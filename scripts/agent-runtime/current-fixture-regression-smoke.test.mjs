@@ -2,10 +2,12 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 function readSmokeScript() {
-  return fs.readFileSync(
+  return [
     "scripts/agent-runtime/current-fixture-regression-smoke.mjs",
-    "utf8",
-  );
+    "scripts/lib/electron-fixture-build.mjs",
+  ]
+    .map((filePath) => fs.readFileSync(filePath, "utf8"))
+    .join("\n");
 }
 
 describe("agent runtime current fixture regression smoke guard", () => {
@@ -150,6 +152,25 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
   });
 
+  it("runs the media contentParts reference Claw fixture in the current regression set", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain(
+      "Claw media contentParts reference Agent Chat GUI Electron fixture",
+    );
+    expect(content).toContain(
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("media-reference");
+    expect(content).toContain(
+      "claw-chat-current-fixture-media-reference-regression",
+    );
+    expect(content).toContain(
+      "media contentParts 引用到 Agent Chat 卡片与 Workbench source 预览 Electron fixture",
+    );
+  });
+
   it("keeps the aggregate fixture smoke diagnosable and app-url aware", () => {
     const content = readSmokeScript();
 
@@ -165,6 +186,8 @@ describe("agent runtime current fixture regression smoke guard", () => {
     const content = readSmokeScript();
 
     expect(content).toContain("function ensureElectronFixtureBuild(options)");
+    expect(content).toContain("../lib/electron-fixture-build.mjs");
+    expect(content).toContain("ensurePackagedElectronFixtureBuild");
     expect(content).toContain(
       "function runElectronFixtureSmoke(label, args, options)",
     );
@@ -176,7 +199,9 @@ describe("agent runtime current fixture regression smoke guard", () => {
       'path.join(rootDir, "dist-electron", "app-server.release.json")',
     );
     expect(content).toContain('"electron:build:smoke"');
+    expect(content).toContain("rebuilding packaged fixture assets");
     expect(content).toContain("ensureElectronFixtureBuild(options)");
+    expect(content).toContain("LIME_ELECTRON_FIXTURE_BUILD_READY");
     expect(content.indexOf("ensureElectronFixtureBuild(options)")).toBeLessThan(
       content.indexOf("Coding Workbench Electron fixture"),
     );

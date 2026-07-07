@@ -54,6 +54,58 @@ describe("agentStreamAgentMessageContentSync", () => {
     ]);
   });
 
+  it("合并 agent_message media contentParts 时保留引用元数据", () => {
+    const mediaItem: AgentThreadItem = {
+      id: "agent-message-media",
+      thread_id: "thread-1",
+      turn_id: "turn-media",
+      type: "agent_message",
+      status: "completed",
+      sequence: 20,
+      text: "",
+      phase: "final_answer",
+      contentParts: [
+        {
+          type: "media",
+          kind: "image",
+          caption: "结果图",
+          reference: {
+            uri: "sidecar://media/image-1",
+            mime_type: "image/png",
+            title: "image-1.png",
+          },
+        },
+      ],
+      started_at: "2026-06-26T10:01:00.000Z",
+      updated_at: "2026-06-26T10:01:01.000Z",
+      completed_at: "2026-06-26T10:01:01.000Z",
+    };
+
+    const parts = mergeAssistantAgentMessageContentPartsFromThreadItems({
+      items: [mediaItem],
+      turnId: "turn-media",
+    });
+
+    expect(parts).toEqual([
+      expect.objectContaining({
+        type: "media_reference",
+        reference: expect.objectContaining({
+          caption: "结果图",
+          uri: "sidecar://media/image-1",
+          mimeType: "image/png",
+          kind: "image",
+        }),
+        metadata: expect.objectContaining({
+          source: "agent_media_reference",
+          itemId: "agent-message-media",
+          referenceUri: "sidecar://media/image-1",
+          mimeType: "image/png",
+          mediaKind: "image",
+        }),
+      }),
+    ]);
+  });
+
   it("同步 content part 无实际变化时应保留 messages 数组引用", () => {
     const item: AgentThreadItem = {
       id: "agent-message-final",

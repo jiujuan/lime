@@ -1,5 +1,6 @@
 import {
   Code2,
+  Clock,
   Edit3,
   Eye,
   FilePlus,
@@ -76,6 +77,22 @@ export const CORE_EXACT_TOOL_CONFIGS = [
         failed: "记忆修正保存失败",
         completed: "已保存记忆修正",
         running: "正在保存记忆修正",
+      },
+    },
+  ],
+  [
+    "sleep",
+    {
+      family: "plan",
+      label: "等待",
+      verb: "等待",
+      icon: Clock,
+      groupTitle: "时间",
+      actionKey: "plan",
+      actions: {
+        failed: "等待失败",
+        completed: "已完成等待",
+        running: "等待中",
       },
     },
   ],
@@ -184,17 +201,6 @@ export const CORE_EXACT_TOOL_CONFIGS = [
       family: "edit",
       label: "批量编辑",
       verb: "批量修改",
-      icon: Edit3,
-      groupTitle: "编辑",
-      actionKey: "edit",
-    },
-  ],
-  [
-    "notebookedit",
-    {
-      family: "edit",
-      label: "笔记本编辑",
-      verb: "修改",
       icon: Edit3,
       groupTitle: "编辑",
       actionKey: "edit",
@@ -524,54 +530,6 @@ export const CORE_EXACT_TOOL_CONFIGS = [
     },
   ],
   [
-    "config",
-    {
-      family: "generic",
-      label: "运行配置",
-      verb: "调整",
-      icon: Settings,
-      groupTitle: "配置",
-      actionKey: "generic",
-      actions: {
-        failed: "调整失败",
-        completed: "已调整配置",
-        running: "调整中",
-      },
-    },
-  ],
-  [
-    "workflow",
-    {
-      family: "generic",
-      label: "工作流执行",
-      verb: "执行",
-      icon: Settings,
-      groupTitle: "工作流",
-      actionKey: "generic",
-      actions: {
-        failed: "执行失败",
-        completed: "已执行工作流",
-        running: "执行中",
-      },
-    },
-  ],
-  [
-    "sleep",
-    {
-      family: "generic",
-      label: "等待",
-      verb: "等待",
-      icon: Settings,
-      groupTitle: "执行",
-      actionKey: "generic",
-      actions: {
-        failed: "等待失败",
-        completed: "已完成等待",
-        running: "等待中",
-      },
-    },
-  ],
-  [
     "powershell",
     {
       family: "command",
@@ -757,38 +715,6 @@ export const CORE_EXACT_TOOL_CONFIGS = [
       icon: FileText,
       groupTitle: "计划",
       actionKey: "plan",
-    },
-  ],
-  [
-    "enterworktree",
-    {
-      family: "generic",
-      label: "进入工作树",
-      verb: "进入",
-      icon: FolderOpen,
-      groupTitle: "工作树",
-      actionKey: "generic",
-      actions: {
-        failed: "进入失败",
-        completed: "已进入工作树",
-        running: "进入中",
-      },
-    },
-  ],
-  [
-    "exitworktree",
-    {
-      family: "generic",
-      label: "退出工作树",
-      verb: "退出",
-      icon: FolderOpen,
-      groupTitle: "工作树",
-      actionKey: "generic",
-      actions: {
-        failed: "退出失败",
-        completed: "已退出工作树",
-        running: "退出中",
-      },
     },
   ],
   [

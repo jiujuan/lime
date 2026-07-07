@@ -18,6 +18,7 @@ import {
 import { RuntimePeerMessageCards } from "./RuntimePeerMessageCards";
 import { FileChangesSummaryCard } from "./FileChangesSummaryCard";
 import { StreamingProcessRun } from "./StreamingProcessRun";
+import { StreamingMediaReferenceCard } from "./StreamingMediaReferenceCard";
 import type {
   A2UIFormData,
   ParseResult,
@@ -30,6 +31,7 @@ import type {
   ContentPart,
   ActionRequired,
   ConfirmResponse,
+  MessageMediaReference,
   SiteSavedContentTarget,
   WriteArtifactContext,
 } from "../types";
@@ -102,6 +104,10 @@ interface StreamingRendererProps {
   fileChangesUndoSessionId?: string | null;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   onOpenUrlPreview?: (item: SearchResultPreviewItem) => void;
+  onOpenMediaReference?: (
+    reference: MessageMediaReference,
+    index: number,
+  ) => void;
   /** 权限确认响应回调 */
   onPermissionResponse?: (response: ConfirmResponse) => void;
   /** 是否折叠代码块（当画布打开时） */
@@ -146,6 +152,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     fileChangesUndoSessionId,
     onOpenSavedSiteContent,
     onOpenUrlPreview,
+    onOpenMediaReference,
     onPermissionResponse,
     collapseCodeBlocks,
     shouldCollapseCodeBlock,
@@ -607,6 +614,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           if (part.type === "file_changes_batch") {
             return part.aggregate.fileCount > 0;
           }
+          if (part.type === "media_reference") {
+            return Boolean(part.reference.uri);
+          }
           return shouldRenderInlineActionRequest(part.actionRequired);
         }) ||
         (isStreaming &&
@@ -639,6 +649,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           }
           if (part.type === "file_changes_batch") {
             return part.aggregate.fileCount > 0;
+          }
+          if (part.type === "media_reference") {
+            return Boolean(part.reference.uri);
           }
           return shouldRenderInlineActionRequest(part.actionRequired);
         });
@@ -777,6 +790,23 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               onFileClick={
                 onFileClick
                   ? (path, content) => onFileClick(path, content)
+                  : undefined
+              }
+            />,
+          );
+          return;
+        }
+
+        if (part.type === "media_reference") {
+          flushProcessBuffer(String(index));
+          nodes.push(
+            <StreamingMediaReferenceCard
+              key={`media-reference-${index}`}
+              reference={part.reference}
+              isStreaming={isStreaming}
+              onOpen={
+                onOpenMediaReference
+                  ? (reference) => onOpenMediaReference(reference, index)
                   : undefined
               }
             />,

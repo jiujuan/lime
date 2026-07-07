@@ -143,6 +143,8 @@ internal/roadmap/test/**
 !internal/roadmap/test/*.md
 !internal/roadmap/test/clawstream/
 !internal/roadmap/test/clawstream/*.md
+!internal/roadmap/test/clawstream/scenario-registry.json
+!internal/roadmap/test/clawstream/scenario-registry.test.mjs
 !internal/roadmap/artifacts/
 internal/roadmap/artifacts/**
 !internal/roadmap/artifacts/roadmap.md
@@ -265,9 +267,13 @@ nul
 .codex/*
 !.codex/skills/
 .codex/skills/*
+!.codex/skills/README.md
 !.codex/skills/lime-governance/
 .codex/skills/lime-governance/*
 !.codex/skills/lime-governance/SKILL.md
+!.codex/skills/lime-aster-migration/
+.codex/skills/lime-aster-migration/*
+!.codex/skills/lime-aster-migration/SKILL.md
 !.codex/skills/lime-quality-workflow/
 .codex/skills/lime-quality-workflow/*
 !.codex/skills/lime-quality-workflow/SKILL.md

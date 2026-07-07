@@ -1,7 +1,9 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
-import type { Message } from "../types";
+import { normalizeQueuedTurnSnapshots } from "@/lib/api/queuedTurn";
+import { logAgentDebug } from "@/lib/agentDebug";
+import type { Message, MessageImage, MessagePathReference } from "../types";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type {
@@ -10,10 +12,13 @@ import type {
   InterruptedInputRestoreRequest,
 } from "./agentStreamInputRestoreTypes";
 import { updateMessageArtifactsStatus } from "../utils/messageArtifacts";
+import { isAgentMessageFinalAnswerPhase } from "../utils/agentMessagePhase";
+import { formatAgentRuntimeStatusSummary } from "../utils/agentRuntimeStatus";
 import {
   removeThreadItemState,
   removeThreadTurnState,
 } from "./agentThreadState";
+import { rememberLocallyInterruptedAgentStreamBinding } from "./agentStreamResumeBinding";
 
 interface AgentStreamFlowNotify {
   info: (message: string) => void;
@@ -34,6 +39,7 @@ interface StopAgentStreamOptions {
   getMessages?: () => readonly Message[];
   getQueuedTurns?: () => readonly QueuedTurnSnapshot[];
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
+  submittedDraftFallback?: InterruptedInputDraftSnapshot | null;
   onRestoreInterruptedInput?: (request: InterruptedInputRestoreRequest) => void;
   notify: AgentStreamFlowNotify;
   onInterruptError?: (error: unknown) => void;
@@ -54,6 +60,7 @@ function resolveInterruptTurnId(activeStream: ActiveStreamState | null) {
 }
 
 const INTERRUPTED_TOOL_RESULT_TEXT = "本轮已中止";
+const INTERRUPTED_PLACEHOLDER_TEXT = "(已停止)";
 
 function hasDraftPayload(draft: InterruptedInputDraftSnapshot): boolean {
   return (
@@ -63,6 +70,225 @@ function hasDraftPayload(draft: InterruptedInputDraftSnapshot): boolean {
     (draft.textElements?.length ?? 0) > 0 ||
     Boolean(draft.inputCapabilityRoute)
   );
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readStringField(
+  value: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): string | null {
+  if (!value) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function readBooleanField(
+  value: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): boolean | null {
+  if (!value) {
+    return null;
+  }
+  for (const key of keys) {
+    if (typeof value[key] === "boolean") {
+      return value[key];
+    }
+  }
+  return null;
+}
+
+function readNumberField(
+  value: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): number | null {
+  if (!value) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function readArrayField(
+  value: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): unknown[] {
+  if (!value) {
+    return [];
+  }
+  for (const key of keys) {
+    const candidate = value[key];
+    if (Array.isArray(candidate)) {
+      return [...candidate];
+    }
+  }
+  return [];
+}
+
+function normalizeQueuedTurnsFromReadModel(value: unknown): QueuedTurnSnapshot[] {
+  const root = readRecord(value);
+  const detail = readRecord(root?.detail);
+  const detailThreadRead =
+    readRecord(detail?.thread_read) ?? readRecord(detail?.threadRead);
+  const candidates = [
+    readArrayField(root, "queued_turns", "queuedTurns"),
+    readArrayField(detailThreadRead, "queued_turns", "queuedTurns"),
+    readArrayField(detail, "queued_turns", "queuedTurns"),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeQueuedTurnSnapshots(candidate);
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  return [];
+}
+
+function normalizeQueuedTurnImage(value: unknown): MessageImage | null {
+  const record = readRecord(value);
+  if (!record) {
+    return null;
+  }
+  const metadata = readRecord(record.metadata) ?? {};
+  const uri = readStringField(record, "uri", "sourceUri", "source_uri");
+  const sourcePath =
+    readStringField(record, "sourcePath", "source_path") ??
+    readStringField(metadata, "sourcePath", "source_path") ??
+    undefined;
+  const mediaType =
+    readStringField(record, "mediaType", "media_type") ??
+    readStringField(metadata, "mediaType", "media_type") ??
+    (uri?.startsWith("data:image/") ? uri.slice(5, uri.indexOf(";")) : null);
+  const rawDataField =
+    readStringField(record, "data") ??
+    readStringField(metadata, "data");
+  const uriLooksLikeBase64Payload =
+    Boolean(uri?.trim()) && !/^[a-z][a-z0-9+.-]*:/iu.test(uri ?? "");
+  const rawData = rawDataField?.startsWith("data:")
+    ? rawDataField.slice(rawDataField.indexOf(",") + 1)
+    : (rawDataField ??
+      (uri?.startsWith("data:")
+        ? uri.slice(uri.indexOf(",") + 1)
+        : uriLooksLikeBase64Payload
+          ? uri
+          : null));
+  const previewUrl =
+    readStringField(record, "previewUrl", "preview_url") ??
+    readStringField(metadata, "previewUrl", "preview_url") ??
+    (uri && /^(?:data:image\/|https?:|file:|asset:|blob:)/iu.test(uri)
+      ? uri
+      : undefined);
+  if (
+    !mediaType?.startsWith("image/") ||
+    (!rawData?.trim() && !uri?.trim() && !sourcePath?.trim() && !previewUrl)
+  ) {
+    return null;
+  }
+  return {
+    data: rawData ?? "",
+    mediaType,
+    sourceUri: uri ?? undefined,
+    sourcePath,
+    previewUrl,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+  };
+}
+
+function normalizeQueuedTurnPathReference(
+  value: unknown,
+): MessagePathReference | null {
+  const record = readRecord(value);
+  if (!record) {
+    return null;
+  }
+  const path = readStringField(record, "path");
+  const name = readStringField(record, "name") ?? path?.split(/[\\/]/u).pop();
+  if (!path || !name) {
+    return null;
+  }
+  const source = readStringField(record, "source");
+  return {
+    id: readStringField(record, "id") ?? `file:${path}`,
+    path,
+    name,
+    isDir: readBooleanField(record, "isDir", "is_dir") ?? false,
+    size: readNumberField(record, "size"),
+    mimeType: readStringField(record, "mimeType", "mime_type"),
+    source:
+      source === "system_drop" || source === "file_manager"
+        ? source
+        : "file_manager",
+  };
+}
+
+function normalizeQueuedTurnTextElements(value: unknown[]): unknown[] {
+  return value
+    .map((item) => {
+      const record = readRecord(item);
+      return record ? { ...record } : null;
+    })
+    .filter(Boolean);
+}
+
+function queuedTurnToInterruptedInputDraft(
+  queuedTurn: QueuedTurnSnapshot | null | undefined,
+): InterruptedInputDraftSnapshot | null {
+  if (!queuedTurn) {
+    return null;
+  }
+  const record = queuedTurn as unknown as Record<string, unknown>;
+  const textElements = normalizeQueuedTurnTextElements(
+    readArrayField(record, "text_elements", "textElements"),
+  );
+  const textFromElement = textElements
+    .map((item) => readStringField(readRecord(item), "text"))
+    .find((text): text is string => Boolean(text));
+  const text = textFromElement ?? queuedTurn.message_text ?? "";
+  const images = readArrayField(
+    record,
+    "input_attachments",
+    "inputAttachments",
+    "attachments",
+  )
+    .map(normalizeQueuedTurnImage)
+    .filter((item): item is MessageImage => Boolean(item));
+  const pathReferences = readArrayField(
+    record,
+    "path_references",
+    "pathReferences",
+  )
+    .map(normalizeQueuedTurnPathReference)
+    .filter((item): item is MessagePathReference => Boolean(item));
+  const inputCapabilityRoute =
+    readRecord(record.input_capability_route) ??
+    readRecord(record.inputCapabilityRoute) ??
+    undefined;
+  return normalizeInterruptedInputDraft({
+    text,
+    images,
+    pathReferences,
+    textElements,
+    inputCapabilityRoute:
+      inputCapabilityRoute as InterruptedInputDraftSnapshot["inputCapabilityRoute"],
+  });
 }
 
 function normalizeInterruptedInputDraft(
@@ -92,18 +318,102 @@ function sortQueuedTurnsForRestore(
   });
 }
 
+function shouldRefreshQueuedTurnsForRestore(
+  plan: InterruptedInputRestorePlan,
+): boolean {
+  if (plan.queuedTurns.length > 0) {
+    return false;
+  }
+  return plan.reason !== "output_free_interrupted_turn";
+}
+
+async function resolveQueuedTurnsForRestore(params: {
+  activeSessionId?: string | null;
+  initialQueuedTurns: readonly QueuedTurnSnapshot[];
+  onError?: (error: unknown) => void;
+  restorePlan: InterruptedInputRestorePlan;
+  runtime: Pick<AgentRuntimeAdapter, "getSessionReadModel">;
+}): Promise<readonly QueuedTurnSnapshot[]> {
+  if (
+    !shouldRefreshQueuedTurnsForRestore(params.restorePlan) ||
+    !params.activeSessionId?.trim()
+  ) {
+    return params.initialQueuedTurns;
+  }
+
+  try {
+    const threadRead = await params.runtime.getSessionReadModel(
+      params.activeSessionId,
+    );
+    const refreshedQueuedTurns = normalizeQueuedTurnsFromReadModel(threadRead);
+    return refreshedQueuedTurns.length > 0
+      ? refreshedQueuedTurns
+      : params.initialQueuedTurns;
+  } catch (error) {
+    params.onError?.(error);
+    return params.initialQueuedTurns;
+  }
+}
+
 function messageHasVisibleText(message: Message | null | undefined): boolean {
   if (!message) {
     return false;
   }
-  if (message.content.trim().length > 0) {
+  if (
+    textBlocksInterruptedInputRestore(message.content) &&
+    !isRuntimeStatusPlaceholderText(message.content, message.runtimeStatus)
+  ) {
     return true;
   }
   return (
     message.contentParts?.some(
-      (part) => part.type === "text" && part.text.trim().length > 0,
+      (part) =>
+        part.type === "text" &&
+        part.text.trim().length > 0 &&
+        textPartBlocksInterruptedInputRestore(part),
     ) ?? false
   );
+}
+
+function textPartBlocksInterruptedInputRestore(
+  part: Extract<NonNullable<Message["contentParts"]>[number], { type: "text" }>,
+): boolean {
+  if (!textBlocksInterruptedInputRestore(part.text)) {
+    return false;
+  }
+
+  const phase =
+    typeof part.metadata?.phase === "string" ? part.metadata.phase : null;
+  if (phase) {
+    return isAgentMessageFinalAnswerPhase(phase);
+  }
+
+  return true;
+}
+
+function textBlocksInterruptedInputRestore(text: string | null | undefined) {
+  const normalized = text?.trim();
+  return Boolean(normalized && normalized !== INTERRUPTED_PLACEHOLDER_TEXT);
+}
+
+function isRuntimeStatusPlaceholderText(
+  text: string | null | undefined,
+  runtimeStatus: Message["runtimeStatus"],
+): boolean {
+  const normalized = text?.trim();
+  if (!normalized || !runtimeStatus) {
+    return false;
+  }
+
+  return new Set(
+    [
+      runtimeStatus.title,
+      runtimeStatus.detail,
+      formatAgentRuntimeStatusSummary(runtimeStatus),
+    ]
+      .map((value) => value?.trim())
+      .filter(Boolean),
+  ).has(normalized);
 }
 
 function messageHasThinkingOnlySignal(
@@ -149,7 +459,28 @@ export function resolveInterruptedInputRestorePlan(params: {
 }): InterruptedInputRestorePlan {
   const draft = normalizeInterruptedInputDraft(params.submittedDraft);
   const queuedTurns = sortQueuedTurnsForRestore(params.queuedTurns);
+  const queuedDraft = queuedTurnToInterruptedInputDraft(queuedTurns[0]);
   const queuedTurnHandling = queuedTurns.length > 0 ? "preserve" : "none";
+  const hasSideEffectActivity = messageHasSideEffectActivity(
+    params.assistantMessage,
+  );
+  const hasVisibleText = messageHasVisibleText(params.assistantMessage);
+  const hasThinkingOnlySignal = messageHasThinkingOnlySignal(
+    params.assistantMessage,
+  );
+
+  if (
+    queuedDraft &&
+    (!draft || hasSideEffectActivity || hasVisibleText || hasThinkingOnlySignal)
+  ) {
+    return {
+      shouldRestoreComposer: true,
+      reason: "queued_turn_restored_after_interrupt",
+      draft: queuedDraft,
+      queuedTurnHandling: "restore_first",
+      queuedTurns,
+    };
+  }
 
   if (!draft) {
     return {
@@ -161,7 +492,7 @@ export function resolveInterruptedInputRestorePlan(params: {
     };
   }
 
-  if (messageHasSideEffectActivity(params.assistantMessage)) {
+  if (hasSideEffectActivity) {
     return {
       shouldRestoreComposer: false,
       reason: "side_effect_activity_present",
@@ -171,7 +502,7 @@ export function resolveInterruptedInputRestorePlan(params: {
     };
   }
 
-  if (messageHasVisibleText(params.assistantMessage)) {
+  if (hasVisibleText) {
     return {
       shouldRestoreComposer: false,
       reason: "visible_output_present",
@@ -183,7 +514,7 @@ export function resolveInterruptedInputRestorePlan(params: {
 
   return {
     shouldRestoreComposer: true,
-    reason: messageHasThinkingOnlySignal(params.assistantMessage)
+    reason: hasThinkingOnlySignal
       ? "thinking_only_cancelled_turn"
       : "output_free_interrupted_turn",
     draft,
@@ -284,6 +615,7 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
     runtime,
     removeStreamListener,
     refreshSessionReadModel,
+    setQueuedTurns,
     setThreadItems,
     setThreadTurns,
     setCurrentTurnId,
@@ -291,6 +623,7 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
     getMessages,
     getQueuedTurns,
     setActiveStream,
+    submittedDraftFallback,
     onRestoreInterruptedInput,
     notify,
     onInterruptError,
@@ -299,6 +632,7 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   if (activeStream) {
     removeStreamListener(activeStream.eventName);
   }
+  rememberLocallyInterruptedAgentStreamBinding(activeStream);
 
   const activeSessionId = activeStream?.sessionId || sessionIdRef.current;
   const assistantMessage =
@@ -307,14 +641,81 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
           (message) => message.id === activeStream.assistantMsgId,
         ) ?? null)
       : null;
-  const restorePlan = resolveInterruptedInputRestorePlan({
-    submittedDraft: activeStream?.submittedDraft,
+  const initialQueuedTurns = getQueuedTurns?.() ?? [];
+  let restorePlan = resolveInterruptedInputRestorePlan({
+    submittedDraft: activeStream?.submittedDraft ?? submittedDraftFallback,
     assistantMessage,
-    queuedTurns: getQueuedTurns?.(),
+    queuedTurns: initialQueuedTurns,
   });
+  const refreshedQueuedTurns =
+    typeof runtime.getSessionReadModel === "function"
+      ? await resolveQueuedTurnsForRestore({
+          activeSessionId,
+          initialQueuedTurns,
+          onError: onInterruptError,
+          restorePlan,
+          runtime,
+        })
+      : initialQueuedTurns;
+  if (refreshedQueuedTurns !== initialQueuedTurns) {
+    restorePlan = resolveInterruptedInputRestorePlan({
+      submittedDraft: activeStream?.submittedDraft ?? submittedDraftFallback,
+      assistantMessage,
+      queuedTurns: refreshedQueuedTurns,
+    });
+  }
+  const queuedTurnToRestore =
+    onRestoreInterruptedInput &&
+    restorePlan.queuedTurnHandling === "restore_first"
+      ? restorePlan.queuedTurns[0]
+      : null;
+  logAgentDebug("AgentStream", "inputRestorePlan", {
+    assistantMessageContentLength: assistantMessage?.content?.trim().length ?? 0,
+    assistantMessagePartCount: assistantMessage?.contentParts?.length ?? 0,
+    draftImageCount: restorePlan.draft?.images?.length ?? 0,
+    draftPathReferenceCount: restorePlan.draft?.pathReferences?.length ?? 0,
+    draftTextLength: restorePlan.draft?.text.trim().length ?? 0,
+    eventName: activeStream?.eventName ?? null,
+    hasActiveStream: Boolean(activeStream),
+    hasActiveStreamDraft: Boolean(activeStream?.submittedDraft),
+    hasSubmittedDraftFallback: Boolean(submittedDraftFallback),
+    queuedTurnsAvailableCount: restorePlan.queuedTurns.length,
+    queuedTurnsRefreshed: refreshedQueuedTurns !== initialQueuedTurns,
+    queuedTurnHandling: restorePlan.queuedTurnHandling,
+    queuedTurnToRestoreId: queuedTurnToRestore?.queued_turn_id ?? null,
+    reason: restorePlan.reason,
+    shouldRestoreComposer: restorePlan.shouldRestoreComposer,
+  });
+  const restoreInterruptedInput = () => {
+    if (!restorePlan.shouldRestoreComposer || !restorePlan.draft) {
+      return;
+    }
+    logAgentDebug("AgentStream", "inputRestoreDispatch", {
+      draftImageCount: restorePlan.draft.images?.length ?? 0,
+      draftPathReferenceCount: restorePlan.draft.pathReferences?.length ?? 0,
+      draftTextLength: restorePlan.draft.text.trim().length,
+      eventName: activeStream?.eventName ?? null,
+      reason: restorePlan.reason,
+    });
+    onRestoreInterruptedInput?.({
+      requestId: crypto.randomUUID(),
+      reason: restorePlan.reason,
+      draft: restorePlan.draft,
+    });
+  };
   const runInterruptAndRefresh = async () => {
     if (!activeSessionId) {
       return;
+    }
+    try {
+      if (queuedTurnToRestore?.queued_turn_id) {
+        await runtime.removeQueuedTurn(
+          activeSessionId,
+          queuedTurnToRestore.queued_turn_id,
+        );
+      }
+    } catch (error) {
+      onInterruptError?.(error);
     }
     try {
       await runtime.interruptTurn(
@@ -364,13 +765,12 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   }
 
   setActiveStream(null);
-  if (restorePlan.shouldRestoreComposer && restorePlan.draft) {
-    onRestoreInterruptedInput?.({
-      requestId: crypto.randomUUID(),
-      reason: restorePlan.reason,
-      draft: restorePlan.draft,
-    });
+  if (queuedTurnToRestore?.queued_turn_id) {
+    setQueuedTurns((prev) =>
+      removeQueuedTurnFromState(prev, queuedTurnToRestore.queued_turn_id),
+    );
   }
+  restoreInterruptedInput();
   notify.info("已停止生成");
   void runInterruptAndRefresh();
 }

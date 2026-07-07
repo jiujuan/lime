@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Artifact } from "@/lib/artifact/types";
 import {
+  createMediaReferencePreviewArtifact,
   isTaskCenterDraftSendPendingForLayout,
   resolveDefaultSelectedArtifact,
   resolveRuntimeWorkspaceId,
@@ -12,6 +13,30 @@ import {
 } from "./agentChatWorkspaceHelpers";
 
 const DOCUMENT_ARTIFACT_TYPE = ("doc" + "ument") as Artifact["type"];
+const t = (key: string, options?: Record<string, unknown>) => {
+  if (key === "agentChat.mediaReferencePreview.fallbackTitle") {
+    return `媒体引用 ${options?.index ?? ""}`;
+  }
+  if (key === "agentChat.mediaReferencePreview.previewUnavailable") {
+    return "该媒体当前以引用形式保存，完整预览需要 media sidecar source 接管。";
+  }
+  if (key === "agentChat.mediaReferencePreview.reference") {
+    return `引用：${options?.value ?? ""}`;
+  }
+  if (key === "agentChat.mediaReferencePreview.kind") {
+    return `类型：${options?.value ?? ""}`;
+  }
+  if (key === "agentChat.mediaReferencePreview.mime") {
+    return `MIME：${options?.value ?? ""}`;
+  }
+  if (key === "agentChat.mediaReferencePreview.byteSize") {
+    return `大小：${options?.value ?? ""} 字节`;
+  }
+  if (key === "agentChat.mediaReferencePreview.sha256") {
+    return `SHA-256：${options?.value ?? ""}`;
+  }
+  return key;
+};
 
 function createArtifact(overrides: Partial<Artifact> = {}): Artifact {
   const content = overrides.content ?? "# 文稿";
@@ -29,6 +54,141 @@ function createArtifact(overrides: Partial<Artifact> = {}): Artifact {
     error: overrides.error,
   };
 }
+
+describe("createMediaReferencePreviewArtifact", () => {
+  it("sidecar media reference 应生成 metadata fallback artifact，不展开媒体 payload", () => {
+    const artifact = createMediaReferencePreviewArtifact({
+      message: {
+        id: "assistant-media",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-07T00:00:00.000Z"),
+      },
+      target: {
+        kind: "media_reference",
+        index: 0,
+        reference: {
+          kind: "image",
+          uri: "sidecar://media/image-1",
+          mimeType: "image/png",
+          caption: "结果图",
+          byteSize: 2048,
+          sha256: "sha256-image-1",
+        },
+      },
+      t,
+    });
+
+    expect(artifact.title).toBe("结果图");
+    expect(artifact.content).toContain("media sidecar source");
+    expect(artifact.content).toContain("sidecar://media/image-1");
+    expect(artifact.meta).toMatchObject({
+      openedFrom: "message-media-reference",
+      messageId: "assistant-media",
+      mediaUri: "sidecar://media/image-1",
+      contentKind: "markdown",
+      renderMode: "canvas",
+    });
+  });
+
+  it("带 sourcePath owner 的 sidecar media reference 应生成 media artifact", () => {
+    const artifact = createMediaReferencePreviewArtifact({
+      message: {
+        id: "assistant-media-source",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-07T00:00:00.000Z"),
+      },
+      target: {
+        kind: "media_reference",
+        index: 0,
+        reference: {
+          kind: "image",
+          uri: "sidecar://media/image-1",
+          mimeType: "image/png",
+          title: "image-1.png",
+          sourcePath: "/tmp/lime-media/image-1.png",
+        },
+      },
+      t,
+    });
+
+    expect(artifact.title).toBe("image-1.png");
+    expect(artifact.content).not.toContain("media sidecar source");
+    expect(artifact.meta).toMatchObject({
+      openedFrom: "message-media-reference",
+      mediaUri: "sidecar://media/image-1",
+      mediaSourcePath: "/tmp/lime-media/image-1.png",
+      mediaPreviewSource: "source_path",
+      sourcePath: "/tmp/lime-media/image-1.png",
+      contentKind: "image",
+      renderMode: "media",
+    });
+  });
+
+  it("inline data previewUrl 应 fail closed 到 metadata fallback", () => {
+    const artifact = createMediaReferencePreviewArtifact({
+      message: {
+        id: "assistant-media-inline-preview",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-07T00:00:00.000Z"),
+      },
+      target: {
+        kind: "media_reference",
+        index: 0,
+        reference: {
+          kind: "image",
+          uri: "sidecar://media/image-1",
+          mimeType: "image/png",
+          title: "image-1.png",
+          previewUrl: "data:image/png;base64,AAAA",
+        },
+      },
+      t,
+    });
+
+    expect(artifact.content).toContain("media sidecar source");
+    expect(artifact.content).toContain("sidecar://media/image-1");
+    expect(artifact.content).not.toContain("data:image");
+    expect(artifact.meta).toMatchObject({
+      contentKind: "markdown",
+      renderMode: "canvas",
+    });
+    expect(artifact.meta.mediaPreviewUrl).toBeUndefined();
+  });
+
+  it("可直接预览的媒体 URI 应生成 media artifact", () => {
+    const artifact = createMediaReferencePreviewArtifact({
+      message: {
+        id: "assistant-media-direct",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-07T00:00:00.000Z"),
+      },
+      target: {
+        kind: "media_reference",
+        index: 1,
+        reference: {
+          kind: "image",
+          uri: "https://example.com/image.png",
+          mimeType: "image/png",
+          title: "image.png",
+        },
+      },
+      t,
+    });
+
+    expect(artifact.title).toBe("image.png");
+    expect(artifact.content).toBe("https://example.com/image.png");
+    expect(artifact.meta).toMatchObject({
+      openedFrom: "message-media-reference",
+      contentKind: "image",
+      renderMode: "media",
+      previewUrl: "https://example.com/image.png",
+    });
+  });
+});
 
 describe("resolveTaskCenterHomeSurfaceState", () => {
   it("任务中心草稿 surface 应压住旧会话活动并进入首页", () => {

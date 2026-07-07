@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "bytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "contentBase64": {
+      "type": "string"
+    },
+    "mimeType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "sha256": {
+      "type": "string"
+    },
+    "sidecarRef": true,
+    "uri": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "bytes",
+    "contentBase64",
+    "sessionId",
+    "sha256",
+    "uri"
+  ],
+  "title": "AgentSessionMediaReadResponse",
+  "type": "object"
+}

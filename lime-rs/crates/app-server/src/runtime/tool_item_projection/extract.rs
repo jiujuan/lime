@@ -2,7 +2,7 @@ use super::super::raw_string_field;
 use super::super::string_array_field;
 use super::super::string_field;
 use app_server_protocol::AgentEvent;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[derive(Debug)]
 pub(super) struct CurrentToolItem {
@@ -256,17 +256,22 @@ fn tool_output(payload: &Value) -> Option<String> {
 }
 
 fn tool_metadata(payload: &Value) -> Option<Value> {
-    payload
-        .get("metadata")
-        .filter(|value| !value.is_null())
-        .cloned()
-        .or_else(|| {
-            payload
-                .get("result")
-                .and_then(|result| result.get("metadata"))
-                .filter(|value| !value.is_null())
-                .cloned()
-        })
+    let mut metadata = Map::new();
+    if let Some(result_metadata) = payload
+        .get("result")
+        .and_then(|result| result.get("metadata"))
+        .and_then(Value::as_object)
+    {
+        for (key, value) in result_metadata {
+            metadata.insert(key.clone(), value.clone());
+        }
+    }
+    if let Some(payload_metadata) = payload.get("metadata").and_then(Value::as_object) {
+        for (key, value) in payload_metadata {
+            metadata.entry(key.clone()).or_insert_with(|| value.clone());
+        }
+    }
+    (!metadata.is_empty()).then_some(Value::Object(metadata))
 }
 
 fn tool_structured_content(payload: &Value) -> Option<Value> {

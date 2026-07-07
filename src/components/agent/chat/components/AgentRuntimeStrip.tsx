@@ -102,8 +102,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         })
       : translate("agentChat.runtimeStrip.team.defaultSummary"));
   const canReviewFileCheckpoints =
-    fileCheckpointCount > 0 &&
-    Boolean(onOpenFileCheckpoints);
+    fileCheckpointCount > 0 && Boolean(onOpenFileCheckpoints);
   const reasoningStatus = harnessState.reasoning?.reasoning;
   const reasoningRunStatus = reasoningStatus?.status;
   const hasReasoningSignal =
@@ -273,11 +272,11 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         tone: "outline",
       });
 
-      if (!runtimeToolAvailability.taskRuntime) {
+      if (!runtimeToolAvailability.planRuntime) {
         nextItems.push({
-          key: "task_runtime_gap",
-          label: translate("agentChat.runtimeStrip.status.taskToolGap", {
-            count: runtimeToolAvailability.missingTaskTools.length,
+          key: "plan_runtime_gap",
+          label: translate("agentChat.runtimeStrip.status.planToolGap", {
+            count: runtimeToolAvailability.missingPlanTools.length,
           }),
           tone: "outline",
         });

@@ -64,6 +64,10 @@
     },
     {
       "kind": "request",
+      "method": "agentSession/media/read"
+    },
+    {
+      "kind": "request",
       "method": "agentSession/objective/audit"
     },
     {
@@ -992,6 +996,22 @@
     },
     {
       "kind": "request",
+      "method": "soulStylePack/install"
+    },
+    {
+      "kind": "request",
+      "method": "soulStylePack/list"
+    },
+    {
+      "kind": "request",
+      "method": "soulStylePack/status/set"
+    },
+    {
+      "kind": "request",
+      "method": "soulStylePack/uninstall"
+    },
+    {
+      "kind": "request",
       "method": "telegramChannel/probe"
     },
     {
@@ -1309,6 +1329,8 @@
       "AgentSessionItemLifecycleNotification",
       "AgentSessionListParams",
       "AgentSessionListResponse",
+      "AgentSessionMediaReadParams",
+      "AgentSessionMediaReadResponse",
       "AgentSessionMessageCreatedNotification",
       "AgentSessionObjectiveAuditParams",
       "AgentSessionObjectiveAuditResponse",
@@ -1354,6 +1376,8 @@
       "AgentSessionTurnStartResponse",
       "AgentSessionUpdateParams",
       "AgentSessionUpdateResponse",
+      "AgentThreadContentReference",
+      "AgentThreadMessageContentPart",
       "AgentTurn",
       "AgentTurnStatus",
       "AppServerClientRequest",
@@ -1797,6 +1821,17 @@
       "SkillRepositorySaveParams",
       "SkillScaffoldCreateParams",
       "SkillScaffoldCreateResponse",
+      "SoulStylePackInstallParams",
+      "SoulStylePackInstallResponse",
+      "SoulStylePackInstallStatus",
+      "SoulStylePackListEntry",
+      "SoulStylePackListParams",
+      "SoulStylePackListResponse",
+      "SoulStylePackMutableStatus",
+      "SoulStylePackStatusSetParams",
+      "SoulStylePackStatusSetResponse",
+      "SoulStylePackUninstallParams",
+      "SoulStylePackUninstallResponse",
       "StructuredOutputContract",
       "SupportBundleExportParams",
       "SupportBundleExportResponse",

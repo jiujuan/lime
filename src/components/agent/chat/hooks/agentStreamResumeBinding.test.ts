@@ -9,6 +9,7 @@ import type { ActionRequired, Message } from "../types";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
 import {
   bindRecoveredAgentStreamThread,
+  rememberLocallyInterruptedAgentStreamBinding,
   rememberLocallyStartedAgentStreamBinding,
   resolveAgentStreamResumeBindingTarget,
 } from "./agentStreamResumeBinding";
@@ -34,6 +35,13 @@ describe("agentStreamResumeBinding", () => {
           thread_id: "thread-1",
           status: "running",
           active_turn_id: "turn-1",
+          turns: [
+            {
+              turn_id: "turn-1",
+              status: "running",
+              started_at: new Date().toISOString(),
+            },
+          ],
         },
         threadTurns: [],
       }),
@@ -44,6 +52,24 @@ describe("agentStreamResumeBinding", () => {
       turnId: "turn-1",
       startedAt: null,
     });
+  });
+
+  it("只有 thread 级 running 或孤立 active_turn_id 时不恢复 active stream", () => {
+    expect(
+      resolveAgentStreamResumeBindingTarget({
+        sessionId: "session-1",
+        threadBusy: true,
+        queuedTurns: [],
+        currentTurnId: "turn-stale",
+        threadRead: {
+          thread_id: "thread-1",
+          status: "running",
+          active_turn_id: "turn-stale",
+          turns: [],
+        },
+        threadTurns: [],
+      }),
+    ).toBeNull();
   });
 
   it("只有 queued turn 时不绑定 active stream", () => {
@@ -107,6 +133,40 @@ describe("agentStreamResumeBinding", () => {
       turnId: "turn-running-1",
       startedAt: null,
     });
+  });
+
+  it("failed read model 残留 active turn 时不应恢复 active stream", () => {
+    expect(
+      resolveAgentStreamResumeBindingTarget({
+        sessionId: "session-1",
+        threadBusy: true,
+        queuedTurns: [],
+        currentTurnId: "turn-stale",
+        threadRead: {
+          thread_id: "thread-1",
+          status: "failed",
+          profile_status: "failed",
+          active_turn_id: "turn-stale",
+          turns: [
+            {
+              turn_id: "turn-stale",
+              status: "running",
+            },
+          ],
+        },
+        threadTurns: [
+          {
+            id: "turn-stale",
+            thread_id: "thread-1",
+            prompt_text: "继续",
+            status: "running",
+            started_at: "2026-03-29T00:00:00.000Z",
+            created_at: "2026-03-29T00:00:00.000Z",
+            updated_at: "2026-03-29T00:00:01.000Z",
+          },
+        ],
+      }),
+    ).toBeNull();
   });
 
   it("已有 live stream listener 时不应抢占并恢复 session event", async () => {
@@ -250,6 +310,82 @@ describe("agentStreamResumeBinding", () => {
         sessionId: "local-session-1",
         threadId: "local-thread-1",
         turnId: "local-turn-1",
+        startedAt: "2026-07-06T00:00:00.000Z",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+    });
+
+    expect(cleanup).toBeNull();
+    expect(runtime.listenToTurnEvents).not.toHaveBeenCalled();
+    expect(runtime.resumeThread).not.toHaveBeenCalled();
+    expect(activeStreamState.current).toBeNull();
+    expect(isSending).toBe(false);
+  });
+
+  it("同标签本地刚停止的 running session 不应被 stale read model 重新恢复", async () => {
+    const runtime = {
+      listenToTurnEvents: vi.fn(async () => vi.fn()),
+      resumeThread: vi.fn(async () => true),
+    };
+    const activeStreamState: { current: ActiveStreamState | null } = {
+      current: null,
+    };
+    const listenerMapRef = { current: new Map<string, () => void>() };
+    const messages = { current: [] as Message[] };
+    const threadTurns = { current: [] as AgentThreadTurn[] };
+    const threadItems = { current: [] as AgentThreadItem[] };
+    const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
+    const pendingActions = { current: [] as ActionRequired[] };
+    const executionRuntime = {
+      current: null as AsterSessionExecutionRuntime | null,
+    };
+    const currentTurnId = { current: null as string | null };
+    let isSending = false;
+    const setIsSending = (next: boolean | ((previous: boolean) => boolean)) => {
+      isSending =
+        typeof next === "function"
+          ? (next as (previous: boolean) => boolean)(isSending)
+          : next;
+    };
+
+    rememberLocallyInterruptedAgentStreamBinding({
+      assistantMsgId: "assistant-interrupted-1",
+      eventName: "aster_stream_interrupted-1",
+      sessionId: "interrupted-session-1",
+      turnId: "interrupted-turn-1",
+    });
+
+    const cleanup = await bindRecoveredAgentStreamThread({
+      activeStreamRef: activeStreamState,
+      appendThinkingToParts: (parts, textDelta) => [
+        ...parts,
+        { type: "thinking", text: textDelta },
+      ],
+      clearActiveStreamIfMatch: vi.fn(() => false),
+      executionStrategy: "react",
+      getMessages: () => messages.current,
+      getThreadItems: () => threadItems.current,
+      listenerMapRef,
+      playToolcallSound: () => undefined,
+      playTypewriterSound: () => undefined,
+      refreshSessionReadModel: vi.fn(async () => true),
+      runtime,
+      setActiveStream: (nextActive) => {
+        activeStreamState.current = nextActive;
+      },
+      setCurrentTurnId: createStateSetter(currentTurnId),
+      setExecutionRuntime: createStateSetter(executionRuntime),
+      setIsSending,
+      setMessages: createStateSetter(messages),
+      setPendingActions: createStateSetter(pendingActions),
+      setQueuedTurns: createStateSetter(queuedTurns),
+      setThreadItems: createStateSetter(threadItems),
+      setThreadTurns: createStateSetter(threadTurns),
+      target: {
+        eventName: "agentSession/event/interrupted-session-1",
+        sessionId: "interrupted-session-1",
+        threadId: "interrupted-thread-1",
+        turnId: "interrupted-turn-1",
         startedAt: "2026-07-06T00:00:00.000Z",
       },
       warnedKeysRef: { current: new Set<string>() },

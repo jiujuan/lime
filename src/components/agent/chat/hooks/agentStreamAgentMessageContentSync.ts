@@ -9,6 +9,7 @@ import {
   buildAgentTextDeltaContentPartMetadata,
   readContentPartSequence,
 } from "../utils/contentPartTimeline";
+import { messageContentPartsFromAgentThreadItem } from "./agentThreadMessageContentParts";
 
 type MessageContentPart = NonNullable<Message["contentParts"]>[number];
 type MessageContentParts = NonNullable<Message["contentParts"]>;
@@ -66,6 +67,17 @@ function isAgentMessageTextPartForItem(
   );
 }
 
+function isAgentMessageStructuredPartForItem(
+  part: MessageContentPart,
+  itemId: string,
+): boolean {
+  const source = part.metadata?.source;
+  return (
+    (source === "agent_text_delta" || source === "agent_media_reference") &&
+    (part.metadata?.itemId === itemId || part.metadata?.threadItemId === itemId)
+  );
+}
+
 function insertContentPartBySequence(params: {
   nextPart: MessageContentPart;
   parts: MessageContentParts;
@@ -101,6 +113,35 @@ function shouldSyncAgentMessageContentPartPhase(
   );
 }
 
+function upsertAgentMessageStructuredContentParts(params: {
+  item: Extract<AgentThreadItem, { type: "agent_message" }>;
+  parts: MessageContentParts;
+  threadItems?: readonly AgentThreadItem[];
+}): MessageContentParts {
+  const itemParts = messageContentPartsFromAgentThreadItem(params.item);
+  if (itemParts.length === 0) {
+    return params.parts;
+  }
+
+  const sequenceByToolId = threadItemToolSequenceById(
+    params.threadItems ?? [],
+    params.item.turn_id,
+  );
+  const retainedParts = params.parts.filter(
+    (part) => !isAgentMessageStructuredPartForItem(part, params.item.id),
+  );
+  return itemParts.reduce<MessageContentParts>(
+    (parts, nextPart) =>
+      insertContentPartBySequence({
+        nextPart,
+        parts,
+        sequence: params.item.sequence,
+        sequenceByToolId,
+      }),
+    retainedParts,
+  );
+}
+
 function upsertAgentMessageContentPart(params: {
   item: AgentThreadItem;
   parts: MessageContentParts;
@@ -114,6 +155,15 @@ function upsertAgentMessageContentPart(params: {
   }
 
   const item = params.item;
+  const structuredParts = upsertAgentMessageStructuredContentParts({
+    item,
+    parts: params.parts,
+    threadItems: params.threadItems,
+  });
+  if (structuredParts !== params.parts) {
+    return structuredParts;
+  }
+
   const text = item.text.trim();
   if (!text) {
     return params.parts;

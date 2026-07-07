@@ -20,8 +20,36 @@ async fn start_memory_prompt_turn(
     data_source: Arc<TestSessionDataSource>,
     runtime_options: Option<RuntimeOptions>,
 ) -> Arc<RecordingBackend> {
+    start_memory_prompt_turn_with_core(data_source, runtime_options, |backend| {
+        RuntimeCore::with_backend(backend)
+    })
+    .await
+    .0
+}
+
+async fn start_memory_prompt_turn_with_sidecar(
+    data_source: Arc<TestSessionDataSource>,
+    runtime_options: Option<RuntimeOptions>,
+) -> (Arc<RecordingBackend>, Arc<SidecarStore>, tempfile::TempDir) {
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
+    let sidecar_store_for_core = sidecar_store.clone();
+    let (backend, _) =
+        start_memory_prompt_turn_with_core(data_source, runtime_options, move |backend| {
+            RuntimeCore::with_backend(backend).with_sidecar_store(sidecar_store_for_core.clone())
+        })
+        .await;
+
+    (backend, sidecar_store, sidecar_root)
+}
+
+async fn start_memory_prompt_turn_with_core(
+    data_source: Arc<TestSessionDataSource>,
+    runtime_options: Option<RuntimeOptions>,
+    build_core: impl FnOnce(Arc<RecordingBackend>) -> RuntimeCore,
+) -> (Arc<RecordingBackend>, RuntimeCore) {
     let backend = Arc::new(RecordingBackend::default());
-    let core = RuntimeCore::with_backend(backend.clone()).with_app_data_source(data_source);
+    let core = build_core(backend.clone()).with_app_data_source(data_source);
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("sess_memory_prompt".to_string()),
@@ -51,7 +79,7 @@ async fn start_memory_prompt_turn(
     .await
     .expect("turn");
 
-    backend
+    (backend, core)
 }
 
 #[tokio::test]
@@ -71,7 +99,8 @@ async fn start_turn_injects_workspace_memory_summary_context() {
         ..RuntimeOptions::default()
     });
 
-    let backend = start_memory_prompt_turn(data_source.clone(), runtime_options).await;
+    let (backend, sidecar_store, _sidecar_root) =
+        start_memory_prompt_turn_with_sidecar(data_source.clone(), runtime_options).await;
 
     let requests = backend
         .requests
@@ -94,6 +123,23 @@ async fn start_turn_injects_workspace_memory_summary_context() {
     assert_eq!(context["path"].as_str(), Some("memory_summary.md"));
     assert_eq!(context["content"].as_str(), Some("Prefer concise answers."));
     assert_eq!(
+        context["sidecarRef"]["kind"].as_str(),
+        Some("memory_summary_context")
+    );
+    let sidecar_path = context["sidecarRef"]["relativePath"]
+        .as_str()
+        .expect("memory sidecar relative path");
+    assert_eq!(
+        sidecar_store.read_text(sidecar_path).as_deref(),
+        Some("Prefer concise answers.")
+    );
+    let sidecar_content = sidecar_store
+        .read_text(sidecar_path)
+        .expect("memory sidecar content");
+    assert!(!sidecar_content.contains("memory_soul_prompt_context"));
+    assert!(!sidecar_content.contains("Style profile:"));
+    assert!(!sidecar_content.contains("## Interaction Soul"));
+    assert_eq!(
         context["contextPacketTelemetry"]["packets"][0]["kind"].as_str(),
         Some("long_term_memory_summary")
     );
@@ -104,6 +150,18 @@ async fn start_turn_injects_workspace_memory_summary_context() {
     assert_eq!(
         metadata[CONTEXT_PACKET_TELEMETRY_KEY]["packets"][0]["admitted"].as_bool(),
         Some(true)
+    );
+    assert_eq!(
+        metadata[CONTEXT_PACKET_TELEMETRY_KEY]["packets"][0]["fragmentEnvelope"]
+            ["sidecar_reference"]["kind"]
+            .as_str(),
+        Some("memory_summary_context")
+    );
+    assert_eq!(
+        metadata[CONTEXT_PACKET_TELEMETRY_KEY]["packets"][0]["fragmentEnvelope"]
+            ["sidecar_reference"]["uri"]
+            .as_str(),
+        context["sidecarRef"]["ref"].as_str()
     );
 
     let read_requests = data_source.memory_store_read_requests();
@@ -189,4 +247,39 @@ async fn start_turn_rejects_secret_like_memory_summary_packet() {
         telemetry["packets"][0]["rejectedReason"].as_str(),
         Some("secret_like")
     );
+}
+
+#[tokio::test]
+async fn start_turn_rejects_secret_like_memory_summary_without_sidecar() {
+    let data_source = Arc::new(
+        TestSessionDataSource::new(empty_agent_session_read_response("missing"))
+            .with_memory_store_read_response(Ok(read_response(
+                "api_key = abcdefghijklmnop\n",
+                false,
+            ))),
+    );
+
+    let (backend, sidecar_store, _sidecar_root) =
+        start_memory_prompt_turn_with_sidecar(data_source, None).await;
+
+    let requests = backend
+        .requests
+        .lock()
+        .expect("test backend requests mutex poisoned");
+    let metadata = requests[0]
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .expect("runtime metadata");
+    let context = metadata
+        .get(MEMORY_PROMPT_CONTEXT_KEY)
+        .expect("memory context");
+    assert!(context.get("sidecarRef").is_none());
+    assert_eq!(
+        metadata[CONTEXT_PACKET_TELEMETRY_KEY]["packets"][0]["rejectedReason"].as_str(),
+        Some("secret_like")
+    );
+    assert!(sidecar_store
+        .read_text("sessions/sess_memory_prompt/context/memory-summary-turn_memory_prompt.md")
+        .is_none());
 }

@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Skill } from "@/lib/api/skills";
-import type { MessagePathReference } from "../../../types";
+import type { MessageImage, MessagePathReference } from "../../../types";
 import type { InputCapabilitySelection } from "../../../skill-selection/inputCapabilitySelection";
 import type { InputbarSendHandler } from "../inputbarSendPayload";
 import type { InputbarPluginSelection } from "../pluginInputCapability";
@@ -26,9 +26,11 @@ interface HarnessProps {
   activeCapability?: InputCapabilitySelection | null;
   activePluginSelection?: InputbarPluginSelection | null;
   activeTools?: Record<string, boolean>;
+  getInputRestoreEpoch?: () => number;
   input?: string;
   onSend: InputbarSendHandler;
   pathReferences?: MessagePathReference[];
+  pendingImages?: MessageImage[];
   projectId?: string | null;
   sessionId?: string | null;
 }
@@ -43,15 +45,17 @@ function Harness({
   activeCapability = null,
   activePluginSelection = null,
   activeTools = {},
+  getInputRestoreEpoch,
   input = "",
   onSend,
   pathReferences = [],
+  pendingImages = [],
   projectId = null,
   sessionId = null,
 }: HarnessProps) {
   const handleSend = useInputbarSend({
     input,
-    pendingImages: [],
+    pendingImages,
     pathReferences,
     activeCapability,
     activePluginSelection,
@@ -63,6 +67,7 @@ function Harness({
     clearPendingImages: clearPendingImagesMock,
     clearPathReferences: clearPathReferencesMock,
     clearActiveCapability: clearActiveCapabilityMock,
+    getInputRestoreEpoch,
   });
 
   useEffect(() => {
@@ -190,14 +195,19 @@ describe("useInputbarSend", () => {
 
   it("只有路径引用时仍应发送路径占位文本并保留 metadata", async () => {
     const onSend = vi.fn().mockResolvedValue(true);
+    const pathReferences = [createPathReference()];
     renderHarness({
       input: "   ",
       onSend,
-      pathReferences: [createPathReference()],
+      pathReferences,
     });
 
     await send();
 
+    const payload = onSend.mock.calls[0]?.[0];
+    expect(payload?.sendOptions?.inputRestoreDraft?.pathReferences).not.toBe(
+      pathReferences,
+    );
     expect(onSend).toHaveBeenCalledWith({
       images: undefined,
       textOverride: "请查看这些文件或文件夹。",
@@ -206,6 +216,7 @@ describe("useInputbarSend", () => {
           text: "",
           images: [],
           pathReferences: [createPathReference()],
+          textElements: [],
           inputCapabilityRoute: undefined,
         },
         requestMetadata: {
@@ -253,6 +264,74 @@ describe("useInputbarSend", () => {
     expect(clearPathReferencesMock).toHaveBeenCalledTimes(1);
   });
 
+  it("富输入恢复草稿应使用发送瞬间的独立快照", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const image: MessageImage = {
+      data: "image-data",
+      mediaType: "image/png",
+      sourcePath: "/tmp/screenshot.png",
+    };
+    const pendingImages = [image];
+    const pathReferences = [createPathReference()];
+    renderHarness({
+      activeCapability: createInstalledSkillSelection(),
+      input: "请结合截图和文件生成能力报告",
+      onSend,
+      pathReferences,
+      pendingImages,
+    });
+
+    await send();
+
+    const payload = onSend.mock.calls[0]?.[0];
+    expect(payload?.sendOptions?.inputRestoreDraft).toMatchObject({
+      text: "请结合截图和文件生成能力报告",
+      images: [image],
+      pathReferences: [createPathReference()],
+      inputCapabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "capability-report",
+        skillName: "Capability Report",
+      },
+    });
+    expect(payload?.sendOptions?.inputRestoreDraft?.images).not.toBe(
+      pendingImages,
+    );
+    expect(payload?.sendOptions?.inputRestoreDraft?.pathReferences).not.toBe(
+      pathReferences,
+    );
+  });
+
+  it("发送期间发生输入恢复时不应再清理刚恢复的富输入状态", async () => {
+    let inputRestoreEpoch = 1;
+    const image: MessageImage = {
+      data: "image-data",
+      mediaType: "image/png",
+      sourcePath: "/tmp/screenshot.png",
+    };
+    const pathReferences = [createPathReference()];
+    const onSend = vi.fn(async () => {
+      inputRestoreEpoch = 2;
+      return true;
+    });
+
+    renderHarness({
+      activeCapability: createInstalledSkillSelection(),
+      getInputRestoreEpoch: () => inputRestoreEpoch,
+      input: "请结合截图和文件生成能力报告",
+      onSend,
+      pathReferences,
+      pendingImages: [image],
+    });
+
+    await send();
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(clearPendingImagesMock).not.toHaveBeenCalled();
+    expect(clearPathReferencesMock).not.toHaveBeenCalled();
+    expect(clearActiveCapabilityMock).not.toHaveBeenCalled();
+  });
+
   it("技能路由和计划模式 metadata 不应因显式文本发送丢失", async () => {
     const onSend = vi.fn().mockResolvedValue(true);
     renderHarness({
@@ -281,6 +360,7 @@ describe("useInputbarSend", () => {
           text: "生成一份能力报告",
           images: [],
           pathReferences: [],
+          textElements: [{ type: "text", text: "生成一份能力报告" }],
           inputCapabilityRoute: {
             kind: "installed_skill",
             skillKey: "capability-report",

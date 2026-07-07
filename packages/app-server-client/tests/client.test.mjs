@@ -72,6 +72,7 @@ const {
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   METHOD_AGENT_SESSION_LIST,
+  METHOD_AGENT_SESSION_MEDIA_READ,
   METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
   METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
   METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
@@ -420,6 +421,11 @@ test("builds initialize and caller supplied session start requests", () => {
     confirmed: true,
     response: { answer: "approved" },
   });
+  const mediaRead = client.readAgentSessionMedia({
+    sessionId: "sess_external",
+    uri: "sidecar://media/demo",
+    maxBytes: 1024,
+  });
 
   assert.equal(initialize.id, 1);
   assert.equal(initialize.method, METHOD_INITIALIZE);
@@ -428,6 +434,10 @@ test("builds initialize and caller supplied session start requests", () => {
   assert.equal(start.params.sessionId, "sess_external");
   assert.equal(workflow.id, 3);
   assert.equal(workflow.method, METHOD_WORKFLOW_READ);
+  assert.equal(mediaRead.id, 7);
+  assert.equal(mediaRead.method, METHOD_AGENT_SESSION_MEDIA_READ);
+  assert.equal(mediaRead.params.sessionId, "sess_external");
+  assert.equal(mediaRead.params.uri, "sidecar://media/demo");
   assert.equal(workflow.params.sessionId, "sess_external");
   assert.equal(workflowCancel.id, 4);
   assert.equal(workflowCancel.method, METHOD_WORKFLOW_CANCEL);

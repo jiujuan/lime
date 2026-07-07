@@ -171,8 +171,7 @@ async fn get_or_create_agent_with_runtime(
     }
 
     let tool_config = ToolRegistrationConfig::new()
-        .with_agent_control_tools(build_agent_control_tool_config(runtime.clone()))
-        .with_scheduler(Arc::clone(&runtime.scheduler));
+        .with_agent_control_tools(build_agent_control_tool_config(runtime.clone()));
     let agent = Arc::new(
         Agent::with_tool_config(tool_config)
             .with_thread_runtime_store(Arc::clone(&runtime.thread_runtime_store)),

@@ -485,39 +485,9 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         ],
     },
     ToolDiscoveryProfile {
-        canonical_name: "NotebookEdit",
-        aliases: &["NotebookEditTool"],
-        intent_terms: &["notebook edit", "jupyter", "编辑 notebook"],
-    },
-    ToolDiscoveryProfile {
         canonical_name: "PowerShell",
         aliases: &["PowerShellTool"],
         intent_terms: &["powershell", "windows shell", "windows 命令"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "RemoteTrigger",
-        aliases: &["RemoteTriggerTool"],
-        intent_terms: &["remote trigger", "trigger remote", "远程触发"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "Sleep",
-        aliases: &["SleepTool"],
-        intent_terms: &["sleep", "wait", "delay", "等待"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "CronCreate",
-        aliases: &["ScheduleCronTool", "CronCreateTool"],
-        intent_terms: &["create cron", "schedule", "定时任务"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "CronList",
-        aliases: &["CronListTool"],
-        intent_terms: &["list cron", "list schedule", "查看定时任务"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "CronDelete",
-        aliases: &["CronDeleteTool"],
-        intent_terms: &["delete cron", "cancel schedule", "删除定时任务"],
     },
     ToolDiscoveryProfile {
         canonical_name: "EnterPlanMode",
@@ -528,16 +498,6 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         canonical_name: "ExitPlanMode",
         aliases: &["ExitPlanModeTool"],
         intent_terms: &["exit plan", "leave plan mode", "退出计划模式"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "EnterWorktree",
-        aliases: &["EnterWorktreeTool"],
-        intent_terms: &["enter worktree", "worktree", "进入工作树"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "ExitWorktree",
-        aliases: &["ExitWorktreeTool"],
-        intent_terms: &["exit worktree", "leave worktree", "退出工作树"],
     },
 ];
 

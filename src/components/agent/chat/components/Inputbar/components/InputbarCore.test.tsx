@@ -86,6 +86,23 @@ const renderInputbarCore = async (
 };
 
 describe("InputbarCore", () => {
+  it("图片草稿没有 base64 data 时应使用 sourceUri 作为预览", async () => {
+    const container = await renderInputbarCore({
+      pendingImages: [
+        {
+          data: "",
+          mediaType: "image/png",
+          sourceUri: "file://queued.png",
+          sourcePath: "/project/queued.png",
+          previewUrl: "file://queued.png",
+        },
+      ],
+    });
+
+    const image = container.querySelector("img") as HTMLImageElement | null;
+    expect(image?.getAttribute("src")).toBe("file://queued.png");
+  });
+
   it("挂载时不应渲染或触发 retired 实时语音入口", async () => {
     await renderInputbarCore({
       visualVariant: "default",

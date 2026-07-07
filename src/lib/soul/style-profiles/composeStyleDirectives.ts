@@ -1,4 +1,5 @@
 import { resolveSoulStyleProfile } from "./resolveStyleProfile";
+import type { SoulStyleProfileRegistry } from "./registry";
 import type {
   SoulStyleDirectives,
   SoulStyleFewShotAnchor,
@@ -22,8 +23,9 @@ function fewShotLines(anchors: SoulStyleFewShotAnchor[]): string[] {
 
 export function composeStyleDirectives(
   context: SoulStyleProfileContext = {},
+  registry?: SoulStyleProfileRegistry,
 ): SoulStyleDirectives | null {
-  const resolved = resolveSoulStyleProfile(context);
+  const resolved = resolveSoulStyleProfile(context, registry);
   if (resolved.bypassInteractionStyle) {
     return null;
   }

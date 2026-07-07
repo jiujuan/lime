@@ -9,9 +9,16 @@ import type {
 import { useWorkspaceHarnessInventoryRuntime } from "./useWorkspaceHarnessInventoryRuntime";
 
 const mockGetAgentRuntimeToolInventory = vi.hoisted(() => vi.fn());
+const mockExecutePrepareRequests = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/agentRuntime", () => ({
   getAgentRuntimeToolInventory: mockGetAgentRuntimeToolInventory,
+}));
+
+vi.mock("@/lib/api/mcp", () => ({
+  mcpApi: {
+    executePrepareRequests: mockExecutePrepareRequests,
+  },
 }));
 
 interface HookProps {
@@ -100,6 +107,13 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
   };
 }
 
+async function flushHookEffects() {
+  await act(async () => {
+    await Promise.resolve();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+}
+
 describe("useWorkspaceHarnessInventoryRuntime", () => {
   beforeEach(() => {
     (
@@ -107,11 +121,13 @@ describe("useWorkspaceHarnessInventoryRuntime", () => {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
-    vi.clearAllMocks();
+    mockGetAgentRuntimeToolInventory.mockReset();
+    mockExecutePrepareRequests.mockReset();
     mockGetAgentRuntimeToolInventory.mockResolvedValue({
       sections: [],
       toolCount: 0,
     });
+    mockExecutePrepareRequests.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -200,12 +216,7 @@ describe("useWorkspaceHarnessInventoryRuntime", () => {
         { name: "TeamCreate" },
         { name: "TeamDelete" },
         { name: "ListPeers" },
-        { name: "TaskCreate" },
-        { name: "TaskGet" },
-        { name: "TaskList" },
-        { name: "TaskUpdate" },
-        { name: "TaskOutput" },
-        { name: "TaskStop" },
+        { name: "update_plan" },
       ],
       registry_tools: [],
     });
@@ -248,6 +259,102 @@ describe("useWorkspaceHarnessInventoryRuntime", () => {
       expect(harness.getValue().toolInventory).toMatchObject({
         agent_initialized: true,
       });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("应执行插件 MCP prepare requests 并刷新工具库存", async () => {
+    const prepareRequests = [
+      {
+        method: "mcpServer/start",
+        params: { name: "context7" },
+        reason: "server_stopped",
+        status: "candidate",
+      },
+      {
+        method: "mcpTool/listForContext",
+        params: { caller: "plugin:docs-plugin", includeDeferred: true },
+        reason: "tool_listing",
+        status: "candidate",
+      },
+    ];
+    mockGetAgentRuntimeToolInventory
+      .mockResolvedValueOnce({
+        agent_initialized: true,
+        plugin_mcp_targets: [
+          {
+            pluginId: "docs-plugin",
+            prepareRequests,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        agent_initialized: true,
+        plugin_mcp_targets: [
+          {
+            pluginId: "docs-plugin",
+            prepareRequests: [],
+          },
+        ],
+      });
+
+    const harness = mountHook({
+      enabled: true,
+      harnessPanelVisible: true,
+    });
+
+    try {
+      await flushHookEffects();
+
+      expect(harness.getValue().mcpPrepareCandidateCount).toBe(2);
+
+      await act(async () => {
+        await harness.getValue().prepareMcpTargets();
+      });
+
+      expect(mockExecutePrepareRequests).toHaveBeenCalledTimes(1);
+      expect(mockExecutePrepareRequests).toHaveBeenCalledWith(prepareRequests);
+      expect(mockGetAgentRuntimeToolInventory).toHaveBeenCalledTimes(2);
+      expect(harness.getValue().mcpPrepareError).toBeNull();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("没有 candidate prepare request 时不应调用 MCP API", async () => {
+    mockGetAgentRuntimeToolInventory.mockResolvedValueOnce({
+      agent_initialized: true,
+      plugin_mcp_targets: [
+        {
+          pluginId: "docs-plugin",
+          prepareRequests: [
+            {
+              method: "mcpTool/listForContext",
+              params: { caller: "plugin:docs-plugin" },
+              status: "ready",
+            },
+          ],
+        },
+      ],
+    });
+
+    const harness = mountHook({
+      enabled: true,
+      harnessPanelVisible: true,
+    });
+
+    try {
+      await flushHookEffects();
+
+      expect(harness.getValue().mcpPrepareCandidateCount).toBe(0);
+
+      await act(async () => {
+        await harness.getValue().prepareMcpTargets();
+      });
+
+      expect(mockExecutePrepareRequests).not.toHaveBeenCalled();
+      expect(mockGetAgentRuntimeToolInventory).toHaveBeenCalledTimes(1);
     } finally {
       harness.unmount();
     }

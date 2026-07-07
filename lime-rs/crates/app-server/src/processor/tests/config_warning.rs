@@ -12,21 +12,32 @@ use app_server_protocol::{
 use serde_json::json;
 use std::sync::Arc;
 
+fn config_warning(summary: &str) -> app_server_protocol::JsonRpcNotification {
+    ServerNotification::ConfigWarning(ConfigWarningNotification {
+        summary: summary.to_string(),
+        details: Some("synthetic config parser warning".to_string()),
+        path: Some("/tmp/lime/config.yaml".to_string()),
+        range: None,
+    })
+    .into()
+}
+
 fn scoped_config_warning_provider() -> ConfigWarningProvider {
     Arc::new(|scope| {
         let summary = match scope {
             ConfigWarningScope::Initialize => "test initialize config warning",
             ConfigWarningScope::TurnStart => "test turn start config warning",
         };
-        Some(
-            ServerNotification::ConfigWarning(ConfigWarningNotification {
-                summary: summary.to_string(),
-                details: Some("synthetic config parser warning".to_string()),
-                path: Some("/tmp/lime/config.yaml".to_string()),
-                range: None,
-            })
-            .into(),
-        )
+        vec![config_warning(summary)]
+    })
+}
+
+fn multi_config_warning_provider() -> ConfigWarningProvider {
+    Arc::new(|_| {
+        vec![
+            config_warning("test first config warning"),
+            config_warning("test second config warning"),
+        ]
     })
 }
 
@@ -65,6 +76,55 @@ async fn initialize_returns_config_warning_notification() {
     assert_eq!(
         notification.params.as_ref().expect("params")["summary"],
         json!("test initialize config warning")
+    );
+}
+
+#[tokio::test]
+async fn initialize_returns_all_config_warning_notifications() {
+    let processor = crate::processor::RequestProcessor::new_with_config_warning_provider(
+        RuntimeCore::default(),
+        multi_config_warning_provider(),
+    );
+
+    let messages = processor
+        .handle_request(JsonRpcRequest::new(
+            RequestId::Integer(1),
+            METHOD_INITIALIZE,
+            Some(
+                serde_json::to_value(InitializeParams {
+                    client_info: ClientInfo {
+                        name: "test-client".to_string(),
+                        title: None,
+                        version: None,
+                    },
+                    capabilities: ClientCapabilities::default(),
+                })
+                .expect("initialize params"),
+            ),
+        ))
+        .await
+        .expect("initialize");
+
+    assert_eq!(messages.len(), 3);
+    assert!(matches!(messages[0], JsonRpcMessage::Response(_)));
+    let summaries: Vec<_> = messages
+        .iter()
+        .filter_map(|message| match message {
+            JsonRpcMessage::Notification(notification)
+                if notification.method == METHOD_CONFIG_WARNING =>
+            {
+                Some(
+                    notification.params.as_ref().expect("params")["summary"]
+                        .as_str()
+                        .expect("summary"),
+                )
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        summaries,
+        vec!["test first config warning", "test second config warning"]
     );
 }
 

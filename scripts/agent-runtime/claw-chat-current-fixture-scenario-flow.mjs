@@ -15,6 +15,7 @@ import {
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
   IMAGE_COMMAND_SCENARIO,
+  INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_SCENARIO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
@@ -27,6 +28,18 @@ import {
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
+  REASONING_FIRST_VISIBLE_DONE_TEXT,
+  REASONING_FIRST_VISIBLE_FINAL_TEXT,
+  REASONING_FIRST_VISIBLE_PROMPT,
+  REASONING_FIRST_VISIBLE_SCENARIO,
+  REASONING_FIRST_VISIBLE_TEXT,
+  TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+  TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
+  TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+  TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+  TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+  TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
   SOUL_STYLE_SCENARIO,
@@ -36,6 +49,14 @@ import {
   SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
   SKILLS_RUNTIME_PROMPT,
   SKILLS_RUNTIME_SCENARIO,
+  TERMINAL_STALE_GUARD_DONE_TEXT,
+  TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
+  TERMINAL_STALE_GUARD_FIRST_PROMPT,
+  TERMINAL_STALE_GUARD_FIRST_TEXT,
+  TERMINAL_STALE_GUARD_SCENARIO,
+  TERMINAL_STALE_GUARD_SECOND_PROMPT,
+  TERMINAL_STALE_GUARD_SECOND_TEXT,
+  TERMINAL_STALE_GUARD_STALE_DONE_TEXT,
   WEB_TOOLS_FETCH_TOOL_CALL_ID,
   WEB_TOOLS_MID_THINKING_TEXT,
   WEB_TOOLS_REASONING_FINAL_SIGNATURE,
@@ -63,11 +84,16 @@ import {
   enableGoalModeFromGui,
   enablePlanModeFromGui,
 } from "./claw-chat-current-fixture-gui-input-modes.mjs";
-import { runInputbarRichRestoreScenario } from "./claw-chat-current-fixture-inputbar-rich-restore.mjs";
+import {
+  runInputbarPendingSteerRichRestoreScenario,
+  runInputbarRichRestoreScenario,
+} from "./claw-chat-current-fixture-inputbar-rich-restore.mjs";
 import {
   waitForGuiChatCanceled,
   waitForGuiChatCompleted,
   waitForGuiPlanCompleted,
+  waitForGuiReasoningFirstVisibleBeforeAnswer,
+  waitForGuiReasoningFirstVisibleCompleted,
   waitForGuiSkillsRuntimeCompleted,
   waitForStopButtonVisibleAndClick,
 } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
@@ -78,6 +104,10 @@ import {
   waitForGuiWebToolsRenderingInProgress,
 } from "./claw-chat-current-fixture-gui-web-tools-waits.mjs";
 import { runImageCommandScenario } from "./claw-chat-current-fixture-image-command.mjs";
+import {
+  MEDIA_REFERENCE_SCENARIO,
+  runMediaReferenceScenario,
+} from "./claw-chat-current-fixture-media-reference.mjs";
 import {
   createExpertSkillsRuntimeSession,
   injectExpertSkillsRuntimeCatalog,
@@ -106,6 +136,7 @@ import {
   waitForBackendTurnStartWithCurrentQueueResume,
   waitForSessionReadCanceled,
   waitForSessionReadCompleted,
+  waitForSessionReadFailedAfterAnswer,
   waitForSessionReadMcpStructuredContentCompleted,
   waitForSessionReadPlanCompleted,
   waitForSessionReadSkillsRuntimeCompleted,
@@ -144,10 +175,148 @@ function summarizeThreadItemsForProbe(items) {
   }));
 }
 
+function collectReadModelThreadItems(readModel) {
+  const detailItems = Array.isArray(readModel?.detail?.items)
+    ? readModel.detail.items
+    : [];
+  const threadReadItems = Array.isArray(
+    readModel?.detail?.thread_read?.thread_items,
+  )
+    ? readModel.detail.thread_read.thread_items
+    : [];
+  return [...detailItems, ...threadReadItems].filter(Boolean);
+}
+
+function summarizeReasoningFirstVisibleReadModel(readModel) {
+  const serialized = JSON.stringify(readModel || {});
+  const items = collectReadModelThreadItems(readModel);
+  const reasoningItems = items.filter((item) => item?.type === "reasoning");
+  const reasoningItem = reasoningItems.find((item) =>
+    JSON.stringify(item || {}).includes(REASONING_FIRST_VISIBLE_TEXT),
+  );
+  const reasoningSequence =
+    typeof reasoningItem?.sequence === "number" ? reasoningItem.sequence : null;
+  const finalItem = items.find((item) =>
+    JSON.stringify(item || {}).includes(REASONING_FIRST_VISIBLE_FINAL_TEXT),
+  );
+  const finalSequence =
+    typeof finalItem?.sequence === "number" ? finalItem.sequence : null;
+
+  return {
+    detailItemCount: Array.isArray(readModel?.detail?.items)
+      ? readModel.detail.items.length
+      : null,
+    threadReadItemCount: Array.isArray(
+      readModel?.detail?.thread_read?.thread_items,
+    )
+      ? readModel.detail.thread_read.thread_items.length
+      : null,
+    latestTurnStatus:
+      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
+      readModel?.detail?.thread_read?.status ??
+      readModel?.detail?.status ??
+      null,
+    includesPrompt: serialized.includes(REASONING_FIRST_VISIBLE_PROMPT),
+    includesAssistantDone: serialized.includes(
+      REASONING_FIRST_VISIBLE_DONE_TEXT,
+    ),
+    includesFinalText: serialized.includes(REASONING_FIRST_VISIBLE_FINAL_TEXT),
+    includesReasoningText: serialized.includes(REASONING_FIRST_VISIBLE_TEXT),
+    includesReasoningItem: Boolean(reasoningItem),
+    reasoningItemCount: reasoningItems.length,
+    reasoningItemStatus: reasoningItem?.status ?? null,
+    reasoningSequence,
+    finalSequence,
+    reasoningSequenceBeforeFinal:
+      reasoningSequence != null &&
+      finalSequence != null &&
+      reasoningSequence < finalSequence,
+  };
+}
+
+function summarizeTerminalStaleGuardReadModel(readModel, { prompt, doneText }) {
+  const serialized = JSON.stringify(readModel || {});
+  return {
+    detailItemCount: Array.isArray(readModel?.detail?.items)
+      ? readModel.detail.items.length
+      : null,
+    threadReadItemCount: Array.isArray(
+      readModel?.detail?.thread_read?.thread_items,
+    )
+      ? readModel.detail.thread_read.thread_items.length
+      : null,
+    latestTurnStatus:
+      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
+      readModel?.detail?.thread_read?.status ??
+      readModel?.detail?.status ??
+      null,
+    includesPrompt: serialized.includes(prompt),
+    includesAssistantDone: serialized.includes(doneText),
+  };
+}
+
+function summarizeTerminalFailedAfterAnswerReadModel(readModel) {
+  const serialized = JSON.stringify(readModel || {});
+  return {
+    detailItemCount: Array.isArray(readModel?.detail?.items)
+      ? readModel.detail.items.length
+      : null,
+    threadReadItemCount: Array.isArray(
+      readModel?.detail?.thread_read?.thread_items,
+    )
+      ? readModel.detail.thread_read.thread_items.length
+      : null,
+    latestTurnStatus:
+      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
+      readModel?.detail?.thread_read?.status ??
+      readModel?.detail?.status ??
+      null,
+    latestTurnErrorMessage:
+      readModel?.detail?.thread_read?.diagnostics
+        ?.latest_turn_error_message ??
+      readModel?.detail?.thread_read?.diagnostics
+        ?.latestTurnErrorMessage ??
+      null,
+    includesPrompt: serialized.includes(TERMINAL_FAILED_AFTER_ANSWER_PROMPT),
+    includesPartialText: serialized.includes(
+      TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+    ),
+    includesFailureText: serialized.includes(
+      TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+    ),
+  };
+}
+
+function summarizeTerminalCanceledAfterAnswerReadModel(readModel) {
+  const serialized = JSON.stringify(readModel || {});
+  return {
+    detailItemCount: Array.isArray(readModel?.detail?.items)
+      ? readModel.detail.items.length
+      : null,
+    threadReadItemCount: Array.isArray(
+      readModel?.detail?.thread_read?.thread_items,
+    )
+      ? readModel.detail.thread_read.thread_items.length
+      : null,
+    latestTurnStatus:
+      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
+      readModel?.detail?.thread_read?.status ??
+      readModel?.detail?.status ??
+      null,
+    includesPrompt: serialized.includes(TERMINAL_CANCELED_AFTER_ANSWER_PROMPT),
+    includesPartialText: serialized.includes(
+      TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+    ),
+    includesCanceled: serialized.includes("canceled"),
+  };
+}
+
 function traceEvidenceHasProviderAndClient(evidence) {
   return (
     evidence?.hasProviderWaitMs === true &&
-    evidence?.hasClientLocalOutputMs === true
+    evidence?.hasClientLocalOutputMs === true &&
+    evidence?.hasFirstVisibleOutputMs === true &&
+    evidence?.hasFirstTextDeltaToFirstTextPaintMs === true
   );
 }
 
@@ -248,6 +417,20 @@ export async function executeScenarioFlow({
     Object.assign(
       summary,
       await runInputbarRichRestoreScenario({
+        page,
+        options,
+        summary,
+        appServerRequests,
+        runtimeEnv,
+      }),
+    );
+  } else if (
+    options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO
+  ) {
+    logStage("run-inputbar-pending-steer-rich-restore");
+    Object.assign(
+      summary,
+      await runInputbarPendingSteerRichRestoreScenario({
         page,
         options,
         summary,
@@ -389,6 +572,240 @@ export async function executeScenarioFlow({
         summary,
       }),
     );
+  } else if (options.scenario === MEDIA_REFERENCE_SCENARIO) {
+    logStage("run-media-reference-scenario");
+    Object.assign(
+      summary,
+      await runMediaReferenceScenario({
+        page,
+        options,
+        appServerRequests,
+      }),
+    );
+  } else if (options.scenario === REASONING_FIRST_VISIBLE_SCENARIO) {
+    logStage("send-reasoning-first-visible-prompt-from-gui");
+    summary.reasoningFirstVisibleInputSend = sanitizeJson(
+      await sendPromptFromGui(page, options, REASONING_FIRST_VISIBLE_PROMPT),
+    );
+
+    logStage("wait-gui-reasoning-first-visible-before-answer");
+    summary.guiReasoningFirstVisibleBeforeAnswer = sanitizeJson(
+      await waitForGuiReasoningFirstVisibleBeforeAnswer(page, options),
+    );
+
+    logStage("wait-gui-reasoning-first-visible-completed");
+    summary.guiReasoningFirstVisibleCompleted = sanitizeJson(
+      await waitForGuiReasoningFirstVisibleCompleted(page, options),
+    );
+
+    logStage("wait-read-model-reasoning-first-visible-completed");
+    const readModelReasoningFirstVisibleCompleted =
+      await waitForSessionReadCompleted(page, options, appServerRequests, {
+        prompt: REASONING_FIRST_VISIBLE_PROMPT,
+        doneText: REASONING_FIRST_VISIBLE_DONE_TEXT,
+        summaryText: REASONING_FIRST_VISIBLE_FINAL_TEXT,
+      });
+    summary.readModelReasoningFirstVisibleCompleted = sanitizeJson(
+      summarizeReasoningFirstVisibleReadModel(
+        readModelReasoningFirstVisibleCompleted,
+      ),
+    );
+
+    await recordAgentUiPerformanceTraceEvidence(summary, page);
+  } else if (options.scenario === TERMINAL_FAILED_AFTER_ANSWER_SCENARIO) {
+    logStage("send-terminal-failed-after-answer-prompt-from-gui");
+    summary.terminalFailedAfterAnswerInputSend = sanitizeJson(
+      await sendPromptFromGui(
+        page,
+        options,
+        TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+      ),
+    );
+
+    logStage("wait-gui-terminal-failed-after-answer-failed");
+    summary.guiTerminalFailedAfterAnswerCompleted = sanitizeJson(
+      await waitForGuiChatCompleted(page, options, {
+        prompt: TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+        doneText: TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+        summaryText: TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+        requiredVisibleTexts: [TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT],
+        dedupeGuardTexts: [
+          TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+          TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+        ],
+      }),
+    );
+
+    logStage("wait-read-model-terminal-failed-after-answer-failed");
+    const readModelTerminalFailedAfterAnswer =
+      await waitForSessionReadFailedAfterAnswer(
+        page,
+        options,
+        appServerRequests,
+        {
+          prompt: TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+          partialText: TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+          failureText: TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+        },
+      );
+    summary.readModelTerminalFailedAfterAnswer = sanitizeJson(
+      summarizeTerminalFailedAfterAnswerReadModel(
+        readModelTerminalFailedAfterAnswer,
+      ),
+    );
+
+    const failedAfterAnswerLedger = await waitForBackendLedgerEntry(
+      runtimeEnv.backendLedgerPath,
+      (entry) => entry.kind === "terminalFailedAfterAnswerTurnFailed",
+      options,
+    );
+    summary.terminalFailedAfterAnswerBackend = sanitizeJson({
+      eventType: failedAfterAnswerLedger.entry.eventType,
+      turnId: failedAfterAnswerLedger.entry.turnId,
+      partialText: failedAfterAnswerLedger.entry.partialText,
+      failureText: failedAfterAnswerLedger.entry.failureText,
+      ledgerCount: failedAfterAnswerLedger.ledger.length,
+    });
+  } else if (options.scenario === TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO) {
+    logStage("send-terminal-canceled-after-answer-prompt-from-gui");
+    summary.terminalCanceledAfterAnswerInputSend = sanitizeJson(
+      await sendPromptFromGui(
+        page,
+        options,
+        TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+      ),
+    );
+
+    logStage("click-stop-after-terminal-canceled-partial-from-gui");
+    summary.terminalCanceledAfterAnswerStopClick = sanitizeJson(
+      await waitForStopButtonVisibleAndClick(page, options, {
+        prompt: TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+        visibleOutputText: TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+        requireVisibleOutput: true,
+      }),
+    );
+
+    logStage("wait-gui-terminal-canceled-after-answer-canceled");
+    summary.guiTerminalCanceledAfterAnswerCanceled = sanitizeJson(
+      await waitForGuiChatCanceled(page, options, {
+        prompt: TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+        partialText: TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+      }),
+    );
+
+    logStage("wait-read-model-terminal-canceled-after-answer-canceled");
+    const readModelTerminalCanceledAfterAnswer =
+      await waitForSessionReadCanceled(page, options, appServerRequests, {
+        prompt: TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+        partialText: TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+      });
+    summary.readModelTerminalCanceledAfterAnswer = sanitizeJson(
+      summarizeTerminalCanceledAfterAnswerReadModel(
+        readModelTerminalCanceledAfterAnswer,
+      ),
+    );
+
+    const canceledAfterAnswerLedger = await waitForBackendLedgerEntry(
+      runtimeEnv.backendLedgerPath,
+      (entry) => entry.kind === "terminalCanceledAfterAnswerTurnCanceled",
+      options,
+    );
+    summary.terminalCanceledAfterAnswerBackend = sanitizeJson({
+      eventType: canceledAfterAnswerLedger.entry.eventType,
+      turnId: canceledAfterAnswerLedger.entry.turnId,
+      partialText: canceledAfterAnswerLedger.entry.partialText,
+      canceledText: canceledAfterAnswerLedger.entry.canceledText,
+      ledgerCount: canceledAfterAnswerLedger.ledger.length,
+    });
+  } else if (options.scenario === TERMINAL_STALE_GUARD_SCENARIO) {
+    logStage("send-terminal-stale-guard-first-prompt-from-gui");
+    summary.terminalStaleGuardFirstInputSend = sanitizeJson(
+      await sendPromptFromGui(
+        page,
+        options,
+        TERMINAL_STALE_GUARD_FIRST_PROMPT,
+      ),
+    );
+
+    logStage("wait-gui-terminal-stale-guard-first-completed");
+    summary.guiTerminalStaleGuardFirstCompleted = sanitizeJson(
+      await waitForGuiChatCompleted(page, options, {
+        prompt: TERMINAL_STALE_GUARD_FIRST_PROMPT,
+        doneText: TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
+        summaryText: TERMINAL_STALE_GUARD_FIRST_TEXT,
+      }),
+    );
+
+    logStage("wait-read-model-terminal-stale-guard-first-completed");
+    const readModelTerminalStaleGuardFirstCompleted =
+      await waitForSessionReadCompleted(page, options, appServerRequests, {
+        prompt: TERMINAL_STALE_GUARD_FIRST_PROMPT,
+        doneText: TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
+        summaryText: TERMINAL_STALE_GUARD_FIRST_TEXT,
+      });
+    summary.readModelTerminalStaleGuardFirstCompleted = sanitizeJson(
+      summarizeTerminalStaleGuardReadModel(
+        readModelTerminalStaleGuardFirstCompleted,
+        {
+          prompt: TERMINAL_STALE_GUARD_FIRST_PROMPT,
+          doneText: TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
+        },
+      ),
+    );
+
+    logStage("send-terminal-stale-guard-second-prompt-from-gui");
+    summary.terminalStaleGuardSecondInputSend = sanitizeJson(
+      await sendPromptFromGui(
+        page,
+        options,
+        TERMINAL_STALE_GUARD_SECOND_PROMPT,
+      ),
+    );
+
+    logStage("wait-gui-terminal-stale-guard-second-completed");
+    summary.guiTerminalStaleGuardSecondCompleted = sanitizeJson(
+      await waitForGuiChatCompleted(page, options, {
+        prompt: TERMINAL_STALE_GUARD_SECOND_PROMPT,
+        doneText: TERMINAL_STALE_GUARD_DONE_TEXT,
+        summaryText: TERMINAL_STALE_GUARD_SECOND_TEXT,
+        disallowedVisibleTexts: [TERMINAL_STALE_GUARD_STALE_DONE_TEXT],
+      }),
+    );
+
+    logStage("wait-read-model-terminal-stale-guard-second-completed");
+    const readModelTerminalStaleGuardSecondCompleted =
+      await waitForSessionReadCompleted(page, options, appServerRequests, {
+        prompt: TERMINAL_STALE_GUARD_SECOND_PROMPT,
+        doneText: TERMINAL_STALE_GUARD_DONE_TEXT,
+        summaryText: TERMINAL_STALE_GUARD_SECOND_TEXT,
+      });
+    summary.readModelTerminalStaleGuardSecondCompleted = sanitizeJson(
+      summarizeTerminalStaleGuardReadModel(
+        readModelTerminalStaleGuardSecondCompleted,
+        {
+          prompt: TERMINAL_STALE_GUARD_SECOND_PROMPT,
+          doneText: TERMINAL_STALE_GUARD_DONE_TEXT,
+        },
+      ),
+    );
+
+    const staleTerminalLedger = await waitForBackendLedgerEntry(
+      runtimeEnv.backendLedgerPath,
+      (entry) => entry.kind === "terminalStaleGuardStaleTerminal",
+      options,
+    );
+    const staleTerminalEntry = staleTerminalLedger.entry;
+    summary.terminalStaleGuardStaleTerminal = sanitizeJson({
+      currentTurnId: staleTerminalEntry.currentTurnId,
+      staleTurnId: staleTerminalEntry.staleTurnId,
+      staleEventType: staleTerminalEntry.staleEventType,
+      staleDoneText: staleTerminalEntry.staleDoneText,
+      staleTurnDiffersFromCurrent:
+        Boolean(staleTerminalEntry.currentTurnId) &&
+        Boolean(staleTerminalEntry.staleTurnId) &&
+        staleTerminalEntry.staleTurnId !== staleTerminalEntry.currentTurnId,
+      ledgerCount: staleTerminalLedger.ledger.length,
+    });
   } else if (options.scenario === "web-tools-rendering") {
     logStage("send-web-tools-rendering-prompt-from-gui");
     summary.webToolsRenderingInputSend = sanitizeJson(
@@ -1178,6 +1595,11 @@ export async function executeScenarioFlow({
     options.scenario !== "plan" &&
     options.scenario !== "goal" &&
     !isImageIntentScenario &&
+    options.scenario !== MEDIA_REFERENCE_SCENARIO &&
+    options.scenario !== REASONING_FIRST_VISIBLE_SCENARIO &&
+    options.scenario !== TERMINAL_FAILED_AFTER_ANSWER_SCENARIO &&
+    options.scenario !== TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO &&
+    options.scenario !== TERMINAL_STALE_GUARD_SCENARIO &&
     options.scenario !== "web-tools-rendering" &&
     options.scenario !== "mcp-structured-content" &&
     options.scenario !== MULTI_AGENT_TEAM_SCENARIO &&
@@ -1187,6 +1609,7 @@ export async function executeScenarioFlow({
     options.scenario !== "expert-panel-skills-runtime" &&
     options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO &&
     options.scenario !== INPUTBAR_RICH_RESTORE_SCENARIO &&
+    options.scenario !== INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO &&
     options.scenario !== CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO &&
     options.scenario !== CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
   ) {

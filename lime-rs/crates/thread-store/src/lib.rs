@@ -1,7 +1,6 @@
 pub mod conversation_transcript;
 pub mod history_search;
 pub mod legacy_conversation;
-pub mod memory_stub;
 pub mod runtime_snapshot;
 pub mod session_insights;
 pub mod session_record;

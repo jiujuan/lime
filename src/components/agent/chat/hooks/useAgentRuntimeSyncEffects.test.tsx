@@ -112,6 +112,74 @@ describe("useAgentRuntimeSyncEffects", () => {
     }
   });
 
+  it("failed read model 下残留 running turn 不应继续 recovered poll", async () => {
+    const refreshSessionDetail = vi.fn(async () => true);
+    const harness = await mountHook({
+      threadReadStatus: "failed",
+      threadTurns: [createThreadTurn({ status: "running" })],
+      refreshSessionDetail,
+    });
+
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("发送中收到 failed read model 时即使本地 turn 残留 running 也应收起 active stream", async () => {
+    const settleActiveRuntimeStream = vi.fn();
+    const harness = await mountHook({
+      isSending: true,
+      threadReadStatus: "failed",
+      threadTurns: [createThreadTurn({ status: "running" })],
+      settleActiveRuntimeStream,
+    });
+
+    try {
+      expect(settleActiveRuntimeStream).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("发送中收到 canceled read model 且本地 turn 残留 running 时也应收起 active stream", async () => {
+    const settleActiveRuntimeStream = vi.fn();
+    const harness = await mountHook({
+      isSending: true,
+      threadReadStatus: "canceled",
+      threadTurns: [createThreadTurn({ status: "running" })],
+      settleActiveRuntimeStream,
+    });
+
+    try {
+      expect(settleActiveRuntimeStream).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("发送中收到 cancelled read model 投影且本地 turn 残留 running 时也应收起 active stream", async () => {
+    const settleActiveRuntimeStream = vi.fn();
+    const harness = await mountHook({
+      isSending: true,
+      threadReadStatus: "cancelled",
+      threadTurns: [createThreadTurn({ status: "running" })],
+      settleActiveRuntimeStream,
+    });
+
+    try {
+      expect(settleActiveRuntimeStream).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("恢复出的陈旧 running turn 不应持续轮询完整详情", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
     const harness = await mountHook({

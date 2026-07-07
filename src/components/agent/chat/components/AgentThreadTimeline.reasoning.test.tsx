@@ -296,6 +296,50 @@ describe("AgentThreadTimeline", () => {
 
     expect(container.textContent).toContain("这里是更完整的正文。");
   });
+  it("clawstream reasoning-first-visible hydrate 后默认只显示 summary，展开才显示 raw reasoning", () => {
+    const summaryText = "摘要：先确认用户只需要一个标记。";
+    const rawReasoningText =
+      "完整推理：用户只要求输出一个标记，因此不需要启动额外工具，也不应把 raw reasoning 拼进最终正文。";
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("reasoning-clawstream-hydrate", 1),
+        type: "reasoning",
+        text: rawReasoningText,
+        summary: [summaryText],
+      },
+    ];
+
+    const container = renderTimeline(items, {
+      turn: {
+        status: "completed",
+      },
+    });
+
+    const block = container.querySelector<HTMLDetailsElement>(
+      '[data-testid="agent-thread-block:1:process"]',
+    );
+    const summary = block?.querySelector("summary");
+
+    expect(block?.open).toBe(false);
+    expect(container.textContent).toContain(summaryText);
+    expect(container.textContent).not.toContain(rawReasoningText);
+    expect((container.textContent?.split(summaryText).length ?? 1) - 1).toBe(
+      1,
+    );
+
+    act(() => {
+      summary?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(block?.open).toBe(true);
+    expect(container.textContent).toContain(rawReasoningText);
+    expect((container.textContent?.split(summaryText).length ?? 1) - 1).toBe(
+      1,
+    );
+    expect(
+      (container.textContent?.split(rawReasoningText).length ?? 1) - 1,
+    ).toBe(1);
+  });
   it("reasoning 的 summary 与正文相同时不应重复渲染", () => {
     const repeatedText = "先判断任务类型\n\n再决定是否联网";
     const items: AgentThreadItem[] = [

@@ -58,6 +58,7 @@ import {
 import { toast } from "sonner";
 import { buildInputbarControllerCopy } from "./inputbarControllerCopy";
 import { buildInputbarWorkflowStateCopy } from "../inputbarWorkflowCopy";
+import { logAgentDebug } from "@/lib/agentDebug";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import {
   applyInputbarPluginSelection,
@@ -165,6 +166,7 @@ export function useInputbarController({
     useState<string | null>(null);
   const handledInitialInputCapabilitySignatureRef = useRef("");
   const pluginSelectionInputSyncedRef = useRef(false);
+  const inputRestoreEpochRef = useRef(0);
   const {
     pendingImages,
     fileInputRef,
@@ -273,8 +275,18 @@ export function useInputbarController({
       return;
     }
 
+    inputRestoreEpochRef.current += 1;
+    const restoreEpoch = inputRestoreEpochRef.current;
     const { draft, requestId } = inputRestoreRequest;
     const restoredPathReferences = [...(draft.pathReferences ?? [])];
+    logAgentDebug("Inputbar", "inputRestoreRequest.apply", {
+      draftImageCount: draft.images?.length ?? 0,
+      draftPathReferenceCount: restoredPathReferences.length,
+      draftTextLength: draft.text.trim().length,
+      hasCapabilityRoute: Boolean(draft.inputCapabilityRoute),
+      requestId,
+      restoreEpoch,
+    });
     setInput(draft.text);
     replacePendingImages([...(draft.images ?? [])]);
     onClearPathReferences?.();
@@ -390,6 +402,7 @@ export function useInputbarController({
     clearPendingImages,
     clearPathReferences: onClearPathReferences,
     clearActiveCapability: () => setActiveCapability(null),
+    getInputRestoreEpoch: () => inputRestoreEpochRef.current,
   });
 
   const inputAdapter = useInputbarAdapter({

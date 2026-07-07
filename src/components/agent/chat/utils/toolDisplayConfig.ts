@@ -21,6 +21,7 @@ export const PLANNING_TOOL_KEYS = new Set([
   "taskupdate",
   "enterplanmode",
   "exitplanmode",
+  "sleep",
 ]);
 
 export const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([

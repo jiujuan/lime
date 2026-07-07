@@ -1,4 +1,3 @@
-use super::super::status::agent_session_status_label;
 use super::super::status::agent_turn_status_label;
 use super::super::RuntimeCoreError;
 use super::metrics::HandoffMetrics;
@@ -63,7 +62,7 @@ pub(super) fn build_replay_input_json(
             "sessionId": read.session.session_id,
             "threadId": read.session.thread_id,
             "exportedAt": exported_at,
-            "threadStatus": agent_session_status_label(read.session.status),
+            "threadStatus": metrics.thread_status.as_str(),
             "latestTurnStatus": metrics.latest_turn_status,
             "turns": read.turns.iter().map(|turn| {
                 json!({
@@ -98,7 +97,7 @@ pub(super) fn build_replay_expected_json(
             "threadId": read.session.thread_id,
             "exportedAt": exported_at,
             "expected": {
-                "terminalThreadStatus": agent_session_status_label(read.session.status),
+                "terminalThreadStatus": metrics.thread_status.as_str(),
                 "latestTurnStatus": metrics.latest_turn_status,
                 "pendingRequestCount": metrics.pending_request_count,
                 "queuedTurnCount": metrics.queued_turn_count,
@@ -122,7 +121,7 @@ pub(super) fn build_replay_grader_markdown(
     let _ = writeln!(
         content,
         "- threadStatus: `{}`",
-        agent_session_status_label(read.session.status)
+        metrics.thread_status.as_str()
     );
     let _ = writeln!(content);
     let _ = writeln!(content, "## Checks");
@@ -183,7 +182,7 @@ pub(super) fn build_analysis_brief_markdown(
     let _ = writeln!(
         content,
         "- threadStatus: `{}`",
-        agent_session_status_label(read.session.status)
+        metrics.thread_status.as_str()
     );
     if let Some(latest_turn_status) = metrics.latest_turn_status.as_deref() {
         let _ = writeln!(content, "- latestTurnStatus: `{latest_turn_status}`");
@@ -224,7 +223,7 @@ pub(super) fn build_analysis_context_json(
             "workspaceRoot": workspace_root.to_string_lossy(),
             "sanitizedWorkspaceRoot": sanitized_workspace_root(workspace_root),
             "exportedAt": exported_at,
-            "threadStatus": agent_session_status_label(read.session.status),
+            "threadStatus": metrics.thread_status.as_str(),
             "latestTurnStatus": metrics.latest_turn_status,
             "pendingRequestCount": metrics.pending_request_count,
             "queuedTurnCount": metrics.queued_turn_count,
@@ -465,7 +464,7 @@ pub(super) fn build_rollout_summary_candidate_markdown(
     let _ = writeln!(
         content,
         "- threadStatus: `{}`",
-        agent_session_status_label(read.session.status)
+        metrics.thread_status.as_str()
     );
     if let Some(latest_turn_status) = metrics.latest_turn_status.as_deref() {
         let _ = writeln!(content, "- latestTurnStatus: `{latest_turn_status}`");
@@ -535,7 +534,7 @@ pub(super) fn build_handoff_progress_json(
         "workspaceRoot": workspace_root.to_string_lossy(),
         "exportedAt": exported_at,
         "status": {
-            "thread": agent_session_status_label(read.session.status),
+            "thread": metrics.thread_status.as_str(),
             "latestTurn": metrics.latest_turn_status,
         },
         "counts": {
@@ -578,7 +577,7 @@ fn write_handoff_header(
         content,
         "- {}: `{}`",
         copy.status_label,
-        agent_session_status_label(read.session.status)
+        metrics.thread_status.as_str()
     );
     if let Some(latest_turn_status) = metrics.latest_turn_status.as_deref() {
         let _ = writeln!(content, "- latestTurnStatus: `{latest_turn_status}`");

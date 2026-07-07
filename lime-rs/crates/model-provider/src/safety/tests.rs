@@ -317,6 +317,10 @@ fn parse_safety_buffering_update_builds_runtime_payload_from_retry_model() {
         ProviderSafetyBufferingRetryModelSource::PayloadRetryModel
     );
 
+    let typed_payload_json = typed_payload.to_json_value();
+    assert_eq!(typed_payload_json["source"], json!("payload_retry_model"));
+    assert!(typed_payload_json.get("retry_model").is_none());
+
     let runtime_payload = parsed.to_runtime_event_payload(Some("openai"), Some("gpt-5-codex"));
     assert_eq!(runtime_payload["kind"], json!("provider_safety_buffering"));
     assert_eq!(runtime_payload["provider"], json!("openai"));

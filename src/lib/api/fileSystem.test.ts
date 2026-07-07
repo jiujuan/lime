@@ -139,7 +139,7 @@ describe("fileSystem API", () => {
     vi.mocked(convertFileSrc).mockReturnValueOnce("asset://demo.txt");
 
     expect(convertLocalFileSrc("/tmp/demo.txt")).toBe("asset://demo.txt");
-    expect(convertFileSrc).toHaveBeenCalledWith("/tmp/demo.txt");
+    expect(convertFileSrc).toHaveBeenCalledWith("/tmp/demo.txt", "asset");
   });
 
   it("convertFileSrc 在浏览器环境不可用时应回退原始路径", () => {

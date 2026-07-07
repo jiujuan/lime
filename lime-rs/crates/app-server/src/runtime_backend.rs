@@ -18,6 +18,7 @@ mod native_tools;
 mod permission_preflight;
 mod plan_events;
 mod plugin_activation_context;
+mod plugin_runtime_context;
 mod plugin_worker_generation;
 mod proposed_plan_parser;
 mod provider_config;

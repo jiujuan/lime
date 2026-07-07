@@ -46,7 +46,6 @@ pub(crate) const DEFAULT_NATIVE_ALIAS_PAIRS: &[(&str, &[&str])] = &[
             "local_shell_call",
         ],
     ),
-    ("Config", &["ConfigTool"]),
     (
         "Edit",
         &[
@@ -76,17 +75,12 @@ pub(crate) const DEFAULT_NATIVE_ALIAS_PAIRS: &[(&str, &[&str])] = &[
     ),
     ("EnterPlanMode", &["EnterPlanModeTool"]),
     ("ExitPlanMode", &["ExitPlanModeTool"]),
-    ("EnterWorktree", &["EnterWorktreeTool"]),
-    ("ExitWorktree", &["ExitWorktreeTool"]),
     ("Glob", &["GlobTool", "mcp__system__glob"]),
     ("Grep", &["GrepTool", "mcp__system__grep"]),
     ("LSP", &["LSPTool"]),
-    ("NotebookEdit", &["NotebookEditTool"]),
     ("PowerShell", &["PowerShellTool"]),
-    ("RemoteTrigger", &["RemoteTriggerTool"]),
     ("SendUserMessage", &["BriefTool"]),
     ("Skill", &["SkillTool"]),
-    ("Sleep", &["SleepTool"]),
     (
         "ToolSearch",
         &["ToolSearchTool", "tool_search", "mcp__system__tool_search"],
@@ -950,31 +944,31 @@ mod tests {
     async fn test_registry_resolves_native_aliases_during_lookup_and_execution() {
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(TestTool::with_aliases(
-            "TaskStop",
-            &["TaskStopTool", "KillShell"],
+            "ShellStop",
+            &["ShellStopTool", "KillProcess"],
         )));
 
-        assert!(registry.contains("TaskStopTool"));
-        assert!(registry.contains_native("killshell"));
-        assert!(registry.is_native("KillShell"));
-        assert!(registry.get("TaskStopTool").is_some());
+        assert!(registry.contains("ShellStopTool"));
+        assert!(registry.contains_native("killprocess"));
+        assert!(registry.is_native("KillProcess"));
+        assert!(registry.get("ShellStopTool").is_some());
         assert_eq!(
-            registry.canonical_native_name("killshell").as_deref(),
-            Some("TaskStop"),
+            registry.canonical_native_name("killprocess").as_deref(),
+            Some("ShellStop"),
         );
         assert_eq!(
-            registry.canonical_name("TaskStopTool").as_deref(),
-            Some("TaskStop"),
+            registry.canonical_name("ShellStopTool").as_deref(),
+            Some("ShellStop"),
         );
 
         let definitions = registry.get_definitions();
         assert_eq!(definitions.len(), 1);
-        assert_eq!(definitions[0].name, "TaskStop");
+        assert_eq!(definitions[0].name, "ShellStop");
 
         let context = create_test_context();
         let result = registry
             .execute(
-                "KillShell",
+                "KillProcess",
                 serde_json::json!({ "input": "hello" }),
                 &context,
                 None,
@@ -1064,9 +1058,25 @@ mod tests {
         }
 
         assert!(
-            DEFAULT_NATIVE_ALIAS_PAIRS.len() > 20,
-            "default alias matrix should cover the broad current tool surface"
+            DEFAULT_NATIVE_ALIAS_PAIRS.len() >= 15,
+            "default alias matrix should cover the curated current tool surface"
         );
+        for retired_name in [
+            "TaskCreate",
+            "TaskList",
+            "TaskGet",
+            "TaskUpdate",
+            "TaskOutput",
+            "TaskStop",
+        ] {
+            assert!(
+                DEFAULT_NATIVE_ALIAS_PAIRS
+                    .iter()
+                    .all(|(canonical, aliases)| *canonical != retired_name
+                        && aliases.iter().all(|alias| *alias != retired_name)),
+                "{retired_name} is Aster-only and must not return to the default alias matrix"
+            );
+        }
 
         let definition_names = registry
             .get_definitions()
@@ -1188,14 +1198,14 @@ mod tests {
     fn test_registry_unregister_clears_native_aliases() {
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(TestTool::with_aliases(
-            "TaskOutput",
-            &["TaskOutputTool"],
+            "ShellOutput",
+            &["ShellOutputTool"],
         )));
 
-        assert!(registry.contains("TaskOutputTool"));
-        let removed = registry.unregister("TaskOutput");
+        assert!(registry.contains("ShellOutputTool"));
+        let removed = registry.unregister("ShellOutput");
         assert!(removed.is_some());
-        assert!(!registry.contains("TaskOutputTool"));
+        assert!(!registry.contains("ShellOutputTool"));
     }
 
     #[test]

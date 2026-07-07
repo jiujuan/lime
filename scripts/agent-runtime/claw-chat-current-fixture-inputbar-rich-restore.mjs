@@ -1,6 +1,9 @@
 import { Buffer } from "node:buffer";
 import {
   APP_SERVER_METHOD_SESSION_READ,
+  INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+  INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+  INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_FORBIDDEN_ASSISTANT_TEXT,
   INPUTBAR_RICH_RESTORE_PATH,
   INPUTBAR_RICH_RESTORE_PATH_NAME,
@@ -8,9 +11,18 @@ import {
   INPUTBAR_RICH_RESTORE_SKILL_NAME,
   SESSION_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
-import { waitForBackendLedgerTurnStart } from "./claw-chat-current-fixture-backend-ledger.mjs";
+import {
+  waitForBackendLedgerEntry,
+  waitForBackendLedgerTurnStartContaining,
+} from "./claw-chat-current-fixture-backend-ledger.mjs";
 import { waitForInputReady } from "./claw-chat-current-fixture-gui-actions.mjs";
 import { waitForStopButtonVisibleAndClick } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
+import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
+import {
+  findReadModelQueuedTurnForPrompt,
+  readModelQueuedTurnId,
+  readModelQueuedTurnText,
+} from "./claw-chat-current-fixture-read-model-core.mjs";
 import {
   evaluatePageSnapshot,
   invokeAppServerFromPage,
@@ -18,6 +30,9 @@ import {
 import { ensureUserVisibleCapabilityReportSkill } from "./claw-chat-current-fixture-skills-workspace.mjs";
 import {
   assert,
+  readArray,
+  readJsonl,
+  readRecord,
   sanitizeJson,
   sleep,
 } from "./claw-chat-current-fixture-utils.mjs";
@@ -25,6 +40,13 @@ import {
 const PATH_REFERENCE_DRAG_MIME = "application/x-lime-path-reference";
 const RICH_RESTORE_IMAGE_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const DEFER_BUTTON_LABELS = [
+  "稍后处理",
+  "稍後處理",
+  "Handle later",
+  "あとで処理",
+  "나중에 처리",
+];
 
 function summarizeBackendTurnStart(turnStart) {
   const entry = turnStart?.entry ?? {};
@@ -78,6 +100,7 @@ async function evaluateRichRestoreSnapshot(page) {
   return await evaluatePageSnapshot(
     page,
     ({
+      deferButtonLabels,
       forbiddenAssistantText,
       pathName,
       prompt,
@@ -112,6 +135,14 @@ async function evaluateRichRestoreSnapshot(page) {
           disabled: button.disabled,
         }),
       );
+      const inputbarButtons = Array.from(
+        container?.querySelectorAll("button") || [],
+      ).map((button) => ({
+        title: button.getAttribute("title") || "",
+        text: button.textContent || "",
+        aria: button.getAttribute("aria-label") || "",
+        disabled: button.disabled,
+      }));
       const stopButtonVisible = buttons.some((button) => {
         const labelText = [button.title, button.text, button.aria].join("\n");
         return (
@@ -121,6 +152,11 @@ async function evaluateRichRestoreSnapshot(page) {
             /\bStop\b/i.test(labelText))
         );
       });
+      const deferButton =
+        inputbarButtons.find((button) => {
+          const labelText = [button.title, button.text, button.aria].join("\n");
+          return deferButtonLabels.some((label) => labelText.includes(label));
+        }) ?? null;
       const sendButton = container?.querySelector('[data-testid="send-btn"]');
       const visionWarning = (container || document).querySelector(
         '[data-testid="inputbar-vision-warning"]',
@@ -204,6 +240,16 @@ async function evaluateRichRestoreSnapshot(page) {
               sendButton.textContent ||
               "send"
             : null,
+        deferButtonExists: Boolean(deferButton),
+        deferButtonDisabled: deferButton ? deferButton.disabled : null,
+        deferButtonLabel: deferButton
+          ? [deferButton.title, deferButton.text, deferButton.aria]
+              .filter(Boolean)
+              .join(" ")
+          : null,
+        inputbarButtonLabels: inputbarButtons.map((button) =>
+          [button.title, button.text, button.aria].filter(Boolean).join(" "),
+        ),
         visionWarningText:
           visionWarning instanceof HTMLElement
             ? visionWarning.textContent || ""
@@ -228,6 +274,7 @@ async function evaluateRichRestoreSnapshot(page) {
       };
     },
     {
+      deferButtonLabels: DEFER_BUTTON_LABELS,
       forbiddenAssistantText: INPUTBAR_RICH_RESTORE_FORBIDDEN_ASSISTANT_TEXT,
       pathName: INPUTBAR_RICH_RESTORE_PATH_NAME,
       prompt: INPUTBAR_RICH_RESTORE_PROMPT,
@@ -373,6 +420,104 @@ async function clickRichRestoreSendButton(page, options) {
   });
 }
 
+async function clickRichRestoreDeferButton(page, options) {
+  const beforeClick = await waitForRichRestoreSnapshot(
+    page,
+    options,
+    (snapshot) =>
+      snapshot.textareaValue === INPUTBAR_RICH_RESTORE_PROMPT &&
+      snapshot.imageRestored === true &&
+      snapshot.pathRestored === true &&
+      snapshot.skillRestored === true &&
+      snapshot.deferButtonExists === true &&
+      snapshot.deferButtonDisabled === false &&
+      snapshot.stopButtonVisible === true,
+    "Inputbar pending steer 稍后处理按钮未就绪",
+  );
+  const clicked = await page.evaluate(
+    ({ labels, sessionId }) => {
+      const textarea =
+        Array.from(
+          document.querySelectorAll('textarea[name="agent-chat-message"]'),
+        ).find(
+          (node) =>
+            node instanceof HTMLTextAreaElement &&
+            node.dataset.sessionId === sessionId,
+        ) ?? document.querySelector('textarea[name="agent-chat-message"]');
+      const container = textarea?.closest(
+        '[data-testid="inputbar-core-container"]',
+      );
+      const buttons = Array.from(container?.querySelectorAll("button") || []);
+      const target = buttons.find((button) => {
+        const labelText = [
+          button.getAttribute("title") || "",
+          button.textContent || "",
+          button.getAttribute("aria-label") || "",
+        ].join("\n");
+        return labels.some((label) => labelText.includes(label));
+      });
+      if (!(target instanceof HTMLButtonElement)) {
+        return {
+          clicked: false,
+          reason: "missing-defer-button",
+          labels: buttons.map((button) =>
+            [
+              button.getAttribute("title") || "",
+              button.textContent || "",
+              button.getAttribute("aria-label") || "",
+            ]
+              .filter(Boolean)
+              .join(" "),
+          ),
+        };
+      }
+      if (target.disabled) {
+        return {
+          clicked: false,
+          reason: "defer-button-disabled",
+          label:
+            target.getAttribute("aria-label") ||
+            target.getAttribute("title") ||
+            target.textContent ||
+            "",
+        };
+      }
+      target.click();
+      return {
+        clicked: true,
+        label:
+          target.getAttribute("aria-label") ||
+          target.getAttribute("title") ||
+          target.textContent ||
+          "",
+      };
+    },
+    {
+      labels: DEFER_BUTTON_LABELS,
+      sessionId: SESSION_ID,
+    },
+  );
+  assert(
+    clicked?.clicked === true,
+    `Inputbar pending steer 稍后处理点击失败: ${JSON.stringify(
+      sanitizeJson(clicked),
+    )}`,
+  );
+  return sanitizeJson({
+    afterFill: {
+      promptVisibleInTextarea:
+        beforeClick.textareaValue === INPUTBAR_RICH_RESTORE_PROMPT,
+      deferButtonExists: beforeClick.deferButtonExists,
+      deferButtonDisabled: beforeClick.deferButtonDisabled,
+      deferButtonLabel: beforeClick.deferButtonLabel,
+      stopButtonVisible: beforeClick.stopButtonVisible,
+      visionWarningPolicy: beforeClick.visionWarningPolicy,
+      visionWarningText: beforeClick.visionWarningText,
+    },
+    clicked,
+  });
+}
+
 async function selectCapabilityReportSkill(page, options) {
   const textarea = page.locator(
     `textarea[name="agent-chat-message"][data-session-id="${SESSION_ID}"]`,
@@ -456,7 +601,13 @@ async function selectCapabilityReportSkill(page, options) {
   );
 }
 
-async function prepareRichDraft(page, options, runtimeEnv, summary) {
+async function prepareRichDraft(
+  page,
+  options,
+  runtimeEnv,
+  summary,
+  { submitAction = "send" } = {},
+) {
   const skill = ensureUserVisibleCapabilityReportSkill(runtimeEnv);
   recordRichRestoreStep(summary, "workspace-skill-ready", skill);
   const inputReady = await waitForInputReady(page, options, {
@@ -481,7 +632,10 @@ async function prepareRichDraft(page, options, runtimeEnv, summary) {
         snapshot.imageRestored === true &&
         snapshot.pathRestored === true &&
         snapshot.skillRestored === true &&
-        snapshot.sendButtonDisabled === false,
+        (submitAction === "defer"
+          ? snapshot.deferButtonExists === true &&
+            snapshot.deferButtonDisabled === false
+          : snapshot.sendButtonDisabled === false),
       "Inputbar rich restore draft 未准备完整",
     );
     recordRichRestoreStep(summary, "draft-prepared", prepared);
@@ -560,6 +714,173 @@ async function waitForInputbarRichRestoreReadModelCanceled(
   );
 }
 
+function firstNonEmptyArray(record, ...keys) {
+  for (const key of keys) {
+    const values = readArray(record, key);
+    if (values.length > 0) {
+      return values;
+    }
+  }
+  return [];
+}
+
+function summarizeQueuedRichRestoreTurn(queuedTurn) {
+  const record = readRecord(queuedTurn) ?? {};
+  const attachments = firstNonEmptyArray(
+    record,
+    "input_attachments",
+    "inputAttachments",
+    "attachments",
+  );
+  const pathReferences = firstNonEmptyArray(
+    record,
+    "path_references",
+    "pathReferences",
+  );
+  const textElements = firstNonEmptyArray(
+    record,
+    "text_elements",
+    "textElements",
+  );
+  const capabilityRoute =
+    readRecord(record.input_capability_route) ??
+    readRecord(record.inputCapabilityRoute) ??
+    null;
+  const serialized = JSON.stringify(record);
+  const imageAttachmentCount = attachments.filter((attachment) => {
+    const attachmentRecord = readRecord(attachment) ?? {};
+    const metadata = readRecord(attachmentRecord.metadata) ?? {};
+    return (
+      attachmentRecord.kind === "image" ||
+      String(attachmentRecord.mediaType ?? attachmentRecord.media_type ?? "")
+        .toLowerCase()
+        .startsWith("image/") ||
+      String(metadata.mediaType ?? metadata.media_type ?? "")
+        .toLowerCase()
+        .startsWith("image/")
+    );
+  }).length;
+  const pathReferenceNames = pathReferences
+    .map((reference) => readRecord(reference)?.name)
+    .filter((value) => typeof value === "string");
+  const pathReferencePaths = pathReferences
+    .map((reference) => readRecord(reference)?.path)
+    .filter((value) => typeof value === "string");
+  const textElementTexts = textElements
+    .map((element) => readRecord(element)?.text)
+    .filter((value) => typeof value === "string");
+  return sanitizeJson({
+    turnId: readModelQueuedTurnId(record),
+    status: record.status ?? null,
+    text: readModelQueuedTurnText(record),
+    imageCount: record.image_count ?? record.imageCount ?? null,
+    attachmentCount: attachments.length,
+    imageAttachmentCount,
+    pathReferenceCount: pathReferences.length,
+    pathReferenceNames,
+    pathReferencePaths,
+    textElementCount: textElements.length,
+    textElementTexts,
+    capabilityRoute,
+    skillName:
+      capabilityRoute?.skillName ??
+      capabilityRoute?.skill_name ??
+      capabilityRoute?.name ??
+      null,
+    includesPrompt: serialized.includes(INPUTBAR_RICH_RESTORE_PROMPT),
+    imagePreserved:
+      imageAttachmentCount >= 1 ||
+      Number(record.image_count ?? record.imageCount ?? 0) >= 1,
+    pathPreserved:
+      pathReferenceNames.includes(INPUTBAR_RICH_RESTORE_PATH_NAME) ||
+      pathReferencePaths.includes(INPUTBAR_RICH_RESTORE_PATH) ||
+      serialized.includes(INPUTBAR_RICH_RESTORE_PATH_NAME),
+    textElementsPreserved:
+      textElements.length > 0 &&
+      JSON.stringify(textElements).includes(INPUTBAR_RICH_RESTORE_PROMPT),
+    skillPreserved:
+      String(
+        capabilityRoute?.skillName ??
+          capabilityRoute?.skill_name ??
+          capabilityRoute?.name ??
+          "",
+      ).includes(INPUTBAR_RICH_RESTORE_SKILL_NAME) ||
+      serialized.includes(INPUTBAR_RICH_RESTORE_SKILL_NAME),
+  });
+}
+
+async function waitForInputbarPendingSteerQueuedReadModel(
+  page,
+  options,
+  requestLog,
+  sessionId,
+) {
+  const startedAt = Date.now();
+  let lastRead = null;
+  let lastSummary = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const read = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId,
+        historyLimit: 100,
+      },
+      requestLog,
+    );
+    lastRead = read.result;
+    const queuedTurn = findReadModelQueuedTurnForPrompt(
+      read.result,
+      INPUTBAR_RICH_RESTORE_PROMPT,
+    );
+    lastSummary = queuedTurn
+      ? summarizeQueuedRichRestoreTurn(queuedTurn)
+      : sanitizeJson({
+          queuedTurnFound: false,
+          serializedIncludesPrompt: JSON.stringify(read.result || {}).includes(
+            INPUTBAR_RICH_RESTORE_PROMPT,
+          ),
+        });
+    if (
+      queuedTurn &&
+      lastSummary.includesPrompt === true &&
+      lastSummary.imagePreserved === true &&
+      lastSummary.pathPreserved === true &&
+      lastSummary.textElementsPreserved === true &&
+      lastSummary.skillPreserved === true
+    ) {
+      return {
+        ...lastSummary,
+        queuedTurnFound: true,
+      };
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `App Server read model 未保留 pending steer rich queued turn: ${JSON.stringify(
+      sanitizeJson({
+        summary: lastSummary,
+        readModel: lastRead,
+      }),
+    )}`,
+  );
+}
+
+function summarizeRichPromptBackendDeferral(ledger) {
+  const richTurnStarts = ledger.filter(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      String(entry.inputText || "").includes(INPUTBAR_RICH_RESTORE_PROMPT),
+  );
+  return sanitizeJson({
+    richPromptStarted: richTurnStarts.length > 0,
+    richPromptTurnStartCount: richTurnStarts.length,
+    turnStartTexts: ledger
+      .filter((entry) => entry.kind === "turnStart")
+      .map((entry) => String(entry.inputText || "").slice(0, 120)),
+  });
+}
+
 export async function runInputbarRichRestoreScenario({
   page,
   options,
@@ -581,7 +902,7 @@ export async function runInputbarRichRestoreScenario({
     options,
   );
 
-  const backendTurnStart = await waitForBackendLedgerTurnStart(
+  const backendTurnStart = await waitForBackendLedgerTurnStartContaining(
     runtimeEnv.backendLedgerPath,
     INPUTBAR_RICH_RESTORE_PROMPT,
     options,
@@ -593,6 +914,20 @@ export async function runInputbarRichRestoreScenario({
   summary.inputbarRichRestoreStopClick = sanitizeJson(
     await waitForStopButtonVisibleAndClick(page, options),
   );
+  const backendCancel = await waitForBackendLedgerEntry(
+    runtimeEnv.backendLedgerPath,
+    (entry) =>
+      entry.kind === "turnCancel" &&
+      entry.sessionId === sessionId &&
+      (!backendTurnStart.entry.turnId ||
+        entry.turnId === backendTurnStart.entry.turnId),
+    options,
+  );
+  summary.inputbarRichRestoreBackendCancel = sanitizeJson({
+    sessionId: backendCancel.entry.sessionId,
+    turnId: backendCancel.entry.turnId,
+    recordedAt: backendCancel.entry.recordedAt,
+  });
 
   summary.inputbarRichRestoreGuiCanceled = await waitForRichRestoreSnapshot(
     page,
@@ -625,8 +960,131 @@ export async function runInputbarRichRestoreScenario({
     inputbarRichRestoreBackendTurnStart:
       summary.inputbarRichRestoreBackendTurnStart,
     inputbarRichRestoreStopClick: summary.inputbarRichRestoreStopClick,
+    inputbarRichRestoreBackendCancel:
+      summary.inputbarRichRestoreBackendCancel,
     inputbarRichRestoreGuiCanceled: summary.inputbarRichRestoreGuiCanceled,
     inputbarRichRestoreReadModelCanceled:
       summary.inputbarRichRestoreReadModelCanceled,
+  });
+}
+
+export async function runInputbarPendingSteerRichRestoreScenario({
+  page,
+  options,
+  summary,
+  appServerRequests,
+  runtimeEnv,
+}) {
+  summary.inputbarPendingSteerActiveInputSend = sanitizeJson(
+    await sendPromptFromGui(
+      page,
+      options,
+      INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+      {
+        expectedSessionId: SESSION_ID,
+        requireTurnStart: true,
+      },
+    ),
+  );
+
+  const activeTurnStart = await waitForBackendLedgerTurnStartContaining(
+    runtimeEnv.backendLedgerPath,
+    INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+    options,
+  );
+  const sessionId = activeTurnStart.entry.sessionId ?? SESSION_ID;
+  summary.inputbarPendingSteerActiveBackendTurnStart =
+    summarizeBackendTurnStart(activeTurnStart);
+
+  summary.inputbarPendingSteerActiveStreaming =
+    await waitForRichRestoreSnapshot(
+      page,
+      options,
+      (snapshot) =>
+        snapshot.stopButtonVisible === true &&
+        snapshot.bodyText.includes(INPUTBAR_PENDING_STEER_ACTIVE_PROMPT) &&
+        snapshot.bodyText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT),
+      "Inputbar pending steer active turn 未进入正在输出状态",
+    );
+
+  summary.inputbarPendingSteerDraftPrepared = await prepareRichDraft(
+    page,
+    options,
+    runtimeEnv,
+    summary,
+    { submitAction: "defer" },
+  );
+  summary.inputbarPendingSteerSkill =
+    summary.inputbarPendingSteerDraftPrepared.skill;
+
+  summary.inputbarPendingSteerInputDefer = await clickRichRestoreDeferButton(
+    page,
+    options,
+  );
+
+  summary.inputbarPendingSteerQueuedReadModel =
+    await waitForInputbarPendingSteerQueuedReadModel(
+      page,
+      options,
+      appServerRequests,
+      sessionId,
+    );
+
+  summary.inputbarPendingSteerBackendBeforeCancel =
+    summarizeRichPromptBackendDeferral(readJsonl(runtimeEnv.backendLedgerPath));
+
+  summary.inputbarPendingSteerStopClick = sanitizeJson(
+    await waitForStopButtonVisibleAndClick(page, options),
+  );
+  const backendCancel = await waitForBackendLedgerEntry(
+    runtimeEnv.backendLedgerPath,
+    (entry) =>
+      entry.kind === "turnCancel" &&
+      entry.sessionId === sessionId &&
+      (!activeTurnStart.entry.turnId ||
+        entry.turnId === activeTurnStart.entry.turnId),
+    options,
+  );
+  summary.inputbarPendingSteerBackendCancel = sanitizeJson({
+    sessionId: backendCancel.entry.sessionId,
+    turnId: backendCancel.entry.turnId,
+    recordedAt: backendCancel.entry.recordedAt,
+  });
+
+  summary.inputbarPendingSteerGuiCanceled = await waitForRichRestoreSnapshot(
+    page,
+    options,
+    (snapshot) =>
+      snapshot.textareaVisible === true &&
+      snapshot.textareaDisabled === false &&
+      snapshot.textareaValue === INPUTBAR_RICH_RESTORE_PROMPT &&
+      snapshot.imageRestored === true &&
+      snapshot.pathRestored === true &&
+      snapshot.skillRestored === true &&
+      snapshot.stopButtonVisible === false &&
+      snapshot.bodyText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT),
+    "Inputbar pending steer 停止 active turn 后未恢复完整 rich 草稿",
+  );
+
+  return sanitizeJson({
+    inputbarPendingSteerActiveInputSend:
+      summary.inputbarPendingSteerActiveInputSend,
+    inputbarPendingSteerActiveBackendTurnStart:
+      summary.inputbarPendingSteerActiveBackendTurnStart,
+    inputbarPendingSteerActiveStreaming:
+      summary.inputbarPendingSteerActiveStreaming,
+    inputbarPendingSteerSkill: summary.inputbarPendingSteerSkill,
+    inputbarPendingSteerDraftPrepared:
+      summary.inputbarPendingSteerDraftPrepared,
+    inputbarPendingSteerInputDefer: summary.inputbarPendingSteerInputDefer,
+    inputbarPendingSteerQueuedReadModel:
+      summary.inputbarPendingSteerQueuedReadModel,
+    inputbarPendingSteerBackendBeforeCancel:
+      summary.inputbarPendingSteerBackendBeforeCancel,
+    inputbarPendingSteerStopClick: summary.inputbarPendingSteerStopClick,
+    inputbarPendingSteerBackendCancel:
+      summary.inputbarPendingSteerBackendCancel,
+    inputbarPendingSteerGuiCanceled:
+      summary.inputbarPendingSteerGuiCanceled,
   });
 }

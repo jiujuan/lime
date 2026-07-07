@@ -831,7 +831,7 @@ function dispatchInputbarDrop(
 }
 
 describe("Inputbar", () => {
-  it("收到中断恢复请求时应回填文本、图片、路径和技能 chip", async () => {
+  it("收到中断恢复请求时即使仍在 loading 也应回填文本、图片、路径和技能 chip", async () => {
     const onInputRestoreRequestHandled = vi.fn();
     const pathReference = {
       id: "file:/tmp/report.md",
@@ -885,7 +885,7 @@ describe("Inputbar", () => {
           input={input}
           setInput={setInput}
           onSend={vi.fn()}
-          isLoading={false}
+          isLoading={true}
           characters={[]}
           skills={[skill]}
           pathReferences={pathReferences}
@@ -907,6 +907,10 @@ describe("Inputbar", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await Promise.resolve();
+    });
 
     const latestCoreProps =
       mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
@@ -920,6 +924,154 @@ describe("Inputbar", () => {
     ]);
     expect(container.querySelector('[data-testid="skill-badge"]')).toBeTruthy();
     expect(onInputRestoreRequestHandled).toHaveBeenCalledWith("restore-1");
+  });
+
+  it("发送 Promise 未结束时收到恢复请求，不应让旧发送清理刚恢复的富输入", async () => {
+    const onInputRestoreRequestHandled = vi.fn();
+    const pathReference = {
+      id: "file:/tmp/report.md",
+      path: "/tmp/report.md",
+      name: "report.md",
+      isDir: false,
+      source: "file_manager" as const,
+    };
+    const skill: Skill = {
+      key: "local:draft",
+      name: "起草",
+      description: "恢复输入用技能",
+      directory: "draft",
+      installed: true,
+      sourceKind: "other",
+    };
+    let resolveSend: ((value: boolean) => void) | null = null;
+    let triggerRestore: (() => void) | null = null;
+    const onSend = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mountedRoots.push({ root, container });
+
+    function RestoreDuringSendHarness() {
+      const [input, setInput] = React.useState("请结合现有资料生成提纲");
+      const [pathReferences, setPathReferences] = React.useState<
+        (typeof pathReference)[]
+      >([]);
+      const [restoreRequest, setRestoreRequest] = React.useState<
+        React.ComponentProps<typeof Inputbar>["inputRestoreRequest"]
+      >(null);
+
+      triggerRestore = () =>
+        setRestoreRequest({
+          requestId: "restore-during-send",
+          reason: "output_free_interrupted_turn",
+          draft: {
+            text: "继续生成提纲",
+            images: [
+              {
+                data: "image-data",
+                mediaType: "image/png",
+              },
+            ],
+            pathReferences: [pathReference],
+            inputCapabilityRoute: {
+              kind: "installed_skill",
+              skillKey: "draft",
+              skillName: "起草",
+            },
+          },
+        });
+
+      return (
+        <Inputbar
+          input={input}
+          setInput={setInput}
+          onSend={onSend}
+          isLoading={false}
+          characters={[]}
+          skills={[skill]}
+          pathReferences={pathReferences}
+          onClearPathReferences={() => setPathReferences([])}
+          onAddPathReferences={(references) =>
+            setPathReferences(references as (typeof pathReference)[])
+          }
+          initialInputCapability={{
+            requestKey: 1,
+            capabilityRoute: {
+              kind: "installed_skill",
+              skillKey: "draft",
+              skillName: "起草",
+            },
+          }}
+          inputRestoreRequest={restoreRequest}
+          onInputRestoreRequestHandled={(requestId) => {
+            onInputRestoreRequestHandled(requestId);
+            setRestoreRequest(null);
+          }}
+        />
+      );
+    }
+
+    await act(async () => {
+      root.render(<RestoreDuringSendHarness />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const firstCoreProps =
+      mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
+    let sendPromise: Promise<unknown> | undefined;
+    await act(async () => {
+      sendPromise = Promise.resolve(firstCoreProps?.onSend?.());
+      await Promise.resolve();
+    });
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      triggerRestore?.();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await Promise.resolve();
+    });
+
+    let latestCoreProps =
+      mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
+    expect(latestCoreProps?.text).toBe("继续生成提纲");
+    expect(latestCoreProps?.pathReferences).toEqual([pathReference]);
+    expect(latestCoreProps?.pendingImages).toEqual([
+      {
+        data: "image-data",
+        mediaType: "image/png",
+      },
+    ]);
+    expect(container.querySelector('[data-testid="skill-badge"]')).toBeTruthy();
+
+    await act(async () => {
+      resolveSend?.(true);
+      await sendPromise;
+      await Promise.resolve();
+    });
+
+    latestCoreProps =
+      mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
+    expect(latestCoreProps?.text).toBe("继续生成提纲");
+    expect(latestCoreProps?.pathReferences).toEqual([pathReference]);
+    expect(latestCoreProps?.pendingImages).toEqual([
+      {
+        data: "image-data",
+        mediaType: "image/png",
+      },
+    ]);
+    expect(container.querySelector('[data-testid="skill-badge"]')).toBeTruthy();
+    expect(onInputRestoreRequestHandled).toHaveBeenCalledWith(
+      "restore-during-send",
+    );
   });
 
   it("即使角色和技能为空，也应挂载 CharacterMention", async () => {

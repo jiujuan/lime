@@ -37,6 +37,10 @@ import { createExecutionRuntimeFromSessionDetail } from "../utils/sessionExecuti
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
+import {
+  hasRunningThreadReadActivity,
+  hasRunningTurnRecordActivity,
+} from "../projection/threadReadActivity";
 
 export interface AgentSessionSnapshot {
   sessionId: string | null;
@@ -146,25 +150,56 @@ export function hasActiveRuntimeTurn(options: {
   const normalizedProfileStatus =
     options.threadRead?.profile_status?.trim().toLowerCase() ?? null;
   if (
-    normalizedThreadReadStatus === "running" ||
-    normalizedProfileStatus === "running"
+    isExplicitTerminalRuntimeStatus(normalizedThreadReadStatus) ||
+    isExplicitTerminalRuntimeStatus(normalizedProfileStatus)
   ) {
+    return false;
+  }
+  if (options.threadRead) {
+    const readModelReportsRunning =
+      normalizedThreadReadStatus === "running" ||
+      normalizedProfileStatus === "running";
+    const hasAuthoritativeReadModelStatus = Boolean(
+      normalizedThreadReadStatus || normalizedProfileStatus,
+    );
+    if (hasAuthoritativeReadModelStatus && !readModelReportsRunning) {
+      return false;
+    }
+    if (
+      hasRunningThreadReadActivity(options.threadRead, {
+        allowThreadStatusWithoutTurn: true,
+      })
+    ) {
+      return true;
+    }
+    if (readModelReportsRunning) {
+      return false;
+    }
+  } else if (normalizedThreadReadStatus === "running") {
     return true;
   }
 
   if (
-    options.threadRead?.turns?.some(
-      (turn) => turn?.status?.trim().toLowerCase() === "running",
+    options.turns.some((turn) =>
+      hasRunningTurnRecordActivity(turn, {
+        staleRunningMs: Number.POSITIVE_INFINITY,
+      }),
     )
   ) {
     return true;
   }
 
-  if (options.turns.some((turn) => turn.status === "running")) {
-    return true;
-  }
-
   return false;
+}
+
+function isExplicitTerminalRuntimeStatus(status: string | null): boolean {
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "aborted"
+  );
 }
 
 export function shouldDeferSessionDetailHydration(options: {

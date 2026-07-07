@@ -196,6 +196,8 @@ function renderHookNode(props: HookProps): HTMLDivElement {
 
 function getLatestInputbarProps(): {
   disabled?: boolean;
+  inputRestoreRequest?: unknown;
+  onInputRestoreRequestHandled?: (requestId: string) => void;
   toolStates?: Record<string, boolean>;
   onToolStatesChange?: (states: Record<string, boolean>) => void;
 } {
@@ -203,6 +205,8 @@ function getLatestInputbarProps(): {
   expect(latestCall).toBeTruthy();
   return latestCall?.[0] as {
     disabled?: boolean;
+    inputRestoreRequest?: unknown;
+    onInputRestoreRequestHandled?: (requestId: string) => void;
     toolStates?: Record<string, boolean>;
     onToolStatesChange?: (states: Record<string, boolean>) => void;
   };
@@ -424,5 +428,32 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     );
 
     expect(getLatestInputbarProps().disabled).toBe(true);
+  });
+
+  it("应把中断输入恢复请求透传给 inline Inputbar", () => {
+    const onInputRestoreRequestHandled = vi.fn();
+    const inputRestoreRequest = {
+      requestId: "restore-1",
+      reason: "thinking_only_cancelled_turn" as const,
+      draft: {
+        text: "恢复这段输入",
+        images: [],
+        pathReferences: [],
+        inputCapabilityRoute: null,
+      },
+    };
+
+    renderHookNode(
+      createDefaultProps({
+        inputRestoreRequest,
+        onInputRestoreRequestHandled,
+      }),
+    );
+
+    expect(getLatestInputbarProps().inputRestoreRequest).toBe(
+      inputRestoreRequest,
+    );
+    getLatestInputbarProps().onInputRestoreRequestHandled?.("restore-1");
+    expect(onInputRestoreRequestHandled).toHaveBeenCalledWith("restore-1");
   });
 });

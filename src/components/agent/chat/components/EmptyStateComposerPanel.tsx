@@ -69,6 +69,7 @@ import {
 } from "./Inputbar/pluginInputCapability";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+import type { InterruptedInputRestoreRequest } from "../hooks/agentStreamInputRestoreTypes";
 
 const ConnectedComposerShell = styled.div`
   width: 100%;
@@ -160,6 +161,7 @@ interface EmptyStateComposerPanelProps {
   onDrop?: (event: React.DragEvent) => void;
   onRemoveImage?: (index: number) => void;
   pathReferences?: MessagePathReference[];
+  inputRestoreRequest?: InterruptedInputRestoreRequest | null;
   onImportPathReferenceAsKnowledge?: (reference: MessagePathReference) => void;
   onRemovePathReference?: (id: string) => void;
   fileManagerOpen?: boolean;
@@ -290,6 +292,7 @@ export function EmptyStateComposerPanel({
   onDrop,
   onRemoveImage,
   pathReferences = [],
+  inputRestoreRequest = null,
   onImportPathReferenceAsKnowledge,
   onRemovePathReference,
   fileManagerOpen = false,
@@ -324,6 +327,13 @@ export function EmptyStateComposerPanel({
   useEffect(() => {
     setDraftInput(input);
   }, [input]);
+
+  useEffect(() => {
+    if (!inputRestoreRequest || isLoading) {
+      return;
+    }
+    setDraftInput(inputRestoreRequest.draft.text);
+  }, [inputRestoreRequest, isLoading]);
 
   useEffect(() => {
     if (!activePluginSelection) {

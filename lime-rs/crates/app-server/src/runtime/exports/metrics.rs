@@ -1,6 +1,7 @@
 use super::super::event_request_id;
 use super::super::status::agent_session_status_label;
 use super::super::status::agent_turn_status_label;
+use super::super::status::resolve_agent_session_runtime_state;
 use super::super::string_field;
 use super::HANDOFF_RECENT_ARTIFACT_LIMIT;
 use app_server_protocol::AgentEvent;
@@ -18,6 +19,7 @@ use std::collections::HashSet;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct HandoffMetrics {
+    pub(super) thread_status: String,
     pub(super) latest_turn_status: Option<String>,
     pub(super) pending_request_count: usize,
     pub(super) queued_turn_count: usize,
@@ -42,21 +44,24 @@ pub(super) fn build_runtime_evidence_pack_summary(
     artifacts: &[ArtifactSummary],
     known_gap: &str,
 ) -> EvidencePackSummary {
+    let pending_request_count = pending_request_count_from_events(events);
+    let runtime_state = resolve_agent_session_runtime_state(
+        session.status,
+        pending_request_count,
+        turns,
+        events,
+        chrono::Utc::now(),
+    );
     EvidencePackSummary {
         pack_relative_root: format!(".lime/harness/sessions/{}/evidence", session.session_id),
         pack_absolute_root: None,
         exported_at: super::super::timestamp(),
-        thread_status: agent_session_status_label(session.status).to_string(),
-        latest_turn_status: turns
-            .last()
-            .map(|turn| agent_turn_status_label(turn.status).to_string()),
+        thread_status: runtime_state.thread_status,
+        latest_turn_status: runtime_state.latest_turn_status,
         turn_count: turns.len(),
         item_count: events.len(),
-        pending_request_count: pending_request_count_from_events(events),
-        queued_turn_count: turns
-            .iter()
-            .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
-            .count(),
+        pending_request_count,
+        queued_turn_count: runtime_state.queued_turn_count,
         recent_artifact_count: artifacts.len(),
         known_gaps: vec![known_gap.to_string()],
         observability_summary: Some(json!({
@@ -208,6 +213,7 @@ fn managed_objective_status_value(status: ManagedObjectiveStatus) -> &'static st
 
 pub(super) fn handoff_metrics(read: &AgentSessionReadResponse) -> HandoffMetrics {
     let mut metrics = HandoffMetrics {
+        thread_status: agent_session_status_label(read.session.status).to_string(),
         latest_turn_status: read
             .turns
             .last()
@@ -224,6 +230,11 @@ pub(super) fn handoff_metrics(read: &AgentSessionReadResponse) -> HandoffMetrics
         return metrics;
     };
     let thread_read = detail.get("thread_read").filter(|value| value.is_object());
+    if let Some(thread_status) =
+        thread_read.and_then(|value| string_field(value, &["status", "thread_status"]))
+    {
+        metrics.thread_status = thread_status;
+    }
     if let Some(latest_turn_status) = thread_read
         .and_then(|value| value.get("diagnostics"))
         .and_then(|value| string_field(value, &["latest_turn_status", "latestTurnStatus"]))

@@ -128,7 +128,15 @@ export function resolveDeferredTextContentParts(
   const sanitizedText = options
     ? sanitizeMessageTextForDisplay(finalText, options)
     : finalText;
-  return sanitizedText ? [{ type: "text", text: sanitizedText }] : undefined;
+  if (sanitizedText) {
+    return [{ type: "text", text: sanitizedText }];
+  }
+
+  const mediaReferenceParts = (parts || []).filter(
+    (part): part is Extract<MessageContentPart, { type: "media_reference" }> =>
+      part.type === "media_reference",
+  );
+  return mediaReferenceParts.length > 0 ? mediaReferenceParts : undefined;
 }
 
 export function resolveAssistantActionContent(params: {

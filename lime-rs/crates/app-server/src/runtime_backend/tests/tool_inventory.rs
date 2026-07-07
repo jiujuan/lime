@@ -117,6 +117,13 @@ fn in_memory_db() -> lime_core::database::DbConnection {
 }
 
 async fn read_inventory(data_source: TestMcpInventoryDataSource) -> serde_json::Value {
+    read_inventory_with_metadata(data_source, None).await
+}
+
+async fn read_inventory_with_metadata(
+    data_source: TestMcpInventoryDataSource,
+    metadata: Option<serde_json::Value>,
+) -> serde_json::Value {
     let db = in_memory_db();
     let backend = RuntimeBackend::with_db(db.clone());
     ExecutionBackend::set_app_data_source(&backend, std::sync::Arc::new(data_source))
@@ -133,7 +140,7 @@ async fn read_inventory(data_source: TestMcpInventoryDataSource) -> serde_json::
             caller: Some("assistant".to_string()),
             workbench: true,
             browser_assist: false,
-            metadata: None,
+            metadata,
         },
     )
     .await
@@ -305,6 +312,199 @@ async fn runtime_backend_tool_inventory_reads_current_mcp_snapshot() {
         .any(|entry| {
             entry["name"] == "ReadMcpResourceTool" && entry["visible_in_context"] == true
         }));
+}
+
+#[tokio::test]
+async fn runtime_backend_tool_inventory_projects_plugin_mcp_targets() {
+    let data_source = TestMcpInventoryDataSource::default()
+        .with_server_status_response(Ok(McpServerStatusListResponse {
+            servers: vec![json!({
+                "name": "context7",
+                "is_running": true,
+                "runtime_status": {
+                    "supports_resources": true
+                }
+            })],
+        }))
+        .with_tool_list_response(Ok(McpToolListResponse {
+            tools: vec![json!({
+                "server_name": "context7",
+                "name": "mcp__context7__resolve-library-id",
+                "description": "Resolve a package name to a Context7 library id",
+                "input_schema": {
+                    "type": "object",
+                    "x-lime": {
+                        "deferred_loading": true,
+                        "always_visible": true,
+                        "allowed_callers": ["assistant", "plugin:docs-plugin"],
+                        "tags": ["context7", "docs"]
+                    }
+                }
+            })],
+        }));
+    let metadata = json!({
+        "harness": {
+            "plugin_runtime_capabilities": {
+                "pluginId": "docs-plugin",
+                "skills": [],
+                "mcpBindings": [
+                    {
+                        "serverId": "context7",
+                        "toolKey": "context7/resolve-library-id",
+                        "provider": "mcp",
+                        "required": true
+                    }
+                ],
+                "workflowBindings": []
+            }
+        }
+    });
+
+    let inventory = read_inventory_with_metadata(data_source, Some(metadata)).await;
+
+    let targets = inventory["plugin_mcp_targets"]
+        .as_array()
+        .expect("plugin mcp targets");
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0]["pluginId"], json!("docs-plugin"));
+    assert_eq!(targets[0]["caller"], json!("plugin:docs-plugin"));
+    assert_eq!(
+        targets[0]["expectedToolName"],
+        json!("mcp__context7__resolve-library-id")
+    );
+    assert_eq!(targets[0]["runtimeStatus"], json!("available"));
+    assert_eq!(targets[0]["prepareStatus"], json!("ready"));
+    assert_eq!(targets[0]["serverAvailable"], json!(true));
+    assert_eq!(targets[0]["serverRunning"], json!(true));
+    assert_eq!(targets[0]["toolAvailable"], json!(true));
+    assert_eq!(
+        targets[0]["toolListRequest"],
+        json!({
+            "caller": "plugin:docs-plugin",
+            "includeDeferred": true
+        })
+    );
+    assert_eq!(targets[0]["prepareRequests"], json!([]));
+}
+
+#[tokio::test]
+async fn runtime_backend_tool_inventory_projects_plugin_mcp_start_request() {
+    let data_source = TestMcpInventoryDataSource::default().with_server_status_response(Ok(
+        McpServerStatusListResponse {
+            servers: vec![json!({
+                "name": "context7",
+                "is_running": false,
+                "runtime_status": {
+                    "supports_resources": true
+                }
+            })],
+        },
+    ));
+    let metadata = json!({
+        "harness": {
+            "plugin_runtime_capabilities": {
+                "pluginId": "docs-plugin",
+                "skills": [],
+                "mcpBindings": [
+                    {
+                        "serverId": "context7",
+                        "toolKey": "context7/resolve-library-id",
+                        "provider": "mcp",
+                        "required": true
+                    }
+                ],
+                "workflowBindings": []
+            }
+        }
+    });
+
+    let inventory = read_inventory_with_metadata(data_source, Some(metadata)).await;
+
+    let target = &inventory["plugin_mcp_targets"]
+        .as_array()
+        .expect("plugin mcp targets")[0];
+    assert_eq!(target["runtimeStatus"], json!("server_stopped"));
+    assert_eq!(target["prepareStatus"], json!("start_required"));
+    assert_eq!(target["serverAvailable"], json!(true));
+    assert_eq!(target["serverRunning"], json!(false));
+    assert_eq!(target["toolAvailable"], json!(false));
+    assert_eq!(
+        target["prepareRequests"],
+        json!([
+            {
+                "method": "mcpServer/start",
+                "params": {
+                    "name": "context7"
+                },
+                "reason": "server_stopped",
+                "status": "candidate"
+            },
+            {
+                "method": "mcpTool/listForContext",
+                "params": {
+                    "caller": "plugin:docs-plugin",
+                    "includeDeferred": true
+                },
+                "reason": "tool_listing",
+                "status": "candidate"
+            }
+        ])
+    );
+}
+
+#[tokio::test]
+async fn runtime_backend_tool_inventory_projects_plugin_mcp_import_request() {
+    let data_source = TestMcpInventoryDataSource::default();
+    let metadata = json!({
+        "harness": {
+            "plugin_runtime_capabilities": {
+                "pluginId": "docs-plugin",
+                "skills": [],
+                "mcpBindings": [
+                    {
+                        "serverId": "codex-docs",
+                        "toolKey": "codex-docs/search",
+                        "provider": "codex",
+                        "required": true
+                    }
+                ],
+                "workflowBindings": []
+            }
+        }
+    });
+
+    let inventory = read_inventory_with_metadata(data_source, Some(metadata)).await;
+
+    let target = &inventory["plugin_mcp_targets"]
+        .as_array()
+        .expect("plugin mcp targets")[0];
+    assert_eq!(target["runtimeStatus"], json!("server_missing"));
+    assert_eq!(target["prepareStatus"], json!("import_required"));
+    assert_eq!(target["serverAvailable"], json!(false));
+    assert_eq!(target["serverRunning"], json!(false));
+    assert_eq!(target["toolAvailable"], json!(false));
+    assert_eq!(
+        target["prepareRequests"],
+        json!([
+            {
+                "method": "mcpServer/importFromApp",
+                "params": {
+                    "appType": "codex"
+                },
+                "reason": "server_missing",
+                "status": "candidate"
+            },
+            {
+                "method": "mcpTool/listForContext",
+                "params": {
+                    "caller": "plugin:docs-plugin",
+                    "includeDeferred": true
+                },
+                "reason": "tool_listing",
+                "status": "candidate"
+            }
+        ])
+    );
 }
 
 #[tokio::test]

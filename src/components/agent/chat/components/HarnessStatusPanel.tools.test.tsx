@@ -21,7 +21,7 @@ describe("HarnessStatusPanel tools", () => {
     expect(document.body.textContent).toContain("Catalog 工具");
   });
 
-  it("runtime tool surface 应在工具库存中展示 subagents/task current gaps", () => {
+  it("runtime tool surface 应在工具库存中展示 subagents/plan current gaps", () => {
     renderPanel({
       toolInventory: createToolInventory(),
     });
@@ -35,17 +35,15 @@ describe("HarnessStatusPanel tools", () => {
     expect(summary?.textContent).toContain("WebSearch 未接通");
     expect(summary?.textContent).toContain("子任务核心 tools 缺 1 项");
     expect(summary?.textContent).toContain("Subagents 协作 tools 缺 3 项");
-    expect(summary?.textContent).toContain("Task current tools 缺 6 项");
+    expect(summary?.textContent).toContain("Plan current tool 缺 1 项");
     expect(summary?.textContent).toContain("SendMessage");
     expect(summary?.textContent).toContain(
       "TeamCreate / TeamDelete / ListPeers",
     );
-    expect(summary?.textContent).toContain(
-      "TaskCreate / TaskGet / TaskList / TaskUpdate / TaskOutput / TaskStop",
-    );
+    expect(summary?.textContent).toContain("update_plan");
   });
 
-  it("runtime tool surface 应在工具库存中展示已接通的 subagents/task current surface", () => {
+  it("runtime tool surface 应在工具库存中展示已接通的 subagents/plan current surface", () => {
     renderPanel({
       toolInventory: createAlignedRuntimeToolInventory(),
     });
@@ -58,9 +56,9 @@ describe("HarnessStatusPanel tools", () => {
     expect(summary?.textContent).toContain("WebSearch 已接通");
     expect(summary?.textContent).toContain("子任务核心 tools 已接通");
     expect(summary?.textContent).toContain("Subagents 协作 tools 已接通");
-    expect(summary?.textContent).toContain("Task current tools 已接通");
+    expect(summary?.textContent).toContain("Plan current tool 已接通");
     expect(summary?.textContent).toContain(
-      "当前 runtime current surface 已覆盖 WebSearch、子任务、Subagents 协作与 Task 主链。",
+      "当前 runtime current surface 已覆盖 WebSearch、子任务、Subagents 协作与 Plan 主链。",
     );
   });
 
@@ -110,5 +108,43 @@ describe("HarnessStatusPanel tools", () => {
     });
 
     expect(onRefreshToolInventory).toHaveBeenCalledTimes(1);
+  });
+
+  it("工具库存有 MCP prepare candidate 时应展示准备入口", () => {
+    const onPrepareMcpTargets = vi.fn();
+
+    renderPanel({
+      toolInventory: createToolInventory(),
+      mcpPrepareCandidateCount: 2,
+      onPrepareMcpTargets,
+    });
+
+    const prepareButton = document.body.querySelector(
+      'button[aria-label="准备插件 MCP 工具"]',
+    ) as HTMLButtonElement | null;
+
+    expect(prepareButton).not.toBeNull();
+    expect(prepareButton?.disabled).toBe(false);
+
+    act(() => {
+      prepareButton?.click();
+    });
+
+    expect(onPrepareMcpTargets).toHaveBeenCalledTimes(1);
+  });
+
+  it("没有 MCP prepare candidate 时准备入口应保持禁用", () => {
+    renderPanel({
+      toolInventory: createToolInventory(),
+      mcpPrepareCandidateCount: 0,
+      onPrepareMcpTargets: vi.fn(),
+    });
+
+    const prepareButton = document.body.querySelector(
+      'button[aria-label="准备插件 MCP 工具"]',
+    ) as HTMLButtonElement | null;
+
+    expect(prepareButton).not.toBeNull();
+    expect(prepareButton?.disabled).toBe(true);
   });
 });

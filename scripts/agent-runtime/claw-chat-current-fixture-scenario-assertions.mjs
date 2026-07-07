@@ -21,6 +21,8 @@ import {
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_PROMPT,
   IMAGE_FIXTURE_MODEL,
+  INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+  INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
   INPUTBAR_RICH_RESTORE_PATH_NAME,
   INPUTBAR_RICH_RESTORE_PROMPT,
   MCP_STRUCTURED_CONTENT_PROMPT,
@@ -30,6 +32,18 @@ import {
   NEWS_PROMPT,
   PLAN_PROMPT,
   PLAN_STEPS,
+  REASONING_FIRST_VISIBLE_PROMPT,
+  TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT,
+  TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+  TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+  TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+  TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+  TERMINAL_STALE_GUARD_DONE_TEXT,
+  TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
+  TERMINAL_STALE_GUARD_FIRST_PROMPT,
+  TERMINAL_STALE_GUARD_SECOND_PROMPT,
+  TERMINAL_STALE_GUARD_STALE_DONE_TEXT,
   SESSION_ID,
   SOUL_STYLE_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
@@ -41,6 +55,12 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildContentFactoryArticleWorkspaceScenarioAssertions } from "./claw-chat-current-fixture-content-factory-assertions.mjs";
 import { EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF } from "./claw-chat-current-fixture-expert-actions.mjs";
+import {
+  MEDIA_REFERENCE_MIME_TYPE,
+  MEDIA_REFERENCE_PROMPT,
+  MEDIA_REFERENCE_SUMMARY_TEXT,
+  MEDIA_REFERENCE_URI,
+} from "./claw-chat-current-fixture-media-reference.mjs";
 import { buildSoulStyleScenarioAssertions } from "./claw-chat-current-fixture-soul-style.mjs";
 
 function readImageCommandTaskFromHarness(harness) {
@@ -76,6 +96,7 @@ export function buildScenarioAssertions(context) {
     imageCommandTurnStart,
     guiTurnStartReachedBackend,
     hasCancelPhase,
+    inputbarPendingSteerActiveTurnStart,
     inputbarRichRestoreTurnStart,
     isAnyExpertSkillsRuntimeScenario,
     isCancelThenContinueScenario,
@@ -85,18 +106,25 @@ export function buildScenarioAssertions(context) {
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarPendingSteerRichRestoreScenario,
     isInputbarRichRestoreScenario,
     isMcpStructuredContentScenario,
+    isMediaReferenceScenario,
     isMultiAgentTeamScenario,
     isPlanScenario,
+    isReasoningFirstVisibleScenario,
+    isTerminalCanceledAfterAnswerScenario,
+    isTerminalFailedAfterAnswerScenario,
     isRightSurfaceVisualMatrixScenario,
     isSkillsRuntimeScenario,
     isSoulStyleScenario,
+    isTerminalStaleGuardScenario,
     isWebToolsRenderingScenario,
     latestTurnCancel,
     manualEnableRuntimeBinding,
     manualEnableRuntimeMetadata,
     mcpStructuredContentTurnStart,
+    mediaReferenceTurnStart,
     multiAgentTeamTurnStart,
     pageText,
     planImplementationTurnStart,
@@ -105,7 +133,12 @@ export function buildScenarioAssertions(context) {
     explicitSkillsRuntimeTurnStart,
     manualEnableSkillsRuntimeTurnStart,
     summary,
+    terminalCanceledAfterAnswerTurnStart,
+    terminalFailedAfterAnswerTurnStart,
+    terminalStaleGuardFirstTurnStart,
+    terminalStaleGuardSecondTurnStart,
     webToolsRenderingTurnStart,
+    reasoningFirstVisibleTurnStart,
     workspace,
   } = context;
   const rightSurfaceVisualMatrix = summary.rightSurfaceVisualMatrix ?? {};
@@ -708,7 +741,252 @@ export function buildScenarioAssertions(context) {
                       summary.guiWebToolsRenderingCompleted
                         ?.planDecisionVisible === false,
                   }
-                : isMcpStructuredContentScenario
+                : isReasoningFirstVisibleScenario
+                  ? {
+                      reasoningFirstVisiblePromptReachedBackend:
+                        reasoningFirstVisibleTurnStart?.inputText ===
+                        REASONING_FIRST_VISIBLE_PROMPT,
+                      guiReasoningFirstVisibleInputSubmitted:
+                        summary.reasoningFirstVisibleInputSend?.afterFill
+                          ?.promptVisibleInTextarea === true &&
+                        summary.reasoningFirstVisibleInputSend?.clicked
+                          ?.clicked === true,
+                      guiReasoningFirstVisibleBeforeAnswer:
+                        summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.reasoningFirstVisibleBeforeAnswerCaptured ===
+                          true &&
+                        summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.hasPrompt === true &&
+                        summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.hasReasoningText === true &&
+                        summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.hasReasoningProcess === true &&
+                        summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.hasReasoningBeforeFinalAnswer === true &&
+                        summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.hasFinalText === false &&
+                        summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.startupNoteVisible === false,
+                      guiReasoningFirstVisibleCompleted:
+                        summary.guiReasoningFirstVisibleCompleted?.hasPrompt ===
+                          true &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.hasReasoningText === true &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.hasFinalText === true &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.hasReasoningBeforeFinalAnswer === true &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.startupNoteVisible === false &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.textareaDisabled === false &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.stopButtonVisible === false,
+                      readModelReasoningFirstVisibleCompleted:
+                        summary.readModelReasoningFirstVisibleCompleted
+                          ?.includesPrompt === true &&
+                        summary.readModelReasoningFirstVisibleCompleted
+                          ?.latestTurnStatus === "completed" &&
+                        summary.readModelReasoningFirstVisibleCompleted
+                          ?.includesFinalText === true &&
+                        summary.readModelReasoningFirstVisibleCompleted
+                          ?.includesReasoningText === true,
+                      readModelReasoningFirstVisibleItemObserved:
+                        summary.readModelReasoningFirstVisibleCompleted
+                          ?.includesReasoningItem === true &&
+                        summary.readModelReasoningFirstVisibleCompleted
+                          ?.reasoningItemCount >= 1 &&
+                        summary.readModelReasoningFirstVisibleCompleted
+                          ?.reasoningSequenceBeforeFinal === true,
+                    }
+                  : isTerminalStaleGuardScenario
+                    ? {
+                        terminalStaleGuardFirstPromptReachedBackend:
+                          terminalStaleGuardFirstTurnStart?.inputText ===
+                          TERMINAL_STALE_GUARD_FIRST_PROMPT,
+                        terminalStaleGuardSecondPromptReachedBackend:
+                          terminalStaleGuardSecondTurnStart?.inputText ===
+                          TERMINAL_STALE_GUARD_SECOND_PROMPT,
+                        terminalStaleGuardFirstCompleted:
+                          summary.guiTerminalStaleGuardFirstCompleted
+                            ?.hasPrompt === true &&
+                          summary.guiTerminalStaleGuardFirstCompleted
+                            ?.hasDoneText === true &&
+                          summary.readModelTerminalStaleGuardFirstCompleted
+                            ?.includesPrompt === true &&
+                          summary.readModelTerminalStaleGuardFirstCompleted
+                            ?.includesAssistantDone === true,
+                        terminalStaleGuardSecondInputSubmitted:
+                          summary.terminalStaleGuardSecondInputSend?.afterFill
+                            ?.promptVisibleInTextarea === true &&
+                          summary.terminalStaleGuardSecondInputSend?.clicked
+                            ?.clicked === true,
+                        terminalStaleGuardSecondCompleted:
+                          summary.guiTerminalStaleGuardSecondCompleted
+                            ?.hasPrompt === true &&
+                          summary.guiTerminalStaleGuardSecondCompleted
+                            ?.hasDoneText === true &&
+                          summary.guiTerminalStaleGuardSecondCompleted
+                            ?.textareaDisabled === false &&
+                          summary.guiTerminalStaleGuardSecondCompleted
+                            ?.stopButtonVisible === false &&
+                          (
+                            summary.guiTerminalStaleGuardSecondCompleted
+                              ?.disallowedVisibleTextHits ?? []
+                          ).every((hit) => hit.occurrences === 0),
+                        terminalStaleGuardReadModelCompleted:
+                          summary.readModelTerminalStaleGuardSecondCompleted
+                            ?.includesPrompt === true &&
+                          summary.readModelTerminalStaleGuardSecondCompleted
+                            ?.includesAssistantDone === true &&
+                          summary.readModelTerminalStaleGuardSecondCompleted
+                            ?.latestTurnStatus === "completed",
+                        terminalStaleGuardStaleTerminalIgnored:
+                          summary.terminalStaleGuardStaleTerminal
+                            ?.staleEventType === "turn.completed" &&
+                          summary.terminalStaleGuardStaleTerminal
+                            ?.staleDoneText ===
+                            TERMINAL_STALE_GUARD_STALE_DONE_TEXT &&
+                          summary.terminalStaleGuardStaleTerminal
+                            ?.staleTurnDiffersFromCurrent === true &&
+                          summary.guiTerminalStaleGuardSecondCompleted
+                            ?.bodyText?.includes(
+                              TERMINAL_STALE_GUARD_DONE_TEXT,
+                            ) === true &&
+                          summary.guiTerminalStaleGuardSecondCompleted
+                            ?.bodyText?.includes(
+                              TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
+                            ) === true &&
+                          summary.guiTerminalStaleGuardSecondCompleted
+                            ?.bodyText?.includes(
+                              TERMINAL_STALE_GUARD_STALE_DONE_TEXT,
+                            ) === false,
+                      }
+                    : isTerminalCanceledAfterAnswerScenario
+                      ? {
+                          terminalCanceledAfterAnswerPromptReachedBackend:
+                            terminalCanceledAfterAnswerTurnStart?.inputText ===
+                            TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+                          guiTerminalCanceledAfterAnswerInputSubmitted:
+                            summary.terminalCanceledAfterAnswerInputSend
+                              ?.afterFill?.promptVisibleInTextarea === true &&
+                            summary.terminalCanceledAfterAnswerInputSend
+                              ?.clicked?.clicked === true,
+                          guiTerminalCanceledAfterAnswerPartialVisibleBeforeStop:
+                            summary.terminalCanceledAfterAnswerStopClick
+                              ?.beforeClick?.hasPrompt === true &&
+                            summary.terminalCanceledAfterAnswerStopClick
+                              ?.beforeClick?.hasVisibleAssistantOutput ===
+                              true &&
+                            summary.terminalCanceledAfterAnswerStopClick
+                              ?.beforeClick?.hasRunningStatus === true &&
+                            summary.terminalCanceledAfterAnswerStopClick
+                              ?.beforeClick?.scopedText?.includes(
+                                TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+                              ) === true,
+                          guiTerminalCanceledAfterAnswerStopClicked:
+                            summary.terminalCanceledAfterAnswerStopClick
+                              ?.clicked?.clicked === true,
+                          guiTerminalCanceledAfterAnswerPartialRetained:
+                            summary.guiTerminalCanceledAfterAnswerCanceled
+                              ?.hasPrompt === true &&
+                            summary.guiTerminalCanceledAfterAnswerCanceled
+                              ?.hasPartialText === true &&
+                            summary.guiTerminalCanceledAfterAnswerCanceled
+                              ?.bodyText?.includes(
+                                TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+                              ) === true,
+                          guiTerminalCanceledAfterAnswerNoDuplicates:
+                            (summary.guiTerminalCanceledAfterAnswerCanceled
+                              ?.bodyText?.split(
+                                TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+                              ).length ?? 1) -
+                              1 ===
+                            1,
+                          guiTerminalCanceledAfterAnswerInputReady:
+                            summary.guiTerminalCanceledAfterAnswerCanceled
+                              ?.textareaVisible === true &&
+                            summary.guiTerminalCanceledAfterAnswerCanceled
+                              ?.textareaDisabled === false &&
+                            summary.guiTerminalCanceledAfterAnswerCanceled
+                              ?.stopButtonVisible === false,
+                          readModelTerminalCanceledAfterAnswerCanceled:
+                            summary.readModelTerminalCanceledAfterAnswer
+                              ?.includesPrompt === true &&
+                            summary.readModelTerminalCanceledAfterAnswer
+                              ?.includesPartialText === true &&
+                            summary.readModelTerminalCanceledAfterAnswer
+                              ?.includesCanceled === true &&
+                            summary.readModelTerminalCanceledAfterAnswer
+                              ?.latestTurnStatus === "canceled",
+                          backendTerminalCanceledAfterAnswerRecorded:
+                            summary.terminalCanceledAfterAnswerBackend
+                              ?.eventType === "turn.canceled" &&
+                            summary.terminalCanceledAfterAnswerBackend
+                              ?.partialText ===
+                              TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT &&
+                            summary.terminalCanceledAfterAnswerBackend
+                              ?.canceledText ===
+                              TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT,
+                        }
+                    : isTerminalFailedAfterAnswerScenario
+                      ? {
+                          terminalFailedAfterAnswerPromptReachedBackend:
+                            terminalFailedAfterAnswerTurnStart?.inputText ===
+                            TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+                          guiTerminalFailedAfterAnswerInputSubmitted:
+                            summary.terminalFailedAfterAnswerInputSend
+                              ?.afterFill?.promptVisibleInTextarea === true &&
+                            summary.terminalFailedAfterAnswerInputSend?.clicked
+                              ?.clicked === true,
+                          guiTerminalFailedAfterAnswerPartialRetained:
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.hasPrompt === true &&
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.hasAssistantSummary === true &&
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.completionScope?.assistantText?.includes(
+                                TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+                              ) === true,
+                          guiTerminalFailedAfterAnswerFailureVisible:
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.hasDoneText === true &&
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.completionScope?.assistantText?.includes(
+                                TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+                              ) === true,
+                          guiTerminalFailedAfterAnswerNoDuplicates:
+                            (
+                              summary.guiTerminalFailedAfterAnswerCompleted
+                                ?.assistantScopeDedupeGuardHits ?? []
+                            ).every((hit) => hit.occurrences === 1),
+                          guiTerminalFailedAfterAnswerInputReady:
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.textareaVisible === true &&
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.textareaDisabled === false &&
+                            summary.guiTerminalFailedAfterAnswerCompleted
+                              ?.stopButtonVisible === false,
+                          readModelTerminalFailedAfterAnswerFailed:
+                            summary.readModelTerminalFailedAfterAnswer
+                              ?.includesPrompt === true &&
+                            summary.readModelTerminalFailedAfterAnswer
+                              ?.includesPartialText === true &&
+                            summary.readModelTerminalFailedAfterAnswer
+                              ?.includesFailureText === true &&
+                            summary.readModelTerminalFailedAfterAnswer
+                              ?.latestTurnStatus === "failed",
+                          backendTerminalFailedAfterAnswerRecorded:
+                            summary.terminalFailedAfterAnswerBackend
+                              ?.eventType === "turn.failed" &&
+                            summary.terminalFailedAfterAnswerBackend
+                              ?.partialText ===
+                              TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT &&
+                            summary.terminalFailedAfterAnswerBackend
+                              ?.failureText ===
+                              TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+                        }
+                  : isMcpStructuredContentScenario
                   ? {
                       mcpStructuredContentPromptReachedBackend:
                         mcpStructuredContentTurnStart?.inputText ===
@@ -755,6 +1033,68 @@ export function buildScenarioAssertions(context) {
                         summary.readModelMcpStructuredContentCompleted
                           ?.outputContainsEnvelope === true,
                     }
+                  : isMediaReferenceScenario
+                    ? {
+                        mediaReferencePromptReachedBackend:
+                          mediaReferenceTurnStart?.inputText ===
+                          MEDIA_REFERENCE_PROMPT,
+                        guiMediaReferenceInputSubmitted:
+                          summary.mediaReferenceInputSend?.afterFill
+                            ?.promptVisibleInTextarea === true &&
+                          summary.mediaReferenceInputSend?.clicked?.clicked ===
+                            true,
+                        guiMediaReferenceCardVisible:
+                          summary.guiMediaReferenceCompleted?.hasPrompt ===
+                            true &&
+                          summary.guiMediaReferenceCompleted
+                            ?.hasAssistantSummary === true &&
+                          summary.guiMediaReferenceSnapshot?.hasCard === true &&
+                          summary.guiMediaReferenceSnapshot?.hasUri === true &&
+                          summary.guiMediaReferenceSnapshot?.hasMimeType ===
+                            true,
+                        guiMediaReferenceDoesNotExposeInlinePayload:
+                          summary.guiMediaReferenceSnapshot
+                            ?.bodyTextIncludesInlinePayload === false &&
+                          summary.readModelMediaReferenceCompleted
+                            ?.noInlinePayload === true,
+                        guiMediaReferencePreviewOpened:
+                          summary.guiMediaReferencePreview?.click?.clicked ===
+                            true &&
+                          summary.guiMediaReferencePreview?.preview
+                            ?.workbenchPreviewVisible === true &&
+                          summary.guiMediaReferencePreview?.preview
+                            ?.previewImageVisible === true &&
+                          summary.guiMediaReferencePreview?.preview
+                            ?.previewTextIncludesSidecarSource === false &&
+                          summary.guiMediaReferencePreview?.preview
+                            ?.bodyTextIncludesInlinePayload === false,
+                        readModelMediaReferenceCompleted:
+                          summary.readModelMediaReferenceCompleted
+                            ?.includesPrompt === true &&
+                          (summary.readModelMediaReferenceCompleted
+                            ?.includesAssistantDone === true ||
+                            summary.readModelMediaReferenceCompleted
+                              ?.includesAssistantSummary === true) &&
+                          summary.readModelMediaReferenceCompleted
+                            ?.latestTurnStatus === "completed",
+                        readModelMediaReferenceObserved:
+                          summary.readModelMediaReferenceCompleted
+                            ?.hasMediaReference === true &&
+                          summary.readModelMediaReferenceCompleted
+                            ?.hasReferenceUri === true &&
+                          summary.readModelMediaReferenceCompleted
+                            ?.hasMimeType === true &&
+                          summary.readModelMediaReferenceCompleted
+                            ?.hasCaption === true &&
+                          summary.readModelMediaReferenceCompleted
+                            ?.hasSourceOwner === true &&
+                          summary.readModelMediaReferenceCompleted
+                            ?.contentPartsKeyObserved === true &&
+                          pageText.includes(MEDIA_REFERENCE_PROMPT) &&
+                          pageText.includes(MEDIA_REFERENCE_SUMMARY_TEXT) &&
+                          pageText.includes(MEDIA_REFERENCE_URI) &&
+                          pageText.includes(MEDIA_REFERENCE_MIME_TYPE),
+                      }
                   : isMultiAgentTeamScenario
                     ? {
                         multiAgentTeamPromptReachedBackend:
@@ -1303,8 +1643,10 @@ export function buildScenarioAssertions(context) {
                           : isInputbarRichRestoreScenario
                             ? {
                                 inputbarRichRestorePromptReachedBackend:
-                                  inputbarRichRestoreTurnStart?.inputText ===
-                                  INPUTBAR_RICH_RESTORE_PROMPT,
+                                  String(
+                                    inputbarRichRestoreTurnStart?.inputText ||
+                                      "",
+                                  ).includes(INPUTBAR_RICH_RESTORE_PROMPT),
                                 inputbarRichRestoreDraftPrepared:
                                   summary.inputbarRichRestoreDraftPrepared
                                     ?.prepared?.imageRestored === true &&
@@ -1332,7 +1674,10 @@ export function buildScenarioAssertions(context) {
                                     APP_SERVER_METHOD_SESSION_TURN_CANCEL,
                                   ),
                                 inputbarRichRestoreBackendCanceled:
-                                  latestTurnCancel?.sessionId === SESSION_ID &&
+                                  latestTurnCancel?.sessionId ===
+                                    inputbarRichRestoreTurnStart?.sessionId &&
+                                  latestTurnCancel?.turnId ===
+                                    inputbarRichRestoreTurnStart?.turnId &&
                                   typeof latestTurnCancel?.turnId ===
                                     "string" &&
                                   latestTurnCancel.turnId.trim().length > 0,
@@ -1365,6 +1710,99 @@ export function buildScenarioAssertions(context) {
                                   summary.inputbarRichRestoreReadModelCanceled
                                     ?.forbiddenAssistantOutput === false,
                               }
+                            : isInputbarPendingSteerRichRestoreScenario
+                              ? {
+                                  inputbarPendingSteerActivePromptReachedBackend:
+                                    inputbarPendingSteerActiveTurnStart
+                                      ?.inputText ===
+                                    INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+                                  inputbarPendingSteerActiveOutputVisible:
+                                    summary.inputbarPendingSteerActiveStreaming
+                                      ?.stopButtonVisible === true &&
+                                    summary.inputbarPendingSteerActiveStreaming
+                                      ?.bodyText?.includes(
+                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+                                      ) === true,
+                                  inputbarPendingSteerRichDraftPrepared:
+                                    summary.inputbarPendingSteerDraftPrepared
+                                      ?.prepared?.imageRestored === true &&
+                                    summary.inputbarPendingSteerDraftPrepared
+                                      ?.prepared?.pathRestored === true &&
+                                    summary.inputbarPendingSteerDraftPrepared
+                                      ?.prepared?.skillRestored === true &&
+                                    summary.inputbarPendingSteerDraftPrepared
+                                      ?.prepared?.deferButtonExists === true,
+                                  inputbarPendingSteerRichInputDeferred:
+                                    summary.inputbarPendingSteerInputDefer
+                                      ?.afterFill?.promptVisibleInTextarea ===
+                                      true &&
+                                    summary.inputbarPendingSteerInputDefer
+                                      ?.clicked?.clicked === true,
+                                  inputbarPendingSteerReadModelQueued:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.queuedTurnFound === true,
+                                  inputbarPendingSteerQueuedRichTextPreserved:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.includesPrompt === true &&
+                                    (summary.inputbarPendingSteerQueuedReadModel
+                                      ?.text === INPUTBAR_RICH_RESTORE_PROMPT ||
+                                      summary.inputbarPendingSteerQueuedReadModel
+                                        ?.textElementTexts?.includes(
+                                          INPUTBAR_RICH_RESTORE_PROMPT,
+                                        ) === true),
+                                  inputbarPendingSteerQueuedRichImagePreserved:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.imagePreserved === true,
+                                  inputbarPendingSteerQueuedRichPathPreserved:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.pathPreserved === true,
+                                  inputbarPendingSteerQueuedRichTextElementsPreserved:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.textElementsPreserved === true,
+                                  inputbarPendingSteerQueuedRichSkillPreserved:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.skillPreserved === true,
+                                  inputbarPendingSteerRichPromptNotStartedBeforeCancel:
+                                    summary.inputbarPendingSteerBackendBeforeCancel
+                                      ?.richPromptStarted === false,
+                                  inputbarPendingSteerUsedCurrentTurnCancel:
+                                    appServerRequestMethods.includes(
+                                      APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+                                    ),
+                                  inputbarPendingSteerActiveBackendCanceled:
+                                    latestTurnCancel?.sessionId ===
+                                      inputbarPendingSteerActiveTurnStart
+                                        ?.sessionId &&
+                                    latestTurnCancel?.turnId ===
+                                      inputbarPendingSteerActiveTurnStart
+                                        ?.turnId &&
+                                    typeof latestTurnCancel?.turnId ===
+                                      "string" &&
+                                    latestTurnCancel.turnId.trim().length > 0,
+                                  inputbarPendingSteerGuiCanceled:
+                                    summary.inputbarPendingSteerGuiCanceled
+                                      ?.stopButtonVisible === false &&
+                                    summary.inputbarPendingSteerGuiCanceled
+                                      ?.textareaDisabled === false,
+                                  inputbarPendingSteerTextRestored:
+                                    summary.inputbarPendingSteerGuiCanceled
+                                      ?.textareaValue ===
+                                    INPUTBAR_RICH_RESTORE_PROMPT,
+                                  inputbarPendingSteerImageRestored:
+                                    summary.inputbarPendingSteerGuiCanceled
+                                      ?.imageRestored === true,
+                                  inputbarPendingSteerPathRestored:
+                                    summary.inputbarPendingSteerGuiCanceled
+                                      ?.pathRestored === true,
+                                  inputbarPendingSteerSkillRestored:
+                                    summary.inputbarPendingSteerGuiCanceled
+                                      ?.skillRestored === true,
+                                  inputbarPendingSteerActiveAssistantOutputKept:
+                                    summary.inputbarPendingSteerGuiCanceled
+                                      ?.bodyText?.includes(
+                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+                                      ) === true,
+                                }
                           : {
                               noEpochFallbackTitle:
                                 summary.guiCompleted?.hasEpochFallbackTitle ===

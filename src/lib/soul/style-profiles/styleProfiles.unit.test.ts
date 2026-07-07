@@ -1,14 +1,21 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import {
-  BUILT_IN_SOUL_STYLE_PACK_IDS,
-  BUILT_IN_SOUL_STYLE_PACKS,
-  BUILT_IN_SOUL_STYLE_PROFILES,
+  DEFAULT_SOUL_STYLE_PROFILE_REGISTRY,
   composeStyleDirectives,
+  createSoulStyleProfileRegistry,
   evaluateStyleBoundary,
   normalizeSoulStyleProfileId,
   resolveSoulStyleProfile,
 } from ".";
-import type { SoulStyleSurfaceContract } from "./types";
+import type {
+  SoulStyleProfile,
+  SoulStyleProfileId,
+  SoulStyleSurfaceContract,
+} from "./types";
 
 const TOOL_LIFECYCLE_SURFACES: readonly SoulStyleSurfaceContract[] = [
   "before_tool",
@@ -22,30 +29,87 @@ const TRANSCRIPT_STYLE_SURFACES: readonly SoulStyleSurfaceContract[] = [
   ...TOOL_LIFECYCLE_SURFACES,
   "closing_suggestion",
 ];
+const builtInPacks = DEFAULT_SOUL_STYLE_PROFILE_REGISTRY.packs.filter(
+  (pack) => pack.source === "built_in",
+);
+const builtInProfiles = DEFAULT_SOUL_STYLE_PROFILE_REGISTRY.profiles;
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const productionStyleSurfaceRoots = [
+  join(repoRoot, "src/components"),
+  join(repoRoot, "src/lib"),
+];
+const allowedStyleProfileFactSourcePrefixes = [
+  "src/lib/soul/style-profiles/",
+];
+const productionSourceExtensions = new Set([".ts", ".tsx", ".js", ".jsx"]);
+const forbiddenBuiltInProfileIdPattern =
+  /\b(cheeky_sassy_executor|warm_supportive_companion|cool_confident_operator|calm_professional_partner)\b/u;
+const forbiddenProfileSwitchPattern =
+  /switch\s*\(\s*(profileId|styleProfileId|profile\.id|resolved\.profile\.id)\s*\)/u;
+
+function requireBuiltInProfile(profileId: SoulStyleProfileId): SoulStyleProfile {
+  const profile = DEFAULT_SOUL_STYLE_PROFILE_REGISTRY.findProfile(profileId);
+  if (!profile) {
+    throw new Error(`Missing built-in Soul style profile: ${profileId}`);
+  }
+  return profile;
+}
+
+function requireBuiltInPackId(profileId: SoulStyleProfileId): string {
+  return requireBuiltInProfile(profileId).packId;
+}
+
+function isAllowedStyleProfileFactSource(filePath: string): boolean {
+  const relativePath = relative(repoRoot, filePath).replaceAll("\\", "/");
+  return allowedStyleProfileFactSourcePrefixes.some((prefix) =>
+    relativePath.startsWith(prefix),
+  );
+}
+
+function shouldScanProductionSourceFile(filePath: string): boolean {
+  if (!productionSourceExtensions.has(extname(filePath))) {
+    return false;
+  }
+  if (isAllowedStyleProfileFactSource(filePath)) {
+    return false;
+  }
+  return !/\.(test|unit\.test)\.[tj]sx?$/u.test(filePath);
+}
+
+function collectProductionStyleSurfaceFiles(root: string): string[] {
+  const stat = statSync(root);
+  if (stat.isFile()) {
+    return shouldScanProductionSourceFile(root) ? [root] : [];
+  }
+  if (!stat.isDirectory()) {
+    return [];
+  }
+
+  return readdirSync(root).flatMap((entry) =>
+    collectProductionStyleSurfaceFiles(join(root, entry)),
+  );
+}
 
 describe("soul style profiles", () => {
   it("内置风格应注册为四个独立 built-in Style Pack seed", () => {
-    expect(BUILT_IN_SOUL_STYLE_PACKS).toHaveLength(4);
-    expect(BUILT_IN_SOUL_STYLE_PROFILES.map((profile) => profile.id)).toEqual([
+    expect(builtInPacks).toHaveLength(4);
+    expect(builtInProfiles.map((profile) => profile.id)).toEqual([
       "cheeky_sassy_executor",
       "warm_supportive_companion",
       "cool_confident_operator",
       "calm_professional_partner",
     ]);
-    expect(
-      BUILT_IN_SOUL_STYLE_PROFILES.map((profile) => profile.packId),
-    ).toEqual([
+    expect(builtInProfiles.map((profile) => profile.packId)).toEqual([
       "com.lime.soul.cheeky-sassy-executor",
       "com.lime.soul.warm-supportive-companion",
       "com.lime.soul.cool-confident-operator",
       "com.lime.soul.calm-professional-partner",
     ]);
+    expect(new Set(builtInProfiles.map((profile) => profile.packId)).size).toBe(
+      4,
+    );
     expect(
-      new Set(BUILT_IN_SOUL_STYLE_PROFILES.map((profile) => profile.packId))
-        .size,
-    ).toBe(4);
-    expect(
-      BUILT_IN_SOUL_STYLE_PACKS.every(
+      builtInPacks.every(
         (pack) =>
           pack.source === "built_in" &&
           pack.compatibility.schemaVersion === 1 &&
@@ -54,7 +118,7 @@ describe("soul style profiles", () => {
       ),
     ).toBe(true);
     expect(
-      BUILT_IN_SOUL_STYLE_PROFILES.every(
+      builtInProfiles.every(
         (profile) =>
           profile.responseContract.length > 0 &&
           profile.voicePrimitives.length > 0 &&
@@ -74,14 +138,110 @@ describe("soul style profiles", () => {
       "cool_confident_operator",
     );
     expect(normalizeSoulStyleProfileId("sassy_cute_executor")).toBe(
-      "cheeky_sassy_executor",
+      "sassy_cute_executor",
     );
-    expect(normalizeSoulStyleProfileId("unknown")).toBeUndefined();
+    expect(normalizeSoulStyleProfileId("custom.pack:v1")).toBe(
+      "custom.pack:v1",
+    );
+    expect(normalizeSoulStyleProfileId("Not Stable")).toBeUndefined();
 
     const resolved = resolveSoulStyleProfile();
     expect(resolved.profile.id).toBe("cheeky_sassy_executor");
     expect(resolved.intensity).toBe("low");
     expect(resolved.reason).toBe("default");
+  });
+
+  it("未加载的合法 profile id 不再 alias 到四个 built-in", () => {
+    const resolved = resolveSoulStyleProfile({
+      styleProfileId: "sassy_cute_executor",
+    });
+
+    expect(resolved.requestedProfileId).toBe("sassy_cute_executor");
+    expect(resolved.profile.id).toBe("cheeky_sassy_executor");
+    expect(resolved.profile.id).not.toBe("sassy_cute_executor");
+  });
+
+  it("registry 应合并已安装风格包并让 resolver 消费同一 profile", () => {
+    const installedManifest = {
+      ...builtInPacks[0],
+      id: "com.example.soul.local-sassy",
+      source: "local_import",
+      integrity: {
+        digest: "sha256-local-sassy",
+      },
+      profiles: [
+        {
+          ...builtInProfiles[0],
+          id: "local_sassy_executor",
+          packId: "com.example.soul.local-sassy",
+          nameKey: "settings.memory.soul.styleProfile.localSassy.title",
+          descriptionKey:
+            "settings.memory.soul.styleProfile.localSassy.description",
+        },
+      ],
+    };
+    const registry = createSoulStyleProfileRegistry({
+      installedPackManifests: [installedManifest],
+    });
+
+    expect(registry.packs.map((pack) => pack.id)).toContain(
+      "com.example.soul.local-sassy",
+    );
+    expect(registry.findProfile("local_sassy_executor")?.packId).toBe(
+      "com.example.soul.local-sassy",
+    );
+
+    const resolved = resolveSoulStyleProfile(
+      { styleProfileId: "local_sassy_executor" },
+      registry,
+    );
+    expect(resolved.profile.id).toBe("local_sassy_executor");
+    expect(resolved.profile.packId).toBe("com.example.soul.local-sassy");
+
+    const directives = composeStyleDirectives(
+      { styleProfileId: "local_sassy_executor" },
+      registry,
+    );
+    expect(directives?.profileId).toBe("local_sassy_executor");
+    expect(directives?.packId).toBe("com.example.soul.local-sassy");
+  });
+
+  it("registry 应拒绝缺少完整性信息的 installed pack", () => {
+    const installedManifest = {
+      ...builtInPacks[0],
+      id: "com.example.soul.unsigned",
+      source: "cloud_download",
+      profiles: [
+        {
+          ...builtInProfiles[0],
+          id: "unsigned_executor",
+          packId: "com.example.soul.unsigned",
+        },
+      ],
+    };
+
+    expect(() =>
+      createSoulStyleProfileRegistry({
+        installedPackManifests: [installedManifest],
+      }),
+    ).toThrow(/integrity/u);
+  });
+
+  it("生产组件不得按 built-in profile id 分支生成展示文案", () => {
+    const offenders = productionStyleSurfaceRoots.flatMap((root) =>
+      collectProductionStyleSurfaceFiles(root).flatMap((filePath) => {
+        const source = readFileSync(filePath, "utf8");
+        if (
+          !forbiddenBuiltInProfileIdPattern.test(source) &&
+          !forbiddenProfileSwitchPattern.test(source)
+        ) {
+          return [];
+        }
+        return [relative(repoRoot, filePath).replaceAll("\\", "/")];
+      }),
+    );
+
+    expect(offenders).toEqual([]);
   });
 
   it("高风险和危险操作应降级到冷静专业型", () => {
@@ -110,7 +270,7 @@ describe("soul style profiles", () => {
 
     expect(directives).toMatchObject({
       profileId: "warm_supportive_companion",
-      packId: BUILT_IN_SOUL_STYLE_PACK_IDS.warm_supportive_companion,
+      packId: requireBuiltInPackId("warm_supportive_companion"),
       tone: "warm_supportive",
       intensity: "medium",
       seriousModeFallback: "calm_professional_partner",
@@ -118,7 +278,7 @@ describe("soul style profiles", () => {
     expect(directives?.promptLines.join("\n")).toContain("Forbidden moves:");
     expect(directives?.promptLines.join("\n")).toContain("Response contract:");
     expect(directives?.promptLines.join("\n")).toContain(
-      `Style pack: ${BUILT_IN_SOUL_STYLE_PACK_IDS.warm_supportive_companion}`,
+      `Style pack: ${requireBuiltInPackId("warm_supportive_companion")}`,
     );
     expect(directives?.promptLines.join("\n")).toContain("Surface contracts:");
     expect(directives?.promptLines.join("\n")).toContain(
@@ -128,7 +288,7 @@ describe("soul style profiles", () => {
   });
 
   it("四种风格应覆盖同一 transcript surface contract", () => {
-    for (const profile of BUILT_IN_SOUL_STYLE_PROFILES) {
+    for (const profile of builtInProfiles) {
       for (const surface of TRANSCRIPT_STYLE_SURFACES) {
         expect(
           profile.surfaceContracts[surface],
@@ -139,19 +299,19 @@ describe("soul style profiles", () => {
       expect(profile.riskFallback.profileId).toBe("calm_professional_partner");
     }
 
-    const lifecycleContractsByProfile = BUILT_IN_SOUL_STYLE_PROFILES.map(
+    const lifecycleContractsByProfile = builtInProfiles.map(
       (profile) =>
         TRANSCRIPT_STYLE_SURFACES.map((surface) =>
           profile.surfaceContracts[surface]?.join(" "),
         ).join("\n"),
     );
     expect(new Set(lifecycleContractsByProfile).size).toBe(
-      BUILT_IN_SOUL_STYLE_PROFILES.length,
+      builtInProfiles.length,
     );
   });
 
   it("few-shot anchors 应覆盖工具失败、正文细节和结尾建议且四种风格不同", () => {
-    for (const profile of BUILT_IN_SOUL_STYLE_PROFILES) {
+    for (const profile of builtInProfiles) {
       const surfaces = new Set(
         profile.fewShotAnchors.map((anchor) => anchor.surface),
       );
@@ -163,19 +323,19 @@ describe("soul style profiles", () => {
     }
 
     for (const surface of TRANSCRIPT_STYLE_SURFACES) {
-      const examples = BUILT_IN_SOUL_STYLE_PROFILES.map(
+      const examples = builtInProfiles.map(
         (profile) =>
           profile.fewShotAnchors.find((anchor) => anchor.surface === surface)
             ?.example,
       );
       expect(new Set(examples).size, `${surface} examples collapsed`).toBe(
-        BUILT_IN_SOUL_STYLE_PROFILES.length,
+        builtInProfiles.length,
       );
     }
   });
 
   it("prompt directives 应写入完整工具生命周期合同而不是只含 profile id", () => {
-    for (const profile of BUILT_IN_SOUL_STYLE_PROFILES) {
+    for (const profile of builtInProfiles) {
       const directives = composeStyleDirectives({
         styleProfileId: profile.id,
         styleIntensity: "high",
@@ -217,7 +377,7 @@ describe("soul style profiles", () => {
 
     expect(directives).toMatchObject({
       profileId: "cool_confident_operator",
-      packId: BUILT_IN_SOUL_STYLE_PACK_IDS.cool_confident_operator,
+      packId: requireBuiltInPackId("cool_confident_operator"),
       tone: "cool_confident",
       intensity: "medium",
       seriousModeFallback: "calm_professional_partner",

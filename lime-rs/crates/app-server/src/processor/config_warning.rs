@@ -1,6 +1,7 @@
 //! App Server config warning notifications.
 
 use super::{RequestProcessor, RpcDispatch};
+#[cfg(test)]
 use crate::RuntimeCore;
 use app_server_protocol::{
     ConfigWarningNotification, JsonRpcError, JsonRpcNotification, ServerNotification,
@@ -9,17 +10,17 @@ use lime_core::config::{Config, ConfigManager};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub(super) type ConfigWarningProvider =
-    Arc<dyn Fn(ConfigWarningScope) -> Option<JsonRpcNotification> + Send + Sync>;
+pub(crate) type ConfigWarningProvider =
+    Arc<dyn Fn(ConfigWarningScope) -> Vec<JsonRpcNotification> + Send + Sync>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ConfigWarningScope {
+pub(crate) enum ConfigWarningScope {
     Initialize,
     TurnStart,
 }
 
 pub(super) fn default_config_warning_provider() -> ConfigWarningProvider {
-    Arc::new(current_config_warning_notification)
+    Arc::new(current_config_warning_notifications)
 }
 
 impl RequestProcessor {
@@ -27,18 +28,15 @@ impl RequestProcessor {
         &self,
         params: Option<serde_json::Value>,
     ) -> Result<RpcDispatch, JsonRpcError> {
-        let mut dispatch = RpcDispatch::single(self.initialize(params)?);
-        if let Some(notification) = self.config_warning_notification(ConfigWarningScope::Initialize)
-        {
-            dispatch = dispatch.with_notification(notification);
-        }
-        Ok(dispatch)
+        let dispatch = RpcDispatch::single(self.initialize(params)?);
+        Ok(dispatch
+            .with_notifications(self.config_warning_notifications(ConfigWarningScope::Initialize)))
     }
 
-    pub(super) fn config_warning_notification(
+    pub(super) fn config_warning_notifications(
         &self,
         scope: ConfigWarningScope,
-    ) -> Option<JsonRpcNotification> {
+    ) -> Vec<JsonRpcNotification> {
         (self.config_warning_provider)(scope)
     }
 
@@ -53,51 +51,51 @@ impl RequestProcessor {
     }
 }
 
-pub(super) fn current_config_warning_notification(
+pub(super) fn current_config_warning_notifications(
     scope: ConfigWarningScope,
-) -> Option<JsonRpcNotification> {
+) -> Vec<JsonRpcNotification> {
     let yaml_path = ConfigManager::default_config_path();
     let json_path = legacy_json_config_path(&yaml_path);
-    config_warning_notification_from_paths(scope, &yaml_path, &json_path)
+    config_warning_notifications_from_paths(scope, &yaml_path, &json_path)
 }
 
-pub(super) fn config_warning_notification_from_paths(
+pub(super) fn config_warning_notifications_from_paths(
     scope: ConfigWarningScope,
     yaml_path: &Path,
     json_path: &Path,
-) -> Option<JsonRpcNotification> {
+) -> Vec<JsonRpcNotification> {
     if yaml_path.exists() {
         return read_yaml_config_warning(scope, yaml_path);
     }
     if json_path.exists() {
         return read_json_config_warning(scope, json_path);
     }
-    None
+    Vec::new()
 }
 
-fn read_yaml_config_warning(scope: ConfigWarningScope, path: &Path) -> Option<JsonRpcNotification> {
+fn read_yaml_config_warning(scope: ConfigWarningScope, path: &Path) -> Vec<JsonRpcNotification> {
     let content = match std::fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) => {
-            return Some(config_warning_notification(scope, path, error.to_string()));
+            return vec![config_warning_notification(scope, path, error.to_string())];
         }
     };
     match ConfigManager::parse_yaml(&content) {
-        Ok(_) => None,
-        Err(error) => Some(config_warning_notification(scope, path, error.to_string())),
+        Ok(_) => Vec::new(),
+        Err(error) => vec![config_warning_notification(scope, path, error.to_string())],
     }
 }
 
-fn read_json_config_warning(scope: ConfigWarningScope, path: &Path) -> Option<JsonRpcNotification> {
+fn read_json_config_warning(scope: ConfigWarningScope, path: &Path) -> Vec<JsonRpcNotification> {
     let content = match std::fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) => {
-            return Some(config_warning_notification(scope, path, error.to_string()));
+            return vec![config_warning_notification(scope, path, error.to_string())];
         }
     };
     match serde_json::from_str::<Config>(&content) {
-        Ok(_) => None,
-        Err(error) => Some(config_warning_notification(scope, path, error.to_string())),
+        Ok(_) => Vec::new(),
+        Err(error) => vec![config_warning_notification(scope, path, error.to_string())],
     }
 }
 
@@ -138,13 +136,13 @@ mod tests {
         let yaml_path = temp.path().join("config.yaml");
         let json_path = temp.path().join("config.json");
 
-        let notification = config_warning_notification_from_paths(
+        let notifications = config_warning_notifications_from_paths(
             ConfigWarningScope::Initialize,
             &yaml_path,
             &json_path,
         );
 
-        assert!(notification.is_none());
+        assert!(notifications.is_empty());
     }
 
     #[test]
@@ -154,15 +152,16 @@ mod tests {
         let json_path = temp.path().join("config.json");
         std::fs::write(&yaml_path, "server: [").expect("write invalid yaml");
 
-        let notification = config_warning_notification_from_paths(
+        let notifications = config_warning_notifications_from_paths(
             ConfigWarningScope::TurnStart,
             &yaml_path,
             &json_path,
-        )
-        .expect("warning notification");
+        );
+        let notification = notifications.first().expect("warning notification");
 
+        assert_eq!(notifications.len(), 1);
         assert_eq!(notification.method, METHOD_CONFIG_WARNING);
-        let params = notification.params.expect("params");
+        let params = notification.params.as_ref().expect("params");
         assert_eq!(
             params["summary"],
             json!("App Server config warning during turn start")
@@ -181,15 +180,16 @@ mod tests {
         let json_path = temp.path().join("config.json");
         std::fs::write(&json_path, "{").expect("write invalid json");
 
-        let notification = config_warning_notification_from_paths(
+        let notifications = config_warning_notifications_from_paths(
             ConfigWarningScope::Initialize,
             &yaml_path,
             &json_path,
-        )
-        .expect("warning notification");
+        );
+        let notification = notifications.first().expect("warning notification");
 
+        assert_eq!(notifications.len(), 1);
         assert_eq!(notification.method, METHOD_CONFIG_WARNING);
-        let params = notification.params.expect("params");
+        let params = notification.params.as_ref().expect("params");
         assert_eq!(
             params["summary"],
             json!("App Server config warning during initialize")

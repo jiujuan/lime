@@ -4,6 +4,7 @@ use super::tool_process_runtime_metadata;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentProviderTraceStage};
+use model_provider::safety::SAFETY_BUFFERING_RUNTIME_EVENT_KIND;
 #[cfg(test)]
 use runtime_core::runtime_event_from_llm_event as runtime_core_event_from_llm_event;
 use serde_json::{json, Value};
@@ -24,6 +25,25 @@ pub(super) fn runtime_events_from_agent_event_with_soul_style(
     event: &RuntimeAgentEvent,
     soul_style: Option<&SoulStyleMetadata>,
 ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
+    if let RuntimeAgentEvent::ProviderStreamEvent {
+        runtime_event_kind,
+        payload,
+    } = event
+    {
+        let mut payload = payload.clone();
+        if let Some(payload_object) = payload.as_object_mut() {
+            payload_object.insert("backend".to_string(), Value::String("runtime".to_string()));
+            payload_object.insert(
+                "runtimeEvent".to_string(),
+                serde_json::to_value(event).map_err(event_error)?,
+            );
+        }
+        return Ok(vec![RuntimeEvent::new(
+            provider_stream_runtime_event_type(runtime_event_kind),
+            payload,
+        )]);
+    }
+
     let runtime_event = serde_json::to_value(event).map_err(event_error)?;
     let raw_type = runtime_event
         .get("type")
@@ -94,6 +114,7 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "turn_context" => "turn.context",
         "model_change" => "model.changed",
         "provider_trace" => "provider.trace",
+        "provider_stream_event" => "runtime.event",
         "context_trace" => "context.trace",
         "context_compaction_started" => "context.compaction.started",
         "context_compaction_completed" => "context.compaction.completed",
@@ -167,6 +188,13 @@ fn runtime_event_type_for_provider_trace_stage(stage: AgentProviderTraceStage) -
         AgentProviderTraceStage::FirstTextDeltaReceived => "provider.first_text_delta.received",
         AgentProviderTraceStage::Failed => "provider.failed",
         AgentProviderTraceStage::Canceled => "provider.canceled",
+    }
+}
+
+fn provider_stream_runtime_event_type(runtime_event_kind: &str) -> &'static str {
+    match runtime_event_kind {
+        SAFETY_BUFFERING_RUNTIME_EVENT_KIND => SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
+        _ => "runtime.event",
     }
 }
 
@@ -284,6 +312,55 @@ mod tests {
         );
         assert_eq!(events[0].payload["elapsed_ms"], json!(1234));
         assert_eq!(events[0].payload["text_chars"], json!(8));
+    }
+
+    #[test]
+    fn provider_stream_event_maps_to_declared_runtime_event_kind() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ProviderStreamEvent {
+            runtime_event_kind: "provider_safety_buffering".to_string(),
+            payload: json!({
+                "kind": "provider_safety_buffering",
+                "provider": "openai",
+                "model": "gpt-5-codex",
+                "useCases": ["policy"],
+                "reasons": ["buffering"],
+                "showBufferingUi": true,
+                "retryModel": "gpt-5-mini",
+                "source": "payload_retry_model"
+            }),
+        })
+        .expect("provider stream event should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "provider_safety_buffering");
+        assert_eq!(events[0].payload["backend"], "runtime");
+        assert_eq!(events[0].payload["provider"], "openai");
+        assert_eq!(events[0].payload["model"], "gpt-5-codex");
+        assert_eq!(events[0].payload["retryModel"], "gpt-5-mini");
+        assert_eq!(events[0].payload["source"], "payload_retry_model");
+        assert_eq!(
+            events[0].payload["runtimeEvent"]["type"],
+            "provider_stream_event"
+        );
+        assert!(events[0].payload.get("retry_model").is_none());
+        assert!(events[0].payload.get("fasterModel").is_none());
+    }
+
+    #[test]
+    fn unknown_provider_stream_event_falls_back_to_generic_runtime_event() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ProviderStreamEvent {
+            runtime_event_kind: "provider.future_event".to_string(),
+            payload: json!({ "kind": "provider.future_event" }),
+        })
+        .expect("provider stream event should emit");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "runtime.event");
+        assert_eq!(events[0].payload["kind"], "provider.future_event");
+        assert_eq!(
+            events[0].payload["runtimeEvent"]["runtime_event_kind"],
+            "provider.future_event"
+        );
     }
 
     #[test]

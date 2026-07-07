@@ -109,6 +109,96 @@ fn session_config_appends_plugin_activation_metadata_to_system_prompt() {
 }
 
 #[test]
+fn session_config_appends_plugin_runtime_capabilities_to_system_prompt() {
+    let workspace = TempDir::new().expect("workspace");
+    let skill_dir = workspace.path().join(".agents/skills/article-writing");
+    std::fs::create_dir_all(&skill_dir).expect("skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: Article Writing
+description: Draft article copy.
+---
+
+# Article Writing
+
+Use article workflow rules.
+"#,
+    )
+    .expect("skill file");
+    let mut request = request_for_test(
+        "@创作工作台 写一篇公众号文章",
+        None,
+        Some(json!({
+            "harness": {
+                "workspace_root": workspace.path().to_string_lossy(),
+                "cwd": workspace.path().to_string_lossy(),
+                "plugin_activation": {
+                    "source": "plugin_explicit_mention",
+                    "trigger": "@创作工作台",
+                    "body": "写一篇公众号文章",
+                    "session_id": "session-1",
+                    "plugin_id": "content-factory-app",
+                    "workflow_key": "content-article",
+                    "runtime_capabilities": {
+                        "pluginId": "content-factory-app",
+                        "skills": [
+                            {
+                                "id": "article-writing",
+                                "title": "Article Writing",
+                                "required": true,
+                                "promptInjectionPolicy": {
+                                    "mode": "workflow_scoped",
+                                    "source": "runtimeCapabilities.skills"
+                                }
+                            }
+                        ],
+                        "mcpBindings": [
+                            {
+                                "serverId": "browser",
+                                "toolKey": "browser/search",
+                                "provider": "mcp",
+                                "required": true
+                            }
+                        ],
+                        "workflowBindings": [
+                            {
+                                "workflowKey": "content-article",
+                                "skillIds": ["article-writing"]
+                            }
+                        ]
+                    }
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+    let host_request = aster_chat_request_from_request(&request);
+    let scope = session_scope_from_request(&request).expect("session scope");
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    let config = session_config_from_request(
+        &request,
+        host_request.as_ref(),
+        &scope,
+        &selection,
+        &policy,
+        None,
+    );
+
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("<plugin_runtime_capabilities>"));
+    assert!(prompt.contains("plugin_id: content-factory-app"));
+    assert!(prompt.contains("id=article-writing"));
+    assert!(prompt.contains("server_id=browser"));
+    assert!(prompt.contains("<selected_skill_instructions>"));
+    assert!(prompt.contains("Use article workflow rules."));
+}
+
+#[test]
 fn session_config_keeps_selected_skill_allowed_tools_inside_aster_skill_runtime() {
     let workspace = TempDir::new().expect("workspace");
     let skill_dir = workspace.path().join(".agents/skills/writer");

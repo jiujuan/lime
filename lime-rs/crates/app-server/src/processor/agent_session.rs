@@ -9,13 +9,13 @@ use app_server_protocol::{
     AgentSessionArchiveManyParams, AgentSessionCompactParams, AgentSessionDeleteParams,
     AgentSessionFileCheckpointDiffParams, AgentSessionFileCheckpointGetParams,
     AgentSessionFileCheckpointListParams, AgentSessionFileCheckpointRestoreParams,
-    AgentSessionListParams, AgentSessionObjectiveAuditParams, AgentSessionObjectiveClearParams,
-    AgentSessionObjectiveContinueParams, AgentSessionObjectiveReadParams,
-    AgentSessionObjectiveSetParams, AgentSessionObjectiveStatusUpdateParams,
-    AgentSessionQueuedTurnPromoteParams, AgentSessionQueuedTurnRemoveParams,
-    AgentSessionRuntimeEventAppendParams, AgentSessionRuntimeEventAppendResponse,
-    AgentSessionThreadResumeParams, AgentSessionToolInventoryReadParams, AgentSessionUpdateParams,
-    JsonRpcError,
+    AgentSessionListParams, AgentSessionMediaReadParams, AgentSessionObjectiveAuditParams,
+    AgentSessionObjectiveClearParams, AgentSessionObjectiveContinueParams,
+    AgentSessionObjectiveReadParams, AgentSessionObjectiveSetParams,
+    AgentSessionObjectiveStatusUpdateParams, AgentSessionQueuedTurnPromoteParams,
+    AgentSessionQueuedTurnRemoveParams, AgentSessionRuntimeEventAppendParams,
+    AgentSessionRuntimeEventAppendResponse, AgentSessionThreadResumeParams,
+    AgentSessionToolInventoryReadParams, AgentSessionUpdateParams, JsonRpcError,
 };
 
 impl RequestProcessor {
@@ -71,6 +71,19 @@ impl RequestProcessor {
             .runtime
             .delete_agent_session(params)
             .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_session_media_read_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionMediaReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_agent_session_media(params)
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }

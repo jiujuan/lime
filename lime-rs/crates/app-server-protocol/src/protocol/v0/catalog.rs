@@ -385,6 +385,14 @@ pub enum AppServerRequestMethod {
     PluginUiRuntimeStatus,
     #[serde(rename = "pluginUiRuntime/stop")]
     PluginUiRuntimeStop,
+    #[serde(rename = "soulStylePack/install")]
+    SoulStylePackInstall,
+    #[serde(rename = "soulStylePack/list")]
+    SoulStylePackList,
+    #[serde(rename = "soulStylePack/status/set")]
+    SoulStylePackStatusSet,
+    #[serde(rename = "soulStylePack/uninstall")]
+    SoulStylePackUninstall,
     #[serde(rename = "knowledgePack/list")]
     KnowledgePackList,
     #[serde(rename = "knowledgePack/read")]
@@ -591,6 +599,8 @@ pub enum AppServerRequestMethod {
     AgentSessionStart,
     #[serde(rename = "agentSession/read")]
     AgentSessionRead,
+    #[serde(rename = "agentSession/media/read")]
+    AgentSessionMediaRead,
     #[serde(rename = "agentSession/turn/start")]
     AgentSessionTurnStart,
     #[serde(rename = "agentSession/turn/cancel")]
@@ -796,6 +806,10 @@ impl AppServerRequestMethod {
             Self::PluginUiRuntimeStart => METHOD_PLUGIN_UI_RUNTIME_START,
             Self::PluginUiRuntimeStatus => METHOD_PLUGIN_UI_RUNTIME_STATUS,
             Self::PluginUiRuntimeStop => METHOD_PLUGIN_UI_RUNTIME_STOP,
+            Self::SoulStylePackInstall => METHOD_SOUL_STYLE_PACK_INSTALL,
+            Self::SoulStylePackList => METHOD_SOUL_STYLE_PACK_LIST,
+            Self::SoulStylePackStatusSet => METHOD_SOUL_STYLE_PACK_STATUS_SET,
+            Self::SoulStylePackUninstall => METHOD_SOUL_STYLE_PACK_UNINSTALL,
             Self::KnowledgePackList => METHOD_KNOWLEDGE_PACK_LIST,
             Self::KnowledgePackRead => METHOD_KNOWLEDGE_PACK_READ,
             Self::KnowledgeSourceImport => METHOD_KNOWLEDGE_SOURCE_IMPORT,
@@ -901,6 +915,7 @@ impl AppServerRequestMethod {
             }
             Self::AgentSessionStart => METHOD_AGENT_SESSION_START,
             Self::AgentSessionRead => METHOD_AGENT_SESSION_READ,
+            Self::AgentSessionMediaRead => METHOD_AGENT_SESSION_MEDIA_READ,
             Self::AgentSessionTurnStart => METHOD_AGENT_SESSION_TURN_START,
             Self::AgentSessionTurnCancel => METHOD_AGENT_SESSION_TURN_CANCEL,
             Self::AgentSessionActionReplay => METHOD_AGENT_SESSION_ACTION_REPLAY,
@@ -1111,6 +1126,10 @@ impl AppServerRequestMethod {
             METHOD_PLUGIN_UI_RUNTIME_START => Some(Self::PluginUiRuntimeStart),
             METHOD_PLUGIN_UI_RUNTIME_STATUS => Some(Self::PluginUiRuntimeStatus),
             METHOD_PLUGIN_UI_RUNTIME_STOP => Some(Self::PluginUiRuntimeStop),
+            METHOD_SOUL_STYLE_PACK_INSTALL => Some(Self::SoulStylePackInstall),
+            METHOD_SOUL_STYLE_PACK_LIST => Some(Self::SoulStylePackList),
+            METHOD_SOUL_STYLE_PACK_STATUS_SET => Some(Self::SoulStylePackStatusSet),
+            METHOD_SOUL_STYLE_PACK_UNINSTALL => Some(Self::SoulStylePackUninstall),
             METHOD_KNOWLEDGE_PACK_LIST => Some(Self::KnowledgePackList),
             METHOD_KNOWLEDGE_PACK_READ => Some(Self::KnowledgePackRead),
             METHOD_KNOWLEDGE_SOURCE_IMPORT => Some(Self::KnowledgeSourceImport),
@@ -1220,6 +1239,7 @@ impl AppServerRequestMethod {
             }
             METHOD_AGENT_SESSION_START => Some(Self::AgentSessionStart),
             METHOD_AGENT_SESSION_READ => Some(Self::AgentSessionRead),
+            METHOD_AGENT_SESSION_MEDIA_READ => Some(Self::AgentSessionMediaRead),
             METHOD_AGENT_SESSION_TURN_START => Some(Self::AgentSessionTurnStart),
             METHOD_AGENT_SESSION_TURN_CANCEL => Some(Self::AgentSessionTurnCancel),
             METHOD_AGENT_SESSION_ACTION_REPLAY => Some(Self::AgentSessionActionReplay),
@@ -1975,6 +1995,22 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_SOUL_STYLE_PACK_INSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SOUL_STYLE_PACK_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SOUL_STYLE_PACK_STATUS_SET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SOUL_STYLE_PACK_UNINSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_KNOWLEDGE_PACK_LIST,
         kind: AppServerMethodKind::Request,
     },
@@ -2384,6 +2420,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_MEDIA_READ,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {

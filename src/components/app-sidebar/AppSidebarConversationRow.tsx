@@ -1,14 +1,18 @@
 import type { MouseEvent } from "react";
 import styled from "styled-components";
-import { MoreHorizontal, Pin } from "lucide-react";
+import { CircleAlert, Clock3, LoaderCircle, MoreHorizontal, Pin } from "lucide-react";
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
+
+type ConversationRuntimeStatus = "running" | "queued" | "waitingAction";
 
 interface AppSidebarConversationRowProps {
   session: AsterSessionInfo;
   title: string;
   meta: string;
   active: boolean;
+  runtimeStatus?: ConversationRuntimeStatus | null;
+  runtimeStatusLabel?: string | null;
   favorite: boolean;
   actionDisabled: boolean;
   favoriteBadgeLabel: string;
@@ -67,6 +71,45 @@ const ConversationItemDot = styled.span<{ $active?: boolean }>`
   border-radius: 999px;
   background: ${({ $active }) =>
     $active ? "var(--sidebar-active-foreground)" : "rgba(148, 163, 184, 0.72)"};
+`;
+
+const ConversationRuntimeStatusIcon = styled.span<{
+  $status: ConversationRuntimeStatus;
+}>`
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ $status }) => {
+    switch ($status) {
+      case "waitingAction":
+        return "#b45309";
+      case "queued":
+        return "#0284c7";
+      case "running":
+        return "#059669";
+    }
+  }};
+
+  &[data-status="running"] svg {
+    animation: sidebar-conversation-status-spin 1s linear infinite;
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  @keyframes sidebar-conversation-status-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 `;
 
 const ConversationItemLabel = styled.span`
@@ -147,6 +190,8 @@ export function AppSidebarConversationRow({
   title,
   meta,
   active,
+  runtimeStatus,
+  runtimeStatusLabel,
   favorite,
   actionDisabled,
   favoriteBadgeLabel,
@@ -175,7 +220,25 @@ export function AppSidebarConversationRow({
         }}
         title={title}
       >
-        <ConversationItemDot $active={active} />
+        {runtimeStatus ? (
+          <ConversationRuntimeStatusIcon
+            $status={runtimeStatus}
+            data-status={runtimeStatus}
+            data-testid="app-sidebar-conversation-runtime-status"
+            aria-label={runtimeStatusLabel ?? undefined}
+            title={runtimeStatusLabel ?? undefined}
+          >
+            {runtimeStatus === "waitingAction" ? (
+              <CircleAlert />
+            ) : runtimeStatus === "queued" ? (
+              <Clock3 />
+            ) : (
+              <LoaderCircle />
+            )}
+          </ConversationRuntimeStatusIcon>
+        ) : (
+          <ConversationItemDot $active={active} />
+        )}
         <ConversationItemLabel>{title}</ConversationItemLabel>
         {favorite ? (
           <ConversationFavoriteBadge

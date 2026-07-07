@@ -27,8 +27,7 @@ struct HooksConfigLegacy {
 fn is_valid_hook_event(event: &str) -> bool {
     matches!(
         event,
-        "TaskCreated"
-            | "TaskCompleted"
+        "TaskCompleted"
             | "PreToolUse"
             | "PostToolUse"
             | "PostToolUseFailure"
@@ -54,7 +53,6 @@ fn is_valid_hook_event(event: &str) -> bool {
 /// 解析事件名称
 fn parse_event(event: &str) -> Option<HookEvent> {
     match event {
-        "TaskCreated" => Some(HookEvent::TaskCreated),
         "TaskCompleted" => Some(HookEvent::TaskCompleted),
         "PreToolUse" => Some(HookEvent::PreToolUse),
         "PostToolUse" => Some(HookEvent::PostToolUse),

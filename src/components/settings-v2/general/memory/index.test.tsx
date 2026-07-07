@@ -31,6 +31,17 @@ const {
   mockResolveMemoryStoreReviewNote: vi.fn(),
   mockResetMemoryStore: vi.fn(),
 }));
+const {
+  mockInstallSoulStylePack,
+  mockListSoulStylePacks,
+  mockSetSoulStylePackStatus,
+  mockUninstallSoulStylePack,
+} = vi.hoisted(() => ({
+  mockInstallSoulStylePack: vi.fn(),
+  mockListSoulStylePacks: vi.fn(),
+  mockSetSoulStylePackStatus: vi.fn(),
+  mockUninstallSoulStylePack: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
@@ -51,6 +62,13 @@ vi.mock("@/lib/api/memoryStore", () => ({
   rebuildMemoryStoreIndex: mockRebuildMemoryStoreIndex,
   resolveMemoryStoreReviewNote: mockResolveMemoryStoreReviewNote,
   resetMemoryStore: mockResetMemoryStore,
+}));
+
+vi.mock("@/lib/api/soulStylePacks", () => ({
+  installSoulStylePack: mockInstallSoulStylePack,
+  listSoulStylePacks: mockListSoulStylePacks,
+  setSoulStylePackStatus: mockSetSoulStylePackStatus,
+  uninstallSoulStylePack: mockUninstallSoulStylePack,
 }));
 
 import { MemorySettings } from ".";
@@ -146,6 +164,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await changeLimeLocale("en-US");
   vi.spyOn(window, "confirm").mockReturnValue(true);
+  mockListSoulStylePacks.mockResolvedValue({ packs: [] });
 
   mockGetConfig.mockResolvedValue({
     memory: {
@@ -568,7 +587,12 @@ describe("MemorySettings", () => {
       "For example: Pragmatic research partner",
     );
     expect(document.body.textContent).not.toContain("Creator voice ID");
-    expect(container.querySelector("input")).toBeNull();
+    expect(container.querySelector('input:not([type="file"])')).toBeNull();
+    expect(
+      container.querySelector(
+        'input[type="file"][aria-label="Select style pack manifest JSON"]',
+      ),
+    ).toBeInstanceOf(HTMLInputElement);
     expect(container.querySelector("textarea")).toBeNull();
 
     await act(async () => {

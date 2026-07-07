@@ -23,6 +23,7 @@ mod project_shell;
 mod request_trace;
 mod right_surface;
 mod skill;
+mod soul;
 mod voice;
 mod wechat;
 mod workflow;
@@ -383,7 +384,7 @@ impl RequestProcessor {
         self.ensure_initialized()?;
         let params = parse_params(params)?;
         let host = self.runtime_host_context();
-        let config_warning = self.config_warning_notification(ConfigWarningScope::TurnStart);
+        let config_warnings = self.config_warning_notifications(ConfigWarningScope::TurnStart);
         if let Some(event_callback) = event_callback {
             let mut runtime_event_callback = |event: AgentEvent| {
                 let message = event_notification_jsonrpc(event).map_err(|error| {
@@ -400,22 +401,15 @@ impl RequestProcessor {
                 .start_turn_with_event_callback(params, host, &mut runtime_event_callback)
                 .await
                 .map_err(to_jsonrpc_error)?;
-            let mut dispatch = dispatch_result(output.response)?;
-            if let Some(notification) = config_warning {
-                dispatch = dispatch.with_notification(notification);
-            }
-            Ok(dispatch)
+            Ok(dispatch_result(output.response)?.with_notifications(config_warnings))
         } else {
             let output = self
                 .runtime
                 .start_turn(params, host)
                 .await
                 .map_err(to_jsonrpc_error)?;
-            let mut dispatch = dispatch_result_with_events(output.response, output.events)?;
-            if let Some(notification) = config_warning {
-                dispatch = dispatch.with_notification(notification);
-            }
-            Ok(dispatch)
+            Ok(dispatch_result_with_events(output.response, output.events)?
+                .with_notifications(config_warnings))
         }
     }
 
@@ -571,6 +565,11 @@ impl RpcDispatch {
 
     pub(super) fn with_notification(mut self, notification: JsonRpcNotification) -> Self {
         self.notifications.push(notification);
+        self
+    }
+
+    pub(super) fn with_notifications(mut self, notifications: Vec<JsonRpcNotification>) -> Self {
+        self.notifications.extend(notifications);
         self
     }
 }

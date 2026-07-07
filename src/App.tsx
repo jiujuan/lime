@@ -13,6 +13,7 @@ import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import { withI18nPatch } from "./i18n/withI18nPatch";
 import { AppPageContent } from "./components/AppPageContent";
+import { AppServerConfigWarningToastBridge } from "./components/AppServerConfigWarningToastBridge";
 import { SplashScreen } from "./components/SplashScreen";
 import { AppSidebar } from "./components/AppSidebar";
 import { startupTracker } from "./lib/diagnostics/startupPerformance";
@@ -199,8 +200,9 @@ function AppContent() {
   const activeAgentPageParams = requestedPageParams ?? pageParams;
   const activeAgentRouteSessionId =
     activeAgentPage === "agent"
-      ? ((activeAgentPageParams as AgentPageParams | undefined)
-          ?.initialSessionId?.trim() ?? null)
+      ? ((
+          activeAgentPageParams as AgentPageParams | undefined
+        )?.initialSessionId?.trim() ?? null)
       : null;
 
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -607,6 +609,7 @@ function AppContent() {
           </Suspense>
 
           <ComponentDebugOverlay />
+          <AppServerConfigWarningToastBridge />
         </AppContainer>
       </ComponentDebugProvider>
     </SoundProvider>

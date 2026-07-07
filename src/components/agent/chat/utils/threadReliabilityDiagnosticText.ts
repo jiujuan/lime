@@ -27,6 +27,7 @@ import {
   buildRuntimePolicyEvidenceLines,
   resolveRuntimePolicyEvidence,
 } from "./runtimePolicyEvidence";
+import { formatProviderSafetyBufferingDiagnostic } from "./providerSafetyBufferingDiagnostic";
 
 export interface AgentThreadReliabilityDiagnosticContext {
   sessionId?: string | null;
@@ -754,6 +755,20 @@ export function buildReliabilityDiagnosticText(params: {
         value:
           sanitizeReliabilityDiagnosticText(
             diagnostics.latest_turn_error_message,
+            t,
+          ) || noneLabel,
+      }),
+    );
+    sections.push(
+      bullet(t, "backend.providerSafetyBufferingCount", {
+        count: diagnostics.provider_safety_buffering_count ?? 0,
+      }),
+    );
+    sections.push(
+      bullet(t, "backend.latestProviderSafetyBuffering", {
+        value:
+          formatProviderSafetyBufferingDiagnostic(
+            diagnostics.latest_provider_safety_buffering,
             t,
           ) || noneLabel,
       }),

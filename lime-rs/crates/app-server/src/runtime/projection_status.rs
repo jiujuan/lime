@@ -6,6 +6,7 @@ pub(super) fn session_status_from_event(event_type: &str) -> &'static str {
         "turn.completed" => "completed",
         "turn.failed" => "failed",
         "turn.canceled" => "canceled",
+        "action.required" => "waitingAction",
         "turn.accepted" | "turn.started" | "message.created" | "message.delta" => "running",
         _ => "active",
     }
@@ -26,6 +27,7 @@ pub(super) fn turn_status_from_event(event_type: &str) -> &'static str {
         "turn.completed" => "completed",
         "turn.failed" => "failed",
         "turn.canceled" => "canceled",
+        "action.required" => "waitingAction",
         "queue.added" => "queued",
         "turn.accepted" => "accepted",
         "turn.started" | "message.created" | "message.delta" => "running",

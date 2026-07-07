@@ -334,7 +334,7 @@ describe("agentSessionState", () => {
     ).toBe(true);
   });
 
-  it("read model 内仍有 running turn 时应判定为 active runtime", () => {
+  it("read model 已明确 idle 时不应被残留 running turn 判定为 active runtime", () => {
     expect(
       hasActiveRuntimeTurn({
         queuedTurnsCount: 0,
@@ -351,7 +351,7 @@ describe("agentSessionState", () => {
         },
         turns: [],
       }),
-    ).toBe(true);
+    ).toBe(false);
 
     expect(
       hasActiveRuntimeTurn({
@@ -366,6 +366,27 @@ describe("agentSessionState", () => {
         turns: [],
       }),
     ).toBe(true);
+  });
+
+  it("显式终态 read model 不应被残留 running turn 判定为 active runtime", () => {
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: "failed",
+        threadRead: {
+          thread_id: "thread-1",
+          status: "failed",
+          active_turn_id: "turn-stale",
+          turns: [
+            {
+              turn_id: "turn-stale",
+              status: "running",
+            },
+          ],
+        },
+        turns: [createTurn({ status: "running" })],
+      }),
+    ).toBe(false);
   });
 
   it("topics 未就绪、无 session 或 topic 已存在时不应处理缺失会话", () => {

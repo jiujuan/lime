@@ -3,7 +3,9 @@ import {
   APP_SERVER_METHOD_INITIALIZE,
 } from "./appServerConstants";
 import { installAppServerClientMethods } from "./appServerClientMethods";
+import { publishAppServerConfigWarnings } from "./appServerConfigWarnings";
 import {
+  AppServerRpcError,
   assertAppServerProtocol,
   expectAppServerResponse,
 } from "./appServerResponse";
@@ -54,7 +56,24 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<T>> {
     const request = createAppServerRequest(this.nextId(), method, params);
     const messages = await this.exchange([request]);
-    return expectAppServerResponse<T>(messages, request.id, method);
+    try {
+      const result = expectAppServerResponse<T>(messages, request.id, method);
+      publishAppServerConfigWarnings(result.configWarnings, {
+        method,
+        phase: "response",
+        requestId: request.id,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof AppServerRpcError) {
+        publishAppServerConfigWarnings(error.configWarnings, {
+          method,
+          phase: "error",
+          requestId: request.id,
+        });
+      }
+      throw error;
+    }
   }
 
   async notify(

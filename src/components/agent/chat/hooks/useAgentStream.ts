@@ -29,7 +29,10 @@ import type {
   SessionModelPreference,
   WorkspacePathMissingState,
 } from "./agentChatShared";
-import type { InterruptedInputRestoreRequest } from "./agentStreamInputRestoreTypes";
+import type {
+  InterruptedInputDraftSnapshot,
+  InterruptedInputRestoreRequest,
+} from "./agentStreamInputRestoreTypes";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import {
   createAgentStreamPreparedSendEnv,
@@ -92,6 +95,18 @@ function appendThinkingToParts(
 
   nextParts.push({ type: "thinking", text: textDelta });
   return nextParts;
+}
+
+function cloneInterruptedInputDraft(
+  draft: InterruptedInputDraftSnapshot,
+): InterruptedInputDraftSnapshot {
+  return {
+    text: draft.text,
+    images: draft.images ? [...draft.images] : [],
+    pathReferences: draft.pathReferences ? [...draft.pathReferences] : [],
+    textElements: draft.textElements ? [...draft.textElements] : [],
+    inputCapabilityRoute: draft.inputCapabilityRoute,
+  };
 }
 
 interface UseAgentStreamOptions {
@@ -220,11 +235,15 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     currentStreamingEventNameRef,
   });
   const preparedSubmitGateRef = useRef(new AgentStreamSubmitGate());
+  const submittedDraftFallbackRef =
+    useRef<InterruptedInputDraftSnapshot | null>(null);
   const recoveredBindingAttemptKeyRef = useRef<string | null>(null);
   const getMessagesRef = useRef(getMessages);
   const getThreadItemsRef = useRef(getThreadItems);
+  const queuedTurnsRef = useRef(queuedTurns);
   getMessagesRef.current = getMessages;
   getThreadItemsRef.current = getThreadItems;
+  queuedTurnsRef.current = queuedTurns;
 
   const preparedSendEnv = useMemo<AgentStreamPreparedSendEnv>(
     () =>
@@ -439,6 +458,16 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       autoContinue?: AutoContinueRequestPayload,
       options?: SendMessageOptions,
     ) => {
+      submittedDraftFallbackRef.current = cloneInterruptedInputDraft(
+        options?.inputRestoreDraft ?? {
+          text: options?.displayContent ?? content,
+          images,
+          textElements: (options?.displayContent ?? content).trim()
+            ? [{ type: "text", text: options?.displayContent ?? content }]
+            : [],
+          inputCapabilityRoute: options?.capabilityRoute,
+        },
+      );
       await sendAgentStreamMessage({
         content,
         images,
@@ -469,8 +498,9 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       setCurrentTurnId,
       setMessages,
       getMessages: () => getMessagesRef.current?.() ?? [],
-      getQueuedTurns: () => queuedTurns,
+      getQueuedTurns: () => queuedTurnsRef.current,
       setActiveStream,
+      submittedDraftFallback: submittedDraftFallbackRef.current,
       onRestoreInterruptedInput,
       notify: {
         info: (message) => toast.info(message),
@@ -480,6 +510,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         console.error("[AsterChat] 停止失败:", error);
       },
     });
+    submittedDraftFallbackRef.current = null;
   }, [
     refreshSessionReadModel,
     runtime,
@@ -493,7 +524,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     setThreadTurns,
     removeStreamListener,
     activeStreamRef,
-    queuedTurns,
+    queuedTurnsRef,
   ]);
 
   const removeQueuedTurn = useCallback(

@@ -102,10 +102,10 @@ const resolveQueuedTurnIds = (queuedTurnId?: string | null): string[] =>
 
 export function buildAgentStreamMissingFinalReplyFailurePlan(params: {
   errorMessage: string;
+  toastMessage?: string;
   queuedTurnId?: string | null;
   usage?: Message["usage"];
 }): AgentStreamMissingFinalReplyPlan {
-  const toastMessage = resolveAgentStreamEmptyFinalReplyErrorMessage();
   return {
     type: "missing_final_reply_failure",
     errorMessage: params.errorMessage,
@@ -115,7 +115,8 @@ export function buildAgentStreamMissingFinalReplyFailurePlan(params: {
       status: "error",
       error: params.errorMessage,
     },
-    toastMessage,
+    toastMessage:
+      params.toastMessage ?? resolveAgentStreamEmptyFinalReplyErrorMessage(),
     ...(params.usage !== undefined ? { usage: params.usage } : {}),
   };
 }

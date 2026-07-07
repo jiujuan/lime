@@ -6,14 +6,23 @@ use super::stream_text_batcher::{emit_text_delta_batch, TextDeltaBatcher};
 use super::web_retrieval_process::WebRetrievalProcessState;
 use super::web_search_execution_tracker::WebSearchExecutionTracker;
 use super::{ReplyAttemptError, RuntimeAgentEvent};
+use crate::model_request_policy::{
+    input_modality_policy_allows_image_input, input_modality_policy_from_turn_context,
+    runtime_reply_model_request_policy_from_turn_context,
+};
 use crate::protocol::TextDeltaBatchBoundary;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
-use agent_runtime::reply_host::{RuntimeReplyPolicyHost, RuntimeReplyStartError};
+use agent_runtime::reply_host::{
+    RuntimeReplyPolicyHost, RuntimeReplyStartError, RuntimeReplyStartRequest,
+};
 use agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput;
+use agent_runtime::reply_request::RuntimeReplyRequest;
 use agent_runtime::reply_stream::RuntimeReplyStreamEvent;
 use agent_runtime::session_config::AgentSessionConfig;
 use futures::StreamExt;
-use model_provider::provider_stream::RuntimeReplyProviderHandle;
+use model_provider::provider_stream::{
+    RuntimeReplyProviderHandle, RuntimeReplyProviderStreamEvent,
+};
 use model_provider::ModelProviderProtocol;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
@@ -56,6 +65,26 @@ fn reply_attempt_error_from_runtime(error: RuntimeReplyStartError) -> ReplyAttem
     }
 }
 
+fn validate_reply_request_modalities(
+    request: &RuntimeReplyRequest,
+    session_config: &AgentSessionConfig,
+    emitted_any: bool,
+) -> Result<(), ReplyAttemptError> {
+    if !request.message.has_images() {
+        return Ok(());
+    }
+    let input_policy =
+        input_modality_policy_from_turn_context(session_config.turn_context.as_ref());
+    if input_modality_policy_allows_image_input(input_policy.as_ref()) {
+        return Ok(());
+    }
+
+    Err(ReplyAttemptError {
+        message: "当前选中模型的 input_modality_policy 不支持图片输入，已拒绝把 image 内容发送到 provider；请切换支持 image 的模型或移除图片。".to_string(),
+        emitted_any,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn stream_agent_reply_once<F>(
     host: &impl RuntimeReplyPolicyHost<RuntimeAgentEvent, crate::protocol::AgentRuntimeStatus>,
@@ -85,13 +114,23 @@ where
     let provider_cancel_token = cancel_token
         .clone()
         .or_else(|| stream_idle_timeout.map(|_| CancellationToken::new()));
+    let model_request_policy =
+        runtime_reply_model_request_policy_from_turn_context(session_config.turn_context.as_ref());
+    let reply_request = RuntimeReplyRequest::from_attempt_input(
+        session_id.clone(),
+        user_input,
+        host.provider_handle().cloned(),
+        model_request_policy,
+    );
+    validate_reply_request_modalities(&reply_request, session_config, *emitted_any)?;
+    let start_request = RuntimeReplyStartRequest::new(
+        reply_request,
+        session_config.clone(),
+        provider_cancel_token,
+        *emitted_any,
+    );
     let (mut stream, message_chars) = host
-        .start_reply_stream(
-            user_input,
-            session_config.clone(),
-            provider_cancel_token,
-            *emitted_any,
-        )
+        .start_reply_stream(start_request)
         .await
         .map_err(reply_attempt_error_from_runtime)?;
     tracing::info!(
@@ -161,6 +200,11 @@ where
                             session_id
                         );
                         continue;
+                    }
+                    RuntimeReplyStreamEvent::ProviderStreamEvent(provider_event) => {
+                        vec![runtime_agent_event_from_provider_stream_event(
+                            provider_event,
+                        )]
                     }
                     RuntimeReplyStreamEvent::Event(runtime_event) => vec![runtime_event],
                 };
@@ -323,6 +367,15 @@ where
     Ok(())
 }
 
+fn runtime_agent_event_from_provider_stream_event(
+    provider_event: RuntimeReplyProviderStreamEvent,
+) -> RuntimeAgentEvent {
+    RuntimeAgentEvent::ProviderStreamEvent {
+        runtime_event_kind: provider_event.runtime_event_kind().to_string(),
+        payload: provider_event.payload_json_value(),
+    }
+}
+
 fn enrich_provider_trace_with_runtime_provider(
     event: &mut RuntimeAgentEvent,
     provider: Option<&RuntimeReplyProviderHandle>,
@@ -364,5 +417,119 @@ fn provider_protocol_wire_value(protocol: &ModelProviderProtocol) -> String {
         ModelProviderProtocol::Responses => "responses".to_string(),
         ModelProviderProtocol::ChatCompletions => "chat_completions".to_string(),
         ModelProviderProtocol::Custom(value) => value.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_protocol::turn_context::TurnContextOverride;
+    use agent_runtime::reply_input::{RuntimeReplyInput, RuntimeReplyInputImage};
+    use model_provider::safety::{
+        ProviderSafetyBufferingRetryModelSource, ProviderSafetyBufferingRuntimeEventPayload,
+        SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
+    };
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    fn session_config_with_image_policy(supports_image_input: bool) -> AgentSessionConfig {
+        AgentSessionConfig {
+            id: "session-image-policy".to_string(),
+            thread_id: None,
+            turn_id: None,
+            schedule_id: None,
+            max_turns: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: Some(TurnContextOverride {
+                metadata: HashMap::from([(
+                    "runtime_options".to_string(),
+                    json!({
+                        "harness": {
+                            "model_request_policy": {
+                                "input_modality_policy": {
+                                    "input_modalities": if supports_image_input {
+                                        vec!["text", "image"]
+                                    } else {
+                                        vec!["text"]
+                                    },
+                                    "supports_image_input": supports_image_input
+                                }
+                            }
+                        }
+                    }),
+                )]),
+                ..TurnContextOverride::default()
+            }),
+        }
+    }
+
+    fn reply_request_with_image() -> RuntimeReplyRequest {
+        let mut input = RuntimeReplyInput::text("解释这张图");
+        input.images.push(RuntimeReplyInputImage {
+            data: "aGVsbG8=".to_string(),
+            media_type: "image/png".to_string(),
+        });
+        RuntimeReplyRequest::from_attempt_input("session-image-policy", input.into(), None, None)
+    }
+
+    #[test]
+    fn provider_stream_reply_event_projects_agent_event() {
+        let event = runtime_agent_event_from_provider_stream_event(
+            RuntimeReplyProviderStreamEvent::SafetyBuffering(
+                ProviderSafetyBufferingRuntimeEventPayload {
+                    kind: SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
+                    provider: Some("openai".to_string()),
+                    model: Some("gpt-5-codex".to_string()),
+                    use_cases: vec!["policy".to_string()],
+                    reasons: vec!["buffering".to_string()],
+                    show_buffering_ui: true,
+                    retry_model: Some("gpt-5-mini".to_string()),
+                    fallback_header_model: None,
+                    source: ProviderSafetyBufferingRetryModelSource::PayloadRetryModel,
+                },
+            ),
+        );
+
+        let RuntimeAgentEvent::ProviderStreamEvent {
+            runtime_event_kind,
+            payload,
+        } = event
+        else {
+            panic!("expected provider stream event");
+        };
+        assert_eq!(runtime_event_kind, "provider_safety_buffering");
+        assert_eq!(payload["retryModel"], json!("gpt-5-mini"));
+        assert_eq!(payload["source"], json!("payload_retry_model"));
+        assert!(payload.get("retry_model").is_none());
+        assert!(payload.get("fasterModel").is_none());
+    }
+
+    #[test]
+    fn reply_request_modalities_reject_image_when_selected_model_is_text_only() {
+        let result = validate_reply_request_modalities(
+            &reply_request_with_image(),
+            &session_config_with_image_policy(false),
+            false,
+        );
+
+        assert!(result.is_err());
+        assert!(result
+            .err()
+            .unwrap()
+            .message
+            .contains("input_modality_policy 不支持图片输入"));
+    }
+
+    #[test]
+    fn reply_request_modalities_allow_image_when_selected_model_supports_image() {
+        let result = validate_reply_request_modalities(
+            &reply_request_with_image(),
+            &session_config_with_image_policy(true),
+            false,
+        );
+
+        assert!(result.is_ok());
     }
 }

@@ -3,8 +3,13 @@ import {
   isJsonRpcNotification,
   isJsonRpcResponse,
 } from "../../../packages/app-server-client/src/protocol";
-import { APP_SERVER_PROTOCOL_VERSION } from "./appServerConstants";
+import {
+  APP_SERVER_METHOD_CONFIG_WARNING,
+  APP_SERVER_PROTOCOL_VERSION,
+} from "./appServerConstants";
 import type {
+  AppServerConfigWarningJsonRpcNotification,
+  AppServerConfigWarningNotification,
   AppServerInitializeResponse,
   AppServerJsonRpcErrorResponse,
   AppServerJsonRpcMessage,
@@ -19,6 +24,7 @@ export class AppServerRpcError extends Error {
   readonly data?: unknown;
   readonly response: AppServerJsonRpcErrorResponse;
   readonly notifications: AppServerJsonRpcNotification[];
+  readonly configWarnings: AppServerConfigWarningNotification[];
   readonly messages: AppServerJsonRpcMessage[];
 
   constructor(
@@ -32,6 +38,7 @@ export class AppServerRpcError extends Error {
     this.data = response.error.data;
     this.response = response;
     this.notifications = notifications;
+    this.configWarnings = readAppServerConfigWarnings(notifications);
     this.messages = messages;
   }
 }
@@ -41,6 +48,7 @@ export function expectAppServerResponse<T>(
   id: AppServerRequestId,
   method: string,
 ): AppServerRequestResult<T> {
+  const notifications = messages.filter(isAppServerJsonRpcNotification);
   const response = messages.find(
     (message): message is AppServerJsonRpcResponse<T> => {
       return isAppServerJsonRpcResponse(message) && message.id === id;
@@ -51,7 +59,8 @@ export function expectAppServerResponse<T>(
       id,
       result: response.result,
       response,
-      notifications: messages.filter(isAppServerJsonRpcNotification),
+      notifications,
+      configWarnings: readAppServerConfigWarnings(notifications),
       messages,
     };
   }
@@ -62,11 +71,7 @@ export function expectAppServerResponse<T>(
     },
   );
   if (error) {
-    throw new AppServerRpcError(
-      error,
-      messages.filter(isAppServerJsonRpcNotification),
-      messages,
-    );
+    throw new AppServerRpcError(error, notifications, messages);
   }
 
   throw new Error(
@@ -86,6 +91,40 @@ export function isAppServerJsonRpcNotification(
   return isJsonRpcNotification(message as AppServerJsonRpcMessage);
 }
 
+export function isAppServerConfigWarningNotification(
+  message: unknown,
+): message is AppServerConfigWarningJsonRpcNotification {
+  if (!isAppServerJsonRpcNotification(message)) {
+    return false;
+  }
+  if (message.method !== APP_SERVER_METHOD_CONFIG_WARNING) {
+    return false;
+  }
+  return isConfigWarningParams(message.params);
+}
+
+export function readAppServerConfigWarnings(
+  notifications: AppServerJsonRpcNotification[] | undefined,
+): AppServerConfigWarningNotification[] {
+  if (!notifications?.length) {
+    return [];
+  }
+  return notifications
+    .filter(isAppServerConfigWarningNotification)
+    .map((notification) => notification.params);
+}
+
+function isConfigWarningParams(
+  params: unknown,
+): params is AppServerConfigWarningNotification {
+  return (
+    !!params &&
+    typeof params === "object" &&
+    !Array.isArray(params) &&
+    typeof (params as { summary?: unknown }).summary === "string"
+  );
+}
+
 export function isAppServerJsonRpcResponse<T = unknown>(
   message: AppServerJsonRpcMessage,
 ): message is AppServerJsonRpcResponse<T> {
@@ -98,7 +137,9 @@ export function isAppServerJsonRpcErrorResponse(
   return isJsonRpcErrorResponse(message);
 }
 
-export function assertAppServerProtocol(response: AppServerInitializeResponse): void {
+export function assertAppServerProtocol(
+  response: AppServerInitializeResponse,
+): void {
   if (response.serverInfo.protocolVersion !== APP_SERVER_PROTOCOL_VERSION) {
     throw new Error(
       `unsupported app-server protocol: expected ${APP_SERVER_PROTOCOL_VERSION}, got ${response.serverInfo.protocolVersion}`,

@@ -250,11 +250,11 @@ export function buildRuntimeToolCapabilityGaps(
     });
   }
 
-  if (!runtimeToolAvailability.taskRuntime) {
+  if (!runtimeToolAvailability.planRuntime) {
     gaps.push({
-      key: "task_runtime",
-      title: "Task current tools",
-      missing: runtimeToolAvailability.missingTaskTools,
+      key: "plan_runtime",
+      title: "Plan current tool",
+      missing: runtimeToolAvailability.missingPlanTools,
     });
   }
 

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "byte_size": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "mime_type": {
+      "type": "string"
+    },
+    "preview_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sha256": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sidecar_ref": true,
+    "source_path": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "source_uri": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "uri": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "mime_type",
+    "uri"
+  ],
+  "title": "AgentThreadContentReference",
+  "type": "object"
+}

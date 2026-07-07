@@ -931,10 +931,10 @@ describe("harnessStatusPanelViewModel", () => {
         subagentCore: false,
         subagentTeamTools: false,
         subagentRuntime: false,
-        taskRuntime: false,
+        planRuntime: false,
         missingSubagentCoreTools: ["Agent", "SendMessage"],
         missingSubagentTeamTools: ["TeamCreate"],
-        missingTaskTools: ["TaskCreate"],
+        missingPlanTools: ["update_plan"],
       }),
     ).toEqual([]);
     expect(
@@ -947,10 +947,10 @@ describe("harnessStatusPanelViewModel", () => {
         subagentCore: false,
         subagentTeamTools: true,
         subagentRuntime: false,
-        taskRuntime: false,
+        planRuntime: false,
         missingSubagentCoreTools: ["SendMessage"],
         missingSubagentTeamTools: [],
-        missingTaskTools: ["TaskCreate"],
+        missingPlanTools: ["update_plan"],
       }),
     ).toEqual([
       { key: "web_search", title: "WebSearch", missing: ["WebSearch"] },
@@ -960,9 +960,9 @@ describe("harnessStatusPanelViewModel", () => {
         missing: ["SendMessage"],
       },
       {
-        key: "task_runtime",
-        title: "Task current tools",
-        missing: ["TaskCreate"],
+        key: "plan_runtime",
+        title: "Plan current tool",
+        missing: ["update_plan"],
       },
     ]);
   });

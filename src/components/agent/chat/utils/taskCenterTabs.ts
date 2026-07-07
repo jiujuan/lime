@@ -44,6 +44,7 @@ export type TaskCenterFallbackRestoreSkipReason =
   | "draft-tab-active"
   | "service-skill-launch-pending"
   | "initial-dispatch-pending"
+  | "home-background-recovery"
   | "initial-session-pending"
   | "detached-session"
   | "unknown-session-with-messages"
@@ -82,6 +83,7 @@ export function shouldResumeTaskSession(
   }
 
   return (
+    topic.status === "running" ||
     topic.status === "waiting" ||
     (topic.status === "failed" && topic.statusReason === "workspace_error")
   );
@@ -620,6 +622,7 @@ export function resolveTaskCenterFallbackRestorePlan(params: {
   initialPendingServiceSkillLaunchSignature?: string | null;
   initialDispatchKey?: string | null;
   isBootstrapDispatchPending: boolean;
+  isHomeSessionBackgroundRecovery?: boolean;
   messagesLength: number;
   isSending: boolean;
   queuedTurnsLength: number;
@@ -670,6 +673,14 @@ export function resolveTaskCenterFallbackRestorePlan(params: {
       params.queuedTurnsLength > 0)
   ) {
     return { action: "skip", reason: "initial-dispatch-pending" };
+  }
+
+  if (
+    params.isHomeSessionBackgroundRecovery &&
+    !params.normalizedInitialSessionId &&
+    !params.sessionId
+  ) {
+    return { action: "skip", reason: "home-background-recovery" };
   }
 
   if (

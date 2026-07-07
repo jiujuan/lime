@@ -4,13 +4,19 @@ import {
   EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
   EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
   IMAGE_COMMAND_ASSERTION_KEYS,
+  INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS,
   INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
   MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
   MULTI_AGENT_TEAM_ASSERTION_KEYS,
+  REASONING_FIRST_VISIBLE_ASSERTION_KEYS,
   RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS,
   SKILLS_RUNTIME_ASSERTION_KEYS,
+  TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS,
+  TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS,
+  TERMINAL_STALE_GUARD_ASSERTION_KEYS,
   WEB_TOOLS_RENDERING_ASSERTION_KEYS,
 } from "./claw-chat-current-fixture-constants.mjs";
+import { MEDIA_REFERENCE_ASSERTION_KEYS } from "./claw-chat-current-fixture-media-reference.mjs";
 
 export function buildNotApplicableAssertions(context) {
   const {
@@ -22,13 +28,19 @@ export function buildNotApplicableAssertions(context) {
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarPendingSteerRichRestoreScenario,
     isInputbarRichRestoreScenario,
+    isMediaReferenceScenario,
     isMcpStructuredContentScenario,
     isMultiAgentTeamScenario,
     isPlanScenario,
+    isReasoningFirstVisibleScenario,
     isRightSurfaceVisualMatrixScenario,
     isSkillsRuntimeScenario,
     isSoulStyleScenario,
+    isTerminalCanceledAfterAnswerScenario,
+    isTerminalFailedAfterAnswerScenario,
+    isTerminalStaleGuardScenario,
     isWebToolsRenderingScenario,
   } = context;
   if (
@@ -67,9 +79,15 @@ export function buildNotApplicableAssertions(context) {
       "guiGoalCompleted",
       "readModelGoalCompleted",
       ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+      ...REASONING_FIRST_VISIBLE_ASSERTION_KEYS,
+      ...TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS,
+      ...TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS,
+      ...TERMINAL_STALE_GUARD_ASSERTION_KEYS,
       ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+      ...MEDIA_REFERENCE_ASSERTION_KEYS,
       ...IMAGE_COMMAND_ASSERTION_KEYS,
       ...INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
+      ...INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS,
       ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
       ...SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -108,6 +126,7 @@ export function buildNotApplicableAssertions(context) {
         "readModelGoalCompleted",
         ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
         ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+        ...MEDIA_REFERENCE_ASSERTION_KEYS,
         ...IMAGE_COMMAND_ASSERTION_KEYS,
         ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
         ...SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -145,7 +164,47 @@ export function buildNotApplicableAssertions(context) {
           "readModelGoalCompleted",
           ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
           ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+          ...MEDIA_REFERENCE_ASSERTION_KEYS,
           ...IMAGE_COMMAND_ASSERTION_KEYS,
+          ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
+          ...SKILLS_RUNTIME_ASSERTION_KEYS,
+        ]
+    : isInputbarPendingSteerRichRestoreScenario
+      ? [
+          "usedCurrentTurnCancel",
+          "externalFixtureCancelUsed",
+          "fixtureCancelReachedBackend",
+          "guiStopClicked",
+          "readModelCanceled",
+          "continuePromptReachedBackend",
+          "guiContinueInputSubmitted",
+          "guiContinueCompleted",
+          "readModelContinueCompleted",
+          "backendRecordedCancelThenContinue",
+          "noEpochFallbackTitle",
+          "readModelCompleted",
+          "eventReadProbeObserved",
+          "readModelEventReadAligned",
+          "readModelToolCallAligned",
+          "planModeEnabledInGui",
+          "planPromptReachedBackend",
+          "planCollaborationModeReachedBackend",
+          "guiPlanRailVisible",
+          "guiPlanStepsVisible",
+          "guiPlanDecisionDrawerVisible",
+          "readModelPlanCompleted",
+          "proposedPlanVisible",
+          "goalModeEnabledInGui",
+          "goalPromptReachedBackend",
+          "goalObjectiveTextReachedBackend",
+          "goalManagedObjectiveReachedBackend",
+          "guiGoalCompleted",
+          "readModelGoalCompleted",
+          ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+          ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+          ...MEDIA_REFERENCE_ASSERTION_KEYS,
+          ...IMAGE_COMMAND_ASSERTION_KEYS,
+          ...INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
           ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
           ...SKILLS_RUNTIME_ASSERTION_KEYS,
         ]
@@ -172,6 +231,7 @@ export function buildNotApplicableAssertions(context) {
           "readModelGoalCompleted",
           ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
           ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+          ...MEDIA_REFERENCE_ASSERTION_KEYS,
           ...IMAGE_COMMAND_ASSERTION_KEYS,
           ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
           ...SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -201,6 +261,7 @@ export function buildNotApplicableAssertions(context) {
             "readModelGoalCompleted",
             ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
             ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+            ...MEDIA_REFERENCE_ASSERTION_KEYS,
             ...IMAGE_COMMAND_ASSERTION_KEYS,
             ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
             ...SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -232,6 +293,7 @@ export function buildNotApplicableAssertions(context) {
               "proposedPlanVisible",
               ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
               ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+              ...MEDIA_REFERENCE_ASSERTION_KEYS,
               ...IMAGE_COMMAND_ASSERTION_KEYS,
               ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
               ...SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -269,6 +331,7 @@ export function buildNotApplicableAssertions(context) {
                 "readModelGoalCompleted",
                 ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
                 ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                ...MEDIA_REFERENCE_ASSERTION_KEYS,
                 ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
                 ...SKILLS_RUNTIME_ASSERTION_KEYS,
               ]
@@ -339,8 +402,9 @@ export function buildNotApplicableAssertions(context) {
                     "guiGoalCompleted",
                     "readModelGoalCompleted",
                     ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
-                    ...IMAGE_COMMAND_ASSERTION_KEYS,
-                    ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
+                  ...IMAGE_COMMAND_ASSERTION_KEYS,
+                  ...MEDIA_REFERENCE_ASSERTION_KEYS,
+                  ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
                     ...SKILLS_RUNTIME_ASSERTION_KEYS,
                   ]
                 : isMultiAgentTeamScenario
@@ -376,6 +440,7 @@ export function buildNotApplicableAssertions(context) {
                       "readModelGoalCompleted",
                       ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
                       ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                      ...MEDIA_REFERENCE_ASSERTION_KEYS,
                       ...IMAGE_COMMAND_ASSERTION_KEYS,
                       ...SKILLS_RUNTIME_ASSERTION_KEYS,
                     ]
@@ -412,6 +477,7 @@ export function buildNotApplicableAssertions(context) {
                         "readModelGoalCompleted",
                         ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
                         ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                        ...MEDIA_REFERENCE_ASSERTION_KEYS,
                         ...IMAGE_COMMAND_ASSERTION_KEYS,
                         ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
                       ]
@@ -445,6 +511,7 @@ export function buildNotApplicableAssertions(context) {
                           "readModelGoalCompleted",
                           ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
                           ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                          ...MEDIA_REFERENCE_ASSERTION_KEYS,
                           ...IMAGE_COMMAND_ASSERTION_KEYS,
                           ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
                           ...SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -512,10 +579,12 @@ export function buildNotApplicableAssertions(context) {
         "readModelGoalCompleted",
         ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
         ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+        ...MEDIA_REFERENCE_ASSERTION_KEYS,
         ...IMAGE_COMMAND_ASSERTION_KEYS,
         ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
         ...SKILLS_RUNTIME_ASSERTION_KEYS,
         ...INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
+        ...INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS,
         ...(isExpertPlazaSkillsRuntimeScenario ||
         isExpertPanelSkillsRuntimeScenario
           ? []
@@ -530,14 +599,31 @@ export function buildNotApplicableAssertions(context) {
         ...EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
         ...EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
         ...(isImageCommandScenario ? [] : IMAGE_COMMAND_ASSERTION_KEYS),
+        ...(isMediaReferenceScenario ? [] : MEDIA_REFERENCE_ASSERTION_KEYS),
       ];
   return [
     ...notApplicableAssertions,
     ...RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS,
     ...CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS,
     ...(isMultiAgentTeamScenario ? [] : MULTI_AGENT_TEAM_ASSERTION_KEYS),
-    ...(isInputbarRichRestoreScenario
+    ...(isInputbarRichRestoreScenario ||
+    isInputbarPendingSteerRichRestoreScenario
       ? []
       : INPUTBAR_RICH_RESTORE_ASSERTION_KEYS),
+    ...(isInputbarPendingSteerRichRestoreScenario
+      ? []
+      : INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS),
+    ...(isReasoningFirstVisibleScenario
+      ? []
+      : REASONING_FIRST_VISIBLE_ASSERTION_KEYS),
+    ...(isTerminalCanceledAfterAnswerScenario
+      ? []
+      : TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS),
+    ...(isTerminalFailedAfterAnswerScenario
+      ? []
+      : TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS),
+    ...(isTerminalStaleGuardScenario
+      ? []
+      : TERMINAL_STALE_GUARD_ASSERTION_KEYS),
   ];
 }

@@ -92,6 +92,8 @@ function webToolsSnapshotFromDom({
   const finalIndex = text.indexOf(finalSummary);
   const sourceIndex = text.indexOf(searchTitle);
   const midThinkingIndex = text.indexOf(midThinkingText);
+  const startupNoteVisible =
+    text.includes("启动处理流程") || text.includes("已接收请求");
   const fetchPageIndex = text.indexOf(
     searchSourceLabel,
     Math.max(midThinkingIndex, 0),
@@ -230,6 +232,7 @@ function webToolsSnapshotFromDom({
     ),
     hasSearchTitle: text.includes(searchTitle),
     hasMidThinkingText: text.includes(midThinkingText),
+    startupNoteVisible,
     hasSearchUrl: text.includes(searchUrl),
     hasSearchSourceLabel: text.includes(searchSourceLabel),
     hasFullSearchUrlVisible: text.includes(searchUrl),
@@ -237,6 +240,15 @@ function webToolsSnapshotFromDom({
     hasFetchPageUrl: Boolean(webProcessGroup?.text.includes(searchSourceLabel)),
     hasIntroBeforeProcess: introIndex >= 0 && processIndex > introIndex,
     hasProcessAfterPrompt: promptIndex >= 0 && processIndex > promptIndex,
+    reasoningIndex: midThinkingIndex,
+    finalAnswerIndex: finalIndex,
+    hasReasoningBeforeFinalAnswer:
+      midThinkingIndex >= 0 && (finalIndex < 0 || midThinkingIndex < finalIndex),
+    hasReasoningVisibleBeforeFinalAnswer:
+      midThinkingIndex >= 0 &&
+      finalIndex < 0 &&
+      !text.includes(doneText) &&
+      startupNoteVisible === false,
     hasFinalTextAfterProcess:
       promptIndex >= 0 &&
       processIndex > promptIndex &&
@@ -342,6 +354,7 @@ export async function waitForGuiWebToolsRenderingInProgress(page, options) {
       snapshot.hasFetchPageSection === true &&
       snapshot.hasSearchTitle === true &&
       snapshot.hasMidThinkingText === true &&
+      snapshot.startupNoteVisible === false &&
       snapshot.hasSearchSourceLabel === true &&
       snapshot.hasFullSearchUrlVisible === false &&
       snapshot.hasFetchPageUrl === true &&

@@ -1,4 +1,7 @@
-import type { InstalledPluginState } from "@/features/plugin/types";
+import type {
+  InstalledPluginState,
+  PluginRuntimeCapabilities,
+} from "@/features/plugin/types";
 import {
   buildPluginActivationMentionCatalog,
   parsePluginActivationMention,
@@ -30,6 +33,7 @@ export interface WorkspacePluginActivationResolution {
   context?: PluginActivationContext;
   intentMatch?: WorkspacePluginIntentMatch;
   runtimeReadiness?: WorkspacePluginRuntimeReadiness;
+  runtimeCapabilities?: PluginRuntimeCapabilities;
   blockerCodes?: string[];
 }
 
@@ -185,6 +189,7 @@ export function resolveWorkspacePluginActivation(params: {
     context: parseResult.context,
     intentMatch,
     runtimeReadiness,
+    runtimeCapabilities: pluginRuntimeCapabilities(installedPlugin),
   };
 }
 
@@ -231,6 +236,7 @@ function pluginActivationMetadata(
   const skillRefs = resolveActivationSkillRefs(manifest, intent?.taskKind);
   const workflowRecord = asRecord(workflow);
   const runtimeRecord = asRecord(manifest?.agentRuntime);
+  const runtimeCapabilities = resolution.runtimeCapabilities;
   return {
     plugin_activation: {
       source: "plugin_explicit_mention",
@@ -285,9 +291,15 @@ function pluginActivationMetadata(
         asRecord(workflowRecord?.hookPolicy) ??
         asRecord(workflowRecord?.hook_policy),
       runtime_readiness: contextRuntimeReadiness(resolution.runtimeReadiness),
+      runtime_capabilities: runtimeCapabilities,
       runtime_registries: buildActivationRuntimeRegistries(runtimeRecord),
       default_prompts: readInterfaceDefaultPrompts(manifest?.interface),
     },
+    ...(runtimeCapabilities
+      ? {
+          plugin_runtime_capabilities: runtimeCapabilities,
+        }
+      : {}),
     ...(resolution.runtimeReadiness
       ? {
           plugin_runtime_readiness: contextRuntimeReadiness(
@@ -312,6 +324,15 @@ function pluginActivationMetadata(
         }
       : {}),
   };
+}
+
+function pluginRuntimeCapabilities(
+  state: InstalledPluginState | undefined,
+): PluginRuntimeCapabilities | undefined {
+  return (
+    state?.projection?.runtimeCapabilities ??
+    state?.manifest.runtimeCapabilities
+  );
 }
 
 function contextRuntimeReadiness(
@@ -399,9 +420,7 @@ function resolveActivationWorkflow(
   if (!manifest || (!intentKey && !taskKind && !workflowKey)) {
     return undefined;
   }
-  const workflows = Array.isArray(manifest.workflows)
-    ? manifest.workflows
-    : [];
+  const workflows = Array.isArray(manifest.workflows) ? manifest.workflows : [];
   return workflows.find(
     (workflow) =>
       (workflowKey ? workflow.key === workflowKey : false) ||
@@ -414,7 +433,9 @@ function resolveActivationWorkflow(
 }
 
 function buildActivationWorkflowContract(params: {
-  workflow: WorkspacePluginIntentMatch["manifest"]["workflows"][number] | undefined;
+  workflow:
+    | WorkspacePluginIntentMatch["manifest"]["workflows"][number]
+    | undefined;
   intent: WorkspacePluginIntentMatch | undefined;
   expectedObjects: readonly string[] | undefined;
 }) {
@@ -462,10 +483,9 @@ function buildActivationWorkflowContract(params: {
     output_artifact_kind:
       workflow?.outputArtifactKind ?? intent?.outputArtifactKind,
     right_surface: intent?.rightSurface,
-    expected_objects:
-      intent?.expectedObjects?.length
-        ? intent.expectedObjects
-        : params.expectedObjects,
+    expected_objects: intent?.expectedObjects?.length
+      ? intent.expectedObjects
+      : params.expectedObjects,
     connector_refs: readStringArray(workflowRecord ?? {}, [
       "connectorRefs",
       "connector_refs",

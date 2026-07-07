@@ -46,6 +46,14 @@ export function resolveContentPartDebugSignature(
             : "";
         return `text${sequence}`;
       }
+      if (part.type === "media_reference") {
+        const sequence =
+          typeof part.metadata?.sequence === "number"
+            ? `#${part.metadata.sequence}`
+            : "";
+        const kind = part.reference.kind || "media";
+        return `media:${kind}${sequence}`;
+      }
       return part.type;
     })
     .join("|");

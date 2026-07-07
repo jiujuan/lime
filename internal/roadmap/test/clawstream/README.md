@@ -1,10 +1,11 @@
 # Clawstream 全链路护栏与旧实现清理路线图
 
 > 状态：active roadmap
-> 更新时间：2026-07-06
+> 更新时间：2026-07-07
 > 关联主线：`internal/research/refactor/v1`
 > 推进计划：`internal/exec-plans/clawstream-codex-derived-guardrail-plan.md`
 > 当前 S1 计划：`internal/exec-plans/clawstream-s1-p0-implementation-plan.md`
+> 场景骨架：`internal/roadmap/test/clawstream/scenario-registry.json`
 > 目标：把 Claw 从输入到输出的流式链路固定成可复用测试账本，并清理多轮迭代留下的旧 fallback、重复 projection、mock / compat 旁路。
 
 ## 1. 结论
@@ -56,12 +57,15 @@ GUI 和 Electron fixture 如何证明它没有回归？
 | Electron fixture | `scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs` | 真实 Electron Desktop Host + App Server sidecar + read model |
 | Codex 派生索引 | `internal/roadmap/test/clawstream/codex-derived-index.md` | 从 Codex protocol / app-server / core / TUI tests 索引 Lime 还没细化的场景族 |
 | Codex 场景账本 | `internal/roadmap/test/clawstream/scenario-ledger.md` | 把 Codex 具体测试函数索引成 Lime scenarioId、event item、projection oracle、Electron evidence、清理目标 |
+| 场景骨架 registry | `internal/roadmap/test/clawstream/scenario-registry.json` | 固定全量 scenarioId、执行批次、evidence gate、细节顺序、优先级、状态、目标证据层和验证入口 |
 
 Codex 不只是泛泛参考，而是 Clawstream 场景族的索引来源和默认架构准则：TUI snapshot、Thread / Turn / Item、app-server JSON-RPC integration、core session/tool runtime、tool / reasoning / approval lifecycle、MCP、Skills Runtime、Multi-Agent、Plan hydrate、compaction、resize-reflow 都要被转成 Lime 自己的 fixture 账本。opencode 只用于多模型 / 多模态 provider capability、media part、模型能力矩阵和 provider lowering，不引入其 Session/UI/Tool 架构；OpenAI / openai-agents-js 资料只作为 API event 命名证据，不替代 Codex 的工程分层。
 
 ## 3. Scenario Catalog
 
 每个 Clawstream 场景必须进入场景账本，不能只散落在单个测试文件里。
+
+推进顺序采用“先骨架、后细节”：`scenario-registry.json` 先固定所有 P0/P1/P2 场景的最小可执行骨架，包括 scenarioId、execution batch、`evidenceGate`、`detailOrder`、目标证据层、当前状态、下一步细节入口、`verificationCommands`、骨架字段定义和 `current / compat / deprecated / dead` 分类；`scenario-ledger.md` 再记录 Codex 来源、oracle 细节和 evidence；具体测试随后按 batch 的 `detailOrder` 逐场景把状态从 `missing` 推进到 `partial` / `partial+guard` / `covered-electron`。`scenario-registry.test.mjs` 会阻止 registry 与 ledger 脱节，也会阻止场景游离在批次之外、细节顺序缺失、验证入口为空，或 ledger 缺少 Codex 来源、标准事件项、Projection / GUI oracle 和清理目标。
 
 | 场景 | 覆盖风险 | v1 主线 |
 | --- | --- | --- |

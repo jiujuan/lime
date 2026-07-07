@@ -11,6 +11,7 @@ import {
   settleInterruptedMessageProcess,
   stopActiveAgentStream,
 } from "./agentStreamFlowControl";
+import { hasLocallyInterruptedAgentStreamBinding } from "./agentStreamResumeBinding";
 
 function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
   return (next: T | ((prev: T) => T)) => {
@@ -18,6 +19,12 @@ function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
       typeof next === "function" ? (next as (prev: T) => T)(getValue()) : next,
     );
   };
+}
+
+async function flushMicrotasks(times = 3) {
+  for (let index = 0; index < times; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe("agentStreamFlowControl", () => {
@@ -350,6 +357,18 @@ describe("agentStreamFlowControl", () => {
       },
     };
     const onRestoreInterruptedInput = vi.fn();
+    const restoreOrder: string[] = [];
+    let resolveRefresh!: (value: boolean) => void;
+    const refreshDone = new Promise<boolean>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const refreshSessionReadModel = vi.fn(() => {
+      restoreOrder.push("refresh");
+      return refreshDone;
+    });
+    onRestoreInterruptedInput.mockImplementation(() => {
+      restoreOrder.push("restore");
+    });
 
     await stopActiveAgentStream({
       activeStream,
@@ -358,7 +377,7 @@ describe("agentStreamFlowControl", () => {
         interruptTurn: vi.fn(async () => true),
       } as never,
       removeStreamListener: vi.fn(),
-      refreshSessionReadModel: vi.fn(async () => true),
+      refreshSessionReadModel,
       setQueuedTurns: createStateSetter(
         () => [] as QueuedTurnSnapshot[],
         () => undefined,
@@ -414,6 +433,552 @@ describe("agentStreamFlowControl", () => {
         },
       },
     });
+    expect(restoreOrder[0]).toBe("restore");
+
+    await flushMicrotasks();
+    expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
+    expect(restoreOrder).toEqual(["restore", "refresh"]);
+
+    resolveRefresh(true);
+    await flushMicrotasks();
+
+    expect(onRestoreInterruptedInput).toHaveBeenCalledTimes(1);
+  });
+
+  it("stopActiveAgentStream 在 active stream 尚无草稿时应使用提交兜底草稿", async () => {
+    const image = {
+      data: "image-data",
+      mediaType: "image/png",
+    };
+    const pathReference = {
+      id: "file:/tmp/report.md",
+      path: "/tmp/report.md",
+      name: "report.md",
+      isDir: false,
+      source: "file_manager" as const,
+    };
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-thinking",
+      eventName: "stream-restore-before-active-draft",
+      sessionId: "session-1",
+      turnId: "turn-runtime-1",
+    };
+    const onRestoreInterruptedInput = vi.fn();
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        interruptTurn: vi.fn(async () => true),
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setQueuedTurns: createStateSetter(
+        () => [] as QueuedTurnSnapshot[],
+        () => undefined,
+      ),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => null as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => [] as Message[],
+        () => undefined,
+      ),
+      getMessages: () => [
+        {
+          id: "assistant-thinking",
+          role: "assistant",
+          content: "",
+          timestamp: new Date("2026-03-29T00:00:00.000Z"),
+          isThinking: true,
+        },
+      ],
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      submittedDraftFallback: {
+        text: "继续生成提纲",
+        images: [image],
+        pathReferences: [pathReference],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "draft",
+          skillName: "起草",
+        },
+      },
+      onRestoreInterruptedInput,
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(activeStream).toBeNull();
+    expect(onRestoreInterruptedInput).toHaveBeenCalledWith({
+      requestId: expect.any(String),
+      reason: "thinking_only_cancelled_turn",
+      draft: {
+        text: "继续生成提纲",
+        images: [image],
+        pathReferences: [pathReference],
+        textElements: [],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "draft",
+          skillName: "起草",
+        },
+      },
+    });
+  });
+
+  it("stopActiveAgentStream 只有 provider/runtime 过程态时仍应恢复富输入", async () => {
+    const image = {
+      data: "image-data",
+      mediaType: "image/png",
+      sourcePath: "/tmp/rich-restore-fixture.png",
+    };
+    const pathReference = {
+      id: "file:/tmp/clawstream-rich-restore-fixture.md",
+      path: "/tmp/clawstream-rich-restore-fixture.md",
+      name: "clawstream-rich-restore-fixture.md",
+      isDir: false,
+      source: "file_manager" as const,
+    };
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-runtime-status",
+      eventName: "stream-provider-trace-only",
+      sessionId: "session-rich-restore",
+      turnId: "turn-provider-trace-only",
+      pendingTurnKey: "pending-turn:provider-trace-only",
+      pendingItemKey: "pending-item:provider-trace-only",
+      submittedDraft: {
+        text: "请结合这个截图、文件和 Capability Report 技能，先不要输出正文。",
+        images: [image],
+        pathReferences: [pathReference],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "capability-report",
+          skillName: "Capability Report",
+        },
+      },
+    };
+    const onRestoreInterruptedInput = vi.fn();
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-rich-restore" },
+      runtime: {
+        interruptTurn: vi.fn(async () => true),
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setQueuedTurns: createStateSetter(
+        () => [] as QueuedTurnSnapshot[],
+        () => undefined,
+      ),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => "pending-turn:provider-trace-only" as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => [] as Message[],
+        () => undefined,
+      ),
+      getMessages: () => [
+        {
+          id: "assistant-runtime-status",
+          role: "assistant",
+          content: "正在生成回复",
+          timestamp: new Date("2026-03-29T00:00:00.000Z"),
+          isThinking: true,
+          contentParts: [],
+          runtimeStatus: {
+            phase: "preparing",
+            title: "正在生成回复",
+            detail: "正在输出",
+            checkpoints: ["provider.request.started"],
+          },
+        },
+      ],
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      onRestoreInterruptedInput,
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(activeStream).toBeNull();
+    expect(onRestoreInterruptedInput).toHaveBeenCalledWith({
+      requestId: expect.any(String),
+      reason: "thinking_only_cancelled_turn",
+      draft: {
+        text: "请结合这个截图、文件和 Capability Report 技能，先不要输出正文。",
+        images: [image],
+        pathReferences: [pathReference],
+        textElements: [],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "capability-report",
+          skillName: "Capability Report",
+        },
+      },
+    });
+  });
+
+  it("stopActiveAgentStream 有 active 输出和 queued rich input 时应恢复 queued draft 并移除队列项", async () => {
+    let queuedTurns: QueuedTurnSnapshot[] = [
+      {
+        queued_turn_id: "queued-rich",
+        message_preview: "/capability-report queued",
+        message_text: "/capability-report queued",
+        created_at: 1,
+        image_count: 1,
+        position: 1,
+        input_attachments: [
+          {
+            kind: "image",
+            uri: "data:image/png;base64,aW1hZ2U=",
+            metadata: {
+              mediaType: "image/png",
+              sourcePath: "/tmp/queued.png",
+            },
+          },
+        ],
+        path_references: [
+          {
+            id: "file:/project/report.md",
+            path: "/project/report.md",
+            name: "report.md",
+            isDir: false,
+            source: "file_manager",
+          },
+        ],
+        text_elements: [
+          {
+            type: "text",
+            text: "queued rich prompt",
+          },
+        ],
+        input_capability_route: {
+          kind: "installed_skill",
+          skillKey: "capability-report",
+          skillName: "Capability Report",
+        },
+      },
+    ];
+    let messages: Message[] = [
+      {
+        id: "assistant-visible",
+        role: "assistant",
+        content: "active output should remain visible",
+        timestamp: new Date("2026-03-29T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-visible",
+      eventName: "stream-pending-steer",
+      sessionId: "session-1",
+      turnId: "turn-active",
+      submittedDraft: {
+        text: "active prompt",
+      },
+    };
+    const interruptTurn = vi.fn(async () => true);
+    const removeQueuedTurn = vi.fn(async () => true);
+    const onRestoreInterruptedInput = vi.fn();
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        interruptTurn,
+        removeQueuedTurn,
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setQueuedTurns: createStateSetter(
+        () => queuedTurns,
+        (value) => {
+          queuedTurns = value;
+        },
+      ),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => null as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      getMessages: () => messages,
+      getQueuedTurns: () => queuedTurns,
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      onRestoreInterruptedInput,
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(activeStream).toBeNull();
+    expect(queuedTurns).toEqual([]);
+    expect(messages[0]).toMatchObject({
+      content: "active output should remain visible",
+      isThinking: false,
+      runtimeStatus: undefined,
+    });
+    expect(onRestoreInterruptedInput).toHaveBeenCalledTimes(1);
+    expect(onRestoreInterruptedInput.mock.calls[0]?.[0]).toMatchObject({
+      requestId: expect.any(String),
+      reason: "queued_turn_restored_after_interrupt",
+      draft: {
+        text: "queued rich prompt",
+        images: [
+          {
+            data: "aW1hZ2U=",
+            mediaType: "image/png",
+            sourceUri: "data:image/png;base64,aW1hZ2U=",
+            sourcePath: "/tmp/queued.png",
+          },
+        ],
+        pathReferences: [
+          {
+            id: "file:/project/report.md",
+            path: "/project/report.md",
+            name: "report.md",
+            isDir: false,
+            source: "file_manager",
+          },
+        ],
+        textElements: [
+          {
+            type: "text",
+            text: "queued rich prompt",
+          },
+        ],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "capability-report",
+          skillName: "Capability Report",
+        },
+      },
+    });
+
+    await flushMicrotasks();
+    expect(removeQueuedTurn).toHaveBeenCalledWith("session-1", "queued-rich");
+    expect(interruptTurn).toHaveBeenCalledWith(
+      "session-1",
+      "turn-active",
+      "stream-pending-steer",
+    );
+  });
+
+  it("stopActiveAgentStream 本地队列未同步时应从 read model 恢复 queued rich draft", async () => {
+    let queuedTurns: QueuedTurnSnapshot[] = [];
+    let messages: Message[] = [
+      {
+        id: "assistant-visible",
+        role: "assistant",
+        content: "active output should remain visible",
+        timestamp: new Date("2026-03-29T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-visible",
+      eventName: "stream-pending-steer-stale-local",
+      sessionId: "session-1",
+      turnId: "turn-active",
+      submittedDraft: {
+        text: "active prompt",
+      },
+    };
+    const interruptTurn = vi.fn(async () => true);
+    const removeQueuedTurn = vi.fn(async () => true);
+    const getSessionReadModel = vi.fn(async () => ({
+      detail: {
+        thread_read: {
+          queued_turns: [
+            {
+              queued_turn_id: "queued-rich-read-model",
+              message_preview: "/capability-report queued",
+              message_text: "/capability-report queued",
+              created_at: 1,
+              image_count: 1,
+              position: 1,
+              input_attachments: [
+                {
+                  kind: "image",
+                  uri: "data:image/png;base64,aW1hZ2U=",
+                  metadata: {
+                    mediaType: "image/png",
+                    sourcePath: "/tmp/queued.png",
+                  },
+                },
+              ],
+              path_references: [
+                {
+                  id: "file:/project/report.md",
+                  path: "/project/report.md",
+                  name: "report.md",
+                  isDir: false,
+                  source: "file_manager",
+                },
+              ],
+              text_elements: [
+                {
+                  type: "text",
+                  text: "queued rich prompt from read model",
+                },
+              ],
+              input_capability_route: {
+                kind: "installed_skill",
+                skillKey: "capability-report",
+                skillName: "Capability Report",
+              },
+            },
+          ],
+        },
+      },
+    }));
+    const onRestoreInterruptedInput = vi.fn();
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        getSessionReadModel,
+        interruptTurn,
+        removeQueuedTurn,
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setQueuedTurns: createStateSetter(
+        () => queuedTurns,
+        (value) => {
+          queuedTurns = value;
+        },
+      ),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => null as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      getMessages: () => messages,
+      getQueuedTurns: () => [],
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      onRestoreInterruptedInput,
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(getSessionReadModel).toHaveBeenCalledWith("session-1");
+    expect(activeStream).toBeNull();
+    expect(
+      hasLocallyInterruptedAgentStreamBinding({
+        eventName: "agentSession/event/session-1",
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-active",
+      }),
+    ).toBe(true);
+    expect(onRestoreInterruptedInput).toHaveBeenCalledTimes(1);
+    expect(onRestoreInterruptedInput.mock.calls[0]?.[0]).toMatchObject({
+      requestId: expect.any(String),
+      reason: "queued_turn_restored_after_interrupt",
+      draft: {
+        text: "queued rich prompt from read model",
+        images: [
+          {
+            data: "aW1hZ2U=",
+            mediaType: "image/png",
+            sourceUri: "data:image/png;base64,aW1hZ2U=",
+            sourcePath: "/tmp/queued.png",
+          },
+        ],
+        pathReferences: [
+          {
+            id: "file:/project/report.md",
+            path: "/project/report.md",
+            name: "report.md",
+            isDir: false,
+            source: "file_manager",
+          },
+        ],
+        textElements: [
+          {
+            type: "text",
+            text: "queued rich prompt from read model",
+          },
+        ],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "capability-report",
+          skillName: "Capability Report",
+        },
+      },
+    });
+
+    await flushMicrotasks();
+    expect(removeQueuedTurn).toHaveBeenCalledWith(
+      "session-1",
+      "queued-rich-read-model",
+    );
+    expect(interruptTurn).toHaveBeenCalledWith(
+      "session-1",
+      "turn-active",
+      "stream-pending-steer-stale-local",
+    );
   });
 
   it("settleInterruptedMessageProcess 应把运行中工具标记为本轮已中止", () => {

@@ -180,6 +180,19 @@ export function MessageAssistantBody({
                 : undefined
             }
             onOpenUrlPreview={onOpenUrlPreview}
+            onOpenMediaReference={
+              onOpenMessagePreview
+                ? (reference, index) =>
+                    onOpenMessagePreview(
+                      {
+                        kind: "media_reference",
+                        reference,
+                        index,
+                      },
+                      message,
+                    )
+                : undefined
+            }
           />
         ) : null
       ) : (
@@ -216,6 +229,19 @@ export function MessageAssistantBody({
           fileChangesUndoSessionId={sessionId}
           onOpenSavedSiteContent={onOpenSavedSiteContent}
           onOpenUrlPreview={onOpenUrlPreview}
+          onOpenMediaReference={
+            onOpenMessagePreview
+              ? (reference, index) =>
+                  onOpenMessagePreview(
+                    {
+                      kind: "media_reference",
+                      reference,
+                      index,
+                    },
+                    message,
+                  )
+              : undefined
+          }
           onPermissionResponse={onPermissionResponse}
           collapseCodeBlocks={collapseCodeBlocks}
           shouldCollapseCodeBlock={shouldCollapseCodeBlock}

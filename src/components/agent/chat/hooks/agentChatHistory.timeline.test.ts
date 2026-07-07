@@ -212,6 +212,92 @@ describe("agentChatHistory timeline fallback", () => {
     ]);
   });
 
+  it("历史 timeline agent_message 只有 media contentParts 时仍应恢复引用", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-timeline-media-final",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-media-final",
+          thread_id: "session-timeline-media-final",
+          prompt_text: "生成一张图",
+          status: "completed",
+          started_at: "2026-05-06T10:00:00.000Z",
+          completed_at: "2026-05-06T10:00:03.000Z",
+          created_at: "2026-05-06T10:00:00.000Z",
+          updated_at: "2026-05-06T10:00:03.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "item-user-media",
+          thread_id: "session-timeline-media-final",
+          turn_id: "turn-media-final",
+          sequence: 1,
+          type: "user_message",
+          content: "生成一张图",
+          status: "completed",
+          started_at: "2026-05-06T10:00:00.000Z",
+          completed_at: "2026-05-06T10:00:00.000Z",
+          updated_at: "2026-05-06T10:00:00.000Z",
+        } as never,
+        {
+          id: "item-assistant-media",
+          thread_id: "session-timeline-media-final",
+          turn_id: "turn-media-final",
+          sequence: 2,
+          type: "agent_message",
+          text: "",
+          phase: "final_answer",
+          contentParts: [
+            {
+              type: "media",
+              kind: "image",
+              caption: "结果图",
+              reference: {
+                uri: "sidecar://media/image-1",
+                mime_type: "image/png",
+                title: "image-1.png",
+              },
+            },
+          ],
+          status: "completed",
+          started_at: "2026-05-06T10:00:02.000Z",
+          completed_at: "2026-05-06T10:00:03.000Z",
+          updated_at: "2026-05-06T10:00:03.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-timeline-media-final",
+    );
+
+    expect(messages[1]).toMatchObject({
+      id: "session-timeline-media-final-timeline-item-assistant-media",
+      role: "assistant",
+      content: "结果图",
+    });
+    expect(messages[1]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "media_reference",
+        reference: expect.objectContaining({
+          caption: "结果图",
+          uri: "sidecar://media/image-1",
+          mimeType: "image/png",
+        }),
+        metadata: expect.objectContaining({
+          source: "agent_media_reference",
+          referenceUri: "sidecar://media/image-1",
+          mimeType: "image/png",
+        }),
+      }),
+    ]);
+  });
+
   it("历史 plan item 应恢复为 proposed_plan 且 update_plan tool_call 不应恢复为消息工具卡", () => {
     const detail: AsterSessionDetail = {
       id: "session-update-plan-history",

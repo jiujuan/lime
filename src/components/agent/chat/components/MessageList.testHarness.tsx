@@ -47,6 +47,7 @@ export function isMockToolUsePart(part: Record<string, unknown>): part is Record
 export type StreamingRendererCallProps = {
   content?: string;
   contentParts?: Array<Record<string, unknown>>;
+  onOpenMediaReference?: (reference: unknown, index: number) => void;
   onOpenSavedSiteContent?: unknown;
   toolCalls?: unknown[];
 };
@@ -171,6 +172,7 @@ export const mockStreamingRenderer = vi.fn(
     thinkingContent,
     toolCalls,
     onOpenUrlPreview,
+    onOpenMediaReference,
     onOpenSavedSiteContent,
     suppressProcessFlow,
     showRuntimeStatusInline,
@@ -198,6 +200,7 @@ export const mockStreamingRenderer = vi.fn(
     readOnlyA2UI?: boolean;
     readOnlyActionRequests?: boolean;
     onOpenUrlPreview?: (target: unknown) => void;
+    onOpenMediaReference?: (reference: unknown, index: number) => void;
     onOpenSavedSiteContent?: (target: {
       projectId: string;
       contentId: string;
@@ -210,6 +213,7 @@ export const mockStreamingRenderer = vi.fn(
       data-tool-calls={toolCalls?.length ?? 0}
       data-has-thinking-content={thinkingContent ? "yes" : "no"}
       data-has-open-url-preview={onOpenUrlPreview ? "yes" : "no"}
+      data-has-open-media-reference={onOpenMediaReference ? "yes" : "no"}
       data-has-open-saved-site-content={onOpenSavedSiteContent ? "yes" : "no"}
       data-suppress-process-flow={suppressProcessFlow ? "yes" : "no"}
       data-show-runtime-status-inline={showRuntimeStatusInline ? "yes" : "no"}

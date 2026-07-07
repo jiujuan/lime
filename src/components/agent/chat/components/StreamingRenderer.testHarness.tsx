@@ -13,6 +13,7 @@ import type {
   ActionRequired,
   AgentRuntimeStatus,
   ContentPart,
+  MessageMediaReference,
   WriteArtifactContext,
 } from "../types";
 
@@ -48,6 +49,10 @@ export interface StreamingRendererHarnessProps {
     title?: string;
   }) => void;
   onOpenUrlPreview?: (item: unknown) => void;
+  onOpenMediaReference?: (
+    reference: MessageMediaReference,
+    index: number,
+  ) => void;
   suppressProcessFlow?: boolean;
   showContentBlockActions?: boolean;
   onQuoteContent?: (content: string) => void;

@@ -45,6 +45,7 @@ import {
   isAuxiliaryHistoryTurn,
   readThreadItemText,
 } from "./agentChatHistoryTimelineBasics";
+import { messageContentPartsFromAgentThreadItem } from "./agentThreadMessageContentParts";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
 import { resolveSessionDetailTurnUsage } from "./agentChatHistoryUsage";
 
@@ -80,6 +81,25 @@ function agentMessageContentPartMetadata(
   };
 }
 
+function contentPartsText(parts: NonNullable<Message["contentParts"]>): string {
+  return parts
+    .map((part) => {
+      if (part.type === "text") {
+        return part.text.trim();
+      }
+      if (part.type === "media_reference") {
+        return (
+          part.reference.caption ||
+          part.reference.title ||
+          part.reference.uri
+        ).trim();
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function buildMessageFromThreadItem(
   item: AgentThreadItem,
   topicId: string,
@@ -101,25 +121,33 @@ function buildMessageFromThreadItem(
       ? readThreadItemText(item, ["content", "text", "message"])
       : readThreadItemText(item, ["text", "content", "message"]);
   const role = item.type === "user_message" ? "user" : "assistant";
+  const itemContentParts =
+    item.type === "agent_message"
+      ? messageContentPartsFromAgentThreadItem(item)
+      : [];
   const sanitizedContent = sanitizeMessageTextForDisplay(content, {
     role,
     hasImages: false,
   });
-  if (!sanitizedContent) {
+  if (!sanitizedContent && itemContentParts.length === 0) {
     return null;
   }
+  const contentPartText = contentPartsText(itemContentParts);
+  const messageContent = sanitizedContent || contentPartText;
 
   const timestamp = new Date(item.completed_at || item.updated_at);
   return {
     id: `${topicId}-timeline-${item.id}`,
     role,
-    content: sanitizedContent,
+    content: messageContent,
     contentParts:
-      role === "assistant"
+      role === "assistant" && itemContentParts.length > 0
+        ? itemContentParts
+        : role === "assistant" && messageContent
         ? [
             {
               type: "text",
-              text: sanitizedContent,
+              text: messageContent,
             },
           ]
         : undefined,
@@ -249,6 +277,18 @@ export function hydrateSessionDetailMessagesFromThreadItems(
     text: string,
     item: Extract<AgentThreadItem, { type: "agent_message" }>,
   ) => {
+    const itemContentParts = messageContentPartsFromAgentThreadItem(item);
+    if (itemContentParts.length > 0) {
+      const textContent = contentPartsText(itemContentParts);
+      if (textContent) {
+        draft.content = [draft.content.trim(), textContent]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+      draft.contentParts = [...(draft.contentParts || []), ...itemContentParts];
+      return;
+    }
+
     const sanitizedText = sanitizeMessageTextForDisplay(text, {
       role: "assistant",
       hasImages: false,
@@ -273,6 +313,18 @@ export function hydrateSessionDetailMessagesFromThreadItems(
     draft: Message,
     item: Extract<AgentThreadItem, { type: "agent_message" }>,
   ): boolean => {
+    const itemContentParts = messageContentPartsFromAgentThreadItem(item);
+    if (itemContentParts.length > 0) {
+      const textContent = contentPartsText(itemContentParts);
+      if (textContent && shouldUseAgentMessageAsFinalText(item.phase)) {
+        draft.content = [draft.content.trim(), textContent]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+      draft.contentParts = [...(draft.contentParts || []), ...itemContentParts];
+      return true;
+    }
+
     const text = readThreadItemText(item, ["text", "content", "message"]);
     const sanitizedText = sanitizeMessageTextForDisplay(text, {
       role: "assistant",

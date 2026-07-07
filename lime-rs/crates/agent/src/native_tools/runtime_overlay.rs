@@ -1,5 +1,5 @@
 use aster::agents::Agent;
-use aster::tools::{create_shared_history, EditTool, Tool, ToolRegistry, WriteTool};
+use aster::tools::{Tool, ToolRegistry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tool_runtime::native_overlay::{runtime_native_tool_overlay_tools, RuntimeNativeToolOverlay};
@@ -34,21 +34,12 @@ pub(crate) async fn configure_lime_native_tool_overlay(agent: &mut Agent) {
     ));
     // Aster 默认工具池由 Agent::with_tool_config -> register_all_tools 注册。
     // 这里只覆盖 Lime 需要改变策略或收口事实源的工具，不重复接管 Aster 默认工具。
-    let shared_history = create_shared_history();
     let registry_handle = runtime_native_tool_registry(agent);
     let mut registry = registry_handle.registry.write().await;
     for overlay_tool in runtime_native_tool_overlay_tools() {
         match overlay_tool {
-            RuntimeNativeToolOverlay::Write => {
-                registry.register(Box::new(
-                    WriteTool::new(shared_history.clone())
-                        .with_require_read_before_overwrite(false),
-                ));
-            }
-            RuntimeNativeToolOverlay::Edit => {
-                registry.register(Box::new(
-                    EditTool::new(shared_history.clone()).with_require_read_before_edit(false),
-                ));
+            RuntimeNativeToolOverlay::ViewImage => {
+                registry.register(crate::native_tools::create_view_image_tool());
             }
             RuntimeNativeToolOverlay::ApplyPatch => {
                 registry.register(Box::new(crate::tools::ApplyPatchTool));
@@ -60,6 +51,102 @@ pub(crate) async fn configure_lime_native_tool_overlay(agent: &mut Agent) {
             RuntimeNativeToolOverlay::Skill => {
                 registry.register(Box::new(crate::tools::LimeSkillTool::new()));
             }
+            RuntimeNativeToolOverlay::Sleep => {
+                registry.register(crate::native_tools::create_sleep_tool());
+            }
+            RuntimeNativeToolOverlay::UpdatePlan => {
+                registry.register(crate::native_tools::create_update_plan_tool());
+            }
+            RuntimeNativeToolOverlay::WebFetch => {
+                registry.register(crate::native_tools::create_web_fetch_tool());
+            }
+            RuntimeNativeToolOverlay::WebSearch => {
+                registry.register(crate::native_tools::create_web_search_tool());
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn overlay_registers_current_view_image_with_lookup_only_aliases() {
+        let tool_config = crate::runtime_state_support::create_lime_tool_config();
+        let mut agent = Agent::with_tool_config(tool_config);
+
+        configure_lime_native_tool_overlay(&mut agent).await;
+
+        let registry = agent.tool_registry();
+        let registry = registry.read().await;
+        assert!(registry.contains("view_image"));
+        assert_eq!(
+            registry.canonical_native_name("ViewImage").as_deref(),
+            Some("view_image")
+        );
+        assert_eq!(
+            registry.canonical_native_name("ViewImageTool").as_deref(),
+            Some("view_image")
+        );
+
+        let definition_names = registry
+            .get_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<Vec<_>>();
+        assert!(definition_names.iter().any(|name| name == "view_image"));
+        assert!(!definition_names.iter().any(|name| name == "ViewImage"));
+        assert!(!definition_names.iter().any(|name| name == "ViewImageTool"));
+    }
+
+    #[tokio::test]
+    async fn overlay_does_not_register_aster_write_edit_task_tools() {
+        let tool_config = crate::runtime_state_support::create_lime_tool_config();
+        let mut agent = Agent::with_tool_config(tool_config);
+
+        configure_lime_native_tool_overlay(&mut agent).await;
+
+        let registry = agent.tool_registry();
+        let registry = registry.read().await;
+        assert!(!registry.contains("Write"));
+        assert!(!registry.contains("Edit"));
+        assert!(!registry.contains("TaskCreate"));
+        assert!(!registry.contains("TaskList"));
+        assert!(!registry.contains("TaskGet"));
+        assert!(!registry.contains("TaskUpdate"));
+        assert!(!registry.contains("TaskOutput"));
+        assert!(!registry.contains("TaskStop"));
+        assert!(registry.contains("apply_patch"));
+        assert!(registry.contains("update_plan"));
+    }
+
+    #[tokio::test]
+    async fn overlay_registers_current_update_plan_with_lookup_only_aliases() {
+        let tool_config = crate::runtime_state_support::create_lime_tool_config();
+        let mut agent = Agent::with_tool_config(tool_config);
+
+        configure_lime_native_tool_overlay(&mut agent).await;
+
+        let registry = agent.tool_registry();
+        let registry = registry.read().await;
+        assert!(registry.contains("update_plan"));
+        assert_eq!(
+            registry.canonical_native_name("UpdatePlan").as_deref(),
+            Some("update_plan")
+        );
+        assert_eq!(
+            registry.canonical_native_name("UpdatePlanTool").as_deref(),
+            Some("update_plan")
+        );
+
+        let definition_names = registry
+            .get_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<Vec<_>>();
+        assert!(definition_names.iter().any(|name| name == "update_plan"));
+        assert!(!definition_names.iter().any(|name| name == "UpdatePlan"));
+        assert!(!definition_names.iter().any(|name| name == "UpdatePlanTool"));
     }
 }

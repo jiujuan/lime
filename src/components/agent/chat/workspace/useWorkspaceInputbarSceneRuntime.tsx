@@ -543,6 +543,10 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   toolInventoryLoading: GeneralWorkbenchDialogParams["toolInventoryLoading"];
   toolInventoryError: GeneralWorkbenchDialogParams["toolInventoryError"];
   refreshToolInventory: GeneralWorkbenchDialogParams["onRefreshToolInventory"];
+  mcpPrepareCandidateCount?: GeneralWorkbenchDialogParams["mcpPrepareCandidateCount"];
+  mcpPrepareLoading?: GeneralWorkbenchDialogParams["mcpPrepareLoading"];
+  mcpPrepareError?: GeneralWorkbenchDialogParams["mcpPrepareError"];
+  prepareMcpTargets?: GeneralWorkbenchDialogParams["onPrepareMcpTargets"];
   mappedTheme: GeneralWorkbenchDialogParams["activeTheme"];
   activeRuntimeStatusTitle: GeneralWorkbenchDialogParams["runtimeStatusTitle"];
   handleHarnessLoadFilePreview: GeneralWorkbenchDialogParams["onLoadFilePreview"];
@@ -649,6 +653,10 @@ export function useWorkspaceInputbarSceneRuntime({
   toolInventoryLoading,
   toolInventoryError,
   refreshToolInventory,
+  mcpPrepareCandidateCount = 0,
+  mcpPrepareLoading = false,
+  mcpPrepareError = null,
+  prepareMcpTargets,
   mappedTheme,
   activeRuntimeStatusTitle,
   handleHarnessLoadFilePreview,
@@ -899,6 +907,10 @@ export function useWorkspaceInputbarSceneRuntime({
         toolInventoryLoading,
         toolInventoryError,
         onRefreshToolInventory: refreshToolInventory,
+        mcpPrepareCandidateCount,
+        mcpPrepareLoading,
+        mcpPrepareError,
+        onPrepareMcpTargets: prepareMcpTargets,
         activeTheme: mappedTheme,
         toolPreferences: resolvedChatToolPreferences,
         runtimeToolAvailability,

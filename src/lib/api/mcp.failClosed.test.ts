@@ -233,4 +233,41 @@ describe("mcp App Server current API fail-closed", () => {
     }
     expect(safeInvoke).not.toHaveBeenCalled();
   });
+
+  it("MCP prepare requests 应拒绝非 candidate、未知方法和 malformed params", async () => {
+    await expect(
+      mcpApi.executePrepareRequests([
+        {
+          method: "mcpServer/start",
+          params: { name: "docs" },
+          status: "completed",
+        },
+      ]),
+    ).rejects.toThrow("MCP prepare request must be candidate");
+
+    await expect(
+      mcpApi.executePrepareRequests([
+        {
+          method: "mcpServer/delete",
+          params: { id: "docs" },
+          status: "candidate",
+        },
+      ]),
+    ).rejects.toThrow(
+      "Unsupported MCP prepare request method: mcpServer/delete",
+    );
+
+    await expect(
+      mcpApi.executePrepareRequests([
+        {
+          method: "mcpServer/start",
+          params: {},
+          status: "candidate",
+        },
+      ]),
+    ).rejects.toThrow("mcpServer/start prepare params require name");
+
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
 });

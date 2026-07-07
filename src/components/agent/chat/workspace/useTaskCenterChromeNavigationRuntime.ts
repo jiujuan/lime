@@ -51,6 +51,7 @@ interface UseTaskCenterChromeNavigationRuntimeParams {
   initialPendingServiceSkillLaunchSignature?: string | null;
   isAutoRestoringSession: boolean;
   isBootstrapDispatchPending: boolean;
+  isHomeSessionBackgroundRecovery: boolean;
   isHomePendingPreviewActive: boolean;
   isPreparingSend: boolean;
   isSending: boolean;
@@ -140,6 +141,7 @@ export function useTaskCenterChromeNavigationRuntime({
   initialPendingServiceSkillLaunchSignature,
   isAutoRestoringSession,
   isBootstrapDispatchPending,
+  isHomeSessionBackgroundRecovery,
   isHomePendingPreviewActive,
   isPreparingSend,
   isSending,
@@ -281,6 +283,7 @@ export function useTaskCenterChromeNavigationRuntime({
     initialPendingServiceSkillLaunchSignature,
     initialDispatchKey,
     isBootstrapDispatchPending,
+    isHomeSessionBackgroundRecovery,
     messagesLength,
     isSending,
     queuedTurnsLength,

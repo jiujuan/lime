@@ -8,6 +8,8 @@ import {
   GOAL_PROMPT,
   IMAGE_COMMAND_PROMPT,
   IMAGE_COMMAND_SCENARIO,
+  INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+  INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_PROMPT,
   INPUTBAR_RICH_RESTORE_SCENARIO,
   MCP_STRUCTURED_CONTENT_PROMPT,
@@ -17,11 +19,20 @@ import {
   PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
   PLAIN_IMAGE_INTENT_SCENARIO,
   PLAN_PROMPT,
+  REASONING_FIRST_VISIBLE_PROMPT,
+  REASONING_FIRST_VISIBLE_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SOUL_STYLE_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
   SKILLS_RUNTIME_PROMPT,
+  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+  TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
+  TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+  TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
+  TERMINAL_STALE_GUARD_FIRST_PROMPT,
+  TERMINAL_STALE_GUARD_SCENARIO,
+  TERMINAL_STALE_GUARD_SECOND_PROMPT,
   WEB_TOOLS_RENDERING_PROMPT,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF } from "./claw-chat-current-fixture-expert-actions.mjs";
@@ -34,6 +45,10 @@ import {
   readObjectiveTextFromHarness,
   readWorkspaceSkillRuntimeEnableFromTurnStart,
 } from "./claw-chat-current-fixture-backend-ledger.mjs";
+import {
+  MEDIA_REFERENCE_PROMPT,
+  MEDIA_REFERENCE_SCENARIO,
+} from "./claw-chat-current-fixture-media-reference.mjs";
 
 export function buildAssertionContext({
   backendLedger,
@@ -93,7 +108,12 @@ export function buildAssertionContext({
   const inputbarRichRestoreTurnStart = backendLedger.find(
     (entry) =>
       entry.kind === "turnStart" &&
-      entry.inputText === INPUTBAR_RICH_RESTORE_PROMPT,
+      String(entry.inputText || "").includes(INPUTBAR_RICH_RESTORE_PROMPT),
+  );
+  const inputbarPendingSteerActiveTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
   );
   const expectedImageIntentRoutedPrompt =
     options.scenario === PLAIN_IMAGE_INTENT_SCENARIO
@@ -114,10 +134,39 @@ export function buildAssertionContext({
       entry.kind === "turnStart" &&
       entry.inputText === WEB_TOOLS_RENDERING_PROMPT,
   );
+  const reasoningFirstVisibleTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === REASONING_FIRST_VISIBLE_PROMPT,
+  );
+  const terminalCanceledAfterAnswerTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+  );
+  const terminalFailedAfterAnswerTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+  );
+  const terminalStaleGuardFirstTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === TERMINAL_STALE_GUARD_FIRST_PROMPT,
+  );
+  const terminalStaleGuardSecondTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === TERMINAL_STALE_GUARD_SECOND_PROMPT,
+  );
   const mcpStructuredContentTurnStart = backendLedger.find(
     (entry) =>
       entry.kind === "turnStart" &&
       entry.inputText === MCP_STRUCTURED_CONTENT_PROMPT,
+  );
+  const mediaReferenceTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" && entry.inputText === MEDIA_REFERENCE_PROMPT,
   );
   const multiAgentTeamTurnStart = backendLedger.find(
     (entry) =>
@@ -164,10 +213,22 @@ export function buildAssertionContext({
     options.scenario === PLAIN_IMAGE_INTENT_SCENARIO;
   const isInputbarRichRestoreScenario =
     options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO;
+  const isInputbarPendingSteerRichRestoreScenario =
+    options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO;
   const isWebToolsRenderingScenario =
     options.scenario === "web-tools-rendering";
+  const isReasoningFirstVisibleScenario =
+    options.scenario === REASONING_FIRST_VISIBLE_SCENARIO;
+  const isTerminalCanceledAfterAnswerScenario =
+    options.scenario === TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO;
+  const isTerminalFailedAfterAnswerScenario =
+    options.scenario === TERMINAL_FAILED_AFTER_ANSWER_SCENARIO;
+  const isTerminalStaleGuardScenario =
+    options.scenario === TERMINAL_STALE_GUARD_SCENARIO;
   const isMcpStructuredContentScenario =
     options.scenario === "mcp-structured-content";
+  const isMediaReferenceScenario =
+    options.scenario === MEDIA_REFERENCE_SCENARIO;
   const isMultiAgentTeamScenario =
     options.scenario === MULTI_AGENT_TEAM_SCENARIO;
   const isSkillsRuntimeScenario = options.scenario === "skills-runtime";
@@ -202,19 +263,29 @@ export function buildAssertionContext({
           ? imageCommandTurnStart?.asterChatRequest
           : isInputbarRichRestoreScenario
             ? inputbarRichRestoreTurnStart?.asterChatRequest
+            : isInputbarPendingSteerRichRestoreScenario
+              ? inputbarPendingSteerActiveTurnStart?.asterChatRequest
             : isWebToolsRenderingScenario
               ? webToolsRenderingTurnStart?.asterChatRequest
-              : isMcpStructuredContentScenario
-                ? mcpStructuredContentTurnStart?.asterChatRequest
-                : isMultiAgentTeamScenario
-                  ? multiAgentTeamTurnStart?.asterChatRequest
-                  : isSkillsRuntimeScenario
-                    ? skillsRuntimeTurnStart?.asterChatRequest
-                    : isAnyExpertSkillsRuntimeScenario
-                      ? expertRuntimeTurnStartForAssertions?.asterChatRequest
-                      : isContentFactoryArticleWorkspaceScenario
-                        ? {}
-                        : newsTurnStart?.asterChatRequest) ?? {};
+            : isReasoningFirstVisibleScenario
+              ? reasoningFirstVisibleTurnStart?.asterChatRequest
+            : isTerminalCanceledAfterAnswerScenario
+              ? terminalCanceledAfterAnswerTurnStart?.asterChatRequest
+            : isTerminalFailedAfterAnswerScenario
+              ? terminalFailedAfterAnswerTurnStart?.asterChatRequest
+                : isMcpStructuredContentScenario
+                  ? mcpStructuredContentTurnStart?.asterChatRequest
+                  : isMediaReferenceScenario
+                    ? mediaReferenceTurnStart?.asterChatRequest
+                    : isMultiAgentTeamScenario
+                      ? multiAgentTeamTurnStart?.asterChatRequest
+                      : isSkillsRuntimeScenario
+                        ? skillsRuntimeTurnStart?.asterChatRequest
+                        : isAnyExpertSkillsRuntimeScenario
+                          ? expertRuntimeTurnStartForAssertions?.asterChatRequest
+                          : isContentFactoryArticleWorkspaceScenario
+                            ? {}
+                            : newsTurnStart?.asterChatRequest) ?? {};
   const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
   const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
   const goalObjectiveText = readObjectiveTextFromHarness(goalHarness);
@@ -270,36 +341,57 @@ export function buildAssertionContext({
         : isImageCommandScenario
           ? imageCommandTurnStart?.inputText === expectedImageIntentRoutedPrompt
           : isInputbarRichRestoreScenario
-            ? inputbarRichRestoreTurnStart?.inputText ===
-              INPUTBAR_RICH_RESTORE_PROMPT
+            ? String(inputbarRichRestoreTurnStart?.inputText || "").includes(
+                INPUTBAR_RICH_RESTORE_PROMPT,
+              )
+            : isInputbarPendingSteerRichRestoreScenario
+              ? inputbarPendingSteerActiveTurnStart?.inputText ===
+                INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
             : isWebToolsRenderingScenario
               ? webToolsRenderingTurnStart?.inputText ===
                 WEB_TOOLS_RENDERING_PROMPT
+            : isReasoningFirstVisibleScenario
+              ? reasoningFirstVisibleTurnStart?.inputText ===
+                REASONING_FIRST_VISIBLE_PROMPT
+              : isTerminalCanceledAfterAnswerScenario
+                ? terminalCanceledAfterAnswerTurnStart?.inputText ===
+                  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT
+              : isTerminalFailedAfterAnswerScenario
+                ? terminalFailedAfterAnswerTurnStart?.inputText ===
+                  TERMINAL_FAILED_AFTER_ANSWER_PROMPT
+              : isTerminalStaleGuardScenario
+                ? terminalStaleGuardFirstTurnStart?.inputText ===
+                    TERMINAL_STALE_GUARD_FIRST_PROMPT &&
+                  terminalStaleGuardSecondTurnStart?.inputText ===
+                    TERMINAL_STALE_GUARD_SECOND_PROMPT
               : isMcpStructuredContentScenario
                 ? mcpStructuredContentTurnStart?.inputText ===
                   MCP_STRUCTURED_CONTENT_PROMPT
-                : isMultiAgentTeamScenario
-                  ? multiAgentTeamTurnStart?.inputText ===
-                    MULTI_AGENT_TEAM_PROMPT
-                  : isSkillsRuntimeScenario
-                    ? skillsRuntimeTurnStart?.inputText ===
-                        SKILLS_RUNTIME_PROMPT &&
-                      explicitSkillsRuntimeTurnStart?.inputText ===
-                        SKILLS_RUNTIME_EXPLICIT_PROMPT &&
-                      manualEnableSkillsRuntimeTurnStart?.inputText ===
-                        SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT
-                    : isAnyExpertSkillsRuntimeScenario
-                      ? isExpertPanelSkillsRuntimeScenario
-                        ? expertPanelSkillsRuntimeTurnStart?.inputText ===
-                          EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
-                        : expertSkillsRuntimeTurnStart?.inputText?.includes(
-                            EXPERT_SKILLS_RUNTIME_PROMPT,
-                          ) === true
-                      : isContentFactoryArticleWorkspaceScenario
-                        ? true
-                        : isSoulStyleScenario
-                          ? newsTraceTurnStart?.inputText === NEWS_PROMPT
-                          : newsTurnStart?.inputText === NEWS_PROMPT;
+                : isMediaReferenceScenario
+                  ? mediaReferenceTurnStart?.inputText ===
+                    MEDIA_REFERENCE_PROMPT
+                  : isMultiAgentTeamScenario
+                    ? multiAgentTeamTurnStart?.inputText ===
+                      MULTI_AGENT_TEAM_PROMPT
+                    : isSkillsRuntimeScenario
+                      ? skillsRuntimeTurnStart?.inputText ===
+                          SKILLS_RUNTIME_PROMPT &&
+                        explicitSkillsRuntimeTurnStart?.inputText ===
+                          SKILLS_RUNTIME_EXPLICIT_PROMPT &&
+                        manualEnableSkillsRuntimeTurnStart?.inputText ===
+                          SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT
+                      : isAnyExpertSkillsRuntimeScenario
+                        ? isExpertPanelSkillsRuntimeScenario
+                          ? expertPanelSkillsRuntimeTurnStart?.inputText ===
+                            EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
+                          : expertSkillsRuntimeTurnStart?.inputText?.includes(
+                              EXPERT_SKILLS_RUNTIME_PROMPT,
+                            ) === true
+                        : isContentFactoryArticleWorkspaceScenario
+                          ? true
+                          : isSoulStyleScenario
+                            ? newsTraceTurnStart?.inputText === NEWS_PROMPT
+                            : newsTurnStart?.inputText === NEWS_PROMPT;
   return {
     backendLedger,
     traceMessages,
@@ -320,10 +412,17 @@ export function buildAssertionContext({
     planTurnStart,
     goalTurnStart,
     inputbarRichRestoreTurnStart,
+    inputbarPendingSteerActiveTurnStart,
     imageCommandTurnStart,
     expectedImageIntentRoutedPrompt,
     webToolsRenderingTurnStart,
+    reasoningFirstVisibleTurnStart,
+    terminalCanceledAfterAnswerTurnStart,
+    terminalFailedAfterAnswerTurnStart,
+    terminalStaleGuardFirstTurnStart,
+    terminalStaleGuardSecondTurnStart,
     mcpStructuredContentTurnStart,
+    mediaReferenceTurnStart,
     multiAgentTeamTurnStart,
     skillsRuntimeTurnStart,
     explicitSkillsRuntimeTurnStart,
@@ -338,8 +437,14 @@ export function buildAssertionContext({
     isGoalScenario,
     isImageCommandScenario,
     isInputbarRichRestoreScenario,
+    isInputbarPendingSteerRichRestoreScenario,
     isWebToolsRenderingScenario,
+    isReasoningFirstVisibleScenario,
+    isTerminalCanceledAfterAnswerScenario,
+    isTerminalFailedAfterAnswerScenario,
+    isTerminalStaleGuardScenario,
     isMcpStructuredContentScenario,
+    isMediaReferenceScenario,
     isMultiAgentTeamScenario,
     isSkillsRuntimeScenario,
     isSoulStyleScenario,

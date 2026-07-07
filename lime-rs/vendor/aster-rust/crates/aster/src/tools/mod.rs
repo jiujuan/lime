@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use crate::agents::ExtensionManager;
-use crate::scheduler_trait::SchedulerTrait;
 
 // Core modules
 pub mod base;
@@ -28,30 +27,16 @@ mod agent_control;
 mod analyze_image;
 pub mod ask;
 pub mod bash;
-pub mod config_tool;
-pub mod cron_tools;
 pub mod file;
 pub mod lsp;
 pub mod mcp_resource_tools;
-pub mod notebook_edit_tool;
 mod peer_address_surface;
 pub mod plan_mode_tool;
-pub mod plan_tool;
 pub mod powershell_tool;
-pub mod remote_trigger_tool;
 pub mod search;
 pub mod send_user_message_tool;
-pub mod sleep_tool;
-pub mod task_list_tools;
-pub mod task_output_tool;
-pub mod task_stop_tool;
 pub mod team_tools;
 pub mod tool_search_tool;
-mod view_image;
-pub mod web;
-mod workflow_integration;
-pub mod workflow_tool;
-pub mod worktree_tools;
 
 // Skills integration
 
@@ -84,9 +69,6 @@ pub use task::{
 
 // Tool implementations
 pub use bash::{BashTool, SandboxConfig, MAX_OUTPUT_LENGTH};
-pub use config_tool::ConfigTool;
-pub use cron_tools::{CronCreateTool, CronDeleteTool, CronListTool};
-pub use sleep_tool::SleepTool;
 
 // File tools
 pub use file::{
@@ -121,45 +103,18 @@ pub use tool_search_tool::{register_tool_search_tool, ToolSearchTool};
 pub use crate::skills::SkillTool;
 
 // Task tools
-pub use notebook_edit_tool::{NotebookCell, NotebookContent, NotebookEditInput, NotebookEditTool};
 pub use plan_mode_tool::{EnterPlanModeTool, ExitPlanModeTool, PlanModeState, SavedPlan};
-pub use plan_tool::{UpdatePlanTool, UPDATE_PLAN_TOOL_NAME};
 pub use powershell_tool::PowerShellTool;
-pub use remote_trigger_tool::{RemoteTriggerTool, REMOTE_TRIGGER_GATE_ENV};
 pub use send_user_message_tool::{SendUserMessageTool, SEND_USER_MESSAGE_TOOL_NAME};
-pub use task_list_tools::{
-    TaskCreateInput, TaskCreateTool, TaskGetInput, TaskGetTool, TaskListInput, TaskListStorage,
-    TaskListTool, TaskUpdateInput, TaskUpdateStatus, TaskUpdateTool,
-};
-pub use task_output_tool::TaskOutputTool;
-pub use task_stop_tool::TaskStopTool;
 pub use team_tools::{ListPeersTool, TeamCreateTool, TeamDeleteTool};
-pub use view_image::{ViewImageTool, VIEW_IMAGE_TOOL_NAME};
-
-// Web tools
-pub use web::{clear_web_caches, get_web_cache_stats, WebCache, WebFetchTool, WebSearchTool};
-pub use workflow_tool::WorkflowTool;
-pub use worktree_tools::{EnterWorktreeTool, ExitWorktreeTool};
+pub const UPDATE_PLAN_TOOL_NAME: &str = "update_plan";
+pub const VIEW_IMAGE_TOOL_NAME: &str = "view_image";
 
 pub(crate) const CURRENT_SURFACE_POWERSHELL_ENV: &str = "ASTER_USE_POWERSHELL_TOOL";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CurrentSurfaceToolGates {
-    pub config: bool,
-    pub sleep: bool,
-    pub cron: bool,
-    pub remote_trigger: bool,
-    pub workflow: bool,
     pub powershell: bool,
-}
-
-fn env_truthy(value: Option<&String>) -> bool {
-    value.is_some_and(|raw| {
-        matches!(
-            raw.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
 }
 
 fn env_defined_falsy(value: Option<&String>) -> bool {
@@ -180,17 +135,9 @@ pub(crate) fn current_surface_tool_gates_from_env_map(
     env: &HashMap<String, String>,
     is_windows: bool,
 ) -> CurrentSurfaceToolGates {
-    let is_internal_user = env
-        .get("USER_TYPE")
-        .is_some_and(|value| value.eq_ignore_ascii_case("ant"));
     let powershell_env = env.get(CURRENT_SURFACE_POWERSHELL_ENV);
 
     CurrentSurfaceToolGates {
-        config: is_internal_user,
-        sleep: env_truthy(env.get("PROACTIVE")) || env_truthy(env.get("KAIROS")),
-        cron: env_truthy(env.get("AGENT_TRIGGERS")),
-        remote_trigger: env_truthy(env.get(REMOTE_TRIGGER_GATE_ENV)),
-        workflow: env_truthy(env.get("WORKFLOW_SCRIPTS")),
         powershell: is_windows && !env_defined_falsy(powershell_env),
     }
 }
@@ -200,11 +147,6 @@ pub(crate) fn should_register_current_surface_tool(
     tool_gates: CurrentSurfaceToolGates,
 ) -> bool {
     match name {
-        "Config" => tool_gates.config,
-        "Sleep" => tool_gates.sleep,
-        "Cron" => tool_gates.cron,
-        "RemoteTrigger" => tool_gates.remote_trigger,
-        "Workflow" => tool_gates.workflow,
         "PowerShell" => tool_gates.powershell,
         _ => true,
     }
@@ -229,8 +171,9 @@ pub struct ToolRegistrationConfig {
     pub extension_manager: Option<Weak<ExtensionManager>>,
     /// Optional modern delegation / agent runtime tools
     pub agent_control_tools: Option<AgentControlToolConfig>,
-    /// Optional scheduler for current cron tools
-    pub scheduler: Option<Arc<dyn SchedulerTrait>>,
+    /// Optional native tool allowlist used by downstream runtimes that no longer
+    /// expose the whole vendored Aster tool surface.
+    pub allowed_tool_names: Option<Vec<String>>,
 }
 
 impl std::fmt::Debug for ToolRegistrationConfig {
@@ -254,7 +197,7 @@ impl std::fmt::Debug for ToolRegistrationConfig {
                 "agent_control_tools",
                 &self.agent_control_tools.as_ref().map(|_| "<callbacks>"),
             )
-            .field("scheduler", &self.scheduler.as_ref().map(|_| "<scheduler>"))
+            .field("allowed_tool_names", &self.allowed_tool_names)
             .finish()
     }
 }
@@ -268,7 +211,7 @@ impl Clone for ToolRegistrationConfig {
             hooks_enabled: self.hooks_enabled,
             extension_manager: self.extension_manager.clone(),
             agent_control_tools: self.agent_control_tools.clone(),
-            scheduler: self.scheduler.clone(),
+            allowed_tool_names: self.allowed_tool_names.clone(),
         }
     }
 }
@@ -316,11 +259,29 @@ impl ToolRegistrationConfig {
         self
     }
 
-    /// Attach a scheduler so current cron tools are registered from the same
-    /// tool entrypoint as the rest of the native tool pool.
-    pub fn with_scheduler(mut self, scheduler: Arc<dyn SchedulerTrait>) -> Self {
-        self.scheduler = Some(scheduler);
+    /// Restrict native tool registration to the provided canonical tool names.
+    pub fn with_allowed_tool_names<I, S>(mut self, tool_names: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.allowed_tool_names = Some(tool_names.into_iter().map(Into::into).collect());
         self
+    }
+
+    fn allows_tool(&self, tool_name: &str) -> bool {
+        match &self.allowed_tool_names {
+            Some(allowed_tool_names) => allowed_tool_names
+                .iter()
+                .any(|allowed| allowed.eq_ignore_ascii_case(tool_name)),
+            None => true,
+        }
+    }
+
+    fn allows_any_tool(&self, tool_names: &[&str]) -> bool {
+        tool_names
+            .iter()
+            .any(|tool_name| self.allows_tool(tool_name))
     }
 }
 
@@ -329,7 +290,7 @@ impl ToolRegistrationConfig {
 /// This function registers all built-in tools:
 /// - BashTool: Shell command execution
 /// - ReadTool: File reading (text, images, PDF, notebooks)
-/// - ViewImageTool: Local image viewing as model-visible image content
+/// - view_image: Local image viewing is owned by Lime tool-runtime overlay
 /// - WriteTool: File writing with validation
 /// - EditTool: Smart file editing
 /// - GlobTool: File search with glob patterns
@@ -370,122 +331,104 @@ pub fn register_all_tools(
     };
 
     let shared_task_manager = Arc::new(TaskManager::new());
-    let shared_task_list_storage = Arc::new(TaskListStorage::new());
 
-    // Register BashTool
-    registry.register(Box::new(BashTool::with_task_manager(
-        shared_task_manager.clone(),
-    )));
-
-    // Register file tools with shared history
-    let read_tool = ReadTool::new(shared_history.clone()).with_pdf_enabled(config.pdf_enabled);
-    registry.register(Box::new(read_tool));
-    registry.register(Box::new(ViewImageTool::new()));
-
-    let write_tool = WriteTool::new(shared_history.clone());
-    registry.register(Box::new(write_tool));
-
-    let edit_tool = EditTool::new(shared_history.clone());
-    registry.register(Box::new(edit_tool));
-
-    // Register search tools
-    registry.register(Box::new(GlobTool::new()));
-    registry.register(Box::new(GrepTool::new()));
-    if should_register_current_surface_tool("Config", tool_gates) {
-        registry.register(Box::new(ConfigTool::new()));
+    if config.allows_tool("Bash") {
+        registry.register(Box::new(BashTool::with_task_manager(
+            shared_task_manager.clone(),
+        )));
     }
-    registry.register(Box::new(SendUserMessageTool::new()));
-    if should_register_current_surface_tool("Sleep", tool_gates) {
-        registry.register(Box::new(SleepTool::new()));
+
+    if config.allows_tool("Read") {
+        let read_tool = ReadTool::new(shared_history.clone()).with_pdf_enabled(config.pdf_enabled);
+        registry.register(Box::new(read_tool));
+    }
+    if config.allows_tool("Write") {
+        let write_tool = WriteTool::new(shared_history.clone());
+        registry.register(Box::new(write_tool));
+    }
+
+    if config.allows_tool("Edit") {
+        let edit_tool = EditTool::new(shared_history.clone());
+        registry.register(Box::new(edit_tool));
+    }
+
+    if config.allows_tool("Glob") {
+        registry.register(Box::new(GlobTool::new()));
+    }
+    if config.allows_tool("Grep") {
+        registry.register(Box::new(GrepTool::new()));
+    }
+    if config.allows_tool("SendUserMessage") {
+        registry.register(Box::new(SendUserMessageTool::new()));
     }
     let powershell_tool = PowerShellTool::with_task_manager(shared_task_manager.clone());
-    if should_register_current_surface_tool("PowerShell", tool_gates)
+    if config.allows_tool("PowerShell")
+        && should_register_current_surface_tool("PowerShell", tool_gates)
         && powershell_tool.is_available()
     {
         registry.register(Box::new(powershell_tool));
     }
 
     // Register request_user_input if callback is provided
-    if let Some(callback) = config.ask_callback {
-        let ask_tool = AskTool::new().with_callback(callback);
-        registry.register(Box::new(ask_tool));
+    if config.allows_tool("Ask") {
+        if let Some(callback) = config.ask_callback.clone() {
+            let ask_tool = AskTool::new().with_callback(callback);
+            registry.register(Box::new(ask_tool));
+        }
     }
 
     // Register LSPTool if callback is provided
-    if let Some(callback) = config.lsp_callback {
-        let lsp_tool = LspTool::new().with_callback(callback);
-        registry.register(Box::new(lsp_tool));
-    }
-
-    // Register SkillTool
-    registry.register(Box::new(SkillTool::new()));
-    if should_register_current_surface_tool("Workflow", tool_gates) {
-        registry.register(Box::new(WorkflowTool::new()));
-    }
-
-    // Register background execution and structured task board tools
-    registry.register(Box::new(TaskCreateTool::with_storage(
-        shared_task_list_storage.clone(),
-    )));
-    registry.register(Box::new(TaskListTool::with_storage(
-        shared_task_list_storage.clone(),
-    )));
-    registry.register(Box::new(TaskGetTool::with_storage(
-        shared_task_list_storage.clone(),
-    )));
-    registry.register(Box::new(TaskUpdateTool::with_storage(
-        shared_task_list_storage,
-    )));
-    registry.register(Box::new(TaskOutputTool::with_manager(
-        shared_task_manager.clone(),
-    )));
-    registry.register(Box::new(TaskStopTool::with_task_manager(
-        shared_task_manager,
-    )));
-    registry.register(Box::new(NotebookEditTool::new()));
-    registry.register(Box::new(UpdatePlanTool::new()));
-    if should_register_current_surface_tool("Cron", tool_gates) {
-        if let Some(scheduler) = config.scheduler.as_ref() {
-            registry.register(Box::new(CronCreateTool::new(scheduler.clone())));
-            registry.register(Box::new(CronListTool::new(scheduler.clone())));
-            registry.register(Box::new(CronDeleteTool::new(scheduler.clone())));
+    if config.allows_tool("LSP") {
+        if let Some(callback) = config.lsp_callback.clone() {
+            let lsp_tool = LspTool::new().with_callback(callback);
+            registry.register(Box::new(lsp_tool));
         }
     }
-    if should_register_current_surface_tool("RemoteTrigger", tool_gates) {
-        registry.register(Box::new(RemoteTriggerTool::new()));
-    }
-    registry.register(Box::new(EnterWorktreeTool::new()));
-    registry.register(Box::new(ExitWorktreeTool::new()));
 
-    // Register Plan Mode tools
-    registry.register(Box::new(EnterPlanModeTool::new()));
-    let mut exit_plan_mode_tool = ExitPlanModeTool::new();
-    if let Some(send_input_callback) = config
-        .agent_control_tools
-        .as_ref()
-        .and_then(|agent_control_tools| agent_control_tools.send_input.clone())
-    {
-        exit_plan_mode_tool = exit_plan_mode_tool.with_send_input_callback(send_input_callback);
+    if config.allows_tool("Skill") {
+        registry.register(Box::new(SkillTool::new()));
     }
-    registry.register(Box::new(exit_plan_mode_tool));
+
+    if config.allows_tool("EnterPlanMode") {
+        registry.register(Box::new(EnterPlanModeTool::new()));
+    }
+    if config.allows_tool("ExitPlanMode") {
+        let mut exit_plan_mode_tool = ExitPlanModeTool::new();
+        if let Some(send_input_callback) = config
+            .agent_control_tools
+            .as_ref()
+            .and_then(|agent_control_tools| agent_control_tools.send_input.clone())
+        {
+            exit_plan_mode_tool = exit_plan_mode_tool.with_send_input_callback(send_input_callback);
+        }
+        registry.register(Box::new(exit_plan_mode_tool));
+    }
 
     if let Some(agent_control_tools) = config.agent_control_tools.as_ref() {
-        register_agent_control_tools(registry, agent_control_tools);
+        if config.allows_any_tool(&["Agent", "SendMessage"]) {
+            register_agent_control_tools(registry, agent_control_tools);
+        }
         if agent_control_tools.spawn_agent.is_some() && agent_control_tools.send_input.is_some() {
-            registry.register(Box::new(TeamCreateTool::new()));
-            registry.register(Box::new(TeamDeleteTool::new()));
-            registry.register(Box::new(ListPeersTool::new()));
+            if config.allows_tool("TeamCreate") {
+                registry.register(Box::new(TeamCreateTool::new()));
+            }
+            if config.allows_tool("TeamDelete") {
+                registry.register(Box::new(TeamDeleteTool::new()));
+            }
+            if config.allows_tool("ListPeers") {
+                registry.register(Box::new(ListPeersTool::new()));
+            }
         }
     }
 
-    if let Some(extension_manager) = config.extension_manager {
-        register_extension_resource_tools(registry, extension_manager.clone());
-        register_tool_search_tool(registry, extension_manager);
+    if let Some(extension_manager) = config.extension_manager.clone() {
+        if config.allows_any_tool(&["ListMcpResources", "ReadMcpResource"]) {
+            register_extension_resource_tools(registry, extension_manager.clone());
+        }
+        if config.allows_tool("ToolSearch") {
+            register_tool_search_tool(registry, extension_manager);
+        }
     }
-
-    // Register Web tools
-    registry.register(Box::new(WebFetchTool::new()));
-    registry.register(Box::new(WebSearchTool::new()));
 
     (shared_history, hook_manager)
 }
@@ -511,90 +454,13 @@ pub fn register_default_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scheduler::{ScheduledJob, SchedulerError};
-    use crate::scheduler_trait::SchedulerTrait;
-    use crate::session::Session;
-    use async_trait::async_trait;
-    use chrono::{DateTime, Utc};
     use serial_test::serial;
     use std::path::PathBuf;
-
-    struct TestScheduler;
-
-    #[async_trait]
-    impl SchedulerTrait for TestScheduler {
-        async fn add_scheduled_job(
-            &self,
-            _job: ScheduledJob,
-            _copy_recipe: bool,
-        ) -> Result<(), SchedulerError> {
-            Ok(())
-        }
-
-        async fn schedule_recipe(
-            &self,
-            _recipe_path: PathBuf,
-            _cron_schedule: Option<String>,
-        ) -> anyhow::Result<(), SchedulerError> {
-            Ok(())
-        }
-
-        async fn list_scheduled_jobs(&self) -> Vec<ScheduledJob> {
-            Vec::new()
-        }
-
-        async fn remove_scheduled_job(
-            &self,
-            _id: &str,
-            _remove_recipe: bool,
-        ) -> Result<(), SchedulerError> {
-            Ok(())
-        }
-
-        async fn pause_schedule(&self, _id: &str) -> Result<(), SchedulerError> {
-            Ok(())
-        }
-
-        async fn unpause_schedule(&self, _id: &str) -> Result<(), SchedulerError> {
-            Ok(())
-        }
-
-        async fn run_now(&self, _id: &str) -> Result<String, SchedulerError> {
-            Ok("scheduled-run".to_string())
-        }
-
-        async fn sessions(
-            &self,
-            _sched_id: &str,
-            _limit: usize,
-        ) -> Result<Vec<(String, Session)>, SchedulerError> {
-            Ok(Vec::new())
-        }
-
-        async fn update_schedule(
-            &self,
-            _sched_id: &str,
-            _new_cron: String,
-        ) -> Result<(), SchedulerError> {
-            Ok(())
-        }
-
-        async fn kill_running_job(&self, _sched_id: &str) -> Result<(), SchedulerError> {
-            Ok(())
-        }
-
-        async fn get_running_job_info(
-            &self,
-            _sched_id: &str,
-        ) -> Result<Option<(String, DateTime<Utc>)>, SchedulerError> {
-            Ok(None)
-        }
-    }
 
     #[test]
     #[serial]
     fn test_register_default_tools() {
-        temp_env::with_var(REMOTE_TRIGGER_GATE_ENV, None::<&str>, || {
+        temp_env::with_var(CURRENT_SURFACE_POWERSHELL_ENV, None::<&str>, || {
             let mut registry = ToolRegistry::new();
             let (_history, _hook_manager) = register_default_tools(&mut registry);
             let tool_gates = current_surface_tool_gates();
@@ -604,8 +470,8 @@ mod tests {
             assert!(registry.contains("BashTool"));
             assert!(registry.contains("Read"));
             assert!(registry.contains("FileReadTool"));
-            assert!(registry.contains(VIEW_IMAGE_TOOL_NAME));
-            assert!(registry.contains("ViewImageTool"));
+            assert!(!registry.contains(VIEW_IMAGE_TOOL_NAME));
+            assert!(!registry.contains("ViewImageTool"));
             assert!(registry.contains("Write"));
             assert!(registry.contains("FileWriteTool"));
             assert!(registry.contains("Edit"));
@@ -614,24 +480,12 @@ mod tests {
             assert!(registry.contains("GlobTool"));
             assert!(registry.contains("Grep"));
             assert!(registry.contains("GrepTool"));
-            assert_eq!(
-                registry.contains("Config"),
-                should_register_current_surface_tool("Config", tool_gates)
-            );
-            assert_eq!(
-                registry.contains("ConfigTool"),
-                should_register_current_surface_tool("Config", tool_gates)
-            );
+            assert!(!registry.contains("Config"));
+            assert!(!registry.contains("ConfigTool"));
             assert!(registry.contains("SendUserMessage"));
             assert!(registry.contains("BriefTool"));
-            assert_eq!(
-                registry.contains("Sleep"),
-                should_register_current_surface_tool("Sleep", tool_gates)
-            );
-            assert_eq!(
-                registry.contains("SleepTool"),
-                should_register_current_surface_tool("Sleep", tool_gates)
-            );
+            assert!(!registry.contains("Sleep"));
+            assert!(!registry.contains("SleepTool"));
             assert_eq!(
                 registry.contains("PowerShell"),
                 should_register_current_surface_tool("PowerShell", tool_gates)
@@ -644,46 +498,45 @@ mod tests {
             );
             assert!(registry.contains("Skill"));
             assert!(registry.contains("SkillTool"));
-            assert_eq!(
-                registry.contains("Workflow"),
-                should_register_current_surface_tool("Workflow", tool_gates)
-            );
-            assert!(registry.contains("TaskCreate"));
-            assert!(registry.contains("TaskList"));
-            assert!(registry.contains("TaskGet"));
-            assert!(registry.contains("TaskUpdate"));
-            assert!(registry.contains("TaskOutput"));
-            assert!(registry.contains("TaskStop"));
-            assert!(registry.contains("TaskCreateTool"));
-            assert!(registry.contains("TaskListTool"));
-            assert!(registry.contains("TaskGetTool"));
-            assert!(registry.contains("TaskUpdateTool"));
-            assert!(registry.contains("TaskOutputTool"));
-            assert!(registry.contains("AgentOutputTool"));
-            assert!(registry.contains("BashOutputTool"));
-            assert!(registry.contains("TaskStopTool"));
-            assert!(registry.contains("KillShell"));
-            assert!(registry.contains("NotebookEdit"));
-            assert!(registry.contains("NotebookEditTool"));
-            assert!(registry.contains("update_plan"));
-            assert!(registry.contains("UpdatePlan"));
-            assert!(registry.contains("UpdatePlanTool"));
+            assert!(!registry.contains("Workflow"));
+            assert!(!registry.contains("WorkflowTool"));
+            assert!(!registry.contains("TaskCreate"));
+            assert!(!registry.contains("TaskList"));
+            assert!(!registry.contains("TaskGet"));
+            assert!(!registry.contains("TaskUpdate"));
+            assert!(!registry.contains("TaskOutput"));
+            assert!(!registry.contains("TaskStop"));
+            assert!(!registry.contains("TaskCreateTool"));
+            assert!(!registry.contains("TaskListTool"));
+            assert!(!registry.contains("TaskGetTool"));
+            assert!(!registry.contains("TaskUpdateTool"));
+            assert!(!registry.contains("TaskOutputTool"));
+            assert!(!registry.contains("AgentOutputTool"));
+            assert!(!registry.contains("BashOutputTool"));
+            assert!(!registry.contains("TaskStopTool"));
+            assert!(!registry.contains("KillShell"));
+            assert!(!registry.contains("NotebookEdit"));
+            assert!(!registry.contains("NotebookEditTool"));
+            assert!(!registry.contains("update_plan"));
+            assert!(!registry.contains("UpdatePlan"));
+            assert!(!registry.contains("UpdatePlanTool"));
             assert!(!registry.contains("CronCreate"));
             assert!(!registry.contains("CronList"));
             assert!(!registry.contains("CronDelete"));
             assert!(!registry.contains("RemoteTrigger"));
-            assert!(registry.contains("EnterWorktree"));
-            assert!(registry.contains("EnterWorktreeTool"));
-            assert!(registry.contains("ExitWorktree"));
-            assert!(registry.contains("ExitWorktreeTool"));
+            assert!(!registry.contains("RemoteTriggerTool"));
+            assert!(!registry.contains("EnterWorktree"));
+            assert!(!registry.contains("EnterWorktreeTool"));
+            assert!(!registry.contains("ExitWorktree"));
+            assert!(!registry.contains("ExitWorktreeTool"));
             assert!(registry.contains("EnterPlanMode"));
             assert!(registry.contains("EnterPlanModeTool"));
             assert!(registry.contains("ExitPlanMode"));
             assert!(registry.contains("ExitPlanModeTool"));
-            assert!(registry.contains("WebFetch"));
-            assert!(registry.contains("WebFetchTool"));
-            assert!(registry.contains("WebSearch"));
-            assert!(registry.contains("WebSearchTool"));
+            assert!(!registry.contains("WebFetch"));
+            assert!(!registry.contains("WebFetchTool"));
+            assert!(!registry.contains("WebSearch"));
+            assert!(!registry.contains("WebSearchTool"));
             assert!(!registry.contains("ToolSearch"));
             assert!(!registry.contains("spawn_agent"));
             assert!(!registry.contains("Agent"));
@@ -707,7 +560,7 @@ mod tests {
         use std::pin::Pin;
         use std::sync::Arc;
 
-        temp_env::with_var(REMOTE_TRIGGER_GATE_ENV, None::<&str>, || {
+        temp_env::with_var(CURRENT_SURFACE_POWERSHELL_ENV, None::<&str>, || {
             let mut registry = ToolRegistry::new();
 
             // Create mock callbacks
@@ -746,8 +599,8 @@ mod tests {
             assert!(registry.contains("BashTool"));
             assert!(registry.contains("Read"));
             assert!(registry.contains("FileReadTool"));
-            assert!(registry.contains(VIEW_IMAGE_TOOL_NAME));
-            assert!(registry.contains("ViewImageTool"));
+            assert!(!registry.contains(VIEW_IMAGE_TOOL_NAME));
+            assert!(!registry.contains("ViewImageTool"));
             assert!(registry.contains("Write"));
             assert!(registry.contains("FileWriteTool"));
             assert!(registry.contains("Edit"));
@@ -756,22 +609,10 @@ mod tests {
             assert!(registry.contains("GlobTool"));
             assert!(registry.contains("Grep"));
             assert!(registry.contains("GrepTool"));
-            assert_eq!(
-                registry.contains("Config"),
-                should_register_current_surface_tool("Config", tool_gates)
-            );
-            assert_eq!(
-                registry.contains("ConfigTool"),
-                should_register_current_surface_tool("Config", tool_gates)
-            );
-            assert_eq!(
-                registry.contains("Sleep"),
-                should_register_current_surface_tool("Sleep", tool_gates)
-            );
-            assert_eq!(
-                registry.contains("SleepTool"),
-                should_register_current_surface_tool("Sleep", tool_gates)
-            );
+            assert!(!registry.contains("Config"));
+            assert!(!registry.contains("ConfigTool"));
+            assert!(!registry.contains("Sleep"));
+            assert!(!registry.contains("SleepTool"));
             assert!(registry.contains("SendUserMessage"));
             assert!(registry.contains("BriefTool"));
             assert_eq!(
@@ -791,37 +632,36 @@ mod tests {
             assert!(registry.contains("LSPTool"));
             assert!(registry.contains("Skill"));
             assert!(registry.contains("SkillTool"));
-            assert_eq!(
-                registry.contains("Workflow"),
-                should_register_current_surface_tool("Workflow", tool_gates)
-            );
-            assert!(registry.contains("TaskCreate"));
-            assert!(registry.contains("TaskList"));
-            assert!(registry.contains("TaskGet"));
-            assert!(registry.contains("TaskUpdate"));
-            assert!(registry.contains("TaskOutput"));
-            assert!(registry.contains("TaskStop"));
-            assert!(registry.contains("NotebookEdit"));
-            assert!(registry.contains("NotebookEditTool"));
-            assert!(registry.contains("update_plan"));
-            assert!(registry.contains("UpdatePlan"));
-            assert!(registry.contains("UpdatePlanTool"));
+            assert!(!registry.contains("Workflow"));
+            assert!(!registry.contains("WorkflowTool"));
+            assert!(!registry.contains("TaskCreate"));
+            assert!(!registry.contains("TaskList"));
+            assert!(!registry.contains("TaskGet"));
+            assert!(!registry.contains("TaskUpdate"));
+            assert!(!registry.contains("TaskOutput"));
+            assert!(!registry.contains("TaskStop"));
+            assert!(!registry.contains("NotebookEdit"));
+            assert!(!registry.contains("NotebookEditTool"));
+            assert!(!registry.contains("update_plan"));
+            assert!(!registry.contains("UpdatePlan"));
+            assert!(!registry.contains("UpdatePlanTool"));
             assert!(!registry.contains("CronCreate"));
             assert!(!registry.contains("CronList"));
             assert!(!registry.contains("CronDelete"));
             assert!(!registry.contains("RemoteTrigger"));
-            assert!(registry.contains("EnterWorktree"));
-            assert!(registry.contains("EnterWorktreeTool"));
-            assert!(registry.contains("ExitWorktree"));
-            assert!(registry.contains("ExitWorktreeTool"));
+            assert!(!registry.contains("RemoteTriggerTool"));
+            assert!(!registry.contains("EnterWorktree"));
+            assert!(!registry.contains("EnterWorktreeTool"));
+            assert!(!registry.contains("ExitWorktree"));
+            assert!(!registry.contains("ExitWorktreeTool"));
             assert!(registry.contains("EnterPlanMode"));
             assert!(registry.contains("EnterPlanModeTool"));
             assert!(registry.contains("ExitPlanMode"));
             assert!(registry.contains("ExitPlanModeTool"));
-            assert!(registry.contains("WebFetch"));
-            assert!(registry.contains("WebFetchTool"));
-            assert!(registry.contains("WebSearch"));
-            assert!(registry.contains("WebSearchTool"));
+            assert!(!registry.contains("WebFetch"));
+            assert!(!registry.contains("WebFetchTool"));
+            assert!(!registry.contains("WebSearch"));
+            assert!(!registry.contains("WebSearchTool"));
             assert!(!registry.contains("spawn_agent"));
             assert!(registry.contains("Agent"));
             assert!(registry.contains("AgentTool"));
@@ -833,114 +673,98 @@ mod tests {
     }
 
     #[test]
-    fn test_register_all_tools_with_scheduler_registers_current_cron_tools() {
-        let mut registry = ToolRegistry::new();
-        let config = ToolRegistrationConfig::new().with_scheduler(Arc::new(TestScheduler));
-
-        let (_history, _hook_manager) = register_all_tools(&mut registry, config);
-
-        assert!(!registry.contains("CronCreate"));
-        assert!(!registry.contains("CronList"));
-        assert!(!registry.contains("CronDelete"));
-    }
-
-    #[test]
     #[serial]
-    fn test_register_all_tools_with_cron_gate_without_scheduler_hides_current_cron_tools() {
-        let mut registry = ToolRegistry::new();
+    fn test_register_all_tools_honors_allowed_tool_names() {
+        temp_env::with_var(CURRENT_SURFACE_POWERSHELL_ENV, Some("true"), || {
+            let mut registry = ToolRegistry::new();
+            let config = ToolRegistrationConfig::new().with_allowed_tool_names([
+                "Bash",
+                "Read",
+                "update_plan",
+                "Ask",
+            ]);
 
-        temp_env::with_var("AGENT_TRIGGERS", Some("true"), || {
-            let (_history, _hook_manager) =
-                register_all_tools(&mut registry, ToolRegistrationConfig::new());
-
-            assert!(!registry.contains("CronCreate"));
-            assert!(!registry.contains("CronList"));
-            assert!(!registry.contains("CronDelete"));
-        });
-    }
-
-    #[test]
-    #[serial]
-    fn test_register_all_tools_with_scheduler_and_gate_registers_current_cron_tools() {
-        let mut registry = ToolRegistry::new();
-        let config = ToolRegistrationConfig::new().with_scheduler(Arc::new(TestScheduler));
-
-        temp_env::with_var("AGENT_TRIGGERS", Some("true"), || {
             let (_history, _hook_manager) = register_all_tools(&mut registry, config);
 
-            assert!(registry.contains("CronCreate"));
-            assert!(registry.contains("CronList"));
-            assert!(registry.contains("CronDelete"));
+            assert!(registry.contains("Bash"));
+            assert!(registry.contains("Read"));
+            assert!(!registry.contains("TaskList"));
+            assert!(!registry.contains("update_plan"));
+            assert!(!registry.contains("Write"));
+            assert!(!registry.contains("Edit"));
+            assert!(!registry.contains("Grep"));
+            assert!(!registry.contains("NotebookEdit"));
+            assert!(!registry.contains("EnterWorktree"));
+            assert!(!registry.contains("ExitWorktree"));
+            assert!(!registry.contains("RemoteTrigger"));
+            assert!(!registry.contains("Config"));
+            assert!(!registry.contains("Sleep"));
+            assert!(!registry.contains("request_user_input"));
         });
     }
 
     #[test]
-    #[serial]
-    fn test_register_all_tools_with_remote_trigger_gate_registers_remote_trigger_tool() {
+    fn test_register_all_tools_does_not_restore_deleted_aster_tools() {
         let mut registry = ToolRegistry::new();
+        let (_history, _hook_manager) =
+            register_all_tools(&mut registry, ToolRegistrationConfig::new());
 
-        temp_env::with_var(REMOTE_TRIGGER_GATE_ENV, Some("true"), || {
-            let (_history, _hook_manager) =
-                register_all_tools(&mut registry, ToolRegistrationConfig::new());
-
-            assert!(registry.contains("RemoteTrigger"));
-        });
+        for deleted_tool in [
+            "Config",
+            "ConfigTool",
+            "Sleep",
+            "SleepTool",
+            "Workflow",
+            "WorkflowTool",
+            "NotebookEdit",
+            "NotebookEditTool",
+            "CronCreate",
+            "CronList",
+            "CronDelete",
+            "RemoteTrigger",
+            "RemoteTriggerTool",
+            "EnterWorktree",
+            "EnterWorktreeTool",
+            "ExitWorktree",
+            "ExitWorktreeTool",
+        ] {
+            assert!(
+                !registry.contains(deleted_tool),
+                "deleted Aster vendor tool should not be registered: {deleted_tool}"
+            );
+        }
     }
 
     #[test]
-    fn test_current_surface_tool_gates_include_agent_triggers_gate() {
+    fn test_current_surface_tool_gates_only_keep_powershell_gate() {
         let default_env = HashMap::new();
         let default_gates = current_surface_tool_gates_from_env_map(&default_env, false);
-        assert!(!default_gates.cron);
-        assert!(!default_gates.remote_trigger);
+        assert!(!default_gates.powershell);
 
-        let enabled_env = HashMap::from([("AGENT_TRIGGERS".to_string(), "true".to_string())]);
+        let enabled_env = HashMap::from([(
+            CURRENT_SURFACE_POWERSHELL_ENV.to_string(),
+            "true".to_string(),
+        )]);
         let enabled_gates = current_surface_tool_gates_from_env_map(&enabled_env, false);
-        assert!(enabled_gates.cron);
-
-        let remote_enabled_env =
-            HashMap::from([(REMOTE_TRIGGER_GATE_ENV.to_string(), "true".to_string())]);
-        let remote_enabled_gates =
-            current_surface_tool_gates_from_env_map(&remote_enabled_env, false);
-        assert!(remote_enabled_gates.remote_trigger);
+        assert!(!enabled_gates.powershell);
     }
 
     #[test]
-    fn test_current_surface_tool_gates_cover_all_gated_runtime_tools() {
+    fn test_current_surface_tool_gates_cover_remaining_gated_runtime_tools() {
         let default_env = HashMap::new();
         assert_eq!(
             current_surface_tool_gates_from_env_map(&default_env, false),
-            CurrentSurfaceToolGates {
-                config: false,
-                sleep: false,
-                cron: false,
-                remote_trigger: false,
-                workflow: false,
-                powershell: false,
-            }
+            CurrentSurfaceToolGates { powershell: false }
         );
 
-        let enabled_env = HashMap::from([
-            ("USER_TYPE".to_string(), "ant".to_string()),
-            ("PROACTIVE".to_string(), "true".to_string()),
-            ("AGENT_TRIGGERS".to_string(), "yes".to_string()),
-            (REMOTE_TRIGGER_GATE_ENV.to_string(), "on".to_string()),
-            ("WORKFLOW_SCRIPTS".to_string(), "1".to_string()),
-        ]);
+        let enabled_env = HashMap::from([(
+            CURRENT_SURFACE_POWERSHELL_ENV.to_string(),
+            "true".to_string(),
+        )]);
         assert_eq!(
             current_surface_tool_gates_from_env_map(&enabled_env, false),
-            CurrentSurfaceToolGates {
-                config: true,
-                sleep: true,
-                cron: true,
-                remote_trigger: true,
-                workflow: true,
-                powershell: false,
-            }
+            CurrentSurfaceToolGates { powershell: false }
         );
-
-        let kairos_env = HashMap::from([("KAIROS".to_string(), "true".to_string())]);
-        assert!(current_surface_tool_gates_from_env_map(&kairos_env, false).sleep);
     }
 
     #[test]
@@ -969,8 +793,8 @@ mod tests {
     fn test_should_register_current_surface_tool_hides_cron_without_gate() {
         let tool_gates = current_surface_tool_gates_from_env_map(&HashMap::new(), false);
 
-        assert!(!should_register_current_surface_tool("Cron", tool_gates));
-        assert!(!should_register_current_surface_tool(
+        assert!(should_register_current_surface_tool("Cron", tool_gates));
+        assert!(should_register_current_surface_tool(
             "RemoteTrigger",
             tool_gates
         ));
@@ -1011,7 +835,7 @@ mod tests {
         assert!(config.lsp_callback.is_none());
         assert!(config.extension_manager.is_none());
         assert!(config.agent_control_tools.is_none());
-        assert!(config.scheduler.is_none());
+        assert!(config.allowed_tool_names.is_none());
     }
 
     #[test]

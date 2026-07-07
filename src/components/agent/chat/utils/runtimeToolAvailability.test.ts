@@ -29,12 +29,7 @@ describe("runtime tool surface 派生", () => {
           { name: "TeamCreate" },
           { name: "TeamDelete" },
           { name: "ListPeers" },
-          { name: "TaskCreate" },
-          { name: "TaskGet" },
-          { name: "TaskList" },
-          { name: "TaskUpdate" },
-          { name: "TaskOutput" },
-          { name: "TaskStop" },
+          { name: "update_plan" },
         ],
         registry_tools: [],
       }),
@@ -45,8 +40,8 @@ describe("runtime tool surface 派生", () => {
       known: true,
       webSearch: true,
       subagentRuntime: true,
-      taskRuntime: true,
-      availableToolCount: 12,
+      planRuntime: true,
+      availableToolCount: 7,
     });
   });
 
@@ -62,10 +57,10 @@ describe("runtime tool surface 派生", () => {
         subagentCore: false,
         subagentTeamTools: false,
         subagentRuntime: false,
-        taskRuntime: false,
+        planRuntime: false,
         missingSubagentCoreTools: ["Agent", "SendMessage"],
         missingSubagentTeamTools: ["TeamCreate", "TeamDelete", "ListPeers"],
-        missingTaskTools: ["TaskCreate"],
+        missingPlanTools: ["update_plan"],
       }),
     );
 
@@ -82,11 +77,11 @@ describe("runtime tool surface 派生", () => {
       known: true,
       webSearch: false,
       subagentRuntime: false,
-      taskRuntime: false,
+      planRuntime: false,
       availableToolCount: 2,
       missingSubagentCoreTools: ["Agent", "SendMessage"],
       missingSubagentTeamTools: ["TeamCreate", "TeamDelete", "ListPeers"],
-      missingTaskTools: ["TaskCreate"],
+      missingPlanTools: ["update_plan"],
     });
   });
 });

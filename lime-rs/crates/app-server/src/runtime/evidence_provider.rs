@@ -1,24 +1,22 @@
 mod browser;
+mod context;
 mod observability;
 
 use self::browser::browser_action_index_summary;
 use self::browser::browser_evidence_artifacts;
 use self::browser::browser_file_evidence_artifacts;
 use self::browser::browser_file_evidence_summary;
+use self::context::context_evidence_summary;
 use self::observability::mcp_resource_reads_summary;
 use self::observability::mcp_tool_results_summary;
 use self::observability::skill_invocations_summary;
 use self::observability::skill_searches_summary;
-use super::status::agent_session_status_label;
-use super::status::agent_turn_is_active;
-use super::status::agent_turn_status_label;
+use super::status::resolve_agent_session_runtime_state;
 use super::timestamp;
 use super::EvidenceExportProvider;
 use super::EvidencePackRequest;
 use super::RuntimeCoreError;
 use app_server_protocol::AgentEvent;
-use app_server_protocol::AgentSessionStatus;
-use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::EvidencePackArtifact;
 use app_server_protocol::EvidencePackSummary;
 use async_trait::async_trait;
@@ -55,25 +53,25 @@ impl EvidenceExportProvider for BasicEvidenceExportProvider {
 }
 
 fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSummary {
-    let latest_turn_status = request
-        .turns
-        .last()
-        .map(|turn| agent_turn_status_label(turn.status).to_string());
     let pending_request_count = request
         .events
         .iter()
         .filter(|event| event.event_type == "action.required")
         .count();
-    let queued_turn_count = request
-        .turns
-        .iter()
-        .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
-        .count();
-    let running_turn_count = request
-        .turns
-        .iter()
-        .filter(|turn| agent_turn_is_active(turn.status))
-        .count();
+    let runtime_state = resolve_agent_session_runtime_state(
+        request.session.status,
+        pending_request_count,
+        &request.turns,
+        &request.events,
+        chrono::Utc::now(),
+    );
+    let latest_turn_status = runtime_state.latest_turn_status.clone();
+    let queued_turn_count = runtime_state.queued_turn_count;
+    let running_turn_count = usize::from(
+        runtime_state.active_turn_id.is_some()
+            && queued_turn_count == 0
+            && runtime_state.thread_status != "waitingAction",
+    );
     let has_artifacts = !request.artifacts.is_empty();
     let known_gaps = if !has_artifacts {
         vec!["no_recent_artifacts".to_string()]
@@ -123,6 +121,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
     let browser_file_evidence = browser_file_evidence_summary(&request.events, &request.artifacts);
     let evidence_artifacts = evidence_pack_artifacts(request);
     let coding_summary = coding_evidence_summary(&request.events);
+    let context_summary = context_evidence_summary(&request.turn_runtime_metadata, &request.events);
     let skill_invocations = skill_invocations_summary(&request.events);
     let skill_searches = skill_searches_summary(&request.events);
     let mcp_tool_results = mcp_tool_results_summary(&request.events);
@@ -138,14 +137,11 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
     } else {
         Vec::new()
     };
-    let completion_decision = if pending_request_count > 0 {
+    let completion_decision = if runtime_state.thread_status == "waitingAction" {
         "needs_input"
-    } else if running_turn_count > 0 || queued_turn_count > 0 {
+    } else if runtime_state.thread_status == "running" || queued_turn_count > 0 {
         "in_progress"
-    } else if matches!(
-        request.session.status,
-        AgentSessionStatus::Failed | AgentSessionStatus::Canceled
-    ) {
+    } else if matches!(runtime_state.thread_status.as_str(), "failed" | "canceled") {
         "failed"
     } else if workspace_skill_tool_call_count > 0 && has_artifacts {
         "completed"
@@ -161,6 +157,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         "evidence_artifact_count": evidence_artifacts.len(),
         "request_telemetry": request_telemetry_summary,
         "coding": coding_summary,
+        "context": context_summary,
         "skill_invocations": skill_invocations,
         "skill_searches": skill_searches,
         "mcp_tool_results": mcp_tool_results,
@@ -207,7 +204,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         ),
         pack_absolute_root: None,
         exported_at: timestamp(),
-        thread_status: agent_session_status_label(request.session.status).to_string(),
+        thread_status: runtime_state.thread_status,
         latest_turn_status,
         turn_count: request.turns.len(),
         item_count: request.events.len(),

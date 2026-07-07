@@ -18,6 +18,7 @@ interface UseTaskCenterFallbackRestoreRuntimeParams {
   initialPendingServiceSkillLaunchSignature?: string | null;
   initialDispatchKey?: string | null;
   isBootstrapDispatchPending: boolean;
+  isHomeSessionBackgroundRecovery: boolean;
   messagesLength: number;
   isSending: boolean;
   queuedTurnsLength: number;
@@ -45,6 +46,7 @@ export function useTaskCenterFallbackRestoreRuntime({
   initialPendingServiceSkillLaunchSignature,
   initialDispatchKey,
   isBootstrapDispatchPending,
+  isHomeSessionBackgroundRecovery,
   messagesLength,
   isSending,
   queuedTurnsLength,
@@ -72,6 +74,7 @@ export function useTaskCenterFallbackRestoreRuntime({
       initialPendingServiceSkillLaunchSignature,
       initialDispatchKey,
       isBootstrapDispatchPending,
+      isHomeSessionBackgroundRecovery,
       messagesLength,
       isSending,
       queuedTurnsLength,
@@ -131,6 +134,7 @@ export function useTaskCenterFallbackRestoreRuntime({
     initialPendingServiceSkillLaunchSignature,
     isAutoRestoringSession,
     isBootstrapDispatchPending,
+    isHomeSessionBackgroundRecovery,
     isSending,
     isSessionHydrating,
     messagesLength,

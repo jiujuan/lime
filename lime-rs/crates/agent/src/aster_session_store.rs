@@ -23,7 +23,6 @@ use thread_store::session_record::DEFAULT_MODEL_NAME;
 mod aster_trait;
 mod history_search;
 mod legacy_conversation;
-mod memory_stub;
 mod runtime_conversation;
 mod session_projection;
 

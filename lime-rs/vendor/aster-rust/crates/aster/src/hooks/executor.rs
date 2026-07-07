@@ -13,9 +13,8 @@ use crate::conversation::message::Message;
 use crate::conversation::Conversation;
 use crate::providers::{create, create_with_default_model, create_with_named_model};
 use crate::session::{
-    query_session, ChatHistoryMatch, CommitOptions, CommitReport, ExtensionData, MemoryCategory,
-    MemoryHealth, MemoryRecord, MemorySearchResult, MemoryStats, Session, SessionInsights,
-    SessionStore, SessionType, TokenStatsUpdate, TurnContextOverride,
+    query_session, ChatHistoryMatch, ExtensionData, Session, SessionInsights, SessionStore,
+    SessionType, TokenStatsUpdate, TurnContextOverride,
 };
 use crate::session_context;
 use async_trait::async_trait;
@@ -604,52 +603,6 @@ impl SessionStore for HookAgentSessionStore {
         _exclude_session_id: Option<String>,
     ) -> anyhow::Result<Vec<ChatHistoryMatch>> {
         Ok(Vec::new())
-    }
-
-    async fn commit_session(
-        &self,
-        session_id: &str,
-        _options: CommitOptions,
-    ) -> anyhow::Result<CommitReport> {
-        Ok(CommitReport {
-            session_id: session_id.to_string(),
-            messages_scanned: 0,
-            memories_created: 0,
-            memories_merged: 0,
-            source_start_ts: None,
-            source_end_ts: None,
-            warnings: Vec::new(),
-        })
-    }
-
-    async fn search_memories(
-        &self,
-        _query: &str,
-        _limit: Option<usize>,
-        _session_scope: Option<&str>,
-        _categories: Option<Vec<MemoryCategory>>,
-    ) -> anyhow::Result<Vec<MemorySearchResult>> {
-        Ok(Vec::new())
-    }
-
-    async fn retrieve_context_memories(
-        &self,
-        _session_id: &str,
-        _query: &str,
-        _limit: usize,
-    ) -> anyhow::Result<Vec<MemoryRecord>> {
-        Ok(Vec::new())
-    }
-
-    async fn memory_stats(&self) -> anyhow::Result<MemoryStats> {
-        Ok(MemoryStats::default())
-    }
-
-    async fn memory_health(&self) -> anyhow::Result<MemoryHealth> {
-        Ok(MemoryHealth {
-            healthy: true,
-            message: "hook-agent-memory-disabled".to_string(),
-        })
     }
 }
 

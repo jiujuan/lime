@@ -23,6 +23,7 @@ interface UseAgentChatUnifiedOptions {
   workspaceId: string;
   workingDir?: string | null;
   disableSessionRestore?: boolean;
+  sessionRestorePresentation?: "foreground" | "background";
   initialTopicsLoadMode?: "immediate" | "deferred";
   initialTopicsDeferredDelayMs?: number;
   initialRuntimeWarmupLoadMode?: "immediate" | "deferred";

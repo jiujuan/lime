@@ -34,6 +34,7 @@ import {
 
 const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+  "scripts/lib/electron-fixture-build.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-file.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-ledger.mjs",
@@ -48,6 +49,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-gui-tool-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-web-tools-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-media-reference.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-inputbar-rich-restore.mjs",
@@ -123,6 +125,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
     expect(content).toContain("import { _electron as electron }");
     expect(content).toContain("electron.launch({");
+    expect(content).toContain("ensureElectronFixtureBuild");
+    expect(content).toContain("../lib/electron-fixture-build.mjs");
+    expect(content).toContain("rebuilding packaged fixture assets");
     expect(content).toContain("waitForAppUrlReady");
     expect(content).toContain('logStage("wait-app-url")');
     expect(content).toContain('"--use-mock-keychain"');
@@ -164,6 +169,14 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "agentUiPerformanceTraceSeparatesProviderAndClient",
     );
+    expect(content).toContain(
+      "agentUiPerformanceTraceHasFirstVisibleTextPaint",
+    );
+    expect(content).toContain("hasFirstVisibleOutputMs");
+    expect(content).toContain("hasHomeInputToFirstTextPaintMs");
+    expect(content).toContain("hasStreamRequestStartToFirstTextPaintMs");
+    expect(content).toContain("hasSubmitAcceptedToFirstTextPaintMs");
+    expect(content).toContain("hasFirstTextDeltaToFirstTextPaintMs");
     expect(content).toContain("agentUiPerformanceTraceNoRawPayload");
     expect(content).toContain("collectAppServerTraceEvidence");
     expect(content).toContain("appServerTraceEvidenceAvailable");
@@ -288,6 +301,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("fixtureCancelReachedBackend");
     expect(content).toContain("readModelCanceled");
     expect(content).toContain("guiStopClicked");
+    expect(content).toContain("guiRunningStatusPreservedBeforeStop");
+    expect(content).toContain("hasVisibleAssistantOutput");
+    expect(content).toContain("hasRunningStatus");
+    expect(content).toContain("statusSnapshots");
   });
 
   it("proves a stopped Claw turn can continue in the same current session", () => {
@@ -364,6 +381,44 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(regressionContent).toContain(
       "Inputbar rich draft restore output-free cancel Electron fixture",
+    );
+  });
+
+  it("covers Inputbar pending steer rich draft queue and restore", () => {
+    const content = readSmokeScript();
+    const regressionContent = readCurrentFixtureRegressionSmokeScript();
+
+    expect(content).toContain("inputbar-pending-steer-rich-restore");
+    expect(content).toContain("INPUTBAR_PENDING_STEER_ACTIVE_PROMPT");
+    expect(content).toContain("INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT");
+    expect(content).toContain("runInputbarPendingSteerRichRestoreScenario");
+    expect(content).toContain("clickRichRestoreDeferButton");
+    expect(content).toContain("DEFER_BUTTON_LABELS");
+    expect(content).toContain("Handle later");
+    expect(content).toContain("稍后处理");
+    expect(content).toContain("waitForInputbarPendingSteerQueuedReadModel");
+    expect(content).toContain("findReadModelQueuedTurnForPrompt");
+    expect(content).toContain("inputbarPendingSteerQueuedReadModel");
+    expect(content).toContain("inputbarPendingSteerBackendBeforeCancel");
+    expect(content).toContain("inputbarPendingSteerRichPromptNotStartedBeforeCancel");
+    expect(content).toContain("inputbarPendingSteerQueuedRichImagePreserved");
+    expect(content).toContain("inputbarPendingSteerQueuedRichPathPreserved");
+    expect(content).toContain("inputbarPendingSteerQueuedRichTextElementsPreserved");
+    expect(content).toContain("inputbarPendingSteerQueuedRichSkillPreserved");
+    expect(content).toContain(
+      "INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS",
+    );
+    expect(content).toContain(
+      "options.scenario !== INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO",
+    );
+    expect(regressionContent).toContain(
+      "Claw Inputbar pending steer rich draft queue + restore Electron fixture",
+    );
+    expect(regressionContent).toContain(
+      '"inputbar-pending-steer-rich-restore"',
+    );
+    expect(regressionContent).toContain(
+      "claw-chat-current-fixture-inputbar-pending-steer-rich-restore-regression",
     );
   });
 
@@ -498,7 +553,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("WEB_TOOLS_MID_THINKING_TEXT");
     expect(content).toContain("WEB_TOOLS_REASONING_ITEM_ID");
     expect(content).toContain("waitForGuiWebToolsRenderingCompleted");
+    expect(content).toContain("startupNoteVisible");
     expect(content).toContain("webProcessGroupExpanded");
+    expect(content).toContain("webProcessGroupRunning");
     expect(content).toContain("hasSearchSourceSection");
     expect(content).toContain("hasFetchPageSection");
     expect(content).toContain("hasFetchPageUrl");
@@ -517,6 +574,109 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("bytes: 2048");
     expect(content).toContain('codeText: "OK"');
     expect(content).toContain("forbiddenTransportFragments");
+    expect(content).not.toContain("agent_runtime_");
+    expect(content).not.toContain(
+      "guiWebToolsReasoningVisibleBeforeFinalAnswer",
+    );
+  });
+
+  it("covers reasoning-first visibility in a dedicated real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("reasoning-first-visible");
+    expect(content).toContain("REASONING_FIRST_VISIBLE_PROMPT");
+    expect(content).toContain("REASONING_FIRST_VISIBLE_TEXT");
+    expect(content).toContain("REASONING_FIRST_VISIBLE_FINAL_TEXT");
+    expect(content).toContain("REASONING_FIRST_VISIBLE_DONE_TEXT");
+    expect(content).toContain("waitForGuiReasoningFirstVisibleBeforeAnswer");
+    expect(content).toContain("waitForGuiReasoningFirstVisibleCompleted");
+    expect(content).toContain("guiReasoningFirstVisibleBeforeAnswer");
+    expect(content).toContain("guiReasoningFirstVisibleCompleted");
+    expect(content).toContain("readModelReasoningFirstVisibleCompleted");
+    expect(content).toContain("readModelReasoningFirstVisibleItemObserved");
+    expect(content).toContain("REASONING_FIRST_VISIBLE_ASSERTION_KEYS");
+    expect(content).toContain('type: "reasoning"');
+    expect(content).toContain('status: "in_progress"');
+    expect(content).toContain('type: "message.delta"');
+    expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("covers stale terminal guard in a dedicated real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("terminal-stale-guard");
+    expect(content).toContain("TERMINAL_STALE_GUARD_FIRST_PROMPT");
+    expect(content).toContain("TERMINAL_STALE_GUARD_SECOND_PROMPT");
+    expect(content).toContain("TERMINAL_STALE_GUARD_FIRST_DONE_TEXT");
+    expect(content).toContain("TERMINAL_STALE_GUARD_DONE_TEXT");
+    expect(content).toContain("TERMINAL_STALE_GUARD_STALE_DONE_TEXT");
+    expect(content).toContain("terminalStaleGuardStaleTerminal");
+    expect(content).toContain("wait-gui-terminal-stale-guard-first-completed");
+    expect(content).toContain("wait-gui-terminal-stale-guard-second-completed");
+    expect(content).toContain("readModelTerminalStaleGuardSecondCompleted");
+    expect(content).toContain("terminalStaleGuardStaleTerminalIgnored");
+    expect(content).toContain("TERMINAL_STALE_GUARD_ASSERTION_KEYS");
+    expect(content).toContain(
+      "options.scenario !== TERMINAL_STALE_GUARD_SCENARIO",
+    );
+    expect(content).toContain('staleEventType: "turn.completed"');
+    expect(content).toContain('type: "turn.completed"');
+    expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("covers failed terminal after visible answer in a dedicated real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("terminal-failed-after-answer");
+    expect(content).toContain("TERMINAL_FAILED_AFTER_ANSWER_PROMPT");
+    expect(content).toContain("TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT");
+    expect(content).toContain("TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT");
+    expect(content).toContain("terminalFailedAfterAnswerTurnFailed");
+    expect(content).toContain("wait-gui-terminal-failed-after-answer-failed");
+    expect(content).toContain(
+      "wait-read-model-terminal-failed-after-answer-failed",
+    );
+    expect(content).toContain("waitForSessionReadFailedAfterAnswer");
+    expect(content).toContain("readModelTerminalFailedAfterAnswerFailed");
+    expect(content).toContain("backendTerminalFailedAfterAnswerRecorded");
+    expect(content).toContain(
+      "TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS",
+    );
+    expect(content).toContain(
+      "options.scenario !== TERMINAL_FAILED_AFTER_ANSWER_SCENARIO",
+    );
+    expect(content).toContain('eventType: "turn.failed"');
+    expect(content).toContain('type: "turn.failed"');
+    expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("covers canceled terminal after visible answer in a dedicated real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("terminal-canceled-after-answer");
+    expect(content).toContain("TERMINAL_CANCELED_AFTER_ANSWER_PROMPT");
+    expect(content).toContain("TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT");
+    expect(content).toContain(
+      "TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT",
+    );
+    expect(content).toContain("terminalCanceledAfterAnswerTurnCanceled");
+    expect(content).toContain(
+      "click-stop-after-terminal-canceled-partial-from-gui",
+    );
+    expect(content).toContain(
+      "wait-read-model-terminal-canceled-after-answer-canceled",
+    );
+    expect(content).toContain("waitForSessionReadCanceled");
+    expect(content).toContain("readModelTerminalCanceledAfterAnswerCanceled");
+    expect(content).toContain("backendTerminalCanceledAfterAnswerRecorded");
+    expect(content).toContain(
+      "TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS",
+    );
+    expect(content).toContain(
+      "options.scenario !== TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO",
+    );
+    expect(content).toContain('eventType: "turn.canceled"');
+    expect(content).toContain('type: "turn.canceled"');
     expect(content).not.toContain("agent_runtime_");
   });
 
@@ -559,6 +719,34 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("MCP_STRUCTURED_CONTENT_ASSERTION_KEYS");
     expect(content).not.toContain("server__diagnostic_probe");
     expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("covers media contentParts references in Agent Chat and Workbench preview", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("media-reference");
+    expect(content).toContain("MEDIA_REFERENCE_PROMPT");
+    expect(content).toContain("验证媒体引用展示");
+    expect(content).toContain("CLAW_MEDIA_REFERENCE_FIXTURE_DONE");
+    expect(content).toContain("contentParts");
+    expect(content).toContain('type: "media"');
+    expect(content).toContain("sidecar://media/fixture-image-1");
+    expect(content).toContain("fixture-image-1.png");
+    expect(content).toContain("streaming-media-reference-card");
+    expect(content).toContain("runMediaReferenceScenario");
+    expect(content).toContain("summarizeGuiMediaReferenceSnapshot");
+    expect(content).toContain("openGuiMediaReferencePreview");
+    expect(content).toContain("waitForSessionReadMediaReferenceCompleted");
+    expect(content).toContain("mediaReferencePromptReachedBackend");
+    expect(content).toContain("guiMediaReferenceCardVisible");
+    expect(content).toContain("guiMediaReferenceDoesNotExposeInlinePayload");
+    expect(content).toContain("guiMediaReferencePreviewOpened");
+    expect(content).toContain("readModelMediaReferenceObserved");
+    expect(content).toContain("source_path");
+    expect(content).toContain("hasSourceOwner");
+    expect(content).toContain("preview-artifact-image");
+    expect(content).toContain("!isMediaReferenceScenario");
+    expect(content).not.toContain("data:image/png;base64,fixture-image-1");
   });
 
   it("covers Claw @配图 through ImageCommandWorkflow and current task artifact", () => {

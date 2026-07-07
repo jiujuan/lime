@@ -1,7 +1,7 @@
 # Soul Style Pack 安装与目录规范
 
-> 状态：current planning source；Cloud 下载实现 deferred
-> 更新时间：2026-07-06
+> 状态：current planning source；前端 registry / resolver installed manifest 入口、App Server installed read model、install status guard、本地 store core、`soulStylePack/*` JSON-RPC / 前端 API 网关、设置页 GUI 管理骨架、当前 profile 失效回退、bundled locale 守卫与骨架级 `verify:gui-smoke` 已落地；Cloud 下载、签名校验、安装审计和真实风格包安装后的 Claw 体验验收仍 deferred
+> 更新时间：2026-07-07
 > 上游路线图：[personal-style-profiles.md](personal-style-profiles.md)
 > 关联细节：[personal-style-output-surfaces.md](personal-style-output-surfaces.md)
 > 目标：定义未来风格包的安装、目录、manifest、校验和扩展边界，同时保持首版 KISS / YAGNI，不把 Style Profile 做成 PersonalStyle 平行系统。
@@ -41,8 +41,8 @@
 | source           | 状态       | 用途                          | 约束                                                                          |
 | ---------------- | ---------- | ----------------------------- | ----------------------------------------------------------------------------- |
 | `built_in`       | `current`  | 应用内置风格包，随版本发布。  | 不需要安装流程；只读；不能卸载；可被用户选择。                                |
-| `local_import`   | `deferred` | 从本地文件导入签名 manifest。 | 只读 JSON + i18n 资源；必须校验 schema、digest、签名和兼容版本。              |
-| `cloud_download` | `deferred` | 从 Cloud 下载风格包。         | 只允许从官方 catalog 下载；安装前展示来源、权限、版本和风险；失败必须可回滚。 |
+| `local_import`   | `current read model / current local store core / current App Server API / current GUI skeleton` | 从本地文件导入签名 manifest。 | installed manifest 已进入 registry read model；App Server 本地 store core 已覆盖 manifest / locale 校验、staging 写入、atomic replace、rollback、list、disable 与 disabled uninstall；`soulStylePack/list|install|status/set|uninstall` 已作为 JSON-RPC API 落地；设置页已支持 manifest + 五语言 locale 文件导入、启用 / 禁用 / 卸载；签名校验仍 deferred。 |
+| `cloud_download` | `current read model / current local store core / current App Server API / deferred cloud transport` | 从 Cloud 下载风格包。         | installed manifest 已进入 registry read model；下载完成后的本地写入可复用 store core 与同一组 `soulStylePack/*` API；Cloud catalog / download、签名校验和安装审计仍 deferred。 |
 
 ## 4. 与 Agent Skills 包的关系
 
@@ -147,6 +147,8 @@ KISS / YAGNI 约束：
 src/lib/soul/style-profiles/
   types.ts                              # current：StyleProfile / StylePack 类型
   builtInProfiles.ts                    # current：四个 built_in style pack seed registry
+  manifest.ts                           # current：StylePackManifest schema / validator
+  registry.ts                           # current：合并 built_in + installed manifests，输出只读 registry
   resolveStyleProfile.ts                # current：按 memory.soul 选择最终 profile
   composeStyleDirectives.ts             # current：profile -> prompt directives
   evaluateStyleBoundary.ts              # current：artifact 旁路、高风险降级、危险操作边界
@@ -157,8 +159,6 @@ src/lib/soul/style-profiles/
 
 ```text
 src/lib/soul/style-packs/
-  manifest.ts                           # deferred：StylePackManifest schema / validator
-  registry.ts                           # deferred：合并 built_in + installed packs，输出只读 registry
   installPlan.ts                        # deferred：安装前检查，返回 plan，不执行 IO
   installState.ts                       # deferred：installed / disabled / failed 状态投影
   integrity.ts                          # deferred：digest / signature 校验 facade
@@ -168,16 +168,17 @@ src/lib/soul/style-packs/
     installPlan.unit.test.ts
 ```
 
-KISS 约束：首版不创建空壳目录；只有实现 Cloud / local import 时再创建 `style-packs/`。当前文档先定义边界，避免后续散落到设置页或 runtime。
+KISS 约束：manifest validator 和 read-only registry 已落在现有 `style-profiles/` 模块中，避免创建空壳目录；只有实现 Cloud / local import 的 IO / 状态机时再创建 `style-packs/`。
 
 ### 5.3 App Server 后续目录
 
 ```text
 lime-rs/crates/app-server/src/runtime/soul/
-  style_profile.rs                      # current：built_in profile 解析和 prompt context
-  style_pack_manifest.rs                # deferred：manifest DTO / schema 校验
-  style_pack_registry.rs                # deferred：installed pack registry read model
-  style_pack_install.rs                 # deferred：安装状态机，不拼 prompt
+  style_profile.rs                      # current：built_in / installed manifest 解析和 prompt context
+  style_pack_registry.rs                # current：只读 installed pack registry read model
+  style_pack_install.rs                 # current：install status enum / transition guard，不拼 prompt
+  style_pack_paths.rs                   # current：app data 逻辑目录、required locales 和安全 id 校验
+  style_pack_store.rs                   # current：本地安装 / list / disable / disabled uninstall store core；Cloud deferred
   style_pack_integrity.rs               # deferred：签名 / digest 校验 facade
 ```
 
@@ -194,7 +195,7 @@ App Server 边界：
 
 ```text
 <app-data>/soul/style-packs/
-  registry.json                         # installed pack index，只存 metadata 和状态
+  registry.json                         # installed pack index，只存 metadata、status 和完整性摘要
   packs/
     <pack-id>/
       manifest.json                     # 原始 manifest，安装后只读
@@ -210,7 +211,7 @@ App Server 边界：
 
 目录约束：
 
-1. `registry.json` 只记录安装状态、版本、来源、digest、enabled、installed_at、last_error。
+1. `registry.json` 只记录安装状态、版本、来源、`integrity.digest`、`status`、`installed_at`、`last_error`；旧 `enabled: true` 和顶层 `digest` 不再作为 current schema。
 2. `manifest.json` 不存用户资料、token、prompt history、工具结果或 artifact 正文。
 3. `assets/` 只允许图片预览，不允许脚本、HTML、可执行文件、动态组件。
 4. 卸载只删除对应 pack 目录和 registry 条目；如果当前 profile 来自该 pack，回退到 built-in 默认 profile。
@@ -319,6 +320,15 @@ stateDiagram-v2
 7. `Disabled`：pack 保留在磁盘，不出现在可选 profile 列表。
 8. `Failed`：保留 error code 和可恢复动作，不留下半安装 profile。
 
+当前实现状态：
+
+1. App Server `style_pack_install.rs` 已固定上述状态枚举和合法转移，防止后续写入链路重新发明状态图。
+2. `style_pack_registry.rs` 只把 registry entry 的 `status: "enabled"` 视为 prompt-readable；`Installed` / `Disabled` / `Failed` / `Uninstalled` 均不进入 resolver。
+3. 缺 `status`、旧 `enabled: true`、顶层 `digest`、缺 `integrity.digest`、缺五语言 locale 文件或 key 都 fail closed。
+4. App Server `style_pack_paths.rs` 已统一 `soul/style-packs` 数据根、五语言 locale 列表和 pack id 安全校验。
+5. App Server `style_pack_store.rs` 已落本地 store core：先写 `.installing/<pack-id>-<timestamp>`，再替换 `packs/<pack-id>`；registry 使用临时文件和备份替换；registry 写入失败会尝试恢复旧 pack；`enable_after_install` 可写入 `Enabled`；disable 与 disabled uninstall 已有状态机约束和文件清理。
+6. 公开 JSON-RPC / App Server command 已落地为 `soulStylePack/list`、`soulStylePack/install`、`soulStylePack/status/set`、`soulStylePack/uninstall`，并有前端 API 网关；设置页 GUI 管理骨架已支持本地导入、启用 / 禁用、disabled / installed uninstall 和当前 profile 被禁用 / 卸载后的用户可见回退。Cloud catalog / download、签名校验和安装审计仍 deferred。
+
 ## 8. 安装流程
 
 ```mermaid
@@ -368,15 +378,15 @@ sequenceDiagram
 
 1. `built_in` 默认包永远可用。
 2. 安装失败不污染 registry。
-3. 选择器只展示 `enabled` 且通过校验的 pack。
+3. 选择器只展示 `status: "enabled"` 且通过校验的 pack。
 4. resolver 对未知 pack/profile fail closed，回退默认 profile。
 5. 所有错误提示走 i18n key，不拼硬编码中文。
 
 ## 10. UI 与文案
 
-设置页未来可以增加“风格包管理”区域，但不应变成市场首页。
+设置页已经增加“风格包管理”骨架，但不应变成市场首页。
 
-建议 UI 结构：
+当前 UI 结构：
 
 ```text
 AI 个性 / Soul
@@ -384,15 +394,15 @@ AI 个性 / Soul
     Built-in profiles
     Installed style packs
   风格包管理
-    已安装
-    从 Cloud 添加
-    本地导入
-    安装记录 / 错误恢复
+    已安装 / 已禁用
+    本地 manifest + 五语言 locale 导入
+    启用 / 禁用 / 卸载
+    当前 profile 失效时回退默认 built-in
 ```
 
 KISS 约束：
 
-1. 首版不加风格包管理 UI，只保留四个内置 profile。
+1. 首版管理 UI 只做本地导入和已安装包管理，不做市场首页。
 2. 后续 Cloud 下载先做“输入官方 pack id / 从官方 catalog 选择”这类窄入口，不做推荐流。
 3. 安装状态必须可恢复：重试、取消、卸载、回退默认。
 4. 危险确认、失败恢复、权限说明必须专业，不跟随被安装风格包人格化。
@@ -403,26 +413,28 @@ KISS 约束：
 | ---------------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
 | built-in registry            | unit test               | 四个内置 profile 始终可用，默认 profile 可解析。                                   |
 | manifest schema              | unit test               | 缺字段、未知 schema、重复 profile id、未知 source 被拒绝。                         |
-| locale completeness          | unit test               | 五语言资源缺失时安装失败。                                                         |
-| integrity failure            | unit test / integration | digest 或 signature 不匹配时不写 registry。                                        |
-| install rollback             | integration             | 写入失败或校验失败不会留下半安装 pack。                                            |
-| disable / uninstall fallback | unit / component        | 当前 profile 来自被禁用 pack 时回退 built-in 默认 profile。                        |
+| locale completeness          | unit test               | bundled registry pack/profile settings key 缺失时测试失败；App Server installed read model 缺五语言 locale 文件或 key 时 fail closed。 |
+| registry status schema       | unit test               | App Server 只加载 `status: "enabled"`；缺 `status`、旧 `enabled: true` 和顶层 `digest` fail closed。 |
+| integrity failure            | unit test / integration | 缺 `integrity.digest` 或未来 signature 不匹配时不写 registry / 不进入 read model。 |
+| install rollback             | unit / integration      | App Server store core 写入失败或校验失败不会留下半安装 pack；公开命令接入后补 integration。 |
+| disable / uninstall fallback | unit / component        | store core 已覆盖 disable 与 disabled uninstall；设置页 list / registry 集成已在当前 profile 来自被禁用 / 卸载 pack 时回退 built-in 默认 profile。 |
 | high-risk downgrade          | prompt snapshot         | Cloud pack 不能覆盖 `calm_professional_partner` 严肃降级。                         |
 | artifact boundary            | prompt snapshot         | 风格包不能让正式 artifact 默认吸收 Product Soul。                                  |
 | package kind split           | unit / integration      | `agent_skill` 和 `soul_style_pack` 共用下载基础设施时仍进入不同 validator 和目录。 |
-| GUI smoke                    | Playwright / Claw       | 安装后选择 profile，真实 Claw 对话生效；失败状态可见且可恢复。                     |
+| 设置页骨架 smoke             | `npm run verify:gui-smoke` | Electron smoke 已到达 `memory settings ready`，证明设置页骨架能进入真实 Electron Desktop Host / App Server current 启动链。 |
+| 安装后 Claw 体验验收         | Playwright / Claw       | 安装后选择 profile，真实 Claw 对话生效；失败状态可见且可恢复。                     |
 
 ## 12. 分阶段路线
 
 | 阶段 | 目标                          | 主产物                                                                             |
 | ---- | ----------------------------- | ---------------------------------------------------------------------------------- |
 | P0   | 规划边界                      | 本文档、主路线图引用、输出面文档引用                                               |
-| P1   | 内置 seed registry            | `builtInProfiles.ts` 表达四个 built-in Style Pack seed，不新增安装器               |
-| P2   | Manifest schema               | `style-packs/manifest.ts` + 单测，只校验本地 fixture                               |
-| P3   | Installed registry read model | 本地 registry 读取、启用 / 禁用 / 卸载状态，不接 Cloud                             |
-| P4   | Local import                  | 本地签名 manifest 导入和回滚                                                       |
+| P1   | 内置 seed registry            | `builtInProfiles.ts` 表达四个 built-in Style Pack seed，不新增安装器；公共 barrel 不导出 built-in profile list |
+| P2   | Manifest schema               | `style-profiles/manifest.ts` + 单测，校验 built-in 与 installed manifest，缺 integrity fail closed |
+| P3   | Installed registry read model | 前端 registry 与 App Server 只读 read model 已可消费 installed manifest，并在 App Server 校验五语言 locale resources、显式 install status 和旧 schema fail-closed；不接 Cloud |
+| P4   | Local import                  | App Server local store core、`soulStylePack/*` JSON-RPC / 前端 API 网关和设置页 GUI 骨架已覆盖原子写入、list、启用 / 禁用、disabled uninstall 文件清理、回滚和当前 profile 回退；签名校验仍待补 |
 | P5   | Cloud package infrastructure  | 通用 catalog / download / signature 基础设施，按 `kind` 分流到 Skill 或 Style Pack |
-| P6   | GUI 管理                      | 设置页风格包管理、错误恢复、Playwright / Claw 验收                                 |
+| P6   | GUI 管理                      | 设置页风格包管理骨架已落地并通过骨架级 `verify:gui-smoke`；剩余为错误恢复细节、安装真实风格包后的 Playwright / Claw 验收和 Cloud 分发体验 |
 
 ## 13. 当前必须避免的误区
 

@@ -4,22 +4,25 @@ use crate::aster_runtime_projection::{
 };
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use crate::turn_context_configuration::{to_agent_turn_context, AgentTurnContext};
+use agent_runtime::event_stream::EventProjector;
 use aster::agents::AgentEvent as AsterAgentEvent;
 
-pub(super) struct RuntimeEventProjector {
+pub(super) struct AsterEventProjector {
     auto_compaction: AutoCompactionProjectionState,
     active_turn_context: Option<AgentTurnContext>,
 }
 
-impl RuntimeEventProjector {
+impl AsterEventProjector {
     pub(super) fn new() -> Self {
         Self {
             auto_compaction: AutoCompactionProjectionState,
             active_turn_context: None,
         }
     }
+}
 
-    pub(super) fn project(&mut self, event: AsterAgentEvent) -> Vec<RuntimeAgentEvent> {
+impl EventProjector<AsterAgentEvent, RuntimeAgentEvent> for AsterEventProjector {
+    fn project(&mut self, event: AsterAgentEvent) -> Vec<RuntimeAgentEvent> {
         if let AsterAgentEvent::TurnStarted { turn } = &event {
             self.active_turn_context = turn.context_override.clone().map(to_agent_turn_context);
         }
@@ -44,7 +47,7 @@ mod tests {
 
     #[test]
     fn projector_applies_turn_context_truncation_to_later_tool_response() {
-        let mut projector = RuntimeEventProjector::new();
+        let mut projector = AsterEventProjector::new();
         let turn = TurnRuntime::new(
             "turn-truncate",
             "session-truncate",

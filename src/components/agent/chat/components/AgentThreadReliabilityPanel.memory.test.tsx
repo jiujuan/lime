@@ -1,6 +1,9 @@
 import { act } from "react";
 import { describe, expect, it } from "vitest";
-import { mockToast, renderPanel } from "./AgentThreadReliabilityPanel.testFixtures";
+import {
+  mockToast,
+  renderPanel,
+} from "./AgentThreadReliabilityPanel.testFixtures";
 
 describe("AgentThreadReliabilityPanel", () => {
   it("不再展示旧运行时记忆预取入口", async () => {
@@ -95,6 +98,23 @@ describe("AgentThreadReliabilityPanel", () => {
           latest_turn_updated_at: "2026-03-23T10:03:00Z",
           latest_turn_elapsed_seconds: 120,
           latest_turn_error_message: "浏览器页面已关闭",
+          provider_safety_buffering_count: 1,
+          latest_provider_safety_buffering: {
+            source_event_id: "event-safety-1",
+            source_event_type: "provider_safety_buffering",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            timestamp: "2026-03-23T10:00:30Z",
+            provider: "openai",
+            model: "gpt-5-codex",
+            use_cases: ["cyber"],
+            reasons: ["policy"],
+            show_buffering_ui: true,
+            retry_model: "gpt-5-mini",
+            fallback_header_model: "legacy-fast",
+            source: "payload_retry_model",
+            backend: "runtime",
+          },
           interrupt_reason: "浏览器页面已关闭",
           runtime_interrupt_source: "user",
           runtime_interrupt_requested_at: "2026-03-23T10:01:58Z",
@@ -298,6 +318,15 @@ describe("AgentThreadReliabilityPanel", () => {
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("主阻塞类型：tool_failed"),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("响应安全缓冲次数：1"),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("最近响应安全缓冲：模型 openai / gpt-5-codex"),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("重试模型 gpt-5-mini"),
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("中断来源：user"),

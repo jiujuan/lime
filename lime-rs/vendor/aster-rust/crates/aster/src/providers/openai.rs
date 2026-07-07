@@ -8,8 +8,8 @@ use super::formats::openai::{
 };
 use super::formats::openai_responses::{
     create_responses_request, get_responses_usage, responses_api_to_message,
-    responses_api_to_streaming_message, ResponsesApiResponse, ResponsesRequestOptions,
-    ResponsesRequestPolicy,
+    responses_api_to_streaming_message_with_provider_stream_headers, ResponsesApiResponse,
+    ResponsesRequestOptions, ResponsesRequestPolicy,
 };
 use super::retry::ProviderRetry;
 use super::utils::{
@@ -595,13 +595,18 @@ impl Provider for OpenAiProvider {
                     let _ = log.error(e);
                 })?;
 
+            let provider_stream_headers =
+                safety_buffering_provider_stream_headers(response.headers());
             let stream = response.bytes_stream().map_err(io::Error::other);
 
             Ok(Box::pin(try_stream! {
                 let stream_reader = StreamReader::new(stream);
                 let framed = FramedRead::new(stream_reader, LinesCodec::new()).map_err(anyhow::Error::from);
 
-                let message_stream = responses_api_to_streaming_message(framed);
+                let message_stream = responses_api_to_streaming_message_with_provider_stream_headers(
+                    framed,
+                    provider_stream_headers,
+                );
                 pin!(message_stream);
                 while let Some(message) = message_stream.next().await {
                     let (message, usage) = message.map_err(|e| ProviderError::RequestFailed(format!("Stream decode error: {}", e)))?;
@@ -637,6 +642,25 @@ impl Provider for OpenAiProvider {
             stream_openai_compat(response, log)
         }
     }
+}
+
+const SAFETY_BUFFERING_PROVIDER_STREAM_HEADER_NAMES: &[&str] = &[
+    "x-codex-safety-buffering-enabled",
+    "x-codex-safety-buffering-faster-model",
+];
+
+fn safety_buffering_provider_stream_headers(
+    headers: &reqwest::header::HeaderMap,
+) -> Vec<(String, String)> {
+    SAFETY_BUFFERING_PROVIDER_STREAM_HEADER_NAMES
+        .iter()
+        .filter_map(|name| {
+            headers
+                .get(*name)
+                .and_then(|value| value.to_str().ok())
+                .map(|value| ((*name).to_string(), value.to_string()))
+        })
+        .collect()
 }
 
 fn parse_custom_headers(s: String) -> HashMap<String, String> {

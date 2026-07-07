@@ -1,6 +1,6 @@
 //! JSON-RPC method dispatch for the App Server processor.
 
-use super::{event_notification, JsonRpcError, RequestProcessor, RpcDispatch};
+use super::{event_notification, JsonRpcError, RequestProcessor};
 use crate::AppServerError;
 use app_server_protocol::error_codes;
 use app_server_protocol::JsonRpcErrorResponse;
@@ -165,6 +165,7 @@ impl RequestProcessor {
             METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).await,
+            METHOD_AGENT_SESSION_MEDIA_READ => self.handle_session_media_read_impl(params).await,
             METHOD_WORKFLOW_READ => self.handle_workflow_read_impl(params).await,
             METHOD_WORKFLOW_CANCEL => self.handle_workflow_cancel_impl(params).await,
             METHOD_WORKFLOW_RETRY => self.handle_workflow_retry_impl(params).await,
@@ -441,6 +442,16 @@ impl RequestProcessor {
                 self.handle_plugin_ui_runtime_status_impl(params).await
             }
             METHOD_PLUGIN_UI_RUNTIME_STOP => self.handle_plugin_ui_runtime_stop_impl(params).await,
+            METHOD_SOUL_STYLE_PACK_INSTALL => {
+                self.handle_soul_style_pack_install_impl(params).await
+            }
+            METHOD_SOUL_STYLE_PACK_LIST => self.handle_soul_style_pack_list_impl(params).await,
+            METHOD_SOUL_STYLE_PACK_STATUS_SET => {
+                self.handle_soul_style_pack_status_set_impl(params).await
+            }
+            METHOD_SOUL_STYLE_PACK_UNINSTALL => {
+                self.handle_soul_style_pack_uninstall_impl(params).await
+            }
             METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list_impl(params).await,
             METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read_impl(params).await,
             METHOD_KNOWLEDGE_SOURCE_IMPORT => {

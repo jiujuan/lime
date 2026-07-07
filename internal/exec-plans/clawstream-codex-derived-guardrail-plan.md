@@ -4,6 +4,7 @@
 > 创建时间：2026-07-06
 > 关联路线图：`internal/roadmap/test/clawstream/README.md`
 > 关联账本：`internal/roadmap/test/clawstream/scenario-ledger.md`
+> 关联骨架：`internal/roadmap/test/clawstream/scenario-registry.json`
 > 关联主线：`internal/research/refactor/v1`
 > S1 细化计划：`internal/exec-plans/clawstream-s1-p0-implementation-plan.md`
 
@@ -20,7 +21,7 @@ Codex source test
   -> legacy cleanup gate
 ```
 
-本计划不再停留在“列出需要覆盖的能力”。每一批推进都必须让 `scenario-ledger.md` 中的场景状态前进，并为后续删除 Claw 旧 helper、旧 fallback、旧 mock / compat 旁路提供准入证据。
+本计划不再停留在“列出需要覆盖的能力”。推进方式固定为先快速完成全量骨架，再回头补细节：`scenario-registry.json` 负责固定全量 scenarioId、execution batch、evidence gate、detail order、优先级、状态、目标证据层、下一步细节入口和验证命令；`scenario-ledger.md` 负责记录 Codex 来源、oracle、Electron evidence 和清理目标。每一批细节推进都必须按 registry 的 `detailOrder` 让账本状态前进，并为后续删除 Claw 旧 helper、旧 fallback、旧 mock / compat 旁路提供准入证据。
 
 ## 2. Current / Compat / Deprecated / Dead
 
@@ -36,10 +37,11 @@ Codex source test
 1. Codex-first 是默认执行准则；除多模型 / 多模态 provider capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，命名、架构、状态机、工具生命周期、MCP、Skills、Multi-Agent、Plan hydrate、history hydrate、projection 和测试护栏都按 Codex 对齐。
 2. 先补护栏，再删旧实现；没有对应 scenario ledger 行的旧实现不动刀。
 3. 每个场景至少推进两层证据；用户主路径、history hydrate、MCP、Skills、Multi-Agent、artifact 必须三层齐备。
-4. P0 先解决首字慢、reasoning 顺序、terminal 收尾、输入恢复；这些直接影响当前 Claw 可用性。
-5. 现有 Electron fixture 不能当作完成态；已有 fixture 的场景还要补 item/projection oracle。
-6. 不新增 parallel legacy path；新增能力默认走 App Server JSON-RPC current 主链和前端 projection。
-7. 验证以当前风险为上限，先定向 `unit/projection/component`，再跑对应 Electron fixture 和聚合 smoke。
+4. 全量骨架优先于单点深挖；除 P0 正在修的首字 / reasoning / terminal / inputbar 外，不在缺 registry 的情况下继续追加散点 fixture。
+5. P0 先解决首字慢、reasoning 顺序、terminal 收尾、输入恢复；这些直接影响当前 Claw 可用性。
+6. 现有 Electron fixture 不能当作完成态；已有 fixture 的场景还要补 item/projection oracle。
+7. 不新增 parallel legacy path；新增能力默认走 App Server JSON-RPC current 主链和前端 projection。
+8. 验证以当前风险为上限，先定向 `unit/projection/component`，再跑对应 Electron fixture 和聚合 smoke。
 
 ## 4. 阶段计划
 
@@ -58,6 +60,8 @@ Codex source test
 - [x] `internal/roadmap/test/clawstream/README.md` 落地。
 - [x] `internal/roadmap/test/clawstream/codex-derived-index.md` 落地。
 - [x] `internal/roadmap/test/clawstream/scenario-ledger.md` 落地。
+- [x] `internal/roadmap/test/clawstream/scenario-registry.json` 全量骨架落地，覆盖 P0/P1/P2 共 59 个场景，并按 8 个 execution batch 固定“先骨架、后细节”的执行顺序、evidence gate、detail order、验证入口、骨架字段定义和 `current / compat / deprecated / dead` 分类。
+- [x] `internal/roadmap/test/clawstream/scenario-registry.test.mjs` 落地，守住 registry 与 ledger 同步，并确保每个场景必须且只能属于一个 execution batch、一个 batch detail order，每个 batch 都有非空验证命令，且 ledger 每行必须具备 Codex 来源、标准事件项、Projection / GUI oracle 和清理目标。
 - [x] 本计划落地并被 Clawstream README 反链。
 - [x] 文档 diff 基础检查通过。
 
@@ -65,7 +69,7 @@ Codex source test
 
 状态：in_progress
 
-执行细节见 `internal/exec-plans/clawstream-s1-p0-implementation-plan.md`。S1 不做泛化清理，只推进 parser boundary、inputbar restore、stale terminal 和 running status 四个 P0 工作包；每个工作包完成后回写 `scenario-ledger.md`。
+执行细节见 `internal/exec-plans/clawstream-s1-p0-implementation-plan.md`。S1 不做泛化清理，只推进 parser boundary、inputbar restore、stale terminal 和 running status 四个 P0 工作包；全量 registry 骨架已经先闭合，后续每个工作包完成后同步回写 `scenario-ledger.md` 与 `scenario-registry.json` 状态。
 
 优先场景：
 
@@ -74,7 +78,7 @@ Codex source test
 | `startup-prewarm-first-output` | `missing -> partial` | fixture schema + projection unit，断言 startup/prewarm 不阻塞首个 reasoning/text |
 | `reasoning-first-visible` | `partial -> partial+guard` | reasoning item oracle + MessageList/StreamingRenderer DOM 回归 |
 | `stream-parser-boundary` | `missing -> partial` | added/delta/completed parser boundary fixture |
-| `terminal-contract-after-answer` | `partial -> partial+guard` | terminal event controller / completion controller 单测 |
+| `terminal-contract-after-answer` | `partial+guard -> covered-electron` | terminal event controller / completion controller 单测 + failed-after-answer Electron current fixture |
 | `inputbar-restore-matrix` | `missing -> partial+guard` | inputbar restore pure reducer / hook unit matrix + Inputbar rich restore component guard |
 
 拟写集：
@@ -95,15 +99,16 @@ Codex source test
 
 当前进度：
 
-- [x] `startup-prewarm-first-output` 已推进到 projection 层 `partial`：`clawstreamP0.test.mjs` 证明 startup/prewarm 状态不会进入 visible messages，首个 reasoning/text 可见。
-- [x] `reasoning-first-visible` 已补 projection 层命名 oracle：同一测试证明 reasoning 先于 text 成为 UI message part。
-- [x] `terminal-contract-after-answer` 已补 projection 层命名 oracle：同一测试证明 `turn.completed` 只更新 runtime status，不合成正文；无 assistant text 时 fail closed。
+- [x] `startup-prewarm-first-output` 已推进到 `covered-electron`：`clawstreamP0.test.mjs` 证明 startup/prewarm 状态不会进入 visible messages，首个 reasoning/text 可见；Agent UI performance summary 与 Electron fixture 公共断言要求 text-stream 场景携带 first visible output marker，并分离 provider wait 与 client local output；`complete` Electron current fixture 已实跑通过并导出 first text paint 证据。
+- [x] `reasoning-first-visible` 已推进到 `covered-electron`：projection oracle 证明 reasoning 先于 text 成为 UI message part；MessageList / AgentThreadTimeline DOM guard 证明首字前 reasoning 不展示启动说明、hydrate 后不重复，且 summary 默认可见、raw reasoning 只在展开后出现；Electron current `reasoning-first-visible` fixture 已捕获 final/done 前 `思考中 + 正在输出` 中间态，完成态与 read model 均证明 reasoning sequence 早于 final message。
+- [x] `terminal-contract-after-answer` 已推进到 `covered-electron`：projection 层命名 oracle 证明 `turn.completed` 只更新 runtime status、不合成正文，无 assistant text 时 fail closed；hook/runtime guard 证明已显示 partial answer 后 `turn_failed` 只补一个失败说明，不重复 error、不吞过程卡；Electron current `terminal-failed-after-answer` fixture 已实跑，证明 partial 保留、失败说明可见且只出现一次、输入框恢复、read model 标记 `failed`；Electron current `terminal-canceled-after-answer` fixture 已实跑，证明 stop 前 partial 与 running 同屏，`turn.canceled` 后 partial 保留且只出现一次、输入框恢复、read model 标记 `canceled`。后续细节补强真实旧 terminal owner 投影后再删除 `final_done` grace timer。
 - [x] guard 已禁止核心投影文件重新引入“启动处理流程 / 已接收请求”启动说明文案。
 - [x] `stream-parser-boundary` 已推进到 projection 层 `partial+guard`：message seed/delta/completed full text 只保留一个 final text part，不把 completed 全量正文追加成重复 finish tail；`<proposed_plan>` 跨 message added / delta / completed 边界会 materialize 为独立 `plan` part。
 - [x] `plan-parser-boundary` 已推进到 projection 层 `partial+guard`：结构化 `plan.delta/final` 与 proposed_plan block 都进入 `plan` part；仍缺 Plan rail / decision drawer / history hydrate DOM 与 Electron evidence。
-- [x] 无 turnId terminal fallback / stale terminal active-turn oracle 已推进到 hook 层 `partial`：pure guard 对缺失 `terminalTurnId` fail closed，handler 回归证明旧 turn terminal 不误停新 active stream；Electron fixture 证据仍留到 S2。
-- [x] `inputbar-restore-matrix` 已推进到 hook + component 层 `partial+guard`：pure policy 覆盖 output-free / visible-output / thinking-only / patch-active / queued steer，manual stop 不再本地抢先清空 queued turns；rich restore 已接到 active stream stop -> Inputbar restore request，组件 guard 覆盖 text / images / pathReferences / inputCapabilityRoute；Electron current fixture 与 pending steer rich restore 全量证据仍留后续补齐。
-- [x] `running-status-preserved` 已推进到 `partial+guard`：projection guard 覆盖首字前启动态、首字后正文仍 running、completed/stale runtimeStatus 不丢 reasoning/tool/text；DOM guard 保留 inline running indicator 且禁止 startup note 回流。
+- [x] 无 turnId terminal fallback / stale terminal active-turn oracle 已推进到 `covered-electron`：pure guard 对缺失 `terminalTurnId` fail closed，handler 回归证明旧 turn terminal 不误停新 active stream；Electron current `terminal-stale-guard` 骨架证明同 session 两轮 GUI/read model 完成，第二轮期间旧 terminal marker 不污染 UI。
+- [x] `inputbar-restore-matrix` 已推进到 hook + component + read model 层 `partial+guard`：pure policy 覆盖 output-free / visible-output / thinking-only / patch-active / queued steer，manual stop 不再本地抢先清空 queued turns；rich restore 已接到 active stream stop -> Inputbar restore request，组件 guard 覆盖 text / images / pathReferences / inputCapabilityRoute；Electron current fixture 已覆盖 rich draft text/image/path/skill 取消恢复；App Server queued snapshot 与前端 normalizer 已保留 pending steer 的 attachments / pathReferences / textElements / skill route；frontend normalizer 已按 explicit `position` 恢复多 queued turn 顺序，同 position 或 legacy 缺 position 时保持输入稳定顺序；App Server oracle 已证明多 queued read model 顺序、pop-front resume 后剩余 queued reindex 为 `position=0`，且 top-level `queued_turns` 与 `thread_read.queued_turns` hydrate 同构；devserver Electron Gate B fixture 已覆盖正在输出时排队富输入、取消 active turn 后恢复 text/image/path/skill。packaged dist 版 pending steer rich restore 与 Electron 多队列证据留后续补齐。
+- [x] `running-status-preserved` 已推进到 `covered-electron`：projection guard 覆盖首字前启动态、首字后正文仍 running、completed/stale runtimeStatus 不丢 reasoning/tool/text；DOM guard 保留 inline running indicator 且禁止 startup note 回流；Electron current `cancel` fixture 证明 stop 前同一 turn 的 scoped text 同时包含 assistant 正文和“正在输出”，且 startup note 不可见。
+- [x] `no-natural-language-lifecycle-regex` 已推进到 `partial+guard`：核心 Claw 投影 owner 已有扫描守卫，禁止展示文案、正文正则、动态 regex 和旧 duplicate helper 回流；剩余细节是扩大扫描面并删除旧 helper。
 - [x] `mcp-structured-content` 追加 current item / converter / display guard：`structuredContent` 从 stream / read model tool item 贯穿到 `toolCall.result`，GUI 显示 answer + reference id，transport envelope 不外露；MCP Electron fixture 和聚合 current fixture 均通过。
 
 ### S2：现有 Electron fixture 补 projection oracle
@@ -222,6 +227,7 @@ node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario cancel
 node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario plan
 node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario web-tools-rendering
 node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario mcp-structured-content
+node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario inputbar-rich-restore
 ```
 
 ### 高风险 GUI
@@ -253,11 +259,31 @@ npm run verify:gui-smoke
 - 定向验证通过：`npx vitest run "src/components/agent/chat/components/messageListItemProjection.unit.test.ts" "src/components/agent/chat/components/MessageList.runtimeStatus.test.tsx" "src/components/agent/chat/components/MessageList.streamingTurns.test.tsx" "src/components/agent/chat/hooks/agentStreamThreadItemController.test.ts" "src/components/agent/chat/hooks/agentStreamToolItemMessageSync.unit.test.ts" "src/components/agent/chat/components/timeline-utils/itemConverters.unit.test.ts" "src/components/agent/chat/components/ToolCallDisplay.test.tsx"`。
 - GUI / current fixture 验证通过：`npm run build:renderer:electron`；`npm run smoke:claw-chat-current-fixture -- --scenario mcp-structured-content --timeout-ms 180000`；`npm run smoke:agent-runtime-current-fixture`，完整覆盖 `cancel-then-continue`、Plan hydrate、Skills Runtime、Multi-Agent Team、MCP structuredContent、Expert Skills / Plaza / Panel、Content Factory Article Editor，`liveProviderUsed=false`。
 
+### 2026-07-07
+
+- 按“先快速完成骨架，再回头完成细节”收口 `scenario-registry.json`：8 个 execution batch 均补齐 `evidenceGate`、全量 `detailOrder` 和 batch 级 `verificationCommands`，后续 P0/P1/P2 细节必须按 registry 顺序推进。
+- 加严 `scenario-registry.test.mjs`：除 registry / ledger 同步与 batch 覆盖外，新增 detail order 全量覆盖、无重复、验证命令非空、禁止 `agent_runtime_` 旧命名回流的结构守卫。
+- 继续把“骨架完成”机械化：`scenario-registry.json` 新增 `skeletonDefinition` 与 `governanceClassification`，`scenario-registry.test.mjs` 解析 `scenario-ledger.md` 六列表格，强制每个 scenario 都有 Codex 来源、标准事件项、Projection / GUI oracle、清理目标和同步状态，避免后续只登记场景名却没有验收口径。
+- `no-natural-language-lifecycle-regex` 从 `guard-needed` 推进到 `partial+guard`：`streamingProjectionGuard.unit.test.ts` 已作为核心投影 owner 的回流守卫；`running-status-preserved` 追加 Electron current `cancel` fixture 证据并推进到 `covered-electron`；registry 状态统计同步更新为 `covered-electron=10 / partial+guard=6 / partial=7 / missing=36 / guard-needed=0`。
+- `reasoning-first-visible` 追加 Electron current `reasoning-first-visible` fixture 证据并推进到 `covered-electron`：`npm run smoke:claw-chat-current-fixture -- --scenario reasoning-first-visible --timeout-ms 240000` 通过，session=`claw-chat-current-1783403517680-48086`，summary=`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`；中间态 `hasFinalText=false / hasDoneText=false / startupNoteVisible=false`，完成态 `reasoningIndex=38 < finalAnswerIndex=63`，read model `reasoningSequence=1 < finalSequence=9`。registry 状态统计更新为 `covered-electron=11 / partial+guard=5 / partial=7 / missing=36 / guard-needed=0`。
+- `terminal-contract-after-answer` 从 `partial` 推进到 `partial+guard`：新增 hook/runtime guard，证明 `turn_failed` 在已有 partial answer 时保留过程卡、partial answer 只出现一次、失败说明只出现一次；同时修正 `turn_failed` toast 使用真实 runtime error presentation，不再误报“模型未输出最终答复”。`stale-terminal-does-not-stop-new-turn` 同步按已有 pure guard / handler oracle 校正到 `partial+guard`。registry 状态统计更新为 `covered-electron=11 / partial+guard=7 / partial=5 / missing=36 / guard-needed=0`。
+- `stale-terminal-does-not-stop-new-turn` 追加 Electron current `terminal-stale-guard` 骨架：第一轮和第二轮都经 GUI 输入、App Server current read model 完成，第二轮 backend ledger 记录旧 terminal marker，GUI 断言 stale done marker 不可见且第二轮完成态恢复输入框。验证通过：`npm run smoke:claw-chat-current-fixture -- --scenario terminal-stale-guard --timeout-ms 240000`，session=`claw-chat-current-1783406820348-36412`，summary=`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`。registry 状态统计更新为 `covered-electron=12 / partial+guard=6 / partial=5 / missing=36 / guard-needed=0`；真实旧 terminal event 注入 owner 投影仍留作细节补强。
+- `terminal-contract-after-answer` 追加 Electron current `terminal-failed-after-answer` 骨架：后端先发 `message.delta` partial，再发 `turn.failed`，GUI 证明 partial 与 failure marker 各只出现一次、输入框恢复且 stop 隐藏，read model 证明 `latestTurnStatus=failed` 并保留 prompt / partial / failure，backend ledger 记录 `turn.failed`。验证通过：`npm run smoke:claw-chat-current-fixture -- --scenario terminal-failed-after-answer --timeout-ms 240000`，session=`claw-chat-current-1783408449429-62469`，summary=`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`。registry 状态统计更新为 `covered-electron=13 / partial+guard=5 / partial=5 / missing=36 / guard-needed=0`。
+- `terminal-contract-after-answer` 追加 Electron current `terminal-canceled-after-answer` 骨架：后端先发 `message.delta` partial 并等待 GUI stop，`turnCancel` 走 current `turn.canceled`；GUI 证明 stop 前 partial 与“正在输出”同屏且启动说明不出现，取消后 partial 保留且只出现一次、输入框恢复、stop 隐藏，read model 证明 `latestTurnStatus=canceled` 并保留 prompt / partial，backend ledger 记录 `turn.canceled`。验证通过：`LIME_ELECTRON_FIXTURE_BUILD_READY=1 npm run smoke:claw-chat-current-fixture -- --scenario terminal-canceled-after-answer --timeout-ms 240000`，session=`claw-chat-current-1783417713111-42454`，summary=`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`；未设 `LIME_ELECTRON_FIXTURE_BUILD_READY` 的首次运行在 packaged renderer/assets build 阶段以 `143/SIGTERM` 退出，未进入场景执行。registry 状态统计保持 `covered-electron=13 / partial+guard=5 / partial=5 / missing=36 / guard-needed=0`；`final_done` grace timer 删除留作真实旧 terminal owner 投影细节之后。
+- 代码体量登记：`scripts/agent-runtime/claw-chat-current-fixture-backend-file.mjs`、`claw-chat-current-fixture-scenario-flow.mjs`、`claw-chat-current-fixture-scenario-assertions.mjs`、`claw-chat-current-fixture-smoke.test.mjs` 均已超过 `1000` 行；本轮为快速完成 Electron 骨架只做贴边界接线，没有继续拆分。退出条件是在下一轮 fixture 细节回补前，把新场景 helper/断言拆入独立 scenario module，中心 flow 仅保留 dispatch。
+- W2 rich restore Electron current fixture 收口：Inputbar 取消恢复已覆盖 text、image attachment、path reference 与 installed skill route；fixture 断言绑定本场景 `turnStart.sessionId / turnId`，不再裸比动态 `SESSION_ID` 常量。
+- Gate B 验证通过：`APP_SERVER_BIN="/Users/coso/Documents/dev/ai/aiclientproxy/lime/dist-electron/app-server/darwin-arm64/app-server" npm run smoke:claw-chat-current-fixture -- --scenario inputbar-rich-restore --timeout-ms 180000`，session=`claw-chat-current-1783381197658-93694`。
+- 结构守卫与卫生检查通过：`npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`（27 tests passed）；`git diff --check`。
+- W2 pending steer rich snapshot guard 落地：App Server queued read model 从 current `turn_inputs + turn_runtime_options.metadata` 投影 `attachments / pathReferences / textElements / inputCapabilityRoute`；前端 `queuedTurn` normalizer 与 restore policy 保留这些字段，发送准备会把 input restore draft 的 path references、text elements 和 skill route 写入 current turn metadata。
+- 定向验证通过：`npx vitest run "src/lib/api/queuedTurn.test.ts" "src/components/agent/chat/hooks/agentStreamInputRestorePolicy.unit.test.ts" "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.test.ts" "src/components/agent/chat/components/Inputbar/hooks/useInputbarSend.test.tsx"`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server read_session_projects_queued_turn_input_snapshot -- --nocapture`。
+- 聚合 current fixture 通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 Inputbar rich restore、Plan hydrate、Skills Runtime、Multi-Agent Team、MCP structuredContent、Expert Skills / Plaza / Panel、Content Factory Article Editor，`liveProviderUsed=false`。
+- W2 pending steer rich restore devserver Electron Gate B 收口：`inputbarPendingSteerQueuedRichTextPreserved` 按结构化 `textElementTexts` 验证用户可编辑正文，允许 queued raw `text` 保留 slash command 前缀；验证通过 `node --check "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs"`、`npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`（28 tests passed）、`npm run smoke:claw-chat-current-fixture -- --app-url "http://127.0.0.1:1420/" --scenario inputbar-pending-steer-rich-restore --prefix claw-chat-current-fixture-inputbar-pending-steer-rich-restore-devserver-text-element-assertion --timeout-ms 180000`，session=`claw-chat-current-1783389967237-36808`。
+
 ## 7. 下一刀
 
 下一刀只做 S1 的第一批，不穿插大规模清理；具体领取口径见 `internal/exec-plans/clawstream-s1-p0-implementation-plan.md`：
 
-1. 给 W2 rich restore 补 Electron current fixture，并补 pending steer 的 textElements / attachments / skill binding 全量恢复证据。
-2. 给 stale terminal 补独立 Electron current fixture 证据，然后再删除无 turnId terminal fallback / input restore 旧 helper。
+1. 给 W2 pending steer 补 packaged dist 版证据和多队列顺序 / pop-front / hydrate oracle；通过后再拆多套 input restore fallback。
+2. 给 stale terminal 补真实旧 terminal event 注入 owner 投影细节，然后再删除无 turnId terminal fallback / input restore 旧 helper。
 3. 补 Plan rail / decision drawer / history hydrate 的 DOM 或 Electron oracle，证明 proposed_plan 与结构化 plan event 不回退到 legacy `update_plan` UI owner。
 4. S2 接续已有 Electron 场景的 item/projection oracle：优先 MCP truncation / resource / elicitation、Skills search-read-gate、Multi-Agent lineage。

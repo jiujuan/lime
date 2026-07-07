@@ -258,6 +258,11 @@ export type MessagePreviewTarget =
       index: number;
     }
   | {
+      kind: "media_reference";
+      reference: MessageMediaReference;
+      index: number;
+    }
+  | {
       kind: "task";
       preview: MessageTaskPreview;
     };
@@ -276,6 +281,19 @@ interface AgentUiProjectionContentPartMeta {
   metadata?: Record<string, unknown>;
 }
 
+export interface MessageMediaReference {
+  kind?: string;
+  uri: string;
+  mimeType?: string;
+  title?: string;
+  caption?: string;
+  sourceUri?: string;
+  sourcePath?: string;
+  previewUrl?: string;
+  sha256?: string;
+  byteSize?: number;
+}
+
 export type ContentPart =
   | ({ type: "text"; text: string } & AgentUiProjectionContentPartMeta)
   | ({ type: "thinking"; text: string } & AgentUiProjectionContentPartMeta)
@@ -290,6 +308,10 @@ export type ContentPart =
   | ({
       type: "file_changes_batch";
       aggregate: import("./utils/fileChangeSummary").FileChangesAggregate;
+    } & AgentUiProjectionContentPartMeta)
+  | ({
+      type: "media_reference";
+      reference: MessageMediaReference;
     } & AgentUiProjectionContentPartMeta);
 
 export type BrowserTaskRequirement =

@@ -6,7 +6,7 @@ const { rendererBuildEnv, startRendererBuildHeartbeat } =
 
 const stopHeartbeat = startRendererBuildHeartbeat();
 try {
-  await run("npx", ["vite", "build"]);
+  await run("npx", ["vite", "build", "--base", "./"]);
 } finally {
   stopHeartbeat();
 }

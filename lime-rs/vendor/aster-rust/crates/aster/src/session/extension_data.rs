@@ -674,7 +674,7 @@ mod tests {
             TaskBoardState::with_next_id(
                 vec![TaskBoardItem {
                     id: "7".to_string(),
-                    subject: "切换到 TaskUpdate".to_string(),
+                    subject: "切换到计划更新".to_string(),
                     description: "替换 TodoWrite".to_string(),
                     active_form: None,
                     status: TaskBoardItemStatus::Pending,
@@ -693,7 +693,7 @@ mod tests {
         assert_eq!(task_board.items[0].id, "7");
 
         let todo_snapshot = resolve_todo_list_state(&extension_data).unwrap();
-        assert_eq!(todo_snapshot.markdown(), "- [ ] 切换到 TaskUpdate");
+        assert_eq!(todo_snapshot.markdown(), "- [ ] 切换到计划更新");
         assert!(extension_data
             .get_extension_state("task_list", "v1")
             .is_some());

@@ -148,8 +148,7 @@ function createInstalledContentFactory(
       installModes: [],
     },
     installMode: "in_lime",
-    runtimeProfileSummary:
-      {} as InstalledPluginState["runtimeProfileSummary"],
+    runtimeProfileSummary: {} as InstalledPluginState["runtimeProfileSummary"],
     setup: {} as InstalledPluginState["setup"],
     installedAt: "2026-06-28T00:00:00.000Z",
     updatedAt: "2026-06-28T00:00:00.000Z",
@@ -550,6 +549,83 @@ describe("workspacePluginActivation", () => {
         plugin_activation_intent: {
           intent_key: "content_article_generate",
           workflow_key: "content_article_workflow",
+        },
+      },
+    });
+  });
+
+  it("插件激活 metadata 应透传 runtimeCapabilities snapshot", () => {
+    const installed = createInstalledPluginBackedApp();
+    installed.manifest.runtimeCapabilities = {
+      schemaVersion: "plugin-runtime-capabilities/v0.1",
+      pluginId: "creator-workbench",
+      version: "1.0.0",
+      skills: [
+        {
+          id: "article-draft",
+          title: "Article Draft",
+          required: true,
+          promptInjectionPolicy: {
+            mode: "workflow_scoped",
+            source: "runtimeCapabilities.skills",
+          },
+        },
+      ],
+      tools: [],
+      mcpBindings: [
+        {
+          serverId: "browser",
+          toolKey: "browser/search",
+          provider: "mcp",
+          required: true,
+        },
+      ],
+      workflowBindings: [
+        {
+          workflowKey: "creator_article_generate",
+          taskKind: "creator.article.generate",
+          skillIds: ["article-draft"],
+          toolKeys: [],
+        },
+      ],
+    };
+
+    const resolution = resolveWorkspacePluginActivation({
+      text: "@创作工作台 写一篇公众号文章",
+      sessionId: "session-runtime-capabilities",
+      installedPlugins: [installed],
+    });
+    const sendOptions = mergePluginActivationSendOptions({
+      resolution: resolution!,
+    });
+
+    expect(sendOptions?.requestMetadata).toMatchObject({
+      harness: {
+        plugin_activation: {
+          plugin_id: "creator-workbench",
+          runtime_capabilities: {
+            pluginId: "creator-workbench",
+            skills: [
+              expect.objectContaining({
+                id: "article-draft",
+                promptInjectionPolicy: {
+                  mode: "workflow_scoped",
+                  source: "runtimeCapabilities.skills",
+                },
+              }),
+            ],
+            mcpBindings: [
+              {
+                serverId: "browser",
+                toolKey: "browser/search",
+                provider: "mcp",
+                required: true,
+              },
+            ],
+          },
+        },
+        plugin_runtime_capabilities: {
+          pluginId: "creator-workbench",
         },
       },
     });

@@ -1,4 +1,4 @@
-import { resolveRequiredAgentChatCopy } from "@/components/agent/chat/utils/agentChatCopy";
+import { resolveRequiredAgentChatCopy } from "@/i18n/agentChatCopy";
 import type { MemorySoulConfig } from "@/lib/api/memoryConfigTypes";
 import { normalizeSoulConfig } from "./soulConfig";
 import { resolveSoulStyleProfile } from "./style-profiles";
@@ -26,12 +26,16 @@ export type SoulInteractionPhase =
   | "collaboration_preparing"
   | "failed";
 
-export type SoulInteractionToneVariant =
-  | "neutral"
-  | Extract<
-      SoulStyleTone,
-      "cheeky_sassy" | "warm_supportive" | "cool_confident"
-    >;
+const SOUL_INTERACTION_TONE_VARIANTS = [
+  "cheeky_sassy",
+  "warm_supportive",
+  "cool_confident",
+] as const;
+
+type SoulInteractionProfileTone =
+  (typeof SOUL_INTERACTION_TONE_VARIANTS)[number];
+
+export type SoulInteractionToneVariant = "neutral" | SoulInteractionProfileTone;
 
 export interface SoulInteractionCopyOptions extends SoulStyleProfileContext {
   soul?: MemorySoulConfig | null;
@@ -158,10 +162,24 @@ function resolveInteractionStyleMetadata(
   }
 
   return {
-    toneVariant: resolved.profile.tone,
+    toneVariant: resolveInteractionToneVariant(resolved.profile.tone),
     profileId: resolved.profile.id,
     packId: resolved.profile.packId,
   };
+}
+
+function resolveInteractionToneVariant(
+  tone: SoulStyleTone,
+): SoulInteractionToneVariant {
+  return isInteractionProfileTone(tone) ? tone : "neutral";
+}
+
+function isInteractionProfileTone(
+  tone: SoulStyleTone,
+): tone is SoulInteractionProfileTone {
+  return SOUL_INTERACTION_TONE_VARIANTS.includes(
+    tone as SoulInteractionProfileTone,
+  );
 }
 
 export function resolveSoulInteractionCopyDescriptors(

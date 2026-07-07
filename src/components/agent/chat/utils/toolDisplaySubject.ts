@@ -95,6 +95,9 @@ const resolveVisionImageSubject = (
 const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   requestuserinput: "requestuserinput",
   requestuserinputtool: "requestuserinput",
+  "clock.sleep": "sleep",
+  clocksleep: "sleep",
+  sleep: "sleep",
   brief: "sendusermessage",
   brieftool: "sendusermessage",
   mcptool: "mcp",
@@ -108,15 +111,12 @@ const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   sendinput: "sendmessage",
   sendmessagetool: "sendmessage",
   bashtool: "bash",
-  configtool: "config",
   updateplan: "updateplan",
   updateplantool: "updateplan",
   update_plan: "updateplan",
   update_plan_tool: "updateplan",
   enterplanmodetool: "enterplanmode",
   exitplanmodetool: "exitplanmode",
-  enterworktreetool: "enterworktree",
-  exitworktreetool: "exitworktree",
   filereadtool: "read",
   readfiletool: "read",
   filewritetool: "write",
@@ -137,16 +137,8 @@ const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   memoryreadtool: "memoryread",
   memorysearch: "memorysearch",
   memorysearchtool: "memorysearch",
-  notebookedittool: "notebookedit",
   powershelltool: "powershell",
-  remotetriggertool: "remotetrigger",
-  schedulecrontool: "croncreate",
-  croncreatetool: "croncreate",
-  cronlisttool: "cronlist",
-  crondeletetool: "crondelete",
   skilltool: "skill",
-  sleeptool: "sleep",
-  workflowtool: "workflow",
   syntheticoutputtool: "structuredoutput",
   taskcreatetool: "taskcreate",
   taskgettool: "taskget",
@@ -532,28 +524,6 @@ export const resolveToolPrimarySubject = (
       "prompt",
       "request_id",
     ]);
-  }
-
-  if (normalizedName === "remotetrigger") {
-    return (
-      resolveToolArgumentPreview(args, [
-        "trigger_id",
-        "triggerId",
-        "action",
-        "organization_uuid",
-      ]) || resolveToolSubjectFallback("remoteTrigger")
-    );
-  }
-
-  if (
-    normalizedName === "croncreate" ||
-    normalizedName === "cronlist" ||
-    normalizedName === "crondelete"
-  ) {
-    return (
-      resolveToolArgumentPreview(args, ["id", "cron", "schedule", "prompt"]) ||
-      resolveToolSubjectFallback("cronTrigger")
-    );
   }
 
   return (

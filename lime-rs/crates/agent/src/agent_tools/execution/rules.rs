@@ -29,11 +29,6 @@ const WORKSPACE_PATH_OPTIONAL_POLICY: ToolExecutionPolicy = ToolExecutionPolicy 
     ..DEFAULT_POLICY
 };
 
-const WORKSPACE_ABSOLUTE_PATH_POLICY: ToolExecutionPolicy = ToolExecutionPolicy {
-    restriction_profile: ToolExecutionRestrictionProfile::WorkspaceAbsolutePathRequired,
-    ..DEFAULT_POLICY
-};
-
 const WORKSPACE_SHELL_POLICY: ToolExecutionPolicy = ToolExecutionPolicy {
     warning_policy: ToolExecutionWarningPolicy::ShellCommandRisk,
     restriction_profile: ToolExecutionRestrictionProfile::WorkspaceShellCommand,
@@ -48,7 +43,6 @@ const SAFE_HTTPS_URL_POLICY: ToolExecutionPolicy = ToolExecutionPolicy {
 const WORKSPACE_PATH_TOOLS: &[&str] = &["Read", "Write", "Edit", "LSP", "view_image"];
 const DEFAULT_POLICY_TOOLS: &[&str] = &[APPLY_PATCH_TOOL_NAME];
 const WORKSPACE_PATH_OPTIONAL_TOOLS: &[&str] = &["Glob", "Grep"];
-const WORKSPACE_ABSOLUTE_PATH_TOOLS: &[&str] = &["NotebookEdit"];
 const WORKSPACE_SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];
 const SAFE_HTTPS_URL_TOOLS: &[&str] = &["WebFetch"];
 
@@ -64,10 +58,6 @@ const TOOL_POLICY_RULES: &[ToolPolicyRule] = &[
     ToolPolicyRule {
         tool_names: WORKSPACE_PATH_OPTIONAL_TOOLS,
         policy: WORKSPACE_PATH_OPTIONAL_POLICY,
-    },
-    ToolPolicyRule {
-        tool_names: WORKSPACE_ABSOLUTE_PATH_TOOLS,
-        policy: WORKSPACE_ABSOLUTE_PATH_POLICY,
     },
     ToolPolicyRule {
         tool_names: WORKSPACE_SHELL_TOOLS,

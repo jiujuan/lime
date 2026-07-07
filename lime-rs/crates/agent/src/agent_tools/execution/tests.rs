@@ -3,7 +3,7 @@ use super::{
     decide_tool_execution, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
     ToolExecutionPolicyService,
 };
-use crate::agent_tools::catalog::{tool_catalog_entry, WorkspaceToolSurface};
+use crate::agent_tools::catalog::tool_catalog_entry;
 use lime_core::config::{
     ToolExecutionCommandRiskLevelConfig as ConfigToolExecutionCommandRiskLevelConfig,
     ToolExecutionCommandRuleConfig as ConfigToolExecutionCommandRuleConfig,

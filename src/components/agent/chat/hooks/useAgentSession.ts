@@ -250,6 +250,7 @@ interface UseAgentSessionOptions {
   workspaceId: string;
   workingDir?: string | null;
   disableSessionRestore: boolean;
+  sessionRestorePresentation?: "foreground" | "background";
   initialTopicsLoadMode: "immediate" | "deferred";
   initialTopicsDeferredDelayMs?: number;
   preserveRestoredMessages: boolean;
@@ -303,6 +304,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     workspaceId,
     workingDir,
     disableSessionRestore,
+    sessionRestorePresentation = "foreground",
     initialTopicsLoadMode,
     initialTopicsDeferredDelayMs,
     preserveRestoredMessages,
@@ -328,6 +330,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     setAccessModeState,
   } = options;
   const { t: tNavigation } = useTranslation("navigation");
+  const shouldRestoreSessionInForeground =
+    !disableSessionRestore && sessionRestorePresentation !== "background";
+  const shouldRecoverSessionInBackground =
+    !disableSessionRestore && sessionRestorePresentation === "background";
   const scopedKeys = useMemo(
     () => getAgentSessionScopedKeys(workspaceId),
     [workspaceId],
@@ -436,17 +442,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(() =>
-    disableSessionRestore
+    !shouldRestoreSessionInForeground
       ? []
       : loadTransient<Message[]>(scopedKeys.messagesKey, []),
   );
   const [threadTurns, setThreadTurns] = useState<AgentThreadTurn[]>(() =>
-    disableSessionRestore
+    !shouldRestoreSessionInForeground
       ? []
       : loadTransient<AgentThreadTurn[]>(scopedKeys.turnsKey, []),
   );
   const [threadItems, setThreadItems] = useState<AgentThreadItem[]>(() =>
-    disableSessionRestore
+    !shouldRestoreSessionInForeground
       ? []
       : filterConversationThreadItems(
           normalizeLegacyThreadItems(
@@ -455,7 +461,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         ),
   );
   const [currentTurnId, setCurrentTurnId] = useState<string | null>(() =>
-    disableSessionRestore
+    !shouldRestoreSessionInForeground
       ? null
       : loadTransient<string | null>(scopedKeys.currentTurnKey, null),
   );
@@ -967,48 +973,54 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const resolvedWorkspaceId = workspaceId.trim();
     sessionStateWorkspaceRef.current = resolvedWorkspaceId;
     appServerConfirmedSessionIdsRef.current.clear();
-    setIsAutoRestoringSession(true);
-    setIsSessionHydrating(false);
     const scopedSessionCandidate = loadScopedSessionRestoreCandidate();
-    const scopedMessages = loadTransient<Message[]>(scopedKeys.messagesKey, []);
-    const scopedTurns = loadTransient<AgentThreadTurn[]>(
-      scopedKeys.turnsKey,
-      [],
-    );
-    const scopedItems = loadTransient<AgentThreadItem[]>(
-      scopedKeys.itemsKey,
-      [],
-    );
-    const scopedCurrentTurnId = loadTransient<string | null>(
-      scopedKeys.currentTurnKey,
-      null,
-    );
-    const cachedScopedSnapshot = scopedSessionCandidate
-      ? loadAgentSessionCachedSnapshot(
-          resolvedWorkspaceId,
-          scopedSessionCandidate,
-        )
-      : null;
-    const restoreViewModel = buildAgentSessionRestoreViewModel({
-      cachedSnapshot: cachedScopedSnapshot,
-      scopedCurrentTurnId,
-      scopedItems,
-      scopedMessages,
-      scopedSessionCandidate,
-      scopedTurns,
-    });
+    setIsAutoRestoringSession(Boolean(scopedSessionCandidate));
+    setIsSessionHydrating(false);
 
     restoreCandidateSessionIdRef.current = scopedSessionCandidate;
-    setRecoveredStreamBindingSessionId(restoreViewModel.sessionId);
-    applySessionSnapshot({
-      ...createEmptyAgentSessionSnapshot(),
-      sessionId: restoreViewModel.sessionId,
-      messages: restoreViewModel.messages,
-      threadTurns: restoreViewModel.threadTurns,
-      threadItems: restoreViewModel.threadItems,
-      currentTurnId: restoreViewModel.currentTurnId,
-    });
-    setSessionHistoryWindow(restoreViewModel.historyWindow);
+    if (shouldRestoreSessionInForeground) {
+      const scopedMessages = loadTransient<Message[]>(scopedKeys.messagesKey, []);
+      const scopedTurns = loadTransient<AgentThreadTurn[]>(
+        scopedKeys.turnsKey,
+        [],
+      );
+      const scopedItems = loadTransient<AgentThreadItem[]>(
+        scopedKeys.itemsKey,
+        [],
+      );
+      const scopedCurrentTurnId = loadTransient<string | null>(
+        scopedKeys.currentTurnKey,
+        null,
+      );
+      const cachedScopedSnapshot = scopedSessionCandidate
+        ? loadAgentSessionCachedSnapshot(
+            resolvedWorkspaceId,
+            scopedSessionCandidate,
+          )
+        : null;
+      const restoreViewModel = buildAgentSessionRestoreViewModel({
+        cachedSnapshot: cachedScopedSnapshot,
+        scopedCurrentTurnId,
+        scopedItems,
+        scopedMessages,
+        scopedSessionCandidate,
+        scopedTurns,
+      });
+      setRecoveredStreamBindingSessionId(restoreViewModel.sessionId);
+      applySessionSnapshot({
+        ...createEmptyAgentSessionSnapshot(),
+        sessionId: restoreViewModel.sessionId,
+        messages: restoreViewModel.messages,
+        threadTurns: restoreViewModel.threadTurns,
+        threadItems: restoreViewModel.threadItems,
+        currentTurnId: restoreViewModel.currentTurnId,
+      });
+      setSessionHistoryWindow(restoreViewModel.historyWindow);
+    } else {
+      setRecoveredStreamBindingSessionId(null);
+      applySessionSnapshot(createEmptyAgentSessionSnapshot());
+      setSessionHistoryWindow(null);
+    }
     resetPendingActions();
     resetStreamingRefs();
     restoredWorkspaceRef.current = null;
@@ -1020,6 +1032,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     resetPendingActions,
     resetStreamingRefs,
     scopedKeys,
+    shouldRestoreSessionInForeground,
     workspaceId,
     applySessionSnapshot,
   ]);
@@ -2534,33 +2547,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         }
       }
 
-      const restoreCandidate = restoreCandidateSessionIdRef.current?.trim();
-      if (
-        !options?.skipSessionRestore &&
-        !disableSessionRestore &&
-        restoreCandidate
-      ) {
-        const targetSessionId = resolveRestorableTopicSessionId(
-          restoreCandidate,
-          topics,
-          {
-            allowDetachedCandidate: topicsListMayBeTruncatedRef.current,
-          },
-        );
-
-        if (targetSessionId) {
-          const targetTopic = topics.find(
-            (topic) => topic.id === targetSessionId,
-          );
-          await switchTopic(targetSessionId, {
-            resumeSessionStartHooks: shouldResumeTaskSession(targetTopic),
-          });
-          if (sessionIdRef.current) {
-            return sessionIdRef.current;
-          }
-        }
-      }
-
       return createFreshSession(undefined, {
         preserveCurrentSnapshot: true,
         skipSessionStartHooks: options?.skipSessionStartHooks === true,
@@ -2578,6 +2564,53 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       topics,
       workspaceId,
     ],
+  );
+
+  const recoverSessionInBackground = useCallback(
+    async (targetSessionId: string, resumeSessionStartHooks: boolean) => {
+      try {
+        const detail = await runtime.getSession(
+          targetSessionId,
+          buildSessionDetailHydrationOptions({
+            resumeSessionStartHooks,
+            source: "homeBackgroundRecovery",
+          }),
+        );
+        appServerConfirmedSessionIdsRef.current.add(targetSessionId);
+        setTopics((prev) =>
+          upsertTopicFromSessionDetail(
+            prev,
+            mapSessionDetailToTopic(
+              targetSessionId,
+              detail,
+              normalizeProjectId(detail.workspace_id) ||
+                normalizeProjectId(workspaceId),
+            ),
+            { workspaceId },
+          ),
+        );
+      } catch (error) {
+        if (isAsterSessionNotFoundError(error)) {
+          persistSessionRestoreCandidate(null);
+          return;
+        }
+        console.warn("[AsterChat] 后台恢复会话失败:", error);
+        logAgentDebug(
+          "useAgentSession",
+          "backgroundRestore.error",
+          {
+            error,
+            targetSessionId,
+            workspaceId,
+          },
+          { level: "warn" },
+        );
+      } finally {
+        setIsAutoRestoringSession(false);
+        setIsSessionHydrating(false);
+      }
+    },
+    [persistSessionRestoreCandidate, runtime, workspaceId],
   );
 
   const refreshSessionDetail = useCallback(
@@ -2727,21 +2760,41 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
 
     restoredWorkspaceRef.current = resolvedWorkspaceId;
+    setIsSessionHydrating(false);
+    const targetTopic = topics.find((topic) => topic.id === targetSessionId);
+    const shouldResumeRestoredSession = shouldResumeTaskSession(targetTopic);
+
+    if (shouldRecoverSessionInBackground) {
+      persistSessionRestoreCandidate(targetSessionId);
+      setRecoveredStreamBindingSessionId(null);
+      logAgentDebug("useAgentSession", "backgroundRestore.start", {
+        candidateSessionId: scopedCandidate,
+        resumeSessionStartHooks: shouldResumeRestoredSession,
+        targetSessionId,
+        restoreSource: topics.length > 0 ? "topics_snapshot" : "shadow_cache",
+        topicsCount: topics.length,
+        workspaceId: resolvedWorkspaceId,
+      });
+      void recoverSessionInBackground(
+        targetSessionId,
+        shouldResumeRestoredSession,
+      );
+      return;
+    }
 
     let cancelled = false;
     setIsAutoRestoringSession(true);
-    setIsSessionHydrating(false);
     setRecoveredStreamBindingSessionId(targetSessionId);
     logAgentDebug("useAgentSession", "autoRestore.start", {
       candidateSessionId: scopedCandidate,
+      resumeSessionStartHooks: shouldResumeRestoredSession,
       targetSessionId,
       restoreSource: topics.length > 0 ? "topics_snapshot" : "shadow_cache",
       topicsCount: topics.length,
       workspaceId: resolvedWorkspaceId,
     });
-    const targetTopic = topics.find((topic) => topic.id === targetSessionId);
     switchTopic(targetSessionId, {
-      resumeSessionStartHooks: shouldResumeTaskSession(targetTopic),
+      resumeSessionStartHooks: shouldResumeRestoredSession,
       restoreSource: "auto",
     })
       .catch((error) => {
@@ -2770,7 +2823,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [
     disableSessionRestore,
     persistSessionRestoreCandidate,
+    recoverSessionInBackground,
     sessionId,
+    shouldRecoverSessionInBackground,
     switchTopic,
     topics,
     topicsReady,

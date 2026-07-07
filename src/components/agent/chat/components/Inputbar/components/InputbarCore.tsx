@@ -63,6 +63,17 @@ function shouldFocusComposerTextarea(target: EventTarget | null): boolean {
   return !target.closest(INTERACTIVE_TARGET_SELECTOR);
 }
 
+function resolvePendingImagePreviewSrc(image: MessageImage): string {
+  const previewUrl = image.previewUrl?.trim();
+  if (previewUrl) {
+    return previewUrl;
+  }
+  if (image.data.trim()) {
+    return `data:${image.mediaType};base64,${image.data}`;
+  }
+  return image.sourceUri?.trim() || image.sourcePath?.trim() || "";
+}
+
 interface InputbarCoreProps {
   uiCopy: InputbarCoreCopy;
   text: string;
@@ -397,7 +408,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                   {pendingImages.map((img, index) => (
                     <ImagePreviewItem key={index}>
                       <ImagePreviewImg
-                        src={`data:${img.mediaType};base64,${img.data}`}
+                        src={resolvePendingImagePreviewSrc(img)}
                         alt={uiCopy.image.previewAlt(index + 1)}
                       />
                       <ImageRemoveButton

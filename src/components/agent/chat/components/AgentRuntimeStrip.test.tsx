@@ -17,17 +17,10 @@ const DEFAULT_RUNTIME_TOOL_AVAILABILITY: RuntimeToolAvailability = {
   subagentCore: false,
   subagentTeamTools: false,
   subagentRuntime: false,
-  taskRuntime: false,
+  planRuntime: false,
   missingSubagentCoreTools: ["Agent", "SendMessage"],
   missingSubagentTeamTools: ["TeamCreate", "TeamDelete", "ListPeers"],
-  missingTaskTools: [
-    "TaskCreate",
-    "TaskGet",
-    "TaskList",
-    "TaskUpdate",
-    "TaskOutput",
-    "TaskStop",
-  ],
+  missingPlanTools: ["update_plan"],
 };
 
 const CODE_RUNTIME_TOOL_AVAILABILITY: RuntimeToolAvailability = {
@@ -39,10 +32,10 @@ const CODE_RUNTIME_TOOL_AVAILABILITY: RuntimeToolAvailability = {
   subagentCore: true,
   subagentTeamTools: true,
   subagentRuntime: true,
-  taskRuntime: true,
+  planRuntime: true,
   missingSubagentCoreTools: [],
   missingSubagentTeamTools: [],
-  missingTaskTools: [],
+  missingPlanTools: [],
 };
 
 function createHarnessState(
@@ -136,9 +129,9 @@ describe("AgentRuntimeStrip", () => {
     ).toContain("Runtime 工具面 4 项");
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip-status-task_runtime_gap"]',
+        '[data-testid="agent-runtime-strip-status-plan_runtime_gap"]',
       )?.textContent,
-    ).toContain("任务工具缺 6");
+    ).toContain("计划工具缺 1");
     expect(
       container.querySelector(
         '[data-testid="agent-runtime-strip-status-subagent_tool_gap"]',
@@ -180,9 +173,7 @@ describe("AgentRuntimeStrip", () => {
         '[data-testid="agent-runtime-strip-status-runtime_surface"][data-status-key="runtime_surface"]',
       )?.textContent,
     ).toContain("Runtime 工具面 12 项");
-    expect(
-      container.querySelector('[data-testid*="code_"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-testid*="code_"]')).toBeNull();
   });
 
   it("运行时信号应露出待确认与产物出口状态", () => {

@@ -16,9 +16,11 @@ export const {
   Menu,
   nativeImage,
   Notification,
+  net,
   screen,
   session,
   shell,
+  protocol,
   Tray,
   WebContentsView,
 } = electron;

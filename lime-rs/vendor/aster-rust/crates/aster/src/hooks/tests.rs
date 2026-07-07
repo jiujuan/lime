@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 #[test]
 fn test_hook_event_display() {
-    assert_eq!(HookEvent::TaskCreated.to_string(), "TaskCreated");
     assert_eq!(HookEvent::TaskCompleted.to_string(), "TaskCompleted");
     assert_eq!(HookEvent::PreToolUse.to_string(), "PreToolUse");
     assert_eq!(HookEvent::PostToolUse.to_string(), "PostToolUse");

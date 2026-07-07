@@ -119,6 +119,68 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
 }
 
 #[tokio::test]
+async fn basic_evidence_pack_downgrades_stale_running_turn() {
+    let provider = BasicEvidenceExportProvider;
+    let evidence_pack = provider
+        .export_evidence_pack(&EvidencePackRequest {
+            session: AgentSession {
+                session_id: "sess_stale_evidence".to_string(),
+                thread_id: "thread_stale_evidence".to_string(),
+                app_id: "content-studio".to_string(),
+                workspace_id: Some("workspace-main".to_string()),
+                business_object_ref: None,
+                status: AgentSessionStatus::Running,
+                created_at: "2000-01-01T00:00:00Z".to_string(),
+                updated_at: "2000-01-01T00:00:00Z".to_string(),
+            },
+            turns: vec![AgentTurn {
+                turn_id: "turn_stale_evidence".to_string(),
+                session_id: "sess_stale_evidence".to_string(),
+                thread_id: "thread_stale_evidence".to_string(),
+                status: AgentTurnStatus::Running,
+                started_at: Some("2000-01-01T00:00:00Z".to_string()),
+                completed_at: None,
+            }],
+            events: vec![AgentEvent {
+                event_id: "evt_stale_evidence_started".to_string(),
+                sequence: 1,
+                session_id: "sess_stale_evidence".to_string(),
+                thread_id: Some("thread_stale_evidence".to_string()),
+                turn_id: Some("turn_stale_evidence".to_string()),
+                event_type: "turn.started".to_string(),
+                timestamp: "2000-01-01T00:00:00Z".to_string(),
+                payload: json!({}),
+            }],
+            artifacts: Vec::new(),
+            turn_runtime_metadata: std::collections::BTreeMap::new(),
+            request_logs: Vec::new(),
+            workflow_audit_events: Vec::new(),
+        })
+        .await
+        .expect("basic evidence provider")
+        .expect("evidence pack");
+
+    assert_eq!(evidence_pack.thread_status, "idle");
+    assert_eq!(evidence_pack.latest_turn_status.as_deref(), Some("running"));
+    let completion_audit = evidence_pack
+        .completion_audit_summary
+        .as_ref()
+        .expect("completion audit");
+    assert_eq!(
+        completion_audit
+            .get("decision")
+            .and_then(serde_json::Value::as_str),
+        Some("verifying")
+    );
+    assert_eq!(
+        completion_audit
+            .get("runningTurnCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(0)
+    );
+}
+
+#[tokio::test]
 async fn export_evidence_summarizes_workflow_audit_jsonl_metadata_only() {
     let temp = tempfile::tempdir().expect("tempdir");
     let event_log_writer = Arc::new(EventLogWriter::new(temp.path()).expect("writer"));

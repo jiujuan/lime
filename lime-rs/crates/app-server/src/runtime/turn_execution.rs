@@ -1,6 +1,6 @@
 use super::event_store::{append_runtime_events_to_state, append_workflow_audit_runtime_events};
 use super::plugin_worker_workflow_cancel::workflow_cancel_events_from_audit_records;
-use super::status::{agent_turn_is_active, agent_turn_is_terminal};
+use super::status::{agent_turn_blocks_queue_resume, agent_turn_is_active, agent_turn_is_terminal};
 use super::workflow::events::{WORKFLOW_RUN_RESUMING, WORKFLOW_STEP_RESUMING};
 use super::*;
 use app_server_protocol::*;
@@ -306,6 +306,7 @@ impl RuntimeCore {
         }
         self.prepare_memory_prompt_context(&mut params).await;
         self.prepare_session_compaction_prompt_context(&mut params);
+        self.prepare_media_prompt_context(&mut params);
 
         if let Some(capability_id) = params
             .runtime_options
@@ -334,7 +335,13 @@ impl RuntimeCore {
             let active_turn_id = stored
                 .turns
                 .iter()
-                .find(|turn| agent_turn_is_active(turn.status))
+                .find(|turn| {
+                    if params.skip_pre_submit_resume {
+                        agent_turn_blocks_queue_resume(turn.status)
+                    } else {
+                        agent_turn_is_active(turn.status)
+                    }
+                })
                 .map(|turn| turn.turn_id.clone());
             if params.queue_if_busy && active_turn_id.is_some() {
                 if let Some(existing_turn) = stored

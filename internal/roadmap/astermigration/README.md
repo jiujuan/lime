@@ -4,15 +4,17 @@
 创建时间：2026-07-03  
 主目标：按 Codex 风格把 Lime Agent Runtime 收敛为一等 workspace crate 分层，停止把 `aster-rust` 当作 Lime current 运行时事实源。
 
-最新现实校准：2026-07-06 复核后，整体目标完成度按退出条件口径约 `89%`，不能按 `99%` 或“无 Aster 依赖完成态”汇报。`tool-runtime` 已接收 tool execution policy、shell/network policy、shell parser / read-target preflight / concurrency analysis、command semantics、process decode、platform shell runtime、tool definition / extension DTO、WebSearch / WebFetch current executor 等能力；`agent-runtime` 已接收 reply input 与 reply stream envelope；`model-provider` 的 provider stream handle metadata 已进入 `provider_trace` 后端 / 前端 / metrics 主链。
+最新现实校准：2026-07-07 复核后，整体目标完成度按退出条件口径约 `95%`，不能按 `99%` 或“无 Aster 依赖完成态”汇报。`tool-runtime` 已接收 tool execution policy、shell/network policy、shell parser / read-target preflight / concurrency analysis、command semantics、process decode、platform shell runtime、tool definition / extension DTO、WebSearch / WebFetch、apply_patch、skill_search、memory_store、image_task、Codex-style sleep current executor、Codex-style view_image current executor、Codex-style update_plan current executor，以及 Codex-style native dispatch / gateway-aware dispatch builder 骨架；`agent-runtime` 已接收 reply input 与 reply stream envelope；`model-provider` 的 provider stream handle metadata 已进入 `provider_trace` 后端 / 前端 / metrics 主链。
 
-本轮校准的关键变化是：`agent_tools/tool_orchestrator/aster_registry_adapter.rs` 已删除，`tool_orchestrator` 工具批执行不再依赖 Aster `ToolRegistry` / `ToolContext` / `SandboxConfig`。但 root workspace 仍有 vendored `aster` dependency，`lime-agent` 仍有 `aster.workspace = true`；provider/reply loop、Aster `Agent::reply` / `Message` / provider trait、session store / subagent adapter、Aster reply loop 内 native tool registry 与 WebFetch/WebSearch `Tool` trait 注册壳仍是 Phase 6 blocker。详见 [2026-07-05-progress-reality-check.md](./2026-07-05-progress-reality-check.md)。
+本轮校准的关键变化是：`agent_tools/tool_orchestrator/aster_registry_adapter.rs` 已删除，`tool_orchestrator` 工具批执行不再依赖 Aster `ToolRegistry` / `ToolContext` / `SandboxConfig`；WebFetch/WebSearch/apply_patch/skill_search/memory_store/image_task/sleep/view_image/update_plan 的 Lime 侧 Aster adapter 已统一委托 `tool-runtime::native_dispatch` 或 gateway-aware dispatch builder。但 root workspace 仍有 vendored `aster` dependency，`lime-agent` 仍有 `aster.workspace = true`；provider/reply loop、Aster `Agent::reply` / `Message` / provider trait、session store / subagent adapter、Aster reply loop 内 native tool registry 与这些临时 Aster `Tool` trait 注册壳仍是 Phase 6 blocker。详见 [2026-07-05-progress-reality-check.md](./2026-07-05-progress-reality-check.md)。
 
 ## 结论
 
 `lime-rs/crates/aster-rust` 已从 current crate 区移出，当前 `dead / forbidden-to-restore`；迁移期 Aster 只允许停留在 `lime-rs/vendor/aster-rust`，并通过 root workspace dependency `aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }` 暂时服务 compat adapter。这个状态仍是过渡态：Aster 不能再成为 Lime current runtime 事实源，后续所有 provider、tool、session、event 和 store 能力都必须继续向 Lime-owned crate 收敛。
 
 后续固定方向是：**学习 Codex 的 crate 存放和依赖方式，把 Lime 自己的 runtime 能力拆成平铺的一等 workspace crate；Aster 只作为 `compat vendor / deprecated migration reference`，不再是 current 主链。**
+
+2026-07-07 起，Aster 能力接收口径进一步收紧为：**Codex 有则迁，Codex 没有则删**。迁移前必须对照 `/Users/coso/Documents/dev/rust/codex` 的 current 工具面、runtime 分层、Thread / Turn / Item 归属和命名；Codex 有的能力才进入 Lime current，并必须接入 App Server / 前端 / Evidence / runtime 至少一条真实消费链。Codex 没有的 Aster-only 能力直接按 `dead / deleted / forbidden-to-restore` 清理，不再因为“Aster 框架有用”保留 vendor 实现、catalog alias、前端专用展示或 compat 壳。
 
 ## Codex 对照
 
@@ -64,7 +66,7 @@ app-server
 - 迁移期的 Aster event -> Lime runtime event 转换器。
 - 迁移期的 Aster session / conversation 读取 adapter。
 - `lime-rs/vendor/aster-rust`，只服务仍未迁完的 Aster compat adapter。
-- Aster reply loop 内的 native tool registry / WebFetch / WebSearch `Tool` trait adapter，只服务尚未迁出的 `Agent::reply` 工具调用面。
+- Aster reply loop 内的 native tool registry，以及 WebFetch / WebSearch / apply_patch / skill_search / memory_store / image_task / sleep / view_image / update_plan 的临时 Aster `Tool` trait adapter，只服务尚未迁出的 `Agent::reply` 工具调用面。
 
 退出条件：App Server、RuntimeCore、GUI、evidence、replay、tests 均只消费 Lime 自有协议和 runtime crate 后删除。
 
@@ -95,7 +97,8 @@ app-server
 3. App Server 只依赖 Lime runtime interface，不直接 import Aster 类型。
 4. `services` 和 `core` 只承接 Lime 领域模型和 persistence，不实现 Aster 公共 trait。
 5. Aster 源码只允许作为迁移参考或短期 vendor，不承担 Lime 业务事实源。
-6. 所有迁移必须配守卫：Cargo 依赖守卫、源码 import 守卫、App Server runtime boundary 守卫。
+6. 命名优先短、领域化、可读：学习 Aster 的简洁命名品味和 Codex 的工具命名，但不把 `lime_*`、`aster_*`、`agent_runtime_*` 或冗长历史词带进 current API。
+7. 所有迁移必须配守卫：Cargo 依赖守卫、源码 import 守卫、App Server runtime boundary 守卫。
 
 ## 配套文档
 

@@ -215,6 +215,82 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(isSending).toBe(true);
   });
 
+  it("富输入恢复结构应随 current turn metadata 一起提交给 App Server", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000012")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000013");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "请结合截图和文件继续审查",
+      images: [createImageAttachment()],
+      skipUserMessage: false,
+      options: {
+        requestMetadata: {
+          harness: {
+            source: "inputbar",
+          },
+        },
+        inputRestoreDraft: {
+          text: "请结合截图和文件继续审查",
+          images: [createImageAttachment()],
+          pathReferences: [
+            {
+              id: "file:/project/report.md",
+              path: "/project/report.md",
+              name: "report.md",
+              isDir: false,
+              source: "file_manager",
+            },
+          ],
+          textElements: [{ type: "text", text: "请结合截图和文件继续审查" }],
+          inputCapabilityRoute: {
+            kind: "installed_skill",
+            skillKey: "code-review",
+            skillName: "Code Review",
+          },
+        },
+      },
+      env: createEnv(),
+    });
+
+    expect(result.submittedDraft).toMatchObject({
+      pathReferences: [
+        {
+          path: "/project/report.md",
+        },
+      ],
+      textElements: [{ type: "text", text: "请结合截图和文件继续审查" }],
+      inputCapabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "code-review",
+      },
+    });
+    expect(result.requestMetadata).toMatchObject({
+      path_references: [
+        {
+          path: "/project/report.md",
+        },
+      ],
+      text_elements: [{ type: "text", text: "请结合截图和文件继续审查" }],
+      input_capability_route: {
+        kind: "installed_skill",
+        skillKey: "code-review",
+      },
+      harness: {
+        source: "inputbar",
+        file_references: [
+          {
+            path: "/project/report.md",
+          },
+        ],
+        input_capability_route: {
+          kind: "installed_skill",
+          skillKey: "code-review",
+        },
+      },
+    });
+  });
+
   it("应优先使用 executionRuntime 回填空的 provider/model 发送偏好", () => {
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("00000000-0000-0000-0000-000000000010")

@@ -53,6 +53,10 @@ export type AppServerAgentSessionOverview = {
   workingDir?: string;
   executionStrategy?: string;
   messagesCount: number;
+  threadStatus?: string;
+  latestTurnStatus?: string;
+  activeTurnId?: string;
+  queuedTurnCount?: number;
 };
 
 export type AppServerAgentSessionListResponse = {
@@ -343,6 +347,11 @@ function readAppServerAgentSessionOverview(
       "execution_strategy",
     ),
     messagesCount,
+    threadStatus: readOptionalStringField(value, "threadStatus") ?? undefined,
+    latestTurnStatus:
+      readOptionalStringField(value, "latestTurnStatus") ?? undefined,
+    activeTurnId: readOptionalStringField(value, "activeTurnId") ?? undefined,
+    queuedTurnCount: readNumberField(value, "queuedTurnCount"),
   }) as AppServerAgentSessionOverview;
 }
 
@@ -629,6 +638,10 @@ function appServerSessionOverviewToRuntimeInfo(
         : undefined,
     workspace_id: session.workspaceId,
     working_dir: session.workingDir,
+    thread_status: session.threadStatus,
+    latest_turn_status: session.latestTurnStatus,
+    active_turn_id: session.activeTurnId,
+    queued_turn_count: session.queuedTurnCount,
   });
 }
 

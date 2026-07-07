@@ -137,6 +137,10 @@ fn llm_media_output_content_part(part: &LlmOutputPart) -> Option<RuntimeContentP
         mime_type: mime_type.to_owned(),
         title: None,
         caption: None,
+        source_uri: None,
+        source_path: None,
+        preview_url: None,
+        sidecar_ref: None,
         sha256: None,
         byte_size: None,
     })

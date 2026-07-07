@@ -35,11 +35,14 @@ export interface AgentUiPerformanceSessionSummary {
   homeInputToFirstTextDeltaMs?: number;
   homeInputToFirstTextRenderFlushMs?: number;
   homeInputToFirstTextPaintMs?: number;
+  streamRequestStartToFirstTextPaintMs?: number;
   sendDispatchToSubmitAcceptedMs?: number;
   streamSubmitDispatchedToAcceptedMs?: number;
   submitAcceptedToFirstEventMs?: number;
+  submitAcceptedToFirstTextPaintMs?: number;
   firstEventToFirstThinkingDeltaMs?: number;
   firstEventToFirstTextDeltaMs?: number;
+  firstEventToFirstTextPaintMs?: number;
   firstThinkingDeltaToFirstTextDeltaMs?: number;
   firstTextDeltaToFirstTextPaintMs?: number;
   providerWaitMs?: number;
@@ -556,6 +559,10 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
         homeInputSubmit,
         streamFirstTextPaint,
       ),
+      streamRequestStartToFirstTextPaintMs: deltaMs(
+        streamRequestStart,
+        streamFirstTextPaint,
+      ),
       sendDispatchToSubmitAcceptedMs: deltaMs(
         homeInputSendDispatch,
         streamSubmitAccepted,
@@ -568,6 +575,10 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
         streamSubmitAccepted,
         streamFirstEvent,
       ),
+      submitAcceptedToFirstTextPaintMs: deltaMs(
+        streamSubmitAccepted,
+        streamFirstTextPaint,
+      ),
       firstEventToFirstThinkingDeltaMs: deltaMs(
         streamFirstEvent,
         streamFirstThinkingDelta,
@@ -575,6 +586,10 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
       firstEventToFirstTextDeltaMs: deltaMs(
         streamFirstEvent,
         streamFirstTextDelta,
+      ),
+      firstEventToFirstTextPaintMs: deltaMs(
+        streamFirstEvent,
+        streamFirstTextPaint,
       ),
       firstThinkingDeltaToFirstTextDeltaMs: deltaMs(
         streamFirstThinkingDelta,

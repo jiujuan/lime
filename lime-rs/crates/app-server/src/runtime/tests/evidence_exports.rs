@@ -8,6 +8,7 @@ use std::path::Path;
 mod base;
 mod browser;
 mod coding_snapshot;
+mod context_summary;
 mod handoff_review;
 mod plugin_task;
 mod provider_telemetry;

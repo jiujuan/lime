@@ -10,8 +10,6 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum HookEvent {
-    /// 任务创建
-    TaskCreated,
     /// 任务完成
     TaskCompleted,
     /// 工具执行前
@@ -58,7 +56,6 @@ pub enum HookEvent {
 impl std::fmt::Display for HookEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HookEvent::TaskCreated => write!(f, "TaskCreated"),
             HookEvent::TaskCompleted => write!(f, "TaskCompleted"),
             HookEvent::PreToolUse => write!(f, "PreToolUse"),
             HookEvent::PostToolUse => write!(f, "PostToolUse"),

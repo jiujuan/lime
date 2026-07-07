@@ -390,6 +390,12 @@ pub enum AgentEvent {
         runtime_provider_active_model: Option<String>,
     },
 
+    #[serde(rename = "provider_stream_event")]
+    ProviderStreamEvent {
+        runtime_event_kind: String,
+        payload: Value,
+    },
+
     #[serde(rename = "context_trace")]
     ContextTrace { steps: Vec<AgentContextTraceStep> },
 
@@ -698,6 +704,35 @@ mod tests {
 
         assert_eq!(value["type"], "runtime_status");
         assert_eq!(value["status"]["phase"], "routing");
+    }
+
+    #[test]
+    fn agent_event_provider_stream_event_serializes_current_payload() {
+        let event = model_provider::provider_stream::RuntimeReplyProviderStreamEvent::SafetyBuffering(
+            model_provider::safety::ProviderSafetyBufferingRuntimeEventPayload {
+                kind: model_provider::safety::SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
+                provider: Some("openai".to_string()),
+                model: Some("gpt-5-codex".to_string()),
+                use_cases: vec!["policy".to_string()],
+                reasons: vec!["buffering".to_string()],
+                show_buffering_ui: true,
+                retry_model: Some("gpt-5-mini".to_string()),
+                fallback_header_model: None,
+                source: model_provider::safety::ProviderSafetyBufferingRetryModelSource::PayloadRetryModel,
+            },
+        );
+        let value = serde_json::to_value(AgentEvent::ProviderStreamEvent {
+            runtime_event_kind: event.runtime_event_kind().to_string(),
+            payload: event.payload_json_value(),
+        })
+        .expect("serialize provider stream event");
+
+        assert_eq!(value["type"], "provider_stream_event");
+        assert_eq!(value["runtime_event_kind"], "provider_safety_buffering");
+        assert_eq!(value["payload"]["retryModel"], "gpt-5-mini");
+        assert_eq!(value["payload"]["source"], "payload_retry_model");
+        assert!(value["payload"].get("retry_model").is_none());
+        assert!(value["payload"].get("fasterModel").is_none());
     }
 
     #[test]

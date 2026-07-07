@@ -1,13 +1,16 @@
-export {
-  BUILT_IN_SOUL_STYLE_PACK_IDS,
-  BUILT_IN_SOUL_STYLE_PACKS,
-  BUILT_IN_SOUL_STYLE_PROFILES,
-  DEFAULT_SOUL_STYLE_PROFILE_ID,
-  SERIOUS_SOUL_STYLE_PROFILE_ID,
-  getBuiltInSoulStyleProfile,
-} from "./builtInProfiles";
 export { composeStyleDirectives } from "./composeStyleDirectives";
 export { evaluateStyleBoundary } from "./evaluateStyleBoundary";
+export {
+  assertSoulStylePackManifest,
+  toSoulStylePackManifest,
+  type SoulStylePackManifestValidationOptions,
+} from "./manifest";
+export {
+  DEFAULT_SOUL_STYLE_PROFILE_REGISTRY,
+  createSoulStyleProfileRegistry,
+  type CreateSoulStyleProfileRegistryOptions,
+  type SoulStyleProfileRegistry,
+} from "./registry";
 export {
   isSoulStyleProfileId,
   normalizeSoulStyleIntensity,

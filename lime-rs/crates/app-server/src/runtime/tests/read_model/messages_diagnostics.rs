@@ -46,6 +46,57 @@ impl ExecutionBackend for PhasedAgentMessagesBackend {
     }
 }
 
+struct ProviderSafetyBufferingBackend;
+
+#[async_trait]
+impl ExecutionBackend for ProviderSafetyBufferingBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new(
+            "provider_safety_buffering",
+            json!({
+                "kind": "provider_safety_buffering",
+                "backend": "runtime",
+                "provider": "openai",
+                "model": "gpt-5-codex",
+                "useCases": ["cyber"],
+                "reasons": ["policy"],
+                "showBufferingUi": true,
+                "retryModel": "gpt-5-mini",
+                "fallbackHeaderModel": "legacy-fast",
+                "source": "payload_retry_model",
+                "runtimeEvent": {
+                    "type": "provider_stream_event",
+                    "payload": {
+                        "retryModel": "gpt-5-mini"
+                    }
+                }
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[tokio::test]
 async fn read_session_projects_runtime_turns_into_gui_messages() {
     let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
@@ -111,6 +162,68 @@ async fn read_session_projects_runtime_turns_into_gui_messages() {
     assert_eq!(
         messages[1]["content"][0]["text"],
         "你好！有什么可以帮你的吗？"
+    );
+}
+
+#[tokio::test]
+async fn read_session_projects_provider_safety_buffering_into_diagnostics() {
+    let core = RuntimeCore::with_backend(Arc::new(ProviderSafetyBufferingBackend));
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_safety_buffering".to_string()),
+        thread_id: Some("thread_safety_buffering".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_safety_buffering".to_string(),
+            turn_id: Some("turn_safety_buffering".to_string()),
+            input: AgentInput {
+                text: "触发 safety buffering".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_safety_buffering".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+    let diagnostics = &detail["thread_read"]["diagnostics"];
+    let latest = &diagnostics["latest_provider_safety_buffering"];
+
+    assert_eq!(diagnostics["provider_safety_buffering_count"], 1);
+    assert_eq!(latest["thread_id"], "thread_safety_buffering");
+    assert_eq!(latest["turn_id"], "turn_safety_buffering");
+    assert_eq!(latest["provider"], "openai");
+    assert_eq!(latest["model"], "gpt-5-codex");
+    assert_eq!(latest["use_cases"], json!(["cyber"]));
+    assert_eq!(latest["reasons"], json!(["policy"]));
+    assert_eq!(latest["show_buffering_ui"], true);
+    assert_eq!(latest["retry_model"], "gpt-5-mini");
+    assert_eq!(latest["fallback_header_model"], "legacy-fast");
+    assert_eq!(latest["source"], "payload_retry_model");
+    assert_eq!(latest["backend"], "runtime");
+    assert!(latest.get("runtimeEvent").is_none());
+    assert!(latest.get("retryModel").is_none());
+    assert_eq!(
+        detail["thread_read"]["runtime_summary"]["latestProviderSafetyBuffering"],
+        diagnostics["latest_provider_safety_buffering"]
     );
 }
 

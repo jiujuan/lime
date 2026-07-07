@@ -16,6 +16,7 @@ mod coding_activity_projection;
 mod connect;
 mod context_auto_compaction;
 mod context_compaction;
+mod context_media;
 mod context_packet;
 mod conversation_import;
 mod diagnostics;
@@ -70,6 +71,7 @@ mod session_files;
 mod session_hydration;
 mod session_lifecycle;
 pub(crate) mod session_list_scope;
+mod session_media_reader;
 pub(crate) mod session_title;
 pub(crate) mod sidecar_store;
 mod skills;
@@ -167,6 +169,7 @@ use chrono::Utc;
 use lime_browser_runtime::{BrowserProfileScope, BrowserRuntimeManager};
 use lime_infra::telemetry::RequestLog;
 use lime_infra::telemetry::TelemetryStore;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -272,6 +275,7 @@ pub struct EvidencePackRequest {
     pub turns: Vec<AgentTurn>,
     pub events: Vec<AgentEvent>,
     pub artifacts: Vec<ArtifactSummary>,
+    pub turn_runtime_metadata: BTreeMap<String, serde_json::Value>,
     pub request_logs: Vec<RequestLog>,
     pub workflow_audit_events: Vec<AgentEvent>,
 }

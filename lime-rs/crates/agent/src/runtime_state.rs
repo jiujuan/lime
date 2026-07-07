@@ -219,7 +219,7 @@ impl AgentRuntimeState {
     /// 注册 App Server current 主链提供的 memory native tools。
     pub async fn register_memory_store_tools(
         &self,
-        gateway: Arc<dyn crate::native_tools::MemoryStoreGateway>,
+        gateway: Arc<dyn tool_runtime::memory_store::MemoryStoreGateway>,
     ) -> Result<(), String> {
         for tool in crate::native_tools::create_memory_tools(gateway.clone()) {
             self.register_native_tool(tool).await?;
@@ -230,7 +230,7 @@ impl AgentRuntimeState {
     /// 注册 App Server current 主链提供的 image native tools。
     pub async fn register_image_task_tools(
         &self,
-        gateway: Arc<dyn crate::native_tools::ImageTaskGateway>,
+        gateway: Arc<dyn tool_runtime::image_task::ImageTaskGateway>,
     ) -> Result<(), String> {
         for tool in crate::native_tools::create_image_tools(gateway.clone()) {
             self.register_native_tool(tool).await?;

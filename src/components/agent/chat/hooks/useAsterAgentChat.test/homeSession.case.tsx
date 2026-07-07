@@ -142,6 +142,101 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("首页后台恢复运行候选时不应抢占为空白会话详情", async () => {
+    const sessionId = "session-home-background-running-restore";
+    const turnId = "turn-home-background-running-restore";
+    const threadId = "thread-home-background-running-restore";
+    localStorage.setItem(
+      "aster_last_sessionId_global",
+      JSON.stringify(sessionId),
+    );
+    sessionStorage.setItem(
+      "aster_curr_sessionId_global",
+      JSON.stringify(sessionId),
+    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: sessionId,
+        name: "后台继续中的任务",
+        created_at: 1700000500,
+        updated_at: 1700000501,
+        messages_count: 2,
+        thread_status: "running",
+        latest_turn_status: "running",
+        active_turn_id: turnId,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      name: "后台继续中的任务",
+      created_at: 1700000500,
+      updated_at: 1700000501,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1700000500,
+          content: [{ type: "text", text: "继续后台任务" }],
+        },
+        {
+          role: "assistant",
+          timestamp: 1700000501,
+          content: [{ type: "text", text: "后台恢复中的输出。" }],
+        },
+      ],
+      turns: [
+        {
+          id: turnId,
+          thread_id: threadId,
+          prompt_text: "继续后台任务",
+          status: "running",
+          started_at: "2026-07-07T00:00:00.000Z",
+          created_at: "2026-07-07T00:00:00.000Z",
+          updated_at: "2026-07-07T00:00:01.000Z",
+        },
+      ],
+      items: [],
+      queued_turns: [],
+      thread_read: {
+        thread_id: threadId,
+        status: "running",
+        profile_status: "running",
+        active_turn_id: turnId,
+        turns: [{ turn_id: turnId, status: "running" }],
+      },
+    });
+
+    const harness = mountHook("", {
+      sessionRestorePresentation: "background",
+    });
+
+    try {
+      await flushEffects();
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({
+          source: "homeBackgroundRecovery",
+          resumeSessionStartHooks: true,
+        }),
+      );
+      expect(harness.getValue().sessionId).toBeNull();
+      expect(harness.getValue().messages).toEqual([]);
+      expect(harness.getValue().threadRead).toBeNull();
+      expect(harness.getValue().topics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: sessionId,
+            status: "running",
+          }),
+        ]),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("无工作区显式发送时应预热全局模型但不写入 workspace_id", async () => {
     mockInitAsterAgent.mockResolvedValue({
       initialized: true,

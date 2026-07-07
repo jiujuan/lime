@@ -664,8 +664,7 @@ mod tests {
     use aster::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
     use aster::providers::errors::ProviderError;
     use aster::session::{
-        ChatHistoryMatch, CommitOptions, CommitReport, MemoryCategory, MemoryHealth, MemoryRecord,
-        MemorySearchResult, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
+        ChatHistoryMatch, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
         TurnStatus,
     };
     use async_trait::async_trait;
@@ -875,52 +874,6 @@ mod tests {
             _exclude_session_id: Option<String>,
         ) -> anyhow::Result<Vec<ChatHistoryMatch>> {
             Ok(Vec::new())
-        }
-
-        async fn commit_session(
-            &self,
-            _id: &str,
-            _options: CommitOptions,
-        ) -> anyhow::Result<CommitReport> {
-            Ok(CommitReport {
-                session_id: "test-session-store".to_string(),
-                messages_scanned: 0,
-                memories_created: 0,
-                memories_merged: 0,
-                source_start_ts: None,
-                source_end_ts: None,
-                warnings: Vec::new(),
-            })
-        }
-
-        async fn search_memories(
-            &self,
-            _query: &str,
-            _limit: Option<usize>,
-            _session_scope: Option<&str>,
-            _categories: Option<Vec<MemoryCategory>>,
-        ) -> anyhow::Result<Vec<MemorySearchResult>> {
-            Ok(Vec::new())
-        }
-
-        async fn retrieve_context_memories(
-            &self,
-            _session_id: &str,
-            _query: &str,
-            _limit: usize,
-        ) -> anyhow::Result<Vec<MemoryRecord>> {
-            Ok(Vec::new())
-        }
-
-        async fn memory_stats(&self) -> anyhow::Result<aster::session::MemoryStats> {
-            Ok(aster::session::MemoryStats::default())
-        }
-
-        async fn memory_health(&self) -> anyhow::Result<MemoryHealth> {
-            Ok(MemoryHealth {
-                healthy: true,
-                message: "test session store".to_string(),
-            })
         }
     }
 

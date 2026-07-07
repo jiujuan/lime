@@ -73,11 +73,58 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
         threadRead: {
           status: "running",
           active_turn_id: "turn-running",
+          turns: [{ turn_id: "turn-running", status: "running" }],
         },
       }),
     );
 
     expect(projection.sceneIsSending).toBe(true);
+  });
+
+  it("当前 read model 的近期 running turn 应保持场景发送态", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        isSending: false,
+        threadRead: {
+          status: "running",
+          active_turn_id: "turn-running",
+          pending_requests: [],
+          queued_turns: [],
+          turns: [
+            {
+              turn_id: "turn-running",
+              status: "running",
+              started_at: new Date().toISOString(),
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(projection.sceneIsSending).toBe(true);
+  });
+
+  it("意外退出遗留的陈旧 running turn 不应永久锁住输入框", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        isSending: false,
+        threadRead: {
+          status: "running",
+          active_turn_id: "turn-orphaned",
+          pending_requests: [],
+          queued_turns: [],
+          turns: [
+            {
+              turn_id: "turn-orphaned",
+              status: "running",
+              started_at: "2026-03-29T00:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(projection.sceneIsSending).toBe(false);
   });
 
   it("当前 read model 的运行中 turn 也应保持场景发送态", () => {
@@ -95,5 +142,67 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
     );
 
     expect(projection.sceneIsSending).toBe(true);
+  });
+
+  it("陈旧 running 状态指向已完成 active turn 时不应永久锁住输入框", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        isSending: false,
+        threadRead: {
+          status: "running",
+          profile_status: "running",
+          active_turn_id: "turn-stale",
+          turns: [{ turn_id: "turn-stale", status: "completed" }],
+        },
+      }),
+    );
+
+    expect(projection.sceneIsSending).toBe(false);
+  });
+
+  it("陈旧 active_turn_id 找不到对应 running turn 时应 fail closed", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        isSending: false,
+        threadRead: {
+          status: "running",
+          active_turn_id: "turn-missing",
+          turns: [{ turn_id: "turn-completed", status: "completed" }],
+        },
+      }),
+    );
+
+    expect(projection.sceneIsSending).toBe(false);
+  });
+
+  it("只有 thread 级 running 但没有 running turn 证据时不应进入发送态", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        isSending: false,
+        threadRead: {
+          status: "running",
+          profile_status: "running",
+          turns: [{ turn_id: "turn-completed", status: "completed" }],
+        },
+      }),
+    );
+
+    expect(projection.sceneIsSending).toBe(false);
+  });
+
+  it("当前 read model 已失败时不应被残留 active turn 维持发送态", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        isSending: false,
+        threadRead: {
+          status: "failed",
+          profile_status: "failed",
+          active_turn_id: "turn-stale",
+          turns: [{ turn_id: "turn-stale", status: "running" }],
+        },
+      }),
+    );
+
+    expect(projection.sceneIsSending).toBe(false);
   });
 });

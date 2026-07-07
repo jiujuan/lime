@@ -151,10 +151,16 @@ export const CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO =
   "content-factory-inline-image-article-workspace";
 export const SOUL_STYLE_SCENARIO = "soul-style";
 export const INPUTBAR_RICH_RESTORE_SCENARIO = "inputbar-rich-restore";
+export const INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO =
+  "inputbar-pending-steer-rich-restore";
 export const NEWS_PROMPT = "整理今天的国际新闻";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
 export const GOAL_PROMPT = "本周完成 Goal E2E 修复";
+export const INPUTBAR_PENDING_STEER_ACTIVE_PROMPT =
+  "请持续输出一段用于 pending steer fixture 的长回复。";
+export const INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT =
+  "pending steer active turn 正在输出，后续 rich draft 应先进入 queue。";
 export const INPUTBAR_RICH_RESTORE_PROMPT =
   "请结合这个截图、文件和 Capability Report 技能，先不要输出正文。";
 export const INPUTBAR_RICH_RESTORE_PATH_NAME =
@@ -202,6 +208,46 @@ export const WEB_TOOLS_SEARCH_SNIPPET =
   "Search source used to verify inline rendering";
 export const WEB_TOOLS_MID_THINKING_TEXT =
   "搜索结果还需要继续筛掉广告软文，我先读取有效来源。";
+export const REASONING_FIRST_VISIBLE_SCENARIO = "reasoning-first-visible";
+export const REASONING_FIRST_VISIBLE_PROMPT =
+  "验证 reasoning 先于最终回答可见";
+export const REASONING_FIRST_VISIBLE_TEXT =
+  "先确认用户要验证的是展示时序，再给出最终回答。";
+export const REASONING_FIRST_VISIBLE_FINAL_TEXT =
+  "最终回答：reasoning 已经先于正文出现在当前回合。";
+export const REASONING_FIRST_VISIBLE_DONE_TEXT =
+  "REASONING_FIRST_VISIBLE_DONE";
+export const TERMINAL_STALE_GUARD_SCENARIO = "terminal-stale-guard";
+export const TERMINAL_STALE_GUARD_FIRST_PROMPT =
+  "验证旧 terminal 不影响下一轮：第一轮";
+export const TERMINAL_STALE_GUARD_SECOND_PROMPT =
+  "验证旧 terminal 不影响下一轮：第二轮";
+export const TERMINAL_STALE_GUARD_FIRST_TEXT =
+  "第一轮已经完成，用作后续旧 terminal owner。";
+export const TERMINAL_STALE_GUARD_SECOND_TEXT =
+  "第二轮在旧 terminal 干扰后继续完成。";
+export const TERMINAL_STALE_GUARD_FIRST_DONE_TEXT =
+  "TERMINAL_STALE_GUARD_FIRST_DONE";
+export const TERMINAL_STALE_GUARD_DONE_TEXT =
+  "TERMINAL_STALE_GUARD_DONE";
+export const TERMINAL_STALE_GUARD_STALE_DONE_TEXT =
+  "TERMINAL_STALE_GUARD_STALE_DONE";
+export const TERMINAL_FAILED_AFTER_ANSWER_SCENARIO =
+  "terminal-failed-after-answer";
+export const TERMINAL_FAILED_AFTER_ANSWER_PROMPT =
+  "验证已输出正文后 turn.failed 不吞正文";
+export const TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT =
+  "TERMINAL_FAILED_AFTER_ANSWER_PARTIAL: 正文已经先显示，失败终态不能覆盖或重复。";
+export const TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT =
+  "TERMINAL_FAILED_AFTER_ANSWER_FAILURE: provider stream closed after partial answer";
+export const TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO =
+  "terminal-canceled-after-answer";
+export const TERMINAL_CANCELED_AFTER_ANSWER_PROMPT =
+  "验证已输出正文后 turn.canceled 不吞正文";
+export const TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT =
+  "TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL: 正文已经先显示，取消终态不能覆盖或重复。";
+export const TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT =
+  "TERMINAL_CANCELED_AFTER_ANSWER_CANCELED: user canceled after partial answer";
 export const WEB_TOOLS_REASONING_FINAL_SIGNATURE =
   "web-tools-reasoning-final-signature";
 export const WEB_TOOLS_REASONING_ITEM_SIGNATURE =
@@ -353,6 +399,44 @@ export const WEB_TOOLS_RENDERING_ASSERTION_KEYS = [
   "readModelWebToolsReasoningProviderMetadataPreserved",
   "guiWebToolsReasoningDidNotOpenPlanRail",
 ];
+export const REASONING_FIRST_VISIBLE_ASSERTION_KEYS = [
+  "reasoningFirstVisiblePromptReachedBackend",
+  "guiReasoningFirstVisibleInputSubmitted",
+  "guiReasoningFirstVisibleBeforeAnswer",
+  "guiReasoningFirstVisibleCompleted",
+  "readModelReasoningFirstVisibleCompleted",
+  "readModelReasoningFirstVisibleItemObserved",
+];
+export const TERMINAL_STALE_GUARD_ASSERTION_KEYS = [
+  "terminalStaleGuardFirstPromptReachedBackend",
+  "terminalStaleGuardSecondPromptReachedBackend",
+  "terminalStaleGuardFirstCompleted",
+  "terminalStaleGuardSecondInputSubmitted",
+  "terminalStaleGuardSecondCompleted",
+  "terminalStaleGuardReadModelCompleted",
+  "terminalStaleGuardStaleTerminalIgnored",
+];
+export const TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS = [
+  "terminalFailedAfterAnswerPromptReachedBackend",
+  "guiTerminalFailedAfterAnswerInputSubmitted",
+  "guiTerminalFailedAfterAnswerPartialRetained",
+  "guiTerminalFailedAfterAnswerFailureVisible",
+  "guiTerminalFailedAfterAnswerNoDuplicates",
+  "guiTerminalFailedAfterAnswerInputReady",
+  "readModelTerminalFailedAfterAnswerFailed",
+  "backendTerminalFailedAfterAnswerRecorded",
+];
+export const TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS = [
+  "terminalCanceledAfterAnswerPromptReachedBackend",
+  "guiTerminalCanceledAfterAnswerInputSubmitted",
+  "guiTerminalCanceledAfterAnswerPartialVisibleBeforeStop",
+  "guiTerminalCanceledAfterAnswerStopClicked",
+  "guiTerminalCanceledAfterAnswerPartialRetained",
+  "guiTerminalCanceledAfterAnswerNoDuplicates",
+  "guiTerminalCanceledAfterAnswerInputReady",
+  "readModelTerminalCanceledAfterAnswerCanceled",
+  "backendTerminalCanceledAfterAnswerRecorded",
+];
 export const MCP_STRUCTURED_CONTENT_ASSERTION_KEYS = [
   "mcpStructuredContentPromptReachedBackend",
   "guiMcpStructuredContentInputSubmitted",
@@ -404,6 +488,27 @@ export const INPUTBAR_RICH_RESTORE_ASSERTION_KEYS = [
   "inputbarRichRestoreSkillRestored",
   "inputbarRichRestoreNoVisibleAssistantOutput",
   "inputbarRichRestoreReadModelCanceled",
+];
+export const INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS = [
+  "inputbarPendingSteerActivePromptReachedBackend",
+  "inputbarPendingSteerActiveOutputVisible",
+  "inputbarPendingSteerRichDraftPrepared",
+  "inputbarPendingSteerRichInputDeferred",
+  "inputbarPendingSteerReadModelQueued",
+  "inputbarPendingSteerQueuedRichTextPreserved",
+  "inputbarPendingSteerQueuedRichImagePreserved",
+  "inputbarPendingSteerQueuedRichPathPreserved",
+  "inputbarPendingSteerQueuedRichTextElementsPreserved",
+  "inputbarPendingSteerQueuedRichSkillPreserved",
+  "inputbarPendingSteerRichPromptNotStartedBeforeCancel",
+  "inputbarPendingSteerUsedCurrentTurnCancel",
+  "inputbarPendingSteerActiveBackendCanceled",
+  "inputbarPendingSteerGuiCanceled",
+  "inputbarPendingSteerTextRestored",
+  "inputbarPendingSteerImageRestored",
+  "inputbarPendingSteerPathRestored",
+  "inputbarPendingSteerSkillRestored",
+  "inputbarPendingSteerActiveAssistantOutputKept",
 ];
 export const RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS = [
   "rightSurfaceVisualMatrixRequestedThroughAppServer",

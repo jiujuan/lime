@@ -3,6 +3,7 @@ use super::read_model;
 use super::session_list_scope::normalize_cwd_values;
 use super::session_list_scope::SessionListScope;
 use super::session_title;
+use super::status::resolve_agent_session_runtime_state;
 use super::*;
 use app_server_protocol::*;
 use serde_json::json;
@@ -10,6 +11,13 @@ use std::collections::{HashMap, HashSet};
 
 fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
     let session = &stored.session;
+    let runtime_state = resolve_agent_session_runtime_state(
+        session.status,
+        0,
+        &stored.turns,
+        &stored.events,
+        chrono::Utc::now(),
+    );
     let explicit_title = session
         .business_object_ref
         .as_ref()
@@ -63,6 +71,10 @@ fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
                 })
             }),
         messages_count: read_model::runtime_session_messages(stored).len(),
+        thread_status: runtime_state.thread_status,
+        latest_turn_status: runtime_state.latest_turn_status,
+        active_turn_id: runtime_state.active_turn_id,
+        queued_turn_count: runtime_state.queued_turn_count,
     }
 }
 

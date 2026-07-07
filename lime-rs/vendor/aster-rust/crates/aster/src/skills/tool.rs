@@ -19,9 +19,8 @@ use crate::providers::base::Provider;
 use crate::providers::errors::ProviderError;
 use crate::providers::{create_with_default_model, create_with_named_model};
 use crate::session::{
-    ChatHistoryMatch, CommitOptions, CommitReport, ExtensionData, ItemRuntime, ItemRuntimePayload,
-    MemoryCategory, MemoryHealth, MemoryRecord, MemorySearchResult, MemoryStats, Session,
-    SessionInsights, SessionStore, SessionType, TokenStatsUpdate, TurnContextOverride,
+    ChatHistoryMatch, ExtensionData, ItemRuntime, ItemRuntimePayload, Session, SessionInsights,
+    SessionStore, SessionType, TokenStatsUpdate, TurnContextOverride,
 };
 use crate::tools::base::{PermissionCheckResult, Tool};
 use crate::tools::context::{ToolContext, ToolResult};
@@ -936,52 +935,6 @@ impl SessionStore for SkillAgentSessionStore {
         _exclude_session_id: Option<String>,
     ) -> anyhow::Result<Vec<ChatHistoryMatch>> {
         Ok(Vec::new())
-    }
-
-    async fn commit_session(
-        &self,
-        session_id: &str,
-        _options: CommitOptions,
-    ) -> anyhow::Result<CommitReport> {
-        Ok(CommitReport {
-            session_id: session_id.to_string(),
-            messages_scanned: 0,
-            memories_created: 0,
-            memories_merged: 0,
-            source_start_ts: None,
-            source_end_ts: None,
-            warnings: Vec::new(),
-        })
-    }
-
-    async fn search_memories(
-        &self,
-        _query: &str,
-        _limit: Option<usize>,
-        _session_scope: Option<&str>,
-        _categories: Option<Vec<MemoryCategory>>,
-    ) -> anyhow::Result<Vec<MemorySearchResult>> {
-        Ok(Vec::new())
-    }
-
-    async fn retrieve_context_memories(
-        &self,
-        _session_id: &str,
-        _query: &str,
-        _limit: usize,
-    ) -> anyhow::Result<Vec<MemoryRecord>> {
-        Ok(Vec::new())
-    }
-
-    async fn memory_stats(&self) -> anyhow::Result<MemoryStats> {
-        Ok(MemoryStats::default())
-    }
-
-    async fn memory_health(&self) -> anyhow::Result<MemoryHealth> {
-        Ok(MemoryHealth {
-            healthy: true,
-            message: "skill-agent-memory-disabled".to_string(),
-        })
     }
 }
 

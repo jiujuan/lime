@@ -89,6 +89,66 @@ describe("agentChatShared", () => {
     expect(topic.title).not.toContain("1970");
   });
 
+  it("App Server list overview 的未完成状态应投影到最近会话 topic", () => {
+    expect(
+      mapSessionToTopic({
+        id: "session-running",
+        name: "运行中会话",
+        created_at: 1780847017766,
+        updated_at: 1780847020000,
+        messages_count: 2,
+        thread_status: "running",
+        latest_turn_status: "accepted",
+        active_turn_id: "turn-running",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "running",
+        statusReason: "default",
+        lastPreview: "正在继续输出。",
+      }),
+    );
+
+    expect(
+      mapSessionToTopic({
+        id: "session-waiting",
+        name: "待确认会话",
+        created_at: 1780847017766,
+        updated_at: 1780847020000,
+        messages_count: 2,
+        thread_status: "waitingAction",
+        latest_turn_status: "waitingAction",
+        active_turn_id: "turn-waiting",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "waiting",
+        statusReason: "user_action",
+        lastPreview: "等待你确认后继续。",
+      }),
+    );
+  });
+
+  it("终态 overview 即使带 stale active turn 也不应投影成运行中", () => {
+    expect(
+      mapSessionToTopic({
+        id: "session-completed-stale",
+        name: "已完成会话",
+        created_at: 1780847017766,
+        updated_at: 1780847020000,
+        messages_count: 2,
+        thread_status: "completed",
+        latest_turn_status: "running",
+        active_turn_id: "turn-stale",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "done",
+        statusReason: "default",
+      }),
+    );
+  });
+
   it("待处理 action request 未提交时应优先判定为待处理", () => {
     const messages = createPendingActionMessages();
 
@@ -375,6 +435,22 @@ describe("agentChatShared", () => {
         hasUnread: false,
         tag: null,
         sourceSessionId: "topic-done",
+      },
+      {
+        id: "topic-running",
+        title: "运行中任务",
+        createdAt: new Date("2026-03-15T09:48:00.000Z"),
+        updatedAt: new Date("2026-03-15T09:49:00.000Z"),
+        workspaceId: "workspace-1",
+        messagesCount: 3,
+        executionStrategy: "react" as const,
+        status: "running" as const,
+        statusReason: "default" as const,
+        lastPreview: "正在继续输出。",
+        isPinned: false,
+        hasUnread: false,
+        tag: null,
+        sourceSessionId: "topic-running",
       },
       {
         id: "topic-waiting",

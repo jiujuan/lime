@@ -238,6 +238,10 @@ describe("appServerSessionClient", () => {
             workingDir: "/tmp/workspace-1",
             executionStrategy: "react",
             messagesCount: 3,
+            threadStatus: "running",
+            latestTurnStatus: "accepted",
+            activeTurnId: "turn-1",
+            queuedTurnCount: 1,
           },
         ],
       },
@@ -267,6 +271,10 @@ describe("appServerSessionClient", () => {
         workspace_id: "workspace-1",
         working_dir: "/tmp/workspace-1",
         execution_strategy: "react",
+        thread_status: "running",
+        latest_turn_status: "accepted",
+        active_turn_id: "turn-1",
+        queued_turn_count: 1,
       },
     ]);
 

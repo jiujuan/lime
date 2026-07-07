@@ -59,6 +59,11 @@ pub(in crate::runtime_backend) fn session_config_from_request(
                 system_prompt,
                 &metadata_values,
             );
+        let system_prompt =
+            super::super::plugin_runtime_context::append_plugin_runtime_context_to_system_prompt(
+                system_prompt,
+                &metadata_values,
+            );
         let system_prompt = append_memory_context_to_system_prompt(system_prompt, runtime_metadata);
         let system_prompt = append_soul_context_to_system_prompt(
             system_prompt,

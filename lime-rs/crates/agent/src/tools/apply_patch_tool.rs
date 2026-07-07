@@ -1,15 +1,12 @@
+use crate::native_tools::runtime_tool_bridge::execute_runtime_tool;
 use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
 pub use tool_runtime::apply_patch::APPLY_PATCH_TOOL_NAME;
 use tool_runtime::apply_patch::{
     apply_patch_tool_definition, check_runtime_apply_patch_permissions,
-    runtime_apply_patch_executor_handle,
 };
-use tool_runtime::tool_executor::{
-    RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutionError,
-    RuntimeToolExecutionRequest, RuntimeToolExecutionResult, RuntimeToolPolicyErrorKind,
-};
+use tool_runtime::native_dispatch::runtime_native_dispatch_handle;
 
 #[derive(Debug, Default)]
 pub struct ApplyPatchTool;
@@ -37,18 +34,14 @@ impl Tool for ApplyPatchTool {
             return Err(ToolError::Cancelled);
         }
 
-        let runtime_context = runtime_context_from_aster(context);
-        let result = runtime_apply_patch_executor_handle()
-            .execute(RuntimeToolExecutionRequest {
-                tool_name: APPLY_PATCH_TOOL_NAME,
-                params: &params,
-                context: &runtime_context,
-                turn_context: None,
-            })
-            .await
-            .map_err(runtime_error_to_tool_error)?;
-
-        Ok(tool_result_from_runtime(result))
+        execute_runtime_tool(
+            runtime_native_dispatch_handle(),
+            APPLY_PATCH_TOOL_NAME,
+            &params,
+            context,
+            None,
+        )
+        .await
     }
 
     async fn check_permissions(
@@ -64,37 +57,6 @@ impl Tool for ApplyPatchTool {
 
     fn options(&self) -> ToolOptions {
         ToolOptions::new().with_max_retries(0)
-    }
-}
-
-fn runtime_context_from_aster(context: &ToolContext) -> RuntimeToolExecutionContext {
-    RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
-        working_directory: context.working_directory.clone(),
-        session_id: context.session_id.clone(),
-        cancel_token: context.cancellation_token.clone(),
-        workspace_sandbox: None,
-    })
-}
-
-fn tool_result_from_runtime(result: RuntimeToolExecutionResult) -> ToolResult {
-    if result.success {
-        ToolResult::success(result.output).with_metadata_map(result.metadata)
-    } else {
-        ToolResult::error(result.error.unwrap_or(result.output)).with_metadata_map(result.metadata)
-    }
-}
-
-fn runtime_error_to_tool_error(error: RuntimeToolExecutionError) -> ToolError {
-    match error.policy_kind() {
-        Some(RuntimeToolPolicyErrorKind::PermissionDenied(_)) => {
-            ToolError::permission_denied(error.message().to_string())
-        }
-        Some(RuntimeToolPolicyErrorKind::SafetyCheckFailed(_)) => {
-            ToolError::safety_check_failed(error.message().to_string())
-        }
-        Some(RuntimeToolPolicyErrorKind::ExecutionFailed(_)) | None => {
-            ToolError::execution_failed(error.message().to_string())
-        }
     }
 }
 

@@ -45,6 +45,14 @@ pub struct RuntimeContentReference {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_url: Option<String>,
+    #[serde(default, alias = "sidecarRef", skip_serializing_if = "Option::is_none")]
+    pub sidecar_ref: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub byte_size: Option<u64>,
@@ -67,6 +75,10 @@ pub struct RuntimeMediaPartInput {
     pub mime_type: String,
     pub title: Option<String>,
     pub caption: Option<String>,
+    pub source_uri: Option<String>,
+    pub source_path: Option<String>,
+    pub preview_url: Option<String>,
+    pub sidecar_ref: Option<Value>,
     pub sha256: Option<String>,
     pub byte_size: Option<u64>,
 }
@@ -157,6 +169,10 @@ pub fn runtime_media_part_from_reference(
             uri,
             mime_type,
             title: input.title.and_then(normalize_non_empty),
+            source_uri: input.source_uri.and_then(normalize_non_inline_reference),
+            source_path: input.source_path.and_then(normalize_non_empty),
+            preview_url: input.preview_url.and_then(normalize_non_inline_reference),
+            sidecar_ref: input.sidecar_ref,
             sha256: input.sha256.and_then(normalize_non_empty),
             byte_size: input.byte_size,
         },
@@ -195,6 +211,11 @@ fn normalize_non_empty(value: impl AsRef<str>) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
+fn normalize_non_inline_reference(value: impl AsRef<str>) -> Option<String> {
+    let value = normalize_non_empty(value)?;
+    (!is_inline_media_payload_uri(&value)).then_some(value)
+}
+
 fn is_inline_media_payload_uri(uri: &str) -> bool {
     uri.trim_start().to_ascii_lowercase().starts_with("data:")
 }
@@ -215,6 +236,10 @@ mod tests {
             mime_type: mime_type.to_string(),
             title: Some("  Screenshot  ".to_string()),
             caption: Some("  UI state  ".to_string()),
+            source_uri: None,
+            source_path: None,
+            preview_url: None,
+            sidecar_ref: None,
             sha256: Some("  sha256:abcd  ".to_string()),
             byte_size: Some(42),
         }
@@ -238,6 +263,10 @@ mod tests {
                 assert_eq!(reference.uri, "sidecar://media/input-1");
                 assert_eq!(reference.mime_type, "image/png");
                 assert_eq!(reference.title.as_deref(), Some("Screenshot"));
+                assert_eq!(reference.source_uri, None);
+                assert_eq!(reference.source_path, None);
+                assert_eq!(reference.preview_url, None);
+                assert_eq!(reference.sidecar_ref, None);
                 assert_eq!(reference.sha256.as_deref(), Some("sha256:abcd"));
                 assert_eq!(reference.byte_size, Some(42));
                 assert_eq!(caption.as_deref(), Some("UI state"));
@@ -267,6 +296,66 @@ mod tests {
                 "caption": "UI state"
             })
         );
+    }
+
+    #[test]
+    fn media_reference_keeps_optional_source_owner_fields() {
+        let mut input = media_input("sidecar://session-1/media/image-1", "image/png");
+        input.source_uri = Some("sidecar://session-1/media/image-1".to_string());
+        input.source_path = Some("  /tmp/lime/sidecars/image-1.png  ".to_string());
+        input.preview_url = Some("  asset:///tmp/lime/sidecars/image-1.png  ".to_string());
+        input.sidecar_ref = Some(json!({
+            "ref": "sidecar://media/image-1",
+            "kind": "media",
+            "relativePath": "sessions/session-1/media/image-1.png",
+            "sha256": "sha256:abcd",
+            "bytes": 42
+        }));
+
+        let part = runtime_media_part_from_reference(input).expect("media reference");
+
+        assert_eq!(
+            serde_json::to_value(part).expect("json"),
+            json!({
+                "type": "media",
+                "kind": "image",
+                "reference": {
+                    "uri": "sidecar://session-1/media/image-1",
+                    "mime_type": "image/png",
+                    "title": "Screenshot",
+                    "source_uri": "sidecar://session-1/media/image-1",
+                    "source_path": "/tmp/lime/sidecars/image-1.png",
+                    "preview_url": "asset:///tmp/lime/sidecars/image-1.png",
+                    "sidecar_ref": {
+                        "ref": "sidecar://media/image-1",
+                        "kind": "media",
+                        "relativePath": "sessions/session-1/media/image-1.png",
+                        "sha256": "sha256:abcd",
+                        "bytes": 42
+                    },
+                    "sha256": "sha256:abcd",
+                    "byte_size": 42
+                },
+                "caption": "UI state"
+            })
+        );
+    }
+
+    #[test]
+    fn media_reference_drops_inline_source_owner_fields() {
+        let mut input = media_input("sidecar://session-1/media/image-1", "image/png");
+        input.source_uri = Some("data:image/png;base64,AAAA".to_string());
+        input.preview_url = Some("data:image/png;base64,BBBB".to_string());
+
+        let part = runtime_media_part_from_reference(input).expect("media reference");
+
+        match part {
+            RuntimeContentPart::Media { reference, .. } => {
+                assert_eq!(reference.source_uri, None);
+                assert_eq!(reference.preview_url, None);
+            }
+            RuntimeContentPart::Text { .. } => panic!("expected media part"),
+        }
     }
 
     #[test]

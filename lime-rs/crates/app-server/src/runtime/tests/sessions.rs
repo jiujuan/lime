@@ -68,14 +68,32 @@ async fn compact_agent_session_writes_session_context_artifact() {
         .expect("sidecar content");
     assert!(sidecar.contains("\"schema\": \"session_context_compaction.v1\""));
     assert!(sidecar.contains("请总结上下文"));
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_compact".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("detail");
+    let items = detail["items"].as_array().expect("items");
+    assert!(items.iter().any(|item| {
+        item["type"] == "context_compaction"
+            && item["id"] == completed.payload["compactionId"]
+            && item["status"] == "completed"
+    }));
 }
 
 #[tokio::test]
 async fn compact_agent_session_injects_next_turn_session_context_packet() {
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
     let backend = Arc::new(FinalDoneRecordingBackend {
         requests: Mutex::new(Vec::new()),
     });
-    let core = RuntimeCore::with_backend(backend.clone());
+    let core = RuntimeCore::with_backend(backend.clone()).with_sidecar_store(sidecar_store.clone());
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_compact_next_turn".to_string()),
         thread_id: Some("thread_compact_next_turn".to_string()),
@@ -159,6 +177,13 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
         .as_str()
         .expect("summary")
         .contains("Turn completed."));
+    assert_eq!(
+        compaction_context["sidecarRef"]["kind"].as_str(),
+        Some("context_compaction")
+    );
+    assert!(compaction_context["sidecarRef"]["sha256"]
+        .as_str()
+        .is_some_and(|value| !value.is_empty()));
     assert_eq!(compaction_context["packetTokenBudget"].as_u64(), Some(720));
     assert_eq!(
         compaction_context["contextBudgetPolicy"]["source"].as_str(),
@@ -185,6 +210,15 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
         Some("session.compaction")
     );
     assert_eq!(telemetry["packets"][0]["tokenBudget"].as_u64(), Some(720));
+    assert_eq!(
+        telemetry["packets"][0]["fragmentEnvelope"]["sidecar_reference"]["kind"].as_str(),
+        Some("context_compaction")
+    );
+    assert!(
+        telemetry["packets"][0]["fragmentEnvelope"]["sidecar_reference"]["sha256"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty())
+    );
 
     let prompt = crate::runtime::memory_prompt::append_memory_context_to_system_prompt(
         Some("base prompt".to_string()),

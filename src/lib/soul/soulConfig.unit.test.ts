@@ -32,16 +32,24 @@ describe("soulConfig", () => {
     expect(hasSoulContent(result)).toBe(true);
   });
 
-  it("应丢弃未知交互口吻配置", () => {
+  it("应保留合法 registry 口吻 ID 并丢弃非法配置", () => {
     const result = normalizeSoulConfig({
       enabled: true,
-      style_profile_id: "unknown_profile" as never,
+      style_profile_id: "unknown_profile",
       style_intensity: "extreme" as never,
     });
 
-    expect(result.style_profile_id).toBeUndefined();
+    expect(result.style_profile_id).toBe("unknown_profile");
     expect(result.style_intensity).toBeUndefined();
-    expect(hasSoulContent(result)).toBe(false);
+    expect(hasSoulContent(result)).toBe(true);
+
+    const invalid = normalizeSoulConfig({
+      enabled: true,
+      style_profile_id: "Not Stable",
+    });
+
+    expect(invalid.style_profile_id).toBeUndefined();
+    expect(hasSoulContent(invalid)).toBe(false);
   });
 
   it("应把多行输入解析为稳定列表", () => {

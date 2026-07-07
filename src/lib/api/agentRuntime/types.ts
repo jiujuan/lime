@@ -117,6 +117,10 @@ export interface AsterSessionInfo {
   workspace_id?: string;
   working_dir?: string;
   session_business_object_ref_metadata?: Record<string, unknown>;
+  thread_status?: string;
+  latest_turn_status?: string;
+  active_turn_id?: string;
+  queued_turn_count?: number;
 }
 
 export interface AgentRuntimeListSessionsOptions {
@@ -286,6 +290,23 @@ export interface AgentRuntimeFileCheckpointRestoreResult {
   restored_at: string | number;
 }
 
+export interface AgentRuntimeDiagnosticProviderSafetyBufferingSample {
+  source_event_id?: string;
+  source_event_type?: string;
+  thread_id?: string | null;
+  turn_id?: string | null;
+  timestamp?: string | number;
+  provider?: string | null;
+  model?: string | null;
+  use_cases?: string[];
+  reasons?: string[];
+  show_buffering_ui?: boolean;
+  retry_model?: string | null;
+  fallback_header_model?: string | null;
+  source?: string | null;
+  backend?: string | null;
+}
+
 export interface AgentRuntimeThreadDiagnostics {
   latest_turn_status?: string;
   latest_turn_started_at?: string | number;
@@ -298,6 +319,7 @@ export interface AgentRuntimeThreadDiagnostics {
   runtime_interrupt_source?: string;
   runtime_interrupt_requested_at?: string | number;
   runtime_interrupt_wait_seconds?: number;
+  provider_safety_buffering_count?: number;
   warning_count: number;
   context_compaction_count: number;
   failed_tool_call_count: number;
@@ -306,6 +328,7 @@ export interface AgentRuntimeThreadDiagnostics {
   oldest_pending_request_wait_seconds?: number;
   primary_blocking_kind?: string;
   primary_blocking_summary?: string;
+  latest_provider_safety_buffering?: AgentRuntimeDiagnosticProviderSafetyBufferingSample | null;
   latest_warning?: AgentRuntimeDiagnosticWarningSample | null;
   latest_context_compaction?: AgentRuntimeDiagnosticContextCompactionSample | null;
   latest_failed_tool?: AgentRuntimeDiagnosticFailedToolSample | null;

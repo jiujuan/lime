@@ -128,6 +128,57 @@ function shouldProjectModelInputCapabilityGate(
   return Boolean(summary) || gate.requiresMediaInput;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cloneArrayField(value: readonly unknown[] | undefined): unknown[] {
+  return value ? [...value] : [];
+}
+
+function withInterruptedInputRestoreMetadata(
+  metadata: Record<string, unknown> | undefined,
+  draft: InterruptedInputDraftSnapshot,
+): Record<string, unknown> | undefined {
+  const textElements = cloneArrayField(draft.textElements);
+  const pathReferences = cloneArrayField(draft.pathReferences);
+  const inputCapabilityRoute = draft.inputCapabilityRoute;
+  if (
+    textElements.length === 0 &&
+    pathReferences.length === 0 &&
+    !inputCapabilityRoute
+  ) {
+    return metadata;
+  }
+
+  const base = metadata ? { ...metadata } : {};
+  const harness = isPlainRecord(base.harness) ? { ...base.harness } : {};
+
+  if (textElements.length > 0) {
+    base.text_elements = textElements;
+    base.textElements = textElements;
+    harness.text_elements = textElements;
+    harness.textElements = textElements;
+  }
+  if (pathReferences.length > 0) {
+    base.path_references = pathReferences;
+    base.pathReferences = pathReferences;
+    harness.file_references = pathReferences;
+    harness.fileReferences = pathReferences;
+  }
+  if (inputCapabilityRoute) {
+    base.input_capability_route = inputCapabilityRoute;
+    base.inputCapabilityRoute = inputCapabilityRoute;
+    harness.input_capability_route = inputCapabilityRoute;
+    harness.inputCapabilityRoute = inputCapabilityRoute;
+  }
+
+  return {
+    ...base,
+    harness,
+  };
+}
+
 interface SendModelPreferenceCandidate {
   providerType?: string | null;
   model?: string | null;
@@ -321,12 +372,11 @@ export function prepareAgentStreamUserInputSend(
     )
       ? modelInputCapabilityGate
       : undefined;
-  const requestMetadata = mergeModelInputCapabilityGateMetadata(
-    baseRequestMetadata,
-    projectedModelInputCapabilityGate,
-  );
-  const runtimeStatusPresentation =
-    resolveAgentRuntimeStatusPresentation(requestMetadata);
+  const baseRequestMetadataWithModelGate =
+    mergeModelInputCapabilityGateMetadata(
+      baseRequestMetadata,
+      projectedModelInputCapabilityGate,
+    );
   const messagePurpose = sendOptions?.purpose;
   const assistantDraft = sendOptions?.assistantDraft;
   const capabilityRoute = sendOptions?.capabilityRoute;
@@ -344,6 +394,12 @@ export function prepareAgentStreamUserInputSend(
       images,
       inputCapabilityRoute: capabilityRoute,
     };
+  const requestMetadata = withInterruptedInputRestoreMetadata(
+    baseRequestMetadataWithModelGate,
+    submittedDraft,
+  );
+  const runtimeStatusPresentation =
+    resolveAgentRuntimeStatusPresentation(requestMetadata);
   const skillRequest = sendOptions?.skillRequest;
   const expectingQueue = resolvePreparedSendExpectingQueue({
     activeStreamSessionId: env.activeStreamRef.current?.sessionId,

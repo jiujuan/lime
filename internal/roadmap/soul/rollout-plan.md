@@ -152,10 +152,11 @@ npm run test:contracts
 建议改动：
 
 1. `src/lib/soul/style-profiles/builtInProfiles.ts` 表达四个 built-in Style Pack seed。
-2. `lime-rs/crates/app-server/src/runtime/soul/style_profile.rs` 与前端 seed 字段同构。
-3. `prompt_context.rs` 输出 surface contract、anti-repetition、few-shot anchor 和 risk fallback。
-4. 工具 lifecycle read model 增加 `phase / status / toolName / facts / riskLevel / styleLevel / profileId / packId`。
-5. Agent Chat 工具卡片、折叠条和 timeline 只消费 descriptor，不从 profile id 拼人格化文案。
+2. `lime-rs/crates/app-server/src/runtime/soul/style_profile.rs` 读取同一组 `src/lib/soul/style-profiles/packs/*.json` built-in manifest，不再维护后端四套静态 profile 对象。
+3. `memory.soul.style_profile_id` 配置层保存 registry profile id 字符串，不再用四个 built-in 枚举或旧 alias 映射限制风格包。
+4. `prompt_context.rs` 输出 surface contract、anti-repetition、few-shot anchor 和 risk fallback。
+5. 工具 lifecycle read model 增加 `phase / status / toolName / facts / riskLevel / styleLevel / profileId / packId`。
+6. Agent Chat 工具卡片、折叠条和 timeline 只消费 descriptor，不从 profile id 拼人格化文案。
 
 不做：
 

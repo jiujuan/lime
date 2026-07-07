@@ -45,6 +45,43 @@ pub struct AgentSessionReadResponse {
     pub detail: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionMediaReadParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    #[serde(
+        default,
+        alias = "ref",
+        alias = "ref_id",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ref_id: Option<String>,
+    #[serde(
+        default,
+        alias = "sidecar_ref",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub sidecar_ref: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionMediaReadResponse {
+    pub session_id: String,
+    pub uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    pub bytes: u64,
+    pub sha256: String,
+    pub content_base64: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidecar_ref: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionToolInventoryReadParams {
@@ -654,6 +691,40 @@ pub struct AgentAttachment {
     pub uri: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AgentThreadContentReference {
+    pub uri: String,
+    pub mime_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_url: Option<String>,
+    #[serde(default, alias = "sidecarRef", skip_serializing_if = "Option::is_none")]
+    pub sidecar_ref: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub byte_size: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AgentThreadMessageContentPart {
+    Text {
+        text: String,
+    },
+    Media {
+        kind: String,
+        reference: AgentThreadContentReference,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caption: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

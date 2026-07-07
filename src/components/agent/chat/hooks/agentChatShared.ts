@@ -15,6 +15,7 @@ import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
+import { resolveUnfinishedSessionProjection } from "../projection/unfinishedSessionProjection";
 import { sanitizeMessageTextForPreview } from "../utils/messageDisplaySanitizer";
 import { sanitizeGeneratedAutoTitle } from "./agentChatAutoTitleViewModel";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
@@ -66,6 +67,7 @@ export interface UseAsterAgentChatOptions {
   workspaceId: string;
   workingDir?: string | null;
   disableSessionRestore?: boolean;
+  sessionRestorePresentation?: "foreground" | "background";
   initialTopicsLoadMode?: "immediate" | "deferred";
   initialTopicsDeferredDelayMs?: number;
   initialRuntimeWarmupLoadMode?: "immediate" | "deferred";
@@ -600,6 +602,21 @@ export const mapSessionToTopic = (session: AsterSessionInfo): Topic => {
     session.name || fallbackTitle,
     session.name,
   );
+  const unfinishedProjection = resolveUnfinishedSessionProjection(session);
+  const status: TaskStatus = unfinishedProjection
+    ? unfinishedProjection.status === "waitingAction"
+      ? "waiting"
+      : "running"
+    : messagesCount > 0
+      ? "done"
+      : "draft";
+  const statusReason: TaskStatusReason =
+    unfinishedProjection?.status === "waitingAction" ? "user_action" : "default";
+  const lastPreview =
+    unfinishedProjection?.preview ||
+    (messagesCount > 0
+      ? `已记录 ${messagesCount} 条消息，可继续补充或接着推进。`
+      : "等待你补充任务需求后开始执行。");
 
   return {
     id: session.id,
@@ -610,12 +627,9 @@ export const mapSessionToTopic = (session: AsterSessionInfo): Topic => {
     workingDir: session.working_dir ?? null,
     messagesCount,
     executionStrategy: normalizeExecutionStrategy(session.execution_strategy),
-    status: messagesCount > 0 ? "done" : "draft",
-    statusReason: "default",
-    lastPreview:
-      messagesCount > 0
-        ? `已记录 ${messagesCount} 条消息，可继续补充或接着推进。`
-        : "等待你补充任务需求后开始执行。",
+    status,
+    statusReason,
+    lastPreview,
     isPinned: false,
     hasUnread: false,
     tag: null,

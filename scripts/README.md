@@ -186,6 +186,8 @@ Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runt
 
 `npm run smoke:agent-runtime-current-fixture` 是 Claw / Agent Runtime current 主路径的离线 fixture 回归聚合入口，覆盖历史 / 缓存恢复、流式终态收尾、Claw 终态 UI、Electron session history / 代码产物工作台 fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard，以及真实 Electron `cancel-then-continue` 场景。它默认禁止 live Provider 和 mock backend，只能作为进入 Electron / Playwright 真实闭环前的快速回归门槛，不能替代完整 GUI E2E。
 
+`npm run smoke:agent-session-recovery-cdp-gate` 是未完成 Agent 会话恢复的真实 Electron CDP Gate B 骨架入口：启动 Electron Desktop Host，通过 `chromium.connectOverCDP` attach 到真实 renderer，验证 `window.__LIME_ELECTRON__`、preload invoke、`app_server_handle_json_lines`、`agentSession/start/read/list` 与侧栏打开同一 session。它使用 `APP_SERVER_BACKEND_MODE=unavailable`，不触发 `agentSession/turn/start`，不调用正式模型后端，也不证明 live Provider 或运行中 turn 输出。
+
 `npm run smoke:expert-skills-live-gate` 是专家 Skills Runtime 的证据门禁：默认只读取 `.lime/qc` 中的确定性 Electron fixture summary，确认专家 declared / selected / invoked、`skill_search -> SKILL.md body read -> Skill gate -> Skill invocation`、Harness GUI Evidence Pack 导出与专家面板复盘证据完整；缺少显式 live Provider summary 时返回 `pending_live_provider`，不调用真实模型，也不把 deterministic fixture 误当完整 live 验收。
 
 `npm run smoke:expert-skills-live-runner` 是专家 Skills Runtime 的 live Provider 验收入口骨架：默认 fail-fast，必须显式传 `--allow-live-provider` 或设置 live Provider smoke 环境变量。它可用 `--live-summary <path>` 归一化已有 live evidence，也可在额外传 `--execute-live-runtime` 时通过 App Server current JSON-RPC 提交真实 Provider turn，并输出 `.lime/qc/expert-skills-live-runner-summary.json` 供 `smoke:expert-skills-live-gate -- --live-summary <path>` 审计。

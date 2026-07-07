@@ -208,6 +208,30 @@ vi.mock("react-i18next", () => ({
       if (key === "agentChat.toolCall.siteResult.openSavedContent") {
         return "打开已保存内容";
       }
+      if (key === "agentChat.streamingRenderer.mediaReference.title") {
+        return "媒体引用";
+      }
+      if (key === "agentChat.streamingRenderer.mediaReference.kind.image") {
+        return "图片";
+      }
+      if (key === "agentChat.streamingRenderer.mediaReference.kind.audio") {
+        return "音频";
+      }
+      if (key === "agentChat.streamingRenderer.mediaReference.kind.video") {
+        return "视频";
+      }
+      if (key === "agentChat.streamingRenderer.mediaReference.kind.file") {
+        return "媒体";
+      }
+      if (key === "agentChat.streamingRenderer.mediaReference.mime") {
+        return `${values?.mime ?? ""}`;
+      }
+      if (key === "agentChat.streamingRenderer.mediaReference.open") {
+        return `打开媒体引用：${values?.title ?? ""}`;
+      }
+      if (key === "agentChat.streamingRenderer.mediaReference.reference") {
+        return `引用：${values?.uri ?? ""}`;
+      }
       return key;
     },
   }),

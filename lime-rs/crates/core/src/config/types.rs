@@ -2429,21 +2429,10 @@ pub enum MemorySoulArtifactVoiceSource {
     BrandVoice,
 }
 
-/// 全局交互口吻预设
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum MemorySoulStyleProfileId {
-    /// 贱兮兮、轻微吐槽、有执行感
-    #[default]
-    #[serde(alias = "sassy_cute_executor")]
-    CheekySassyExecutor,
-    /// 低压、耐心、稳定陪伴
-    WarmSupportiveCompanion,
-    /// 克制、锋利、短句、有掌控感
-    CoolConfidentOperator,
-    /// 简洁、可信、可审计
-    CalmProfessionalPartner,
-}
+/// 全局交互口吻预设 ID。
+///
+/// 具体风格由 Style Pack Registry 解析，配置层只保存稳定 ID，不枚举内置 seed。
+pub type MemorySoulStyleProfileId = String;
 
 /// 全局交互口吻强度
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -2830,7 +2819,7 @@ mod unit_tests {
     }
 
     #[test]
-    fn memory_soul_style_profile_accepts_cheeky_sassy_executor() {
+    fn memory_soul_style_profile_accepts_registry_profile_id() {
         let yaml = r#"
 memory:
   soul:
@@ -2842,12 +2831,12 @@ memory:
 
         assert_eq!(
             config.memory.soul.and_then(|soul| soul.style_profile_id),
-            Some(MemorySoulStyleProfileId::CheekySassyExecutor)
+            Some("cheeky_sassy_executor".to_string())
         );
     }
 
     #[test]
-    fn memory_soul_style_profile_accepts_legacy_sassy_cute_executor_alias() {
+    fn memory_soul_style_profile_does_not_alias_legacy_profile_id() {
         let yaml = r#"
 memory:
   soul:
@@ -2855,11 +2844,11 @@ memory:
     style_profile_id: sassy_cute_executor
 "#;
 
-        let config: Config = serde_yaml::from_str(yaml).expect("legacy style profile id");
+        let config: Config = serde_yaml::from_str(yaml).expect("style profile id");
 
         assert_eq!(
             config.memory.soul.and_then(|soul| soul.style_profile_id),
-            Some(MemorySoulStyleProfileId::CheekySassyExecutor)
+            Some("sassy_cute_executor".to_string())
         );
     }
 

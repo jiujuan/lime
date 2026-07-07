@@ -1,7 +1,7 @@
 # Lime Soul 个性化路线图
 
 > 状态：current planning source
-> 更新时间：2026-07-06
+> 更新时间：2026-07-07
 > 目标：把 OpenClaw / Hermes 的 `SOUL.md` 个性化经验转译成 Lime 的全局人格 / 声线能力，同时继续收敛到 Memory 个性化主链，不新增平行事实源。
 
 ## 1. 本路线图回答什么
@@ -156,7 +156,7 @@ Hermes 本地调研：
 2. 首版规划四个 built-in Style Pack seed：贱兮兮执行官、温柔陪伴型助理、拽酷行动派、冷静专业型搭档。四个 seed 以独立 manifest 进入统一 `Style Pack Registry`，不是组件里的四个文案分支。
 3. 每个 Style Pack 必须承载 `voicePrimitives`、`surfaceContracts`、`antiRepetitionRules`、`fewShotAnchors` 和 `riskFallback`；few-shot 是风格锚点，不是 UI 可直接复读的固定句子。
 4. Style Profile 只影响聊天交互、工具叙事、缺参数追问和失败解释，不作为事实源。
-5. 工具结果、搜索来源、图片结果、任务状态继续以 Agent Runtime / App Server read model 为事实源。
+5. 工具结果、搜索来源、图片结果、媒体引用和任务状态继续以 Agent Runtime / App Server read model 为事实源。
 6. 正式 artifact 默认不吸收 Product Soul；需要正式内容声线时仍走 `Generation Brief`。
 7. 高风险、权限、删除、生产 API、医疗、法律、财务等场景必须降级到冷静专业口吻。
 8. LoRA / QLoRA 小模型不是首版依赖；只有 Prompt / 模板 / guard 方案评测不稳定时再进入对照评估。
@@ -221,7 +221,7 @@ Lime 不照搬的点：
 | Phase 1   | 全局人格设置                  | 设置页配置 + current config                                              |
 | Phase 2   | 聊天交互注入                  | prompt composition section                                               |
 | Phase 2.5 | 可切换 Style Profiles         | 四个 built-in Style Pack seed + Style Resolver + prompt surface contract |
-| Phase 2.6 | Style Pack 安装规范           | Style Pack Registry + deferred Cloud 分发边界                            |
+| Phase 2.6 | Style Pack 安装规范           | Style Pack Registry + install status guard + App Server local store core + JSON-RPC API + 设置页 GUI 管理骨架 + deferred Cloud 分发边界 |
 | Phase 3   | SOUL.md 导入 / 导出           | 高级可移植编辑入口                                                       |
 | Phase 4   | 创作声线进入 Generation Brief | Creator / Brand Voice guard                                              |
 | Phase 5   | Expert Persona 联动收口       | expert runtime metadata boundary                                         |
@@ -238,15 +238,17 @@ Lime 不照搬的点：
 4. Phase 3 已落地：`SOUL.md` 作为高级可移植编辑格式进入设置页，导入前预览，导入后不依赖原始文件。
 5. Phase 4 已接入 current 主链：设置页提供显式 `正式内容声线` 开关，配置保存到 `memory.soul.artifact_voice`；`useSoulArtifactVoiceGenerationBrief` 将已保存声线投影为发送候选，Workspace 输入区提供“创作声线”本轮开关；前端发送层只在本轮开关开启、且没有显式 `generation_brief` 时把保存声线 fallback 归一化到 root `artifact.generation_brief`，并通过 `diagnostics.soul_artifact_voice` 解释来源、开关和 guard 结果；`voice_source` 切换时会清理互斥的 `creator_voice_id` / `brand_voice_id`；后端 Artifact request metadata 归一化会为正式产物补 `generation_brief` 声线边界，默认 `voice_source=none`，并通过 Artifact prompt section 明确正式产物不默认吸收 Global Soul / Expert Persona；显式 `generation_brief` 可独立保留并覆盖保存声线，但不会单独触发 Artifact 交付合同。
 6. Phase 5 已部分落地：`expertRuntimeBinding` 标记 Expert Persona 与 Global Soul 的作用域边界，`runtime_turn` 将 `harness.expert` 识别为专家会话上下文；专家人格不写回 Global Soul。
-7. Phase 2.5 当前规划已更新为四个内置 Style Pack seed + registry：前端已把四个 seed 迁到 `src/lib/soul/style-profiles/packs/*.json` manifest，并由 registry loader 校验后输出独立 pack id、voice primitives、surface contracts、anti-repetition、few-shot anchors 和 risk fallback；后续仍需把 App Server 静态重复对象、工具 lifecycle facts / UI read model / GUI evidence 补齐。
-8. Phase 2.6 已新增规划文档：`personal-style-pack-installation.md` 固定风格包安装目录、manifest、状态机、Cloud 下载 deferred 边界，以及与 Agent Skills 包共享分发但 runtime 分离的规则。
+7. Phase 2.5 当前规划已更新为四个内置 Style Pack seed + registry：四个 seed 已迁到 `src/lib/soul/style-profiles/packs/*.json` manifest，前端 `manifest.ts` / `registry.ts` 已可合并 built-in 与 installed `local_import/cloud_download` manifests，resolver / directive composer / 设置页 selector 都消费同一 registry；公共 `style-profiles` barrel 不再导出 built-in profile list / pack id map / 旧 built-in helper，测试和 i18n 覆盖也通过 registry 遍历 pack/profile；App Server `runtime/soul/style_profile.rs` 读取同一 built-in manifest，`style_pack_registry.rs` 已只读加载 `<app-data>/soul/style-packs/registry.json` 中 `status: "enabled"`、`integrity.digest` 和五语言 locale key 齐全的 installed manifest，缺 `status`、旧 `enabled: true`、顶层 `digest` 旧 schema 均 fail closed；`style_pack_install.rs` 已固定 install status 状态机，只有 `Enabled` 可进入 prompt read model；`style_pack_paths.rs` / `style_pack_store.rs` 已落 App Server 本地 store core，覆盖安全 id、staging 写入、atomic replace、registry 备份、rollback、disable 和 disabled uninstall；`soulStylePack/list|install|status/set|uninstall` 已接入 App Server JSON-RPC、generated TS protocol 和前端 API 网关；设置页已具备本地包 list / manifest + 五语言 locale 导入 / 启用 / 禁用 / disabled uninstall 管理骨架，并在当前 profile 被禁用 / 卸载 / 未加载时回退默认 built-in；配置层 `memory.soul.style_profile_id` 已从四枚举演进为 registry profile id 字符串，旧 `sassy_cute_executor` alias 不再隐式映射；bundled locale 守卫已禁止 `agentChat.soulInteraction.<tone>.*` 句库回流；后续仍需把 Cloud catalog / download、签名 / digest 实测校验、安装审计、工具 lifecycle facts / UI read model / GUI evidence 补齐。
+8. Phase 2.6 已新增规划文档：`personal-style-pack-installation.md` 固定风格包安装目录、manifest、状态机、Cloud 下载 deferred 边界，以及与 Agent Skills 包共享分发但 runtime 分离的规则；当前只读 read model、状态机 guard、App Server 本地 store core、JSON-RPC / 前端 API 和设置页 GUI 管理骨架已落地，Cloud 下载、签名校验和安装审计仍 deferred。
+9. `/internal/research/refactor/v1` 对齐项已推进 media / contentParts 骨架：`agent_message.contentParts.media` 已从 App Server read model 进入 GUI media reference card；reference 中存在 `sourcePath/sourceUri/previewUrl` owner facts 时可进入 Workbench media preview，其中 `sourcePath` 已通过 Electron `asset://` 本地只读协议在 current fixture 中显示真实图片；inline `data:` owner fail closed。该项只代表 source owner preview 骨架完成，不代表通用 binary sidecar read、sidecar media store 或 digest 校验完成。
 
 尚未完成：
 
 1. Phase 4：自动 voice evidence 投影、诊断详情 UI 和完整 GUI / E2E 证据。
 2. Phase 2.5：真实 Claw 风格自然度仍需持续评测，重点是工具调用前后、正文段落转折、失败恢复和结尾建议都受 profile 影响，同时防固定口头禅、工具进度自然化、失败恢复不卖萌，以及拽酷风格不过度装腔。
-3. Phase 6：品牌 / 项目声线包的 Knowledge / Memory evidence projection。
-4. Phase 7：session-scoped personality overlay。
+3. Refactor/v1 media 骨架后续项：通用 binary sidecar read、sidecar media store、digest 校验和非 sourcePath owner 的完整读取链。
+4. Phase 6：品牌 / 项目声线包的 Knowledge / Memory evidence projection。
+5. Phase 7：session-scoped personality overlay。
 
 ## 8. 当前必须避免的误区
 

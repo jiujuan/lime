@@ -7,6 +7,7 @@ import electronPath from "electron";
 import { _electron as electron } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
+import { ensureElectronFixtureBuild } from "../lib/electron-fixture-build.mjs";
 import {
   APP_SERVER_METHOD_SESSION_LIST,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
@@ -15,15 +16,22 @@ import {
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
   IMAGE_COMMAND_SCENARIO,
+  INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+  INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_PROMPT,
   INPUTBAR_RICH_RESTORE_SCENARIO,
   LOG_PREFIX,
   MULTI_AGENT_TEAM_SCENARIO,
   NEWS_PROMPT,
   PLAIN_IMAGE_INTENT_SCENARIO,
+  REASONING_FIRST_VISIBLE_PROMPT,
+  REASONING_FIRST_VISIBLE_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
   SOUL_STYLE_SCENARIO,
+  TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
+  TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
+  TERMINAL_STALE_GUARD_SCENARIO,
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildFixtureAssertionReport } from "./claw-chat-current-fixture-assertions.mjs";
@@ -55,6 +63,10 @@ import {
   waitForRendererReady,
 } from "./claw-chat-current-fixture-rpc.mjs";
 import { executeScenarioFlow } from "./claw-chat-current-fixture-scenario-flow.mjs";
+import {
+  MEDIA_REFERENCE_PROMPT,
+  MEDIA_REFERENCE_SCENARIO,
+} from "./claw-chat-current-fixture-media-reference.mjs";
 import {
   DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
   DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
@@ -101,7 +113,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | plan | goal | soul-style | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
   --soul-style-profile <id>   soul-style 场景使用的 profile，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID}
   --soul-style-intensity <v>  soul-style 场景使用的强度，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY}
   --timeout-ms <ms>      总超时，默认 180000
@@ -185,11 +197,17 @@ function parseArgs(argv) {
     "cancel",
     "cancel-then-continue",
     INPUTBAR_RICH_RESTORE_SCENARIO,
+    INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
     "plan",
     "goal",
     SOUL_STYLE_SCENARIO,
     IMAGE_COMMAND_SCENARIO,
     PLAIN_IMAGE_INTENT_SCENARIO,
+    MEDIA_REFERENCE_SCENARIO,
+    REASONING_FIRST_VISIBLE_SCENARIO,
+    TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
+    TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
+    TERMINAL_STALE_GUARD_SCENARIO,
     "web-tools-rendering",
     "mcp-structured-content",
     "skills-runtime",
@@ -214,7 +232,9 @@ function parseArgs(argv) {
 function traceEvidenceHasProviderAndClient(evidence) {
   return (
     evidence?.hasProviderWaitMs === true &&
-    evidence?.hasClientLocalOutputMs === true
+    evidence?.hasClientLocalOutputMs === true &&
+    evidence?.hasFirstVisibleOutputMs === true &&
+    evidence?.hasFirstTextDeltaToFirstTextPaintMs === true
   );
 }
 
@@ -236,7 +256,8 @@ function shouldUseTextProviderFixture(scenario) {
   return (
     isImageWorkflowScenario(scenario) ||
     scenario === SOUL_STYLE_SCENARIO ||
-    scenario === INPUTBAR_RICH_RESTORE_SCENARIO
+    scenario === INPUTBAR_RICH_RESTORE_SCENARIO ||
+    scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO
   );
 }
 
@@ -290,6 +311,11 @@ async function updateAgentUiPerformanceTraceEvidence(summary, page) {
 
 async function run() {
   const options = parseArgs(process.argv.slice(2));
+  ensureElectronFixtureBuild({
+    appUrl: options.appUrl,
+    logPrefix: LOG_PREFIX,
+    rootDir: process.cwd(),
+  });
   const soulStyleSelection =
     options.scenario === SOUL_STYLE_SCENARIO
       ? createSoulStyleFixtureSelection({
@@ -336,7 +362,13 @@ async function run() {
     prompt:
       options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO
         ? INPUTBAR_RICH_RESTORE_PROMPT
-        : NEWS_PROMPT,
+        : options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO
+          ? INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
+          : options.scenario === MEDIA_REFERENCE_SCENARIO
+            ? MEDIA_REFERENCE_PROMPT
+            : options.scenario === REASONING_FIRST_VISIBLE_SCENARIO
+              ? REASONING_FIRST_VISIBLE_PROMPT
+          : NEWS_PROMPT,
     sessionId: SESSION_ID,
     threadId: THREAD_ID,
     workspaceId: null,
@@ -379,6 +411,17 @@ async function run() {
     inputbarRichRestoreStopClick: null,
     inputbarRichRestoreGuiCanceled: null,
     inputbarRichRestoreReadModelCanceled: null,
+    inputbarPendingSteerSkill: null,
+    inputbarPendingSteerActiveInputSend: null,
+    inputbarPendingSteerActiveBackendTurnStart: null,
+    inputbarPendingSteerActiveStreaming: null,
+    inputbarPendingSteerDraftPrepared: null,
+    inputbarPendingSteerInputDefer: null,
+    inputbarPendingSteerQueuedReadModel: null,
+    inputbarPendingSteerBackendBeforeCancel: null,
+    inputbarPendingSteerStopClick: null,
+    inputbarPendingSteerBackendCancel: null,
+    inputbarPendingSteerGuiCanceled: null,
     continueInputSend: null,
     guiContinueCompleted: null,
     planModeEnabled: null,
@@ -387,6 +430,9 @@ async function run() {
     goalModeEnabled: null,
     goalInputSend: null,
     guiGoalCompleted: null,
+    reasoningFirstVisibleInputSend: null,
+    guiReasoningFirstVisibleBeforeAnswer: null,
+    guiReasoningFirstVisibleCompleted: null,
     webToolsRenderingInputSend: null,
     guiWebToolsRenderingCompleted: null,
     skillsRuntimeInputSend: null,
@@ -405,6 +451,7 @@ async function run() {
     readModelContinueCompleted: null,
     readModelPlanCompleted: null,
     readModelGoalCompleted: null,
+    readModelReasoningFirstVisibleCompleted: null,
     readModelWebToolsRenderingCompleted: null,
     imageCommandInputSend: null,
     imageCommandBackendTurnStart: null,
@@ -418,6 +465,11 @@ async function run() {
     guiImageCommandRestoredAfterReload: null,
     imageCommandTaskArtifactAfterReload: null,
     readModelImageCommandCompleted: null,
+    mediaReferenceInputSend: null,
+    guiMediaReferenceCompleted: null,
+    guiMediaReferenceSnapshot: null,
+    guiMediaReferencePreview: null,
+    readModelMediaReferenceCompleted: null,
     readModelSkillsRuntimeCompleted: null,
     readModelExplicitSkillsRuntimeCompleted: null,
     readModelManualEnableSkillsRuntimeCompleted: null,

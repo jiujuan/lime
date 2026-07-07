@@ -58,6 +58,10 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   onOpenSubagentSession: HarnessStatusPanelProps["onOpenSubagentSession"];
   onPromoteQueuedTurn: HarnessStatusPanelProps["onPromoteQueuedTurn"];
   onRefreshToolInventory: HarnessStatusPanelProps["onRefreshToolInventory"];
+  mcpPrepareCandidateCount: number;
+  mcpPrepareLoading: boolean;
+  mcpPrepareError: string | null;
+  onPrepareMcpTargets: HarnessStatusPanelProps["onPrepareMcpTargets"];
   onReplayPendingRequest: HarnessStatusPanelProps["onReplayPendingRequest"];
   onRespondToAction: HarnessStatusPanelProps["onRespondToAction"];
   onResumeThread: HarnessStatusPanelProps["onResumeThread"];
@@ -114,6 +118,10 @@ export function buildHarnessStatusPanelSectionModels({
   onOpenSubagentSession,
   onPromoteQueuedTurn,
   onRefreshToolInventory,
+  mcpPrepareCandidateCount,
+  mcpPrepareLoading,
+  mcpPrepareError,
+  onPrepareMcpTargets,
   onReplayPendingRequest,
   onRespondToAction,
   onResumeThread,
@@ -363,6 +371,10 @@ export function buildHarnessStatusPanelSectionModels({
       runtimeToolTotal,
       registerSectionRef,
       onRefreshToolInventory,
+      mcpPrepareCandidateCount,
+      mcpPrepareLoading,
+      mcpPrepareError,
+      onPrepareMcpTargets,
       toolInventorySourceStats,
       toolInventoryWarnings,
       runtimeToolAvailability,

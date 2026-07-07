@@ -22,6 +22,7 @@ export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =
 export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   "agentSession/handoffBundle/export";
 export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
+export const METHOD_AGENT_SESSION_MEDIA_READ = "agentSession/media/read";
 export const METHOD_AGENT_SESSION_OBJECTIVE_AUDIT =
   "agentSession/objective/audit";
 export const METHOD_AGENT_SESSION_OBJECTIVE_CLEAR =
@@ -311,6 +312,10 @@ export const METHOD_SKILL_REMOTE_INSPECT = "skillRemote/inspect";
 export const METHOD_SKILL_REPOSITORY_DELETE = "skillRepository/delete";
 export const METHOD_SKILL_REPOSITORY_LIST = "skillRepository/list";
 export const METHOD_SKILL_REPOSITORY_SAVE = "skillRepository/save";
+export const METHOD_SOUL_STYLE_PACK_INSTALL = "soulStylePack/install";
+export const METHOD_SOUL_STYLE_PACK_LIST = "soulStylePack/list";
+export const METHOD_SOUL_STYLE_PACK_STATUS_SET = "soulStylePack/status/set";
+export const METHOD_SOUL_STYLE_PACK_UNINSTALL = "soulStylePack/uninstall";
 export const METHOD_TELEGRAM_CHANNEL_PROBE = "telegramChannel/probe";
 export const METHOD_USAGE_STATS_DAILY_TRENDS_LIST =
   "usageStats/dailyTrends/list";
@@ -422,6 +427,10 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "agentSession/list",
+  },
+  {
+    kind: "request",
+    method: "agentSession/media/read",
   },
   {
     kind: "request",
@@ -1353,6 +1362,22 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
+    method: "soulStylePack/install",
+  },
+  {
+    kind: "request",
+    method: "soulStylePack/list",
+  },
+  {
+    kind: "request",
+    method: "soulStylePack/status/set",
+  },
+  {
+    kind: "request",
+    method: "soulStylePack/uninstall",
+  },
+  {
+    kind: "request",
     method: "telegramChannel/probe",
   },
   {
@@ -1914,6 +1939,24 @@ export interface AgentSessionListResponse {
   sessions?: AgentSessionOverview[];
 }
 
+export interface AgentSessionMediaReadParams {
+  maxBytes?: number | null;
+  refId?: null | string;
+  sessionId: string;
+  sidecarRef?: unknown;
+  uri?: null | string;
+}
+
+export interface AgentSessionMediaReadResponse {
+  bytes: number;
+  contentBase64: string;
+  mimeType?: null | string;
+  sessionId: string;
+  sha256: string;
+  sidecarRef?: unknown;
+  uri: string;
+}
+
 export interface AgentSessionMessageCreatedNotification {
   eventId: string;
   input?: AgentInput | null;
@@ -1991,14 +2034,18 @@ export interface AgentSessionObjectiveStatusUpdateResponse {
 }
 
 export interface AgentSessionOverview {
+  activeTurnId?: null | string;
   archivedAt?: null | string;
   businessObjectRefMetadata?: unknown;
   createdAt: string;
   executionStrategy?: null | string;
+  latestTurnStatus?: null | string;
   messagesCount: number;
   model: string;
+  queuedTurnCount?: number;
   sessionId: string;
   threadId?: null | string;
+  threadStatus?: string;
   title?: null | string;
   updatedAt: string;
   workingDir?: null | string;
@@ -2277,6 +2324,30 @@ export interface AgentSessionUpdateParams {
 export interface AgentSessionUpdateResponse {
   session: AgentSessionOverview;
 }
+
+export interface AgentThreadContentReference {
+  byte_size?: number | null;
+  mime_type: string;
+  preview_url?: null | string;
+  sha256?: null | string;
+  sidecar_ref?: unknown;
+  source_path?: null | string;
+  source_uri?: null | string;
+  title?: null | string;
+  uri: string;
+}
+
+export type AgentThreadMessageContentPart =
+  | {
+      text: string;
+      type: "text";
+    }
+  | {
+      caption?: null | string;
+      kind: string;
+      reference: AgentThreadContentReference;
+      type: "media";
+    };
 
 export interface AgentTurn {
   completedAt?: null | string;
@@ -3159,6 +3230,26 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
+      method: "soulStylePack/install";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "soulStylePack/list";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "soulStylePack/status/set";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "soulStylePack/uninstall";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
       method: "knowledgePack/list";
       params?: unknown;
     }
@@ -3674,6 +3765,11 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
+      method: "agentSession/media/read";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
       method: "agentSession/turn/start";
       params?: unknown;
     }
@@ -3744,6 +3840,7 @@ export type AppServerRequestMethod =
   | "agentSession/fileCheckpoint/restore"
   | "agentSession/handoffBundle/export"
   | "agentSession/list"
+  | "agentSession/media/read"
   | "agentSession/objective/audit"
   | "agentSession/objective/clear"
   | "agentSession/objective/continue"
@@ -3974,6 +4071,10 @@ export type AppServerRequestMethod =
   | "skillRepository/delete"
   | "skillRepository/list"
   | "skillRepository/save"
+  | "soulStylePack/install"
+  | "soulStylePack/list"
+  | "soulStylePack/status/set"
+  | "soulStylePack/uninstall"
   | "telegramChannel/probe"
   | "usageStats/dailyTrends/list"
   | "usageStats/modelRanking/list"
@@ -7158,6 +7259,67 @@ export interface SkillScaffoldCreateParams {
 
 export interface SkillScaffoldCreateResponse {
   inspection: unknown;
+}
+
+export interface SoulStylePackInstallParams {
+  enableAfterInstall?: boolean;
+  localeSources?: Record<string, unknown>;
+  manifestSource: string;
+}
+
+export interface SoulStylePackInstallResponse {
+  packId: string;
+  profileIds?: string[];
+  status: SoulStylePackInstallStatus;
+}
+
+export type SoulStylePackInstallStatus =
+  | "disabled"
+  | "discovered"
+  | "downloading"
+  | "enabled"
+  | "failed"
+  | "installed"
+  | "installing"
+  | "uninstalled"
+  | "validating";
+
+export interface SoulStylePackListEntry {
+  integrityDigest?: null | string;
+  localeSources?: Record<string, unknown>;
+  manifestSource: string;
+  packId: string;
+  profileIds?: string[];
+  source: string;
+  status: SoulStylePackInstallStatus;
+  updatedAt?: null | string;
+}
+
+export type SoulStylePackListParams = Record<string, unknown>;
+
+export interface SoulStylePackListResponse {
+  packs?: SoulStylePackListEntry[];
+}
+
+export type SoulStylePackMutableStatus = "disabled" | "enabled";
+
+export interface SoulStylePackStatusSetParams {
+  packId: string;
+  status: SoulStylePackMutableStatus;
+}
+
+export interface SoulStylePackStatusSetResponse {
+  packId: string;
+  status: SoulStylePackInstallStatus;
+}
+
+export interface SoulStylePackUninstallParams {
+  packId: string;
+}
+
+export interface SoulStylePackUninstallResponse {
+  packId: string;
+  status: SoulStylePackInstallStatus;
 }
 
 export interface StructuredOutputContract {

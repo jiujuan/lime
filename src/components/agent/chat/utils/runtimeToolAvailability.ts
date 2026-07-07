@@ -7,14 +7,7 @@ const SUBAGENT_TEAM_TOOL_NAMES = [
   "TeamDelete",
   "ListPeers",
 ] as const;
-const TASK_TOOL_NAMES = [
-  "TaskCreate",
-  "TaskGet",
-  "TaskList",
-  "TaskUpdate",
-  "TaskOutput",
-  "TaskStop",
-] as const;
+const PLAN_TOOL_NAMES = ["update_plan"] as const;
 
 type RuntimeToolAvailabilitySource =
   | "runtime_tools"
@@ -33,10 +26,10 @@ export interface RuntimeToolAvailability {
   subagentCore: boolean;
   subagentTeamTools: boolean;
   subagentRuntime: boolean;
-  taskRuntime: boolean;
+  planRuntime: boolean;
   missingSubagentCoreTools: string[];
   missingSubagentTeamTools: string[];
-  missingTaskTools: string[];
+  missingPlanTools: string[];
 }
 
 function isRuntimeToolAvailabilitySource(
@@ -105,8 +98,8 @@ function readRuntimeToolAvailabilityOverride(): Partial<RuntimeToolAvailability>
     if (typeof parsed.subagentRuntime === "boolean") {
       override.subagentRuntime = parsed.subagentRuntime;
     }
-    if (typeof parsed.taskRuntime === "boolean") {
-      override.taskRuntime = parsed.taskRuntime;
+    if (typeof parsed.planRuntime === "boolean") {
+      override.planRuntime = parsed.planRuntime;
     }
 
     const missingSubagentCoreTools = normalizeStringList(
@@ -123,9 +116,9 @@ function readRuntimeToolAvailabilityOverride(): Partial<RuntimeToolAvailability>
       override.missingSubagentTeamTools = missingSubagentTeamTools;
     }
 
-    const missingTaskTools = normalizeStringList(parsed.missingTaskTools);
-    if (missingTaskTools) {
-      override.missingTaskTools = missingTaskTools;
+    const missingPlanTools = normalizeStringList(parsed.missingPlanTools);
+    if (missingPlanTools) {
+      override.missingPlanTools = missingPlanTools;
     }
 
     return Object.keys(override).length > 0 ? override : null;
@@ -149,7 +142,7 @@ function applyRuntimeToolAvailabilityOverride(
       override.missingSubagentCoreTools ?? base.missingSubagentCoreTools,
     missingSubagentTeamTools:
       override.missingSubagentTeamTools ?? base.missingSubagentTeamTools,
-    missingTaskTools: override.missingTaskTools ?? base.missingTaskTools,
+    missingPlanTools: override.missingPlanTools ?? base.missingPlanTools,
   };
 }
 
@@ -210,13 +203,13 @@ export function deriveRuntimeToolAvailability(
     toolNames,
     SUBAGENT_TEAM_TOOL_NAMES,
   );
-  const missingTaskTools = missingToolNames(toolNames, TASK_TOOL_NAMES);
+  const missingPlanTools = missingToolNames(toolNames, PLAN_TOOL_NAMES);
   const webSearch =
     missingToolNames(toolNames, WEB_SEARCH_TOOL_NAMES).length <
     WEB_SEARCH_TOOL_NAMES.length;
   const subagentCore = missingSubagentCoreTools.length === 0;
   const subagentTeamTools = missingSubagentTeamTools.length === 0;
-  const taskRuntime = missingTaskTools.length === 0;
+  const planRuntime = missingPlanTools.length === 0;
   const agentInitialized = Boolean(toolInventory?.agent_initialized);
 
   return applyRuntimeToolAvailabilityOverride({
@@ -228,9 +221,9 @@ export function deriveRuntimeToolAvailability(
     subagentCore,
     subagentTeamTools,
     subagentRuntime: subagentCore && subagentTeamTools,
-    taskRuntime,
+    planRuntime,
     missingSubagentCoreTools,
     missingSubagentTeamTools,
-    missingTaskTools,
+    missingPlanTools,
   });
 }

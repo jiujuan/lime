@@ -183,6 +183,11 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionReadResponse>
     >;
+    readAgentSessionMedia(
+      params: appServer.AppServerAgentSessionMediaReadParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerAgentSessionMediaReadResponse>
+    >;
     readConversationImportRuntimeEvents(
       params: appServer.AppServerConversationImportThreadRuntimeEventsReadParams,
     ): Promise<
@@ -846,6 +851,11 @@ const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   {
     name: "readSession",
     method: constants.APP_SERVER_METHOD_AGENT_SESSION_READ,
+    params: "required",
+  },
+  {
+    name: "readAgentSessionMedia",
+    method: constants.APP_SERVER_METHOD_AGENT_SESSION_MEDIA_READ,
     params: "required",
   },
   {

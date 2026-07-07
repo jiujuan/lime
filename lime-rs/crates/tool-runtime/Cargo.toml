@@ -12,10 +12,14 @@ doctest = false
 
 [dependencies]
 agent-protocol.workspace = true
+app-server-protocol.workspace = true
+async-trait.workspace = true
+base64.workspace = true
 chrono.workspace = true
 dirs.workspace = true
 encoding_rs = "0.8"
 lime-core.workspace = true
+lime-skills.workspace = true
 patch-apply.workspace = true
 rmcp.workspace = true
 regex.workspace = true

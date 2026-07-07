@@ -239,6 +239,16 @@ export const messageContentPartsSignature = (parts?: ContentPart[]): string => {
       if (part.type === "file_changes_batch") {
         return `file_changes_batch:${part.aggregate.fileCount}:+${part.aggregate.totalAdded}-${part.aggregate.totalRemoved}`;
       }
+      if (part.type === "media_reference") {
+        return [
+          "media_reference",
+          part.reference.kind || "",
+          part.reference.uri,
+          part.reference.mimeType || "",
+          part.reference.caption || "",
+          part.reference.title || "",
+        ].join(":");
+      }
       const prompt = part.actionRequired.prompt
         ? normalizeSignatureText(part.actionRequired.prompt)
         : "";

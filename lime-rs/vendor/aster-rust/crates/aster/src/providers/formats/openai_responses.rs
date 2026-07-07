@@ -1,4 +1,6 @@
-use crate::conversation::message::{Message, MessageContent, MessageMetadata};
+use crate::conversation::message::{
+    Message, MessageContent, MessageMetadata, SystemNotificationType,
+};
 use crate::model::ModelConfig;
 use crate::providers::base::{ProviderUsage, Usage};
 use crate::providers::formats::tool_description_with_examples;
@@ -302,6 +304,46 @@ struct ResponsesStreamingToolCall {
     tool_id: String,
     tool_name: Option<String>,
     accumulated_arguments: String,
+}
+
+pub const PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX: &str = "__aster_provider_stream_event__:";
+pub const PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING: &str = "openai_responses.safety_buffering";
+
+pub fn provider_stream_event_notification_payload_from_message(message: &Message) -> Option<Value> {
+    message.content.iter().find_map(|content| {
+        let notification = content.as_system_notification()?;
+        let payload = notification
+            .msg
+            .strip_prefix(PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX)?;
+        serde_json::from_str(payload).ok()
+    })
+}
+
+pub fn is_provider_stream_event_notification(message: &Message) -> bool {
+    provider_stream_event_notification_payload_from_message(message).is_some()
+}
+
+fn provider_stream_event_notification(
+    event_kind: &str,
+    response_event: Value,
+    headers: Vec<(String, String)>,
+) -> Message {
+    let headers = headers
+        .into_iter()
+        .map(|(name, value)| json!({ "name": name, "value": value }))
+        .collect::<Vec<_>>();
+    let payload = json!({
+        "eventKind": event_kind,
+        "responseEvent": response_event,
+        "headers": headers,
+    });
+
+    Message::assistant()
+        .with_system_notification(
+            SystemNotificationType::InlineMessage,
+            format!("{PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX}{payload}"),
+        )
+        .with_metadata(MessageMetadata::invisible())
 }
 
 fn response_function_call_request_id(id: &str, call_id: Option<&str>) -> String {
@@ -914,7 +956,17 @@ fn process_streaming_output_items(
 }
 
 pub fn responses_api_to_streaming_message<S>(
+    stream: S,
+) -> impl Stream<Item = anyhow::Result<(Option<Message>, Option<ProviderUsage>)>> + 'static
+where
+    S: Stream<Item = anyhow::Result<String>> + Unpin + Send + 'static,
+{
+    responses_api_to_streaming_message_with_provider_stream_headers(stream, Vec::new())
+}
+
+pub fn responses_api_to_streaming_message_with_provider_stream_headers<S>(
     mut stream: S,
+    provider_stream_headers: Vec<(String, String)>,
 ) -> impl Stream<Item = anyhow::Result<(Option<Message>, Option<ProviderUsage>)>> + 'static
 where
     S: Stream<Item = anyhow::Result<String>> + Unpin + Send + 'static,
@@ -954,7 +1006,23 @@ where
                 break 'outer;
             }
 
-            let event: ResponsesStreamEvent = serde_json::from_str(data_line)
+            let response_event_json: Value = serde_json::from_str(data_line)
+                .map_err(|e| anyhow!("Failed to parse Responses stream event JSON: {}: {:?}", e, data_line))?;
+            if response_event_json
+                .get("safety_buffering")
+                .is_some_and(Value::is_object)
+            {
+                yield (
+                    Some(provider_stream_event_notification(
+                        PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING,
+                        response_event_json.clone(),
+                        provider_stream_headers.clone(),
+                    )),
+                    None,
+                );
+            }
+
+            let event: ResponsesStreamEvent = serde_json::from_value(response_event_json)
                 .map_err(|e| anyhow!("Failed to parse Responses stream event: {}: {:?}", e, data_line))?;
 
             match event {
@@ -1596,6 +1664,59 @@ mod tests {
                 .and_then(|args| args.get("path").cloned()),
             Some(json!("README.md"))
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_responses_streaming_safety_buffering_emits_provider_stream_notification(
+    ) -> anyhow::Result<()> {
+        let lines = [
+            r#"data: {"type":"response.created","sequence_number":0,"response":{"id":"resp-1","object":"response","created_at":1778300000,"status":"in_progress","model":"gpt-5-codex","output":[]}}"#,
+            r#"data: {"type":"response.output_text.delta","sequence_number":1,"item_id":"msg-1","output_index":0,"content_index":0,"delta":"Hello","safety_buffering":{"use_cases":["cyber"],"reasons":["policy"],"retry_model":"gpt-5-mini"}}"#,
+            r#"data: {"type":"response.completed","sequence_number":2,"response":{"id":"resp-1","object":"response","created_at":1778300001,"status":"completed","model":"gpt-5-codex","output":[],"usage":{"input_tokens":10,"output_tokens":4,"total_tokens":14}}}"#,
+            "data: [DONE]",
+        ];
+
+        let stream = tokio_stream::iter(lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = responses_api_to_streaming_message_with_provider_stream_headers(
+            stream,
+            vec![(
+                "x-codex-safety-buffering-enabled".to_string(),
+                "true".to_string(),
+            )],
+        );
+        futures::pin_mut!(messages);
+
+        let mut provider_payload = None;
+        let mut text = String::new();
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            if let Some(payload) = provider_stream_event_notification_payload_from_message(&message)
+            {
+                provider_payload = Some(payload);
+                continue;
+            }
+            text.push_str(&message.as_concat_text());
+        }
+
+        let payload = provider_payload.expect("provider stream notification");
+        assert_eq!(
+            payload["eventKind"],
+            json!(PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING)
+        );
+        assert_eq!(
+            payload["responseEvent"]["safety_buffering"]["retry_model"],
+            json!("gpt-5-mini")
+        );
+        assert_eq!(
+            payload["headers"][0]["name"],
+            json!("x-codex-safety-buffering-enabled")
+        );
+        assert_eq!(text, "Hello");
 
         Ok(())
     }

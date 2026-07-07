@@ -1,10 +1,10 @@
 use crate::AppDataSource;
 use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
 use async_trait::async_trait;
-use lime_agent::native_tools::{
-    image_task_tool_result_projection, ImageTaskGateway, NativeToolResultProjection,
-};
 use std::sync::Arc;
+use tool_runtime::image_task::{
+    image_task_tool_result_projection, ImageTaskGateway, ImageTaskToolResultProjection,
+};
 
 pub(crate) fn image_task_gateway(
     app_data_source: Arc<dyn AppDataSource>,
@@ -14,7 +14,7 @@ pub(crate) fn image_task_gateway(
 
 pub(super) fn tool_result_from_response(
     response: MediaTaskArtifactResponse,
-) -> NativeToolResultProjection {
+) -> ImageTaskToolResultProjection {
     image_task_tool_result_projection(response)
 }
 

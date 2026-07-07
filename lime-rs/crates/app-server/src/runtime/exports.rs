@@ -6,7 +6,6 @@ use self::builders::*;
 use self::files::*;
 use self::metrics::*;
 use super::artifact_projection;
-use super::status::agent_session_status_label;
 use super::timestamp;
 use super::EvidencePackRequest;
 use super::RuntimeCore;
@@ -32,6 +31,7 @@ use app_server_protocol::EvidencePackSummary;
 use app_server_protocol::MemoryStoreRootParams;
 use app_server_protocol::MemoryStoreScope;
 use lime_infra::telemetry::RequestLog;
+use std::collections::BTreeMap;
 use std::fs;
 
 const HANDOFF_BUNDLE_RELATIVE_ROOT: &str = ".lime/harness/sessions";
@@ -96,6 +96,16 @@ impl RuntimeCore {
             self.request_logs_for_evidence(&session.session_id, params.turn_id.as_deref());
         let workflow_audit_events =
             self.workflow_audit_events_for_evidence(&session.session_id, params.turn_id.as_deref());
+        let turn_runtime_metadata = turns
+            .iter()
+            .filter_map(|turn| {
+                stored
+                    .turn_runtime_options
+                    .get(&turn.turn_id)
+                    .and_then(|options| options.metadata.clone())
+                    .map(|metadata| (turn.turn_id.clone(), metadata))
+            })
+            .collect::<BTreeMap<_, _>>();
         let evidence_pack = if params.include_evidence_pack.unwrap_or(true) {
             let evidence_pack = self
                 .evidence_export_provider
@@ -104,6 +114,7 @@ impl RuntimeCore {
                     turns: turns.clone(),
                     events: events.clone(),
                     artifacts: artifacts.clone(),
+                    turn_runtime_metadata,
                     request_logs: request_logs.clone(),
                     workflow_audit_events: workflow_audit_events.clone(),
                 })
@@ -348,7 +359,7 @@ impl RuntimeCore {
             bundle_relative_root,
             bundle_absolute_root: bundle_absolute_root.to_string_lossy().to_string(),
             exported_at,
-            thread_status: agent_session_status_label(read.session.status).to_string(),
+            thread_status: metrics.thread_status,
             latest_turn_status: metrics.latest_turn_status,
             pending_request_count: metrics.pending_request_count,
             queued_turn_count: metrics.queued_turn_count,
@@ -448,7 +459,7 @@ impl RuntimeCore {
             handoff_bundle_relative_root: handoff_relative_root,
             evidence_pack_relative_root: evidence_relative_root,
             exported_at,
-            thread_status: agent_session_status_label(read.session.status).to_string(),
+            thread_status: metrics.thread_status,
             latest_turn_status: metrics.latest_turn_status,
             pending_request_count: metrics.pending_request_count,
             queued_turn_count: metrics.queued_turn_count,
@@ -537,7 +548,7 @@ impl RuntimeCore {
             evidence_pack_relative_root: evidence_relative_root,
             replay_case_relative_root: replay_relative_root,
             exported_at,
-            thread_status: agent_session_status_label(read.session.status).to_string(),
+            thread_status: metrics.thread_status,
             latest_turn_status: metrics.latest_turn_status,
             pending_request_count: metrics.pending_request_count,
             queued_turn_count: metrics.queued_turn_count,
@@ -720,7 +731,7 @@ impl RuntimeCore {
             evidence_pack_relative_root: evidence_relative_root,
             replay_case_relative_root: replay_relative_root,
             exported_at,
-            thread_status: agent_session_status_label(read.session.status).to_string(),
+            thread_status: metrics.thread_status,
             latest_turn_status: metrics.latest_turn_status,
             pending_request_count: metrics.pending_request_count,
             queued_turn_count: metrics.queued_turn_count,

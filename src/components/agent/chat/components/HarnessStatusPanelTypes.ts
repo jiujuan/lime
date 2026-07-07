@@ -58,6 +58,10 @@ export interface HarnessStatusPanelProps {
   toolInventoryLoading?: boolean;
   toolInventoryError?: string | null;
   onRefreshToolInventory?: () => void;
+  mcpPrepareCandidateCount?: number;
+  mcpPrepareLoading?: boolean;
+  mcpPrepareError?: string | null;
+  onPrepareMcpTargets?: () => void | Promise<void>;
   title?: string;
   description?: string;
   toggleLabel?: string;

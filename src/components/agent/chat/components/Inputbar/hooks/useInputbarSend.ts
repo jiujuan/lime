@@ -33,6 +33,7 @@ interface UseInputbarSendParams {
   clearPendingImages: () => void;
   clearPathReferences?: () => void;
   clearActiveCapability: () => void;
+  getInputRestoreEpoch?: () => number;
 }
 
 export function useInputbarSend({
@@ -49,8 +50,10 @@ export function useInputbarSend({
   clearPendingImages,
   clearPathReferences,
   clearActiveCapability,
+  getInputRestoreEpoch,
 }: UseInputbarSendParams) {
   return useCallback(async () => {
+    const sendRestoreEpoch = getInputRestoreEpoch?.() ?? 0;
     const submittedInput = resolveInputbarPluginSubmissionText({
       input,
       selection: activePluginSelection,
@@ -107,8 +110,11 @@ export function useInputbarSend({
         : undefined;
     const inputRestoreDraft = {
       text: submittedInput.trim() ? submittedInput : "",
-      images: pendingImages,
-      pathReferences,
+      images: [...pendingImages],
+      pathReferences: [...pathReferences],
+      textElements: submittedInput.trim()
+        ? [{ type: "text", text: submittedInput }]
+        : [],
       inputCapabilityRoute: capabilityDispatch.capabilityRoute,
     };
     const sendOptions =
@@ -161,6 +167,9 @@ export function useInputbarSend({
           referenceEntries: activeCapability.referenceEntries,
         });
       }
+      if ((getInputRestoreEpoch?.() ?? sendRestoreEpoch) !== sendRestoreEpoch) {
+        return;
+      }
       clearPendingImages();
       clearPathReferences?.();
       clearActiveCapability();
@@ -174,6 +183,7 @@ export function useInputbarSend({
     clearActiveCapability,
     clearPendingImages,
     clearPathReferences,
+    getInputRestoreEpoch,
     input,
     knowledgePackSelection,
     projectId,

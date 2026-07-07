@@ -11,8 +11,9 @@ use super::permission_state_projection;
 use super::raw_string_field;
 use super::read_model_turn_usage;
 use super::status::agent_session_status_label;
-use super::status::agent_turn_is_active;
 use super::status::agent_turn_status_label;
+use super::status::resolve_agent_session_runtime_state;
+use super::string_array_field;
 use super::string_field;
 use super::thread_item_projection;
 use super::tool_item_projection;
@@ -26,7 +27,7 @@ use app_server_protocol::AgentSessionReadParams;
 use app_server_protocol::AgentSessionReplayedActionRequired;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::borrow::Cow;
 
 pub(super) use messages::runtime_session_messages;
@@ -312,19 +313,27 @@ fn runtime_thread_read_from_stored_session_with_usage_events(
     let service_model_slot = model_routing
         .as_ref()
         .and_then(|routing| string_field(routing, &["serviceModelSlot", "service_model_slot"]));
-    let latest_turn_status = stored
-        .turns
-        .last()
-        .map(|turn| agent_turn_status_label(turn.status));
     let latest_turn_id = stored.turns.last().map(|turn| turn.turn_id.as_str());
     let latest_turn_error_message = latest_turn_error_message(stored, latest_turn_id);
-    let active_turn_id = stored
-        .turns
+    let provider_safety_buffering_count = stored
+        .events
         .iter()
-        .rev()
-        .find(|turn| agent_turn_is_active(turn.status))
-        .map(|turn| turn.turn_id.clone());
+        .filter(|event| event.event_type == "provider_safety_buffering")
+        .count();
+    let latest_provider_safety_buffering =
+        latest_provider_safety_buffering_from_events(&stored.events);
+    let queued_turns = queued_turn_snapshots(stored);
     let pending_request_count = coding_activity.pending_requests.len();
+    let runtime_state = resolve_agent_session_runtime_state(
+        stored.session.status,
+        pending_request_count,
+        &stored.turns,
+        &stored.events,
+        chrono::Utc::now(),
+    );
+    let latest_turn_status = runtime_state.latest_turn_status.as_deref();
+    let active_turn_id = runtime_state.active_turn_id.clone();
+    let thread_status = runtime_state.thread_status.as_str();
     let command_count = coding_activity.commands.len();
     let test_count = coding_activity.tests.len();
     let changed_file_count = coding_activity
@@ -345,12 +354,12 @@ fn runtime_thread_read_from_stored_session_with_usage_events(
     let mut thread_read = json!({
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
-        "status": agent_session_status_label(stored.session.status),
+        "status": thread_status,
         "execution_strategy": session_execution_strategy(&stored.session),
         "turns": turns,
         "pending_requests": coding_activity.pending_requests,
         "permission_state": permission_state,
-        "queued_turns": queued_turn_snapshots(stored),
+        "queued_turns": queued_turns,
         "active_turn_id": active_turn_id,
         "active_command_id": coding_activity.active_command_id,
         "active_test_run_id": coding_activity.active_test_run_id,
@@ -367,6 +376,8 @@ fn runtime_thread_read_from_stored_session_with_usage_events(
             "latest_turn_status": latest_turn_status,
             "latest_turn_error_message": latest_turn_error_message,
             "latest_turn_usage": latest_turn_usage.clone(),
+            "provider_safety_buffering_count": provider_safety_buffering_count,
+            "latest_provider_safety_buffering": latest_provider_safety_buffering.clone(),
             "pending_request_count": pending_request_count,
             "command_count": command_count,
             "test_count": test_count,
@@ -377,6 +388,7 @@ fn runtime_thread_read_from_stored_session_with_usage_events(
             "latestTurnStatus": latest_turn_status,
             "latestTurnErrorMessage": latest_turn_error_message,
             "latestTurnUsage": latest_turn_usage,
+            "latestProviderSafetyBuffering": latest_provider_safety_buffering,
             "decisionSource": model_routing
                 .as_ref()
                 .and_then(|routing| string_field(routing, &["decisionSource", "decision_source"])),
@@ -402,6 +414,47 @@ fn runtime_thread_read_from_stored_session_with_usage_events(
         }
     }
     thread_read
+}
+
+fn latest_provider_safety_buffering_from_events(
+    events: &[AgentEvent],
+) -> Option<serde_json::Value> {
+    events
+        .iter()
+        .rev()
+        .find_map(provider_safety_buffering_diagnostic_from_event)
+}
+
+fn provider_safety_buffering_diagnostic_from_event(
+    event: &AgentEvent,
+) -> Option<serde_json::Value> {
+    if event.event_type != "provider_safety_buffering" {
+        return None;
+    }
+    Some(json!({
+        "source_event_id": event.event_id.clone(),
+        "source_event_type": event.event_type.clone(),
+        "thread_id": event.thread_id.clone(),
+        "turn_id": event.turn_id.clone(),
+        "timestamp": event.timestamp.clone(),
+        "provider": string_field(&event.payload, &["provider"]),
+        "model": string_field(&event.payload, &["model"]),
+        "use_cases": string_array_field(&event.payload, &["useCases", "use_cases"]),
+        "reasons": string_array_field(&event.payload, &["reasons"]),
+        "show_buffering_ui": event
+            .payload
+            .get("showBufferingUi")
+            .or_else(|| event.payload.get("show_buffering_ui"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        "retry_model": string_field(&event.payload, &["retryModel", "retry_model"]),
+        "fallback_header_model": string_field(
+            &event.payload,
+            &["fallbackHeaderModel", "fallback_header_model"],
+        ),
+        "source": string_field(&event.payload, &["source"]),
+        "backend": string_field(&event.payload, &["backend"]),
+    }))
 }
 
 fn runtime_events_with_workflow_audit<'a>(
@@ -440,6 +493,99 @@ fn queued_turn_snapshots(stored: &StoredSession) -> Vec<serde_json::Value> {
         .collect::<Vec<_>>()
 }
 
+fn queued_turn_input_attachments(input: Option<&app_server_protocol::AgentInput>) -> Vec<Value> {
+    input
+        .map(|input| {
+            input
+                .attachments
+                .iter()
+                .filter_map(|attachment| serde_json::to_value(attachment).ok())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_metadata_array(metadata: Option<&Value>, keys: &[&str]) -> Vec<Value> {
+    metadata
+        .and_then(|metadata| {
+            keys.iter()
+                .filter_map(|key| metadata.get(*key))
+                .find_map(Value::as_array)
+        })
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn runtime_harness_metadata_array(metadata: Option<&Value>, keys: &[&str]) -> Vec<Value> {
+    metadata
+        .and_then(|metadata| metadata.get("harness"))
+        .and_then(|harness| {
+            keys.iter()
+                .filter_map(|key| harness.get(*key))
+                .find_map(Value::as_array)
+        })
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn runtime_metadata_value(metadata: Option<&Value>, keys: &[&str]) -> Option<Value> {
+    metadata.and_then(|metadata| {
+        keys.iter()
+            .filter_map(|key| metadata.get(*key))
+            .find(|value| !value.is_null())
+            .cloned()
+    })
+}
+
+fn runtime_harness_metadata_value(metadata: Option<&Value>, keys: &[&str]) -> Option<Value> {
+    metadata
+        .and_then(|metadata| metadata.get("harness"))
+        .and_then(|harness| {
+            keys.iter()
+                .filter_map(|key| harness.get(*key))
+                .find(|value| !value.is_null())
+                .cloned()
+        })
+}
+
+fn queued_turn_path_references(metadata: Option<&Value>) -> Vec<Value> {
+    let direct = runtime_metadata_array(metadata, &["path_references", "pathReferences"]);
+    if !direct.is_empty() {
+        return direct;
+    }
+    runtime_harness_metadata_array(
+        metadata,
+        &[
+            "file_references",
+            "fileReferences",
+            "path_references",
+            "pathReferences",
+        ],
+    )
+}
+
+fn queued_turn_text_elements(metadata: Option<&Value>) -> Vec<Value> {
+    let direct = runtime_metadata_array(metadata, &["text_elements", "textElements"]);
+    if !direct.is_empty() {
+        return direct;
+    }
+    runtime_harness_metadata_array(metadata, &["text_elements", "textElements"])
+}
+
+fn queued_turn_input_capability_route(metadata: Option<&Value>) -> Value {
+    runtime_metadata_value(
+        metadata,
+        &["input_capability_route", "inputCapabilityRoute"],
+    )
+    .or_else(|| {
+        runtime_harness_metadata_value(
+            metadata,
+            &["input_capability_route", "inputCapabilityRoute"],
+        )
+    })
+    .unwrap_or(Value::Null)
+}
+
 fn queued_turn_snapshot(
     stored: &StoredSession,
     turn: &AgentTurn,
@@ -450,6 +596,10 @@ fn queued_turn_snapshot(
         .get(&turn.turn_id)
         .cloned()
         .or_else(|| messages::turn_input_from_events(&stored.events, &turn.turn_id));
+    let runtime_metadata = stored
+        .turn_runtime_options
+        .get(&turn.turn_id)
+        .and_then(|options| options.metadata.as_ref());
     let message_text = input
         .as_ref()
         .map(|input| input.text.trim().to_string())
@@ -471,6 +621,10 @@ fn queued_turn_snapshot(
                 .count()
         })
         .unwrap_or(0);
+    let attachments = queued_turn_input_attachments(input.as_ref());
+    let path_references = queued_turn_path_references(runtime_metadata);
+    let text_elements = queued_turn_text_elements(runtime_metadata);
+    let input_capability_route = queued_turn_input_capability_route(runtime_metadata);
 
     json!({
         "queued_turn_id": turn.turn_id,
@@ -488,6 +642,15 @@ fn queued_turn_snapshot(
         "messagePreview": message_preview,
         "image_count": image_count,
         "imageCount": image_count,
+        "attachments": attachments.clone(),
+        "input_attachments": attachments.clone(),
+        "inputAttachments": attachments,
+        "path_references": path_references.clone(),
+        "pathReferences": path_references,
+        "text_elements": text_elements.clone(),
+        "textElements": text_elements,
+        "input_capability_route": input_capability_route.clone(),
+        "inputCapabilityRoute": input_capability_route,
         "position": index,
         "created_at": turn.started_at,
         "createdAt": turn.started_at,
@@ -825,5 +988,84 @@ fn compact_json_nulls(value: serde_json::Value) -> serde_json::Value {
             serde_json::Value::Array(values.into_iter().map(compact_json_nulls).collect())
         }
         value => value,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stored_running_session(started_at: &str, latest_event_at: &str) -> StoredSession {
+        let session_id = "sess_read_model_orphan_running".to_string();
+        let thread_id = "thread_read_model_orphan_running".to_string();
+        let turn_id = "turn_read_model_orphan_running".to_string();
+        StoredSession {
+            session: AgentSession {
+                session_id: session_id.clone(),
+                thread_id: thread_id.clone(),
+                app_id: "agent-chat".to_string(),
+                workspace_id: Some("workspace-current".to_string()),
+                business_object_ref: None,
+                status: app_server_protocol::AgentSessionStatus::Running,
+                created_at: started_at.to_string(),
+                updated_at: latest_event_at.to_string(),
+            },
+            turns: vec![AgentTurn {
+                turn_id: turn_id.clone(),
+                session_id: session_id.clone(),
+                thread_id: thread_id.clone(),
+                status: AgentTurnStatus::Running,
+                started_at: Some(started_at.to_string()),
+                completed_at: None,
+            }],
+            turn_inputs: std::collections::HashMap::new(),
+            turn_runtime_options: std::collections::HashMap::new(),
+            events: vec![AgentEvent {
+                event_id: "event-read-model-running".to_string(),
+                sequence: 1,
+                session_id,
+                thread_id: Some(thread_id),
+                turn_id: Some(turn_id),
+                event_type: "turn.started".to_string(),
+                timestamp: latest_event_at.to_string(),
+                payload: json!({}),
+            }],
+            output_blobs: std::collections::HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn thread_read_downgrades_stale_orphan_running_turn() {
+        let stored = stored_running_session("2026-03-29T00:00:00.000Z", "2026-03-29T00:00:01.000Z");
+
+        let thread_read = runtime_thread_read_from_stored_session_with_usage_events(
+            &stored,
+            None,
+            Vec::new(),
+            &[],
+        );
+
+        assert_eq!(thread_read["status"], "idle");
+        assert_eq!(thread_read["active_turn_id"], serde_json::Value::Null);
+        assert_eq!(thread_read["diagnostics"]["latest_turn_status"], "running");
+    }
+
+    #[test]
+    fn thread_read_keeps_recent_running_turn_active() {
+        let now = chrono::Utc::now().to_rfc3339();
+        let stored = stored_running_session(now.as_str(), now.as_str());
+
+        let thread_read = runtime_thread_read_from_stored_session_with_usage_events(
+            &stored,
+            None,
+            Vec::new(),
+            &[],
+        );
+
+        assert_eq!(thread_read["status"], "running");
+        assert_eq!(
+            thread_read["active_turn_id"],
+            "turn_read_model_orphan_running"
+        );
     }
 }

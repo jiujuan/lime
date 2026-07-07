@@ -24,6 +24,7 @@
 - [./plugin-runtime-completion-audit.md](./plugin-runtime-completion-audit.md)：Plugin Runtime / 内容工厂闭环的完成审计、证据和剩余缺口
 - [./agentruntime-standard-adoption-gap.md](./agentruntime-standard-adoption-gap.md)：外部 AgentRuntime 标准对 Plugin / Claw 共享运行事实的采用边界、prompt-to-artifact 审计和单会话失败 handoff
 - [./claw-capability-sharing.md](./claw-capability-sharing.md)：Claw `@` 能力如何抽象为 Chat、Plugin、Automation 可共享 capability
+- [./agent-unfinished-session-recovery-plan.md](./agent-unfinished-session-recovery-plan.md)：未完成 Agent 会话自动检测、首页恢复与侧栏 / 输入框异步状态计划
 - [./backend-surface-facade-plan.md](./backend-surface-facade-plan.md)：Plugin runtime command 与共享后端 surface facade 计划
 - [./diagrams.md](./diagrams.md)：架构图、流程图、时序图
 - [./implementation-plan.md](./implementation-plan.md)：分阶段落地计划、风险和测试策略

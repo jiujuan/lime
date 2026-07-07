@@ -4,9 +4,12 @@ export * from "./appServerTransport";
 export {
   AppServerRpcError,
   expectAppServerResponse,
+  isAppServerConfigWarningNotification,
   isAppServerJsonRpcErrorResponse,
   isAppServerJsonRpcNotification,
   isAppServerJsonRpcResponse,
+  readAppServerConfigWarnings,
 } from "./appServerResponse";
+export * from "./appServerConfigWarnings";
 export * from "./appServerEventBus";
 export * from "./appServerClient";

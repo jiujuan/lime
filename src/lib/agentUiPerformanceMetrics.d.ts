@@ -30,11 +30,14 @@ export interface AgentUiPerformanceSessionSummary {
   homeInputToFirstTextDeltaMs?: number;
   homeInputToFirstTextRenderFlushMs?: number;
   homeInputToFirstTextPaintMs?: number;
+  streamRequestStartToFirstTextPaintMs?: number;
   sendDispatchToSubmitAcceptedMs?: number;
   streamSubmitDispatchedToAcceptedMs?: number;
   submitAcceptedToFirstEventMs?: number;
+  submitAcceptedToFirstTextPaintMs?: number;
   firstEventToFirstThinkingDeltaMs?: number;
   firstEventToFirstTextDeltaMs?: number;
+  firstEventToFirstTextPaintMs?: number;
   firstThinkingDeltaToFirstTextDeltaMs?: number;
   firstTextDeltaToFirstTextPaintMs?: number;
   providerWaitMs?: number;

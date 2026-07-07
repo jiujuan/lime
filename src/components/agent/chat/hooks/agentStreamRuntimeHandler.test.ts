@@ -1264,4 +1264,149 @@ describe("agentStreamRuntimeHandler storage", () => {
     });
   });
 
+  it("item_completed 的 agent_message contentParts 应同步到当前 assistant 消息", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-media-reference",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-07T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+
+    handleTurnStreamEvent({
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (
+          parts: NonNullable<Message["contentParts"]>,
+          textDelta: string,
+        ) => [...parts, { type: "thinking" as const, text: textDelta }],
+      },
+      data: {
+        type: "item_completed",
+        session_id: "session-media-reference",
+        thread_id: "session-media-reference",
+        turn_id: "turn-media-reference",
+        item: {
+          id: "agent-media-reference-1",
+          thread_id: "session-media-reference",
+          turn_id: "turn-media-reference",
+          sequence: 5,
+          status: "completed",
+          started_at: "2026-07-07T10:00:00.100Z",
+          completed_at: "2026-07-07T10:00:00.200Z",
+          updated_at: "2026-07-07T10:00:00.200Z",
+          type: "agent_message",
+          role: "assistant",
+          phase: "final_answer",
+          text: "媒体引用已进入对话",
+          contentParts: [
+            {
+              type: "text",
+              text: "媒体引用已进入对话",
+            },
+            {
+              type: "media",
+              kind: "image",
+              caption: "结果图",
+              reference: {
+                uri: "sidecar://media/fixture-image-1",
+                mime_type: "image/png",
+                title: "fixture-image-1.png",
+                source_path: "/tmp/lime-media/fixture-image-1.png",
+                preview_url: "asset:///tmp/lime-media/fixture-image-1.png",
+                sha256: "sha256-fixture-image-1",
+                byte_size: 2048,
+              },
+            },
+          ],
+        },
+      } as AgentEvent,
+      eventName: "agent-runtime-media-reference-content-parts-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-media-reference",
+      activeSessionId: "session-media-reference",
+      resolvedWorkspaceId: "workspace-media-reference",
+      effectiveExecutionStrategy: "react" as const,
+      surfaceThinkingDeltas: false,
+      content: "验证媒体引用展示",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      getThreadItems: () => threadItems,
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(messages[0]?.runtimeTurnId).toBe("turn-media-reference");
+    expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
+      "text",
+      "media_reference",
+    ]);
+    expect(messages[0]?.contentParts?.[1]).toMatchObject({
+      type: "media_reference",
+      reference: {
+        uri: "sidecar://media/fixture-image-1",
+        mimeType: "image/png",
+        title: "fixture-image-1.png",
+        caption: "结果图",
+        sourcePath: "/tmp/lime-media/fixture-image-1.png",
+        previewUrl: "asset:///tmp/lime-media/fixture-image-1.png",
+      },
+      metadata: {
+        source: "agent_media_reference",
+        threadItemId: "agent-media-reference-1",
+        turnId: "turn-media-reference",
+        sequence: 5,
+        sourcePath: "/tmp/lime-media/fixture-image-1.png",
+        previewUrl: "asset:///tmp/lime-media/fixture-image-1.png",
+      },
+    });
+  });
+
 });

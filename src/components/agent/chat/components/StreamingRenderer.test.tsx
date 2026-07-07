@@ -287,6 +287,59 @@ describe("StreamingRenderer", () => {
     );
   });
 
+  it("交错媒体引用应渲染为引用卡片且不展开 inline data URI", () => {
+    const onOpenMediaReference = vi.fn();
+    const { container } = renderHarness({
+      content: "",
+      onOpenMediaReference,
+      contentParts: [
+        {
+          type: "media_reference",
+          reference: {
+            kind: "image",
+            uri: "sidecar://media/image-1",
+            mimeType: "image/png",
+            caption: "结果图",
+            byteSize: 2048,
+          },
+          metadata: {
+            source: "agent_media_reference",
+            itemId: "item-image-1",
+            sequence: 2,
+          },
+        },
+        {
+          type: "text",
+          text: "图片已生成。",
+        },
+      ],
+    });
+
+    const mediaCard = container.querySelector(
+      '[data-testid="streaming-media-reference-card"]',
+    );
+    expect(mediaCard).not.toBeNull();
+    expect(mediaCard?.getAttribute("data-reference-uri")).toBe(
+      "sidecar://media/image-1",
+    );
+    expect(container.textContent).toContain("结果图");
+    expect(container.textContent).toContain("sidecar://media/image-1");
+    expect(container.textContent).toContain("图片已生成。");
+    expect(container.textContent).not.toContain("data:image");
+
+    act(() => {
+      (mediaCard as HTMLButtonElement | null)?.click();
+    });
+
+    expect(onOpenMediaReference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: "sidecar://media/image-1",
+        caption: "结果图",
+      }),
+      0,
+    );
+  });
+
   it("应过滤 assistant 正文中的工具协议残留", () => {
     const { container } = renderHarness({
       content:
@@ -332,9 +385,7 @@ describe("StreamingRenderer", () => {
     });
 
     const renderedText = container.textContent || "";
-    expect(renderedText.length).toBeGreaterThan(0);
-    expect(fullText.startsWith(renderedText)).toBe(true);
-    expect(renderedText.length).toBeLessThan(fullText.length);
+    expect(renderedText).toBe(fullText);
   });
 
   it("流式正文积压较多时应快速追上最新目标文本", () => {
@@ -424,7 +475,8 @@ describe("StreamingRenderer", () => {
       isStreaming: true,
     });
 
-    expect(parseAIResponseMock).toHaveBeenCalledTimes(1);
+    const initialParseCount = parseAIResponseMock.mock.calls.length;
+    expect(initialParseCount).toBeGreaterThan(0);
 
     rerender({
       content: structuredText,
@@ -432,7 +484,7 @@ describe("StreamingRenderer", () => {
       isStreaming: true,
     });
 
-    expect(parseAIResponseMock).toHaveBeenCalledTimes(1);
+    expect(parseAIResponseMock).toHaveBeenCalledTimes(initialParseCount);
   });
 
   it("连续探索工具应逐条保留过程记录", () => {

@@ -28,6 +28,21 @@ pub struct SidecarWriteRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SidecarBytesWriteRequest {
+    pub session_id: String,
+    pub kind: String,
+    pub logical_id: String,
+    pub relative_path: String,
+    pub content: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SidecarReadBytesResult {
+    pub bytes: Vec<u8>,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SidecarStore {
     root: PathBuf,
 }
@@ -41,6 +56,16 @@ impl SidecarStore {
     }
 
     pub fn write_text(&self, request: &SidecarWriteRequest) -> Result<SidecarRef, String> {
+        self.write_bytes(&SidecarBytesWriteRequest {
+            session_id: request.session_id.clone(),
+            kind: request.kind.clone(),
+            logical_id: request.logical_id.clone(),
+            relative_path: request.relative_path.clone(),
+            content: request.content.as_bytes().to_vec(),
+        })
+    }
+
+    pub fn write_bytes(&self, request: &SidecarBytesWriteRequest) -> Result<SidecarRef, String> {
         let relative_path = normalize_sidecar_relative_path(&request.relative_path)?;
         let path = self
             .root
@@ -50,11 +75,11 @@ impl SidecarStore {
                 .map_err(|error| format!("无法创建 sidecar 目录 {}: {error}", parent.display()))?;
         }
 
-        fs::write(&path, request.content.as_bytes())
+        fs::write(&path, &request.content)
             .map_err(|error| format!("无法写入 sidecar 文件 {}: {error}", path.display()))?;
 
         let bytes = request.content.len() as u64;
-        let sha256 = sha256_prefixed(request.content.as_bytes());
+        let sha256 = sha256_prefixed(&request.content);
         let actual = sha256_prefixed(
             &fs::read(&path)
                 .map_err(|error| format!("无法读取 sidecar 文件 {}: {error}", path.display()))?,
@@ -84,6 +109,51 @@ impl SidecarStore {
                 .join(relative_path_to_platform_path(&relative_path)),
         )
         .ok()
+    }
+
+    pub fn read_bytes_verified(
+        &self,
+        relative_path: &str,
+        expected_sha256: Option<&str>,
+        max_bytes: u64,
+    ) -> Result<Option<SidecarReadBytesResult>, String> {
+        let relative_path = normalize_sidecar_relative_path(relative_path)?;
+        let path = self
+            .root
+            .join(relative_path_to_platform_path(&relative_path));
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(format!(
+                    "无法读取 sidecar 文件元数据 {}: {error}",
+                    path.display()
+                ))
+            }
+        };
+        if metadata.len() > max_bytes {
+            return Err(format!(
+                "sidecar 文件超过读取上限 {}: {} > {} bytes",
+                path.display(),
+                metadata.len(),
+                max_bytes
+            ));
+        }
+        let bytes = fs::read(&path)
+            .map_err(|error| format!("无法读取 sidecar 文件 {}: {error}", path.display()))?;
+        let sha256 = sha256_prefixed(&bytes);
+        if let Some(expected_sha256) = expected_sha256
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            if sha256 != expected_sha256 {
+                return Err(format!(
+                    "sidecar 文件校验失败 {}: expected {expected_sha256}, actual {sha256}",
+                    path.display()
+                ));
+            }
+        }
+        Ok(Some(SidecarReadBytesResult { bytes, sha256 }))
     }
 
     pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
@@ -234,6 +304,37 @@ mod tests {
             store.read_text(&reference.relative_path).as_deref(),
             Some("hello")
         );
+    }
+
+    #[test]
+    fn write_bytes_and_read_bytes_verified_enforces_digest_and_size() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = SidecarStore::new(temp.path()).expect("store");
+
+        let reference = store
+            .write_bytes(&SidecarBytesWriteRequest {
+                session_id: "sess-a".to_string(),
+                kind: "media".to_string(),
+                logical_id: "image-a".to_string(),
+                relative_path: "sessions/sess-a/media/image-a.png".to_string(),
+                content: vec![0x89, b'P', b'N', b'G'],
+            })
+            .expect("write");
+
+        let read = store
+            .read_bytes_verified(&reference.relative_path, Some(&reference.sha256), 16)
+            .expect("read")
+            .expect("available");
+        assert_eq!(read.bytes, vec![0x89, b'P', b'N', b'G']);
+        assert_eq!(read.sha256, reference.sha256);
+        assert!(store
+            .read_bytes_verified(&reference.relative_path, Some("sha256:bad"), 16)
+            .expect_err("digest mismatch")
+            .contains("校验失败"));
+        assert!(store
+            .read_bytes_verified(&reference.relative_path, Some(&reference.sha256), 2)
+            .expect_err("too large")
+            .contains("超过读取上限"));
     }
 
     #[test]

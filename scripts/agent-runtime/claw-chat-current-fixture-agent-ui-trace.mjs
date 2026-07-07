@@ -23,6 +23,9 @@ const TRACE_SUMMARY_METRIC_KEYS = [
   "homeInputToFirstTextDeltaMs",
   "homeInputToFirstTextRenderFlushMs",
   "homeInputToFirstTextPaintMs",
+  "streamRequestStartToFirstTextPaintMs",
+  "submitAcceptedToFirstTextPaintMs",
+  "firstEventToFirstTextPaintMs",
   "firstTextDeltaToFirstTextPaintMs",
 ];
 
@@ -475,6 +478,12 @@ export async function collectAgentUiPerformanceTraceEvidence(page) {
       sessions: [],
       hasProviderWaitMs: false,
       hasClientLocalOutputMs: false,
+      hasHomeInputToFirstTextPaintMs: false,
+      hasStreamRequestStartToFirstTextPaintMs: false,
+      hasSubmitAcceptedToFirstTextPaintMs: false,
+      hasFirstEventToFirstTextPaintMs: false,
+      hasFirstVisibleOutputMs: false,
+      hasFirstTextDeltaToFirstTextPaintMs: false,
       hasServerToRendererFirstTextDeltaMs: false,
       hasRendererApplyFirstTextDeltaMs: false,
       forbiddenFragmentPresent: false,
@@ -492,6 +501,26 @@ export async function collectAgentUiPerformanceTraceEvidence(page) {
     sessions,
     hasProviderWaitMs: hasMetric(sessions, "providerWaitMs"),
     hasClientLocalOutputMs: hasMetric(sessions, "clientLocalOutputMs"),
+    hasHomeInputToFirstTextPaintMs: hasMetric(
+      sessions,
+      "homeInputToFirstTextPaintMs",
+    ),
+    hasStreamRequestStartToFirstTextPaintMs: hasMetric(
+      sessions,
+      "streamRequestStartToFirstTextPaintMs",
+    ),
+    hasSubmitAcceptedToFirstTextPaintMs: hasMetric(
+      sessions,
+      "submitAcceptedToFirstTextPaintMs",
+    ),
+    hasFirstEventToFirstTextPaintMs: hasMetric(
+      sessions,
+      "firstEventToFirstTextPaintMs",
+    ),
+    hasFirstTextDeltaToFirstTextPaintMs: hasMetric(
+      sessions,
+      "firstTextDeltaToFirstTextPaintMs",
+    ),
     hasServerToRendererFirstTextDeltaMs: hasMetric(
       sessions,
       "serverToRendererFirstTextDeltaMs",
@@ -501,6 +530,11 @@ export async function collectAgentUiPerformanceTraceEvidence(page) {
       "rendererApplyFirstTextDeltaMs",
     ),
   };
+  evidence.hasFirstVisibleOutputMs =
+    evidence.hasHomeInputToFirstTextPaintMs ||
+    evidence.hasStreamRequestStartToFirstTextPaintMs ||
+    evidence.hasSubmitAcceptedToFirstTextPaintMs ||
+    evidence.hasFirstEventToFirstTextPaintMs;
 
   return {
     ...evidence,

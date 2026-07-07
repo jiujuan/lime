@@ -30,15 +30,14 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["exec_command", "bash"],
   ["local_shell_call", "bash"],
   ["BriefTool", "sendusermessage"],
-  ["ConfigTool", "config"],
   ["request_user_input", "requestuserinput"],
   ["RequestUserInputTool", "requestuserinput"],
+  ["clock.sleep", "sleep"],
+  ["sleep", "sleep"],
   ["update_plan", "updateplan"],
   ["UpdatePlanTool", "updateplan"],
   ["EnterPlanModeTool", "enterplanmode"],
-  ["EnterWorktreeTool", "enterworktree"],
   ["ExitPlanModeTool", "exitplanmode"],
-  ["ExitWorktreeTool", "exitworktree"],
   ["FileEditTool", "edit"],
   ["FileReadTool", "read"],
   ["FileWriteTool", "write"],
@@ -59,7 +58,6 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["ListMcpResourcesTool", "listmcpresources"],
   ["MCPTool", "mcp"],
   ["McpAuthTool", "mcpauth"],
-  ["NotebookEditTool", "notebookedit"],
   ["PowerShellTool", "powershell"],
   ["ReadMcpResourceTool", "readmcpresource"],
   ["REPLTool", "repl"],
@@ -68,11 +66,8 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["WaitAgent", "waitagent"],
   ["ResumeAgent", "resumeagent"],
   ["CloseAgent", "closeagent"],
-  ["RemoteTriggerTool", "remotetrigger"],
-  ["ScheduleCronTool", "croncreate"],
   ["SendMessageTool", "sendmessage"],
   ["SkillTool", "skill"],
-  ["SleepTool", "sleep"],
   ["SyntheticOutputTool", "structuredoutput"],
   ["TaskCreateTool", "taskcreate"],
   ["TaskGetTool", "taskget"],
@@ -107,6 +102,13 @@ describe("toolDisplayInfo", () => {
     );
     expect(normalizeToolNameKey("AgentOutputTool")).toBe("taskoutput");
     expect(normalizeToolNameKey("BashOutputTool")).toBe("taskoutput");
+    expect(normalizeToolNameKey("ConfigTool")).toBe("configtool");
+    expect(normalizeToolNameKey("EnterWorktreeTool")).toBe("enterworktreetool");
+    expect(normalizeToolNameKey("ExitWorktreeTool")).toBe("exitworktreetool");
+    expect(normalizeToolNameKey("NotebookEditTool")).toBe("notebookedittool");
+    expect(normalizeToolNameKey("RemoteTriggerTool")).toBe("remotetriggertool");
+    expect(normalizeToolNameKey("ScheduleCronTool")).toBe("schedulecrontool");
+    expect(normalizeToolNameKey("SleepTool")).toBe("sleeptool");
   });
 
   it("应兼容导入来源中被双层 JSON 编码的工具参数", () => {
@@ -141,10 +143,9 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("exec_command")).toBe("命令执行");
     expect(resolveToolDisplayLabel("FileReadTool")).toBe("文件读取");
     expect(resolveToolDisplayLabel("mcp__system__read_file")).toBe("文件读取");
-    expect(resolveToolDisplayLabel("ConfigTool")).toBe("运行配置");
     expect(resolveToolDisplayLabel("update_plan")).toBe("计划更新");
+    expect(resolveToolDisplayLabel("sleep")).toBe("等待");
     expect(resolveToolDisplayLabel("PowerShellTool")).toBe("PowerShell");
-    expect(resolveToolDisplayLabel("WorkflowTool")).toBe("工作流执行");
     expect(resolveToolDisplayLabel("MCPTool")).toBe("MCP 工具");
     expect(resolveToolDisplayLabel("McpAuthTool")).toBe("MCP 授权");
     expect(resolveToolDisplayLabel("REPLTool")).toBe("REPL 执行");
@@ -153,8 +154,6 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("WaitAgent")).toBe("查看任务进展");
     expect(resolveToolDisplayLabel("ResumeAgent")).toBe("继续处理");
     expect(resolveToolDisplayLabel("CloseAgent")).toBe("暂停处理");
-    expect(resolveToolDisplayLabel("EnterWorktreeTool")).toBe("进入工作树");
-    expect(resolveToolDisplayLabel("ExitWorktreeTool")).toBe("退出工作树");
     expect(resolveToolDisplayLabel("SearchQuery")).toBe("网络搜索");
     expect(resolveToolDisplayLabel("ImageQuery")).toBe("图片搜索");
     expect(resolveToolDisplayLabel("finance")).toBe("行情查询");
@@ -169,7 +168,6 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("ListPeersTool")).toBe("子任务");
     expect(resolveToolDisplayLabel("TeamCreateTool")).toBe("创建子代理组");
     expect(resolveToolDisplayLabel("TeamDeleteTool")).toBe("删除子代理组");
-    expect(resolveToolDisplayLabel("ScheduleCronTool")).toBe("定时触发器");
     expect(resolveToolDisplayLabel("SyntheticOutputTool")).toBe("最终答复");
     expect(resolveToolDisplayLabel("AgentOutputTool")).toBe("任务输出");
     expect(resolveToolDisplayLabel("BashOutputTool")).toBe("任务输出");
@@ -221,12 +219,8 @@ describe("toolDisplayInfo", () => {
     expect(resolveUserFacingToolDisplayLabel("FileReadTool")).toBe("查看文件");
     expect(resolveUserFacingToolDisplayLabel("write_file")).toBe("保存文件");
     expect(resolveUserFacingToolDisplayLabel("LSPTool")).toBe("分析代码");
-    expect(resolveUserFacingToolDisplayLabel("ConfigTool")).toBe("查看配置");
     expect(resolveUserFacingToolDisplayLabel("PowerShellTool")).toBe(
       "运行命令",
-    );
-    expect(resolveUserFacingToolDisplayLabel("WorkflowTool")).toBe(
-      "运行工作流",
     );
     expect(resolveUserFacingToolDisplayLabel("MCPTool")).toBe("调用 MCP 工具");
     expect(resolveUserFacingToolDisplayLabel("McpAuthTool")).toBe(
@@ -268,9 +262,6 @@ describe("toolDisplayInfo", () => {
     ).toBe("页面截图");
     expect(resolveUserFacingToolDisplayLabel("mcp__github__create_issue")).toBe(
       "调用 MCP 工具",
-    );
-    expect(resolveUserFacingToolDisplayLabel("EnterWorktreeTool")).toBe(
-      "进入工作树",
     );
     expect(resolveUserFacingToolDisplayLabel("TaskOutput")).toBe(
       "查看任务结果",

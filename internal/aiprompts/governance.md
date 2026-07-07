@@ -17,6 +17,14 @@
 
 Agent 相关治理的最高事实源是 Codex-first：除多模型 / 多模态的 provider、capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，其余 Agent runtime、Thread / Turn / Item、App Server、状态机、工具生命周期、MCP、Skills、Multi-Agent、history hydrate、projection、TUI/GUI 测试护栏和命名，默认按 `/Users/coso/Documents/dev/rust/codex` 的架构方式收敛。Lime 当前不合理命名、旧 `Aster` 语义、`agent_runtime_*` 命令或多轮迭代残留不能作为 current 事实源续命；它们必须被标成 `compat` / `deprecated` / `dead`，并在护栏齐备后替换或删除。
 
+Aster 迁移的判定口径固定为 **Codex 有则迁，Codex 没有则删**：
+
+- 先对照 `/Users/coso/Documents/dev/rust/codex` 的 current 工具面、runtime crate 分层、Thread / Turn / Item 归属和命名；不要只看 Lime 当前有没有用上，也不要只看 Aster 框架本身有没有价值。
+- Codex 有的能力必须迁入 Lime current owner，并让 App Server、前端 GUI、Evidence / replay / analysis 或运行时主链至少一条真实消费链用起来；只搬 DTO、只留 wrapper、只写计划都不算迁移完成。
+- Codex 没有的 Aster-only 能力默认判为 `dead / deleted / forbidden-to-restore`，同轮清理 vendor 实现、tool catalog、前端 normalization/display/summary、测试正向断言和文档 active checklist；不得因为“以后可能有用”保留 root `aster` dependency 或 compat 壳。
+- `sleep` 这类同名能力必须按 Codex 语义重建：Codex current 是 `clock.sleep` / `sleep` 风格的 duration tool，不是 Aster `SleepTool` 的旧 proactive / Kairos 语义；实现和文档必须区分。
+- 命名要优雅、短、领域化。优先继承 Codex / Aster 中清晰的领域词，如 `apply_patch`、`web_search`、`tool_search`、`view_image`、`update_plan`；避免把 `lime_*`、`aster_*`、`agent_runtime_*` 或冗长历史词带进 current API。`Tool` / `*Tool` 这类实现后缀只允许作为历史 alias、测试夹具或退场 adapter，不能作为新 current API 命名。Aster 可以作为命名品味参考，不是实现事实源。
+
 其余实现必须被明确归类。
 
 生产路径不能 mock。mock 只允许作为测试夹具、契约守卫或已标明测试场景的本地 fixture；如果生产入口需要靠 `defaultMocks`、`mockPriorityCommands`、`invokeMockOnly`、renderer mock fallback 或 App Server mock backend 才能跑通，该入口应判为阻塞缺口，而不是可交付降级。

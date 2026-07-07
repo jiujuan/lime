@@ -2238,7 +2238,7 @@ mod tests {
         assert!(system_prompt.contains("<proposed_plan>"));
         assert!(system_prompt.contains("Do not use update_plan in Plan mode"));
         assert!(system_prompt.contains("request_user_input"));
-        assert!(tool_names.iter().any(|name| name == "update_plan"));
+        assert!(!tool_names.iter().any(|name| name == "update_plan"));
         assert!(tool_names.iter().any(|name| name == "request_user_input"));
         Ok(())
     }
@@ -2953,14 +2953,7 @@ mod tests {
             .await?;
 
         let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
-        assert_eq!(
-            names,
-            vec![
-                "Bash".to_string(),
-                "NotebookEdit".to_string(),
-                VIEW_IMAGE_TOOL_NAME.to_string(),
-            ]
-        );
+        assert_eq!(names, vec!["Bash".to_string()]);
 
         Ok(())
     }

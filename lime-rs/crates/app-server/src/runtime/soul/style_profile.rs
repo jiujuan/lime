@@ -1,6 +1,8 @@
-use lime_core::config::{MemorySoulStyleIntensity, MemorySoulStyleProfileId};
+use lime_core::config::MemorySoulStyleIntensity;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
+
+use super::style_pack_registry::load_installed_style_profile_seeds;
 
 pub(crate) const DEFAULT_STYLE_PROFILE_ID: &str = "cheeky_sassy_executor";
 pub(crate) const SERIOUS_STYLE_PROFILE_ID: &str = "calm_professional_partner";
@@ -19,10 +21,10 @@ const BUILT_IN_STYLE_PACK_SOURCES: [&str; 4] = [
     ),
 ];
 
-#[derive(Clone)]
-struct StyleProfileSeed {
-    id: String,
-    pack_id: String,
+#[derive(Clone, Debug)]
+pub(super) struct StyleProfileSeed {
+    pub(super) id: String,
+    pub(super) pack_id: String,
     tone: String,
     scopes: Vec<String>,
     response_contract: Vec<String>,
@@ -58,11 +60,12 @@ pub(crate) struct ResolvedStyleProfile {
 }
 
 pub(crate) fn resolve_style_profile(
-    profile_id: Option<&MemorySoulStyleProfileId>,
+    profile_id: Option<&str>,
     intensity: Option<&MemorySoulStyleIntensity>,
 ) -> ResolvedStyleProfile {
     let requested_profile_id = profile_id
-        .map(style_profile_id_as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
         .unwrap_or(DEFAULT_STYLE_PROFILE_ID);
     let seed = find_style_profile_seed(requested_profile_id)
         .or_else(|| find_style_profile_seed(DEFAULT_STYLE_PROFILE_ID))
@@ -96,19 +99,16 @@ fn resolve_intensity(intensity: Option<&MemorySoulStyleIntensity>) -> String {
     }
 }
 
-fn style_profile_id_as_str(profile_id: &MemorySoulStyleProfileId) -> &'static str {
-    match profile_id {
-        MemorySoulStyleProfileId::CheekySassyExecutor => "cheeky_sassy_executor",
-        MemorySoulStyleProfileId::WarmSupportiveCompanion => "warm_supportive_companion",
-        MemorySoulStyleProfileId::CoolConfidentOperator => "cool_confident_operator",
-        MemorySoulStyleProfileId::CalmProfessionalPartner => "calm_professional_partner",
-    }
-}
-
-fn find_style_profile_seed(profile_id: &str) -> Option<&'static StyleProfileSeed> {
+fn find_style_profile_seed(profile_id: &str) -> Option<StyleProfileSeed> {
     built_in_style_profile_seeds()
         .iter()
         .find(|profile| profile.id == profile_id)
+        .cloned()
+        .or_else(|| {
+            load_installed_style_profile_seeds()
+                .into_iter()
+                .find(|profile| profile.id == profile_id)
+        })
 }
 
 fn built_in_style_profile_seeds() -> &'static [StyleProfileSeed] {
@@ -139,27 +139,70 @@ fn load_built_in_style_profile_seeds() -> Vec<StyleProfileSeed> {
 }
 
 fn style_profile_seeds_from_pack_source(source: &str) -> Vec<StyleProfileSeed> {
-    let manifest: Value = serde_json::from_str(source).expect("parse built-in Soul style pack");
-    let pack_id = required_string(&manifest, "id");
-    let source = required_string(&manifest, "source");
-    assert_eq!(
-        source, "built_in",
-        "Soul style pack source must be built_in"
-    );
+    style_profile_seeds_from_pack_source_result(source, StylePackSourceMode::BuiltIn)
+        .expect("parse built-in Soul style pack")
+}
+
+pub(super) fn installed_style_profile_seeds_from_manifest_source(
+    source: &str,
+) -> Result<Vec<StyleProfileSeed>, String> {
+    style_profile_seeds_from_pack_source_result(source, StylePackSourceMode::Installed)
+}
+
+#[derive(Clone, Copy)]
+enum StylePackSourceMode {
+    BuiltIn,
+    Installed,
+}
+
+fn style_profile_seeds_from_pack_source_result(
+    source: &str,
+    source_mode: StylePackSourceMode,
+) -> Result<Vec<StyleProfileSeed>, String> {
+    let manifest: Value = serde_json::from_str(source)
+        .map_err(|error| format!("parse Soul style pack manifest: {error}"))?;
+    let pack_id = required_string_result(&manifest, "id")?;
+    let source = required_string_result(&manifest, "source")?;
+    match source_mode {
+        StylePackSourceMode::BuiltIn if source != "built_in" => {
+            return Err("Soul style pack source must be built_in".to_string());
+        }
+        StylePackSourceMode::Installed
+            if source != "local_import" && source != "cloud_download" =>
+        {
+            return Err(
+                "Installed Soul style pack source must be local_import or cloud_download"
+                    .to_string(),
+            );
+        }
+        _ => {}
+    }
+    if matches!(source_mode, StylePackSourceMode::Installed) {
+        let digest = manifest
+            .get("integrity")
+            .and_then(|value| value.get("digest"))
+            .and_then(Value::as_str)
+            .filter(|text| !text.trim().is_empty());
+        if digest.is_none() {
+            return Err("Installed Soul style pack must include integrity.digest".to_string());
+        }
+    }
     let schema_version = manifest
         .get("compatibility")
         .and_then(|value| value.get("schemaVersion"))
         .and_then(Value::as_i64)
-        .expect("Soul style pack schemaVersion");
-    assert_eq!(
-        schema_version, 1,
-        "Soul style pack schemaVersion must remain 1"
-    );
+        .ok_or_else(|| "Soul style pack schemaVersion".to_string())?;
+    if schema_version != 1 {
+        return Err("Soul style pack schemaVersion must remain 1".to_string());
+    }
 
     let profiles = manifest
         .get("profiles")
         .and_then(Value::as_array)
-        .expect("Soul style pack profiles");
+        .ok_or_else(|| "Soul style pack profiles".to_string())?;
+    if profiles.is_empty() {
+        return Err("Soul style pack profiles cannot be empty".to_string());
+    }
 
     profiles
         .iter()
@@ -167,82 +210,84 @@ fn style_profile_seeds_from_pack_source(source: &str) -> Vec<StyleProfileSeed> {
         .collect()
 }
 
-fn style_profile_seed_from_manifest_profile(pack_id: &str, profile: &Value) -> StyleProfileSeed {
-    let profile_pack_id = required_string(profile, "packId");
-    assert_eq!(
-        profile_pack_id, pack_id,
-        "Soul style profile packId must match pack manifest id"
-    );
+fn style_profile_seed_from_manifest_profile(
+    pack_id: &str,
+    profile: &Value,
+) -> Result<StyleProfileSeed, String> {
+    let profile_pack_id = required_string_result(profile, "packId")?;
+    if profile_pack_id != pack_id {
+        return Err("Soul style profile packId must match pack manifest id".to_string());
+    }
 
-    StyleProfileSeed {
-        id: required_string(profile, "id"),
+    Ok(StyleProfileSeed {
+        id: required_string_result(profile, "id")?,
         pack_id: profile_pack_id,
-        tone: required_string(profile, "tone"),
-        scopes: required_string_array(profile, "scopes"),
-        response_contract: required_string_array(profile, "responseContract"),
-        voice_primitives: required_string_array(profile, "voicePrimitives"),
+        tone: required_string_result(profile, "tone")?,
+        scopes: required_string_array_result(profile, "scopes")?,
+        response_contract: required_string_array_result(profile, "responseContract")?,
+        voice_primitives: required_string_array_result(profile, "voicePrimitives")?,
         surface_contracts: surface_contract_lines(
             profile
                 .get("surfaceContracts")
-                .expect("Soul style profile surfaceContracts"),
-        ),
-        allowed_moves: required_string_array(profile, "allowedMoves"),
-        forbidden_moves: required_string_array(profile, "forbiddenMoves"),
-        anti_repetition_rules: required_string_array(profile, "antiRepetitionRules"),
+                .ok_or_else(|| "Soul style profile surfaceContracts".to_string())?,
+        )?,
+        allowed_moves: required_string_array_result(profile, "allowedMoves")?,
+        forbidden_moves: required_string_array_result(profile, "forbiddenMoves")?,
+        anti_repetition_rules: required_string_array_result(profile, "antiRepetitionRules")?,
         few_shot_anchors: few_shot_anchor_lines(
             profile
                 .get("fewShotAnchors")
-                .expect("Soul style profile fewShotAnchors"),
-        ),
-        default_use_cases: required_string_array(profile, "defaultUseCases"),
+                .ok_or_else(|| "Soul style profile fewShotAnchors".to_string())?,
+        )?,
+        default_use_cases: required_string_array_result(profile, "defaultUseCases")?,
         risk_fallback_profile_id: profile
             .get("riskFallback")
-            .map(|fallback| required_string(fallback, "profileId"))
-            .expect("Soul style profile riskFallback"),
+            .map(|fallback| required_string_result(fallback, "profileId"))
+            .ok_or_else(|| "Soul style profile riskFallback".to_string())??,
         risk_fallback_triggers: profile
             .get("riskFallback")
-            .map(|fallback| required_string_array(fallback, "triggers"))
-            .expect("Soul style profile riskFallback triggers"),
-        serious_mode_fallback: required_string(profile, "seriousModeFallback"),
-    }
+            .map(|fallback| required_string_array_result(fallback, "triggers"))
+            .ok_or_else(|| "Soul style profile riskFallback triggers".to_string())??,
+        serious_mode_fallback: required_string_result(profile, "seriousModeFallback")?,
+    })
 }
 
-fn required_string(value: &Value, key: &str) -> String {
+fn required_string_result(value: &Value, key: &str) -> Result<String, String> {
     value
         .get(key)
         .and_then(Value::as_str)
         .filter(|text| !text.trim().is_empty())
-        .unwrap_or_else(|| panic!("Soul style manifest missing string field `{key}`"))
-        .to_string()
+        .map(str::to_string)
+        .ok_or_else(|| format!("Soul style manifest missing string field `{key}`"))
 }
 
-fn required_string_array(value: &Value, key: &str) -> Vec<String> {
+fn required_string_array_result(value: &Value, key: &str) -> Result<Vec<String>, String> {
     let values = value
         .get(key)
         .and_then(Value::as_array)
-        .unwrap_or_else(|| panic!("Soul style manifest missing array field `{key}`"));
-    let result: Vec<String> = values
+        .ok_or_else(|| format!("Soul style manifest missing array field `{key}`"))?;
+    let result: Result<Vec<String>, String> = values
         .iter()
         .map(|item| {
             item.as_str()
                 .filter(|text| !text.trim().is_empty())
-                .unwrap_or_else(|| {
-                    panic!("Soul style manifest array `{key}` contains a non-string item")
+                .map(str::to_string)
+                .ok_or_else(|| {
+                    format!("Soul style manifest array `{key}` contains a non-string item")
                 })
-                .to_string()
         })
         .collect();
-    assert!(
-        !result.is_empty(),
-        "Soul style manifest array `{key}` cannot be empty"
-    );
-    result
+    let result = result?;
+    if result.is_empty() {
+        return Err(format!("Soul style manifest array `{key}` cannot be empty"));
+    }
+    Ok(result)
 }
 
-fn surface_contract_lines(value: &Value) -> Vec<String> {
+fn surface_contract_lines(value: &Value) -> Result<Vec<String>, String> {
     let object = value
         .as_object()
-        .expect("Soul style surfaceContracts must be an object");
+        .ok_or_else(|| "Soul style surfaceContracts must be an object".to_string())?;
     let mut lines = Vec::new();
     for surface in [
         "before_tool",
@@ -256,38 +301,38 @@ fn surface_contract_lines(value: &Value) -> Vec<String> {
         let rules = object
             .get(surface)
             .and_then(Value::as_array)
-            .unwrap_or_else(|| panic!("Soul style surfaceContracts missing `{surface}`"));
+            .ok_or_else(|| format!("Soul style surfaceContracts missing `{surface}`"))?;
         for rule in rules {
             let rule = rule
                 .as_str()
                 .filter(|text| !text.trim().is_empty())
-                .unwrap_or_else(|| {
-                    panic!("Soul style surfaceContracts `{surface}` contains non-string rule")
-                });
+                .ok_or_else(|| {
+                    format!("Soul style surfaceContracts `{surface}` contains non-string rule")
+                })?;
             lines.push(format!("{surface}: {rule}"));
         }
     }
-    lines
+    Ok(lines)
 }
 
-fn few_shot_anchor_lines(value: &Value) -> Vec<String> {
+fn few_shot_anchor_lines(value: &Value) -> Result<Vec<String>, String> {
     let anchors = value
         .as_array()
-        .expect("Soul style fewShotAnchors must be an array");
-    let lines: Vec<String> = anchors
+        .ok_or_else(|| "Soul style fewShotAnchors must be an array".to_string())?;
+    let lines: Result<Vec<String>, String> = anchors
         .iter()
         .map(|anchor| {
-            let surface = required_string(anchor, "surface");
-            let intent = required_string(anchor, "intent");
-            let example = required_string(anchor, "example");
-            format!("{surface} / {intent}: {example}")
+            let surface = required_string_result(anchor, "surface")?;
+            let intent = required_string_result(anchor, "intent")?;
+            let example = required_string_result(anchor, "example")?;
+            Ok(format!("{surface} / {intent}: {example}"))
         })
         .collect();
-    assert!(
-        !lines.is_empty(),
-        "Soul style fewShotAnchors cannot be empty"
-    );
-    lines
+    let lines = lines?;
+    if lines.is_empty() {
+        return Err("Soul style fewShotAnchors cannot be empty".to_string());
+    }
+    Ok(lines)
 }
 
 impl ResolvedStyleProfile {
@@ -357,15 +402,10 @@ mod tests {
 
     #[test]
     fn built_in_profiles_cover_the_same_transcript_surface_contract() {
-        let profiles = [
-            MemorySoulStyleProfileId::CheekySassyExecutor,
-            MemorySoulStyleProfileId::WarmSupportiveCompanion,
-            MemorySoulStyleProfileId::CoolConfidentOperator,
-            MemorySoulStyleProfileId::CalmProfessionalPartner,
-        ];
+        let profiles = built_in_style_profile_seeds();
 
-        for profile_id in &profiles {
-            let profile = resolve_style_profile(Some(profile_id), None);
+        for profile_seed in profiles {
+            let profile = resolve_style_profile(Some(profile_seed.id.as_str()), None);
             for surface in TRANSCRIPT_STYLE_SURFACES {
                 assert!(
                     profile
@@ -386,15 +426,10 @@ mod tests {
 
     #[test]
     fn built_in_profiles_cover_transcript_few_shot_anchors() {
-        let profiles = [
-            MemorySoulStyleProfileId::CheekySassyExecutor,
-            MemorySoulStyleProfileId::WarmSupportiveCompanion,
-            MemorySoulStyleProfileId::CoolConfidentOperator,
-            MemorySoulStyleProfileId::CalmProfessionalPartner,
-        ];
+        let profiles = built_in_style_profile_seeds();
 
-        for profile_id in &profiles {
-            let profile = resolve_style_profile(Some(profile_id), None);
+        for profile_seed in profiles {
+            let profile = resolve_style_profile(Some(profile_seed.id.as_str()), None);
             for prefix in TRANSCRIPT_STYLE_ANCHOR_PREFIXES {
                 assert!(
                     profile
@@ -409,8 +444,8 @@ mod tests {
 
         for prefix in TRANSCRIPT_STYLE_ANCHOR_PREFIXES {
             let mut examples = BTreeSet::new();
-            for profile_id in &profiles {
-                let profile = resolve_style_profile(Some(profile_id), None);
+            for profile_seed in profiles {
+                let profile = resolve_style_profile(Some(profile_seed.id.as_str()), None);
                 let anchor = profile
                     .few_shot_anchors
                     .iter()
@@ -429,7 +464,7 @@ mod tests {
     #[test]
     fn style_profile_context_contains_complete_transcript_surface_contract() {
         let profile = resolve_style_profile(
-            Some(&MemorySoulStyleProfileId::CoolConfidentOperator),
+            Some("cool_confident_operator"),
             Some(&MemorySoulStyleIntensity::High),
         );
         let context = profile.as_context_value();
@@ -446,5 +481,13 @@ mod tests {
             assert!(serialized.contains(prefix), "missing {prefix}");
         }
         assert!(serialized.contains("calm_professional_partner"));
+    }
+
+    #[test]
+    fn unresolved_profile_id_falls_back_to_default_without_alias_mapping() {
+        let profile = resolve_style_profile(Some("sassy_cute_executor"), None);
+
+        assert_eq!(profile.id, DEFAULT_STYLE_PROFILE_ID);
+        assert_ne!(profile.id, "sassy_cute_executor");
     }
 }

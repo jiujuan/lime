@@ -122,6 +122,10 @@ export function useEmptyStateAttachments({
     setPendingImages([]);
   };
 
+  const replacePendingImages = (images: MessageImage[]) => {
+    setPendingImages(images);
+  };
+
   return {
     clearPendingImages,
     handleDragOver,
@@ -130,5 +134,6 @@ export function useEmptyStateAttachments({
     handlePaste,
     handleRemoveImage,
     pendingImages,
+    replacePendingImages,
   };
 }

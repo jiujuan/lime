@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "AgentThreadContentReference": {
+      "properties": {
+        "byte_size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "preview_url": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sidecar_ref": true,
+        "source_path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source_uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime_type",
+        "uri"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "caption": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/AgentThreadContentReference"
+        },
+        "type": {
+          "const": "media",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "reference",
+        "type"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "AgentThreadMessageContentPart"
+}

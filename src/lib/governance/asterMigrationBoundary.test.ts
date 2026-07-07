@@ -52,6 +52,25 @@ const DELETED_ASTER_VENDOR_PUBLIC_MODULES = [
   "updater",
 ];
 
+const DELETED_ASTER_VENDOR_SESSION_PUBLIC_MODULES = ["cleanup", "statistics"];
+
+const DELETED_ASTER_VENDOR_TASK_TOOL_FILES = [
+  "lime-rs/vendor/aster-rust/crates/aster/src/tools/task_list_tools.rs",
+  "lime-rs/vendor/aster-rust/crates/aster/src/tools/task_output_tool.rs",
+  "lime-rs/vendor/aster-rust/crates/aster/src/tools/task_stop_tool.rs",
+];
+
+const RUNTIME_TOOL_BRIDGE_ADAPTER_FILES = [
+  "lime-rs/crates/agent/src/native_tools/memory_store.rs",
+  "lime-rs/crates/agent/src/native_tools/image_tasks.rs",
+  "lime-rs/crates/agent/src/native_tools/sleep.rs",
+  "lime-rs/crates/agent/src/native_tools/view_image.rs",
+  "lime-rs/crates/agent/src/native_tools/update_plan.rs",
+  "lime-rs/crates/agent/src/native_tools/web_retrieval.rs",
+  "lime-rs/crates/agent/src/tools/apply_patch_tool.rs",
+  "lime-rs/crates/agent/src/tools/skill_search_tool.rs",
+];
+
 const DIRECT_ASTER_DEPENDENCY_MIGRATED_FILES = [
   "lime-rs/crates/agent-protocol/src/action_required.rs",
   "lime-rs/crates/services/src/model_registry_service.rs",
@@ -95,7 +114,18 @@ const DIRECT_ASTER_DEPENDENCY_MIGRATED_FILES = [
   "lime-rs/crates/tool-runtime/src/tool_definition.rs",
   "lime-rs/crates/tool-runtime/src/tool_extension.rs",
   "lime-rs/crates/tool-runtime/src/tool_result.rs",
+  "lime-rs/crates/tool-runtime/src/native_dispatch.rs",
   "lime-rs/crates/tool-runtime/src/apply_patch.rs",
+  "lime-rs/crates/tool-runtime/src/skill_search.rs",
+  "lime-rs/crates/tool-runtime/src/update_plan.rs",
+  "lime-rs/crates/tool-runtime/src/image_task.rs",
+  "lime-rs/crates/tool-runtime/src/image_task/definition.rs",
+  "lime-rs/crates/tool-runtime/src/image_task/executor.rs",
+  "lime-rs/crates/tool-runtime/src/image_task/params.rs",
+  "lime-rs/crates/tool-runtime/src/memory_store.rs",
+  "lime-rs/crates/tool-runtime/src/memory_store/definitions.rs",
+  "lime-rs/crates/tool-runtime/src/memory_store/executor.rs",
+  "lime-rs/crates/tool-runtime/src/memory_store/params.rs",
   "lime-rs/crates/tool-runtime/src/web_fetch.rs",
   "lime-rs/crates/tool-runtime/src/web_fetch/content.rs",
   "lime-rs/crates/tool-runtime/src/web_search.rs",
@@ -1489,16 +1519,6 @@ const SESSION_TODO_ASTER_ADAPTER_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
   "content.trim().is_empty()",
 ];
 
-const ASTER_MEMORY_STUB_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
-  "LimeSessionStore: memory subsystem disabled",
-  "LimeSessionStore: memory commit skipped",
-  "messages_scanned: 0",
-  "memories_created: 0",
-  "memories_merged: 0",
-  "source_start_ts: None",
-  "MemoryStats::default",
-];
-
 const ASTER_LEGACY_CONVERSATION_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
   "struct PersistedConversationMessageRecord",
   "persisted_visibility_default_true",
@@ -1740,6 +1760,47 @@ describe("aster migration boundary", () => {
     expect(
       restoredLibExports,
       "这些 Aster vendor public modules 不得重新从 aster-core lib.rs 导出",
+    ).toEqual([]);
+  });
+
+  it("已删除的 Aster vendor session public wrappers 不得恢复", () => {
+    const sessionRoot = join(
+      REPO_ROOT,
+      "lime-rs/vendor/aster-rust/crates/aster/src/session",
+    );
+    const sessionModSource = readFileSync(join(sessionRoot, "mod.rs"), "utf8");
+
+    const restoredFiles = DELETED_ASTER_VENDOR_SESSION_PUBLIC_MODULES.filter(
+      (moduleName) => existsSync(join(sessionRoot, `${moduleName}.rs`)),
+    );
+    const restoredMods = DELETED_ASTER_VENDOR_SESSION_PUBLIC_MODULES.filter(
+      (moduleName) =>
+        sessionModSource.includes(`mod ${moduleName};`) ||
+        sessionModSource.includes(`pub mod ${moduleName};`),
+    );
+    const restoredExports = [
+      "cleanup_expired_data",
+      "force_cleanup",
+      "schedule_cleanup",
+      "CleanupStats",
+      "calculate_statistics",
+      "generate_report",
+      "get_all_statistics",
+      "SessionStatistics",
+      "SessionSummary",
+    ].filter((snippet) => sessionModSource.includes(snippet));
+
+    expect(
+      restoredFiles,
+      "Aster session cleanup/statistics 是无 Lime current 消费的旧 public wrapper，已按 dead 删除，不得恢复文件",
+    ).toEqual([]);
+    expect(
+      restoredMods,
+      "Aster session cleanup/statistics 不得重新挂回 session/mod.rs",
+    ).toEqual([]);
+    expect(
+      restoredExports,
+      "Aster session cleanup/statistics 的旧 public API 不得重新导出；统计/清理能力必须进入 Lime current owner",
     ).toEqual([]);
   });
 
@@ -2680,12 +2741,20 @@ describe("aster migration boundary", () => {
     const agentRuntimeLibPath = "lime-rs/crates/agent-runtime/src/lib.rs";
     const agentRuntimeReplyInputPath =
       "lime-rs/crates/agent-runtime/src/reply_input.rs";
+    const agentRuntimeReplyMessagePath =
+      "lime-rs/crates/agent-runtime/src/reply_message.rs";
+    const agentRuntimeReplyRequestPath =
+      "lime-rs/crates/agent-runtime/src/reply_request.rs";
     const agentRuntimeReplyHostPath =
       "lime-rs/crates/agent-runtime/src/reply_host.rs";
+    const agentRuntimeReplySessionPath =
+      "lime-rs/crates/agent-runtime/src/reply_session.rs";
     const agentRuntimeReplyExecutionPath =
       "lime-rs/crates/agent-runtime/src/reply_execution.rs";
     const agentRuntimeReplyStreamPath =
       "lime-rs/crates/agent-runtime/src/reply_stream.rs";
+    const agentRuntimeEventStreamPath =
+      "lime-rs/crates/agent-runtime/src/event_stream.rs";
     const mainSource = readFileSync(join(REPO_ROOT, mainPath), "utf8");
     const mainProductionSource = mainSource.split(
       "\n#[cfg(test)]\nmod tests",
@@ -2711,8 +2780,20 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, agentRuntimeReplyInputPath),
       "utf8",
     );
+    const agentRuntimeReplyMessageSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyMessagePath),
+      "utf8",
+    );
+    const agentRuntimeReplyRequestSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyRequestPath),
+      "utf8",
+    );
     const agentRuntimeReplyHostSource = readFileSync(
       join(REPO_ROOT, agentRuntimeReplyHostPath),
+      "utf8",
+    );
+    const agentRuntimeReplySessionSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplySessionPath),
       "utf8",
     );
     const agentRuntimeReplyExecutionSource = readFileSync(
@@ -2721,6 +2802,10 @@ describe("aster migration boundary", () => {
     );
     const agentRuntimeReplyStreamSource = readFileSync(
       join(REPO_ROOT, agentRuntimeReplyStreamPath),
+      "utf8",
+    );
+    const agentRuntimeEventStreamSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeEventStreamPath),
       "utf8",
     );
     const leaks =
@@ -2820,12 +2905,29 @@ describe("aster migration boundary", () => {
     expect(adapterSource).toContain(
       "agent_runtime::reply_stream::RuntimeReplyStreamEvent",
     );
+    expect(adapterSource).toContain(
+      "agent_runtime::reply_request::RuntimeReplyRequest",
+    );
+    expect(adapterSource).toContain("RuntimeReplyRequest::from_attempt_input");
+    expect(adapterSource).toContain("agent_runtime::reply_host::{");
+    expect(adapterSource).toContain("RuntimeReplyStartRequest");
+    expect(adapterSource).toContain("RuntimeReplyStartRequest::new");
+    expect(adapterSource).toContain(
+      "runtime_reply_model_request_policy_from_turn_context",
+    );
+    expect(adapterSource).toContain("validate_reply_request_modalities");
+    expect(adapterSource).toContain("input_modality_policy_from_turn_context");
+    expect(adapterSource).toContain("input_modality_policy_allows_image_input");
     expect(adapterSource).toContain("RuntimeReplyStreamEvent");
     expect(adapterSource.includes("ConfiguredReplyProvider")).toBe(false);
     expect(agentRuntimeLibSource).toContain("pub mod reply_input;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_message;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_request;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_host;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_session;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_execution;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_stream;");
+    expect(agentRuntimeLibSource).toContain("pub mod event_stream;");
     expect(agentRuntimeReplyHostSource).toContain(
       "pub trait RuntimeReplyStreamHost<E>",
     );
@@ -2839,7 +2941,23 @@ describe("aster migration boundary", () => {
     expect(agentRuntimeReplyHostSource).toContain(
       "pub struct RuntimeReplyStartError",
     );
-    expect(agentRuntimeReplyHostSource).toContain("RuntimeReplyAttemptInput");
+    expect(agentRuntimeReplyHostSource).toContain(
+      "pub struct RuntimeReplyStartRequest",
+    );
+    expect(agentRuntimeReplyHostSource).toContain(
+      "pub request: RuntimeReplyRequest",
+    );
+    expect(agentRuntimeReplyHostSource).toContain(
+      "pub session_config: AgentSessionConfig",
+    );
+    expect(agentRuntimeReplyHostSource).toContain(
+      "pub cancel_token: Option<CancellationToken>",
+    );
+    expect(agentRuntimeReplyHostSource).toContain("pub emitted_any: bool");
+    expect(agentRuntimeReplyHostSource).toContain("RuntimeReplyRequest");
+    expect(agentRuntimeReplyHostSource).not.toContain(
+      "RuntimeReplyAttemptInput",
+    );
     expect(agentRuntimeReplyHostSource).toContain("AgentSessionConfig");
     expect(
       FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
@@ -2847,6 +2965,22 @@ describe("aster migration boundary", () => {
       ),
       "agent-runtime reply_host contract 不得引入 Aster 类型",
     ).toEqual([]);
+    expect(agentRuntimeReplySessionSource).toContain(
+      "pub fn attach_reply_disallowed_tools",
+    );
+    expect(agentRuntimeReplySessionSource).toContain(
+      "pub fn attach_reply_provider_wire_shape",
+    );
+    expect(agentRuntimeReplySessionSource).toContain(
+      "pub const TOOL_SCOPE_METADATA_KEY",
+    );
+    expect(agentRuntimeReplySessionSource).toContain(
+      "pub const DISALLOWED_TOOLS_METADATA_KEY",
+    );
+    expect(agentRuntimeReplySessionSource).toContain(
+      "RuntimeReplyProviderRequestWireShape",
+    );
+    expect(agentRuntimeReplySessionSource).not.toContain("aster::");
     expect(agentRuntimeReplyInputSource).toContain(
       "pub struct RuntimeReplyInput",
     );
@@ -2861,6 +2995,38 @@ describe("aster migration boundary", () => {
     );
     expect(agentRuntimeReplyInputSource).toContain("runtime_input_kind");
     expect(agentRuntimeReplyInputSource).not.toContain("aster::");
+    expect(agentRuntimeReplyMessageSource).toContain(
+      "pub struct RuntimeReplyMessage",
+    );
+    expect(agentRuntimeReplyMessageSource).toContain(
+      "pub enum RuntimeReplyMessageContent",
+    );
+    expect(agentRuntimeReplyMessageSource).toContain("RuntimeReplyMessageRole");
+    expect(agentRuntimeReplyMessageSource).toContain("from_attempt_input");
+    expect(agentRuntimeReplyMessageSource).toContain("concat_text");
+    expect(agentRuntimeReplyMessageSource).toContain("has_images");
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        agentRuntimeReplyMessageSource.includes(snippet),
+      ),
+      "agent-runtime reply_message contract 不得引入 Aster Message / MessageContent 类型",
+    ).toEqual([]);
+    expect(agentRuntimeReplyRequestSource).toContain(
+      "pub struct RuntimeReplyRequest",
+    );
+    expect(agentRuntimeReplyRequestSource).toContain(
+      "RuntimeReplyStreamRequest::new",
+    );
+    expect(agentRuntimeReplyRequestSource).toContain("from_attempt_input");
+    expect(agentRuntimeReplyRequestSource).toContain("into_parts");
+    expect(agentRuntimeReplyRequestSource).toContain("RuntimeReplyMessage");
+    expect(agentRuntimeReplyRequestSource).toContain("message_chars");
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        agentRuntimeReplyRequestSource.includes(snippet),
+      ),
+      "agent-runtime reply_request contract 不得引入 Aster provider/reply 类型",
+    ).toEqual([]);
     expect(agentRuntimeReplyExecutionSource).toContain(
       "pub struct RuntimeReplyAttemptError",
     );
@@ -2876,7 +3042,20 @@ describe("aster migration boundary", () => {
     expect(agentRuntimeReplyStreamSource).toContain(
       "SuppressedInlineProviderError(String)",
     );
+    expect(agentRuntimeReplyStreamSource).toContain("ProviderStreamEvent");
     expect(agentRuntimeReplyStreamSource).not.toContain("aster::");
+    expect(agentRuntimeEventStreamSource).toContain(
+      "pub trait EventProjector<SourceEvent, RuntimeEvent>",
+    );
+    expect(agentRuntimeEventStreamSource).toContain(
+      "fn project(&mut self, event: SourceEvent) -> Vec<RuntimeEvent>",
+    );
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        agentRuntimeEventStreamSource.includes(snippet),
+      ),
+      "agent-runtime event_stream 只能定义 current event projector contract，不得引入 Aster source type",
+    ).toEqual([]);
     expect(asterReplyAdapterSource).toContain("struct AsterReplyRuntimeHost");
     expect(asterReplyAdapterSource).toContain(
       "impl RuntimeReplyStreamHost<RuntimeAgentEvent> for AsterReplyRuntimeHost",
@@ -2887,11 +3066,65 @@ describe("aster migration boundary", () => {
     expect(asterReplyAdapterSource).toContain(
       "agent_runtime::reply_stream::RuntimeReplyStreamEvent",
     );
+    expect(asterReplyAdapterSource).toContain("RuntimeReplyStartRequest");
     expect(asterReplyAdapterSource).toContain(
       "RuntimeActionRequiredResponseInput as ActionRequiredResponseInput",
     );
     expect(asterReplyAdapterSource).toContain(
       "RuntimeReplyAttemptInput as ReplyAttemptInput",
+    );
+    expect(asterReplyAdapterSource).toContain(
+      "agent_runtime::reply_message::{",
+    );
+    expect(asterReplyAdapterSource).toContain(
+      "agent_runtime::reply_session::{",
+    );
+    expect(asterReplyAdapterSource).toContain("attach_reply_disallowed_tools");
+    expect(asterReplyAdapterSource).toContain(
+      "attach_reply_provider_wire_shape",
+    );
+    expect(asterReplyAdapterSource).toContain(
+      "RuntimeReplyStartRequest {\n        request,",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeReplyProviderRequestWireShape::TURN_CONTEXT_METADATA_KEY",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      'entry("tool_scope".to_string())',
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      'entry("disallowed_tools".to_string())',
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "serde_json::to_value(wire_shape)",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeReplyMessage::from_attempt_input",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeReplyRequest::from_attempt_input",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "request: RuntimeReplyRequest,\n        session_config: AgentSessionConfig",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "runtime_reply_model_request_policy_from_turn_context",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeReplyStreamRequest::new",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "input_modality_policy_from_turn_context",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "input_modality_policy_allows_image_input",
+    );
+    expect(asterReplyAdapterSource).toContain("lower_aster_reply_message");
+    expect(asterReplyAdapterSource).not.toContain(
+      "validate_reply_message_modalities",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "fn build_aster_user_message",
     );
     expect(asterReplyAdapterSource).toContain("RuntimeReplyStreamEvent");
     expect(asterReplyAdapterSource).not.toContain(
@@ -2905,8 +3138,12 @@ describe("aster migration boundary", () => {
       "enum RuntimeReplyStreamEvent",
     );
     expect(asterReplyAdapterSource).toContain("project_aster_reply_stream");
-    expect(asterReplyAdapterSource).toContain("RuntimeEventProjector::new");
+    expect(asterReplyAdapterSource).toContain("AsterEventProjector::new");
+    expect(asterReplyAdapterSource).toContain(
+      "agent_runtime::event_stream::EventProjector",
+    );
     expect(asterReplyAdapterSource).toContain("SuppressedInlineProviderError");
+    expect(asterReplyAdapterSource).toContain("ProviderStreamEvent");
     expect(asterReplyAdapterSource).toContain(
       "extract_inline_agent_provider_error",
     );
@@ -2938,6 +3175,13 @@ describe("aster migration boundary", () => {
       "project_aster_auto_compaction_event",
     );
     expect(asterEventAdapterSource).toContain("AutoCompactionProjectionState");
+    expect(asterEventAdapterSource).toContain("struct AsterEventProjector");
+    expect(asterEventAdapterSource).toContain(
+      "impl EventProjector<AsterAgentEvent, RuntimeAgentEvent> for AsterEventProjector",
+    );
+    expect(asterEventAdapterSource).not.toContain(
+      "struct RuntimeEventProjector",
+    );
     expect(webSearchPreflightSource).toContain(
       "runtime_web_search_executor_handle",
     );
@@ -3174,10 +3418,23 @@ describe("aster migration boundary", () => {
 
   it("runtime_state native tool overlay 不得直接操作 Aster ToolRegistry", () => {
     const runtimeStatePath = "lime-rs/crates/agent/src/runtime_state.rs";
+    const runtimeStateSupportPath =
+      "lime-rs/crates/agent/src/runtime_state_support.rs";
     const nativeOverlayPath =
       "lime-rs/crates/agent/src/native_tools/runtime_overlay.rs";
     const currentOwnerPath =
       "lime-rs/crates/tool-runtime/src/native_overlay.rs";
+    const currentDispatchPath =
+      "lime-rs/crates/tool-runtime/src/native_dispatch.rs";
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const agentToolCatalogPath =
+      "lime-rs/crates/agent/src/agent_tools/catalog.rs";
+    const agentPromptTemplatesPath =
+      "lime-rs/crates/agent/src/prompt/templates.rs";
+    const runtimeAvailabilityPath =
+      "src/components/agent/chat/utils/runtimeToolAvailability.ts";
+    const vendorToolsModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
     const runtimeInventoryAdapterPath =
       "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs";
     const runtimeStateSource = readFileSync(
@@ -3191,8 +3448,36 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, nativeOverlayPath),
       "utf8",
     );
+    const runtimeStateSupportSource = readFileSync(
+      join(REPO_ROOT, runtimeStateSupportPath),
+      "utf8",
+    );
     const currentOwnerSource = readFileSync(
       join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentDispatchSource = readFileSync(
+      join(REPO_ROOT, currentDispatchPath),
+      "utf8",
+    );
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const agentToolCatalogSource = readFileSync(
+      join(REPO_ROOT, agentToolCatalogPath),
+      "utf8",
+    );
+    const agentPromptTemplatesSource = readFileSync(
+      join(REPO_ROOT, agentPromptTemplatesPath),
+      "utf8",
+    );
+    const runtimeAvailabilitySource = readFileSync(
+      join(REPO_ROOT, runtimeAvailabilityPath),
+      "utf8",
+    );
+    const vendorToolsModSource = readFileSync(
+      join(REPO_ROOT, vendorToolsModPath),
       "utf8",
     );
     const runtimeInventoryAdapterSource = readFileSync(
@@ -3224,18 +3509,119 @@ describe("aster migration boundary", () => {
     expect(productionSource).toContain(
       "crate::native_tools::runtime_native_tool_registry",
     );
-    expect(nativeOverlaySource).toContain("create_shared_history");
-    expect(nativeOverlaySource).toContain("WriteTool");
-    expect(nativeOverlaySource).toContain("EditTool");
+    expect(nativeOverlaySource).not.toContain("create_shared_history");
+    expect(nativeOverlaySource).not.toContain("WriteTool");
+    expect(nativeOverlaySource).not.toContain("EditTool");
     expect(nativeOverlaySource).toContain("WorkspaceToolPolicyInspector::new");
     expect(currentOwnerSource).toContain("pub enum RuntimeNativeToolOverlay");
     expect(currentOwnerSource).toContain("runtime_native_tool_overlay_tools");
     expect(currentOwnerSource).toContain(
       "runtime_native_tool_overlay_tool_names",
     );
+    expect(currentOwnerSource).toContain(
+      "runtime_native_tool_registration_allowlist",
+    );
+    expect(currentOwnerSource).toContain("RuntimeNativeToolOverlay::ViewImage");
+    expect(currentOwnerSource).toContain("RuntimeNativeToolOverlay::Sleep");
+    expect(currentOwnerSource).toContain(
+      "RuntimeNativeToolOverlay::UpdatePlan",
+    );
+    expect(currentOwnerSource).not.toContain("RuntimeNativeToolOverlay::Write");
+    expect(currentOwnerSource).not.toContain("RuntimeNativeToolOverlay::Edit");
+    expect(currentOwnerSource).toContain('names.contains(&"view_image")');
+    expect(currentOwnerSource).toContain('names.contains(&"sleep")');
+    expect(currentOwnerSource).toContain('names.contains(&"update_plan")');
+    expect(currentOwnerSource).toContain('!names.contains(&"Write")');
+    expect(currentOwnerSource).toContain('!names.contains(&"Edit")');
+    for (const retiredTaskTool of [
+      "TaskCreate",
+      "TaskList",
+      "TaskGet",
+      "TaskUpdate",
+      "TaskOutput",
+      "TaskStop",
+    ]) {
+      expect(currentOwnerSource).toContain(
+        `!names.contains(&"${retiredTaskTool}")`,
+      );
+      expect(agentToolCatalogSource).not.toContain(
+        `name: "${retiredTaskTool}"`,
+      );
+      expect(agentPromptTemplatesSource).not.toContain(retiredTaskTool);
+      expect(runtimeAvailabilitySource).not.toContain(retiredTaskTool);
+    }
+    expect(agentToolCatalogSource).toContain("UPDATE_PLAN_TOOL_NAME");
+    expect(agentPromptTemplatesSource).toContain("update_plan");
+    expect(runtimeAvailabilitySource).toContain("PLAN_TOOL_NAMES");
+    expect(runtimeAvailabilitySource).toContain('"update_plan"');
+    expect(currentOwnerSource).toContain('!names.contains(&"ViewImage")');
+    expect(currentOwnerSource).toContain('!names.contains(&"UpdatePlan")');
+    expect(currentOwnerSource).toContain('!names.contains(&"NotebookEdit")');
+    expect(currentOwnerSource).toContain('!names.contains(&"EnterWorktree")');
+    expect(currentOwnerSource).toContain('!names.contains(&"Workflow")');
+    expect(currentOwnerSource).toContain('!names.contains(&"Config")');
+    expect(currentOwnerSource).toContain('!names.contains(&"Sleep")');
+    expect(currentOwnerSource).toContain('!names.contains(&"SleepTool")');
     expect(currentOwnerSource).not.toContain("aster::");
     expect(currentOwnerSource).not.toContain("lime_native_tool_overlay");
+    expect(currentLibSource).toContain("pub mod native_dispatch;");
+    expect(currentDispatchSource).toContain("pub struct NativeDispatch");
+    expect(currentDispatchSource).toContain("runtime_native_dispatch_handle");
+    expect(currentDispatchSource).toContain(
+      "runtime_native_dispatch_definitions",
+    );
+    expect(currentDispatchSource).toContain(
+      "runtime_apply_patch_executor_handle",
+    );
+    expect(currentDispatchSource).toContain(
+      "runtime_skill_search_executor_handle",
+    );
+    expect(currentDispatchSource).toContain("runtime_sleep_executor_handle");
+    expect(currentDispatchSource).toContain(
+      "runtime_view_image_executor_handle",
+    );
+    expect(currentDispatchSource).toContain(
+      "runtime_plan_update_executor_handle",
+    );
+    expect(currentDispatchSource).toContain(
+      "runtime_web_fetch_executor_handle",
+    );
+    expect(currentDispatchSource).toContain(
+      "runtime_web_search_executor_handle",
+    );
+    expect(currentDispatchSource).toContain("with_memory_store_gateway");
+    expect(currentDispatchSource).toContain(
+      "runtime_memory_store_executor_handle",
+    );
+    expect(currentDispatchSource).toContain("with_image_task_gateway");
+    expect(currentDispatchSource).toContain(
+      "runtime_image_task_executor_handle",
+    );
+    expect(currentDispatchSource).toContain("unsupported_native_tool");
+    expect(currentDispatchSource).toContain('canonical_name("clock.sleep")');
+    expect(currentDispatchSource).toContain('canonical_name("UpdatePlanTool")');
+    expect(currentDispatchSource).toContain('canonical_name("ViewImageTool")');
+    expect(currentDispatchSource).not.toContain("aster::");
+    expect(runtimeStateSupportSource).toContain(
+      "runtime_native_tool_registration_allowlist",
+    );
+    expect(runtimeStateSupportSource).toContain(".with_allowed_tool_names(");
+    expect(vendorToolsModSource).toContain("allowed_tool_names");
+    expect(vendorToolsModSource).toContain("fn allows_tool");
+    expect(vendorToolsModSource).toContain('config.allows_tool("Bash")');
+    expect(vendorToolsModSource).not.toContain(
+      'config.allows_tool("NotebookEdit")',
+    );
+    expect(vendorToolsModSource).not.toContain(
+      'config.allows_tool("EnterWorktree")',
+    );
+    expect(vendorToolsModSource).not.toContain(
+      'config.allows_tool("ViewImage")',
+    );
     expect(nativeOverlaySource).toContain("runtime_native_tool_overlay_tools");
+    expect(nativeOverlaySource).toContain("create_view_image_tool");
+    expect(nativeOverlaySource).toContain("create_sleep_tool");
+    expect(nativeOverlaySource).toContain("create_update_plan_tool");
     expect(runtimeInventoryAdapterSource).toContain(
       "runtime_native_tool_overlay_tool_names",
     );
@@ -3243,6 +3629,393 @@ describe("aster migration boundary", () => {
     expect(runtimeInventoryAdapterSource).toContain(
       "definition.name.as_str() == *name",
     );
+  });
+
+  it("已迁 native tool wrapper 的 RuntimeTool 转换只能集中在 runtime_tool_bridge", () => {
+    const bridgePath =
+      "lime-rs/crates/agent/src/native_tools/runtime_tool_bridge.rs";
+    const bridgeSource = readFileSync(join(REPO_ROOT, bridgePath), "utf8");
+    const adapterForbiddenSnippets = [
+      "fn runtime_context_from_aster",
+      "fn tool_result_from_runtime",
+      "fn runtime_error_to_tool_error",
+      "RuntimeToolExecutionContext",
+      "RuntimeToolExecutionContextInput",
+      "RuntimeToolExecutionRequest",
+      "RuntimeToolExecutionResult",
+      "RuntimeToolExecutionError",
+      "RuntimeToolPolicyErrorKind",
+    ];
+    const adapterLeaks = RUNTIME_TOOL_BRIDGE_ADAPTER_FILES.flatMap(
+      (filePath) => {
+        const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+        const productionSource = source.split("#[cfg(test)]")[0] ?? source;
+        return adapterForbiddenSnippets
+          .filter((snippet) => productionSource.includes(snippet))
+          .map((snippet) => `${filePath}: ${snippet}`);
+      },
+    );
+    const missingBridgeCalls = RUNTIME_TOOL_BRIDGE_ADAPTER_FILES.filter(
+      (filePath) => {
+        const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+        const productionSource = source.split("#[cfg(test)]")[0] ?? source;
+        return !productionSource.includes("execute_runtime_tool(");
+      },
+    );
+
+    expect(bridgeSource).toContain("fn runtime_context_from_aster");
+    expect(bridgeSource).toContain("fn tool_result_from_runtime");
+    expect(bridgeSource).toContain("fn runtime_error_to_tool_error");
+    expect(bridgeSource).toContain("pub(crate) async fn execute_runtime_tool");
+    expect(
+      missingBridgeCalls,
+      "已迁 native tool 的 Aster Tool wrapper 必须通过 runtime_tool_bridge 执行 current RuntimeToolExecutor",
+    ).toEqual([]);
+    expect(
+      adapterLeaks,
+      "已迁 native tool wrapper 只能保留权限/别名/turn context 适配；Aster ToolContext/ToolResult/ToolError 转换必须集中在 runtime_tool_bridge，迁出 reply loop 后整体删除",
+    ).toEqual([]);
+  });
+
+  it("vendored Aster Task* 工具族必须保持删除且不得重新注册", () => {
+    const vendorToolsModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const vendorAgentPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+    const vendorToolSearchPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/tool_search_tool.rs";
+    const vendorHookLoaderPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/hooks/loader.rs";
+    const vendorHookTypesPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/hooks/types.rs";
+    const vendorToolsModSource = readFileSync(
+      join(REPO_ROOT, vendorToolsModPath),
+      "utf8",
+    );
+    const vendorToolsModProduction =
+      vendorToolsModSource.split("#[cfg(test)]")[0] ?? vendorToolsModSource;
+    const vendorAgentSource = readFileSync(
+      join(REPO_ROOT, vendorAgentPath),
+      "utf8",
+    );
+    const vendorAgentProduction =
+      vendorAgentSource.split("#[cfg(test)]")[0] ?? vendorAgentSource;
+    const vendorToolSearchSource = readFileSync(
+      join(REPO_ROOT, vendorToolSearchPath),
+      "utf8",
+    );
+    const vendorToolSearchProduction =
+      vendorToolSearchSource.split("#[cfg(test)]")[0] ?? vendorToolSearchSource;
+    const vendorHookLoaderSource = readFileSync(
+      join(REPO_ROOT, vendorHookLoaderPath),
+      "utf8",
+    );
+    const vendorHookTypesSource = readFileSync(
+      join(REPO_ROOT, vendorHookTypesPath),
+      "utf8",
+    );
+    const retiredTaskToolNames = [
+      "TaskCreate",
+      "TaskList",
+      "TaskGet",
+      "TaskUpdate",
+      "TaskOutput",
+      "TaskStop",
+    ];
+    const forbiddenToolsModSnippets = [
+      "task_list_tools",
+      "task_output_tool",
+      "task_stop_tool",
+      "TaskListStorage",
+      "TaskCreateTool",
+      "TaskListTool",
+      "TaskGetTool",
+      "TaskUpdateTool",
+      "TaskOutputTool",
+      "TaskStopTool",
+      "AgentOutputTool",
+      "BashOutputTool",
+      "KillShell",
+      ...retiredTaskToolNames.map((name) => `config.allows_tool("${name}")`),
+    ];
+    const toolsModLeaks = forbiddenToolsModSnippets
+      .filter((snippet) => vendorToolsModProduction.includes(snippet))
+      .map((snippet) => `${vendorToolsModPath}: ${snippet}`);
+    const agentProductionLeaks = retiredTaskToolNames
+      .filter((snippet) => vendorAgentProduction.includes(snippet))
+      .map((snippet) => `${vendorAgentPath}: ${snippet}`);
+    const toolSearchLeaks = [
+      ...retiredTaskToolNames,
+      "taskcreatetool",
+      "tasklisttool",
+      "taskgettool",
+      "taskupdatetool",
+      "taskoutputtool",
+      "taskstoptool",
+      "agent output",
+      "kill shell",
+    ]
+      .filter((snippet) => vendorToolSearchProduction.includes(snippet))
+      .map((snippet) => `${vendorToolSearchPath}: ${snippet}`);
+
+    for (const deletedPath of DELETED_ASTER_VENDOR_TASK_TOOL_FILES) {
+      expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
+    }
+    expect(
+      toolsModLeaks,
+      "Codex 没有 model-facing Task* 工具族；vendored Aster 不得恢复 Task* module、public export、alias 或默认注册",
+    ).toEqual([]);
+    expect(
+      agentProductionLeaks,
+      "SubAgent production allowlist 不得再把 Aster Task* 当 current 工具面暴露",
+    ).toEqual([]);
+    expect(
+      toolSearchLeaks,
+      "ToolSearch vendor 面不得继续用 Aster Task* 作为可搜索 alias 或语义示例",
+    ).toEqual([]);
+    expect(vendorHookLoaderSource).not.toContain("TaskCreated");
+    expect(vendorHookTypesSource).not.toContain("TaskCreated");
+  });
+
+  it("update_plan native tool 必须按 Codex checklist 语义归属 tool-runtime", () => {
+    const currentOwnerPath = "lime-rs/crates/tool-runtime/src/update_plan.rs";
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const agentWrapperPath =
+      "lime-rs/crates/agent/src/native_tools/update_plan.rs";
+    const vendorUpdatePlanPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/plan_tool.rs";
+    const vendorToolsModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const vendorToolsModSource = readFileSync(
+      join(REPO_ROOT, vendorToolsModPath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "struct UpdatePlanTool",
+      "UpdatePlanTool::new",
+      "deserialize_step_status",
+      "inProgress",
+      "in-progress",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod update_plan;");
+    expect(currentOwnerSource).toContain(
+      'pub const UPDATE_PLAN_NAME: &str = "update_plan"',
+    );
+    expect(currentOwnerSource).toContain("struct PlanUpdate");
+    expect(currentOwnerSource).toContain("struct PlanStep");
+    expect(currentOwnerSource).toContain("RuntimePlanUpdateExecutor");
+    expect(currentOwnerSource).toContain("runtime_plan_update_executor_handle");
+    expect(currentOwnerSource).toContain("check_plan_update_permissions");
+    expect(currentOwnerSource).toContain("deny_unknown_fields");
+    expect(currentOwnerSource).toContain("At most one step");
+    expect(currentOwnerSource).toContain("not allowed in Plan mode");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(currentOwnerSource).not.toContain("struct UpdatePlanTool");
+    expect(agentWrapperSource).toContain("struct PlanUpdateAdapter");
+    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).not.toContain(
+      "runtime_plan_update_executor_handle",
+    );
+    expect(agentWrapperSource).toContain("check_plan_update_permissions");
+    expect(agentWrapperSource).toContain("UPDATE_PLAN_NAME");
+    expect(agentWrapperSource).not.toContain(
+      'name(&self) -> &str {\n        "UpdatePlan"',
+    );
+    expect(agentWrapperSource).not.toContain(
+      'name(&self) -> &str {\n        "UpdatePlanTool"',
+    );
+    expect(existsSync(join(REPO_ROOT, vendorUpdatePlanPath))).toBe(false);
+    expect(vendorToolsModSource).not.toContain("pub mod plan_tool");
+    expect(vendorToolsModSource).not.toContain("pub use plan_tool");
+    expect(vendorToolsModSource).not.toContain("UpdatePlanTool::new()");
+    expect(vendorToolsModSource).not.toContain(
+      'config.allows_tool("UpdatePlan")',
+    );
+    expect(
+      wrapperLeaks,
+      "update_plan 已按 Codex TODO/checklist 语义迁到 tool-runtime；Lime 侧 Aster Tool adapter 只能委托 current executor，不能恢复 Aster UpdatePlanTool 实现或非 Codex status alias",
+    ).toEqual([]);
+  });
+
+  it("sleep native tool 必须按 Codex clock.sleep 语义归属 tool-runtime", () => {
+    const currentOwnerPath = "lime-rs/crates/tool-runtime/src/sleep.rs";
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const agentWrapperPath = "lime-rs/crates/agent/src/native_tools/sleep.rs";
+    const vendorSleepToolPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/sleep_tool.rs";
+    const vendorToolsModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const frontendNormalizationPath = "src/lib/api/agentTextNormalization.ts";
+    const frontendSubjectPath =
+      "src/components/agent/chat/utils/toolDisplaySubject.ts";
+    const frontendConfigPath =
+      "src/components/agent/chat/utils/toolDisplayConfig/core.ts";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const vendorToolsModSource = readFileSync(
+      join(REPO_ROOT, vendorToolsModPath),
+      "utf8",
+    );
+    const frontendNormalizationSource = readFileSync(
+      join(REPO_ROOT, frontendNormalizationPath),
+      "utf8",
+    );
+    const frontendSubjectSource = readFileSync(
+      join(REPO_ROOT, frontendSubjectPath),
+      "utf8",
+    );
+    const frontendConfigSource = readFileSync(
+      join(REPO_ROOT, frontendConfigPath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "struct SleepTool",
+      "SleepTool::new",
+      "proactive",
+      "Kairos",
+      "kairos",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod sleep;");
+    expect(currentOwnerSource).toContain("pub const SLEEP_TOOL_NAME");
+    expect(currentOwnerSource).toContain("pub const CLOCK_SLEEP_TOOL_NAME");
+    expect(currentOwnerSource).toContain("MAX_SLEEP_DURATION_MS");
+    expect(currentOwnerSource).toContain("duration_ms");
+    expect(currentOwnerSource).toContain("deny_unknown_fields");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(agentWrapperSource).toContain("struct ClockSleepAdapter");
+    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).not.toContain("runtime_sleep_executor_handle");
+    expect(agentWrapperSource).toContain("check_runtime_sleep_permissions");
+    expect(agentWrapperSource).toContain("SLEEP_TOOL_NAME");
+    expect(agentWrapperSource).not.toContain(
+      'name(&self) -> &str {\n        "Sleep"',
+    );
+    expect(agentWrapperSource).not.toContain(
+      'name(&self) -> &str {\n        "SleepTool"',
+    );
+    expect(existsSync(join(REPO_ROOT, vendorSleepToolPath))).toBe(false);
+    expect(vendorToolsModSource).not.toContain("pub mod sleep_tool");
+    expect(vendorToolsModSource).not.toContain("SleepTool::new()");
+    expect(frontendNormalizationSource).toContain('"clock.sleep": "sleep"');
+    expect(frontendNormalizationSource).toContain('sleep: "sleep"');
+    expect(frontendNormalizationSource).not.toContain('sleeptool: "sleep"');
+    expect(frontendSubjectSource).toContain('"clock.sleep": "sleep"');
+    expect(frontendSubjectSource).not.toContain('sleeptool: "sleep"');
+    expect(frontendConfigSource).toContain('"sleep"');
+    expect(frontendConfigSource).not.toContain('"sleeptool"');
+    expect(
+      wrapperLeaks,
+      "sleep 已按 Codex clock.sleep / duration_ms 语义迁到 tool-runtime；Lime 侧 Aster Tool adapter 只能委托 current executor，不能恢复 Aster SleepTool 旧语义",
+    ).toEqual([]);
+  });
+
+  it("view_image native tool 必须归属 tool-runtime current owner", () => {
+    const currentOwnerPath = "lime-rs/crates/tool-runtime/src/view_image.rs";
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const currentCargoPath = "lime-rs/crates/tool-runtime/Cargo.toml";
+    const agentWrapperPath =
+      "lime-rs/crates/agent/src/native_tools/view_image.rs";
+    const vendorViewImagePath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/view_image.rs";
+    const vendorToolsModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const currentCargoSource = readFileSync(
+      join(REPO_ROOT, currentCargoPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const vendorToolsModSource = readFileSync(
+      join(REPO_ROOT, vendorToolsModPath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "read_image_file_enhanced",
+      "estimate_image_tokens",
+      "is_supported_image_format",
+      "MAX_IMAGE_FILE_SIZE",
+      "struct ViewImageTool",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod view_image;");
+    expect(currentCargoSource).toContain("base64.workspace = true");
+    expect(currentOwnerSource).toContain("pub const VIEW_IMAGE_TOOL_NAME");
+    expect(currentOwnerSource).toContain("MAX_VIEW_IMAGE_FILE_SIZE");
+    expect(currentOwnerSource).toContain("RuntimeViewImageExecutor");
+    expect(currentOwnerSource).toContain("runtime_view_image_executor_handle");
+    expect(currentOwnerSource).toContain(
+      "check_runtime_view_image_permissions",
+    );
+    expect(currentOwnerSource).toContain("model_visible_image");
+    expect(currentOwnerSource).toContain("image_url");
+    expect(currentOwnerSource).toContain("deny_unknown_fields");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(agentWrapperSource).toContain("struct ImageViewAdapter");
+    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).not.toContain(
+      "runtime_view_image_executor_handle",
+    );
+    expect(agentWrapperSource).toContain(
+      "check_runtime_view_image_permissions",
+    );
+    expect(agentWrapperSource).toContain("VIEW_IMAGE_TOOL_NAME");
+    expect(agentWrapperSource).not.toContain(
+      'name(&self) -> &str {\n        "ViewImage"',
+    );
+    expect(agentWrapperSource).not.toContain(
+      'name(&self) -> &str {\n        "ViewImageTool"',
+    );
+    expect(existsSync(join(REPO_ROOT, vendorViewImagePath))).toBe(false);
+    expect(vendorToolsModSource).not.toContain("mod view_image");
+    expect(vendorToolsModSource).not.toContain("pub use view_image");
+    expect(vendorToolsModSource).not.toContain("ViewImageTool::new()");
+    expect(
+      wrapperLeaks,
+      "view_image 已迁到 tool-runtime；Lime 侧 Aster Tool adapter 只能委托 current executor，不能恢复 Aster media helper 或 ViewImageTool 实现",
+    ).toEqual([]);
   });
 
   it("apply_patch native tool 执行规则必须归属 tool-runtime current owner", () => {
@@ -3300,13 +4073,283 @@ describe("aster migration boundary", () => {
     );
     expect(currentOwnerSource).toContain("apply_patch_to_workdir");
     expect(currentOwnerSource).not.toContain("aster::");
-    expect(agentWrapperSource).toContain("runtime_apply_patch_executor_handle");
+    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).not.toContain(
+      "runtime_apply_patch_executor_handle",
+    );
     expect(agentWrapperSource).toContain(
       "check_runtime_apply_patch_permissions",
     );
     expect(
       wrapperLeaks,
       "apply_patch 的 patch 解析、路径权限、metadata/diff 构造和执行必须归属 tool-runtime；Aster Tool wrapper 只能做 DTO 适配",
+    ).toEqual([]);
+  });
+
+  it("skill_search native tool 执行规则必须归属 tool-runtime current owner", () => {
+    const currentOwnerPath = "lime-rs/crates/tool-runtime/src/skill_search.rs";
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const currentCargoPath = "lime-rs/crates/tool-runtime/Cargo.toml";
+    const agentWrapperPath =
+      "lime-rs/crates/agent/src/tools/skill_search_tool.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const currentCargoSource = readFileSync(
+      join(REPO_ROOT, currentCargoPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "build_agent_skill_snapshot_from_workspace",
+      "search_agent_skills",
+      "AgentSkillSearchOptions",
+      "AgentSkillSearchResult",
+      "DEFAULT_AGENT_SKILL_SEARCH_LIMIT",
+      "fn parse_input",
+      "fn resolve_skill_search_workspace",
+      "fn skill_search_output",
+      "fn skill_search_result_value",
+      "fn skill_search_metadata",
+      "PROJECT_ROOT_POINTERS",
+      "WORKING_DIR_POINTERS",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod skill_search;");
+    expect(currentCargoSource).toContain("lime-skills.workspace = true");
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeSkillSearchExecutor",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn runtime_skill_search_executor_handle",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn check_runtime_skill_search_permissions",
+    );
+    expect(currentOwnerSource).toContain(
+      "build_agent_skill_snapshot_from_workspace",
+    );
+    expect(currentOwnerSource).toContain("search_agent_skills");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).not.toContain(
+      "runtime_skill_search_executor_handle",
+    );
+    expect(agentWrapperSource).toContain(
+      "check_runtime_skill_search_permissions",
+    );
+    expect(
+      wrapperLeaks,
+      "skill_search 的输入解析、workspace 解析、搜索执行和 metadata/output 构造必须归属 tool-runtime；Aster Tool wrapper 只能做 DTO 适配",
+    ).toEqual([]);
+  });
+
+  it("memory store native tool 执行规则必须归属 tool-runtime current owner", () => {
+    const currentOwnerPaths = [
+      "lime-rs/crates/tool-runtime/src/memory_store.rs",
+      "lime-rs/crates/tool-runtime/src/memory_store/definitions.rs",
+      "lime-rs/crates/tool-runtime/src/memory_store/executor.rs",
+      "lime-rs/crates/tool-runtime/src/memory_store/params.rs",
+    ];
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const currentCargoPath = "lime-rs/crates/tool-runtime/Cargo.toml";
+    const agentWrapperPath =
+      "lime-rs/crates/agent/src/native_tools/memory_store.rs";
+    const appServerGatewayPath =
+      "lime-rs/crates/app-server/src/runtime_backend/memory_tools.rs";
+    const currentOwnerSource = currentOwnerPaths
+      .map((path) => readFileSync(join(REPO_ROOT, path), "utf8"))
+      .join("\n");
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const currentCargoSource = readFileSync(
+      join(REPO_ROOT, currentCargoPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const appServerGatewaySource = readFileSync(
+      join(REPO_ROOT, appServerGatewayPath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "pub trait MemoryStoreGateway",
+      "MemoryStoreRootParams",
+      "MemoryStoreScope",
+      "MemoryStoreSearchMatchMode",
+      "struct MemoryListTool",
+      "struct MemoryReadTool",
+      "struct MemorySearchTool",
+      "struct MemoryAddNoteTool",
+      "fn root_params",
+      "fn context_workspace_root",
+      "fn metadata_map",
+      "fn string_param",
+      "fn required_string_param",
+      "fn usize_param",
+      "fn bool_param",
+      "fn string_array_param",
+      "fn match_mode_param",
+      "fn check_memory_path_permission",
+      "fn validate_memory_relative_path",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod memory_store;");
+    expect(currentOwnerSource).toContain("mod definitions;");
+    expect(currentOwnerSource).toContain("mod executor;");
+    expect(currentOwnerSource).toContain("mod params;");
+    expect(currentCargoSource).toContain(
+      "app-server-protocol.workspace = true",
+    );
+    expect(currentCargoSource).toContain("async-trait.workspace = true");
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeMemoryStoreExecutor",
+    );
+    expect(currentOwnerSource).toContain("pub trait MemoryStoreGateway");
+    expect(currentOwnerSource).toContain(
+      "pub fn runtime_memory_store_executor_handle",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn check_runtime_memory_store_permissions",
+    );
+    expect(currentOwnerSource).toContain("MemoryStoreListParams");
+    expect(currentOwnerSource).toContain("validate_memory_relative_path");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(agentWrapperSource).toContain("NativeDispatch::builder");
+    expect(agentWrapperSource).toContain("with_memory_store_gateway");
+    expect(agentWrapperSource).not.toContain(
+      "runtime_memory_store_executor_handle",
+    );
+    expect(agentWrapperSource).toContain(
+      "check_runtime_memory_store_permissions",
+    );
+    expect(agentWrapperSource).not.toContain(
+      "pub use memory_store::MemoryStoreGateway",
+    );
+    expect(appServerGatewaySource).toContain(
+      "use tool_runtime::memory_store::MemoryStoreGateway",
+    );
+    expect(appServerGatewaySource).not.toContain(
+      "use lime_agent::native_tools::MemoryStoreGateway",
+    );
+    expect(
+      wrapperLeaks,
+      "memory store 的 DTO 构造、路径权限、metadata/output 构造和 gateway trait 必须归属 tool-runtime；Aster Tool wrapper 只能做调用适配",
+    ).toEqual([]);
+  });
+
+  it("image task native tool 执行规则必须归属 tool-runtime current owner", () => {
+    const currentOwnerPaths = [
+      "lime-rs/crates/tool-runtime/src/image_task.rs",
+      "lime-rs/crates/tool-runtime/src/image_task/definition.rs",
+      "lime-rs/crates/tool-runtime/src/image_task/executor.rs",
+      "lime-rs/crates/tool-runtime/src/image_task/params.rs",
+    ];
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const currentCargoPath = "lime-rs/crates/tool-runtime/Cargo.toml";
+    const agentWrapperPath =
+      "lime-rs/crates/agent/src/native_tools/image_tasks.rs";
+    const appServerGatewayPath =
+      "lime-rs/crates/app-server/src/runtime_backend/image_tools.rs";
+    const currentOwnerSource = currentOwnerPaths
+      .map((path) => readFileSync(join(REPO_ROOT, path), "utf8"))
+      .join("\n");
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const currentCargoSource = readFileSync(
+      join(REPO_ROOT, currentCargoPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const agentWrapperProductionSource =
+      agentWrapperSource.split("#[cfg(test)]")[0] ?? agentWrapperSource;
+    const appServerGatewaySource = readFileSync(
+      join(REPO_ROOT, appServerGatewayPath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "pub trait ImageTaskGateway",
+      "pub struct NativeToolResultProjection",
+      "struct ImageGenerationTool",
+      "struct ImageToolInput",
+      "fn parse_params",
+      "fn build_create_params",
+      "fn image_task_tool_result_projection",
+      "fn image_tool_result_from_response",
+      "fn resolve_project_root_path",
+      "fn validate_absolute_path",
+      "fn required_identity",
+      "fn required_string",
+      "fn optional_string",
+      "fn optional_u32",
+      "fn string_vec",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperProductionSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod image_task;");
+    expect(currentOwnerSource).toContain("mod definition;");
+    expect(currentOwnerSource).toContain("mod executor;");
+    expect(currentOwnerSource).toContain("mod params;");
+    expect(currentCargoSource).toContain(
+      "app-server-protocol.workspace = true",
+    );
+    expect(currentOwnerSource).toContain("pub struct RuntimeImageTaskExecutor");
+    expect(currentOwnerSource).toContain("pub trait ImageTaskGateway");
+    expect(currentOwnerSource).toContain(
+      "pub struct ImageTaskToolResultProjection",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn runtime_image_task_executor_handle",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn check_runtime_image_task_permissions",
+    );
+    expect(currentOwnerSource).toContain("MediaTaskArtifactImageCreateParams");
+    expect(currentOwnerSource).toContain("validate_absolute_path");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(agentWrapperProductionSource).toContain("NativeDispatch::builder");
+    expect(agentWrapperProductionSource).toContain("with_image_task_gateway");
+    expect(agentWrapperProductionSource).not.toContain(
+      "runtime_image_task_executor_handle",
+    );
+    expect(agentWrapperProductionSource).toContain(
+      "check_runtime_image_task_permissions",
+    );
+    expect(agentWrapperProductionSource).toContain(
+      "runtime_turn_context_from_aster",
+    );
+    expect(appServerGatewaySource).toContain("use tool_runtime::image_task::{");
+    expect(appServerGatewaySource).not.toContain(
+      "use lime_agent::native_tools::{",
+    );
+    expect(
+      wrapperLeaks,
+      "image task 的 schema、DTO 构造、参数校验、gateway trait 和 tool result projection 必须归属 tool-runtime；Aster Tool wrapper 只能做调用适配",
     ).toEqual([]);
   });
 
@@ -4450,32 +5493,51 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
   });
 
-  it("vendored Aster web tools 只能委托 tool-runtime current owner", () => {
+  it("vendored Aster web tools 必须保持删除，Lime adapter 只能委托 tool-runtime current owner", () => {
     const toolsModPath =
       "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
     const webPath = "lime-rs/vendor/aster-rust/crates/aster/src/tools/web.rs";
+    const limeAdapterPath =
+      "lime-rs/crates/agent/src/native_tools/web_retrieval.rs";
+    const overlayPath = "lime-rs/crates/tool-runtime/src/native_overlay.rs";
     const webFetchContentPath =
       "lime-rs/vendor/aster-rust/crates/aster/src/tools/web_fetch_content.rs";
     const toolsModSource = readFileSync(join(REPO_ROOT, toolsModPath), "utf8");
-    const webSource = readFileSync(join(REPO_ROOT, webPath), "utf8");
-    const productionSource = `${toolsModPath}\n${toolsModSource.split("#[cfg(test)]")[0] ?? toolsModSource}\n${webPath}\n${webSource.split("#[cfg(test)]")[0] ?? webSource}`;
-    const webLineCount = webSource.split(/\r?\n/u).length;
+    const limeAdapterSource = readFileSync(
+      join(REPO_ROOT, limeAdapterPath),
+      "utf8",
+    );
+    const overlaySource = readFileSync(join(REPO_ROOT, overlayPath), "utf8");
+    const productionSource = `${toolsModPath}\n${toolsModSource.split("#[cfg(test)]")[0] ?? toolsModSource}\n${limeAdapterPath}\n${limeAdapterSource.split("#[cfg(test)]")[0] ?? limeAdapterSource}`;
+    const adapterLineCount = limeAdapterSource.split(/\r?\n/u).length;
     const leaks = VENDORED_ASTER_WEB_TOOL_FORBIDDEN_SNIPPETS.filter((snippet) =>
       productionSource.includes(snippet),
     );
 
-    expect(webLineCount).toBeLessThan(800);
+    expect(existsSync(join(REPO_ROOT, webPath))).toBe(false);
     expect(existsSync(join(REPO_ROOT, webFetchContentPath))).toBe(false);
+    expect(adapterLineCount).toBeLessThan(500);
+    expect(toolsModSource).not.toContain("pub mod web;");
+    expect(toolsModSource).not.toContain("pub use web::{");
+    expect(toolsModSource).not.toContain("WebFetchTool::new()");
+    expect(toolsModSource).not.toContain("WebSearchTool::new()");
     expect(toolsModSource).not.toContain("mod web_fetch_content;");
-    expect(webSource).toContain("use tool_runtime::web_fetch::{");
-    expect(webSource).toContain("runtime_web_fetch_executor_handle");
-    expect(webSource).toContain("runtime_web_search_executor_handle");
-    expect(webSource).toContain("execute_current_tool(");
-    expect(webSource).toContain("WebFetchTool");
-    expect(webSource).toContain("WebSearchTool");
+    expect(limeAdapterSource).toContain("use tool_runtime::web_fetch::{");
+    expect(limeAdapterSource).toContain("runtime_native_dispatch_handle");
+    expect(limeAdapterSource).not.toContain(
+      "runtime_web_fetch_executor_handle",
+    );
+    expect(limeAdapterSource).not.toContain(
+      "runtime_web_search_executor_handle",
+    );
+    expect(limeAdapterSource).toContain("execute_current_tool(");
+    expect(limeAdapterSource).toContain("create_web_fetch_tool");
+    expect(limeAdapterSource).toContain("create_web_search_tool");
+    expect(overlaySource).toContain("RuntimeNativeToolOverlay::WebFetch");
+    expect(overlaySource).toContain("RuntimeNativeToolOverlay::WebSearch");
     expect(
       leaks.map((snippet) => `vendored web tool duplicate: ${snippet}`),
-      "WebFetch/WebSearch 执行逻辑已迁到 tool-runtime；vendored Aster 只能保留 Tool trait adapter，不得恢复抓取、搜索 provider、缓存或内容清洗重复实现",
+      "WebFetch/WebSearch 执行逻辑已迁到 tool-runtime；vendored Aster 必须保持删除，Lime 侧短期 Aster Tool adapter 也只能委托 current executor",
     ).toEqual([]);
   });
 
@@ -5621,54 +6683,81 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
   });
 
-  it("session memory disabled stub 规则必须归属 thread-store current owner", () => {
+  it("Aster session memory stub 与自动注入必须保持删除态", () => {
     const adapterPath =
       "lime-rs/crates/agent/src/aster_session_store/memory_stub.rs";
     const currentOwnerPath = "lime-rs/crates/thread-store/src/memory_stub.rs";
     const threadStoreLibPath = "lime-rs/crates/thread-store/src/lib.rs";
-    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
-    const currentOwnerSource = readFileSync(
-      join(REPO_ROOT, currentOwnerPath),
-      "utf8",
-    );
+    const asterSessionModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/mod.rs";
+    const asterSessionStorePath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/store.rs";
+    const asterSessionManagerPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/session_manager.rs";
+    const asterAgentPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+    const deletedVendorMemoryPaths = [
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory.rs",
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_deduplicator.rs",
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_extractor.rs",
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_pipeline.rs",
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_repository.rs",
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_retriever.rs",
+    ];
     const threadStoreLibSource = readFileSync(
       join(REPO_ROOT, threadStoreLibPath),
       "utf8",
     );
-    const adapterProductionSource =
-      adapterSource.split("#[cfg(test)]")[0] ?? adapterSource;
-    const leaks = ASTER_MEMORY_STUB_FORBIDDEN_CURRENT_RULE_SNIPPETS.filter(
-      (snippet) => adapterProductionSource.includes(snippet),
-    ).map((snippet) => `${adapterPath}: ${snippet}`);
+    const asterSessionModSource = readFileSync(
+      join(REPO_ROOT, asterSessionModPath),
+      "utf8",
+    );
+    const asterSessionStoreSource = readFileSync(
+      join(REPO_ROOT, asterSessionStorePath),
+      "utf8",
+    );
+    const asterSessionManagerSource = readFileSync(
+      join(REPO_ROOT, asterSessionManagerPath),
+      "utf8",
+    );
+    const asterAgentSource = readFileSync(
+      join(REPO_ROOT, asterAgentPath),
+      "utf8",
+    );
+    const asterAgentProductionSource =
+      asterAgentSource.split("#[cfg(test)]")[0] ?? asterAgentSource;
 
-    expect(threadStoreLibSource).toContain("pub mod memory_stub;");
-    expect(currentOwnerSource).toContain(
-      "pub struct SessionMemoryCommitReportRecord",
+    expect(existsSync(join(REPO_ROOT, adapterPath))).toBe(false);
+    expect(existsSync(join(REPO_ROOT, currentOwnerPath))).toBe(false);
+    for (const deletedPath of deletedVendorMemoryPaths) {
+      expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
+    }
+    expect(threadStoreLibSource).not.toContain("pub mod memory_stub;");
+    expect(asterSessionModSource).not.toContain("mod memory");
+    expect(asterSessionModSource).not.toContain("pub use memory::");
+    expect(asterSessionStoreSource).not.toContain("CommitReport");
+    expect(asterSessionStoreSource).not.toContain("MemorySearchResult");
+    expect(asterSessionStoreSource).not.toContain("async fn commit_session");
+    expect(asterSessionStoreSource).not.toContain("async fn search_memories");
+    expect(asterSessionStoreSource).not.toContain(
+      "async fn retrieve_context_memories",
     );
-    expect(currentOwnerSource).toContain("pub struct SessionMemoryStatsRecord");
-    expect(currentOwnerSource).toContain(
-      "pub struct SessionMemoryHealthRecord",
+    expect(asterSessionManagerSource).not.toContain("memory_pipeline");
+    expect(asterSessionManagerSource).not.toContain("memory_retriever");
+    expect(asterSessionManagerSource).not.toContain("MemoryRepository");
+    expect(asterSessionManagerSource).not.toContain("CREATE TABLE memories");
+    expect(asterSessionManagerSource).not.toContain(
+      "CREATE TABLE memory_links",
     );
-    expect(currentOwnerSource).toContain("pub fn commit_session_memory_report");
-    expect(currentOwnerSource).toContain(
-      "pub fn search_session_memory_records",
+    expect(asterSessionManagerSource).not.toContain(
+      "CREATE TABLE memory_events",
     );
-    expect(currentOwnerSource).toContain(
-      "pub fn retrieve_context_memory_records",
+    expect(asterAgentProductionSource).not.toContain(
+      "retrieve_context_memories",
     );
-    expect(currentOwnerSource).toContain("pub fn session_memory_health_record");
-    expect(currentOwnerSource).not.toContain("aster::");
-    expect(adapterProductionSource).toContain("commit_session_memory_report");
-    expect(adapterProductionSource).toContain("search_session_memory_records");
-    expect(adapterProductionSource).toContain(
-      "retrieve_context_memory_records",
+    expect(asterAgentProductionSource).toContain(
+      'push_trace("memory_injection", "removed=lime_memory_tools"',
     );
-    expect(adapterProductionSource).toContain("session_memory_stats_record");
-    expect(adapterProductionSource).toContain("session_memory_health_record");
-    expect(
-      leaks,
-      "session memory disabled/skipped 文案、空结果与 stats/health 默认规则必须归属 thread-store；Aster memory_stub 只能转换 current record 到 Aster DTO",
-    ).toEqual([]);
   });
 
   it("legacy conversation content_json 解析规则必须归属 thread-store current owner", () => {

@@ -2517,6 +2517,130 @@ describe("agentStreamRuntimeHandler", () => {
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
 
+  it("收到 turn_failed 时应保留 partial answer 且只补一个失败说明", () => {
+    const partialAnswer = "已完成的部分回答：先确认时序，再输出结论。";
+    const failureMessage = "provider stream closed before final answer";
+    let messages: Message[] = [
+      {
+        id: "assistant-turn-failed",
+        role: "assistant",
+        content: partialAnswer,
+        timestamp: new Date("2026-06-07T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [
+          { type: "text", text: partialAnswer },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-sequence-check",
+              name: "sequence_check",
+              arguments: "{}",
+              status: "completed",
+              result: { success: true, output: "ok" },
+            },
+          },
+        ],
+      },
+    ];
+    const requestState = {
+      accumulatedContent: partialAnswer,
+      currentTurnId: "turn-failed",
+      queuedTurnId: "queued-failed",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setIsSending = vi.fn();
+    const disposeListener = vi.fn();
+    const removeQueuedTurnState = vi.fn();
+    const onError = vi.fn();
+
+    handleTurnStreamEvent({
+      data: {
+        type: "turn_failed",
+        turn: {
+          id: "turn-failed",
+          thread_id: "thread-failed",
+          prompt_text: "验证 terminal failed contract",
+          status: "failed",
+          error_message: failureMessage,
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState,
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      observer: {
+        onError,
+      },
+      eventName: "agent-runtime-turn-failed",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-turn-failed",
+      activeSessionId: "session-failed",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "验证 terminal failed contract",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: setIsSending as never,
+    });
+
+    expect((messages[0]?.content.match(new RegExp(partialAnswer, "g")) ?? []))
+      .toHaveLength(1);
+    expect((messages[0]?.content.match(/执行失败：/g) ?? [])).toHaveLength(1);
+    expect(messages[0]?.content).toContain(failureMessage);
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({ type: "tool_use" }),
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining(partialAnswer),
+      }),
+    ]);
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "failed",
+      title: "当前处理失败",
+      detail: failureMessage,
+    });
+    expect(removeQueuedTurnState).toHaveBeenCalledWith(["queued-failed"]);
+    expect(setIsSending).toHaveBeenCalledWith(false);
+    expect(disposeListener).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(failureMessage);
+    expect(mockToast.error).toHaveBeenCalledWith(
+      `响应错误: ${failureMessage}`,
+    );
+  });
+
   it("收到空 turn_completed 且没有真实产物信号时也应收起发送态并落失败态", () => {
     let messages: Message[] = [
       {

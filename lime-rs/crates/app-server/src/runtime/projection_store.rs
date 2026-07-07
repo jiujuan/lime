@@ -26,6 +26,8 @@ use super::projection_schema::create_schema;
 use super::projection_status::{session_status_from_event, turn_status_from_event};
 use super::session_list_scope::SessionListScope;
 use super::session_title;
+use super::status::resolve_session_runtime_state;
+use super::status::RuntimeTurnState;
 
 const PROJECTION_SUMMARY_MESSAGE_TEXT_MAX_CHARS: usize = 2_000;
 const PROJECTION_SUMMARY_MESSAGE_ROW_LIMIT: i64 = 20_000;
@@ -480,6 +482,18 @@ fn query_projected_session_overviews(
 fn projected_session_overview(conn: &Connection, row: ProjectedSessionRow) -> AgentSessionOverview {
     let first_user_message =
         query_projected_first_user_message(conn, row.session_id.as_str()).unwrap_or_default();
+    let turns = query_projected_turns(conn, row.session_id.as_str()).unwrap_or_default();
+    let runtime_state = resolve_session_runtime_state(
+        row.status.as_str(),
+        0,
+        turns.iter().map(|turn| RuntimeTurnState {
+            turn_id: turn.turn_id.as_str(),
+            status: turn.status.as_str(),
+            started_at: turn.started_at.as_deref(),
+            latest_activity_at: Some(row.updated_at.as_str()),
+        }),
+        chrono::Utc::now(),
+    );
     let messages_count = conn
         .query_row(
             "SELECT COUNT(1)
@@ -507,6 +521,10 @@ fn projected_session_overview(conn: &Connection, row: ProjectedSessionRow) -> Ag
         working_dir: row.working_dir,
         execution_strategy: row.execution_strategy,
         messages_count,
+        thread_status: runtime_state.thread_status,
+        latest_turn_status: runtime_state.latest_turn_status,
+        active_turn_id: runtime_state.active_turn_id,
+        queued_turn_count: runtime_state.queued_turn_count,
     }
 }
 
@@ -1051,9 +1069,28 @@ fn query_projected_first_user_message(
 
 fn apply_event_in_tx(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
     upsert_projected_session(conn, event)?;
+    apply_projected_queue_event(conn, event)?;
     upsert_projected_turn(conn, event)?;
     insert_projected_item(conn, event)?;
     upsert_watermark(conn, event)?;
+    Ok(())
+}
+
+fn apply_projected_queue_event(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
+    if event.event_type != "queue.removed" {
+        return Ok(());
+    }
+
+    let Some(queued_turn_id) =
+        value_string(Some(&event.payload), &["queuedTurnId", "queued_turn_id"])
+    else {
+        return Ok(());
+    };
+    conn.execute(
+        "DELETE FROM projected_turns WHERE session_id = ?1 AND turn_id = ?2 AND status = 'queued'",
+        params![event.session_id.as_str(), queued_turn_id.as_str()],
+    )
+    .map_err(|error| format!("无法清理 projected_turns queued turn: {error}"))?;
     Ok(())
 }
 

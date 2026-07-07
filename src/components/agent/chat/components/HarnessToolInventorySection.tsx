@@ -28,6 +28,10 @@ interface HarnessToolInventorySectionProps {
     node: HTMLElement | null,
   ) => void;
   onRefreshToolInventory?: () => void;
+  mcpPrepareCandidateCount: number;
+  mcpPrepareLoading: boolean;
+  mcpPrepareError: string | null;
+  onPrepareMcpTargets?: () => void | Promise<void>;
   toolInventorySourceStats: ToolInventorySourceStats;
   toolInventoryWarnings: AgentRuntimeToolInventory["warnings"];
   runtimeToolAvailability: RuntimeToolAvailability;
@@ -54,6 +58,10 @@ export function HarnessToolInventorySection({
   runtimeToolTotal,
   registerSectionRef,
   onRefreshToolInventory,
+  mcpPrepareCandidateCount,
+  mcpPrepareLoading,
+  mcpPrepareError,
+  onPrepareMcpTargets,
   toolInventorySourceStats,
   toolInventoryWarnings,
   runtimeToolAvailability,
@@ -95,6 +103,10 @@ export function HarnessToolInventorySection({
           runtimeToolVisibleTotal={runtimeToolVisibleTotal}
           runtimeToolTotal={runtimeToolTotal}
           onRefreshToolInventory={onRefreshToolInventory}
+          mcpPrepareCandidateCount={mcpPrepareCandidateCount}
+          mcpPrepareLoading={mcpPrepareLoading}
+          mcpPrepareError={mcpPrepareError}
+          onPrepareMcpTargets={onPrepareMcpTargets}
           toolInventorySourceStats={toolInventorySourceStats}
           toolInventoryWarnings={toolInventoryWarnings}
           runtimeToolAvailability={runtimeToolAvailability}

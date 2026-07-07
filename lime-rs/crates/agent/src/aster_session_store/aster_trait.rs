@@ -3,8 +3,7 @@
 //! 主文件只保留 LimeSessionStore 结构和共享接线；Aster trait 方法集中在这里。
 
 use super::{
-    history_search, legacy_conversation, memory_stub, runtime_conversation, session_projection,
-    LimeSessionStore,
+    history_search, legacy_conversation, runtime_conversation, session_projection, LimeSessionStore,
 };
 use crate::session_record_sql::{
     load_all_session_record_rows, load_session_insights_record, load_session_record_row_by_id,
@@ -17,9 +16,7 @@ use aster::model::ModelConfig;
 use aster::recipe::Recipe;
 use aster::session::extension_data::ExtensionData;
 use aster::session::{
-    ChatHistoryMatch, CommitOptions, CommitReport, MemoryCategory, MemoryHealth, MemoryRecord,
-    MemorySearchResult, MemoryStats, Session, SessionInsights, SessionStore, SessionType,
-    TokenStatsUpdate,
+    ChatHistoryMatch, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -524,43 +521,5 @@ impl SessionStore for LimeSessionStore {
         };
 
         history_search::search_chat_history(sessions, query, limit).await
-    }
-
-    async fn commit_session(&self, id: &str, _options: CommitOptions) -> Result<CommitReport> {
-        Ok(memory_stub::commit_session_report(id))
-    }
-
-    async fn search_memories(
-        &self,
-        query: &str,
-        limit: Option<usize>,
-        session_scope: Option<&str>,
-        categories: Option<Vec<MemoryCategory>>,
-    ) -> Result<Vec<MemorySearchResult>> {
-        Ok(memory_stub::empty_memory_search_results(
-            query,
-            limit,
-            session_scope,
-            categories,
-        ))
-    }
-
-    async fn retrieve_context_memories(
-        &self,
-        session_id: &str,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<MemoryRecord>> {
-        Ok(memory_stub::empty_context_memories(
-            session_id, query, limit,
-        ))
-    }
-
-    async fn memory_stats(&self) -> Result<MemoryStats> {
-        Ok(memory_stub::memory_stats())
-    }
-
-    async fn memory_health(&self) -> Result<MemoryHealth> {
-        memory_stub::memory_health()
     }
 }

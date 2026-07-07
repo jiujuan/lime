@@ -470,4 +470,68 @@ describe("mcp", () => {
     );
     expect(safeInvoke).not.toHaveBeenCalled();
   });
+
+  it("MCP prepare requests 应顺序执行 App Server current 方法", async () => {
+    const tool = {
+      name: "mcp__context7__resolve-library-id",
+      server_name: "context7",
+      description: "resolve",
+      input_schema: {},
+    };
+    mockAppServerResult({
+      importedCount: 1,
+      servers: [{ id: "codex-docs", name: "codex-docs" }],
+    });
+    mockAppServerResult({});
+    mockAppServerResult({ tools: [tool] });
+
+    await expect(
+      mcpApi.executePrepareRequests([
+        {
+          method: "mcpServer/importFromApp",
+          params: { appType: "codex" },
+          reason: "server_missing",
+          status: "candidate",
+        },
+        {
+          method: "mcpServer/start",
+          params: { name: "context7" },
+          reason: "server_stopped",
+          status: "candidate",
+        },
+        {
+          method: "mcpTool/listForContext",
+          params: { caller: "plugin:docs-plugin", includeDeferred: true },
+          reason: "tool_listing",
+          status: "candidate",
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        method: "mcpServer/importFromApp",
+        status: "completed",
+        importedCount: 1,
+      },
+      {
+        method: "mcpServer/start",
+        status: "completed",
+      },
+      {
+        method: "mcpTool/listForContext",
+        status: "completed",
+        toolCount: 1,
+        tools: [tool],
+      },
+    ]);
+
+    expect(appServerRequestMock.mock.calls).toEqual([
+      ["mcpServer/importFromApp", { appType: "codex" }],
+      ["mcpServer/start", { name: "context7" }],
+      [
+        "mcpTool/listForContext",
+        { caller: "plugin:docs-plugin", includeDeferred: true },
+      ],
+    ]);
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
 });

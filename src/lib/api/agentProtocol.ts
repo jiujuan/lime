@@ -174,9 +174,33 @@ export interface AgentThreadUserMessageItem extends AgentThreadItemBase {
   content: string;
 }
 
+export interface AgentThreadContentReference {
+  uri: string;
+  mime_type: string;
+  title?: string;
+  source_uri?: string;
+  source_path?: string;
+  preview_url?: string;
+  sha256?: string;
+  byte_size?: number;
+}
+
+export type AgentThreadMessageContentPart =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "media";
+      kind: string;
+      reference: AgentThreadContentReference;
+      caption?: string;
+    };
+
 export interface AgentThreadAgentMessageItem extends AgentThreadItemBase {
   type: "agent_message";
   text: string;
+  contentParts?: AgentThreadMessageContentPart[];
   phase?: string;
 }
 

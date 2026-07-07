@@ -170,6 +170,12 @@ pub struct ProviderSafetyBufferingRuntimeEventPayload {
     pub source: ProviderSafetyBufferingRetryModelSource,
 }
 
+impl ProviderSafetyBufferingRuntimeEventPayload {
+    pub fn to_json_value(&self) -> serde_json::Value {
+        serde_json::to_value(self).expect("provider safety buffering runtime payload serializes")
+    }
+}
+
 impl ProviderSafetyBufferingUpdate {
     pub fn runtime_event_payload(
         &self,
@@ -194,8 +200,7 @@ impl ProviderSafetyBufferingUpdate {
         provider: Option<&str>,
         model: Option<&str>,
     ) -> serde_json::Value {
-        serde_json::to_value(self.runtime_event_payload(provider, model))
-            .expect("provider safety buffering runtime payload serializes")
+        self.runtime_event_payload(provider, model).to_json_value()
     }
 }
 

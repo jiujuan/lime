@@ -383,6 +383,7 @@ import {
   BROWSER_WORKSPACE_HOME_HINT_MESSAGE,
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
   NOOP_SET_CHAT_MESSAGES,
+  createMediaReferencePreviewArtifact,
   isUsableKnowledgeSourceText,
   normalizeVideoAspectRatio,
   normalizeVideoResolution,
@@ -483,9 +484,23 @@ export function AgentChatWorkspace({
     useState<InterruptedInputRestoreRequest | null>(null);
   const handleRestoreInterruptedInput = useCallback(
     (request: InterruptedInputRestoreRequest) => {
+      const restoredPathReferences = [...(request.draft.pathReferences ?? [])];
+      logAgentDebug("AgentChatWorkspace", "inputRestoreRequest.received", {
+        draftImageCount: request.draft.images?.length ?? 0,
+        draftPathReferenceCount: restoredPathReferences.length,
+        draftTextLength: request.draft.text.trim().length,
+        hasCapabilityRoute: Boolean(request.draft.inputCapabilityRoute),
+        reason: request.reason,
+        requestId: request.requestId,
+      });
+      setInput(request.draft.text);
+      handleClearPathReferences();
+      if (restoredPathReferences.length > 0) {
+        handleAddPathReferences(restoredPathReferences);
+      }
       setInputRestoreRequest(request);
     },
-    [],
+    [handleAddPathReferences, handleClearPathReferences],
   );
   const handleInputRestoreRequestHandled = useCallback((requestId: string) => {
     setInputRestoreRequest((current) =>
@@ -602,6 +617,10 @@ export function AgentChatWorkspace({
     typeof initialSessionId === "string" && initialSessionId.trim().length > 0
       ? initialSessionId.trim()
       : null;
+  const sessionRestorePresentation =
+    shouldKeepNewTaskHomeSessionRestoreDisabled && !normalizedInitialSessionId
+      ? "background"
+      : "foreground";
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(
     shouldBootstrapCanvasOnEntry ? "canvas" : "chat",
   );
@@ -1172,6 +1191,7 @@ export function AgentChatWorkspace({
     workspaceId: runtimeWorkspaceId,
     workingDir: project?.rootPath || null,
     disableSessionRestore: shouldDisableSessionRestore,
+    sessionRestorePresentation,
     initialTopicsLoadMode: shouldDeferInitialTopicsLoad
       ? "deferred"
       : "immediate",
@@ -1651,10 +1671,6 @@ export function AgentChatWorkspace({
   useEffect(() => {
     onSessionChange?.(sessionId ?? null);
   }, [onSessionChange, sessionId]);
-
-  useEffect(() => {
-    onAgentStreamingChange?.(isSending);
-  }, [isSending, onAgentStreamingChange]);
 
   useEffect(() => {
     return () => {
@@ -2690,6 +2706,8 @@ export function AgentChatWorkspace({
     initialPendingServiceSkillLaunchSignature,
     isAutoRestoringSession,
     isBootstrapDispatchPending,
+    isHomeSessionBackgroundRecovery:
+      sessionRestorePresentation === "background" && !normalizedInitialSessionId,
     isHomePendingPreviewActive,
     isPreparingSend,
     isSending,
@@ -3147,6 +3165,38 @@ export function AgentChatWorkspace({
     },
     [handleWorkspaceArtifactClick, workbenchRequests, upsertGeneralArtifact],
   );
+  const openMediaReferencePreview = useCallback(
+    (
+      target: Extract<MessagePreviewTarget, { kind: "media_reference" }>,
+      message: Message,
+    ) => {
+      const artifact = createMediaReferencePreviewArtifact({
+        message,
+        target,
+        t,
+      });
+      openCanvasForReason("user_open_message_preview", setLayoutMode);
+      setCanvasWorkbenchLayoutMode("split");
+      upsertGeneralArtifact(artifact);
+      handleWorkspaceArtifactClick(artifact);
+      const artifactFilePath =
+        typeof artifact.meta?.filePath === "string"
+          ? artifact.meta.filePath
+          : artifact.title;
+      workbenchRequests.requestCanvasWorkbenchPreviewOpen({
+        filePath: artifactFilePath,
+        selectionKey: `artifact:${artifact.id}`,
+      });
+    },
+    [
+      handleWorkspaceArtifactClick,
+      setCanvasWorkbenchLayoutMode,
+      setLayoutMode,
+      t,
+      upsertGeneralArtifact,
+      workbenchRequests,
+    ],
+  );
   const handleOpenUrlPreview = useCallback(
     (item: SearchResultPreviewItem) => {
       const url = item.url.trim();
@@ -3186,6 +3236,11 @@ export function AgentChatWorkspace({
 
       if (target.kind === "message_attachment") {
         openMessageAttachmentPreview(target, message);
+        return;
+      }
+
+      if (target.kind === "media_reference") {
+        openMediaReferencePreview(target, message);
         return;
       }
 
@@ -3239,6 +3294,7 @@ export function AgentChatWorkspace({
       handleWorkspaceArtifactClick,
       handleWorkspaceFileClick,
       openMessageAttachmentPreview,
+      openMediaReferencePreview,
       messages,
       setCanvasState,
       setLayoutMode,
@@ -4076,6 +4132,9 @@ export function AgentChatWorkspace({
   ) : undefined;
   const isReadModelRunning = hasRunningThreadReadActivity(threadRead);
   const inputbarIsSending = isSending || isReadModelRunning;
+  useEffect(() => {
+    onAgentStreamingChange?.(inputbarIsSending);
+  }, [inputbarIsSending, onAgentStreamingChange]);
 
   const generalWorkbenchHarnessPanelBaseProps = {
     environment: contextHarnessRuntime.harnessEnvironment,
@@ -4122,6 +4181,11 @@ export function AgentChatWorkspace({
     toolInventoryLoading: harnessInventoryRuntime.toolInventoryLoading,
     toolInventoryError: harnessInventoryRuntime.toolInventoryError,
     onRefreshToolInventory: harnessInventoryRuntime.refreshToolInventory,
+    mcpPrepareCandidateCount:
+      harnessInventoryRuntime.mcpPrepareCandidateCount,
+    mcpPrepareLoading: harnessInventoryRuntime.mcpPrepareLoading,
+    mcpPrepareError: harnessInventoryRuntime.mcpPrepareError,
+    onPrepareMcpTargets: harnessInventoryRuntime.prepareMcpTargets,
     onOpenSubagentSession: handleOpenSubagentSession,
     onLoadFilePreview: handleHarnessLoadFilePreview,
     onOpenFile: handleWorkspaceFileClick,
@@ -4274,6 +4338,11 @@ export function AgentChatWorkspace({
     toolInventoryLoading: harnessInventoryRuntime.toolInventoryLoading,
     toolInventoryError: harnessInventoryRuntime.toolInventoryError,
     refreshToolInventory: harnessInventoryRuntime.refreshToolInventory,
+    mcpPrepareCandidateCount:
+      harnessInventoryRuntime.mcpPrepareCandidateCount,
+    mcpPrepareLoading: harnessInventoryRuntime.mcpPrepareLoading,
+    mcpPrepareError: harnessInventoryRuntime.mcpPrepareError,
+    prepareMcpTargets: harnessInventoryRuntime.prepareMcpTargets,
     mappedTheme,
     activeRuntimeStatusTitle: contextHarnessRuntime.activeRuntimeStatusTitle,
     handleHarnessLoadFilePreview,
@@ -4283,6 +4352,8 @@ export function AgentChatWorkspace({
     defaultCuratedTaskReferenceEntries: defaultCuratedTaskReferenceEntries,
     pathReferences,
     onAddPathReferences: handleAddPathReferences,
+    inputRestoreRequest,
+    onInputRestoreRequestHandled: handleInputRestoreRequestHandled,
     onRemovePathReference: handleRemovePathReference,
     onClearPathReferences: handleClearPathReferences,
     fileManagerOpen: fileManagerSidebar.fileManagerOpen,

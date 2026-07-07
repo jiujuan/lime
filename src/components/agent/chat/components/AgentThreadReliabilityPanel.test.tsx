@@ -509,6 +509,50 @@ describe("AgentThreadReliabilityPanel", () => {
     expect(container.textContent).not.toContain("打开执行策略设置");
   });
 
+  it("应从 thread_read diagnostics 展示 provider safety buffering", () => {
+    const container = renderPanel({
+      threadRead: {
+        thread_id: "thread-provider-safety-buffering",
+        status: "running",
+        diagnostics: {
+          provider_safety_buffering_count: 1,
+          latest_provider_safety_buffering: {
+            source_event_id: "event-safety-1",
+            source_event_type: "provider_safety_buffering",
+            thread_id: "thread-provider-safety-buffering",
+            turn_id: "turn-provider-safety-buffering",
+            timestamp: "2026-07-07T08:00:00Z",
+            provider: "openai",
+            model: "gpt-5-codex",
+            use_cases: ["cyber"],
+            reasons: ["policy"],
+            show_buffering_ui: true,
+            retry_model: "gpt-5-mini",
+            fallback_header_model: "legacy-fast",
+            source: "payload_retry_model",
+            backend: "runtime",
+          },
+        } as unknown as AgentRuntimeThreadReadModel["diagnostics"],
+      },
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="agent-thread-provider-safety-buffering"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("响应安全缓冲");
+    expect(container.textContent).toContain("显示缓冲提示");
+    expect(container.textContent).toContain("openai / gpt-5-codex");
+    expect(container.textContent).toContain("gpt-5-mini");
+    expect(container.textContent).toContain("legacy-fast");
+    expect(container.textContent).toContain("cyber");
+    expect(container.textContent).toContain("policy");
+    expect(container.textContent).toContain("payload_retry_model");
+    expect(container.textContent).not.toContain("runtimeEvent");
+    expect(container.textContent).not.toContain("retryModel");
+  });
+
   it("provider readiness 没有管理回调时不应显示假入口", () => {
     const container = renderPanel({
       threadRead: {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   IMAGE_WORKBENCH_TASK_ACTION_EVENT,
   VIDEO_WORKBENCH_TASK_ACTION_EVENT,
+  mockStreamingRenderer,
   render,
   renderZh,
 } from "./MessageList.testHarness";
@@ -57,6 +58,69 @@ describe("MessageList media tasks", () => {
       },
       expect.objectContaining({
         id: "msg-assistant-image-task",
+      }),
+    );
+  });
+
+  it("media reference content part 应接入消息预览 target", () => {
+    const now = new Date();
+    const onOpenMessagePreview = vi.fn();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-media-reference",
+        role: "assistant",
+        content: "图片已生成。",
+        timestamp: now,
+        contentParts: [
+          {
+            type: "media_reference",
+            reference: {
+              kind: "image",
+              uri: "sidecar://media/image-1",
+              mimeType: "image/png",
+              caption: "结果图",
+            },
+          },
+          {
+            type: "text",
+            text: "图片已生成。",
+          },
+        ],
+      },
+    ];
+
+    render(messages, { onOpenMessagePreview });
+
+    const rendererCall = mockStreamingRenderer.mock.calls.find(([props]) =>
+      props.contentParts?.some(
+        (part: Record<string, unknown>) => part.type === "media_reference",
+      ),
+    )?.[0];
+    expect(rendererCall?.onOpenMediaReference).toBeTypeOf("function");
+
+    act(() => {
+      rendererCall?.onOpenMediaReference?.(
+        {
+          kind: "image",
+          uri: "sidecar://media/image-1",
+          mimeType: "image/png",
+          caption: "结果图",
+        },
+        0,
+      );
+    });
+
+    expect(onOpenMessagePreview).toHaveBeenCalledWith(
+      {
+        kind: "media_reference",
+        index: 0,
+        reference: expect.objectContaining({
+          uri: "sidecar://media/image-1",
+          caption: "结果图",
+        }),
+      },
+      expect.objectContaining({
+        id: "msg-assistant-media-reference",
       }),
     );
   });

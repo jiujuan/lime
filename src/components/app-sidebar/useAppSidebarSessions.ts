@@ -218,7 +218,10 @@ export function useAppSidebarSessions({
   }, [recentSessionsVisibleCount]);
 
   const scheduleRecentSidebarReload = useCallback((minimumDelayMs: number) => {
-    if (activeAgentStreamingRef.current) {
+    if (
+      activeAgentStreamingRef.current &&
+      sidebarSessionsRef.current.length > 0
+    ) {
       recentSidebarReloadPendingRef.current = true;
       logAgentDebug(
         "AppSidebar",
@@ -282,7 +285,10 @@ export function useAppSidebarSessions({
       return;
     }
 
-    if (activeAgentStreamingRef.current) {
+    if (
+      activeAgentStreamingRef.current &&
+      sidebarSessionsRef.current.length > 0
+    ) {
       recentSidebarReloadPendingRef.current = true;
       setSidebarSessionsLoading(false);
       logAgentDebug(

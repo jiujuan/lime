@@ -49,6 +49,14 @@ pub struct AgentSessionOverview {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_strategy: Option<String>,
     pub messages_count: usize,
+    #[serde(default)]
+    pub thread_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_turn_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_turn_id: Option<String>,
+    #[serde(default)]
+    pub queued_turn_count: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

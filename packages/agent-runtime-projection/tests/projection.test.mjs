@@ -2780,6 +2780,49 @@ test("thread item helpers build standard projection events", () => {
     null,
   );
 
+  const agentMessageWithMedia = buildAgentUiThreadItemEvent(
+    "item_updated",
+    {
+      id: "message-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "agent_message",
+      status: "in_progress",
+      text: "已生成预览",
+      contentParts: [
+        { type: "text", text: "已生成预览" },
+        {
+          type: "media",
+          kind: "image",
+          caption: "结果图",
+          reference: {
+            uri: "sidecar://media/image-1",
+            mime_type: "image/png",
+          },
+        },
+        {
+          type: "media",
+          kind: "image",
+          reference: {
+            uri: "data:image/png;base64,abcd",
+            mime_type: "image/png",
+          },
+        },
+      ],
+    },
+    context,
+  );
+  assert.equal(agentMessageWithMedia?.type, "text.delta");
+  assert.equal(agentMessageWithMedia?.owner, "model");
+  assert.equal(agentMessageWithMedia?.surface, "conversation");
+  assert.deepEqual(agentMessageWithMedia?.payload, {
+    textLength: 5,
+    preview: "已生成预览",
+    contentPartCount: 3,
+    mediaKinds: ["image"],
+    referenceUris: ["sidecar://media/image-1"],
+  });
+
   const reasoning = buildAgentUiThreadItemEvent(
     "item_completed",
     {

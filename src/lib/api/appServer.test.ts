@@ -6,6 +6,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_COMPACT,
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   APP_SERVER_METHOD_AGENT_SESSION_LIST,
+  APP_SERVER_METHOD_AGENT_SESSION_MEDIA_READ,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET,
@@ -566,6 +567,57 @@ describe("App Server API", () => {
               artifactRef: "artifact-report",
               includeContent: true,
               limit: 1,
+            },
+          }),
+        ],
+      },
+    });
+  });
+
+  it("readAgentSessionMedia 应通过 App Server JSON-RPC 读取已知 sidecar media", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 6,
+          result: {
+            sessionId: "session-media",
+            uri: "sidecar://media/demo",
+            mimeType: "image/png",
+            bytes: 4,
+            sha256: "sha256:demo",
+            contentBase64: "iVBORw==",
+            sidecarRef: {
+              ref: "sidecar://media/demo",
+              kind: "media",
+              relativePath: "sessions/session-media/media/demo.png",
+            },
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 6 });
+    const result = await client.readAgentSessionMedia({
+      sessionId: "session-media",
+      uri: "sidecar://media/demo",
+      maxBytes: 1024,
+    });
+
+    expect(result.result.contentBase64).toBe("iVBORw==");
+    expect(result.result.sidecarRef).toMatchObject({
+      ref: "sidecar://media/demo",
+      kind: "media",
+    });
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 6,
+            method: APP_SERVER_METHOD_AGENT_SESSION_MEDIA_READ,
+            params: {
+              sessionId: "session-media",
+              uri: "sidecar://media/demo",
+              maxBytes: 1024,
             },
           }),
         ],

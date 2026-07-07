@@ -22,7 +22,7 @@ describe("toolProcessSummary", () => {
     await changeLimeLocale("zh-CN");
   });
 
-  it("应为工作树切换提供明确过程文案", () => {
+  it("Aster-only 工作树工具不再提供 current 专用过程文案", () => {
     const enterNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "EnterWorktreeTool",
@@ -36,13 +36,13 @@ describe("toolProcessSummary", () => {
       }),
     );
 
-    expect(enterNarrative.preSummary).toBe("先进入隔离工作树");
-    expect(enterNarrative.summary).toBe("先进入隔离工作树");
-    expect(exitNarrative.postSummary).toBe("已回到主工作区");
-    expect(exitNarrative.summary).toBe("已回到主工作区");
+    expect(enterNarrative.preSummary).not.toBe("先进入隔离工作树");
+    expect(enterNarrative.summary).not.toBe("先进入隔离工作树");
+    expect(exitNarrative.postSummary).not.toBe("已回到主工作区");
+    expect(exitNarrative.summary).not.toBe("已回到主工作区");
   });
 
-  it("应为配置与工作流工具提供稳定文案", () => {
+  it("Aster-only 配置与工作流工具不再提供 current 专用过程文案", () => {
     const configNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "ConfigTool",
@@ -56,14 +56,20 @@ describe("toolProcessSummary", () => {
       }),
     );
 
-    expect(configNarrative.preSummary).toBe("先查看或调整运行配置");
-    expect(configNarrative.postSummary).toBe("已更新运行配置");
-    expect(workflowNarrative.preSummary).toBe("先执行预设工作流");
-    expect(workflowNarrative.postSummary).toBe("已执行工作流");
+    expect(configNarrative.preSummary).not.toBe("先查看或调整运行配置");
+    expect(configNarrative.postSummary).not.toBe("已更新运行配置");
+    expect(workflowNarrative.preSummary).not.toBe("先执行预设工作流");
+    expect(workflowNarrative.postSummary).not.toBe("已执行工作流");
   });
 
   it("应为等待工具提供显式完成文案", () => {
     const narrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "sleep",
+        status: "completed",
+      }),
+    );
+    const deletedAsterNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "SleepTool",
         status: "completed",
@@ -73,6 +79,7 @@ describe("toolProcessSummary", () => {
     expect(narrative.preSummary).toBe("先等待一段时间再继续");
     expect(narrative.postSummary).toBe("已完成等待");
     expect(narrative.summary).toBe("已完成等待");
+    expect(deletedAsterNarrative.postSummary).not.toBe("已完成等待");
   });
 
   it("应为图片查看工具提供稳定过程文案，避免展示 raw output", () => {
@@ -236,13 +243,6 @@ describe("toolProcessSummary", () => {
         arguments: JSON.stringify({ task_id: "task-123" }),
       }),
     );
-    const cronListNarrative = resolveToolProcessNarrative(
-      createToolCall({
-        name: "CronListTool",
-        status: "completed",
-      }),
-    );
-
     expect(taskCreateNarrative.preSummary).toBe("先开始 每日趋势摘要");
     expect(taskCreateNarrative.postSummary).toBe("已开始 每日趋势摘要");
     expect(taskListNarrative.preSummary).toBe("先查看任务列表");
@@ -251,10 +251,9 @@ describe("toolProcessSummary", () => {
     expect(taskOutputNarrative.postSummary).toBe("已查看任务结果");
     expect(taskStopNarrative.preSummary).toBe("先终止任务 task-123");
     expect(taskStopNarrative.postSummary).toBe("已终止任务 task-123");
-    expect(cronListNarrative.postSummary).toBe("已查看定时触发器");
   });
 
-  it("应为 gated runtime 工具保留历史主体并净化失败摘要", () => {
+  it("Aster-only gated runtime 工具不再保留专用主体，但失败摘要仍要净化", () => {
     const cronCreateNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "CronCreateTool",
@@ -300,13 +299,13 @@ describe("toolProcessSummary", () => {
       }),
     );
 
-    expect(cronCreateNarrative.preSummary).toBe(
+    expect(cronCreateNarrative.preSummary).not.toBe(
       "先创建定时触发器 morning-news",
     );
-    expect(cronCreateNarrative.postSummary).toBe(
+    expect(cronCreateNarrative.postSummary).not.toBe(
       "已创建定时触发器 morning-news",
     );
-    expect(cronDeleteNarrative.postSummary).toBe(
+    expect(cronDeleteNarrative.postSummary).not.toBe(
       "已删除定时触发器 morning-news",
     );
     expect(remoteTriggerNarrative.summary).toBe(

@@ -22,6 +22,7 @@ import {
   isPersistedReasoningContentPart,
   syncAssistantReasoningContentPartFromThreadItem,
 } from "./agentStreamReasoningContentSync";
+import { syncAssistantAgentMessageContentPartFromThreadItem } from "./agentStreamAgentMessageContentSync";
 import {
   syncExistingMessageToolCallFromThreadItem,
 } from "./agentStreamToolItemMessageSync";
@@ -35,6 +36,7 @@ import {
 } from "./agentStreamRuntimeHandlerUtils";
 import { resolveAccumulatedFinalContentForCompletion } from "./agentStreamTextDeltaLifecycle";
 import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
+import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import type {
   HandleTurnStreamEventOptions,
   StreamRequestState,
@@ -261,6 +263,12 @@ export function handleAgentStreamThreadItemLifecycleEvent(params: {
     threadItems: nextThreadItemsForSync,
     setMessages: params.setters.setMessages,
   });
+  syncAssistantAgentMessageContentPartFromThreadItem({
+    assistantMsgId: params.assistantMsgId,
+    item: params.event.item,
+    threadItems: nextThreadItemsForSync,
+    setMessages: params.setters.setMessages,
+  });
   return "applied";
 }
 
@@ -407,9 +415,12 @@ export function handleAgentStreamTurnFailedEvent(params: {
     ),
   );
   params.setters.setCurrentTurnId(params.event.turn.id);
+  const errorMessage = params.event.turn.error_message || "当前处理失败";
   params.finalizeMissingFinalReplyFailure(
     buildAgentStreamMissingFinalReplyFailurePlan({
-      errorMessage: params.event.turn.error_message || "当前处理失败",
+      errorMessage,
+      toastMessage: resolveAgentRuntimeErrorPresentation(errorMessage)
+        .toastMessage,
       queuedTurnId: params.requestState.queuedTurnId,
     }),
   );

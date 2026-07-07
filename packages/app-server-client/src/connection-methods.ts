@@ -1067,6 +1067,10 @@ declare module "./connection.js" {
       params: protocol.AgentSessionReadParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.AgentSessionReadResponse>>;
+    readAgentSessionMedia(
+      params: protocol.AgentSessionMediaReadParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.AgentSessionMediaReadResponse>>;
     readAgentSessionToolInventory(
       params?: protocol.AgentSessionToolInventoryReadParams,
       options?: AppServerRequestOptions,

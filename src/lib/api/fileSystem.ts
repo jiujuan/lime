@@ -55,7 +55,9 @@ export async function getHomeDirectory(): Promise<string> {
 
 export function convertLocalFileSrc(path: string): string {
   try {
-    return typeof convertFileSrc === "function" ? convertFileSrc(path) : path;
+    return typeof convertFileSrc === "function"
+      ? convertFileSrc(path, "asset")
+      : path;
   } catch {
     return path;
   }

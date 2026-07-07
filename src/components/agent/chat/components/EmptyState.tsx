@@ -137,6 +137,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onManageKnowledgePacks,
   pathReferences = [],
   onAddPathReferences,
+  inputRestoreRequest = null,
+  onInputRestoreRequestHandled,
   onImportPathReferenceAsKnowledge,
   onRemovePathReference,
   onClearPathReferences,
@@ -166,6 +168,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     [translateAgentCopyKey],
   );
   const handledInitialInputCapabilitySignatureRef = useRef("");
+  const inputRestoreEpochRef = useRef(0);
   const [activeCapability, setActiveCapability] =
     useState<InputCapabilitySelection | null>(null);
   const [knowledgeHubOpenRequestKey, setKnowledgeHubOpenRequestKey] =
@@ -388,10 +391,45 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     handlePaste,
     handleRemoveImage,
     pendingImages,
+    replacePendingImages,
   } = useEmptyStateAttachments({
     toastCopy: homeSurfaceCopy.toast,
     onAddPathReferences,
   });
+
+  useEffect(() => {
+    if (!inputRestoreRequest || isComposerBusy) {
+      return;
+    }
+
+    inputRestoreEpochRef.current += 1;
+    const { draft, requestId } = inputRestoreRequest;
+    const restoredPathReferences = [...(draft.pathReferences ?? [])];
+    setInput(draft.text);
+    replacePendingImages([...(draft.images ?? [])]);
+    onClearPathReferences?.();
+    if (restoredPathReferences.length > 0) {
+      onAddPathReferences?.(restoredPathReferences);
+    }
+    setActiveCapability(
+      draft.inputCapabilityRoute
+        ? resolveInputCapabilitySelectionFromRoute({
+            route: draft.inputCapabilityRoute,
+            skills,
+          })
+        : null,
+    );
+    onInputRestoreRequestHandled?.(requestId);
+  }, [
+    inputRestoreRequest,
+    isComposerBusy,
+    onAddPathReferences,
+    onClearPathReferences,
+    onInputRestoreRequestHandled,
+    replacePendingImages,
+    setInput,
+    skills,
+  ]);
 
   const recommendationSelectedText = appendSelectedTextToRecommendation
     ? selectedText
@@ -448,6 +486,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       subagentEnabled?: boolean;
     },
   ) => {
+    const sendRestoreEpoch = inputRestoreEpochRef.current;
     const hasPathReferences = pathReferences.length > 0;
     if (
       isComposerBusy ||
@@ -499,14 +538,24 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       : hasPathReferences
         ? homeSurfaceCopy.composerPathReferenceFallbackPrompt
         : inputOverride;
+    const inputRestoreDraft = {
+      text: inputOverride.trim() ? inputOverride : "",
+      images: [...pendingImages],
+      pathReferences: [...pathReferences],
+      inputCapabilityRoute: capabilityDispatch.capabilityRoute,
+    };
+    const shouldAttachInputRestoreDraft =
+      pendingImages.length > 0 || pathReferences.length > 0;
     const sendOptions =
       capabilityDispatch.capabilityRoute ||
       capabilityDispatch.displayContent ||
-      requestMetadata
+      requestMetadata ||
+      shouldAttachInputRestoreDraft
         ? {
             ...(capabilityDispatch.capabilityRoute
               ? { capabilityRoute: capabilityDispatch.capabilityRoute }
               : {}),
+            ...(shouldAttachInputRestoreDraft ? { inputRestoreDraft } : {}),
             ...(capabilityDispatch.displayContent
               ? { displayContent: capabilityDispatch.displayContent }
               : {}),
@@ -521,6 +570,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       sendOptions,
     });
     const clearAcceptedSubmissionState = () => {
+      if (inputRestoreEpochRef.current !== sendRestoreEpoch) {
+        return;
+      }
       clearPendingImages();
       onClearPathReferences?.();
       clearSelectedSkill?.();
@@ -851,6 +903,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onDrop={handleDrop}
         onRemoveImage={handleRemoveImage}
         pathReferences={pathReferences}
+        inputRestoreRequest={inputRestoreRequest}
         onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
         onRemovePathReference={onRemovePathReference}
         fileManagerOpen={fileManagerOpen}

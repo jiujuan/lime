@@ -12,6 +12,7 @@ use aster::skills::{
 use aster::tools::ToolRegistrationConfig;
 use lime_core::app_paths;
 use std::path::{Path, PathBuf};
+use tool_runtime::native_overlay::runtime_native_tool_registration_allowlist;
 
 /// 重新加载 Lime Skills
 pub fn reload_lime_skills() {
@@ -61,6 +62,7 @@ pub(crate) fn create_lime_identity() -> AgentIdentity {
 /// 启用 Ask/LSP 回调，确保 ask/lsp 工具在 Agent 初始化时可用。
 pub(crate) fn create_lime_tool_config() -> ToolRegistrationConfig {
     ToolRegistrationConfig::new()
+        .with_allowed_tool_names(runtime_native_tool_registration_allowlist().iter().copied())
         .with_ask_callback(crate::ask_bridge::create_ask_callback())
         .with_lsp_callback(crate::lsp_bridge::create_lsp_callback())
 }

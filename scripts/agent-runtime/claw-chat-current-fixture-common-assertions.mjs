@@ -18,6 +18,8 @@ import {
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
   IMAGE_COMMAND_DONE_TEXT,
+  INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+  INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
   INPUTBAR_RICH_RESTORE_PROMPT,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MULTI_AGENT_TEAM_DONE_TEXT,
@@ -27,7 +29,27 @@ import {
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
+  REASONING_FIRST_VISIBLE_DONE_TEXT,
+  REASONING_FIRST_VISIBLE_FINAL_TEXT,
+  REASONING_FIRST_VISIBLE_PROMPT,
+  REASONING_FIRST_VISIBLE_TEXT,
+  TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+  TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+  TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+  TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+  TERMINAL_STALE_GUARD_DONE_TEXT,
+  TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
+  TERMINAL_STALE_GUARD_FIRST_PROMPT,
+  TERMINAL_STALE_GUARD_SECOND_PROMPT,
+  TERMINAL_STALE_GUARD_SECOND_TEXT,
+  TERMINAL_STALE_GUARD_STALE_DONE_TEXT,
 } from "./claw-chat-current-fixture-constants.mjs";
+import {
+  MEDIA_REFERENCE_PROMPT,
+  MEDIA_REFERENCE_SUMMARY_TEXT,
+  MEDIA_REFERENCE_URI,
+} from "./claw-chat-current-fixture-media-reference.mjs";
 
 export function buildCommonAssertions(context) {
   const {
@@ -41,10 +63,17 @@ export function buildCommonAssertions(context) {
     isPlanScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarPendingSteerRichRestoreScenario,
     isInputbarRichRestoreScenario,
+    inputbarRichRestoreTurnStart,
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
+    isMediaReferenceScenario,
     isMultiAgentTeamScenario,
+    isReasoningFirstVisibleScenario,
+    isTerminalCanceledAfterAnswerScenario,
+    isTerminalFailedAfterAnswerScenario,
+    isTerminalStaleGuardScenario,
     isSkillsRuntimeScenario,
     isSoulStyleScenario,
     isRightSurfaceVisualMatrixScenario,
@@ -52,6 +81,7 @@ export function buildCommonAssertions(context) {
     isAnyExpertSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
+    hasCancelPhase,
     summary,
     pageText,
     errorRaw,
@@ -65,8 +95,10 @@ export function buildCommonAssertions(context) {
     shouldRequireAgentUiTraceEvidence &&
     !isPlanScenario &&
     !isImageCommandScenario &&
+    !isMediaReferenceScenario &&
     !isSoulStyleScenario &&
-    !isInputbarRichRestoreScenario;
+    !isInputbarRichRestoreScenario &&
+    !isInputbarPendingSteerRichRestoreScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
   const commonAssertions = {
@@ -103,12 +135,19 @@ export function buildCommonAssertions(context) {
       isRightSurfaceVisualMatrixScenario ||
       isContentFactoryArticleWorkspaceScenario
         ? true
+        : isInputbarRichRestoreScenario
+          ? Boolean(inputbarRichRestoreTurnStart)
+          : isInputbarPendingSteerRichRestoreScenario
+            ? guiTurnStartReachedBackend
         : guiTurnStartReachedBackend,
     liveProviderNotUsed: backendLedger.every((entry) => {
       if (entry.kind !== "turnStart") {
         return true;
       }
-      if (isInputbarRichRestoreScenario) {
+      if (
+        isInputbarRichRestoreScenario ||
+        isInputbarPendingSteerRichRestoreScenario
+      ) {
         return (
           (!entry.providerPreference ||
             entry.providerPreference ===
@@ -139,6 +178,11 @@ export function buildCommonAssertions(context) {
           summary.guiContinueCompleted?.bodyText?.includes(NEWS_PROMPT) === true
         : isInputbarRichRestoreScenario
           ? summary.inputbarRichRestoreGuiCanceled?.hasPrompt === true
+        : isInputbarPendingSteerRichRestoreScenario
+          ? summary.inputbarPendingSteerGuiCanceled?.hasPrompt === true &&
+            summary.inputbarPendingSteerGuiCanceled?.bodyText?.includes(
+              INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+            ) === true
         : isRightSurfaceVisualMatrixScenario
           ? summary.rightSurfaceVisualMatrix?.captures?.expertInfo?.stable
               ?.rootVisible === true
@@ -154,25 +198,41 @@ export function buildCommonAssertions(context) {
                   ? summary.guiImageCommandCompleted?.hasPrompt === true
                   : isWebToolsRenderingScenario
                     ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true
-                    : isMcpStructuredContentScenario
-                      ? summary.guiMcpStructuredContentCompleted?.hasPrompt ===
+                    : isReasoningFirstVisibleScenario
+                      ? summary.guiReasoningFirstVisibleCompleted?.hasPrompt ===
                         true
-                      : isMultiAgentTeamScenario
-                        ? summary.guiMultiAgentTeamCompleted?.hasPrompt === true
-                        : isSkillsRuntimeScenario
-                          ? summary.guiSkillsRuntimeCompleted?.hasPrompt ===
-                              true &&
-                            summary.guiExplicitSkillsRuntimeCompleted
-                              ?.hasPrompt === true &&
-                            summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.hasPrompt === true
-                          : isAnyExpertSkillsRuntimeScenario
-                            ? isExpertPanelSkillsRuntimeScenario
-                              ? summary.guiExpertPanelSkillsRuntimeCompleted
-                                  ?.hasPrompt === true
-                              : summary.guiExpertSkillsRuntimeCompleted
-                                  ?.hasPrompt === true
-                            : summary.guiCompleted?.hasPrompt === true,
+                    : isTerminalCanceledAfterAnswerScenario
+                      ? summary.guiTerminalCanceledAfterAnswerCanceled
+                          ?.hasPrompt === true
+                    : isTerminalFailedAfterAnswerScenario
+                      ? summary.guiTerminalFailedAfterAnswerCompleted
+                          ?.hasPrompt === true
+                    : isTerminalStaleGuardScenario
+                      ? summary.guiTerminalStaleGuardFirstCompleted
+                          ?.hasPrompt === true &&
+                        summary.guiTerminalStaleGuardSecondCompleted
+                          ?.hasPrompt === true
+                      : isMcpStructuredContentScenario
+                        ? summary.guiMcpStructuredContentCompleted?.hasPrompt ===
+                          true
+                      : isMediaReferenceScenario
+                        ? summary.guiMediaReferenceCompleted?.hasPrompt === true
+                        : isMultiAgentTeamScenario
+                          ? summary.guiMultiAgentTeamCompleted?.hasPrompt === true
+                          : isSkillsRuntimeScenario
+                            ? summary.guiSkillsRuntimeCompleted?.hasPrompt ===
+                                true &&
+                              summary.guiExplicitSkillsRuntimeCompleted
+                                ?.hasPrompt === true &&
+                              summary.guiManualEnableSkillsRuntimeCompleted
+                                ?.hasPrompt === true
+                            : isAnyExpertSkillsRuntimeScenario
+                              ? isExpertPanelSkillsRuntimeScenario
+                                ? summary.guiExpertPanelSkillsRuntimeCompleted
+                                    ?.hasPrompt === true
+                                : summary.guiExpertSkillsRuntimeCompleted
+                                    ?.hasPrompt === true
+                              : summary.guiCompleted?.hasPrompt === true,
     guiAssistantOutputVisible: isCancelOnlyScenario
       ? summary.guiCanceled?.hasStoppedCopy === true
       : isCancelThenContinueScenario
@@ -181,6 +241,10 @@ export function buildCommonAssertions(context) {
         : isInputbarRichRestoreScenario
           ? summary.inputbarRichRestoreGuiCanceled
               ?.noVisibleAssistantOutput === true
+        : isInputbarPendingSteerRichRestoreScenario
+          ? summary.inputbarPendingSteerGuiCanceled?.bodyText?.includes(
+              INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+            ) === true
         : isRightSurfaceVisualMatrixScenario
           ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
               ?.rootVisible === true &&
@@ -214,40 +278,61 @@ export function buildCommonAssertions(context) {
                         ?.hasAssistantSummary === true ||
                       summary.guiWebToolsRenderingCompleted?.hasDoneText ===
                         true
+                    : isReasoningFirstVisibleScenario
+                      ? summary.guiReasoningFirstVisibleBeforeAnswer
+                          ?.hasReasoningText === true &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.hasFinalText === true
+                    : isTerminalCanceledAfterAnswerScenario
+                      ? summary.guiTerminalCanceledAfterAnswerCanceled
+                          ?.hasPartialText === true
+                    : isTerminalFailedAfterAnswerScenario
+                      ? summary.guiTerminalFailedAfterAnswerCompleted
+                          ?.hasAssistantSummary === true &&
+                        summary.guiTerminalFailedAfterAnswerCompleted
+                          ?.hasDoneText === true
+                    : isTerminalStaleGuardScenario
+                      ? summary.guiTerminalStaleGuardSecondCompleted
+                          ?.hasAssistantSummary === true ||
+                        summary.guiTerminalStaleGuardSecondCompleted
+                          ?.hasDoneText === true
                     : isMcpStructuredContentScenario
                       ? summary.guiMcpStructuredContentCompleted
                           ?.hasStructuredAnswer === true
-                      : isMultiAgentTeamScenario
-                        ? summary.guiMultiAgentTeamCompleted
-                            ?.hasAssistantSummary === true ||
-                          summary.guiMultiAgentTeamCompleted?.hasDoneText ===
-                            true
-                        : isSkillsRuntimeScenario
-                          ? summary.guiSkillsRuntimeCompleted
+                      : isMediaReferenceScenario
+                        ? summary.guiMediaReferenceSnapshot?.hasCard === true &&
+                          summary.guiMediaReferenceSnapshot?.hasUri === true
+                        : isMultiAgentTeamScenario
+                          ? summary.guiMultiAgentTeamCompleted
                               ?.hasAssistantSummary === true ||
-                            summary.guiSkillsRuntimeCompleted?.hasDoneText ===
-                              true ||
-                            summary.guiExplicitSkillsRuntimeCompleted
-                              ?.hasAssistantSummary === true ||
-                            summary.guiExplicitSkillsRuntimeCompleted
-                              ?.hasDoneText === true ||
-                            summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.hasAssistantSummary === true ||
-                            summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.hasDoneText === true
-                          : isAnyExpertSkillsRuntimeScenario
-                            ? isExpertPanelSkillsRuntimeScenario
-                              ? summary.guiExpertPanelSkillsRuntimeCompleted
-                                  ?.hasAssistantSummary === true ||
-                                summary.guiExpertPanelSkillsRuntimeCompleted
-                                  ?.hasDoneText === true
-                              : summary.guiExpertSkillsRuntimeCompleted
-                                  ?.hasAssistantSummary === true ||
-                                summary.guiExpertSkillsRuntimeCompleted
-                                  ?.hasDoneText === true
-                            : summary.guiCompleted?.hasAssistantSummary ===
+                            summary.guiMultiAgentTeamCompleted?.hasDoneText ===
+                              true
+                          : isSkillsRuntimeScenario
+                            ? summary.guiSkillsRuntimeCompleted
+                                ?.hasAssistantSummary === true ||
+                              summary.guiSkillsRuntimeCompleted?.hasDoneText ===
                                 true ||
-                              summary.guiCompleted?.hasDoneText === true,
+                              summary.guiExplicitSkillsRuntimeCompleted
+                                ?.hasAssistantSummary === true ||
+                              summary.guiExplicitSkillsRuntimeCompleted
+                                ?.hasDoneText === true ||
+                              summary.guiManualEnableSkillsRuntimeCompleted
+                                ?.hasAssistantSummary === true ||
+                              summary.guiManualEnableSkillsRuntimeCompleted
+                                ?.hasDoneText === true
+                            : isAnyExpertSkillsRuntimeScenario
+                              ? isExpertPanelSkillsRuntimeScenario
+                                ? summary.guiExpertPanelSkillsRuntimeCompleted
+                                    ?.hasAssistantSummary === true ||
+                                  summary.guiExpertPanelSkillsRuntimeCompleted
+                                    ?.hasDoneText === true
+                                : summary.guiExpertSkillsRuntimeCompleted
+                                    ?.hasAssistantSummary === true ||
+                                  summary.guiExpertSkillsRuntimeCompleted
+                                    ?.hasDoneText === true
+                              : summary.guiCompleted?.hasAssistantSummary ===
+                                  true ||
+                                summary.guiCompleted?.hasDoneText === true,
     guiInputRemainsReady: isCancelOnlyScenario
       ? summary.guiCanceled?.textareaVisible === true &&
         summary.guiCanceled?.textareaDisabled === false
@@ -259,6 +344,12 @@ export function buildCommonAssertions(context) {
             summary.inputbarRichRestoreGuiCanceled?.textareaDisabled ===
               false &&
             summary.inputbarRichRestoreGuiCanceled?.textareaValue ===
+              INPUTBAR_RICH_RESTORE_PROMPT
+        : isInputbarPendingSteerRichRestoreScenario
+          ? summary.inputbarPendingSteerGuiCanceled?.textareaVisible === true &&
+            summary.inputbarPendingSteerGuiCanceled?.textareaDisabled ===
+              false &&
+            summary.inputbarPendingSteerGuiCanceled?.textareaValue ===
               INPUTBAR_RICH_RESTORE_PROMPT
         : isRightSurfaceVisualMatrixScenario
           ? summary.guiRightSurfaceVisualMatrixSessionOpened?.inputReady
@@ -281,11 +372,36 @@ export function buildCommonAssertions(context) {
                         true &&
                       summary.guiWebToolsRenderingCompleted
                         ?.textareaDisabled === false
+                    : isReasoningFirstVisibleScenario
+                      ? summary.guiReasoningFirstVisibleCompleted
+                          ?.textareaVisible === true &&
+                        summary.guiReasoningFirstVisibleCompleted
+                          ?.textareaDisabled === false
+                    : isTerminalCanceledAfterAnswerScenario
+                      ? summary.guiTerminalCanceledAfterAnswerCanceled
+                          ?.textareaVisible === true &&
+                        summary.guiTerminalCanceledAfterAnswerCanceled
+                          ?.textareaDisabled === false
+                    : isTerminalFailedAfterAnswerScenario
+                      ? summary.guiTerminalFailedAfterAnswerCompleted
+                          ?.textareaVisible === true &&
+                        summary.guiTerminalFailedAfterAnswerCompleted
+                          ?.textareaDisabled === false
+                    : isTerminalStaleGuardScenario
+                      ? summary.guiTerminalStaleGuardSecondCompleted
+                          ?.textareaVisible === true &&
+                        summary.guiTerminalStaleGuardSecondCompleted
+                          ?.textareaDisabled === false
                     : isMcpStructuredContentScenario
                       ? summary.guiMcpStructuredContentCompleted
                           ?.textareaVisible === true &&
                         summary.guiMcpStructuredContentCompleted
                           ?.textareaDisabled === false
+                      : isMediaReferenceScenario
+                        ? summary.guiMediaReferenceCompleted?.textareaVisible ===
+                            true &&
+                          summary.guiMediaReferenceCompleted
+                            ?.textareaDisabled === false
                       : isMultiAgentTeamScenario
                         ? summary.guiMultiAgentTeamCompleted
                             ?.textareaVisible === true &&
@@ -322,6 +438,8 @@ export function buildCommonAssertions(context) {
         ? summary.guiContinueCompleted?.stopButtonVisible === false
         : isInputbarRichRestoreScenario
           ? summary.inputbarRichRestoreGuiCanceled?.stopButtonVisible === false
+        : isInputbarPendingSteerRichRestoreScenario
+          ? summary.inputbarPendingSteerGuiCanceled?.stopButtonVisible === false
         : isRightSurfaceVisualMatrixScenario
           ? true
           : isContentFactoryArticleWorkspaceScenario
@@ -336,9 +454,24 @@ export function buildCommonAssertions(context) {
                   : isWebToolsRenderingScenario
                     ? summary.guiWebToolsRenderingCompleted
                         ?.stopButtonVisible === false
-                    : isMcpStructuredContentScenario
-                      ? summary.guiMcpStructuredContentCompleted
+                    : isReasoningFirstVisibleScenario
+                      ? summary.guiReasoningFirstVisibleCompleted
                           ?.stopButtonVisible === false
+                    : isTerminalCanceledAfterAnswerScenario
+                      ? summary.guiTerminalCanceledAfterAnswerCanceled
+                          ?.stopButtonVisible === false
+                    : isTerminalFailedAfterAnswerScenario
+                      ? summary.guiTerminalFailedAfterAnswerCompleted
+                          ?.stopButtonVisible === false
+                    : isTerminalStaleGuardScenario
+                      ? summary.guiTerminalStaleGuardSecondCompleted
+                          ?.stopButtonVisible === false
+                    : isMcpStructuredContentScenario
+                    ? summary.guiMcpStructuredContentCompleted
+                        ?.stopButtonVisible === false
+                    : isMediaReferenceScenario
+                      ? summary.guiMediaReferenceCompleted?.stopButtonVisible ===
+                        false
                       : isMultiAgentTeamScenario
                         ? summary.guiMultiAgentTeamCompleted
                             ?.stopButtonVisible === false
@@ -355,7 +488,14 @@ export function buildCommonAssertions(context) {
                                   ?.stopButtonVisible === false
                               : summary.guiExpertSkillsRuntimeCompleted
                                   ?.stopButtonVisible === false
-                            : summary.guiCompleted?.stopButtonVisible === false,
+                          : summary.guiCompleted?.stopButtonVisible === false,
+    guiRunningStatusPreservedBeforeStop:
+      !hasCancelPhase ||
+      (summary.stopClick?.beforeClick?.hasVisibleAssistantOutput === true &&
+        summary.stopClick?.beforeClick?.hasRunningStatus === true &&
+        summary.stopClick?.beforeClick?.startupNoteVisible === false &&
+        Array.isArray(summary.stopClick?.beforeClick?.stopButtons) &&
+        summary.stopClick.beforeClick.stopButtons.length > 0),
     pageMentionsPromptAndAssistant: isCancelOnlyScenario
       ? pageText.includes(NEWS_PROMPT) &&
         (pageText.includes("已停止") ||
@@ -371,6 +511,10 @@ export function buildCommonAssertions(context) {
           ? pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&
             summary.inputbarRichRestoreGuiCanceled
               ?.noVisibleAssistantOutput === true
+        : isInputbarPendingSteerRichRestoreScenario
+          ? pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_PROMPT) &&
+            pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&
+            pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT)
         : isRightSurfaceVisualMatrixScenario
           ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
               ?.activeSurface === "files" &&
@@ -424,6 +568,37 @@ export function buildCommonAssertions(context) {
                         ?.hasSearchSourceLabel === true &&
                       summary.guiWebToolsRenderingCompleted
                         ?.hasAssistantSummary === true
+                    : isReasoningFirstVisibleScenario
+                      ? pageText.includes(REASONING_FIRST_VISIBLE_PROMPT) &&
+                        pageText.includes(REASONING_FIRST_VISIBLE_TEXT) &&
+                        (pageText.includes(
+                          REASONING_FIRST_VISIBLE_FINAL_TEXT,
+                        ) ||
+                          pageText.includes(REASONING_FIRST_VISIBLE_DONE_TEXT))
+                    : isTerminalCanceledAfterAnswerScenario
+                      ? pageText.includes(
+                          TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
+                        ) &&
+                        pageText.includes(
+                          TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
+                        )
+                    : isTerminalFailedAfterAnswerScenario
+                      ? pageText.includes(
+                          TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+                        ) &&
+                        pageText.includes(
+                          TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+                        ) &&
+                        pageText.includes(
+                          TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
+                        )
+                    : isTerminalStaleGuardScenario
+                      ? pageText.includes(TERMINAL_STALE_GUARD_FIRST_PROMPT) &&
+                        pageText.includes(TERMINAL_STALE_GUARD_SECOND_PROMPT) &&
+                        pageText.includes(TERMINAL_STALE_GUARD_SECOND_TEXT) &&
+                        pageText.includes(TERMINAL_STALE_GUARD_DONE_TEXT) &&
+                        pageText.includes(TERMINAL_STALE_GUARD_FIRST_DONE_TEXT) &&
+                        !pageText.includes(TERMINAL_STALE_GUARD_STALE_DONE_TEXT)
                     : isMcpStructuredContentScenario
                       ? summary.guiMcpStructuredContentCompleted?.hasPrompt ===
                           true &&
@@ -431,6 +606,10 @@ export function buildCommonAssertions(context) {
                           ?.hasStructuredAnswer === true &&
                         summary.guiMcpStructuredContentCompleted
                           ?.envelopeVisible === false
+                      : isMediaReferenceScenario
+                        ? pageText.includes(MEDIA_REFERENCE_PROMPT) &&
+                          pageText.includes(MEDIA_REFERENCE_SUMMARY_TEXT) &&
+                          pageText.includes(MEDIA_REFERENCE_URI)
                       : isMultiAgentTeamScenario
                         ? pageText.includes(MULTI_AGENT_TEAM_PROMPT) &&
                           (pageText.includes(MULTI_AGENT_TEAM_SUMMARY_TEXT) ||
@@ -482,6 +661,10 @@ export function buildCommonAssertions(context) {
       !shouldRequireTextStreamTraceSeparation ||
       (agentUiPerformanceTrace?.hasProviderWaitMs === true &&
         agentUiPerformanceTrace?.hasClientLocalOutputMs === true),
+    agentUiPerformanceTraceHasFirstVisibleTextPaint:
+      !shouldRequireTextStreamTraceSeparation ||
+      (agentUiPerformanceTrace?.hasFirstVisibleOutputMs === true &&
+        agentUiPerformanceTrace?.hasFirstTextDeltaToFirstTextPaintMs === true),
     agentUiPerformanceTraceNoRawPayload:
       agentUiPerformanceTrace == null ||
       (agentUiPerformanceTrace.rawEntriesExported === false &&

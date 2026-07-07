@@ -826,6 +826,10 @@ export type AgentSessionOverview = {
   workingDir?: string;
   executionStrategy?: string;
   messagesCount: number;
+  threadStatus?: string;
+  latestTurnStatus?: string;
+  activeTurnId?: string;
+  queuedTurnCount?: number;
 };
 
 export type AgentSessionListResponse = {

@@ -20,6 +20,7 @@ import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import { handleTurnStreamEvent } from "./agentStreamRuntimeHandler";
 import type { StreamRequestState } from "./agentStreamRuntimeHandlerTypes";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
+import { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
 import {
   upsertThreadItemState,
   upsertThreadTurnState,
@@ -95,6 +96,17 @@ function isRunningStatus(value?: string | null): boolean {
   return normalizeNonEmpty(value)?.toLowerCase() === "running";
 }
 
+function isExplicitTerminalStatus(value?: string | null): boolean {
+  const normalized = normalizeNonEmpty(value)?.toLowerCase();
+  return (
+    normalized === "completed" ||
+    normalized === "failed" ||
+    normalized === "canceled" ||
+    normalized === "cancelled" ||
+    normalized === "aborted"
+  );
+}
+
 function normalizeRealTurnId(value?: string | null): string | null {
   const normalized = normalizeNonEmpty(value);
   if (!normalized || normalized.startsWith("pending-turn:")) {
@@ -104,6 +116,7 @@ function normalizeRealTurnId(value?: string | null): string | null {
 }
 
 const LOCALLY_STARTED_STREAM_BINDING_TTL_MS = 5 * 60 * 1000;
+const LOCALLY_INTERRUPTED_STREAM_BINDING_TTL_MS = 30 * 1000;
 
 interface LocallyStartedAgentStreamBindingRecord {
   eventName: string;
@@ -116,11 +129,19 @@ const locallyStartedAgentStreamBindingRecords = new Map<
   string,
   LocallyStartedAgentStreamBindingRecord
 >();
+const locallyInterruptedAgentStreamBindingRecords = new Map<
+  string,
+  LocallyStartedAgentStreamBindingRecord
+>();
 
-function pruneLocallyStartedAgentStreamBindingRecords(now = Date.now()): void {
-  for (const [key, record] of locallyStartedAgentStreamBindingRecords) {
-    if (now - record.recordedAt > LOCALLY_STARTED_STREAM_BINDING_TTL_MS) {
-      locallyStartedAgentStreamBindingRecords.delete(key);
+function pruneAgentStreamBindingRecords(
+  records: Map<string, LocallyStartedAgentStreamBindingRecord>,
+  ttlMs: number,
+  now = Date.now(),
+): void {
+  for (const [key, record] of records) {
+    if (now - record.recordedAt > ttlMs) {
+      records.delete(key);
     }
   }
 }
@@ -141,7 +162,10 @@ export function rememberLocallyStartedAgentStreamBinding(
     return;
   }
 
-  pruneLocallyStartedAgentStreamBindingRecords();
+  pruneAgentStreamBindingRecords(
+    locallyStartedAgentStreamBindingRecords,
+    LOCALLY_STARTED_STREAM_BINDING_TTL_MS,
+  );
   const turnId = normalizeRealTurnId(stream?.turnId);
   const recordedAt = Date.now();
   const record: LocallyStartedAgentStreamBindingRecord = {
@@ -160,6 +184,37 @@ export function rememberLocallyStartedAgentStreamBinding(
   );
 }
 
+export function rememberLocallyInterruptedAgentStreamBinding(
+  stream: ActiveStreamState | null,
+): void {
+  const sessionId = normalizeNonEmpty(stream?.sessionId);
+  const eventName = normalizeNonEmpty(stream?.eventName);
+  if (!sessionId) {
+    return;
+  }
+
+  pruneAgentStreamBindingRecords(
+    locallyInterruptedAgentStreamBindingRecords,
+    LOCALLY_INTERRUPTED_STREAM_BINDING_TTL_MS,
+  );
+  const turnId = normalizeRealTurnId(stream?.turnId);
+  const recordedAt = Date.now();
+  const record: LocallyStartedAgentStreamBindingRecord = {
+    eventName: eventName ?? "",
+    recordedAt,
+    sessionId,
+    turnId,
+  };
+  locallyInterruptedAgentStreamBindingRecords.set(
+    createLocallyStartedAgentStreamBindingKey(sessionId, turnId),
+    record,
+  );
+  locallyInterruptedAgentStreamBindingRecords.set(
+    createLocallyStartedAgentStreamBindingKey(sessionId, null),
+    record,
+  );
+}
+
 export function hasLocallyStartedAgentStreamBinding(
   target?: AgentStreamResumeBindingTarget | null,
 ): boolean {
@@ -168,13 +223,39 @@ export function hasLocallyStartedAgentStreamBinding(
     return false;
   }
 
-  pruneLocallyStartedAgentStreamBindingRecords();
+  pruneAgentStreamBindingRecords(
+    locallyStartedAgentStreamBindingRecords,
+    LOCALLY_STARTED_STREAM_BINDING_TTL_MS,
+  );
   const turnId = normalizeRealTurnId(target?.turnId);
   return (
     locallyStartedAgentStreamBindingRecords.has(
       createLocallyStartedAgentStreamBindingKey(sessionId, turnId),
     ) ||
     locallyStartedAgentStreamBindingRecords.has(
+      createLocallyStartedAgentStreamBindingKey(sessionId, null),
+    )
+  );
+}
+
+export function hasLocallyInterruptedAgentStreamBinding(
+  target?: AgentStreamResumeBindingTarget | null,
+): boolean {
+  const sessionId = normalizeNonEmpty(target?.sessionId);
+  if (!sessionId) {
+    return false;
+  }
+
+  pruneAgentStreamBindingRecords(
+    locallyInterruptedAgentStreamBindingRecords,
+    LOCALLY_INTERRUPTED_STREAM_BINDING_TTL_MS,
+  );
+  const turnId = normalizeRealTurnId(target?.turnId);
+  return (
+    locallyInterruptedAgentStreamBindingRecords.has(
+      createLocallyStartedAgentStreamBindingKey(sessionId, turnId),
+    ) ||
+    locallyInterruptedAgentStreamBindingRecords.has(
       createLocallyStartedAgentStreamBindingKey(sessionId, null),
     )
   );
@@ -240,7 +321,10 @@ export function hasBlockingActiveAgentStreamBinding(
   if (options.listenerMapRef.current.size > 0) {
     return true;
   }
-  return hasLocallyStartedAgentStreamBinding(options.target);
+  return (
+    hasLocallyStartedAgentStreamBinding(options.target) ||
+    hasLocallyInterruptedAgentStreamBinding(options.target)
+  );
 }
 
 export function resolveAgentStreamResumeBindingTarget(
@@ -250,12 +334,15 @@ export function resolveAgentStreamResumeBindingTarget(
   if (!sessionId || !options.threadBusy) {
     return null;
   }
+  if (
+    isExplicitTerminalStatus(options.threadRead?.status) ||
+    isExplicitTerminalStatus(options.threadRead?.profile_status)
+  ) {
+    return null;
+  }
 
   const runningThreadTurn = findRunningThreadTurn(options.threadTurns);
-  const hasRunningReadModel =
-    isRunningStatus(options.threadRead?.status) ||
-    isRunningStatus(options.threadRead?.profile_status) ||
-    Boolean(findRunningThreadReadTurnId(options.threadRead));
+  const hasRunningReadModel = hasRunningThreadReadActivity(options.threadRead);
   if (!runningThreadTurn && !hasRunningReadModel) {
     return null;
   }

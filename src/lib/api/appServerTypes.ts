@@ -21,6 +21,12 @@ export type AppServerRequestId = protocol.RequestId;
 export type AppServerJsonValue = protocol.JsonValue;
 export type AppServerJsonRpcRequest = protocol.JsonRpcRequest;
 export type AppServerJsonRpcNotification = protocol.JsonRpcNotification;
+export type AppServerConfigWarningNotification =
+  protocol.ConfigWarningNotification;
+export type AppServerConfigWarningJsonRpcNotification = {
+  method: typeof protocol.METHOD_CONFIG_WARNING;
+  params: AppServerConfigWarningNotification;
+};
 export type AppServerJsonRpcResponse<T = unknown> = protocol.JsonRpcResponse<T>;
 export type AppServerJsonRpcError = protocol.JsonRpcError;
 export type AppServerJsonRpcErrorResponse = protocol.JsonRpcErrorResponse;
@@ -111,6 +117,10 @@ export type AppServerAgentSessionListParams = protocol.AgentSessionListParams;
 export type AppServerAgentSessionListResponse =
   protocol.AgentSessionListResponse;
 export type AppServerAgentSessionReadParams = protocol.AgentSessionReadParams;
+export type AppServerAgentSessionMediaReadParams =
+  protocol.AgentSessionMediaReadParams;
+export type AppServerAgentSessionMediaReadResponse =
+  protocol.AgentSessionMediaReadResponse;
 export type AppServerConversationImportThreadRuntimeEventsReadParams =
   protocol.ConversationImportThreadRuntimeEventsReadParams;
 export type AppServerConversationImportThreadRuntimeEventsReadResponse =
@@ -464,5 +474,6 @@ export type AppServerRequestResult<T> = {
   result: T;
   response: AppServerJsonRpcResponse<T>;
   notifications: AppServerJsonRpcNotification[];
+  configWarnings: AppServerConfigWarningNotification[];
   messages: AppServerJsonRpcMessage[];
 };

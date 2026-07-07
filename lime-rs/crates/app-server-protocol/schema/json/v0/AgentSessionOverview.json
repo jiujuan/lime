@@ -1,6 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "activeTurnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "archivedAt": {
       "type": [
         "null",
@@ -17,6 +23,12 @@
         "string"
       ]
     },
+    "latestTurnStatus": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "messagesCount": {
       "format": "uint",
       "minimum": 0,
@@ -24,6 +36,12 @@
     },
     "model": {
       "type": "string"
+    },
+    "queuedTurnCount": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
     },
     "sessionId": {
       "type": "string"
@@ -33,6 +51,10 @@
         "null",
         "string"
       ]
+    },
+    "threadStatus": {
+      "default": "",
+      "type": "string"
     },
     "title": {
       "type": [

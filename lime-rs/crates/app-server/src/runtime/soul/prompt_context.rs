@@ -29,7 +29,7 @@ pub(crate) fn memory_soul_prompt_context_from_config(
         normalize_text(soul.challenge_style.as_deref(), SOUL_SHORT_TEXT_MAX_CHARS);
     let avoid = normalize_list(&soul.avoid);
     let style_profile = resolve_style_profile(
-        soul.style_profile_id.as_ref(),
+        soul.style_profile_id.as_deref(),
         soul.style_intensity.as_ref(),
     );
     let boundary = default_prompt_boundary();

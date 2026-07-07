@@ -206,65 +206,6 @@ export const CONTENT_EXACT_TOOL_CONFIGS = [
     },
   ],
   [
-    "croncreate",
-    {
-      family: "task",
-      label: "定时触发器",
-      verb: "创建",
-      icon: Settings,
-      groupTitle: "定时触发",
-      actionKey: "generic",
-      actions: {
-        failed: "创建失败",
-        completed: "已创建",
-        running: "创建中",
-      },
-    },
-  ],
-  [
-    "cronlist",
-    {
-      family: "list",
-      label: "定时触发器",
-      verb: "查看",
-      icon: Settings,
-      groupTitle: "定时触发",
-      actionKey: "list",
-    },
-  ],
-  [
-    "crondelete",
-    {
-      family: "task",
-      label: "定时触发器",
-      verb: "删除",
-      icon: Settings,
-      groupTitle: "定时触发",
-      actionKey: "generic",
-      actions: {
-        failed: "删除失败",
-        completed: "已删除",
-        running: "删除中",
-      },
-    },
-  ],
-  [
-    "remotetrigger",
-    {
-      family: "command",
-      label: "远程触发器",
-      verb: "处理",
-      icon: Globe,
-      groupTitle: "远程触发",
-      actionKey: "generic",
-      actions: {
-        failed: "处理失败",
-        completed: "已处理",
-        running: "处理中",
-      },
-    },
-  ],
-  [
     "socialgeneratecoverimage",
     {
       family: "task",

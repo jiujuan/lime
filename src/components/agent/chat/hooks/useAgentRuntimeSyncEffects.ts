@@ -76,6 +76,9 @@ function shouldPollRecoveredRuntimeWork(params: {
   const normalizedThreadReadStatus = (
     params.threadReadStatus || ""
   ).toLowerCase();
+  if (isExplicitTerminalRuntimeStatus(normalizedThreadReadStatus)) {
+    return false;
+  }
   const hasRunningTurn = params.threadTurns.some(
     (turn) => turn.status === "running",
   );
@@ -135,7 +138,18 @@ function isTerminalRuntimeStatus(status?: string | null): boolean {
 
 function isExplicitTerminalRuntimeStatus(status?: string | null): boolean {
   const normalizedStatus = (status || "").trim().toLowerCase();
-  return normalizedStatus !== "idle" && isTerminalRuntimeStatus(status);
+  return (
+    normalizedStatus === "completed" ||
+    normalizedStatus === "failed" ||
+    normalizedStatus === "canceled" ||
+    normalizedStatus === "cancelled" ||
+    normalizedStatus === "aborted" ||
+    (normalizedStatus !== "idle" && isTerminalRuntimeStatus(status))
+  );
+}
+
+function shouldForceSettleStaleRunningTurn(status?: string | null): boolean {
+  return isExplicitTerminalRuntimeStatus(status);
 }
 
 function hasRunningTurn(threadTurns: AgentThreadTurn[]): boolean {
@@ -308,6 +322,10 @@ export function useAgentRuntimeSyncEffects(
       return;
     }
     if (queuedTurnCount > 0 || hasRunningTurn(threadTurns)) {
+      if (shouldForceSettleStaleRunningTurn(threadReadStatus)) {
+        observedActiveRuntimeWorkRef.current = false;
+        settleActiveRuntimeStream(sessionId);
+      }
       return;
     }
     if (

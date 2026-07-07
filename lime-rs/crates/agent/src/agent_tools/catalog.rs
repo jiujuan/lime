@@ -31,6 +31,7 @@ pub const MEMORY_LIST_TOOL_NAME: &str = "memory_list";
 pub const MEMORY_READ_TOOL_NAME: &str = "memory_read";
 pub const MEMORY_SEARCH_TOOL_NAME: &str = "memory_search";
 pub const MEMORY_ADD_NOTE_TOOL_NAME: &str = "memory_add_note";
+pub const SLEEP_TOOL_NAME: &str = "sleep";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -236,51 +237,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: true,
     },
     ToolCatalogEntry {
-        name: "Workflow",
-        profiles: CORE_PROFILES,
-        capabilities: EXECUTION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TaskCreate",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TaskList",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TaskGet",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TaskUpdate",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
         name: UPDATE_PLAN_TOOL_NAME,
         profiles: CORE_PROFILES,
         capabilities: PLAN_CAP,
@@ -288,33 +244,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         source: ToolSourceKind::RuntimeBuiltin,
         permission_plane: ToolPermissionPlane::SessionAllowlist,
         workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TaskOutput",
-        profiles: CORE_PROFILES,
-        capabilities: EXECUTION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TaskStop",
-        profiles: CORE_PROFILES,
-        capabilities: EXECUTION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "NotebookEdit",
-        profiles: CORE_PROFILES,
-        capabilities: WORKSPACE_IO_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::ParameterRestricted,
-        workspace_default_allow: false,
     },
     ToolCatalogEntry {
         name: VIEW_IMAGE_TOOL_NAME,
@@ -338,24 +267,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         name: "ExitPlanMode",
         profiles: CORE_PROFILES,
         capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "EnterWorktree",
-        profiles: CORE_PROFILES,
-        capabilities: WORKSPACE_IO_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "ExitWorktree",
-        profiles: CORE_PROFILES,
-        capabilities: WORKSPACE_IO_CAP,
         lifecycle: ToolLifecycle::Current,
         source: ToolSourceKind::RuntimeBuiltin,
         permission_plane: ToolPermissionPlane::SessionAllowlist,
@@ -389,6 +300,15 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: true,
     },
     ToolCatalogEntry {
+        name: SLEEP_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: PLAN_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::LimeInjected,
+        permission_plane: ToolPermissionPlane::SessionAllowlist,
+        workspace_default_allow: true,
+    },
+    ToolCatalogEntry {
         name: "SendUserMessage",
         profiles: CORE_PROFILES,
         capabilities: SESSION_CAP,
@@ -407,24 +327,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: false,
     },
     ToolCatalogEntry {
-        name: "Config",
-        profiles: CORE_PROFILES,
-        capabilities: SESSION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "Sleep",
-        profiles: CORE_PROFILES,
-        capabilities: EXECUTION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
         name: "PowerShell",
         profiles: CORE_PROFILES,
         capabilities: EXECUTION_CAP,
@@ -432,42 +334,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         source: ToolSourceKind::RuntimeBuiltin,
         permission_plane: ToolPermissionPlane::ParameterRestricted,
         workspace_default_allow: false,
-    },
-    ToolCatalogEntry {
-        name: "RemoteTrigger",
-        profiles: CORE_PROFILES,
-        capabilities: EXECUTION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "CronCreate",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "CronList",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "CronDelete",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
     },
     ToolCatalogEntry {
         name: TOOL_SEARCH_TOOL_NAME,
@@ -757,16 +623,14 @@ pub fn native_tool_catalog() -> &'static [ToolCatalogEntry] {
 fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
     match tool_catalog_reference_lookup_key(tool_name).as_str() {
         "requestuserinput" | "requestuserinputtool" => "request_user_input",
+        "clocksleep" | "clock.sleep" | "sleep" => SLEEP_TOOL_NAME,
         "brief" | "brieftool" | "sendusermessagetool" => "SendUserMessage",
         "spawnagent" | "subagenttask" | "agenttool" => "Agent",
         "sendinput" | "sendmessagetool" => "SendMessage",
         "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
         | "localshellcall" => "Bash",
-        "configtool" => "Config",
         "enterplanmodetool" => "EnterPlanMode",
         "exitplanmodetool" => "ExitPlanMode",
-        "enterworktreetool" => "EnterWorktree",
-        "exitworktreetool" => "ExitWorktree",
         "filereadtool" | "readfiletool" | "readfile" | "developerread" | "mcpsystemreadfile" => {
             "Read"
         }
@@ -783,21 +647,9 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "memoryread" | "memoryreadtool" => MEMORY_READ_TOOL_NAME,
         "memorysearch" | "memorysearchtool" => MEMORY_SEARCH_TOOL_NAME,
         "memoryaddnote" | "memoryaddnotetool" => MEMORY_ADD_NOTE_TOOL_NAME,
-        "notebookedittool" => "NotebookEdit",
         "powershelltool" => "PowerShell",
-        "remotetriggertool" => "RemoteTrigger",
-        "schedulecrontool" | "croncreatetool" => "CronCreate",
-        "cronlisttool" => "CronList",
-        "crondeletetool" => "CronDelete",
         "skilltool" => "Skill",
-        "sleeptool" => "Sleep",
         "syntheticoutputtool" => "StructuredOutput",
-        "taskcreatetool" => "TaskCreate",
-        "taskgettool" => "TaskGet",
-        "tasklisttool" => "TaskList",
-        "taskoutputtool" | "agentoutputtool" | "bashoutputtool" => "TaskOutput",
-        "taskstoptool" | "killshell" => "TaskStop",
-        "taskupdatetool" => "TaskUpdate",
         "teamcreatetool" => "TeamCreate",
         "teamdeletetool" => "TeamDelete",
         "listpeerstool" => "ListPeers",
@@ -1034,7 +886,6 @@ mod tests {
         assert!(names.contains(&"SendUserMessage"));
         assert!(names.contains(&"TeamCreate"));
         assert!(names.contains(&"TeamDelete"));
-        assert!(names.contains(&"Workflow"));
         assert!(names.contains(&"WebSearch"));
         assert!(names.contains(&MEMORY_LIST_TOOL_NAME));
         assert!(names.contains(&MEMORY_READ_TOOL_NAME));
@@ -1075,11 +926,18 @@ mod tests {
             "request_user_input"
         );
         assert_eq!(
-            tool_catalog_entry("remote_trigger")
-                .expect("snake_case current name should normalize")
+            tool_catalog_entry("clock.sleep")
+                .expect("Codex clock.sleep should resolve to current sleep")
                 .name,
-            "RemoteTrigger"
+            SLEEP_TOOL_NAME
         );
+        assert_eq!(
+            tool_catalog_entry("sleep")
+                .expect("Codex sleep should be current")
+                .name,
+            SLEEP_TOOL_NAME
+        );
+        assert!(tool_catalog_entry("remote_trigger").is_none());
     }
 
     #[test]
@@ -1088,17 +946,16 @@ mod tests {
             ("AgentTool", "Agent"),
             ("request_user_input", "request_user_input"),
             ("RequestUserInputTool", "request_user_input"),
+            ("clock.sleep", SLEEP_TOOL_NAME),
+            ("sleep", SLEEP_TOOL_NAME),
             ("BashTool", "Bash"),
             ("developer__shell", "Bash"),
             ("mcp__system__shell", "Bash"),
             ("shell_command", "Bash"),
             ("local_shell_call", "Bash"),
             ("BriefTool", "SendUserMessage"),
-            ("ConfigTool", "Config"),
             ("EnterPlanModeTool", "EnterPlanMode"),
-            ("EnterWorktreeTool", "EnterWorktree"),
             ("ExitPlanModeTool", "ExitPlanMode"),
-            ("ExitWorktreeTool", "ExitWorktree"),
             ("FileEditTool", "Edit"),
             ("ApplyPatchTool", APPLY_PATCH_TOOL_NAME),
             ("apply_patch", APPLY_PATCH_TOOL_NAME),
@@ -1127,24 +984,11 @@ mod tests {
             ("memory_search", MEMORY_SEARCH_TOOL_NAME),
             ("MemoryAddNoteTool", MEMORY_ADD_NOTE_TOOL_NAME),
             ("memory_add_note", MEMORY_ADD_NOTE_TOOL_NAME),
-            ("NotebookEditTool", "NotebookEdit"),
             ("PowerShellTool", "PowerShell"),
             ("ReadMcpResourceTool", "ReadMcpResourceTool"),
-            ("RemoteTriggerTool", "RemoteTrigger"),
-            ("ScheduleCronTool", "CronCreate"),
             ("SendMessageTool", "SendMessage"),
             ("SkillTool", "Skill"),
-            ("SleepTool", "Sleep"),
             ("SyntheticOutputTool", "StructuredOutput"),
-            ("TaskCreateTool", "TaskCreate"),
-            ("TaskGetTool", "TaskGet"),
-            ("TaskListTool", "TaskList"),
-            ("TaskOutputTool", "TaskOutput"),
-            ("AgentOutputTool", "TaskOutput"),
-            ("BashOutputTool", "TaskOutput"),
-            ("TaskStopTool", "TaskStop"),
-            ("KillShell", "TaskStop"),
-            ("TaskUpdateTool", "TaskUpdate"),
             ("update_plan", UPDATE_PLAN_TOOL_NAME),
             ("UpdatePlan", UPDATE_PLAN_TOOL_NAME),
             ("UpdatePlanTool", UPDATE_PLAN_TOOL_NAME),
@@ -1175,6 +1019,30 @@ mod tests {
             tool_catalog_entry("exec_command").is_none(),
             "Codex unified_exec exec_command must not collapse into legacy Bash"
         );
+        for deleted_tool_name in [
+            "ConfigTool",
+            "EnterWorktreeTool",
+            "ExitWorktreeTool",
+            "NotebookEditTool",
+            "RemoteTriggerTool",
+            "ScheduleCronTool",
+            "CronCreateTool",
+            "CronListTool",
+            "CronDeleteTool",
+            "SleepTool",
+            "TaskCreateTool",
+            "TaskGetTool",
+            "TaskListTool",
+            "TaskOutputTool",
+            "TaskStopTool",
+            "TaskUpdateTool",
+            "WorkflowTool",
+        ] {
+            assert!(
+                tool_catalog_entry(deleted_tool_name).is_none(),
+                "deleted Aster tool alias should not resolve: {deleted_tool_name}"
+            );
+        }
     }
 
     #[test]
@@ -1207,17 +1075,26 @@ mod tests {
             .iter()
             .filter(|entry| entry.profiles.contains(&ToolSurfaceProfile::BrowserAssist))
             .count();
-        assert_eq!(core.len(), 48);
         assert_eq!(
             core.iter()
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Current)
                 .count(),
-            48
+            core.len()
         );
         assert!(core.iter().any(|entry| entry.name == VIEW_IMAGE_TOOL_NAME));
         assert!(core
             .iter()
             .any(|entry| entry.name == SKILL_SEARCH_TOOL_NAME));
+        let sleep = core
+            .iter()
+            .find(|entry| entry.name == SLEEP_TOOL_NAME)
+            .expect("sleep should stay in current catalog");
+        assert_eq!(sleep.lifecycle, ToolLifecycle::Current);
+        assert_eq!(
+            sleep.permission_plane,
+            ToolPermissionPlane::SessionAllowlist
+        );
+        assert!(sleep.workspace_default_allow);
         let apply_patch = core
             .iter()
             .find(|entry| entry.name == APPLY_PATCH_TOOL_NAME)

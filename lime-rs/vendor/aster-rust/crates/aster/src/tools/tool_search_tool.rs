@@ -279,22 +279,6 @@ fn native_tool_search_aliases(name: &str) -> &'static [&'static str] {
             "run command",
             "command execution",
         ],
-        "taskcreate" | "taskcreatetool" => &["create task", "new task", "task board", "task list"],
-        "taskget" | "taskgettool" => &["get task", "task details", "read task"],
-        "tasklist" | "tasklisttool" => &["list tasks", "task list", "todo list"],
-        "taskupdate" | "taskupdatetool" => {
-            &["update task", "complete task", "mark task", "task status"]
-        }
-        "taskoutput" | "taskoutputtool" => &[
-            "agent output",
-            "bash output",
-            "task output",
-            "task logs",
-            "read task output",
-        ],
-        "taskstop" | "taskstoptool" => {
-            &["kill shell", "stop task", "cancel task", "terminate task"]
-        }
         "teamcreate" | "teamcreatetool" => &["create team", "create swarm", "swarm team"],
         "teamdelete" | "teamdeletetool" => &["delete team", "cleanup team", "disband swarm"],
         "listpeers" | "listpeerstool" => &[
@@ -973,13 +957,13 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_selected_tools_matches_reference_alias_for_task_stop() {
+    fn test_resolve_selected_tools_matches_reference_alias_for_list_peers_phrase() {
         let deferred = Vec::new();
-        let all = vec![searchable("TaskStop", "stop a background task")];
+        let all = vec![searchable("ListPeers", "list available peers")];
 
-        let matches = resolve_selected_tools(&["kill shell".to_string()], &deferred, &all);
+        let matches = resolve_selected_tools(&["message peers".to_string()], &deferred, &all);
 
-        assert_eq!(matches, vec!["TaskStop".to_string()]);
+        assert_eq!(matches, vec!["ListPeers".to_string()]);
     }
 
     #[test]
@@ -1260,17 +1244,14 @@ mod tests {
     }
 
     #[test]
-    fn test_score_query_match_can_resolve_task_output_alias() {
+    fn test_score_query_match_can_resolve_web_fetch_alias() {
         let matches = score_query_match(
-            "agent output",
+            "read url",
             &[],
-            &[searchable(
-                "TaskOutput",
-                "read output from a background task",
-            )],
+            &[searchable("WebFetch", "fetch and read a specific URL")],
         );
 
-        assert_eq!(matches, vec!["TaskOutput".to_string()]);
+        assert_eq!(matches, vec!["WebFetch".to_string()]);
     }
 
     #[test]

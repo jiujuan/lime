@@ -102,6 +102,10 @@ pub(super) fn selected_agent_skill_selections(
 ) -> Vec<AgentSkillSelection> {
     let mut selections = select_catalog_bound_agent_skills(metadata_values, snapshot);
     selections.extend(select_expert_bound_agent_skills(metadata_values, snapshot));
+    selections.extend(select_plugin_runtime_agent_skills(
+        metadata_values,
+        snapshot,
+    ));
     selections.extend(select_explicit_agent_skills(user_input, snapshot));
     let selections = dedupe_agent_skill_selections(selections);
     if !selections.is_empty() {
@@ -116,12 +120,18 @@ pub(super) fn selected_agent_skill_body_selections_for_prompt(
     snapshot: &AgentSkillSnapshot,
 ) -> Vec<AgentSkillSelection> {
     let mut selections = select_catalog_bound_agent_skills(metadata_values, snapshot);
+    selections.extend(select_plugin_runtime_agent_skills(
+        metadata_values,
+        snapshot,
+    ));
     selections.extend(select_explicit_agent_skills(user_input, snapshot));
     let selections = dedupe_agent_skill_selections(selections);
     if !selections.is_empty() {
         return selections;
     }
-    if has_expert_skill_refs(metadata_values) || has_workspace_skill_runtime_enable(metadata_values)
+    if has_expert_skill_refs(metadata_values)
+        || has_workspace_skill_runtime_enable(metadata_values)
+        || super::plugin_runtime_context::has_plugin_runtime_skill_policy(metadata_values)
     {
         return Vec::new();
     }
@@ -147,6 +157,17 @@ fn select_expert_bound_agent_skills(
         expert_bound_skill_candidates(metadata_values),
         snapshot,
         AgentSkillSelectionTrigger::ExpertBinding,
+    )
+}
+
+fn select_plugin_runtime_agent_skills(
+    metadata_values: &[&Value],
+    snapshot: &AgentSkillSnapshot,
+) -> Vec<AgentSkillSelection> {
+    select_agent_skills_by_name_candidates(
+        super::plugin_runtime_context::plugin_runtime_skill_candidates(metadata_values),
+        snapshot,
+        AgentSkillSelectionTrigger::CatalogBinding,
     )
 }
 
@@ -664,6 +685,59 @@ Call lime_create_image_generation_task directly.
         assert!(prompt.contains("`skill:capability-report` -> `capability-report`"));
         assert!(!prompt.contains("<selected_skill_instructions>"));
         assert!(!prompt.contains("# Body"));
+    }
+
+    #[test]
+    fn plugin_runtime_capability_injects_registered_workflow_skill_body() {
+        let workspace = TempDir::new().expect("workspace");
+        write_skill(
+            &workspace,
+            "article-writing",
+            "Article Writing",
+            "Draft article copy.",
+        );
+        let metadata = serde_json::json!({
+            "harness": {
+                "plugin_activation": {
+                    "plugin_id": "content-factory-app",
+                    "workflow_key": "content-article",
+                    "runtime_capabilities": {
+                        "pluginId": "content-factory-app",
+                        "skills": [
+                            {
+                                "id": "article-writing",
+                                "title": "Article Writing",
+                                "required": true,
+                                "promptInjectionPolicy": {
+                                    "mode": "workflow_scoped",
+                                    "source": "runtimeCapabilities.skills"
+                                }
+                            }
+                        ],
+                        "mcpBindings": [],
+                        "workflowBindings": [
+                            {
+                                "workflowKey": "content-article",
+                                "skillIds": ["article-writing"]
+                            }
+                        ]
+                    }
+                }
+            }
+        });
+
+        let prompt = append_agent_skills_context_to_system_prompt(
+            Some("base".to_string()),
+            "写一篇文章",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        )
+        .expect("prompt");
+
+        assert!(prompt.contains("<selected_skill_instructions>"));
+        assert!(prompt.contains("`article-writing`"));
+        assert!(prompt.contains("# Body"));
     }
 
     #[test]

@@ -1,5 +1,8 @@
-use super::context_packet::{assemble_context_packets, ContextPacket, ContextScope};
+use super::context_packet::{
+    assemble_context_packets, contains_secret_like_content, ContextPacket, ContextScope,
+};
 use super::output_refs::SIDECAR_REF_FIELD;
+use super::sidecar_store::{session_scoped_relative_path, SidecarWriteRequest};
 use super::RuntimeCore;
 use app_server_protocol::{
     AgentSessionTurnStartParams, MemoryStoreReadParams, MemoryStoreRootParams, MemoryStoreScope,
@@ -63,6 +66,15 @@ impl RuntimeCore {
             "truncated": response.truncated,
             "citation": response.citation,
         });
+        if let Some(sidecar_ref) = self.memory_summary_sidecar_ref(
+            params.session_id.as_str(),
+            params.turn_id.as_deref(),
+            scope,
+            response.path.as_str(),
+            summary,
+        ) {
+            context[SIDECAR_REF_FIELD] = sidecar_ref;
+        }
         apply_prompt_context_budget_policy(
             &mut context,
             params.runtime_options.as_ref(),
@@ -107,6 +119,35 @@ impl RuntimeCore {
             .rev()
             .find(|event| event.event_type == "context.compaction.completed")
             .and_then(|event| session_compaction_prompt_context_from_event(&event.payload))
+    }
+
+    fn memory_summary_sidecar_ref(
+        &self,
+        session_id: &str,
+        turn_id: Option<&str>,
+        scope: &str,
+        path: &str,
+        content: &str,
+    ) -> Option<Value> {
+        if contains_secret_like_content(content) {
+            return None;
+        }
+        let sidecar_store = self.sidecar_store.as_deref()?;
+        let turn_stem = sidecar_file_stem(turn_id.unwrap_or("latest"));
+        let relative_path = session_scoped_relative_path(
+            session_id,
+            &format!("context/memory-summary-{turn_stem}.md"),
+        );
+        let sidecar_ref = sidecar_store
+            .write_text(&SidecarWriteRequest {
+                session_id: session_id.to_string(),
+                kind: "memory_summary_context".to_string(),
+                logical_id: format!("memory-summary:{scope}:{path}:{turn_stem}"),
+                relative_path,
+                content: content.to_string(),
+            })
+            .ok()?;
+        serde_json::to_value(sidecar_ref).ok()
     }
 }
 
@@ -190,6 +231,7 @@ fn memory_packet_from_prompt_context(value: &Value) -> Option<ContextPacket> {
     metadata.insert("scope".to_string(), json!(scope));
     metadata.insert("startLineNumber".to_string(), json!(start_line));
     metadata.insert("endLineNumber".to_string(), json!(end_line));
+    copy_optional_value(value, &mut metadata, SIDECAR_REF_FIELD);
     Some(ContextPacket::memory_summary(
         content,
         match scope {
@@ -243,6 +285,7 @@ fn session_compaction_packet_from_prompt_context(value: &Value) -> Option<Contex
     copy_optional_value(value, &mut metadata, "tailStartTurnId");
     copy_optional_value(value, &mut metadata, "turnCount");
     copy_optional_value(value, &mut metadata, "trigger");
+    copy_optional_value(value, &mut metadata, SIDECAR_REF_FIELD);
     Some(ContextPacket::session_compaction(
         summary,
         prompt_context_packet_budget(value, SESSION_COMPACTION_PACKET_MAX_TOKENS),
@@ -476,7 +519,27 @@ fn string_value_from_candidates<'a>(
         .map(ToString::to_string)
 }
 
-fn merge_runtime_options_metadata(
+fn sidecar_file_stem(value: &str) -> String {
+    let stem = value
+        .trim()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let stem = stem.trim_matches('_');
+    if stem.is_empty() {
+        "latest".to_string()
+    } else {
+        stem.to_string()
+    }
+}
+
+pub(in crate::runtime) fn merge_runtime_options_metadata(
     params: &mut AgentSessionTurnStartParams,
     key: &str,
     value: Value,
@@ -497,7 +560,10 @@ fn merge_runtime_options_metadata(
     options.metadata = Some(Value::Object(metadata));
 }
 
-fn merge_context_packet_telemetry(params: &mut AgentSessionTurnStartParams, telemetry: Value) {
+pub(in crate::runtime) fn merge_context_packet_telemetry(
+    params: &mut AgentSessionTurnStartParams,
+    telemetry: Value,
+) {
     let options = params
         .runtime_options
         .get_or_insert_with(RuntimeOptions::default);
@@ -575,7 +641,7 @@ fn append_context_block(system_prompt: Option<String>, context: Option<String>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_core::config::{MemorySoulConfig, MemorySoulStyleProfileId};
+    use lime_core::config::MemorySoulConfig;
     use serde_json::json;
 
     #[test]
@@ -670,7 +736,7 @@ mod tests {
             enabled: true,
             name: Some("Direct reviewer".to_string()),
             summary: Some("Call out weak assumptions.".to_string()),
-            style_profile_id: Some(MemorySoulStyleProfileId::CalmProfessionalPartner),
+            style_profile_id: Some("calm_professional_partner".to_string()),
             tone: vec!["direct".to_string(), "direct".to_string()],
             communication_style: vec!["Lead with the answer".to_string()],
             explanation_depth: Some("Concise unless risk is high.".to_string()),
@@ -696,7 +762,7 @@ mod tests {
         assert!(prompt.contains("memory_soul_prompt_context.v2"));
         assert!(prompt.contains("Style profile: calm_professional_partner"));
         assert!(prompt.contains("Style pack: com.lime.soul.calm-professional-partner"));
-        assert!(prompt.contains("Apply this tone to greetings, opening turns, self-introductions"));
+        assert!(prompt.contains("Every reply should remain concise, explicit, and operational."));
         assert!(prompt.contains("Surface contracts"));
         assert!(prompt.contains("Anti-repetition rules"));
         assert!(prompt.contains("Risk fallback profile: calm_professional_partner"));
@@ -713,7 +779,7 @@ mod tests {
     fn soul_prompt_context_appends_persona_pack_boundaries_from_request_metadata() {
         let soul = MemorySoulConfig {
             enabled: true,
-            style_profile_id: Some(MemorySoulStyleProfileId::CheekySassyExecutor),
+            style_profile_id: Some("cheeky_sassy_executor".to_string()),
             ..MemorySoulConfig::default()
         };
         let context = memory_soul_prompt_context_from_config(Some(&soul)).expect("context");
@@ -762,7 +828,7 @@ mod tests {
         assert!(prompt.contains("after_tool_failure: Explain the failure"));
         assert!(prompt.contains("Few-shot anchors"));
         assert!(prompt.contains("never as a required prefix"));
-        assert!(prompt.contains("Do not start every reply with a persona tag"));
+        assert!(prompt.contains("Do not turn any example wording into a required template"));
         assert!(!prompt.contains("Every normal chat reply must show"));
         assert!(prompt.contains("Formal artifact voice source: generation_brief_only"));
         assert!(prompt.contains("Style fidelity rules"));

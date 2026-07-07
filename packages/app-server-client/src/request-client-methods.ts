@@ -1502,6 +1502,12 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "optional-empty",
     },
     {
+      name: "readAgentSessionMedia",
+      method: protocol.METHOD_AGENT_SESSION_MEDIA_READ,
+      kind: "request",
+      params: "required",
+    },
+    {
       name: "listModels",
       method: protocol.METHOD_MODEL_LIST,
       kind: "request",

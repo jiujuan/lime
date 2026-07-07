@@ -38,6 +38,8 @@ import {
 import type {
   McpPromptDefinition,
   McpPromptResult,
+  McpPrepareRequest,
+  McpPrepareResult,
   McpResourceContent,
   McpResourceDefinition,
   McpResourceListResult,
@@ -364,4 +366,120 @@ export const mcpApi = {
       assertEmptyResponse(METHOD_MCP_RESOURCE_UNSUBSCRIBE, response);
       return undefined;
     }),
+
+  executePrepareRequests: async (
+    requests: McpPrepareRequest[],
+  ): Promise<McpPrepareResult[]> => {
+    const results: McpPrepareResult[] = [];
+    for (const request of requests) {
+      results.push(await executeMcpPrepareRequest(request));
+    }
+    return results;
+  },
 };
+
+function assertPrepareCandidate(request: McpPrepareRequest): void {
+  if (request.status !== "candidate") {
+    throw new Error("MCP prepare request must be candidate");
+  }
+}
+
+function getPrepareParams(
+  method: string,
+  params: McpPrepareRequest["params"],
+): Record<string, unknown> {
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    throw new Error(`${method} did not provide prepare params`);
+  }
+  return params;
+}
+
+function readStringPrepareParam(
+  method: string,
+  params: Record<string, unknown>,
+  field: string,
+): string {
+  const value = params[field];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${method} prepare params require ${field}`);
+  }
+  return value;
+}
+
+function readOptionalStringPrepareParam(
+  method: string,
+  params: Record<string, unknown>,
+  field: string,
+): string | undefined {
+  const value = params[field];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new Error(`${method} prepare params require ${field} string`);
+  }
+  return value;
+}
+
+function readOptionalBooleanPrepareParam(
+  method: string,
+  params: Record<string, unknown>,
+  field: string,
+): boolean {
+  const value = params[field];
+  if (value === undefined) {
+    return false;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${method} prepare params require ${field} boolean`);
+  }
+  return value;
+}
+
+async function executeMcpPrepareRequest(
+  request: McpPrepareRequest,
+): Promise<McpPrepareResult> {
+  assertPrepareCandidate(request);
+  if (request.method === METHOD_MCP_SERVER_IMPORT_FROM_APP) {
+    const params = getPrepareParams(request.method, request.params);
+    const appType = readStringPrepareParam(request.method, params, "appType");
+    const importedCount = await mcpApi.importFromApp(appType);
+    return {
+      method: METHOD_MCP_SERVER_IMPORT_FROM_APP,
+      status: "completed",
+      importedCount,
+    };
+  }
+  if (request.method === METHOD_MCP_SERVER_START) {
+    const params = getPrepareParams(request.method, request.params);
+    const name = readStringPrepareParam(request.method, params, "name");
+    await mcpApi.startServer(name);
+    return {
+      method: METHOD_MCP_SERVER_START,
+      status: "completed",
+    };
+  }
+  if (request.method === METHOD_MCP_TOOL_LIST_FOR_CONTEXT) {
+    const params = getPrepareParams(request.method, request.params);
+    const caller = readOptionalStringPrepareParam(
+      request.method,
+      params,
+      "caller",
+    );
+    const includeDeferred = readOptionalBooleanPrepareParam(
+      request.method,
+      params,
+      "includeDeferred",
+    );
+    const tools = await mcpApi.listToolsForContext(caller, includeDeferred);
+    return {
+      method: METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+      status: "completed",
+      toolCount: tools.length,
+      tools,
+    };
+  }
+  throw new Error(
+    `Unsupported MCP prepare request method: ${String(request.method)}`,
+  );
+}

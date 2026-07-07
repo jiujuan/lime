@@ -31,14 +31,16 @@ const {
 } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(async () => ({})),
   mockProjectSelector: vi.fn(),
-  mockReadProjectGitStatus: vi.fn(async (): Promise<ProjectGitStatus> => ({
-    rootPath: "/workspace/lime",
-    repositoryRoot: undefined,
-    hasGitRepository: false,
-    currentBranch: undefined,
-    branches: [],
-    uncommittedFileCount: 0,
-  })),
+  mockReadProjectGitStatus: vi.fn(
+    async (): Promise<ProjectGitStatus> => ({
+      rootPath: "/workspace/lime",
+      repositoryRoot: undefined,
+      hasGitRepository: false,
+      currentBranch: undefined,
+      branches: [],
+      uncommittedFileCount: 0,
+    }),
+  ),
   mockCheckoutProjectGitBranch: vi.fn(async () => ({
     rootPath: "/workspace/lime",
     repositoryRoot: "/workspace/lime",
@@ -90,9 +92,7 @@ const {
   mockGetChromeBridgeStatus: vi.fn(),
 }));
 
-const mockGetAgentRuntimeObjective = vi.hoisted(() =>
-  vi.fn(async () => null),
-);
+const mockGetAgentRuntimeObjective = vi.hoisted(() => vi.fn(async () => null));
 
 const mockCharacterMention = vi.fn<
   (props: {
@@ -128,7 +128,8 @@ vi.mock("@/lib/api/channelsRuntime", () => ({
 }));
 
 vi.mock("@/lib/api/agentRuntime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/api/agentRuntime")>();
+  const actual =
+    await importOriginal<typeof import("@/lib/api/agentRuntime")>();
   return {
     ...actual,
     getAgentRuntimeObjective: mockGetAgentRuntimeObjective,
@@ -1794,10 +1795,10 @@ describe("EmptyState", () => {
         subagentCore: true,
         subagentTeamTools: true,
         subagentRuntime: true,
-        taskRuntime: true,
+        planRuntime: true,
         missingSubagentCoreTools: [],
         missingSubagentTeamTools: [],
-        missingTaskTools: [],
+        missingPlanTools: [],
       },
       runtimeTaskCard: {
         taskId: "task-1",

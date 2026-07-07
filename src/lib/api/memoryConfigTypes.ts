@@ -18,11 +18,7 @@ export interface MemorySoulArtifactVoiceConfig {
   evidence_refs?: string[];
 }
 
-export type MemorySoulStyleProfileId =
-  | "cheeky_sassy_executor"
-  | "warm_supportive_companion"
-  | "cool_confident_operator"
-  | "calm_professional_partner";
+export type MemorySoulStyleProfileId = string;
 
 export type MemorySoulStyleIntensity = "low" | "medium" | "high";
 

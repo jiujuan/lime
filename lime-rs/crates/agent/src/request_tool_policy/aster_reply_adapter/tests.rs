@@ -1,6 +1,8 @@
 use super::*;
 use agent_protocol::turn_context::TurnContextOverride;
-use agent_runtime::reply_input::RuntimeReplyInputImage;
+use aster::providers::formats::openai_responses::PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX;
+use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
+use model_provider::safety::ProviderSafetyBufferingRetryModelSource;
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -16,70 +18,6 @@ fn empty_session_config(turn_context: Option<TurnContextOverride>) -> AgentSessi
         include_context_trace: None,
         turn_context,
     }
-}
-
-#[test]
-fn build_reply_message_rejects_image_when_selected_model_is_text_only() {
-    let turn_context = TurnContextOverride {
-        metadata: HashMap::from([(
-            "runtime_options".to_string(),
-            json!({
-                "harness": {
-                    "model_request_policy": {
-                        "input_modality_policy": {
-                            "input_modalities": ["text"],
-                            "supports_image_input": false
-                        }
-                    }
-                }
-            }),
-        )]),
-        ..TurnContextOverride::default()
-    };
-    let mut input = ReplyInput::text("解释这张图");
-    input.images.push(RuntimeReplyInputImage {
-        data: "aGVsbG8=".to_string(),
-        media_type: "image/png".to_string(),
-    });
-
-    let result =
-        build_aster_reply_attempt_message(ReplyAttemptInput::from(input), Some(&turn_context));
-
-    assert!(result.is_err());
-    assert!(result
-        .err()
-        .unwrap()
-        .contains("input_modality_policy 不支持图片输入"));
-}
-
-#[test]
-fn build_reply_message_allows_image_when_selected_model_supports_image() {
-    let turn_context = TurnContextOverride {
-        metadata: HashMap::from([(
-            "runtime_options".to_string(),
-            json!({
-                "harness": {
-                    "model_request_policy": {
-                        "input_modality_policy": {
-                            "input_modalities": ["text", "image"],
-                            "supports_image_input": true
-                        }
-                    }
-                }
-            }),
-        )]),
-        ..TurnContextOverride::default()
-    };
-    let mut input = ReplyInput::text("解释这张图");
-    input.images.push(RuntimeReplyInputImage {
-        data: "aGVsbG8=".to_string(),
-        media_type: "image/png".to_string(),
-    });
-
-    let result =
-        build_aster_reply_attempt_message(ReplyAttemptInput::from(input), Some(&turn_context));
-
-    assert!(result.is_ok());
 }
 
 #[test]
@@ -122,4 +60,72 @@ fn attach_native_tool_policy_scope_disallows_unsupported_native_tools() {
         .collect::<Vec<_>>();
 
     assert_eq!(names, vec!["Read", "Bash", "PowerShell", "apply_patch"]);
+}
+
+#[test]
+fn provider_stream_notification_projects_safety_buffering_event() {
+    let payload = json!({
+        "eventKind": PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING,
+        "responseEvent": {
+            "type": "response.output_text.delta",
+            "safety_buffering": {
+                "use_cases": ["cyber"],
+                "reasons": ["policy"],
+                "retry_model": "gpt-5-mini"
+            }
+        },
+        "headers": [
+            {
+                "name": "x-codex-safety-buffering-enabled",
+                "value": "true"
+            },
+            {
+                "name": "x-codex-safety-buffering-faster-model",
+                "value": "legacy-fast"
+            }
+        ]
+    });
+    let message = Message::assistant()
+        .with_system_notification(
+            aster::conversation::message::SystemNotificationType::InlineMessage,
+            format!("{PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX}{payload}"),
+        )
+        .with_metadata(aster::conversation::message::MessageMetadata::invisible());
+    let config = RuntimeProviderConfig {
+        provider_name: "openai".to_string(),
+        provider_selector: Some("openai".to_string()),
+        model_name: "gpt-5-codex".to_string(),
+        api_key: None,
+        base_url: Some("https://api.openai.com".to_string()),
+        credential_uuid: "credential-1".to_string(),
+        reasoning_effort: None,
+        protocol: Some(RuntimeProviderProtocol::Responses),
+        toolshim: false,
+        toolshim_model: None,
+    };
+    let stream_request = RuntimeReplyStreamRequest::new(
+        "session-1",
+        model_provider::provider_stream::RuntimeReplyInputKind::UserMessage,
+        10,
+        Some(RuntimeReplyProviderHandle::from_config(
+            &config,
+            RuntimeProviderBackend::AsterCompat,
+        )),
+    );
+
+    let event = provider_stream_event_from_aster_message(&stream_request, &message)
+        .expect("provider stream event");
+
+    let RuntimeReplyProviderStreamEvent::SafetyBuffering(payload) = event;
+    assert_eq!(payload.provider.as_deref(), Some("openai"));
+    assert_eq!(payload.model.as_deref(), Some("gpt-5-codex"));
+    assert_eq!(payload.use_cases, ["cyber"]);
+    assert_eq!(payload.reasons, ["policy"]);
+    assert!(payload.show_buffering_ui);
+    assert_eq!(payload.retry_model.as_deref(), Some("gpt-5-mini"));
+    assert_eq!(
+        payload.source,
+        ProviderSafetyBufferingRetryModelSource::PayloadRetryModel
+    );
+    assert_eq!(payload.fallback_header_model, None);
 }

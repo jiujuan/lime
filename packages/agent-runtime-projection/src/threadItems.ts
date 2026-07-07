@@ -61,6 +61,7 @@ export interface AgentUiThreadItemProjectionInput {
   detail?: string;
   message?: string;
   code?: string;
+  contentParts?: readonly unknown[] | null;
 }
 
 export interface AgentUiTaskOwnerChangeProjectionInput {
@@ -215,6 +216,55 @@ export function buildAgentUiThreadItemBase(
   };
 }
 
+function isInlineMediaReference(uri: string): boolean {
+  return uri.trimStart().toLowerCase().startsWith("data:");
+}
+
+function pushUnique(values: string[], value: string | undefined): void {
+  const normalized = value?.trim();
+  if (!normalized || values.includes(normalized)) {
+    return;
+  }
+  values.push(normalized);
+}
+
+function summarizeAgentMessageContentParts(
+  contentParts: readonly unknown[] | null | undefined,
+): {
+  contentPartCount: number;
+  mediaKinds: string[];
+  referenceUris: string[];
+} {
+  if (!Array.isArray(contentParts)) {
+    return {
+      contentPartCount: 0,
+      mediaKinds: [],
+      referenceUris: [],
+    };
+  }
+
+  const mediaKinds: string[] = [];
+  const referenceUris: string[] = [];
+  for (const part of contentParts) {
+    const record = readRecord(part);
+    if (readStringField(record, ["type"]) !== "media") {
+      continue;
+    }
+    pushUnique(mediaKinds, readStringField(record, ["kind"]));
+    const reference = readRecord(record?.reference);
+    const uri = readStringField(reference, ["uri"]);
+    if (uri && !isInlineMediaReference(uri)) {
+      pushUnique(referenceUris, uri);
+    }
+  }
+
+  return {
+    contentPartCount: contentParts.length,
+    mediaKinds,
+    referenceUris,
+  };
+}
+
 export function buildAgentUiThreadItemSubagentActivityEvent(
   sourceType: AgentUiProjectionSourceType | string,
   item: AgentUiThreadItemProjectionInput,
@@ -354,6 +404,25 @@ export function buildAgentUiThreadItemEvent(
         item,
         context,
       );
+    case "agent_message": {
+      const contentSummary = summarizeAgentMessageContentParts(
+        item.contentParts,
+      );
+      return {
+        ...base,
+        type: item.status === "completed" ? "messages.snapshot" : "text.delta",
+        owner: "model",
+        scope: "part",
+        phase: resolveAgentUiThreadItemPhase(item),
+        surface: "conversation",
+        persistence: "transcript",
+        payload: {
+          textLength: item.text?.length ?? 0,
+          preview: truncateText(item.text),
+          ...contentSummary,
+        },
+      };
+    }
     case "plan":
       return {
         ...base,

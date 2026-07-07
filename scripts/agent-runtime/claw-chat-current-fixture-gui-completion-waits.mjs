@@ -4,6 +4,10 @@ import {
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
+  REASONING_FIRST_VISIBLE_DONE_TEXT,
+  REASONING_FIRST_VISIBLE_FINAL_TEXT,
+  REASONING_FIRST_VISIBLE_PROMPT,
+  REASONING_FIRST_VISIBLE_TEXT,
   SKILLS_RUNTIME_SCENARIO,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { evaluatePageSnapshot } from "./claw-chat-current-fixture-rpc.mjs";
@@ -255,6 +259,184 @@ export async function waitForGuiSkillsRuntimeCompleted(
   });
 }
 
+function reasoningFirstVisibleSnapshotFromDom({
+  prompt,
+  reasoningText,
+  finalText,
+  doneText,
+}) {
+  const text = document.body?.innerText || "";
+  const turnGroups = Array.from(
+    document.querySelectorAll('[data-testid="message-turn-group"]'),
+  );
+  const promptTurnGroup =
+    [...turnGroups]
+      .reverse()
+      .find((group) => (group.innerText || "").includes(prompt)) ?? null;
+  const scope = promptTurnGroup ?? document;
+  const scopedText = promptTurnGroup?.innerText || text;
+  const processBlocks = Array.from(
+    scope.querySelectorAll(
+      [
+        '[data-testid="agent-thread-timeline:leading"]',
+        '[data-testid="assistant-primary-timeline-shell"]',
+        '[data-testid^="agent-thread-block:"][data-testid$=":process"]',
+      ].join(","),
+    ),
+  ).map((node) => ({
+    testId: node.getAttribute("data-testid") || "",
+    text: node.textContent || "",
+  }));
+  const textarea = document.querySelector('textarea[name="agent-chat-message"]');
+  const rect = textarea?.getBoundingClientRect();
+  const style = textarea ? window.getComputedStyle(textarea) : null;
+  const textareaVisible = Boolean(
+    textarea &&
+      rect &&
+      rect.width > 16 &&
+      rect.height > 16 &&
+      style?.visibility !== "hidden" &&
+      style?.display !== "none",
+  );
+  const buttons = Array.from(document.querySelectorAll("button")).map(
+    (button) => ({
+      title: button.getAttribute("title") || "",
+      text: button.textContent || "",
+      aria: button.getAttribute("aria-label") || "",
+      disabled: button.disabled,
+    }),
+  );
+  const stopButtonVisible = buttons.some((button) => {
+    const label = [button.title, button.text, button.aria].join("\n");
+    return (
+      !button.disabled &&
+      (label.includes("停止") ||
+        label.includes("终止") ||
+        /\bStop\b/i.test(label))
+    );
+  });
+  const reasoningIndex = scopedText.indexOf(reasoningText);
+  const finalAnswerIndex = scopedText.indexOf(finalText);
+  const hasThinkingLabel =
+    scopedText.includes("思考中") || scopedText.includes("已完成思考");
+  const hasReasoningProcess =
+    hasThinkingLabel ||
+    processBlocks.some(
+      (block) =>
+        block.text.includes(reasoningText) ||
+        block.text.includes("思考中") ||
+        block.text.includes("已完成思考"),
+    );
+  const startupNoteVisible =
+    text.includes("启动处理流程") || text.includes("已接收请求");
+
+  return {
+    url: window.location.href,
+    hasPrompt: scopedText.includes(prompt),
+    hasReasoningText: reasoningIndex >= 0,
+    hasReasoningProcess,
+    hasThinkingLabel,
+    hasFinalText: finalAnswerIndex >= 0,
+    hasDoneText: scopedText.includes(doneText),
+    reasoningIndex,
+    finalAnswerIndex,
+    hasReasoningBeforeFinalAnswer:
+      reasoningIndex >= 0 &&
+      (finalAnswerIndex < 0 || reasoningIndex < finalAnswerIndex),
+    startupNoteVisible,
+    processBlockCount: processBlocks.length,
+    processBlocks,
+    scopedText,
+    bodyText: text,
+    textareaVisible,
+    textareaDisabled:
+      textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+    textareaValue:
+      textarea instanceof HTMLTextAreaElement ? textarea.value : null,
+    stopButtonVisible,
+    hasMessageList: Boolean(
+      document.querySelector('[data-testid="message-list"]') ||
+        document.querySelector('[data-testid="message-list-frame"]'),
+    ),
+  };
+}
+
+async function evaluateReasoningFirstVisibleSnapshot(page) {
+  return await evaluatePageSnapshot(page, reasoningFirstVisibleSnapshotFromDom, {
+    prompt: REASONING_FIRST_VISIBLE_PROMPT,
+    reasoningText: REASONING_FIRST_VISIBLE_TEXT,
+    finalText: REASONING_FIRST_VISIBLE_FINAL_TEXT,
+    doneText: REASONING_FIRST_VISIBLE_DONE_TEXT,
+  });
+}
+
+export async function waitForGuiReasoningFirstVisibleBeforeAnswer(
+  page,
+  options,
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 45_000)) {
+    const snapshot = await evaluateReasoningFirstVisibleSnapshot(page);
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.hasPrompt &&
+      snapshot.hasReasoningText &&
+      snapshot.hasReasoningProcess &&
+      snapshot.hasReasoningBeforeFinalAnswer &&
+      snapshot.hasFinalText === false &&
+      snapshot.hasDoneText === false &&
+      snapshot.startupNoteVisible === false
+    ) {
+      return sanitizeJson({
+        ...snapshot,
+        reasoningFirstVisibleBeforeAnswerCaptured: true,
+      });
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI 未在最终回答前显示 reasoning: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+export async function waitForGuiReasoningFirstVisibleCompleted(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluateReasoningFirstVisibleSnapshot(page);
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.hasPrompt &&
+      snapshot.hasReasoningText &&
+      snapshot.hasFinalText &&
+      snapshot.hasReasoningBeforeFinalAnswer &&
+      snapshot.startupNoteVisible === false &&
+      snapshot.textareaVisible &&
+      snapshot.textareaDisabled === false &&
+      snapshot.stopButtonVisible === false
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw GUI reasoning-first 场景未完成: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
 export async function waitForGuiPlanCompleted(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -379,14 +561,47 @@ export async function waitForGuiPlanCompleted(page, options) {
   );
 }
 
-export async function waitForStopButtonVisibleAndClick(page, options) {
+export async function waitForStopButtonVisibleAndClick(
+  page,
+  options,
+  {
+    prompt = NEWS_PROMPT,
+    visibleOutputText = "以下是今日国际新闻简要整理",
+    requireVisibleOutput = false,
+  } = {},
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({ prompt }) => {
+      ({ prompt, visibleOutputText }) => {
         const text = document.body?.innerText || "";
+        const turnGroups = Array.from(
+          document.querySelectorAll('[data-testid="message-turn-group"]'),
+        );
+        const promptTurnGroup =
+          [...turnGroups]
+            .reverse()
+            .find((group) => (group.innerText || "").includes(prompt)) ?? null;
+        const scope = promptTurnGroup ?? document;
+        const scopedText = promptTurnGroup?.innerText || text;
+        const statusNodes = Array.from(
+          scope.querySelectorAll(
+            [
+              '[data-testid="assistant-first-token-runtime-status"]',
+              '[data-testid="message-runtime-status-pill"]',
+              '[data-testid="inputbar-runtime-status-line"]',
+            ].join(","),
+          ),
+        );
+        const statusSnapshots = statusNodes.map((node) => ({
+          testId: node.getAttribute("data-testid") || "",
+          status: node.getAttribute("data-status") || "",
+          text: node.textContent || "",
+        }));
+        const startupNoteVisible =
+          text.includes("启动处理流程") || text.includes("已接收请求");
         const buttons = Array.from(document.querySelectorAll("button")).map(
           (button, index) => {
             const label = [
@@ -411,26 +626,51 @@ export async function waitForStopButtonVisibleAndClick(page, options) {
             };
           },
         );
+        const hasRunningStatus =
+          scopedText.includes("正在输出") ||
+          scopedText.includes("正在生成") ||
+          statusSnapshots.some(
+            (entry) =>
+              entry.status === "running" ||
+              entry.text.includes("正在输出") ||
+              entry.text.includes("正在生成"),
+          ) ||
+          buttons.some(
+            (button) =>
+              button.visible &&
+              (button.label.includes("正在输出") ||
+                button.label.includes("正在生成")),
+          );
         return {
           url: window.location.href,
           hasPrompt: text.includes(prompt),
           hasAssistantSummary: text.includes("今日国际新闻简要整理"),
+          hasVisibleAssistantOutput: visibleOutputText
+            ? scopedText.includes(visibleOutputText)
+            : true,
+          hasRunningStatus,
+          startupNoteVisible,
+          statusSnapshots,
           stopButtons: buttons.filter((button) => button.isStop),
           buttonLabels: buttons
             .filter((button) => button.label.trim().length > 0)
             .slice(0, 80)
             .map((button) => button.label),
+          scopedText,
           bodyText: text,
         };
       },
-      { prompt: NEWS_PROMPT },
+      { prompt, visibleOutputText },
     );
     if (!snapshot) {
       await sleep(options.intervalMs);
       continue;
     }
     lastSnapshot = snapshot;
-    if (snapshot.stopButtons?.length > 0) {
+    if (
+      snapshot.stopButtons?.length > 0 &&
+      (!requireVisibleOutput || snapshot.hasVisibleAssistantOutput === true)
+    ) {
       const clicked = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll("button"));
         const stopButton = buttons.find((button) => {
@@ -475,13 +715,17 @@ export async function waitForStopButtonVisibleAndClick(page, options) {
   );
 }
 
-export async function waitForGuiChatCanceled(page, options) {
+export async function waitForGuiChatCanceled(
+  page,
+  options,
+  { prompt = NEWS_PROMPT, partialText = "" } = {},
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({ prompt }) => {
+      ({ prompt, partialText }) => {
         const text = document.body?.innerText || "";
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
@@ -517,6 +761,7 @@ export async function waitForGuiChatCanceled(page, options) {
           url: window.location.href,
           hasPrompt: text.includes(prompt),
           hasAssistantSummary: text.includes("今日国际新闻简要整理"),
+          hasPartialText: partialText ? text.includes(partialText) : null,
           hasStoppedCopy:
             text.includes("已停止") ||
             text.includes("本轮已中止") ||
@@ -531,7 +776,7 @@ export async function waitForGuiChatCanceled(page, options) {
           bodyText: text,
         };
       },
-      { prompt: NEWS_PROMPT },
+      { prompt, partialText },
     );
     if (!snapshot) {
       await sleep(options.intervalMs);

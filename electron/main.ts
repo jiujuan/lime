@@ -54,10 +54,12 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  net,
   screen,
   session,
   type MenuItemConstructorOptions,
   type OpenDialogOptions,
+  protocol,
   shell,
   type SaveDialogOptions,
   Tray,
@@ -104,6 +106,17 @@ let updateNotificationWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let trayModelShortcutsState: TrayModelShortcutsState | null = null;
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "asset",
+    privileges: {
+      standard: true,
+      secure: true,
+      stream: true,
+    },
+  },
+]);
 
 app.setName(APP_NAME);
 
@@ -202,6 +215,42 @@ function createMainWindow(): BrowserWindow {
 
   mainWindow = window;
   return window;
+}
+
+function registerLocalAssetProtocol(): void {
+  if (protocol.isProtocolHandled("asset")) {
+    return;
+  }
+
+  protocol.handle("asset", (request) => {
+    const filePath = decodeLocalAssetFilePath(request.url);
+    if (!filePath || !existsSync(filePath)) {
+      return new Response("asset not found", { status: 404 });
+    }
+
+    return net.fetch(pathToFileURL(filePath).toString());
+  });
+}
+
+function decodeLocalAssetFilePath(requestUrl: string): string | null {
+  try {
+    const url = new URL(requestUrl);
+    const encodedPath = url.host
+      ? `${url.host}${url.pathname}`
+      : url.pathname;
+    const filePath = decodeURIComponent(encodedPath);
+    return isAbsoluteLocalAssetPath(filePath) ? filePath : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAbsoluteLocalAssetPath(filePath: string): boolean {
+  return (
+    filePath.startsWith("/") ||
+    /^[a-zA-Z]:[\\/]/.test(filePath) ||
+    filePath.startsWith("\\\\")
+  );
 }
 
 async function showStartupScreenBeforeRenderer(
@@ -1471,6 +1520,7 @@ if (isWindowsSquirrelStartup) {
 
   app.whenReady().then(() => {
     configureApplicationIdentity();
+    registerLocalAssetProtocol();
     registerIpcHandlers();
     devHttpBridge = startDevHttpBridge();
     tray = createTray();

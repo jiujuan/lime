@@ -34,7 +34,7 @@ import type {
   SoulStyleProfileId,
 } from "@/lib/soul/style-profiles";
 import { MemoryStoreStatusPanel } from "./MemoryStoreStatusPanel";
-import { StyleProfileSelector } from "./soul/StyleProfileSelector";
+import { StyleProfileSection } from "./soul/StyleProfileSection";
 
 type EmbeddingProviderChoice =
   | "auto"
@@ -755,11 +755,12 @@ export function MemorySettings() {
               </div>
             ) : null}
           </div>
-
-          <StyleProfileSelector
+          <StyleProfileSection
             value={soul.style_profile_id}
             intensity={soul.style_intensity}
             onChange={handleSoulStyleProfileChange}
+            setMessage={setMessage}
+            t={t}
           />
 
           <div className="mt-5">

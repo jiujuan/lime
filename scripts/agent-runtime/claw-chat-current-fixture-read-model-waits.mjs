@@ -43,6 +43,7 @@ import {
   readModelQueuedTurnId,
   readModelQueuedTurnText,
   summarizeReadModelQueueState,
+  readModelLatestTurnStatus,
   summarizeSkillsRuntimeReadModel,
 } from "./claw-chat-current-fixture-read-model-core.mjs";
 import {
@@ -86,6 +87,43 @@ export async function waitForSessionReadCompleted(
   }
   throw new Error(
     `App Server read model 未完成输入闭环: ${JSON.stringify(
+      sanitizeJson(lastRead),
+    )}`,
+  );
+}
+
+export async function waitForSessionReadFailedAfterAnswer(
+  page,
+  options,
+  requestLog,
+  { sessionId = SESSION_ID, prompt, partialText, failureText } = {},
+) {
+  const startedAt = Date.now();
+  let lastRead = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const read = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId,
+        historyLimit: 100,
+      },
+      requestLog,
+    );
+    lastRead = read.result;
+    const serialized = JSON.stringify(read.result || {});
+    if (
+      readModelLatestTurnStatus(read.result) === "failed" &&
+      serialized.includes(prompt) &&
+      serialized.includes(partialText) &&
+      serialized.includes(failureText)
+    ) {
+      return read.result;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `App Server read model 未完成 failed-after-answer 闭环: ${JSON.stringify(
       sanitizeJson(lastRead),
     )}`,
   );
@@ -586,7 +624,12 @@ export async function runEventReadProbe(page, options, requestLog) {
   });
 }
 
-export async function waitForSessionReadCanceled(page, options, requestLog) {
+export async function waitForSessionReadCanceled(
+  page,
+  options,
+  requestLog,
+  { sessionId = SESSION_ID, prompt = NEWS_PROMPT, partialText = "" } = {},
+) {
   const startedAt = Date.now();
   let lastRead = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -594,14 +637,18 @@ export async function waitForSessionReadCanceled(page, options, requestLog) {
       page,
       APP_SERVER_METHOD_SESSION_READ,
       {
-        sessionId: SESSION_ID,
+        sessionId,
         historyLimit: 100,
       },
       requestLog,
     );
     lastRead = read.result;
     const serialized = JSON.stringify(read.result || {});
-    if (serialized.includes(NEWS_PROMPT) && serialized.includes("canceled")) {
+    if (
+      serialized.includes(prompt) &&
+      serialized.includes("canceled") &&
+      (!partialText || serialized.includes(partialText))
+    ) {
       return read.result;
     }
     await sleep(options.intervalMs);

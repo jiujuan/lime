@@ -638,7 +638,7 @@ impl BashTool {
 
         let mut result = ToolResult::success(match output_file_text.as_deref() {
             Some(path) => format!(
-                "Background task started with ID: {task_id}\nOutput file: {path}\nPrefer using the read tool on the output file path for logs; keep TaskOutput only as a compatibility fallback."
+                "Background task started with ID: {task_id}\nOutput file: {path}\nRead the output file path for logs."
             ),
             None => format!("Background task started with ID: {task_id}"),
         })

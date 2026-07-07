@@ -14,6 +14,7 @@ pub(crate) enum ContextPacketKind {
     LongTermMemorySummary,
     InteractionSoul,
     SessionContextCompaction,
+    MediaReference,
 }
 
 impl ContextPacketKind {
@@ -22,6 +23,7 @@ impl ContextPacketKind {
             Self::LongTermMemorySummary => "long_term_memory_summary",
             Self::InteractionSoul => "interaction_soul",
             Self::SessionContextCompaction => "session_context_compaction",
+            Self::MediaReference => "media_reference",
         }
     }
 }
@@ -31,6 +33,7 @@ pub(crate) enum ContextSource {
     MemoryStore,
     MemorySoul,
     SessionCompaction,
+    MediaInput,
 }
 
 impl ContextSource {
@@ -39,6 +42,7 @@ impl ContextSource {
             Self::MemoryStore => "memory.store",
             Self::MemorySoul => "memory.soul",
             Self::SessionCompaction => "session.compaction",
+            Self::MediaInput => "media.input",
         }
     }
 }
@@ -80,6 +84,7 @@ enum ContextTrustLevel {
     UserMaintained,
     AppConfig,
     RuntimeGenerated,
+    UserProvided,
 }
 
 impl ContextTrustLevel {
@@ -88,6 +93,7 @@ impl ContextTrustLevel {
             Self::UserMaintained => "user_maintained",
             Self::AppConfig => "app_config",
             Self::RuntimeGenerated => "runtime_generated",
+            Self::UserProvided => "user_provided",
         }
     }
 }
@@ -97,6 +103,7 @@ enum ContextSensitivity {
     Private,
     InteractionPreference,
     SessionContext,
+    MediaReference,
 }
 
 impl ContextSensitivity {
@@ -105,6 +112,7 @@ impl ContextSensitivity {
             Self::Private => "private",
             Self::InteractionPreference => "interaction_preference",
             Self::SessionContext => "session_context",
+            Self::MediaReference => "media_reference",
         }
     }
 }
@@ -195,6 +203,27 @@ impl ContextPacket {
             role: ContextRole::Developer,
             trust_level: ContextTrustLevel::RuntimeGenerated,
             sensitivity: ContextSensitivity::SessionContext,
+            token_budget,
+            content: content.into(),
+            input_truncated: false,
+            metadata,
+        }
+    }
+
+    pub(crate) fn media_reference(
+        id: impl Into<String>,
+        content: impl Into<String>,
+        token_budget: usize,
+        metadata: Map<String, Value>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            kind: ContextPacketKind::MediaReference,
+            source: ContextSource::MediaInput,
+            scope: ContextScope::Session,
+            role: ContextRole::Developer,
+            trust_level: ContextTrustLevel::UserProvided,
+            sensitivity: ContextSensitivity::MediaReference,
             token_budget,
             content: content.into(),
             input_truncated: false,
@@ -340,6 +369,7 @@ fn render_packet(packet: &ContextPacket, content: &str, truncated: bool) -> Stri
         ContextPacketKind::SessionContextCompaction => {
             render_session_context_compaction(packet, content, truncated)
         }
+        ContextPacketKind::MediaReference => render_media_reference(packet, content, truncated),
     }
 }
 
@@ -407,6 +437,24 @@ fn render_session_context_compaction(
     )
 }
 
+fn render_media_reference(packet: &ContextPacket, content: &str, truncated: bool) -> String {
+    let attachment_kind = string_metadata(packet, "attachmentKind").unwrap_or("media");
+    let mime_type = string_metadata(packet, "mimeType").unwrap_or("unknown");
+    let budget_hint = if truncated {
+        "\n- 该媒体引用说明已按单包预算截断；不要推断被截断部分的内容。"
+    } else {
+        ""
+    };
+
+    format!(
+        "## Media Reference\n\
+         来源：本轮用户附件 `{attachment_kind}`，MIME `{mime_type}`。\n\
+         媒体二进制内容只通过 runtime reference / sidecar 进入，不在 prompt 内展开；不要仅凭 URI、文件名或 MIME 推断实际内容。{budget_hint}\n\
+         \n\
+         ```media-reference\n{content}\n```"
+    )
+}
+
 fn effective_token_budget(token_budget: usize) -> usize {
     token_budget.clamp(1, HARD_PACKET_MAX_TOKENS)
 }
@@ -441,7 +489,7 @@ fn string_value_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
         .filter(|value| !value.is_empty())
 }
 
-fn contains_secret_like_content(value: &str) -> bool {
+pub(crate) fn contains_secret_like_content(value: &str) -> bool {
     if value.contains("-----BEGIN PRIVATE KEY-----") {
         return true;
     }

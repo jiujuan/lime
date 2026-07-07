@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { cwd } from "node:process";
 import {
   resolveSoulInteractionCopy,
   resolveSoulInteractionCopyDescriptors,
@@ -172,7 +173,7 @@ describe("resolveSoulInteractionCopy", () => {
     for (const locale of LOCALES) {
       const resource = JSON.parse(
         readFileSync(
-          join(process.cwd(), "src/i18n/resources", locale, "agent.json"),
+          join(cwd(), "src/i18n/resources", locale, "agent.json"),
           "utf8",
         ),
       ) as Record<string, unknown>;

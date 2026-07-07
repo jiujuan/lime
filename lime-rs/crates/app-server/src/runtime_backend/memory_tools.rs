@@ -5,8 +5,8 @@ use app_server_protocol::{
     MemoryStoreSearchParams, MemoryStoreSearchResponse,
 };
 use async_trait::async_trait;
-use lime_agent::native_tools::MemoryStoreGateway;
 use std::sync::Arc;
+use tool_runtime::memory_store::MemoryStoreGateway;
 
 pub(crate) fn memory_store_gateway(
     app_data_source: Arc<dyn AppDataSource>,

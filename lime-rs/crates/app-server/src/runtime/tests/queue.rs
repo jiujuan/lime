@@ -454,10 +454,37 @@ async fn read_session_projects_queued_turn_input_snapshot() {
                 attachments: vec![AgentAttachment {
                     kind: "image".to_string(),
                     uri: Some("file://queued.png".to_string()),
-                    metadata: None,
+                    metadata: Some(json!({
+                        "mediaType": "image/png",
+                        "sourcePath": "/project/queued.png"
+                    })),
                 }],
             },
-            runtime_options: None,
+            runtime_options: Some(RuntimeOptions {
+                metadata: Some(json!({
+                    "path_references": [
+                        {
+                            "path": "/project/report.md",
+                            "name": "report.md",
+                            "is_dir": false,
+                            "isDir": false,
+                            "source": "file_manager"
+                        }
+                    ],
+                    "text_elements": [
+                        {
+                            "type": "text",
+                            "text": "请继续执行排队任务，并保留完整输入"
+                        }
+                    ],
+                    "input_capability_route": {
+                        "kind": "installed_skill",
+                        "skillKey": "code-review",
+                        "skillName": "Code Review"
+                    }
+                })),
+                ..RuntimeOptions::default()
+            }),
             queue_if_busy: true,
             skip_pre_submit_resume: false,
         },
@@ -486,6 +513,20 @@ async fn read_session_projects_queued_turn_input_snapshot() {
         "请继续执行排队任务，并保留完整输入"
     );
     assert_eq!(queued["image_count"], 1);
+    assert_eq!(queued["attachments"][0]["kind"], "image");
+    assert_eq!(queued["attachments"][0]["uri"], "file://queued.png");
+    assert_eq!(
+        queued["input_attachments"][0]["metadata"]["mediaType"],
+        "image/png"
+    );
+    assert_eq!(queued["path_references"][0]["path"], "/project/report.md");
+    assert_eq!(queued["pathReferences"][0]["name"], "report.md");
+    assert_eq!(
+        queued["text_elements"][0]["text"],
+        "请继续执行排队任务，并保留完整输入"
+    );
+    assert_eq!(queued["input_capability_route"]["skillKey"], "code-review");
+    assert_eq!(queued["inputCapabilityRoute"]["skillName"], "Code Review");
     assert_eq!(queued["position"], 0);
     assert_eq!(detail["thread_read"]["queued_turns"][0], *queued);
 }

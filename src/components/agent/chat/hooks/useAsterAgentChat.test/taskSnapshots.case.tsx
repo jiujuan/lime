@@ -91,7 +91,7 @@ describe("useAsterAgentChat 任务快照", () => {
       items: [],
       queued_turns: [],
     });
-    mockGetAgentRuntimeThreadRead.mockResolvedValueOnce({
+    mockGetAgentRuntimeThreadRead.mockResolvedValue({
       thread_id: "thread-stop-refresh",
       status: "interrupted",
       pending_requests: [],

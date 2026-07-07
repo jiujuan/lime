@@ -647,6 +647,12 @@
       "$defs": {
         "AgentSessionOverview": {
           "properties": {
+            "activeTurnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "archivedAt": {
               "type": [
                 "null",
@@ -663,6 +669,12 @@
                 "string"
               ]
             },
+            "latestTurnStatus": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "messagesCount": {
               "format": "uint",
               "minimum": 0,
@@ -670,6 +682,12 @@
             },
             "model": {
               "type": "string"
+            },
+            "queuedTurnCount": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
             },
             "sessionId": {
               "type": "string"
@@ -679,6 +697,10 @@
                 "null",
                 "string"
               ]
+            },
+            "threadStatus": {
+              "default": "",
+              "type": "string"
             },
             "title": {
               "type": [
@@ -2447,6 +2469,12 @@
       "$defs": {
         "AgentSessionOverview": {
           "properties": {
+            "activeTurnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "archivedAt": {
               "type": [
                 "null",
@@ -2463,6 +2491,12 @@
                 "string"
               ]
             },
+            "latestTurnStatus": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "messagesCount": {
               "format": "uint",
               "minimum": 0,
@@ -2470,6 +2504,12 @@
             },
             "model": {
               "type": "string"
+            },
+            "queuedTurnCount": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
             },
             "sessionId": {
               "type": "string"
@@ -2479,6 +2519,10 @@
                 "null",
                 "string"
               ]
+            },
+            "threadStatus": {
+              "default": "",
+              "type": "string"
             },
             "title": {
               "type": [
@@ -2523,6 +2567,78 @@
         }
       },
       "title": "AgentSessionListResponse",
+      "type": "object"
+    },
+    "AgentSessionMediaReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "maxBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "sidecarRef": true,
+        "uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionMediaReadParams",
+      "type": "object"
+    },
+    "AgentSessionMediaReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "contentBase64": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "sidecarRef": true,
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bytes",
+        "contentBase64",
+        "sessionId",
+        "sha256",
+        "uri"
+      ],
+      "title": "AgentSessionMediaReadResponse",
       "type": "object"
     },
     "AgentSessionMessageCreatedNotification": {
@@ -3380,6 +3496,12 @@
     "AgentSessionOverview": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "activeTurnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
         "archivedAt": {
           "type": [
             "null",
@@ -3396,6 +3518,12 @@
             "string"
           ]
         },
+        "latestTurnStatus": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
         "messagesCount": {
           "format": "uint",
           "minimum": 0,
@@ -3403,6 +3531,12 @@
         },
         "model": {
           "type": "string"
+        },
+        "queuedTurnCount": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
         },
         "sessionId": {
           "type": "string"
@@ -3412,6 +3546,10 @@
             "null",
             "string"
           ]
+        },
+        "threadStatus": {
+          "default": "",
+          "type": "string"
         },
         "title": {
           "type": [
@@ -5923,6 +6061,12 @@
       "$defs": {
         "AgentSessionOverview": {
           "properties": {
+            "activeTurnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "archivedAt": {
               "type": [
                 "null",
@@ -5939,6 +6083,12 @@
                 "string"
               ]
             },
+            "latestTurnStatus": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "messagesCount": {
               "format": "uint",
               "minimum": 0,
@@ -5946,6 +6096,12 @@
             },
             "model": {
               "type": "string"
+            },
+            "queuedTurnCount": {
+              "default": 0,
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
             },
             "sessionId": {
               "type": "string"
@@ -5955,6 +6111,10 @@
                 "null",
                 "string"
               ]
+            },
+            "threadStatus": {
+              "default": "",
+              "type": "string"
             },
             "title": {
               "type": [
@@ -5999,6 +6159,166 @@
       ],
       "title": "AgentSessionUpdateResponse",
       "type": "object"
+    },
+    "AgentThreadContentReference": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "byte_size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "preview_url": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sidecar_ref": true,
+        "source_path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source_uri": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime_type",
+        "uri"
+      ],
+      "title": "AgentThreadContentReference",
+      "type": "object"
+    },
+    "AgentThreadMessageContentPart": {
+      "$defs": {
+        "AgentThreadContentReference": {
+          "properties": {
+            "byte_size": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "mime_type": {
+              "type": "string"
+            },
+            "preview_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sha256": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sidecar_ref": true,
+            "source_path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source_uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mime_type",
+            "uri"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "caption": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reference": {
+              "$ref": "#/$defs/AgentThreadContentReference"
+            },
+            "type": {
+              "const": "media",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reference",
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "AgentThreadMessageContentPart"
     },
     "AgentTurn": {
       "$defs": {
@@ -9355,6 +9675,82 @@
               "$ref": "#/$defs/RequestId"
             },
             "method": {
+              "const": "soulStylePack/install",
+              "type": "string"
+            },
+            "params": {
+              "default": null
+            }
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
+              "const": "soulStylePack/list",
+              "type": "string"
+            },
+            "params": {
+              "default": null
+            }
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
+              "const": "soulStylePack/status/set",
+              "type": "string"
+            },
+            "params": {
+              "default": null
+            }
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
+              "const": "soulStylePack/uninstall",
+              "type": "string"
+            },
+            "params": {
+              "default": null
+            }
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
               "const": "knowledgePack/list",
               "type": "string"
             },
@@ -11312,6 +11708,25 @@
               "$ref": "#/$defs/RequestId"
             },
             "method": {
+              "const": "agentSession/media/read",
+              "type": "string"
+            },
+            "params": {
+              "default": null
+            }
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
               "const": "agentSession/turn/start",
               "type": "string"
             },
@@ -11541,6 +11956,7 @@
         "agentSession/fileCheckpoint/restore",
         "agentSession/handoffBundle/export",
         "agentSession/list",
+        "agentSession/media/read",
         "agentSession/objective/audit",
         "agentSession/objective/clear",
         "agentSession/objective/continue",
@@ -11771,6 +12187,10 @@
         "skillRepository/delete",
         "skillRepository/list",
         "skillRepository/save",
+        "soulStylePack/install",
+        "soulStylePack/list",
+        "soulStylePack/status/set",
+        "soulStylePack/uninstall",
         "telegramChannel/probe",
         "usageStats/dailyTrends/list",
         "usageStats/modelRanking/list",
@@ -35030,6 +35450,351 @@
       "title": "SkillScaffoldCreateResponse",
       "type": "object"
     },
+    "SoulStylePackInstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "enableAfterInstall": {
+          "default": false,
+          "type": "boolean"
+        },
+        "localeSources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "manifestSource": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifestSource"
+      ],
+      "title": "SoulStylePackInstallParams",
+      "type": "object"
+    },
+    "SoulStylePackInstallResponse": {
+      "$defs": {
+        "SoulStylePackInstallStatus": {
+          "enum": [
+            "disabled",
+            "discovered",
+            "downloading",
+            "enabled",
+            "failed",
+            "installed",
+            "installing",
+            "uninstalled",
+            "validating"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packId": {
+          "type": "string"
+        },
+        "profileIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/SoulStylePackInstallStatus"
+        }
+      },
+      "required": [
+        "packId",
+        "status"
+      ],
+      "title": "SoulStylePackInstallResponse",
+      "type": "object"
+    },
+    "SoulStylePackInstallStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "disabled",
+        "discovered",
+        "downloading",
+        "enabled",
+        "failed",
+        "installed",
+        "installing",
+        "uninstalled",
+        "validating"
+      ],
+      "title": "SoulStylePackInstallStatus",
+      "type": "string"
+    },
+    "SoulStylePackListEntry": {
+      "$defs": {
+        "SoulStylePackInstallStatus": {
+          "enum": [
+            "disabled",
+            "discovered",
+            "downloading",
+            "enabled",
+            "failed",
+            "installed",
+            "installing",
+            "uninstalled",
+            "validating"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "integrityDigest": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "localeSources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "manifestSource": {
+          "type": "string"
+        },
+        "packId": {
+          "type": "string"
+        },
+        "profileIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SoulStylePackInstallStatus"
+        },
+        "updatedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "manifestSource",
+        "packId",
+        "source",
+        "status"
+      ],
+      "title": "SoulStylePackListEntry",
+      "type": "object"
+    },
+    "SoulStylePackListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SoulStylePackListParams",
+      "type": "object"
+    },
+    "SoulStylePackListResponse": {
+      "$defs": {
+        "SoulStylePackInstallStatus": {
+          "enum": [
+            "disabled",
+            "discovered",
+            "downloading",
+            "enabled",
+            "failed",
+            "installed",
+            "installing",
+            "uninstalled",
+            "validating"
+          ],
+          "type": "string"
+        },
+        "SoulStylePackListEntry": {
+          "properties": {
+            "integrityDigest": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "localeSources": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {},
+              "type": "object"
+            },
+            "manifestSource": {
+              "type": "string"
+            },
+            "packId": {
+              "type": "string"
+            },
+            "profileIds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "source": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/SoulStylePackInstallStatus"
+            },
+            "updatedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "manifestSource",
+            "packId",
+            "source",
+            "status"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SoulStylePackListEntry"
+          },
+          "type": "array"
+        }
+      },
+      "title": "SoulStylePackListResponse",
+      "type": "object"
+    },
+    "SoulStylePackMutableStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "disabled",
+        "enabled"
+      ],
+      "title": "SoulStylePackMutableStatus",
+      "type": "string"
+    },
+    "SoulStylePackStatusSetParams": {
+      "$defs": {
+        "SoulStylePackMutableStatus": {
+          "enum": [
+            "disabled",
+            "enabled"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SoulStylePackMutableStatus"
+        }
+      },
+      "required": [
+        "packId",
+        "status"
+      ],
+      "title": "SoulStylePackStatusSetParams",
+      "type": "object"
+    },
+    "SoulStylePackStatusSetResponse": {
+      "$defs": {
+        "SoulStylePackInstallStatus": {
+          "enum": [
+            "disabled",
+            "discovered",
+            "downloading",
+            "enabled",
+            "failed",
+            "installed",
+            "installing",
+            "uninstalled",
+            "validating"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SoulStylePackInstallStatus"
+        }
+      },
+      "required": [
+        "packId",
+        "status"
+      ],
+      "title": "SoulStylePackStatusSetResponse",
+      "type": "object"
+    },
+    "SoulStylePackUninstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "packId"
+      ],
+      "title": "SoulStylePackUninstallParams",
+      "type": "object"
+    },
+    "SoulStylePackUninstallResponse": {
+      "$defs": {
+        "SoulStylePackInstallStatus": {
+          "enum": [
+            "disabled",
+            "discovered",
+            "downloading",
+            "enabled",
+            "failed",
+            "installed",
+            "installing",
+            "uninstalled",
+            "validating"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SoulStylePackInstallStatus"
+        }
+      },
+      "required": [
+        "packId",
+        "status"
+      ],
+      "title": "SoulStylePackUninstallResponse",
+      "type": "object"
+    },
     "StructuredOutputContract": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -38980,6 +39745,7 @@
               "agentSession/fileCheckpoint/restore",
               "agentSession/handoffBundle/export",
               "agentSession/list",
+              "agentSession/media/read",
               "agentSession/objective/audit",
               "agentSession/objective/clear",
               "agentSession/objective/continue",
@@ -39210,6 +39976,10 @@
               "skillRepository/delete",
               "skillRepository/list",
               "skillRepository/save",
+              "soulStylePack/install",
+              "soulStylePack/list",
+              "soulStylePack/status/set",
+              "soulStylePack/uninstall",
               "telegramChannel/probe",
               "usageStats/dailyTrends/list",
               "usageStats/modelRanking/list",

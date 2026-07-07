@@ -172,6 +172,26 @@ export interface McpToolResult {
   is_error: boolean;
 }
 
+export type McpPrepareRequestMethod =
+  | "mcpServer/importFromApp"
+  | "mcpServer/start"
+  | "mcpTool/listForContext";
+
+export interface McpPrepareRequest {
+  method: McpPrepareRequestMethod | string;
+  params?: Record<string, unknown>;
+  reason?: string;
+  status?: "candidate" | string;
+}
+
+export interface McpPrepareResult {
+  method: McpPrepareRequestMethod;
+  status: "completed";
+  importedCount?: number;
+  toolCount?: number;
+  tools?: McpToolDefinition[];
+}
+
 /** 从 runtime 名 `mcp__<server>__<tool>` 提取 inner tool 名。 */
 export function getMcpInnerToolName(
   toolName: string,

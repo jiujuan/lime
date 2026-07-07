@@ -24,23 +24,15 @@
 
 mod bootstrap;
 mod chat_history_search;
-mod cleanup;
 pub mod extension_data;
 mod fork;
 mod legacy;
-mod memory;
-mod memory_deduplicator;
-mod memory_extractor;
-mod memory_pipeline;
-mod memory_repository;
-mod memory_retriever;
 mod plan;
 mod query;
 pub mod resume;
 mod runtime_queue;
 mod runtime_store;
 pub mod session_manager;
-mod statistics;
 mod store;
 mod subagent;
 mod team;
@@ -58,10 +50,6 @@ pub use store::{
 };
 
 // 导出现有功能（向后兼容）
-pub use cleanup::{
-    cleanup_expired_data, force_cleanup, get_cutoff_date, schedule_cleanup, CleanupStats,
-    DEFAULT_CLEANUP_PERIOD_DAYS,
-};
 pub use extension_data::{
     resolve_task_board_state, EnabledExtensionsState, ExtensionData, ExtensionState, TaskBoardItem,
     TaskBoardItemStatus, TaskBoardState,
@@ -69,10 +57,6 @@ pub use extension_data::{
 pub use fork::{
     fork_session, get_session_branch_tree, merge_sessions, ForkMetadata, ForkOptions, MergeOptions,
     MergeStrategy, MetadataStrategy, SessionBranchTree,
-};
-pub use memory::{
-    CommitOptions, CommitReport, MemoryCategory, MemoryHealth, MemoryRecord, MemorySearchResult,
-    MemoryStats,
 };
 pub use plan::{save_session_plan_mode_state, SessionPlanModeState};
 pub use query::{
@@ -101,9 +85,6 @@ pub use runtime_store::{
 };
 pub use session_manager::{
     Session, SessionInsights, SessionManager, SessionType, SessionUpdateBuilder,
-};
-pub use statistics::{
-    calculate_statistics, generate_report, get_all_statistics, SessionStatistics, SessionSummary,
 };
 pub use subagent::{
     list_subagent_child_sessions, list_subagent_sessions_with_metadata,

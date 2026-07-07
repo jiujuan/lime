@@ -1,4 +1,4 @@
-use super::aster_event_adapter::RuntimeEventProjector;
+use super::aster_event_adapter::AsterEventProjector;
 use super::{
     stream_message_reply_with_policy_with_options, ReplyAttemptError, ReplyInput,
     RequestToolPolicy, StreamReplyExecution, StreamReplyPolicyExecutionOptions,
@@ -7,22 +7,27 @@ use super::{
 use crate::aster_runtime_projection::project_aster_runtime_event_with_turn_context;
 use crate::credential_bridge::ConfiguredReplyProvider;
 use crate::model_request_policy::{
-    input_modality_policy_allows_image_input, input_modality_policy_from_turn_context,
     native_tool_policy_disallowed_tool_names, native_tool_policy_from_turn_context,
-    runtime_reply_model_request_policy_from_turn_context,
 };
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::provider_configuration::ConfiguredSessionProvider;
 use crate::runtime_state::AgentRuntimeState;
 use crate::session_config_adapter::to_aster_session_config;
-use crate::turn_context_configuration::AgentTurnContext;
 use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
+use agent_runtime::event_stream::EventProjector;
 use agent_runtime::reply_host::{
-    RuntimeReplyPolicyHost, RuntimeReplyStartError, RuntimeReplyStartResult, RuntimeReplyStreamHost,
+    RuntimeReplyPolicyHost, RuntimeReplyStartError, RuntimeReplyStartRequest,
+    RuntimeReplyStartResult, RuntimeReplyStreamHost,
 };
 use agent_runtime::reply_input::{
     RuntimeActionRequiredResponseInput as ActionRequiredResponseInput,
     RuntimeReplyAttemptInput as ReplyAttemptInput,
+};
+use agent_runtime::reply_message::{
+    RuntimeReplyMessage, RuntimeReplyMessageContent, RuntimeReplyMessageRole,
+};
+use agent_runtime::reply_session::{
+    attach_reply_disallowed_tools, attach_reply_provider_wire_shape,
 };
 use agent_runtime::reply_stream::RuntimeReplyStreamEvent;
 use agent_runtime::session_config::AgentSessionConfig;
@@ -31,11 +36,15 @@ use aster::conversation::message::{
     ActionRequired, ActionRequiredData, ActionRequiredScope, Message, MessageContent,
 };
 use aster::permission::{Permission, PermissionConfirmation, PrincipalType};
+use aster::providers::formats::openai_responses::{
+    provider_stream_event_notification_payload_from_message,
+    PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING,
+};
 use aster::session::SessionManager;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, StreamExt};
 use model_provider::provider_stream::{
-    RuntimeProviderBackend, RuntimeReplyProviderHandle, RuntimeReplyProviderRequestWireShape,
+    RuntimeProviderBackend, RuntimeReplyProviderHandle, RuntimeReplyProviderStreamEvent,
     RuntimeReplyStreamRequest,
 };
 use std::path::Path;
@@ -73,10 +82,7 @@ impl<'a> AsterReplyRuntimeHost<'a> {
 
     pub(super) async fn start_reply_stream(
         &self,
-        user_input: ReplyAttemptInput,
-        session_config: AgentSessionConfig,
-        cancel_token: Option<CancellationToken>,
-        emitted_any: bool,
+        start_request: RuntimeReplyStartRequest,
     ) -> Result<
         (
             BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeAgentEvent>>>,
@@ -84,15 +90,7 @@ impl<'a> AsterReplyRuntimeHost<'a> {
         ),
         ReplyAttemptError,
     > {
-        start_aster_reply_stream(
-            self.agent,
-            self.provider.as_ref(),
-            user_input,
-            session_config,
-            cancel_token,
-            emitted_any,
-        )
-        .await
+        start_aster_reply_stream(self.agent, self.provider.as_ref(), start_request).await
     }
 
     pub(super) async fn emit_runtime_status<F>(
@@ -151,21 +149,12 @@ impl RuntimeReplyStreamHost<RuntimeAgentEvent> for AsterReplyRuntimeHost<'_> {
 
     fn start_reply_stream<'a>(
         &'a self,
-        user_input: ReplyAttemptInput,
-        session_config: AgentSessionConfig,
-        cancel_token: Option<CancellationToken>,
-        emitted_any: bool,
+        start_request: RuntimeReplyStartRequest,
     ) -> BoxFuture<'a, RuntimeReplyStartResult<'a, RuntimeAgentEvent>> {
         Box::pin(async move {
-            AsterReplyRuntimeHost::start_reply_stream(
-                self,
-                user_input,
-                session_config,
-                cancel_token,
-                emitted_any,
-            )
-            .await
-            .map_err(|error| RuntimeReplyStartError::new(error.message, error.emitted_any))
+            AsterReplyRuntimeHost::start_reply_stream(self, start_request)
+                .await
+                .map_err(|error| RuntimeReplyStartError::new(error.message, error.emitted_any))
         })
     }
 }
@@ -510,10 +499,7 @@ where
 async fn start_aster_reply_stream<'a>(
     agent: &'a Agent,
     provider: Option<&ConfiguredReplyProvider>,
-    user_input: ReplyAttemptInput,
-    mut session_config: AgentSessionConfig,
-    cancel_token: Option<CancellationToken>,
-    emitted_any: bool,
+    start_request: RuntimeReplyStartRequest,
 ) -> Result<
     (
         BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeAgentEvent>>>,
@@ -521,24 +507,15 @@ async fn start_aster_reply_stream<'a>(
     ),
     ReplyAttemptError,
 > {
-    let session_id = session_config.id.clone();
-    let input_kind = user_input.runtime_input_kind();
-    let model_request_policy =
-        runtime_reply_model_request_policy_from_turn_context(session_config.turn_context.as_ref());
-    let user_message =
-        build_aster_reply_attempt_message(user_input, session_config.turn_context.as_ref())
-            .map_err(|message| ReplyAttemptError {
-                message,
-                emitted_any,
-            })?;
-    let message_chars = user_message.as_concat_text().chars().count();
-    let stream_request = RuntimeReplyStreamRequest::new(
-        session_id,
-        input_kind,
-        message_chars,
-        provider.map(|provider| provider.runtime_handle().clone()),
-    )
-    .with_model_request_policy(model_request_policy);
+    let RuntimeReplyStartRequest {
+        request,
+        mut session_config,
+        cancel_token,
+        emitted_any,
+    } = start_request;
+    let (runtime_message, stream_request) = request.into_parts();
+    let message_chars = stream_request.message_chars;
+    let user_message = lower_aster_reply_message(runtime_message);
     tracing::debug!(
         provider_backend = ?stream_request.provider_backend(),
         provider_name = ?stream_request.provider_name(),
@@ -577,7 +554,12 @@ async fn start_aster_reply_stream<'a>(
     };
 
     stream_result
-        .map(|stream| (project_aster_reply_stream(stream), message_chars))
+        .map(|stream| {
+            (
+                project_aster_reply_stream(stream, stream_request),
+                message_chars,
+            )
+        })
         .map_err(|error| ReplyAttemptError {
             message: format!("Agent error: {error}"),
             emitted_any,
@@ -587,41 +569,7 @@ async fn start_aster_reply_stream<'a>(
 fn attach_native_tool_policy_scope(session_config: &mut AgentSessionConfig) {
     let native_policy = native_tool_policy_from_turn_context(session_config.turn_context.as_ref());
     let disallowed_tools = native_tool_policy_disallowed_tool_names(native_policy.as_ref());
-    if disallowed_tools.is_empty() {
-        return;
-    }
-
-    let turn_context = session_config
-        .turn_context
-        .get_or_insert_with(Default::default);
-    let tool_scope = turn_context
-        .metadata
-        .entry("tool_scope".to_string())
-        .or_insert_with(|| serde_json::json!({}));
-    if !tool_scope.is_object() {
-        *tool_scope = serde_json::json!({});
-    }
-    let Some(scope_object) = tool_scope.as_object_mut() else {
-        return;
-    };
-    let disallowed_value = scope_object
-        .entry("disallowed_tools".to_string())
-        .or_insert_with(|| serde_json::json!([]));
-    if !disallowed_value.is_array() {
-        *disallowed_value = serde_json::json!([]);
-    }
-    let Some(disallowed_array) = disallowed_value.as_array_mut() else {
-        return;
-    };
-    for tool_name in disallowed_tools {
-        if disallowed_array.iter().any(|item| {
-            item.as_str()
-                .is_some_and(|existing| existing.eq_ignore_ascii_case(tool_name))
-        }) {
-            continue;
-        }
-        disallowed_array.push(serde_json::Value::String(tool_name.to_string()));
-    }
+    attach_reply_disallowed_tools(session_config, disallowed_tools);
 }
 
 fn attach_provider_request_wire_shape(
@@ -631,21 +579,11 @@ fn attach_provider_request_wire_shape(
     if stream_request.model_request_policy.is_none() {
         return;
     }
-    let wire_shape = stream_request.provider_request_wire_shape();
-    let Ok(value) = serde_json::to_value(wire_shape) else {
+    if !attach_reply_provider_wire_shape(session_config, stream_request) {
         tracing::warn!(
             "[AgentRuntime][ReplyPolicy] provider request wire shape 序列化失败，已跳过 metadata 注入"
         );
-        return;
-    };
-    session_config
-        .turn_context
-        .get_or_insert_with(Default::default)
-        .metadata
-        .insert(
-            RuntimeReplyProviderRequestWireShape::TURN_CONTEXT_METADATA_KEY.to_string(),
-            value,
-        );
+    }
 }
 
 fn unsupported_aster_compat_wire_shape_error(
@@ -695,12 +633,21 @@ fn aster_compat_provider_supports_responses_lite_wire(
 
 fn project_aster_reply_stream<'a>(
     stream: BoxStream<'a, anyhow::Result<AsterAgentEvent>>,
+    stream_request: RuntimeReplyStreamRequest,
 ) -> BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeAgentEvent>>> {
     Box::pin(async_stream::try_stream! {
         let mut stream = stream;
-        let mut runtime_event_projector = RuntimeEventProjector::new();
+        let mut runtime_event_projector = AsterEventProjector::new();
         while let Some(event_result) = stream.next().await {
             let agent_event = event_result?;
+            if let AsterAgentEvent::Message(message) = &agent_event {
+                if let Some(provider_event) =
+                    provider_stream_event_from_aster_message(&stream_request, message)
+                {
+                    yield RuntimeReplyStreamEvent::ProviderStreamEvent(provider_event);
+                    continue;
+                }
+            }
             if let Some(provider_error) = extract_inline_agent_provider_error(&agent_event) {
                 yield RuntimeReplyStreamEvent::SuppressedInlineProviderError(provider_error);
                 continue;
@@ -713,56 +660,83 @@ fn project_aster_reply_stream<'a>(
     })
 }
 
-fn build_aster_user_message(
-    input: ReplyInput,
-    turn_context: Option<&AgentTurnContext>,
-) -> Result<Message, String> {
-    validate_user_input_modalities(&input, turn_context)?;
-    let mut message = Message::user().with_text(input.text);
-    for image in input.images {
-        message = message.with_image(image.data, image.media_type);
-    }
-    if input.agent_only {
-        message = message.agent_only();
-    }
-    Ok(message)
-}
-
-fn build_aster_reply_attempt_message(
-    input: ReplyAttemptInput,
-    turn_context: Option<&AgentTurnContext>,
-) -> Result<Message, String> {
-    match input {
-        ReplyAttemptInput::Current(input) => build_aster_user_message(input, turn_context),
-        ReplyAttemptInput::ActionRequiredResponse(input) => {
-            Ok(build_aster_action_required_response_message(input))
+fn provider_stream_event_from_aster_message(
+    stream_request: &RuntimeReplyStreamRequest,
+    message: &Message,
+) -> Option<RuntimeReplyProviderStreamEvent> {
+    let payload = provider_stream_event_notification_payload_from_message(message)?;
+    let event_kind = payload
+        .get("eventKind")
+        .and_then(serde_json::Value::as_str)?;
+    match event_kind {
+        PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING => {
+            let response_event = payload.get("responseEvent")?;
+            let headers = provider_stream_event_headers(&payload);
+            RuntimeReplyProviderStreamEvent::safety_buffering_from_response_event(
+                stream_request,
+                response_event,
+                headers
+                    .iter()
+                    .map(|(name, value)| (name.as_str(), value.as_str())),
+            )
         }
+        _ => None,
     }
 }
 
-fn validate_user_input_modalities(
-    input: &ReplyInput,
-    turn_context: Option<&AgentTurnContext>,
-) -> Result<(), String> {
-    if input.images.is_empty() {
-        return Ok(());
-    }
-    let input_policy = input_modality_policy_from_turn_context(turn_context);
-    if input_modality_policy_allows_image_input(input_policy.as_ref()) {
-        return Ok(());
-    }
-
-    Err("当前选中模型的 input_modality_policy 不支持图片输入，已拒绝把 image 内容发送到 provider；请切换支持 image 的模型或移除图片。".to_string())
+fn provider_stream_event_headers(payload: &serde_json::Value) -> Vec<(String, String)> {
+    payload
+        .get("headers")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|header| {
+            let name = header.get("name").and_then(serde_json::Value::as_str)?;
+            let value = header.get("value").and_then(serde_json::Value::as_str)?;
+            Some((name.to_string(), value.to_string()))
+        })
+        .collect()
 }
 
-fn build_aster_action_required_response_message(input: ActionRequiredResponseInput) -> Message {
-    Message::user().with_content(MessageContent::ActionRequired(ActionRequired {
+fn lower_aster_reply_message(message: RuntimeReplyMessage) -> Message {
+    let mut aster_message = match message.role {
+        RuntimeReplyMessageRole::User => Message::user(),
+    };
+
+    for content in message.content {
+        aster_message = match content {
+            RuntimeReplyMessageContent::Text(text) => aster_message.with_text(text),
+            RuntimeReplyMessageContent::Image { data, media_type } => {
+                aster_message.with_image(data, media_type)
+            }
+            RuntimeReplyMessageContent::ActionRequiredResponse {
+                request_id,
+                user_data,
+                scope,
+            } => aster_message.with_content(build_aster_action_required_response_content(
+                request_id, user_data, scope,
+            )),
+        };
+    }
+
+    if message.agent_only {
+        aster_message = aster_message.agent_only();
+    }
+    aster_message
+}
+
+fn build_aster_action_required_response_content(
+    request_id: String,
+    user_data: serde_json::Value,
+    scope: Option<RuntimeActionRequiredScope>,
+) -> MessageContent {
+    MessageContent::ActionRequired(ActionRequired {
         data: ActionRequiredData::ElicitationResponse {
-            id: input.request_id,
-            user_data: input.user_data,
+            id: request_id,
+            user_data,
         },
-        scope: input.scope.and_then(to_aster_action_required_scope),
-    }))
+        scope: scope.and_then(to_aster_action_required_scope),
+    })
 }
 
 fn to_aster_action_required_scope(

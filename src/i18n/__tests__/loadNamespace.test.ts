@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BUILT_IN_SOUL_STYLE_PACK } from "@/lib/soul/style-profiles";
+import { DEFAULT_SOUL_STYLE_PROFILE_REGISTRY } from "@/lib/soul/style-profiles";
 import {
   CORE_NAMESPACES,
   hasBundledNamespace,
@@ -12,14 +12,16 @@ import { SUPPORTED_LOCALES } from "../locales";
 describe("i18n namespace loader", () => {
   it("Soul 内置风格包文案覆盖所有支持 locale", () => {
     const resources = loadBundledI18nResources();
-    const requiredKeys = [
-      BUILT_IN_SOUL_STYLE_PACK.nameKey,
-      BUILT_IN_SOUL_STYLE_PACK.descriptionKey,
-      ...BUILT_IN_SOUL_STYLE_PACK.profiles.flatMap((profile) => [
-        profile.nameKey,
-        profile.descriptionKey,
-      ]),
-    ];
+    const requiredKeys = DEFAULT_SOUL_STYLE_PROFILE_REGISTRY.packs.flatMap(
+      (pack) => [
+        pack.nameKey,
+        pack.descriptionKey,
+        ...pack.profiles.flatMap((profile) => [
+          profile.nameKey,
+          profile.descriptionKey,
+        ]),
+      ],
+    );
 
     for (const locale of SUPPORTED_LOCALES) {
       for (const key of requiredKeys) {
@@ -27,6 +29,24 @@ describe("i18n namespace loader", () => {
           resources[locale].settings,
           `${locale}/settings should include ${key}`,
         ).toHaveProperty(key);
+      }
+    }
+  });
+
+  it("Soul 本地化不允许新增按 profile 展开的句库", () => {
+    const resources = loadBundledI18nResources();
+    const forbiddenKeyPattern =
+      /^agentChat\.soulInteraction\.(cheeky|warm|cool|calm|cheeky_sassy|warm_supportive|cool_confident|calm_professional)\./u;
+
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const [namespace, entries] of Object.entries(resources[locale])) {
+        const forbiddenKeys = Object.keys(entries).filter((key) =>
+          forbiddenKeyPattern.test(key),
+        );
+        expect(
+          forbiddenKeys,
+          `${locale}/${namespace} must keep Soul style out of i18n phrase libraries`,
+        ).toEqual([]);
       }
     }
   });

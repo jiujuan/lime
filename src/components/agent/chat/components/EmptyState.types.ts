@@ -4,6 +4,7 @@ import type { AgentI18nResource } from "@/i18n/agentResources";
 import type { AgentInitialInputCapabilityParams } from "@/types/page";
 import type { SkillSelectionSourceProps } from "../skill-selection/skillSelectionBindings";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
+import type { InterruptedInputRestoreRequest } from "../hooks/agentStreamInputRestoreTypes";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import type { AgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
@@ -128,6 +129,8 @@ export interface EmptyStateProps extends SkillSelectionSourceProps {
   /** 输入框已添加的本地文件/文件夹引用 */
   pathReferences?: MessagePathReference[];
   onAddPathReferences?: (references: MessagePathReference[]) => void;
+  inputRestoreRequest?: InterruptedInputRestoreRequest | null;
+  onInputRestoreRequestHandled?: (requestId: string) => void;
   onImportPathReferenceAsKnowledge?: (reference: MessagePathReference) => void;
   onRemovePathReference?: (id: string) => void;
   onClearPathReferences?: () => void;

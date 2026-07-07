@@ -1017,6 +1017,7 @@ mod tests {
 
     #[test]
     fn test_build_tool_inventory_marks_visibility_and_mappings() {
+        let expected_catalog = tool_catalog_entries_for_surface(WorkspaceToolSurface::core());
         let inventory = build_tool_inventory(AgentToolInventoryBuildInput {
             surface: WorkspaceToolSurface::core(),
             caller: "assistant".to_string(),
@@ -1084,9 +1085,21 @@ mod tests {
             ],
         });
 
-        assert_eq!(inventory.counts.catalog_total, 48);
-        assert_eq!(inventory.counts.catalog_current_total, 48);
-        assert_eq!(inventory.counts.catalog_compat_total, 0);
+        assert_eq!(inventory.counts.catalog_total, expected_catalog.len());
+        assert_eq!(
+            inventory.counts.catalog_current_total,
+            expected_catalog
+                .iter()
+                .filter(|entry| entry.lifecycle == ToolLifecycle::Current)
+                .count()
+        );
+        assert_eq!(
+            inventory.counts.catalog_compat_total,
+            expected_catalog
+                .iter()
+                .filter(|entry| entry.lifecycle == ToolLifecycle::Compat)
+                .count()
+        );
         assert_eq!(inventory.counts.registry_total, 4);
         assert_eq!(inventory.counts.registry_visible_total, 3);
         assert_eq!(inventory.counts.registry_catalog_unmapped_total, 1);

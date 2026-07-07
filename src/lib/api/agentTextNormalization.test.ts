@@ -11,15 +11,14 @@ const REFERENCE_JS_TOOL_SURFACE_MAPPINGS = [
   ["exec_command", "Bash"],
   ["local_shell_call", "Bash"],
   ["BriefTool", "SendUserMessage"],
-  ["ConfigTool", "Config"],
   ["request_user_input", "request_user_input"],
   ["RequestUserInputTool", "request_user_input"],
+  ["clock.sleep", "sleep"],
+  ["sleep", "sleep"],
   ["update_plan", "update_plan"],
   ["UpdatePlanTool", "update_plan"],
   ["EnterPlanModeTool", "EnterPlanMode"],
-  ["EnterWorktreeTool", "EnterWorktree"],
   ["ExitPlanModeTool", "ExitPlanMode"],
-  ["ExitWorktreeTool", "ExitWorktree"],
   ["FileEditTool", "Edit"],
   ["FileReadTool", "Read"],
   ["FileWriteTool", "Write"],
@@ -38,14 +37,10 @@ const REFERENCE_JS_TOOL_SURFACE_MAPPINGS = [
   ["mcp__system__grep", "Grep"],
   ["LSPTool", "LSP"],
   ["ListMcpResourcesTool", "ListMcpResourcesTool"],
-  ["NotebookEditTool", "NotebookEdit"],
   ["PowerShellTool", "PowerShell"],
   ["ReadMcpResourceTool", "ReadMcpResourceTool"],
-  ["RemoteTriggerTool", "RemoteTrigger"],
-  ["ScheduleCronTool", "CronCreate"],
   ["SendMessageTool", "SendMessage"],
   ["SkillTool", "Skill"],
-  ["SleepTool", "Sleep"],
   ["SyntheticOutputTool", "StructuredOutput"],
   ["TaskCreateTool", "TaskCreate"],
   ["TaskGetTool", "TaskGet"],
@@ -91,5 +86,22 @@ describe("agentTextNormalization", () => {
     expect(normalizeLegacyToolSurfaceName("MCPTool")).toBe("MCPTool");
     expect(normalizeLegacyToolSurfaceName("McpAuthTool")).toBe("McpAuthTool");
     expect(normalizeLegacyToolSurfaceName("REPLTool")).toBe("REPLTool");
+    expect(normalizeLegacyToolSurfaceName("ConfigTool")).toBe("ConfigTool");
+    expect(normalizeLegacyToolSurfaceName("EnterWorktreeTool")).toBe(
+      "EnterWorktreeTool",
+    );
+    expect(normalizeLegacyToolSurfaceName("ExitWorktreeTool")).toBe(
+      "ExitWorktreeTool",
+    );
+    expect(normalizeLegacyToolSurfaceName("NotebookEditTool")).toBe(
+      "NotebookEditTool",
+    );
+    expect(normalizeLegacyToolSurfaceName("RemoteTriggerTool")).toBe(
+      "RemoteTriggerTool",
+    );
+    expect(normalizeLegacyToolSurfaceName("ScheduleCronTool")).toBe(
+      "ScheduleCronTool",
+    );
+    expect(normalizeLegacyToolSurfaceName("SleepTool")).toBe("SleepTool");
   });
 });

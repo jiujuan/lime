@@ -1,18 +1,12 @@
 import { resolveRequiredAgentChatCopy } from "./agentChatCopy";
-import {
-  getToolDisplayInfo,
-  normalizeToolNameKey,
-} from "./toolDisplayInfo";
+import { getToolDisplayInfo, normalizeToolNameKey } from "./toolDisplayInfo";
 import type { ToolProcessStatus } from "./toolProcessSummaryTypes";
 import {
   buildVisionToolSummary,
   normalizeNarrativeSubject,
   resolveProcessSummaryCopy,
 } from "./toolProcessSummaryCopy";
-import {
-  readString,
-  shorten,
-} from "./toolProcessSummaryText";
+import { readString, shorten } from "./toolProcessSummaryText";
 
 type ToolDisplayFamily = ReturnType<typeof getToolDisplayInfo>["family"];
 
@@ -67,31 +61,6 @@ export function buildGenericPostSummary(params: {
   const displayFamily = params.displayFamily || display.family;
   const normalizedSubject = normalizeNarrativeSubject(subject);
 
-  if (normalizedName === "enterworktree") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.worktree.entered",
-    );
-  }
-  if (normalizedName === "exitworktree") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.worktree.exited",
-    );
-  }
-  if (normalizedName === "config") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.config.updated",
-    );
-  }
-  if (normalizedName === "workflow") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.workflow.completed",
-    );
-  }
-  if (normalizedName === "sleep") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.wait.completed",
-    );
-  }
   if (normalizedName === "enterplanmode") {
     return resolveRequiredAgentChatCopy(
       "toolCall.processSummary.planMode.entered",
@@ -107,6 +76,9 @@ export function buildGenericPostSummary(params: {
       "toolCall.processSummary.finalAnswer.completed",
     );
   }
+  if (normalizedName === "sleep") {
+    return "已完成等待";
+  }
   if (normalizedName === "skill") {
     return resolveProcessSummaryCopy(
       "toolCall.processSummary.skill.executed",
@@ -114,9 +86,7 @@ export function buildGenericPostSummary(params: {
     );
   }
   if (normalizedName === "listskills") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.skill.listed",
-    );
+    return resolveRequiredAgentChatCopy("toolCall.processSummary.skill.listed");
   }
   if (normalizedName === "loadskill") {
     return resolveProcessSummaryCopy(
@@ -137,9 +107,7 @@ export function buildGenericPostSummary(params: {
     );
   }
   if (normalizedName === "tasklist") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.task.listed",
-    );
+    return resolveRequiredAgentChatCopy("toolCall.processSummary.task.listed");
   }
   if (normalizedName === "taskcreate") {
     return resolveProcessSummaryCopy(
@@ -213,27 +181,6 @@ export function buildGenericPostSummary(params: {
       normalizedSubject,
     );
   }
-  if (normalizedName === "croncreate") {
-    return resolveProcessSummaryCopy(
-      "toolCall.processSummary.cron.created",
-      normalizedSubject,
-    );
-  }
-  if (normalizedName === "cronlist") {
-    return resolveRequiredAgentChatCopy("toolCall.processSummary.cron.listed");
-  }
-  if (normalizedName === "crondelete") {
-    return resolveProcessSummaryCopy(
-      "toolCall.processSummary.cron.deleted",
-      normalizedSubject,
-    );
-  }
-  if (normalizedName === "remotetrigger") {
-    return resolveProcessSummaryCopy(
-      "toolCall.processSummary.remoteTrigger.handled",
-      normalizedSubject,
-    );
-  }
   if (limeTaskSummary) {
     return limeTaskSummary;
   }
@@ -250,10 +197,16 @@ export function buildGenericPostSummary(params: {
     return resolveRequiredAgentChatCopy("toolCall.processSummary.mcp.called");
   }
   if (normalizedName === "mcpauth") {
-    return resolveRequiredAgentChatCopy("toolCall.processSummary.mcp.authorized");
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.mcp.authorized",
+    );
   }
 
-  return buildPostSummaryByFamily(displayFamily, normalizedName, normalizedSubject);
+  return buildPostSummaryByFamily(
+    displayFamily,
+    normalizedName,
+    normalizedSubject,
+  );
 }
 
 function buildPostSummaryByFamily(
@@ -384,34 +337,6 @@ export function buildKnownPreSummary(params: {
         );
   }
 
-  if (normalizedName === "enterworktree") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.worktree.enterFirst",
-    );
-  }
-
-  if (normalizedName === "exitworktree") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.worktree.exitFirst",
-    );
-  }
-
-  if (normalizedName === "config") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.config.reviewFirst",
-    );
-  }
-
-  if (normalizedName === "workflow") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.workflow.runFirst",
-    );
-  }
-
-  if (normalizedName === "sleep") {
-    return resolveRequiredAgentChatCopy("toolCall.processSummary.wait.first");
-  }
-
   if (normalizedName === "sendusermessage" || normalizedName === "brief") {
     return resolveRequiredAgentChatCopy(
       "toolCall.processSummary.userMessage.syncFirst",
@@ -434,6 +359,9 @@ export function buildKnownPreSummary(params: {
     return resolveRequiredAgentChatCopy(
       "toolCall.processSummary.finalAnswer.prepareFirst",
     );
+  }
+  if (normalizedName === "sleep") {
+    return "先等待一段时间再继续";
   }
 
   if (normalizedName === "skill") {
@@ -538,32 +466,6 @@ export function buildKnownPreSummary(params: {
     );
   }
 
-  if (normalizedName === "croncreate") {
-    return resolveProcessSummaryCopy(
-      "toolCall.processSummary.cron.createFirst",
-      normalizedSubject,
-    );
-  }
-
-  if (normalizedName === "cronlist") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.cron.listFirst",
-    );
-  }
-
-  if (normalizedName === "crondelete") {
-    return resolveProcessSummaryCopy(
-      "toolCall.processSummary.cron.deleteFirst",
-      normalizedSubject,
-    );
-  }
-
-  if (normalizedName === "remotetrigger") {
-    return resolveProcessSummaryCopy(
-      "toolCall.processSummary.remoteTrigger.handleFirst",
-      normalizedSubject,
-    );
-  }
   if (limeTaskSummary) {
     return limeTaskSummary;
   }
@@ -579,7 +481,9 @@ export function buildKnownPreSummary(params: {
   }
 
   if (normalizedName === "mcp") {
-    return resolveRequiredAgentChatCopy("toolCall.processSummary.mcp.callFirst");
+    return resolveRequiredAgentChatCopy(
+      "toolCall.processSummary.mcp.callFirst",
+    );
   }
 
   if (normalizedName === "mcpauth") {

@@ -10,6 +10,10 @@ import { useTranslation } from "react-i18next";
 import { FileInput, MessageSquarePlus } from "lucide-react";
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
 import {
+  resolveUnfinishedSessionProjection,
+  type AgentUnfinishedSessionStatus,
+} from "@/components/agent/chat/projection/unfinishedSessionProjection";
+import {
   formatSidebarSessionMeta,
   resolveSidebarSessionTitle,
 } from "@/components/app-sidebar/sidebarSessionFormatting";
@@ -493,10 +497,23 @@ export function AppSidebarConversationShelf({
     "navigation.sidebar.conversations.projectMenu.moreActions",
     "项目操作",
   );
+  const runtimeStatusLabels: Record<AgentUnfinishedSessionStatus, string> = {
+    running: t(
+      "navigation.sidebar.conversations.status.running",
+      "正在输出",
+    ),
+    queued: t("navigation.sidebar.conversations.status.queued", "排队中"),
+    waitingAction: t(
+      "navigation.sidebar.conversations.status.waitingAction",
+      "等待确认",
+    ),
+  };
 
   const renderConversationRow = (session: AsterSessionInfo) => {
     const active = currentSessionId === session.id;
     const title = resolveLocalizedSessionTitle(session);
+    const runtimeProjection = resolveUnfinishedSessionProjection(session);
+    const runtimeStatus = runtimeProjection?.status ?? null;
     return (
       <AppSidebarConversationRow
         key={session.id}
@@ -504,6 +521,10 @@ export function AppSidebarConversationShelf({
         title={title}
         meta={formatLocalizedSessionMeta(session)}
         active={active}
+        runtimeStatus={runtimeStatus}
+        runtimeStatusLabel={
+          runtimeStatus ? runtimeStatusLabels[runtimeStatus] : null
+        }
         favorite={favoriteSessionIds.includes(session.id)}
         actionDisabled={actionSessionId === session.id}
         favoriteBadgeLabel={favoriteBadgeLabel}

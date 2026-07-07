@@ -62,6 +62,7 @@ function createFallbackRestoreParams(
     initialPendingServiceSkillLaunchSignature: null,
     initialDispatchKey: null,
     isBootstrapDispatchPending: false,
+    isHomeSessionBackgroundRecovery: false,
     messagesLength: 1,
     isSending: false,
     queuedTurnsLength: 0,
@@ -398,6 +399,12 @@ describe("taskCenterTabs", () => {
   });
 
   it("应正确识别需要恢复 start hooks 的任务", () => {
+    expect(
+      shouldResumeTaskSession({
+        status: "running",
+        statusReason: "default",
+      }),
+    ).toBe(true);
     expect(
       shouldResumeTaskSession({
         status: "waiting",
@@ -796,6 +803,21 @@ describe("taskCenterTabs", () => {
         topicId: "topic-old",
         startedAt: 10_000,
       },
+    });
+  });
+
+  it("new-task 首页后台恢复运行候选时，应跳过旧任务标签 fallback 恢复", () => {
+    expect(
+      resolveTaskCenterFallbackRestorePlan(
+        createFallbackRestoreParams({
+          agentEntry: "new-task",
+          isHomeSessionBackgroundRecovery: true,
+          now: 10_000,
+        }),
+      ),
+    ).toEqual({
+      action: "skip",
+      reason: "home-background-recovery",
     });
   });
 

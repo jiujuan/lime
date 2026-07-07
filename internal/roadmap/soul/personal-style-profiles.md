@@ -34,7 +34,7 @@
 3. 不让风格层编造工具结果、搜索结论、图片结果或用户资料。
 4. 不让 Product Soul 默认进入文章、脚本、海报文案、PPT 等正式 artifact。
 5. 不把 LoRA / QLoRA 小模型训练作为第一版必须能力。
-6. 不在首版实现 Cloud 风格包下载、市场、同步、付费或远程执行；这些只作为后续风格包能力的受控扩展点。
+6. 不在首版实现公开 Cloud 风格包下载、市场、同步、付费或远程执行；App Server 本地 store core、JSON-RPC API 和设置页本地导入 / 管理骨架已作为受控扩展点接入，Cloud transport、签名实测和安装审计继续延期。
 
 ## 3. 收益
 
@@ -287,7 +287,7 @@ src/lib/soul/
     composeStyleDirectives.ts           # current：把 profile 转成 prompt context / UI 过程文案约束
     evaluateStyleBoundary.ts            # current：正式 artifact、高风险、危险操作、工具事实保真边界
     index.ts                            # current：稳定导出面
-    *.unit.test.ts                      # current：纯函数测试，覆盖四种风格、降级、artifact 旁路
+    *.unit.test.ts                      # current：纯函数 / 守卫测试，覆盖四种风格、降级、artifact 旁路、生产组件不得 hard-code profile id
 
 src/features/knowledge/agent/
   knowledgeMetadata.ts                  # current：Knowledge persona pack -> persona_context 受限 metadata adapter
@@ -307,7 +307,7 @@ src/i18n/resources/{zh-CN,zh-TW,en-US,ja-JP,ko-KR}/settings.json
 前端边界：
 
 1. `src/lib/soul/style-profiles/**` 只包含纯函数、静态 registry 和类型，不依赖 React、DOM、App Server client 或 i18n 实例。
-2. UI 组件只能消费 resolver 输出，不能在组件里写 `switch(profileId)` 拼风格规则。
+2. UI 组件只能消费 resolver 输出，不能在组件里写 `switch(profileId)` 拼风格规则；`styleProfiles.unit.test.ts` 已扫描 `src/components` 与 `src/lib` 生产源，禁止四个 built-in profile id 离开 registry 事实源后继续成为展示分支。
 3. `src/components/settings-v2/general/memory/index.tsx` 已经是聚合入口，后续新增 Style Profile UI 时应拆到 `memory/soul/` 子目录，不继续向单文件追加业务状态机。
 4. 用户可见名称和描述只能通过 i18n key 输出，profile registry 不写死中文或英文展示文案。
 5. Knowledge persona pack 只通过 `persona_context` metadata 暴露 pack 引用、激活方式和边界契约；不读取 pack 正文、不生成 system prompt、不写回 `memory.soul`。
@@ -322,6 +322,10 @@ lime-rs/crates/core/src/config/types.rs
 lime-rs/crates/app-server/src/runtime/soul/
   mod.rs                                 # current：RuntimeCore 可调用的 Soul prompt context facade
   style_profile.rs                       # current：profile id、风险降级、默认值解析
+  style_pack_registry.rs                 # current：只读 installed pack registry read model，校验 status / integrity / locale
+  style_pack_install.rs                  # current：install status 状态机 guard
+  style_pack_paths.rs                    # current：app data 逻辑目录、required locales 和安全 id 校验
+  style_pack_store.rs                    # current：本地安装 / list / disable / disabled uninstall store core；Cloud deferred
   prompt_context.rs                      # current：生成 memory_soul_prompt_context.v2，并读取本轮 persona_context 引用
   boundary.rs                            # current：artifact 旁路、高风险降级、长度 / 禁忌策略
 
@@ -334,8 +338,9 @@ Runtime 边界：
 1. `MemorySoulConfig` 仍是配置事实源；新增字段只能表达 `style_profile_id`、强度或会话覆盖，不新增 `personal_style_*` 表、命令或 Runtime。
 2. `memory_prompt.rs` 只保留 dispatch / append 入口，Style Profile 解析与 prompt context 构造进入 `runtime/soul/` 子模块。
 3. App Server 只输出结构化 `memory_soul_prompt_context`；前端 UI 不直接拼系统 prompt。
-4. 工具事实、搜索结果、图片结果和任务状态仍来自 Agent Runtime / App Server read model，Soul 模块不得解析或改写 read model。
-5. `persona_context` 只渲染为 “Persona knowledge packs (context only)” 引用和边界规则；正式 artifact 仍以 `generation_brief_only` 为声线事实源。
+4. Installed pack 只通过 `<app-data>/soul/style-packs/registry.json` + manifest + locale read model 进入 resolver；只有 `status: "enabled"` 可读，缺 `status`、旧 `enabled: true`、顶层 `digest` 或缺五语言 locale 都 fail closed。
+5. 工具事实、搜索结果、图片结果和任务状态仍来自 Agent Runtime / App Server read model，Soul 模块不得解析或改写 read model。
+6. `persona_context` 只渲染为 “Persona knowledge packs (context only)” 引用和边界规则；正式 artifact 仍以 `generation_brief_only` 为声线事实源。
 
 ### 8.3 不新增的目录
 
@@ -364,7 +369,7 @@ lime-rs/crates/personal-style/         # dead：不得新增
 | 模式           | 在本能力中的作用                                                                 | KISS 约束                                                                                           |
 | -------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Registry       | `builtInProfiles.ts` 只加载 `packs/*.json` 并做 manifest 校验。                  | 不承载四套 profile 大对象；组件不得 switch profile id 写终稿文案。                                  |
-| Manifest       | `packs/*.json` 是四个内置 Style Pack seed 的当前数据契约。                       | Cloud 下载、签名校验或市场仍 deferred；manifest 承载规则和 few-shot，不承载 i18n 句库。             |
+| Manifest       | `packs/*.json` 是四个内置 Style Pack seed 的当前数据契约。                       | App Server 本地 store core 已可写入 / list installed manifest；设置页 GUI 骨架已可本地导入和管理；Cloud 下载、签名校验和市场仍 deferred；manifest 承载规则和 few-shot，不承载 i18n 句库。 |
 | Strategy       | 每个 profile 提供同一组 `allowedMoves / forbiddenMoves / fallback`。             | 不为每个风格建 class，使用 typed object 即可。                                                      |
 | Resolver       | `resolveStyleProfile` 统一处理默认风格、用户选择、会话覆盖和严肃降级。           | 所有调用点只拿最终结果，不重复判断。                                                                |
 | Guard / Policy | `evaluateStyleBoundary` 判断 artifact 旁路、高风险降级、危险操作确认和事实保真。 | 首版只做可解释规则，不引入第二个模型评审。                                                          |
@@ -390,7 +395,7 @@ Settings UI / Chat UI
 原则落地：
 
 1. **KISS**：首版不训练小模型、不引入二次改写服务，不做动态 marketplace；用静态 profile、prompt context 和规则 guard 先跑通闭环。
-2. **YAGNI**：只做四个 built-in Style Pack seed、一个默认值、一个严肃降级；Cloud 下载和安装市场仍 deferred。
+2. **YAGNI**：只做四个 built-in Style Pack seed、一个默认值、一个严肃降级、App Server 本地 store core / JSON-RPC API，以及设置页本地管理骨架；公开 Cloud 下载、安装市场、签名实测和安装审计仍 deferred。
 3. **DRY**：风格规则、禁忌、surface contract 和 few-shot 只写在 pack manifest；registry / resolver 只负责加载、校验和解析。
 4. **SOLID**：catalog 负责定义，resolver 负责选择，composer 负责生成 prompt context，guard 负责边界判断，UI 负责展示和配置。
 5. **可测试性**：核心逻辑全部是纯函数单测；React 测试只覆盖选择器渲染、保存接线和 i18n key。
@@ -403,7 +408,7 @@ flowchart LR
   Runtime --> Facts[可靠草稿 / 工具事实 / 状态事件]
   Config[MemorySoulConfig / Style Profile ID] --> Resolver[Style Resolver]
   BuiltInPack[4 built-in Style Pack seeds\n1 profile per seed] --> Registry[Style Pack Registry]
-  CloudPack[Cloud / Local Style Pack\nDeferred source] -. 未来下载 / 导入 .-> Registry
+  CloudPack[Cloud / Local Style Pack\nDeferred public source] -. 未来下载 / 导入 .-> Registry
   Registry --> Resolver
   Persona[Persona Knowledge Pack metadata] --> Adapter[persona_context Adapter]
   Adapter --> Resolver
@@ -424,7 +429,7 @@ flowchart LR
 2. `Style Directive Composer` 只生成表达约束，不解析或新增事实。
 3. `Artifact` 默认不消费 Product Soul，只消费显式 Generation Brief。
 4. `Persona Knowledge Pack` 是资料，不是 system prompt 或开发者指令；运行时只消费 `persona_context` 中的 pack 引用和边界契约。
-5. `Cloud / Local Style Pack` 是延期来源，只能进入同一 registry / resolver / guard，不允许携带代码、事实或工具权限。
+5. `Cloud / Local Style Pack` 的公开来源仍延期；App Server 本地 store core 只能写入同一 registry / resolver / guard，不允许携带代码、事实或工具权限。
 
 ## 11. 时序图
 

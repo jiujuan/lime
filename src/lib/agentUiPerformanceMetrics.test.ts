@@ -254,7 +254,10 @@ describe("agentUiPerformanceMetrics", () => {
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("agentStream.firstTextDelta", {
+      providerWaitMs: 320.4,
       requestId: "request-a",
+      rendererEventReceivedDeltaMs: 8.6,
+      serverToRendererDeltaMs: 42.2,
       sessionId: "draft-a",
       workspaceId: "workspace-a",
     });
@@ -264,6 +267,7 @@ describe("agentUiPerformanceMetrics", () => {
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("agentStream.firstTextPaint", {
+      clientLocalOutputDeltaMs: 16.8,
       requestId: "request-a",
       sessionId: "draft-a",
       workspaceId: "workspace-a",
@@ -339,5 +343,18 @@ describe("agentUiPerformanceMetrics", () => {
     expect(
       summary.sessions[0]?.firstTextDeltaToFirstTextPaintMs,
     ).toBeGreaterThanOrEqual(0);
+    expect(
+      summary.sessions[0]?.streamRequestStartToFirstTextPaintMs,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      summary.sessions[0]?.submitAcceptedToFirstTextPaintMs,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      summary.sessions[0]?.firstEventToFirstTextPaintMs,
+    ).toBeGreaterThanOrEqual(0);
+    expect(summary.sessions[0]?.providerWaitMs).toBe(320);
+    expect(summary.sessions[0]?.serverToRendererFirstTextDeltaMs).toBe(42);
+    expect(summary.sessions[0]?.rendererApplyFirstTextDeltaMs).toBe(9);
+    expect(summary.sessions[0]?.clientLocalOutputMs).toBe(17);
   });
 });

@@ -209,6 +209,7 @@ export function mountHook(
     initialTopicsDeferredDelayMs?: number;
     initialRuntimeWarmupLoadMode?: "immediate" | "deferred";
     initialRuntimeWarmupDeferredDelayMs?: number;
+    sessionRestorePresentation?: "foreground" | "background";
   } = {},
 ): HookHarness {
   const container = document.createElement("div");
@@ -230,6 +231,7 @@ export function mountHook(
       initialRuntimeWarmupLoadMode: currentOptions.initialRuntimeWarmupLoadMode,
       initialRuntimeWarmupDeferredDelayMs:
         currentOptions.initialRuntimeWarmupDeferredDelayMs,
+      sessionRestorePresentation: currentOptions.sessionRestorePresentation,
     });
     return null;
   }

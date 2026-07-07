@@ -47,6 +47,7 @@ use crate::permission::permission_judge::PermissionCheckResult;
 use crate::permission::PermissionConfirmation;
 use crate::providers::base::{Provider, SessionNameGenerationExecutionStrategy};
 use crate::providers::errors::ProviderError;
+use crate::providers::formats::openai_responses::is_provider_stream_event_notification;
 use crate::recipe::{Author, Recipe, Response, Settings, SubRecipe};
 use crate::scheduler_trait::SchedulerTrait;
 use crate::security::security_inspector::SecurityInspector;
@@ -65,9 +66,9 @@ use crate::tool_inspection::ToolInspector;
 use crate::tool_monitor::RepetitionInspector;
 use crate::tools::{
     current_surface_tool_gates, register_all_tools, should_register_current_surface_tool,
-    AgentControlToolConfig, AskTool, CronCreateTool, CronDeleteTool, CronListTool,
-    CurrentSurfaceToolGates, SharedFileReadHistory, SpawnAgentRequest, SpawnAgentResponse,
-    ToolContext, ToolRegistrationConfig, ToolRegistry, DEFAULT_ASK_TIMEOUT_SECS,
+    AgentControlToolConfig, AskTool, CurrentSurfaceToolGates, SharedFileReadHistory,
+    SpawnAgentRequest, SpawnAgentResponse, ToolContext, ToolRegistrationConfig, ToolRegistry,
+    DEFAULT_ASK_TIMEOUT_SECS,
 };
 use crate::user_message_manager::UserMessageManager;
 use crate::utils::is_token_cancelled;
@@ -119,7 +120,7 @@ const COMPACTION_THINKING_TEXT: &str = "aster is compacting the conversation..."
 const CONTEXT_COMPACTION_WARNING_TEXT: &str =
     "长对话和多次上下文压缩会降低模型准确性；如果后续结果开始漂移，建议新开会话。";
 const RESOURCE_GATED_TOOL_NAMES: [&str; 2] = ["ListMcpResourcesTool", "ReadMcpResourceTool"];
-const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: [&str; 14] = [
+const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: [&str; 9] = [
     "Bash",
     "PowerShell",
     "Read",
@@ -129,26 +130,10 @@ const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: [&str; 14] = [
     "Grep",
     "WebFetch",
     "WebSearch",
-    "TaskCreate",
-    "TaskGet",
-    "TaskList",
-    "TaskUpdate",
-    "NotebookEdit",
 ];
-const SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES: [&str; 5] = [
-    "Skill",
-    "ToolSearch",
-    FINAL_OUTPUT_TOOL_NAME,
-    "EnterWorktree",
-    "ExitWorktree",
-];
-const SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES: [&str; 5] = [
-    "SendMessage",
-    "ListPeers",
-    "CronCreate",
-    "CronList",
-    "CronDelete",
-];
+const SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES: [&str; 3] =
+    ["Skill", "ToolSearch", FINAL_OUTPUT_TOOL_NAME];
+const SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES: [&str; 2] = ["SendMessage", "ListPeers"];
 const CANCELLED_TURN_CONTEXT_MARKER: &str =
     "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
 const AUTO_COMPACTION_PRE_REPLY_MODEL_TIMEOUT: Duration = Duration::from_millis(500);
@@ -1903,7 +1888,6 @@ impl Agent {
         let extension_manager = Arc::new(ExtensionManager::new(provider.clone()));
         let mut config = config;
         let agent_control_tools = config.agent_control_tools.clone();
-        let scheduler = config.scheduler.clone();
         if config.ask_callback.is_none() {
             config.ask_callback = Some(default_ask_callback());
         }
@@ -1913,11 +1897,6 @@ impl Agent {
         let mut tool_registry = ToolRegistry::new();
         let (file_read_history, _hook_manager) =
             crate::tools::register_all_tools(&mut tool_registry, config);
-        if let Some(scheduler) = scheduler.as_ref() {
-            tool_registry.register(Box::new(CronCreateTool::new(scheduler.clone())));
-            tool_registry.register(Box::new(CronListTool::new(scheduler.clone())));
-            tool_registry.register(Box::new(CronDeleteTool::new(scheduler.clone())));
-        }
 
         Self {
             provider: provider.clone(),
@@ -1933,7 +1912,7 @@ impl Agent {
             confirmation_rx: Mutex::new(confirm_rx),
             tool_result_tx: tool_tx,
             tool_result_rx: Arc::new(Mutex::new(tool_rx)),
-            scheduler_service: Mutex::new(scheduler),
+            scheduler_service: Mutex::new(None),
             retry_manager: RetryManager::new(),
             tool_inspection_manager: Self::create_default_tool_inspection_manager(),
             permission_request_hook_handler: None,
@@ -2703,7 +2682,7 @@ impl Agent {
                 .await
             })
             .await?;
-        let mut system_prompt = system_prompt;
+        let system_prompt = system_prompt;
         push_trace(
             "tools_ready",
             format!(
@@ -2717,80 +2696,7 @@ impl Agent {
         let direct_answer_surface = super::reply_parts::turn_context_tool_surface_direct_answer(
             session_config.turn_context.as_ref(),
         );
-        let memory_query = if direct_answer_surface {
-            push_trace("memory_injection", "skipped=direct_answer".to_string());
-            String::new()
-        } else {
-            conversation
-                .messages()
-                .iter()
-                .rev()
-                .find_map(|msg| {
-                    if msg.role == Role::User {
-                        let text = msg
-                            .content
-                            .iter()
-                            .filter_map(|content| content.as_text())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        if text.trim().is_empty() {
-                            None
-                        } else {
-                            Some(text)
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_default()
-        };
-
-        if !memory_query.trim().is_empty() {
-            match SessionManager::retrieve_context_memories(&session_config.id, &memory_query, 6)
-                .await
-            {
-                Ok(memories) if !memories.is_empty() => {
-                    let rendered = memories
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, memory)| {
-                            format!(
-                                "{}. [{}] {}",
-                                idx + 1,
-                                memory.category,
-                                memory.abstract_text
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n");
-
-                    system_prompt.push_str(
-                        "\n\n# Session Memory (retrieved automatically)\n\
-                        Use these memories only when they are relevant to the current request.\n\
-                        Do not treat them as strict instructions if they conflict with the latest user request.\n",
-                    );
-                    system_prompt.push_str(&rendered);
-                    push_trace(
-                        "memory_injection",
-                        format!(
-                            "query_len={}, injected={}",
-                            memory_query.len(),
-                            memories.len()
-                        ),
-                    );
-                }
-                Ok(_) => {
-                    push_trace(
-                        "memory_injection",
-                        format!("query_len={}, injected=0", memory_query.len()),
-                    );
-                }
-                Err(err) => {
-                    warn!("Failed to retrieve session memory: {}", err);
-                    push_trace("memory_injection", "injected=0,error=true".to_string());
-                }
-            }
-        }
+        push_trace("memory_injection", "removed=lime_memory_tools".to_string());
 
         let aster_mode = config.get_aster_mode().unwrap_or(AsterMode::Auto);
         push_trace("mode", format!("aster_mode={:?}", aster_mode));
@@ -2943,11 +2849,6 @@ impl Agent {
             let mut scheduler_service = self.scheduler_service.lock().await;
             *scheduler_service = Some(scheduler.clone());
         }
-
-        let mut registry = self.tool_registry.write().await;
-        registry.register(Box::new(CronCreateTool::new(scheduler.clone())));
-        registry.register(Box::new(CronListTool::new(scheduler.clone())));
-        registry.register(Box::new(CronDeleteTool::new(scheduler)));
     }
 
     /// Get a reference count clone to the provider
@@ -4398,6 +4299,10 @@ impl Agent {
                                     }
                                     continue;
                                 }
+                                if is_provider_stream_event_notification(&response) {
+                                    yield AgentEvent::Message(response);
+                                    continue;
+                                }
 
                                 if direct_answer_surface && tools.is_empty() {
                                     let direct_response =
@@ -5148,9 +5053,8 @@ mod tests {
     use crate::providers::errors::ProviderError;
     use crate::session::{
         extension_data::ExtensionData, initialize_session_runtime_store, ChatHistoryMatch,
-        CommitOptions, CommitReport, InMemoryThreadRuntimeStore, MemoryCategory, MemoryHealth,
-        MemoryRecord, MemorySearchResult, MemoryStats, SessionInsights, SessionManager,
-        SessionStore, SessionType, TokenStatsUpdate, TurnContextOverride,
+        InMemoryThreadRuntimeStore, SessionInsights, SessionManager, SessionStore, SessionType,
+        TokenStatsUpdate, TurnContextOverride,
     };
     use async_trait::async_trait;
     use futures::StreamExt;
@@ -5538,48 +5442,6 @@ mod tests {
             _exclude_session_id: Option<String>,
         ) -> Result<Vec<ChatHistoryMatch>> {
             Ok(Vec::new())
-        }
-
-        async fn commit_session(&self, _id: &str, _options: CommitOptions) -> Result<CommitReport> {
-            Ok(CommitReport {
-                session_id: "counting-test-store".to_string(),
-                messages_scanned: 0,
-                memories_created: 0,
-                memories_merged: 0,
-                source_start_ts: None,
-                source_end_ts: None,
-                warnings: Vec::new(),
-            })
-        }
-
-        async fn search_memories(
-            &self,
-            _query: &str,
-            _limit: Option<usize>,
-            _session_scope: Option<&str>,
-            _categories: Option<Vec<MemoryCategory>>,
-        ) -> Result<Vec<MemorySearchResult>> {
-            Ok(Vec::new())
-        }
-
-        async fn retrieve_context_memories(
-            &self,
-            _session_id: &str,
-            _query: &str,
-            _limit: usize,
-        ) -> Result<Vec<MemoryRecord>> {
-            Ok(Vec::new())
-        }
-
-        async fn memory_stats(&self) -> Result<MemoryStats> {
-            Ok(MemoryStats::default())
-        }
-
-        async fn memory_health(&self) -> Result<MemoryHealth> {
-            Ok(MemoryHealth {
-                healthy: true,
-                message: "counting test store".to_string(),
-            })
         }
     }
 
@@ -7234,8 +7096,8 @@ mod tests {
             "Read tool should be registered"
         );
         assert!(
-            registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
-            "view_image tool should be registered"
+            !registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
+            "view_image is registered by Lime's tool-runtime overlay, not Aster default tools"
         );
         assert!(
             registry_guard.contains("Write"),
@@ -7273,16 +7135,13 @@ mod tests {
             !registry_guard.contains("AskUserQuestion"),
             "AskUserQuestion should not remain in the current native surface"
         );
-        let tool_gates = current_surface_tool_gates();
-        assert_eq!(
-            registry_guard.contains("Config"),
-            should_register_current_surface_tool("Config", tool_gates),
-            "Config registration should match current surface gate"
+        assert!(
+            !registry_guard.contains("Config"),
+            "Config should not remain on the current native surface"
         );
-        assert_eq!(
-            registry_guard.contains("Sleep"),
-            should_register_current_surface_tool("Sleep", tool_gates),
-            "Sleep registration should match current surface gate"
+        assert!(
+            !registry_guard.contains("Sleep"),
+            "Sleep should not remain on the current native surface"
         );
 
         // Verify tool count
@@ -7380,8 +7239,8 @@ mod tests {
             "Read tool should be registered"
         );
         assert!(
-            registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
-            "view_image tool should be registered"
+            !registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
+            "view_image is registered by Lime's tool-runtime overlay, not Aster default tools"
         );
         assert!(
             registry_guard.contains("ListMcpResourcesTool"),
@@ -7403,16 +7262,13 @@ mod tests {
             !registry_guard.contains("AskUserQuestion"),
             "AskUserQuestion should not remain in the current native surface"
         );
-        let tool_gates = current_surface_tool_gates();
-        assert_eq!(
-            registry_guard.contains("Config"),
-            should_register_current_surface_tool("Config", tool_gates),
-            "Config registration should match current surface gate"
+        assert!(
+            !registry_guard.contains("Config"),
+            "Config should not remain on the current native surface"
         );
-        assert_eq!(
-            registry_guard.contains("Sleep"),
-            should_register_current_surface_tool("Sleep", tool_gates),
-            "Sleep registration should match current surface gate"
+        assert!(
+            !registry_guard.contains("Sleep"),
+            "Sleep should not remain on the current native surface"
         );
 
         Ok(())
@@ -7627,16 +7483,10 @@ mod tests {
         let external_env = HashMap::new();
         let external_gates =
             crate::tools::current_surface_tool_gates_from_env_map(&external_env, true);
-        assert!(!external_gates.config);
-        assert!(!external_gates.sleep);
-        assert!(!external_gates.workflow);
         assert!(external_gates.powershell);
 
         let ant_env = HashMap::from([("USER_TYPE".to_string(), "ant".to_string())]);
         let ant_gates = crate::tools::current_surface_tool_gates_from_env_map(&ant_env, true);
-        assert!(ant_gates.config);
-        assert!(!ant_gates.sleep);
-        assert!(!ant_gates.workflow);
         assert!(ant_gates.powershell);
 
         let external_powershell_env = HashMap::from([(
@@ -7660,9 +7510,6 @@ mod tests {
             &ant_powershell_disabled_env,
             true,
         );
-        assert!(ant_powershell_disabled_gates.config);
-        assert!(ant_powershell_disabled_gates.sleep);
-        assert!(ant_powershell_disabled_gates.workflow);
         assert!(!ant_powershell_disabled_gates.powershell);
 
         let non_windows_env = HashMap::from([(
@@ -7693,6 +7540,26 @@ mod tests {
         ));
         assert!(should_expose_tool_for_session(
             "mcp__docs__search",
+            Some(SessionType::SubAgent),
+            false
+        ));
+        assert!(!should_expose_tool_for_session(
+            "TaskCreate",
+            Some(SessionType::SubAgent),
+            false
+        ));
+        assert!(!should_expose_tool_for_session(
+            "TaskGet",
+            Some(SessionType::SubAgent),
+            false
+        ));
+        assert!(!should_expose_tool_for_session(
+            "TaskList",
+            Some(SessionType::SubAgent),
+            false
+        ));
+        assert!(!should_expose_tool_for_session(
+            "TaskUpdate",
             Some(SessionType::SubAgent),
             false
         ));
@@ -7745,14 +7612,7 @@ mod tests {
 
     #[test]
     fn test_current_surface_subagent_plan_mode_keeps_exit_plan_mode_visible() {
-        let tool_gates = CurrentSurfaceToolGates {
-            config: false,
-            sleep: false,
-            cron: false,
-            remote_trigger: false,
-            workflow: false,
-            powershell: false,
-        };
+        let tool_gates = CurrentSurfaceToolGates { powershell: false };
 
         assert!(should_expose_tool_for_session_with_gates(
             "ExitPlanMode",
@@ -7774,14 +7634,7 @@ mod tests {
 
     #[test]
     fn test_current_surface_team_subagent_keeps_agent_visible_for_sync_nested_subagents() {
-        let tool_gates = CurrentSurfaceToolGates {
-            config: false,
-            sleep: false,
-            cron: false,
-            remote_trigger: false,
-            workflow: false,
-            powershell: false,
-        };
+        let tool_gates = CurrentSurfaceToolGates { powershell: false };
 
         assert!(should_expose_tool_for_session_with_gates(
             AGENT_TOOL_NAME,
@@ -7844,16 +7697,17 @@ mod tests {
         let tools = agent.list_tools(None).await;
         let tool_gates = current_surface_tool_gates();
 
-        for (tool_name, expected_visible) in [
-            ("Config", tool_gates.config),
-            ("Sleep", tool_gates.sleep),
-            ("Workflow", tool_gates.workflow),
-            ("PowerShell", tool_gates.powershell),
-        ] {
+        for (tool_name, expected_visible) in [("PowerShell", tool_gates.powershell)] {
             assert_eq!(
                 tools.iter().any(|tool| tool.name == tool_name),
                 expected_visible,
                 "main-thread current surface visibility mismatch for {tool_name}"
+            );
+        }
+        for deleted_tool in ["Config", "Sleep", "Workflow"] {
+            assert!(
+                !tools.iter().any(|tool| tool.name == deleted_tool),
+                "deleted Aster tool should not be visible on main-thread surface: {deleted_tool}"
             );
         }
 
@@ -8005,14 +7859,8 @@ mod tests {
             "Read",
             "Edit",
             "Write",
-            "TaskCreate",
-            "TaskGet",
-            "TaskList",
-            "TaskUpdate",
             "ToolSearch",
             FINAL_OUTPUT_TOOL_NAME,
-            "EnterWorktree",
-            "ExitWorktree",
         ] {
             assert!(
                 tools.iter().any(|tool| tool.name == visible_name),
@@ -8021,6 +7869,10 @@ mod tests {
         }
 
         for hidden_name in [
+            "TaskCreate",
+            "TaskGet",
+            "TaskList",
+            "TaskUpdate",
             "TaskOutput",
             "TaskStop",
             "SendUserMessage",
@@ -8030,6 +7882,8 @@ mod tests {
             "request_user_input",
             "EnterPlanMode",
             "ExitPlanMode",
+            "EnterWorktree",
+            "ExitWorktree",
         ] {
             assert!(
                 !tools.iter().any(|tool| tool.name == hidden_name),
@@ -8092,14 +7946,7 @@ mod tests {
         let child_agent = manager.get_or_create_agent(child.id.clone()).await?;
         let tools = child_agent.list_tools(None).await;
 
-        for visible_name in [
-            AGENT_TOOL_NAME,
-            "SendMessage",
-            "ListPeers",
-            "CronCreate",
-            "CronList",
-            "CronDelete",
-        ] {
+        for visible_name in [AGENT_TOOL_NAME, "SendMessage", "ListPeers"] {
             assert!(
                 tools.iter().any(|tool| tool.name == visible_name),
                 "team subagent current surface should keep teammate tool: {visible_name}"

@@ -5,6 +5,10 @@
 //! 被 adapter 包在内部，不能把 Aster 类型暴露给 current 调用面。
 
 use crate::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
+use crate::safety::{
+    parse_safety_buffering_runtime_event_payload, ProviderSafetyBufferingRuntimeEventPayload,
+    SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
+};
 use crate::ModelProviderProtocol;
 use serde::{Deserialize, Serialize};
 
@@ -282,6 +286,40 @@ impl RuntimeReplyProviderRequestWireShape {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "payload")]
+pub enum RuntimeReplyProviderStreamEvent {
+    SafetyBuffering(ProviderSafetyBufferingRuntimeEventPayload),
+}
+
+impl RuntimeReplyProviderStreamEvent {
+    pub fn safety_buffering_from_response_event<'a>(
+        stream_request: &RuntimeReplyStreamRequest,
+        response_event: &serde_json::Value,
+        headers: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Option<Self> {
+        parse_safety_buffering_runtime_event_payload(
+            response_event,
+            headers,
+            stream_request.provider_name(),
+            stream_request.model_name(),
+        )
+        .map(Self::SafetyBuffering)
+    }
+
+    pub fn runtime_event_kind(&self) -> &'static str {
+        match self {
+            Self::SafetyBuffering(_) => SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
+        }
+    }
+
+    pub fn payload_json_value(&self) -> serde_json::Value {
+        match self {
+            Self::SafetyBuffering(payload) => payload.to_json_value(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeReplyProviderRequestHeader {
     pub name: String,
@@ -343,6 +381,11 @@ impl RuntimeReplyReasoningOutputPolicy {
 mod tests {
     use super::*;
     use crate::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
+    use crate::safety::{
+        ProviderSafetyBufferingRetryModelSource, SAFETY_BUFFERING_ENABLED_HEADER,
+        SAFETY_BUFFERING_FASTER_MODEL_HEADER,
+    };
+    use serde_json::json;
 
     fn runtime_config() -> RuntimeProviderConfig {
         RuntimeProviderConfig {
@@ -401,6 +444,87 @@ mod tests {
         );
         assert_eq!(request.provider_name(), Some("openai"));
         assert_eq!(request.model_name(), Some("gpt-5.3-codex"));
+    }
+
+    #[test]
+    fn stream_event_projects_safety_buffering_payload_from_response_event() {
+        let request = RuntimeReplyStreamRequest::new(
+            "session-1",
+            RuntimeReplyInputKind::UserMessage,
+            42,
+            Some(RuntimeReplyProviderHandle::from_config(
+                &runtime_config(),
+                RuntimeProviderBackend::AsterCompat,
+            )),
+        );
+        let response_event = json!({
+            "type": "response.output_text.delta",
+            "safety_buffering": {
+                "use_cases": ["cyber"],
+                "reasons": ["user_risk"],
+            },
+        });
+
+        let event = RuntimeReplyProviderStreamEvent::safety_buffering_from_response_event(
+            &request,
+            &response_event,
+            [
+                (SAFETY_BUFFERING_ENABLED_HEADER, "true"),
+                (SAFETY_BUFFERING_FASTER_MODEL_HEADER, " retry-target "),
+            ],
+        )
+        .expect("safety buffering event");
+
+        assert_eq!(
+            event.runtime_event_kind(),
+            SAFETY_BUFFERING_RUNTIME_EVENT_KIND
+        );
+        let RuntimeReplyProviderStreamEvent::SafetyBuffering(payload) = &event;
+        assert_eq!(payload.provider.as_deref(), Some("openai"));
+        assert_eq!(payload.model.as_deref(), Some("gpt-5.3-codex"));
+        assert_eq!(payload.use_cases, ["cyber"]);
+        assert_eq!(payload.reasons, ["user_risk"]);
+        assert!(payload.show_buffering_ui);
+        assert_eq!(payload.retry_model.as_deref(), Some("retry-target"));
+        assert_eq!(
+            payload.fallback_header_model.as_deref(),
+            Some("retry-target")
+        );
+        assert_eq!(
+            payload.source,
+            ProviderSafetyBufferingRetryModelSource::LegacyHeader
+        );
+
+        let payload_json = event.payload_json_value();
+        assert_eq!(payload_json["source"], json!("legacy_header"));
+        assert!(payload_json.get("retry_model").is_none());
+        assert!(payload_json.get("faster_model").is_none());
+    }
+
+    #[test]
+    fn stream_event_ignores_false_safety_buffering_response_field() {
+        let request = RuntimeReplyStreamRequest::new(
+            "session-1",
+            RuntimeReplyInputKind::UserMessage,
+            42,
+            Some(RuntimeReplyProviderHandle::from_config(
+                &runtime_config(),
+                RuntimeProviderBackend::AsterCompat,
+            )),
+        );
+        let response_event = json!({
+            "type": "response.created",
+            "safety_buffering": false,
+        });
+
+        assert!(
+            RuntimeReplyProviderStreamEvent::safety_buffering_from_response_event(
+                &request,
+                &response_event,
+                [(SAFETY_BUFFERING_ENABLED_HEADER, "true")],
+            )
+            .is_none()
+        );
     }
 
     #[test]

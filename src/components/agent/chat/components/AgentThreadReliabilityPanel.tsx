@@ -47,6 +47,7 @@ import { AgentThreadFileCheckpointDialog } from "./AgentThreadFileCheckpointDial
 import { AgentThreadOutcomeSummary } from "./AgentThreadOutcomeSummary";
 import { AgentThreadRoutingEvidenceCard } from "./AgentThreadRoutingEvidenceCard";
 import { AgentThreadPolicyEvidenceCard } from "./AgentThreadPolicyEvidenceCard";
+import { AgentThreadProviderSafetyBufferingCard } from "./AgentThreadProviderSafetyBufferingCard";
 import { AgentThreadReliabilityPanelHeader } from "./AgentThreadReliabilityPanelHeader";
 import { AgentThreadReliabilityStats } from "./AgentThreadReliabilityStats";
 import {
@@ -571,6 +572,8 @@ export const AgentThreadReliabilityPanel: React.FC<
         }}
         onOpenExecutionPolicySettings={onOpenExecutionPolicySettings}
       />
+
+      <AgentThreadProviderSafetyBufferingCard threadRead={threadRead} />
 
       {(canInterrupt && onInterruptCurrentTurn) ||
       (view.pendingRequests.length > 0 && onReplayPendingRequest) ||
