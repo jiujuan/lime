@@ -25,6 +25,10 @@ import {
   upsertThreadItemState,
   upsertThreadTurnState,
 } from "./agentThreadState";
+import {
+  removeQueuedTurnSnapshots,
+  upsertQueuedTurnSnapshot,
+} from "./agentQueuedTurnProjection";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
 
@@ -280,7 +284,13 @@ function findRunningThreadReadTurnId(
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     const turn = turns[index];
     if (isRunningStatus(turn?.status)) {
-      return normalizeRealTurnId(turn.turn_id);
+      return (
+        normalizeRealTurnId(turn.turn_id) ??
+        normalizeRealTurnId(
+          (turn as { turnId?: string | null }).turnId,
+        ) ??
+        normalizeRealTurnId((turn as { id?: string | null }).id)
+      );
     }
   }
   return null;
@@ -343,15 +353,17 @@ export function resolveAgentStreamResumeBindingTarget(
 
   const runningThreadTurn = findRunningThreadTurn(options.threadTurns);
   const hasRunningReadModel = hasRunningThreadReadActivity(options.threadRead);
-  if (!runningThreadTurn && !hasRunningReadModel) {
+  if (!hasRunningReadModel) {
     return null;
   }
 
   const turnId =
     normalizeRealTurnId(options.threadRead?.active_turn_id) ??
-    findRunningThreadReadTurnId(options.threadRead) ??
-    normalizeRealTurnId(runningThreadTurn?.id) ??
-    normalizeRealTurnId(options.currentTurnId);
+    normalizeRealTurnId(
+      (options.threadRead as { activeTurnId?: string | null } | null | undefined)
+        ?.activeTurnId,
+    ) ??
+    findRunningThreadReadTurnId(options.threadRead);
   if (!turnId) {
     return null;
   }
@@ -558,33 +570,13 @@ export async function bindRecoveredAgentStreamThread(
     });
   };
   const upsertQueuedTurn = (queuedTurn: QueuedTurnSnapshot) => {
-    setQueuedTurns((prev) =>
-      [
-        ...prev.filter(
-          (item) => item.queued_turn_id !== queuedTurn.queued_turn_id,
-        ),
-        queuedTurn,
-      ].sort((left, right) => {
-        if (left.position !== right.position) {
-          return left.position - right.position;
-        }
-        return left.created_at - right.created_at;
-      }),
-    );
+    setQueuedTurns((prev) => upsertQueuedTurnSnapshot(prev, queuedTurn));
   };
-  const removeQueuedTurnState = (queuedTurnIds: string[]) => {
+  const removeQueuedTurnsFromProjection = (queuedTurnIds: string[]) => {
     if (queuedTurnIds.length === 0) {
       return;
     }
-    setQueuedTurns((prev) => {
-      const idSet = new Set(queuedTurnIds);
-      return prev
-        .filter((item) => !idSet.has(item.queued_turn_id))
-        .map((item, index) => ({
-          ...item,
-          position: index + 1,
-        }));
-    });
+    setQueuedTurns((prev) => removeQueuedTurnSnapshots(prev, queuedTurnIds));
   };
 
   setActiveStream({
@@ -630,7 +622,7 @@ export async function bindRecoveredAgentStreamThread(
           removeQueuedDraftMessages: () => undefined,
           clearActiveStreamIfMatch,
           upsertQueuedTurn,
-          removeQueuedTurnState,
+          removeQueuedTurnsFromProjection,
           playToolcallSound,
           playTypewriterSound,
           appendThinkingToParts,

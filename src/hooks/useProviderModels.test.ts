@@ -268,14 +268,7 @@ describe("loadProviderModels", () => {
     expect(models.map((model) => model.id)).toEqual(["MiniMax-M2.7"]);
   });
 
-  it("实时目录无 API Key 时仍先走后端读取缓存", async () => {
-    mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      models: [createModelMetadata("gpt-cached")],
-      source: "Api",
-      error: null,
-      from_cache: true,
-    });
-
+  it("实时目录无 API Key 时不触发后台模型拉取", async () => {
     const models = await loadProviderModels(
       createProvider({
         customModels: ["manual-model"],
@@ -286,11 +279,8 @@ describe("loadProviderModels", () => {
       },
     );
 
-    expect(models.map((model) => model.id)).toEqual([
-      "manual-model",
-      "gpt-cached",
-    ]);
-    expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("openai");
+    expect(models.map((model) => model.id)).toEqual(["manual-model"]);
+    expect(mockFetchProviderModelsAuto).not.toHaveBeenCalled();
   });
 
   it("Lime Hub 实时目录为空时不应注入本地 mock 模型", async () => {
@@ -336,6 +326,24 @@ describe("loadProviderModels", () => {
     );
 
     expect(models).toEqual([]);
+    expect(mockGetModelRegistry).not.toHaveBeenCalled();
+    expect(mockGetProviderAliasConfig).not.toHaveBeenCalled();
+    expect(mockFetchProviderModelsAuto).not.toHaveBeenCalled();
+  });
+
+  it("Lime Hub 未登录但已有声明模型时应返回声明模型且不读取实时接口", async () => {
+    const models = await loadProviderModels(
+      createLimeHubProvider({
+        authStatus: "login_required",
+        customModels: ["gpt-5.2-pro"],
+      }),
+      {
+        liveFetchOnly: true,
+        hasApiKey: true,
+      },
+    );
+
+    expect(models.map((model) => model.id)).toEqual(["gpt-5.2-pro"]);
     expect(mockGetModelRegistry).not.toHaveBeenCalled();
     expect(mockGetProviderAliasConfig).not.toHaveBeenCalled();
     expect(mockFetchProviderModelsAuto).not.toHaveBeenCalled();

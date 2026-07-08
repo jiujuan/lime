@@ -349,7 +349,9 @@ describe("mcp", () => {
     });
 
     mockAppServerResult({});
-    await expect(mcpApi.subscribeResource("docs://readme")).resolves.toBeUndefined();
+    await expect(
+      mcpApi.subscribeResource("docs://readme"),
+    ).resolves.toBeUndefined();
     expect(appServerRequestMock).toHaveBeenLastCalledWith(
       "mcpResource/subscribe",
       {
@@ -532,6 +534,49 @@ describe("mcp", () => {
         { caller: "plugin:docs-plugin", includeDeferred: true },
       ],
     ]);
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("MCP call proof requests 应通过 caller-scoped current 方法执行", async () => {
+    mockAppServerResult({
+      content: [{ type: "text", text: "ok" }],
+      structuredContent: { libraryId: "/facebook/react" },
+      is_error: false,
+    });
+
+    await expect(
+      mcpApi.executeCallProofRequests([
+        {
+          method: "mcpTool/callWithCaller",
+          params: {
+            toolName: "mcp__context7__resolve-library-id",
+            caller: "plugin:docs-plugin",
+            arguments: { libraryName: "react" },
+          },
+          reason: "tool_call_proof",
+          status: "candidate",
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        method: "mcpTool/callWithCaller",
+        status: "completed",
+        result: {
+          content: [{ type: "text", text: "ok" }],
+          structuredContent: { libraryId: "/facebook/react" },
+          is_error: false,
+        },
+      },
+    ]);
+
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpTool/callWithCaller",
+      {
+        toolName: "mcp__context7__resolve-library-id",
+        arguments: { libraryName: "react" },
+        caller: "plugin:docs-plugin",
+      },
+    );
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

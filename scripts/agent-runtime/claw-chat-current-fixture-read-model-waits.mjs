@@ -628,7 +628,12 @@ export async function waitForSessionReadCanceled(
   page,
   options,
   requestLog,
-  { sessionId = SESSION_ID, prompt = NEWS_PROMPT, partialText = "" } = {},
+  {
+    sessionId = SESSION_ID,
+    prompt = NEWS_PROMPT,
+    partialText = "",
+    requireContent = true,
+  } = {},
 ) {
   const startedAt = Date.now();
   let lastRead = null;
@@ -645,9 +650,10 @@ export async function waitForSessionReadCanceled(
     lastRead = read.result;
     const serialized = JSON.stringify(read.result || {});
     if (
-      serialized.includes(prompt) &&
       serialized.includes("canceled") &&
-      (!partialText || serialized.includes(partialText))
+      (!requireContent ||
+        (serialized.includes(prompt) &&
+          (!partialText || serialized.includes(partialText))))
     ) {
       return read.result;
     }

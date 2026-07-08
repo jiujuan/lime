@@ -3,7 +3,13 @@ import {
   getAgentRuntimeToolInventory,
   type AgentRuntimeToolInventory,
 } from "@/lib/api/agentRuntime";
-import { mcpApi, type McpPrepareRequest } from "@/lib/api/mcp";
+import {
+  mcpApi,
+  type McpCallProofRequest,
+  type McpPrepareRequest,
+  type McpPrepareResult,
+  type McpToolDefinition,
+} from "@/lib/api/mcp";
 import { extractArtifactProtocolPathsFromRecord } from "@/lib/artifact-protocol";
 import type {
   GeneralWorkbenchRunState as BackendGeneralWorkbenchRunState,
@@ -29,7 +35,16 @@ interface UseWorkspaceHarnessInventoryRuntimeParams {
 }
 
 interface PluginMcpTargetProjection {
+  expectedToolName?: unknown;
+  callProofRequest?: unknown;
   prepareRequests?: unknown;
+  toolListRequest?: unknown;
+}
+
+interface PluginMcpPrepareTarget {
+  expectedToolName: string | null;
+  callProofRequests: McpCallProofRequest[];
+  prepareRequests: McpPrepareRequest[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -46,24 +61,136 @@ function getPluginMcpTargets(
   const targets = inventory.plugin_mcp_targets;
   return Array.isArray(targets)
     ? targets.filter(isRecord).map((target) => ({
+        expectedToolName: target.expectedToolName,
+        callProofRequest: target.callProofRequest,
         prepareRequests: target.prepareRequests,
+        toolListRequest: target.toolListRequest,
       }))
     : [];
 }
 
-function getCandidateMcpPrepareRequests(
+function isCandidateMcpCallProofRequest(
+  request: unknown,
+): request is McpCallProofRequest {
+  return (
+    isRecord(request) &&
+    request.status === "candidate" &&
+    typeof request.method === "string"
+  );
+}
+
+function getCandidateMcpPrepareTargets(
   inventory: AgentRuntimeToolInventory | null,
-): McpPrepareRequest[] {
+): PluginMcpPrepareTarget[] {
   return getPluginMcpTargets(inventory).flatMap((target) => {
-    if (!Array.isArray(target.prepareRequests)) {
+    const prepareRequests = Array.isArray(target.prepareRequests)
+      ? target.prepareRequests.filter(
+          (request): request is McpPrepareRequest =>
+            isRecord(request) && request.status === "candidate",
+        )
+      : [];
+    const callProofRequests = isCandidateMcpCallProofRequest(
+      target.callProofRequest,
+    )
+      ? [target.callProofRequest]
+      : [];
+    if (
+      prepareRequests.length === 0 &&
+      callProofRequests.length === 0 &&
+      isRecord(target.toolListRequest)
+    ) {
+      prepareRequests.push({
+        method: "mcpTool/listForContext",
+        params: target.toolListRequest,
+        reason: "tool_listing_default_proof",
+        status: "candidate",
+      });
+    }
+    if (prepareRequests.length === 0 && callProofRequests.length === 0) {
       return [];
     }
 
-    return target.prepareRequests.filter(
-      (request): request is McpPrepareRequest =>
-        isRecord(request) && request.status === "candidate",
+    const expectedToolName =
+      typeof target.expectedToolName === "string" &&
+      target.expectedToolName.trim().length > 0
+        ? target.expectedToolName.trim()
+        : null;
+    return [
+      {
+        expectedToolName,
+        callProofRequests,
+        prepareRequests,
+      },
+    ];
+  });
+}
+
+function mcpToolMatchesExpectedName(
+  tool: McpToolDefinition,
+  expectedToolName: string,
+): boolean {
+  return tool.name.trim().toLowerCase() === expectedToolName.toLowerCase();
+}
+
+function assertMcpPrepareResultsExposeExpectedTools(
+  targets: PluginMcpPrepareTarget[],
+  requests: McpPrepareRequest[],
+  results: McpPrepareResult[],
+): void {
+  const missingTool = targets.find((target) => {
+    const expectedToolName = target.expectedToolName;
+    return (
+      expectedToolName &&
+      !target.prepareRequests.some((request) => {
+        if (request.method !== "mcpTool/listForContext") {
+          return false;
+        }
+        const requestIndex = requests.indexOf(request);
+        if (requestIndex < 0) {
+          return false;
+        }
+        const result = results[requestIndex];
+        return (result?.tools ?? []).some((tool) =>
+          mcpToolMatchesExpectedName(tool, expectedToolName),
+        );
+      })
     );
   });
+  if (missingTool) {
+    throw new Error("准备 MCP 工具失败");
+  }
+}
+
+function buildAutoMcpListProofSignature(
+  targets: PluginMcpPrepareTarget[],
+): string | null {
+  if (targets.length === 0) {
+    return null;
+  }
+  const entries = targets.map((target) => {
+    if (
+      !target.expectedToolName ||
+      target.callProofRequests.length > 0 ||
+      target.prepareRequests.length === 0 ||
+      !target.prepareRequests.every(
+        (request) => request.method === "mcpTool/listForContext",
+      )
+    ) {
+      return null;
+    }
+    return {
+      expectedToolName: target.expectedToolName,
+      requests: target.prepareRequests.map((request) => ({
+        method: request.method,
+        params: request.params ?? {},
+      })),
+    };
+  });
+  return entries.every((entry): entry is NonNullable<typeof entry> =>
+    Boolean(entry),
+  )
+    ? JSON.stringify(entries)
+    : null;
 }
 
 export function useWorkspaceHarnessInventoryRuntime({
@@ -89,6 +216,7 @@ export function useWorkspaceHarnessInventoryRuntime({
   const [mcpPrepareLoading, setMcpPrepareLoading] = useState(false);
   const [mcpPrepareError, setMcpPrepareError] = useState<string | null>(null);
   const mcpPrepareRequestIdRef = useRef(0);
+  const mcpAutoPrepareSignatureRef = useRef<string | null>(null);
 
   const refreshToolInventory = useCallback(async () => {
     if (!enabled || !harnessPanelVisible) {
@@ -148,6 +276,7 @@ export function useWorkspaceHarnessInventoryRuntime({
 
     toolInventoryRequestIdRef.current += 1;
     mcpPrepareRequestIdRef.current += 1;
+    mcpAutoPrepareSignatureRef.current = null;
     setToolInventory(null);
     setToolInventoryLoading(false);
     setToolInventoryError(null);
@@ -163,9 +292,21 @@ export function useWorkspaceHarnessInventoryRuntime({
     void refreshToolInventory();
   }, [enabled, harnessPanelVisible, refreshToolInventory]);
 
-  const mcpPrepareCandidateRequests = useMemo(
-    () => getCandidateMcpPrepareRequests(toolInventory),
+  const mcpPrepareTargets = useMemo(
+    () => getCandidateMcpPrepareTargets(toolInventory),
     [toolInventory],
+  );
+  const mcpPrepareCandidateRequests = useMemo(
+    () => mcpPrepareTargets.flatMap((target) => target.prepareRequests),
+    [mcpPrepareTargets],
+  );
+  const mcpCallProofCandidateRequests = useMemo(
+    () => mcpPrepareTargets.flatMap((target) => target.callProofRequests),
+    [mcpPrepareTargets],
+  );
+  const mcpAutoPrepareSignature = useMemo(
+    () => buildAutoMcpListProofSignature(mcpPrepareTargets),
+    [mcpPrepareTargets],
   );
 
   const prepareMcpTargets = useCallback(async () => {
@@ -173,7 +314,10 @@ export function useWorkspaceHarnessInventoryRuntime({
       return;
     }
 
-    if (mcpPrepareCandidateRequests.length === 0) {
+    if (
+      mcpPrepareCandidateRequests.length === 0 &&
+      mcpCallProofCandidateRequests.length === 0
+    ) {
       setMcpPrepareError(null);
       return;
     }
@@ -184,7 +328,19 @@ export function useWorkspaceHarnessInventoryRuntime({
     setMcpPrepareError(null);
 
     try {
-      await mcpApi.executePrepareRequests(mcpPrepareCandidateRequests);
+      if (mcpPrepareCandidateRequests.length > 0) {
+        const results = await mcpApi.executePrepareRequests(
+          mcpPrepareCandidateRequests,
+        );
+        assertMcpPrepareResultsExposeExpectedTools(
+          mcpPrepareTargets,
+          mcpPrepareCandidateRequests,
+          results,
+        );
+      }
+      if (mcpCallProofCandidateRequests.length > 0) {
+        await mcpApi.executeCallProofRequests(mcpCallProofCandidateRequests);
+      }
       if (mcpPrepareRequestIdRef.current !== requestId) {
         return;
       }
@@ -204,8 +360,37 @@ export function useWorkspaceHarnessInventoryRuntime({
   }, [
     enabled,
     harnessPanelVisible,
+    mcpCallProofCandidateRequests,
     mcpPrepareCandidateRequests,
+    mcpPrepareTargets,
     refreshToolInventory,
+  ]);
+
+  useEffect(() => {
+    if (!mcpAutoPrepareSignature) {
+      mcpAutoPrepareSignatureRef.current = null;
+      return;
+    }
+    if (
+      !enabled ||
+      !harnessPanelVisible ||
+      toolInventoryLoading ||
+      mcpPrepareLoading
+    ) {
+      return;
+    }
+    if (mcpAutoPrepareSignatureRef.current === mcpAutoPrepareSignature) {
+      return;
+    }
+    mcpAutoPrepareSignatureRef.current = mcpAutoPrepareSignature;
+    void prepareMcpTargets();
+  }, [
+    enabled,
+    harnessPanelVisible,
+    mcpAutoPrepareSignature,
+    mcpPrepareLoading,
+    prepareMcpTargets,
+    toolInventoryLoading,
   ]);
 
   const generalWorkbenchHarnessSummary = useMemo(() => {
@@ -257,7 +442,8 @@ export function useWorkspaceHarnessInventoryRuntime({
     toolInventoryLoading,
     toolInventoryError,
     refreshToolInventory,
-    mcpPrepareCandidateCount: mcpPrepareCandidateRequests.length,
+    mcpPrepareCandidateCount:
+      mcpPrepareCandidateRequests.length + mcpCallProofCandidateRequests.length,
     mcpPrepareLoading,
     mcpPrepareError,
     prepareMcpTargets,

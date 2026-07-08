@@ -1,5 +1,7 @@
-use super::super::status::agent_turn_status_label;
 use super::super::RuntimeCoreError;
+use super::super::soul::locale_copy::HandoffCopy;
+use super::super::soul::locale_copy::RuntimeExportCopy;
+use super::super::status::agent_turn_status_label;
 use super::metrics::HandoffMetrics;
 use super::metrics::HandoffRecentArtifact;
 use app_server_protocol::AgentSessionReadResponse;
@@ -9,24 +11,6 @@ use serde_json::json;
 use std::fmt::Write as _;
 use std::path::Component;
 use std::path::Path;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct HandoffCopy {
-    pub(super) plan_title: &'static str,
-    pub(super) progress_title: &'static str,
-    pub(super) handoff_title: &'static str,
-    pub(super) review_summary_title: &'static str,
-    pub(super) session_label: &'static str,
-    pub(super) thread_label: &'static str,
-    pub(super) status_label: &'static str,
-    pub(super) exported_at_label: &'static str,
-    pub(super) todo_summary_title: &'static str,
-    pub(super) recent_artifacts_title: &'static str,
-    pub(super) no_recent_artifacts: &'static str,
-    pub(super) next_step_title: &'static str,
-    pub(super) next_step_body: &'static str,
-    pub(super) review_note: &'static str,
-}
 
 pub(super) fn sanitized_workspace_root(workspace_root: &Path) -> String {
     let mut components = workspace_root
@@ -111,9 +95,10 @@ pub(super) fn build_replay_grader_markdown(
     read: &AgentSessionReadResponse,
     metrics: &HandoffMetrics,
     exported_at: &str,
+    copy: &RuntimeExportCopy,
 ) -> String {
     let mut content = String::new();
-    let _ = writeln!(content, "# Replay Grader");
+    let _ = writeln!(content, "# {}", copy.replay.grader_heading);
     let _ = writeln!(content);
     let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
     let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
@@ -124,21 +109,20 @@ pub(super) fn build_replay_grader_markdown(
         metrics.thread_status.as_str()
     );
     let _ = writeln!(content);
-    let _ = writeln!(content, "## Checks");
-    let _ = writeln!(
-        content,
-        "- pendingRequestCount should remain {} unless intentionally changed.",
-        metrics.pending_request_count
-    );
-    let _ = writeln!(
-        content,
-        "- queuedTurnCount should remain {} unless intentionally changed.",
-        metrics.queued_turn_count
-    );
-    let _ = writeln!(
-        content,
-        "- replay should preserve App Server current read model shape."
-    );
+    write_generation_brief_boundary(&mut content, copy);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## {}", copy.replay.checks_heading);
+    let pending_request_check = copy
+        .replay
+        .pending_request_check
+        .replace("{count}", &metrics.pending_request_count.to_string());
+    let queued_turn_check = copy
+        .replay
+        .queued_turn_check
+        .replace("{count}", &metrics.queued_turn_count.to_string());
+    let _ = writeln!(content, "- {pending_request_check}");
+    let _ = writeln!(content, "- {queued_turn_check}");
+    let _ = writeln!(content, "- {}", copy.replay.read_model_check);
     content
 }
 
@@ -173,9 +157,10 @@ pub(super) fn build_analysis_brief_markdown(
     metrics: &HandoffMetrics,
     recent_artifacts: &[HandoffRecentArtifact],
     exported_at: &str,
+    copy: &RuntimeExportCopy,
 ) -> String {
     let mut content = String::new();
-    let _ = writeln!(content, "# Analysis Handoff");
+    let _ = writeln!(content, "# {}", copy.analysis.markdown_heading);
     let _ = writeln!(content);
     let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
     let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
@@ -189,19 +174,16 @@ pub(super) fn build_analysis_brief_markdown(
     }
     let _ = writeln!(content, "- exportedAt: `{exported_at}`");
     let _ = writeln!(content);
-    let _ = writeln!(content, "## Focus");
-    let _ = writeln!(
-        content,
-        "- Review the current App Server read model and decide the next implementation slice."
-    );
-    let _ = writeln!(
-        content,
-        "- Do not use legacy `agent_runtime_*` command output as production evidence."
-    );
+    write_generation_brief_boundary(&mut content, copy);
     let _ = writeln!(content);
-    write_handoff_todo_summary(&mut content, metrics, handoff_copy(Some("en-US")));
+    let _ = writeln!(content, "## {}", copy.analysis.focus_heading);
     let _ = writeln!(content);
-    write_handoff_recent_artifacts(&mut content, recent_artifacts, handoff_copy(Some("en-US")));
+    let _ = writeln!(content, "- {}", copy.analysis.focus_current_read_model);
+    let _ = writeln!(content, "- {}", copy.analysis.focus_no_legacy);
+    let _ = writeln!(content);
+    write_handoff_todo_summary(&mut content, metrics, copy.handoff);
+    let _ = writeln!(content);
+    write_handoff_recent_artifacts(&mut content, recent_artifacts, copy.handoff);
     content
 }
 
@@ -240,14 +222,16 @@ pub(super) fn build_analysis_copy_prompt(
     read: &AgentSessionReadResponse,
     analysis_relative_root: &str,
     replay_relative_root: &str,
+    copy: &RuntimeExportCopy,
 ) -> String {
-    format!(
-        "请基于 App Server current 导出的 `{}` 和 `{}` 分析会话 `{}` 的下一步风险、缺口和回归验证；不要依赖 legacy agent_runtime_* 输出。",
-        analysis_relative_root, replay_relative_root, read.session.session_id
+    copy.analysis_copy_prompt(
+        &read.session.session_id,
+        analysis_relative_root,
+        replay_relative_root,
     )
 }
 
-pub(super) fn default_review_decision() -> AgentSessionReviewDecision {
+pub(super) fn default_review_decision(copy: &RuntimeExportCopy) -> AgentSessionReviewDecision {
     AgentSessionReviewDecision {
         decision_status: "pending_review".to_string(),
         decision_summary: String::new(),
@@ -257,7 +241,9 @@ pub(super) fn default_review_decision() -> AgentSessionReviewDecision {
         human_reviewer: String::new(),
         followup_actions: Vec::new(),
         regression_requirements: vec![
-            "Run targeted current-path regression before marking accepted.".to_string(),
+            copy.review
+                .default_decision_regression_requirement
+                .to_string(),
         ],
         notes: String::new(),
     }
@@ -310,9 +296,10 @@ pub(super) fn build_review_decision_markdown(
     analysis_relative_root: &str,
     replay_relative_root: &str,
     exported_at: &str,
+    copy: &RuntimeExportCopy,
 ) -> String {
     let mut content = String::new();
-    let _ = writeln!(content, "# Review Decision");
+    let _ = writeln!(content, "# {}", copy.review.markdown_heading);
     let _ = writeln!(content);
     let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
     let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
@@ -322,29 +309,31 @@ pub(super) fn build_review_decision_markdown(
     let _ = writeln!(content, "- analysis: `{analysis_relative_root}`");
     let _ = writeln!(content, "- replay: `{replay_relative_root}`");
     let _ = writeln!(content);
-    let _ = writeln!(content, "## Summary");
+    write_generation_brief_boundary(&mut content, copy);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## {}", copy.review.summary_heading);
     let _ = writeln!(
         content,
         "{}",
         if decision.decision_summary.is_empty() {
-            "Pending human review."
+            copy.review.pending_summary
         } else {
             decision.decision_summary.as_str()
         }
     );
     let _ = writeln!(content);
-    let _ = writeln!(content, "## Follow-up Actions");
+    let _ = writeln!(content, "## {}", copy.review.followup_heading);
     if decision.followup_actions.is_empty() {
-        let _ = writeln!(content, "- None recorded.");
+        let _ = writeln!(content, "- {}", copy.review.no_followup);
     } else {
         for action in &decision.followup_actions {
             let _ = writeln!(content, "- {action}");
         }
     }
     let _ = writeln!(content);
-    let _ = writeln!(content, "## Regression Requirements");
+    let _ = writeln!(content, "## {}", copy.review.regression_heading);
     if decision.regression_requirements.is_empty() {
-        let _ = writeln!(content, "- Run current-path targeted regression.");
+        let _ = writeln!(content, "- {}", copy.review.default_regression_requirement);
     } else {
         for item in &decision.regression_requirements {
             let _ = writeln!(content, "- {item}");
@@ -352,7 +341,7 @@ pub(super) fn build_review_decision_markdown(
     }
     if !decision.notes.is_empty() {
         let _ = writeln!(content);
-        let _ = writeln!(content, "## Notes");
+        let _ = writeln!(content, "## {}", copy.review.notes_heading);
         let _ = writeln!(content, "{}", decision.notes);
     }
     content
@@ -448,15 +437,16 @@ pub(super) fn build_rollout_summary_candidate_markdown(
     exported_at: &str,
     export_relative_root: &str,
     export_kind: &str,
+    copy: &RuntimeExportCopy,
 ) -> String {
     let mut content = String::new();
     let _ = writeln!(
         content,
-        "Session `{}` exported `{export_kind}` evidence for follow-up consolidation.",
-        read.session.session_id
+        "{}",
+        copy.rollout_opening(&read.session.session_id, export_kind)
     );
     let _ = writeln!(content);
-    let _ = writeln!(content, "## Export Evidence");
+    let _ = writeln!(content, "## {}", copy.rollout.export_evidence_heading);
     let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
     let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
     let _ = writeln!(content, "- exportKind: `{export_kind}`");
@@ -471,21 +461,28 @@ pub(super) fn build_rollout_summary_candidate_markdown(
     }
     let _ = writeln!(content, "- exportedAt: `{exported_at}`");
     let _ = writeln!(content);
-    let _ = writeln!(content, "## Candidate Memory");
+    write_generation_brief_boundary(&mut content, copy);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## {}", copy.rollout.candidate_memory_heading);
     let _ = writeln!(
         content,
-        "- Review `{export_relative_root}` before promoting this candidate into long-term memory."
+        "- {} `{export_relative_root}`",
+        copy.rollout.review_before_promoting
     );
     if metrics.todo_pending > 0 || metrics.todo_in_progress > 0 {
         let _ = writeln!(
             content,
-            "- Pending work remains: {} pending, {} in progress.",
-            metrics.todo_pending, metrics.todo_in_progress
+            "- {}: {} {}, {} {}.",
+            copy.rollout.pending_work_label,
+            metrics.todo_pending,
+            copy.rollout.pending_label,
+            metrics.todo_in_progress,
+            copy.rollout.in_progress_label
         );
     }
     if !recent_artifacts.is_empty() {
         let _ = writeln!(content);
-        let _ = writeln!(content, "## Referenced Artifacts");
+        let _ = writeln!(content, "## {}", copy.rollout.referenced_artifacts_heading);
         for artifact in recent_artifacts {
             let _ = writeln!(
                 content,
@@ -585,6 +582,19 @@ fn write_handoff_header(
     let _ = writeln!(content, "- {}: `{}`", copy.exported_at_label, exported_at);
 }
 
+fn write_generation_brief_boundary(content: &mut String, copy: &RuntimeExportCopy) {
+    let _ = writeln!(content, "## {}", copy.generation_brief.heading);
+    let _ = writeln!(
+        content,
+        "- {}: `{}`",
+        copy.generation_brief.voice_source_label,
+        copy.formal_artifact_voice_source()
+    );
+    let _ = writeln!(content, "- {}", copy.generation_brief.default_voice);
+    let _ = writeln!(content, "- {}", copy.generation_brief.explicit_voice);
+    let _ = writeln!(content, "- {}", copy.generation_brief.fidelity_rule);
+}
+
 fn write_handoff_todo_summary(content: &mut String, metrics: &HandoffMetrics, copy: HandoffCopy) {
     let _ = writeln!(content, "## {}", copy.todo_summary_title);
     let _ = writeln!(content);
@@ -622,98 +632,5 @@ fn write_handoff_recent_artifacts(
             "- `{}` {} ({})",
             artifact.path, artifact.title, artifact.kind
         );
-    }
-}
-
-pub(super) fn handoff_copy(locale: Option<&str>) -> HandoffCopy {
-    match locale.unwrap_or("zh-CN") {
-        value if value.eq_ignore_ascii_case("zh-TW") || value.eq_ignore_ascii_case("zh-HK") => {
-            HandoffCopy {
-                plan_title: "計畫摘要",
-                progress_title: "結構化進度",
-                handoff_title: "交接摘要",
-                review_summary_title: "審查摘要",
-                session_label: "會話",
-                thread_label: "執行緒",
-                status_label: "狀態",
-                exported_at_label: "匯出時間",
-                todo_summary_title: "待辦摘要",
-                recent_artifacts_title: "最近產物",
-                no_recent_artifacts: "目前沒有可引用的最近產物。",
-                next_step_title: "建議接手順序",
-                next_step_body: "先讀 progress.json 確認結構化狀態，再讀 handoff.md 決定下一刀。",
-                review_note: "此摘要來自 App Server current read model；不要把 legacy command 輸出當成交付證據。",
-            }
-        }
-        value if value.eq_ignore_ascii_case("ja-JP") || value.eq_ignore_ascii_case("ja") => {
-            HandoffCopy {
-                plan_title: "計画サマリー",
-                progress_title: "構造化された進捗",
-                handoff_title: "引き継ぎサマリー",
-                review_summary_title: "レビューサマリー",
-                session_label: "セッション",
-                thread_label: "スレッド",
-                status_label: "状態",
-                exported_at_label: "エクスポート時刻",
-                todo_summary_title: "Todo サマリー",
-                recent_artifacts_title: "最近の成果物",
-                no_recent_artifacts: "参照できる最近の成果物はありません。",
-                next_step_title: "推奨される引き継ぎ順序",
-                next_step_body: "まず progress.json で構造化された状態を確認し、次に handoff.md で次の作業を決めてください。",
-                review_note: "このサマリーは App Server current read model から生成されています。legacy command の出力を納品証跡として扱わないでください。",
-            }
-        }
-        value if value.eq_ignore_ascii_case("ko-KR") || value.eq_ignore_ascii_case("ko") => {
-            HandoffCopy {
-                plan_title: "계획 요약",
-                progress_title: "구조화된 진행 상황",
-                handoff_title: "인수인계 요약",
-                review_summary_title: "리뷰 요약",
-                session_label: "세션",
-                thread_label: "스레드",
-                status_label: "상태",
-                exported_at_label: "내보낸 시간",
-                todo_summary_title: "Todo 요약",
-                recent_artifacts_title: "최근 산출물",
-                no_recent_artifacts: "참조할 최근 산출물이 없습니다.",
-                next_step_title: "권장 인수인계 순서",
-                next_step_body: "먼저 progress.json에서 구조화된 상태를 확인한 뒤 handoff.md에서 다음 작업을 결정하세요.",
-                review_note: "이 요약은 App Server current read model에서 생성되었습니다. legacy command 출력을 납품 증거로 사용하지 마세요.",
-            }
-        }
-        value if value.eq_ignore_ascii_case("en-US") || value.eq_ignore_ascii_case("en") => {
-            HandoffCopy {
-                plan_title: "Plan Summary",
-                progress_title: "Structured Progress",
-                handoff_title: "Handoff Summary",
-                review_summary_title: "Review Summary",
-                session_label: "Session",
-                thread_label: "Thread",
-                status_label: "Status",
-                exported_at_label: "Exported At",
-                todo_summary_title: "Todo Summary",
-                recent_artifacts_title: "Recent Artifacts",
-                no_recent_artifacts: "No recent artifacts are available.",
-                next_step_title: "Recommended Handoff Order",
-                next_step_body: "Read progress.json for structured state first, then use handoff.md to choose the next implementation slice.",
-                review_note: "This summary is generated from the App Server current read model; do not treat legacy command output as delivery evidence.",
-            }
-        }
-        _ => HandoffCopy {
-            plan_title: "计划摘要",
-            progress_title: "结构化进度",
-            handoff_title: "交接摘要",
-            review_summary_title: "审查摘要",
-            session_label: "会话",
-            thread_label: "线程",
-            status_label: "状态",
-            exported_at_label: "导出时间",
-            todo_summary_title: "Todo 摘要",
-            recent_artifacts_title: "最近产物",
-            no_recent_artifacts: "当前没有可引用的最近产物。",
-            next_step_title: "推荐接手顺序",
-            next_step_body: "先读 progress.json 确认结构化状态，再读 handoff.md 决定下一刀。",
-            review_note: "此摘要来自 App Server current read model；不要把 legacy command 输出当成交付证据。",
-        },
     }
 }

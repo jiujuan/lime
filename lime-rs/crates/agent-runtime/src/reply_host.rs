@@ -1,9 +1,10 @@
+use crate::reply_backend::RuntimeReplyBackend;
 use crate::reply_request::RuntimeReplyRequest;
 use crate::reply_stream::RuntimeReplyStreamEvent;
 use crate::session_config::AgentSessionConfig;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
-use model_provider::provider_stream::RuntimeReplyProviderHandle;
+use model_provider::provider_stream::RuntimeReplyProviderWireSupportIssue;
 use tokio_util::sync::CancellationToken;
 
 pub type RuntimeReplyStream<'a, E> = BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<E>>>;
@@ -47,17 +48,19 @@ impl RuntimeReplyStartError {
             emitted_any,
         }
     }
+
+    pub fn from_provider_wire_support_issue(
+        issue: &RuntimeReplyProviderWireSupportIssue,
+        emitted_any: bool,
+    ) -> Self {
+        Self::new(issue.message(), emitted_any)
+    }
 }
 
 pub trait RuntimeReplyStreamHost<E> {
-    fn uses_pinned_provider(&self) -> bool;
+    type Backend: RuntimeReplyBackend<E>;
 
-    fn provider_handle(&self) -> Option<&RuntimeReplyProviderHandle>;
-
-    fn start_reply_stream<'a>(
-        &'a self,
-        start_request: RuntimeReplyStartRequest,
-    ) -> BoxFuture<'a, RuntimeReplyStartResult<'a, E>>;
+    fn reply_backend(&self) -> &Self::Backend;
 }
 
 pub trait RuntimeReplyPolicyHost<E, S>: RuntimeReplyStreamHost<E> {
@@ -86,6 +89,28 @@ mod tests {
         let error = RuntimeReplyStartError::new("stream failed", true);
 
         assert_eq!(error.message, "stream failed");
+        assert!(error.emitted_any);
+    }
+
+    #[test]
+    fn runtime_reply_start_error_maps_provider_wire_support_issue() {
+        use model_provider::provider_stream::{
+            RuntimeProviderBackend, RuntimeReplyProviderRequestWireShape,
+            RuntimeReplyProviderWireSupportIssue,
+        };
+
+        let issue = RuntimeReplyProviderWireSupportIssue {
+            provider_backend: Some(RuntimeProviderBackend::AsterCompat),
+            provider_name: Some("openai".to_string()),
+            model_name: Some("gpt-5.3-codex".to_string()),
+            wire_shape: RuntimeReplyProviderRequestWireShape {
+                use_responses_lite: true,
+                ..Default::default()
+            },
+        };
+        let error = RuntimeReplyStartError::from_provider_wire_support_issue(&issue, true);
+
+        assert_eq!(error.message, RuntimeReplyProviderWireSupportIssue::MESSAGE);
         assert!(error.emitted_any);
     }
 

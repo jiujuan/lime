@@ -11,7 +11,7 @@ import type { AgentTranslation } from "./HarnessStatusPanelPrimitives";
 import type { HarnessStatusPanelSectionsProps } from "./HarnessStatusPanelSections";
 import type { useHarnessActivityModel } from "./useHarnessActivityModel";
 import type { useHarnessFileReviewState } from "./useHarnessFileReviewState";
-import type { useHarnessHandoffExports } from "./useHarnessHandoffExports";
+import type { useHarnessEvidencePackExport } from "./useHarnessEvidencePackExport";
 import type { useHarnessPreviewDialog } from "./useHarnessPreviewDialog";
 import type { useHarnessToolInventoryModel } from "./useHarnessToolInventoryModel";
 import type {
@@ -22,7 +22,7 @@ import type {
 
 type ActivityModel = ReturnType<typeof useHarnessActivityModel>;
 type FileReviewState = ReturnType<typeof useHarnessFileReviewState>;
-type HandoffExports = ReturnType<typeof useHarnessHandoffExports>;
+type EvidencePackExport = ReturnType<typeof useHarnessEvidencePackExport>;
 type PreviewModel = ReturnType<typeof useHarnessPreviewDialog>;
 type ToolInventoryModel = ReturnType<typeof useHarnessToolInventoryModel>;
 type ThreadReliabilityView = ReturnType<typeof buildThreadReliabilityView>;
@@ -44,7 +44,7 @@ interface BuildHarnessStatusPanelSectionModelsInput {
     confirmed: boolean,
   ) => void | Promise<void>;
   handleOpenExternalLink: (url: string) => void | Promise<void>;
-  handoffExports: HandoffExports;
+  evidencePackExport: EvidencePackExport;
   hasAgentUiProjectionSection: boolean;
   hasHandoffSection: boolean;
   hasSelectedTeamConfig: boolean;
@@ -104,7 +104,7 @@ export function buildHarnessStatusPanelSectionModels({
   fileReviewState,
   handleApprovalResponse,
   handleOpenExternalLink,
-  handoffExports,
+  evidencePackExport,
   hasAgentUiProjectionSection,
   hasHandoffSection,
   hasSelectedTeamConfig,
@@ -197,7 +197,7 @@ export function buildHarnessStatusPanelSectionModels({
     evidenceExporting,
     evidencePack,
     handleExportEvidencePack,
-  } = handoffExports;
+  } = evidencePackExport;
   const { handleOpenPathValue, openBrowserReplayPreview, openPreview } =
     previewModel;
 

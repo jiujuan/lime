@@ -13,6 +13,7 @@ import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import { withI18nPatch } from "./i18n/withI18nPatch";
 import { AppPageContent } from "./components/AppPageContent";
+import type { AgentBackgroundSessionRuntimeSnapshot } from "./components/agent/chat";
 import { AppServerConfigWarningToastBridge } from "./components/AppServerConfigWarningToastBridge";
 import { SplashScreen } from "./components/SplashScreen";
 import { AppSidebar } from "./components/AppSidebar";
@@ -194,6 +195,10 @@ function AppContent() {
     string | null
   >(null);
   const [activeAgentStreaming, setActiveAgentStreaming] = useState(false);
+  const [
+    backgroundAgentSessionRuntime,
+    setBackgroundAgentSessionRuntime,
+  ] = useState<AgentBackgroundSessionRuntimeSnapshot | null>(null);
   const [agentSessionTargetState, setAgentSessionTargetState] =
     useState<AgentSessionTargetState>(loadInitialAgentSessionTargetState);
   const activeAgentPage = requestedPage ?? currentPage;
@@ -505,6 +510,17 @@ function AppContent() {
     },
     [],
   );
+  const handleBackgroundSessionRuntimeChange = useCallback(
+    (snapshot: AgentBackgroundSessionRuntimeSnapshot | null) => {
+      const sessionId = snapshot?.sessionId.trim();
+      if (!sessionId || !snapshot) {
+        setBackgroundAgentSessionRuntime(null);
+        return;
+      }
+      setBackgroundAgentSessionRuntime({ sessionId, status: snapshot.status });
+    },
+    [],
+  );
 
   if (showSplash) {
     startupTracker.mark("AppContent: showing splash");
@@ -542,6 +558,7 @@ function AppContent() {
               currentPageParams={pageParams}
               activeAgentSessionId={activeAgentSessionId}
               activeAgentStreaming={activeAgentStreaming}
+              backgroundAgentSessionRuntime={backgroundAgentSessionRuntime}
               requestedPage={requestedPage}
               requestedPageParams={requestedPageParams}
               onNavigate={handleNavigate}
@@ -568,6 +585,9 @@ function AppContent() {
                 onAgentHasMessagesChange={setAgentHasMessages}
                 onAgentSessionChange={setActiveAgentSessionId}
                 onAgentStreamingChange={setActiveAgentStreaming}
+                onBackgroundSessionRuntimeChange={
+                  handleBackgroundSessionRuntimeChange
+                }
                 activeAgentSessionTarget={agentSessionTargetState.active}
                 agentSessionTargets={agentSessionTargetState.recent}
                 onAgentSessionTargetChange={handleAgentSessionTargetChange}

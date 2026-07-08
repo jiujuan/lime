@@ -1,65 +1,21 @@
-use crate::native_tools::runtime_tool_bridge::execute_runtime_tool;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
-use async_trait::async_trait;
+use crate::native_tools::runtime_tool_bridge::RuntimeNativeToolAdapter;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext};
 use serde_json::Value;
-use tool_runtime::native_dispatch::runtime_native_dispatch_handle;
-use tool_runtime::sleep::{
-    check_runtime_sleep_permissions, sleep_tool_definition, CLOCK_SLEEP_TOOL_NAME, SLEEP_TOOL_NAME,
-};
+use tool_runtime::native_overlay::RuntimeNativeToolOverlay;
+use tool_runtime::sleep::{check_runtime_sleep_permissions, SLEEP_TOOL_NAME};
 
 pub(crate) fn create_sleep_tool() -> Box<dyn Tool> {
-    Box::new(ClockSleepAdapter)
+    debug_assert_eq!(RuntimeNativeToolOverlay::Sleep.name(), SLEEP_TOOL_NAME);
+    Box::new(RuntimeNativeToolAdapter::new(
+        RuntimeNativeToolOverlay::Sleep,
+        check_sleep_permissions,
+    ))
 }
 
-#[derive(Debug, Default)]
-struct ClockSleepAdapter;
-
-#[async_trait]
-impl Tool for ClockSleepAdapter {
-    fn name(&self) -> &str {
-        SLEEP_TOOL_NAME
-    }
-
-    fn description(&self) -> &str {
-        "Pause execution for a specified duration and return elapsed wall-clock time."
-    }
-
-    fn input_schema(&self) -> Value {
-        sleep_tool_definition().input_schema
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        &[CLOCK_SLEEP_TOOL_NAME]
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if context.is_cancelled() {
-            return Err(ToolError::Cancelled);
-        }
-
-        execute_runtime_tool(
-            runtime_native_dispatch_handle(),
-            SLEEP_TOOL_NAME,
-            &params,
-            context,
-            None,
-        )
-        .await
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        _context: &ToolContext,
-    ) -> PermissionCheckResult {
-        match check_runtime_sleep_permissions(params) {
-            Ok(()) => PermissionCheckResult::allow(),
-            Err(error) => PermissionCheckResult::deny(error.message().to_string()),
-        }
-    }
-
-    fn options(&self) -> ToolOptions {
-        ToolOptions::new().with_max_retries(0)
+fn check_sleep_permissions(params: &Value, _context: &ToolContext) -> PermissionCheckResult {
+    match check_runtime_sleep_permissions(params) {
+        Ok(()) => PermissionCheckResult::allow(),
+        Err(error) => PermissionCheckResult::deny(error.message().to_string()),
     }
 }
 
@@ -70,7 +26,8 @@ mod tests {
 
     #[tokio::test]
     async fn sleep_permission_delegates_to_current_runtime_rules() {
-        let result = ClockSleepAdapter
+        let tool = create_sleep_tool();
+        let result = tool
             .check_permissions(&json!({ "seconds": 1 }), &ToolContext::default())
             .await;
 
@@ -79,7 +36,8 @@ mod tests {
 
     #[tokio::test]
     async fn sleep_tool_delegates_to_current_executor() {
-        let result = ClockSleepAdapter
+        let tool = create_sleep_tool();
+        let result = tool
             .execute(
                 json!({ "duration_ms": 1 }),
                 &ToolContext::default().with_session_id("session-sleep-1"),

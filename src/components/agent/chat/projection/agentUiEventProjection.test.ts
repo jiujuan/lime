@@ -960,6 +960,11 @@ describe("agentUiEventProjection", () => {
       owner: "task",
       surface: "task_capsule",
       control: "queue",
+      queuedTurnCount: 2,
+      payload: {
+        queuedTurnCount: 2,
+        position: 1,
+      },
     });
     expect(queueEvents[1]).toMatchObject({
       type: "task.changed",
@@ -971,10 +976,12 @@ describe("agentUiEventProjection", () => {
       phase: "submitted",
       surface: "task_capsule",
       control: "steer",
+      queuedTurnCount: 2,
       payload: {
         taskEvent: "steer_intent",
         intentKind: "queued_user_input",
         queuedTurnId: "queued-1",
+        position: 1,
         messagePreview: "下一轮",
       },
     });

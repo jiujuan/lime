@@ -597,6 +597,7 @@ export function checkWorkspaceRightSurfaceCurrentContracts({ repoRoot, failures 
         "packages/app-server-client/src/connection-methods.ts",
         "src/lib/api/workspaceRightSurface.ts",
         "src/lib/api/appServerClientMethods.ts",
+        "src/lib/api/appServerClientMethodSpecs.ts",
         "src/components/agent/chat/workspace/useWorkspaceRightSurfacePendingRuntime.ts",
         "src/lib/governance/agentCommandCatalog.json",
       ],

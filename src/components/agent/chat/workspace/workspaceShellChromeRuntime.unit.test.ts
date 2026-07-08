@@ -59,6 +59,23 @@ describe("resolveWorkspaceShellChromeRuntime", () => {
     expect(runtime.shouldRenderTopBar).toBe(true);
   });
 
+  it("new-task 首页后台运行旧 session 时不应因为旧消息或发送中状态显示聊天布局", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        agentEntry: "new-task",
+        hasDisplayMessages: true,
+        hasHomeConversationActivity: false,
+        isSending: true,
+        queuedTurnCount: 1,
+        sessionId: "running-session",
+        shouldUseBrowserWorkspaceHomeChrome: true,
+      }),
+    );
+
+    expect(runtime.showChatLayout).toBe(false);
+    expect(runtime.shouldRenderTopBar).toBe(true);
+  });
+
   it("Subagents runtime 可见时应切换主聊天面板宽度", () => {
     const runtime = resolveWorkspaceShellChromeRuntime(
       baseInput({

@@ -522,12 +522,6 @@ if (input.kind === "turnStart") {
           status: "completed",
           text: "${FINAL_DONE_TEXT}"
         }
-      },
-      {
-        type: "turn.final_done",
-        payload: {
-          text: "${FINAL_DONE_TEXT}"
-        }
       }
     ]
   }));
@@ -704,8 +698,7 @@ function hasGuiToolTimelineEvidence({
 
 function hasSessionConversationShell(snapshot) {
   return (
-    snapshot?.hasMessageList === true ||
-    snapshot?.hasConversationShell === true
+    snapshot?.hasMessageList === true || snapshot?.hasConversationShell === true
   );
 }
 
@@ -2151,7 +2144,9 @@ async function collectCodingWorkbenchGuiEvidence(
             return visibleShell;
           }
           const visibleLayout = Array.from(
-            document.querySelectorAll('[data-testid="canvas-workbench-layout"]'),
+            document.querySelectorAll(
+              '[data-testid="canvas-workbench-layout"]',
+            ),
           ).find(isVisible);
           if (!(visibleLayout instanceof HTMLElement)) {
             return null;
@@ -2426,9 +2421,7 @@ async function clickCodingWorkbenchRecovery(page, options) {
       return false;
     }
     const button =
-      panel.querySelector(
-        '[data-testid="coding-workbench-recovery-submit"]',
-      ) ||
+      panel.querySelector('[data-testid="coding-workbench-recovery-submit"]') ||
       Array.from(panel.querySelectorAll("button")).find((candidate) =>
         (candidate.textContent || "").includes("继续修复"),
       );
@@ -2847,8 +2840,7 @@ async function run() {
       backendTurnStartObserved ||
       capturedRecoveryContext?.schemaVersion ===
         "coding-workbench-recovery/v1" ||
-      traceRecoveryContext?.schemaVersion ===
-        "coding-workbench-recovery/v1";
+      traceRecoveryContext?.schemaVersion === "coding-workbench-recovery/v1";
     const guiToolTimelineEvidencePresent = hasGuiToolTimelineEvidence({
       sessionHydrated: summary.sessionHydrated,
       timelineProcessEvidence: summary.timelineProcessEvidence,
@@ -2885,9 +2877,7 @@ async function run() {
         summary.sessionCreation?.toolTimelineProjectionPersisted === true,
       codingProjectionPersisted:
         summary.sessionCreation?.codingProjectionPersisted === true,
-      guiHydratedSession: hasHydratedSessionSnapshot(
-        summary.sessionHydrated,
-      ),
+      guiHydratedSession: hasHydratedSessionSnapshot(summary.sessionHydrated),
       workbenchOpened:
         summary.workbench?.snapshot?.hasWorkbenchSidebar === true ||
         summary.workbench?.snapshot?.hasHarnessPanel === true ||
@@ -2932,8 +2922,7 @@ async function run() {
             CODING_TEST_RUN_ID) ||
         (capturedRecoveryContext?.schemaVersion ===
           "coding-workbench-recovery/v1" &&
-          capturedRecoveryContext?.sourceIds?.commandId ===
-            CODING_COMMAND_ID &&
+          capturedRecoveryContext?.sourceIds?.commandId === CODING_COMMAND_ID &&
           capturedRecoveryContext?.sourceIds?.testRunId ===
             CODING_TEST_RUN_ID) ||
         (traceRecoveryContext?.schemaVersion ===

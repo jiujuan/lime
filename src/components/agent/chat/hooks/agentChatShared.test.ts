@@ -90,12 +90,14 @@ describe("agentChatShared", () => {
   });
 
   it("App Server list overview 的未完成状态应投影到最近会话 topic", () => {
+    const freshUpdatedAt = Date.now();
+
     expect(
       mapSessionToTopic({
         id: "session-running",
         name: "运行中会话",
         created_at: 1780847017766,
-        updated_at: 1780847020000,
+        updated_at: freshUpdatedAt,
         messages_count: 2,
         thread_status: "running",
         latest_turn_status: "accepted",
@@ -125,6 +127,26 @@ describe("agentChatShared", () => {
         status: "waiting",
         statusReason: "user_action",
         lastPreview: "等待你确认后继续。",
+      }),
+    );
+
+    expect(
+      mapSessionToTopic({
+        id: "session-queued",
+        name: "排队会话",
+        created_at: 1780847017766,
+        updated_at: 1780847020000,
+        messages_count: 2,
+        thread_status: "running",
+        latest_turn_status: "queued",
+        active_turn_id: "turn-running",
+        queued_turn_count: 1,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "queued",
+        statusReason: "default",
+        lastPreview: "仍有排队中的请求。",
       }),
     );
   });
@@ -361,6 +383,22 @@ describe("agentChatShared", () => {
       }),
     ).toEqual({
       status: "running",
+      statusReason: "default",
+    });
+  });
+
+  it("当前线程只有排队请求时应投影为排队中", () => {
+    expect(
+      deriveTaskLiveState({
+        messages: [],
+        isSending: false,
+        pendingActionCount: 0,
+        queuedTurnCount: 1,
+        threadStatus: "queued",
+        workspaceError: false,
+      }),
+    ).toEqual({
+      status: "queued",
       statusReason: "default",
     });
   });

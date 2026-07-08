@@ -377,6 +377,7 @@ pub struct LocalAppDataSource {
     gateway_tunnel_state: GatewayTunnelState,
     wechat_login_state: WechatLoginState,
     memory_backend: Arc<dyn MemoryBackend>,
+    sidecar_store: Option<Arc<crate::runtime::SidecarStore>>,
 }
 
 impl LocalAppDataSource {
@@ -418,7 +419,13 @@ impl LocalAppDataSource {
             gateway_tunnel_state,
             wechat_login_state: WechatLoginState::default(),
             memory_backend,
+            sidecar_store: None,
         })
+    }
+
+    pub fn with_sidecar_store(mut self, sidecar_store: Arc<crate::runtime::SidecarStore>) -> Self {
+        self.sidecar_store = Some(sidecar_store);
+        self
     }
 }
 

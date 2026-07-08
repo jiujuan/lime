@@ -3,6 +3,10 @@ import type {
   AgentRuntimeExecutionEvent,
   AgentUiProjectionState,
 } from "@limecloud/agent-ui-contracts";
+import {
+  pluginRuntimeStatusFromStandardEvent,
+  standardProjectionType,
+} from "./agentUiProjectionStandardMapping";
 
 export type PluginRunProjectionRuntimeStatus =
   | "idle"
@@ -263,6 +267,23 @@ function standardRuntimeProjectionToSourceEvent<TEvent extends AgentRuntimeExecu
       controls: Array.isArray(payload.controls) ? payload.controls : undefined,
       eventType: event.eventClass,
       metricName: stringValue(payload.metricName) ?? event.eventClass,
+      displayTitle: stringValue(payload.displayTitle),
+      displayMessage: stringValue(payload.displayMessage),
+      displayTitleKey: stringValue(payload.displayTitleKey),
+      displayMessageKey: stringValue(payload.displayMessageKey),
+      displayValues: recordPayloadValue(payload, "displayValues"),
+      soulLifecycle: recordPayloadValue(payload, "soulLifecycle"),
+      soulSurface: stringValue(payload.soulSurface),
+      soulPhase: stringValue(payload.soulPhase),
+      styleLevel: stringValue(payload.styleLevel),
+      riskLevel: stringValue(payload.riskLevel),
+      toneVariant: stringValue(payload.toneVariant),
+      profileId: stringValue(payload.profileId),
+      packId: stringValue(payload.packId),
+      generationBriefBoundary: recordPayloadValue(
+        payload,
+        "generationBriefBoundary",
+      ),
       preview: projection.detail ?? event.detail ?? event.title,
       providerName: stringValue(payload.providerName),
       modelName: stringValue(payload.modelName) ?? event.model,
@@ -271,44 +292,6 @@ function standardRuntimeProjectionToSourceEvent<TEvent extends AgentRuntimeExecu
       cost: recordPayloadValue(payload, "cost"),
     },
   };
-}
-
-function standardProjectionType(
-  projection: AgentRuntimeEventProjection,
-): string {
-  const payloadType = stringValue(projection.source.payload?.projectionType);
-  if (payloadType) {
-    return payloadType;
-  }
-  const eventClass = projection.source.eventClass ?? "";
-  if (eventClass === "model.delta") return "text.delta";
-  if (eventClass === "model.completed") return "text.final";
-  if (eventClass.startsWith("reasoning.")) return "reasoning.delta";
-  if (eventClass === "tool.started") return "tool.started";
-  if (eventClass === "tool.result") return "tool.result";
-  if (eventClass === "tool.failed") return "tool.failed";
-  if (eventClass === "action.required") return "action.required";
-  if (eventClass === "action.resolved") return "action.resolved";
-  if (eventClass === "artifact.changed") return "artifact.created";
-  if (eventClass === "evidence.changed") return "evidence.changed";
-  if (eventClass === "runtime.error") return "diagnostic.changed";
-  if (eventClass === "snapshot.updated") return "metric.changed";
-  if (eventClass === "turn.completed") return "run.finished";
-  if (eventClass === "turn.failed") return "run.failed";
-  return "run.status";
-}
-
-function pluginRuntimeStatusFromStandardEvent(
-  event: AgentRuntimeExecutionEvent,
-): PluginRunProjectionRuntimeStatus {
-  if (event.eventClass === "action.required") return "needs_input";
-  if (event.eventClass === "action.resolved") return "completed";
-  if (event.status === "completed") return "completed";
-  if (event.status === "failed") return "failed";
-  if (event.status === "blocked") return "needs_input";
-  if (event.status === "running") return "running";
-  if (event.status === "pending") return "queued";
-  return "unknown";
 }
 
 function compareProjectionEvents(
@@ -694,6 +677,8 @@ function isTerminalStatus(status: PluginRunProjectionRuntimeStatus | "unknown"):
 
 function previewForEvent(event: PluginRunProjectionSourceEvent): string | undefined {
   return (
+    readPayloadString(event, "displayMessage") ??
+    readPayloadString(event, "displayTitle") ??
     readPayloadString(event, "preview") ??
     readPayloadString(event, "status") ??
     event.runtimeStatus

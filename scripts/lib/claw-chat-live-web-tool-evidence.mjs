@@ -394,11 +394,7 @@ export function liveWebToolStreamEvidenceFromEvents(
   const scopedRecords = Array.isArray(eventRecords)
     ? eventRecords.filter((record) => strictlyMatchesTurn(record, turnRef))
     : [];
-  const terminalEventTypes = new Set([
-    "turn.completed",
-    "turn.done",
-    "turn.final_done",
-  ]);
+  const terminalEventTypes = new Set(["turn.completed"]);
   const toolEvents = scopedRecords
     .map((record, eventIndex) => {
       const type = eventType(record);

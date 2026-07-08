@@ -3,6 +3,7 @@ import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
 import { resolveAgentChatPageShellViewModel } from "./agentChatPageShellViewModel";
 
 export type {
+  AgentBackgroundSessionRuntimeSnapshot,
   AgentChatWorkspaceProps,
   WorkflowProgressSnapshot,
 } from "./agentChatWorkspaceContract";

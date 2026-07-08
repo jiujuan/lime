@@ -38,10 +38,6 @@ vi.mock("./components/settings-v2/system/chrome-relay/guide-window", () => ({
   ),
 }));
 
-vi.mock("./components/ui/sonner", () => ({
-  Toaster: () => <div data-testid="toaster" />,
-}));
-
 vi.mock("./components/layout/AppCrashBoundary", () => ({
   AppCrashBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -96,6 +92,7 @@ describe("RootRouter", () => {
     const { container } = await renderRootRouter("/");
 
     expect(container.textContent).toContain("主应用");
+    expect(container.querySelector('[data-sonner-toaster]')).toBeNull();
   });
 
   it("Windows 独立窗口从 index.html 入口启动时应映射到连接器引导页", async () => {

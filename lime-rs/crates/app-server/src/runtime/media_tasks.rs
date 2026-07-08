@@ -34,7 +34,7 @@ impl RuntimeCore {
         params: MediaTaskArtifactAudioCompleteParams,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
         self.app_data_source
-            .complete_audio_media_task_artifact(params)
+            .complete_audio_media_task_artifact(params, self.sidecar_store.clone())
             .await
     }
 
@@ -43,7 +43,7 @@ impl RuntimeCore {
         params: MediaTaskArtifactImageCompleteParams,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
         self.app_data_source
-            .complete_image_media_task_artifact(params)
+            .complete_image_media_task_artifact(params, self.sidecar_store.clone())
             .await
     }
 

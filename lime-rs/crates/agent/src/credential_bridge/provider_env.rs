@@ -67,6 +67,7 @@ const LIME_TENANT_HEADER: &str = "X-Lime-Tenant-ID";
 const LIME_TENANT_PARAM: &str = "lime_tenant_id";
 #[cfg_attr(not(test), allow(dead_code))]
 pub(super) const OPENAI_CUSTOM_HEADERS_ENV: &str = "OPENAI_CUSTOM_HEADERS";
+const OPENAI_ALLOW_NO_AUTH_ENV: &str = "OPENAI_ALLOW_NO_AUTH";
 
 fn normalize_lime_tenant_id(value: &str) -> Option<String> {
     let tenant_id = value.trim();
@@ -179,12 +180,20 @@ pub(super) fn set_provider_env_vars(config: &RuntimeProviderConfig) {
 
     if let Some(api_key) = &config.api_key {
         std::env::set_var(env_key, api_key);
+        if config.provider_name == "openai" {
+            std::env::remove_var(OPENAI_ALLOW_NO_AUTH_ENV);
+        }
         if config.provider_name == "anthropic" {
             match env_key {
                 "ANTHROPIC_AUTH_TOKEN" => std::env::remove_var("ANTHROPIC_API_KEY"),
                 "ANTHROPIC_API_KEY" => std::env::remove_var("ANTHROPIC_AUTH_TOKEN"),
                 _ => {}
             }
+        }
+    } else {
+        std::env::remove_var(env_key);
+        if config.provider_name == "openai" {
+            std::env::set_var(OPENAI_ALLOW_NO_AUTH_ENV, "1");
         }
     }
 

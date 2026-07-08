@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use std::sync::Arc;
 
 struct RoutingDecisionReadModelBackend;
 
@@ -195,6 +196,144 @@ async fn start_read_model_test_turn(
         .response
         .turn;
     (core, turn)
+}
+
+#[tokio::test]
+async fn load_session_current_enriches_completed_media_task_store_results() {
+    let workspace = tempfile::TempDir::new().expect("workspace root");
+    let workspace_root = workspace.path().to_string_lossy().to_string();
+    let session_id = "sess-media-task-read-model";
+    let thread_id = "thread-media-task-read-model";
+    let turn_id = "turn-media-task-read-model";
+    let timestamp = "2026-07-07T00:00:00.000Z";
+    let session = AgentSession {
+        session_id: session_id.to_string(),
+        thread_id: thread_id.to_string(),
+        app_id: "agent-runtime".to_string(),
+        workspace_id: Some("workspace-media".to_string()),
+        business_object_ref: Some(BusinessObjectRef {
+            kind: "project".to_string(),
+            id: "workspace-media".to_string(),
+            title: None,
+            uri: None,
+            metadata: Some(json!({
+                "workingDir": workspace_root,
+            })),
+        }),
+        status: AgentSessionStatus::Completed,
+        created_at: timestamp.to_string(),
+        updated_at: timestamp.to_string(),
+    };
+    let persisted = AgentSessionReadResponse {
+        session: session.clone(),
+        turns: vec![AgentTurn {
+            turn_id: turn_id.to_string(),
+            session_id: session_id.to_string(),
+            thread_id: thread_id.to_string(),
+            status: AgentTurnStatus::Completed,
+            started_at: Some(timestamp.to_string()),
+            completed_at: Some("2026-07-07T00:00:02.000Z".to_string()),
+        }],
+        detail: Some(json!({
+            "id": session_id,
+            "session_id": session_id,
+            "thread_id": thread_id,
+            "working_dir": workspace.path().to_string_lossy(),
+            "items": [],
+            "messages": [],
+            "turns": [],
+        })),
+    };
+    let media_task = media_task_artifact_response(json!({
+        "task_id": "task-image-read-model",
+        "task_type": "image_generate",
+        "payload": {
+            "sessionId": session_id,
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "prompt": "生成一张青柠封面图"
+        },
+        "status": "succeeded",
+        "normalized_status": "succeeded",
+        "created_at": timestamp,
+        "updated_at": "2026-07-07T00:00:01.000Z",
+        "completed_at": "2026-07-07T00:00:02.000Z",
+        "result": {
+            "images": [{
+                "url": "data:image/png;base64,AAECAw==",
+                "caption": "青柠封面图",
+                "sidecarRef": {
+                    "ref": "sidecar://media/image-read-model",
+                    "kind": "media",
+                    "relativePath": "sessions/sess-media-task-read-model/media/image-read-model.png",
+                    "bytes": 4,
+                    "sha256": "sha256:read-model",
+                    "contentStatus": "available",
+                    "uri": "sidecar://media/image-read-model",
+                    "mimeType": "image/png"
+                }
+            }]
+        }
+    }));
+    let data_source =
+        Arc::new(TestSessionDataSource::new(persisted).with_media_task_artifacts(vec![media_task]));
+    let core = RuntimeCore::default().with_app_data_source(data_source.clone());
+
+    let loaded = core
+        .load_session_current(AgentSessionReadParams {
+            session_id: session.session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("session read");
+    let detail = loaded.response.detail.expect("read detail");
+
+    assert_eq!(data_source.media_task_list_requests().len(), 1);
+    let item = detail
+        .get("items")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| {
+            items.iter().find(|item| {
+                item.get("id").and_then(serde_json::Value::as_str)
+                    == Some("media-task-result:turn-media-task-read-model:task-image-read-model")
+            })
+        })
+        .expect("media task synthetic item");
+    assert_eq!(item["type"], "agent_message");
+    assert_eq!(item["status"], "completed");
+    assert_eq!(item["contentParts"][0]["type"], "media");
+    assert_eq!(item["contentParts"][0]["kind"], "image");
+    assert_eq!(
+        item["contentParts"][0]["reference"]["uri"],
+        "sidecar://media/image-read-model"
+    );
+    assert_eq!(
+        item["contentParts"][0]["source"],
+        "media_task_store_owner_facts"
+    );
+    assert_eq!(item["metadata"]["source"], "media_task_store_owner_facts");
+    assert_eq!(item["metadata"]["task_id"], "task-image-read-model");
+}
+
+fn media_task_artifact_response(record: serde_json::Value) -> MediaTaskArtifactResponse {
+    MediaTaskArtifactResponse {
+        success: true,
+        task_id: "task-image-read-model".to_string(),
+        task_type: "image_generate".to_string(),
+        task_family: "media".to_string(),
+        status: "succeeded".to_string(),
+        normalized_status: "succeeded".to_string(),
+        current_attempt_id: None,
+        path: String::new(),
+        absolute_path: String::new(),
+        artifact_path: ".lime/tasks/image_generate/task-image-read-model.json".to_string(),
+        absolute_artifact_path: String::new(),
+        reused_existing: false,
+        idempotency_key: None,
+        record,
+    }
 }
 
 fn tool_item_event_payload(

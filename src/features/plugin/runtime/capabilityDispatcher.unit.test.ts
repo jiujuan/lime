@@ -20,7 +20,7 @@ import {
   buildRuntimeProjectionDispatcher,
   buildToolExecutionHandoffDispatcher,
   FIXED_NOW,
-} from "./capabilityDispatcherTestFixtures";
+} from "../testing/capabilityDispatcherTestFixtures";
 
 describe("createPluginCapabilityDispatcher unit boundary", () => {
   it("应通过 lime.capabilities 暴露 Host discovery profile，且不泄露内部路径", async () => {

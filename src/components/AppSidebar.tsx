@@ -53,6 +53,7 @@ import { AppSidebarConversationImportDialog } from "@/components/app-sidebar/App
 import { AppSidebarInviteDialog } from "@/components/app-sidebar/AppSidebarInviteDialog";
 import { AppSidebarSearchDialog } from "@/components/app-sidebar/AppSidebarSearchDialog";
 import { AppUpdateEntry } from "@/components/app-sidebar/AppUpdateEntry";
+import type { AgentBackgroundSessionRuntimeSnapshot } from "@/components/agent/chat";
 import { useOpenedProjectSummaries } from "@/components/agent/chat/hooks/useOpenedProjectSummaries";
 import { useAppSidebarAppearance } from "@/components/app-sidebar/useAppSidebarAppearance";
 import { useAppSidebarConversationActions } from "@/components/app-sidebar/useAppSidebarConversationActions";
@@ -154,6 +155,7 @@ interface AppSidebarProps {
   currentPageParams?: PageParams;
   activeAgentSessionId?: string | null;
   activeAgentStreaming?: boolean;
+  backgroundAgentSessionRuntime?: AgentBackgroundSessionRuntimeSnapshot | null;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   onNavigate: (page: Page, params?: PageParams) => void;
@@ -167,6 +169,7 @@ export function AppSidebar({
   currentPageParams,
   activeAgentSessionId,
   activeAgentStreaming = false,
+  backgroundAgentSessionRuntime = null,
   requestedPage,
   requestedPageParams,
   onNavigate,
@@ -315,8 +318,9 @@ export function AppSidebar({
     Boolean(activeAgentProjectId) && conversationProjectCwds.length > 0;
   const requestedAgentSessionId =
     requestedPage === "agent"
-      ? ((requestedPageParams as AgentPageParams | undefined)?.initialSessionId
-          ?.trim() ?? null)
+      ? ((
+          requestedPageParams as AgentPageParams | undefined
+        )?.initialSessionId?.trim() ?? null)
       : null;
   const liveAgentSessionId = isAgentWorkspace
     ? activeAgentSessionId?.trim() || null
@@ -933,19 +937,14 @@ export function AppSidebar({
   };
 
   const conversationImport = useAppSidebarConversationImport({
-    projects: conversationDisplayProjects,
     addImportedSidebarSessionOptimistically,
     refreshSidebarSessions,
     onImportedSession: (response) => {
       conversationActions.navigateToConversation({
         id: response.session.sessionId,
         name: response.thread.title ?? response.session.sessionId,
-        created_at: Math.floor(
-          Date.parse(response.session.createdAt) / 1000,
-        ),
-        updated_at: Math.floor(
-          Date.parse(response.session.updatedAt) / 1000,
-        ),
+        created_at: Math.floor(Date.parse(response.session.createdAt) / 1000),
+        updated_at: Math.floor(Date.parse(response.session.updatedAt) / 1000),
         archived_at: null,
         workspace_id: response.session.workspaceId ?? undefined,
         working_dir: response.thread.cwd ?? undefined,
@@ -1391,6 +1390,7 @@ export function AppSidebar({
                 onClick={() => onNavigate("agent", buildHomeAgentParams())}
                 aria-label={homeAriaLabel}
                 title={homeAriaLabel}
+                data-testid="app-sidebar-home-button"
               >
                 <Avatar>
                   <img src={LIME_BRAND_LOGO_SRC} alt={LIME_BRAND_NAME} />
@@ -1459,6 +1459,8 @@ export function AppSidebar({
               openedProjects={conversationDisplayProjects}
               recentSessions={visibleRecentSidebarSessions}
               currentSessionId={currentSessionId}
+              activeAgentStreaming={activeAgentStreaming}
+              backgroundAgentSessionRuntime={backgroundAgentSessionRuntime}
               recentLoading={shouldShowSessionLoadingState}
               hasMoreRecent={hasMoreRecentSidebarSessions}
               actionSessionId={sidebarSessionActionId}
@@ -1470,12 +1472,16 @@ export function AppSidebar({
                 conversationActions.navigateToStandaloneConversation();
               }}
               onImportConversation={conversationImport.open}
-              importableProjectIds={conversationImport.importableProjectIds}
-              onNavigateToConversation={conversationActions.navigateToConversation}
+              onNavigateToConversation={
+                conversationActions.navigateToConversation
+              }
               onRenameConversation={conversationActions.renameConversation}
               onDeleteConversation={conversationActions.deleteConversation}
               onToggleArchive={(session, archived) => {
-                void conversationActions.toggleSessionArchive(session, archived);
+                void conversationActions.toggleSessionArchive(
+                  session,
+                  archived,
+                );
               }}
               onToggleProjectPin={(project) => {
                 void projectActions.handleToggleProjectPin(project);
@@ -1718,9 +1724,7 @@ export function AppSidebar({
           void handleCopyInviteText(value, successMessage)
         }
       />
-      <AppSidebarConversationImportDialog
-        {...conversationImport.dialogProps}
-      />
+      <AppSidebarConversationImportDialog {...conversationImport.dialogProps} />
     </TooltipProvider>
   );
 }

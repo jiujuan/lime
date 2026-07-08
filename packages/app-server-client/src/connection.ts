@@ -9,6 +9,7 @@ export type AppServerMessageTransport = {
 
 export type AppServerRequestOptions = {
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 const APP_SERVER_TRANSPORT_READ_SLICE_MS = 250;
@@ -53,6 +54,20 @@ export class AppServerRequestError extends Error {
   }
 }
 
+export class AppServerRequestAbortedError extends Error {
+  readonly id: protocol.RequestId;
+  readonly method: string;
+  readonly reason?: unknown;
+
+  constructor(method: string, id: protocol.RequestId, reason?: unknown) {
+    super("app-server request aborted");
+    this.name = "AppServerRequestAbortedError";
+    this.id = id;
+    this.method = method;
+    this.reason = reason;
+  }
+}
+
 function remainingRequestTimeoutMs(
   timeoutMs: number | undefined,
   startedAt: number,
@@ -70,7 +85,6 @@ function remainingRequestTimeoutMs(
 }
 
 export class AppServerConnection {
-
   readonly client: AppServerClient;
   readonly transport: AppServerMessageTransport;
 
@@ -92,6 +106,7 @@ export class AppServerConnection {
     method = requestMessage.method,
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<T>> {
+    throwIfRequestAborted(options.signal, method, requestMessage.id);
     this.transport.send(requestMessage);
     return await this.waitForResponse<T>(requestMessage.id, method, options);
   }
@@ -108,7 +123,9 @@ export class AppServerConnection {
     try {
       const message = await this.#nextMessageForRequest(
         requestMessage.id,
+        method,
         options.timeoutMs,
+        options.signal,
       );
       messages.push(message);
 
@@ -124,7 +141,10 @@ export class AppServerConnection {
         };
       }
 
-      if (protocol.isJsonRpcErrorResponse(message) && message.id === requestMessage.id) {
+      if (
+        protocol.isJsonRpcErrorResponse(message) &&
+        message.id === requestMessage.id
+      ) {
         throw new AppServerRequestError(
           method,
           message,
@@ -133,7 +153,10 @@ export class AppServerConnection {
         );
       }
 
-      if (protocol.isJsonRpcResponse(message) && message.id === requestMessage.id) {
+      if (
+        protocol.isJsonRpcResponse(message) &&
+        message.id === requestMessage.id
+      ) {
         return {
           id: requestMessage.id,
           result: message.result as T,
@@ -152,7 +175,13 @@ export class AppServerConnection {
         messages,
       };
     } catch (error) {
-      if (isAppServerTransportReadTimeoutError(error)) {
+      if (
+        isAppServerTransportReadTimeoutError(error) ||
+        error instanceof AppServerRequestAbortedError
+      ) {
+        if (error instanceof AppServerRequestAbortedError) {
+          this.#sendCancelRequest(requestMessage.id);
+        }
         this.#detachedRequestIds.add(requestMessage.id);
       }
       throw error;
@@ -168,43 +197,60 @@ export class AppServerConnection {
     const notifications: protocol.JsonRpcNotification[] = [];
     const startedAt = Date.now();
 
-    for (;;) {
-      const remainingTimeoutMs = remainingRequestTimeoutMs(
-        options.timeoutMs,
-        startedAt,
-      );
-      const message = await this.#nextMessageForRequest(id, remainingTimeoutMs);
-      messages.push(message);
-
-      if (protocol.isJsonRpcNotification(message)) {
-        notifications.push(message);
-        this.#mirroredNotifications.push(message);
-        await this.#yieldReadTurn();
-        continue;
-      }
-
-      if (protocol.isJsonRpcErrorResponse(message) && message.id === id) {
-        throw new AppServerRequestError(
-          method,
-          message,
-          [...notifications],
-          [...messages],
+    try {
+      for (;;) {
+        throwIfRequestAborted(options.signal, method, id);
+        const remainingTimeoutMs = remainingRequestTimeoutMs(
+          options.timeoutMs,
+          startedAt,
         );
-      }
-
-      if (protocol.isJsonRpcResponse(message) && message.id === id) {
-        return {
+        const message = await this.#nextMessageForRequest(
           id,
-          result: message.result as T,
-          response: message,
-          notifications,
-          messages,
-        };
+          method,
+          remainingTimeoutMs,
+          options.signal,
+        );
+        throwIfRequestAborted(options.signal, method, id);
+        messages.push(message);
+
+        if (protocol.isJsonRpcNotification(message)) {
+          notifications.push(message);
+          this.#mirroredNotifications.push(message);
+          await this.#yieldReadTurn();
+          continue;
+        }
+
+        if (protocol.isJsonRpcErrorResponse(message) && message.id === id) {
+          throw new AppServerRequestError(
+            method,
+            message,
+            [...notifications],
+            [...messages],
+          );
+        }
+
+        if (protocol.isJsonRpcResponse(message) && message.id === id) {
+          return {
+            id,
+            result: message.result as T,
+            response: message,
+            notifications,
+            messages,
+          };
+        }
       }
+    } catch (error) {
+      if (error instanceof AppServerRequestAbortedError) {
+        this.#sendCancelRequest(id);
+        this.#detachedRequestIds.add(id);
+      }
+      throw error;
     }
   }
 
-  async nextNotification(timeoutMs?: number): Promise<protocol.JsonRpcNotification> {
+  async nextNotification(
+    timeoutMs?: number,
+  ): Promise<protocol.JsonRpcNotification> {
     for (;;) {
       const buffered = this.#shiftBufferedNotification();
       if (buffered) {
@@ -236,7 +282,9 @@ export class AppServerConnection {
       if (buffered) {
         return buffered;
       }
-      const message = await this.#withTransportRead<protocol.JsonRpcMessage | undefined>(
+      const message = await this.#withTransportRead<
+        protocol.JsonRpcMessage | undefined
+      >(
         timeoutMs,
         () => this.#shiftBufferedMessage(),
         (incoming) =>
@@ -250,13 +298,17 @@ export class AppServerConnection {
 
   async #nextMessageForRequest(
     id: protocol.RequestId,
+    method: string,
     timeoutMs?: number,
+    signal?: AbortSignal,
   ): Promise<protocol.JsonRpcMessage> {
     const startedAt = Date.now();
 
     for (;;) {
+      throwIfRequestAborted(signal, method, id);
       const buffered = this.#shiftBufferedRequestMessage(id);
       if (buffered) {
+        throwIfRequestAborted(signal, method, id);
         return buffered;
       }
 
@@ -270,7 +322,9 @@ export class AppServerConnection {
           : Math.min(remainingTimeoutMs, APP_SERVER_TRANSPORT_READ_SLICE_MS);
       let message: protocol.JsonRpcMessage | undefined;
       try {
-        message = await this.#withTransportRead<protocol.JsonRpcMessage | undefined>(
+        message = await this.#withTransportRead<
+          protocol.JsonRpcMessage | undefined
+        >(
           readTimeoutMs,
           () => this.#shiftBufferedRequestMessage(id),
           (incoming) => {
@@ -283,7 +337,10 @@ export class AppServerConnection {
             if (protocol.isJsonRpcResponse(incoming) && incoming.id === id) {
               return incoming;
             }
-            if (protocol.isJsonRpcErrorResponse(incoming) && incoming.id === id) {
+            if (
+              protocol.isJsonRpcErrorResponse(incoming) &&
+              incoming.id === id
+            ) {
               return incoming;
             }
             this.#prependBufferedMessages([incoming]);
@@ -294,6 +351,7 @@ export class AppServerConnection {
         if (!isAppServerTransportReadTimeoutError(error)) {
           throw error;
         }
+        throwIfRequestAborted(signal, method, id);
         if (timeoutMs !== undefined && Date.now() - startedAt >= timeoutMs) {
           throw new Error(
             `timed out waiting for app-server message after ${timeoutMs}ms`,
@@ -304,9 +362,11 @@ export class AppServerConnection {
       }
 
       if (message) {
+        throwIfRequestAborted(signal, method, id);
         return message;
       }
 
+      throwIfRequestAborted(signal, method, id);
       await this.#yieldReadTurn();
     }
   }
@@ -334,7 +394,9 @@ export class AppServerConnection {
     return undefined;
   }
 
-  #shiftBufferedRequestMessage(id: protocol.RequestId): protocol.JsonRpcMessage | undefined {
+  #shiftBufferedRequestMessage(
+    id: protocol.RequestId,
+  ): protocol.JsonRpcMessage | undefined {
     this.#dropDetachedBufferedRequestMessages();
 
     const notificationIndex = this.#bufferedMessages.findIndex(
@@ -347,7 +409,8 @@ export class AppServerConnection {
 
     const responseIndex = this.#bufferedMessages.findIndex((message) => {
       return (
-        (protocol.isJsonRpcResponse(message) || protocol.isJsonRpcErrorResponse(message)) &&
+        (protocol.isJsonRpcResponse(message) ||
+          protocol.isJsonRpcErrorResponse(message)) &&
         message.id === id
       );
     });
@@ -364,7 +427,9 @@ export class AppServerConnection {
       return mirrored;
     }
     this.#dropDetachedBufferedRequestMessages();
-    const index = this.#bufferedMessages.findIndex(protocol.isJsonRpcNotification);
+    const index = this.#bufferedMessages.findIndex(
+      protocol.isJsonRpcNotification,
+    );
     if (index < 0) {
       return undefined;
     }
@@ -380,7 +445,8 @@ export class AppServerConnection {
 
   #consumeDetachedRequestMessage(message: protocol.JsonRpcMessage): boolean {
     if (
-      (protocol.isJsonRpcResponse(message) || protocol.isJsonRpcErrorResponse(message)) &&
+      (protocol.isJsonRpcResponse(message) ||
+        protocol.isJsonRpcErrorResponse(message)) &&
       this.#detachedRequestIds.has(message.id)
     ) {
       this.#detachedRequestIds.delete(message.id);
@@ -417,6 +483,10 @@ export class AppServerConnection {
       setTimeout(resolve, 0);
     });
   }
+
+  #sendCancelRequest(id: protocol.RequestId): void {
+    this.transport.send(protocol.cancelRequest(id));
+  }
 }
 
 installAppServerConnectionMethods(AppServerConnection.prototype);
@@ -426,4 +496,14 @@ function isAppServerTransportReadTimeoutError(error: unknown): boolean {
     error instanceof Error &&
     error.message.includes("timed out waiting for app-server message after")
   );
+}
+
+function throwIfRequestAborted(
+  signal: AbortSignal | undefined,
+  method: string,
+  id: protocol.RequestId,
+): void {
+  if (signal?.aborted) {
+    throw new AppServerRequestAbortedError(method, id, signal.reason);
+  }
 }

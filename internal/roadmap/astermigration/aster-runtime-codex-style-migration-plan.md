@@ -25,6 +25,18 @@
 - `blocking`：Phase 6 删除条件未满足；主阻塞仍是 `lime-agent` 内部 Aster reply/provider/tool/session adapters 与 root vendored Aster dependency。
 - `next`：继续主执行链退场，优先处理 `request_tool_policy/aster_reply_adapter.rs`、`credential_bridge/runtime_provider_adapter.rs`、`agent_tools` / `native_tools` registry execution adapter 和 `aster_session_store`；目标是让 current provider stream / turn executor / tool runtime / thread store 接管后删除 adapter，而不是继续集中 Aster 壳。
 
+## 2026-07-08 进度记录：Skill tool surface owner 上提
+
+- `completed`：`tool-runtime::skill_gate` 承接 `Skill` 工具的 `SKILL_TOOL_NAME` / `SKILL_TOOL_DESCRIPTION` / `skill_tool_input_schema()`，把模型可见 surface 从临时 Aster wrapper 中上提。
+- `completed`：`tool-runtime::skill_gate` 承接 `normalize_skill_invocation_params(...)`，把 `Skill` 调用中 `args` object/array -> string 的 invocation input materialization 从临时 Aster wrapper 中上提。
+- `completed`：`lime-agent/src/tools/skill_tool_gate.rs` 的 `LimeSkillTool::name()` / `description()` / `input_schema()` 改为消费 `tool-runtime` current owner；执行前参数规范化也只调用 `tool-runtime` current owner；Aster `SkillTool` 仍只作为 execution shell 留在 compat 边界。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 wrapper 恢复 `self.inner.name()` / `self.inner.input_schema()`、本地 normalize 函数或 `serde_json::to_string(&args)` 规则，并要求 current owner 暴露 Skill surface / normalization API。
+- `current`：`tool-runtime::skill_gate` 负责 Turn tool lifecycle 的 Skill surface、invocation normalization 与 session gate。
+- `compat`：`LimeSkillTool` / Aster `SkillTool` execution shell；退出条件是 Aster reply loop 不再通过 Aster `Tool` trait 执行 Skill。
+- `dead`：Aster wrapper 代理 `SkillTool::name()` / `SkillTool::input_schema()` 作为模型可见 surface，或在 wrapper 内本地维护参数规范化规则的形态不得恢复。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime --package lime-agent -- --check` 通过；`tool-runtime skill_gate --lib` 4 passed；`lime-agent skill_tool --lib` 7 passed；`asterMigrationBoundary.test.ts` 123 passed。
+- `next`：继续 Phase 6 主线，优先拆 Aster reply loop `Tool` trait execution shell 或 provider/reply loop blocker；本刀不删除 root `aster` dependency。
+
 ## 2026-07-03 进度记录：Codex 风格 runtime crate 骨架
 
 - `completed`：新增 `agent-protocol`、`model-provider`、`thread-store`、`tool-runtime`、`agent-runtime` 五个一等 workspace crate，并在根 `lime-rs/Cargo.toml` 声明 workspace dependency。五个 crate 只定义最小 DTO / trait 骨架，不依赖 Aster。
@@ -1763,7 +1775,7 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 ## 2026-07-05 进度记录：test-support Aster fixture surface 删除
 
 - `completed`：删除 `lime-agent` 的 `test-support` feature、`test_support.rs` 模块和 `lib.rs` 中的 `pub mod test_support` 出口；App Server dev-dependency 不再通过 feature 获取 Aster `Tool` / `ToolContext` fixture。
-- `completed`：`skill_runtime_enable` 测试改为通过 `lime_agent::tools::is_skill_tool_session_skill_allowed(...)` 断言 current session gate 状态，不再构造 `LimeSkillTool` + Aster `ToolContext` 作为跨 crate 权限探针。
+- `completed`：`skill_runtime_enable` 测试改为通过 `tool_runtime::skill_gate::is_skill_tool_session_skill_allowed(...)` 断言 current session gate 状态，不再构造 `LimeSkillTool` + Aster `ToolContext` 作为跨 crate 权限探针，也不再把 `lime_agent::tools` 当 Skill gate 公共事实源。
 - `completed`：App Server 删除依赖 fake Aster WebSearch 注册的 content factory host tool execution 测试；等价的 host tool evidence / workspace patch 成功与失败回填断言迁入 `lime-agent::agent_tools::workspace_patch_host` 单测，覆盖 current projection 逻辑而不向外暴露注册 Aster native tool 的测试 API。
 - `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 `test_support.rs` / `test-support` feature / App Server `features = ["test-support"]` 归类为 `dead`，禁止恢复该测试 surface。
 - `current`：跨 crate 测试只允许消费非 Aster current API（session gate 查询、workspace patch projection）；Aster native tool fixture 只能留在 `lime-agent` 内部测试模块。

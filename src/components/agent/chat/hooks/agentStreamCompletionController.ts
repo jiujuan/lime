@@ -89,7 +89,7 @@ interface AgentStreamCompletionSuccessPlan {
   requestLogPayload: AgentStreamCompletionRequestLogPayload;
 }
 
-export type AgentStreamFinalDonePlan =
+export type AgentStreamTerminalCompletionPlan =
   | AgentStreamMissingFinalReplyPlan
   | AgentStreamCompletionSuccessPlan;
 
@@ -228,7 +228,7 @@ function isFinalTextContentPart(
   return part.type === "text" && !isCommentaryTextContentPart(part);
 }
 
-function completeRunningToolCallOnFinalDone(
+function completeRunningToolCallOnTerminalCompletion(
   toolCall: NonNullable<Message["toolCalls"]>[number],
   completedAt: Date,
 ): NonNullable<Message["toolCalls"]>[number] {
@@ -247,7 +247,7 @@ function completeRunningToolCallOnFinalDone(
   };
 }
 
-function completeRunningToolCallsOnFinalDone(
+function completeRunningToolCallsOnTerminalCompletion(
   parts: Message["contentParts"],
   completedAt: Date,
 ): Message["contentParts"] {
@@ -259,7 +259,7 @@ function completeRunningToolCallsOnFinalDone(
     part.type === "tool_use"
       ? {
           ...part,
-          toolCall: completeRunningToolCallOnFinalDone(
+          toolCall: completeRunningToolCallOnTerminalCompletion(
             part.toolCall,
             completedAt,
           ),
@@ -547,7 +547,7 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
     isThinking: false,
     content: finalContent,
     thinkingContent: retainedThinkingContent,
-    contentParts: completeRunningToolCallsOnFinalDone(
+    contentParts: completeRunningToolCallsOnTerminalCompletion(
       reconcileAgentStreamFinalContentParts({
         parts: params.parts,
         finalContent,
@@ -558,14 +558,14 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
       completedAt,
     ),
     toolCalls: params.toolCalls?.map((toolCall) =>
-      completeRunningToolCallOnFinalDone(toolCall, completedAt),
+      completeRunningToolCallOnTerminalCompletion(toolCall, completedAt),
     ),
     runtimeStatus: undefined,
     ...(params.usage !== undefined ? { usage: params.usage } : {}),
   };
 }
 
-export function buildAgentStreamFinalDonePlan(params: {
+export function buildAgentStreamTerminalCompletionPlan(params: {
   accumulatedContent: string;
   fallbackContent?: string | null;
   hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary?: boolean;
@@ -574,7 +574,7 @@ export function buildAgentStreamFinalDonePlan(params: {
   queuedTurnId?: string | null;
   toolCallCount: number;
   usage?: Message["usage"];
-}): AgentStreamFinalDonePlan {
+}): AgentStreamTerminalCompletionPlan {
   if (
     shouldFailAgentStreamMissingFinalReply({
       accumulatedContent: params.accumulatedContent,

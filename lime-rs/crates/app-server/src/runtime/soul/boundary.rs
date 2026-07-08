@@ -1,5 +1,5 @@
 use super::style_profile::SERIOUS_STYLE_PROFILE_ID;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(crate) const FORMAL_ARTIFACT_VOICE_SOURCE: &str = "generation_brief_only";
 

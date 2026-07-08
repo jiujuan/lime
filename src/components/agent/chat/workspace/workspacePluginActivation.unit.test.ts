@@ -631,6 +631,39 @@ describe("workspacePluginActivation", () => {
     });
   });
 
+  it("本地 folder 插件激活 metadata 应透传 package source", () => {
+    const installed = createInstalledPluginBackedApp({
+      identity: {
+        sourceKind: "local_folder",
+        sourceUri: "/tmp/creator-workbench",
+        appId: "creator-workbench",
+        appVersion: "1.0.0",
+        packageHash: "local-folder",
+        manifestHash: "manifest",
+        loadedAt: "2026-07-07T00:00:00.000Z",
+      } as InstalledPluginState["identity"],
+    });
+
+    const resolution = resolveWorkspacePluginActivation({
+      text: "@创作工作台 写一篇公众号文章",
+      sessionId: "session-package-source",
+      installedPlugins: [installed],
+    });
+    const sendOptions = mergePluginActivationSendOptions({
+      resolution: resolution!,
+    });
+
+    expect(sendOptions?.requestMetadata).toMatchObject({
+      harness: {
+        plugin_activation: {
+          plugin_id: "creator-workbench",
+          package_source_kind: "local_folder",
+          package_source_uri: "/tmp/creator-workbench",
+        },
+      },
+    });
+  });
+
   it("兼容旧安装态缺少 workflows 时合并 @写文章 发送参数不应崩溃", () => {
     const base = createInstalledContentFactory();
     const resolution = resolveWorkspacePluginActivation({

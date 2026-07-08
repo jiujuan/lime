@@ -95,13 +95,13 @@ export function HarnessExportDirectoryCard({
       </div>
       <div className="mt-2 space-y-1 text-xs text-muted-foreground">
         <div>
-          {agentText("agentChat.harness.generated.2ee19fe8b0", "相对路径：")}
+          {agentText("agentChat.harness.export.path.relative", "相对路径：")}
           <span className="ml-1 break-all font-mono text-foreground">
             {relativePath}
           </span>
         </div>
         <div>
-          {agentText("agentChat.harness.generated.f9c616413f", "绝对路径：")}
+          {agentText("agentChat.harness.export.path.absolute", "绝对路径：")}
           <PathTextLink
             path={absolutePath}
             className="ml-1"
@@ -121,14 +121,19 @@ interface HarnessExportArtifact {
   bytes: number;
 }
 
+interface HarnessExportArtifactActionCopy {
+  key: string;
+  defaultValue: string;
+}
+
 interface HarnessExportArtifactListProps<
   TArtifact extends HarnessExportArtifact,
 > {
   artifacts: readonly TArtifact[];
   formatKindLabel: (kind: TArtifact["kind"]) => string;
-  previewDescriptionPrefix: string;
-  previewAriaLabelPrefix: string;
-  openAriaLabelPrefix: string;
+  previewDescription: HarnessExportArtifactActionCopy;
+  previewAriaLabel: HarnessExportArtifactActionCopy;
+  openAriaLabel: HarnessExportArtifactActionCopy;
   title?: ReactNode;
   onOpenPath: HandoffOpenPathHandler;
   onOpenPreview: HandoffOpenPreviewHandler;
@@ -139,9 +144,9 @@ export function HarnessExportArtifactList<
 >({
   artifacts,
   formatKindLabel,
-  previewDescriptionPrefix,
-  previewAriaLabelPrefix,
-  openAriaLabelPrefix,
+  previewDescription,
+  previewAriaLabel,
+  openAriaLabel,
   title,
   onOpenPath,
   onOpenPreview,
@@ -175,7 +180,7 @@ export function HarnessExportArtifactList<
                 <div className="mt-2 text-xs text-muted-foreground">
                   <div>
                     {agentText(
-                      "agentChat.harness.generated.2ee19fe8b0",
+                      "agentChat.harness.export.path.relative",
                       "相对路径：",
                     )}
                     <span className="ml-1 break-all font-mono text-foreground">
@@ -184,7 +189,7 @@ export function HarnessExportArtifactList<
                   </div>
                   <div className="mt-1">
                     {agentText(
-                      "agentChat.harness.generated.f9c616413f",
+                      "agentChat.harness.export.path.absolute",
                       "绝对路径：",
                     )}
                     <PathTextLink
@@ -201,28 +206,40 @@ export function HarnessExportArtifactList<
                   size="sm"
                   variant="outline"
                   className="gap-2"
-                  aria-label={`${previewAriaLabelPrefix}：${artifact.title}`}
+                  aria-label={agentText(
+                    previewAriaLabel.key,
+                    previewAriaLabel.defaultValue,
+                    { title: artifact.title },
+                  )}
                   onClick={() =>
                     void onOpenPreview({
                       title: artifact.title,
-                      description: `${previewDescriptionPrefix} · ${kindLabel}`,
+                      description: agentText(
+                        previewDescription.key,
+                        previewDescription.defaultValue,
+                        { kind: kindLabel },
+                      ),
                       path: artifact.absolute_path,
                     })
                   }
                 >
                   <Eye className="h-4 w-4" />
-                  {agentText("agentChat.harness.generated.de61aa8e1c", "预览")}
+                  {agentText("agentChat.harness.export.action.preview", "预览")}
                 </Button>
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
                   className="gap-2"
-                  aria-label={`${openAriaLabelPrefix}：${artifact.absolute_path}`}
+                  aria-label={agentText(
+                    openAriaLabel.key,
+                    openAriaLabel.defaultValue,
+                    { path: artifact.absolute_path },
+                  )}
                   onClick={() => void onOpenPath(artifact.absolute_path)}
                 >
                   <FolderOpen className="h-4 w-4" />
-                  {agentText("agentChat.harness.generated.65fc81e161", "打开")}
+                  {agentText("agentChat.harness.export.action.open", "打开")}
                 </Button>
               </div>
             </div>

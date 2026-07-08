@@ -1,5 +1,5 @@
 use lime_core::config::MemorySoulStyleIntensity;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::OnceLock;
 
 use super::style_pack_registry::load_installed_style_profile_seeds;
@@ -389,15 +389,21 @@ mod tests {
         let profiles = built_in_style_profile_seeds();
 
         assert_eq!(profiles.len(), BUILT_IN_STYLE_PACK_SOURCES.len());
-        assert!(profiles
-            .iter()
-            .all(|profile| profile.pack_id.starts_with("com.lime.soul.")));
-        assert!(!profiles
-            .iter()
-            .any(|profile| profile.pack_id == "com.lime.builtin.default"));
-        assert!(profiles
-            .iter()
-            .all(|profile| !profile.response_contract.is_empty()));
+        assert!(
+            profiles
+                .iter()
+                .all(|profile| profile.pack_id.starts_with("com.lime.soul."))
+        );
+        assert!(
+            !profiles
+                .iter()
+                .any(|profile| profile.pack_id == "com.lime.builtin.default")
+        );
+        assert!(
+            profiles
+                .iter()
+                .all(|profile| !profile.response_contract.is_empty())
+        );
     }
 
     #[test]
@@ -417,10 +423,12 @@ mod tests {
                 );
             }
             assert_eq!(profile.serious_mode_fallback, SERIOUS_STYLE_PROFILE_ID);
-            assert!(profile
-                .risk_fallback_triggers
-                .iter()
-                .any(|trigger| trigger == "permission"));
+            assert!(
+                profile
+                    .risk_fallback_triggers
+                    .iter()
+                    .any(|trigger| trigger == "permission")
+            );
         }
     }
 

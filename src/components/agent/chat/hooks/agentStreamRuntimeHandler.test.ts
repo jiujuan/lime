@@ -67,7 +67,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -197,7 +197,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -354,7 +354,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -580,7 +580,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -823,7 +823,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -1034,7 +1034,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -1310,7 +1310,7 @@ describe("agentStreamRuntimeHandler storage", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (

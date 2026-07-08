@@ -4,6 +4,7 @@ use app_server::LocalAppDataSource;
 use app_server::MockBackend;
 use app_server::RuntimeBackend;
 use app_server::RuntimeCore;
+use app_server::SidecarStore;
 use app_server_protocol::*;
 use chrono::Utc;
 use lime_core::database::dao::api_key_provider::{
@@ -20,6 +21,7 @@ use tempfile::TempDir;
 struct MediaTaskAppServer {
     _temp: TempDir,
     event_log_writer: Arc<EventLogWriter>,
+    sidecar_store: Arc<SidecarStore>,
     workspace_root: String,
     server: AppServer,
 }
@@ -36,16 +38,20 @@ async fn media_task_app_server() -> MediaTaskAppServer {
     insert_image_provider_with_key(&db, "provider-image", "gpt-image-test");
     let event_log_writer =
         Arc::new(EventLogWriter::new(temp.path().join("events")).expect("event log writer"));
+    let sidecar_store =
+        Arc::new(SidecarStore::new(temp.path().join("sidecars")).expect("sidecar store"));
     let app_data_source = LocalAppDataSource::initialize_with_db_and_data_root(db, data_root)
         .await
         .expect("local app data source");
     let runtime = RuntimeCore::with_backend(Arc::new(MockBackend))
         .with_app_data_source(Arc::new(app_data_source))
-        .with_event_log_writer(event_log_writer.clone());
+        .with_event_log_writer(event_log_writer.clone())
+        .with_sidecar_store(sidecar_store.clone());
 
     MediaTaskAppServer {
         _temp: temp,
         event_log_writer,
+        sidecar_store,
         workspace_root,
         server: AppServer::with_runtime(runtime),
     }
@@ -151,6 +157,74 @@ async fn image_task_complete_uses_current_jsonrpc_method() {
         restored.pointer("/result/record/result/images/0/url"),
         Some(&json!("file:///tmp/lime-image-complete.png"))
     );
+}
+
+#[tokio::test]
+async fn image_task_complete_writes_data_url_sidecar_via_jsonrpc() {
+    let app = media_task_app_server().await;
+    initialize_server(&app.server, 1, "media-task-image-complete-sidecar-test").await;
+
+    let created = request(
+        &app.server,
+        2,
+        METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+        json!({
+            "projectRootPath": app.workspace_root,
+            "prompt": "给春日咖啡活动生成一张可读 sidecar 的配图",
+            "size": "1024x1024",
+            "count": 1,
+            "providerId": "provider-image",
+            "model": "gpt-image-test",
+            "sessionId": "session-image-complete-sidecar",
+            "threadId": "thread-image-complete-sidecar",
+            "turnId": "turn-image-complete-sidecar",
+            "entrySource": "at_image_command"
+        }),
+    )
+    .await;
+    let task_id = created
+        .pointer("/result/task_id")
+        .and_then(Value::as_str)
+        .expect("created task id")
+        .to_string();
+
+    let completed = request(
+        &app.server,
+        3,
+        METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
+        json!({
+            "projectRootPath": app.workspace_root,
+            "taskRef": task_id,
+            "providerId": "provider-image",
+            "model": "gpt-image-test",
+            "responseId": "response-image-complete-sidecar",
+            "images": [{
+                "url": "data:image/png;base64,AAECAw==",
+                "revisedPrompt": "春日咖啡活动插画",
+                "slotId": "hero",
+                "slotIndex": 1,
+                "slotPrompt": "主视觉配图"
+            }]
+        }),
+    )
+    .await;
+
+    let sidecar_ref = completed
+        .pointer("/result/record/result/images/0/sidecarRef")
+        .expect("sidecar ref");
+    assert_eq!(sidecar_ref["kind"].as_str(), Some("media"));
+    assert_eq!(sidecar_ref["mimeType"].as_str(), Some("image/png"));
+    assert!(sidecar_ref["ref"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("sidecar://media/")));
+    let relative_path = sidecar_ref["relativePath"].as_str().expect("relative path");
+    let sha256 = sidecar_ref["sha256"].as_str();
+    let bytes = app
+        .sidecar_store
+        .read_bytes_verified(relative_path, sha256, 16)
+        .expect("read sidecar bytes")
+        .expect("sidecar bytes");
+    assert_eq!(bytes.bytes, vec![0, 1, 2, 3]);
 }
 
 #[tokio::test]
@@ -525,17 +599,21 @@ async fn image_command_app_server() -> MediaTaskAppServer {
     insert_image_provider_with_key(&db, "provider-image", "gpt-image-test");
     let event_log_writer =
         Arc::new(EventLogWriter::new(temp.path().join("events")).expect("event log writer"));
+    let sidecar_store =
+        Arc::new(SidecarStore::new(temp.path().join("sidecars")).expect("sidecar store"));
     let app_data_source =
         LocalAppDataSource::initialize_with_db_and_data_root(db.clone(), data_root)
             .await
             .expect("local app data source");
     let runtime = RuntimeCore::with_backend(Arc::new(RuntimeBackend::with_db(db)))
         .with_app_data_source(Arc::new(app_data_source))
-        .with_event_log_writer(event_log_writer.clone());
+        .with_event_log_writer(event_log_writer.clone())
+        .with_sidecar_store(sidecar_store.clone());
 
     MediaTaskAppServer {
         _temp: temp,
         event_log_writer,
+        sidecar_store,
         workspace_root,
         server: AppServer::with_runtime(runtime),
     }

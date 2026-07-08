@@ -13,9 +13,9 @@ import {
   resetStreamedReasoningSegment,
 } from "./agentStreamReasoningTimeline";
 import {
-  buildAgentStreamFinalDonePlan,
+  buildAgentStreamTerminalCompletionPlan,
   buildAgentStreamMissingFinalReplyFailurePlan,
-  type AgentStreamFinalDonePlan,
+  type AgentStreamTerminalCompletionPlan,
   type AgentStreamMissingFinalReplyPlan,
 } from "./agentStreamCompletionController";
 import {
@@ -51,9 +51,14 @@ type RuntimeHandlerStateSetters = Pick<
   | "setThreadTurns"
 >;
 
-type AgentStreamCompletionMessagePlan = Extract<
-  AgentStreamFinalDonePlan,
+type AgentStreamCompletionCompletePlan = Extract<
+  AgentStreamTerminalCompletionPlan,
   { type: "complete" }
+>;
+
+type AgentStreamCompletionMessagePlan = Pick<
+  AgentStreamCompletionCompletePlan,
+  "finalContent" | "requestLogPayload"
 > & {
   usage?: Message["usage"];
 };
@@ -122,7 +127,7 @@ export function handleAgentStreamQueueEvent(params: {
     { type: "queue_added" | "queue_removed" | "queue_started" | "queue_cleared" }
   >;
   markQueuedDraftState: (queuedMessageText?: string | null) => void;
-  removeQueuedTurnState: (queuedTurnIds: string[]) => void;
+  removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
   requestState: StreamRequestState;
   scheduleQueuedDraftCleanup: (shouldWatchCurrentRequest: boolean) => void;
   shouldWatchAgentStreamQueuedDraftCleanup: (params: {
@@ -145,7 +150,7 @@ export function handleAgentStreamQueueEvent(params: {
       params.markQueuedDraftState(params.event.queued_turn.message_text);
       break;
     case "queue_removed":
-      params.removeQueuedTurnState([params.event.queued_turn_id]);
+      params.removeQueuedTurnsFromProjection([params.event.queued_turn_id]);
       params.scheduleQueuedDraftCleanup(
         params.shouldWatchAgentStreamQueuedDraftCleanup({
           affectedQueuedTurnId: params.event.queued_turn_id,
@@ -155,12 +160,12 @@ export function handleAgentStreamQueueEvent(params: {
       break;
     case "queue_started":
       params.requestState.queuedTurnId = params.event.queued_turn_id;
-      params.removeQueuedTurnState([params.event.queued_turn_id]);
+      params.removeQueuedTurnsFromProjection([params.event.queued_turn_id]);
       params.clearQueuedDraftCleanupTimer();
       params.activateStream();
       break;
     case "queue_cleared":
-      params.removeQueuedTurnState(params.event.queued_turn_ids);
+      params.removeQueuedTurnsFromProjection(params.event.queued_turn_ids);
       params.scheduleQueuedDraftCleanup(
         params.shouldWatchAgentStreamQueuedDraftCleanupForCleared({
           clearedQueuedTurnIds: params.event.queued_turn_ids,
@@ -348,7 +353,7 @@ export function handleAgentStreamTurnCompletedEvent(params: {
   const finalAccumulatedContent = resolveAccumulatedFinalContentForCompletion(
     params.requestState,
   );
-  const turnCompletedPlan = buildAgentStreamFinalDonePlan({
+  const turnCompletedPlan = buildAgentStreamTerminalCompletionPlan({
     accumulatedContent: finalAccumulatedContent,
     fallbackContent: params.assistantFallbackContent,
     hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary:

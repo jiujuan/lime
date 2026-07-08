@@ -34,6 +34,7 @@ export interface WorkspacePluginActivationResolution {
   intentMatch?: WorkspacePluginIntentMatch;
   runtimeReadiness?: WorkspacePluginRuntimeReadiness;
   runtimeCapabilities?: PluginRuntimeCapabilities;
+  packageSource?: WorkspacePluginPackageSource;
   blockerCodes?: string[];
 }
 
@@ -49,6 +50,11 @@ interface WorkspacePluginActivationParseResolution {
   intentSources: readonly WorkspacePluginIntentSource[];
   installedPlugins: readonly InstalledPluginState[];
   contracts: readonly PluginContract[];
+}
+
+interface WorkspacePluginPackageSource {
+  sourceKind: string;
+  sourceUri: string;
 }
 
 function canActivateLocalPluginChatTurnWithReadinessBlockers(
@@ -190,6 +196,7 @@ export function resolveWorkspacePluginActivation(params: {
     intentMatch,
     runtimeReadiness,
     runtimeCapabilities: pluginRuntimeCapabilities(installedPlugin),
+    packageSource: pluginPackageSource(installedPlugin),
   };
 }
 
@@ -244,6 +251,8 @@ function pluginActivationMetadata(
       body: resolution.body,
       session_id: context.sessionId,
       plugin_id: context.pluginId,
+      package_source_kind: resolution.packageSource?.sourceKind,
+      package_source_uri: resolution.packageSource?.sourceUri,
       active_plugin_ui_id: context.activePluginUiId,
       active_entry_key: context.activeEntryKey,
       entry_task_kind: context.taskKind,
@@ -333,6 +342,17 @@ function pluginRuntimeCapabilities(
     state?.projection?.runtimeCapabilities ??
     state?.manifest.runtimeCapabilities
   );
+}
+
+function pluginPackageSource(
+  state: InstalledPluginState | undefined,
+): WorkspacePluginPackageSource | undefined {
+  const sourceKind = state?.identity?.sourceKind;
+  const sourceUri = state?.identity?.sourceUri?.trim();
+  if (sourceKind !== "local_folder" || !sourceUri) {
+    return undefined;
+  }
+  return { sourceKind, sourceUri };
 }
 
 function contextRuntimeReadiness(

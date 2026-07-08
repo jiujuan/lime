@@ -21,7 +21,7 @@ import type { HarnessStatusPanelProps } from "./HarnessStatusPanelTypes";
 import { type AgentTranslation } from "./HarnessStatusPanelPrimitives";
 import type { HarnessSectionKey } from "./HarnessStatusSectionFrame";
 import { useHarnessPreviewDialog } from "./useHarnessPreviewDialog";
-import { useHarnessHandoffExports } from "./useHarnessHandoffExports";
+import { useHarnessEvidencePackExport } from "./useHarnessEvidencePackExport";
 import {
   buildRuntimeFactSummary,
   buildRuntimeTaskPresentation,
@@ -141,8 +141,8 @@ export function HarnessStatusPanel({
     handleRevealPath,
     handleOpenPath,
   } = previewModel;
-  const handoffExports = useHarnessHandoffExports(currentSessionId);
-  const { evidencePack } = handoffExports;
+  const evidencePackExport = useHarnessEvidencePackExport(currentSessionId);
+  const { evidencePack } = evidencePackExport;
   const agentUiProjectionFilter = useMemo<AgentUiProjectionScopeFilter | null>(
     () => (currentSessionId ? { sessionId: currentSessionId } : null),
     [currentSessionId],
@@ -415,7 +415,7 @@ export function HarnessStatusPanel({
             fileReviewState,
             handleApprovalResponse,
             handleOpenExternalLink,
-            handoffExports,
+            evidencePackExport,
             hasAgentUiProjectionSection,
             hasHandoffSection,
             hasSelectedTeamConfig,
@@ -473,7 +473,7 @@ export function HarnessStatusPanel({
       fileReviewState,
       handleApprovalResponse,
       handleOpenExternalLink,
-      handoffExports,
+      evidencePackExport,
       hasAgentUiProjectionSection,
       hasHandoffSection,
       hasSelectedTeamConfig,

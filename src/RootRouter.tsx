@@ -9,7 +9,6 @@ import { UpdateNotificationPage } from "./pages/update-notification";
 import { BrowserRuntimeDebuggerPage } from "./pages";
 import { ResourceManagerPage } from "./features/resource-manager";
 import { BrowserConnectorGuideWindow } from "./components/settings-v2/system/chrome-relay/guide-window";
-import { Toaster } from "./components/ui/sonner";
 import { AppCrashBoundary } from "./components/layout/AppCrashBoundary";
 import { finalizeCrashRecoveryAutoReload } from "./components/layout/CrashRecoveryPanel.helpers";
 import { getRuntimeAppVersion } from "./lib/appVersion";
@@ -90,7 +89,6 @@ export function RootRouter() {
     return (
       <AppCrashBoundary>
         <BrowserRuntimeDebuggerPage />
-        <Toaster />
       </AppCrashBoundary>
     );
   }
@@ -99,7 +97,6 @@ export function RootRouter() {
     return (
       <AppCrashBoundary>
         <ResourceManagerPage />
-        <Toaster />
       </AppCrashBoundary>
     );
   }
@@ -108,7 +105,6 @@ export function RootRouter() {
     return (
       <AppCrashBoundary>
         <BrowserConnectorGuideWindow />
-        <Toaster />
       </AppCrashBoundary>
     );
   }
@@ -119,7 +115,6 @@ export function RootRouter() {
         <Suspense fallback={null}>
           <DesignCanvasSmokePage />
         </Suspense>
-        <Toaster />
       </AppCrashBoundary>
     );
   }
@@ -128,7 +123,6 @@ export function RootRouter() {
   return (
     <AppCrashBoundary>
       <App />
-      <Toaster />
     </AppCrashBoundary>
   );
 }

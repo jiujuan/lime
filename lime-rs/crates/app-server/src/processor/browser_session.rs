@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
+use super::{RequestProcessor, RpcDispatch, dispatch_result, parse_params, to_jsonrpc_error};
 use app_server_protocol::{
     BrowserSessionActionExecuteParams, BrowserSessionEventListParams, BrowserSessionIdParams,
     BrowserSessionOpenParams, BrowserSessionTargetListParams, JsonRpcError,
@@ -99,9 +99,9 @@ mod tests {
     use super::*;
     use crate::RuntimeCore;
     use app_server_protocol::{
-        error_codes, ClientCapabilities, ClientInfo, InitializeParams, JsonRpcMessage,
-        JsonRpcNotification, JsonRpcRequest, RequestId, METHOD_BROWSER_SESSION_TARGET_LIST,
-        METHOD_INITIALIZE, METHOD_INITIALIZED,
+        ClientCapabilities, ClientInfo, InitializeParams, JsonRpcMessage, JsonRpcNotification,
+        JsonRpcRequest, METHOD_BROWSER_SESSION_TARGET_LIST, METHOD_INITIALIZE, METHOD_INITIALIZED,
+        RequestId, error_codes,
     };
     use serde_json::json;
 

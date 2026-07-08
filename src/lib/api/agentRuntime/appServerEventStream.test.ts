@@ -111,6 +111,37 @@ describe("appServerEventStream", () => {
     });
   });
 
+  it("legacy terminal 事件不应投影成 current turn terminal payload", () => {
+    for (const type of [
+      "done",
+      "final_done",
+      "cancelled",
+      "turn.done",
+      "turn.final_done",
+      "turn.cancelled",
+    ]) {
+      const payload = projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: `event-legacy-${type}`,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-legacy",
+            sequence: 13,
+            timestamp: "2026-07-05T10:00:00.000Z",
+            type,
+            payload: {
+              text: "旧终态不应成为最终正文",
+            },
+          },
+        },
+      } as never);
+
+      expect(payload).toBeNull();
+    }
+  });
+
   it("tool.started 应保留 runtime 产出的过程摘要 metadata", () => {
     const payload = projectAppServerAgentEventPayload({
       method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,

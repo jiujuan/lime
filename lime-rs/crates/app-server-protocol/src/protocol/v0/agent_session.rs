@@ -66,6 +66,10 @@ pub struct AgentSessionMediaReadParams {
     pub sidecar_ref: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -76,6 +80,11 @@ pub struct AgentSessionMediaReadResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
     pub bytes: u64,
+    pub total_bytes: u64,
+    pub offset: u64,
+    pub length: u64,
+    pub content_range: String,
+    pub has_more: bool,
     pub sha256: String,
     pub content_base64: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

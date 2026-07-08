@@ -47,6 +47,7 @@ import {
   loadPersistedString,
   resolvePersistedAccessMode,
   resolvePersistedExecutionStrategy,
+  resolveWorkspaceAgentPreferences,
   loadTransient,
   savePersisted,
   saveTransient,
@@ -417,9 +418,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       }
     }
 
-    return sanitizeRestoreCandidateSessionId(
-      null,
-    );
+    return sanitizeRestoreCandidateSessionId(null);
   }, [
     disableSessionRestore,
     sanitizeRestoreCandidateSessionId,
@@ -434,11 +433,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     return sanitizeRestoreCandidateSessionId(
       loadPersisted<string | null>(scopedKeys.persistedSessionKey, null),
     );
-  }, [
-    disableSessionRestore,
-    sanitizeRestoreCandidateSessionId,
-    scopedKeys,
-  ]);
+  }, [disableSessionRestore, sanitizeRestoreCandidateSessionId, scopedKeys]);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(() =>
@@ -979,7 +974,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     restoreCandidateSessionIdRef.current = scopedSessionCandidate;
     if (shouldRestoreSessionInForeground) {
-      const scopedMessages = loadTransient<Message[]>(scopedKeys.messagesKey, []);
+      const scopedMessages = loadTransient<Message[]>(
+        scopedKeys.messagesKey,
+        [],
+      );
       const scopedTurns = loadTransient<AgentThreadTurn[]>(
         scopedKeys.turnsKey,
         [],
@@ -1206,8 +1204,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             workspaceId: resolvedWorkspaceId || null,
             workingDir: normalizedWorkingDir,
           });
-          const nextProviderType = providerTypeRef.current;
-          const nextModel = modelRef.current;
+          const workspaceModelPreference = resolveWorkspaceAgentPreferences(
+            resolvedWorkspaceId || workspaceId,
+          );
+          const nextProviderType =
+            workspaceModelPreference.providerType || providerTypeRef.current;
+          const nextModel = workspaceModelPreference.model || modelRef.current;
           const newSessionId = await runtime.createSession(
             resolvedWorkspaceId || undefined,
             sessionName,
@@ -1266,6 +1268,16 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             newSessionId,
             creationExecutionStrategy,
           );
+          if (nextProviderType.trim() && nextModel.trim()) {
+            applySessionModelPreference(
+              newSessionId,
+              {
+                providerType: nextProviderType,
+                model: nextModel,
+              },
+              { markSynced: true },
+            );
+          }
           const nextScopedKeys = scopedKeys;
           scheduleFreshSessionPostCreatePersistence(() => {
             persistSessionModelPreference(
@@ -1320,6 +1332,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     },
     [
       accessMode,
+      applySessionModelPreference,
       applySessionSnapshot,
       executionStrategy,
       invalidatePendingSessionSwitches,
@@ -2462,9 +2475,62 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
   const ensureSession = useCallback(
     async (options?: {
+      targetSessionId?: string;
       skipSessionRestore?: boolean;
       skipSessionStartHooks?: boolean;
     }): Promise<string | null> => {
+      const targetSessionId = options?.targetSessionId?.trim();
+      if (targetSessionId) {
+        try {
+          const detail = await runtime.getSession(
+            targetSessionId,
+            buildSessionDetailHydrationOptions({
+              source: "ensureSessionTarget",
+            }),
+          );
+          const runtimeWorkspaceId = normalizeProjectId(detail.workspace_id);
+          const currentWorkspaceId = normalizeProjectId(workspaceId);
+          const runtimeWorkingDir = normalizeSessionScopeWorkingDir(
+            detail.working_dir,
+          );
+          const currentWorkingDir =
+            normalizeSessionScopeWorkingDir(normalizedWorkingDir);
+          if (
+            runtimeWorkingDir &&
+            currentWorkingDir &&
+            runtimeWorkingDir !== currentWorkingDir
+          ) {
+            throw new Error(
+              `session workspace mismatch: expected cwd ${currentWorkingDir}, got ${runtimeWorkingDir}`,
+            );
+          }
+          if (
+            !runtimeWorkingDir &&
+            runtimeWorkspaceId &&
+            currentWorkspaceId &&
+            runtimeWorkspaceId !== currentWorkspaceId
+          ) {
+            throw new Error(
+              `session workspace mismatch: expected ${currentWorkspaceId}, got ${runtimeWorkspaceId}`,
+            );
+          }
+          appServerConfirmedSessionIdsRef.current.add(targetSessionId);
+          return targetSessionId;
+        } catch (error) {
+          logAgentDebug(
+            "useAgentSession",
+            "ensureSession.targetSessionError",
+            {
+              error,
+              sessionId: targetSessionId,
+              workspaceId,
+            },
+            { level: "error" },
+          );
+          throw error;
+        }
+      }
+
       const existingSessionId = sessionIdRef.current?.trim();
       if (existingSessionId) {
         if (appServerConfirmedSessionIdsRef.current.has(existingSessionId)) {
@@ -2762,7 +2828,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     restoredWorkspaceRef.current = resolvedWorkspaceId;
     setIsSessionHydrating(false);
     const targetTopic = topics.find((topic) => topic.id === targetSessionId);
-    const shouldResumeRestoredSession = shouldResumeTaskSession(targetTopic);
+    const shouldResumeRestoredSession =
+      shouldResumeTaskSession(targetTopic) ||
+      (shouldRecoverSessionInBackground && scopedCandidate === targetSessionId);
 
     if (shouldRecoverSessionInBackground) {
       persistSessionRestoreCandidate(targetSessionId);

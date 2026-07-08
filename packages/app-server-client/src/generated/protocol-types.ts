@@ -1940,7 +1940,9 @@ export interface AgentSessionListResponse {
 }
 
 export interface AgentSessionMediaReadParams {
+  length?: number | null;
   maxBytes?: number | null;
+  offset?: number | null;
   refId?: null | string;
   sessionId: string;
   sidecarRef?: unknown;
@@ -1949,11 +1951,16 @@ export interface AgentSessionMediaReadParams {
 
 export interface AgentSessionMediaReadResponse {
   bytes: number;
+  contentRange: string;
   contentBase64: string;
+  hasMore: boolean;
+  length: number;
   mimeType?: null | string;
+  offset: number;
   sessionId: string;
   sha256: string;
   sidecarRef?: unknown;
+  totalBytes: number;
   uri: string;
 }
 

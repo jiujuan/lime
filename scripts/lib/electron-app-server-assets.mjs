@@ -101,11 +101,9 @@ export async function prepareElectronAppServerAssets({
   outputRoot = electronAppServerResourcesRoot(repoRoot),
   platform = process.platform,
   arch = process.arch,
-  sourceBinary = resolveDevAppServerBinary({
-    repoRoot,
-    platform,
-    forceBuild: true,
-  }),
+  sourceBinary,
+  resolveBinary = resolveDevAppServerBinary,
+  env = process.env,
   readPackageJson = readJsonFile,
   copy = copyFile,
   makeDir = mkdir,
@@ -123,12 +121,26 @@ export async function prepareElectronAppServerAssets({
     arch,
   });
   const manifestPath = electronAppServerManifestPath({ outputRoot });
+  const resolvedSourceBinary = path.resolve(
+    sourceBinary ??
+      resolveBinary({
+        repoRoot,
+        platform,
+        forceBuild: true,
+        env: withoutAppServerBin(env),
+      }),
+  );
+  if (resolvedSourceBinary === destination) {
+    throw new Error(
+      `Electron app-server asset source must not equal packaged destination: ${destination}`,
+    );
+  }
 
   await makeDir(path.dirname(destination), { recursive: true });
   await rm(destination, { force: true });
-  await copy(path.resolve(sourceBinary), destination);
+  await copy(resolvedSourceBinary, destination);
   await clearLaunchBlockingXattrs(destination, platform);
-  const sourceStat = await getStat(path.resolve(sourceBinary));
+  const sourceStat = await getStat(resolvedSourceBinary);
   await changeMode(destination, sourceStat.mode);
 
   const manifest = await buildElectronAppServerReleaseManifest({
@@ -140,7 +152,7 @@ export async function prepareElectronAppServerAssets({
   await write(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   return {
-    sourceBinary: path.resolve(sourceBinary),
+    sourceBinary: resolvedSourceBinary,
     binaryPath: destination,
     manifestPath,
     manifest,
@@ -202,4 +214,10 @@ function requiredValue(value, name) {
     throw new Error(`${name} is required`);
   }
   return normalized;
+}
+
+function withoutAppServerBin(env) {
+  const nextEnv = { ...env };
+  delete nextEnv.APP_SERVER_BIN;
+  return nextEnv;
 }

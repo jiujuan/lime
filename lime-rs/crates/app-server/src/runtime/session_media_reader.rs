@@ -13,12 +13,21 @@ impl RuntimeCore {
         &self,
         params: AgentSessionMediaReadParams,
     ) -> Result<AgentSessionMediaReadResponse, RuntimeCoreError> {
+        self.read_agent_session_media_with_cancel(params, || false)
+    }
+
+    pub(crate) fn read_agent_session_media_with_cancel(
+        &self,
+        params: AgentSessionMediaReadParams,
+        is_canceled: impl Fn() -> bool,
+    ) -> Result<AgentSessionMediaReadResponse, RuntimeCoreError> {
         let requested = RequestedMediaSidecar::from_params(&params)?;
         let sidecar_store = self.sidecar_store.as_ref().ok_or_else(|| {
             RuntimeCoreError::Backend(
                 "agentSession/media/read requires an initialized sidecar store".to_string(),
             )
         })?;
+        fail_if_canceled(&is_canceled)?;
         let known_ref = {
             let state = self
                 .state
@@ -46,20 +55,27 @@ impl RuntimeCore {
             .max_bytes
             .unwrap_or(DEFAULT_MAX_MEDIA_SIDECAR_BYTES)
             .min(MAX_MEDIA_SIDECAR_BYTES);
+        let offset = params.offset.unwrap_or(0);
+        let length = params.length.unwrap_or(max_bytes);
+        fail_if_canceled(&is_canceled)?;
         let content = sidecar_store
-            .read_bytes_verified(
+            .read_bytes_range_verified_with_cancel(
                 relative_path.as_str(),
                 known_ref.sha256.as_deref(),
+                offset,
+                length,
                 max_bytes,
+                &is_canceled,
             )
-            .map_err(RuntimeCoreError::Backend)?
+            .map_err(sidecar_read_error)?
             .ok_or_else(|| {
                 RuntimeCoreError::Backend(
                     "agent session media sidecar content is not available".to_string(),
                 )
             })?;
+        fail_if_canceled(&is_canceled)?;
         if let Some(expected_bytes) = known_ref.bytes {
-            let actual_bytes = content.bytes.len() as u64;
+            let actual_bytes = content.total_bytes;
             if expected_bytes != actual_bytes {
                 return Err(RuntimeCoreError::Backend(format!(
                     "agent session media sidecar size mismatch: expected {expected_bytes}, actual {actual_bytes}"
@@ -75,10 +91,35 @@ impl RuntimeCore {
                 .unwrap_or_else(|| requested.display_uri()),
             mime_type: known_ref.mime_type,
             bytes: content.bytes.len() as u64,
+            total_bytes: content.total_bytes,
+            offset: content.offset,
+            length: content.length,
+            content_range: format_content_range(
+                content.offset,
+                content.length,
+                content.total_bytes,
+            ),
+            has_more: content.has_more,
             sha256: content.sha256,
             content_base64: BASE64_STANDARD.encode(content.bytes),
             sidecar_ref: Some(known_ref.sidecar_ref),
         })
+    }
+}
+
+fn fail_if_canceled(is_canceled: &impl Fn() -> bool) -> Result<(), RuntimeCoreError> {
+    if is_canceled() {
+        Err(RuntimeCoreError::RequestCanceled)
+    } else {
+        Ok(())
+    }
+}
+
+fn sidecar_read_error(error: String) -> RuntimeCoreError {
+    if error == super::sidecar_store::SIDECAR_READ_CANCELED {
+        RuntimeCoreError::RequestCanceled
+    } else {
+        RuntimeCoreError::Backend(error)
     }
 }
 
@@ -246,6 +287,14 @@ fn session_scoped_media_relative_path(
     Ok(relative_path)
 }
 
+fn format_content_range(offset: u64, length: u64, total_bytes: u64) -> String {
+    if length == 0 {
+        return format!("bytes */{total_bytes}");
+    }
+    let end = offset.saturating_add(length).saturating_sub(1);
+    format!("bytes {offset}-{end}/{total_bytes}")
+}
+
 fn push_key(keys: &mut HashSet<String>, value: Option<&str>) {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return;
@@ -348,6 +397,8 @@ mod tests {
                 ref_id: None,
                 sidecar_ref: None,
                 max_bytes: Some(1024),
+                offset: None,
+                length: None,
             })
             .expect("read media");
 
@@ -355,9 +406,42 @@ mod tests {
         assert_eq!(response.uri, ref_id);
         assert_eq!(response.mime_type.as_deref(), Some("image/png"));
         assert_eq!(response.bytes, 4);
+        assert_eq!(response.total_bytes, 4);
+        assert_eq!(response.offset, 0);
+        assert_eq!(response.length, 4);
+        assert_eq!(response.content_range, "bytes 0-3/4");
+        assert!(!response.has_more);
         assert_eq!(response.content_base64, "iVBORw==");
         assert!(response.sha256.starts_with("sha256:"));
         assert!(response.sidecar_ref.is_some());
+    }
+
+    #[test]
+    fn reads_known_media_sidecar_range_with_full_digest_check() {
+        let (core, _temp, ref_id) = prepared_core_with_media_ref(None);
+
+        let response = core
+            .read_agent_session_media(AgentSessionMediaReadParams {
+                session_id: "sess-media-read".to_string(),
+                uri: Some(ref_id.clone()),
+                ref_id: None,
+                sidecar_ref: None,
+                max_bytes: Some(2),
+                offset: Some(1),
+                length: Some(2),
+            })
+            .expect("read media range");
+
+        assert_eq!(response.session_id, "sess-media-read");
+        assert_eq!(response.uri, ref_id);
+        assert_eq!(response.bytes, 2);
+        assert_eq!(response.total_bytes, 4);
+        assert_eq!(response.offset, 1);
+        assert_eq!(response.length, 2);
+        assert_eq!(response.content_range, "bytes 1-2/4");
+        assert!(response.has_more);
+        assert_eq!(response.content_base64, "UE4=");
+        assert!(response.sha256.starts_with("sha256:"));
     }
 
     #[test]
@@ -371,6 +455,8 @@ mod tests {
                 ref_id: None,
                 sidecar_ref: None,
                 max_bytes: Some(1024),
+                offset: None,
+                length: None,
             })
             .expect_err("unknown ref");
 
@@ -400,6 +486,8 @@ mod tests {
                 ref_id: None,
                 sidecar_ref: None,
                 max_bytes: Some(1024),
+                offset: None,
+                length: None,
             })
             .expect_err("digest mismatch");
 

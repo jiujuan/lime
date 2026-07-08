@@ -10,7 +10,7 @@ import { buildInstalledPluginState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildPluginLabResolvedSetupState } from "../install/labInstallFlow";
 import { buildPackageIdentity } from "../install/packageIdentity";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 import type { AppManifest, InstalledPluginState } from "../types";
 import { PluginRuntimePage } from "./PluginRuntimePage";
 
@@ -138,6 +138,21 @@ const hoisted = vi.hoisted(() => ({
       "plugin.apps.runtime.agentRun.facts.evidence": "证据",
       "plugin.apps.runtime.agentRun.facts.evidence.empty": "暂无证据",
       "plugin.apps.runtime.agentRun.facts.evidence.itemFallback": "证据已记录",
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.message": `宿主已用 ${String(params?.provider)} / ${String(params?.model)} 生成 ${String(params?.outputCount)} 个受控产物；正文保持 Generation Brief 边界。`,
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.title":
+        "宿主托管生成已完成",
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.requested.message":
+        "宿主正在为插件生成受控正文；过程说明可带 Soul，正式正文仍走 Generation Brief。",
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.requested.title":
+        "宿主托管生成中",
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.skipped.message":
+        "插件声明了托管生成入口，但本轮没有需要宿主生成的正文。",
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.skipped.title":
+        "宿主托管生成已跳过",
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.unavailable.message":
+        "宿主托管生成不可用，插件会按 fail-closed 边界处理，不伪造正文。",
+      "plugin.apps.runtime.agentRun.hostManagedGeneration.unavailable.title":
+        "宿主托管生成不可用",
       "plugin.apps.runtime.agentRun.timeline.running":
         "运行中，点击折叠或展开过程",
       "plugin.apps.runtime.agentRun.timeline.collapsed":

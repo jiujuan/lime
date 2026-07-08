@@ -9,7 +9,7 @@ import {
   verifyCloudReleaseSignature,
 } from "@/features/plugin/install/cloudReleaseSignature";
 import { buildPluginPackageCacheEntry } from "@/features/plugin/install/packageCache";
-import { buildWorkflowRuntimeCapabilityProfile } from "@/features/plugin/runtime/workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "@/features/plugin/testing/workflowRuntimeCapabilityProfile";
 import type { ShellDescriptor } from "@/features/plugin/shell";
 import type {
   PluginCloudReleaseSignatureProof,

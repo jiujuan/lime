@@ -29,13 +29,12 @@ mod wechat;
 mod workflow;
 mod workspace;
 
-use crate::execution_process::ExecutionProcessServer;
-use crate::project_shell::ProjectShellManager;
 use crate::AppServerError;
 use crate::RuntimeCore;
 use crate::RuntimeCoreError;
 use crate::RuntimeHostContext;
-use app_server_protocol::error_codes;
+use crate::execution_process::ExecutionProcessServer;
+use crate::project_shell::ProjectShellManager;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSessionActionReplayParams;
 use app_server_protocol::AgentSessionActionRespondParams;
@@ -57,17 +56,21 @@ use app_server_protocol::JsonRpcError;
 use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
+use app_server_protocol::METHOD_CANCEL_REQUEST;
 use app_server_protocol::PlatformInfo;
+use app_server_protocol::RequestId;
+use app_server_protocol::error_codes;
 use config_warning::{ConfigWarningProvider, ConfigWarningScope};
 // ProjectGit* 类型已移至 processor/project_git.rs
+use app_server_protocol::PROTOCOL_VERSION;
+use app_server_protocol::SERVER_NAME;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
 use app_server_protocol::ServerNotification;
 use app_server_protocol::UsageStatsRangeParams;
-use app_server_protocol::PROTOCOL_VERSION;
-use app_server_protocol::SERVER_NAME;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::Instrument;
@@ -86,6 +89,7 @@ struct ProcessorState {
     initialize_accepted: bool,
     initialized: bool,
     client_info: Option<ClientInfo>,
+    canceled_request_ids: HashSet<RequestId>,
 }
 
 impl RequestProcessor {
@@ -141,6 +145,14 @@ impl RequestProcessor {
     }
 
     pub fn handle_notification(&self, notification: JsonRpcNotification) {
+        if notification.method == METHOD_CANCEL_REQUEST {
+            if let Some(request_id) = read_cancel_request_id(notification.params.as_ref()) {
+                let mut state = self.state.lock().expect("app-server state mutex poisoned");
+                state.canceled_request_ids.insert(request_id);
+            }
+            return;
+        }
+
         if ClientNotification::try_from(notification) != Ok(ClientNotification::Initialized) {
             return;
         }
@@ -149,6 +161,22 @@ impl RequestProcessor {
         if state.initialize_accepted {
             state.initialized = true;
         }
+    }
+
+    pub(super) fn is_request_canceled(&self, request_id: &RequestId) -> bool {
+        self.state
+            .lock()
+            .expect("app-server state mutex poisoned")
+            .canceled_request_ids
+            .contains(request_id)
+    }
+
+    fn clear_request_cancel_state(&self, request_id: &RequestId) {
+        self.state
+            .lock()
+            .expect("app-server state mutex poisoned")
+            .canceled_request_ids
+            .remove(request_id);
     }
 
     fn handle_session_start(
@@ -518,6 +546,14 @@ impl RequestProcessor {
 
     pub(super) fn runtime_host_context(&self) -> RuntimeHostContext {
         RuntimeHostContext::from(self.client_info())
+    }
+}
+
+fn read_cancel_request_id(params: Option<&serde_json::Value>) -> Option<RequestId> {
+    match params?.get("id")? {
+        serde_json::Value::Number(value) => value.as_i64().map(RequestId::Integer),
+        serde_json::Value::String(value) => Some(RequestId::String(value.clone())),
+        _ => None,
     }
 }
 

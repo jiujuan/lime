@@ -164,6 +164,131 @@ impl RuntimeReplyStreamRequest {
             self.model_request_policy.as_ref(),
         )
     }
+
+    pub fn provider_request_wire_support_issue(
+        &self,
+    ) -> Option<RuntimeReplyProviderWireSupportIssue> {
+        let wire_shape = self.provider_request_wire_shape();
+        if provider_supports_request_wire_shape(self.provider.as_ref(), &wire_shape) {
+            return None;
+        }
+        Some(RuntimeReplyProviderWireSupportIssue {
+            provider_backend: self.provider_backend(),
+            provider_name: self.provider_name().map(ToOwned::to_owned),
+            model_name: self.model_name().map(ToOwned::to_owned),
+            wire_shape,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeReplyProviderStreamStart {
+    stream_request: RuntimeReplyStreamRequest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeReplyProviderStreamTrace<'a> {
+    pub session_id: &'a str,
+    pub input_kind: RuntimeReplyInputKind,
+    pub message_chars: usize,
+    pub provider_backend: Option<RuntimeProviderBackend>,
+    pub provider_name: Option<&'a str>,
+    pub model_name: Option<&'a str>,
+}
+
+impl RuntimeReplyProviderStreamStart {
+    pub fn new(
+        stream_request: RuntimeReplyStreamRequest,
+        expected_provider: &RuntimeReplyProviderHandle,
+    ) -> Result<Self, RuntimeReplyProviderStartError> {
+        let Some(provider) = stream_request.provider.as_ref() else {
+            return Err(RuntimeReplyProviderStartError::new(format!(
+                "Provider stream start requires a configured provider handle for session {}",
+                stream_request.session_id
+            )));
+        };
+        if provider != expected_provider {
+            return Err(RuntimeReplyProviderStartError::new(format!(
+                "Provider stream handle mismatch for session {}: expected {}/{}, got {}/{}",
+                stream_request.session_id,
+                expected_provider.provider_name(),
+                expected_provider.model_name(),
+                provider.provider_name(),
+                provider.model_name()
+            )));
+        }
+
+        Ok(Self { stream_request })
+    }
+
+    pub fn stream_request(&self) -> &RuntimeReplyStreamRequest {
+        &self.stream_request
+    }
+
+    pub fn trace(&self) -> RuntimeReplyProviderStreamTrace<'_> {
+        RuntimeReplyProviderStreamTrace {
+            session_id: &self.stream_request.session_id,
+            input_kind: self.stream_request.input_kind,
+            message_chars: self.stream_request.message_chars,
+            provider_backend: self.stream_request.provider_backend(),
+            provider_name: self.stream_request.provider_name(),
+            model_name: self.stream_request.model_name(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeReplyProviderStartError {
+    pub message: String,
+}
+
+impl RuntimeReplyProviderStartError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+fn provider_supports_request_wire_shape(
+    provider: Option<&RuntimeReplyProviderHandle>,
+    wire_shape: &RuntimeReplyProviderRequestWireShape,
+) -> bool {
+    if !wire_shape.requires_responses_lite_wire_support() {
+        return true;
+    }
+
+    let Some(provider) = provider else {
+        return false;
+    };
+
+    match provider.backend {
+        RuntimeProviderBackend::Current => true,
+        RuntimeProviderBackend::AsterCompat => {
+            provider.identity.provider_name == "openai"
+                && provider
+                    .identity
+                    .protocol
+                    .as_ref()
+                    .is_some_and(ModelProviderProtocol::uses_responses_api)
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeReplyProviderWireSupportIssue {
+    pub provider_backend: Option<RuntimeProviderBackend>,
+    pub provider_name: Option<String>,
+    pub model_name: Option<String>,
+    pub wire_shape: RuntimeReplyProviderRequestWireShape,
+}
+
+impl RuntimeReplyProviderWireSupportIssue {
+    pub const MESSAGE: &'static str = "Provider request policy requires Responses Lite wire support, but the configured provider backend cannot safely apply the required header/reasoning payload yet; refusing to stream instead of silently dropping the policy.";
+
+    pub fn message(&self) -> &'static str {
+        Self::MESSAGE
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -293,6 +418,32 @@ pub enum RuntimeReplyProviderStreamEvent {
 }
 
 impl RuntimeReplyProviderStreamEvent {
+    pub const NOTIFICATION_KIND_SAFETY_BUFFERING: &'static str =
+        "openai_responses.safety_buffering";
+
+    pub fn from_notification_payload(
+        stream_request: &RuntimeReplyStreamRequest,
+        payload: &serde_json::Value,
+    ) -> Option<Self> {
+        let event_kind = payload
+            .get("eventKind")
+            .and_then(serde_json::Value::as_str)?;
+        match event_kind {
+            Self::NOTIFICATION_KIND_SAFETY_BUFFERING => {
+                let response_event = payload.get("responseEvent")?;
+                let headers = provider_stream_event_headers(payload);
+                Self::safety_buffering_from_response_event(
+                    stream_request,
+                    response_event,
+                    headers
+                        .iter()
+                        .map(|(name, value)| (name.as_str(), value.as_str())),
+                )
+            }
+            _ => None,
+        }
+    }
+
     pub fn safety_buffering_from_response_event<'a>(
         stream_request: &RuntimeReplyStreamRequest,
         response_event: &serde_json::Value,
@@ -318,6 +469,20 @@ impl RuntimeReplyProviderStreamEvent {
             Self::SafetyBuffering(payload) => payload.to_json_value(),
         }
     }
+}
+
+fn provider_stream_event_headers(payload: &serde_json::Value) -> Vec<(String, String)> {
+    payload
+        .get("headers")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|header| {
+            let name = header.get("name").and_then(serde_json::Value::as_str)?;
+            let value = header.get("value").and_then(serde_json::Value::as_str)?;
+            Some((name.to_string(), value.to_string()))
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -378,309 +543,4 @@ impl RuntimeReplyReasoningOutputPolicy {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
-    use crate::safety::{
-        ProviderSafetyBufferingRetryModelSource, SAFETY_BUFFERING_ENABLED_HEADER,
-        SAFETY_BUFFERING_FASTER_MODEL_HEADER,
-    };
-    use serde_json::json;
-
-    fn runtime_config() -> RuntimeProviderConfig {
-        RuntimeProviderConfig {
-            provider_name: "openai".to_string(),
-            provider_selector: Some("codex".to_string()),
-            model_name: "gpt-5.3-codex".to_string(),
-            api_key: None,
-            base_url: Some("https://example.com/openai".to_string()),
-            credential_uuid: "credential-1".to_string(),
-            reasoning_effort: Some("medium".to_string()),
-            protocol: Some(RuntimeProviderProtocol::Responses),
-            toolshim: true,
-            toolshim_model: Some("gpt-4o-mini".to_string()),
-        }
-    }
-
-    #[test]
-    fn provider_handle_projects_runtime_config_without_provider_trait() {
-        let handle = RuntimeReplyProviderHandle::from_config(
-            &runtime_config(),
-            RuntimeProviderBackend::AsterCompat,
-        )
-        .with_capabilities(RuntimeReplyProviderCapabilities {
-            supports_streaming: true,
-            supports_embeddings: false,
-            active_model_name: Some("gpt-5.3-codex".to_string()),
-        });
-
-        assert_eq!(handle.provider_name(), "openai");
-        assert_eq!(handle.model_name(), "gpt-5.3-codex");
-        assert_eq!(handle.backend, RuntimeProviderBackend::AsterCompat);
-        assert_eq!(
-            handle.identity.protocol,
-            Some(ModelProviderProtocol::Responses)
-        );
-        assert!(handle.capabilities.supports_streaming);
-    }
-
-    #[test]
-    fn stream_request_carries_current_provider_handle() {
-        let handle = RuntimeReplyProviderHandle::from_config(
-            &runtime_config(),
-            RuntimeProviderBackend::AsterCompat,
-        );
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            Some(handle),
-        );
-
-        assert_eq!(request.session_id, "session-1");
-        assert_eq!(
-            request.provider_backend(),
-            Some(RuntimeProviderBackend::AsterCompat)
-        );
-        assert_eq!(request.provider_name(), Some("openai"));
-        assert_eq!(request.model_name(), Some("gpt-5.3-codex"));
-    }
-
-    #[test]
-    fn stream_event_projects_safety_buffering_payload_from_response_event() {
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            Some(RuntimeReplyProviderHandle::from_config(
-                &runtime_config(),
-                RuntimeProviderBackend::AsterCompat,
-            )),
-        );
-        let response_event = json!({
-            "type": "response.output_text.delta",
-            "safety_buffering": {
-                "use_cases": ["cyber"],
-                "reasons": ["user_risk"],
-            },
-        });
-
-        let event = RuntimeReplyProviderStreamEvent::safety_buffering_from_response_event(
-            &request,
-            &response_event,
-            [
-                (SAFETY_BUFFERING_ENABLED_HEADER, "true"),
-                (SAFETY_BUFFERING_FASTER_MODEL_HEADER, " retry-target "),
-            ],
-        )
-        .expect("safety buffering event");
-
-        assert_eq!(
-            event.runtime_event_kind(),
-            SAFETY_BUFFERING_RUNTIME_EVENT_KIND
-        );
-        let RuntimeReplyProviderStreamEvent::SafetyBuffering(payload) = &event;
-        assert_eq!(payload.provider.as_deref(), Some("openai"));
-        assert_eq!(payload.model.as_deref(), Some("gpt-5.3-codex"));
-        assert_eq!(payload.use_cases, ["cyber"]);
-        assert_eq!(payload.reasons, ["user_risk"]);
-        assert!(payload.show_buffering_ui);
-        assert_eq!(payload.retry_model.as_deref(), Some("retry-target"));
-        assert_eq!(
-            payload.fallback_header_model.as_deref(),
-            Some("retry-target")
-        );
-        assert_eq!(
-            payload.source,
-            ProviderSafetyBufferingRetryModelSource::LegacyHeader
-        );
-
-        let payload_json = event.payload_json_value();
-        assert_eq!(payload_json["source"], json!("legacy_header"));
-        assert!(payload_json.get("retry_model").is_none());
-        assert!(payload_json.get("faster_model").is_none());
-    }
-
-    #[test]
-    fn stream_event_ignores_false_safety_buffering_response_field() {
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            Some(RuntimeReplyProviderHandle::from_config(
-                &runtime_config(),
-                RuntimeProviderBackend::AsterCompat,
-            )),
-        );
-        let response_event = json!({
-            "type": "response.created",
-            "safety_buffering": false,
-        });
-
-        assert!(
-            RuntimeReplyProviderStreamEvent::safety_buffering_from_response_event(
-                &request,
-                &response_event,
-                [(SAFETY_BUFFERING_ENABLED_HEADER, "true")],
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn stream_request_carries_model_request_policy() {
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            None,
-        )
-        .with_model_request_policy(RuntimeReplyModelRequestPolicy::new(
-            Some(RuntimeReplyResponsesPolicy {
-                use_responses_lite: true,
-                request_mode: "responses_lite".to_string(),
-                instructions_location: "input_prefix".to_string(),
-                tools_location: "input_prefix".to_string(),
-                reasoning_context: "all_turns".to_string(),
-                parallel_tool_calls_allowed: false,
-                requires_responses_lite_header: true,
-            }),
-            Some(RuntimeReplyToolCallPolicy {
-                supports_parallel_tool_calls: true,
-                parallel_tool_calls: false,
-            }),
-            None,
-        ));
-
-        let policy = request.model_request_policy.as_ref().expect("policy");
-        assert!(policy.use_responses_lite());
-        assert_eq!(policy.reasoning_context(), Some("all_turns"));
-        assert!(policy.requires_responses_lite_header());
-        assert_eq!(policy.parallel_tool_calls(), Some(false));
-    }
-
-    #[test]
-    fn stream_request_projects_responses_lite_wire_shape() {
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            None,
-        )
-        .with_model_request_policy(RuntimeReplyModelRequestPolicy::new(
-            Some(RuntimeReplyResponsesPolicy {
-                use_responses_lite: true,
-                request_mode: "responses_lite".to_string(),
-                instructions_location: "input_prefix".to_string(),
-                tools_location: "input_prefix".to_string(),
-                reasoning_context: "all_turns".to_string(),
-                parallel_tool_calls_allowed: false,
-                requires_responses_lite_header: true,
-            }),
-            Some(RuntimeReplyToolCallPolicy {
-                supports_parallel_tool_calls: true,
-                parallel_tool_calls: false,
-            }),
-            None,
-        ));
-
-        let wire_shape = request.provider_request_wire_shape();
-
-        assert!(wire_shape.use_responses_lite);
-        assert_eq!(wire_shape.reasoning_context.as_deref(), Some("all_turns"));
-        assert_eq!(wire_shape.parallel_tool_calls, Some(false));
-        assert_eq!(
-            wire_shape.headers,
-            vec![RuntimeReplyProviderRequestHeader {
-                name: RuntimeReplyProviderRequestWireShape::RESPONSES_LITE_HEADER_NAME.to_string(),
-                value: RuntimeReplyProviderRequestWireShape::RESPONSES_LITE_HEADER_VALUE
-                    .to_string(),
-            }]
-        );
-        assert!(wire_shape.requires_responses_lite_wire_support());
-    }
-
-    #[test]
-    fn stream_request_projects_plain_responses_parallel_tool_calls_without_lite_header() {
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            None,
-        )
-        .with_model_request_policy(RuntimeReplyModelRequestPolicy::new(
-            Some(RuntimeReplyResponsesPolicy {
-                use_responses_lite: false,
-                request_mode: "responses".to_string(),
-                instructions_location: "request_field".to_string(),
-                tools_location: "request_field".to_string(),
-                reasoning_context: "default".to_string(),
-                parallel_tool_calls_allowed: true,
-                requires_responses_lite_header: false,
-            }),
-            Some(RuntimeReplyToolCallPolicy {
-                supports_parallel_tool_calls: true,
-                parallel_tool_calls: true,
-            }),
-            None,
-        ));
-
-        let wire_shape = request.provider_request_wire_shape();
-
-        assert!(!wire_shape.use_responses_lite);
-        assert_eq!(wire_shape.reasoning_context.as_deref(), Some("default"));
-        assert_eq!(wire_shape.parallel_tool_calls, Some(true));
-        assert!(wire_shape.headers.is_empty());
-        assert!(!wire_shape.requires_responses_lite_wire_support());
-    }
-
-    #[test]
-    fn stream_request_projects_reasoning_output_wire_shape() {
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            None,
-        )
-        .with_model_request_policy(RuntimeReplyModelRequestPolicy::new(
-            None,
-            None,
-            Some(RuntimeReplyReasoningOutputPolicy {
-                default_reasoning_summary: "detailed".to_string(),
-                support_verbosity: true,
-                default_verbosity: Some("low".to_string()),
-                can_set_verbosity: true,
-            }),
-        ));
-
-        let wire_shape = request.provider_request_wire_shape();
-
-        assert_eq!(wire_shape.reasoning_summary.as_deref(), Some("detailed"));
-        assert_eq!(wire_shape.text_verbosity.as_deref(), Some("low"));
-    }
-
-    #[test]
-    fn reasoning_output_wire_shape_omits_none_summary_and_unsupported_verbosity() {
-        let request = RuntimeReplyStreamRequest::new(
-            "session-1",
-            RuntimeReplyInputKind::UserMessage,
-            42,
-            None,
-        )
-        .with_model_request_policy(RuntimeReplyModelRequestPolicy::new(
-            None,
-            None,
-            Some(RuntimeReplyReasoningOutputPolicy {
-                default_reasoning_summary: "none".to_string(),
-                support_verbosity: false,
-                default_verbosity: Some("high".to_string()),
-                can_set_verbosity: false,
-            }),
-        ));
-
-        let wire_shape = request.provider_request_wire_shape();
-
-        assert_eq!(wire_shape.reasoning_summary, None);
-        assert_eq!(wire_shape.text_verbosity, None);
-    }
-}
+mod tests;

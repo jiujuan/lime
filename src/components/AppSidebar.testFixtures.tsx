@@ -19,6 +19,7 @@ import type {
   ConversationImportThreadPreviewResponse,
   ImportedThreadSummary,
 } from "@/lib/api/conversationImport";
+import type { AgentBackgroundSessionRuntimeSnapshot } from "@/components/agent/chat";
 
 export const act = reactAct;
 export const AppSidebar = AppSidebarComponent;
@@ -281,6 +282,7 @@ export function mountSidebar(options?: {
   currentPageParams?: PageParams;
   activeAgentSessionId?: string | null;
   activeAgentStreaming?: boolean;
+  backgroundAgentSessionRuntime?: AgentBackgroundSessionRuntimeSnapshot | null;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   onNavigate?: (page: Page, params?: PageParams) => void;
@@ -296,6 +298,7 @@ export function mountSidebar(options?: {
         currentPageParams={options?.currentPageParams}
         activeAgentSessionId={options?.activeAgentSessionId}
         activeAgentStreaming={options?.activeAgentStreaming}
+        backgroundAgentSessionRuntime={options?.backgroundAgentSessionRuntime}
         requestedPage={options?.requestedPage}
         requestedPageParams={options?.requestedPageParams}
         onNavigate={options?.onNavigate ?? vi.fn()}
@@ -313,6 +316,7 @@ export function mountSidebarContainer(options?: {
   currentPageParams?: PageParams;
   activeAgentSessionId?: string | null;
   activeAgentStreaming?: boolean;
+  backgroundAgentSessionRuntime?: AgentBackgroundSessionRuntimeSnapshot | null;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   onNavigate?: (page: Page, params?: PageParams) => void;

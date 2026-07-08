@@ -42,6 +42,7 @@ const {
   ERROR_CODES,
   AppServerConnection,
   AppServerClient,
+  AppServerRequestAbortedError,
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
   createAgentRuntimeClient,
@@ -73,6 +74,7 @@ const {
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   METHOD_AGENT_SESSION_LIST,
   METHOD_AGENT_SESSION_MEDIA_READ,
+  METHOD_CANCEL_REQUEST,
   METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
   METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
   METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
@@ -2863,6 +2865,102 @@ test("ordinary request timeout is not extended forever by streaming notification
 
   assert.equal(sent[0].method, METHOD_AGENT_SESSION_LIST);
   assert.ok(sequence > 0);
+});
+
+test("connection rejects already aborted requests before transport send", async () => {
+  const sent = [];
+  const controller = new AbortController();
+  controller.abort("superseded");
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      throw new Error("unexpected transport read");
+    },
+  });
+
+  await assert.rejects(
+    () => connection.listSessions({}, { signal: controller.signal }),
+    (error) => {
+      assert.equal(error instanceof AppServerRequestAbortedError, true);
+      assert.equal(error.method, METHOD_AGENT_SESSION_LIST);
+      assert.equal(error.id, 1);
+      assert.equal(error.reason, "superseded");
+      return true;
+    },
+  );
+
+  assert.equal(sent.length, 0);
+});
+
+test("connection abort detaches pending request and drops its late response", async () => {
+  const sent = [];
+  const inbound = [];
+  const controller = new AbortController();
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage(timeoutMs = 30_000) {
+      const message = inbound.shift();
+      if (message) {
+        return message;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      throw new Error(
+        `timed out waiting for app-server message after ${timeoutMs}ms`,
+      );
+    },
+  });
+
+  const aborted = connection.listSessions({}, { signal: controller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort("preview superseded");
+
+  await assert.rejects(aborted, (error) => {
+    assert.equal(error instanceof AppServerRequestAbortedError, true);
+    assert.equal(error.method, METHOD_AGENT_SESSION_LIST);
+    assert.equal(error.id, 1);
+    assert.equal(error.reason, "preview superseded");
+    return true;
+  });
+
+  inbound.push(
+    {
+      id: 1,
+      result: { sessions: [] },
+    },
+    {
+      id: 2,
+      result: {
+        sessions: [
+          {
+            sessionId: "sess_after_abort",
+            threadId: "thread_after_abort",
+            appId: "content-studio",
+            status: "running",
+            createdAt: "2026-06-04T00:00:00Z",
+            updatedAt: "2026-06-04T00:00:01Z",
+          },
+        ],
+      },
+    },
+  );
+
+  const result = await connection.listSessions({}, { timeoutMs: 100 });
+
+  assert.deepEqual(
+    sent.map((message) => message.method),
+    [
+      METHOD_AGENT_SESSION_LIST,
+      METHOD_CANCEL_REQUEST,
+      METHOD_AGENT_SESSION_LIST,
+    ],
+  );
+  assert.deepEqual(sent[1].params, { id: 1 });
+  assert.equal(result.id, 2);
+  assert.equal(result.result.sessions[0].sessionId, "sess_after_abort");
 });
 
 test("stdio sidecar stdin EPIPE rejects pending request instead of escaping as uncaught exception", async () => {

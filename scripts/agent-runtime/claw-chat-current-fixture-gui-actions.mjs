@@ -402,6 +402,7 @@ async function sampleInputbarSubmitState(page, prompt, expectedSessionId = null)
           );
           return {
             timestamp: entry?.timestamp || null,
+            transport: entry?.transport || null,
             status: entry?.status || null,
             durationMs: entry?.duration_ms ?? null,
             error: entry?.error || null,
@@ -430,6 +431,7 @@ async function sampleInputbarSubmitState(page, prompt, expectedSessionId = null)
           entry.turnStarts.map((turnStart) => ({
             ...turnStart,
             timestamp: entry.timestamp,
+            transport: entry.transport,
             status: entry.status,
             durationMs: entry.durationMs,
             error: entry.error,

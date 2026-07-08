@@ -11,5 +11,6 @@ mod execution_process;
 mod file;
 mod mcp;
 mod project_git;
+mod request_cancel;
 mod right_surface;
 mod usage_stats;

@@ -3,7 +3,11 @@ use hex::encode as hex_encode;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
+
+pub(crate) const SIDECAR_READ_CANCELED: &str = "sidecar read canceled";
+const SIDECAR_READ_CHUNK_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +44,10 @@ pub struct SidecarBytesWriteRequest {
 pub struct SidecarReadBytesResult {
     pub bytes: Vec<u8>,
     pub sha256: String,
+    pub total_bytes: u64,
+    pub offset: u64,
+    pub length: u64,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,27 +129,136 @@ impl SidecarStore {
         let path = self
             .root
             .join(relative_path_to_platform_path(&relative_path));
-        let metadata = match fs::metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => {
-                return Err(format!(
-                    "无法读取 sidecar 文件元数据 {}: {error}",
-                    path.display()
-                ))
-            }
+        let total_bytes = match sidecar_file_len(&path)? {
+            Some(total_bytes) => total_bytes,
+            None => return Ok(None),
         };
-        if metadata.len() > max_bytes {
+        if total_bytes > max_bytes {
             return Err(format!(
                 "sidecar 文件超过读取上限 {}: {} > {} bytes",
                 path.display(),
-                metadata.len(),
+                total_bytes,
                 max_bytes
             ));
         }
-        let bytes = fs::read(&path)
+        self.read_bytes_window_verified(&path, expected_sha256, 0, total_bytes, total_bytes)
+            .map(Some)
+    }
+
+    pub fn read_bytes_range_verified(
+        &self,
+        relative_path: &str,
+        expected_sha256: Option<&str>,
+        offset: u64,
+        length: u64,
+        max_bytes: u64,
+    ) -> Result<Option<SidecarReadBytesResult>, String> {
+        self.read_bytes_range_verified_with_cancel(
+            relative_path,
+            expected_sha256,
+            offset,
+            length,
+            max_bytes,
+            &|| false,
+        )
+    }
+
+    pub(crate) fn read_bytes_range_verified_with_cancel(
+        &self,
+        relative_path: &str,
+        expected_sha256: Option<&str>,
+        offset: u64,
+        length: u64,
+        max_bytes: u64,
+        is_canceled: &impl Fn() -> bool,
+    ) -> Result<Option<SidecarReadBytesResult>, String> {
+        fail_if_canceled(is_canceled)?;
+        let relative_path = normalize_sidecar_relative_path(relative_path)?;
+        let path = self
+            .root
+            .join(relative_path_to_platform_path(&relative_path));
+        if length == 0 {
+            return Err("sidecar range length must be positive".to_string());
+        }
+        if max_bytes == 0 {
+            return Err("sidecar range max bytes must be positive".to_string());
+        }
+        if length > max_bytes {
+            return Err(format!(
+                "sidecar range exceeds read window: {length} > {max_bytes} bytes"
+            ));
+        }
+        let total_bytes = match sidecar_file_len(&path)? {
+            Some(total_bytes) => total_bytes,
+            None => return Ok(None),
+        };
+        if offset > total_bytes {
+            return Err(format!(
+                "sidecar range offset exceeds file size {}: {} > {} bytes",
+                path.display(),
+                offset,
+                total_bytes
+            ));
+        }
+        let window_length = length.min(total_bytes.saturating_sub(offset));
+        self.read_bytes_window_verified_with_cancel(
+            &path,
+            expected_sha256,
+            offset,
+            window_length,
+            total_bytes,
+            is_canceled,
+        )
+        .map(Some)
+    }
+
+    fn read_bytes_window_verified(
+        &self,
+        path: &Path,
+        expected_sha256: Option<&str>,
+        offset: u64,
+        length: u64,
+        total_bytes: u64,
+    ) -> Result<SidecarReadBytesResult, String> {
+        self.read_bytes_window_verified_with_cancel(
+            path,
+            expected_sha256,
+            offset,
+            length,
+            total_bytes,
+            &|| false,
+        )
+    }
+
+    fn read_bytes_window_verified_with_cancel(
+        &self,
+        path: &Path,
+        expected_sha256: Option<&str>,
+        offset: u64,
+        length: u64,
+        total_bytes: u64,
+        is_canceled: &impl Fn() -> bool,
+    ) -> Result<SidecarReadBytesResult, String> {
+        fail_if_canceled(is_canceled)?;
+        let mut file = fs::File::open(path)
             .map_err(|error| format!("无法读取 sidecar 文件 {}: {error}", path.display()))?;
-        let sha256 = sha256_prefixed(&bytes);
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|error| format!("无法定位 sidecar 文件 {}: {error}", path.display()))?;
+        let buffer_len = usize::try_from(length)
+            .map_err(|_| format!("sidecar range too large to allocate: {length} bytes"))?;
+        let mut bytes = Vec::with_capacity(buffer_len);
+        let mut remaining = buffer_len;
+        let mut buffer = vec![0_u8; SIDECAR_READ_CHUNK_BYTES.min(buffer_len.max(1))];
+        while remaining > 0 {
+            fail_if_canceled(is_canceled)?;
+            let read_len = buffer.len().min(remaining);
+            file.read_exact(&mut buffer[..read_len])
+                .map_err(|error| format!("无法读取 sidecar 文件 {}: {error}", path.display()))?;
+            fail_if_canceled(is_canceled)?;
+            bytes.extend_from_slice(&buffer[..read_len]);
+            remaining -= read_len;
+        }
+        let sha256 = sha256_file_with_cancel(path, is_canceled)?;
         if let Some(expected_sha256) = expected_sha256
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -153,7 +270,14 @@ impl SidecarStore {
                 ));
             }
         }
-        Ok(Some(SidecarReadBytesResult { bytes, sha256 }))
+        Ok(SidecarReadBytesResult {
+            bytes,
+            sha256,
+            total_bytes,
+            offset,
+            length,
+            has_more: offset.saturating_add(length) < total_bytes,
+        })
     }
 
     pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
@@ -175,6 +299,48 @@ impl SidecarStore {
             )),
         }
     }
+}
+
+fn fail_if_canceled(is_canceled: &impl Fn() -> bool) -> Result<(), String> {
+    if is_canceled() {
+        Err(SIDECAR_READ_CANCELED.to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn sidecar_file_len(path: &Path) -> Result<Option<u64>, String> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "无法读取 sidecar 文件元数据 {}: {error}",
+                path.display()
+            ))
+        }
+    };
+    Ok(Some(metadata.len()))
+}
+
+fn sha256_file_with_cancel(path: &Path, is_canceled: &impl Fn() -> bool) -> Result<String, String> {
+    fail_if_canceled(is_canceled)?;
+    let mut file = fs::File::open(path)
+        .map_err(|error| format!("无法读取 sidecar 文件 {}: {error}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; SIDECAR_READ_CHUNK_BYTES];
+    loop {
+        fail_if_canceled(is_canceled)?;
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("无法读取 sidecar 文件 {}: {error}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        fail_if_canceled(is_canceled)?;
+    }
+    Ok(format!("sha256:{}", hex_encode(hasher.finalize())))
 }
 
 pub fn normalize_sidecar_relative_path(path: &str) -> Result<String, String> {
@@ -278,6 +444,7 @@ fn sha256_prefixed(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn write_text_persists_relative_file_and_ref_metadata() {
@@ -327,6 +494,10 @@ mod tests {
             .expect("available");
         assert_eq!(read.bytes, vec![0x89, b'P', b'N', b'G']);
         assert_eq!(read.sha256, reference.sha256);
+        assert_eq!(read.total_bytes, 4);
+        assert_eq!(read.offset, 0);
+        assert_eq!(read.length, 4);
+        assert!(!read.has_more);
         assert!(store
             .read_bytes_verified(&reference.relative_path, Some("sha256:bad"), 16)
             .expect_err("digest mismatch")
@@ -335,6 +506,66 @@ mod tests {
             .read_bytes_verified(&reference.relative_path, Some(&reference.sha256), 2)
             .expect_err("too large")
             .contains("超过读取上限"));
+    }
+
+    #[test]
+    fn read_bytes_range_verified_reads_window_and_keeps_full_digest() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = SidecarStore::new(temp.path()).expect("store");
+        let reference = store
+            .write_bytes(&SidecarBytesWriteRequest {
+                session_id: "sess-a".to_string(),
+                kind: "media".to_string(),
+                logical_id: "image-a".to_string(),
+                relative_path: "sessions/sess-a/media/image-a.png".to_string(),
+                content: vec![0x89, b'P', b'N', b'G'],
+            })
+            .expect("write");
+
+        let read = store
+            .read_bytes_range_verified(&reference.relative_path, Some(&reference.sha256), 1, 2, 2)
+            .expect("read range")
+            .expect("available");
+
+        assert_eq!(read.bytes, vec![b'P', b'N']);
+        assert_eq!(read.sha256, reference.sha256);
+        assert_eq!(read.total_bytes, 4);
+        assert_eq!(read.offset, 1);
+        assert_eq!(read.length, 2);
+        assert!(read.has_more);
+        assert!(store
+            .read_bytes_range_verified(&reference.relative_path, Some(&reference.sha256), 0, 3, 2)
+            .expect_err("range too large")
+            .contains("exceeds read window"));
+    }
+
+    #[test]
+    fn read_bytes_range_verified_with_cancel_stops_before_file_io() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = SidecarStore::new(temp.path()).expect("store");
+        let reference = store
+            .write_bytes(&SidecarBytesWriteRequest {
+                session_id: "sess-a".to_string(),
+                kind: "media".to_string(),
+                logical_id: "image-a".to_string(),
+                relative_path: "sessions/sess-a/media/image-a.png".to_string(),
+                content: vec![0x89, b'P', b'N', b'G'],
+            })
+            .expect("write");
+        let canceled = AtomicBool::new(true);
+
+        let error = store
+            .read_bytes_range_verified_with_cancel(
+                &reference.relative_path,
+                Some(&reference.sha256),
+                0,
+                4,
+                4,
+                &|| canceled.load(Ordering::SeqCst),
+            )
+            .expect_err("canceled");
+
+        assert_eq!(error, SIDECAR_READ_CANCELED);
     }
 
     #[test]

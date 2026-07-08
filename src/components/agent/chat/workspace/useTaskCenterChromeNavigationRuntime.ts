@@ -200,6 +200,7 @@ export function useTaskCenterChromeNavigationRuntime({
     shouldSuppressDraftContent,
     draftSendRequest,
     normalizedInitialSessionId,
+    isHomeSessionBackgroundRecovery,
     displayMessageCount,
     threadItemCount,
     hasPendingA2UIForm,

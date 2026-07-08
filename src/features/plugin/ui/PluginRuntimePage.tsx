@@ -13,8 +13,6 @@ import {
 import type { PluginPageParams } from "@/types/page";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryPluginCapabilityStore } from "../adapters/InMemoryPluginCapabilityStore";
-import { buildCleanupPlan } from "../install/cleanupPlan";
-import { checkReadiness } from "../readiness/checkReadiness";
 import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
 import { createPluginCapabilityDispatcher } from "../runtime/capabilityDispatcher";
 import { wrapPluginCapabilityDispatchWithBrowserIntentLaunch } from "../runtime/browserIntentLaunch";
@@ -23,7 +21,6 @@ import {
   createPluginHostBridge,
   type PluginHostAgentRunUiRequest,
   type PluginHostBridge,
-  type PluginHostBridgeCapabilities,
   type PluginHostBridgeNotifyPayload,
 } from "../runtime/hostBridge";
 import { createDefaultPluginRuntimeHostOptions } from "../runtime/agentRuntimeAppServerClient";
@@ -32,13 +29,10 @@ import type {
   PluginRunProjectionAction,
   PluginRunProjectionActionControl,
 } from "../runtime/agentUiProjectionViewModel";
-import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityProfile";
 import { buildLimeCapabilityInvokeRequest } from "../sdk/capabilityContract";
 import type {
-  PluginTaskHostResponseActionType,
   CloudBootstrapApp,
   InstalledPluginState,
-  ProjectedEntry,
 } from "../types";
 import { buildRuntimePackageLoadForPreview } from "./pluginsRuntime";
 import { resolveInstalledPluginDisplayName } from "./pluginDisplay";
@@ -47,495 +41,31 @@ import {
   type AgentRunTranslator,
   type AgentRunUiState,
 } from "./AgentRunHostDrawer";
-
-const HOST_BRIDGE_DISPATCH_CAPABILITIES = new Set([
-  "lime.capabilities",
-  "lime.storage",
-  "lime.artifacts",
-  "lime.evidence",
-  "lime.knowledge",
-  "lime.agent",
-  "lime.models",
-  "lime.usage",
-  "lime.skills",
-  "lime.memory",
-  "lime.context",
-  "lime.search",
-  "lime.browser",
-  "lime.documents",
-  "lime.media",
-  "lime.mcp",
-  "lime.terminal",
-  "lime.connectors",
-  "lime.cloudSession",
-]);
-const HOST_BRIDGE_KNOWN_CAPABILITIES = new Set([
-  ...HOST_BRIDGE_DISPATCH_CAPABILITIES,
-  "lime.workflow",
-]);
-const RUNTIME_PAGE_PROFILE = buildUiRuntimeCapabilityProfile({
-  realAdapterEnabled: true,
-  uiRuntimeEnabled: true,
-});
-const RUNTIME_PAGE_FLAGS = RUNTIME_PAGE_PROFILE.featureFlags;
-const NEGATIVE_AGENT_RUN_ACTION_CONTROLS =
-  new Set<PluginRunProjectionActionControl>(["reject", "interrupt", "stop"]);
-const AGENT_RUN_UI_STORAGE_PREFIX = "lime.plugin.hostAgentRunUi.v1";
-
-function isUiEntry(entry: ProjectedEntry): boolean {
-  return ["page", "panel", "settings"].includes(entry.kind);
-}
-
-function resolveDefaultEntry(
-  state: InstalledPluginState,
-): ProjectedEntry | undefined {
-  return (
-    state.projection.entries.find(
-      (entry) => entry.key === "dashboard" && isUiEntry(entry),
-    ) ?? state.projection.entries.find((entry) => isUiEntry(entry))
-  );
-}
-
-function resolveActiveEntry(
-  state: InstalledPluginState,
-  entryKey?: string,
-): ProjectedEntry | undefined {
-  const requested = state.projection.entries.find(
-    (entry) => entry.key === entryKey && isUiEntry(entry),
-  );
-  return requested ?? resolveDefaultEntry(state);
-}
-
-function normalizeErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function parseAppVersion(
-  value: string | undefined,
-): [number, number, number] | null {
-  const match = value?.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/i);
-  if (!match) {
-    return null;
-  }
-  return [Number(match[1] ?? 0), Number(match[2] ?? 0), Number(match[3] ?? 0)];
-}
-
-function compareAppVersion(
-  left: string | undefined,
-  right: string | undefined,
-): number {
-  const leftParts = parseAppVersion(left);
-  const rightParts = parseAppVersion(right);
-  if (!leftParts || !rightParts) {
-    return 0;
-  }
-  for (let index = 0; index < leftParts.length; index += 1) {
-    const diff = leftParts[index] - rightParts[index];
-    if (diff !== 0) {
-      return diff;
-    }
-  }
-  return 0;
-}
-
-function hasNewerCloudVersion(
-  state: InstalledPluginState | null,
-  cloudApp: CloudBootstrapApp | undefined,
-): boolean {
-  if (!state || !cloudApp) {
-    return false;
-  }
-  return compareAppVersion(cloudApp.version, state.identity.appVersion) > 0;
-}
-
-function sourceLabelKey(
-  state: InstalledPluginState,
-):
-  | "plugin.apps.runtime.appInfo.source.cloud"
-  | "plugin.apps.runtime.appInfo.source.local" {
-  return state.identity.sourceKind === "cloud_release"
-    ? "plugin.apps.runtime.appInfo.source.cloud"
-    : "plugin.apps.runtime.appInfo.source.local";
-}
-
-function buildPreviewFromInstalledState(state: InstalledPluginState) {
-  return {
-    identity: state.identity,
-    manifest: state.manifest,
-    projection: state.projection,
-    readiness: buildRuntimeReadinessFromInstalledState(state),
-    cleanupPlan: buildCleanupPlan({
-      projection: state.projection,
-      generatedAt: state.updatedAt,
-    }),
-  };
-}
-
-function buildRuntimeReadinessFromInstalledState(state: InstalledPluginState) {
-  return checkReadiness({
-    manifest: state.manifest,
-    projection: state.projection,
-    profile: RUNTIME_PAGE_PROFILE,
-    setup: state.setup,
-    checkedAt: state.readiness.checkedAt,
-  });
-}
-
-function resolveHostBridgeCapabilities(
-  state: InstalledPluginState,
-): PluginHostBridgeCapabilities {
-  const readiness = buildRuntimeReadinessFromInstalledState(state);
-  const available = readiness.supportedCapabilities
-    .filter(
-      (item) =>
-        item.enabled && HOST_BRIDGE_DISPATCH_CAPABILITIES.has(item.capability),
-    )
-    .map((item) => item.capability);
-  available.push("lime.capabilities");
-  const declared = state.projection.requiredCapabilities.map(
-    (item) => item.capability,
-  );
-  const blocked = [
-    ...HOST_BRIDGE_KNOWN_CAPABILITIES,
-    ...readiness.missingCapabilities.map((item) => item.capability),
-    ...declared,
-  ].filter((capability) => !available.includes(capability));
-
-  return {
-    available,
-    blocked,
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function readAgentRunTaskId(value: unknown): string | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  return (
-    readString(value.taskId) ??
-    (isRecord(value.task) ? readString(value.task.taskId) : null) ??
-    (isRecord(value.snapshot) ? readString(value.snapshot.taskId) : null)
-  );
-}
-
-function shouldExposeCloudSession(state: InstalledPluginState): boolean {
-  return state.projection.requiredCapabilities.some(
-    (item) => item.capability === "lime.cloudSession",
-  );
-}
-
-function normalizeAgentRunActionType(
-  value: string | undefined,
-): PluginTaskHostResponseActionType {
-  if (
-    value === "tool_confirmation" ||
-    value === "ask_user" ||
-    value === "elicitation"
-  ) {
-    return value;
-  }
-  return "ask_user";
-}
-
-function buildAgentRunActionResponse(
-  control: PluginRunProjectionActionControl,
-) {
-  return {
-    confirmed: !NEGATIVE_AGENT_RUN_ACTION_CONTROLS.has(control),
-    response: control,
-  };
-}
-
-function buildAgentRunUiStorageKey(
-  appId: string | undefined,
-  entryKey: string | undefined,
-): string | null {
-  if (!appId || !entryKey) {
-    return null;
-  }
-  return `${AGENT_RUN_UI_STORAGE_PREFIX}:${appId}:${entryKey}`;
-}
-
-function readStoredAgentRunUi(
-  storageKey: string | null,
-): AgentRunUiState | null {
-  if (!storageKey || typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const raw = window.sessionStorage.getItem(storageKey);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed)) {
-      return null;
-    }
-    return {
-      ...parsed,
-      mode:
-        parsed.mode === "modal" || parsed.mode === "page"
-          ? parsed.mode
-          : "drawer",
-    } as AgentRunUiState;
-  } catch {
-    return null;
-  }
-}
-
-function persistAgentRunUi(
-  storageKey: string | null,
-  run: AgentRunUiState | null,
-) {
-  if (!storageKey || typeof window === "undefined") {
-    return;
-  }
-  try {
-    if (!run) {
-      window.sessionStorage.removeItem(storageKey);
-      return;
-    }
-    window.sessionStorage.setItem(storageKey, JSON.stringify(run));
-  } catch {
-    // sessionStorage can be unavailable in hardened WebViews; UI state remains in memory.
-  }
-}
-
-function readAgentRunItemKey(item: unknown, index: number): string {
-  if (!isRecord(item)) {
-    return `${index}:${String(item).slice(0, 80)}`;
-  }
-  return [
-    readString(item.eventId) ?? readString(item.id),
-    readString(item.eventType) ??
-      readString(item.type) ??
-      readString(item.kind),
-    readString(item.status) ?? readString(item.statusText),
-    readString(item.message) ?? readString(item.title),
-    readString(item.occurredAt) ??
-      readString(item.at) ??
-      readString(item.createdAt),
-  ]
-    .filter(Boolean)
-    .join("|");
-}
-
-function mergeAgentRunItems(
-  previous: unknown,
-  next: unknown,
-  limit = 40,
-): unknown[] | undefined {
-  const previousItems = Array.isArray(previous) ? previous : [];
-  const nextItems = Array.isArray(next) ? next : [];
-  if (!previousItems.length && !nextItems.length) {
-    return undefined;
-  }
-  const merged: unknown[] = [];
-  const indexByKey = new Map<string, number>();
-  [...previousItems, ...nextItems].forEach((item, index) => {
-    const key = readAgentRunItemKey(item, index);
-    const stableKey = key || `${index}`;
-    const existingIndex = indexByKey.get(stableKey);
-    if (existingIndex === undefined) {
-      indexByKey.set(stableKey, merged.length);
-      merged.push(item);
-      return;
-    }
-    merged[existingIndex] = item;
-  });
-  return merged.slice(-limit);
-}
-
-function mergeStringArray(
-  previous: unknown,
-  next: unknown,
-): unknown[] | undefined {
-  const merged = mergeAgentRunItems(previous, next);
-  return merged?.length ? merged : undefined;
-}
-
-function mergeAgentRunProcess(previous: unknown, next: unknown): unknown {
-  if (!isRecord(previous)) {
-    return next ?? previous;
-  }
-  if (!isRecord(next)) {
-    return previous;
-  }
-  const merged: Record<string, unknown> = {
-    ...previous,
-    ...next,
-  };
-  const timeline = mergeAgentRunItems(previous.timeline, next.timeline, 60);
-  if (timeline) {
-    merged.timeline = timeline;
-  }
-  const skillNames = mergeStringArray(previous.skillNames, next.skillNames);
-  if (skillNames) {
-    merged.skillNames = skillNames;
-  }
-  const invokedSkillNames = mergeStringArray(
-    previous.invokedSkillNames,
-    next.invokedSkillNames,
-  );
-  if (invokedSkillNames) {
-    merged.invokedSkillNames = invokedSkillNames;
-  }
-  for (const key of ["streamText", "thinkingText", "executionText"]) {
-    if (!readString(merged[key]) && readString(previous[key])) {
-      merged[key] = previous[key];
-    }
-  }
-  return merged;
-}
-
-function mergeAgentRunPayload(previous: unknown, next: unknown): unknown {
-  if (next === null || next === undefined) {
-    return previous;
-  }
-  if (!isRecord(previous) || !isRecord(next)) {
-    return next;
-  }
-  return {
-    ...previous,
-    ...next,
-    events: mergeAgentRunItems(previous.events, next.events, 80),
-    taskEvents: mergeAgentRunItems(previous.taskEvents, next.taskEvents, 80),
-    runtimeProcess: mergeAgentRunProcess(
-      previous.runtimeProcess,
-      next.runtimeProcess,
-    ),
-    process: mergeAgentRunProcess(previous.process, next.process),
-  };
-}
-
-function shouldMergeAgentRunUi(
-  previous: AgentRunUiState | null,
-  request: PluginHostAgentRunUiRequest,
-): previous is AgentRunUiState {
-  if (!previous) {
-    return false;
-  }
-  const previousTaskId = readAgentRunTaskId(previous);
-  const nextTaskId = readAgentRunTaskId(request);
-  if (previousTaskId && nextTaskId && previousTaskId !== nextTaskId) {
-    return false;
-  }
-  if (
-    previous.bridgeAction &&
-    request.bridgeAction &&
-    previous.bridgeAction !== request.bridgeAction
-  ) {
-    return false;
-  }
-  return true;
-}
-
-interface AgentRunDismissalKey {
-  taskId: string | null;
-  bridgeAction: string | null;
-}
-
-function buildAgentRunDismissalKey(value: unknown): AgentRunDismissalKey {
-  return {
-    taskId: readAgentRunTaskId(value),
-    bridgeAction: isRecord(value) ? readString(value.bridgeAction) : null,
-  };
-}
-
-function hasAgentRunDismissalKey(key: AgentRunDismissalKey): boolean {
-  return Boolean(key.taskId || key.bridgeAction);
-}
-
-function mergeAgentRunDismissalKey(
-  requestKey: AgentRunDismissalKey,
-  previousKey: AgentRunDismissalKey,
-): AgentRunDismissalKey {
-  return {
-    taskId: requestKey.taskId ?? previousKey.taskId,
-    bridgeAction: requestKey.bridgeAction ?? previousKey.bridgeAction,
-  };
-}
-
-function matchesDismissedAgentRun(
-  dismissed: AgentRunDismissalKey | null,
-  request: PluginHostAgentRunUiRequest,
-): boolean {
-  if (!dismissed) {
-    return false;
-  }
-  const next = buildAgentRunDismissalKey(request);
-  let compared = false;
-  if (dismissed.taskId && next.taskId) {
-    compared = true;
-    if (dismissed.taskId === next.taskId) {
-      return true;
-    }
-  }
-  if (dismissed.bridgeAction && next.bridgeAction) {
-    compared = true;
-    if (dismissed.bridgeAction === next.bridgeAction) {
-      return true;
-    }
-  }
-  return (
-    !compared &&
-    !hasAgentRunDismissalKey(dismissed) &&
-    !hasAgentRunDismissalKey(next)
-  );
-}
-
-function shouldCloseAgentRunUi(
-  previous: AgentRunUiState,
-  request: Pick<PluginHostAgentRunUiRequest, "taskId" | "bridgeAction">,
-): boolean {
-  const previousKey = buildAgentRunDismissalKey(previous);
-  const requestKey = buildAgentRunDismissalKey(request);
-  const sameTask =
-    !requestKey.taskId ||
-    !previousKey.taskId ||
-    previousKey.taskId === requestKey.taskId;
-  const sameBridgeAction =
-    !requestKey.bridgeAction ||
-    !previousKey.bridgeAction ||
-    previousKey.bridgeAction === requestKey.bridgeAction;
-  return sameTask && sameBridgeAction;
-}
-
-function mergeAgentRunUiState(
-  previous: AgentRunUiState | null,
-  request: PluginHostAgentRunUiRequest,
-  now: string,
-  fallbackMode: AgentRunUiState["mode"],
-): AgentRunUiState {
-  const base = shouldMergeAgentRunUi(previous, request) ? previous : null;
-  return {
-    ...base,
-    ...request,
-    taskId: request.taskId ?? base?.taskId,
-    bridgeAction: request.bridgeAction ?? base?.bridgeAction,
-    title: request.title ?? base?.title,
-    mode: request.mode ?? base?.mode ?? fallbackMode,
-    expectedOutput: request.expectedOutput ?? base?.expectedOutput,
-    runtimeFacts: request.runtimeFacts ?? base?.runtimeFacts,
-    task: mergeAgentRunPayload(base?.task, request.task),
-    snapshot: mergeAgentRunPayload(base?.snapshot, request.snapshot),
-    runtimeProcess: mergeAgentRunProcess(
-      base?.runtimeProcess,
-      request.runtimeProcess,
-    ),
-    events: mergeAgentRunItems(base?.events, request.events, 100),
-    openedAt: base?.openedAt ?? now,
-    updatedAt: now,
-  };
-}
+import {
+  type AgentRunDismissalKey,
+  buildAgentRunActionResponse,
+  buildAgentRunDismissalKey,
+  buildAgentRunUiStorageKey,
+  matchesDismissedAgentRun,
+  mergeAgentRunDismissalKey,
+  mergeAgentRunUiState,
+  normalizeAgentRunActionType,
+  persistAgentRunUi,
+  readAgentRunTaskId,
+  readStoredAgentRunUi,
+  shouldCloseAgentRunUi,
+} from "./PluginRuntimeAgentRunState";
+import {
+  RUNTIME_PAGE_FLAGS,
+  RUNTIME_PAGE_PROFILE,
+  buildPreviewFromInstalledState,
+  hasNewerCloudVersion,
+  normalizeErrorMessage,
+  resolveActiveEntry,
+  resolveHostBridgeCapabilities,
+  shouldExposeCloudSession,
+  sourceLabelKey,
+} from "./PluginRuntimePageHelpers";
 
 export function PluginRuntimePage({
   pageParams,

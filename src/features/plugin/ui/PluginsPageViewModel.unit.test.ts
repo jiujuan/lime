@@ -4,7 +4,7 @@ import { buildInstalledPluginState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildPluginLabResolvedSetupState } from "../install/labInstallFlow";
 import { buildPackageIdentity } from "../install/packageIdentity";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 import type {
   AppManifest,
   CloudBootstrapApp,

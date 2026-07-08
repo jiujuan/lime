@@ -192,6 +192,21 @@ export interface McpPrepareResult {
   tools?: McpToolDefinition[];
 }
 
+export type McpCallProofRequestMethod = "mcpTool/callWithCaller";
+
+export interface McpCallProofRequest {
+  method: McpCallProofRequestMethod | string;
+  params?: Record<string, unknown>;
+  reason?: string;
+  status?: "candidate" | string;
+}
+
+export interface McpCallProofResult {
+  method: McpCallProofRequestMethod;
+  status: "completed";
+  result: McpToolResult;
+}
+
 /** 从 runtime 名 `mcp__<server>__<tool>` 提取 inner tool 名。 */
 export function getMcpInnerToolName(
   toolName: string,

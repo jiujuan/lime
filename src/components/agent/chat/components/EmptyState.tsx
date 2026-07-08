@@ -111,6 +111,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   recentSessionTitle = null,
   recentSessionSummary = null,
   recentSessionActionLabel,
+  homeRecoverySession = null,
   onResumeRecentSession,
   projectConversationGroups = [],
   onOpenProjectConversation,
@@ -903,7 +904,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onDrop={handleDrop}
         onRemoveImage={handleRemoveImage}
         pathReferences={pathReferences}
-        inputRestoreRequest={inputRestoreRequest}
         onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
         onRemovePathReference={onRemovePathReference}
         fileManagerOpen={fileManagerOpen}
@@ -944,10 +944,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       copy={homeSurfaceCopy.chrome}
       guideCards={homeGuideCards}
       guideOpen={guideHelpActive}
+      recoverySession={homeRecoverySession}
       sections={homeSkillSections}
       conversationGroups={projectConversationGroups}
       supplementalActions={homeSupplementalActions}
       onGuideOpenChange={setGuideHelpActive}
+      onSelectRecoverySession={onResumeRecentSession}
       onSelectConversation={onOpenProjectConversation}
       onSelectStarterChip={handleSelectHomeStarterChip}
       onSelectGuideCard={handleSelectHomeGuideCard}

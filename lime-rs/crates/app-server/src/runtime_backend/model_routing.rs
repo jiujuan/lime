@@ -7,6 +7,7 @@ use lime_core::database::DbConnection;
 use lime_core::models::provider_type::is_custom_provider_id;
 use lime_core::models::RuntimeProviderType;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
+use lime_services::model_registry_service::ModelRegistryService;
 use runtime_core::{
     resolve_ready_model_routing, ModelRoutingDecision, ProviderReadiness, RoutingResolution,
 };
@@ -94,7 +95,7 @@ fn readiness_from_configured_provider(provider: &ProviderWithKeys) -> ProviderRe
             total_key_count,
         );
     }
-    if enabled_key_count == 0 {
+    if enabled_key_count == 0 && provider_requires_enabled_api_key(provider) {
         return ProviderReadiness::provider_store_needs_setup(
             "missing_enabled_api_key",
             provider_type,
@@ -105,6 +106,14 @@ fn readiness_from_configured_provider(provider: &ProviderWithKeys) -> ProviderRe
     }
 
     ProviderReadiness::provider_store_ready(provider_type, enabled_key_count, total_key_count)
+}
+
+fn provider_requires_enabled_api_key(provider: &ProviderWithKeys) -> bool {
+    ModelRegistryService::requires_api_key_for_model_fetch(
+        &provider.provider.id,
+        &provider.provider.api_host,
+        provider.provider.provider_type,
+    )
 }
 
 fn metadata_candidates(request: &ExecutionRequest) -> Vec<&Value> {

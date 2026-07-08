@@ -114,23 +114,26 @@ export function resolveRuntimeThreadStatusFromSessionDetail(
   detail: AsterSessionDetail,
 ): Topic["status"] | null {
   const status = detail.thread_read?.status?.trim().toLowerCase();
-  if (status === "running" || status === "queued") {
-    return "running";
-  }
-
-  if ((detail.thread_read?.queued_turns?.length ?? 0) > 0) {
-    return "running";
-  }
-
-  if ((detail.queued_turns?.length ?? 0) > 0) {
-    return "running";
-  }
-
   if (
+    status === "waitingaction" ||
+    status === "waiting_action" ||
     status === "waiting_request" ||
+    status === "needs_input" ||
     (detail.thread_read?.pending_requests?.length ?? 0) > 0
   ) {
     return "waiting";
+  }
+
+  if (
+    status === "queued" ||
+    (detail.thread_read?.queued_turns?.length ?? 0) > 0 ||
+    (detail.queued_turns?.length ?? 0) > 0
+  ) {
+    return "queued";
+  }
+
+  if (status === "running") {
+    return "running";
   }
 
   if (status === "failed") {
@@ -177,7 +180,7 @@ export function mapSessionDetailToTopic(
   return {
     ...topic,
     status: runtimeStatus,
-    statusReason: "default",
+    statusReason: runtimeStatus === "waiting" ? "user_action" : "default",
     lastPreview:
       resolveRuntimePreviewFromSessionDetail(detail) ?? topic.lastPreview,
   };

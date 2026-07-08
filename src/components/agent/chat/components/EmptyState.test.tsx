@@ -1176,6 +1176,120 @@ describe("EmptyState", () => {
     });
   });
 
+  it("首页中断恢复请求应由 EmptyState 完整恢复文本、图片、路径和技能 route", async () => {
+    const onSend = vi.fn();
+    const onInputRestoreRequestHandled = vi.fn();
+    const pathReference = {
+      id: "file:/tmp/report.md",
+      path: "/tmp/report.md",
+      name: "report.md",
+      isDir: false,
+      source: "file_manager" as const,
+    };
+    const image = {
+      data: "image-data",
+      mediaType: "image/png",
+    };
+    const capabilityRoute = {
+      kind: "installed_skill" as const,
+      skillKey: "draft",
+      skillName: "起草",
+    };
+    const skill = {
+      key: "local:draft",
+      name: "起草",
+      description: "恢复输入用技能",
+      directory: "draft",
+      installed: true,
+      sourceKind: "other",
+    } as Skill;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mountedRoots.push({ root, container });
+
+    function RestoreHarness() {
+      const [input, setInput] = React.useState("");
+      const [pathReferences, setPathReferences] = React.useState<
+        (typeof pathReference)[]
+      >([]);
+      const [restoreRequest, setRestoreRequest] = React.useState<
+        React.ComponentProps<typeof EmptyState>["inputRestoreRequest"]
+      >({
+        requestId: "restore-empty-state-1",
+        reason: "output_free_interrupted_turn",
+        draft: {
+          text: "继续生成提纲",
+          images: [image],
+          pathReferences: [pathReference],
+          inputCapabilityRoute: capabilityRoute,
+        },
+      });
+
+      return (
+        <EmptyState
+          input={input}
+          setInput={setInput}
+          onSend={onSend}
+          providerType="openai"
+          setProviderType={vi.fn()}
+          model="gpt-4.1"
+          setModel={vi.fn()}
+          activeTheme="general"
+          skills={[skill]}
+          pathReferences={pathReferences}
+          onClearPathReferences={() => setPathReferences([])}
+          onAddPathReferences={(references) =>
+            setPathReferences(references as (typeof pathReference)[])
+          }
+          inputRestoreRequest={restoreRequest}
+          onInputRestoreRequestHandled={(requestId) => {
+            onInputRestoreRequestHandled(requestId);
+            setRestoreRequest(null);
+          }}
+        />
+      );
+    }
+
+    await act(async () => {
+      root.render(<RestoreHarness />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushAsyncEffects();
+
+    expect(container.querySelector("textarea")?.value).toBe("继续生成提纲");
+    expect(
+      container.querySelector('[data-testid="input-skill-badge"]'),
+    ).toBeTruthy();
+    expect(onInputRestoreRequestHandled).toHaveBeenCalledWith(
+      "restore-empty-state-1",
+    );
+
+    const sendButton = container.querySelector(
+      'button[aria-label="发送"]',
+    ) as HTMLButtonElement | null;
+    expect(sendButton).toBeTruthy();
+
+    act(() => {
+      sendButton?.click();
+    });
+
+    expectEmptyStateSend(onSend, {
+      images: [image],
+      textOverride: "继续生成提纲",
+      sendOptions: expect.objectContaining({
+        capabilityRoute,
+        inputRestoreDraft: expect.objectContaining({
+          text: "继续生成提纲",
+          images: [image],
+          pathReferences: [pathReference],
+          inputCapabilityRoute: capabilityRoute,
+        }),
+      }),
+    });
+  });
+
   it("首页添加资料入口应打开输入框资料中枢，而不是预填一段说明", async () => {
     const setInput = vi.fn();
     const onToggleKnowledgePack = vi.fn<(enabled: boolean) => void>();

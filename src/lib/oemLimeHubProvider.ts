@@ -3,6 +3,7 @@ import type { OemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 
 export const OEM_LIME_HUB_PROVIDER_ID = "lime-hub";
 export const DEFAULT_OEM_LIME_HUB_PROVIDER_NAME = "Lime Hub";
+export const DEFAULT_OEM_LIME_HUB_CHAT_MODEL = "gpt-5.2-pro";
 
 const LEGACY_PROXYCAST_PROVIDER_IDS = new Set([
   "lobehub",

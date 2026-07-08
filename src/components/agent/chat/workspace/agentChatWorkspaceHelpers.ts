@@ -1,8 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { AgentRuntimeUpdateSessionRequest } from "@/lib/api/agentRuntime/types";
 import type { Artifact } from "@/lib/artifact/types";
-import { createPreviewArtifact } from "@/lib/artifact/previewArtifact";
-import { isAbsoluteLocalFilePath } from "@/lib/api/fileSystem";
 import {
   normalizeArtifactProtocolPath,
   resolveArtifactProtocolFilePath,
@@ -13,11 +11,6 @@ import { isHiddenInternalArtifactPath } from "../utils/internalArtifactVisibilit
 import { shouldAutoSelectGeneralArtifact } from "./generalArtifactAutoSelection";
 import { doesWorkspaceFileCandidateMatch } from "./workspaceFilePathMatch";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
-
-type Translate = (
-  key: string,
-  options?: Record<string, unknown>,
-) => string;
 
 export const GENERAL_BROWSER_ASSIST_PROFILE_KEY = "general_browser_assist";
 export const BLANK_HOME_DEFERRED_LOAD_MS = 18_000;
@@ -57,6 +50,7 @@ interface ResolveTaskCenterHomeSurfaceStateParams {
   hasInitialSessionRoute?: boolean;
   hasConversationActivity: boolean;
   hasCurrentSessionActivity?: boolean;
+  isHomeSessionBackgroundRecovery?: boolean;
   sessionId?: string | null;
   embeddedHomeSessionIds: ReadonlySet<string>;
   isAutoRestoringSession: boolean;
@@ -270,6 +264,7 @@ export function resolveTaskCenterHomeSurfaceState({
   hasInitialSessionRoute = false,
   hasConversationActivity,
   hasCurrentSessionActivity = hasConversationActivity,
+  isHomeSessionBackgroundRecovery = false,
   sessionId,
   embeddedHomeSessionIds,
   isAutoRestoringSession,
@@ -290,6 +285,8 @@ export function resolveTaskCenterHomeSurfaceState({
   );
   const isSessionRestorePending =
     isAutoRestoringSession || isSessionHydrating || sessionSwitchPending;
+  const shouldHideBackgroundSessionContent =
+    isHomeSessionBackgroundRecovery && !hasInitialSessionRoute;
   const shouldKeepDraftHomeShell =
     shouldSuppressDraftContent &&
     !sessionSwitchPending &&
@@ -297,6 +294,7 @@ export function resolveTaskCenterHomeSurfaceState({
     !hasCurrentSessionActivity;
   const shouldHideCurrentSessionContent =
     sessionSwitchPending ||
+    shouldHideBackgroundSessionContent ||
     (shouldSuppressDraftContent &&
       !shouldProtectInitialSessionRoute &&
       !hasCurrentSessionActivity);
@@ -423,170 +421,6 @@ export function resolveTaskPreviewArtifact(
   return visibleArtifacts.length > 0
     ? (visibleArtifacts[visibleArtifacts.length - 1] ?? null)
     : null;
-}
-
-type MediaReferencePreviewSource =
-  | {
-      kind: "direct_uri" | "preview_url" | "source_uri";
-      value: string;
-    }
-  | {
-      kind: "source_path";
-      value: string;
-    };
-
-function isDirectPreviewMediaUri(uri: string): boolean {
-  return /^(https?|file|asset):/iu.test(uri) || uri.startsWith("//");
-}
-
-function isInlineMediaPayloadUri(uri?: string | null): boolean {
-  return Boolean(uri?.trimStart().toLowerCase().startsWith("data:"));
-}
-
-function isMediaMimeType(mimeType?: string | null): boolean {
-  const normalized = mimeType?.trim().toLowerCase() || "";
-  return (
-    normalized.startsWith("image/") ||
-    normalized.startsWith("audio/") ||
-    normalized.startsWith("video/")
-  );
-}
-
-function resolveMediaReferencePreviewSource(
-  reference: Extract<
-    MessagePreviewTarget,
-    { kind: "media_reference" }
-  >["reference"],
-): MediaReferencePreviewSource | null {
-  const previewUrl = reference.previewUrl?.trim();
-  if (previewUrl && isDirectPreviewMediaUri(previewUrl)) {
-    return { kind: "preview_url", value: previewUrl };
-  }
-
-  const sourcePath = reference.sourcePath?.trim();
-  if (sourcePath && isAbsoluteLocalFilePath(sourcePath)) {
-    return { kind: "source_path", value: sourcePath };
-  }
-
-  const sourceUri = reference.sourceUri?.trim();
-  if (sourceUri && isDirectPreviewMediaUri(sourceUri)) {
-    return { kind: "source_uri", value: sourceUri };
-  }
-
-  const uri = reference.uri.trim();
-  if (uri && isDirectPreviewMediaUri(uri)) {
-    return { kind: "direct_uri", value: uri };
-  }
-
-  return null;
-}
-
-function buildMediaReferenceFallbackMarkdown(params: {
-  title: string;
-  reference: Extract<
-    MessagePreviewTarget,
-    { kind: "media_reference" }
-  >["reference"];
-  t: Translate;
-}): string {
-  const { reference, t, title } = params;
-  const lines = [
-    `# ${title}`,
-    "",
-    t("agentChat.mediaReferencePreview.previewUnavailable"),
-    "",
-    t("agentChat.mediaReferencePreview.reference", {
-      value: reference.uri,
-    }),
-  ];
-  if (reference.kind) {
-    lines.push(
-      t("agentChat.mediaReferencePreview.kind", {
-        value: reference.kind,
-      }),
-    );
-  }
-  if (reference.mimeType) {
-    lines.push(
-      t("agentChat.mediaReferencePreview.mime", {
-        value: reference.mimeType,
-      }),
-    );
-  }
-  if (typeof reference.byteSize === "number") {
-    lines.push(
-      t("agentChat.mediaReferencePreview.byteSize", {
-        value: reference.byteSize,
-      }),
-    );
-  }
-  if (reference.sha256) {
-    lines.push(
-      t("agentChat.mediaReferencePreview.sha256", {
-        value: reference.sha256,
-      }),
-    );
-  }
-  return lines.join("\n");
-}
-
-export function createMediaReferencePreviewArtifact(params: {
-  message: Message;
-  target: Extract<MessagePreviewTarget, { kind: "media_reference" }>;
-  t: Translate;
-}): Artifact {
-  const { message, target, t } = params;
-  const reference = target.reference;
-  const sourceRef =
-    reference.uri.trim() || `${message.id}:media:${target.index}`;
-  const title =
-    reference.title?.trim() ||
-    reference.caption?.trim() ||
-    t("agentChat.mediaReferencePreview.fallbackTitle", {
-      index: target.index + 1,
-    });
-  const resolvedPreviewSource = resolveMediaReferencePreviewSource(reference);
-  const previewSource = isMediaMimeType(reference.mimeType)
-    ? resolvedPreviewSource
-    : null;
-  const previewPath =
-    previewSource?.kind === "source_path" ? previewSource.value : sourceRef;
-  const previewUrl =
-    previewSource && previewSource.kind !== "source_path"
-      ? previewSource.value
-      : undefined;
-  const projection = createPreviewArtifact({
-    source: "session_file",
-    sourceRef,
-    path: previewSource
-      ? previewPath
-      : `${message.id}-media-${target.index + 1}.md`,
-    title,
-    content: previewSource
-      ? ""
-      : buildMediaReferenceFallbackMarkdown({ title, reference, t }),
-    isBinary: Boolean(previewSource),
-    mimeType: previewSource ? reference.mimeType : "text/markdown",
-    previewUrl,
-    meta: {
-      openedFrom: "message-media-reference",
-      messageId: message.id,
-      contentPartIndex: target.index,
-      mediaKind: reference.kind,
-      mediaUri: reference.uri,
-      mediaSourceUri: isInlineMediaPayloadUri(reference.sourceUri)
-        ? undefined
-        : reference.sourceUri,
-      mediaSourcePath: reference.sourcePath,
-      mediaPreviewUrl:
-        previewSource?.kind === "preview_url" ? previewSource.value : undefined,
-      mediaPreviewSource: previewSource?.kind,
-      mediaMimeType: reference.mimeType,
-      mediaSha256: reference.sha256,
-      mediaByteSize: reference.byteSize,
-    },
-  });
-  return projection.artifact;
 }
 
 export function normalizeVideoAspectRatio(

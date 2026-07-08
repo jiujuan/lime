@@ -1174,6 +1174,7 @@ export interface AgentRuntimeReviewDecision {
 }
 export interface AgentRuntimeSaveReviewDecisionRequest extends AgentRuntimeReviewDecision {
   session_id: string;
+  locale?: string | null;
 }
 export interface AgentRuntimeReviewDecisionTemplate {
   session_id: string;

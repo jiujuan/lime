@@ -92,7 +92,7 @@ export interface StreamLifecycleCallbacks {
   removeQueuedDraftMessages: () => void;
   clearActiveStreamIfMatch: (eventName: string) => boolean;
   upsertQueuedTurn: (queuedTurn: QueuedTurnSnapshot) => void;
-  removeQueuedTurnState: (queuedTurnIds: string[]) => void;
+  removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
   playToolcallSound: () => void;
   playTypewriterSound: () => void;
   appendThinkingToParts: (

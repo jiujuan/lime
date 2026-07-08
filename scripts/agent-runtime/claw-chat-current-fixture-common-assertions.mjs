@@ -20,6 +20,7 @@ import {
   IMAGE_COMMAND_DONE_TEXT,
   INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+  INPUTBAR_PENDING_STEER_SECOND_PROMPT,
   INPUTBAR_RICH_RESTORE_PROMPT,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MULTI_AGENT_TEAM_DONE_TEXT,
@@ -63,7 +64,10 @@ export function buildCommonAssertions(context) {
     isPlanScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarPendingSteerMultiQueueScenario,
+    isInputbarPendingSteerPopFrontResumeScenario,
     isInputbarPendingSteerRichRestoreScenario,
+    isInputbarPendingSteerScenario,
     isInputbarRichRestoreScenario,
     inputbarRichRestoreTurnStart,
     isWebToolsRenderingScenario,
@@ -98,9 +102,22 @@ export function buildCommonAssertions(context) {
     !isMediaReferenceScenario &&
     !isSoulStyleScenario &&
     !isInputbarRichRestoreScenario &&
-    !isInputbarPendingSteerRichRestoreScenario;
+    !isInputbarPendingSteerScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
+  const inputbarPendingSteerPopFrontQueuedPanel =
+    summary.inputbarPendingSteerPopFrontGuiHydrated?.queuedPanel ?? {};
+  const inputbarPendingSteerPopFrontHydratedResumeReady =
+    inputbarPendingSteerPopFrontQueuedPanel.panelVisible === true &&
+    inputbarPendingSteerPopFrontQueuedPanel.rowCount === 1 &&
+    inputbarPendingSteerPopFrontQueuedPanel.secondQueued === true &&
+    inputbarPendingSteerPopFrontQueuedPanel.richQueued === false &&
+    inputbarPendingSteerPopFrontQueuedPanel.secondPosition === "0" &&
+    inputbarPendingSteerPopFrontQueuedPanel.activeOutputVisible === true &&
+    inputbarPendingSteerPopFrontQueuedPanel.richPromptVisible === true &&
+    inputbarPendingSteerPopFrontQueuedPanel.textareaVisible === true &&
+    inputbarPendingSteerPopFrontQueuedPanel.textareaDisabled === false &&
+    inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === true;
   const commonAssertions = {
     electronPreloadBridge: rendererSnapshot.electron === true,
     appServerJsonRpcUsed:
@@ -137,7 +154,7 @@ export function buildCommonAssertions(context) {
         ? true
         : isInputbarRichRestoreScenario
           ? Boolean(inputbarRichRestoreTurnStart)
-          : isInputbarPendingSteerRichRestoreScenario
+          : isInputbarPendingSteerScenario
             ? guiTurnStartReachedBackend
         : guiTurnStartReachedBackend,
     liveProviderNotUsed: backendLedger.every((entry) => {
@@ -146,7 +163,7 @@ export function buildCommonAssertions(context) {
       }
       if (
         isInputbarRichRestoreScenario ||
-        isInputbarPendingSteerRichRestoreScenario
+        isInputbarPendingSteerScenario
       ) {
         return (
           (!entry.providerPreference ||
@@ -178,6 +195,15 @@ export function buildCommonAssertions(context) {
           summary.guiContinueCompleted?.bodyText?.includes(NEWS_PROMPT) === true
         : isInputbarRichRestoreScenario
           ? summary.inputbarRichRestoreGuiCanceled?.hasPrompt === true
+        : isInputbarPendingSteerPopFrontResumeScenario
+          ? summary.inputbarPendingSteerPopFrontGuiHydrated?.queuedPanel
+              ?.secondQueued === true &&
+            summary.inputbarPendingSteerPopFrontGuiHydrated?.queuedPanel
+              ?.activeOutputVisible === true
+        : isInputbarPendingSteerMultiQueueScenario
+          ? summary.inputbarPendingSteerActiveStreaming?.bodyText?.includes(
+              INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+            ) === true
         : isInputbarPendingSteerRichRestoreScenario
           ? summary.inputbarPendingSteerGuiCanceled?.hasPrompt === true &&
             summary.inputbarPendingSteerGuiCanceled?.bodyText?.includes(
@@ -241,6 +267,14 @@ export function buildCommonAssertions(context) {
         : isInputbarRichRestoreScenario
           ? summary.inputbarRichRestoreGuiCanceled
               ?.noVisibleAssistantOutput === true
+        : isInputbarPendingSteerPopFrontResumeScenario
+          ? summary.inputbarPendingSteerActiveStreaming?.bodyText?.includes(
+              INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+            ) === true
+        : isInputbarPendingSteerMultiQueueScenario
+          ? summary.inputbarPendingSteerActiveStreaming?.bodyText?.includes(
+              INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+            ) === true
         : isInputbarPendingSteerRichRestoreScenario
           ? summary.inputbarPendingSteerGuiCanceled?.bodyText?.includes(
               INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
@@ -345,6 +379,14 @@ export function buildCommonAssertions(context) {
               false &&
             summary.inputbarRichRestoreGuiCanceled?.textareaValue ===
               INPUTBAR_RICH_RESTORE_PROMPT
+        : isInputbarPendingSteerPopFrontResumeScenario
+          ? summary.inputbarPendingSteerPopFrontGuiHydrated?.queuedPanel
+              ?.textareaVisible === true &&
+            summary.inputbarPendingSteerPopFrontGuiHydrated?.queuedPanel
+              ?.textareaDisabled === false
+        : isInputbarPendingSteerMultiQueueScenario
+          ? summary.inputbarPendingSteerSecondInputDefer?.clicked?.clicked ===
+            true
         : isInputbarPendingSteerRichRestoreScenario
           ? summary.inputbarPendingSteerGuiCanceled?.textareaVisible === true &&
             summary.inputbarPendingSteerGuiCanceled?.textareaDisabled ===
@@ -438,8 +480,12 @@ export function buildCommonAssertions(context) {
         ? summary.guiContinueCompleted?.stopButtonVisible === false
         : isInputbarRichRestoreScenario
           ? summary.inputbarRichRestoreGuiCanceled?.stopButtonVisible === false
+        : isInputbarPendingSteerPopFrontResumeScenario
+          ? inputbarPendingSteerPopFrontHydratedResumeReady
+        : isInputbarPendingSteerMultiQueueScenario
+          ? true
         : isInputbarPendingSteerRichRestoreScenario
-          ? summary.inputbarPendingSteerGuiCanceled?.stopButtonVisible === false
+          ? summary.inputbarPendingSteerGuiCanceled?.stopButtonVisible === true
         : isRightSurfaceVisualMatrixScenario
           ? true
           : isContentFactoryArticleWorkspaceScenario
@@ -511,6 +557,16 @@ export function buildCommonAssertions(context) {
           ? pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&
             summary.inputbarRichRestoreGuiCanceled
               ?.noVisibleAssistantOutput === true
+        : isInputbarPendingSteerPopFrontResumeScenario
+          ? pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_PROMPT) &&
+            pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&
+            pageText.includes(INPUTBAR_PENDING_STEER_SECOND_PROMPT) &&
+            pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT)
+        : isInputbarPendingSteerMultiQueueScenario
+          ? pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_PROMPT) &&
+            pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&
+            pageText.includes(INPUTBAR_PENDING_STEER_SECOND_PROMPT) &&
+            pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT)
         : isInputbarPendingSteerRichRestoreScenario
           ? pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_PROMPT) &&
             pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&

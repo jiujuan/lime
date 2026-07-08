@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub const JSONRPC_VERSION: &str = "2.0";
+pub const METHOD_CANCEL_REQUEST: &str = "$/cancelRequest";
 pub const JSONRPC_SCHEMA_TYPE_NAMES: &[&str] = &[
     "RequestId",
     "JsonRpcMessage",
@@ -93,6 +94,7 @@ pub mod error_codes {
     pub const TURN_ALREADY_ACTIVE: i64 = -32012;
     pub const SESSION_ALREADY_EXISTS: i64 = -32013;
     pub const CAPABILITY_DENIED: i64 = -32020;
+    pub const REQUEST_CANCELLED: i64 = -32800;
 }
 
 impl JsonRpcRequest {

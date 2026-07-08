@@ -2,16 +2,17 @@ use super::image_tools;
 use super::request_context::RuntimeSessionScope;
 use crate::{AppDataSource, ExecutionRequest, RuntimeCoreError, RuntimeEvent, RuntimeEventSink};
 use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
-use lime_agent::{agent_tools::catalog::LIME_CREATE_IMAGE_TASK_TOOL_NAME, AgentTokenUsage};
+use lime_agent::{AgentTokenUsage, agent_tools::catalog::LIME_CREATE_IMAGE_TASK_TOOL_NAME};
 mod intent;
 mod presentation;
+mod presentation_soul;
 #[cfg(test)]
 mod tests;
-use intent::{parse_image_command_intent, ImageCommandIntent};
+use intent::{ImageCommandIntent, parse_image_command_intent};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 const WORKFLOW_SOURCE: &str = "image_command_workflow";
 // Presentation is part of the user-visible turn. Live text providers can take

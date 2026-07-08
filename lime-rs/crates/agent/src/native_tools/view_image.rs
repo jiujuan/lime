@@ -1,66 +1,24 @@
-use crate::native_tools::runtime_tool_bridge::execute_runtime_tool;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
-use async_trait::async_trait;
+use crate::native_tools::runtime_tool_bridge::RuntimeNativeToolAdapter;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext};
 use serde_json::Value;
-use tool_runtime::native_dispatch::runtime_native_dispatch_handle;
-use tool_runtime::view_image::{
-    check_runtime_view_image_permissions, view_image_tool_definition, VIEW_IMAGE_LEGACY_ALIASES,
-    VIEW_IMAGE_TOOL_NAME,
-};
+use tool_runtime::native_overlay::RuntimeNativeToolOverlay;
+use tool_runtime::view_image::{check_runtime_view_image_permissions, VIEW_IMAGE_TOOL_NAME};
 
 pub(crate) fn create_view_image_tool() -> Box<dyn Tool> {
-    Box::new(ImageViewAdapter)
+    debug_assert_eq!(
+        RuntimeNativeToolOverlay::ViewImage.name(),
+        VIEW_IMAGE_TOOL_NAME
+    );
+    Box::new(RuntimeNativeToolAdapter::new(
+        RuntimeNativeToolOverlay::ViewImage,
+        check_view_image_permissions,
+    ))
 }
 
-#[derive(Debug, Default)]
-struct ImageViewAdapter;
-
-#[async_trait]
-impl Tool for ImageViewAdapter {
-    fn name(&self) -> &str {
-        VIEW_IMAGE_TOOL_NAME
-    }
-
-    fn description(&self) -> &str {
-        "View a local image file from the filesystem when visual inspection is needed."
-    }
-
-    fn input_schema(&self) -> Value {
-        view_image_tool_definition().input_schema
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        VIEW_IMAGE_LEGACY_ALIASES
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if context.is_cancelled() {
-            return Err(ToolError::Cancelled);
-        }
-
-        execute_runtime_tool(
-            runtime_native_dispatch_handle(),
-            VIEW_IMAGE_TOOL_NAME,
-            &params,
-            context,
-            None,
-        )
-        .await
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        context: &ToolContext,
-    ) -> PermissionCheckResult {
-        match check_runtime_view_image_permissions(params, &context.working_directory) {
-            Ok(()) => PermissionCheckResult::allow(),
-            Err(error) => PermissionCheckResult::deny(error.message().to_string()),
-        }
-    }
-
-    fn options(&self) -> ToolOptions {
-        ToolOptions::new().with_max_retries(0)
+fn check_view_image_permissions(params: &Value, context: &ToolContext) -> PermissionCheckResult {
+    match check_runtime_view_image_permissions(params, &context.working_directory) {
+        Ok(()) => PermissionCheckResult::allow(),
+        Err(error) => PermissionCheckResult::deny(error.message().to_string()),
     }
 }
 
@@ -77,7 +35,8 @@ mod tests {
 
     #[tokio::test]
     async fn view_image_permission_delegates_to_current_runtime_rules() {
-        let result = ImageViewAdapter
+        let tool = create_view_image_tool();
+        let result = tool
             .check_permissions(
                 &json!({
                     "path": "sample.png",
@@ -94,7 +53,8 @@ mod tests {
     async fn view_image_tool_delegates_to_current_executor() {
         let dir = tempdir().expect("tempdir");
         std::fs::write(dir.path().join("sample.png"), PNG_BYTES).expect("write image");
-        let result = ImageViewAdapter
+        let tool = create_view_image_tool();
+        let result = tool
             .execute(
                 json!({ "path": "sample.png" }),
                 &ToolContext::new(dir.path().to_path_buf()).with_session_id("session-image-1"),

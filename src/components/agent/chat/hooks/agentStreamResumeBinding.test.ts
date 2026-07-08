@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
+  AgentRuntimeThreadReadModel,
   AsterSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -54,6 +55,35 @@ describe("agentStreamResumeBinding", () => {
     });
   });
 
+  it("running read model 使用 current turnId 字段时也应解析恢复目标", () => {
+    expect(
+      resolveAgentStreamResumeBindingTarget({
+        sessionId: "session-1",
+        threadBusy: true,
+        queuedTurns: [],
+        currentTurnId: null,
+        threadRead: {
+          thread_id: "thread-1",
+          status: "running",
+          turns: [
+            {
+              turnId: "turn-current-1",
+              status: "running",
+              startedAt: new Date().toISOString(),
+            },
+          ],
+        } as AgentRuntimeThreadReadModel,
+        threadTurns: [],
+      }),
+    ).toEqual({
+      eventName: "agentSession/event/session-1",
+      sessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-current-1",
+      startedAt: null,
+    });
+  });
+
   it("只有 thread 级 running 或孤立 active_turn_id 时不恢复 active stream", () => {
     expect(
       resolveAgentStreamResumeBindingTarget({
@@ -93,6 +123,29 @@ describe("agentStreamResumeBinding", () => {
           status: "queued",
         },
         threadTurns: [],
+      }),
+    ).toBeNull();
+  });
+
+  it("只有本地 stale running turn 时不绑定 active stream", () => {
+    expect(
+      resolveAgentStreamResumeBindingTarget({
+        sessionId: "session-1",
+        threadBusy: true,
+        queuedTurns: [],
+        currentTurnId: "turn-stale",
+        threadRead: null,
+        threadTurns: [
+          {
+            id: "turn-stale",
+            thread_id: "thread-1",
+            prompt_text: "继续",
+            status: "running",
+            started_at: "2026-03-29T00:00:00.000Z",
+            created_at: "2026-03-29T00:00:00.000Z",
+            updated_at: "2026-03-29T00:00:01.000Z",
+          },
+        ],
       }),
     ).toBeNull();
   });

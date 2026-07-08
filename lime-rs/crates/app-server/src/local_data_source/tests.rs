@@ -65,6 +65,7 @@ fn setup_data_source() -> LocalAppDataSource {
         memory_backend: Arc::new(LocalMemoryBackend::new(
             std::env::temp_dir().join("app-server-local-data-source-test-memory"),
         )),
+        sidecar_store: None,
     }
 }
 

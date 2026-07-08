@@ -252,11 +252,8 @@ export function summarizeAgentSessionEvents(events, turnId) {
   const scopedEvents = events.filter((event) => event.turnId === turnId);
   const terminalTypes = new Set([
     "turn.completed",
-    "turn.done",
-    "turn.final_done",
     "turn.failed",
     "turn.canceled",
-    "turn.cancelled",
   ]);
   return sanitizeJson({
     eventCount: events.length,

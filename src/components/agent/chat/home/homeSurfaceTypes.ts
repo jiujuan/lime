@@ -86,6 +86,15 @@ export interface HomeProjectConversationGroup {
   conversations: HomeProjectConversationItem[];
 }
 
+export type HomeRecoverySessionStatus = "running" | "queued" | "waiting";
+
+export interface HomeRecoverySession {
+  sessionId: string;
+  title: string;
+  summary?: string;
+  status: HomeRecoverySessionStatus;
+}
+
 export interface HomeInputSuggestion {
   id: string;
   label: string;

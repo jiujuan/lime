@@ -1,15 +1,15 @@
 use crate::otel_trace::set_parent_from_w3c_trace_context;
-use crate::trace_context::parse_w3c_trace_context;
 use crate::trace_context::W3cTraceContext;
 use crate::trace_context::W3cTraceContextParse;
+use crate::trace_context::parse_w3c_trace_context;
 use app_server_protocol::ClientInfo;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 use serde_json::Map;
 use serde_json::Value;
+use tracing::Span;
 use tracing::field;
 use tracing::info_span;
-use tracing::Span;
 
 const TRACE_METADATA_KEYS: &[&str] = &["agentUiPerformanceTrace", "agent_ui_performance_trace"];
 
@@ -181,11 +181,11 @@ fn record_string(span: &Span, key: &'static str, value: Option<&str>) {
 mod tests {
     use super::*;
     use app_server_protocol::RequestId;
+    use opentelemetry::Value as OtelValue;
     use opentelemetry::trace::SpanId;
     use opentelemetry::trace::SpanKind;
     use opentelemetry::trace::TraceId;
     use opentelemetry::trace::TracerProvider as _;
-    use opentelemetry::Value as OtelValue;
     use opentelemetry_sdk::export::trace::ExportResult;
     use opentelemetry_sdk::export::trace::SpanData;
     use opentelemetry_sdk::export::trace::SpanExporter;
@@ -322,10 +322,11 @@ mod tests {
             Some("bbbbbbbbbbbbbbbb")
         );
         assert_eq!(bool_attr(span, "w3c.traceparent.valid"), Some(true));
-        assert!(span
-            .attributes
-            .iter()
-            .all(|kv| kv.key.as_str() != "tracestate"));
+        assert!(
+            span.attributes
+                .iter()
+                .all(|kv| kv.key.as_str() != "tracestate")
+        );
     }
 
     #[test]

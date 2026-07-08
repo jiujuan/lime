@@ -706,19 +706,21 @@ const MODEL_PROVIDER_STREAM_CONTRACT_REQUIRED_SNIPPETS = [
   "pub enum RuntimeReplyInputKind",
   "pub struct RuntimeReplyProviderHandle",
   "pub struct RuntimeReplyStreamRequest",
+  "pub struct RuntimeReplyProviderStreamStart",
+  "pub struct RuntimeReplyProviderStreamTrace",
   "RuntimeProviderBackend::AsterCompat",
 ];
 
 const CONFIGURED_REPLY_PROVIDER_REQUIRED_CURRENT_HANDLE_SNIPPETS = [
   "RuntimeReplyProviderHandle",
   "RuntimeReplyProviderCapabilities",
-  "RuntimeReplyStreamRequest",
+  "RuntimeReplyProviderCall",
   "RuntimeProviderBackend::AsterCompat",
   "backend: CompatAsterReplyProviderBackend",
   "struct CompatAsterReplyProviderBackend",
   "pub(crate) fn runtime_handle(&self) -> &RuntimeReplyProviderHandle",
-  "stream_request: &RuntimeReplyStreamRequest",
-  "debug_assert_eq!(stream_request.provider.as_ref(), Some(&self.handle));",
+  "provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>",
+  "provider_call.trace()",
 ];
 
 const PROVIDER_TRACE_RUNTIME_PROVIDER_METADATA_REQUIRED_SNIPPETS = [
@@ -2267,14 +2269,24 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/credential_bridge/runtime_provider_adapter.rs";
     const asterReplyAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_adapter.rs";
+    const asterReplyBackendAdapterPath =
+      "lime-rs/crates/agent/src/request_tool_policy/aster_reply_backend_adapter.rs";
+    const agentRuntimeReplyBackendPath =
+      "lime-rs/crates/agent-runtime/src/reply_backend.rs";
     const agentReplyStreamPath =
       "lime-rs/crates/agent/src/request_tool_policy/agent_reply_stream.rs";
     const agentProtocolPath = "lime-rs/crates/agent/src/protocol.rs";
     const appServerToolEventsPath =
       "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs";
     const frontendAgentProtocolPath = "src/lib/api/agentProtocol.ts";
+    const frontendAgentProtocolEventTypesPath =
+      "src/lib/api/agentProtocolEventTypes.ts";
+    const frontendAgentProtocolParserUtilsPath =
+      "src/lib/api/agentProtocolParserUtils.ts";
     const frontendAppServerEventStreamPath =
       "src/lib/api/agentRuntime/appServerEventStream.ts";
+    const frontendAppServerEventPayloadProjectionPath =
+      "src/lib/api/agentRuntime/appServerEventPayloadProjection.ts";
     const frontendMetricsPath =
       "src/components/agent/chat/hooks/agentStreamRuntimeMetricsController.ts";
     const frontendTurnBindingPath =
@@ -2295,6 +2307,14 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, asterReplyAdapterPath),
       "utf8",
     );
+    const asterReplyBackendAdapterSource = readFileSync(
+      join(REPO_ROOT, asterReplyBackendAdapterPath),
+      "utf8",
+    );
+    const agentRuntimeReplyBackendSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyBackendPath),
+      "utf8",
+    );
     const agentReplyStreamSource = readFileSync(
       join(REPO_ROOT, agentReplyStreamPath),
       "utf8",
@@ -2307,14 +2327,19 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, appServerToolEventsPath),
       "utf8",
     );
-    const frontendAgentProtocolSource = readFileSync(
-      join(REPO_ROOT, frontendAgentProtocolPath),
-      "utf8",
-    );
-    const frontendAppServerEventStreamSource = readFileSync(
-      join(REPO_ROOT, frontendAppServerEventStreamPath),
-      "utf8",
-    );
+    const frontendAgentProtocolSource = [
+      frontendAgentProtocolPath,
+      frontendAgentProtocolEventTypesPath,
+      frontendAgentProtocolParserUtilsPath,
+    ]
+      .map((filePath) => readFileSync(join(REPO_ROOT, filePath), "utf8"))
+      .join("\n");
+    const frontendAppServerEventStreamSource = [
+      frontendAppServerEventStreamPath,
+      frontendAppServerEventPayloadProjectionPath,
+    ]
+      .map((filePath) => readFileSync(join(REPO_ROOT, filePath), "utf8"))
+      .join("\n");
     const frontendMetricsSource = readFileSync(
       join(REPO_ROOT, frontendMetricsPath),
       "utf8",
@@ -2357,14 +2382,91 @@ describe("aster migration boundary", () => {
       configuredReplyProviderStruct.includes("Arc<dyn Provider>"),
       "ConfiguredReplyProvider 只能持有 current handle + 私有 compat backend，不能直接保存 Aster Provider trait object",
     ).toBe(false);
-    expect(asterReplyAdapterSource).toContain("RuntimeReplyStreamRequest");
-    expect(asterReplyAdapterSource).toContain(".stream_reply_with_agent(");
-    expect(asterReplyAdapterSource).toContain("&stream_request");
-    expect(asterReplyAdapterSource).toContain("provider_handle(&self)");
+    const configuredReplyProviderStreamBody =
+      runtimeProviderAdapterSource.slice(
+        runtimeProviderAdapterSource.indexOf(
+          "pub(crate) async fn stream_reply_with_agent",
+        ),
+        runtimeProviderAdapterSource.indexOf(
+          "pub(crate) async fn create_configured_reply_provider",
+        ),
+      );
+    expect(configuredReplyProviderStreamBody).toContain(
+      "self.backend.stream_reply_with_agent(agent, provider_call).await",
+    );
+    expect(configuredReplyProviderStreamBody).not.toContain(
+      "provider_call.into_parts()",
+    );
+    const compatProviderBackendImpl = runtimeProviderAdapterSource.slice(
+      runtimeProviderAdapterSource.indexOf(
+        "impl CompatAsterReplyProviderBackend",
+      ),
+      runtimeProviderAdapterSource.indexOf("fn build_provider_model_config"),
+    );
+    expect(compatProviderBackendImpl).toContain(
+      "provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>",
+    );
+    expect(compatProviderBackendImpl).toContain(
+      "let (_, user_message, session_config, cancel_token) = provider_call.into_parts();",
+    );
+    expect(compatProviderBackendImpl).not.toContain("user_message: Message,");
+    expect(compatProviderBackendImpl).not.toContain(
+      "session_config: aster::agents::SessionConfig,",
+    );
+    expect(compatProviderBackendImpl).not.toContain(
+      "cancel_token: Option<CancellationToken>,",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplyStreamRequest",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyStreamRequest",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      ".stream_reply_with_agent(",
+    );
+    expect(asterReplyAdapterSource).not.toContain("RuntimeReplyStreamRequest");
+    expect(asterReplyAdapterSource).not.toContain(".stream_reply_with_agent(");
+    expect(providerStreamSource).toContain(
+      "pub struct RuntimeReplyProviderStreamStart",
+    );
+    expect(providerStreamSource).toContain(
+      "pub struct RuntimeReplyProviderStreamTrace",
+    );
+    expect(providerStreamSource).toContain("pub fn trace(&self)");
+    expect(providerStreamSource).toContain(
+      "pub fn stream_request(&self) -> &RuntimeReplyStreamRequest",
+    );
+    expect(runtimeProviderAdapterSource).toContain("RuntimeReplyProviderCall");
+    expect(runtimeProviderAdapterSource).toContain("provider_call.trace()");
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "provider_start: &RuntimeReplyProviderStreamStart",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "provider_start.trace()",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "let stream_request = provider_start.stream_request()",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "stream_request.provider_backend()",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "stream_request.provider_name()",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "stream_request.model_name()",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "debug_assert_eq!(stream_request.provider.as_ref()",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "fn provider_handle(&self)",
+    );
     expect(agentReplyStreamSource).toContain(
       "enrich_provider_trace_with_runtime_provider",
     );
-    expect(agentReplyStreamSource).toContain("host.provider_handle()");
+    expect(agentReplyStreamSource).toContain("reply_backend.provider_handle()");
     expect(
       PROVIDER_TRACE_RUNTIME_PROVIDER_METADATA_REQUIRED_SNIPPETS.filter(
         (snippet) =>
@@ -2734,10 +2836,18 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/request_tool_policy/agent_reply_stream.rs";
     const asterReplyAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_adapter.rs";
+    const asterReplyBackendAdapterPath =
+      "lime-rs/crates/agent/src/request_tool_policy/aster_reply_backend_adapter.rs";
+    const asterReplyMessageAdapterPath =
+      "lime-rs/crates/agent/src/request_tool_policy/aster_reply_message_adapter.rs";
+    const asterReplyStreamAdapterPath =
+      "lime-rs/crates/agent/src/request_tool_policy/aster_reply_stream_adapter.rs";
     const asterEventAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_event_adapter.rs";
     const webSearchPreflightPath =
       "lime-rs/crates/agent/src/request_tool_policy/web_search_preflight.rs";
+    const streamIdlePath =
+      "lime-rs/crates/agent/src/request_tool_policy/stream_idle.rs";
     const agentRuntimeLibPath = "lime-rs/crates/agent-runtime/src/lib.rs";
     const agentRuntimeReplyInputPath =
       "lime-rs/crates/agent-runtime/src/reply_input.rs";
@@ -2745,6 +2855,8 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent-runtime/src/reply_message.rs";
     const agentRuntimeReplyRequestPath =
       "lime-rs/crates/agent-runtime/src/reply_request.rs";
+    const agentRuntimeReplyBackendPath =
+      "lime-rs/crates/agent-runtime/src/reply_backend.rs";
     const agentRuntimeReplyHostPath =
       "lime-rs/crates/agent-runtime/src/reply_host.rs";
     const agentRuntimeReplySessionPath =
@@ -2755,6 +2867,8 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent-runtime/src/reply_stream.rs";
     const agentRuntimeEventStreamPath =
       "lime-rs/crates/agent-runtime/src/event_stream.rs";
+    const modelProviderStreamPath =
+      "lime-rs/crates/model-provider/src/provider_stream.rs";
     const mainSource = readFileSync(join(REPO_ROOT, mainPath), "utf8");
     const mainProductionSource = mainSource.split(
       "\n#[cfg(test)]\nmod tests",
@@ -2764,12 +2878,28 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, asterReplyAdapterPath),
       "utf8",
     );
+    const asterReplyBackendAdapterSource = readFileSync(
+      join(REPO_ROOT, asterReplyBackendAdapterPath),
+      "utf8",
+    );
+    const asterReplyMessageAdapterSource = readFileSync(
+      join(REPO_ROOT, asterReplyMessageAdapterPath),
+      "utf8",
+    );
+    const asterReplyStreamAdapterSource = readFileSync(
+      join(REPO_ROOT, asterReplyStreamAdapterPath),
+      "utf8",
+    );
     const asterEventAdapterSource = readFileSync(
       join(REPO_ROOT, asterEventAdapterPath),
       "utf8",
     );
     const webSearchPreflightSource = readFileSync(
       join(REPO_ROOT, webSearchPreflightPath),
+      "utf8",
+    );
+    const streamIdleSource = readFileSync(
+      join(REPO_ROOT, streamIdlePath),
       "utf8",
     );
     const agentRuntimeLibSource = readFileSync(
@@ -2786,6 +2916,10 @@ describe("aster migration boundary", () => {
     );
     const agentRuntimeReplyRequestSource = readFileSync(
       join(REPO_ROOT, agentRuntimeReplyRequestPath),
+      "utf8",
+    );
+    const agentRuntimeReplyBackendSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyBackendPath),
       "utf8",
     );
     const agentRuntimeReplyHostSource = readFileSync(
@@ -2806,6 +2940,10 @@ describe("aster migration boundary", () => {
     );
     const agentRuntimeEventStreamSource = readFileSync(
       join(REPO_ROOT, agentRuntimeEventStreamPath),
+      "utf8",
+    );
+    const modelProviderStreamSource = readFileSync(
+      join(REPO_ROOT, modelProviderStreamPath),
       "utf8",
     );
     const leaks =
@@ -2880,6 +3018,9 @@ describe("aster migration boundary", () => {
     expect(mainSource).toContain("mod agent_reply_stream;");
     expect(mainSource).toContain("mod aster_event_adapter;");
     expect(mainSource).toContain("mod aster_reply_adapter;");
+    expect(mainSource).toContain("mod aster_reply_backend_adapter;");
+    expect(mainSource).toContain("mod aster_reply_message_adapter;");
+    expect(mainSource).toContain("mod aster_reply_stream_adapter;");
     expect(mainSource).toContain("agent_runtime::reply_input::{");
     expect(mainSource).toContain(
       "agent_runtime::session_config::AgentSessionConfig",
@@ -2890,6 +3031,16 @@ describe("aster migration boundary", () => {
     expect(mainSource).not.toContain("struct ReplyAttemptError");
     expect(mainSource).not.toContain("struct StreamReplyExecution");
     expect(mainSource).toContain("agent_runtime::reply_execution::{");
+    expect(mainSource).toContain("RuntimeReplyAttemptState");
+    expect(mainProductionSource).toContain("RuntimeReplyAttemptState::new()");
+    expect(mainProductionSource).toContain("attempt_state.into_execution(");
+    expect(mainProductionSource).toContain("attempt_state.error(");
+    expect(mainProductionSource).not.toContain("let mut emitted_any = false");
+    expect(mainProductionSource).not.toContain("text_chunks: Vec");
+    expect(mainProductionSource).not.toContain("event_errors: Vec");
+    expect(mainProductionSource).not.toContain(
+      "fn build_stream_reply_execution",
+    );
     expect(mainSource).toContain("persist_cancelled_turn_context_marker");
     expect(adapterSource).toContain("session_config: &AgentSessionConfig");
     expect(adapterSource).toContain(
@@ -2903,12 +3054,49 @@ describe("aster migration boundary", () => {
       "agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput",
     );
     expect(adapterSource).toContain(
-      "agent_runtime::reply_stream::RuntimeReplyStreamEvent",
+      "agent_runtime::reply_stream::{\n    RuntimeReplyStreamEvent, RuntimeReplyStreamIdleTimeout, RuntimeReplyStreamState,\n}",
     );
     expect(adapterSource).toContain(
       "agent_runtime::reply_request::RuntimeReplyRequest",
     );
     expect(adapterSource).toContain("RuntimeReplyRequest::from_attempt_input");
+    expect(adapterSource).toContain(
+      "agent_runtime::reply_backend::RuntimeReplyBackend",
+    );
+    expect(adapterSource).toContain(
+      "agent_runtime::reply_execution::RuntimeReplyAttemptState",
+    );
+    expect(adapterSource).toContain(
+      "attempt_state: &mut RuntimeReplyAttemptState",
+    );
+    expect(adapterSource).toContain("attempt_state.push_text");
+    expect(adapterSource).toContain("attempt_state.push_error");
+    expect(adapterSource).toContain("attempt_state.error(");
+    expect(adapterSource).toContain("map_err(ReplyAttemptError::from)");
+    expect(adapterSource).not.toContain("let mut emitted_any = false");
+    expect(adapterSource).not.toContain("text_chunks: Vec");
+    expect(adapterSource).not.toContain("event_errors: Vec");
+    expect(adapterSource).not.toContain("fn reply_attempt_error_from_runtime");
+    expect(adapterSource).toContain("RuntimeReplyStreamState::new()");
+    expect(adapterSource).toContain("RuntimeReplyStreamIdleTimeout::new");
+    expect(adapterSource).toContain("stream_state.next_timeout");
+    expect(adapterSource).toContain("stream_state.mark_stream_event_seen");
+    expect(adapterSource).toContain(
+      "stream_state.capture_inline_provider_error",
+    );
+    expect(adapterSource).toContain("stream_state.take_inline_provider_error");
+    expect(adapterSource).not.toContain(
+      "const MIN_PROVIDER_STREAM_FIRST_EVENT_TIMEOUT",
+    );
+    expect(adapterSource).not.toContain("fn provider_stream_next_timeout");
+    expect(streamIdleSource).not.toContain(
+      "fn provider_stream_idle_timeout_message",
+    );
+    expect(streamIdleSource).not.toContain(
+      "Agent provider execution failed: stream idle timeout",
+    );
+    expect(adapterSource).not.toContain("let mut inline_provider_error = None");
+    expect(adapterSource).toContain("let reply_backend = host.reply_backend()");
     expect(adapterSource).toContain("agent_runtime::reply_host::{");
     expect(adapterSource).toContain("RuntimeReplyStartRequest");
     expect(adapterSource).toContain("RuntimeReplyStartRequest::new");
@@ -2916,6 +3104,22 @@ describe("aster migration boundary", () => {
       "runtime_reply_model_request_policy_from_turn_context",
     );
     expect(adapterSource).toContain("validate_reply_request_modalities");
+    expect(adapterSource).toContain("idle_cancel_token");
+    expect(adapterSource).toContain(
+      "let start_result = reply_backend.start_reply_stream(start_request).await;",
+    );
+    expect(adapterSource).toContain(
+      "tokio::time::timeout(timeout, stream.next())",
+    );
+    expect(adapterSource).not.toContain(
+      "tokio::time::timeout(timeout, reply_backend.start_reply_stream(start_request))",
+    );
+    expect(adapterSource).not.toContain(
+      "host.start_reply_stream(start_request)",
+    );
+    expect(adapterSource).not.toContain(
+      "let (mut stream, message_chars) = host\n        .start_reply_stream(start_request)\n        .await",
+    );
     expect(adapterSource).toContain("input_modality_policy_from_turn_context");
     expect(adapterSource).toContain("input_modality_policy_allows_image_input");
     expect(adapterSource).toContain("RuntimeReplyStreamEvent");
@@ -2923,6 +3127,7 @@ describe("aster migration boundary", () => {
     expect(agentRuntimeLibSource).toContain("pub mod reply_input;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_message;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_request;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_backend;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_host;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_session;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_execution;");
@@ -2932,6 +3137,10 @@ describe("aster migration boundary", () => {
       "pub trait RuntimeReplyStreamHost<E>",
     );
     expect(agentRuntimeReplyHostSource).toContain(
+      "type Backend: RuntimeReplyBackend<E>",
+    );
+    expect(agentRuntimeReplyHostSource).toContain("fn reply_backend(&self)");
+    expect(agentRuntimeReplyHostSource).toContain(
       "pub trait RuntimeReplyPolicyHost<E, S>",
     );
     expect(agentRuntimeReplyHostSource).toContain("fn emit_runtime_status");
@@ -2940,6 +3149,9 @@ describe("aster migration boundary", () => {
     );
     expect(agentRuntimeReplyHostSource).toContain(
       "pub struct RuntimeReplyStartError",
+    );
+    expect(agentRuntimeReplyHostSource).toContain(
+      "from_provider_wire_support_issue",
     );
     expect(agentRuntimeReplyHostSource).toContain(
       "pub struct RuntimeReplyStartRequest",
@@ -2965,6 +3177,54 @@ describe("aster migration boundary", () => {
       ),
       "agent-runtime reply_host contract 不得引入 Aster 类型",
     ).toEqual([]);
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub trait RuntimeReplyBackend<E>",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyBackendStart",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplySessionPreparation",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("from_start_request");
+    expect(agentRuntimeReplyBackendSource).toContain("session_config(&self)");
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "provider_wire_support_start_error",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn provider_stream_start",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn prepare_session_metadata",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "attach_reply_disallowed_tools",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "attach_reply_provider_wire_shape",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "provider_request_wire_support_issue",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplyStartError::from_provider_wire_support_issue",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplyProviderStreamStart::new",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("fn uses_pinned_provider");
+    expect(agentRuntimeReplyBackendSource).toContain("fn provider_handle");
+    expect(agentRuntimeReplyBackendSource).toContain("fn start_reply_stream");
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplyStartRequest",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("RuntimeReplyStartResult");
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        agentRuntimeReplyBackendSource.includes(snippet),
+      ),
+      "agent-runtime reply_backend contract 不得引入 Aster Agent / provider trait / AgentEvent 类型",
+    ).toEqual([]);
     expect(agentRuntimeReplySessionSource).toContain(
       "pub fn attach_reply_disallowed_tools",
     );
@@ -2981,6 +3241,37 @@ describe("aster migration boundary", () => {
       "RuntimeReplyProviderRequestWireShape",
     );
     expect(agentRuntimeReplySessionSource).not.toContain("aster::");
+    expect(modelProviderStreamSource).toContain(
+      "pub struct RuntimeReplyProviderWireSupportIssue",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub struct RuntimeReplyProviderStreamStart",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub struct RuntimeReplyProviderStartError",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub const NOTIFICATION_KIND_SAFETY_BUFFERING",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub fn from_notification_payload",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "fn provider_stream_event_headers",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "provider_request_wire_support_issue",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "provider_supports_request_wire_shape",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "RuntimeProviderBackend::Current",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "RuntimeProviderBackend::AsterCompat",
+    );
+    expect(modelProviderStreamSource).toContain("uses_responses_api");
     expect(agentRuntimeReplyInputSource).toContain(
       "pub struct RuntimeReplyInput",
     );
@@ -3033,6 +3324,19 @@ describe("aster migration boundary", () => {
     expect(agentRuntimeReplyExecutionSource).toContain(
       "pub struct RuntimeReplyExecution",
     );
+    expect(agentRuntimeReplyExecutionSource).toContain(
+      "pub struct RuntimeReplyAttemptState",
+    );
+    expect(agentRuntimeReplyExecutionSource).toContain(
+      "impl From<RuntimeReplyStartError> for RuntimeReplyAttemptError",
+    );
+    expect(agentRuntimeReplyExecutionSource).toContain("fn push_text");
+    expect(agentRuntimeReplyExecutionSource).toContain("fn push_error");
+    expect(agentRuntimeReplyExecutionSource).toContain("fn error");
+    expect(agentRuntimeReplyExecutionSource).toContain("fn last_error");
+    expect(agentRuntimeReplyExecutionSource).toContain(
+      "fn into_execution_with_text",
+    );
     expect(agentRuntimeReplyExecutionSource).toContain("emitted_any");
     expect(agentRuntimeReplyExecutionSource).toContain("attempts_summary");
     expect(agentRuntimeReplyExecutionSource).not.toContain("aster::");
@@ -3040,10 +3344,84 @@ describe("aster migration boundary", () => {
       "pub enum RuntimeReplyStreamEvent<E>",
     );
     expect(agentRuntimeReplyStreamSource).toContain(
+      "pub struct RuntimeReplyStreamState",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub const MIN_PROVIDER_STREAM_FIRST_EVENT_TIMEOUT",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub struct RuntimeReplyStreamIdleTimeout",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain("pub fn message(&self)");
+    expect(agentRuntimeReplyStreamSource).toContain("fn next_timeout");
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "fn capture_inline_provider_error",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "fn take_inline_provider_error",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub trait RuntimeReplyStreamProjector<SourceEvent, RuntimeEvent>",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub struct RuntimeReplyStreamProjection",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain("pub fn from_parts");
+    expect(agentRuntimeReplyStreamSource).toContain("pub fn into_events");
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "fn project_reply_stream_event",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
       "SuppressedInlineProviderError(String)",
     );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub struct RuntimeReplyInlineProviderError",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain("pub fn from_text");
     expect(agentRuntimeReplyStreamSource).toContain("ProviderStreamEvent");
     expect(agentRuntimeReplyStreamSource).not.toContain("aster::");
+    expect(asterReplyStreamAdapterSource).toContain(
+      "provider_stream_event_notification_payload_from_message",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "RuntimeReplyProviderStreamEvent::from_notification_payload",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "safety_buffering_from_response_event",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "fn provider_stream_event_headers",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "inline_provider_error_from_aster_message",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "RuntimeReplyInlineProviderError::from_text",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "RuntimeReplyStreamProjection::from_parts",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "RuntimeReplyStreamProjection::events",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(".into_events()");
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "RuntimeReplyStreamEvent::ProviderStreamEvent",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "RuntimeReplyStreamEvent::SuppressedInlineProviderError",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "suppressed_inline_provider_error",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain("Ran into this error:");
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "Please retry if you think this is a transient or recoverable error.",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain("split_once");
     expect(agentRuntimeEventStreamSource).toContain(
       "pub trait EventProjector<SourceEvent, RuntimeEvent>",
     );
@@ -3057,47 +3435,349 @@ describe("aster migration boundary", () => {
       "agent-runtime event_stream 只能定义 current event projector contract，不得引入 Aster source type",
     ).toEqual([]);
     expect(asterReplyAdapterSource).toContain("struct AsterReplyRuntimeHost");
+    expect(asterReplyAdapterSource).toContain("backend: AsterReplyBackend<'a>");
     expect(asterReplyAdapterSource).toContain(
-      "impl RuntimeReplyStreamHost<RuntimeAgentEvent> for AsterReplyRuntimeHost",
+      "impl<'a> RuntimeReplyStreamHost<RuntimeAgentEvent> for AsterReplyRuntimeHost<'a>",
     );
+    expect(asterReplyAdapterSource).toContain(
+      "type Backend = AsterReplyBackend<'a>",
+    );
+    expect(asterReplyAdapterSource).toContain("fn reply_backend(&self)");
     expect(asterReplyAdapterSource).toContain(
       "impl RuntimeReplyPolicyHost<RuntimeAgentEvent, AgentRuntimeStatus> for AsterReplyRuntimeHost",
     );
-    expect(asterReplyAdapterSource).toContain(
-      "agent_runtime::reply_stream::RuntimeReplyStreamEvent",
-    );
-    expect(asterReplyAdapterSource).toContain("RuntimeReplyStartRequest");
     expect(asterReplyAdapterSource).toContain(
       "RuntimeActionRequiredResponseInput as ActionRequiredResponseInput",
     );
     expect(asterReplyAdapterSource).toContain(
       "RuntimeReplyAttemptInput as ReplyAttemptInput",
     );
-    expect(asterReplyAdapterSource).toContain(
+    expect(asterReplyMessageAdapterSource).toContain(
       "agent_runtime::reply_message::{",
     );
-    expect(asterReplyAdapterSource).toContain(
+    expect(asterReplyMessageAdapterSource).toContain(
+      "pub(super) fn lower_aster_reply_message",
+    );
+    expect(asterReplyMessageAdapterSource).toContain("RuntimeReplyMessage");
+    expect(asterReplyMessageAdapterSource).toContain(
+      "RuntimeReplyMessageContent",
+    );
+    expect(asterReplyMessageAdapterSource).toContain("RuntimeReplyMessageRole");
+    expect(asterReplyMessageAdapterSource).toContain("Message::user()");
+    expect(asterReplyMessageAdapterSource).toContain("Message::assistant()");
+    expect(asterReplyMessageAdapterSource).toContain(
+      "MessageContent::ActionRequired",
+    );
+    expect(asterReplyMessageAdapterSource).toContain(
+      "ActionRequiredData::ElicitationResponse",
+    );
+    expect(asterReplyMessageAdapterSource).toContain(
+      "cancelled_turn_context_marker_message",
+    );
+    expect(asterReplyMessageAdapterSource).toContain(
+      "CANCELLED_TURN_CONTEXT_MARKER",
+    );
+    expect(asterReplyMessageAdapterSource).not.toContain(".reply(");
+    expect(asterReplyMessageAdapterSource).not.toContain(
+      "SessionManager::add_message",
+    );
+    expect(asterReplyMessageAdapterSource).not.toContain(
+      "ConfiguredReplyProvider",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "agent_runtime::reply_message::{",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "use agent_runtime::reply_backend::{",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "RuntimeReplyBackendStart::from_start_request",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub enum RuntimeReplyBackendRunPath",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyBackendRun",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyBackendRunOutcome",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyDefaultCall",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub type RuntimeReplyDefaultSourceCall",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplyDefaultSourceCall::new",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyProviderCall",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub type RuntimeReplyProviderSourceCall",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplyProviderSourceCall::new",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub enum RuntimeReplySourceCall",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub type RuntimeReplySourceRun",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplySourceCall::Default",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplySourceCall::Provider",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyBackendTrace",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub enum RuntimeReplyBackendPrepareError",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("pub fn trace");
+    expect(agentRuntimeReplyBackendSource).toContain("pub fn prepare_run");
+    expect(agentRuntimeReplyBackendSource).toContain("pub fn finish_stream");
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub trait RuntimeReplySource",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("pub fn run_reply_source");
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "S: RuntimeReplySource + Send",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("fn run");
+    expect(agentRuntimeReplyBackendSource).toContain("Agent error:");
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "provider_wire_support_start_error",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "prepare_session_metadata",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("provider_stream_start");
+    expect(asterReplyBackendAdapterSource).toContain("RuntimeReplyStartResult");
+    expect(asterReplyBackendAdapterSource).not.toContain("ReplyAttemptError");
+    expect(asterReplyBackendAdapterSource).toContain(
+      "struct AsterReplyBackend",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "impl<'backend> RuntimeReplyBackend<RuntimeAgentEvent> for AsterReplyBackend<'backend>",
+    );
+    expect(asterReplyBackendAdapterSource).toContain("fn uses_pinned_provider");
+    expect(asterReplyBackendAdapterSource).toContain("fn provider_handle");
+    expect(asterReplyBackendAdapterSource).toContain("fn start_reply_stream");
+    expect(asterReplyBackendAdapterSource).toContain(
+      "native_tool_policy_disallowed_tool_names",
+    );
+    expect(asterReplyBackendAdapterSource).toContain("prepare_run(");
+    expect(asterReplyBackendAdapterSource).toContain("backend_start.trace()");
+    expect(asterReplyBackendAdapterSource).toContain("run_reply_source");
+    expect(asterReplyBackendAdapterSource).toContain("struct AsterReplySource");
+    expect(asterReplyBackendAdapterSource).toContain(
+      "impl<'source> RuntimeReplySource for AsterReplySource<'source>",
+    );
+    expect(asterReplyBackendAdapterSource).toContain("type Stream<'run>");
+    expect(asterReplyBackendAdapterSource).toContain("Self: 'run");
+    expect(asterReplyBackendAdapterSource).toContain("fn run");
+    expect(asterReplyBackendAdapterSource).toContain("RuntimeReplySourceRun");
+    expect(asterReplyBackendAdapterSource).toContain("RuntimeReplySourceCall");
+    expect(asterReplyBackendAdapterSource).toContain(
+      "RuntimeReplySourceCall::Default",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "RuntimeReplySourceCall::Provider",
+    );
+    expect(
+      asterReplyBackendAdapterSource.match(
+        /call\.map\(lower_aster_reply_message, to_aster_session_config\)/g,
+      ) ?? [],
+    ).toHaveLength(1);
+    expect(asterReplyBackendAdapterSource).toContain("outcome.finish_stream");
+    const runtimeReplySourceTraitBody = agentRuntimeReplyBackendSource.slice(
+      agentRuntimeReplyBackendSource.indexOf("pub trait RuntimeReplySource"),
+      agentRuntimeReplyBackendSource.indexOf("pub fn run_reply_source"),
+    );
+    const startAsterReplyStreamBody = asterReplyBackendAdapterSource.slice(
+      asterReplyBackendAdapterSource.indexOf(
+        "pub(super) async fn start_aster_reply_stream",
+      ),
+      asterReplyBackendAdapterSource.indexOf("struct AsterReplySource"),
+    );
+    expect(startAsterReplyStreamBody).not.toContain(
+      "RuntimeReplyBackendRunPath::Provider",
+    );
+    expect(startAsterReplyStreamBody).not.toContain(
+      "RuntimeReplyBackendRunPath::Default",
+    );
+    expect(startAsterReplyStreamBody).not.toContain(".reply(");
+    expect(startAsterReplyStreamBody).not.toContain(
+      ".stream_reply_with_agent(",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "provider_wire_support_start_error",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "prepare_session_metadata",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "provider_stream_start(provider.runtime_handle())",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "provider_request_wire_support_issue",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "stream_request.provider_backend()",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "stream_request.provider_name()",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "stream_request.model_name()",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "stream_request.model_request_policy.as_ref()",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
       "agent_runtime::reply_session::{",
     );
-    expect(asterReplyAdapterSource).toContain("attach_reply_disallowed_tools");
-    expect(asterReplyAdapterSource).toContain(
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "attach_reply_disallowed_tools",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
       "attach_reply_provider_wire_shape",
     );
-    expect(asterReplyAdapterSource).toContain(
+    expect(asterReplyBackendAdapterSource).not.toContain("session_config_mut");
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "fn attach_provider_request_wire_shape",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "fn attach_native_tool_policy_scope",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyStartError::from_provider_wire_support_issue",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "unsupported_provider_wire_shape_error",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "request.into_parts()",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain("issue.message()");
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderStreamStart::new",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderStartError",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      ".map_err(|error| RuntimeReplyStartError::new(error.message, emitted_any))",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      'RuntimeReplyStartError::new(format!("Agent error:',
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      ".map(|stream| {\n            (",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain("&provider_start");
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "message: agent_runtime::reply_message::RuntimeReplyMessage",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "session_config: agent_runtime::session_config::AgentSessionConfig",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "cancel_token: Option<CancellationToken>",
+    );
+    expect(runtimeReplySourceTraitBody).not.toContain(
+      "message: RuntimeReplyMessage",
+    );
+    expect(runtimeReplySourceTraitBody).not.toContain(
+      "session_config: AgentSessionConfig",
+    );
+    expect(runtimeReplySourceTraitBody).not.toContain(
+      "cancel_token: Option<CancellationToken>",
+    );
+    expect(runtimeReplySourceTraitBody).not.toContain("fn run_default");
+    expect(runtimeReplySourceTraitBody).not.toContain("fn run_provider");
+    expect(asterReplyBackendAdapterSource).not.toContain("fn run_default");
+    expect(asterReplyBackendAdapterSource).not.toContain("fn run_provider");
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyStartRequest {\n        request,",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "attach_reply_disallowed_tools",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "attach_reply_provider_wire_shape",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "provider_request_wire_support_issue",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeReplyProviderStreamStart::new",
+    );
+    expect(asterReplyAdapterSource).not.toContain("&provider_start");
+    expect(asterReplyAdapterSource).not.toContain(
       "RuntimeReplyStartRequest {\n        request,",
     );
     expect(asterReplyAdapterSource).not.toContain(
       "RuntimeReplyProviderRequestWireShape::TURN_CONTEXT_METADATA_KEY",
     );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderRequestWireShape::TURN_CONTEXT_METADATA_KEY",
+    );
     expect(asterReplyAdapterSource).not.toContain(
+      'entry("tool_scope".to_string())',
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
       'entry("tool_scope".to_string())',
     );
     expect(asterReplyAdapterSource).not.toContain(
       'entry("disallowed_tools".to_string())',
     );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      'entry("disallowed_tools".to_string())',
+    );
     expect(asterReplyAdapterSource).not.toContain(
       "serde_json::to_value(wire_shape)",
     );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "serde_json::to_value(wire_shape)",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "fn aster_compat_provider_supports_responses_lite_wire",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "fn aster_compat_provider_supports_responses_lite_wire",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "unsupported_aster_compat_wire_shape_error",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "unsupported_aster_compat_wire_shape_error",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeProviderBackend::Current",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeProviderBackend::Current",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeProviderBackend::AsterCompat",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeProviderBackend::AsterCompat",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      'provider.identity.provider_name == "openai"',
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      'provider.identity.provider_name == "openai"',
+    );
+    expect(asterReplyAdapterSource).not.toContain("uses_responses_api");
+    expect(asterReplyBackendAdapterSource).not.toContain("uses_responses_api");
     expect(asterReplyAdapterSource).not.toContain(
       "RuntimeReplyMessage::from_attempt_input",
     );
@@ -3119,14 +3799,28 @@ describe("aster migration boundary", () => {
     expect(asterReplyAdapterSource).not.toContain(
       "input_modality_policy_allows_image_input",
     );
-    expect(asterReplyAdapterSource).toContain("lower_aster_reply_message");
+    expect(asterReplyBackendAdapterSource).toContain(
+      "lower_aster_reply_message",
+    );
+    expect(asterReplyAdapterSource).not.toContain("lower_aster_reply_message");
+    expect(asterReplyAdapterSource).not.toContain("Message::user()");
+    expect(asterReplyAdapterSource).not.toContain("Message::assistant()");
+    expect(asterReplyAdapterSource).not.toContain(
+      "MessageContent::ActionRequired",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "ActionRequiredData::ElicitationResponse",
+    );
     expect(asterReplyAdapterSource).not.toContain(
       "validate_reply_message_modalities",
     );
     expect(asterReplyAdapterSource).not.toContain(
       "fn build_aster_user_message",
     );
-    expect(asterReplyAdapterSource).toContain("RuntimeReplyStreamEvent");
+    expect(asterReplyBackendAdapterSource).toContain(
+      "RuntimeReplyBackend<RuntimeAgentEvent>",
+    );
+    expect(asterReplyAdapterSource).not.toContain("RuntimeReplyStreamEvent");
     expect(asterReplyAdapterSource).not.toContain(
       "struct ActionRequiredResponseInput",
     );
@@ -3137,15 +3831,77 @@ describe("aster migration boundary", () => {
     expect(asterReplyAdapterSource).not.toContain(
       "enum RuntimeReplyStreamEvent",
     );
-    expect(asterReplyAdapterSource).toContain("project_aster_reply_stream");
-    expect(asterReplyAdapterSource).toContain("AsterEventProjector::new");
-    expect(asterReplyAdapterSource).toContain(
+    expect(asterReplyBackendAdapterSource).toContain(
+      "project_aster_reply_stream",
+    );
+    expect(asterReplyAdapterSource).not.toContain("project_aster_reply_stream");
+    expect(asterReplyAdapterSource).not.toContain("AsterEventProjector::new");
+    expect(asterReplyAdapterSource).not.toContain(
       "agent_runtime::event_stream::EventProjector",
     );
-    expect(asterReplyAdapterSource).toContain("SuppressedInlineProviderError");
-    expect(asterReplyAdapterSource).toContain("ProviderStreamEvent");
-    expect(asterReplyAdapterSource).toContain(
+    expect(asterReplyAdapterSource).not.toContain(
       "extract_inline_agent_provider_error",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "provider_stream_event_from_aster_message",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "struct AsterReplyStreamProjector",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "impl RuntimeReplyStreamProjector<AsterAgentEvent, RuntimeAgentEvent>",
+    );
+    expect(asterReplyStreamAdapterSource).toContain("AsterEventProjector::new");
+    expect(asterReplyStreamAdapterSource).toContain(
+      "agent_runtime::event_stream::EventProjector",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "RuntimeReplyStreamProjection::from_parts",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "RuntimeReplyStreamEvent::ProviderStreamEvent",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "suppressed_inline_provider_error",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "inline_provider_error_from_aster_message",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "extract_inline_agent_provider_error",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "provider_stream_event_from_aster_message",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(".reply(");
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "to_aster_session_config",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "pub(super) async fn start_aster_reply_stream",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "RuntimeReplyStartRequest",
+    );
+    expect(asterReplyBackendAdapterSource).toContain("to_aster_session_config");
+    expect(asterReplyBackendAdapterSource).toContain(".reply(");
+    expect(asterReplyBackendAdapterSource).toContain(
+      ".stream_reply_with_agent(",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "AsterEventProjector::new",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyStreamProjector",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "RuntimeReplyStreamProjector",
+    );
+    expect(asterReplyMessageAdapterSource).not.toContain(
+      "RuntimeReplyStreamProjector",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "MessageContent::ActionRequired",
     );
     expect(asterReplyAdapterSource).toContain(
       "stream_runtime_reply_with_policy",
@@ -3153,22 +3909,22 @@ describe("aster migration boundary", () => {
     expect(asterReplyAdapterSource).toContain(
       "stream_runtime_reply_with_configured_provider",
     );
-    expect(asterReplyAdapterSource).toContain(
+    expect(asterReplyBackendAdapterSource).toContain(
       "provider: Option<ConfiguredReplyProvider>",
     );
     expect(asterReplyAdapterSource).toContain("with_reply_provider");
-    expect(asterReplyAdapterSource).toContain("uses_pinned_provider");
+    expect(asterReplyBackendAdapterSource).toContain("uses_pinned_provider");
     expect(asterReplyAdapterSource).toContain("emit_runtime_status");
     expect(asterReplyAdapterSource).toContain(
       "persist_cancelled_turn_context_marker",
     );
     expect(asterReplyAdapterSource).not.toContain("tool_registry");
-    expect(asterReplyAdapterSource).toContain("start_aster_reply_stream");
+    expect(asterReplyBackendAdapterSource).toContain(
+      "start_aster_reply_stream",
+    );
     expect(asterReplyAdapterSource).toContain("to_aster_session_config");
-    expect(asterReplyAdapterSource).toContain(".reply(");
-    expect(asterReplyAdapterSource).toContain(".stream_reply_with_agent(");
-    expect(asterReplyAdapterSource).toContain("Message::user()");
-    expect(asterReplyAdapterSource).toContain("MessageContent::ActionRequired");
+    expect(asterReplyAdapterSource).not.toContain(".reply(");
+    expect(asterReplyAdapterSource).not.toContain(".stream_reply_with_agent(");
     expect(asterReplyAdapterSource).toContain("SessionManager::add_message");
     expect(asterEventAdapterSource).toContain("project_aster_runtime_event");
     expect(asterEventAdapterSource).toContain(
@@ -3519,6 +4275,17 @@ describe("aster migration boundary", () => {
       "runtime_native_tool_overlay_tool_names",
     );
     expect(currentOwnerSource).toContain(
+      "pub struct RuntimeNativeToolRegistration",
+    );
+    expect(currentOwnerSource).toContain("pub struct RuntimeNativeToolSurface");
+    expect(currentOwnerSource).toContain(
+      "runtime_native_tool_overlay_registrations",
+    );
+    expect(currentOwnerSource).toContain("runtime_native_tool_surface");
+    expect(currentOwnerSource).toContain(
+      "RuntimeNativeToolRegistrationOwner::NativeDispatch",
+    );
+    expect(currentOwnerSource).toContain(
       "runtime_native_tool_registration_allowlist",
     );
     expect(currentOwnerSource).toContain("RuntimeNativeToolOverlay::ViewImage");
@@ -3618,7 +4385,12 @@ describe("aster migration boundary", () => {
     expect(vendorToolsModSource).not.toContain(
       'config.allows_tool("ViewImage")',
     );
-    expect(nativeOverlaySource).toContain("runtime_native_tool_overlay_tools");
+    expect(nativeOverlaySource).toContain(
+      "runtime_native_tool_overlay_registrations",
+    );
+    expect(nativeOverlaySource).not.toContain(
+      "for overlay_tool in runtime_native_tool_overlay_tools()",
+    );
     expect(nativeOverlaySource).toContain("create_view_image_tool");
     expect(nativeOverlaySource).toContain("create_sleep_tool");
     expect(nativeOverlaySource).toContain("create_update_plan_tool");
@@ -3659,7 +4431,11 @@ describe("aster migration boundary", () => {
       (filePath) => {
         const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
         const productionSource = source.split("#[cfg(test)]")[0] ?? source;
-        return !productionSource.includes("execute_runtime_tool(");
+        return (
+          !productionSource.includes("execute_runtime_tool(") &&
+          !productionSource.includes("RuntimeNativeToolAdapter::new") &&
+          !productionSource.includes("RuntimeDefinitionToolAdapter::new")
+        );
       },
     );
 
@@ -3667,13 +4443,227 @@ describe("aster migration boundary", () => {
     expect(bridgeSource).toContain("fn tool_result_from_runtime");
     expect(bridgeSource).toContain("fn runtime_error_to_tool_error");
     expect(bridgeSource).toContain("pub(crate) async fn execute_runtime_tool");
+    expect(bridgeSource).toContain(
+      "pub(crate) struct RuntimeNativeToolAdapter",
+    );
+    expect(bridgeSource).toContain("impl Tool for RuntimeNativeToolAdapter");
+    expect(bridgeSource).toContain(
+      "pub(crate) struct RuntimeDefinitionToolAdapter",
+    );
+    expect(bridgeSource).toContain(
+      "impl Tool for RuntimeDefinitionToolAdapter",
+    );
     expect(
       missingBridgeCalls,
-      "已迁 native tool 的 Aster Tool wrapper 必须通过 runtime_tool_bridge 执行 current RuntimeToolExecutor",
+      "已迁 native tool 的 Aster Tool wrapper 必须通过 runtime_tool_bridge 执行 current RuntimeToolExecutor，stateless wrapper 只能创建 RuntimeNativeToolAdapter",
     ).toEqual([]);
     expect(
       adapterLeaks,
       "已迁 native tool wrapper 只能保留权限/别名/turn context 适配；Aster ToolContext/ToolResult/ToolError 转换必须集中在 runtime_tool_bridge，迁出 reply loop 后整体删除",
+    ).toEqual([]);
+  });
+
+  it("已迁 stateless native tool wrapper 的模型可见 surface 必须来自 tool-runtime", () => {
+    const bridgePath =
+      "lime-rs/crates/agent/src/native_tools/runtime_tool_bridge.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/tool-runtime/src/native_overlay.rs";
+    const bridgeSource = readFileSync(join(REPO_ROOT, bridgePath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const statelessWrapperFiles = [
+      "lime-rs/crates/agent/src/native_tools/sleep.rs",
+      "lime-rs/crates/agent/src/native_tools/view_image.rs",
+      "lime-rs/crates/agent/src/native_tools/update_plan.rs",
+      "lime-rs/crates/agent/src/native_tools/web_retrieval.rs",
+      "lime-rs/crates/agent/src/tools/apply_patch_tool.rs",
+      "lime-rs/crates/agent/src/tools/skill_search_tool.rs",
+    ];
+    const forbiddenSurfaceSnippets = [
+      "sleep_tool_definition",
+      "view_image_tool_definition",
+      "update_plan_definition",
+      "web_fetch_tool_definition",
+      "web_search_tool_definition",
+      "apply_patch_tool_definition",
+      "skill_search_tool_definition",
+      "CLOCK_SLEEP_TOOL_NAME",
+      "VIEW_IMAGE_LEGACY_ALIASES",
+      "UPDATE_PLAN_LEGACY_ALIASES",
+      '"ApplyPatchTool"',
+      '"SkillSearchTool"',
+    ];
+    const missingAdapterRefs = statelessWrapperFiles.filter((filePath) => {
+      const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+      const productionSource = source.split("#[cfg(test)]")[0] ?? source;
+      return !productionSource.includes("RuntimeNativeToolAdapter::new");
+    });
+    const wrapperImplLeaks = statelessWrapperFiles.flatMap((filePath) => {
+      const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+      const productionSource = source.split("#[cfg(test)]")[0] ?? source;
+      return [
+        "impl Tool for",
+        "runtime_native_tool_surface_ref",
+        "runtime_native_tool_options",
+      ]
+        .filter((snippet) => productionSource.includes(snippet))
+        .map((snippet) => `${filePath}: ${snippet}`);
+    });
+    const surfaceLeaks = statelessWrapperFiles.flatMap((filePath) => {
+      const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+      const productionSource = source.split("#[cfg(test)]")[0] ?? source;
+      return forbiddenSurfaceSnippets
+        .filter((snippet) => productionSource.includes(snippet))
+        .map((snippet) => `${filePath}: ${snippet}`);
+    });
+
+    expect(currentOwnerSource).toContain("pub struct RuntimeNativeToolSurface");
+    expect(currentOwnerSource).toContain("runtime_native_tool_surface");
+    expect(currentOwnerSource).toContain(
+      "RuntimeNativeToolOverlay::Skill => None",
+    );
+    expect(bridgeSource).toContain("runtime_native_tool_surface_ref");
+    expect(bridgeSource).toContain("runtime_native_tool_options");
+    expect(
+      missingAdapterRefs,
+      "stateless Aster Tool wrapper 只能创建统一 RuntimeNativeToolAdapter，不能继续自持模型可见 spec 或 Tool trait 样板",
+    ).toEqual([]);
+    expect(
+      wrapperImplLeaks,
+      "stateless Aster Tool wrapper 不得恢复本地 impl Tool、surface 读取或 options 读取；这些兼容逻辑必须集中在 runtime_tool_bridge",
+    ).toEqual([]);
+    expect(
+      surfaceLeaks,
+      "stateless Aster Tool wrapper 不得恢复各自 *_tool_definition / legacy alias 常量或硬编码 alias 作为模型可见 surface 事实源",
+    ).toEqual([]);
+  });
+
+  it("Skill gate session enable 规则必须归属 tool-runtime current owner", () => {
+    const currentOwnerPath = "lime-rs/crates/tool-runtime/src/skill_gate.rs";
+    const currentContractPath =
+      "lime-rs/crates/tool-runtime/src/skill_runtime_contract.rs";
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const agentWrapperPath =
+      "lime-rs/crates/agent/src/tools/skill_tool_gate.rs";
+    const agentToolsModPath = "lime-rs/crates/agent/src/tools/mod.rs";
+    const appServerRuntimeEnablePath =
+      "lime-rs/crates/app-server/src/runtime_backend/skill_runtime_enable.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const currentContractSource = readFileSync(
+      join(REPO_ROOT, currentContractPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const agentToolsModSource = readFileSync(
+      join(REPO_ROOT, agentToolsModPath),
+      "utf8",
+    );
+    const appServerRuntimeEnableSource = readFileSync(
+      join(REPO_ROOT, appServerRuntimeEnablePath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "struct SkillToolSessionAccess",
+      "fn session_access_store",
+      "HashMap<String, SkillToolSessionAccess>",
+      "Mutex<HashMap",
+      "fn skill_name_gate_aliases",
+      "fn workspace_skill_source_for_session_skill",
+      "fn is_skill_allowed_for_session",
+      "MODALITY_RUNTIME_CONTRACTS_JSON",
+      "MODALITY_EXECUTION_PROFILES_JSON",
+      "struct SkillRuntimeContractSpec",
+      "fn current_skill_runtime_contract_spec",
+      "fn build_current_runtime_contract",
+      "fn validate_runtime_contract_preflight",
+      "fn normalize_skill_tool_params",
+      "fn normalize_skill_invocation_params",
+      "serde_json::to_string(&args)",
+      "LIMECORE_POLICY_SNAPSHOT_STATUS_LOCAL_DEFAULTS_EVALUATED",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod skill_gate;");
+    expect(currentLibSource).toContain("pub mod skill_runtime_contract;");
+    expect(currentOwnerSource).toContain(
+      "pub struct SkillToolSessionSkillSource",
+    );
+    expect(currentOwnerSource).toContain("set_skill_tool_session_access");
+    expect(currentOwnerSource).toContain(
+      "set_skill_tool_session_allowed_skill_sources",
+    );
+    expect(currentOwnerSource).toContain("is_skill_tool_session_skill_allowed");
+    expect(currentOwnerSource).toContain(
+      "workspace_skill_source_for_session_skill",
+    );
+    expect(currentOwnerSource).toContain("skill_tool_disabled_message");
+    expect(currentOwnerSource).toContain("pub const SKILL_TOOL_NAME");
+    expect(currentOwnerSource).toContain("pub const SKILL_TOOL_DESCRIPTION");
+    expect(currentOwnerSource).toContain("pub fn skill_tool_input_schema");
+    expect(currentOwnerSource).toContain(
+      "pub fn normalize_skill_invocation_params",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(currentOwnerSource).not.toContain("SkillTool::new");
+    expect(currentContractSource).toContain(
+      "pub struct SkillRuntimeContractMetadata",
+    );
+    expect(currentContractSource).toContain(
+      "pub fn build_skill_runtime_contract_metadata",
+    );
+    expect(currentContractSource).toContain("modalityRuntimeContracts.json");
+    expect(currentContractSource).toContain("modalityExecutionProfiles.json");
+    expect(currentContractSource).not.toContain("aster::");
+    expect(currentContractSource).not.toContain("ToolResult");
+    expect(agentWrapperSource).toContain("use tool_runtime::skill_gate");
+    expect(agentWrapperSource).toContain("SKILL_TOOL_NAME");
+    expect(agentWrapperSource).toContain("SKILL_TOOL_DESCRIPTION");
+    expect(agentWrapperSource).toContain("skill_tool_input_schema");
+    expect(agentWrapperSource).toContain("normalize_skill_invocation_params");
+    expect(agentWrapperSource).not.toContain(
+      "pub use tool_runtime::skill_gate",
+    );
+    expect(agentWrapperSource).toContain(
+      "use tool_runtime::skill_runtime_contract",
+    );
+    expect(agentToolsModSource).toContain(
+      "pub use skill_tool_gate::LimeSkillTool",
+    );
+    expect(agentToolsModSource).not.toContain(
+      "is_skill_tool_session_skill_allowed",
+    );
+    expect(agentToolsModSource).not.toContain("set_skill_tool_session_access");
+    expect(agentToolsModSource).not.toContain("SkillToolSessionSkillSource");
+    expect(agentWrapperSource).toContain("inner: SkillTool");
+    expect(agentWrapperSource).toContain("impl Tool for LimeSkillTool");
+    expect(agentWrapperSource).not.toContain("self.inner.name()");
+    expect(agentWrapperSource).not.toContain("self.inner.input_schema()");
+    expect(appServerRuntimeEnableSource).toContain(
+      "use tool_runtime::skill_gate::{",
+    );
+    expect(appServerRuntimeEnableSource).not.toContain(
+      "use lime_agent::tools::{",
+    );
+    expect(appServerRuntimeEnableSource).not.toContain(
+      "use lime_agent::tools::is_skill_tool_session_skill_allowed",
+    );
+    expect(
+      wrapperLeaks,
+      "SkillTool session enable / allowlist / source metadata gate 必须归属 tool-runtime；lime-agent 只能保留临时 Aster SkillTool 执行壳",
     ).toEqual([]);
   });
 
@@ -3827,8 +4817,8 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).toContain("not allowed in Plan mode");
     expect(currentOwnerSource).not.toContain("aster::");
     expect(currentOwnerSource).not.toContain("struct UpdatePlanTool");
-    expect(agentWrapperSource).toContain("struct PlanUpdateAdapter");
-    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).toContain("RuntimeNativeToolAdapter::new");
+    expect(agentWrapperSource).toContain("with_turn_context_provider");
     expect(agentWrapperSource).not.toContain(
       "runtime_plan_update_executor_handle",
     );
@@ -3912,8 +4902,8 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).toContain("duration_ms");
     expect(currentOwnerSource).toContain("deny_unknown_fields");
     expect(currentOwnerSource).not.toContain("aster::");
-    expect(agentWrapperSource).toContain("struct ClockSleepAdapter");
-    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).toContain("RuntimeNativeToolAdapter::new");
+    expect(agentWrapperSource).not.toContain("impl Tool for");
     expect(agentWrapperSource).not.toContain("runtime_sleep_executor_handle");
     expect(agentWrapperSource).toContain("check_runtime_sleep_permissions");
     expect(agentWrapperSource).toContain("SLEEP_TOOL_NAME");
@@ -3993,8 +4983,8 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).toContain("image_url");
     expect(currentOwnerSource).toContain("deny_unknown_fields");
     expect(currentOwnerSource).not.toContain("aster::");
-    expect(agentWrapperSource).toContain("struct ImageViewAdapter");
-    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).toContain("RuntimeNativeToolAdapter::new");
+    expect(agentWrapperSource).not.toContain("impl Tool for");
     expect(agentWrapperSource).not.toContain(
       "runtime_view_image_executor_handle",
     );
@@ -4073,7 +5063,9 @@ describe("aster migration boundary", () => {
     );
     expect(currentOwnerSource).toContain("apply_patch_to_workdir");
     expect(currentOwnerSource).not.toContain("aster::");
-    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).toContain("create_apply_patch_tool");
+    expect(agentWrapperSource).toContain("RuntimeNativeToolAdapter::new");
+    expect(agentWrapperSource).not.toContain("impl Tool for");
     expect(agentWrapperSource).not.toContain(
       "runtime_apply_patch_executor_handle",
     );
@@ -4142,7 +5134,10 @@ describe("aster migration boundary", () => {
     );
     expect(currentOwnerSource).toContain("search_agent_skills");
     expect(currentOwnerSource).not.toContain("aster::");
-    expect(agentWrapperSource).toContain("runtime_native_dispatch_handle");
+    expect(agentWrapperSource).toContain("create_skill_search_tool");
+    expect(agentWrapperSource).toContain("RuntimeNativeToolAdapter::new");
+    expect(agentWrapperSource).toContain("with_turn_context_provider");
+    expect(agentWrapperSource).not.toContain("impl Tool for");
     expect(agentWrapperSource).not.toContain(
       "runtime_skill_search_executor_handle",
     );
@@ -4235,6 +5230,10 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).not.toContain("aster::");
     expect(agentWrapperSource).toContain("NativeDispatch::builder");
     expect(agentWrapperSource).toContain("with_memory_store_gateway");
+    expect(agentWrapperSource).toContain("RuntimeDefinitionToolAdapter::new");
+    expect(agentWrapperSource).toContain("with_max_retries(0)");
+    expect(agentWrapperSource).not.toContain("struct MemoryStoreTool");
+    expect(agentWrapperSource).not.toContain("impl Tool for");
     expect(agentWrapperSource).not.toContain(
       "runtime_memory_store_executor_handle",
     );
@@ -4334,6 +5333,15 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).not.toContain("aster::");
     expect(agentWrapperProductionSource).toContain("NativeDispatch::builder");
     expect(agentWrapperProductionSource).toContain("with_image_task_gateway");
+    expect(agentWrapperProductionSource).toContain(
+      "RuntimeDefinitionToolAdapter::new",
+    );
+    expect(agentWrapperProductionSource).toContain(
+      "with_turn_context_provider",
+    );
+    expect(agentWrapperProductionSource).toContain("with_max_retries(0)");
+    expect(agentWrapperProductionSource).not.toContain("struct ImageTaskTool");
+    expect(agentWrapperProductionSource).not.toContain("impl Tool for");
     expect(agentWrapperProductionSource).not.toContain(
       "runtime_image_task_executor_handle",
     );
@@ -5523,14 +6531,15 @@ describe("aster migration boundary", () => {
     expect(toolsModSource).not.toContain("WebSearchTool::new()");
     expect(toolsModSource).not.toContain("mod web_fetch_content;");
     expect(limeAdapterSource).toContain("use tool_runtime::web_fetch::{");
-    expect(limeAdapterSource).toContain("runtime_native_dispatch_handle");
+    expect(limeAdapterSource).toContain("RuntimeNativeToolAdapter::new");
+    expect(limeAdapterSource).toContain("with_turn_context_provider");
     expect(limeAdapterSource).not.toContain(
       "runtime_web_fetch_executor_handle",
     );
     expect(limeAdapterSource).not.toContain(
       "runtime_web_search_executor_handle",
     );
-    expect(limeAdapterSource).toContain("execute_current_tool(");
+    expect(limeAdapterSource).not.toContain("execute_current_tool(");
     expect(limeAdapterSource).toContain("create_web_fetch_tool");
     expect(limeAdapterSource).toContain("create_web_search_tool");
     expect(overlaySource).toContain("RuntimeNativeToolOverlay::WebFetch");

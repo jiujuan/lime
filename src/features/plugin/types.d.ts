@@ -265,11 +265,15 @@ export interface PluginRuntimeToolBinding {
     capabilities: string[];
     required?: boolean;
 }
+export interface PluginRuntimeMcpCallProof {
+    arguments: Record<string, unknown>;
+}
 export interface PluginRuntimeMcpBinding {
     serverId: string;
     toolKey: string;
     provider: string;
     required?: boolean;
+    callProof?: PluginRuntimeMcpCallProof;
 }
 export interface PluginRuntimeWorkflowBinding {
     workflowKey: string;

@@ -117,6 +117,65 @@ describe("electron app-server assets", () => {
     );
   });
 
+  it("准备 packaged resources 时忽略 APP_SERVER_BIN 作为复制源", async () => {
+    const calls = [];
+    const outputRoot = path.resolve("/repo/lime/dist-electron");
+    const result = await prepareElectronAppServerAssets({
+      repoRoot: "/repo/lime",
+      outputRoot,
+      platform: "darwin",
+      arch: "arm64",
+      env: {
+        APP_SERVER_BIN:
+          "/repo/lime/dist-electron/app-server/darwin-arm64/app-server",
+        CARGO_TARGET_DIR: "/repo/lime/lime-rs/target",
+      },
+      resolveBinary: (options) => {
+        expect(options.env.APP_SERVER_BIN).toBeUndefined();
+        expect(options.env.CARGO_TARGET_DIR).toBe(
+          "/repo/lime/lime-rs/target",
+        );
+        return "/repo/lime/lime-rs/target/debug/app-server";
+      },
+      readPackageJson: async () => ({ version: "1.59.0" }),
+      makeDir: async (...args) => calls.push(["mkdir", ...args]),
+      copy: async (...args) => calls.push(["copy", ...args]),
+      clearLaunchBlockingXattrs: async (...args) => calls.push(["xattr", ...args]),
+      getStat: async () => ({ mode: 0o755 }),
+      changeMode: async (...args) => calls.push(["chmod", ...args]),
+      write: async (...args) => calls.push(["write", ...args]),
+      sha256File: async () => "sha256",
+    });
+
+    expect(result.sourceBinary).toBe(
+      path.resolve("/repo/lime/lime-rs/target/debug/app-server"),
+    );
+    expect(calls[1]).toEqual([
+      "copy",
+      path.resolve("/repo/lime/lime-rs/target/debug/app-server"),
+      path.resolve("/repo/lime/dist-electron/app-server/darwin-arm64/app-server"),
+    ]);
+  });
+
+  it("拒绝把 packaged destination 当作 sourceBinary", async () => {
+    const destination = path.resolve(
+      "/repo/lime/dist-electron/app-server/darwin-arm64/app-server",
+    );
+
+    await expect(
+      prepareElectronAppServerAssets({
+        repoRoot: "/repo/lime",
+        outputRoot: path.resolve("/repo/lime/dist-electron"),
+        platform: "darwin",
+        arch: "arm64",
+        sourceBinary: destination,
+        readPackageJson: async () => ({ version: "1.59.0" }),
+      }),
+    ).rejects.toThrow(
+      "Electron app-server asset source must not equal packaged destination",
+    );
+  });
+
   it("runtime env 优先使用显式 APP_SERVER_BIN", () => {
     expect(
       resolveElectronAppServerRuntimeEnv({

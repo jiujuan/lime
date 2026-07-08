@@ -7,7 +7,6 @@ Agent 聊天界面的 UI 组件集合。
 | 文件                             | 说明                                                                          |
 | -------------------------------- | ----------------------------------------------------------------------------- |
 | `ChatNavbar.tsx`                 | 聊天顶部导航栏                                                                |
-| `ChatSidebar.tsx`                | 旧会话侧栏组件，已退出 WorkspaceShell 主路径，仅保留为 legacy/test-only       |
 | `CanvasWorkbenchLayout.tsx`      | 画布顶部标签壳，统一承载结果、文件、Subagents 进展与动态文件标签              |
 | `CanvasSessionOverviewPanel.tsx` | 解耦后的会话过程面板，用于从运行时注入 turn、activity、A2UI、queue 等过程视图 |
 | `EmptyState.tsx`                 | 空状态占位组件                                                                |

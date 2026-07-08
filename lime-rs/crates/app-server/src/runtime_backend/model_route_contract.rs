@@ -7,7 +7,7 @@ use crate::ExecutionRequest;
 use agent_protocol::ModelId;
 use agent_runtime::turn_executor::TurnProviderConfiguration;
 use app_server_protocol::{
-    CapabilitySnapshot, ModelRefSource, ModelTaskKind, ModelTaskRequest, ModelTaskSource,
+    AuthKind, CapabilitySnapshot, ModelRefSource, ModelTaskKind, ModelTaskRequest, ModelTaskSource,
     ProtocolKind, ResolvedModelRoute,
 };
 use lime_agent::{
@@ -112,6 +112,9 @@ pub(super) fn provider_configuration_from_runtime(
     resolved_route: &ResolvedModelRoute,
     direct_provider_config: Option<SessionProviderConfig>,
 ) -> ModelRouteProviderConfiguration {
+    let direct_provider_config = direct_provider_config
+        .or_else(|| no_auth_direct_provider_config_from_route(selection, resolved_route));
+
     ModelRouteProviderConfiguration {
         turn_provider: TurnProviderConfiguration {
             route: model_route_from_runtime(selection, resolved_route),
@@ -119,6 +122,44 @@ pub(super) fn provider_configuration_from_runtime(
         },
         route_protocol: Some(resolved_route.protocol.clone()),
         direct_provider_config,
+    }
+}
+
+fn no_auth_direct_provider_config_from_route(
+    selection: &RuntimeModelSelection,
+    resolved_route: &ResolvedModelRoute,
+) -> Option<SessionProviderConfig> {
+    if resolved_route.auth.kind != AuthKind::NoAuth {
+        return None;
+    }
+
+    let provider_name = no_auth_provider_name_from_protocol(&resolved_route.protocol)?;
+    let base_url = resolved_route
+        .endpoint
+        .base_url
+        .as_deref()
+        .and_then(|value| non_empty(Some(value)))?;
+
+    Some(SessionProviderConfig {
+        provider_name: provider_name.to_string(),
+        provider_selector: Some(selection.provider.clone()),
+        model_name: selection.model.clone(),
+        api_key: None,
+        base_url: Some(base_url),
+        credential_uuid: None,
+        reasoning_effort: selection.reasoning_effort.clone(),
+        route_protocol: Some(resolved_route.protocol.clone()),
+        toolshim: false,
+        toolshim_model: None,
+        model_capabilities: Some(serde_json::to_value(&resolved_route.capability_snapshot).ok()?),
+    })
+}
+
+fn no_auth_provider_name_from_protocol(protocol: &ProtocolKind) -> Option<&'static str> {
+    match protocol {
+        ProtocolKind::OpenaiChat | ProtocolKind::OpenaiResponses => Some("openai"),
+        ProtocolKind::OllamaChat => Some("ollama"),
+        _ => None,
     }
 }
 
@@ -444,5 +485,89 @@ mod tests {
                 .and_then(Value::as_str),
             Some("coding")
         );
+    }
+
+    #[test]
+    fn provider_configuration_projects_no_auth_openai_route_to_direct_config() {
+        let selection = RuntimeModelSelection {
+            provider: "lime-hub".to_string(),
+            model: "agnes-2.0-flash".to_string(),
+            source: "runtime_options",
+            reasoning_effort: None,
+        };
+        let task_request = build_model_task_request(ModelTaskRequestInput {
+            task_kind: ModelTaskKind::Chat,
+            source: ModelTaskSource::AgentTurn,
+            provider_id: Some(selection.provider.clone()),
+            model_id: Some(selection.model.clone()),
+            model_ref_source: ModelRefSource::RuntimeOptions,
+            modality_contract_key: Some("chat".to_string()),
+            routing_slot: Some("coding".to_string()),
+            task_families: vec!["chat".to_string()],
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["text".to_string()],
+            runtime_features: vec!["streaming".to_string()],
+            capabilities: vec!["streaming".to_string()],
+            session_id: None,
+            thread_id: None,
+            turn_id: None,
+            content_id: None,
+            trace_id: None,
+        });
+        let routing_payload = json!({
+            "providerReadiness": {
+                "ready": true,
+                "status": "ready"
+            },
+            "modelRegistry": {
+                "source": "provider_declared_model",
+                "reasonCode": "matched_provider_custom_models",
+                "modelCapabilities": {
+                    "capabilities": {
+                        "streaming": true
+                    },
+                    "taskFamilies": ["chat"],
+                    "inputModalities": ["text"],
+                    "outputModalities": ["text"],
+                    "runtimeFeatures": ["streaming"]
+                }
+            }
+        });
+        let route_seed = SessionProviderConfig {
+            provider_name: "openai".to_string(),
+            provider_selector: Some("lime-hub".to_string()),
+            model_name: "agnes-2.0-flash".to_string(),
+            api_key: None,
+            base_url: Some("https://llm.limeai.run/v1#lime_tenant_id=tenant-0001".to_string()),
+            credential_uuid: None,
+            reasoning_effort: None,
+            route_protocol: Some(ProtocolKind::OpenaiChat),
+            toolshim: false,
+            toolshim_model: None,
+            model_capabilities: None,
+        };
+        let resolved_route = resolved_route_from_runtime(
+            &task_request,
+            &selection,
+            &routing_payload,
+            None,
+            Some(&route_seed),
+        );
+
+        let configuration = provider_configuration_from_runtime(&selection, &resolved_route, None);
+        let direct_config = configuration
+            .direct_provider_config
+            .expect("no-auth route should create direct provider config");
+
+        assert_eq!(resolved_route.auth.kind, AuthKind::NoAuth);
+        assert_eq!(direct_config.provider_name, "openai");
+        assert_eq!(direct_config.provider_selector.as_deref(), Some("lime-hub"));
+        assert_eq!(direct_config.model_name, "agnes-2.0-flash");
+        assert!(direct_config.api_key.is_none());
+        assert_eq!(
+            direct_config.base_url.as_deref(),
+            Some("https://llm.limeai.run/v1#lime_tenant_id=tenant-0001")
+        );
+        assert_eq!(direct_config.route_protocol, Some(ProtocolKind::OpenaiChat));
     }
 }

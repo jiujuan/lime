@@ -3,8 +3,8 @@
 use super::super::*;
 use super::tests_support::*;
 use app_server_protocol::{
-    JsonRpcMessage, RequestId, METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT,
-    METHOD_EXECUTION_PROCESS_START, METHOD_EXECUTION_PROCESS_STATUS,
+    JsonRpcMessage, METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT, METHOD_EXECUTION_PROCESS_START,
+    METHOD_EXECUTION_PROCESS_STATUS, RequestId,
 };
 use serde_json::json;
 use tokio::time::Duration;

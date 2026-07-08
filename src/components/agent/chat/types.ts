@@ -75,6 +75,24 @@ export interface ImageRuntimeContractSnapshot {
   limecorePolicyEvaluationPendingRefs?: string[];
 }
 
+export interface ImageGenerationSoulMetadata {
+  surface?: string | null;
+  phase?: string | null;
+  styleLevel?: string | null;
+  riskLevel?: string | null;
+  toneVariant?: string | null;
+  profileId?: string | null;
+  packId?: string | null;
+  titleStyleLevel?: string | null;
+  parameterSummaryStyleLevel?: string | null;
+  runningStatusStyleLevel?: string | null;
+  assistantIntroStyleLevel?: string | null;
+  completionCaptionStyleLevel?: string | null;
+  mediaArtifactStyleLevel?: string | null;
+  formalArtifactVoiceSource?: string | null;
+  productSoulDefault?: string | null;
+}
+
 export interface MessageImageWorkbenchPreview {
   taskId: string;
   prompt: string;
@@ -106,6 +124,7 @@ export interface MessageImageWorkbenchPreview {
   placeholderText?: string | null;
   runtimeContract?: ImageRuntimeContractSnapshot | null;
   workflowRun?: ImageCommandRunSnapshot | null;
+  soulMetadata?: ImageGenerationSoulMetadata | null;
 }
 
 export interface ImageCommandRunSnapshot {
@@ -287,6 +306,7 @@ export interface MessageMediaReference {
   mimeType?: string;
   title?: string;
   caption?: string;
+  sidecarRef?: unknown;
   sourceUri?: string;
   sourcePath?: string;
   previewUrl?: string;

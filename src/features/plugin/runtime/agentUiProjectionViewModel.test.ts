@@ -6,6 +6,7 @@ import {
   buildPluginRunProjectionViewModel,
   buildPluginRunProjectionViewModelFromStandardState,
 } from "./agentUiProjectionViewModel";
+import { buildSharedProjectionInput } from "../ui/AgentRunHostDrawerProjectionInput";
 
 describe("buildPluginRunProjectionViewModel", () => {
   it("按 AgentUI sequence 保留 reasoning / tool / text 的穿插顺序", () => {
@@ -468,6 +469,100 @@ describe("buildPluginRunProjectionViewModel", () => {
       providerName: "deepseek",
       modelName: "deepseek-v4-flash",
       tokenText: "120 tokens",
+    });
+  });
+
+  it("保留 host-managed generation 的翻译后过程说明和 Soul metadata", () => {
+    const sharedInput = buildSharedProjectionInput(
+      {
+        mode: "drawer",
+        openedAt: "2026-07-08T00:00:00.000Z",
+        updatedAt: "2026-07-08T00:00:01.000Z",
+        appId: "content-factory-app",
+        taskId: "task-host-generation",
+        bridgeAction: "contentFactoryProduction",
+        runtimeProcess: {
+          terminal: true,
+          timeline: [
+            {
+              kind: "artifact",
+              title: "Host-managed generation",
+              statusText: "completed",
+              message: "Host-managed generation status updated.",
+              displayTitleKey:
+                "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.title",
+              displayMessageKey:
+                "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.message",
+              displayValues: {
+                provider: "fixture-openai",
+                model: "lime-fixture-chat",
+                outputCount: 1,
+              },
+              collapseKey: "plugin:host-managed-generation",
+              soulLifecycle: {
+                surface: "plugin_host_managed_generation",
+                phase: "after_artifact",
+                styleLevel: "L2",
+                riskLevel: "normal",
+                toneVariant: "cheeky_sassy",
+                profileId: "cheeky_sassy_executor",
+                packId: "com.lime.soul.cheeky-sassy-executor",
+              },
+              soulSurface: "plugin_host_managed_generation",
+              soulPhase: "after_artifact",
+              styleLevel: "L2",
+              riskLevel: "normal",
+              toneVariant: "cheeky_sassy",
+              profileId: "cheeky_sassy_executor",
+              packId: "com.lime.soul.cheeky-sassy-executor",
+              generationBriefBoundary: {
+                artifactBodyStyleLevel: "L3",
+                formalArtifactVoiceSource: "generation_brief_only",
+                productSoulDefault: "interaction_only",
+              },
+            },
+          ],
+        },
+      },
+      (key, params) => {
+        if (
+          key ===
+          "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.title"
+        ) {
+          return "宿主托管生成已完成";
+        }
+        if (
+          key ===
+          "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.message"
+        ) {
+          return `宿主已用 ${String(params?.provider)} / ${String(params?.model)} 生成 ${String(params?.outputCount)} 个受控产物；正文保持 Generation Brief 边界。`;
+        }
+        if (key === "plugin.apps.runtime.agentRun.timeline.event") {
+          return "运行事件";
+        }
+        return key;
+      },
+    );
+
+    const standardState = buildAgentRunStandardProjectionStateFromState(sharedInput);
+    const view = buildPluginRunProjectionViewModelFromStandardState(standardState);
+
+    expect(view.orderedParts[0]).toMatchObject({
+      kind: "status",
+      preview:
+        "宿主已用 fixture-openai / lime-fixture-chat 生成 1 个受控产物；正文保持 Generation Brief 边界。",
+    });
+    expect(standardState.readModel.events[0]?.source.payload).toMatchObject({
+      soulLifecycle: {
+        surface: "plugin_host_managed_generation",
+        phase: "after_artifact",
+        styleLevel: "L2",
+      },
+      generationBriefBoundary: {
+        artifactBodyStyleLevel: "L3",
+        formalArtifactVoiceSource: "generation_brief_only",
+        productSoulDefault: "interaction_only",
+      },
     });
   });
 });

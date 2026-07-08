@@ -181,6 +181,39 @@ describe("ModelSelector", () => {
     );
   });
 
+  it("Lime Hub 已有声明模型但无凭证时不应强制实时目录", () => {
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime Hub",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          apiHost: "https://llm.limeai.run",
+          customModels: ["gpt-5.2-pro"],
+          hasApiKey: false,
+        },
+      ],
+      loading: false,
+    });
+
+    renderModelSelector({
+      providerType: "lime-hub",
+      model: "gpt-5.2-pro",
+    });
+
+    expect(mockUseProviderModels).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "lime-hub" }),
+      expect.objectContaining({
+        returnFullMetadata: true,
+        autoLoad: true,
+        liveFetchOnly: false,
+        hasApiKey: false,
+      }),
+    );
+  });
+
   it("默认后台预加载开启时，应在未展开选择器前纠正失效持久化模型", async () => {
     const setModel = vi.fn();
 
@@ -231,6 +264,116 @@ describe("ModelSelector", () => {
       }),
     );
     expect(setModel).toHaveBeenCalledWith("gpt-5.2-codex");
+  });
+
+  it("首次自动选择 provider 时应跳过需要登录的 Lime Hub 提示", async () => {
+    const setProviderType = vi.fn();
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime 云端",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          apiHost: "https://llm.limeai.run",
+          customModels: [],
+          authStatus: "login_required",
+        },
+        {
+          key: "deepseek",
+          label: "DeepSeek",
+          registryId: "deepseek",
+          type: "openai",
+          providerId: "deepseek",
+          apiHost: "https://api.deepseek.com",
+          customModels: ["deepseek-chat"],
+        },
+      ],
+      loading: false,
+    });
+
+    renderModelSelector({
+      providerType: "",
+      model: "",
+      setProviderType,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(setProviderType).toHaveBeenCalledWith("deepseek");
+    expect(setProviderType).not.toHaveBeenCalledWith("lime-hub");
+  });
+
+  it("Lime Hub 有声明模型时应自动选中 provider 和默认模型", async () => {
+    const setProviderType = vi.fn();
+    const setModel = vi.fn();
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime Hub",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          apiHost: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+          customModels: ["gpt-5.2-pro"],
+          authStatus: "login_required",
+        },
+      ],
+      loading: false,
+    });
+
+    renderModelSelector({
+      providerType: "",
+      model: "",
+      setProviderType,
+      setModel,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(setProviderType).toHaveBeenCalledWith("lime-hub");
+    expect(setModel).toHaveBeenCalledWith("gpt-5.2-pro");
+  });
+
+  it("Lime Hub 有声明模型时应展示模型列表而不是登录阻断空态", () => {
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime Hub",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          apiHost: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+          customModels: ["gpt-5.2-pro"],
+          authStatus: "login_required",
+        },
+      ],
+      loading: false,
+    });
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.2-pro"],
+      models: [createModelMetadata("gpt-5.2-pro")],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      providerType: "lime-hub",
+      model: "gpt-5.2-pro",
+    });
+
+    clickModelSelectorTrigger(container);
+
+    const pageText = getBodyText();
+    expect(pageText).toContain("gpt-5.2-pro");
+    expect(pageText).not.toContain("登录后会自动同步 Lime Hub 的可用模型");
   });
 
   it("打开选择器后应加载数据并回退到兼容模型", () => {

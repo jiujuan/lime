@@ -112,6 +112,10 @@ function resolveProviderSelectionModel(params: {
   );
 }
 
+function hasProviderDeclaredModel(provider: ConfiguredProvider): boolean {
+  return Boolean(resolveInitialProviderModel(provider));
+}
+
 function resolveApiReasoningEffortLevels(
   model: EnhancedModelMetadata | null | undefined,
 ): ModelReasoningEffortLevel[] {
@@ -298,6 +302,20 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   }, [configuredProviders, providerType]);
   const selectedProviderLoginRequired =
     selectedProvider?.authStatus === "login_required";
+  const selectedProviderHasDeclaredModel = selectedProvider
+    ? hasProviderDeclaredModel(selectedProvider)
+    : false;
+  const selectedProviderBlocksModelLoad =
+    selectedProviderLoginRequired && !selectedProviderHasDeclaredModel;
+  const autoSelectableProviders = useMemo(
+    () =>
+      visibleProviders.filter(
+        (provider) =>
+          provider.authStatus !== "login_required" ||
+          hasProviderDeclaredModel(provider),
+      ),
+    [visibleProviders],
+  );
   const selectedProviderVisible = useMemo(
     () =>
       selectedProvider
@@ -313,9 +331,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         providerId: selectedProvider?.providerId,
         providerType: selectedProvider?.type,
         apiHost: selectedProvider?.apiHost,
+        hasApiKey: selectedProvider?.hasApiKey,
+        hasDeclaredModels: selectedProvider
+          ? hasProviderDeclaredModel(selectedProvider)
+          : false,
       }),
     [
       selectedProvider?.apiHost,
+      selectedProvider?.customModels,
+      selectedProvider?.hasApiKey,
       selectedProvider?.providerId,
       selectedProvider?.type,
     ],
@@ -325,7 +349,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     selectedProvider,
     {
       returnFullMetadata: true,
-      autoLoad: shouldLoadModels && !selectedProviderLoginRequired,
+      autoLoad: shouldLoadModels && !selectedProviderBlocksModelLoad,
       ...providerModelLoadOptions,
     },
   );
@@ -344,7 +368,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     if (
       baseModels.length > 0 ||
       !selectedProvider ||
-      selectedProviderLoginRequired ||
       !getFallbackModels
     ) {
       return baseModels;
@@ -361,7 +384,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     getFallbackModels,
     modelFilter,
     selectedProvider,
-    selectedProviderLoginRequired,
   ]);
 
   const modelOptions = useMemo(
@@ -467,14 +489,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     hasInitialized.current = true;
 
     if (!providerType.trim()) {
-      setProviderType(
-        visibleProviders[0].providerId ?? visibleProviders[0].key,
-      );
+      const nextProvider = autoSelectableProviders[0];
+      if (nextProvider) {
+        setProviderType(nextProvider.providerId ?? nextProvider.key);
+        const nextModel = resolveInitialProviderModel(nextProvider);
+        if (nextModel) {
+          setModel(nextModel);
+        }
+      } else {
+        hasInitialized.current = false;
+      }
     }
   }, [
     allowAutoProvider,
+    autoSelectableProviders,
     providerType,
     providersLoading,
+    setModel,
     setProviderType,
     shouldLoadProviders,
     suppressAutoSelection,
@@ -484,7 +515,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   useEffect(() => {
     if (!shouldLoadModels) return;
     if (!selectedProvider) return;
-    if (selectedProvider.authStatus === "login_required") return;
+    if (selectedProviderBlocksModelLoad) return;
     if (modelsLoading) return;
     if (allowAutoModel || suppressAutoSelection) return;
 
@@ -500,6 +531,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     currentModels,
     modelsLoading,
     selectedProvider,
+    selectedProviderBlocksModelLoad,
     setModel,
     shouldLoadModels,
     suppressAutoSelection,
@@ -571,7 +603,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         ? resolvedAutoProviderLabel
         : fallbackProviderLabel);
   const selectedModelLabel =
-    !showPlaceholderSelection && selectedProviderLoginRequired
+    !showPlaceholderSelection && selectedProviderBlocksModelLoad
       ? t("common.modelSelector.state.loginRequired")
       : showPlaceholderSelection
         ? resolvedPlaceholderLabel
@@ -858,11 +890,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                 setProviderType(
                                   resolveProviderSelectionValue(provider),
                                 );
-                                setModel(
-                                  provider.authStatus === "login_required"
-                                    ? ""
-                                    : nextModel,
-                                );
+                                setModel(nextModel);
                                 setReasoningEffort?.("");
                               }}
                               className={cn(
@@ -1014,7 +1042,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
                       {t("common.modelSelector.model.selectProviderFirst")}
                     </div>
-                  ) : selectedProviderLoginRequired ? (
+                  ) : selectedProviderBlocksModelLoad ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-4 text-xs leading-5 text-amber-800">
                       <div className="flex items-start gap-2 text-left">
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />

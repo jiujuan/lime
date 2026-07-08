@@ -159,7 +159,7 @@ export function handleTurnStreamEvent({
     clearOptimisticItem,
     clearOptimisticTurn,
     upsertQueuedTurn,
-    removeQueuedTurnState,
+    removeQueuedTurnsFromProjection,
     playToolcallSound,
     playTypewriterSound,
     appendThinkingToParts,
@@ -519,7 +519,7 @@ export function handleTurnStreamEvent({
         clearQueuedDraftCleanupTimer,
         event: data,
         markQueuedDraftState,
-        removeQueuedTurnState,
+        removeQueuedTurnsFromProjection,
         requestState,
         scheduleQueuedDraftCleanup,
         shouldWatchAgentStreamQueuedDraftCleanup,
@@ -1399,7 +1399,6 @@ export function handleTurnStreamEvent({
           finalizeMissingFinalReplyFailure(emptyFinalErrorPlan);
           break;
         }
-        removeQueuedTurnState(emptyFinalErrorPlan.queuedTurnIds);
         finishRequestLog(requestState, emptyFinalErrorPlan.requestLogPayload);
         const gracefulContent = emptyFinalErrorPlan.finalContent;
         observer?.onComplete?.(gracefulContent);
@@ -1441,7 +1440,6 @@ export function handleTurnStreamEvent({
         queuedTurnId: requestState.queuedTurnId,
       });
       markFailedTimelineState(errorFailurePlan.errorMessage);
-      removeQueuedTurnState(errorFailurePlan.queuedTurnIds);
       finishRequestLog(requestState, errorFailurePlan.requestLogPayload);
       observer?.onError?.(errorFailurePlan.errorMessage);
       applyAgentStreamErrorToastPlan(errorFailurePlan.toast, toast);

@@ -28,6 +28,9 @@ import {
 } from "./agentChatShared";
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { useAgentTopicSnapshot } from "./useAgentTopicSnapshot";
+import {
+  hasRunningThreadReadActivity,
+} from "../projection/threadReadActivity";
 import { resolveClawWorkspaceProviderSelection } from "../utils/clawWorkspaceProviderSelection";
 import {
   applyGeneratedAutoTitleToTopics,
@@ -216,19 +219,34 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         }
       }
 
+      let runtimeSelectionRejected = false;
       if (
         usableRuntimeProviderType &&
         usableRuntimeModel &&
         (!hasPersistedWorkspacePreference || !currentProviderMatchesRuntime)
       ) {
-        if (!isCurrentWorkspace()) {
-          return;
+        try {
+          const runtimeSelection = await resolveClawWorkspaceProviderSelection({
+            currentProviderType: usableRuntimeProviderType,
+            currentModel: usableRuntimeModel,
+            theme: "general",
+            allowProviderFallback: false,
+          });
+          if (!isCurrentWorkspace()) {
+            return;
+          }
+          if (runtimeSelection) {
+            applyWorkspaceModelPreference({
+              providerType: runtimeSelection.providerType,
+              model: runtimeSelection.model,
+            });
+            return;
+          }
+          runtimeSelectionRejected = true;
+        } catch (error) {
+          runtimeSelectionRejected = true;
+          console.warn("[AsterChat] 校验运行时默认模型失败:", error);
         }
-        applyWorkspaceModelPreference({
-          providerType: usableRuntimeProviderType,
-          model: usableRuntimeModel,
-        });
-        return;
       }
 
       if (
@@ -265,7 +283,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
           currentProviderType: fallbackProviderType || undefined,
           currentModel: fallbackModel || null,
           theme: "general",
-          ...(usableRuntimeProviderType
+          ...(usableRuntimeProviderType && !runtimeSelectionRejected
             ? { allowProviderFallback: false }
             : {}),
         };
@@ -369,6 +387,16 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
 
   resetPendingActionsRef.current = () => tools.setPendingActions([]);
 
+  const threadBusy = hasActiveRuntimeTurn({
+    queuedTurnsCount: session.queuedTurns.length,
+    threadRead: session.threadRead,
+    threadReadStatus: session.threadRead?.status,
+    turns: session.threadTurns,
+  });
+  const hasRecoverableRunningActivity = hasRunningThreadReadActivity(
+    session.threadRead,
+  );
+
   const stream = useAgentStream({
     runtime,
     systemPrompt,
@@ -399,12 +427,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     setThreadTurns: session.setThreadTurns,
     setCurrentTurnId: session.setCurrentTurnId,
     setExecutionRuntime: session.setExecutionRuntime,
-    threadBusy: hasActiveRuntimeTurn({
-      queuedTurnsCount: session.queuedTurns.length,
-      threadRead: session.threadRead,
-      threadReadStatus: session.threadRead?.status,
-      turns: session.threadTurns,
-    }),
+    threadBusy,
     currentTurnId: session.currentTurnId,
     threadRead: session.threadRead,
     threadTurns: session.threadTurns,
@@ -417,7 +440,8 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     clawTraceEnabled,
     allowRecoveredStreamBinding:
       Boolean(session.sessionId) &&
-      session.recoveredStreamBindingSessionId === session.sessionId,
+      (session.recoveredStreamBindingSessionId === session.sessionId ||
+        hasRecoverableRunningActivity),
     soulCopy,
   });
   detachStreamBindingsRef.current = stream.detachStreamBindings;
@@ -532,6 +556,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     parentSessionId: session.subagentParentContext?.parent_session_id,
     currentTurnEventName: currentStreamingEventNameRef.current,
     isSending: stream.isSending,
+    threadRead: session.threadRead,
     threadReadStatus: session.threadRead?.status,
     queuedTurnCount: session.queuedTurns.length,
     threadTurns: session.threadTurns,
@@ -549,8 +574,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     isSending: stream.isSending,
     pendingActionCount: tools.pendingActions.length,
     queuedTurnCount: session.queuedTurns.length,
-    threadStatus:
-      session.threadRead?.status ?? (session.currentTurnId ? "running" : null),
+    threadStatus: session.threadRead?.status ?? null,
     workspaceId,
     workspacePathMissing: Boolean(context.workspacePathMissing),
     topicsCount: session.topics.length,

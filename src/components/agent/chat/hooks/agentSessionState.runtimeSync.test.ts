@@ -35,6 +35,96 @@ function createAgentMessageItem(
 }
 
 describe("agentSessionState runtimeSync detail refresh", () => {
+  it("App Server detail 协议形状应能水合出用户与助手消息", () => {
+    const detail = {
+      id: "topic-app-server-detail",
+      thread_id: "thread-app-server-detail",
+      created_at: 1783480361000,
+      updated_at: 1783480369000,
+      messages_count: 2,
+      messages: [
+        {
+          id: "turn-app-server:user",
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "请只回复：收到-CDP正常对话",
+            },
+          ],
+        },
+        {
+          id: "turn-app-server:assistant",
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "收到-CDP正常对话",
+            },
+          ],
+        },
+      ],
+      items: [
+        {
+          id: "assistant:chatcmpl-app-server",
+          type: "agent_message",
+          status: "completed",
+          turn_id: "turn-app-server",
+          text: "收到-CDP正常对话",
+        },
+      ],
+      turns: [
+        {
+          completedAt: "2026-07-08T03:12:49.191Z",
+          sessionId: "topic-app-server-detail",
+          startedAt: "2026-07-08T03:12:41.154Z",
+          status: "completed",
+          threadId: "thread-app-server-detail",
+          turnId: "turn-app-server",
+        },
+      ],
+      queued_turns: [],
+      thread_read: {
+        thread_id: "thread-app-server-detail",
+        status: "completed",
+        active_turn_id: null,
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-app-server-detail",
+      detail,
+      currentSessionId: "topic-app-server-detail",
+      currentMessages: [],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [
+        {
+          id: "topic-app-server-detail",
+          title: "请只回复：收到-CDP正常对话",
+          createdAt: new Date("2026-07-08T03:12:41.154Z"),
+          updatedAt: new Date("2026-07-08T03:12:49.191Z"),
+          workspaceId: null,
+          messagesCount: 2,
+          executionStrategy: "react",
+          status: "done",
+          lastPreview: "收到-CDP正常对话",
+          isPinned: false,
+          hasUnread: false,
+          tag: null,
+          sourceSessionId: "topic-app-server-detail",
+        },
+      ],
+    });
+
+    expect(result.snapshot.messages.map((message) => message.content)).toEqual([
+      "请只回复：收到-CDP正常对话",
+      "收到-CDP正常对话",
+    ]);
+  });
+
   it("runtimeSync detail rebase 不应让不兼容历史消息覆盖当前时间线", () => {
     const liveText =
       "这是当前 turn 已经流出来的较长回答，session detail refresh 只能合入元数据，不能把它替换成另一条历史回答。";
@@ -200,6 +290,103 @@ describe("agentSessionState runtimeSync detail refresh", () => {
       "最终 assistant 总结",
     ]);
     expect(result.snapshot.currentTurnId).toBe("turn-runtime-sync-terminal");
+    expect(result.snapshot.threadRead?.status).toBe("completed");
+  });
+
+  it("runtimeSync terminal detail 只有 thread items 时也应替换本地 thinking pending 壳", () => {
+    const turnId = "turn-runtime-sync-items-terminal";
+    const promptText = "CDP 修复复测 marker";
+    const finalText = "收到-CDP 修复复测 marker";
+    const detail = {
+      id: "topic-runtime-sync-items-terminal",
+      created_at: 1782800000,
+      updated_at: 1782800001,
+      messages: [],
+      turns: [
+        {
+          id: turnId,
+          thread_id: "topic-runtime-sync-items-terminal-thread",
+          prompt_text: promptText,
+          status: "completed",
+          started_at: "2026-06-30T10:00:00.000Z",
+          completed_at: "2026-06-30T10:00:02.000Z",
+          created_at: "2026-06-30T10:00:00.000Z",
+          updated_at: "2026-06-30T10:00:02.000Z",
+        },
+      ],
+      items: [
+        createAgentMessageItem({
+          id: "item-runtime-sync-items-terminal-final",
+          thread_id: "topic-runtime-sync-items-terminal-thread",
+          turn_id: turnId,
+          text: finalText,
+          status: "completed",
+          sequence: 1,
+          started_at: "2026-06-30T10:00:01.000Z",
+          completed_at: "2026-06-30T10:00:02.000Z",
+          updated_at: "2026-06-30T10:00:02.000Z",
+        }),
+      ],
+      thread_read: {
+        thread_id: "topic-runtime-sync-items-terminal-thread",
+        status: "completed",
+        active_turn_id: turnId,
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-runtime-sync-items-terminal",
+      detail,
+      currentSessionId: "topic-runtime-sync-items-terminal",
+      currentMessages: [
+        createMessage({
+          id: "local-pending-user",
+          role: "user",
+          content: promptText,
+          runtimeTurnId: turnId,
+        }),
+        createMessage({
+          id: "local-pending-assistant",
+          role: "assistant",
+          content: "正在生成回复",
+          isThinking: true,
+          runtimeTurnId: turnId,
+          runtimeStatus: {
+            phase: "generating",
+            title: "正在输出",
+            detail: "正在等待模型继续输出。",
+          },
+        }),
+      ],
+      currentThreadTurns: [
+        {
+          id: turnId,
+          thread_id: "topic-runtime-sync-items-terminal-thread",
+          prompt_text: promptText,
+          status: "running",
+          started_at: "2026-06-30T10:00:00.000Z",
+          created_at: "2026-06-30T10:00:00.000Z",
+          updated_at: "2026-06-30T10:00:01.000Z",
+        },
+      ],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      detailMergeMode: "runtime_sync",
+    });
+
+    expect(result.snapshot.messages.map((message) => message.content)).toEqual([
+      promptText,
+      finalText,
+    ]);
+    expect(result.snapshot.messages[1]).toMatchObject({
+      role: "assistant",
+      isThinking: false,
+      runtimeTurnId: turnId,
+    });
+    expect(result.snapshot.messages[1]?.runtimeStatus).toBeUndefined();
+    expect(result.snapshot.currentTurnId).toBe(turnId);
     expect(result.snapshot.threadRead?.status).toBe("completed");
   });
 });

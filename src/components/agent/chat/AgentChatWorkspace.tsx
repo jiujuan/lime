@@ -64,6 +64,7 @@ import { useImageGen } from "@/components/image-gen/useImageGen";
 import { resolveMediaGenerationPreference } from "@/lib/mediaGeneration";
 import { readTeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { TaskCenterDraftSendRequest } from "./homePendingPreview";
+import type { HomeRecoverySession } from "./home/homeSurfaceTypes";
 
 import type {
   ConfirmResponse,
@@ -126,6 +127,9 @@ import { useWorkspaceWriteFileAction } from "./workspace/useWorkspaceWriteFileAc
 import { useWorkspaceArtifactPreviewActions } from "./workspace/useWorkspaceArtifactPreviewActions";
 import { useWorkspaceCanvasLayoutRuntime } from "./workspace/useWorkspaceCanvasLayoutRuntime";
 import { useSessionRecentMetadataSyncRuntime } from "./workspace/useSessionRecentMetadataSyncRuntime";
+import { useWorkspaceMediaReferencePreviewRuntime } from "./workspace/useWorkspaceMediaReferencePreviewRuntime";
+import { MediaReferencePreviewPaginationActions } from "./workspace/mediaReferencePreviewToolbarActions";
+import { resolveMediaReferencePreviewPageRequest } from "./workspace/mediaReferencePreviewToolbarState";
 import { useTaskCenterTabSessionRuntime } from "./workspace/useTaskCenterTabSessionRuntime";
 import {
   useTaskCenterDraftSendDispatchRuntime,
@@ -383,7 +387,6 @@ import {
   BROWSER_WORKSPACE_HOME_HINT_MESSAGE,
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
   NOOP_SET_CHAT_MESSAGES,
-  createMediaReferencePreviewArtifact,
   isUsableKnowledgeSourceText,
   normalizeVideoAspectRatio,
   normalizeVideoResolution,
@@ -399,6 +402,7 @@ import { SCENEAPP_QUICK_REVIEW_ACTIONS } from "@/lib/agent/legacySceneAppExecuti
 import { buildArticleWorkspaceForArtifactOpen } from "./workspace/workspaceArticleWorkspaceArtifactOpen";
 
 export type {
+  AgentBackgroundSessionRuntimeSnapshot,
   AgentChatWorkspaceProps,
   WorkflowProgressSnapshot,
 } from "./agentChatWorkspaceContract";
@@ -444,6 +448,7 @@ export function AgentChatWorkspace({
   onHasMessagesChange,
   onSessionChange,
   onAgentStreamingChange,
+  onBackgroundSessionRuntimeChange,
   preferContentReviewInRightRail = false,
   openBrowserAssistOnMount = false,
   initialSiteSkillLaunch,
@@ -484,23 +489,17 @@ export function AgentChatWorkspace({
     useState<InterruptedInputRestoreRequest | null>(null);
   const handleRestoreInterruptedInput = useCallback(
     (request: InterruptedInputRestoreRequest) => {
-      const restoredPathReferences = [...(request.draft.pathReferences ?? [])];
       logAgentDebug("AgentChatWorkspace", "inputRestoreRequest.received", {
         draftImageCount: request.draft.images?.length ?? 0,
-        draftPathReferenceCount: restoredPathReferences.length,
+        draftPathReferenceCount: request.draft.pathReferences?.length ?? 0,
         draftTextLength: request.draft.text.trim().length,
         hasCapabilityRoute: Boolean(request.draft.inputCapabilityRoute),
         reason: request.reason,
         requestId: request.requestId,
       });
-      setInput(request.draft.text);
-      handleClearPathReferences();
-      if (restoredPathReferences.length > 0) {
-        handleAddPathReferences(restoredPathReferences);
-      }
       setInputRestoreRequest(request);
     },
-    [handleAddPathReferences, handleClearPathReferences],
+    [],
   );
   const handleInputRestoreRequestHandled = useCallback((requestId: string) => {
     setInputRestoreRequest((current) =>
@@ -2129,6 +2128,7 @@ export function AgentChatWorkspace({
   } = useTaskCenterTabSessionRuntime({
     agentEntry,
     normalizedInitialSessionId,
+    newChatAt,
     sessionId,
     taskCenterDraftSurfaceActiveRef,
     taskCenterWorkspaceId,
@@ -2530,7 +2530,6 @@ export function AgentChatWorkspace({
     isThemeWorkbench,
     shouldUseCompactGeneralWorkbench,
     isBootstrapDispatchPending,
-    isSessionHydrating,
     isSending,
     queuedTurnCount: queuedTurns.length,
   });
@@ -2707,7 +2706,8 @@ export function AgentChatWorkspace({
     isAutoRestoringSession,
     isBootstrapDispatchPending,
     isHomeSessionBackgroundRecovery:
-      sessionRestorePresentation === "background" && !normalizedInitialSessionId,
+      sessionRestorePresentation === "background" &&
+      !normalizedInitialSessionId,
     isHomePendingPreviewActive,
     isPreparingSend,
     isSending,
@@ -2835,7 +2835,7 @@ export function AgentChatWorkspace({
     },
     [handleWriteFile],
   );
-  const { renderToolbarActions: renderArtifactWorkbenchToolbarActions } =
+  const { renderToolbarActions: renderBaseArtifactWorkbenchToolbarActions } =
     useWorkspaceArtifactWorkbenchActions({
       activeTheme,
       projectId,
@@ -3047,6 +3047,16 @@ export function AgentChatWorkspace({
     ) => Promise<void>;
     refreshRightSurfacePendingRequests?: () => Promise<void>;
   }>({});
+  const [manualRightSurface, setManualRightSurface] =
+    useState<WorkspaceRightSurfaceKind | null>(null);
+  const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
+    useState<WorkspaceFilesSurfaceTarget | null>(null);
+  const [
+    activeObjectCanvasRightSurfaceCandidate,
+    setActiveObjectCanvasRightSurfaceCandidate,
+  ] = useState<WorkspaceObjectCanvasCandidate | null>(null);
+  const [activeArticleWorkspace, setActiveArticleWorkspace] =
+    useState<WorkspaceArticleWorkspace | null>(null);
   const handleWorkspaceArtifactClick = useCallback(
     (artifact: Artifact) => {
       const articleWorkspaceFromArtifact = buildArticleWorkspaceForArtifactOpen(
@@ -3165,36 +3175,62 @@ export function AgentChatWorkspace({
     },
     [handleWorkspaceArtifactClick, workbenchRequests, upsertGeneralArtifact],
   );
-  const openMediaReferencePreview = useCallback(
-    (
-      target: Extract<MessagePreviewTarget, { kind: "media_reference" }>,
-      message: Message,
-    ) => {
-      const artifact = createMediaReferencePreviewArtifact({
-        message,
-        target,
-        t,
-      });
-      openCanvasForReason("user_open_message_preview", setLayoutMode);
-      setCanvasWorkbenchLayoutMode("split");
-      upsertGeneralArtifact(artifact);
-      handleWorkspaceArtifactClick(artifact);
-      const artifactFilePath =
-        typeof artifact.meta?.filePath === "string"
-          ? artifact.meta.filePath
-          : artifact.title;
-      workbenchRequests.requestCanvasWorkbenchPreviewOpen({
-        filePath: artifactFilePath,
-        selectionKey: `artifact:${artifact.id}`,
-      });
-    },
-    [
+  const { openMediaReferencePreview, openMediaReferencePreviewPage } =
+    useWorkspaceMediaReferencePreviewRuntime({
+      artifacts,
       handleWorkspaceArtifactClick,
+      requestCanvasWorkbenchPreviewOpen:
+        workbenchRequests.requestCanvasWorkbenchPreviewOpen,
+      sessionId,
       setCanvasWorkbenchLayoutMode,
       setLayoutMode,
       t,
       upsertGeneralArtifact,
-      workbenchRequests,
+    });
+  const renderMediaReferencePaginationActions = useCallback(
+    (artifact: Artifact) => {
+      const pageRequest = resolveMediaReferencePreviewPageRequest(
+        artifact,
+        messages,
+      );
+      if (!pageRequest) {
+        return null;
+      }
+
+      return (
+        <MediaReferencePreviewPaginationActions
+          artifact={artifact}
+          onOpenPage={(page) => {
+            void openMediaReferencePreviewPage(
+              pageRequest.target,
+              pageRequest.message,
+              page,
+            );
+          }}
+        />
+      );
+    },
+    [messages, openMediaReferencePreviewPage],
+  );
+  const renderArtifactWorkbenchToolbarActions = useCallback(
+    (params: { artifact: Artifact; document: ArtifactDocumentV1 | null }) => {
+      const baseActions = renderBaseArtifactWorkbenchToolbarActions(params);
+      const paginationActions = renderMediaReferencePaginationActions(
+        params.artifact,
+      );
+      if (!baseActions && !paginationActions) {
+        return null;
+      }
+      return (
+        <>
+          {baseActions}
+          {paginationActions}
+        </>
+      );
+    },
+    [
+      renderBaseArtifactWorkbenchToolbarActions,
+      renderMediaReferencePaginationActions,
     ],
   );
   const handleOpenUrlPreview = useCallback(
@@ -3240,7 +3276,7 @@ export function AgentChatWorkspace({
       }
 
       if (target.kind === "media_reference") {
-        openMediaReferencePreview(target, message);
+        void openMediaReferencePreview(target, message);
         return;
       }
 
@@ -4181,8 +4217,7 @@ export function AgentChatWorkspace({
     toolInventoryLoading: harnessInventoryRuntime.toolInventoryLoading,
     toolInventoryError: harnessInventoryRuntime.toolInventoryError,
     onRefreshToolInventory: harnessInventoryRuntime.refreshToolInventory,
-    mcpPrepareCandidateCount:
-      harnessInventoryRuntime.mcpPrepareCandidateCount,
+    mcpPrepareCandidateCount: harnessInventoryRuntime.mcpPrepareCandidateCount,
     mcpPrepareLoading: harnessInventoryRuntime.mcpPrepareLoading,
     mcpPrepareError: harnessInventoryRuntime.mcpPrepareError,
     onPrepareMcpTargets: harnessInventoryRuntime.prepareMcpTargets,
@@ -4338,8 +4373,7 @@ export function AgentChatWorkspace({
     toolInventoryLoading: harnessInventoryRuntime.toolInventoryLoading,
     toolInventoryError: harnessInventoryRuntime.toolInventoryError,
     refreshToolInventory: harnessInventoryRuntime.refreshToolInventory,
-    mcpPrepareCandidateCount:
-      harnessInventoryRuntime.mcpPrepareCandidateCount,
+    mcpPrepareCandidateCount: harnessInventoryRuntime.mcpPrepareCandidateCount,
     mcpPrepareLoading: harnessInventoryRuntime.mcpPrepareLoading,
     mcpPrepareError: harnessInventoryRuntime.mcpPrepareError,
     prepareMcpTargets: harnessInventoryRuntime.prepareMcpTargets,
@@ -4498,11 +4532,13 @@ export function AgentChatWorkspace({
       setTaskCenterDetachedTopicId(null);
       upsertTaskCenterOpenTab(readySessionId, taskCenterWorkspaceId);
       markTaskCenterLocalSessionOverride(readySessionId);
+      persistTaskCenterMaterializedSessionNavigation(readySessionId);
     },
     [
       markNewChatRequestHandled,
       markTaskCenterLocalSessionOverride,
       newChatAt,
+      persistTaskCenterMaterializedSessionNavigation,
       setTaskCenterDetachedTopicId,
       setTaskCenterTransitionTopicId,
       taskCenterWorkspaceId,
@@ -4588,26 +4624,16 @@ export function AgentChatWorkspace({
     hasExpertInfoPanel &&
     !expertInfoPanelCollapsed &&
     sceneLayoutMode === "chat";
-  const [manualRightSurface, setManualRightSurface] =
-    useState<WorkspaceRightSurfaceKind | null>(null);
   const [rightSurfaceBrowserTitle, setRightSurfaceBrowserTitle] = useState<
     string | null
   >(null);
   const [activeBrowserRightSurfaceIntent, setActiveBrowserRightSurfaceIntent] =
     useState<WorkspaceRightSurfaceBrowserIntent | null>(null);
-  const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
-    useState<WorkspaceFilesSurfaceTarget | null>(null);
   const [activePluginSurfaces, setActivePluginSurfaces] = useState<
     WorkspacePluginSurfaceDescriptor[]
   >([]);
   const [activePluginSurfaceContainerId, setActivePluginSurfaceContainerId] =
     useState<string | null>(null);
-  const [
-    activeObjectCanvasRightSurfaceCandidate,
-    setActiveObjectCanvasRightSurfaceCandidate,
-  ] = useState<WorkspaceObjectCanvasCandidate | null>(null);
-  const [activeArticleWorkspace, setActiveArticleWorkspace] =
-    useState<WorkspaceArticleWorkspace | null>(null);
   const [activeArticleEditedDraft, setActiveArticleEditedDraft] =
     useState<WorkspaceArticleEditedDraft | null>(null);
   useEffect(() => {
@@ -5960,6 +5986,74 @@ export function AgentChatWorkspace({
       suppressHomeNavbarUtilityActions,
     ],
   );
+  const homeRecoverySession = useMemo<HomeRecoverySession | null>(() => {
+    if (
+      !recentSessionTopic ||
+      (recentSessionTopic.status !== "running" &&
+        recentSessionTopic.status !== "queued" &&
+        recentSessionTopic.status !== "waiting")
+    ) {
+      return null;
+    }
+
+    const title = recentSessionTopic.title.trim();
+    if (!title) {
+      return null;
+    }
+
+    const summary = recentSessionTopic.lastPreview.trim();
+    return {
+      sessionId: recentSessionTopic.sourceSessionId || recentSessionTopic.id,
+      title,
+      summary: summary || undefined,
+      status: recentSessionTopic.status,
+    };
+  }, [recentSessionTopic]);
+  const backgroundSessionRuntime = useMemo(
+    () =>
+      homeRecoverySession
+        ? {
+            sessionId: homeRecoverySession.sessionId,
+            status: homeRecoverySession.status,
+          }
+        : null,
+    [homeRecoverySession],
+  );
+  useEffect(() => {
+    onBackgroundSessionRuntimeChange?.(backgroundSessionRuntime);
+  }, [backgroundSessionRuntime, onBackgroundSessionRuntimeChange]);
+  const handleResumeHomeRecoverySession = useCallback(() => {
+    if (!homeRecoverySession) {
+      handleResumeRecentSession();
+      return;
+    }
+
+    if (_onNavigate) {
+      const recoveryProjectId =
+        recentSessionTopic?.workspaceId ?? projectId ?? undefined;
+      _onNavigate(
+        "agent",
+        buildClawAgentParams({
+          initialSessionId: homeRecoverySession.sessionId,
+          projectId: recoveryProjectId ?? undefined,
+        }),
+      );
+      return;
+    }
+
+    void handleOpenTaskTopic(homeRecoverySession.sessionId, {
+      preferResume: true,
+      forceRefresh: true,
+      replaceOpenTabs: true,
+    });
+  }, [
+    _onNavigate,
+    handleOpenTaskTopic,
+    handleResumeRecentSession,
+    homeRecoverySession,
+    projectId,
+    recentSessionTopic?.workspaceId,
+  ]);
   const conversationSceneRuntime = useWorkspaceConversationSceneRuntime({
     messageListEmptyStateVariant: sceneMessageListEmptyStateVariant,
     navbarContextVariant:
@@ -6058,7 +6152,8 @@ export function AgentChatWorkspace({
     recentSessionTitle: recentSessionTopic?.title ?? null,
     recentSessionSummary: recentSessionTopic?.lastPreview ?? null,
     recentSessionActionLabel,
-    handleResumeRecentSession,
+    homeRecoverySession,
+    handleResumeRecentSession: handleResumeHomeRecoverySession,
     projectConversationGroups,
     handleOpenProjectConversation,
     taskCenterTabsNode: shouldRenderTaskCenterTabStrip

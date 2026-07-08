@@ -227,4 +227,96 @@ describe("buildAgentRuntimeProcessView", () => {
     expect(process.artifactCount).toBe(1);
     expect(process.terminal).toBe(true);
   });
+
+  it("从 hostManagedGeneration result 补插件托管生成过程和 Soul / Generation Brief 边界", () => {
+    const process = buildAgentRuntimeProcessView({
+      task: {
+        taskStatus: "completed",
+        runtime: {
+          hostManagedGenerationResult: {
+            schemaVersion: "lime.plugin.host_managed_generation.v1",
+            source: "app_server_runtime_backend",
+            status: "completed",
+            provider: "fixture-openai",
+            model: "lime-fixture-chat",
+            outputs: [
+              {
+                id: "article-draft-document",
+                kind: "markdown_document",
+                targetObjectKind: "articleDraft",
+                outputField: "documentText",
+                contentType: "text/markdown",
+                content: "# 正文",
+              },
+            ],
+            presentation: {
+              schemaVersion:
+                "lime.plugin.host_managed_generation.presentation.v1",
+              surface: "plugin_host_managed_generation",
+              status: "completed",
+              styleLevel: "L2",
+              riskLevel: "normal",
+              soulSurface: "plugin_host_managed_generation",
+              soulPhase: "after_artifact",
+              titleKey:
+                "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.title",
+              messageKey:
+                "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.message",
+              values: {
+                provider: "fixture-openai",
+                model: "lime-fixture-chat",
+                outputCount: 1,
+              },
+              toneVariant: "cheeky_sassy",
+              profileId: "cheeky_sassy_executor",
+              packId: "com.lime.soul.cheeky-sassy-executor",
+            },
+            generationBriefBoundary: {
+              schemaVersion:
+                "lime.plugin.host_managed_generation.boundary.v1",
+              artifactBodyStyleLevel: "L3",
+              formalArtifactVoiceSource: "generation_brief_only",
+              productSoulDefault: "interaction_only",
+            },
+            soul_lifecycle: {
+              surface: "plugin_host_managed_generation",
+              phase: "after_artifact",
+              status: "completed",
+              styleLevel: "L2",
+              riskLevel: "normal",
+              toneVariant: "cheeky_sassy",
+              profileId: "cheeky_sassy_executor",
+              packId: "com.lime.soul.cheeky-sassy-executor",
+            },
+          },
+        },
+      },
+    });
+
+    expect(process.timeline[0]).toMatchObject({
+      kind: "artifact",
+      collapseKey: "plugin:host-managed-generation",
+      displayTitleKey:
+        "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.title",
+      displayMessageKey:
+        "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.message",
+      displayValues: {
+        provider: "fixture-openai",
+        model: "lime-fixture-chat",
+        outputCount: 1,
+      },
+      soulSurface: "plugin_host_managed_generation",
+      soulPhase: "after_artifact",
+      styleLevel: "L2",
+      riskLevel: "normal",
+      toneVariant: "cheeky_sassy",
+      profileId: "cheeky_sassy_executor",
+      packId: "com.lime.soul.cheeky-sassy-executor",
+      generationBriefBoundary: {
+        artifactBodyStyleLevel: "L3",
+        formalArtifactVoiceSource: "generation_brief_only",
+        productSoulDefault: "interaction_only",
+      },
+    });
+  });
 });

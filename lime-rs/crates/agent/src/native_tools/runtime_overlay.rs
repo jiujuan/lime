@@ -2,7 +2,9 @@ use aster::agents::Agent;
 use aster::tools::{Tool, ToolRegistry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tool_runtime::native_overlay::{runtime_native_tool_overlay_tools, RuntimeNativeToolOverlay};
+use tool_runtime::native_overlay::{
+    runtime_native_tool_overlay_registrations, RuntimeNativeToolOverlay,
+};
 
 pub(crate) struct RuntimeNativeToolRegistry {
     registry: Arc<RwLock<ToolRegistry>>,
@@ -36,16 +38,16 @@ pub(crate) async fn configure_lime_native_tool_overlay(agent: &mut Agent) {
     // 这里只覆盖 Lime 需要改变策略或收口事实源的工具，不重复接管 Aster 默认工具。
     let registry_handle = runtime_native_tool_registry(agent);
     let mut registry = registry_handle.registry.write().await;
-    for overlay_tool in runtime_native_tool_overlay_tools() {
-        match overlay_tool {
+    for registration in runtime_native_tool_overlay_registrations() {
+        match registration.tool() {
             RuntimeNativeToolOverlay::ViewImage => {
                 registry.register(crate::native_tools::create_view_image_tool());
             }
             RuntimeNativeToolOverlay::ApplyPatch => {
-                registry.register(Box::new(crate::tools::ApplyPatchTool));
+                registry.register(crate::tools::create_apply_patch_tool());
             }
             RuntimeNativeToolOverlay::SkillSearch => {
-                registry.register(Box::new(crate::tools::SkillSearchTool));
+                registry.register(crate::tools::create_skill_search_tool());
             }
             // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
             RuntimeNativeToolOverlay::Skill => {

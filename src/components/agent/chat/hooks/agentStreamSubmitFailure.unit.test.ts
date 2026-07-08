@@ -83,7 +83,6 @@ describe("handleAgentStreamSubmitFailure", () => {
       setIsSending: noopDispatch<boolean>(),
       clearActiveStreamIfMatch: () => true,
       disposeListener: vi.fn(),
-      removeQueuedTurnState: vi.fn(),
       markOptimisticFailure: vi.fn(),
       soulCopy,
     });
@@ -106,6 +105,65 @@ describe("handleAgentStreamSubmitFailure", () => {
           pack_id: "com.lime.soul.cheeky-sassy-executor",
         },
       },
+    });
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("提交失败不应绕过 read model 本地裁决 queued turn", () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    let messages: Message[] = [
+      {
+        id: "assistant-queued-submit-failure",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-04T01:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: Date.now(),
+      requestFinished: false,
+      queuedTurnId: "queued-submit-failure",
+    };
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const markOptimisticFailure = vi.fn();
+
+    handleAgentStreamSubmitFailure({
+      error: new Error("provider failed"),
+      requestState,
+      content: "排队输入",
+      images: [] as MessageImage[],
+      assistantMsgId: "assistant-queued-submit-failure",
+      expectingQueue: true,
+      eventName: "turn-queued-submit-failure",
+      activeStreamRef: {
+        current: null,
+      } as MutableRefObject<ActiveStreamState | null>,
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setWorkspacePathMissing: noopDispatch<WorkspacePathMissingState | null>(),
+      setIsSending: noopDispatch<boolean>(),
+      clearActiveStreamIfMatch,
+      disposeListener: vi.fn(),
+      markOptimisticFailure,
+    });
+
+    expect(markOptimisticFailure).toHaveBeenCalledWith("provider failed");
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
+      "turn-queued-submit-failure",
+    );
+    expect(messages[0]).toMatchObject({
+      id: "assistant-queued-submit-failure",
+      isThinking: false,
+      content: "执行失败：provider failed",
     });
     consoleErrorSpy.mockRestore();
   });

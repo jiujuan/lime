@@ -9,7 +9,7 @@ import {
   buildPluginLabResolvedSetupState,
   evaluatePluginLabInstallFlow,
 } from "../install/labInstallFlow";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 import type { AppManifest, InstalledPluginState } from "../types";
 import { PluginManagerPanel } from "./PluginManagerPanel";
 

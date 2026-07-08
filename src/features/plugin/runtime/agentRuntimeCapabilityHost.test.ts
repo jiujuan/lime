@@ -4,7 +4,7 @@ import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { AgentRuntimeCapabilityHost } from "./agentRuntimeCapabilityHost";
-import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 
 const CONTENT_FACTORY_ENTRY_KEY = "content_factory";
 

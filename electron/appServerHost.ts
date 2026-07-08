@@ -1,5 +1,6 @@
 import {
   AppServerSidecarLifecycle,
+  cancelRequest,
   decodeMessage,
   defaultReleaseManifestPath,
   encodeMessage,
@@ -44,6 +45,7 @@ const APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_TIMEOUT_MS = 180_000;
 const APP_SERVER_REQUEST_TIMEOUT_OVERRIDE_CEILING_MS = 600_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
+const APP_SERVER_CANCEL_REQUEST_METHOD = "$/cancelRequest";
 const APP_SERVER_DATA_DIR_NAME = "app-server";
 const APP_SERVER_RECENT_NOTIFICATION_LIMIT = 500;
 const APP_SERVER_PROXY_PROBE_URL = "https://llm.limeai.run/v1/models";
@@ -85,6 +87,7 @@ export class ElectronAppServerHost {
   #connected: ConnectedAppServerSidecar | null = null;
   #connectPromise: Promise<ConnectedAppServerSidecar> | null = null;
   #nextProxyRequestId = 1;
+  #activeProxyRequestIds = new Map<RequestId, RequestId>();
   #recentNotifications: JsonRpcMessage[] = [];
   #stopping = false;
 
@@ -118,6 +121,10 @@ export class ElectronAppServerHost {
       if (isInitializedNotification(message)) {
         continue;
       }
+      if (isCancelRequestNotification(message)) {
+        this.#forwardCancelRequest(connected, message);
+        continue;
+      }
       if (
         isJsonRpcRequestLike(message) &&
         message.method === METHOD_INITIALIZE
@@ -143,11 +150,16 @@ export class ElectronAppServerHost {
           proxiedMessage.message.method,
           request.timeoutMs,
         );
-        const result = await this.#requestAppServer<unknown>(
-          connected,
-          proxiedMessage.message,
-          proxiedMessage.message.method,
-          { timeoutMs },
+        const result = await this.#withActiveProxyRequest(
+          proxiedMessage.originalId,
+          proxiedMessage.message.id,
+          () =>
+            this.#requestAppServer<unknown>(
+              connected,
+              proxiedMessage.message,
+              proxiedMessage.message.method,
+              { timeoutMs },
+            ),
         );
         responses.push(
           ...result.messages.map((response) =>
@@ -323,15 +335,19 @@ export class ElectronAppServerHost {
     message: JsonRpcRequest,
   ): Promise<JsonRpcMessage[]> {
     try {
-      const result =
-        await this.#requestAppServerUntilFirstNotificationOrResponse<AgentSessionTurnStartResponse>(
-          connected,
-          message,
-          message.method,
-          {
-            timeoutMs: APP_SERVER_STREAMING_TURN_ACK_GRACE_MS,
-          },
-        );
+      const result = await this.#withActiveProxyRequest(
+        originalMessage.id,
+        message.id,
+        () =>
+          this.#requestAppServerUntilFirstNotificationOrResponse<AgentSessionTurnStartResponse>(
+            connected,
+            message,
+            message.method,
+            {
+              timeoutMs: APP_SERVER_STREAMING_TURN_ACK_GRACE_MS,
+            },
+          ),
+      );
       const messages = result.messages.map((response) =>
         restoreProxyResponseId(response, originalMessage.id),
       );
@@ -345,6 +361,34 @@ export class ElectronAppServerHost {
       }
       return [streamingTurnStartAcceptedResponse(originalMessage, message)];
     }
+  }
+
+  async #withActiveProxyRequest<T>(
+    originalId: RequestId,
+    proxiedId: RequestId,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    this.#activeProxyRequestIds.set(originalId, proxiedId);
+    try {
+      return await run();
+    } finally {
+      this.#activeProxyRequestIds.delete(originalId);
+    }
+  }
+
+  #forwardCancelRequest(
+    connected: ConnectedAppServerSidecar,
+    message: JsonRpcMessage,
+  ): void {
+    const originalId = readCancelRequestId(message);
+    if (originalId === null) {
+      return;
+    }
+    const proxiedId = this.#activeProxyRequestIds.get(originalId);
+    if (proxiedId === undefined) {
+      return;
+    }
+    connected.connection.transport.send(cancelRequest(proxiedId));
   }
 
   async #requestAppServer<T>(
@@ -445,6 +489,27 @@ function isAppServerRequestTimeoutError(error: unknown): boolean {
     error instanceof Error &&
     error.message.includes("timed out waiting for app-server message after")
   );
+}
+
+function isCancelRequestNotification(
+  message: JsonRpcMessage,
+): message is Extract<JsonRpcMessage, { method: string }> {
+  return (
+    isJsonRpcNotification(message) &&
+    message.method === APP_SERVER_CANCEL_REQUEST_METHOD
+  );
+}
+
+function readCancelRequestId(message: JsonRpcMessage): RequestId | null {
+  if (!isCancelRequestNotification(message)) {
+    return null;
+  }
+  const params = message.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return null;
+  }
+  const id = (params as { id?: unknown }).id;
+  return typeof id === "string" || typeof id === "number" ? id : null;
 }
 
 function normalizeDrainEventsLimit(value: unknown, maxLimit: number): number {

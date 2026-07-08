@@ -16,6 +16,8 @@ pub mod shell;
 pub mod shell_analysis;
 pub mod shell_permission;
 pub mod shell_runtime;
+pub mod skill_gate;
+pub mod skill_runtime_contract;
 pub mod skill_search;
 pub mod sleep;
 pub mod subprocess;

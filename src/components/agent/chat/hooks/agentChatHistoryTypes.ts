@@ -10,4 +10,5 @@ export type HistoryThreadToolCall = NonNullable<
 export interface HydrateSessionDetailMessagesOptions {
   compactCompletedHistory?: boolean;
   includeTimelineFallback?: boolean;
+  includeTimelineFallbackUsers?: boolean;
 }

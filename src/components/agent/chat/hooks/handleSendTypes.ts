@@ -27,6 +27,7 @@ export interface HandleSendOptions {
   searchMode?: AgentRuntimeWebSearchMode;
   explicitToolPreferences?: boolean;
   assistantDraft?: AssistantDraftState;
+  targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;

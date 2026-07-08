@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use lime_skills::{
-    build_agent_skill_snapshot_from_workspace, contains_agent_skills_prompt,
-    contains_selected_agent_skill_body_prompt, read_agent_skill_body,
+    agent_skill_roots_for_workspace, build_agent_skill_snapshot_from_roots,
+    contains_agent_skills_prompt, contains_selected_agent_skill_body_prompt, read_agent_skill_body,
     render_available_agent_skills, render_selected_agent_skill_bodies,
     reorder_agent_skill_snapshot_for_query, select_agent_skills_by_name_candidates,
     select_explicit_agent_skills, select_implicit_agent_skills, AgentSkillBodyRenderOptions,
@@ -17,7 +17,7 @@ pub(super) fn append_agent_skills_context_to_system_prompt(
     working_dir: Option<&Path>,
     project_root: Option<&Path>,
 ) -> Option<String> {
-    let snapshot = build_agent_skill_snapshot_from_workspace(working_dir, project_root);
+    let snapshot = build_agent_skill_snapshot_for_turn(working_dir, project_root, metadata_values);
     let system_prompt =
         append_selected_agent_skill_bodies(system_prompt, user_input, metadata_values, &snapshot);
     let system_prompt = append_expert_skill_hints(system_prompt, metadata_values, &snapshot);
@@ -46,11 +46,21 @@ pub(super) fn selected_agent_skill_names_for_turn(
     working_dir: Option<&Path>,
     project_root: Option<&Path>,
 ) -> Vec<String> {
-    let snapshot = build_agent_skill_snapshot_from_workspace(working_dir, project_root);
+    let snapshot = build_agent_skill_snapshot_for_turn(working_dir, project_root, metadata_values);
     selected_agent_skill_selections(user_input, metadata_values, &snapshot)
         .into_iter()
         .map(|selection| selection.locator.name)
         .collect()
+}
+
+pub(super) fn build_agent_skill_snapshot_for_turn(
+    working_dir: Option<&Path>,
+    project_root: Option<&Path>,
+    metadata_values: &[&Value],
+) -> AgentSkillSnapshot {
+    let mut roots = agent_skill_roots_for_workspace(working_dir, project_root);
+    roots.extend(super::plugin_runtime_context::plugin_runtime_agent_skill_roots(metadata_values));
+    build_agent_skill_snapshot_from_roots(roots)
 }
 
 fn append_selected_agent_skill_bodies(
@@ -738,6 +748,70 @@ Call lime_create_image_generation_task directly.
         assert!(prompt.contains("<selected_skill_instructions>"));
         assert!(prompt.contains("`article-writing`"));
         assert!(prompt.contains("# Body"));
+    }
+
+    #[test]
+    fn plugin_package_skill_path_enters_selected_skill_instructions() {
+        let package = TempDir::new().expect("package");
+        let skill_dir = package.path().join("skills").join("article-writing");
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: article-writing
+description: Draft article copy.
+---
+
+# Package Article Writing
+
+Use package workflow rules.
+"#,
+        )
+        .expect("skill file");
+        let metadata = serde_json::json!({
+            "harness": {
+                "plugin_activation": {
+                    "plugin_id": "content-factory-app",
+                    "package_source_uri": package.path().to_string_lossy(),
+                    "workflow_key": "content-article",
+                    "runtime_capabilities": {
+                        "pluginId": "content-factory-app",
+                        "skills": [
+                            {
+                                "id": "article-writing",
+                                "path": "./skills/article-writing/SKILL.md",
+                                "required": true,
+                                "promptInjectionPolicy": {
+                                    "mode": "workflow_scoped",
+                                    "source": "runtimeCapabilities.skills"
+                                }
+                            }
+                        ],
+                        "mcpBindings": [],
+                        "workflowBindings": [
+                            {
+                                "workflowKey": "content-article",
+                                "skillIds": ["article-writing"]
+                            }
+                        ]
+                    }
+                }
+            }
+        });
+
+        let prompt = append_agent_skills_context_to_system_prompt(
+            Some("base".to_string()),
+            "写一篇文章",
+            &[&metadata],
+            None,
+            None,
+        )
+        .expect("prompt");
+
+        assert!(prompt.contains("<selected_skill_instructions>"));
+        assert!(prompt.contains("`article-writing`"));
+        assert!(prompt.contains("# Package Article Writing"));
+        assert!(prompt.contains("Use package workflow rules."));
     }
 
     #[test]

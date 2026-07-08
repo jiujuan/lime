@@ -300,8 +300,8 @@ describe("legacySurfaceCatalog", () => {
     ]);
     expect(profileMonitor?.allowedPaths).toEqual(
       expect.arrayContaining([
-        "src/features/plugin/runtime/workflowRuntimeCapabilityProfile.ts",
-        "src/features/plugin/runtime/capabilityDispatcherTestFixtures.ts",
+        "src/features/plugin/testing/workflowRuntimeCapabilityProfile.ts",
+        "src/features/plugin/testing/capabilityDispatcherTestFixtures.ts",
         "src/features/plugin/ui/PluginsPage.runtime.test.tsx",
       ]),
     );
@@ -1033,21 +1033,15 @@ describe("legacySurfaceCatalog", () => {
     expect(rustEventMonitor?.allowedPaths).toEqual([]);
   });
 
-  it("应限制 subagent metadata 直读只留在 query 与 session_store 投影边界", () => {
+  it("应禁止 subagent metadata 直读重新回流", () => {
     const monitor = legacySurfaceCatalogJson.rustText.find(
       (entry) => entry.id === "rust-agent-subagent-metadata-direct-read",
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("deprecated");
+    expect(monitor?.classification).toBe("dead-candidate");
     expect(monitor?.patterns).toEqual(["resolve_subagent_session_metadata("]);
-    expect(monitor?.allowedPaths).toEqual([
-      "lime-rs/crates/agent/src/session_query.rs",
-      "lime-rs/crates/agent/src/session_store.rs",
-      "lime-rs/crates/agent/src/session_store_subagent_context.rs",
-      "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
-      "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs",
-    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
   });
 
   it("应将 channels_cmd 旧 CRUD stub 命令标记为 dead-candidate", () => {
@@ -3616,13 +3610,20 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.allowedPaths).toEqual([
       "lime-rs/crates/app-server/src/file_checkpoint.rs",
       "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
+      "lime-rs/crates/app-server/src/media_task.rs",
+      "lime-rs/crates/app-server/src/media_task/sidecar.rs",
+      "lime-rs/crates/app-server/src/media_task/tests.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_projection.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
+      "lime-rs/crates/app-server/src/runtime/context_media.rs",
+      "lime-rs/crates/app-server/src/runtime/context_packet.rs",
       "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
       "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
       "lime-rs/crates/app-server/src/runtime/output_refs.rs",
       "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
+      "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
+      "lime-rs/crates/app-server/src/runtime/session_media_reader.rs",
       "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
     ]);
     expect(monitor?.patterns).toEqual([
@@ -3844,6 +3845,7 @@ describe("legacySurfaceCatalog", () => {
   it("应记录 Plugin 应用中心 current App Server 方法目录", () => {
     expect(agentCommandCatalog.appServerPluginMethods).toEqual([
       "pluginLocalPackage/inspect",
+      "pluginLocalPackage/export",
       "pluginPackage/fetchCloud",
       "pluginInstalled/save",
       "pluginInstalled/list",

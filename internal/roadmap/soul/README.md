@@ -1,7 +1,7 @@
 # Lime Soul 个性化路线图
 
 > 状态：current planning source
-> 更新时间：2026-07-07
+> 更新时间：2026-07-08
 > 目标：把 OpenClaw / Hermes 的 `SOUL.md` 个性化经验转译成 Lime 的全局人格 / 声线能力，同时继续收敛到 Memory 个性化主链，不新增平行事实源。
 
 ## 1. 本路线图回答什么
@@ -168,6 +168,15 @@ Hermes 本地调研：
 
 **后续交互口吻能力只允许向 `memory.soul` + Soul `Style Pack Registry` / `Style Resolver` + Memory/Soul prompt composition + Agent Runtime facts 收敛；不得新增 PersonalStyle 平行系统，也不得让 UI / i18n 组件按 profile id 写固定句库。**
 
+### 3.8 当前 P6 输出面骨架事实
+
+截至 `2026-07-08`，Style Profile 已不只停留在欢迎语：
+
+1. 工具 lifecycle、协作执行、artifact/export、media/contentParts、图片生成块和 plugin host-managed generation 都已有 current metadata 骨架。
+2. 图片生成块由 App Server `runtime_backend/image_command/presentation_soul.rs` 写入 L0/L1/L2/L3 `styleLevels`、`generationBriefBoundary`、`soul_lifecycle` 和 Style Pack metadata；前端 `ImageGenerationSoulMetadata` 读取并透传到 chat preview / workbench / DOM `data-soul-*` evidence。
+3. Plugin host-managed generation 的过程说明由 `plugin_worker_generation.rs` 写入 L1/L2 presentation metadata，Host Drawer projection 保留 `data-soul-*`；插件正文仍是 L3 Generation Brief only。
+4. Media/contentParts 的大型媒体 preview policy metadata、page-window 读取执行链与 Workbench 分页按钮骨架已进入 current owner，能标记 `sidecar_preview_budget_exceeded` / `sidecar_page_window` 与 `mediaPreviewRequiresPagination=true`，并通过 toolbar icon 读取上一段 / 下一段；未完成项是 GUI / Playwright 自然度验收、更多业务协作入口、业务域 risk taxonomy、Cloud 风格包安装验收，以及大型媒体 streaming / server-side cancellation / progressive media renderer。
+
 ## 4. OpenClaw / Hermes 借鉴结论
 
 ### 4.1 OpenClaw 值得借鉴的点
@@ -230,7 +239,7 @@ Lime 不照搬的点：
 
 ## 7. 当前落地状态
 
-截至 2026-07-04，本路线图已进入分阶段实现：
+截至 2026-07-08，本路线图已进入分阶段实现：
 
 1. Phase 0 已落地：本目录固定了 Soul、Memory、Expert Persona、Generation Brief 和 `SOUL.md` 的边界。
 2. Phase 1 已落地：设置页提供 `AI 个性 / 声线` 配置，配置保存到 current app config 的 `memory.soul`，不新增数据库表或 Tauri 命令。
@@ -240,14 +249,15 @@ Lime 不照搬的点：
 6. Phase 5 已部分落地：`expertRuntimeBinding` 标记 Expert Persona 与 Global Soul 的作用域边界，`runtime_turn` 将 `harness.expert` 识别为专家会话上下文；专家人格不写回 Global Soul。
 7. Phase 2.5 当前规划已更新为四个内置 Style Pack seed + registry：四个 seed 已迁到 `src/lib/soul/style-profiles/packs/*.json` manifest，前端 `manifest.ts` / `registry.ts` 已可合并 built-in 与 installed `local_import/cloud_download` manifests，resolver / directive composer / 设置页 selector 都消费同一 registry；公共 `style-profiles` barrel 不再导出 built-in profile list / pack id map / 旧 built-in helper，测试和 i18n 覆盖也通过 registry 遍历 pack/profile；App Server `runtime/soul/style_profile.rs` 读取同一 built-in manifest，`style_pack_registry.rs` 已只读加载 `<app-data>/soul/style-packs/registry.json` 中 `status: "enabled"`、`integrity.digest` 和五语言 locale key 齐全的 installed manifest，缺 `status`、旧 `enabled: true`、顶层 `digest` 旧 schema 均 fail closed；`style_pack_install.rs` 已固定 install status 状态机，只有 `Enabled` 可进入 prompt read model；`style_pack_paths.rs` / `style_pack_store.rs` 已落 App Server 本地 store core，覆盖安全 id、staging 写入、atomic replace、registry 备份、rollback、disable 和 disabled uninstall；`soulStylePack/list|install|status/set|uninstall` 已接入 App Server JSON-RPC、generated TS protocol 和前端 API 网关；设置页已具备本地包 list / manifest + 五语言 locale 导入 / 启用 / 禁用 / disabled uninstall 管理骨架，并在当前 profile 被禁用 / 卸载 / 未加载时回退默认 built-in；配置层 `memory.soul.style_profile_id` 已从四枚举演进为 registry profile id 字符串，旧 `sassy_cute_executor` alias 不再隐式映射；bundled locale 守卫已禁止 `agentChat.soulInteraction.<tone>.*` 句库回流；后续仍需把 Cloud catalog / download、签名 / digest 实测校验、安装审计、工具 lifecycle facts / UI read model / GUI evidence 补齐。
 8. Phase 2.6 已新增规划文档：`personal-style-pack-installation.md` 固定风格包安装目录、manifest、状态机、Cloud 下载 deferred 边界，以及与 Agent Skills 包共享分发但 runtime 分离的规则；当前只读 read model、状态机 guard、App Server 本地 store core、JSON-RPC / 前端 API 和设置页 GUI 管理骨架已落地，Cloud 下载、签名校验和安装审计仍 deferred。
-9. `/internal/research/refactor/v1` 对齐项已推进 media / contentParts 骨架：`agent_message.contentParts.media` 已从 App Server read model 进入 GUI media reference card；reference 中存在 `sourcePath/sourceUri/previewUrl` owner facts 时可进入 Workbench media preview，其中 `sourcePath` 已通过 Electron `asset://` 本地只读协议在 current fixture 中显示真实图片；inline `data:` owner fail closed。该项只代表 source owner preview 骨架完成，不代表通用 binary sidecar read、sidecar media store 或 digest 校验完成。
+9. `/internal/research/refactor/v1` 对齐项已推进 media / contentParts 骨架：`agent_message.contentParts.media` 已从 App Server read model 进入 GUI media reference card；reference 中存在 `sourcePath/sourceUri/previewUrl` owner facts 时可进入 Workbench media preview，其中 `sourcePath` 已通过 Electron `asset://` 本地只读协议在 current fixture 中显示真实图片；inline `data:` owner fail closed。App Server `agentSession/media/read` 已完成已知 session `sidecarRef` 的 bounded base64 / range window 读取、full-file `sha256` / `maxBytes` / `offset/length` 校验、`totalBytes/contentRange/hasMore` response contract、schema / generated TS / package client / 前端 API 网关骨架；GUI 点击无 source owner 但可读的 `sidecar://` media reference 时，由 `workspace/mediaReferencePreviewArtifacts.ts` 按 bounded range window 分片读取并校验 offset 连续、chunk length、sha256、MIME、totalBytes 和总上限后生成 object URL media preview artifact，读取失败、partial range、不连续、digest 漂移会 fail-closed 到 metadata fallback；超过前端 preview 预算的大媒体只读取首段 range facts，返回带 `mediaPreviewPolicySchema=lime.media_reference.preview_policy.v1`、`sidecar_preview_budget_exceeded`、budget / loaded / next offset / total bytes facts 和 `mediaPreviewRequiresPagination=true` 的 fallback artifact，不继续分片、不创建 object URL、不把大型 payload 伪装成已完整预览；page-window 读取执行骨架已进入 `workspace/mediaReferencePreviewPagination.ts` / `workspace/useWorkspaceMediaReferencePreviewRuntime.ts` current owner，可按指定 `offset/length` 读取并校验单页 range，生成 `sidecar_page_window` fallback artifact 与 previous / next / page index facts；Workbench 分页按钮骨架已进入 `workspace/mediaReferencePreviewToolbarState.ts` / `workspace/mediaReferencePreviewToolbarActions.tsx` current owner，从 artifact metadata 还原 message / media reference request，并通过五语言 neutral title / aria icon button 调用 `openMediaReferencePreviewPage(...)` 读取上一段 / 下一段；同一 artifact meta 也写入 `mediaReferenceSoulSchema=lime.media_reference.soul_surface.v1`，固定 L0 reference facts、L1 loading status、L2 preview caption 与 L3 source-owned media artifact boundary；App Server client lazy read、object URL registry、同一 preview artifact 替换释放旧 URL、request token、组件卸载 fail-closed、迟到读取不写 UI、object URL 数量 / bytes 预算、`AbortSignal` wait-detach 和 Canvas Workbench preview 接线已收敛到 `workspace/useWorkspaceMediaReferencePreviewRuntime.ts` / App Server client current owner；media preview helper owner 已从泛化 `agentChatWorkspaceHelpers.ts` 拆出，preview runtime lifecycle / 取消 / 内存策略 owner 已从 `AgentChatWorkspace.tsx` 拆出，后续真正 streaming transport / progressive media renderer 和 server-side cancellation / transport kill 必须继续在这些 owner 上推进；App Server `mediaTaskArtifact/image|audio/complete` 已能把当前 session 的 `data:` / `file://` / workspace-local / 受控远程 URL 媒体输出写入 `SidecarStore` 并回写 `sidecarRef` owner facts；图片 worker 直接执行 provider 返回 `data:` 或 remote URL 输出时也会复用同一 `SidecarStore` 写入 session-scoped sidecar，并刷新 task result / attempt snapshot 的 `sidecarRef` owner facts；App Server read model 已能把 `tool.result` / current `item.completed(tool_call)` 中已携带 completed media task `record.result.images[].sidecarRef` 的 owner facts 投影成 synthetic `agent_message.contentParts.media`；`RuntimeCore::load_session_current(...)` 已能在 session read detail 返回前消费同 workspace media task store，按 `sessionId/threadId/turnId` owner facts 把 completed / partial `image_generate` task enrich 成 synthetic `agent_message.contentParts.media`。该项仍不代表真正 streaming transport / progressive media renderer、其它非 sidecar/sourcePath owner 完整读取链或 server-side cancellation / transport kill 完成。
+10. P6 artifact / export 骨架已补到 App Server L3：Harness `evidence/export` UI 只保留 L0 操作层五语言 i18n；`agentSession/handoffBundle|replayCase|analysisHandoff|reviewDecisionTemplate|reviewDecision` current export 已消费 `runtime/soul/locale_copy.rs`，覆盖正式 artifact title、导出 Markdown 正文、`copy_prompt` 与 review checklist 的五语言 copy，并在正文写入 `Generation Brief` 边界，默认不吸收 Product Soul；前端 `agentRuntime/exportClient.ts` 只透传 normalized locale，不按四种 Style Pack 写固定句库。
 
 尚未完成：
 
 1. Phase 4：自动 voice evidence 投影、诊断详情 UI 和完整 GUI / E2E 证据。
 2. Phase 2.5：真实 Claw 风格自然度仍需持续评测，重点是工具调用前后、正文段落转折、失败恢复和结尾建议都受 profile 影响，同时防固定口头禅、工具进度自然化、失败恢复不卖萌，以及拽酷风格不过度装腔。
-3. Refactor/v1 media 骨架后续项：通用 binary sidecar read、sidecar media store、digest 校验和非 sourcePath owner 的完整读取链。
-4. Phase 6：品牌 / 项目声线包的 Knowledge / Memory evidence projection。
+3. Refactor/v1 media 骨架后续项：补真正 streaming transport / progressive media renderer、其它非 sidecar/sourcePath owner 的完整读取链，以及 server-side cancellation / transport kill。
+4. Phase 6：品牌 / 项目声线包的 Knowledge / Memory evidence projection；export L3 copy service 仍需接入更完整的 creator / brand voice evidence、诊断详情 UI 与真实 GUI/E2E。
 5. Phase 7：session-scoped personality overlay。
 
 ## 8. 当前必须避免的误区

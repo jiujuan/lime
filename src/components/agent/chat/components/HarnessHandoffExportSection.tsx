@@ -40,11 +40,15 @@ export function HarnessHandoffExportSection({
   return (
     <Section
       sectionKey="handoff"
-      title={agentText("agentChat.harness.generated.153b1d0f0a", "问题证据包")}
+      title={agentText("agentChat.harness.evidence.title", "问题证据包")}
       badge={
         evidencePack
-          ? `已导出 ${evidencePack.artifacts.length} 个文件`
-          : "待导出"
+          ? agentText(
+              "agentChat.harness.evidence.badge.exported",
+              "已导出 {{count}} 个文件",
+              { count: evidencePack.artifacts.length },
+            )
+          : agentText("agentChat.harness.evidence.badge.pending", "待导出")
       }
       registerRef={registerSectionRef}
     >

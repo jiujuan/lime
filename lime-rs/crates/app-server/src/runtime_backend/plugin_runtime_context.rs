@@ -1,4 +1,6 @@
+use lime_skills::{AgentSkillRoot, AgentSkillScope};
 use serde_json::Value;
+use std::path::{Component, Path, PathBuf};
 
 const PLUGIN_RUNTIME_CONTEXT_MARKER: &str = "<plugin_runtime_capabilities>";
 
@@ -6,6 +8,7 @@ const PLUGIN_RUNTIME_CONTEXT_MARKER: &str = "<plugin_runtime_capabilities>";
 pub(super) struct PluginRuntimeContext {
     pub(super) plugin_id: String,
     pub(super) version: Option<String>,
+    pub(super) package_source_uri: Option<String>,
     pub(super) active_workflow_key: Option<String>,
     pub(super) active_task_kind: Option<String>,
     pub(super) skills: Vec<PluginRuntimeSkill>,
@@ -18,6 +21,7 @@ pub(super) struct PluginRuntimeContext {
 pub(super) struct PluginRuntimeSkill {
     pub(super) id: String,
     pub(super) title: Option<String>,
+    pub(super) path: Option<String>,
     pub(super) activation: Option<String>,
     pub(super) required: bool,
     pub(super) prompt_injection_mode: String,
@@ -30,6 +34,7 @@ pub(super) struct PluginRuntimeMcpBinding {
     pub(super) tool_key: String,
     pub(super) provider: String,
     pub(super) required: bool,
+    pub(super) call_proof_arguments: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +46,7 @@ pub(super) struct PluginRuntimeMcpTarget {
     pub(super) required: bool,
     pub(super) caller: String,
     pub(super) expected_tool_name: String,
+    pub(super) call_proof_arguments: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,6 +123,16 @@ pub(super) fn plugin_runtime_mcp_targets(
     targets
 }
 
+pub(super) fn plugin_runtime_agent_skill_roots(metadata_values: &[&Value]) -> Vec<AgentSkillRoot> {
+    let mut roots = Vec::new();
+    for context in plugin_runtime_contexts(metadata_values) {
+        for root in context.agent_skill_roots() {
+            push_agent_skill_root_unique(&mut roots, root);
+        }
+    }
+    roots
+}
+
 impl PluginRuntimeContext {
     pub(super) fn prompt_injection_skills(&self) -> Vec<&PluginRuntimeSkill> {
         let active_refs = self.active_skill_refs();
@@ -143,6 +159,33 @@ impl PluginRuntimeContext {
             .iter()
             .map(|binding| binding.runtime_target(&self.plugin_id))
             .collect()
+    }
+
+    fn agent_skill_roots(&self) -> Vec<AgentSkillRoot> {
+        let Some(package_root) = self
+            .package_source_uri
+            .as_deref()
+            .and_then(local_package_root_from_source_uri)
+        else {
+            return Vec::new();
+        };
+        let mut roots = Vec::new();
+        for skill in &self.skills {
+            let Some(path) = skill.path.as_deref() else {
+                continue;
+            };
+            let Some(root_path) = plugin_skill_snapshot_root(&package_root, path) else {
+                continue;
+            };
+            push_agent_skill_root_unique(
+                &mut roots,
+                AgentSkillRoot {
+                    path: root_path,
+                    scope: AgentSkillScope::App,
+                },
+            );
+        }
+        roots
     }
 
     fn active_skill_refs(&self) -> Vec<String> {
@@ -177,6 +220,7 @@ impl PluginRuntimeMcpBinding {
             required: self.required,
             caller: plugin_runtime_caller(plugin_id),
             expected_tool_name: expected_mcp_tool_name(&self.server_id, &self.tool_key),
+            call_proof_arguments: self.call_proof_arguments.clone(),
         }
     }
 }
@@ -282,6 +326,7 @@ fn parse_plugin_runtime_context(
     Some(PluginRuntimeContext {
         plugin_id,
         version: read_string(value, &["version"]),
+        package_source_uri: plugin_package_source_uri(activation, value),
         active_workflow_key,
         active_task_kind,
         skills: parse_skills(value.get("skills")),
@@ -345,6 +390,17 @@ fn activation_plugin_id(activation: Option<&Value>) -> Option<String> {
     activation.and_then(|value| read_string(value, &["plugin_id", "pluginId"]))
 }
 
+fn plugin_package_source_uri(activation: Option<&Value>, capabilities: &Value) -> Option<String> {
+    activation
+        .and_then(|value| {
+            read_string(
+                value,
+                &["package_source_uri", "packageSourceUri", "sourceUri"],
+            )
+        })
+        .or_else(|| read_string(capabilities, &["packageSourceUri", "package_source_uri"]))
+}
+
 fn parse_skills(value: Option<&Value>) -> Vec<PluginRuntimeSkill> {
     value
         .and_then(Value::as_array)
@@ -359,6 +415,7 @@ fn parse_skill(value: &Value) -> Option<PluginRuntimeSkill> {
     Some(PluginRuntimeSkill {
         id: read_string(value, &["id"])?,
         title: read_string(value, &["title"]),
+        path: read_string(value, &["path"]),
         activation: read_string(value, &["activation"]),
         required: value
             .get("required")
@@ -389,7 +446,20 @@ fn parse_mcp_binding(value: &Value) -> Option<PluginRuntimeMcpBinding> {
             .get("required")
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        call_proof_arguments: read_call_proof_arguments(value),
     })
+}
+
+fn read_call_proof_arguments(value: &Value) -> Option<Value> {
+    let proof = value
+        .get("callProof")
+        .or_else(|| value.get("call_proof"))?
+        .as_object()?;
+    let arguments = proof
+        .get("arguments")
+        .or_else(|| proof.get("args"))?
+        .clone();
+    arguments.is_object().then_some(arguments)
 }
 
 fn parse_workflow_bindings(value: Option<&Value>) -> Vec<PluginRuntimeWorkflowBinding> {
@@ -496,6 +566,26 @@ fn push_mcp_target_unique(
     targets.push(target);
 }
 
+fn push_agent_skill_root_unique(roots: &mut Vec<AgentSkillRoot>, root: AgentSkillRoot) {
+    let normalized = root
+        .path
+        .canonicalize()
+        .unwrap_or_else(|_| root.path.clone());
+    if roots.iter().any(|existing| {
+        existing
+            .path
+            .canonicalize()
+            .unwrap_or_else(|_| existing.path.clone())
+            == normalized
+    }) {
+        return;
+    }
+    roots.push(AgentSkillRoot {
+        path: normalized,
+        scope: root.scope,
+    });
+}
+
 fn push_unique(values: &mut Vec<String>, value: &str) {
     let value = value.trim();
     if value.is_empty() {
@@ -528,6 +618,48 @@ fn expected_mcp_tool_name(server_id: &str, tool_key: &str) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or(tool_key);
     format!("mcp__{server_id}__{inner}")
+}
+
+fn local_package_root_from_source_uri(source_uri: &str) -> Option<PathBuf> {
+    let source_uri = source_uri.trim();
+    if source_uri.is_empty() || source_uri.contains("://") {
+        return None;
+    }
+    let canonical = PathBuf::from(source_uri).canonicalize().ok()?;
+    canonical.is_dir().then_some(canonical)
+}
+
+fn plugin_skill_snapshot_root(package_root: &Path, relative_path: &str) -> Option<PathBuf> {
+    let skill_path = resolve_package_relative_path(package_root, relative_path)?;
+    if skill_path.file_name().and_then(|name| name.to_str()) == Some("SKILL.md")
+        && skill_path.is_file()
+    {
+        return skill_path
+            .parent()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
+    }
+    if skill_path.join("SKILL.md").is_file() {
+        return skill_path.parent().map(Path::to_path_buf);
+    }
+    skill_path.is_dir().then_some(skill_path)
+}
+
+fn resolve_package_relative_path(package_root: &Path, relative_path: &str) -> Option<PathBuf> {
+    let package_root = package_root.canonicalize().ok()?;
+    let mut normalized = PathBuf::new();
+    for component in Path::new(relative_path.trim()).components() {
+        match component {
+            Component::Normal(value) => normalized.push(value),
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        return None;
+    }
+    let candidate = package_root.join(normalized).canonicalize().ok()?;
+    candidate.starts_with(&package_root).then_some(candidate)
 }
 
 fn read_string(value: &Value, keys: &[&str]) -> Option<String> {
@@ -691,7 +823,12 @@ mod tests {
                             "serverId": "browser",
                             "toolKey": "browser/search",
                             "provider": "mcp",
-                            "required": true
+                            "required": true,
+                            "callProof": {
+                                "arguments": {
+                                    "query": "lime"
+                                }
+                            }
                         },
                         {
                             "serverId": "filesystem",
@@ -718,10 +855,94 @@ mod tests {
         assert_eq!(targets[0].server_id, "browser");
         assert_eq!(targets[0].tool_key, "browser/search");
         assert_eq!(targets[0].expected_tool_name, "mcp__browser__search");
+        assert_eq!(
+            targets[0].call_proof_arguments,
+            Some(json!({ "query": "lime" }))
+        );
         assert_eq!(targets[1].server_id, "filesystem");
         assert_eq!(
             targets[1].expected_tool_name,
             "mcp__filesystem__filesystem-read"
         );
+        assert_eq!(targets[1].call_proof_arguments, None);
+    }
+
+    #[test]
+    fn resolves_local_package_skill_roots_for_agent_skill_snapshot() {
+        let package = tempfile::tempdir().expect("package");
+        let skill_dir = package.path().join("skills").join("article-writing");
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: article-writing\ndescription: Draft articles.\n---\n\n# Article Writing\n",
+        )
+        .expect("skill");
+        let metadata = json!({
+            "harness": {
+                "plugin_activation": {
+                    "plugin_id": "content-factory-app",
+                    "package_source_uri": package.path().to_string_lossy(),
+                    "runtime_capabilities": {
+                        "pluginId": "content-factory-app",
+                        "skills": [
+                            {
+                                "id": "article-writing",
+                                "path": "./skills/article-writing/SKILL.md",
+                                "promptInjectionPolicy": {
+                                    "mode": "workflow_scoped",
+                                    "source": "runtimeCapabilities.skills"
+                                }
+                            }
+                        ],
+                        "mcpBindings": [],
+                        "workflowBindings": []
+                    }
+                }
+            }
+        });
+
+        let roots = plugin_runtime_agent_skill_roots(&[&metadata]);
+
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].scope, AgentSkillScope::App);
+        assert!(roots[0].path.ends_with("skills"));
+    }
+
+    #[test]
+    fn rejects_package_skill_path_traversal() {
+        let package = tempfile::tempdir().expect("package");
+        let outside = tempfile::tempdir().expect("outside");
+        let skill_dir = outside.path().join("article-writing");
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: article-writing\ndescription: Draft articles.\n---\n\n# Article Writing\n",
+        )
+        .expect("skill");
+        let metadata = json!({
+            "harness": {
+                "plugin_activation": {
+                    "plugin_id": "content-factory-app",
+                    "package_source_uri": package.path().to_string_lossy(),
+                    "runtime_capabilities": {
+                        "pluginId": "content-factory-app",
+                        "skills": [
+                            {
+                                "id": "article-writing",
+                                "path": "../article-writing/SKILL.md",
+                                "promptInjectionPolicy": {
+                                    "mode": "workflow_scoped",
+                                    "source": "runtimeCapabilities.skills"
+                                }
+                            }
+                        ],
+                        "mcpBindings": [],
+                        "workflowBindings": []
+                    }
+                }
+            }
+        });
+
+        assert!(plugin_runtime_agent_skill_roots(&[&metadata]).is_empty());
     }
 }

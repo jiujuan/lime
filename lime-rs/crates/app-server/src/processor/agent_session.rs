@@ -1,8 +1,8 @@
 //! agent_session domain handlers for the App Server processor.
 
 use super::{
-    dispatch_result, dispatch_result_with_events, parse_params, to_jsonrpc_error, RequestProcessor,
-    RpcDispatch,
+    RequestProcessor, RpcDispatch, dispatch_result, dispatch_result_with_events, parse_params,
+    to_jsonrpc_error,
 };
 use crate::RuntimeEvent;
 use app_server_protocol::{
@@ -16,6 +16,7 @@ use app_server_protocol::{
     AgentSessionQueuedTurnRemoveParams, AgentSessionRuntimeEventAppendParams,
     AgentSessionRuntimeEventAppendResponse, AgentSessionThreadResumeParams,
     AgentSessionToolInventoryReadParams, AgentSessionUpdateParams, JsonRpcError,
+    RequestId,
 };
 
 impl RequestProcessor {
@@ -77,13 +78,14 @@ impl RequestProcessor {
 
     pub(super) async fn handle_session_media_read_impl(
         &self,
+        request_id: &RequestId,
         params: Option<serde_json::Value>,
     ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let params: AgentSessionMediaReadParams = parse_params(params)?;
         let response = self
             .runtime
-            .read_agent_session_media(params)
+            .read_agent_session_media_with_cancel(params, || self.is_request_canceled(request_id))
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
@@ -335,8 +337,8 @@ mod tests {
     use app_server_protocol::{
         AgentInput, AgentSessionStartParams, AgentSessionTurnStartParams, ClientCapabilities,
         ClientInfo, InitializeParams, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
-        RequestId, METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, METHOD_INITIALIZE,
-        METHOD_INITIALIZED,
+        METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, METHOD_INITIALIZE, METHOD_INITIALIZED,
+        RequestId,
     };
     use serde_json::json;
     use std::sync::Arc;

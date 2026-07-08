@@ -6,14 +6,30 @@
       "minimum": 0,
       "type": "integer"
     },
+    "contentRange": {
+      "type": "string"
+    },
     "contentBase64": {
       "type": "string"
+    },
+    "hasMore": {
+      "type": "boolean"
+    },
+    "length": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
     },
     "mimeType": {
       "type": [
         "null",
         "string"
       ]
+    },
+    "offset": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
     },
     "sessionId": {
       "type": "string"
@@ -22,15 +38,25 @@
       "type": "string"
     },
     "sidecarRef": true,
+    "totalBytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
     "uri": {
       "type": "string"
     }
   },
   "required": [
     "bytes",
+    "contentRange",
     "contentBase64",
+    "hasMore",
+    "length",
+    "offset",
     "sessionId",
     "sha256",
+    "totalBytes",
     "uri"
   ],
   "title": "AgentSessionMediaReadResponse",

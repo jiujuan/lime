@@ -12,6 +12,13 @@ export interface AgentRunTimelineGroup {
   detail: string | null;
   count: number;
   toolCall: AgentToolCallState | null;
+  soulSurface: string | null;
+  soulPhase: string | null;
+  styleLevel: string | null;
+  riskLevel: string | null;
+  toneVariant: string | null;
+  profileId: string | null;
+  packId: string | null;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,7 +63,8 @@ function resolveTimelineTitle(
   record: Record<string, unknown>,
   fallback: string,
 ): string {
-  const title = readString(record.title) ?? fallback;
+  const title =
+    readString(record.displayTitle) ?? readString(record.title) ?? fallback;
   if (readTimelineKind(record) !== "tool") {
     return title;
   }
@@ -195,7 +203,8 @@ export function buildTimelineGroups(
     const groupKey = collapseKey ? `collapse:${collapseKey}` : `item:${index}`;
     const existing = collapseKey ? groupedByCollapseKey.get(groupKey) : null;
     const kind = readTimelineKind(record);
-    const rawMessage = readString(record.message);
+    const rawMessage =
+      readString(record.displayMessage) ?? readString(record.message);
     const toolCall =
       kind === "tool" || kind === "skill"
         ? buildToolCallFromTimeline(record)
@@ -230,6 +239,13 @@ export function buildTimelineGroups(
       detail: detail || null,
       count: 1,
       toolCall,
+      soulSurface: readTimelineSoulField(record, "soulSurface", "soul_surface"),
+      soulPhase: readTimelineSoulField(record, "soulPhase", "soul_phase"),
+      styleLevel: readTimelineSoulField(record, "styleLevel", "style_level"),
+      riskLevel: readTimelineSoulField(record, "riskLevel", "risk_level"),
+      toneVariant: readTimelineSoulField(record, "toneVariant", "tone_variant"),
+      profileId: readTimelineSoulField(record, "profileId", "profile_id"),
+      packId: readTimelineSoulField(record, "packId", "pack_id"),
     };
     groups.push(group);
     if (collapseKey) {
@@ -240,9 +256,28 @@ export function buildTimelineGroups(
   return groups;
 }
 
+function readTimelineSoulField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+): string | null {
+  const lifecycle = isRecord(record.soulLifecycle)
+    ? record.soulLifecycle
+    : isRecord(record.soul_lifecycle)
+      ? record.soul_lifecycle
+      : {};
+  return (
+    readString(record[camelKey]) ??
+    readString(record[snakeKey]) ??
+    readString(lifecycle[camelKey]) ??
+    readString(lifecycle[snakeKey])
+  );
+}
+
 function enrichTimelineRecordForProjection(
   item: unknown,
   fallbackTitle: string,
+  t: AgentRunTranslator,
 ): unknown {
   if (!isRecord(item)) {
     return item;
@@ -258,14 +293,32 @@ function enrichTimelineRecordForProjection(
     .join("\n");
   return {
     ...item,
-    displayTitle: resolveTimelineTitle(item, fallbackTitle),
-    ...(displayMessage ? { displayMessage } : {}),
+    displayTitle:
+      translateTimelineCopy(item, "displayTitleKey", t) ??
+      resolveTimelineTitle(item, fallbackTitle),
+    displayMessage:
+      translateTimelineCopy(item, "displayMessageKey", t) ??
+      (displayMessage || undefined),
   };
+}
+
+function translateTimelineCopy(
+  item: Record<string, unknown>,
+  keyName: "displayTitleKey" | "displayMessageKey",
+  t: AgentRunTranslator,
+): string | null {
+  const key = readString(item[keyName]);
+  if (!key) {
+    return null;
+  }
+  const values = isRecord(item.displayValues) ? item.displayValues : undefined;
+  return t(key, values);
 }
 
 function enrichRuntimeProcessForProjection(
   value: unknown,
   fallbackTitle: string,
+  t: AgentRunTranslator,
 ): unknown {
   if (!isRecord(value) || !Array.isArray(value.timeline)) {
     return value;
@@ -273,7 +326,7 @@ function enrichRuntimeProcessForProjection(
   return {
     ...value,
     timeline: value.timeline.map((item) =>
-      enrichTimelineRecordForProjection(item, fallbackTitle),
+      enrichTimelineRecordForProjection(item, fallbackTitle, t),
     ),
   };
 }
@@ -281,6 +334,7 @@ function enrichRuntimeProcessForProjection(
 function enrichProjectionContainer(
   value: unknown,
   fallbackTitle: string,
+  t: AgentRunTranslator,
 ): unknown {
   if (!isRecord(value)) {
     return value;
@@ -290,8 +344,9 @@ function enrichProjectionContainer(
     runtimeProcess: enrichRuntimeProcessForProjection(
       value.runtimeProcess,
       fallbackTitle,
+      t,
     ),
-    process: enrichRuntimeProcessForProjection(value.process, fallbackTitle),
+    process: enrichRuntimeProcessForProjection(value.process, fallbackTitle, t),
   };
 }
 
@@ -305,8 +360,9 @@ export function buildSharedProjectionInput(
     runtimeProcess: enrichRuntimeProcessForProjection(
       run.runtimeProcess,
       fallbackTitle,
+      t,
     ),
-    task: enrichProjectionContainer(run.task, fallbackTitle),
-    snapshot: enrichProjectionContainer(run.snapshot, fallbackTitle),
+    task: enrichProjectionContainer(run.task, fallbackTitle, t),
+    snapshot: enrichProjectionContainer(run.snapshot, fallbackTitle, t),
   };
 }

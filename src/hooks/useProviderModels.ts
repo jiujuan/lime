@@ -64,6 +64,17 @@ function getProviderAutoFetchCapability(selectedProvider: ConfiguredProvider) {
   });
 }
 
+function canFetchProviderModelsFromApi(
+  selectedProvider: ConfiguredProvider,
+  options: { hasApiKey?: boolean } = {},
+): boolean {
+  const capability = getProviderAutoFetchCapability(selectedProvider);
+  if (!capability.supported) {
+    return false;
+  }
+  return !capability.requiresApiKey || options.hasApiKey !== false;
+}
+
 function mergeConfiguredAndFetchedModels(
   selectedProvider: ConfiguredProvider,
   registryModels: EnhancedModelMetadata[],
@@ -86,10 +97,28 @@ function mergeConfiguredAndFetchedModels(
   });
 }
 
+function hasDeclaredProviderModels(
+  selectedProvider: ConfiguredProvider | undefined | null,
+): boolean {
+  return Boolean(
+    selectedProvider?.customModels?.some((modelId) => modelId.trim()),
+  );
+}
+
+function blocksProviderModelLoad(
+  selectedProvider: ConfiguredProvider | undefined | null,
+): boolean {
+  return (
+    selectedProvider?.authStatus === "login_required" &&
+    !hasDeclaredProviderModels(selectedProvider)
+  );
+}
+
 async function fetchProviderModelsFromApi(
   selectedProvider: ConfiguredProvider,
+  options: { hasApiKey?: boolean } = {},
 ): Promise<EnhancedModelMetadata[]> {
-  if (!getProviderAutoFetchCapability(selectedProvider).supported) {
+  if (!canFetchProviderModelsFromApi(selectedProvider, options)) {
     return [];
   }
 
@@ -124,7 +153,7 @@ export async function loadProviderModels(
   }
 
   if (selectedProvider.authStatus === "login_required") {
-    return [];
+    return buildProviderModelsFromRegistry(selectedProvider, [], null).models;
   }
 
   const sourceOptions = options.forceRefresh
@@ -142,8 +171,11 @@ export async function loadProviderModels(
     aliasConfigPromise,
   ]);
   const autoFetchCapability = getProviderAutoFetchCapability(selectedProvider);
+  const canUseApiModelFetch = canFetchProviderModelsFromApi(selectedProvider, {
+    hasApiKey: options.hasApiKey,
+  });
   const useLiveFetchTruthOnly =
-    options.liveFetchOnly && autoFetchCapability.supported;
+    options.liveFetchOnly && canUseApiModelFetch;
 
   const localResult = buildProviderModelsFromRegistry(
     selectedProvider,
@@ -154,7 +186,9 @@ export async function loadProviderModels(
     return mergeConfiguredAndFetchedModels(
       selectedProvider,
       registryModels,
-      await fetchProviderModelsFromApi(selectedProvider),
+      await fetchProviderModelsFromApi(selectedProvider, {
+        hasApiKey: options.hasApiKey,
+      }),
     );
   }
 
@@ -166,11 +200,13 @@ export async function loadProviderModels(
     return localResult.models;
   }
 
-  if (!autoFetchCapability.supported) {
+  if (!autoFetchCapability.supported || !canUseApiModelFetch) {
     return localResult.models;
   }
 
-  const apiModels = await fetchProviderModelsFromApi(selectedProvider);
+  const apiModels = await fetchProviderModelsFromApi(selectedProvider, {
+    hasApiKey: options.hasApiKey,
+  });
   if (apiModels.length === 0) {
     return localResult.models;
   }
@@ -225,10 +261,11 @@ export function useProviderModels(
     returnFullMetadata = false,
     autoLoad = true,
     liveFetchOnly = false,
+    hasApiKey,
   } = options;
-  const selectedProviderLoginRequired =
-    selectedProvider?.authStatus === "login_required";
-  const effectiveAutoLoad = autoLoad && !selectedProviderLoginRequired;
+  const selectedProviderBlocksModelLoad =
+    blocksProviderModelLoad(selectedProvider);
+  const effectiveAutoLoad = autoLoad && !selectedProviderBlocksModelLoad;
 
   // 获取模型注册表数据
   const {
@@ -266,7 +303,9 @@ export function useProviderModels(
     [selectedProvider],
   );
   const useLiveFetchTruthOnly = Boolean(
-    liveFetchOnly && autoFetchCapability?.supported,
+    liveFetchOnly &&
+      autoFetchCapability?.supported &&
+      (!autoFetchCapability.requiresApiKey || hasApiKey !== false),
   );
   // 当本地没有模型时，从 API 获取
   useEffect(() => {
@@ -299,7 +338,10 @@ export function useProviderModels(
       return;
     }
 
-    if (!autoFetchCapability?.supported) {
+    if (
+      !autoFetchCapability?.supported ||
+      (autoFetchCapability.requiresApiKey && hasApiKey === false)
+    ) {
       setApiModels([]);
       setApiLoading(false);
       setApiError(null);
@@ -323,7 +365,9 @@ export function useProviderModels(
       setApiError(null);
 
       try {
-        setApiModels(await fetchProviderModelsFromApi(selectedProvider));
+        setApiModels(
+          await fetchProviderModelsFromApi(selectedProvider, { hasApiKey }),
+        );
       } catch (err) {
         setApiError(err instanceof Error ? err.message : String(err));
         setApiModels([]);
@@ -337,6 +381,7 @@ export function useProviderModels(
     selectedProvider,
     effectiveAutoLoad,
     autoFetchCapability,
+    hasApiKey,
     useLiveFetchTruthOnly,
     localResult.hasLocalModels,
     registryLoading,
@@ -345,7 +390,7 @@ export function useProviderModels(
 
   // 合并本地模型和 API 模型
   const finalResult = useMemo(() => {
-    if (selectedProviderLoginRequired) {
+    if (selectedProviderBlocksModelLoad) {
       return {
         modelIds: [],
         models: [],
@@ -408,7 +453,7 @@ export function useProviderModels(
     registryModels,
     returnFullMetadata,
     selectedProvider,
-    selectedProviderLoginRequired,
+    selectedProviderBlocksModelLoad,
     useLiveFetchTruthOnly,
   ]);
 

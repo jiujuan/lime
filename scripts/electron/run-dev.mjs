@@ -55,9 +55,7 @@ if (existingRenderer) {
   });
 }
 
-await waitForHttp(rendererDevServerUrl, 60_000);
-
-startElectron("initial");
+await startElectron("initial");
 
 const watcher =
   process.env.LIME_ELECTRON_APP_SERVER_WATCH === "0"
@@ -68,7 +66,8 @@ const watcher =
         },
       });
 
-function startElectron(reason) {
+async function startElectron(reason) {
+  await waitForHttp(rendererDevServerUrl, 60_000);
   console.log(`[electron-dev] starting Electron (${reason})`);
   const electronArgs = ["."];
   const remoteDebuggingPort = normalizeRemoteDebuggingPort(
@@ -185,7 +184,7 @@ async function restartElectron(reason) {
   }
   const child = electron;
   if (!child) {
-    startElectron(reason);
+    await startElectron(reason);
     return;
   }
 
@@ -193,7 +192,7 @@ async function restartElectron(reason) {
   child.kill();
   await waitForExit(child, 5_000);
   restartingElectron = false;
-  startElectron(reason);
+  await startElectron(reason);
 }
 
 async function waitForExit(child, timeoutMs) {

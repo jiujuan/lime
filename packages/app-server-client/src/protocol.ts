@@ -29,6 +29,7 @@ export type {
 export const JSONRPC_VERSION = "2.0";
 export const PROTOCOL_VERSION = "appserver.v0";
 export const SERVER_NAME = "app-server";
+export const METHOD_CANCEL_REQUEST = "$/cancelRequest";
 
 export const CONVERSATION_IMPORT_SOURCE_CLIENTS = [
   "codex",
@@ -79,6 +80,7 @@ export const ERROR_CODES = {
   turnNotActive: -32011,
   sessionAlreadyExists: -32013,
   capabilityDenied: -32020,
+  requestCancelled: -32800,
 } as const;
 
 export type RequestId = number | string;
@@ -100,6 +102,10 @@ export type JsonRpcRequest = {
 export type JsonRpcNotification = {
   method: string;
   params?: unknown;
+};
+
+export type JsonRpcCancelRequestParams = {
+  id: RequestId;
 };
 
 export type JsonRpcResponse<T = RpcResult> = {
@@ -3145,6 +3151,10 @@ export function notification(
   params?: unknown,
 ): JsonRpcNotification {
   return compactParams({ method, params });
+}
+
+export function cancelRequest(id: RequestId): JsonRpcNotification {
+  return notification(METHOD_CANCEL_REQUEST, { id });
 }
 
 export function isAppServerRequestMethod(method: string): boolean {

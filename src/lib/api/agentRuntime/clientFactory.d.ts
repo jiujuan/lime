@@ -106,18 +106,22 @@ export declare function createAgentRuntimeClient({
   ) => Promise<import("./types").ManagedObjective | null>;
   exportAgentRuntimeAnalysisHandoff: (
     sessionId: string,
+    options?: import("./exportClient").AgentRuntimeExportOptions,
   ) => Promise<import("./types").AgentRuntimeAnalysisHandoff>;
   exportAgentRuntimeEvidencePack: (
     sessionId: string,
   ) => Promise<import("./types").AgentRuntimeEvidencePack>;
   exportAgentRuntimeHandoffBundle: (
     sessionId: string,
+    options?: import("./exportClient").AgentRuntimeExportOptions,
   ) => Promise<import("./types").AgentRuntimeHandoffBundle>;
   exportAgentRuntimeReplayCase: (
     sessionId: string,
+    options?: import("./exportClient").AgentRuntimeExportOptions,
   ) => Promise<import("./types").AgentRuntimeReplayCase>;
   exportAgentRuntimeReviewDecisionTemplate: (
     sessionId: string,
+    options?: import("./exportClient").AgentRuntimeExportOptions,
   ) => Promise<import("./types").AgentRuntimeReviewDecisionTemplate>;
   saveAgentRuntimeReviewDecision: (
     request: import("./types").AgentRuntimeSaveReviewDecisionRequest,

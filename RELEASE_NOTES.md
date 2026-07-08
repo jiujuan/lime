@@ -1,41 +1,43 @@
-## Lime v1.94.0
+## Lime v1.95.0
 
 ### 新功能
 
-- Soul Style Pack 进入 App Server current 主链，新增安装、列表、启停和卸载协议，设置页可导入五语言 style pack 并统一展示内置与已安装 profile。
-- Agent chat 增强未完成会话恢复、队列 turn 处理、停止后输入恢复、结构化 `contentParts`、媒体引用卡片、provider safety buffering 提示和侧栏会话投影，降低长对话和中断场景的状态丢失。
-- Runtime native tool surface 扩展到 `view_image`、`apply_patch`、`skill_search`、`sleep`、`update_plan`、`WebFetch`、`WebSearch`、记忆和图片任务等 current 工具面，并补齐 tool-runtime 分发模块。
-- App Server 协议补充 content reference、message content part、session archive / update / list 返回结构和 config warning 投影，为 GUI、client 和 schema export 提供同一份事实源。
+- Agent / Claw 工作区继续收敛到 current 主链，补齐首页启动面、任务中心 tab、队列 turn、停止后输入恢复、终态事件处理、媒体引用预览、Browser Assist 与 Team 协作投影。
+- App Server 增加 session media read 协议、media task 读模型、sidecar / idempotency 支撑和图片命令 Soul presentation，使媒体任务、会话历史和 GUI 预览共享同一份事实源。
+- Runtime 工具面补强 reply backend / stream、provider stream、native overlay、Skill runtime gate 与 tool-runtime 合同边界，减少 agent crate 中的中心化分发逻辑。
+- 插件应用中心和 runtime host 进入更完整的安装、启动、卸载预览、清理证据、云端 bootstrap 与 capability dispatch 主链，详情页和运行态投影拆成可复用模块。
 
 ### 修复
 
-- 修复 Claw / Agent chat 在停止生成、queued turn、history hydrate 和恢复输入时的边界判断，避免有工具副作用、占位输出或旧终态事件时误恢复或误清理。
-- 修复 App Server config warning 在前端 toast、API response、Electron bridge 和 runtime read model 中的传递路径，提升本地配置错误的可见性。
-- 修复模型 provider stream 的安全缓冲与消息投影，保留结构化 content parts、媒体 reference、media-only 历史消息和 final answer phase，减少 reasoning / tool / final text 混排漂移。
-- 修复 Electron renderer 打包时的静态资源 base，降低 packaged fixture 与桌面包内资源路径不一致的风险。
-- 修复 Soul profile 解析和 fallback 行为，使未知 profile、内置 registry 和安装包 profile 在设置页与 prompt context 中保持一致。
+- 修复 Agent / Claw 在 stale terminal event、queued turn、停止后继续输入、history hydrate 和 workspace topic 切换中的状态回收边界，避免错误恢复输入或误停新 stream。
+- 修复 App Server / client 的 event stream、read model normalizer、media result projection 和 export normalizer，降低前后端协议字段漂移风险。
+- 修复 Codex conversation import 的路径解析与项目过滤边界，提升跨目录导入和历史恢复的稳定性。
+- 修复 provider / model 列表加载、OEM LimeHub 同步和 Prompt Cache 能力提示的边界回归，减少 UI 与运行时能力认知不一致。
+- 修复 Electron dev sidecar、fixture build 和 packaged app-server asset 处理，降低开发态与打包态资源路径差异。
 
 ### 优化与重构
 
-- 继续按 Codex-first 收缩 Aster residual，删除 vendor Aster 中旧 session memory、config、cron、notebook edit、plan、remote trigger、task、workflow、web、view image 和 worktree tool 等 dead surface。
-- 将图片任务、记忆、Skill search、sleep、update plan、view image、web retrieval 等工具实现从 agent crate 下沉到 `tool-runtime` 领域模块，中心文件只保留注册和分发接线。
-- 拆分 App Server runtime 的 context media、evidence context、Soul style pack registry / store / paths / installer 和 session projection，减少运行时中心模块膨胀。
-- 前端聊天主路径拆分 unfinished session projection、thread message content parts、runtime status、workspace projection、输入恢复策略和 tool display copy，降低 React 组件中的业务状态机复杂度。
+- 删除旧 ChatSidebar 与多张旧 Harness 导出卡片，把会话、任务、证据包和工作台状态收敛到 workspace / Task Center / HarnessStatusPanel current 组件。
+- 拆分前端大文件：`agentProtocol`、Agent Runtime normalizers / types、App Server client methods、OEM cloud control plane、plugin capability dispatcher、host bridge 和 Plugins page 都下沉到更窄的领域模块。
+- 拆分 Agent chat 的 message projection、timeline content parts、stream event processor、flow control、harness state、thread reliability 和 workspace browser assist runtime，降低 React hook 和组件承担的状态机复杂度。
+- 拆分 Rust 后端的 media task、conversation import、runtime exports、Soul locale copy、image command presentation、model routing、plugin worker generation 和 tool inventory 相关模块。
+- 继续清理 Aster / legacy residual：Skill gate、native tool、provider stream 和 retired command guard 按 Codex-first current 边界重新归位。
 
 ### 测试与质量
 
-- 新增和更新 Soul style pack API / UI、style profile registry、queued turn、App Server warning、content part projection、unfinished session recovery 和 sidebar conversation row 回归。
-- 新增 Rust 定向测试覆盖 Soul style pack store / processor、media context、queue order、session list projection、message diagnostics、agent skill telemetry 和 provider safety buffering。
-- 新增 `smoke:agent-session-recovery-cdp-gate`，并增补 Claw current fixture 的 CDP recovery gate、media reference smoke、scenario registry、GUI completion waits 和 assertion context，覆盖恢复、媒体和主路径完成态。
-- 更新 App Server protocol schema、generated TypeScript types、client contract、Aster migration boundary、scripts governance 和 release workflow guard，防止 retired 工具面回流。
+- 新增和更新 Agent stream、queued turn、input restore、workspace topic switch、media reference preview、task center、message projection、thread reliability 和 Claw provider selection 回归。
+- 新增和更新 Plugin App Center、capability dispatcher、host bridge、cloud bootstrap、runtime projection 和安装 / 卸载证据回归。
+- 新增 Rust 定向测试覆盖 media task JSON-RPC、session media read、conversation import path resolution、runtime export rollout、tool inventory、model routing 与 image command presentation。
+- 扩展 Claw current fixture、terminal guard、pending steer、web tools、skills runtime、Electron fixture build 与 reopen running turn CDP gate，提升 GUI 主路径发布证据。
+- 更新 App Server protocol schema、generated TypeScript types、client contract、legacy surface catalog、MCP contract guards 和五语言 i18n 资源。
 
 ### 文档
 
-- 更新 `AGENTS.md`、工程导航、governance、quality workflow、release workflow 和 Codex skill 索引，明确当前发布治理边界与 Aster 迁移规则。
-- 更新 Aster migration、Soul style output / pack installation / profile、Claw stream、unfinished session recovery 和 refactor v1 研究材料，记录 v1.94.0 的主线背景与退出条件。
+- 更新 Claw stream、Soul style output、refactor v1、Aster migration、Skills、Agent runtime recovery 和测试场景 ledger / registry 等执行计划与路线图材料。
+- 更新 release candidate 相关研究材料，记录 v1.95.0 对 Agent / Plugin / Media / Runtime current 主线的收口点。
 
 ### 其他
 
-- 版本事实源更新到 `1.94.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/vendor/aster-rust/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.95.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/vendor/aster-rust/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.93.0` -> `v1.94.0`
+**完整变更**: `v1.94.0` -> `v1.95.0`

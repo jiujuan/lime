@@ -138,9 +138,12 @@ describe("logs diagnostics current App Server boundary", () => {
 
   it("App Server protocol 和治理 catalog 应记录日志诊断 current 方法", () => {
     const appServerSource = readAppServerApiSources();
-    const clientProtocolSource = readRepoFile(
-      "packages/app-server-client/src/protocol.ts",
-    );
+    const clientProtocolSource = [
+      readRepoFile("packages/app-server-client/src/protocol.ts"),
+      readRepoFile(
+        "packages/app-server-client/src/generated/protocol-types.ts",
+      ),
+    ].join("\n");
     const rustProtocolSource = [
       readRepoFile(
         "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",

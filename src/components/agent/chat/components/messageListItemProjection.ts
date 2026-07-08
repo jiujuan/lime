@@ -1,29 +1,17 @@
-import {
-  areArtifactProtocolPathsEquivalent,
-  resolveArtifactProtocolFilePath,
-} from "@/lib/artifact-protocol";
+import { areArtifactProtocolPathsEquivalent } from "@/lib/artifact-protocol";
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
-import { resolveLatestProjectFileSavedSiteContentTargetFromMessage } from "../utils/latestSavedSiteContentTarget";
 import { isPureRuntimePeerMessageText } from "../utils/runtimePeerMessageDisplay";
-import {
-  resolveSiteSavedContentTargetDisplayName,
-  resolveSiteSavedContentTargetRelativePath,
-} from "../utils/siteToolResultSummary";
 import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
 } from "../utils/messageDisplaySanitizer";
 import { hasStructuredHistoricalContentHint } from "../projection/historicalMessageHydrationProjection";
 import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
-import type { MessageListRenderGroup } from "./MessageList.types";
-import type { AgentStreamTextOverlaySnapshot } from "../hooks/agentStreamTextOverlayStore";
-import type { AgentThreadItem, Message, PendingA2UISource } from "../types";
 import { buildHistoricalMessagePreview } from "./messageListHistoricalPreviewText";
 import {
   parseLeadingUserCommandTag,
   resolveInstalledSkillMessageLabel,
 } from "./messageListUserContentState";
-import { resolveKnowledgeSourceFromArtifacts } from "./messageListKnowledgeSource";
 import { buildTimelineInlineContentParts } from "./messageListTimelineContentParts";
 import {
   resolveImageWorkbenchMessageDisplayState,
@@ -44,11 +32,7 @@ import {
   shouldRenderConversationTimelineItem,
   shouldSuppressPreAnswerThinkingTimeline,
 } from "./messageListInlineProcess";
-import { shouldRenderAssistantRuntimeStatusPill } from "./messageAssistantMetaFooterState";
-import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
-import { isUpdatePlanToolName } from "../utils/toolNameFamily";
-import { isArticleArtifactFrameArtifact } from "./articleArtifactProjection";
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
@@ -78,144 +62,17 @@ import {
   normalizeInactiveRunningWebRetrievalContentParts,
   normalizeInactiveRunningWebRetrievalTimelineItems,
 } from "./messageListProjectionWebRetrieval";
-
-function normalizeFailureContentForCompare(value?: string | null): string {
-  return (value || "").trim().replace(/\s+/g, " ");
-}
-
-function isRuntimeFailureOnlyAssistantText(
-  message: Message,
-  actionContent: string,
-): boolean {
-  if (
-    message.role !== "assistant" ||
-    message.runtimeStatus?.phase !== "failed"
-  ) {
-    return false;
-  }
-
-  const detailText = normalizeFailureContentForCompare(
-    message.runtimeStatus.detail,
-  );
-  const contentText = normalizeFailureContentForCompare(actionContent);
-  if (!detailText || !contentText) {
-    return false;
-  }
-
-  const rawFailureText = contentText.replace(/^执行失败：/, "").trim();
-  if (rawFailureText && rawFailureText !== contentText) {
-    const presentedFailureText = normalizeFailureContentForCompare(
-      resolveAgentRuntimeErrorPresentation(rawFailureText).displayMessage,
-    );
-    if (presentedFailureText === detailText) {
-      return true;
-    }
-  }
-
-  return (
-    contentText === detailText ||
-    contentText === `执行失败：${detailText}` ||
-    contentText === `当前处理失败 ${detailText}`
-  );
-}
-
-function shouldUseFirstTokenRuntimeStatus(
-  status?: Message["runtimeStatus"] | null,
-): boolean {
-  const phase = status?.phase;
-  return (
-    phase === "routing" ||
-    phase === "context" ||
-    phase === "synthesizing" ||
-    phase === "continuing" ||
-    phase === "retrying"
-  );
-}
-
-function sanitizeProjectedMessageText(message: Message, value: string): string {
-  if (!value.trim()) {
-    return "";
-  }
-
-  return sanitizeMessageTextForDisplay(value, {
-    role: message.role,
-    hasImages: Array.isArray(message.images) && message.images.length > 0,
-  });
-}
-
-function canMergeTimelineAsSparseProcessPatch(
-  items?: AgentThreadItem[],
-): boolean {
-  return Boolean(
-    items?.length &&
-    items.every(
-      (item) => item.type === "reasoning" || item.type === "turn_summary",
-    ),
-  );
-}
-
-function canTimelineOwnInlineProcessFlow(items?: AgentThreadItem[]): boolean {
-  return Boolean(
-    items?.some((item) => {
-      if (item.type === "tool_call") {
-        return !isUpdatePlanToolName(item.tool_name);
-      }
-      return (
-        item.type === "plan" ||
-        item.type === "command_execution" ||
-        item.type === "patch" ||
-        item.type === "web_search" ||
-        item.type === "approval_request" ||
-        item.type === "request_user_input" ||
-        item.type === "subagent_activity" ||
-        item.type === "context_compaction"
-      );
-    }),
-  );
-}
-
-function resolveTimelineOwnedVisibleText(
-  parts?: Message["contentParts"],
-): string | null {
-  const text = (parts || [])
-    .filter(
-      (
-        part,
-      ): part is Extract<
-        NonNullable<Message["contentParts"]>[number],
-        { type: "text"; text: string }
-      > => part.type === "text" && part.text.trim().length > 0,
-    )
-    .filter((part) =>
-      shouldUseAgentMessageAsFinalText(
-        typeof part.metadata?.phase === "string" ? part.metadata.phase : null,
-      ),
-    )
-    .map((part) => part.text.trim())
-    .join("\n\n")
-    .trim();
-
-  return text || null;
-}
-
-export interface ResolveMessageListItemProjectionOptions {
-  activeCurrentTurnId: string | null;
-  activePendingA2UISource: PendingA2UISource | null;
-  canOpenSavedSiteContent: boolean;
-  expandedHistoricalAssistantMessageIds: Set<string>;
-  expandedHistoricalTimelineKeys: Set<string>;
-  expandedLongHistoricalMessageIds: Set<string>;
-  focusedTimelineItemId?: string | null;
-  group: MessageListRenderGroup;
-  hasActiveInteractiveRuntime: boolean;
-  isRestoredHistoryWindow: boolean;
-  isSending: boolean;
-  lastAssistantMessageId: string | null;
-  message: Message;
-  shouldDeferHistoricalAssistantMessageDetails: (message: Message) => boolean;
-  shouldDeferThreadItemsScan: boolean;
-  streamingTextOverlay?: AgentStreamTextOverlaySnapshot | null;
-}
+import {
+  canMergeTimelineAsSparseProcessPatch,
+  canTimelineOwnInlineProcessFlow,
+  isRuntimeFailureOnlyAssistantText,
+  resolveMessageInteractiveProjectionState,
+  resolveTimelineOwnedVisibleText,
+  sanitizeProjectedMessageText,
+  shouldUseFirstTokenRuntimeStatus,
+} from "./messageListItemProjectionHelpers";
+import { resolveMessageListItemArtifactProjection } from "./messageListItemProjectionArtifacts";
+import type { ResolveMessageListItemProjectionOptions } from "./messageListItemProjectionTypes";
 
 export function resolveMessageListItemProjection({
   activeCurrentTurnId,
@@ -317,6 +174,14 @@ export function resolveMessageListItemProjection({
     hasCompletedOrRunningWebRetrievalTimelineItem(rawTimelineItems);
   const hasRunningWebRetrievalPart = hasRunningWebRetrievalContentPart(
     rawDisplayContentParts,
+  );
+  const hasInlineNonThinkingProcessPart = Boolean(
+    rawDisplayContentParts?.some(
+      (part) =>
+        part.type === "tool_use" ||
+        part.type === "action_required" ||
+        part.type === "file_changes_batch",
+    ),
   );
   const hasInlineToolUseProcessPart = hasInlineToolUseContentPart(
     rawDisplayContentParts,
@@ -421,11 +286,16 @@ export function resolveMessageListItemProjection({
   const timelineOwnsInlineProcessFlow =
     !messageContentPartsOwnInlineProcessFlow &&
     canTimelineOwnInlineProcessFlow(timelineItemsForDisplay);
+  const shouldMergeTimelineProcessWithInlineThinking =
+    messageContentPartsOwnInlineProcessFlow &&
+    !hasInlineNonThinkingProcessPart &&
+    canTimelineOwnInlineProcessFlow(timelineItemsForDisplay);
   const timelineInlineContentParts =
     message.role === "assistant" &&
     (timelineOwnsInlineProcessFlow ||
       (messageContentPartsOwnInlineProcessFlow &&
-        canMergeTimelineAsSparseProcessPatch(timelineItemsForDisplay))) &&
+        canMergeTimelineAsSparseProcessPatch(timelineItemsForDisplay)) ||
+      shouldMergeTimelineProcessWithInlineThinking) &&
     !shouldPreferCompactHistoricalTimeline &&
     !shouldKeepExpandedHistoricalTimelineInTimeline
       ? buildTimelineInlineContentParts({
@@ -625,44 +495,21 @@ export function resolveMessageListItemProjection({
       : undefined;
   const shouldSuppressInlineA2UI = false;
   const suppressedActionRequestId = null;
-  const hasActivePendingSourceForMessage =
-    activePendingA2UISource?.kind === "assistant_message"
-      ? activePendingA2UISource.messageId === message.id
-      : activePendingA2UISource?.kind === "action_request"
-        ? (message.actionRequests || []).some(
-            (request) =>
-              request.requestId === activePendingA2UISource.requestId,
-          ) ||
-          (message.contentParts || []).some(
-            (part) =>
-              part.type === "action_required" &&
-              part.actionRequired.requestId ===
-                activePendingA2UISource.requestId,
-          )
-        : false;
-  const hasPendingActionRequestForMessage =
-    (message.actionRequests || []).some(
-      (request) => request.status !== "submitted",
-    ) ||
-    (message.contentParts || []).some(
-      (part) =>
-        part.type === "action_required" &&
-        part.actionRequired.status !== "submitted",
-    );
   const hasActiveStreamingOverlay = Boolean(
     streamingFinalTextOverlayContent?.trim(),
   );
-  const isCurrentInteractiveAssistantMessage =
-    message.role === "assistant" &&
-    (hasActivePendingSourceForMessage ||
-      hasActiveStreamingOverlay ||
-      (message.id === lastAssistantMessageId &&
-        hasActiveInteractiveRuntime &&
-        (isSending ||
-          hasPendingActionRequestForMessage ||
-          isActiveProcessOnlyOutput)));
-  const shouldReadOnlyInteractiveContent =
-    message.role === "assistant" && !isCurrentInteractiveAssistantMessage;
+  const {
+    isCurrentInteractiveAssistantMessage,
+    shouldReadOnlyInteractiveContent,
+  } = resolveMessageInteractiveProjectionState({
+    activePendingA2UISource,
+    hasActiveInteractiveRuntime,
+    hasActiveStreamingOverlay,
+    isActiveProcessOnlyOutput,
+    isSending,
+    lastAssistantMessageId,
+    message,
+  });
   const usesProcessSeparatedFinalText =
     messageContentPartsOwnInlineProcessFlow &&
     includeInlineProcessFlow &&
@@ -800,52 +647,23 @@ export function resolveMessageListItemProjection({
     actionContent &&
     actionContent.length >= 24,
   );
-  const knowledgeArtifactSource =
-    message.role === "assistant"
-      ? resolveKnowledgeSourceFromArtifacts(message.artifacts)
-      : null;
-  const knowledgeSaveContent =
-    knowledgeArtifactSource?.content.trim() || actionContent;
-  const canSaveMessageAsKnowledge = Boolean(
-    message.role === "assistant" &&
-    !message.imageWorkbenchPreview &&
-    !message.isThinking &&
-    knowledgeSaveContent &&
-    knowledgeSaveContent.length >= 24,
-  );
-  const messageSavedSiteContentTarget =
-    message.role === "assistant"
-      ? resolveLatestProjectFileSavedSiteContentTargetFromMessage(message)
-      : null;
-  const visibleAssistantArtifacts =
-    message.role === "assistant" && !shouldSuppressImageProcessFlow
-      ? (message.artifacts || []).filter((artifact) => {
-          const artifactPath = resolveArtifactProtocolFilePath(artifact);
-          if (isHiddenConversationArtifactPath(artifactPath)) {
-            return false;
-          }
-
-          return !alreadyRenderedArtifactPaths.some((renderedPath) =>
-            areArtifactProtocolPathsEquivalent(artifactPath, renderedPath),
-          );
-        })
-      : [];
-  const hasArticleArtifactFrame = visibleAssistantArtifacts.some(
-    isArticleArtifactFrameArtifact,
-  );
-  const shouldRenderMessageCanvasShortcut = Boolean(
-    messageSavedSiteContentTarget &&
-    canOpenSavedSiteContent &&
-    !message.imageWorkbenchPreview &&
-    !hasTrailingArtifactTimelineItems,
-  );
-  const messageCanvasShortcutTitle = messageSavedSiteContentTarget
-    ? resolveSiteSavedContentTargetDisplayName(messageSavedSiteContentTarget) ||
-      "导出稿"
-    : "文件";
-  const messageCanvasShortcutPath = messageSavedSiteContentTarget
-    ? resolveSiteSavedContentTargetRelativePath(messageSavedSiteContentTarget)
-    : null;
+  const {
+    canSaveMessageAsKnowledge,
+    hasArticleArtifactFrame,
+    knowledgeArtifactSource,
+    messageCanvasShortcutPath,
+    messageCanvasShortcutTitle,
+    messageSavedSiteContentTarget,
+    shouldRenderMessageCanvasShortcut,
+    visibleAssistantArtifacts,
+  } = resolveMessageListItemArtifactProjection({
+    actionContent,
+    alreadyRenderedArtifactPaths,
+    canOpenSavedSiteContent,
+    hasTrailingArtifactTimelineItems,
+    message,
+    shouldSuppressImageProcessFlow,
+  });
   const shouldDeferHistoricalMarkdownRender =
     shouldDeferMessageDetails &&
     message.role === "assistant" &&

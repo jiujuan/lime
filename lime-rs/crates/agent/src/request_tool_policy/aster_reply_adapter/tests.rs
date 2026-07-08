@@ -1,6 +1,19 @@
+use super::super::aster_reply_stream_adapter::provider_stream_event_from_aster_message;
 use super::*;
+use crate::model_request_policy::{
+    native_tool_policy_disallowed_tool_names, native_tool_policy_from_turn_context,
+};
 use agent_protocol::turn_context::TurnContextOverride;
+use agent_runtime::reply_backend::RuntimeReplyBackendStart;
+use agent_runtime::reply_host::RuntimeReplyStartRequest;
+use agent_runtime::reply_input::RuntimeReplyInput;
+use agent_runtime::reply_request::RuntimeReplyRequest;
+use aster::conversation::message::Message;
 use aster::providers::formats::openai_responses::PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX;
+use model_provider::provider_stream::{
+    RuntimeProviderBackend, RuntimeReplyInputKind, RuntimeReplyProviderHandle,
+    RuntimeReplyProviderStreamEvent, RuntimeReplyStreamRequest,
+};
 use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use model_provider::safety::ProviderSafetyBufferingRetryModelSource;
 use serde_json::json;
@@ -21,8 +34,8 @@ fn empty_session_config(turn_context: Option<TurnContextOverride>) -> AgentSessi
 }
 
 #[test]
-fn attach_native_tool_policy_scope_disallows_unsupported_native_tools() {
-    let mut config = empty_session_config(Some(TurnContextOverride {
+fn backend_start_session_metadata_disallows_unsupported_native_tools() {
+    let config = empty_session_config(Some(TurnContextOverride {
         metadata: HashMap::from([
             (
                 "runtime_options".to_string(),
@@ -44,8 +57,19 @@ fn attach_native_tool_policy_scope_disallows_unsupported_native_tools() {
         ]),
         ..TurnContextOverride::default()
     }));
-
-    attach_native_tool_policy_scope(&mut config);
+    let native_policy = native_tool_policy_from_turn_context(config.turn_context.as_ref());
+    let request = RuntimeReplyRequest::from_attempt_input(
+        config.id.clone(),
+        RuntimeReplyInput::text("hello").into(),
+        None,
+        None,
+    );
+    let start_request = RuntimeReplyStartRequest::new(request, config, None, false);
+    let mut backend_start = RuntimeReplyBackendStart::from_start_request(start_request);
+    backend_start.prepare_session_metadata(native_tool_policy_disallowed_tool_names(
+        native_policy.as_ref(),
+    ));
+    let (_, _, config, _, _) = backend_start.into_parts();
 
     let turn_context = config.turn_context.expect("turn context");
     let disallowed_tools = turn_context
@@ -65,7 +89,7 @@ fn attach_native_tool_policy_scope_disallows_unsupported_native_tools() {
 #[test]
 fn provider_stream_notification_projects_safety_buffering_event() {
     let payload = json!({
-        "eventKind": PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING,
+        "eventKind": RuntimeReplyProviderStreamEvent::NOTIFICATION_KIND_SAFETY_BUFFERING,
         "responseEvent": {
             "type": "response.output_text.delta",
             "safety_buffering": {
@@ -105,7 +129,7 @@ fn provider_stream_notification_projects_safety_buffering_event() {
     };
     let stream_request = RuntimeReplyStreamRequest::new(
         "session-1",
-        model_provider::provider_stream::RuntimeReplyInputKind::UserMessage,
+        RuntimeReplyInputKind::UserMessage,
         10,
         Some(RuntimeReplyProviderHandle::from_config(
             &config,

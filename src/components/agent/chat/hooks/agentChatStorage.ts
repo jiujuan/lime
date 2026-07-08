@@ -341,12 +341,13 @@ export const resolveWorkspaceAgentPreferences = (
   const { providerKey, modelKey, migratedKey } =
     getAgentPreferenceKeys(workspaceId);
 
-  const scopedProvider = loadPersistedString(providerKey);
-  const scopedModel = loadPersistedString(modelKey);
-  if (scopedProvider || scopedModel) {
+  const scopedProvider = loadPersistedString(providerKey)?.trim() || null;
+  const scopedModel = loadPersistedString(modelKey)?.trim() || null;
+  const hasScopedPreference = Boolean(scopedProvider || scopedModel);
+  if (hasScopedPreference) {
     const scopedPreference = normalizeChatSessionModelPreference({
-      providerType: scopedProvider || DEFAULT_AGENT_PROVIDER,
-      model: scopedModel || DEFAULT_AGENT_MODEL,
+      providerType: scopedProvider ?? DEFAULT_AGENT_PROVIDER,
+      model: scopedModel ?? DEFAULT_AGENT_MODEL,
     });
     if (scopedPreference) {
       return scopedPreference;
@@ -363,11 +364,11 @@ export const resolveWorkspaceAgentPreferences = (
   const migrated = loadPersisted<boolean>(migratedKey, false);
   if (!migrated) {
     const legacyProvider =
-      loadPersistedString("agent_pref_provider") ||
-      loadPersistedString(GLOBAL_PROVIDER_PREF_KEY);
+      loadPersistedString("agent_pref_provider")?.trim() ||
+      loadPersistedString(GLOBAL_PROVIDER_PREF_KEY)?.trim();
     const legacyModel =
-      loadPersistedString("agent_pref_model") ||
-      loadPersistedString(GLOBAL_MODEL_PREF_KEY);
+      loadPersistedString("agent_pref_model")?.trim() ||
+      loadPersistedString(GLOBAL_MODEL_PREF_KEY)?.trim();
     const legacyPreference = normalizeChatSessionModelPreference({
       providerType: legacyProvider || DEFAULT_AGENT_PROVIDER,
       model: legacyModel || DEFAULT_AGENT_MODEL,

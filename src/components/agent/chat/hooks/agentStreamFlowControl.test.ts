@@ -6,7 +6,6 @@ import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
 import {
   promoteQueuedAgentTurn,
   removeQueuedAgentTurn,
-  removeQueuedTurnFromState,
   resumeAgentStreamThread,
   settleInterruptedMessageProcess,
   stopActiveAgentStream,
@@ -28,41 +27,6 @@ async function flushMicrotasks(times = 3) {
 }
 
 describe("agentStreamFlowControl", () => {
-  it("removeQueuedTurnFromState 应删除目标并重新编号", () => {
-    const next = removeQueuedTurnFromState(
-      [
-        {
-          queued_turn_id: "queued-1",
-          message_preview: "one",
-          message_text: "one",
-          created_at: 1,
-          image_count: 0,
-          position: 1,
-        },
-        {
-          queued_turn_id: "queued-2",
-          message_preview: "two",
-          message_text: "two",
-          created_at: 2,
-          image_count: 0,
-          position: 2,
-        },
-      ],
-      "queued-1",
-    );
-
-    expect(next).toEqual([
-      {
-        queued_turn_id: "queued-2",
-        message_preview: "two",
-        message_text: "two",
-        created_at: 2,
-        image_count: 0,
-        position: 1,
-      },
-    ]);
-  });
-
   it("stopActiveAgentStream 应清理 optimistic 状态并刷新 read model", async () => {
     let queuedTurns: QueuedTurnSnapshot[] = [
       {
@@ -149,16 +113,11 @@ describe("agentStreamFlowControl", () => {
       activeStream,
       sessionIdRef: { current: "session-1" },
       runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
         interruptTurn,
       } as never,
       removeStreamListener,
       refreshSessionReadModel,
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
-        },
-      ),
       setThreadItems: createStateSetter(
         () => threadItems,
         (value) => {
@@ -253,7 +212,6 @@ describe("agentStreamFlowControl", () => {
         isThinking: true,
       },
     ];
-    let queuedTurns: QueuedTurnSnapshot[] = [];
     let threadItems: AgentThreadItem[] = [];
     let threadTurns: AgentThreadTurn[] = [];
     let currentTurnId: string | null = null;
@@ -268,16 +226,11 @@ describe("agentStreamFlowControl", () => {
       activeStream,
       sessionIdRef: { current: "session-1" },
       runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
         interruptTurn,
       } as never,
       removeStreamListener: vi.fn(),
       refreshSessionReadModel,
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
-        },
-      ),
       setThreadItems: createStateSetter(
         () => threadItems,
         (value) => {
@@ -374,14 +327,11 @@ describe("agentStreamFlowControl", () => {
       activeStream,
       sessionIdRef: { current: "session-1" },
       runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
         interruptTurn: vi.fn(async () => true),
       } as never,
       removeStreamListener: vi.fn(),
       refreshSessionReadModel,
-      setQueuedTurns: createStateSetter(
-        () => [] as QueuedTurnSnapshot[],
-        () => undefined,
-      ),
       setThreadItems: createStateSetter(
         () => [] as AgentThreadItem[],
         () => undefined,
@@ -469,14 +419,11 @@ describe("agentStreamFlowControl", () => {
       activeStream,
       sessionIdRef: { current: "session-1" },
       runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
         interruptTurn: vi.fn(async () => true),
       } as never,
       removeStreamListener: vi.fn(),
       refreshSessionReadModel: vi.fn(async () => true),
-      setQueuedTurns: createStateSetter(
-        () => [] as QueuedTurnSnapshot[],
-        () => undefined,
-      ),
       setThreadItems: createStateSetter(
         () => [] as AgentThreadItem[],
         () => undefined,
@@ -577,14 +524,11 @@ describe("agentStreamFlowControl", () => {
       activeStream,
       sessionIdRef: { current: "session-rich-restore" },
       runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
         interruptTurn: vi.fn(async () => true),
       } as never,
       removeStreamListener: vi.fn(),
       refreshSessionReadModel: vi.fn(async () => true),
-      setQueuedTurns: createStateSetter(
-        () => [] as QueuedTurnSnapshot[],
-        () => undefined,
-      ),
       setThreadItems: createStateSetter(
         () => [] as AgentThreadItem[],
         () => undefined,
@@ -645,7 +589,7 @@ describe("agentStreamFlowControl", () => {
     });
   });
 
-  it("stopActiveAgentStream 有 active 输出和 queued rich input 时应恢复 queued draft 并移除队列项", async () => {
+  it("stopActiveAgentStream 有 active 输出和 queued rich input 时应恢复 queued draft 且不本地裁剪队列", async () => {
     let queuedTurns: QueuedTurnSnapshot[] = [
       {
         queued_turn_id: "queued-rich",
@@ -712,17 +656,12 @@ describe("agentStreamFlowControl", () => {
       activeStream,
       sessionIdRef: { current: "session-1" },
       runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
         interruptTurn,
         removeQueuedTurn,
       } as never,
       removeStreamListener: vi.fn(),
       refreshSessionReadModel: vi.fn(async () => true),
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
-        },
-      ),
       setThreadItems: createStateSetter(
         () => [] as AgentThreadItem[],
         () => undefined,
@@ -754,7 +693,12 @@ describe("agentStreamFlowControl", () => {
     });
 
     expect(activeStream).toBeNull();
-    expect(queuedTurns).toEqual([]);
+    expect(queuedTurns).toEqual([
+      expect.objectContaining({
+        queued_turn_id: "queued-rich",
+        position: 1,
+      }),
+    ]);
     expect(messages[0]).toMatchObject({
       content: "active output should remain visible",
       isThinking: false,
@@ -806,8 +750,99 @@ describe("agentStreamFlowControl", () => {
     );
   });
 
+  it("stopActiveAgentStream 恢复 queued turn 时不应再把 queued turn 当 active turn 取消", async () => {
+    let queuedTurns: QueuedTurnSnapshot[] = [
+      {
+        queued_turn_id: "queued-rich",
+        message_preview: "/capability-report queued rich prompt",
+        message_text: "queued rich prompt",
+        created_at: Date.now(),
+        image_count: 0,
+        position: 0,
+        text_elements: [
+          {
+            type: "text",
+            text: "queued rich prompt",
+          },
+        ],
+      },
+    ];
+    let messages: Message[] = [
+      {
+        id: "assistant-visible",
+        role: "assistant",
+        content: "active output should remain visible",
+        timestamp: new Date("2026-03-29T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-visible",
+      eventName: "stream-pending-steer",
+      sessionId: "session-1",
+      turnId: "queued-rich",
+      submittedDraft: {
+        text: "active prompt",
+      },
+    };
+    const interruptTurn = vi.fn(async () => true);
+    const removeQueuedTurn = vi.fn(async () => true);
+    const onRestoreInterruptedInput = vi.fn();
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
+        interruptTurn,
+        removeQueuedTurn,
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => null as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      getMessages: () => messages,
+      getQueuedTurns: () => queuedTurns,
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      onRestoreInterruptedInput,
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    await flushMicrotasks();
+    expect(removeQueuedTurn).toHaveBeenCalledWith("session-1", "queued-rich");
+    expect(interruptTurn).not.toHaveBeenCalled();
+    expect(onRestoreInterruptedInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "queued_turn_restored_after_interrupt",
+        draft: expect.objectContaining({
+          text: "queued rich prompt",
+        }),
+      }),
+    );
+  });
+
   it("stopActiveAgentStream 本地队列未同步时应从 read model 恢复 queued rich draft", async () => {
-    let queuedTurns: QueuedTurnSnapshot[] = [];
     let messages: Message[] = [
       {
         id: "assistant-visible",
@@ -886,12 +921,6 @@ describe("agentStreamFlowControl", () => {
       } as never,
       removeStreamListener: vi.fn(),
       refreshSessionReadModel: vi.fn(async () => true),
-      setQueuedTurns: createStateSetter(
-        () => queuedTurns,
-        (value) => {
-          queuedTurns = value;
-        },
-      ),
       setThreadItems: createStateSetter(
         () => [] as AgentThreadItem[],
         () => undefined,
@@ -1053,7 +1082,7 @@ describe("agentStreamFlowControl", () => {
     }
   });
 
-  it("promoteQueuedAgentTurn 应先收口当前前台流，再切换到新的排队任务", async () => {
+  it("promoteQueuedAgentTurn 应通过 current promote/cancel/resume 一键切换排队任务", async () => {
     let queuedTurns: QueuedTurnSnapshot[] = [
       {
         queued_turn_id: "queued-1",
@@ -1108,11 +1137,48 @@ describe("agentStreamFlowControl", () => {
       assistantMsgId: "assistant-1",
       eventName: "stream-1",
       sessionId: "session-1",
+      turnId: "queued-2",
       pendingTurnKey: "pending-turn:1",
       pendingItemKey: "pending-item:1",
     };
     const refreshSessionReadModel = vi.fn(async () => true);
+    const getSessionReadModel = vi.fn(async () => ({
+      thread_id: "session-1",
+      active_turn_id: "queued-2",
+      queued_turns: [
+        {
+          queued_turn_id: "queued-1",
+          message_preview: "preview",
+          message_text: "text",
+          created_at: 1,
+          image_count: 0,
+          position: 1,
+        },
+        {
+          queued_turn_id: "queued-2",
+          message_preview: "second",
+          message_text: "second",
+          created_at: 2,
+          image_count: 0,
+          position: 2,
+        },
+      ],
+      turns: [
+        {
+          turn_id: "turn-active-1",
+          status: "running",
+          native_status: "running",
+        },
+        {
+          turn_id: "queued-2",
+          status: "running",
+          native_status: "queued",
+        },
+      ],
+    }));
+    const interruptTurn = vi.fn(async () => true);
     const promoteQueuedTurn = vi.fn(async () => true);
+    const resumeThread = vi.fn(async () => true);
     const removeStreamListener = vi.fn(() => true);
     const notify = {
       info: vi.fn(),
@@ -1122,19 +1188,16 @@ describe("agentStreamFlowControl", () => {
     await expect(
       promoteQueuedAgentTurn({
         runtime: {
+          getSessionReadModel,
+          interruptTurn,
           promoteQueuedTurn,
+          resumeThread,
         },
         queuedTurnId: "queued-1",
         activeStream,
         removeStreamListener,
         sessionIdRef: { current: "session-1" },
         refreshSessionReadModel,
-        setQueuedTurns: createStateSetter(
-          () => queuedTurns,
-          (value) => {
-            queuedTurns = value;
-          },
-        ),
         setThreadItems: createStateSetter(
           () => threadItems,
           (value) => {
@@ -1168,8 +1231,30 @@ describe("agentStreamFlowControl", () => {
 
     expect(removeStreamListener).toHaveBeenCalledWith("stream-1");
     expect(promoteQueuedTurn).toHaveBeenCalledWith("session-1", "queued-1");
+    expect(getSessionReadModel).toHaveBeenCalledWith("session-1");
+    expect(interruptTurn).toHaveBeenCalledWith(
+      "session-1",
+      "turn-active-1",
+      undefined,
+    );
+    expect(resumeThread).toHaveBeenCalledWith("session-1");
+    expect(
+      promoteQueuedTurn.mock.invocationCallOrder[0],
+    ).toBeLessThan(interruptTurn.mock.invocationCallOrder[0]);
+    expect(interruptTurn.mock.invocationCallOrder[0]).toBeLessThan(
+      resumeThread.mock.invocationCallOrder[0],
+    );
     expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
-    expect(queuedTurns).toEqual([]);
+    expect(queuedTurns).toEqual([
+      {
+        queued_turn_id: "queued-1",
+        message_preview: "preview",
+        message_text: "text",
+        created_at: 1,
+        image_count: 0,
+        position: 1,
+      },
+    ]);
     expect(threadItems).toEqual([]);
     expect(threadTurns).toEqual([]);
     expect(currentTurnId).toBeNull();
@@ -1211,16 +1296,19 @@ describe("agentStreamFlowControl", () => {
         queuedTurnId: "queued-1",
         sessionIdRef,
         refreshSessionReadModel,
-        setQueuedTurns: createStateSetter(
-          () => queuedTurns,
-          (value) => {
-            queuedTurns = value;
-          },
-        ),
         notify,
       }),
     ).resolves.toBe(true);
-    expect(queuedTurns).toEqual([]);
+    expect(queuedTurns).toEqual([
+      {
+        queued_turn_id: "queued-1",
+        message_preview: "preview",
+        message_text: "text",
+        created_at: 1,
+        image_count: 0,
+        position: 1,
+      },
+    ]);
 
     queuedTurns = [
       {
@@ -1235,19 +1323,29 @@ describe("agentStreamFlowControl", () => {
     await expect(
       promoteQueuedAgentTurn({
         runtime: {
+          getSessionReadModel: vi.fn(async () => ({
+            thread_id: "session-1",
+            queued_turns: [
+              {
+                queued_turn_id: "queued-1",
+                message_preview: "preview",
+                message_text: "text",
+                created_at: 1,
+                image_count: 0,
+                position: 1,
+              },
+            ],
+            turns: [],
+          })),
+          interruptTurn: vi.fn(async () => true),
           promoteQueuedTurn: vi.fn(async () => true),
+          resumeThread: vi.fn(async () => true),
         },
         queuedTurnId: "queued-1",
         activeStream: null,
         removeStreamListener: vi.fn(() => true),
         sessionIdRef,
         refreshSessionReadModel,
-        setQueuedTurns: createStateSetter(
-          () => queuedTurns,
-          (value) => {
-            queuedTurns = value;
-          },
-        ),
         setThreadItems: createStateSetter(
           () => [] as AgentThreadItem[],
           () => undefined,

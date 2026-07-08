@@ -345,6 +345,7 @@ export async function mountHook(
     parentSessionId: null,
     currentTurnEventName: null,
     isSending: false,
+    threadRead: null,
     threadReadStatus: null,
     queuedTurnCount: 0,
     threadTurns: [],

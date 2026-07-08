@@ -215,7 +215,6 @@ export function useWorkspaceTopicSwitch({
         });
 
         if (decision.status === "blocked") {
-          toast.error("该任务绑定了其他项目，请先切换到对应项目");
           return "blocked" as const;
         }
 

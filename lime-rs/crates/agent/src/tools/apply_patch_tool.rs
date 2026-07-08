@@ -1,62 +1,25 @@
-use crate::native_tools::runtime_tool_bridge::execute_runtime_tool;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
-use async_trait::async_trait;
+use crate::native_tools::runtime_tool_bridge::RuntimeNativeToolAdapter;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext};
 use serde_json::Value;
+use tool_runtime::apply_patch::check_runtime_apply_patch_permissions;
 pub use tool_runtime::apply_patch::APPLY_PATCH_TOOL_NAME;
-use tool_runtime::apply_patch::{
-    apply_patch_tool_definition, check_runtime_apply_patch_permissions,
-};
-use tool_runtime::native_dispatch::runtime_native_dispatch_handle;
+use tool_runtime::native_overlay::RuntimeNativeToolOverlay;
 
-#[derive(Debug, Default)]
-pub struct ApplyPatchTool;
-
-#[async_trait]
-impl Tool for ApplyPatchTool {
-    fn name(&self) -> &str {
+pub(crate) fn create_apply_patch_tool() -> Box<dyn Tool> {
+    debug_assert_eq!(
+        RuntimeNativeToolOverlay::ApplyPatch.name(),
         APPLY_PATCH_TOOL_NAME
-    }
+    );
+    Box::new(RuntimeNativeToolAdapter::new(
+        RuntimeNativeToolOverlay::ApplyPatch,
+        check_apply_patch_permissions,
+    ))
+}
 
-    fn description(&self) -> &str {
-        "Apply a structured patch to files inside the current workspace. Use this for multi-file add, update, delete, or move edits."
-    }
-
-    fn input_schema(&self) -> Value {
-        apply_patch_tool_definition().input_schema
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        &["ApplyPatchTool"]
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if context.is_cancelled() {
-            return Err(ToolError::Cancelled);
-        }
-
-        execute_runtime_tool(
-            runtime_native_dispatch_handle(),
-            APPLY_PATCH_TOOL_NAME,
-            &params,
-            context,
-            None,
-        )
-        .await
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        context: &ToolContext,
-    ) -> PermissionCheckResult {
-        match check_runtime_apply_patch_permissions(params, &context.working_directory) {
-            Ok(()) => PermissionCheckResult::allow(),
-            Err(error) => PermissionCheckResult::deny(error.message().to_string()),
-        }
-    }
-
-    fn options(&self) -> ToolOptions {
-        ToolOptions::new().with_max_retries(0)
+fn check_apply_patch_permissions(params: &Value, context: &ToolContext) -> PermissionCheckResult {
+    match check_runtime_apply_patch_permissions(params, &context.working_directory) {
+        Ok(()) => PermissionCheckResult::allow(),
+        Err(error) => PermissionCheckResult::deny(error.message().to_string()),
     }
 }
 
@@ -75,7 +38,7 @@ mod tests {
     #[tokio::test]
     async fn applies_patch_inside_workspace() {
         let dir = tempdir().unwrap();
-        let tool = ApplyPatchTool;
+        let tool = create_apply_patch_tool();
         let result = tool
             .execute(
                 json!({
@@ -109,7 +72,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_patch_path_outside_workspace() {
         let dir = tempdir().unwrap();
-        let tool = ApplyPatchTool;
+        let tool = create_apply_patch_tool();
         let permission = tool
             .check_permissions(
                 &json!({
@@ -126,7 +89,7 @@ mod tests {
     async fn allows_absolute_path_inside_workspace() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("absolute.md");
-        let tool = ApplyPatchTool;
+        let tool = create_apply_patch_tool();
         let permission = tool
             .check_permissions(
                 &json!({

@@ -383,9 +383,10 @@ impl AppServer {
 
 pub fn spawn_image_task_worker_scheduler(
     db: lime_core::database::DbConnection,
+    sidecar_store: Option<Arc<SidecarStore>>,
 ) -> tokio::task::JoinHandle<()> {
     media_task_worker::spawn_image_task_worker_scheduler(
-        media_task_worker::ImageTaskWorkerContext::new(db),
+        media_task_worker::ImageTaskWorkerContext::new(db).with_sidecar_store(sidecar_store),
     )
 }
 
@@ -450,27 +451,13 @@ where
                         connection_id,
                         message,
                     } => {
-                        if is_streaming_turn_start_request(&message) {
-                            let task_server = server.clone();
-                            let task_streamed_tx = streamed_tx.clone();
-                            tokio::spawn(async move {
-                                let mut event_callback = |message: JsonRpcMessage| {
-                                    let _ = task_streamed_tx.send(Ok((connection_id, message)));
-                                };
-                                match task_server
-                                    .handle_message_streaming(message, &mut event_callback)
-                                    .await
-                                {
-                                    Ok(messages) => {
-                                        for message in messages {
-                                            let _ = task_streamed_tx.send(Ok((connection_id, message)));
-                                        }
-                                    }
-                                    Err(error) => {
-                                        let _ = task_streamed_tx.send(Err(error));
-                                    }
-                                }
-                            });
+                        if should_spawn_transport_request(&message) {
+                            spawn_transport_request(
+                                server.clone(),
+                                connection_id,
+                                message,
+                                streamed_tx.clone(),
+                            );
                             continue;
                         }
                         for response in server.handle_message(message).await? {
@@ -497,6 +484,46 @@ where
     Ok(())
 }
 
+fn spawn_transport_request(
+    server: AppServer,
+    connection_id: ConnectionId,
+    message: JsonRpcMessage,
+    streamed_tx: mpsc::UnboundedSender<StreamedTransportMessage>,
+) {
+    tokio::spawn(async move {
+        if is_streaming_turn_start_request(&message) {
+            let mut event_callback = |message: JsonRpcMessage| {
+                let _ = streamed_tx.send(Ok((connection_id, message)));
+            };
+            match server
+                .handle_message_streaming(message, &mut event_callback)
+                .await
+            {
+                Ok(messages) => {
+                    for message in messages {
+                        let _ = streamed_tx.send(Ok((connection_id, message)));
+                    }
+                }
+                Err(error) => {
+                    let _ = streamed_tx.send(Err(error));
+                }
+            }
+            return;
+        }
+
+        match server.handle_message(message).await {
+            Ok(messages) => {
+                for message in messages {
+                    let _ = streamed_tx.send(Ok((connection_id, message)));
+                }
+            }
+            Err(error) => {
+                let _ = streamed_tx.send(Err(error));
+            }
+        }
+    });
+}
+
 fn enqueue_transport_outbound_message(writers: &TransportWriters, message: JsonRpcMessage) {
     let writers = writers
         .lock()
@@ -519,6 +546,15 @@ fn is_streaming_turn_start_request(message: &JsonRpcMessage) -> bool {
         message,
         JsonRpcMessage::Request(request)
             if request.method == METHOD_AGENT_SESSION_TURN_START
+    )
+}
+
+fn should_spawn_transport_request(message: &JsonRpcMessage) -> bool {
+    matches!(
+        message,
+        JsonRpcMessage::Request(request)
+            if request.method == METHOD_AGENT_SESSION_TURN_START
+                || request.method == METHOD_AGENT_SESSION_MEDIA_READ
     )
 }
 
@@ -2577,5 +2613,26 @@ mod tests {
             JsonRpcMessage::Response(response) => assert_eq!(response.id, expected_id),
             other => panic!("expected response, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn media_read_requests_spawn_transport_task_for_cancellation() {
+        assert!(should_spawn_transport_request(&JsonRpcMessage::Request(
+            JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_AGENT_SESSION_MEDIA_READ,
+                Some(json!({})),
+            ),
+        )));
+        assert!(should_spawn_transport_request(&JsonRpcMessage::Request(
+            JsonRpcRequest::new(
+                RequestId::Integer(2),
+                METHOD_AGENT_SESSION_TURN_START,
+                Some(json!({})),
+            ),
+        )));
+        assert!(!should_spawn_transport_request(&JsonRpcMessage::Request(
+            JsonRpcRequest::new(RequestId::Integer(3), METHOD_AGENT_SESSION_START, Some(json!({}))),
+        )));
     }
 }

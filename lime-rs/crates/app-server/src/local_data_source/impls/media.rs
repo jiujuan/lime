@@ -26,7 +26,8 @@ impl MediaAppDataSource for LocalAppDataSource {
             .map_err(data_error)?;
         let _ = crate::media_task_worker::spawn_image_task_worker_for_created_task(
             &response,
-            crate::media_task_worker::ImageTaskWorkerContext::new(self.db.clone()),
+            crate::media_task_worker::ImageTaskWorkerContext::new(self.db.clone())
+                .with_sidecar_store(self.sidecar_store.clone()),
         );
         Ok(response)
     }
@@ -55,15 +56,20 @@ impl MediaAppDataSource for LocalAppDataSource {
     async fn complete_audio_media_task_artifact(
         &self,
         params: MediaTaskArtifactAudioCompleteParams,
+        sidecar_store: Option<std::sync::Arc<crate::runtime::SidecarStore>>,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
-        media_tasks::complete_audio_media_task_artifact(params).map_err(data_error)
+        media_tasks::complete_audio_media_task_artifact(params, sidecar_store.as_deref())
+            .map_err(data_error)
     }
 
     async fn complete_image_media_task_artifact(
         &self,
         params: MediaTaskArtifactImageCompleteParams,
+        sidecar_store: Option<std::sync::Arc<crate::runtime::SidecarStore>>,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
-        media_tasks::complete_image_media_task_artifact(params).map_err(data_error)
+        media_tasks::complete_image_media_task_artifact(params, sidecar_store.as_deref())
+            .await
+            .map_err(data_error)
     }
 
     async fn get_media_task_artifact(

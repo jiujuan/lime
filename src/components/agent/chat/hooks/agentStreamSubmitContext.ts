@@ -13,6 +13,7 @@ import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
 interface ResolveAgentStreamSubmitContextOptions {
   ensureSession: (options?: {
+    targetSessionId?: string;
     skipSessionRestore?: boolean;
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
@@ -27,6 +28,7 @@ interface ResolveAgentStreamSubmitContextOptions {
   effectiveExecutionStrategy: AsterExecutionStrategy;
   assistantDraft?: AssistantDraftState;
   expectingQueue: boolean;
+  targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
@@ -49,6 +51,7 @@ export async function resolveAgentStreamSubmitContext(
     effectiveExecutionStrategy,
     assistantDraft,
     expectingQueue,
+    targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
     performanceTrace,
@@ -57,6 +60,7 @@ export async function resolveAgentStreamSubmitContext(
   } = options;
 
   const hadActiveSessionBeforeEnsure = Boolean(sessionIdRef.current?.trim());
+  const normalizedTargetSessionId = targetSessionId?.trim() || undefined;
   const ensureStartedAt = Date.now();
   recordAgentStreamPerformanceMetric(
     "agentStream.ensureSession.start",
@@ -64,16 +68,19 @@ export async function resolveAgentStreamSubmitContext(
     {
       hadActiveSessionBeforeEnsure,
       sessionId: sessionIdRef.current,
+      targetSessionId: normalizedTargetSessionId ?? null,
       skipSessionRestore: skipSessionRestore === true,
       skipSessionStartHooks: skipSessionStartHooks === true,
     },
   );
   logAgentDebug("AgentStream", "ensureSession.start", {
     hadActiveSessionBeforeEnsure,
+    targetSessionId: normalizedTargetSessionId ?? null,
     skipSessionRestore: skipSessionRestore === true,
     skipSessionStartHooks: skipSessionStartHooks === true,
   });
   const activeSessionId = await ensureSession({
+    targetSessionId: normalizedTargetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
   });
@@ -85,6 +92,7 @@ export async function resolveAgentStreamSubmitContext(
     performanceTrace,
     {
       activeSessionId,
+      targetSessionId: normalizedTargetSessionId ?? null,
       durationMs: Date.now() - ensureStartedAt,
       hadActiveSessionBeforeEnsure,
       sessionId: activeSessionId,
@@ -94,6 +102,7 @@ export async function resolveAgentStreamSubmitContext(
   );
   logAgentDebug("AgentStream", "ensureSession.done", {
     activeSessionId,
+    targetSessionId: normalizedTargetSessionId ?? null,
     durationMs: Date.now() - ensureStartedAt,
     hadActiveSessionBeforeEnsure,
   });

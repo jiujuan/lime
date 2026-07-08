@@ -1,4 +1,5 @@
 mod boundary;
+pub(crate) mod locale_copy;
 mod prompt_context;
 mod style_pack_install;
 mod style_pack_paths;

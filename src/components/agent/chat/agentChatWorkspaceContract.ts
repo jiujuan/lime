@@ -21,6 +21,16 @@ export interface WorkflowProgressSnapshot {
   currentIndex: number;
 }
 
+export type AgentBackgroundSessionRuntimeStatus =
+  | "running"
+  | "queued"
+  | "waiting";
+
+export interface AgentBackgroundSessionRuntimeSnapshot {
+  sessionId: string;
+  status: AgentBackgroundSessionRuntimeStatus;
+}
+
 export interface AgentChatWorkspaceProps {
   onNavigate?: (page: Page, params?: PageParams) => void;
   projectId?: string;
@@ -55,6 +65,9 @@ export interface AgentChatWorkspaceProps {
   onHasMessagesChange?: (hasMessages: boolean) => void;
   onSessionChange?: (sessionId: string | null) => void;
   onAgentStreamingChange?: (isStreaming: boolean) => void;
+  onBackgroundSessionRuntimeChange?: (
+    snapshot: AgentBackgroundSessionRuntimeSnapshot | null,
+  ) => void;
   preferContentReviewInRightRail?: boolean;
   openBrowserAssistOnMount?: boolean;
   initialSiteSkillLaunch?: AgentSiteSkillLaunchParams;

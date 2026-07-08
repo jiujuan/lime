@@ -151,9 +151,15 @@ export function ImageGenSettings() {
         providerId: selectedProvider?.providerId,
         providerType: selectedProvider?.type,
         apiHost: selectedProvider?.apiHost,
+        hasApiKey: selectedProvider?.hasApiKey,
+        hasDeclaredModels: Boolean(
+          selectedProvider?.customModels?.some((modelId) => modelId.trim()),
+        ),
       }),
     [
       selectedProvider?.apiHost,
+      selectedProvider?.customModels,
+      selectedProvider?.hasApiKey,
       selectedProvider?.providerId,
       selectedProvider?.type,
     ],

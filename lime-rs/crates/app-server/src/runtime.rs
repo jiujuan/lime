@@ -33,6 +33,7 @@ mod imported_session_runtime;
 mod knowledge;
 mod load_context;
 mod mcp;
+mod media_task_read_model;
 mod media_tasks;
 mod memory;
 pub(crate) mod memory_prompt;
@@ -188,6 +189,8 @@ pub enum RuntimeCoreError {
     TurnAlreadyActive(String),
     #[error("capability denied: {0}")]
     CapabilityDenied(String),
+    #[error("request canceled")]
+    RequestCanceled,
     #[error("execution backend error: {0}")]
     Backend(String),
 }
@@ -215,6 +218,7 @@ impl RuntimeCoreError {
                 error_codes::CAPABILITY_DENIED,
                 format!("capability denied: {capability_id}"),
             ),
+            Self::RequestCanceled => JsonRpcError::new(error_codes::REQUEST_CANCELLED, "request canceled"),
             Self::Backend(message) => JsonRpcError::new(error_codes::RUNTIME_ERROR, message),
         }
     }

@@ -4,6 +4,7 @@ use crate::model_route_assembly::{resolved_route_from_task, ModelRouteSelection}
 use crate::model_task_contract::{
     capability_snapshot_from_model_capabilities, MediaRouteAssessment,
 };
+use crate::runtime::SidecarStore;
 use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
 use app_server_protocol::MediaTaskArtifactAudioCreateParams;
 use app_server_protocol::MediaTaskArtifactImageCompleteParams;
@@ -46,14 +47,16 @@ pub(crate) fn create_video_media_task_artifact(
 
 pub(crate) fn complete_audio_media_task_artifact(
     params: MediaTaskArtifactAudioCompleteParams,
+    sidecar_store: Option<&SidecarStore>,
 ) -> Result<MediaTaskArtifactResponse, String> {
-    media_task::complete_audio_generation_task_artifact(params)
+    media_task::complete_audio_generation_task_artifact(params, sidecar_store)
 }
 
-pub(crate) fn complete_image_media_task_artifact(
+pub(crate) async fn complete_image_media_task_artifact(
     params: MediaTaskArtifactImageCompleteParams,
+    sidecar_store: Option<&SidecarStore>,
 ) -> Result<MediaTaskArtifactResponse, String> {
-    media_task::complete_image_generation_task_artifact(params)
+    media_task::complete_image_generation_task_artifact(params, sidecar_store).await
 }
 
 pub(crate) fn get_media_task_artifact(

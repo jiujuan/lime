@@ -6,6 +6,8 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
   APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
 } from "@/lib/api/appServer";
+import { getLimeI18n } from "@/i18n/createI18n";
+import { normalizeLocale } from "@/i18n/locales";
 import { projectAppServerEvidenceExportToRuntimeEvidencePack } from "./appServerEvidenceExportProjection";
 import {
   normalizeAnalysisHandoff,
@@ -38,6 +40,10 @@ export type AgentRuntimeEvidenceExportAppServerClient = Pick<
 
 export interface AgentRuntimeExportClientDeps {
   appServerClient?: AgentRuntimeEvidenceExportAppServerClient;
+}
+
+export interface AgentRuntimeExportOptions {
+  locale?: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -306,11 +312,16 @@ function assertRuntimeExportResult(
   }
 }
 
+function resolveExportLocale(options?: AgentRuntimeExportOptions): string {
+  return normalizeLocale(options?.locale ?? getLimeI18n().language);
+}
+
 export function createExportClient({
   appServerClient = new AppServerClient(),
 }: AgentRuntimeExportClientDeps = {}) {
   async function exportAgentRuntimeHandoffBundle(
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ): Promise<AgentRuntimeHandoffBundle> {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) {
@@ -321,6 +332,7 @@ export function createExportClient({
 
     const response = await appServerClient.exportHandoffBundle({
       sessionId: normalizedSessionId,
+      locale: resolveExportLocale(options),
     });
     const result = response.result;
     assertRuntimeExportResult(
@@ -343,6 +355,7 @@ export function createExportClient({
 
   async function exportAgentRuntimeAnalysisHandoff(
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ): Promise<AgentRuntimeAnalysisHandoff> {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) {
@@ -352,6 +365,7 @@ export function createExportClient({
     }
     const response = await appServerClient.exportAnalysisHandoff({
       sessionId: normalizedSessionId,
+      locale: resolveExportLocale(options),
     });
     const result = response.result;
     assertRuntimeExportResult(
@@ -377,6 +391,7 @@ export function createExportClient({
 
   async function exportAgentRuntimeReviewDecisionTemplate(
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ): Promise<AgentRuntimeReviewDecisionTemplate> {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) {
@@ -386,6 +401,7 @@ export function createExportClient({
     }
     const response = await appServerClient.exportReviewDecisionTemplate({
       sessionId: normalizedSessionId,
+      locale: resolveExportLocale(options),
     });
     const result = response.result;
     assertRuntimeExportResult(
@@ -431,6 +447,7 @@ export function createExportClient({
       followupActions: request.followup_actions,
       regressionRequirements: request.regression_requirements,
       notes: request.notes,
+      locale: resolveExportLocale({ locale: request.locale }),
     });
     const result = response.result;
     assertRuntimeExportResult(
@@ -475,6 +492,7 @@ export function createExportClient({
 
   async function exportAgentRuntimeReplayCase(
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ): Promise<AgentRuntimeReplayCase> {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) {
@@ -484,6 +502,7 @@ export function createExportClient({
     }
     const response = await appServerClient.exportReplayCase({
       sessionId: normalizedSessionId,
+      locale: resolveExportLocale(options),
     });
     const result = response.result;
     assertRuntimeExportResult(

@@ -112,6 +112,63 @@ describe("useAgentRuntimeSyncEffects", () => {
     }
   });
 
+  it("thread_read 只有 running status 和 active_turn_id 时也应继续轮询刷新", async () => {
+    const refreshSessionDetail = vi.fn(async () => true);
+    const harness = await mountHook({
+      threadReadStatus: "running",
+      threadRead: {
+        status: "running",
+        active_turn_id: "turn-running",
+        turns: [],
+      },
+      refreshSessionDetail,
+    });
+
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        runtimeSyncRefreshRequest("runtimeSync.recoveredPoll"),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("current thread_read 已 idle 时本地 running turn 不应继续 recovered poll", async () => {
+    const refreshSessionDetail = vi.fn(async () => true);
+    const harness = await mountHook({
+      threadReadStatus: "idle",
+      threadRead: {
+        status: "idle",
+        turns: [],
+      },
+      threadTurns: [
+        createThreadTurn({
+          status: "running",
+          updated_at: "2026-03-29T00:05:00.000Z",
+        }),
+      ],
+      refreshSessionDetail,
+    });
+
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("failed read model 下残留 running turn 不应继续 recovered poll", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
     const harness = await mountHook({
@@ -893,7 +950,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     }
   });
 
-  it("浏览器 DevBridge 已接通事件桥时，不应再轮询刷新当前会话详情", async () => {
+  it("事件桥可用但当前 turn event 未恢复时，发送态仍应轮询刷新当前会话详情", async () => {
     mockIsAppServerBridgeAvailable.mockReturnValue(true);
     mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
@@ -905,22 +962,25 @@ describe("useAgentRuntimeSyncEffects", () => {
     });
 
     try {
-      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
+        "session-1",
+        runtimeSyncRefreshRequest("runtimeSync.poll"),
+      );
 
       await act(async () => {
-        vi.advanceTimersByTime(2000);
+        vi.advanceTimersByTime(1000);
         await Promise.resolve();
       });
 
-      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(2);
 
       await harness.render({ isSending: false });
 
-      expect(refreshSessionDetail).not.toHaveBeenCalled();
       await flushCoalescedRefresh();
 
-      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith(
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(3);
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
         "session-1",
         runtimeSyncRefreshRequest("runtimeSync.sendSettled"),
       );

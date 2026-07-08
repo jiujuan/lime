@@ -10,6 +10,7 @@ const APP_SERVER_API_SOURCE_FILES = [
   "src/lib/api/appServerResponse.ts",
   "src/lib/api/appServerClient.ts",
   "src/lib/api/appServerClientMethods.ts",
+  "src/lib/api/appServerClientMethodSpecs.ts",
 ];
 
 function readRepoFile(path: string): string {

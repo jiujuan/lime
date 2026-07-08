@@ -432,6 +432,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn managed_lime_hub_tenant_provider_without_key_resolves_no_auth_route() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let provider = service
+            .add_custom_provider(
+                &db,
+                "Lime Hub".to_string(),
+                ApiProviderType::Openai,
+                "https://llm.limeai.run/v1#lime_tenant_id=tenant-0001".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("custom provider");
+        service
+            .update_provider(
+                &db,
+                &provider.id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec!["agnes-2.0-flash".to_string()]),
+            )
+            .expect("declared model");
+        let request = request_for_test("hello", None, None);
+
+        let route = resolve_chat_model_route(
+            &db,
+            &service,
+            &request,
+            &selection(&provider.id, "agnes-2.0-flash"),
+            None,
+        )
+        .await
+        .expect("route");
+
+        assert!(route.resolved_route.failure.is_none());
+        assert_eq!(route.resolved_route.protocol, ProtocolKind::OpenaiChat);
+        assert_eq!(
+            route.resolved_route.endpoint.kind,
+            EndpointKind::OpenaiCompatible
+        );
+        assert_eq!(
+            route.resolved_route.endpoint.base_url.as_deref(),
+            Some("https://llm.limeai.run/v1#lime_tenant_id=tenant-0001")
+        );
+        assert_eq!(route.resolved_route.auth.kind, AuthKind::NoAuth);
+        assert_eq!(
+            route
+                .decision_payload
+                .pointer("/providerReadiness/reasonCode")
+                .and_then(|value| value.as_str()),
+            None
+        );
+    }
+
+    #[tokio::test]
     async fn unready_coding_slot_emits_fallback_payload_for_ready_base_slot() {
         let db = test_db();
         let service = ApiKeyProviderService::new();

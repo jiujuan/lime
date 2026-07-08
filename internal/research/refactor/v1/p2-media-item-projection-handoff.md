@@ -1,12 +1,12 @@
 # P2 Media Item Projection Handoff
 
-> 状态：app-server-agent-message-skeleton-validated / protocol-generated-skeleton-validated / projection-hydrate-skeleton-done / message-list-renderer-skeleton-validated / media-preview-target-skeleton-validated / media-source-owner-preview-skeleton-validated / binary-sidecar-read-app-server-skeleton-wired / binary-sidecar-read-runtime-test-sigterm / full-binary-preview-pending / broad-related-test-noise
-> 更新时间：2026-07-07
+> 状态：app-server-agent-message-skeleton-validated / protocol-generated-skeleton-validated / projection-hydrate-skeleton-done / message-list-renderer-skeleton-validated / media-preview-target-skeleton-validated / media-source-owner-preview-skeleton-validated / binary-sidecar-read-app-server-skeleton-validated / full-binary-preview-consumer-skeleton-validated / media-task-sidecar-write-skeleton-validated / media-worker-sidecar-write-skeleton-validated / media-task-result-owner-projection-skeleton-validated / media-task-store-read-model-enrich-skeleton-validated / remote-url-sidecar-cache-skeleton-validated / range-read-object-url-skeleton-validated / chunked-read-assembly-skeleton-validated / media-preview-helper-owner-split / media-preview-runtime-hook-owner-split / media-preview-cancel-memory-skeleton-validated / media-client-abort-detach-skeleton-validated / media-preview-progress-artifact-skeleton-validated / broad-related-test-noise
+> 更新时间：2026-07-08
 > 目标：把 RuntimeCore `message.delta.contentPart/contentParts` payload 接到 App Server Item/read model、projection package 和 Workbench/GUI，不再让 GUI 或 provider wire event 旁路解释媒体。
 
 ## 1. 结论
 
-`RuntimeMessageDeltaContent::from_payload(...)` 已经是 `message.delta` 内容 payload 的 current parser owner；App Server `thread_item_projection/agent_message.rs` 已完成并验证第一层 skeleton，能把 media-only `message.delta.contentPart/contentParts` materialize 成 `agent_message.contentParts`，并按同一 `itemId` 与文本 delta 合并。本轮继续补上协议 generated type、projection package 摘要、GUI history hydrate、streaming sync、MessageList / StreamingRenderer media reference skeleton、preview target skeleton、source owner facts 贯通和 current Electron media-reference fixture；`agentSession/media/read` App Server JSON-RPC skeleton、schema fixture、generated TS type 与 `@limecloud/app-server-client` `readAgentSessionMedia(...)` 已接上 `SidecarStore::read_bytes_verified(...)` / digest 读取链。当前缺口不是 provider media event 是否能发出，也不是 GUI provider wire 解析，而是 Rust app-server 定向测试在当前环境被 SIGTERM 中断、GUI full binary preview consumer、sidecar media store 和更多 media source owner 类型尚未完成：
+`RuntimeMessageDeltaContent::from_payload(...)` 已经是 `message.delta` 内容 payload 的 current parser owner；App Server `thread_item_projection/agent_message.rs` 已完成并验证第一层 skeleton，能把 media-only `message.delta.contentPart/contentParts` materialize 成 `agent_message.contentParts`，并按同一 `itemId` 与文本 delta 合并。本轮继续补上协议 generated type、projection package 摘要、GUI history hydrate、streaming sync、MessageList / StreamingRenderer media reference skeleton、preview target skeleton、source owner facts 贯通和 current Electron media-reference fixture；`agentSession/media/read` App Server JSON-RPC skeleton、schema fixture、generated TS type、`@limecloud/app-server-client` `readAgentSessionMedia(...)` 与前端 `AppServerClient.readAgentSessionMedia(...)` 已接上 `SidecarStore::read_bytes_verified(...)` / digest 读取链，并通过 RuntimeCore / App Server 定向测试验证；GUI full binary preview consumer 已能在点击 media reference 时读取 bounded base64 bytes 并生成 media preview artifact。App Server `mediaTaskArtifact/image|audio/complete` 已经能把当前 session 的 `data:` / `file://` / workspace-local 媒体输出写入 `SidecarStore`，并把 `sidecarRef`、MIME、bytes、sha256 owner facts 写回 task record；图片 worker 直接执行 provider 返回 `data:` 输出时也已能经同一 `SidecarStore` 写入 sidecar，并刷新 task result / attempt snapshot 的 `sidecarRef` owner facts。App Server read model 已新增 `media_result` synthetic projection skeleton，能把 `tool.result` / current `item.completed(tool_call)` 中携带 completed media task `record.result.images[].sidecarRef` 的 owner facts 投影为 `agent_message.contentParts.media`；`RuntimeCore::load_session_current(...)` 也已在 session read detail 返回前消费同 workspace media task store，按 `sessionId/threadId/turnId` owner facts fail-closed 过滤已完成 / partial `image_generate` task，把 `record.result.images[].sidecarRef` 自动 enrich 为 synthetic `agent_message.contentParts.media`。远程 URL 输出已进入 App Server sidecar cache skeleton：完成图片任务或 worker 补 owner facts 时，`https` 图片 URL 和 loopback `http` 图片 URL 会在 App Server 受控下载、校验 content-type / size / timeout 后写入 session-scoped media sidecar；非图片、超限、下载失败、无 session id 或无 sidecar store 均 fail closed，不把远程 URL 交给 GUI 直显。`agentSession/media/read` 已补 `offset/length` range window、`totalBytes/contentRange/hasMore` response contract、GUI object URL lifecycle 和前端 bounded 分片组装骨架：`workspace/mediaReferencePreviewArtifacts.ts` 按 range window 读取同一已知 sidecar media，校验 offset 连续、chunk length、full-file sha256、MIME、totalBytes 和总上限后合成 `Blob` object URL；partial / 不连续 / digest 漂移 / 超限均 fail closed 到 metadata fallback；`workspace/useWorkspaceMediaReferencePreviewRuntime.ts` 负责 App Server client lazy read、同一 preview artifact 替换时释放旧 object URL、组件卸载清理、request token、迟到读取 fail-closed、object URL 数量 / bytes 预算、progress artifact、`AbortController` 接线和 Canvas Workbench preview 接线；chunked sidecar read 首段有效 range 后会用同一 artifact id 先写入 loading/progress markdown artifact，完整 object URL 组装成功后再替换为 media artifact；App Server client / renderer client 已补 `AbortSignal` wait-detach skeleton，abort 后会丢弃已发送 request 的迟到 response。media reference fallback artifact、sidecar read params、range / chunked object URL assembly 与 progress artifact 已从 `agentChatWorkspaceHelpers.ts` 拆到 `mediaReferencePreviewArtifacts.ts`，preview runtime 生命周期和前端取消 / 内存策略骨架已从 `AgentChatWorkspace.tsx` 拆到 `useWorkspaceMediaReferencePreviewRuntime.ts`，后续 media preview 扩展必须继续在这些 owner 上推进。当前缺口不是 provider media event 是否能发出，也不是 GUI provider wire 解析，而是真正 streaming transport、其它非 sidecar/sourcePath owner 完整读取链、server-side cancellation / transport kill 和大型媒体分页策略尚未完成：
 
 ```text
 RuntimeCore message.delta payload
@@ -18,7 +18,7 @@ RuntimeCore message.delta payload
   -> Workbench preview target skeleton
 ```
 
-下一刀必须先补 `agentSession/media/read` Rust 定向测试可重复通过，再接 GUI full binary preview / sidecar media store；不要在 `src/components/agent/chat/**` 继续补 provider wire 媒体识别，也不要在 Aster vendor 或 provider wire 里加 UI 字段。
+下一刀应补真正 streaming transport、其它非 sidecar/sourcePath owner 的完整读取链、server-side cancellation / transport kill 和大型媒体分页策略；不要在 `src/components/agent/chat/**` 继续补 provider wire 媒体识别，也不要在 Aster vendor 或 provider wire 里加 UI 字段。
 
 当前工作树仍有并行热区：
 
@@ -55,7 +55,7 @@ RuntimeCore message.delta payload
 | GUI history hydrate | `src/components/agent/chat/hooks/agentChatHistoryThreadItems.ts` | 已优先消费 item.contentParts；media reference 进入 `Message.contentParts`，media-only final item 不再被空 text 丢掉；current Electron fixture 已验证 live `item.completed(agent_message.contentParts)` 同步到 assistant message；source owner facts 会随 read model/hydrate 进入 GUI projection，inline `data:` owner fail closed | 后续接通用 binary sidecar read / digest 校验 |
 | GUI streaming sync | `src/components/agent/chat/hooks/agentStreamAgentMessageContentSync.ts` | 已支持 agent_message media content parts，按 item id 替换同源 text/media part 后按 sequence 插入 | 后续补更完整重复事件等价判断和 GUI smoke |
 | GUI MessageList render | `src/components/agent/chat/components/StreamingRenderer.tsx`、`StreamingMediaReferenceCard.tsx` | 已渲染 `media_reference` 为引用卡片，五语言 media kind/title/open 文案已接入；projection helper 单测覆盖 sidecar reference 转换、source owner 透传与 inline `data:` fail-closed；current Electron fixture 已验证 GUI 卡片可见且不暴露 inline payload | 后续补完整 sidecar store / digest |
-| Workbench preview target | `src/components/agent/chat/components/MessageAssistantBody.tsx`、`AgentChatWorkspace.tsx`、`workspace/agentChatWorkspaceHelpers.ts`、`src/lib/api/fileSystem.ts`、`electron/main.ts` | `media_reference` 卡片可发出 `MessagePreviewTarget.kind = "media_reference"`；workspace helper 会把 direct media URI、`previewUrl`、绝对 `sourcePath`、`sourceUri` 变成 media artifact，把没有 source owner 的 `sidecar://` 引用 fail-closed 成 markdown metadata artifact；Electron `asset://` 只读协议已支撑 dev renderer 加载本地 sourcePath 图片，不展开 inline payload；App Server `agentSession/media/read` skeleton 已能按 session 已知 sidecar ref 读取 base64 bytes 并校验 digest | 后续补 Rust 定向测试稳定通过、GUI full binary preview、sidecar media store |
+| Workbench preview target | `src/components/agent/chat/components/MessageAssistantBody.tsx`、`AgentChatWorkspace.tsx`、`workspace/mediaReferencePreviewArtifacts.ts`、`workspace/useWorkspaceMediaReferencePreviewRuntime.ts`、`src/lib/api/fileSystem.ts`、`electron/main.ts` | `media_reference` 卡片可发出 `MessagePreviewTarget.kind = "media_reference"`；`mediaReferencePreviewArtifacts.ts` 会把 direct media URI、`previewUrl`、绝对 `sourcePath`、`sourceUri` 变成 media artifact，并负责 sidecar read params、range / chunked object URL assembly、progress artifact、`shouldContinue` 中断钩子与 metadata fallback；`useWorkspaceMediaReferencePreviewRuntime.ts` 负责 App Server client lazy read、object URL registry、同一 preview artifact 替换时释放旧 URL、组件卸载清理、request token、迟到 sidecar read fail-closed、object URL 数量 / bytes 预算、progress artifact、`AbortSignal` 接线和 Canvas Workbench preview 接线；Electron `asset://` 只读协议已支撑 dev renderer 加载本地 sourcePath 图片，不展开 inline payload；App Server `agentSession/media/read` skeleton 已能按 session 已知 sidecar ref 读取 base64 bytes / range window 并校验 full-file digest，前端 AppServerClient 网关已接入；没有 direct/source owner 但可读的 `sidecar://` media reference 会按 bounded range window 分片读取并组装 object URL media preview artifact，首段有效 range 后先写 loading/progress markdown artifact，读取失败、partial range、不连续 offset、digest 漂移、超限、并发过期或组件卸载时 fail-closed 到 markdown metadata fallback / no-op；`AgentChatWorkspace.tsx` 只做 hook 接线；App Server `mediaTaskArtifact/image|audio/complete` 已能把当前 session 的 data/file/workspace-local/受控远程 URL 输出写成 media sidecar owner facts；图片 worker 直写 data URL 或 remote URL 输出已能补 sidecar owner facts | 后续补真正 streaming transport、其它非 sidecar/sourcePath owner 完整读取链、server-side cancellation / transport kill 和大型媒体分页策略 |
 
 ## 4. 最小源码切片
 
@@ -87,7 +87,7 @@ RuntimeCore message.delta payload
    - `agentChatHistoryThreadItems.ts` 先把 item.contentParts 转成 `Message.contentParts`。
    - `agentStreamAgentMessageContentSync.ts` 按 item id / content sequence upsert media part；text fallback 仍保留。
    - `StreamingRenderer` 显示 reference card，不展开 inline payload，不丢 item。
-   - Message preview target 已能打开 media reference artifact：direct media URI、`previewUrl`、绝对 `sourcePath`、`sourceUri` 走 media preview，没有 source owner 的 `sidecar://` 走 metadata fallback；current Electron fixture 已验证 `agent_message.contentParts.media -> GUI media card -> Canvas Workbench sourcePath image preview` 骨架；`agentSession/media/read` App Server/client skeleton 已接通，Rust 定向测试因当前环境 SIGTERM 未跑到测试体，GUI full binary preview、sidecar media store 后续补。
+   - Message preview target 已能打开 media reference artifact：direct media URI、`previewUrl`、绝对 `sourcePath`、`sourceUri` 走 `mediaReferencePreviewArtifacts.ts` media preview；没有 source owner 的 `sidecar://` 若可由当前 session `agentSession/media/read` 读取，则按 bounded range window 分片组装 object URL media preview artifact，否则走 metadata fallback；chunked sidecar read 首段有效 range 后先写 loading/progress artifact，完整 object URL 成功后用同一 artifact id 替换；current Electron fixture 已验证 `agent_message.contentParts.media -> GUI media card -> Canvas Workbench sourcePath image preview` 骨架；media task completion data/file/remote URL sidecar 写入骨架、worker data URL / remote URL 输出 sidecar 写入骨架、tool result carried owner facts synthetic projection 骨架、worker task store -> session read model enrich 骨架、range/object URL lifecycle、chunked read assembly 骨架、helper owner split、preview runtime hook owner split、preview runtime 取消 / object URL 预算骨架、progress artifact 骨架和 App Server client / renderer client AbortSignal wait-detach 骨架已补，真正 streaming transport、server-side cancellation / transport kill 与大型媒体分页策略后续补。
 
 ## 5. 不做
 
@@ -128,7 +128,173 @@ rustfmt --edition 2021 --check "lime-rs/crates/app-server/src/runtime/session_me
 git diff --check -- "lime-rs/crates/app-server/src/runtime/session_media_reader.rs" "lime-rs/crates/app-server/src/runtime/sidecar_store.rs" "lime-rs/crates/app-server-protocol/schema/json" "packages/app-server-client/src" "packages/app-server-client/tests/client.test.mjs"
 ```
 
-结果：schema fixture / generated TS 已包含 `AgentSessionMediaReadParams`、`AgentSessionMediaReadResponse` 与 `agentSession/media/read`；`@limecloud/app-server-client` 已新增 `readAgentSessionMedia(...)` request / connection method；`check:protocol-types` 通过，app-server-client 2 files / 56 tests 通过，app-server-client contract 287 checks 通过，rustfmt 与 diff check 通过。`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --lib session_media_reader -- --nocapture` 已用 `/tmp` cache / target 多次续跑，但在 cold compile 阶段被 SIGTERM 中断，尚未跑到测试体；不能把 RuntimeCore media read 单测标为通过。
+历史结果：schema fixture / generated TS 已包含 `AgentSessionMediaReadParams`、`AgentSessionMediaReadResponse` 与 `agentSession/media/read`；`@limecloud/app-server-client` 已新增 `readAgentSessionMedia(...)` request / connection method；`check:protocol-types`、app-server-client contract 与 rustfmt / diff check 曾先行通过。此前 `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --lib session_media_reader -- --nocapture` 在 cold compile 阶段被 SIGTERM 中断；该阻塞已由下方补充验证收口。
+
+本轮补充验证后更新结果：
+
+```bash
+cargo test --manifest-path "lime-rs/Cargo.toml" -p runtime-core runtime_content
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol schema_registry_matches_declared_type_names
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --lib session_media_reader -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --lib sidecar_store -- --nocapture
+npm run check:protocol-types
+npx vitest run "src/lib/api/appServer.test.ts"
+npx vitest run "packages/app-server-client/tests/client.test.mjs"
+npm run test:contracts
+```
+
+结果：RuntimeCore `runtime_content` 15 tests passed；app-server-protocol schema registry 1 test passed；App Server `session_media_reader` 3 tests passed；App Server `sidecar_store` 4 tests passed；`check:protocol-types` 无漂移；前端 AppServerClient 网关 31 tests passed；`@limecloud/app-server-client` 54 tests passed；`test:contracts` 全链路通过。`agentSession/media/read` skeleton 现在可标记为 App Server current 骨架已验证；当时仍不声明 GUI full binary preview、sidecar write/store 或 streaming / range read 完成；后续已补 GUI bounded data URL consumer、media task completion data/file sidecar write skeleton、worker data URL sidecar write skeleton 和 remote URL sidecar cache skeleton，仍不声明 streaming / range read 或大型二进制 object URL 生命周期完成。
+
+GUI full binary preview consumer skeleton 验证：
+
+```bash
+npx vitest run "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/hooks/agentThreadMessageContentParts.unit.test.ts" "src/lib/api/appServer.test.ts"
+npx eslint "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/hooks/agentThreadMessageContentParts.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" --max-warnings 0
+npm exec tsc -- --noEmit --project "tsconfig.renderer.json" --pretty false
+npm run test:contracts
+npm run verify:gui-smoke
+```
+
+结果：3 files / 67 tests passed；ESLint 通过；renderer typecheck 通过；`test:contracts` 通过；`verify:gui-smoke` 通过。该步证明 UI read model 透传 `sidecarRef`、Workspace 能构造 App Server media read params，并把 `agentSession/media/read` 返回的 bounded base64 bytes 转成 media preview artifact；当时仍不声明 worker/provider 输出写入 sidecar、streaming / range read 或大型二进制 object URL 管理完成；后续已补 media task completion data/file sidecar write skeleton 和 worker data URL sidecar write skeleton。
+
+Media task sidecar write/store skeleton 验证：
+
+```bash
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server media_task -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --test media_task_jsonrpc -- --nocapture
+```
+
+结果：app-server `media_task` filter 30 tests passed；`media_task_jsonrpc` 6 tests passed。该步证明 App Server current `mediaTaskArtifact/image|audio/complete` completion 边界会把当前 session 的 `data:`、`file://` 或 workspace-local 媒体输出写入 `SidecarStore`，并把 `sidecarRef`、MIME、bytes、sha256 owner facts 写回 task record；无 sidecar store、无 session id、远程 URL 或不可读本地文件时保持原结果，不做 provider wire / GUI 旁路解析。当时仍不声明 worker 直写输出、远程 URL 下载/缓存、streaming / range read、大型二进制 object URL 生命周期或 `agent_message.contentParts.media` 自动生成 owner facts 完成；后续已补 worker data URL sidecar write skeleton、tool result carried owner facts synthetic projection skeleton 和 remote URL sidecar cache skeleton。
+
+Media task worker sidecar write skeleton 验证：
+
+```bash
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server execute_image_task_writes_worker_output_to_media_sidecar -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server media_task -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --test media_task_jsonrpc -- --nocapture
+git diff --check
+```
+
+结果：新增 worker sidecar 定向测试 1 test passed；app-server `media_task` filter 31 tests passed；`media_task_jsonrpc` 6 tests passed；`git diff --check` 通过。该步证明 App Server main / LocalAppDataSource / worker scheduler 共用当前 `SidecarStore`，图片 worker 直接执行 provider 返回 `data:` 输出后，会复用 media task sidecar owner 把 bytes 写入 session-scoped media sidecar，并刷新 task `result.images[].sidecarRef` 与当前 attempt `result_snapshot.images[].sidecarRef`；同时 current JSON-RPC completion 路径仍能写入 data URL sidecar。`npm run test:contracts` 当前失败在并行 Plugin runtime projection 契约热区（`src/features/plugin/runtime/*` 缺 App Server replay labels / tool call replay helper 断言），不属于本 slice 写集；后续已补 tool result carried owner facts synthetic projection skeleton、worker task store enrich skeleton 和 remote URL sidecar cache skeleton；仍不声明 streaming / range read 或大型二进制 object URL 生命周期完成。
+
+Media task result owner facts -> contentParts synthetic projection 骨架验证：
+
+```bash
+cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server media_result -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server thread_item_projection -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --test media_task_jsonrpc -- --nocapture
+git diff --check
+```
+
+结果：`media_result` 2 tests passed；`thread_item_projection` 15 tests passed；`media_task_jsonrpc` 6 tests passed；`git diff --check` 通过。该步只声明 `tool.result` / current `item.completed(tool_call)` 已携带 completed media task `record.result.images[].sidecarRef` 时，App Server read model 可生成 synthetic `agent_message.contentParts.media`；当时不声明 worker 异步完成后的 task store enrich。后续已补 task store enrich skeleton 和 remote URL sidecar cache skeleton，仍不声明 streaming / range read 或大型二进制 object URL 生命周期完成。
+
+Media task store -> session read model enrich 骨架验证：
+
+```bash
+cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server load_session_current_enriches_completed_media_task_store_results -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server media_result -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server thread_item_projection -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --test media_task_jsonrpc -- --nocapture
+```
+
+结果：新增 read model enrich 测试 1 test passed；`media_result` 2 tests passed；`thread_item_projection` 15 tests passed；`media_task_jsonrpc` 6 tests passed。该步声明 worker 异步完成后的 media task store 已可在 `RuntimeCore::load_session_current(...)` 返回前，按 workspace + `sessionId/threadId/turnId` owner facts 过滤 completed / partial `image_generate` task，并把 `record.result.images[].sidecarRef` enrich 成 synthetic `agent_message.contentParts.media`；后续已补远程 URL sidecar cache skeleton，仍不声明 streaming / range read 或大型二进制 object URL 生命周期完成。
+
+Remote URL sidecar cache skeleton 验证：
+
+```bash
+cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server media_task -- --nocapture
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --test media_task_jsonrpc -- --nocapture
+```
+
+结果：app-server `media_task` filter 34 tests passed；`media_task_jsonrpc` 6 tests passed。该步声明 App Server media task completion 与 worker sidecar owner 复用路径已能把 provider remote URL 输出缓存为 session-scoped media sidecar：`https` 图片 URL 与 loopback `http` 图片 URL 通过 App Server 受控下载，校验 content-type / size / timeout 后写入 `SidecarStore` 并回写 `sidecarRef` owner facts；非图片 MIME、超限、下载失败、无 session id 或无 sidecar store 均 fail closed，不让 GUI/provider wire 直显远程 URL。仍不声明 streaming / range read、大型二进制 object URL 生命周期或其它非 sourcePath owner 完整读取链完成。
+
+Range read + object URL lifecycle skeleton 验证：
+
+```bash
+cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server -p app-server-protocol
+npm run check:protocol-types
+npx vitest run "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/lib/api/appServer.test.ts"
+npm exec tsc -- --noEmit --project "tsconfig.renderer.json" --pretty false
+cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol schema_registry_matches_declared_type_names -- --nocapture
+CARGO_TARGET_DIR="/tmp/lime-soul-media-range-target" CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1 cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --lib sidecar -- --nocapture
+npm exec eslint -- "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/lib/api/appServer.test.ts" --max-warnings 0
+git diff --check
+```
+
+结果：`cargo fmt` 通过；`check:protocol-types` 无漂移；前端 media helper / AppServerClient gateway 2 files / 66 tests passed；renderer typecheck 通过；app-server-protocol schema registry 1 test passed；App Server 独立 target `sidecar` filter 19 tests passed；scoped ESLint 通过；scoped `git diff --check` 通过。该步声明 `agentSession/media/read` 已具备 `offset/length` window request、`totalBytes/contentRange/hasMore` response contract，GUI 完整窗口响应已走 `Blob + URL.createObjectURL` preview，并在同一 preview artifact 替换与组件卸载时释放本组件创建的 object URL；partial range 不伪装成完整媒体预览。仍不声明 streaming read、其它非 sourcePath owner 完整读取链或大型二进制分片预览完成。
+
+Chunked read assembly skeleton 验证：
+
+```bash
+npx vitest run "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/lib/api/appServer.test.ts"
+npm exec eslint -- "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/lib/api/appServer.test.ts" --max-warnings 0
+git diff --check -- "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/lib/api/appServer.test.ts"
+./node_modules/.bin/tsc --noEmit --project "tsconfig.renderer.json" --pretty false
+```
+
+结果：前端 media helper / AppServerClient gateway 2 files / 70 tests passed；scoped ESLint 通过；scoped `git diff --check` 通过；renderer typecheck 会话耗时较长但最终无诊断、exit code 0。该步声明 GUI 已能用 `agentSession/media/read` range window 多次读取同一 bounded sidecar media，并在 offset 连续、chunk length、full-file sha256、MIME、totalBytes 和总上限均一致时组装 `Blob` object URL；不连续、digest 漂移或超出前端预览上限均 fail closed 且不创建 object URL。当时仍不声明真正 streaming transport、front-end progress artifact、其它非 sidecar/sourcePath owner 完整读取链，或大型媒体取消 / 分页 / 内存策略完成。
+
+Media preview helper owner split 验证：
+
+```bash
+npx vitest run "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/lib/api/appServer.test.ts"
+npm exec eslint -- "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.ts" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/lib/api/appServer.test.ts" --max-warnings 0
+./node_modules/.bin/tsc --noEmit --project "tsconfig.renderer.json" --pretty false
+git diff --check -- "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.ts" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/lib/api/appServer.test.ts" "internal/exec-plans/soul-style-output-surface-convergence-plan.md" "internal/research/refactor/v1/p2-media-item-projection-handoff.md" "internal/roadmap/soul/README.md" "internal/roadmap/soul/personal-style-output-surfaces.md"
+npm run verify:gui-smoke
+```
+
+结果：media owner / workspace helper / AppServerClient gateway 3 files / 70 tests passed；scoped ESLint 通过；renderer typecheck 通过；scoped `git diff --check` 通过；GUI smoke 通过，Electron 输出 `renderer loaded`、`app-server initialized protocol=appserver.v0 version=1.94.0`、`claw workbench shell ready`、`memory settings ready`。该步声明 `mediaReferencePreviewArtifacts.ts` 已成为 media reference preview helper current owner，原 `agentChatWorkspaceHelpers.ts` 不再承接 sidecar read / range assembly 逻辑；当时仍不声明 front-end progress artifact、streaming transport 或大型媒体策略完成。
+
+Media preview runtime hook owner split 验证：
+
+```bash
+npx vitest run "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/lib/api/appServer.test.ts"
+npm exec eslint -- "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.ts" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/lib/api/appServer.test.ts" --max-warnings 0
+./node_modules/.bin/tsc --noEmit --project "tsconfig.renderer.json" --pretty false
+git diff --check -- "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/AgentChatWorkspace.tsx" "internal/exec-plans/soul-style-output-surface-convergence-plan.md" "internal/research/refactor/v1/p2-media-item-projection-handoff.md" "internal/roadmap/soul/README.md" "internal/roadmap/soul/personal-style-output-surfaces.md"
+npm run verify:gui-smoke
+```
+
+结果：Vitest 4 files / 72 tests passed；scoped ESLint 通过；renderer typecheck 通过；scoped `git diff --check` 通过；GUI smoke 通过，Electron 输出 `renderer loaded`、`app-server initialized protocol=appserver.v0 version=1.94.0`、`claw workbench shell ready`、`memory settings ready`。该步声明 `useWorkspaceMediaReferencePreviewRuntime.ts` 已成为 media preview runtime 生命周期 current owner，覆盖 direct URI 不实例化 App Server client、sidecar read 生成 object URL、同一 preview artifact 替换释放旧 URL、组件卸载释放当前 URL；当时仍不声明 front-end progress artifact、streaming transport、其它非 sidecar/sourcePath owner 完整读取链或大型媒体取消 / 分页 / 内存策略完成。
+
+Media preview runtime cancel / memory policy skeleton 验证：
+
+```bash
+npx vitest run "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/lib/api/appServer.test.ts"
+npm exec eslint -- "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.ts" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" "src/lib/api/appServer.test.ts" --max-warnings 0
+./node_modules/.bin/tsc --noEmit --project "tsconfig.renderer.json" --pretty false
+git diff --check -- "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.ts" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "internal/exec-plans/soul-style-output-surface-convergence-plan.md" "internal/research/refactor/v1/p2-media-item-projection-handoff.md" "internal/roadmap/soul/README.md" "internal/roadmap/soul/personal-style-output-surfaces.md"
+npm run verify:gui-smoke
+```
+
+结果：Vitest 4 files / 76 tests passed；scoped ESLint 通过；renderer typecheck 通过；scoped `git diff --check` 通过；`npm run verify:gui-smoke` 第二轮通过，Electron smoke 输出 `renderer loaded`、`app-server initialized protocol=appserver.v0 version=1.94.0`、`claw workbench shell ready`、`memory settings ready`。第一轮 GUI smoke 曾被并行 Rust 热区 `lime-rs/crates/agent/src/tools/skill_tool_gate.rs` 缺 `std::sync::OnceLock` import 阻塞，已用最小 import 解开，不改变 Skill gate 逻辑。该步只声明前端 preview runtime 的 request token、迟到读取 fail-closed、unmount no-op、object URL budget 和 helper `shouldContinue` 中断骨架；后续已补 App Server client / renderer client AbortSignal wait-detach skeleton 和 front-end progress artifact skeleton，但仍不声明 server-side cancellation、streaming transport、其它非 sidecar/sourcePath owner 完整读取链或大型媒体分页策略完成。
+
+Media client AbortSignal wait-detach skeleton 验证：
+
+```bash
+npm --prefix "packages/app-server-client" run build
+./node_modules/.bin/tsc --noEmit --project "tsconfig.renderer.json" --pretty false
+npm --prefix "packages/app-server-client" test
+npx vitest run "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/lib/api/appServer.test.ts"
+npm exec eslint -- "packages/app-server-client/src/connection.ts" "packages/app-server-client/tests/client.test.mjs" "src/lib/api/appServerClient.ts" "src/lib/api/appServerClientMethods.ts" "src/lib/api/appServerTypes.ts" "src/lib/api/appServer.test.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.ts" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx" --max-warnings 0
+npm run test:contracts
+```
+
+结果：`@limecloud/app-server-client` build 通过；renderer typecheck 通过；`@limecloud/app-server-client` tests 2 files / 58 tests passed；前端 media runtime / helper / AppServerClient gateway 4 files / 77 tests passed；scoped ESLint 通过；`npm run test:contracts` 通过。该步声明 App Server client wait loop 和 renderer AppServerClient 已支持 `AbortSignal`，已发送 request abort 后会 detach 并丢弃 late response；GUI media preview supersede / unmount 会 abort 当前 media read。该步不是 Rust App Server / Electron IPC / sidecar I/O 的 server-side cancellation。
+
+Media preview progress artifact skeleton 验证：
+
+```bash
+node -e 'const fs=require("fs"); for (const locale of ["zh-CN","zh-TW","en-US","ja-JP","ko-KR"]) JSON.parse(fs.readFileSync(`src/i18n/resources/${locale}/agent.json`, "utf8"));'
+npx vitest run "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx"
+npm exec eslint -- "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.ts" "src/components/agent/chat/workspace/mediaReferencePreviewArtifacts.unit.test.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.ts" "src/components/agent/chat/workspace/useWorkspaceMediaReferencePreviewRuntime.test.tsx" --max-warnings 0
+```
+
+结果：五语言 `agent.json` JSON 解析通过；media preview artifacts / runtime hook 2 files / 21 tests passed；scoped ESLint 通过。该步声明 front-end progress artifact 骨架完成：chunked sidecar read 首段有效 range 后先写 loading/progress markdown artifact，完整 object URL 成功后用同一 artifact id 替换。该步不是真正 streaming transport、不是 server-side cancellation，也不是大型媒体分页策略。
 
 RuntimeCore owner 回归：
 
@@ -173,7 +339,7 @@ npm exec vitest run "src/i18n/__tests__/loadNamespace.test.ts"
 npm exec tsc -- --noEmit --project "tsconfig.renderer.json" --pretty false
 ```
 
-结果：3 test files / 73 tests passed；i18n loader 1 file / 9 tests passed；renderer typecheck 通过且无输出。覆盖 `media_reference` 卡片点击到 `MessagePreviewTarget.kind = "media_reference"` 的 UI target 链，以及 direct URI media artifact / sidecar metadata fallback 两种 Workbench artifact skeleton。本轮后续已补 source owner facts 和 sourcePath-backed media preview；通用 binary sidecar read 仍未完成。
+结果：3 test files / 73 tests passed；i18n loader 1 file / 9 tests passed；renderer typecheck 通过且无输出。覆盖 `media_reference` 卡片点击到 `MessagePreviewTarget.kind = "media_reference"` 的 UI target 链，以及 direct URI media artifact / sidecar metadata fallback 两种 Workbench artifact skeleton。当时通用 binary sidecar read 仍未完成；后续已补 App Server `agentSession/media/read` 已知 session sidecar bytes 读取与 digest / size 校验骨架、GUI bounded data URL preview consumer、media task completion data/file sidecar write skeleton、worker data URL sidecar write skeleton、tool result carried owner facts synthetic projection skeleton、worker task store enrich skeleton 和 remote URL sidecar cache skeleton。仍待做的是 streaming / range read 和大型二进制 object URL 生命周期。
 
 Current Electron media source owner fixture skeleton 验证：
 
@@ -184,7 +350,7 @@ npm exec vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.
 node "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs" --scenario media-reference --prefix claw-chat-current-fixture-media-reference-source-owner-regression-minimal-asset --timeout-ms 180000 --app-url http://127.0.0.1:1421/
 ```
 
-结果：fixture guard 2 files / 42 tests passed；真实 Electron current fixture 通过，summary 位于 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-media-reference-source-owner-regression-minimal-asset-summary.json`。证据显示 `electronPreloadBridge=true`、`appServerJsonRpcUsed=true`、`mediaReferencePromptReachedBackend=true`、`guiMediaReferenceCardVisible=true`、`guiMediaReferenceDoesNotExposeInlinePayload=true`、`guiMediaReferencePreviewOpened=true`、`readModelMediaReferenceObserved=true`、`readModelMediaReferenceCompleted.hasSourceOwner=true`；Workbench 侧 `layoutMode="chat-canvas"`、`canvasWorkbenchVisible=true`、`workbenchPreviewVisible=true`、`previewImageVisible=true`、`previewImageSrc=asset://...fixture-media-reference.png`、`previewTextIncludesSidecarSource=false`、`bodyTextIncludesInlinePayload=false`，且 `consoleErrors=[]`。该证据只声明 `agent_message.contentParts.media -> source owner facts -> GUI media card -> Canvas Workbench sourcePath image preview` 骨架完成，不声明通用 binary sidecar read、sidecar media store 或 digest 校验完成。
+结果：fixture guard 2 files / 42 tests passed；真实 Electron current fixture 通过，summary 位于 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-media-reference-source-owner-regression-minimal-asset-summary.json`。证据显示 `electronPreloadBridge=true`、`appServerJsonRpcUsed=true`、`mediaReferencePromptReachedBackend=true`、`guiMediaReferenceCardVisible=true`、`guiMediaReferenceDoesNotExposeInlinePayload=true`、`guiMediaReferencePreviewOpened=true`、`readModelMediaReferenceObserved=true`、`readModelMediaReferenceCompleted.hasSourceOwner=true`；Workbench 侧 `layoutMode="chat-canvas"`、`canvasWorkbenchVisible=true`、`workbenchPreviewVisible=true`、`previewImageVisible=true`、`previewImageSrc=asset://...fixture-media-reference.png`、`previewTextIncludesSidecarSource=false`、`bodyTextIncludesInlinePayload=false`，且 `consoleErrors=[]`。该证据只声明 `agent_message.contentParts.media -> source owner facts -> GUI media card -> Canvas Workbench sourcePath image preview` 骨架完成；后续 App Server `agentSession/media/read` 已补读取 / digest 骨架，GUI bounded data URL preview consumer、media task completion data/file sidecar write skeleton、worker data URL sidecar write skeleton、tool result carried owner facts synthetic projection skeleton、worker task store enrich skeleton 和 remote URL sidecar cache skeleton 也已补上；仍不声明 streaming / range read 或大型二进制 object URL 生命周期完成。
 
 本轮新增 source owner / asset protocol 补充验证：
 
@@ -231,8 +397,8 @@ npm run verify:gui-smoke
 
 ## 8. 治理分类
 
-- `current`：RuntimeCore `RuntimeMessageDeltaContent`、App Server `ThreadItem.agent_message.contentParts` skeleton、protocol/generated `AgentThreadMessageContentPart`、local protocol `AgentThreadMessageContentPart`、source owner facts、projection package contentParts summary、GUI history / streaming media reference skeleton、MessageList / StreamingRenderer media reference card skeleton、media reference preview target skeleton、Electron `asset://` 本地只读 preview protocol、sourcePath-backed current Electron media-reference fixture skeleton、App Server `agentSession/media/read` skeleton、schema/generated TS `AgentSessionMediaRead*`、`@limecloud/app-server-client` `readAgentSessionMedia(...)`。
-- `current-pending-consumer`：`session_media_reader` Rust 定向测试稳定通过、GUI full binary preview、sidecar media store、非 sourcePath owner 的完整媒体读取；必须在后续代码刀接通并验证后才能改成完成态。
+- `current`：RuntimeCore `RuntimeMessageDeltaContent`、App Server `ThreadItem.agent_message.contentParts` skeleton、protocol/generated `AgentThreadMessageContentPart`、local protocol `AgentThreadMessageContentPart`、source owner facts、projection package contentParts summary、GUI history / streaming media reference skeleton、MessageList / StreamingRenderer media reference card skeleton、media reference preview target skeleton、Electron `asset://` 本地只读 preview protocol、sourcePath-backed current Electron media-reference fixture skeleton、App Server `agentSession/media/read` skeleton、schema/generated TS `AgentSessionMediaRead*`、`@limecloud/app-server-client` `readAgentSessionMedia(...)`、前端 `AppServerClient.readAgentSessionMedia(...)` 网关、digest checked known-session sidecar read、range window read contract、GUI bounded data URL full binary preview consumer skeleton、GUI object URL lifecycle skeleton、GUI chunked read assembly skeleton、front-end progress artifact skeleton、media preview helper owner split、media preview runtime hook owner split、preview runtime request token / stale result fail-closed / object URL budget skeleton、App Server client / renderer client `AbortSignal` wait-detach skeleton、App Server `mediaTaskArtifact/image|audio/complete` data/file/workspace-local/remote URL media sidecar write skeleton、image task worker data URL / remote URL sidecar write skeleton、media task result owner facts -> `agent_message.contentParts.media` 自动投影、media task store -> session read model enrich skeleton。
+- `current-pending-consumer`：真正 streaming transport、其它非 sidecar/sourcePath owner 完整媒体读取、server-side cancellation / transport kill、大型媒体分页策略；必须在后续代码刀接通并验证后才能改成完成态。
 - `compat`：Aster vendor provider/executor 只作为事件来源和兼容执行面，不承接 media item truth。
 - `deprecated`：旧 `agent_runtime_*` production surface、GUI provider-wire media parsing、把有 `itemId` 的 delta 退化成 active item 猜测。
 - `dead`：旧 `lime-rs/src/**`、旧 Tauri command wrapper、把 media payload 直接塞进 inline `data:` Item 的路径。

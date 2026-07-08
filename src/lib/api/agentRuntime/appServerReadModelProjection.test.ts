@@ -69,6 +69,31 @@ describe("appServerReadModelProjection", () => {
     });
   });
 
+  it("active_turn_id 推断应跳过 queued turn", () => {
+    const result = projectAppServerSessionReadToThreadReadModel(
+      sessionRead({
+        turns: [
+          {
+            turnId: "turn-running",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "running",
+            startedAt: "2026-06-06T00:00:01.000Z",
+          },
+          {
+            turnId: "turn-queued",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "queued",
+            startedAt: "2026-06-06T00:00:02.000Z",
+          },
+        ],
+      }),
+    );
+
+    expect(result.active_turn_id).toBe("turn-running");
+  });
+
   it("应保留 detail.thread_read 的富 read model 并归一 queued turns", () => {
     const result = projectAppServerSessionReadToThreadReadModel(
       sessionRead({

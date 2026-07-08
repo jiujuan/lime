@@ -17,6 +17,7 @@ import {
 } from "@/lib/oemCloudSession";
 import {
   buildOemLimeHubApiHost,
+  DEFAULT_OEM_LIME_HUB_CHAT_MODEL,
   OEM_LIME_HUB_PROVIDER_ID,
   resolveOemLimeHubProviderName,
 } from "@/lib/oemLimeHubProvider";
@@ -64,9 +65,13 @@ function normalizeCustomModels(
 
 async function resolveSyncedCustomModels(
   runtime: NonNullable<ReturnType<typeof resolveOemCloudRuntimeContext>>,
+  currentCustomModels: string[] = [],
 ): Promise<string[]> {
   if (!runtime.sessionToken) {
-    return [];
+    const preservedModels = normalizeCustomModels(currentCustomModels);
+    return preservedModels.length > 0
+      ? preservedModels
+      : [DEFAULT_OEM_LIME_HUB_CHAT_MODEL];
   }
 
   const snapshot = getOemCloudBootstrapSnapshot<OemCloudBootstrapResponse>();
@@ -111,13 +116,16 @@ async function resolveSyncedCustomModels(
     }),
   );
 
-  return normalizeCustomModels(
+  const resolvedModels = normalizeCustomModels(
     modelGroups.flatMap((group) => [
       group.defaultModel ?? "",
       ...group.modelIds,
     ]),
     cloudPreference?.defaultModel,
   );
+  return resolvedModels.length > 0
+    ? resolvedModels
+    : [DEFAULT_OEM_LIME_HUB_CHAT_MODEL];
 }
 
 function buildManagedKeyModelsState(input: {
@@ -290,7 +298,10 @@ export function useOemLimeHubProviderSync() {
           : [];
         let nextCustomModels: string[] = [];
         try {
-          nextCustomModels = await resolveSyncedCustomModels(runtime);
+          nextCustomModels = await resolveSyncedCustomModels(
+            runtime,
+            currentCustomModels,
+          );
         } catch (error) {
           nextCustomModels = currentCustomModels;
           console.warn(

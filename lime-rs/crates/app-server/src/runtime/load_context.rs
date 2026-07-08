@@ -26,13 +26,19 @@ impl RuntimeCore {
         &self,
         params: AgentSessionReadParams,
     ) -> Result<SessionLoadContext, RuntimeCoreError> {
-        if let Some(context) = self.load_runtime_core_session(&params)? {
+        if let Some(mut context) = self.load_runtime_core_session(&params)? {
+            self.enrich_session_load_context_with_media_task_results(&mut context)
+                .await;
             return Ok(context);
         }
-        if let Some(context) = self.load_projection_session(&params)? {
+        if let Some(mut context) = self.load_projection_session(&params)? {
+            self.enrich_session_load_context_with_media_task_results(&mut context)
+                .await;
             return Ok(context);
         }
-        if let Some(context) = self.load_app_data_session(params.clone()).await? {
+        if let Some(mut context) = self.load_app_data_session(params.clone()).await? {
+            self.enrich_session_load_context_with_media_task_results(&mut context)
+                .await;
             return Ok(context);
         }
         Err(RuntimeCoreError::SessionNotFound(params.session_id))

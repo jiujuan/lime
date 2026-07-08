@@ -89,6 +89,7 @@ export interface SoulInteractionCopy {
 }
 
 interface DescriptorOptions {
+  keyPrefix?: string;
   surface: SoulInteractionSurface;
   phase: SoulInteractionPhase;
   styleLevel: SoulStyleLevel;
@@ -104,9 +105,11 @@ function descriptor(
   name: string,
   options: Omit<DescriptorOptions, "toneVariant">,
 ): SoulCopyDescriptor {
+  const { keyPrefix = "soulInteraction.neutral", ...descriptorOptions } =
+    options;
   return {
-    key: `soulInteraction.neutral.${name}`,
-    ...options,
+    key: `${keyPrefix}.${name}`,
+    ...descriptorOptions,
     toneVariant,
   };
 }
@@ -270,7 +273,8 @@ export function resolveSoulInteractionCopyDescriptors(
       riskLevel,
       ...descriptorMetadata,
     }),
-    subagentsReadyTitle: descriptor(toneVariant, "subagents.readyTitle", {
+    subagentsReadyTitle: descriptor(toneVariant, "readyTitle", {
+      keyPrefix: "collaboration.runtime",
       surface: "collaboration_runtime",
       phase: "collaboration_ready",
       styleLevel: "L1",
@@ -278,7 +282,8 @@ export function resolveSoulInteractionCopyDescriptors(
       ...descriptorMetadata,
     }),
     subagentsReadyContent: (teamLabel: string) =>
-      descriptor(toneVariant, "subagents.readyContent", {
+      descriptor(toneVariant, "readyContent", {
+        keyPrefix: "collaboration.runtime",
         surface: "collaboration_runtime",
         phase: "collaboration_ready",
         styleLevel: "L1",
@@ -288,8 +293,9 @@ export function resolveSoulInteractionCopyDescriptors(
       }),
     subagentsPreparingContent: descriptor(
       toneVariant,
-      "subagents.preparingContent",
+      "preparingContent",
       {
+        keyPrefix: "collaboration.runtime",
         surface: "collaboration_runtime",
         phase: "collaboration_preparing",
         styleLevel: "L1",
@@ -298,6 +304,7 @@ export function resolveSoulInteractionCopyDescriptors(
       },
     ),
     failurePrefix: descriptor(toneVariant, "failure.prefix", {
+      keyPrefix: "runtime",
       surface: "failure_recovery",
       phase: "failed",
       styleLevel: riskLevel === "high" ? "L4" : "L2",

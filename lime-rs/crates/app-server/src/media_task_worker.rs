@@ -6,6 +6,7 @@ use lime_media_runtime::{
     IMAGE_TASK_RUNNER_WORKER_ID,
 };
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 mod route;
@@ -28,11 +29,23 @@ pub(crate) use scheduler::{
 #[derive(Clone)]
 pub(crate) struct ImageTaskWorkerContext {
     db: DbConnection,
+    sidecar_store: Option<Arc<crate::runtime::SidecarStore>>,
 }
 
 impl ImageTaskWorkerContext {
     pub(crate) fn new(db: DbConnection) -> Self {
-        Self { db }
+        Self {
+            db,
+            sidecar_store: None,
+        }
+    }
+
+    pub(crate) fn with_sidecar_store(
+        mut self,
+        sidecar_store: Option<Arc<crate::runtime::SidecarStore>>,
+    ) -> Self {
+        self.sidecar_store = sidecar_store;
+        self
     }
 }
 
@@ -168,8 +181,13 @@ pub(super) async fn execute_image_task(
                 request_body_format = %runner_config.request_body_format.as_str(),
                 "image task worker using resolved route"
             );
-            return execute_image_task_with_runner_config(workspace_root, task_id, runner_config)
-                .await;
+            return execute_image_task_with_runner_config_and_sidecar(
+                workspace_root,
+                task_id,
+                runner_config,
+                context.sidecar_store.as_deref(),
+            )
+            .await;
         }
         Ok(None) => {}
         Err(error) => {
@@ -189,8 +207,13 @@ pub(super) async fn execute_image_task(
                 request_body_format = %runner_config.request_body_format.as_str(),
                 "image task worker using provider store route"
             );
-            return execute_image_task_with_runner_config(workspace_root, task_id, runner_config)
-                .await;
+            return execute_image_task_with_runner_config_and_sidecar(
+                workspace_root,
+                task_id,
+                runner_config,
+                context.sidecar_store.as_deref(),
+            )
+            .await;
         }
         Ok(None) => {}
         Err(error) => {
@@ -209,15 +232,33 @@ pub(super) async fn execute_image_task(
     )
 }
 
+#[cfg(test)]
 async fn execute_image_task_with_runner_config(
     workspace_root: PathBuf,
     task_id: String,
     runner_config: ImageGenerationRunnerConfig,
 ) -> Result<MediaTaskOutput, String> {
+    execute_image_task_with_runner_config_and_sidecar(workspace_root, task_id, runner_config, None)
+        .await
+}
+
+async fn execute_image_task_with_runner_config_and_sidecar(
+    workspace_root: PathBuf,
+    task_id: String,
+    runner_config: ImageGenerationRunnerConfig,
+    sidecar_store: Option<&crate::runtime::SidecarStore>,
+) -> Result<MediaTaskOutput, String> {
     let output =
         execute_image_generation_task(Path::new(&workspace_root), &task_id, &runner_config)
             .await
             .map_err(|error| error.to_string())?;
+    let output = crate::media_task::attach_image_result_sidecar_refs(
+        Path::new(&workspace_root),
+        &task_id,
+        output,
+        sidecar_store,
+    )
+    .await?;
     tracing::info!(
         task_id = %task_id,
         status = %output.normalized_status,
@@ -297,6 +338,7 @@ mod tests {
         cancel_media_task_artifact, complete_image_generation_task_artifact,
         create_image_generation_task_artifact,
     };
+    use crate::runtime::sidecar_store::SidecarStore;
     use app_server_protocol::{
         MediaTaskArtifactImageCompleteParams, MediaTaskArtifactImageCreateParams,
         MediaTaskArtifactLookupParams,
@@ -331,8 +373,8 @@ mod tests {
         assert!(!should_execute_created_image_task(&task));
     }
 
-    #[test]
-    fn workspace_recovery_scans_only_pending_image_tasks() {
+    #[tokio::test]
+    async fn workspace_recovery_scans_only_pending_image_tasks() {
         let workspace = tempfile::tempdir().expect("workspace");
         let pending = create_image_generation_task_artifact(
             MediaTaskArtifactImageCreateParams {
@@ -378,21 +420,25 @@ mod tests {
             None,
         )
         .expect("create failed image task");
-        complete_image_generation_task_artifact(MediaTaskArtifactImageCompleteParams {
-            project_root_path: workspace.path().to_string_lossy().to_string(),
-            task_ref: failed.task_id,
-            status: Some("failed".to_string()),
-            failures: vec![serde_json::json!({
-                "code": "local_image_server_unavailable",
-                "message": "本地图片服务不可用",
-                "retryable": true,
-                "stage": "execute"
-            })],
-            provider_id: Some("fal".to_string()),
-            model: Some("fal-ai/nano-banana-pro".to_string()),
-            executor_mode: Some("images_api".to_string()),
-            ..MediaTaskArtifactImageCompleteParams::default()
-        })
+        complete_image_generation_task_artifact(
+            MediaTaskArtifactImageCompleteParams {
+                project_root_path: workspace.path().to_string_lossy().to_string(),
+                task_ref: failed.task_id,
+                status: Some("failed".to_string()),
+                failures: vec![serde_json::json!({
+                    "code": "local_image_server_unavailable",
+                    "message": "本地图片服务不可用",
+                    "retryable": true,
+                    "stage": "execute"
+                })],
+                provider_id: Some("fal".to_string()),
+                model: Some("fal-ai/nano-banana-pro".to_string()),
+                executor_mode: Some("images_api".to_string()),
+                ..MediaTaskArtifactImageCompleteParams::default()
+            },
+            None,
+        )
+        .await
         .expect("mark failed image task");
         let running = create_image_generation_task_artifact(
             MediaTaskArtifactImageCreateParams {
@@ -421,8 +467,8 @@ mod tests {
         assert_eq!(recoverable[0].normalized_status, "pending");
     }
 
-    #[test]
-    fn retryable_failed_image_task_reuses_same_task_with_new_attempt() {
+    #[tokio::test]
+    async fn retryable_failed_image_task_reuses_same_task_with_new_attempt() {
         let workspace = tempfile::tempdir().expect("workspace");
         let failed = create_image_generation_task_artifact(
             MediaTaskArtifactImageCreateParams {
@@ -437,8 +483,8 @@ mod tests {
             None,
         )
         .expect("create failed image task");
-        let failed =
-            complete_image_generation_task_artifact(MediaTaskArtifactImageCompleteParams {
+        let failed = complete_image_generation_task_artifact(
+            MediaTaskArtifactImageCompleteParams {
                 project_root_path: workspace.path().to_string_lossy().to_string(),
                 task_ref: failed.task_id.clone(),
                 status: Some("failed".to_string()),
@@ -452,8 +498,11 @@ mod tests {
                 model: Some("fal-ai/nano-banana-pro".to_string()),
                 executor_mode: Some("images_api".to_string()),
                 ..MediaTaskArtifactImageCompleteParams::default()
-            })
-            .expect("mark failed image task");
+            },
+            None,
+        )
+        .await
+        .expect("mark failed image task");
 
         let retried = retry_failed_image_task_for_worker(workspace.path(), &failed.task_id)
             .expect("retry failed image task")
@@ -616,6 +665,70 @@ mod tests {
         let persisted = load_task_output(workspace.path(), &created.task_id, None)
             .expect("load persisted task");
         assert_eq!(persisted.normalized_status, "succeeded");
+    }
+
+    #[tokio::test]
+    async fn execute_image_task_writes_worker_output_to_media_sidecar() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let sidecar_root = tempfile::tempdir().expect("sidecar root");
+        let sidecar_store =
+            Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
+        let image_server = SingleImageGenerationServer::start();
+        let created = create_image_generation_task_artifact(
+            MediaTaskArtifactImageCreateParams {
+                project_root_path: workspace.path().to_string_lossy().to_string(),
+                prompt: "生成由 worker 写入 sidecar 的青柠主视觉".to_string(),
+                count: Some(1),
+                provider_id: Some("fal".to_string()),
+                model: Some("fal-ai/nano-banana-pro".to_string()),
+                executor_mode: Some("images_api".to_string()),
+                session_id: Some("session-worker-sidecar".to_string()),
+                ..MediaTaskArtifactImageCreateParams::default()
+            },
+            None,
+        )
+        .expect("create image task");
+        let runner_config = ImageGenerationRunnerConfig {
+            endpoint: format!("http://{}/v1/images/generations", image_server.address),
+            api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
+        };
+
+        let result = execute_image_task_with_runner_config_and_sidecar(
+            workspace.path().to_path_buf(),
+            created.task_id.clone(),
+            runner_config,
+            Some(sidecar_store.as_ref()),
+        )
+        .await
+        .expect("execute image task with sidecar");
+
+        assert_eq!(result.normalized_status, "succeeded");
+        let sidecar_ref =
+            &result.record.result.as_ref().expect("result")["images"][0]["sidecarRef"];
+        assert_eq!(sidecar_ref["kind"].as_str(), Some("media"));
+        assert_eq!(sidecar_ref["mimeType"].as_str(), Some("image/png"));
+        assert!(sidecar_ref["ref"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("sidecar://media/")));
+        let relative_path = sidecar_ref["relativePath"].as_str().expect("relative path");
+        let sha256 = sidecar_ref["sha256"].as_str();
+        let bytes = sidecar_store
+            .read_bytes_verified(relative_path, sha256, 64)
+            .expect("read sidecar bytes")
+            .expect("sidecar bytes");
+        assert_eq!(bytes.bytes, b"fake-lime-image".to_vec());
+        assert_eq!(
+            result
+                .record
+                .attempts
+                .last()
+                .and_then(|attempt| attempt.result_snapshot.as_ref())
+                .and_then(|snapshot| snapshot.pointer("/images/0/sidecarRef/ref"))
+                .and_then(serde_json::Value::as_str),
+            sidecar_ref["ref"].as_str()
+        );
+        assert_eq!(image_server.join(), 1);
     }
 
     #[tokio::test]

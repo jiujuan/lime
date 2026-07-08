@@ -118,7 +118,9 @@ interface UseAgentStreamOptions {
     context?: import("../types").WriteArtifactContext,
   ) => void;
   ensureSession: (options?: {
+    targetSessionId?: string;
     skipSessionRestore?: boolean;
+    skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
   attemptSilentTurnRecovery: (
     sessionId: string,
@@ -492,7 +494,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       runtime,
       removeStreamListener,
       refreshSessionReadModel,
-      setQueuedTurns,
       setThreadItems,
       setThreadTurns,
       setCurrentTurnId,
@@ -519,7 +520,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     setActiveStream,
     setCurrentTurnId,
     setMessages,
-    setQueuedTurns,
     setThreadItems,
     setThreadTurns,
     removeStreamListener,
@@ -534,7 +534,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         queuedTurnId,
         sessionIdRef,
         refreshSessionReadModel,
-        setQueuedTurns,
         notify: {
           info: () => undefined,
           error: (message) => toast.error(message),
@@ -544,7 +543,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         },
       });
     },
-    [refreshSessionReadModel, runtime, sessionIdRef, setQueuedTurns],
+    [refreshSessionReadModel, runtime, sessionIdRef],
   );
 
   const compactSession = useCallback(async () => {
@@ -624,7 +623,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         removeStreamListener,
         sessionIdRef,
         refreshSessionReadModel,
-        setQueuedTurns,
         setThreadItems,
         setThreadTurns,
         setCurrentTurnId,
@@ -648,7 +646,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       setActiveStream,
       setCurrentTurnId,
       setMessages,
-      setQueuedTurns,
       setThreadItems,
       setThreadTurns,
     ],

@@ -75,6 +75,7 @@ const rendererAppServerSplitSourceFiles = [
   "src/lib/api/appServerResponse.ts",
   "src/lib/api/appServerClient.ts",
   "src/lib/api/appServerClientMethods.ts",
+  "src/lib/api/appServerClientMethodSpecs.ts",
 ];
 
 function expandContractFiles(files) {
@@ -127,6 +128,18 @@ const schemaExportModuleFiles = collectRustFiles(
 const appServerRuntimeFiles = [
   "lime-rs/crates/app-server/src/runtime.rs",
   ...collectRustFiles("lime-rs/crates/app-server/src/runtime"),
+];
+const appServerRuntimeThreadReadProjectionFiles = [
+  "lime-rs/crates/app-server/src/runtime/load_context.rs",
+  "lime-rs/crates/app-server/src/runtime/session_lifecycle.rs",
+  "lime-rs/crates/app-server/src/runtime/read_model.rs",
+  "lime-rs/crates/app-server/src/runtime/tool_item_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/tool_item_projection/extract.rs",
+  "lime-rs/crates/app-server/src/runtime/artifact_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+  "lime-rs/crates/app-server/src/runtime/tests/read_model/tool_calls.rs",
+  "lime-rs/crates/app-server/src/runtime/tests/read_model/imports_items.rs",
+  "lime-rs/crates/app-server/src/runtime/tests/read_model/artifacts.rs",
 ];
 const appServerRuntimeBackendFiles = [
   "lime-rs/crates/app-server/src/runtime_backend.rs",
@@ -2433,7 +2446,11 @@ const checks = [
   },
   {
     name: "Renderer Plugin lifecycle uses App Server current methods",
-    file: "src/lib/api/plugins.ts",
+    files: [
+      "src/lib/api/plugins.ts",
+      "src/lib/api/pluginsTypes.ts",
+      "src/lib/api/pluginsResultGuards.ts",
+    ],
     snippets: [
       'import { AppServerClient } from "@/lib/api/appServer"',
       "METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT",
@@ -2881,7 +2898,7 @@ const checks = [
   },
   {
     name: "App Server session read projects runtime events into thread_read",
-    files: appServerRuntimeFiles,
+    files: appServerRuntimeThreadReadProjectionFiles,
     snippets: [
       "let detail = read_model::runtime_session_read_detail_with_options(",
       "detail: Some(detail)",
@@ -3225,7 +3242,7 @@ const checks = [
       '"agentSession/read"',
       '"agentSession/list"',
       'type: "artifact.snapshot"',
-      'type: "turn.final_done"',
+      'type: "turn.completed"',
       "Hello Lime Workbench",
       "openFixtureSessionFromSidebar",
       "openWorkbench",
@@ -3245,6 +3262,7 @@ const checks = [
       "defaultMocks",
       "invokeMockOnly",
       "explicitMockFallback",
+      'type: "turn.final_done"',
     ],
   },
   {
@@ -3873,12 +3891,13 @@ const checks = [
       "connection.exportEvidence",
       "message.delta",
       "artifact.snapshot",
-      "turn.final_done",
+      "turn.completed",
       'assertEqual(readTurns.length, 1, "read turn count")',
       'assertEqual(readTurn.status, "completed", "read turn status")',
       "evidenceEvents=${evidenceResult.result.events.length}",
       "content-draft-smoke",
     ],
+    absentSnippets: ["turn.final_done"],
   },
   {
     name: "npm exposes standalone external backend smoke",
@@ -4746,6 +4765,9 @@ const checks = [
     files: [
       "src/lib/api/agentRuntime/threadClient.ts",
       "src/lib/api/agentRuntime/appServerEventStream.ts",
+      "src/lib/api/agentRuntime/appServerEventStreamRouting.ts",
+      "src/lib/api/agentRuntime/appServerEventPayloadProjection.ts",
+      "src/lib/api/agentRuntime/appServerEventTimelineReaders.ts",
     ],
     snippets: [
       "isAppServerBridgeAvailable",
@@ -5022,6 +5044,14 @@ const checks = [
     files: [
       "src/features/plugin/runtime/capabilityDispatcher.ts",
       "src/features/plugin/runtime/agentRuntimeCapabilityHost.ts",
+      "src/features/plugin/runtime/agentRuntimeTaskState.ts",
+      "src/features/plugin/runtime/capabilityDispatcherClawCapabilities.ts",
+      "src/features/plugin/runtime/capabilityDispatcherContextProjection.ts",
+      "src/features/plugin/runtime/capabilityDispatcherRuntimeDispatch.ts",
+      "src/features/plugin/runtime/capabilityDispatcherRuntimeProjection.ts",
+      "src/features/plugin/runtime/capabilityDispatcherRuntimeTypes.ts",
+      "src/features/plugin/runtime/capabilityDispatcherToolExecution.ts",
+      "src/features/plugin/runtime/capabilityDispatcherToolRuns.ts",
     ],
     snippets: [
       "app_server_runtime_capability_catalog",
@@ -6737,6 +6767,7 @@ const checks = [
     name: "Plugin runtime task record replays App Server read model tool calls",
     files: [
       "src/features/plugin/runtime/agentRuntimeCapabilityHost.ts",
+      "src/features/plugin/runtime/agentRuntimeTaskState.ts",
       "src/features/plugin/runtime/agentRuntimeCapabilityHost.test.ts",
     ],
     snippets: [
@@ -7378,7 +7409,7 @@ const checks = [
     name: "Renderer Agent task runtime tests lock turn.completed first-token waiting state",
     file: "src/components/agent/chat/utils/agentTaskRuntime.test.ts",
     snippets: [
-      "turn_completed 早于 final_done 时不应把等待首个输出的助手草稿标记为已完成",
+      "turn_completed 没有可见输出时不应把等待首个输出的助手草稿标记为已完成",
       'phase: "routing"',
       'status: "completed" as const',
       'expect(taskModel?.status).toBe("running")',
@@ -7659,7 +7690,7 @@ const checks = [
   },
   {
     name: "Renderer artifact snapshot metadata carries App Server artifact/read scope",
-    file: "src/components/agent/chat/hooks/agentStreamEventProcessor.ts",
+    file: "src/components/agent/chat/hooks/agentStreamEventProcessorAuxiliary.ts",
     snippets: [
       "activeSessionId,",
       "sessionId: activeSessionId",

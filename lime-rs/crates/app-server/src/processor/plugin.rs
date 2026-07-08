@@ -1,6 +1,6 @@
 //! plugin domain handlers for the App Server processor.
 
-use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
+use super::{RequestProcessor, RpcDispatch, dispatch_result, parse_params, to_jsonrpc_error};
 use app_server_protocol::{
     JsonRpcError, PluginFetchCloudPackageParams, PluginInstalledDisabledSetParams,
     PluginInstalledSaveParams, PluginLocalPackageExportParams, PluginLocalPackageInspectParams,

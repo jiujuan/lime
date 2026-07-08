@@ -569,6 +569,23 @@ describe("MessageList layout and scrolling", () => {
     expect(messageColumn?.className).not.toContain("justify-end");
   });
 
+  it("默认空会话应展示清晰启动面而不是弱化空白提示", () => {
+    const container = render([]);
+    const emptyState = container.querySelector(
+      '[data-testid="message-list-empty-default"]',
+    );
+
+    expect(emptyState).not.toBeNull();
+    expect(emptyState?.className).toContain("max-w-[560px]");
+    expect(emptyState?.className).not.toContain("opacity-50");
+    expect(container.textContent).toContain("New chat");
+    expect(container.textContent).toContain("Start a new conversation");
+    expect(container.textContent).toContain("The composer is ready");
+    expect(container.textContent).toContain(
+      "After sending, it stays in this chat",
+    );
+  });
+
   it("自动恢复生成会话时应展示恢复占位而不是空白引导", () => {
     const container = render([], { isRestoringSession: true });
 

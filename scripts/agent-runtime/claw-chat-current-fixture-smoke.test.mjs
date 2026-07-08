@@ -1,42 +1,22 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
+import { registerImageContentAndTeamSmokeGuards } from "./claw-chat-current-fixture-smoke-domain-guards.mjs";
+import { registerSkillsRuntimeSmokeGuards } from "./claw-chat-current-fixture-smoke-skills-runtime-guards.mjs";
 import {
   buildSoulStyleTranscriptGoldenReport,
   SOUL_STYLE_TRANSCRIPT_GOLDENS,
   SOUL_STYLE_TRANSCRIPT_SURFACES,
 } from "./claw-chat-current-fixture-soul-style-transcript-golden.mjs";
 import { SOUL_STYLE_FIXTURE_PROFILE_IDS } from "./claw-chat-current-fixture-soul-style.mjs";
-import {
-  MULTI_AGENT_TEAM_PROMPT,
-  summarizeMultiAgentTeamEvidenceExport,
-} from "./multi-agent-team-fixture-scenario.mjs";
-import {
-  createExpertSkillsRuntimeFixtureScenario,
-  createManualEnableSkillsRuntimeFixtureScenario,
-  createSkillsRuntimeFixtureScenario,
-  EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
-  EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
-  EXPERT_SKILLS_RUNTIME_DONE_TEXT,
-  EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT,
-  EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-  EXPERT_SKILLS_RUNTIME_PROMPT,
-  EXPERT_SKILLS_RUNTIME_SKILL_REF,
-  SKILLS_RUNTIME_EXPLICIT_DONE_TEXT,
-  SKILLS_RUNTIME_EXPLICIT_PROMPT,
-  SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT,
-  SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
-  SKILLS_RUNTIME_QUERY,
-  SKILLS_RUNTIME_SKILL_NAME,
-  summarizeSkillsRuntimeEvidenceExport,
-} from "./skills-runtime-fixture-scenario.mjs";
 
 const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
   "scripts/lib/electron-fixture-build.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-file.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-backend-script.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-backend-tool-skill-events.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-ledger.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-agent-ui-trace.mjs",
@@ -53,6 +33,13 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-inputbar-rich-restore.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-inputbar-pending-steer.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-pending-steer-gui-actions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-pending-steer-read-model.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-skills-runtime-flow.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-terminal-after-answer.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-terminal-stale-guard.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-web-tools-rendering.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
@@ -63,6 +50,11 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-pending-steer-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-runtime-surface-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-skills-runtime-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-terminal-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-web-tools-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-soul-style-transcript-golden.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-soul-style.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-assertions.mjs",
@@ -87,13 +79,6 @@ function removeContentFactoryForbiddenMarkerGuard(content) {
 function readCurrentFixtureRegressionSmokeScript() {
   return fs.readFileSync(
     "scripts/agent-runtime/current-fixture-regression-smoke.mjs",
-    "utf8",
-  );
-}
-
-function readSkillsRuntimeFixtureScenario() {
-  return fs.readFileSync(
-    "scripts/agent-runtime/skills-runtime-fixture-scenario.mjs",
     "utf8",
   );
 }
@@ -123,8 +108,13 @@ describe("claw chat current Electron fixture smoke guard", () => {
   it("drives the real Electron Desktop Host bridge and App Server JSON-RPC", () => {
     const content = readSmokeScript();
 
-    expect(content).toContain("import { _electron as electron }");
+    expect(content).toContain("import { _electron as electron, chromium }");
     expect(content).toContain("electron.launch({");
+    expect(content).toContain("--cdp-port");
+    expect(content).toContain("--remote-debugging-port=");
+    expect(content).toContain("chromium.connectOverCDP");
+    expect(content).toContain("findElectronCdpPage");
+    expect(content).toContain("LIME_ELECTRON_REMOTE_DEBUGGING_PORT");
     expect(content).toContain("ensureElectronFixtureBuild");
     expect(content).toContain("../lib/electron-fixture-build.mjs");
     expect(content).toContain("rebuilding packaged fixture assets");
@@ -292,6 +282,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('scenario: "complete"');
     expect(content).toContain("CLAW_CHAT_FIXTURE_SCENARIO: options.scenario");
     expect(content).toContain("waitForStopButtonVisibleAndClick");
+    expect(content).toContain("requireVisibleOutput: true");
     expect(content).toContain("waitForGuiChatCanceled");
     expect(content).toContain("waitForSessionReadCanceled");
     expect(content).toContain("click-stop-from-gui");
@@ -389,22 +380,66 @@ describe("claw chat current Electron fixture smoke guard", () => {
     const regressionContent = readCurrentFixtureRegressionSmokeScript();
 
     expect(content).toContain("inputbar-pending-steer-rich-restore");
+    expect(content).toContain("inputbar-pending-steer-multi-queue");
+    expect(content).toContain("inputbar-pending-steer-pop-front-resume");
     expect(content).toContain("INPUTBAR_PENDING_STEER_ACTIVE_PROMPT");
     expect(content).toContain("INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT");
+    expect(content).toContain("INPUTBAR_PENDING_STEER_SECOND_PROMPT");
     expect(content).toContain("runInputbarPendingSteerRichRestoreScenario");
+    expect(content).toContain("runInputbarPendingSteerMultiQueueScenario");
+    expect(content).toContain("runInputbarPendingSteerPopFrontResumeScenario");
+    expect(content).toContain("scenarioWaitsForExternalBackendCancel");
+    expect(content).toContain("Math.max(options.timeoutMs, 130_000)");
     expect(content).toContain("clickRichRestoreDeferButton");
+    expect(content).toContain("clickQueuedTurnPromoteButtonForPrompt");
+    expect(content).toContain(
+      "textarea?.closest('[data-testid=\"inputbar-core-container\"]')",
+    );
+    expect(content).toContain("scopedRowCount");
+    expect(content).toContain("deferSecondPlainPendingSteer");
     expect(content).toContain("DEFER_BUTTON_LABELS");
     expect(content).toContain("Handle later");
     expect(content).toContain("稍后处理");
     expect(content).toContain("waitForInputbarPendingSteerQueuedReadModel");
+    expect(content).toContain("summarizePendingSteerQueue");
     expect(content).toContain("findReadModelQueuedTurnForPrompt");
     expect(content).toContain("inputbarPendingSteerQueuedReadModel");
+    expect(content).toContain("inputbarPendingSteerSecondInputDefer");
     expect(content).toContain("inputbarPendingSteerBackendBeforeCancel");
     expect(content).toContain("inputbarPendingSteerRichPromptNotStartedBeforeCancel");
+    expect(content).toContain("inputbarPendingSteerQueuedRestoreClicked");
     expect(content).toContain("inputbarPendingSteerQueuedRichImagePreserved");
     expect(content).toContain("inputbarPendingSteerQueuedRichPathPreserved");
     expect(content).toContain("inputbarPendingSteerQueuedRichTextElementsPreserved");
     expect(content).toContain("inputbarPendingSteerQueuedRichSkillPreserved");
+    expect(content).toContain("inputbarPendingSteerMultipleQueued");
+    expect(content).toContain("inputbarPendingSteerQueueOrderPreserved");
+    expect(content).toContain("inputbarPendingSteerSecondTextQueued");
+    expect(content).toContain("inputbarPendingSteerPopFrontGuiPromoteClicked");
+    expect(content).toContain("inputbarPendingSteerPopFrontUsedCurrentResume");
+    expect(content).not.toMatch(
+      /summary\.inputbarPendingSteerPopFrontActiveCancel\s*=\s*await cancelActivePendingSteerTurn/u,
+    );
+    expect(content).not.toMatch(
+      /summary\.inputbarPendingSteerPopFrontQueueResume\s*=\s*await resumeQueuedTurnForPromptIfNeeded/u,
+    );
+    expect(content).toContain("inputbarPendingSteerPopFrontSecondReindexed");
+    expect(content).toContain("inputbarPendingSteerPopFrontGuiHydratedSecondQueue");
+    expect(content).toContain(
+      "inputbarPendingSteerPopFrontHydratedResumeReady",
+    );
+    expect(content).toContain(
+      "inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === true",
+    );
+    expect(content).toContain(
+      "isInputbarPendingSteerPopFrontResumeScenario\n          ? inputbarPendingSteerPopFrontHydratedResumeReady",
+    );
+    expect(content).toContain(
+      "INPUTBAR_PENDING_STEER_MULTI_QUEUE_ASSERTION_KEYS",
+    );
+    expect(content).toContain(
+      "INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_ASSERTION_KEYS",
+    );
     expect(content).toContain(
       "INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS",
     );
@@ -419,6 +454,24 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(regressionContent).toContain(
       "claw-chat-current-fixture-inputbar-pending-steer-rich-restore-regression",
+    );
+    expect(regressionContent).toContain(
+      "Claw Inputbar pending steer multi queue order Electron fixture",
+    );
+    expect(regressionContent).toContain(
+      '"inputbar-pending-steer-multi-queue"',
+    );
+    expect(regressionContent).toContain(
+      "claw-chat-current-fixture-inputbar-pending-steer-multi-queue-regression",
+    );
+    expect(regressionContent).toContain(
+      "Claw Inputbar pending steer pop-front resume hydrate Electron fixture",
+    );
+    expect(regressionContent).toContain(
+      '"inputbar-pending-steer-pop-front-resume"',
+    );
+    expect(regressionContent).toContain(
+      "claw-chat-current-fixture-inputbar-pending-steer-pop-front-resume-regression",
     );
   });
 
@@ -702,6 +755,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("structuredContent:");
     expect(content).toContain("structured_content:");
     expect(content).toContain("result: {");
+    expect(content).toContain("success: true,");
+    expect(content).toContain(
+      "output: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)}",
+    );
     expect(content).toContain("waitForGuiMcpStructuredContentCompleted");
     expect(content).toContain(
       "waitForSessionReadMcpStructuredContentCompleted",
@@ -749,412 +806,20 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("data:image/png;base64,fixture-image-1");
   });
 
-  it("covers Claw @配图 through ImageCommandWorkflow and current task artifact", () => {
-    const content = readSmokeScript();
-    const imageCommandContent = fs.readFileSync(
-      "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
-      "utf8",
-    );
-    const rpcContent = fs.readFileSync(
-      "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
-      "utf8",
-    );
-
-    expect(content).toContain("image-command");
-    expect(content).toContain("plain-image-intent");
-    expect(content).toContain("IMAGE_COMMAND_SCENARIO");
-    expect(content).toContain("PLAIN_IMAGE_INTENT_SCENARIO");
-    expect(content).toContain("@配图 E2E 图片命令路由测试，请生成一张青柠插画");
-    expect(content).toContain("画一张广州夏天的图");
-    expect(content).toContain("@配图 ${PLAIN_IMAGE_INTENT_PROMPT}");
-    expect(imageCommandContent).toContain("expectedSessionId: SESSION_ID");
-    expect(content).toContain("ensure-fixture-image-provider");
-    expect(rpcContent).toContain("modelProvider/create");
-    expect(rpcContent).toContain("modelProviderKey/create");
-    expect(rpcContent).toContain("media_defaults");
-    expect(content).toContain("image_command_intent");
-    expect(content).toContain("imageCommandLegacySkillLaunchNotSubmitted");
-    expect(content).toContain("image_task");
-    expect(imageCommandContent).not.toContain(
-      'entrySource: "plain_image_intent"',
-    );
-    expect(imageCommandContent).toContain('entrySource: "at_image_command"');
-    expect(imageCommandContent).not.toContain("IMAGE_COMMAND_SKILL_NAME");
-    expect(imageCommandContent).not.toContain(
-      "IMAGE_COMMAND_SKILL_TOOL_CALL_ID",
-    );
-    expect(imageCommandContent).toContain("image_command_workflow");
-    expect(content).toContain("lime_create_image_generation_task");
-    expect(content).toContain("IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID");
-    expect(content).toContain("mediaTaskArtifact/image/create");
-    expect(content).toContain("mediaTaskArtifact/get");
-    expect(content).toContain("mediaTaskArtifact/list");
-    expect(content).toContain('APP_SERVER_BACKEND_MODE: "runtime"');
-    expect(content).toContain("media_runtime_worker");
-    expect(content).toContain("lime-image-api-worker");
-    expect(content).toContain(".lime/tasks/image_generate");
-    expect(content).toContain("runImageCommandScenario");
-    expect(content).toContain("waitForImageCommandWorkflowTaskArtifact");
-    expect(content).toContain("isImageIntentScenario");
-    expect(content).toContain("waitForGuiImageCommandCompleted");
-    expect(content).toContain("waitForGuiImageCommandTerminal");
-    expect(content).toContain("waitForSessionReadImageCommandCompleted");
-    expect(content).toContain("waitForImageCommandTaskArtifactTerminal");
-    expect(content).not.toContain("createImageCommandTaskArtifact");
-    expect(content).not.toContain("completeImageCommandTaskArtifact");
-    expect(content).not.toContain("completeImageCommandTaskArtifactFile");
-    expect(content).toContain("imageCommandTaskArtifactTerminalPatch");
-    expect(content).toContain("completeMethodUsed");
-    expect(content).toContain("imageCommandTaskArtifactTerminal");
-    expect(content).toContain("imageCommandTaskArtifactAfterReload");
-    expect(content).toContain("imageCommandTaskAuditLog");
-    expect(content).toContain("EXPECTED_IMAGE_TASK_AUDIT_EVENTS");
-    expect(content).toContain("worker_loaded");
-    expect(content).toContain("request_slot_succeeded");
-    expect(content).toContain("task_succeeded");
-    expect(content).toContain("guiImageCommandRestoredAfterReload");
-    expect(content).toContain("agentUiPerformanceTracePreReload");
-    expect(content).toContain("collectAgentUiPerformanceTraceEvidence");
-    expect(content).toContain("image-workbench-message-preview-${taskId}");
-    expect(content).toContain("page.reload");
-    expect(content).toContain("imageCommandTaskArtifact");
-    expect(content).toContain("imageCommandPromptReachedBackend");
-    expect(content).toContain("imageCommandMetadataReachedBackend");
-    expect(content).toContain(
-      "imageCommandUsedCurrentMediaTaskArtifactMethods",
-    );
-    expect(content).toContain("imageCommandTaskArtifactWritten");
-    expect(content).toContain("imageCommandTaskArtifactTerminal");
-    expect(content).toContain("imageCommandTaskArtifactSameTaskUpdated");
-    expect(content).toContain("imageCommandTaskAuditLogWritten");
-    expect(content).toContain("imageCommandTaskAuditLogEventSequence");
-    expect(content).toContain("imageCommandTaskAuditLogNoSensitiveTokens");
-    expect(content).toContain("readImageCommandWorkflowAudit");
-    expect(content).toContain("APP_SERVER_METHOD_WORKFLOW_READ");
-    expect(content).toContain("workflow/read");
-    expect(content).toContain("imageCommandWorkflowRead");
-    expect(content).toContain("imageCommandWorkflowAuditReadModelProjected");
-    expect(content).toContain("imageCommandWorkflowAuditStepsProjected");
-    expect(content).toContain("imageCommandWorkflowAuditSummaryRedacted");
-    expect(content).toContain("image-command-run-${turnId}");
-    expect(content).toContain("imageCommandWorkerUsedFixtureProviderAndModel");
-    expect(content).toContain("imageCommandFixtureProvider");
-    expect(content).toContain("bodyIncludesModel");
-    expect(content).toContain("headerProviderId");
-    expect(content).toContain("imageCommandWorkflowToolObserved");
-    expect(content).toContain("imageCommandCreateTaskToolObserved");
-    expect(content).toContain("guiImageCommandToolProcessVisible");
-    expect(content).toContain("guiImageCommandTaskCardVisible");
-    expect(content).toContain("guiImageCommandTaskCardTerminal");
-    expect(content).toContain("guiImageCommandSingleTaskCard");
-    expect(content).toContain("guiImageCommandRestoredAfterReload");
-    expect(content).toContain("hasLoadedVisiblePreviewImage");
-    expect(content).toContain("guiImageCommandNoDraftCard");
-    expect(content).toContain("guiImageCommandNoTemplateTaskId");
-    expect(imageCommandContent).toContain("suppresses submission-summary chat");
-    expect(imageCommandContent).toContain(
-      "snapshot.hasVisibleImageTaskProcess",
-    );
-    expect(imageCommandContent).not.toContain(
-      "(snapshot.hasAssistantSummary || snapshot.hasDoneText) &&",
-    );
-    expect(imageCommandContent).not.toContain(
-      "snapshot.hasPresentationCaption === true",
-    );
-    expect(content).toContain("readModelImageCommandTaskPreviewObserved");
-    expect(content).toContain("IMAGE_COMMAND_ASSERTION_KEYS");
-    expect(content).toContain("draft-image-");
-    expect(content).toContain("{task_id}");
-    expect(content).not.toContain("execute_skill");
-    expect(content).not.toContain("agent_runtime_submit_turn");
+  registerImageContentAndTeamSmokeGuards({
+    expect,
+    it,
+    readSmokeScript,
+    readCurrentFixtureRegressionSmokeScript,
+    removeContentFactoryForbiddenMarkerGuard,
   });
-
-  it("covers Skills runtime search, on-demand body load, gate, and Evidence Pack in the real Electron fixture", () => {
-    const content = readSmokeScript();
-    const scenarioContent = readSkillsRuntimeFixtureScenario();
-    const expertActionsContent = readExpertActionsScript();
-    const sessionContent = fs.readFileSync(
-      "scripts/agent-runtime/claw-chat-current-fixture-session.mjs",
-      "utf8",
-    );
-    const guiActionsContent = readGuiActionsScript();
-    const expertRuntimeContent = `${content}\n${expertActionsContent}\n${guiActionsContent}`;
-
-    expect(content).toContain("skills-runtime");
-    expect(content).toContain("skills-runtime-fixture-scenario.mjs");
-    expect(content).toContain("createSkillsRuntimeFixtureScenario");
-    expect(content).toContain("renderSkillsRuntimeBackendEvents");
-    expect(content).toContain("SKILLS_RUNTIME_PROMPT");
-    expect(content).toContain("SKILLS_RUNTIME_DONE_TEXT");
-    expect(content).toContain("SKILLS_RUNTIME_EXPLICIT_PROMPT");
-    expect(content).toContain("SKILLS_RUNTIME_EXPLICIT_DONE_TEXT");
-    expect(content).toContain("SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT");
-    expect(content).toContain("SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT");
-    expect(content).toContain("expert-skills-runtime");
-    expect(content).toContain("expert-plaza-skills-runtime");
-    expect(content).toContain("expert-panel-skills-runtime");
-    expect(content).toContain(
-      'options.scenario !== "expert-panel-skills-runtime"',
-    );
-    expect(content).toContain("createExpertSkillsRuntimeFixtureScenario");
-    expect(content).toContain("createExpertPanelSkillsRuntimeFixtureScenario");
-    expect(content).toContain("buildExpertSkillsRuntimeMetadata");
-    expect(content).toContain("buildExpertSkillsRuntimeCatalog");
-    expect(content).toContain("EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS");
-    expect(content).toContain("EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS");
-    expect(content).toContain("EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS");
-    expect(content).toContain("EXPERT_SKILLS_RUNTIME_PROMPT");
-    expect(content).toContain("EXPERT_SKILLS_RUNTIME_PANEL_PROMPT");
-    expect(content).toContain("EXPERT_SKILLS_RUNTIME_DONE_TEXT");
-    expect(content).toContain("EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT");
-    expect(content).toContain("EXPERT_SKILLS_RUNTIME_SKILL_REF");
-    expect(content).toContain("EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF");
-    expect(content).toContain("injectExpertSkillsRuntimeCatalog");
-    expect(content).toContain("buildExpertPanelWorkspaceSkillCatalog");
-    expect(expertRuntimeContent).toContain(
-      "reloadRendererAfterExpertPanelSkillCatalogInjection",
-    );
-    expect(content).toContain("expertPanelSkillsRuntimeCatalogReload");
-    expect(content).toContain("reload-expert-panel-skills-runtime-catalog");
-    expect(expertRuntimeContent).toContain("lime:skill-catalog:v1");
-    expect(content).toContain("workspaceSkillCatalog");
-    expect(content).toContain("workspaceSkill: expertSkillsRuntimeSkill");
-    expect(content).toContain('"native_skill"');
-    expect(content).toContain('"skill:capability-report"');
-    expect(expertRuntimeContent).toContain(
-      "launchExpertSkillsRuntimeFromExpertPlaza",
-    );
-    expect(expertRuntimeContent).toContain(
-      "addExpertSkillsRuntimeSkillFromInfoPanel",
-    );
-    expect(expertActionsContent).toContain("waitForExpertSkillPickerState");
-    expect(expertActionsContent).toContain("clickExpertSkillPickerTrigger");
-    for (const fragment of [
-      "expert-info-skills-runtime-action-skill-code-review",
-      "mapping-action",
-      "setExpertSkillPickerQuery",
-      "pickerSearch",
-    ])
-      expect(expertActionsContent).toContain(fragment);
-    expect(expertActionsContent).toContain("waitForExpertPanelAddedSkill");
-    expect(expertActionsContent).toContain(
-      "exportExpertPanelEvidencePackFromHarnessPanel",
-    );
-    expect(expertActionsContent).toContain("missing-visible-trigger");
-    expect(expertActionsContent).toContain(
-      "visibleElementSnapshot(candidate).visible",
-    );
-    expect(expertActionsContent).toContain("导出问题证据包");
-    expect(expertActionsContent).toContain("刷新证据包");
-    expect(expertActionsContent).toContain("app-sidebar-nav-experts");
-    expect(expertActionsContent).toContain(
-      "expert-start-${EXPERT_SKILLS_RUNTIME_ID}",
-    );
-    expect(expertActionsContent).toContain("expert-info-skills-add");
-    expect(expertRuntimeContent).toContain(
-      "EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF",
-    );
-    expect(expertActionsContent).toContain("EXPERT_SKILLS_RUNTIME_SKILL_REF");
-    expect(expertActionsContent).not.toContain("skill:local:capability-report");
-    expect(sessionContent).toContain("lime:skill-catalog-changed");
-    expect(sessionContent).toContain('source: "manual_override"');
-    expect(sessionContent).toContain("window.__LIME_OEM_CLOUD__?.tenantId");
-    expect(sessionContent).toContain("buildExpertPanelWorkspaceSkillCatalog");
-    expect(sessionContent).toContain("options.workspaceSkill");
-    expect(sessionContent).toContain("tenantId");
-    expect(sessionContent).toContain("EXPERT_SKILLS_RUNTIME_TENANT_ID");
-    expect(scenarioContent).toContain("EXPERT_SKILLS_RUNTIME_TENANT_ID");
-    expect(expertRuntimeContent).toContain(
-      "EXPERT_PANEL_SKILLS_RUNTIME_UI_ADD_TEST_ID",
-    );
-    expect(expertRuntimeContent).toContain(
-      "EXPERT_PANEL_SKILLS_RUNTIME_UI_CHIP_TEST_ID",
-    );
-    expect(content).toContain("selectExpertPanelSkillsRuntimeSessionId");
-    expect(content).toContain("summary.expertPanelSkillsRuntimeSessionId");
-    expect(content).toContain("expertPanelSkillsRuntimeSessionId");
-    expect(content).toContain("reopen-expert-panel-skills-runtime-session");
-    expect(content).toContain("guiExpertPanelSkillsRuntimeSessionReopened");
-    expect(content).toContain(
-      "openSessionFromSidebar(page, options, appServerRequests",
-    );
-    expect(content).toContain("expectedSessionId");
-    expect(content).toContain(
-      "{ expectedSessionId: expertPlazaSkillsRuntimeSessionId }",
-    );
-    expect(expertRuntimeContent).toContain("data-session-id");
-    expect(expertRuntimeContent).toContain("hasAddedSkill");
-    expect(content).toContain("expertPlazaCatalogInjected");
-    expect(content).toContain("expertPlazaCardClicked");
-    expect(content).toContain("expertPlazaAutoSendTurnStarted");
-    expect(content).toContain("expertPanelSkillPickerOpened");
-    expect(content).toContain("expertPanelSkillAdded");
-    expect(content).toContain("expertPanelAddedSkillVisible");
-    expect(content).toContain("expertPanelEvidencePackGuiExport");
-    expect(content).toContain(
-      "expertPanelEvidencePackExportedFromHarnessPanel",
-    );
-    expect(content).toContain("expertPanelSkillRefsOverrideReachedBackend");
-    expect(content).toContain("waitForBackendLedgerTurnStartContaining");
-    expect(content).toContain("launchSkillsRuntimeFromWorkspacePanel");
-    expect(content).toContain("createExpertSkillsRuntimeSession");
-    for (const fragment of [
-      "send-expert-skills-runtime-prompt-from-gui",
-      "expertSkillsRuntimeInputSend",
-      "expectedSessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID",
-      "expertSkillsRuntimeQueueResume",
-      "waitForBackendTurnStartWithCurrentQueueResume",
-    ])
-      expect(content).toContain(fragment);
-    for (const fragment of [
-      "startExpertSkillsRuntimeTurn",
-      "EXPERT_SKILLS_RUNTIME_TURN_ID",
-    ])
-      expect(content).not.toContain(fragment);
-    expect(content).toContain("{ title }");
-    expect(content).toContain("waitForBackendLedgerTurnStart");
-    expect(content).toContain("manualEnableSkillsRuntimeSessionId");
-    expect(content).not.toContain(
-      "async function runManualEnableSkillsRuntimeTurn",
-    );
-    expect(content).toContain("ensureManualEnableWorkspaceSkill");
-    expect(content).toContain('".lime"');
-    expect(content).toContain('"registration.json"');
-    expect(content).toContain("workspace-registered-skill-enable-runtime");
-    expect(content).toContain("app-sidebar-nav-skills");
-    expect(content).toContain("sanitizeBackendLedgerForEvidence");
-    expect(content).toContain("isIgnorableConsoleError");
-    expect(content).toContain("actionableConsoleErrors");
-    expect(content).toContain("workspaceSkillRuntimeEnable");
-    expect(content).toContain("SKILLS_RUNTIME_QUERY");
-    expect(content).toContain("SKILLS_RUNTIME_SKILL_NAME");
-    expect(content).toContain('"evidence/export"');
-    expect(content).toContain("includeEvidencePack: true");
-    expect(content).toContain("waitForGuiSkillsRuntimeCompleted");
-    expect(content).toContain(
-      "scenario.guiSummaryText ?? scenario.summaryText",
-    );
-    expect(content).toContain("waitForSessionReadSkillsRuntimeCompleted");
-    expect(content).toContain("summarizeSkillsRuntimeReadModel");
-    expect(content).toContain("readModelTurnTerminal");
-    expect(content).toContain("exportSkillsRuntimeEvidencePack");
-    expect(content).toContain("summarizeSkillsRuntimeEvidenceExport");
-    expect(content).toContain("skillsRuntimePromptReachedBackend");
-    expect(content).toContain("readModelSkillSearchObserved");
-    expect(content).toContain("readModelSkillInvocationObserved");
-    expect(content).toContain("evidenceSkillBodyReadObserved");
-    expect(content).toContain("evidenceSkillGateObserved");
-    expect(content).toContain("evidencePackSkillSearchObserved");
-    expect(content).toContain("evidencePackSkillInvocationObserved");
-    expect(content).toContain("skillSearchBeforeSkillInvocation");
-    expect(content).toContain("explicitSkillsRuntimePromptReachedBackend");
-    expect(content).toContain("guiExplicitSkillsRuntimeInputSubmitted");
-    expect(content).toContain("readModelExplicitSkillSearchObserved");
-    expect(content).toContain("evidenceExplicitSkillBodyReadObserved");
-    expect(content).toContain("explicitSkillSearchBeforeSkillInvocation");
-    expect(content).toContain("manualEnableSkillsRuntimePromptReachedBackend");
-    expect(content).toContain(
-      "manualEnableSkillsRuntimeMetadataReachedBackend",
-    );
-    expect(content).toContain(
-      "manualEnableSkillsRuntimeSkillDirectoryPrepared",
-    );
-    expect(content).toContain(
-      "manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace",
-    );
-    expect(content).toContain("manualEnableSkillsRuntimeUsedAgentSession");
-    expect(content).toContain("expertSkillsRuntimeMetadataReachedBackend");
-    expect(content).toContain("expert_declared_skill_refs");
-    expect(content).toContain("expert_selected_skill");
-    expect(content).toContain("expert_invoked_skill");
-    expect(content).toContain("expertDeclaredSkillRefsObserved");
-    expect(content).toContain("expertSelectedSkillObserved");
-    expect(content).toContain("expertInvokedSkillObserved");
-    expect(content).toContain("evidencePackExpertSkillSearchObserved");
-    expect(content).toContain("evidencePackExpertSkillInvocationObserved");
-    expect(content).toContain("expertSkillSearchBeforeSkillInvocation");
-    expect(content).toContain("guiManualEnableSkillsRuntimeCompleted");
-    expect(content).toContain("readModelManualEnableSkillSearchObserved");
-    expect(content).toContain(
-      "evidenceManualEnableWorkspaceRuntimeEnableObserved",
-    );
-    expect(content).toContain("manualEnableSkillSearchBeforeSkillInvocation");
-    expect(content).toContain("SKILLS_RUNTIME_ASSERTION_KEYS");
-    expect(scenarioContent).toContain(
-      "createExplicitSkillsRuntimeFixtureScenario",
-    );
-    expect(scenarioContent).toContain(
-      "createManualEnableSkillsRuntimeFixtureScenario",
-    );
-    expect(scenarioContent).toContain("buildManualEnableSkillsRuntimeMetadata");
-    expect(scenarioContent).toContain(
-      "createExpertSkillsRuntimeFixtureScenario",
-    );
-    expect(scenarioContent).toContain(
-      "createExpertPanelSkillsRuntimeFixtureScenario",
-    );
-    expect(scenarioContent).toContain("buildExpertSkillsRuntimeMetadata");
-    expect(scenarioContent).toContain("buildExpertSkillsRuntimeCatalog");
-    expect(scenarioContent).toContain(SKILLS_RUNTIME_EXPLICIT_PROMPT);
-    expect(scenarioContent).toContain(SKILLS_RUNTIME_EXPLICIT_DONE_TEXT);
-    expect(scenarioContent).toContain(SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT);
-    expect(scenarioContent).toContain(SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT);
-    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_PROMPT);
-    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_DONE_TEXT);
-    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_PANEL_PROMPT);
-    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT);
-    expect(scenarioContent).toContain(EXPERT_SKILLS_RUNTIME_SKILL_REF);
-    expect(scenarioContent).toContain('trigger: "explicit"');
-    expect(scenarioContent).toContain("explicit skill mention");
-    expect(scenarioContent).toContain(
-      'trigger: "workspace_panel_manual_enable"',
-    );
-    expect(scenarioContent).toContain("launched from Skills workspace panel");
-    expect(scenarioContent).toContain('gateMode: "workspace_runtime_enable"');
-    expect(scenarioContent).toContain("sourceAllowlist");
-    expect(scenarioContent).toContain("searchToolCallId");
-    expect(scenarioContent).toContain("skillToolCallId");
-    expect(scenarioContent).toContain('toolName: "skill_search"');
-    expect(scenarioContent).toContain('tool_family: "skill_search"');
-    expect(scenarioContent).toContain("skill_search_query");
-    expect(scenarioContent).toContain("skill_search_snapshot_skill_count");
-    expect(scenarioContent).toContain("skill_search_result_count");
-    expect(scenarioContent).toContain("skillRuntime");
-    expect(scenarioContent).toContain("skill_body_read");
-    expect(scenarioContent).toContain("skill_gate_decision");
-    expect(scenarioContent).toContain('toolName: "Skill"');
-    expect(scenarioContent).toContain('tool_family: "skill"');
-    expect(scenarioContent).toContain("workspace_skill_runtime_enable");
-    expect(scenarioContent).toContain("expertSkillsRuntime");
-    expect(scenarioContent).toContain("expert_skills_runtime");
-    expect(scenarioContent).toContain("guiSummaryText");
-    expect(scenarioContent).toContain(
-      "专家面板新增 Skill 后的下一轮 runtime 证据已完成",
-    );
-    expect(scenarioContent).toContain("expert_declared_skill_refs");
-    expect(scenarioContent).toContain("expert_selected_skill");
-    expect(scenarioContent).toContain("expert_invoked_skill");
-    expect(scenarioContent).toContain("promptStarters");
-    expect(scenarioContent).toContain(
-      "EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS",
-    );
-    for (const assertionKey of EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS) {
-      expect(content).toContain(assertionKey);
-      expect(scenarioContent).toContain(assertionKey);
-    }
-    for (const assertionKey of EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS) {
-      expect(content).toContain(assertionKey);
-      expect(scenarioContent).toContain(assertionKey);
-    }
-    expect(scenarioContent).toContain("expertDeclaredObserved");
-    expect(scenarioContent).toContain("expertSelectedObserved");
-    expect(scenarioContent).toContain("expertInvokedObserved");
-    expect(scenarioContent).toContain(
-      "export function summarizeSkillsRuntimeEvidenceExport",
-    );
-    expect(content).not.toContain("agent_runtime_");
-    expect(scenarioContent).not.toContain("agent_runtime_");
-    expect(expertActionsContent).not.toContain("agent_runtime_");
+  registerSkillsRuntimeSmokeGuards({
+    expect,
+    it,
+    readSmokeScript,
+    readCurrentFixtureRegressionSmokeScript,
+    readExpertActionsScript,
+    readGuiActionsScript,
   });
 
   it("covers the Right Surface visual matrix without a model turn", () => {
@@ -1242,702 +907,6 @@ describe("claw chat current Electron fixture smoke guard", () => {
     ).toBe(false);
   });
 
-  it("covers content factory Article Workspace through runtime event append and artifact read", () => {
-    const content = readSmokeScript();
-    const contentFactoryScenario = fs.readFileSync(
-      "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
-      "utf8",
-    );
-
-    expect(content).toContain("content-factory-article-workspace");
-    expect(content).toContain("content-factory-inline-image-article-workspace");
-    expect(content).toContain("runContentFactoryArticleWorkspaceScenario");
-    expect(content).toContain(
-      "runContentFactoryInlineImageArticleWorkspaceScenario",
-    );
-    expect(content).toContain("pluginInstalled/save");
-    expect(content).toContain("agentSession/turn/start");
-    expect(content).toContain("agentSession/runtimeEvents/append");
-    expect(content).toContain("workflow/read");
-    expect(content).toContain("workflow/respond");
-    expect(content).toContain("workflow/cancel");
-    expect(content).toContain("workflow/retry");
-    expect(contentFactoryScenario).toContain("workflow.run.started");
-    expect(contentFactoryScenario).toContain("workflow.step.waiting");
-    expect(contentFactoryScenario).toContain(
-      "summarizeContentFactoryWorkflowRead",
-    );
-    expect(contentFactoryScenario).toContain(
-      "summarizeContentFactoryWorkflowControl",
-    );
-    expect(content).toContain("artifact/read");
-    expect(content).toContain("content_factory.workspace_patch");
-    expect(content).toContain("contentFactoryWorkspacePatch");
-    expect(content).toContain("内容工厂 Article Editor Fixture");
-    expect(content).toContain("公众号文章草稿");
-    expect(content).toContain("配图组");
-    expect(content).toContain("视频分镜");
-    expect(content).toContain("交付检查清单");
-    expect(content).toContain("artifact-article-1");
-    expect(content).toContain("artifact-image-1");
-    expect(content).toContain("artifact-video-storyboard");
-    expect(content).toContain("artifact-delivery-checklist");
-    expect(content).toContain("artifact-image-regenerate-workspace-patch");
-    expect(content).toContain("artifact-image-regenerated");
-    expect(content).toContain("image_regenerate_job_1");
-    expect(content).toContain("worker_dogfood");
-    expect(content).toContain("contentFactoryArticleWorkspaceWorkerTurnStart");
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkerHostGenerationFixture",
-    );
-    expect(content).toContain("contentFactoryHostGenerationAsterChatRequest");
-    expect(content).toContain("startContentFactoryHostGenerationFixture");
-    expect(content).toContain("fixture-openai");
-    expect(content).toContain("article-draft-document");
-    const contentWithoutForbiddenMarkerGuard =
-      removeContentFactoryForbiddenMarkerGuard(content);
-    expect(contentWithoutForbiddenMarkerGuard).not.toContain(
-      "受控宿主生成标题",
-    );
-    expect(contentWithoutForbiddenMarkerGuard).not.toContain(
-      "内容工厂插件化写作：让文章生产可审计",
-    );
-    expect(contentFactoryScenario).toContain(
-      "articleCanvasHasForbiddenTemplate",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkerTurnExecuted",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkerAuditFactsHidden",
-    );
-    expect(content).toContain("contentFactoryArticleWorkspaceWorkflowRead");
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkflowReadModelProjected",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkflowRespondProjected",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkflowCancelProjected",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkflowRetryProjected",
-    );
-    expect(content).toContain("content.article.generate");
-    expect(content).toContain(
-      "options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO",
-    );
-    expect(content).toContain(
-      "options.scenario !== CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO",
-    );
-    expect(content).toContain("CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID");
-    expect(content).toContain("contentFactoryInlineImageTaskEventEmitted");
-    expect(content).toContain("contentFactoryInlineImageArticleRestored");
-    expect(content).toContain("mediaTaskArtifact/image/create");
-    expect(content).toContain("mediaTaskArtifact/image/complete");
-    expect(content).toContain(
-      "readModel.workerArticleObject?.hostManagedGenerationStatus ===",
-    );
-    expect(content).toContain('"completed"');
-    expect(content).not.toContain(
-      'readModel.workerArticleObject?.hostManagedGenerationStatus ===\n        "unavailable"',
-    );
-    expect(content).toContain(
-      "CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID",
-    );
-    expect(content).toContain("PLUGIN_WORKER_CONTRACT_UNSUPPORTED");
-    expect(content).toContain("runRuntimeContractRejectionProbe");
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceRuntimeContractRejection",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceRuntimeContractFailClosed",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceStoryboardObjectSelection",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceArticleObjectSelection",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceArticleCanvasSurface",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceArticleCanvasSurfaceVisible",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceEditedDraftUpdate",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceEditedDraftSessionReopened",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceEditedDraftReload",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceEditedDraftArtifactFrame",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceEditedDraftRestored",
-    );
-    expect(content).toContain("E2E_EDITED_ARTICLE_DRAFT_RESTORED");
-    expect(contentFactoryScenario).toContain(
-      "reloadContentFactoryArticleWorkspaceSession",
-    );
-    expect(contentFactoryScenario).toContain("reloadRendererDocument");
-    expect(contentFactoryScenario).toContain(
-      "updateContentFactoryArticleWorkspaceEditedDraft",
-    );
-    expect(contentFactoryScenario).toContain(
-      "waitForContentFactoryArticleWorkspaceEditedDraftRestored",
-    );
-    expect(contentFactoryScenario).toContain(
-      "readContentFactoryArticleDraftObjectRef",
-    );
-    expect(contentFactoryScenario).toContain("article-artifact-frame");
-    expect(contentFactoryScenario).toContain(
-      "clickContentFactoryArticleArtifactFrame",
-    );
-    expect(contentFactoryScenario).toContain(
-      "waitForContentFactoryArticleEditorOpened",
-    );
-    expect(contentFactoryScenario).not.toContain(
-      'toggleTestId: "task-center-object-canvas-toggle"',
-    );
-    expect(content).toContain("workspace-article-editor-related-articleDraft");
-    expect(content).toContain(
-      "workspace-article-editor-related-videoStoryboard",
-    );
-    expect(content).toContain("workspace-article-editor-title-candidates");
-    expect(content).toContain("workspace-article-editor-research");
-    expect(content).toContain("workspace-article-editor-outline");
-    expect(content).toContain("workspace-article-editor-citations");
-    expect(content).toContain("workspace-article-editor-image-slots");
-    expect(content).toContain("workspace-article-editor-canvas");
-    expect(content).toContain("documentCanvasText.includes");
-    expect(contentFactoryScenario).toContain(
-      "FORBIDDEN_CONTENT_FACTORY_ARTICLE_TEMPLATE_MARKERS",
-    );
-    expect(contentFactoryScenario).toContain("metadataPanelsHidden");
-    expect(contentFactoryScenario).toContain(
-      "articleCanvasHasForbiddenTemplate",
-    );
-    expect(contentFactoryScenario).toContain("snapshot.metadataPanelsHidden");
-    expect(contentFactoryScenario).toContain("snapshot.hasFullArticleCanvas");
-    expect(contentFactoryScenario).not.toContain("researchText.includes");
-    expect(contentFactoryScenario).not.toContain("takeawaysText.length");
-    expect(contentFactoryScenario).not.toContain("writingPlanText.length");
-    expect(content).toContain("snapshot.hasArticleCanvasContent");
-    expect(content).toContain("readModel.hasImageSetObject");
-    expect(content).toContain("readModel.hasStoryboardObject");
-    expect(content).toContain("readModel.hasChecklistObject");
-    expect(content).toContain(
-      "workspace-article-workspace-app-declared-renderer",
-    );
-    expect(content).toContain("app_declared");
-    expect(content).toContain("host_placeholder");
-    expect(content).toContain("host_placeholder_only");
-    expect(content).toContain("rendererContract");
-    expect(content).toContain("not_loaded");
-    expect(content).toContain("rendererExecutionModelVisible");
-    expect(content).toContain("entryLoadPolicyVisible");
-    expect(content).toContain("executableHostAbsent");
-    expect(content).toContain("app_declared_renderer_placeholder_only");
-    expect(content).toContain("./renderer/storyboard.tsx");
-    expect(content).toContain("open_storyboard");
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceStoryboardRendererContractPreserved",
-    );
-    expect(content).toContain("已重新生成 2 张候选图");
-    expect(content).toContain("workspace-article-editor-surface");
-    expect(content).toContain("workspace-right-surface-host");
-    expect(content).toContain("artifact_document.v1");
-    expect(content).toContain("worker_invalid_json_output");
-    expect(content).toContain("failureCategory");
-    expect(content).toContain("retryAdvice");
-    expect(content).toContain("inspect_worker_output");
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceDoesNotUseModelTurn",
-    );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceActionResultPatchProjected",
-    );
-    for (const assertionKey of CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS) {
-      expect(content).toContain(assertionKey);
-    }
-    expect(content).not.toContain("APP_SERVER_METHOD_CONTENT_FACTORY");
-    expect(content).not.toContain("content_factory/start");
-    expect(content).not.toContain("content_factory/generate");
-    expect(content).not.toContain("BrowserView");
-  });
-
-  it("summarizes Skills runtime evidence with mixed camelCase and snake_case fields", () => {
-    const scenario = createSkillsRuntimeFixtureScenario(
-      "skills-runtime-unit-session",
-    );
-    const evidenceExportResult = {
-      evidencePack: {
-        observability_summary: {
-          skillSearches: [
-            {
-              query: SKILLS_RUNTIME_QUERY,
-              tool_call_id: scenario.searchToolCallId,
-            },
-          ],
-          skill_invocations: [
-            {
-              skill_name: SKILLS_RUNTIME_SKILL_NAME,
-              toolCallId: scenario.skillToolCallId,
-              workspaceSkillRuntimeEnable: {
-                source: "manual_session_enable",
-                authorization_scope: "session",
-              },
-            },
-          ],
-        },
-      },
-      events: [
-        {
-          event_type: "tool.result",
-          payload: {
-            toolCallId: scenario.searchToolCallId,
-          },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              skillRuntime: {
-                event: "skill_body_read",
-              },
-            },
-          },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              skill_runtime: {
-                event: "skill_gate_decision",
-                mode: "selected_skills",
-              },
-            },
-          },
-        },
-        {
-          eventType: "tool.result",
-          payload: {
-            tool_call_id: scenario.skillToolCallId,
-          },
-        },
-      ],
-    };
-
-    expect(
-      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, scenario),
-    ).toMatchObject({
-      hasEvidencePack: true,
-      eventCount: 4,
-      skillSearchCount: 1,
-      skillInvocationCount: 1,
-      hasSkillSearchSummary: true,
-      hasSkillInvocationSummary: true,
-      skillBodyReadObserved: true,
-      skillGateObserved: true,
-      skillGateMode: "selected_skills",
-      skillGateWorkspaceRuntimeEnable: null,
-      skillGateSourceAllowlist: [],
-      skillSearchEventIndex: 0,
-      skillBodyReadEventIndex: 1,
-      skillGateEventIndex: 2,
-      skillInvocationEventIndex: 3,
-      skillSearchBeforeSkillInvocation: true,
-      searchQuery: SKILLS_RUNTIME_QUERY,
-      invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
-    });
-  });
-
-  it("ties Skills runtime body and gate evidence to the selected tool-call pair", () => {
-    const natural = createSkillsRuntimeFixtureScenario(
-      "skills-runtime-unit-session",
-    );
-    const explicit = createSkillsRuntimeFixtureScenario(
-      "skills-runtime-unit-session",
-      { variant: "explicit" },
-    );
-    const evidenceExportResult = {
-      evidencePack: {
-        observabilitySummary: {
-          skillSearches: [
-            {
-              query: SKILLS_RUNTIME_QUERY,
-              toolCallId: natural.searchToolCallId,
-            },
-            {
-              query: SKILLS_RUNTIME_QUERY,
-              toolCallId: explicit.searchToolCallId,
-            },
-          ],
-          skillInvocations: [
-            {
-              skillName: SKILLS_RUNTIME_SKILL_NAME,
-              toolCallId: natural.skillToolCallId,
-              workspaceSkillRuntimeEnable: { source: "manual_session_enable" },
-            },
-          ],
-        },
-      },
-      events: [
-        {
-          type: "tool.result",
-          payload: { toolCallId: natural.searchToolCallId },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: { skillRuntime: { event: "skill_body_read" } },
-          },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: { skillRuntime: { event: "skill_gate_decision" } },
-          },
-        },
-        {
-          type: "tool.result",
-          payload: { toolCallId: natural.skillToolCallId },
-        },
-        {
-          type: "tool.result",
-          payload: { toolCallId: explicit.searchToolCallId },
-        },
-        {
-          type: "tool.result",
-          payload: { toolCallId: explicit.skillToolCallId },
-        },
-      ],
-    };
-
-    expect(
-      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, natural),
-    ).toMatchObject({
-      skillBodyReadObserved: true,
-      skillGateObserved: true,
-      skillSearchBeforeSkillInvocation: true,
-    });
-    expect(
-      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, explicit),
-    ).toMatchObject({
-      hasSkillSearchSummary: true,
-      hasSkillInvocationSummary: false,
-      skillBodyReadObserved: false,
-      skillGateObserved: false,
-      skillSearchBeforeSkillInvocation: true,
-    });
-  });
-
-  it("summarizes the manual-enable Skills runtime gate mode and allowlist", () => {
-    const scenario = createManualEnableSkillsRuntimeFixtureScenario(
-      "skills-runtime-unit-session",
-    );
-    const evidenceExportResult = {
-      evidencePack: {
-        observabilitySummary: {
-          skillSearches: [
-            {
-              query: SKILLS_RUNTIME_QUERY,
-              toolCallId: scenario.searchToolCallId,
-            },
-          ],
-          skillInvocations: [
-            {
-              skillName: SKILLS_RUNTIME_SKILL_NAME,
-              toolCallId: scenario.skillToolCallId,
-              workspaceSkillRuntimeEnable: { source: "manual_session_enable" },
-            },
-          ],
-        },
-      },
-      events: [
-        {
-          type: "tool.result",
-          payload: { toolCallId: scenario.searchToolCallId },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: { skillRuntime: { event: "skill_body_read" } },
-          },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              skill_runtime: {
-                event: "skill_gate_decision",
-                mode: "workspace_runtime_enable",
-                workspace_runtime_enable: true,
-                source_allowlist: [SKILLS_RUNTIME_SKILL_NAME],
-              },
-            },
-          },
-        },
-        {
-          type: "tool.result",
-          payload: { toolCallId: scenario.skillToolCallId },
-        },
-      ],
-    };
-
-    expect(
-      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, scenario),
-    ).toMatchObject({
-      hasSkillSearchSummary: true,
-      hasSkillInvocationSummary: true,
-      skillBodyReadObserved: true,
-      skillGateObserved: true,
-      skillGateMode: "workspace_runtime_enable",
-      skillGateWorkspaceRuntimeEnable: true,
-      skillGateSourceAllowlist: [SKILLS_RUNTIME_SKILL_NAME],
-      skillSearchBeforeSkillInvocation: true,
-      searchQuery: SKILLS_RUNTIME_QUERY,
-      invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
-    });
-  });
-
-  it("summarizes expert Skills runtime declaration, selection, and invocation evidence", () => {
-    const scenario = createExpertSkillsRuntimeFixtureScenario(
-      "expert-skills-runtime-unit-session",
-    );
-    const evidenceExportResult = {
-      evidencePack: {
-        observability_summary: {
-          skill_searches: [
-            {
-              query: SKILLS_RUNTIME_QUERY,
-              toolCallId: scenario.searchToolCallId,
-            },
-          ],
-          skillInvocations: [
-            {
-              skill_name: SKILLS_RUNTIME_SKILL_NAME,
-              tool_call_id: scenario.skillToolCallId,
-              workspace_skill_runtime_enable: {
-                source: "manual_session_enable",
-              },
-            },
-          ],
-        },
-      },
-      events: [
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              expertSkillsRuntime: {
-                event: "expert_declared_skill_refs",
-                skillRefs: [EXPERT_SKILLS_RUNTIME_SKILL_REF],
-              },
-            },
-          },
-        },
-        {
-          event_type: "tool.result",
-          payload: { tool_call_id: scenario.searchToolCallId },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              skillRuntime: { event: "skill_body_read" },
-            },
-          },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              skill_runtime: {
-                event: "skill_gate_decision",
-                mode: "selected_skills",
-              },
-            },
-          },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              expert_skills_runtime: {
-                event: "expert_selected_skill",
-                skill_name: SKILLS_RUNTIME_SKILL_NAME,
-              },
-            },
-          },
-        },
-        {
-          eventType: "tool.result",
-          payload: { toolCallId: scenario.skillToolCallId },
-        },
-        {
-          type: "runtime.status",
-          payload: {
-            metadata: {
-              expertSkillsRuntime: {
-                event: "expert_invoked_skill",
-                skillName: SKILLS_RUNTIME_SKILL_NAME,
-              },
-            },
-          },
-        },
-      ],
-    };
-
-    expect(
-      summarizeSkillsRuntimeEvidenceExport(evidenceExportResult, scenario),
-    ).toMatchObject({
-      hasEvidencePack: true,
-      eventCount: 7,
-      hasSkillSearchSummary: true,
-      hasSkillInvocationSummary: true,
-      skillBodyReadObserved: true,
-      skillGateObserved: true,
-      skillGateMode: "selected_skills",
-      expertDeclaredObserved: true,
-      expertSelectedObserved: true,
-      expertInvokedObserved: true,
-      expertDeclaredSkillRefs: [EXPERT_SKILLS_RUNTIME_SKILL_REF],
-      expertSelectedSkill: SKILLS_RUNTIME_SKILL_NAME,
-      expertInvokedSkill: SKILLS_RUNTIME_SKILL_NAME,
-      skillSearchBeforeSkillInvocation: true,
-      searchQuery: SKILLS_RUNTIME_QUERY,
-      invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
-    });
-  });
-
-  it("covers multi-agent Team facts as parent Thread Evidence Pack data instead of Agent-first history", () => {
-    const content = readSmokeScript();
-    const scenarioContent = fs.readFileSync(
-      "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs",
-      "utf8",
-    );
-    const regressionContent = readCurrentFixtureRegressionSmokeScript();
-
-    expect(content).toContain("multi-agent-team");
-    expect(content).toContain("MULTI_AGENT_TEAM_SCENARIO");
-    expect(content).toContain(MULTI_AGENT_TEAM_PROMPT);
-    expect(content).toContain("renderMultiAgentTeamBackendEvents");
-    expect(content).toContain("summarizeMultiAgentTeamEvidenceExport");
-    expect(content).toContain("send-multi-agent-team-prompt-from-gui");
-    expect(content).toContain("wait-gui-multi-agent-team-completed");
-    expect(content).toContain("wait-read-model-multi-agent-team-completed");
-    expect(content).toContain("export-multi-agent-team-evidence-pack");
-    expect(content).toContain("evidencePackMultiAgentTeam");
-    expect(content).toContain("readModelMultiAgentTeamCompleted");
-    expect(content).toContain("multiAgentTeamPromptReachedBackend");
-    expect(content).toContain("guiMultiAgentTeamInputSubmitted");
-    expect(content).toContain("guiMultiAgentTeamCompleted");
-    expect(content).toContain("readModelMultiAgentTeamCompleted");
-    expect(content).toContain("readModelMultiAgentTeamFactsObserved");
-    expect(content).toContain("evidencePackMultiAgentTeamExported");
-    expect(content).toContain("evidencePackMultiAgentTeamParentThreadBound");
-    expect(content).toContain("evidencePackMultiAgentTeamHandoffObserved");
-    expect(content).toContain(
-      "evidencePackMultiAgentTeamWorkerNotificationObserved",
-    );
-    expect(content).toContain("evidencePackMultiAgentTeamReviewLaneObserved");
-    expect(content).toContain("multiAgentTeamNoAgentFirstHistory");
-    expect(scenarioContent).toContain('type: "subagent_status_changed"');
-    expect(scenarioContent).toContain('type: "team.changed"');
-    expect(scenarioContent).toContain('type: "task.changed"');
-    expect(scenarioContent).toContain('type: "agent.handoff"');
-    expect(scenarioContent).toContain('type: "agent.completed"');
-    expect(scenarioContent).toContain('type: "worker.notification"');
-    expect(scenarioContent).toContain('type: "artifact.snapshot"');
-    expect(scenarioContent).toContain("parentSessionId");
-    expect(scenarioContent).toContain("currentThreadId()");
-    expect(scenarioContent).toContain("currentTurnId()");
-    expect(scenarioContent).toContain("parent_thread");
-    expect(scenarioContent).toContain("review_lane");
-    expect(scenarioContent).toContain("parentSessionIds");
-    expect(scenarioContent).toContain("threadIds");
-    expect(scenarioContent).toContain("turnIds");
-    expect(scenarioContent).toContain("handoffIds");
-    expect(scenarioContent).toContain("workerNotificationIds");
-    expect(scenarioContent).toContain("reviewIds");
-    expect(regressionContent).toContain(
-      "Claw Multi-Agent Team parent Thread Evidence Pack Electron fixture",
-    );
-    expect(regressionContent).toContain('"multi-agent-team"');
-    expect(regressionContent).toContain(
-      "claw-chat-current-fixture-multi-agent-team-regression",
-    );
-    expect(regressionContent).toContain(
-      "Multi-Agent Team parent Thread Evidence Pack Electron fixture",
-    );
-
-    const summary = summarizeMultiAgentTeamEvidenceExport(
-      {
-        evidencePack: {
-          observabilitySummary: {
-            team_facts: {
-              status: "exported",
-              parentSessionIds: ["sess-team"],
-              childSessionIds: [
-                "fixture-team-child-researcher",
-                "fixture-team-child-reviewer",
-              ],
-              threadIds: ["thread-team"],
-              turnIds: ["turn-team"],
-              handoffIds: ["sess-team:handoff:fixture-team-child-researcher"],
-              workerNotificationIds: [
-                "fixture-team-child-researcher:completed",
-              ],
-              reviewIds: ["fixture-team-review-1"],
-              teamPhases: ["running", "queued", "completed"],
-              handoffCount: 1,
-              workerNotificationCount: 1,
-              reviewLaneCount: 1,
-            },
-          },
-        },
-        events: [
-          { eventType: "subagent_status_changed" },
-          { eventType: "team.changed" },
-          { eventType: "worker.notification" },
-        ],
-        artifacts: [{ artifactRef: "fixture-team-worker-result" }],
-      },
-      {
-        sessionId: "sess-team",
-        threadId: "thread-team",
-        turnId: "turn-team",
-      },
-    );
-
-    expect(summary.exported).toBe(true);
-    expect(summary.includesParentSession).toBe(true);
-    expect(summary.includesThread).toBe(true);
-    expect(summary.includesTurn).toBe(true);
-    expect(summary.includesResearcher).toBe(true);
-    expect(summary.includesReviewer).toBe(true);
-    expect(summary.includesHandoff).toBe(true);
-    expect(summary.includesWorkerNotification).toBe(true);
-    expect(summary.includesReview).toBe(true);
-    expect(summary.includesRunningPhase).toBe(true);
-    expect(summary.includesQueuedPhase).toBe(true);
-    expect(summary.includesCompletedPhase).toBe(true);
-    expect(summary.hasSubagentStatusEvent).toBe(true);
-    expect(summary.hasTeamChangedEvent).toBe(true);
-    expect(summary.hasWorkerNotificationEvent).toBe(true);
-    expect(summary.hasWorkerResultArtifact).toBe(true);
-    expect(summary.forbiddenAgentFirstHistory).toBe(false);
-    expect(scenarioContent).not.toContain("subagentSessionHistory:");
-    expect(scenarioContent).not.toContain("childSubagentHistory:");
-  });
-
   it("does not use live providers, App Server mock backend, renderer mocks, or legacy commands", () => {
     const content = readSmokeScript();
 
@@ -1955,61 +924,4 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
   });
 
-  it("keeps the Skills runtime fixture in the current Agent Runtime regression smoke", () => {
-    const content = readCurrentFixtureRegressionSmokeScript();
-
-    expect(content).toContain(
-      "Claw Skills Runtime natural + explicit $skill + Skills workspace try Electron fixture",
-    );
-    expect(content).toContain("claw-chat-current-fixture-smoke.mjs");
-    expect(content).toContain('"skills-runtime"');
-    expect(content).toContain(
-      "claw-chat-current-fixture-skills-runtime-regression",
-    );
-    expect(content).toContain(
-      "Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture",
-    );
-    expect(content).toContain(
-      "Claw MCP structuredContent Agent Chat GUI Electron fixture",
-    );
-    expect(content).toContain('"mcp-structured-content"');
-    expect(content).toContain(
-      "claw-chat-current-fixture-mcp-structured-content-regression",
-    );
-    expect(content).toContain(
-      "MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture",
-    );
-    expect(content).toContain(
-      "Claw Expert Skills Runtime declared + selected + invoked Electron fixture",
-    );
-    expect(content).toContain('"expert-skills-runtime"');
-    expect(content).toContain(
-      "claw-chat-current-fixture-expert-skills-runtime-regression",
-    );
-    expect(content).toContain(
-      "Expert Skills Runtime declared + selected + invoked Electron fixture",
-    );
-    expect(content).toContain(
-      "Claw Expert Plaza Skills Runtime click-through Electron fixture",
-    );
-    expect(content).toContain('"expert-plaza-skills-runtime"');
-    expect(content).toContain(
-      "claw-chat-current-fixture-expert-plaza-skills-runtime-regression",
-    );
-    expect(content).toContain(
-      "Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture",
-    );
-    expect(content).toContain(
-      "Claw Expert Panel Skills Runtime override Electron fixture",
-    );
-    expect(content).toContain('"expert-panel-skills-runtime"');
-    expect(content).toContain(
-      "claw-chat-current-fixture-expert-panel-skills-runtime-regression",
-    );
-    expect(content).toContain(
-      "ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture",
-    );
-    expect(content).toContain('LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0"');
-    expect(content).toContain('LIME_REAL_API_TEST: "0"');
-  });
 });

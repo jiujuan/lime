@@ -43,6 +43,9 @@ import { collectRetainedLocalTail } from "./agentChatHistoryLocalMergeTail";
 export const mergeHydratedMessagesWithLocalState = (
   localMessages: Message[],
   hydratedMessages: Message[],
+  options: {
+    preferHydratedAssistantOutput?: boolean;
+  } = {},
 ): Message[] => {
   if (hydratedMessages.length === 0) {
     return localMessages;
@@ -327,6 +330,7 @@ export const mergeHydratedMessagesWithLocalState = (
       const remoteIsFailedRuntimeStatus =
         message.runtimeStatus?.phase === "failed";
       const shouldPreserveLocalVisibleOutput =
+        !options.preferHydratedAssistantOutput &&
         !remoteIsFailedRuntimeStatus &&
         (localAssistantMessage?.isThinking === true ||
           shouldPreserveLocalRuntimeSnapshot ||

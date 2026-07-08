@@ -257,6 +257,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   recentSessionTitle?: ConversationScenePresentationParams["scene"]["recentSessionTitle"];
   recentSessionSummary?: ConversationScenePresentationParams["scene"]["recentSessionSummary"];
   recentSessionActionLabel?: ConversationScenePresentationParams["scene"]["recentSessionActionLabel"];
+  homeRecoverySession?: ConversationScenePresentationParams["scene"]["homeRecoverySession"];
   handleResumeRecentSession?: ConversationScenePresentationParams["scene"]["handleResumeRecentSession"];
   projectConversationGroups?: ConversationScenePresentationParams["scene"]["projectConversationGroups"];
   handleOpenProjectConversation?: ConversationScenePresentationParams["scene"]["handleOpenProjectConversation"];
@@ -450,6 +451,7 @@ export function useWorkspaceConversationSceneRuntime({
   recentSessionTitle,
   recentSessionSummary,
   recentSessionActionLabel,
+  homeRecoverySession,
   handleResumeRecentSession,
   projectConversationGroups,
   handleOpenProjectConversation,
@@ -811,6 +813,10 @@ export function useWorkspaceConversationSceneRuntime({
         messageListEmptyStateVariant === "task-center"
           ? undefined
           : recentSessionActionLabel,
+      homeRecoverySession:
+        messageListEmptyStateVariant === "task-center"
+          ? undefined
+          : homeRecoverySession,
       handleResumeRecentSession:
         messageListEmptyStateVariant === "task-center"
           ? undefined

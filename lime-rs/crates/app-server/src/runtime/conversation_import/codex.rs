@@ -7,9 +7,10 @@ use app_server_protocol::{
     ConversationImportThreadPreviewParams, ConversationImportThreadPreviewResponse,
     ConversationImportThreadStatus, ImportedThreadSummary,
 };
-use chrono::{SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use lime_core::app_paths;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -32,6 +33,7 @@ pub(super) const MAX_PREVIEW_LIMIT: usize = 100;
 pub(super) const MAX_PREVIEW_TEXT_BYTES: usize = 4_000;
 pub(super) const USER_MESSAGE_BEGIN: &str = "## My request for Codex:";
 const COMPRESSED_ROLLOUT_SUFFIX: &str = ".zst";
+const ROLLOUT_SCAN_MAX_LINES: usize = 256;
 
 pub(super) fn scan_source(
     params: ConversationImportSourceScanParams,
@@ -77,23 +79,32 @@ pub(super) fn scan_source(
         None => Vec::new(),
     };
 
-    if threads.is_empty() {
-        threads = session_index::scan(&source_root);
-    }
+    threads.extend(session_index::scan(&source_root));
+    threads.extend(discover_rollout_threads(&source_root));
 
     for thread in &mut threads {
         repair_thread_source_path(&source_root, thread);
     }
+    let threads = deduplicate_import_threads(threads);
+    let missing_source_project_matches = project_path
+        .as_deref()
+        .map(|project_path| {
+            threads
+                .iter()
+                .filter(|thread| {
+                    thread.source_path.is_none()
+                        && thread_matches_project_path(thread, project_path)
+                })
+                .count()
+        })
+        .unwrap_or(0);
 
     let filtered = threads
         .into_iter()
         .filter(|thread| thread.source_path.is_some())
         .filter(|thread| include_archived || !thread.archived)
         .filter(|thread| match project_path.as_deref() {
-            Some(project_path) => thread
-                .cwd
-                .as_deref()
-                .is_some_and(|cwd| project_filter::matches(cwd, project_path)),
+            Some(project_path) => thread_matches_project_path(thread, project_path),
             None => true,
         })
         .filter(|thread| match query.as_deref() {
@@ -116,7 +127,28 @@ pub(super) fn scan_source(
         })
         .collect::<Vec<_>>();
 
+    let mut filtered = filtered;
+    filtered.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| right.created_at.cmp(&left.created_at))
+            .then_with(|| left.source_thread_id.cmp(&right.source_thread_id))
+    });
     let total = filtered.len();
+    let prompt_only_history_matches = if total == 0 {
+        project_path
+            .as_deref()
+            .map(|project_path| count_history_mentions(&source_root, project_path))
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let scan_message = empty_scan_message(
+        total,
+        missing_source_project_matches,
+        prompt_only_history_matches,
+    );
     let page = filtered
         .into_iter()
         .skip(cursor)
@@ -135,11 +167,186 @@ pub(super) fn scan_source(
             true,
             state_db_readable,
             paths::count_rollout_files(&source_root),
-            None,
+            scan_message,
         ),
         threads: page,
         next_cursor,
     })
+}
+
+fn discover_rollout_threads(source_root: &Path) -> Vec<ImportedThreadSummary> {
+    paths::discover_rollout_paths(source_root)
+        .into_iter()
+        .filter_map(|(path, archived)| read_rollout_thread_summary(&path, archived).ok())
+        .collect()
+}
+
+fn deduplicate_import_threads(threads: Vec<ImportedThreadSummary>) -> Vec<ImportedThreadSummary> {
+    let mut seen = HashSet::new();
+    threads
+        .into_iter()
+        .filter(|thread| {
+            let key = if !thread.source_thread_id.trim().is_empty() {
+                thread.source_thread_id.clone()
+            } else {
+                thread.source_path.clone().unwrap_or_default()
+            };
+            seen.insert(key)
+        })
+        .collect()
+}
+
+fn read_rollout_thread_summary(
+    path: &Path,
+    archived: bool,
+) -> Result<ImportedThreadSummary, RuntimeCoreError> {
+    let reader = open_rollout_reader(path)?;
+    let mut thread = ImportedThreadSummary {
+        source_client: ConversationImportSourceClient::Codex,
+        source_thread_id: path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        source_path: Some(path_to_string(path)),
+        source: Some("rollout".to_string()),
+        archived,
+        import_status: ConversationImportThreadStatus::NotImported,
+        updated_at: file_modified_timestamp(path),
+        ..Default::default()
+    };
+    let mut first_user_message = None;
+
+    for line in BufReader::new(reader)
+        .lines()
+        .map_while(Result::ok)
+        .take(ROLLOUT_SCAN_MAX_LINES)
+    {
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if thread.created_at.is_none() {
+            thread.created_at = value
+                .get("timestamp")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned);
+        }
+        if thread.updated_at.is_none() {
+            thread.updated_at = thread.created_at.clone();
+        }
+
+        match value.get("type").and_then(Value::as_str) {
+            Some("session_meta") => apply_session_meta_to_thread(&mut thread, value.get("payload")),
+            Some("event_msg") => {
+                if first_user_message.is_none() {
+                    first_user_message = value
+                        .get("payload")
+                        .and_then(event_msg_user_message)
+                        .and_then(normalize_user_message_text);
+                }
+            }
+            Some("response_item") => {
+                if first_user_message.is_none() {
+                    first_user_message = value
+                        .get("payload")
+                        .and_then(response_item_user_message)
+                        .and_then(normalize_user_message_text);
+                }
+            }
+            _ => {}
+        }
+
+        if thread.cwd.is_some() && first_user_message.is_some() {
+            break;
+        }
+    }
+
+    if let Some(first_user_message) = first_user_message {
+        if thread.title.is_none() {
+            thread.title = Some(first_user_message.clone());
+        }
+        let metadata = serde_json::json!({
+            "firstUserMessage": first_user_message,
+        });
+        if let Some(object) = metadata.as_object().cloned() {
+            state::merge_thread_metadata(&mut thread, object);
+        }
+    }
+
+    Ok(thread)
+}
+
+fn event_msg_user_message(payload: &Value) -> Option<&str> {
+    (payload.get("type").and_then(Value::as_str) == Some("user_message"))
+        .then(|| payload.get("message").and_then(Value::as_str))
+        .flatten()
+}
+
+fn response_item_user_message(payload: &Value) -> Option<String> {
+    if payload.get("type").and_then(Value::as_str) != Some("message")
+        || payload.get("role").and_then(Value::as_str) != Some("user")
+    {
+        return None;
+    }
+    let content = payload.get("content")?.as_array()?;
+    let text = content
+        .iter()
+        .filter_map(|item| item.get("text").or_else(|| item.get("input_text")))
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
+    (!text.trim().is_empty()).then_some(text)
+}
+
+fn normalize_user_message_text(value: impl AsRef<str>) -> Option<String> {
+    let trimmed = value.as_ref().trim();
+    let normalized = trimmed
+        .strip_prefix(USER_MESSAGE_BEGIN)
+        .unwrap_or(trimmed)
+        .trim();
+    (!normalized.is_empty()).then(|| normalized.to_string())
+}
+
+fn file_modified_timestamp(path: &Path) -> Option<String> {
+    let modified = fs::metadata(path).ok()?.modified().ok()?;
+    Some(DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Millis, true))
+}
+
+fn count_history_mentions(source_root: &Path, project_path: &str) -> usize {
+    let Ok(file) = fs::File::open(source_root.join("history.jsonl")) else {
+        return 0;
+    };
+    BufReader::new(file)
+        .lines()
+        .map_while(Result::ok)
+        .filter(|line| project_filter::mentions(line, project_path))
+        .count()
+}
+
+fn empty_scan_message(
+    importable_count: usize,
+    missing_source_project_matches: usize,
+    prompt_only_history_matches: usize,
+) -> Option<String> {
+    if importable_count > 0 {
+        return None;
+    }
+
+    match (
+        missing_source_project_matches > 0,
+        prompt_only_history_matches > 0,
+    ) {
+        (true, true) => Some(format!(
+            "Found {missing_source_project_matches} matching Codex index records and {prompt_only_history_matches} prompt-only history entries, but no complete rollout files are available to import. Conversation import requires stored rollout files."
+        )),
+        (true, false) => Some(format!(
+            "Found {missing_source_project_matches} matching Codex index records, but their rollout files are missing. Conversation import requires stored rollout files."
+        )),
+        (false, true) => Some(format!(
+            "Found {prompt_only_history_matches} prompt-only history entries, but no complete rollout files are available to import. Conversation import requires stored rollout files."
+        )),
+        (false, false) => None,
+    }
 }
 
 pub(super) fn preview_thread(
@@ -452,6 +659,33 @@ fn repair_thread_source_path(source_root: &Path, thread: &mut ImportedThreadSumm
 
     thread.source_path = None;
     false
+}
+
+fn thread_matches_project_path(thread: &ImportedThreadSummary, project_path: &str) -> bool {
+    if thread
+        .cwd
+        .as_deref()
+        .is_some_and(|cwd| project_filter::matches(cwd, project_path))
+    {
+        return true;
+    }
+
+    [
+        thread.title.as_deref(),
+        thread
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("firstUserMessage"))
+            .and_then(Value::as_str),
+        thread
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("preview"))
+            .and_then(Value::as_str),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|value| project_filter::mentions(value, project_path))
 }
 
 pub(super) fn merge_indexed_thread_metadata(

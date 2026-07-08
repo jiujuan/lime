@@ -57,9 +57,9 @@ export function HarnessEvidencePackCard({
   return (
     <HarnessExportCardFrame
       icon={<ShieldAlert className="h-4 w-4 text-amber-600" />}
-      title={agentText("agentChat.harness.generated.153b1d0f0a", "问题证据包")}
+      title={agentText("agentChat.harness.evidence.title", "问题证据包")}
       description={agentText(
-        "agentChat.harness.generated.1a81e7e23f",
+        "agentChat.harness.evidence.description",
         "把当前 runtime、timeline、最近产物和已知缺口导出为最小证据包，为后续 replay、eval 和故障复盘提供输入。",
       )}
       actions={
@@ -70,7 +70,7 @@ export function HarnessEvidencePackCard({
             variant={evidencePack ? "outline" : "default"}
             className="gap-2"
             aria-label={agentText(
-              "agentChat.harness.generated.f1e4d07649",
+              "agentChat.harness.evidence.action.exportAria",
               "导出问题证据包",
             )}
             disabled={evidenceExporting}
@@ -81,7 +81,15 @@ export function HarnessEvidencePackCard({
             ) : (
               <ShieldAlert className="h-4 w-4" />
             )}
-            {evidencePack ? "刷新证据包" : "导出问题证据包"}
+            {evidencePack
+              ? agentText(
+                  "agentChat.harness.evidence.action.refresh",
+                  "刷新证据包",
+                )
+              : agentText(
+                  "agentChat.harness.evidence.action.export",
+                  "导出问题证据包",
+                )}
           </Button>
           {evidencePack ? (
             <Button
@@ -90,7 +98,7 @@ export function HarnessEvidencePackCard({
               variant="outline"
               className="gap-2"
               aria-label={agentText(
-                "agentChat.harness.generated.d6913f073d",
+                "agentChat.harness.evidence.action.openDirectoryAria",
                 "打开问题证据目录",
               )}
               onClick={() =>
@@ -98,7 +106,10 @@ export function HarnessEvidencePackCard({
               }
             >
               <FolderOpen className="h-4 w-4" />
-              {agentText("agentChat.harness.generated.031c105578", "打开目录")}
+              {agentText(
+                "agentChat.harness.evidence.action.openDirectory",
+                "打开目录",
+              )}
             </Button>
           ) : null}
         </>
@@ -106,7 +117,7 @@ export function HarnessEvidencePackCard({
       error={evidenceExportError}
       hasContent={Boolean(evidencePack)}
       emptyMessage={agentText(
-        "agentChat.harness.generated.913ad2f0a2",
+        "agentChat.harness.evidence.empty",
         "尚未导出问题证据包。建议在出现阻塞、需要复盘失败链路，或准备把真实案例沉淀成 replay / eval 样本前导出一次。",
       )}
     >
@@ -467,9 +478,18 @@ function EvidencePackContent({
       <HarnessExportArtifactList
         artifacts={evidencePack.artifacts}
         formatKindLabel={formatEvidenceArtifactKindLabel}
-        previewDescriptionPrefix="问题证据"
-        previewAriaLabelPrefix="预览问题证据"
-        openAriaLabelPrefix="系统打开问题证据"
+        previewDescription={{
+          key: "agentChat.harness.evidence.artifact.previewDescription",
+          defaultValue: "问题证据 · {{kind}}",
+        }}
+        previewAriaLabel={{
+          key: "agentChat.harness.evidence.artifact.previewAria",
+          defaultValue: "预览问题证据：{{title}}",
+        }}
+        openAriaLabel={{
+          key: "agentChat.harness.evidence.artifact.openAria",
+          defaultValue: "系统打开问题证据：{{path}}",
+        }}
         onOpenPath={handleOpenPathValue}
         onOpenPreview={openPreview}
       />

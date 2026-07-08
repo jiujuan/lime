@@ -71,8 +71,11 @@ impl OpenAiProvider {
         let model = model.with_fast(OPEN_AI_DEFAULT_FAST_MODEL.to_string());
 
         let config = crate::config::Config::global();
-        let secrets = config.get_secrets("OPENAI_API_KEY", &["OPENAI_CUSTOM_HEADERS"])?;
-        let api_key = secrets.get("OPENAI_API_KEY").unwrap().clone();
+        let api_key = config
+            .get_secret::<String>("OPENAI_API_KEY")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
         let host: String = config
             .get_param("OPENAI_HOST")
             .unwrap_or_else(|_| "https://api.openai.com".to_string());
@@ -81,13 +84,17 @@ impl OpenAiProvider {
             .unwrap_or_else(|_| "v1/chat/completions".to_string());
         let organization: Option<String> = config.get_param("OPENAI_ORGANIZATION").ok();
         let project: Option<String> = config.get_param("OPENAI_PROJECT").ok();
-        let custom_headers: Option<HashMap<String, String>> = secrets
-            .get("OPENAI_CUSTOM_HEADERS")
-            .cloned()
+        let custom_headers: Option<HashMap<String, String>> = config
+            .get_secret::<String>("OPENAI_CUSTOM_HEADERS")
+            .ok()
             .map(parse_custom_headers);
         let timeout_secs: u64 = config.get_param("OPENAI_TIMEOUT").unwrap_or(600);
 
-        let auth = AuthMethod::BearerToken(api_key);
+        let auth = match api_key {
+            Some(api_key) => AuthMethod::BearerToken(api_key),
+            None if openai_no_auth_enabled() => AuthMethod::Custom(Box::new(NoAuth)),
+            None => anyhow::bail!("Missing API key: OPENAI_API_KEY"),
+        };
         let mut api_client =
             ApiClient::with_timeout(host, auth, std::time::Duration::from_secs(timeout_secs))?;
 
@@ -388,6 +395,27 @@ impl OpenAiProvider {
         }
         let response = request.response_post(payload).await?;
         handle_response_openai_compat(response).await
+    }
+}
+
+fn openai_no_auth_enabled() -> bool {
+    matches!(
+        std::env::var("OPENAI_ALLOW_NO_AUTH")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    )
+}
+
+struct NoAuth;
+
+#[async_trait]
+impl super::api_client::AuthProvider for NoAuth {
+    async fn get_auth_header(&self) -> Result<(String, String)> {
+        Ok(("X-No-Auth".to_string(), "true".to_string()))
     }
 }
 
@@ -781,6 +809,7 @@ mod tests {
     async fn test_from_env_applies_openai_custom_headers() {
         std::env::set_var("OPENAI_API_KEY", "sk-test");
         std::env::set_var("OPENAI_HOST", "https://llm.limeai.run");
+        std::env::remove_var("OPENAI_ALLOW_NO_AUTH");
         std::env::remove_var("OPENAI_BASE_PATH");
         std::env::set_var("OPENAI_CUSTOM_HEADERS", "X-Lime-Tenant-ID=tenant-0001");
 
@@ -800,6 +829,27 @@ mod tests {
         std::env::remove_var("OPENAI_API_KEY");
         std::env::remove_var("OPENAI_HOST");
         std::env::remove_var("OPENAI_CUSTOM_HEADERS");
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_from_env_allows_no_auth_only_with_explicit_flag() {
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::set_var("OPENAI_HOST", "https://llm.limeai.run");
+        std::env::remove_var("OPENAI_ALLOW_NO_AUTH");
+
+        let missing_key = OpenAiProvider::from_env(ModelConfig::new("gpt-4o").unwrap()).await;
+        assert!(missing_key.is_err());
+
+        std::env::set_var("OPENAI_ALLOW_NO_AUTH", "1");
+        let provider = OpenAiProvider::from_env(ModelConfig::new("gpt-4o").unwrap())
+            .await
+            .expect("provider should build without api key when no-auth is explicit");
+
+        assert_eq!(provider.name, "openai");
+
+        std::env::remove_var("OPENAI_HOST");
+        std::env::remove_var("OPENAI_ALLOW_NO_AUTH");
     }
 
     #[test]

@@ -25,7 +25,13 @@ import type {
   InterruptedInputRestoreRequest,
 } from "./agentStreamInputRestoreTypes";
 
-export type TaskStatus = "draft" | "running" | "waiting" | "done" | "failed";
+export type TaskStatus =
+  | "draft"
+  | "running"
+  | "queued"
+  | "waiting"
+  | "done"
+  | "failed";
 export type TaskStatusReason =
   | "default"
   | "workspace_error"
@@ -116,6 +122,7 @@ export interface SendMessageOptions {
   systemPromptOverride?: string;
   searchMode?: AgentRuntimeWebSearchMode;
   explicitToolPreferences?: boolean;
+  targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;
@@ -385,11 +392,17 @@ export function deriveTaskLiveState(params: {
   }
 
   if (
-    isSending ||
-    queuedTurnCount > 0 ||
-    threadStatus === "running" ||
-    threadStatus === "queued"
+    threadStatus === "waitingAction" ||
+    threadStatus === "waiting_action" ||
+    threadStatus === "waiting_request"
   ) {
+    return {
+      status: "waiting",
+      statusReason: "user_action",
+    };
+  }
+
+  if (isSending || threadStatus === "running") {
     return {
       status: "running",
       statusReason: "default",
@@ -403,6 +416,13 @@ export function deriveTaskLiveState(params: {
       statusReason: pendingAction
         ? resolvePendingActionStatusReason(pendingAction)
         : "user_action",
+    };
+  }
+
+  if (queuedTurnCount > 0 || threadStatus === "queued") {
+    return {
+      status: "queued",
+      statusReason: "default",
     };
   }
 
@@ -486,27 +506,31 @@ function resolveRecentTopicPriority(topic: RecentSessionLabelSource): number {
     return 0;
   }
 
-  if (topic.status === "failed" && topic.statusReason === "workspace_error") {
+  if (topic.status === "queued") {
     return 1;
   }
 
-  if (topic.status === "running") {
+  if (topic.status === "failed" && topic.statusReason === "workspace_error") {
     return 2;
   }
 
-  if (topic.status === "done") {
+  if (topic.status === "running") {
     return 3;
   }
 
-  if (topic.status === "failed") {
+  if (topic.status === "done") {
     return 4;
   }
 
-  if ((topic.messagesCount ?? 0) > 0) {
+  if (topic.status === "failed") {
     return 5;
   }
 
-  return 6;
+  if ((topic.messagesCount ?? 0) > 0) {
+    return 6;
+  }
+
+  return 7;
 }
 
 export function resolveRecentTopicCandidate(
@@ -606,12 +630,16 @@ export const mapSessionToTopic = (session: AsterSessionInfo): Topic => {
   const status: TaskStatus = unfinishedProjection
     ? unfinishedProjection.status === "waitingAction"
       ? "waiting"
-      : "running"
+      : unfinishedProjection.status === "queued"
+        ? "queued"
+        : "running"
     : messagesCount > 0
       ? "done"
       : "draft";
   const statusReason: TaskStatusReason =
-    unfinishedProjection?.status === "waitingAction" ? "user_action" : "default";
+    unfinishedProjection?.status === "waitingAction"
+      ? "user_action"
+      : "default";
   const lastPreview =
     unfinishedProjection?.preview ||
     (messagesCount > 0

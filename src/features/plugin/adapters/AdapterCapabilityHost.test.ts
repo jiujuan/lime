@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { uninstallApp } from "../install/uninstallApp";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 import { AdapterCapabilityHost } from "./AdapterCapabilityHost";
 import { InMemoryPluginCapabilityStore } from "./InMemoryPluginCapabilityStore";
 

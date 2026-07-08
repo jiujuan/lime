@@ -355,14 +355,14 @@ export function useTaskCenterEmptyStateSendRuntime({
               });
               if (result !== true) {
                 setInput(text);
-                setTaskCenterDraftSendRequest((current) =>
-                  current?.id === requestId ? null : current,
-                );
                 setHomePendingPreviewRequest((current) =>
                   current?.id === requestId ? null : current,
                 );
-                homeSendInFlightRef.current = false;
               }
+              setTaskCenterDraftSendRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              homeSendInFlightRef.current = false;
             },
             (error) => {
               recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
@@ -445,14 +445,14 @@ export function useTaskCenterEmptyStateSendRuntime({
             });
             if (result !== true) {
               setInput(text);
-              setTaskCenterDraftSendRequest((current) =>
-                current?.id === requestId ? null : current,
-              );
               setHomePendingPreviewRequest((current) =>
                 current?.id === requestId ? null : current,
               );
-              homeSendInFlightRef.current = false;
             }
+            setTaskCenterDraftSendRequest((current) =>
+              current?.id === requestId ? null : current,
+            );
+            homeSendInFlightRef.current = false;
           },
           (error) => {
             recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
@@ -678,6 +678,11 @@ export function useTaskCenterDraftSendDispatchRuntime({
       }
 
       const dispatchSessionId = materializedSessionId ?? request.draftTabId;
+      if (request.materializeDraft && materializedSessionId) {
+        commitMaterializedDraftTab(request.draftTabId, materializedSessionId, {
+          preserveInput: false,
+        });
+      }
       recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
         elapsedMs: Date.now() - request.submittedAt,
         requestId: request.id,
@@ -687,6 +692,7 @@ export function useTaskCenterDraftSendDispatchRuntime({
       });
       const tracedSendOptions: HandleSendOptions = {
         ...(request.sendOptions || {}),
+        targetSessionId: dispatchSessionId,
         // 首页首发代表“创建新对话”，不要先恢复上次会话，否则会把首字链路拖进旧会话 hydration。
         skipSessionRestore: true,
         // 同一条快路径也不应同步跑项目启动 hooks 或 submit 前队列恢复扫描。
@@ -717,13 +723,6 @@ export function useTaskCenterDraftSendDispatchRuntime({
       );
       void sendPromise.then(
         (result) => {
-          if (request.materializeDraft && materializedSessionId) {
-            commitMaterializedDraftTab(
-              request.draftTabId,
-              materializedSessionId,
-              { preserveInput: result !== true, syncRoute: false },
-            );
-          }
           recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
             durationMs: Date.now() - request.submittedAt,
             requestId: request.id,
@@ -732,7 +731,7 @@ export function useTaskCenterDraftSendDispatchRuntime({
             source: request.source,
             workspaceId: workspaceId ?? null,
           });
-          if (result !== true && !request.materializeDraft) {
+          if (result !== true) {
             restoreInput?.(request.text);
           }
           const latestCounts = messageCountsRef.current;
@@ -744,13 +743,6 @@ export function useTaskCenterDraftSendDispatchRuntime({
           });
         },
         (error) => {
-          if (request.materializeDraft && materializedSessionId) {
-            commitMaterializedDraftTab(
-              request.draftTabId,
-              materializedSessionId,
-              { preserveInput: true, syncRoute: false },
-            );
-          }
           recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
             durationMs: Date.now() - request.submittedAt,
             error: error instanceof Error ? error.message : String(error),
@@ -759,9 +751,7 @@ export function useTaskCenterDraftSendDispatchRuntime({
             source: request.source,
             workspaceId: workspaceId ?? null,
           });
-          if (!request.materializeDraft) {
-            restoreInput?.(request.text);
-          }
+          restoreInput?.(request.text);
           clearRequest();
         },
       );

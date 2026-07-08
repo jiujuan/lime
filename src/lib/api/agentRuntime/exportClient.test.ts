@@ -267,6 +267,7 @@ describe("agentRuntime exportClient", () => {
 
     expect(appServerClient.exportHandoffBundle).toHaveBeenCalledWith({
       sessionId: "session-handoff",
+      locale: "en-US",
     });
   });
 
@@ -333,12 +334,15 @@ describe("agentRuntime exportClient", () => {
 
     expect(appServerClient.exportAnalysisHandoff).toHaveBeenCalledWith({
       sessionId: "session-analysis",
+      locale: "en-US",
     });
     expect(appServerClient.exportReplayCase).toHaveBeenCalledWith({
       sessionId: "session-replay",
+      locale: "en-US",
     });
     expect(appServerClient.exportReviewDecisionTemplate).toHaveBeenCalledWith({
       sessionId: "session-review",
+      locale: "en-US",
     });
     expect(appServerClient.saveReviewDecision).toHaveBeenCalledWith({
       sessionId: "session-review",
@@ -351,7 +355,66 @@ describe("agentRuntime exportClient", () => {
       followupActions: ["补 GUI smoke"],
       regressionRequirements: ["npm run test:contracts"],
       notes: "",
+      locale: "en-US",
     });
+  });
+
+  it("runtime residual exports 应把 locale 透传给 App Server locale copy service", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createExportClient({
+      appServerClient,
+    });
+
+    await client.exportAgentRuntimeHandoffBundle("session-handoff", {
+      locale: "en",
+    });
+    await client.exportAgentRuntimeAnalysisHandoff("session-analysis", {
+      locale: "ja",
+    });
+    await client.exportAgentRuntimeReplayCase("session-replay", {
+      locale: "zh-HK",
+    });
+    await client.exportAgentRuntimeReviewDecisionTemplate("session-review", {
+      locale: "ko",
+    });
+    await client.saveAgentRuntimeReviewDecision({
+      session_id: "session-review",
+      decision_status: "accepted",
+      decision_summary: "确认可以合入。",
+      chosen_fix_strategy: "保留最小 current 边界。",
+      risk_level: "medium",
+      risk_tags: ["runtime"],
+      human_reviewer: "Lime Maintainer",
+      followup_actions: ["补 GUI smoke"],
+      regression_requirements: ["npm run test:contracts"],
+      notes: "",
+      locale: "en-US",
+    });
+
+    expect(appServerClient.exportHandoffBundle).toHaveBeenLastCalledWith({
+      sessionId: "session-handoff",
+      locale: "en-US",
+    });
+    expect(appServerClient.exportAnalysisHandoff).toHaveBeenLastCalledWith({
+      sessionId: "session-analysis",
+      locale: "ja-JP",
+    });
+    expect(appServerClient.exportReplayCase).toHaveBeenLastCalledWith({
+      sessionId: "session-replay",
+      locale: "zh-TW",
+    });
+    expect(
+      appServerClient.exportReviewDecisionTemplate,
+    ).toHaveBeenLastCalledWith({
+      sessionId: "session-review",
+      locale: "ko-KR",
+    });
+    expect(appServerClient.saveReviewDecision).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: "session-review",
+        locale: "en-US",
+      }),
+    );
   });
 
   it("handoff current export 收到假成功或缺字段时应 fail closed", async () => {
@@ -371,6 +434,7 @@ describe("agentRuntime exportClient", () => {
 
     expect(appServerClient.exportHandoffBundle).toHaveBeenCalledWith({
       sessionId: "session-handoff",
+      locale: "en-US",
     });
   });
 

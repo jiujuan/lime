@@ -2,8 +2,8 @@
 
 use super::super::*;
 use app_server_protocol::{
-    ClientCapabilities, JsonRpcMessage, RequestId, METHOD_INITIALIZE, METHOD_INITIALIZED,
-    METHOD_PROJECT_GIT_STATUS,
+    ClientCapabilities, JsonRpcMessage, METHOD_INITIALIZE, METHOD_INITIALIZED,
+    METHOD_PROJECT_GIT_STATUS, RequestId,
 };
 use serde_json::json;
 

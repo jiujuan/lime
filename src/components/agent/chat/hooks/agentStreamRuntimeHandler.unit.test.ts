@@ -83,7 +83,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -203,7 +203,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -356,7 +356,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -475,7 +475,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -554,7 +554,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -625,7 +625,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -787,7 +787,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -893,7 +893,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -990,7 +990,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -1065,7 +1065,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -1250,7 +1250,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -1371,7 +1371,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -1450,7 +1450,7 @@ describe("agentStreamRuntimeHandler", () => {
       removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
       upsertQueuedTurn: () => {},
-      removeQueuedTurnState: () => {},
+      removeQueuedTurnsFromProjection: () => {},
       playToolcallSound: () => {},
       playTypewriterSound: () => {},
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -1589,7 +1589,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -1753,7 +1753,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -1904,7 +1904,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -2104,7 +2104,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -2251,7 +2251,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -2360,7 +2360,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -2427,7 +2427,7 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const setIsSending = vi.fn();
     const disposeListener = vi.fn();
-    const removeQueuedTurnState = vi.fn();
+    const removeQueuedTurnsFromProjection = vi.fn();
     const setThreadTurns = vi.fn(
       (value: unknown[] | ((prev: unknown[]) => unknown[])) => {
         if (typeof value === "function") {
@@ -2466,7 +2466,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState,
+        removeQueuedTurnsFromProjection,
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -2512,7 +2512,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(requestState.accumulatedContent).toBe(
       "我先给出计划，不会直接改代码：\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 proposed_plan\n</proposed_plan>",
     );
-    expect(removeQueuedTurnState).toHaveBeenCalledWith(["queued-news"]);
+    expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
@@ -2557,7 +2557,7 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const setIsSending = vi.fn();
     const disposeListener = vi.fn();
-    const removeQueuedTurnState = vi.fn();
+    const removeQueuedTurnsFromProjection = vi.fn();
     const onError = vi.fn();
 
     handleTurnStreamEvent({
@@ -2585,7 +2585,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState,
+        removeQueuedTurnsFromProjection,
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -2632,7 +2632,7 @@ describe("agentStreamRuntimeHandler", () => {
       title: "当前处理失败",
       detail: failureMessage,
     });
-    expect(removeQueuedTurnState).toHaveBeenCalledWith(["queued-failed"]);
+    expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(failureMessage);
@@ -2667,7 +2667,7 @@ describe("agentStreamRuntimeHandler", () => {
     );
     const setIsSending = vi.fn();
     const disposeListener = vi.fn();
-    const removeQueuedTurnState = vi.fn();
+    const removeQueuedTurnsFromProjection = vi.fn();
 
     handleTurnStreamEvent({
       data: {
@@ -2693,7 +2693,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState,
+        removeQueuedTurnsFromProjection,
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -2727,7 +2727,7 @@ describe("agentStreamRuntimeHandler", () => {
       title: "当前处理失败",
       detail: "模型未输出最终答复，请重试",
     });
-    expect(removeQueuedTurnState).toHaveBeenCalledWith(["queued-empty-turn"]);
+    expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);
     expect(mockToast.error).toHaveBeenCalledWith("模型未输出最终答复，请重试");
@@ -2759,7 +2759,7 @@ describe("agentStreamRuntimeHandler", () => {
         messages = typeof value === "function" ? value(messages) : value;
       },
     );
-    const removeQueuedTurnState = vi.fn();
+    const removeQueuedTurnsFromProjection = vi.fn();
     const setIsSending = vi.fn();
     const disposeListener = vi.fn();
     const callbacks = {
@@ -2771,7 +2771,7 @@ describe("agentStreamRuntimeHandler", () => {
       removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
       upsertQueuedTurn: () => {},
-      removeQueuedTurnState,
+      removeQueuedTurnsFromProjection,
       playToolcallSound: () => {},
       playTypewriterSound: () => {},
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -2864,9 +2864,7 @@ describe("agentStreamRuntimeHandler", () => {
       title: "当前处理失败",
       detail: "模型未输出最终答复，请重试",
     });
-    expect(removeQueuedTurnState).toHaveBeenCalledWith([
-      "queued-search-no-final",
-    ]);
+    expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);
     expect(mockToast.error).toHaveBeenCalledWith("模型未输出最终答复，请重试");
@@ -2930,7 +2928,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -3020,7 +3018,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -3131,7 +3129,7 @@ describe("agentStreamRuntimeHandler", () => {
         messages = typeof value === "function" ? value(messages) : value;
       },
     );
-    const removeQueuedTurnState = vi.fn();
+    const removeQueuedTurnsFromProjection = vi.fn();
     const onComplete = vi.fn();
     const setThreadItems = vi.fn(
       (
@@ -3151,7 +3149,7 @@ describe("agentStreamRuntimeHandler", () => {
       removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
       upsertQueuedTurn: () => {},
-      removeQueuedTurnState,
+      removeQueuedTurnsFromProjection,
       playToolcallSound: () => {},
       playTypewriterSound: () => {},
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -3294,7 +3292,7 @@ describe("agentStreamRuntimeHandler", () => {
         }),
       ]),
     );
-    expect(removeQueuedTurnState).toHaveBeenCalledWith(["queued-search-final"]);
+    expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
     expect(mockToast.error).not.toHaveBeenCalledWith(
       "模型未输出最终答复，请重试",
     );
@@ -3352,7 +3350,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -3443,7 +3441,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -3529,7 +3527,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: vi.fn(),
+        removeQueuedTurnsFromProjection: vi.fn(),
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -3613,7 +3611,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -3708,7 +3706,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -3802,7 +3800,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -3878,7 +3876,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound,
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4004,7 +4002,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4120,7 +4118,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4258,7 +4256,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4415,7 +4413,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: () => {
@@ -4510,7 +4508,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4605,7 +4603,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4727,7 +4725,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4861,7 +4859,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -4945,7 +4943,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -5051,7 +5049,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -5150,7 +5148,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -5224,7 +5222,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -5333,7 +5331,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (
@@ -5527,7 +5525,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -5630,7 +5628,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -5711,7 +5709,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -5785,7 +5783,7 @@ describe("agentStreamRuntimeHandler", () => {
       removeQueuedDraftMessages: () => {},
       clearActiveStreamIfMatch: () => true,
       upsertQueuedTurn: () => {},
-      removeQueuedTurnState: () => {},
+      removeQueuedTurnsFromProjection: () => {},
       playToolcallSound: () => {},
       playTypewriterSound: () => {},
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
@@ -5932,7 +5930,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -6025,7 +6023,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -6133,7 +6131,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -6201,7 +6199,7 @@ describe("agentStreamRuntimeHandler", () => {
         removeQueuedDraftMessages,
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         playToolcallSound: () => {},
         playTypewriterSound: () => {},
         appendThinkingToParts: (parts) => parts,
@@ -6266,7 +6264,7 @@ describe("agentStreamRuntimeHandler", () => {
       removeQueuedDraftMessages,
       clearActiveStreamIfMatch: () => true,
       upsertQueuedTurn: () => {},
-      removeQueuedTurnState: () => {},
+      removeQueuedTurnsFromProjection: () => {},
       playToolcallSound: () => {},
       playTypewriterSound: () => {},
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>

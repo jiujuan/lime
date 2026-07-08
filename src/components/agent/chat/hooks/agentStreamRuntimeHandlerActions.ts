@@ -150,7 +150,6 @@ export function createAgentStreamRuntimeHandlerActions({
     disposeListener,
     isStreamActivated,
     removeQueuedDraftMessages,
-    removeQueuedTurnState,
   } = callbacks;
 
   const shouldPreserveVisibleProcessForMessage = (message: Message): boolean =>
@@ -536,7 +535,6 @@ export function createAgentStreamRuntimeHandlerActions({
     if (sideEffectPlan.shouldMarkFailedTimeline) {
       markFailedTimelineState(sideEffectPlan.errorMessage);
     }
-    removeQueuedTurnState(sideEffectPlan.queuedTurnIds);
     finishRequestLog(requestState, sideEffectPlan.requestLogPayload);
     observer?.onError?.(sideEffectPlan.observerErrorMessage);
     toast.error(sideEffectPlan.toastMessage);
@@ -645,16 +643,13 @@ export function createAgentStreamRuntimeHandlerActions({
 
   const completeAssistantStreamMessageFromCompletionPlan = ({
     finalContent,
-    queuedTurnIds,
     requestLogPayload,
     usage,
   }: {
     finalContent: string;
-    queuedTurnIds: string[];
     requestLogPayload: AgentStreamRequestLogFinishPayload;
     usage?: Message["usage"];
   }) => {
-    removeQueuedTurnState(queuedTurnIds);
     finishRequestLog(requestState, requestLogPayload);
     completeAssistantStreamMessage({
       finalContent,
@@ -664,9 +659,6 @@ export function createAgentStreamRuntimeHandlerActions({
   };
 
   const completeInterruptedTurn = (turn: AgentThreadTurn) => {
-    removeQueuedTurnState(
-      requestState.queuedTurnId ? [requestState.queuedTurnId] : [],
-    );
     finishRequestLog(requestState, {
       eventType: "chat_request_complete",
       status: "success",

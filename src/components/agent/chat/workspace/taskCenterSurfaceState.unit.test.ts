@@ -188,6 +188,38 @@ describe("resolveTaskCenterHomeChromeState", () => {
     expect(state.shouldRenderTaskCenterEmbeddedHome).toBe(false);
   });
 
+  it("new-task 后台恢复时应把旧 running session 留在后台，不作为首页前台会话活动", () => {
+    const state = resolveTaskCenterHomeChromeState({
+      agentEntry: "new-task",
+      draftSurfaceActive: false,
+      draftTabActive: false,
+      shouldSuppressDraftContent: false,
+      draftSendRequest: null,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: false,
+      isHomeSessionBackgroundRecovery: true,
+      displayMessageCount: 1,
+      threadItemCount: 1,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: true,
+      isHomePendingPreviewActive: false,
+      queuedTurnCount: 0,
+      sessionId: "running-session",
+      embeddedHomeSessionIds: new Set(),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+      shouldUseBrowserWorkspaceHomeChrome: true,
+    });
+
+    expect(state.hasCurrentSessionActivity).toBe(false);
+    expect(state.hasHomeConversationActivity).toBe(false);
+    expect(
+      state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(true);
+    expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBeNull();
+  });
+
   it("从路由打开历史空会话时不应被任务中心首页覆盖", () => {
     const state = resolveTaskCenterHomeChromeState({
       agentEntry: "claw",

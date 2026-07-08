@@ -21,6 +21,7 @@ import {
   mergeStoryboardSlots,
   readBoolean,
   readImageCommandRunSnapshot,
+  readImageGenerationSoulMetadata,
   readImageTaskPresentationCaption,
   readImageTaskPresentationText,
   readPositiveNumber,
@@ -499,6 +500,13 @@ export function buildParsedImageTaskSnapshot(params: {
     normalizedStatus,
   });
   const workflowRun = readImageCommandRunSnapshot([payload, params.taskRecord]);
+  const soulMetadata = readImageGenerationSoulMetadata([
+    resultRecord,
+    attemptResultRecord,
+    payload,
+    uiHintsRecord,
+    params.taskRecord,
+  ]);
   const prompt = sanitizePreviewPrompt(
     readString(
       [payload, params.taskRecord, uiHintsRecord],
@@ -676,16 +684,17 @@ export function buildParsedImageTaskSnapshot(params: {
     runtimeContract?.model ??
     null;
   const previewPrompt = displayPrompt || prompt || `${taskLabel}进行中`;
-  const assistantIntro = readImageTaskPresentationText(
-    [
-      resultRecord,
-      attemptResultRecord,
-      payload,
-      uiHintsRecord,
-      params.taskRecord,
-    ],
-    previewPrompt,
-  ) || "";
+  const assistantIntro =
+    readImageTaskPresentationText(
+      [
+        resultRecord,
+        attemptResultRecord,
+        payload,
+        uiHintsRecord,
+        params.taskRecord,
+      ],
+      previewPrompt,
+    ) || "";
   const previewCaption =
     readImageTaskPresentationCaption(
       [
@@ -742,6 +751,7 @@ export function buildParsedImageTaskSnapshot(params: {
       null,
     runtimeContract,
     workflowRun,
+    soulMetadata,
   };
 
   const messageTimestamp = new Date(createdAt);
@@ -778,6 +788,7 @@ export function buildParsedImageTaskSnapshot(params: {
       failureMessage: lastError,
       runtimeContract,
       workflowRun,
+      soulMetadata,
       hookImageIds: outputs.map((output) => output.hookImageId),
       applyTarget,
       taskFilePath,
@@ -835,6 +846,9 @@ export function buildPendingImageTaskSnapshot(params: {
       ["model", "modelName", "model_name"],
     ) || null;
   const workflowRun = readImageCommandRunSnapshot([params.payload || null]);
+  const soulMetadata = readImageGenerationSoulMetadata([
+    params.payload || null,
+  ]);
   const fallbackAssistantIntro =
     readImageTaskPresentationText([params.payload || null], previewPrompt) ||
     "";
@@ -891,6 +905,7 @@ export function buildPendingImageTaskSnapshot(params: {
           phase: resolvePendingProgressPhase(params.status),
           statusMessage: params.progressMessage || "正在生成图片。",
           workflowRun,
+          soulMetadata,
         },
       },
       task: {
@@ -910,6 +925,7 @@ export function buildPendingImageTaskSnapshot(params: {
         targetOutputId: null,
         createdAt: Date.now(),
         workflowRun,
+        soulMetadata,
         hookImageIds: [],
         applyTarget: resolveScopedImageWorkbenchApplyTarget({
           canvasState: params.canvasState,

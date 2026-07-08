@@ -19,7 +19,6 @@ function resolve(
     isThemeWorkbench: false,
     shouldUseCompactGeneralWorkbench: false,
     isBootstrapDispatchPending: false,
-    isSessionHydrating: false,
     isSending: false,
     queuedTurnCount: 0,
     ...overrides,
@@ -53,7 +52,6 @@ describe("agentChatWorkspaceShellViewModel", () => {
       { isHomePendingPreviewActive: true },
       { isSending: true },
       { queuedTurnCount: 1 },
-      { isSessionHydrating: true },
     ] satisfies Array<Partial<AgentChatWorkspaceShellViewModelInput>>) {
       expect(resolve(overrides)).toMatchObject({
         hasDisplayMessages:

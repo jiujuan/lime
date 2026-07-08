@@ -328,8 +328,82 @@ describe("agentSessionState", () => {
     expect(
       hasActiveRuntimeTurn({
         queuedTurnsCount: 0,
+        threadRead: {
+          thread_id: "thread-queued",
+          status: "queued",
+          pending_requests: [],
+          incidents: [],
+          queued_turns: [
+            {
+              queued_turn_id: "queued-1",
+              message_preview: "继续输出",
+            } as never,
+          ],
+        },
         threadReadStatus: "queued",
-        turns: [createTurn({ status: "running" })],
+        turns: [createTurn({ status: "completed" })],
+      }),
+    ).toBe(true);
+
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: "queued",
+        turns: [
+          createTurn({
+            status: "running",
+            started_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }),
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("无权威 read model 时陈旧本地 running turn 不应永久阻塞输入框", () => {
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: null,
+        turns: [
+          createTurn({
+            status: "running",
+            started_at: "2026-03-29T00:00:00.000Z",
+            updated_at: "2026-03-29T00:00:01.000Z",
+          }),
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("无权威 read model 时近期本地 running turn 可短暂阻塞重复提交", () => {
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: null,
+        turns: [
+          createTurn({
+            status: "running",
+            started_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }),
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("running read model 只有 active_turn_id 时也应阻塞下一轮用户提交", () => {
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: "running",
+        threadRead: {
+          thread_id: "thread-running",
+          status: "running",
+          active_turn_id: "turn-running",
+          turns: [],
+        },
+        turns: [],
       }),
     ).toBe(true);
   });

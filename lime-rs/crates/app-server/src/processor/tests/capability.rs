@@ -3,8 +3,8 @@
 use super::super::*;
 use super::tests_support::*;
 use app_server_protocol::{
-    ClientCapabilities, JsonRpcMessage, RequestId, METHOD_AGENT_SESSION_START,
-    METHOD_CAPABILITY_LIST, METHOD_INITIALIZE, METHOD_INITIALIZED,
+    ClientCapabilities, JsonRpcMessage, METHOD_AGENT_SESSION_START, METHOD_CAPABILITY_LIST,
+    METHOD_INITIALIZE, METHOD_INITIALIZED, RequestId,
 };
 use serde_json::json;
 use std::sync::Arc;

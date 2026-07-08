@@ -6,6 +6,9 @@
 mod agent_reply_stream;
 mod aster_event_adapter;
 mod aster_reply_adapter;
+mod aster_reply_backend_adapter;
+mod aster_reply_message_adapter;
+mod aster_reply_stream_adapter;
 pub(crate) mod auto_compaction_projection;
 mod policy_config;
 mod reply_retry;
@@ -70,7 +73,8 @@ use crate::protocol::TextDeltaBatchBoundary;
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::write_artifact_events::WriteArtifactEventEmitter;
 pub use agent_runtime::reply_execution::{
-    RuntimeReplyAttemptError as ReplyAttemptError, RuntimeReplyExecution as StreamReplyExecution,
+    RuntimeReplyAttemptError as ReplyAttemptError, RuntimeReplyAttemptState,
+    RuntimeReplyExecution as StreamReplyExecution,
 };
 use agent_runtime::reply_host::RuntimeReplyPolicyHost;
 use agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput;
@@ -98,22 +102,6 @@ fn is_reply_cancelled(cancel_token: &Option<CancellationToken>) -> bool {
     cancel_token
         .as_ref()
         .is_some_and(CancellationToken::is_cancelled)
-}
-
-fn build_stream_reply_execution(
-    text_output: String,
-    event_errors: Vec<String>,
-    emitted_any: bool,
-    attempts_summary: String,
-    cancelled: bool,
-) -> StreamReplyExecution {
-    StreamReplyExecution::new(
-        text_output,
-        event_errors,
-        emitted_any,
-        attempts_summary,
-        cancelled,
-    )
 }
 
 fn build_empty_final_reply_fallback(
@@ -265,9 +253,7 @@ where
     };
 
     let mut write_artifact_emitter = WriteArtifactEventEmitter::new(session_config.id.clone());
-    let mut emitted_any = false;
-    let mut text_chunks: Vec<String> = Vec::new();
-    let mut event_errors: Vec<String> = Vec::new();
+    let mut attempt_state = RuntimeReplyAttemptState::new();
     let mut diagnostics = StreamEventDiagnostics::default();
     let first_attempt = stream_agent_reply_once(
         reply_host,
@@ -278,30 +264,32 @@ where
         request_tool_policy,
         &mut web_search_tracker,
         &mut write_artifact_emitter,
-        &mut emitted_any,
-        &mut text_chunks,
-        &mut event_errors,
+        &mut attempt_state,
         &mut diagnostics,
         &mut on_event,
     )
     .await;
     tracing::info!(
-        "[AgentRuntime][TTFT] stream policy first attempt complete: session_id={}, elapsed_ms={}, emitted_any={}, text_deltas={}",
+        "[AgentRuntime][TTFT] stream policy first attempt complete: session_id={}, elapsed_ms={}, attempt_state.emitted_any()={}, text_deltas={}",
         session_config.id,
         started_at.elapsed().as_millis(),
-        emitted_any,
+        attempt_state.emitted_any(),
         diagnostics.text_delta_count
     );
     if let Err(error) = first_attempt {
-        if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any) {
+        if should_downgrade_provider_tail_failure(
+            &error.message,
+            &diagnostics,
+            attempt_state.emitted_any(),
+        ) {
             tracing::warn!(
                 "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after persisted output: tools={}, artifacts={}, saved_site={}",
                 diagnostics.tool_end_count,
                 diagnostics.persisted_artifact_count,
                 diagnostics.saved_site_content_count
             );
-            let fallback_text = text_chunks.join("").trim().to_string();
-            return Ok(build_stream_reply_execution(
+            let fallback_text = attempt_state.text_output().to_string().trim().to_string();
+            return Ok(attempt_state.into_execution_with_text(
                 if fallback_text.is_empty() {
                     match build_output_preserved_reply_fallback(&diagnostics) {
                         Some(output) => output,
@@ -310,15 +298,17 @@ where
                 } else {
                     fallback_text
                 },
-                event_errors,
-                emitted_any,
                 web_search_tracker.format_attempts(),
                 is_reply_cancelled(&cancel_probe),
             ));
         }
         if let Some(error_detail) =
             retryable_provider_tail_failure_detail(&error.message).filter(|_| {
-                should_retry_provider_tail_failure(&error.message, &diagnostics, emitted_any)
+                should_retry_provider_tail_failure(
+                    &error.message,
+                    &diagnostics,
+                    attempt_state.emitted_any(),
+                )
             })
         {
             tracing::warn!(
@@ -344,9 +334,7 @@ where
                 request_tool_policy,
                 &mut web_search_tracker,
                 &mut write_artifact_emitter,
-                &mut emitted_any,
-                &mut text_chunks,
-                &mut event_errors,
+                &mut attempt_state,
                 &mut diagnostics,
                 &mut on_event,
             )
@@ -355,7 +343,7 @@ where
                 if should_downgrade_provider_tail_failure(
                     &retry_error.message,
                     &diagnostics,
-                    emitted_any,
+                    attempt_state.emitted_any(),
                 ) {
                     tracing::warn!(
                         "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after tail-failure retry with persisted output: tools={}, artifacts={}, saved_site={}",
@@ -367,10 +355,8 @@ where
                     else {
                         return Err(retry_error);
                     };
-                    return Ok(build_stream_reply_execution(
+                    return Ok(attempt_state.into_execution_with_text(
                         fallback_text,
-                        event_errors,
-                        emitted_any,
                         web_search_tracker.format_attempts(),
                         is_reply_cancelled(&cancel_probe),
                     ));
@@ -386,22 +372,16 @@ where
         reply_host
             .persist_cancelled_turn_context_marker(&session_config.id)
             .await;
-        return Ok(build_stream_reply_execution(
-            text_chunks.join(""),
-            event_errors,
-            emitted_any,
-            web_search_tracker.format_attempts(),
-            true,
-        ));
+        return Ok(attempt_state.into_execution(web_search_tracker.format_attempts(), true));
     }
 
-    let current_text_output = text_chunks.join("");
+    let current_text_output = attempt_state.text_output().to_string();
     match resolve_reply_retry_mode(
         &preflight_execution,
         &current_text_output,
         &web_search_tracker,
         &diagnostics,
-        &event_errors,
+        attempt_state.event_errors(),
     ) {
         ReplyRetryMode::WebSearchSynthesis => {
             tracing::warn!(
@@ -432,16 +412,17 @@ where
                 request_tool_policy,
                 &mut web_search_tracker,
                 &mut write_artifact_emitter,
-                &mut emitted_any,
-                &mut text_chunks,
-                &mut event_errors,
+                &mut attempt_state,
                 &mut diagnostics,
                 &mut on_event,
             )
             .await;
             if let Err(error) = retry_attempt {
-                if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any)
-                {
+                if should_downgrade_provider_tail_failure(
+                    &error.message,
+                    &diagnostics,
+                    attempt_state.emitted_any(),
+                ) {
                     tracing::warn!(
                         "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after retry with persisted output: tools={}, artifacts={}, saved_site={}",
                         diagnostics.tool_end_count,
@@ -452,10 +433,8 @@ where
                     else {
                         return Err(error);
                     };
-                    return Ok(build_stream_reply_execution(
+                    return Ok(attempt_state.into_execution_with_text(
                         fallback_text,
-                        event_errors,
-                        emitted_any,
                         web_search_tracker.format_attempts(),
                         is_reply_cancelled(&cancel_probe),
                     ));
@@ -485,16 +464,17 @@ where
                 request_tool_policy,
                 &mut web_search_tracker,
                 &mut write_artifact_emitter,
-                &mut emitted_any,
-                &mut text_chunks,
-                &mut event_errors,
+                &mut attempt_state,
                 &mut diagnostics,
                 &mut on_event,
             )
             .await;
             if let Err(error) = retry_attempt {
-                if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any)
-                {
+                if should_downgrade_provider_tail_failure(
+                    &error.message,
+                    &diagnostics,
+                    attempt_state.emitted_any(),
+                ) {
                     tracing::warn!(
                         "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after empty-reply retry with persisted output: tools={}, artifacts={}, saved_site={}",
                         diagnostics.tool_end_count,
@@ -505,10 +485,8 @@ where
                     else {
                         return Err(error);
                     };
-                    return Ok(build_stream_reply_execution(
+                    return Ok(attempt_state.into_execution_with_text(
                         fallback_text,
-                        event_errors,
-                        emitted_any,
                         web_search_tracker.format_attempts(),
                         is_reply_cancelled(&cancel_probe),
                     ));
@@ -539,16 +517,17 @@ where
                 request_tool_policy,
                 &mut web_search_tracker,
                 &mut write_artifact_emitter,
-                &mut emitted_any,
-                &mut text_chunks,
-                &mut event_errors,
+                &mut attempt_state,
                 &mut diagnostics,
                 &mut on_event,
             )
             .await;
             if let Err(error) = retry_attempt {
-                if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any)
-                {
+                if should_downgrade_provider_tail_failure(
+                    &error.message,
+                    &diagnostics,
+                    attempt_state.emitted_any(),
+                ) {
                     tracing::warn!(
                         "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after intermediate-conclusion retry with persisted output: tools={}, artifacts={}, saved_site={}",
                         diagnostics.tool_end_count,
@@ -559,10 +538,8 @@ where
                     else {
                         return Err(error);
                     };
-                    return Ok(build_stream_reply_execution(
+                    return Ok(attempt_state.into_execution_with_text(
                         fallback_text,
-                        event_errors,
-                        emitted_any,
                         web_search_tracker.format_attempts(),
                         is_reply_cancelled(&cancel_probe),
                     ));
@@ -577,22 +554,13 @@ where
         reply_host
             .persist_cancelled_turn_context_marker(&session_config.id)
             .await;
-        return Ok(build_stream_reply_execution(
-            text_chunks.join(""),
-            event_errors,
-            emitted_any,
-            web_search_tracker.format_attempts(),
-            true,
-        ));
+        return Ok(attempt_state.into_execution(web_search_tracker.format_attempts(), true));
     }
 
     if let Err(validation_error) =
         web_search_tracker.validate_web_search_requirement(request_tool_policy)
     {
-        return Err(ReplyAttemptError {
-            message: validation_error,
-            emitted_any,
-        });
+        return Err(attempt_state.error(validation_error));
     }
 
     tracing::info!(
@@ -608,40 +576,35 @@ where
         diagnostics.max_context_trace_steps
     );
 
-    let final_text_output = text_chunks.join("");
+    let final_text_output = attempt_state.text_output().to_string();
     if final_text_output.trim().is_empty() {
-        if let Some(last_error) = event_errors.last() {
-            return Err(ReplyAttemptError {
-                message: last_error.clone(),
-                emitted_any,
-            });
+        if let Some(last_error) = attempt_state.last_error() {
+            return Err(attempt_state.error(last_error.to_string()));
         }
-        if let Some(fallback_text) = build_empty_final_reply_fallback(&diagnostics, emitted_any) {
+        if let Some(fallback_text) =
+            build_empty_final_reply_fallback(&diagnostics, attempt_state.emitted_any())
+        {
             tracing::warn!(
-                "[AgentRuntime][ReplyPolicy] empty final text downgraded to synthesized fallback: emitted_any={}, tool_starts={}, tool_ends={}, attempts={}",
-                emitted_any,
+                "[AgentRuntime][ReplyPolicy] empty final text downgraded to synthesized fallback: attempt_state.emitted_any()={}, tool_starts={}, tool_ends={}, attempts={}",
+                attempt_state.emitted_any(),
                 diagnostics.tool_start_count,
                 diagnostics.tool_end_count,
                 web_search_tracker.format_attempts()
             );
-            return Ok(build_stream_reply_execution(
+            return Ok(attempt_state.into_execution_with_text(
                 fallback_text,
-                event_errors,
-                emitted_any,
                 web_search_tracker.format_attempts(),
                 is_reply_cancelled(&cancel_probe),
             ));
         }
-        return Err(ReplyAttemptError {
-            message: build_empty_final_reply_error_message(&diagnostics, &web_search_tracker),
-            emitted_any,
-        });
+        return Err(attempt_state.error(build_empty_final_reply_error_message(
+            &diagnostics,
+            &web_search_tracker,
+        )));
     }
 
-    Ok(build_stream_reply_execution(
+    Ok(attempt_state.into_execution_with_text(
         final_text_output,
-        event_errors,
-        emitted_any,
         web_search_tracker.format_attempts(),
         false,
     ))

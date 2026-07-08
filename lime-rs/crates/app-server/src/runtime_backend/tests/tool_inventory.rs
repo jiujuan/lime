@@ -352,7 +352,12 @@ async fn runtime_backend_tool_inventory_projects_plugin_mcp_targets() {
                         "serverId": "context7",
                         "toolKey": "context7/resolve-library-id",
                         "provider": "mcp",
-                        "required": true
+                        "required": true,
+                        "callProof": {
+                            "arguments": {
+                                "libraryName": "react"
+                            }
+                        }
                     }
                 ],
                 "workflowBindings": []
@@ -382,6 +387,21 @@ async fn runtime_backend_tool_inventory_projects_plugin_mcp_targets() {
         json!({
             "caller": "plugin:docs-plugin",
             "includeDeferred": true
+        })
+    );
+    assert_eq!(
+        targets[0]["callProofRequest"],
+        json!({
+            "method": "mcpTool/callWithCaller",
+            "params": {
+                "toolName": "mcp__context7__resolve-library-id",
+                "arguments": {
+                    "libraryName": "react"
+                },
+                "caller": "plugin:docs-plugin"
+            },
+            "reason": "tool_call_proof",
+            "status": "candidate"
         })
     );
     assert_eq!(targets[0]["prepareRequests"], json!([]));

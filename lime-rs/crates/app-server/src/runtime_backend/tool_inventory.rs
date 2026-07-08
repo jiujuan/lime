@@ -237,6 +237,7 @@ fn plugin_mcp_target_status_value(
             "caller": target.caller,
             "includeDeferred": true,
         },
+        "callProofRequest": plugin_mcp_call_proof_request(target),
         "prepareRequests": plugin_mcp_prepare_requests(target, runtime_status),
     })
 }
@@ -310,6 +311,24 @@ fn plugin_mcp_prepare_requests(
         "status": "candidate",
     }));
     requests
+}
+
+fn plugin_mcp_call_proof_request(
+    target: &super::plugin_runtime_context::PluginRuntimeMcpTarget,
+) -> Value {
+    match target.call_proof_arguments.as_ref() {
+        Some(arguments) => json!({
+            "method": "mcpTool/callWithCaller",
+            "params": {
+                "toolName": target.expected_tool_name,
+                "arguments": arguments,
+                "caller": target.caller,
+            },
+            "reason": "tool_call_proof",
+            "status": "candidate",
+        }),
+        None => Value::Null,
+    }
 }
 
 fn plugin_mcp_import_app_type(provider: &str) -> Option<String> {

@@ -177,6 +177,100 @@ describe("agentStreamSubmissionLifecycle", () => {
     expect(threadItems[0].text).toContain("失败");
   });
 
+  it("queue event 删除只过滤 id，不在前端重排 position", () => {
+    const assistantMsg: Message = {
+      id: "assistant-queued-position",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-03-27T01:00:00.000Z"),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: buildWaitingAgentRuntimeStatus({
+        executionStrategy: "react",
+      }),
+    };
+
+    let messages: Message[] = [assistantMsg];
+    let queuedTurns: QueuedTurnSnapshot[] = [
+      {
+        queued_turn_id: "queued-0",
+        message_preview: "第一条",
+        message_text: "第一条",
+        created_at: 1,
+        image_count: 0,
+        position: 0,
+      },
+      {
+        queued_turn_id: "queued-1",
+        message_preview: "第二条",
+        message_text: "第二条",
+        created_at: 2,
+        image_count: 0,
+        position: 1,
+      },
+      {
+        queued_turn_id: "queued-2",
+        message_preview: "第三条",
+        message_text: "第三条",
+        created_at: 3,
+        image_count: 0,
+        position: 2,
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    let threadTurns: AgentThreadTurn[] = [];
+    let currentTurnId: string | null = null;
+
+    const lifecycle = createAgentStreamSubmissionLifecycle({
+      assistantMsg,
+      assistantMsgId: assistantMsg.id,
+      userMsgId: null,
+      content: "继续生成",
+      expectingQueue: true,
+      initialThreadId: "thread-queued-position",
+      listenerMapRef: { current: new Map() },
+      setActiveStream: () => {},
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setQueuedTurns: createStateSetter(
+        () => queuedTurns,
+        (value) => {
+          queuedTurns = value;
+        },
+      ),
+      setThreadItems: createStateSetter(
+        () => threadItems,
+        (value) => {
+          threadItems = value;
+        },
+      ),
+      setThreadTurns: createStateSetter(
+        () => threadTurns,
+        (value) => {
+          threadTurns = value;
+        },
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => currentTurnId,
+        (value) => {
+          currentTurnId = value;
+        },
+      ),
+    });
+
+    lifecycle.removeQueuedTurnsFromProjection(["queued-0"]);
+
+    expect(queuedTurns.map((item) => item.queued_turn_id)).toEqual([
+      "queued-1",
+      "queued-2",
+    ]);
+    expect(queuedTurns.map((item) => item.position)).toEqual([1, 2]);
+  });
+
   it("轻量瞬态运行状态不应创建思考/进展卡", () => {
     const assistantMsg: Message = {
       id: "assistant-fast",

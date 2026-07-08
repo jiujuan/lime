@@ -26,6 +26,17 @@ function normalizeValue(value?: string | null): string {
   return (value || "").trim().toLowerCase();
 }
 
+function hasDeclaredProviderModels(provider: ConfiguredProvider): boolean {
+  return Boolean(provider.customModels?.some((modelId) => modelId.trim()));
+}
+
+function isSelectableProvider(provider: ConfiguredProvider): boolean {
+  return (
+    provider.authStatus !== "login_required" ||
+    hasDeclaredProviderModels(provider)
+  );
+}
+
 function isTextChatCandidateModel(model: EnhancedModelMetadata): boolean {
   const outputModalities = model.output_modalities ?? [];
   const canReturnText =
@@ -115,26 +126,27 @@ export async function resolveClawWorkspaceProviderSelection(
     allowProviderFallback = true,
   } = input;
   const configuredProviders = await loadConfiguredProviders();
+  const executableProviders = configuredProviders.filter(isSelectableProvider);
 
-  if (configuredProviders.length === 0) {
+  if (executableProviders.length === 0) {
     return null;
   }
 
   const currentProvider = findConfiguredProviderBySelection(
-    configuredProviders,
+    executableProviders,
     currentProviderType,
   );
   const orderedProviders = currentProvider
     ? allowProviderFallback
       ? [
           currentProvider,
-          ...configuredProviders.filter(
+          ...executableProviders.filter(
             (provider) => provider.key !== currentProvider.key,
           ),
         ]
       : [currentProvider]
     : allowProviderFallback || !currentProviderType?.trim()
-      ? configuredProviders
+      ? executableProviders
       : [];
 
   for (const provider of orderedProviders) {
@@ -144,6 +156,8 @@ export async function resolveClawWorkspaceProviderSelection(
         providerId: provider.providerId,
         providerType: provider.type,
         apiHost: provider.apiHost,
+        hasApiKey: provider.hasApiKey,
+        hasDeclaredModels: hasDeclaredProviderModels(provider),
       }),
     );
     const preferredModel = resolvePreferredModelId(

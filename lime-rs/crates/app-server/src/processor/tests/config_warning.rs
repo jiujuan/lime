@@ -1,13 +1,13 @@
 //! Config warning notification integration tests.
 
 use super::tests_support::initialize_processor;
-use crate::processor::config_warning::{ConfigWarningProvider, ConfigWarningScope};
 use crate::RuntimeCore;
+use crate::processor::config_warning::{ConfigWarningProvider, ConfigWarningScope};
 use app_server_protocol::{
     AgentInput, AgentSessionStartParams, AgentSessionTurnStartParams, ClientCapabilities,
     ClientInfo, ConfigWarningNotification, InitializeParams, JsonRpcMessage, JsonRpcRequest,
-    RequestId, ServerNotification, METHOD_AGENT_SESSION_TURN_START, METHOD_CONFIG_WARNING,
-    METHOD_INITIALIZE,
+    METHOD_AGENT_SESSION_TURN_START, METHOD_CONFIG_WARNING, METHOD_INITIALIZE, RequestId,
+    ServerNotification,
 };
 use serde_json::json;
 use std::sync::Arc;

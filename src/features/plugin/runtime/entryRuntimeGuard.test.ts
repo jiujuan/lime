@@ -5,7 +5,7 @@ import { currentPluginHostRuntimeVersion } from "../readiness/hostCapabilityProf
 import { buildContentFactoryUiRuntimeTestManifest } from "../testing/contentFactoryTestManifest";
 import type { PluginSetupState, InstalledAppPreview } from "../types";
 import { buildLimeRuntimeProfileFromHostProfile } from "../runtime-profile";
-import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 import { loadRuntimePackageDescriptor } from "./runtimePackageLoader";
 import { evaluatePluginEntryRuntimeGuard } from "./entryRuntimeGuard";
 

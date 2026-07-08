@@ -13,6 +13,8 @@ pub(in crate::runtime::tests) struct TestSessionDataSource {
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
     right_surface_pending: Mutex<Vec<WorkspaceRightSurfacePendingRequest>>,
     object_canvas_snapshots: Mutex<Vec<WorkspaceObjectCanvasSnapshot>>,
+    media_task_artifacts: Mutex<Vec<MediaTaskArtifactResponse>>,
+    media_task_list_requests: Mutex<Vec<MediaTaskArtifactListParams>>,
 }
 
 impl TestSessionDataSource {
@@ -29,6 +31,8 @@ impl TestSessionDataSource {
             knowledge_compile_requests: Mutex::new(Vec::new()),
             right_surface_pending: Mutex::new(Vec::new()),
             object_canvas_snapshots: Mutex::new(Vec::new()),
+            media_task_artifacts: Mutex::new(Vec::new()),
+            media_task_list_requests: Mutex::new(Vec::new()),
         }
     }
 
@@ -79,6 +83,17 @@ impl TestSessionDataSource {
         self
     }
 
+    pub(in crate::runtime::tests) fn with_media_task_artifacts(
+        self,
+        tasks: Vec<MediaTaskArtifactResponse>,
+    ) -> Self {
+        *self
+            .media_task_artifacts
+            .lock()
+            .expect("test media task artifacts mutex poisoned") = tasks;
+        self
+    }
+
     pub(in crate::runtime::tests) fn objective(&self) -> Option<ManagedObjective> {
         self.objective
             .lock()
@@ -117,6 +132,15 @@ impl TestSessionDataSource {
         self.object_canvas_snapshots
             .lock()
             .expect("test object canvas snapshot mutex poisoned")
+            .clone()
+    }
+
+    pub(in crate::runtime::tests) fn media_task_list_requests(
+        &self,
+    ) -> Vec<MediaTaskArtifactListParams> {
+        self.media_task_list_requests
+            .lock()
+            .expect("test media task list requests mutex poisoned")
             .clone()
     }
 }
@@ -258,7 +282,58 @@ impl WorkspaceAppDataSource for TestSessionDataSource {
 impl SkillAppDataSource for TestSessionDataSource {}
 impl WorkspaceSkillBindingAppDataSource for TestSessionDataSource {}
 impl GatewayAppDataSource for TestSessionDataSource {}
-impl MediaAppDataSource for TestSessionDataSource {}
+#[async_trait]
+impl MediaAppDataSource for TestSessionDataSource {
+    async fn list_media_task_artifacts(
+        &self,
+        params: MediaTaskArtifactListParams,
+    ) -> Result<MediaTaskArtifactListResponse, RuntimeCoreError> {
+        self.media_task_list_requests
+            .lock()
+            .expect("test media task list requests mutex poisoned")
+            .push(params.clone());
+        let status_filter = optional_trimmed(params.status.clone());
+        let task_family_filter = optional_trimmed(params.task_family.clone());
+        let task_type_filter = optional_trimmed(params.task_type.clone());
+        let mut tasks = self
+            .media_task_artifacts
+            .lock()
+            .expect("test media task artifacts mutex poisoned")
+            .iter()
+            .filter(|task| {
+                status_filter.as_ref().is_none_or(|status| {
+                    task.status == *status || task.normalized_status == *status
+                })
+            })
+            .filter(|task| {
+                optional_filter_matches(&task_family_filter, Some(task.task_family.as_str()))
+            })
+            .filter(|task| {
+                optional_filter_matches(&task_type_filter, Some(task.task_type.as_str()))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if let Some(limit) = params.limit {
+            tasks.truncate(limit);
+        }
+        Ok(MediaTaskArtifactListResponse {
+            success: true,
+            workspace_root: params.project_root_path.clone(),
+            artifact_root: String::new(),
+            filters: MediaTaskArtifactListFilters {
+                status: status_filter,
+                task_family: task_family_filter,
+                task_type: task_type_filter,
+                modality_contract_key: params.modality_contract_key,
+                routing_outcome: params.routing_outcome,
+                limit: params.limit,
+            },
+            total: tasks.len(),
+            modality_runtime_contracts: serde_json::Value::Null,
+            tasks,
+        })
+    }
+}
 impl VoiceAppDataSource for TestSessionDataSource {}
 #[async_trait]
 impl PluginDataSource for TestSessionDataSource {

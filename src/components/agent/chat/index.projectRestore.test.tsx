@@ -47,7 +47,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(mockToast.error).not.toHaveBeenCalled();
   });
 
-  it("外部锁定项目与话题绑定冲突时应阻止切换并提示", async () => {
+  it("外部锁定项目与话题绑定冲突时应阻止切换且不弹出全局 tip", async () => {
     localStorage.setItem(
       "agent_session_workspace_topic-a",
       JSON.stringify("topic-project"),
@@ -63,9 +63,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     await flushEffects(60);
 
     expect(sharedSwitchTopicMock).not.toHaveBeenCalled();
-    expect(mockToast.error).toHaveBeenCalledWith(
-      "该任务绑定了其他项目，请先切换到对应项目",
-    );
+    expect(mockToast.error).not.toHaveBeenCalled();
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
   });
 

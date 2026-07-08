@@ -6,6 +6,7 @@ use crate::media_task_payload::{
     create_audio_payload, create_image_payload, create_video_payload, AUDIO_TASK_DEFAULT_MIME_TYPE,
 };
 use crate::model_task_contract::MediaRouteAssessment;
+use crate::runtime::sidecar_store::SidecarStore;
 use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
 use app_server_protocol::MediaTaskArtifactAudioCreateParams;
 use app_server_protocol::MediaTaskArtifactCompletedImageInput;
@@ -34,6 +35,9 @@ use serde_json::json;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
+
+mod idempotency;
+mod sidecar;
 
 const AUDIO_TASK_COMPLETION_WORKER_ID: &str = "app-server-audio-output-writer";
 const IMAGE_TASK_COMPLETION_WORKER_ID: &str = "app-server-image-output-writer";
@@ -79,76 +83,6 @@ fn maybe_json_bool(value: &Value, keys: &[&str]) -> Option<bool> {
     keys.iter()
         .filter_map(|key| value.get(*key))
         .find_map(Value::as_bool)
-}
-
-fn build_image_idempotency_key(params: &MediaTaskArtifactImageCreateParams) -> String {
-    let seed = json!({
-        "kind": "image",
-        "projectRootPath": params.project_root_path,
-        "prompt": params.prompt,
-        "mode": params.mode,
-        "size": params.size,
-        "aspectRatio": params.aspect_ratio,
-        "count": params.count,
-        "style": params.style,
-        "providerId": params.provider_id,
-        "model": params.model,
-        "threadId": params.thread_id,
-        "turnId": params.turn_id,
-        "contentId": params.content_id,
-        "targetOutputId": params.target_output_id,
-        "targetOutputRefId": params.target_output_ref_id,
-        "slotId": params.slot_id,
-        "referenceImages": params.reference_images,
-        "storyboardSlots": params.storyboard_slots,
-    });
-    format!("app-server:media:image:{:x}", sha256_json(&seed))
-}
-
-fn build_audio_idempotency_key(params: &MediaTaskArtifactAudioCreateParams) -> String {
-    let seed = json!({
-        "kind": "audio",
-        "projectRootPath": params.project_root_path,
-        "sourceText": params.source_text,
-        "voice": params.voice,
-        "voiceStyle": params.voice_style,
-        "targetLanguage": params.target_language,
-        "providerId": params.provider_id,
-        "model": params.model,
-        "threadId": params.thread_id,
-        "turnId": params.turn_id,
-        "contentId": params.content_id,
-        "outputPath": params.output_path,
-    });
-    format!("app-server:media:audio:{:x}", sha256_json(&seed))
-}
-
-fn build_video_idempotency_key(params: &MediaTaskArtifactVideoCreateParams) -> String {
-    let seed = json!({
-        "kind": "video",
-        "projectRootPath": params.project_root_path,
-        "prompt": params.prompt,
-        "providerId": params.provider_id,
-        "model": params.model,
-        "threadId": params.thread_id,
-        "turnId": params.turn_id,
-        "contentId": params.content_id,
-        "aspectRatio": params.aspect_ratio,
-        "resolution": params.resolution,
-        "duration": params.duration,
-        "imageUrl": params.image_url,
-        "endImageUrl": params.end_image_url,
-        "seed": params.seed,
-        "generateAudio": params.generate_audio,
-        "cameraFixed": params.camera_fixed,
-        "outputPath": params.output_path,
-    });
-    format!("app-server:media:video:{:x}", sha256_json(&seed))
-}
-
-fn sha256_json(value: &Value) -> sha2::digest::Output<sha2::Sha256> {
-    use sha2::Digest;
-    sha2::Sha256::digest(serde_json::to_string(value).unwrap_or_default().as_bytes())
 }
 
 fn response_from_output(output: MediaTaskOutput) -> Result<MediaTaskArtifactResponse, String> {
@@ -207,6 +141,7 @@ fn normalize_completed_image(
     fallback_model: Option<&str>,
     fallback_size: Option<&str>,
     index: usize,
+    sidecar_context: Option<&sidecar::MediaSidecarContext<'_>>,
 ) -> Result<Value, String> {
     let url = normalize_required_string(&image.url, "images[].url")?;
     let prompt = normalize_optional_string(image.prompt)
@@ -220,7 +155,7 @@ fn normalize_completed_image(
     let size = normalize_optional_string(image.size).or_else(|| fallback_size.map(str::to_string));
     let slot_index = image.slot_index.unwrap_or((index + 1) as u32);
 
-    Ok(json!({
+    let mut output = json!({
         "url": url,
         "prompt": prompt,
         "revised_prompt": normalize_optional_string(image.revised_prompt),
@@ -230,7 +165,11 @@ fn normalize_completed_image(
         "slot_index": slot_index,
         "slot_id": normalize_optional_string(image.slot_id),
         "slot_prompt": slot_prompt,
-    }))
+    });
+    if let Some(context) = sidecar_context {
+        sidecar::attach_image_sidecar_ref(&mut output, context, &url, index)?;
+    }
+    Ok(output)
 }
 
 fn image_failure_error_record(failure: Option<&Value>) -> TaskErrorRecord {
@@ -263,6 +202,9 @@ fn image_failure_error_record(failure: Option<&Value>) -> TaskErrorRecord {
 fn build_image_task_result_value(
     payload: &Value,
     params: MediaTaskArtifactImageCompleteParams,
+    sidecar_store: Option<&SidecarStore>,
+    workspace_root: &str,
+    task_ref: &str,
 ) -> Result<(Value, Value, String, usize, usize, Option<TaskErrorRecord>), String> {
     let requested_status = normalize_optional_string(params.status.clone());
     let requested_failed = requested_status.as_deref() == Some("failed");
@@ -282,6 +224,8 @@ fn build_image_task_result_value(
     let executor_mode = normalize_optional_string(params.executor_mode)
         .or_else(|| maybe_json_string(payload, &["executor_mode", "executorMode"]))
         .unwrap_or_else(|| "images_api".to_string());
+    let sidecar_context =
+        sidecar::image_sidecar_context(sidecar_store, Path::new(workspace_root), task_ref, payload);
 
     let images: Vec<Value> = params
         .images
@@ -295,6 +239,7 @@ fn build_image_task_result_value(
                 model.as_deref(),
                 payload_size.as_deref(),
                 index,
+                sidecar_context.as_ref(),
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -663,7 +608,7 @@ pub fn create_image_generation_task_artifact(
             status: Some("pending_submit".to_string()),
             output_path: None,
             artifact_dir: None,
-            idempotency_key: Some(build_image_idempotency_key(&params).as_str()),
+            idempotency_key: Some(idempotency::build_image_idempotency_key(&params).as_str()),
             relationships: TaskRelationships {
                 slot_id: normalize_optional_string(params.slot_id.clone()),
                 ..TaskRelationships::default()
@@ -692,7 +637,7 @@ pub fn create_audio_generation_task_artifact(
             status: Some("pending_submit".to_string()),
             output_path: output_path.as_deref(),
             artifact_dir: None,
-            idempotency_key: Some(build_audio_idempotency_key(&params).as_str()),
+            idempotency_key: Some(idempotency::build_audio_idempotency_key(&params).as_str()),
             relationships: TaskRelationships::default(),
         },
     )
@@ -719,7 +664,7 @@ pub fn create_video_generation_task_artifact(
             status: Some("pending_submit".to_string()),
             output_path: output_path.as_deref(),
             artifact_dir: None,
-            idempotency_key: Some(build_video_idempotency_key(&params).as_str()),
+            idempotency_key: Some(idempotency::build_video_idempotency_key(&params).as_str()),
             relationships: TaskRelationships::default(),
         },
     )
@@ -729,6 +674,7 @@ pub fn create_video_generation_task_artifact(
 
 pub fn complete_audio_generation_task_artifact(
     params: MediaTaskArtifactAudioCompleteParams,
+    sidecar_store: Option<&SidecarStore>,
 ) -> Result<MediaTaskArtifactResponse, String> {
     let workspace_root = normalize_required_string(&params.project_root_path, "projectRootPath")?;
     let task_ref = normalize_required_string(&params.task_ref, "taskRef")?;
@@ -773,6 +719,13 @@ pub fn complete_audio_generation_task_artifact(
         provider_id.as_deref(),
         model.as_deref(),
     );
+    let audio_output = sidecar::attach_audio_sidecar_ref(
+        audio_output,
+        sidecar_store,
+        &workspace_root,
+        &task_ref,
+        payload,
+    )?;
     let result = build_audio_generation_result_value(&audio_output);
     let output = patch_task_artifact(
         workspace_root_path,
@@ -798,8 +751,9 @@ pub fn complete_audio_generation_task_artifact(
     response_from_output(output)
 }
 
-pub fn complete_image_generation_task_artifact(
+pub async fn complete_image_generation_task_artifact(
     params: MediaTaskArtifactImageCompleteParams,
+    sidecar_store: Option<&SidecarStore>,
 ) -> Result<MediaTaskArtifactResponse, String> {
     let workspace_root = normalize_required_string(&params.project_root_path, "projectRootPath")?;
     let task_ref = normalize_required_string(&params.task_ref, "taskRef")?;
@@ -820,8 +774,13 @@ pub fn complete_image_generation_task_artifact(
     }
 
     let payload = task_payload(&current);
-    let (result, payload_patch, status, image_count, failure_count, last_error) =
-        build_image_task_result_value(payload, params)?;
+    let (mut result, payload_patch, status, image_count, failure_count, last_error) =
+        build_image_task_result_value(payload, params, sidecar_store, &workspace_root, &task_ref)?;
+    if let Some(sidecar_context) =
+        sidecar::image_sidecar_context(sidecar_store, workspace_root_path, &task_ref, payload)
+    {
+        sidecar::attach_missing_image_sidecar_refs(&mut result, &sidecar_context).await?;
+    }
     let progress_message = if status == "failed" {
         last_error
             .as_ref()
@@ -884,6 +843,43 @@ pub fn complete_image_generation_task_artifact(
     )
     .map_err(data_error)?;
     response_from_output(output)
+}
+
+pub(crate) async fn attach_image_result_sidecar_refs(
+    workspace_root_path: &Path,
+    task_ref: &str,
+    output: MediaTaskOutput,
+    sidecar_store: Option<&SidecarStore>,
+) -> Result<MediaTaskOutput, String> {
+    if !matches!(output.normalized_status.as_str(), "partial" | "succeeded") {
+        return Ok(output);
+    }
+    let Some(sidecar_context) = sidecar::image_sidecar_context(
+        sidecar_store,
+        workspace_root_path,
+        task_ref,
+        task_payload(&output),
+    ) else {
+        return Ok(output);
+    };
+    let Some(mut result) = output.record.result.clone() else {
+        return Ok(output);
+    };
+    let changed = sidecar::attach_missing_image_sidecar_refs(&mut result, &sidecar_context).await?;
+    if !changed {
+        return Ok(output);
+    }
+
+    patch_task_artifact(
+        workspace_root_path,
+        task_ref,
+        None,
+        TaskArtifactPatch {
+            result: Some(Some(result)),
+            ..TaskArtifactPatch::default()
+        },
+    )
+    .map_err(data_error)
 }
 
 pub fn get_media_task_artifact(

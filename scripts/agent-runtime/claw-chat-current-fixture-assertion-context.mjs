@@ -9,6 +9,8 @@ import {
   IMAGE_COMMAND_PROMPT,
   IMAGE_COMMAND_SCENARIO,
   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+  INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO,
+  INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO,
   INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_PROMPT,
   INPUTBAR_RICH_RESTORE_SCENARIO,
@@ -215,6 +217,14 @@ export function buildAssertionContext({
     options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO;
   const isInputbarPendingSteerRichRestoreScenario =
     options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO;
+  const isInputbarPendingSteerMultiQueueScenario =
+    options.scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO;
+  const isInputbarPendingSteerPopFrontResumeScenario =
+    options.scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO;
+  const isInputbarPendingSteerScenario =
+    isInputbarPendingSteerRichRestoreScenario ||
+    isInputbarPendingSteerMultiQueueScenario ||
+    isInputbarPendingSteerPopFrontResumeScenario;
   const isWebToolsRenderingScenario =
     options.scenario === "web-tools-rendering";
   const isReasoningFirstVisibleScenario =
@@ -263,7 +273,7 @@ export function buildAssertionContext({
           ? imageCommandTurnStart?.asterChatRequest
           : isInputbarRichRestoreScenario
             ? inputbarRichRestoreTurnStart?.asterChatRequest
-            : isInputbarPendingSteerRichRestoreScenario
+            : isInputbarPendingSteerScenario
               ? inputbarPendingSteerActiveTurnStart?.asterChatRequest
             : isWebToolsRenderingScenario
               ? webToolsRenderingTurnStart?.asterChatRequest
@@ -344,7 +354,7 @@ export function buildAssertionContext({
             ? String(inputbarRichRestoreTurnStart?.inputText || "").includes(
                 INPUTBAR_RICH_RESTORE_PROMPT,
               )
-            : isInputbarPendingSteerRichRestoreScenario
+            : isInputbarPendingSteerScenario
               ? inputbarPendingSteerActiveTurnStart?.inputText ===
                 INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
             : isWebToolsRenderingScenario
@@ -438,6 +448,9 @@ export function buildAssertionContext({
     isImageCommandScenario,
     isInputbarRichRestoreScenario,
     isInputbarPendingSteerRichRestoreScenario,
+    isInputbarPendingSteerMultiQueueScenario,
+    isInputbarPendingSteerPopFrontResumeScenario,
+    isInputbarPendingSteerScenario,
     isWebToolsRenderingScenario,
     isReasoningFirstVisibleScenario,
     isTerminalCanceledAfterAnswerScenario,

@@ -4,6 +4,8 @@ export interface ProviderModelLoadOptionInput {
   providerId?: string | null;
   providerType?: string | null;
   apiHost?: string | null;
+  hasApiKey?: boolean | null;
+  hasDeclaredModels?: boolean | null;
 }
 
 export interface ProviderModelLoadOptions {
@@ -26,6 +28,8 @@ export function resolveProviderModelLoadOptions(
   }
 
   const managedProvider = hasManagedProviderId(input.providerId);
+  const hasApiKey = input.hasApiKey ?? managedProvider;
+  const hasDeclaredModels = Boolean(input.hasDeclaredModels);
   const capability = getProviderModelAutoFetchCapability({
     providerId: input.providerId,
     providerType: input.providerType,
@@ -36,7 +40,9 @@ export function resolveProviderModelLoadOptions(
     liveFetchOnly:
       managedProvider &&
       capability.supported &&
-      capability.requiresLiveModelTruth,
-    hasApiKey: managedProvider,
+      capability.requiresLiveModelTruth &&
+      !hasDeclaredModels &&
+      (!capability.requiresApiKey || hasApiKey),
+    hasApiKey,
   };
 }

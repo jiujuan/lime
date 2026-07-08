@@ -229,7 +229,21 @@ describe("agentSessionTopicViewModel", () => {
           queued_turns: [{ message_preview: "继续执行" } as never],
         }),
       ),
-    ).toBe("running");
+    ).toBe("queued");
+
+    expect(
+      resolveRuntimeThreadStatusFromSessionDetail(
+        createDetail({
+          thread_read: {
+            thread_id: "thread-1",
+            status: "queued",
+            pending_requests: [],
+            incidents: [],
+            queued_turns: [{ message_preview: " 后台排队中 " } as never],
+          },
+        }),
+      ),
+    ).toBe("queued");
 
     expect(
       resolveRuntimePreviewFromSessionDetail(
@@ -273,6 +287,38 @@ describe("agentSessionTopicViewModel", () => {
       messagesCount: 2,
       status: "running",
       statusReason: "default",
+    });
+  });
+
+  it("应把 runtime detail 中的 queued 状态映射为排队 topic", () => {
+    const topic = mapSessionDetailToTopic(
+      "session-queued",
+      createDetail({
+        name: "排队任务",
+        messages_count: 2,
+        thread_read: {
+          thread_id: "thread-1",
+          status: "queued",
+          pending_requests: [],
+          incidents: [],
+          queued_turns: [
+            {
+              queued_turn_id: "queued-1",
+              message_preview: "后台排队中",
+            } as never,
+          ],
+        },
+      }),
+      null,
+    );
+
+    expect(topic).toMatchObject({
+      id: "session-queued",
+      title: "排队任务",
+      messagesCount: 2,
+      status: "queued",
+      statusReason: "default",
+      lastPreview: "后台排队中",
     });
   });
 

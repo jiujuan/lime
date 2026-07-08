@@ -37,10 +37,3 @@ pub(crate) fn resolve_provider_stream_idle_timeout() -> Option<Duration> {
         ))
     })
 }
-
-pub(crate) fn provider_stream_idle_timeout_message(timeout: Duration) -> String {
-    format!(
-        "Agent provider execution failed: stream idle timeout after {}ms without provider event",
-        timeout.as_millis()
-    )
-}

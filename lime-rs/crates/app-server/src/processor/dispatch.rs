@@ -1,12 +1,12 @@
 //! JSON-RPC method dispatch for the App Server processor.
 
-use super::{event_notification, JsonRpcError, RequestProcessor};
+use super::{JsonRpcError, RequestProcessor, event_notification};
 use crate::AppServerError;
-use app_server_protocol::error_codes;
 use app_server_protocol::JsonRpcErrorResponse;
 use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
+use app_server_protocol::error_codes;
 use app_server_protocol::*;
 
 impl RequestProcessor {
@@ -27,6 +27,13 @@ impl RequestProcessor {
         };
         let (id, method, params) = request.into_jsonrpc_parts();
         let method = method.as_str();
+        if self.is_request_canceled(&id) {
+            self.clear_request_cancel_state(&id);
+            return Ok(vec![JsonRpcMessage::Error(JsonRpcErrorResponse {
+                id,
+                error: JsonRpcError::new(error_codes::REQUEST_CANCELLED, "request canceled"),
+            })]);
+        }
         let result = match method {
             METHOD_INITIALIZE => self.handle_initialize(params),
             METHOD_CAPABILITY_LIST => self.handle_capability_list(params),
@@ -165,7 +172,9 @@ impl RequestProcessor {
             METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).await,
-            METHOD_AGENT_SESSION_MEDIA_READ => self.handle_session_media_read_impl(params).await,
+            METHOD_AGENT_SESSION_MEDIA_READ => {
+                self.handle_session_media_read_impl(&id, params).await
+            }
             METHOD_WORKFLOW_READ => self.handle_workflow_read_impl(params).await,
             METHOD_WORKFLOW_CANCEL => self.handle_workflow_cancel_impl(params).await,
             METHOD_WORKFLOW_RETRY => self.handle_workflow_retry_impl(params).await,
@@ -681,6 +690,7 @@ impl RequestProcessor {
             )),
         };
 
+        self.clear_request_cancel_state(&id);
         match result {
             Ok(dispatch) => {
                 let mut messages =

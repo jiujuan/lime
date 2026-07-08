@@ -1,17 +1,19 @@
-use super::{workflow_run_id, ImageCommandIntent};
+use super::presentation_soul::insert_image_generation_soul_payload_fields;
+use super::{ImageCommandIntent, workflow_run_id};
 use crate::runtime::memory_prompt::append_soul_context_to_system_prompt;
 use crate::runtime_backend::{
     backend_error, current_agent_runtime_config_metadata, direct_provider_config_from_request,
     initialize_runtime_database, model_route_contract, model_route_resolver,
     request_context::{self, RuntimeModelSelection},
     selection_with_effective_reasoning,
+    tool_process_metadata::SoulStyleMetadata,
 };
 use crate::{ExecutionRequest, RuntimeCoreError};
 use lime_agent::{
-    insert_agent_turn_metadata, run_direct_text_generation_with_db,
-    set_agent_turn_user_visible_input_text, AgentTokenUsage, DirectTextGenerationRequest,
+    AgentTokenUsage, DirectTextGenerationRequest, insert_agent_turn_metadata,
+    run_direct_text_generation_with_db, set_agent_turn_user_visible_input_text,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const PRESENTATION_SCHEMA_VERSION: &str = "image_task_presentation.v1";
 const PRESENTATION_SOURCE: &str = "model_generated";
@@ -179,6 +181,7 @@ pub(super) async fn generate_image_task_presentation(
         .as_ref()
         .and_then(|options| options.metadata.as_ref())
         .or(request.metadata.as_ref());
+    let soul_style = image_generation_soul_style(config_metadata.as_ref(), runtime_metadata);
     let system_prompt = append_soul_context_to_system_prompt(
         Some(presentation_system_prompt()),
         config_metadata.as_ref(),
@@ -224,11 +227,12 @@ pub(super) async fn generate_image_task_presentation(
         .unwrap_or(&selection.model);
 
     let raw_text_len = generated.text.chars().count();
-    let parsed = parse_generated_presentation(
+    let parsed = parse_generated_presentation_with_soul_style(
         &generated.text,
         generated_provider,
         generated_model,
         presentation_language,
+        soul_style.as_ref(),
     )
     .map(|mut presentation| {
         presentation.usage = generated.usage.clone();
@@ -273,13 +277,25 @@ pub(super) fn normalize_existing_presentation(
         .or_else(|| intent.provider_id.clone());
     let model = string_field(existing, &["model", "modelName", "model_name"])
         .or_else(|| intent.model.clone());
+    let soul_style = existing
+        .as_object()
+        .and_then(SoulStyleMetadata::from_payload_object);
     normalize_presentation_value(
         existing,
         provider.as_deref(),
         model.as_deref(),
         presentation_language,
         PRESENTATION_SOURCE_METADATA,
+        soul_style.as_ref(),
     )
+}
+
+fn image_generation_soul_style(
+    config_metadata: Option<&Value>,
+    runtime_metadata: Option<&Value>,
+) -> Option<SoulStyleMetadata> {
+    SoulStyleMetadata::from_config_metadata(config_metadata)
+        .or_else(|| SoulStyleMetadata::from_config_metadata(runtime_metadata))
 }
 
 fn resolve_presentation_model_selection(
@@ -461,11 +477,22 @@ pub(super) fn merge_generated_presentation(
     Some(Value::Object(merged))
 }
 
+#[cfg(test)]
 fn parse_generated_presentation(
     raw_text: &str,
     provider: &str,
     model: &str,
     expected_language: PresentationLanguage,
+) -> Option<GeneratedImageTaskPresentation> {
+    parse_generated_presentation_with_soul_style(raw_text, provider, model, expected_language, None)
+}
+
+fn parse_generated_presentation_with_soul_style(
+    raw_text: &str,
+    provider: &str,
+    model: &str,
+    expected_language: PresentationLanguage,
+    soul_style: Option<&SoulStyleMetadata>,
 ) -> Option<GeneratedImageTaskPresentation> {
     let value = parse_json_object(raw_text)?;
     normalize_presentation_value(
@@ -474,6 +501,7 @@ fn parse_generated_presentation(
         Some(model),
         expected_language,
         PRESENTATION_SOURCE,
+        soul_style,
     )
 }
 
@@ -483,6 +511,7 @@ fn normalize_presentation_value(
     model: Option<&str>,
     expected_language: PresentationLanguage,
     source: &str,
+    soul_style: Option<&SoulStyleMetadata>,
 ) -> Option<GeneratedImageTaskPresentation> {
     let assistant_intro = sanitize_user_visible_copy(
         string_field(&value, &["assistant_intro", "assistantIntro", "intro"]).as_deref(),
@@ -532,6 +561,14 @@ fn normalize_presentation_value(
         payload.insert("model".to_string(), json!(model));
     }
     payload.insert("language".to_string(), json!(expected_language.code()));
+    insert_image_generation_soul_payload_fields(
+        &mut payload,
+        source,
+        provider,
+        model,
+        expected_language.code(),
+        soul_style,
+    );
     if let Some(planning_summary) = planning_summary.as_ref() {
         payload.insert("planning_summary".to_string(), json!(planning_summary));
         payload.insert("planningSummary".to_string(), json!(planning_summary));

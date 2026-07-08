@@ -3,8 +3,8 @@
 use super::super::*;
 use crate::SidecarStore;
 use app_server_protocol::{
-    AgentSessionStartParams, ClientCapabilities, JsonRpcMessage, RequestId, METHOD_EVIDENCE_EXPORT,
-    METHOD_INITIALIZE, METHOD_INITIALIZED,
+    AgentSessionStartParams, ClientCapabilities, JsonRpcMessage, METHOD_EVIDENCE_EXPORT,
+    METHOD_INITIALIZE, METHOD_INITIALIZED, RequestId,
 };
 use serde_json::json;
 use std::sync::Arc;

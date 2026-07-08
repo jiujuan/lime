@@ -17,6 +17,12 @@ import {
   type ModelInputSendPolicy,
 } from "@/lib/model/modelInputSendPolicy";
 
+function hasDeclaredProviderModels(
+  provider: { customModels?: string[] } | null | undefined,
+): boolean {
+  return Boolean(provider?.customModels?.some((modelId) => modelId.trim()));
+}
+
 interface InputbarVisionCapabilityNoticeProps {
   providerType: string;
   model: string;
@@ -43,9 +49,13 @@ export const InputbarVisionCapabilityNotice: React.FC<
         providerId: selectedProvider?.providerId,
         providerType: selectedProvider?.type,
         apiHost: selectedProvider?.apiHost,
+        hasApiKey: selectedProvider?.hasApiKey,
+        hasDeclaredModels: hasDeclaredProviderModels(selectedProvider),
       }),
     [
       selectedProvider?.apiHost,
+      selectedProvider?.customModels,
+      selectedProvider?.hasApiKey,
       selectedProvider?.providerId,
       selectedProvider?.type,
     ],

@@ -107,6 +107,9 @@ interface BuildWorkspaceEmptyStatePropsParams {
   recentSessionActionLabel?: ComponentProps<
     typeof EmptyState
   >["recentSessionActionLabel"];
+  homeRecoverySession?: ComponentProps<
+    typeof EmptyState
+  >["homeRecoverySession"];
   onResumeRecentSession?: ComponentProps<
     typeof EmptyState
   >["onResumeRecentSession"];
@@ -237,6 +240,7 @@ export function buildWorkspaceEmptyStateProps({
   recentSessionTitle,
   recentSessionSummary,
   recentSessionActionLabel,
+  homeRecoverySession,
   onResumeRecentSession,
   projectConversationGroups,
   onOpenProjectConversation,
@@ -328,6 +332,7 @@ export function buildWorkspaceEmptyStateProps({
     recentSessionTitle,
     recentSessionSummary,
     recentSessionActionLabel,
+    homeRecoverySession,
     onResumeRecentSession,
     projectConversationGroups,
     onOpenProjectConversation,

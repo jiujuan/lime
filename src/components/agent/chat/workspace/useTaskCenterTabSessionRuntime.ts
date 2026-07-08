@@ -45,6 +45,7 @@ function resolveTaskCenterTabWorkspaceId(
 interface UseTaskCenterTabSessionRuntimeParams {
   agentEntry?: AgentEntry;
   normalizedInitialSessionId?: string | null;
+  newChatAt?: number;
   sessionId?: string | null;
   taskCenterDraftSurfaceActiveRef: MutableRefObject<boolean>;
   taskCenterWorkspaceId?: string | null;
@@ -94,6 +95,7 @@ export interface TaskCenterTabSessionRuntimeState {
 export function useTaskCenterTabSessionRuntime({
   agentEntry,
   normalizedInitialSessionId,
+  newChatAt,
   sessionId,
   taskCenterDraftSurfaceActiveRef,
   taskCenterWorkspaceId,
@@ -104,6 +106,10 @@ export function useTaskCenterTabSessionRuntime({
   setTaskCenterDraftSendRequest,
   setTaskCenterDraftTabs,
 }: UseTaskCenterTabSessionRuntimeParams): TaskCenterTabSessionRuntimeState {
+  const shouldStartNewTaskHome =
+    agentEntry === "new-task" &&
+    !normalizedInitialSessionId &&
+    typeof newChatAt === "number";
   const [taskCenterOpenTabMap, setTaskCenterOpenTabMap] =
     useState<TaskCenterWorkspaceTabMap>(() => {
       const initialTabMap = normalizeTaskCenterWorkspaceTabMap(
@@ -112,6 +118,13 @@ export function useTaskCenterTabSessionRuntime({
           workspaceId: taskCenterWorkspaceId,
         },
       );
+      if (shouldStartNewTaskHome) {
+        return updateTaskCenterTabIdsForWorkspace(
+          initialTabMap,
+          taskCenterWorkspaceId,
+          [],
+        );
+      }
 
       return initializeTaskCenterOpenTabMap({
         initialTabMap,
@@ -145,6 +158,9 @@ export function useTaskCenterTabSessionRuntime({
     startedAt: number;
   } | null>(null);
   const taskCenterRouteTabSyncRef = useRef<string | null>(null);
+  const taskCenterNewChatResetRef = useRef<string | null>(
+    shouldStartNewTaskHome ? String(newChatAt) : null,
+  );
   const isTaskCenterEntry = isTaskCenterAgentEntry(agentEntry);
   const shouldRespectTaskCenterLocalSession =
     shouldRespectTaskCenterLocalSessionOverride({
@@ -156,6 +172,49 @@ export function useTaskCenterTabSessionRuntime({
   useEffect(() => {
     taskCenterOpenTabIdsRef.current = taskCenterOpenTabIds;
   }, [taskCenterOpenTabIds]);
+
+  useEffect(() => {
+    const requestKey =
+      agentEntry === "new-task" &&
+      !normalizedInitialSessionId &&
+      typeof newChatAt === "number"
+        ? String(newChatAt)
+        : null;
+    if (!requestKey || taskCenterNewChatResetRef.current === requestKey) {
+      return;
+    }
+
+    taskCenterNewChatResetRef.current = requestKey;
+    taskCenterFallbackRestoreRef.current = null;
+    taskCenterDraftSurfaceActiveRef.current = false;
+    setTaskCenterDetachedTopicId(null);
+    setTaskCenterTransitionTopicId(null);
+    setTaskCenterEmbeddedHomeSessionIds((current) =>
+      current.size > 0 ? new Set<string>() : current,
+    );
+    setTaskCenterLocalSessionOverride(null);
+    setActiveTaskCenterDraftTabId(null);
+    setTaskCenterDraftTabs((current) => (current.length > 0 ? [] : current));
+    setTaskCenterDraftSendRequest(null);
+    setHomePendingPreviewRequest(null);
+    setTaskCenterOpenTabMap((currentMap) =>
+      updateTaskCenterTabIdsForWorkspace(
+        currentMap,
+        taskCenterWorkspaceId,
+        [],
+      ),
+    );
+  }, [
+    agentEntry,
+    newChatAt,
+    normalizedInitialSessionId,
+    setActiveTaskCenterDraftTabId,
+    setHomePendingPreviewRequest,
+    setTaskCenterDraftSendRequest,
+    setTaskCenterDraftTabs,
+    taskCenterDraftSurfaceActiveRef,
+    taskCenterWorkspaceId,
+  ]);
 
   useEffect(() => {
     if (!isTaskCenterEntry) {
@@ -287,6 +346,9 @@ export function useTaskCenterTabSessionRuntime({
     if (!isTaskCenterEntry || !taskCenterWorkspaceId) {
       return;
     }
+    if (shouldStartNewTaskHome) {
+      return;
+    }
 
     const hasInitialSessionTopic = normalizedInitialSessionId
       ? topicById.has(normalizedInitialSessionId)
@@ -326,6 +388,7 @@ export function useTaskCenterTabSessionRuntime({
     normalizedInitialSessionId,
     sessionId,
     shouldRespectTaskCenterLocalSession,
+    shouldStartNewTaskHome,
     taskCenterDetachedTopicId,
     taskCenterLocalSessionOverride,
     taskCenterWorkspaceId,

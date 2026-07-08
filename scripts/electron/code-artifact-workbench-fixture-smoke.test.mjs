@@ -88,7 +88,9 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("assertNoRendererErrors");
     expect(content).toContain("Electron renderer console error");
     expect(content).toContain("Electron renderer page error");
-    expect(content).toContain("assertNoRendererErrors(consoleErrors, pageErrors)");
+    expect(content).toContain(
+      "assertNoRendererErrors(consoleErrors, pageErrors)",
+    );
     expect(content).toContain("lime:agent-runtime-sessions-changed");
     expect(content).toContain('reason: "external"');
     expect(content).toContain("workspaceId");
@@ -123,7 +125,8 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
       "guiToolTimelineEvidencePresent",
     );
     expect(content).toContain('type: "artifact.snapshot"');
-    expect(content).toContain('type: "turn.final_done"');
+    expect(content).toContain('type: "turn.completed"');
+    expect(content).not.toContain('type: "turn.final_done"');
     expect(content).toContain("Hello Lime Workbench");
     expect(content).toContain("CODE_ARTIFACT_WORKBENCH_DONE");
     expect(content).toContain("waitForFixtureSessionOpenedFromSidebar");
@@ -165,7 +168,7 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
       'document.querySelectorAll(`[data-canvas-tab-key="${key}"]`)',
     );
     expect(content).not.toContain(
-      'document.querySelectorAll(\'[data-canvas-tab-key="outputs"]\')',
+      "document.querySelectorAll('[data-canvas-tab-key=\"outputs\"]')",
     );
     expect(content).not.toContain("const sourceText =");
     expect(content).toContain('window.dispatchEvent(new Event("focus"))');

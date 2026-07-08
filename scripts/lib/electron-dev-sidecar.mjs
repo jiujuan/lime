@@ -296,9 +296,9 @@ export function shouldRebuildAppServer(filename) {
   }
   const normalized = String(filename).replaceAll("\\", "/");
   if (
-    normalized.includes("/target/") ||
-    normalized.includes("/node_modules/") ||
-    normalized.includes("/dist-electron/")
+    hasPathSegment(normalized, "target") ||
+    hasPathSegment(normalized, "node_modules") ||
+    hasPathSegment(normalized, "dist-electron")
   ) {
     return false;
   }
@@ -310,6 +310,14 @@ export function shouldRebuildAppServer(filename) {
     basename === "Cargo.lock" ||
     basename === "build.rs" ||
     basename === "config.toml"
+  );
+}
+
+function hasPathSegment(normalizedPath, segment) {
+  return (
+    normalizedPath === segment ||
+    normalizedPath.startsWith(`${segment}/`) ||
+    normalizedPath.includes(`/${segment}/`)
   );
 }
 

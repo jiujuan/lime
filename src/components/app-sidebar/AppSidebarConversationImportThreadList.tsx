@@ -34,6 +34,7 @@ interface AppSidebarConversationImportThreadListProps {
   importGroups: ImportThreadGroup[];
   loading: boolean;
   locale: string;
+  emptyMessage?: string | null;
   selectableThreadCount: number;
   selectedThreadId: string | null;
   selectingSourceRoot: boolean;
@@ -61,6 +62,7 @@ export function AppSidebarConversationImportThreadList({
   importGroups,
   loading,
   locale,
+  emptyMessage,
   selectableThreadCount,
   selectedThreadId,
   selectingSourceRoot,
@@ -174,7 +176,10 @@ export function AppSidebarConversationImportThreadList({
               {filter === "all"
                 ? t("navigation.sidebar.importDialog.archive.all", "All")
                 : filter === "active"
-                  ? t("navigation.sidebar.importDialog.archive.active", "Active")
+                  ? t(
+                      "navigation.sidebar.importDialog.archive.active",
+                      "Active",
+                    )
                   : t(
                       "navigation.sidebar.importDialog.archive.archived",
                       "Archived",
@@ -317,6 +322,11 @@ export function AppSidebarConversationImportThreadList({
                     "navigation.sidebar.importDialog.empty.noThreads",
                     "No importable local history found",
                   )}
+              {!loading && emptyMessage ? (
+                <span className="mt-2 block text-xs font-medium leading-5 text-slate-400">
+                  {emptyMessage}
+                </span>
+              ) : null}
             </div>
           )}
         </div>

@@ -157,7 +157,7 @@ async function main() {
     while (
       !notificationTypes.includes("message.delta") ||
       !notificationTypes.includes("artifact.snapshot") ||
-      !notificationTypes.includes("turn.final_done")
+      !notificationTypes.includes("turn.completed")
     ) {
       const notification = await connection.nextNotification(5_000);
       assertEqual(
@@ -247,11 +247,11 @@ async function main() {
     }
     if (
       !evidenceResult.result.events.some(
-        (event) => event.type === "turn.final_done",
+        (event) => event.type === "turn.completed",
       )
     ) {
       throw new Error(
-        "evidence export is missing external turn.final_done event",
+        "evidence export is missing external turn.completed event",
       );
     }
     if (
@@ -333,9 +333,10 @@ if (input.kind === "turnStart") {
         },
       },
       {
-        type: "turn.final_done",
+        type: "turn.completed",
         payload: {
           backend: "external",
+          status: "completed",
         },
       },
     ],

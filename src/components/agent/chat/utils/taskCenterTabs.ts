@@ -42,6 +42,7 @@ export type TaskCenterFallbackRestoreSkipReason =
   | "session-hydrating"
   | "draft-surface-active"
   | "draft-tab-active"
+  | "new-task-home"
   | "service-skill-launch-pending"
   | "initial-dispatch-pending"
   | "home-background-recovery"
@@ -677,10 +678,13 @@ export function resolveTaskCenterFallbackRestorePlan(params: {
 
   if (
     params.isHomeSessionBackgroundRecovery &&
-    !params.normalizedInitialSessionId &&
-    !params.sessionId
+    !params.normalizedInitialSessionId
   ) {
     return { action: "skip", reason: "home-background-recovery" };
+  }
+
+  if (params.agentEntry === "new-task" && !params.normalizedInitialSessionId) {
+    return { action: "skip", reason: "new-task-home" };
   }
 
   if (

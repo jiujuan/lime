@@ -12,7 +12,7 @@ import {
   type PluginInstallReview,
 } from "../install/installReview";
 import { buildPackageIdentity } from "../install/packageIdentity";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 import { buildPluginHostLifecycleSnapshot } from "../host";
 import type {
   AppManifest,

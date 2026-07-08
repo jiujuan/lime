@@ -297,6 +297,13 @@ function AgentRunTimeline({
                 className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2"
                 data-agent-run-timeline-kind={group.kind}
                 data-agent-run-timeline-group={group.key}
+                data-soul-surface={group.soulSurface ?? undefined}
+                data-soul-phase={group.soulPhase ?? undefined}
+                data-soul-style-level={group.styleLevel ?? undefined}
+                data-soul-risk-level={group.riskLevel ?? undefined}
+                data-soul-tone-variant={group.toneVariant ?? undefined}
+                data-soul-profile-id={group.profileId ?? undefined}
+                data-soul-pack-id={group.packId ?? undefined}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-2">

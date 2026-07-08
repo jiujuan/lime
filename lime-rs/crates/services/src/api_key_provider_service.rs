@@ -2314,9 +2314,21 @@ impl ApiKeyProviderService {
 
             match existing {
                 Some(mut provider) => {
+                    let default_provider = to_api_key_provider(def);
+                    let mut should_update = false;
                     if Self::should_update_system_provider_default_api_host(&provider, def.api_host)
                     {
                         provider.api_host = def.api_host.to_string();
+                        should_update = true;
+                    }
+                    if provider.is_system
+                        && provider.custom_models.is_empty()
+                        && !default_provider.custom_models.is_empty()
+                    {
+                        provider.custom_models = default_provider.custom_models;
+                        should_update = true;
+                    }
+                    if should_update {
                         provider.updated_at = Utc::now();
                         ApiKeyProviderDao::update_provider(&conn, &provider)
                             .map_err(|e| e.to_string())?;

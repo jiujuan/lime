@@ -51,6 +51,10 @@ function isRunningTurnStatus(status: string | null): boolean {
   );
 }
 
+function isQueuedThreadStatus(status: string | null): boolean {
+  return status === "queued";
+}
+
 function readString(
   record: Record<string, unknown>,
   keys: string[],
@@ -91,7 +95,9 @@ function parseTimestampMs(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function readActivityTimestampMs(record: Record<string, unknown>): number | null {
+function readActivityTimestampMs(
+  record: Record<string, unknown>,
+): number | null {
   const candidates = [
     record.updated_at,
     record.updatedAt,
@@ -121,8 +127,7 @@ function isFreshRunningRecord(
     return true;
   }
   const nowMs = options.nowMs ?? Date.now();
-  const staleRunningMs =
-    options.staleRunningMs ?? STALE_RUNNING_THREAD_READ_MS;
+  const staleRunningMs = options.staleRunningMs ?? STALE_RUNNING_THREAD_READ_MS;
   return nowMs - timestampMs <= staleRunningMs;
 }
 
@@ -163,6 +168,18 @@ export function hasRunningThreadReadActivity(
     .filter((turn): turn is Record<string, unknown> => turn !== null);
   const activeTurnId = readString(record, ["active_turn_id", "activeTurnId"]);
   const hasPendingOrQueued = hasPendingOrQueuedActivity(record);
+  const hasQueuedTurns =
+    readArray(record, ["queued_turns", "queuedTurns"]).length > 0;
+  if (
+    hasQueuedTurns ||
+    (isQueuedThreadStatus(threadStatus) &&
+      isFreshRunningRecord(record, options)) ||
+    (isQueuedThreadStatus(profileStatus) &&
+      isFreshRunningRecord(record, options))
+  ) {
+    return true;
+  }
+
   if (activeTurnId) {
     const activeTurn = turns.find((turn) => readTurnId(turn) === activeTurnId);
     if (!activeTurn) {
@@ -229,7 +246,7 @@ export function hasRunningSessionOverviewActivity(
   const activeTurnId = readString(record, ["active_turn_id", "activeTurnId"]);
   return Boolean(
     activeTurnId &&
-      isRunningTurnStatus(latestTurnStatus) &&
-      isFreshRunningRecord(record, options),
+    isRunningTurnStatus(latestTurnStatus) &&
+    isFreshRunningRecord(record, options),
   );
 }

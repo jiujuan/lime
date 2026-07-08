@@ -81,6 +81,7 @@ export interface PreparedAgentStreamUserInputSend {
   assistantDraft?: AssistantDraftState;
   skillRequest?: SendMessageOptions["skillRequest"];
   explicitToolPreferences?: boolean;
+  targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;
@@ -325,8 +326,10 @@ export function prepareAgentStreamUserInputSend(
     sendOptions?.reasoningEffort?.trim() ||
     env.reasoningEffortRef.current.trim();
   const currentSessionId = env.sessionIdRef.current;
-  const syncedSessionModelPreference = currentSessionId
-    ? env.getSyncedSessionModelPreference(currentSessionId)
+  const targetSessionId = sendOptions?.targetSessionId?.trim() || undefined;
+  const sessionIdForSend = targetSessionId ?? currentSessionId;
+  const syncedSessionModelPreference = sessionIdForSend
+    ? env.getSyncedSessionModelPreference(sessionIdForSend)
     : null;
   const currentProviderType = env.providerTypeRef.current.trim();
   const currentModel = env.modelRef.current.trim();
@@ -351,7 +354,7 @@ export function prepareAgentStreamUserInputSend(
     sendOptions?.requestMetadata,
     {
       enabled: env.clawTraceEnabled,
-      sessionId: currentSessionId,
+      sessionId: sessionIdForSend,
       source: "agent-chat",
       submittedAt: Date.now(),
       workspaceId: env.getWorkspaceIdForSubmit(),
@@ -403,7 +406,7 @@ export function prepareAgentStreamUserInputSend(
   const skillRequest = sendOptions?.skillRequest;
   const expectingQueue = resolvePreparedSendExpectingQueue({
     activeStreamSessionId: env.activeStreamRef.current?.sessionId,
-    currentSessionId,
+    currentSessionId: sessionIdForSend,
     queuedTurnsCount: env.getQueuedTurnsCount(),
     threadBusy: env.isThreadBusy(),
     pendingPreparedSubmit: env.hasPendingPreparedSubmit(),
@@ -449,6 +452,7 @@ export function prepareAgentStreamUserInputSend(
     assistantDraft,
     skillRequest,
     explicitToolPreferences,
+    targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
     skipPreSubmitResume,

@@ -196,9 +196,16 @@ describe("agent runtime current fixture regression smoke guard", () => {
       'path.join(rootDir, "dist-electron", "main", "main.js")',
     );
     expect(content).toContain(
+      'path.join(rootDir, "dist-electron", "preload", "preload.cjs")',
+    );
+    expect(content).toContain(
       'path.join(rootDir, "dist-electron", "app-server.release.json")',
     );
+    expect(content).toContain("electronAppServerBinaryDestination");
     expect(content).toContain('"electron:build:smoke"');
+    expect(content).toContain("reusing fresh packaged fixture assets");
+    expect(content).toContain("fresh-artifacts");
+    expect(content).toContain("stale-source");
     expect(content).toContain("rebuilding packaged fixture assets");
     expect(content).toContain("ensureElectronFixtureBuild(options)");
     expect(content).toContain("LIME_ELECTRON_FIXTURE_BUILD_READY");
@@ -207,6 +214,20 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
     expect(content).toContain(
       "Claw Expert Plaza Skills Runtime click-through Electron fixture",
+    );
+    expect(content).toContain(
+      "Claw Inputbar pending steer multi queue order Electron fixture",
+    );
+    expect(content).toContain('"inputbar-pending-steer-multi-queue"');
+    expect(content).toContain(
+      "claw-chat-current-fixture-inputbar-pending-steer-multi-queue-regression",
+    );
+    expect(content).toContain(
+      "Claw Inputbar pending steer pop-front resume hydrate Electron fixture",
+    );
+    expect(content).toContain('"inputbar-pending-steer-pop-front-resume"');
+    expect(content).toContain(
+      "claw-chat-current-fixture-inputbar-pending-steer-pop-front-resume-regression",
     );
   });
 

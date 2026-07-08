@@ -52,6 +52,9 @@ const {
   mockUseServiceModelsConfig,
   mockUseSoulArtifactVoiceGenerationBrief,
   mockUseImageGen,
+  mockGetConfig,
+  mockGetDefaultProviderFromConfig,
+  mockSubscribeAppConfigChanged,
   mockGetProject,
   mockGetDefaultProject,
   mockGetOrCreateDefaultProject,
@@ -108,6 +111,9 @@ const {
   mockUseServiceModelsConfig: vi.fn(),
   mockUseSoulArtifactVoiceGenerationBrief: vi.fn(),
   mockUseImageGen: vi.fn(),
+  mockGetConfig: vi.fn(),
+  mockGetDefaultProviderFromConfig: vi.fn(),
+  mockSubscribeAppConfigChanged: vi.fn(),
   mockGetProject: vi.fn(),
   mockGetDefaultProject: vi.fn(),
   mockGetOrCreateDefaultProject: vi.fn(),
@@ -279,6 +285,9 @@ export function getIndexTestMocks() {
     mockUseServiceModelsConfig,
     mockUseSoulArtifactVoiceGenerationBrief,
     mockUseImageGen,
+    mockGetConfig,
+    mockGetDefaultProviderFromConfig,
+    mockSubscribeAppConfigChanged,
     mockGetProject,
     mockGetDefaultProject,
     mockGetOrCreateDefaultProject,
@@ -376,6 +385,12 @@ vi.mock("@/hooks/useSoulArtifactVoiceGenerationBrief", () => ({
 
 vi.mock("@/components/image-gen/useImageGen", () => ({
   useImageGen: mockUseImageGen,
+}));
+
+vi.mock("@/lib/api/appConfig", () => ({
+  getConfig: mockGetConfig,
+  getDefaultProvider: mockGetDefaultProviderFromConfig,
+  subscribeAppConfigChanged: mockSubscribeAppConfigChanged,
 }));
 
 vi.mock("./workspace/useWorkspaceImageTaskPreviewRuntime", () => ({
@@ -518,40 +533,6 @@ vi.mock("./components/ChatNavbar", () => ({
           设置
         </button>
       ) : null}
-    </div>
-  ),
-}));
-
-vi.mock("./components/ChatSidebar", () => ({
-  ChatSidebar: ({
-    onSwitchTopic,
-    onResumeTask,
-  }: {
-    onSwitchTopic?: (topicId: string) => Promise<void> | void;
-    onResumeTask?: (
-      topicId: string,
-      statusReason?: string,
-    ) => Promise<void> | void;
-  }) => (
-    <div data-testid="chat-sidebar">
-      <button
-        type="button"
-        data-testid="switch-topic"
-        onClick={() => {
-          void onSwitchTopic?.("topic-a");
-        }}
-      >
-        切换话题
-      </button>
-      <button
-        type="button"
-        data-testid="resume-topic"
-        onClick={() => {
-          void onResumeTask?.("topic-a", "user_action");
-        }}
-      >
-        恢复任务
-      </button>
     </div>
   ),
 }));
@@ -1380,6 +1361,9 @@ beforeEach(async () => {
   });
   mockGetDefaultProject.mockResolvedValue(null);
   mockGetOrCreateDefaultProject.mockResolvedValue(null);
+  mockGetConfig.mockResolvedValue({ memory: {} });
+  mockGetDefaultProviderFromConfig.mockResolvedValue("openai");
+  mockSubscribeAppConfigChanged.mockReturnValue(() => undefined);
   mockGetContent.mockResolvedValue(null);
   mockGetGeneralWorkbenchDocumentState.mockResolvedValue(null);
   mockEnsureWorkspaceReady.mockResolvedValue({

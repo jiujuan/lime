@@ -17,6 +17,7 @@ import {
 interface HarnessProps {
   agentEntry?: "new-task" | "claw" | null;
   normalizedInitialSessionId?: string | null;
+  newChatAt?: number;
   sessionId?: string | null;
   taskCenterWorkspaceId?: string | null;
   topics?: Topic[];
@@ -82,6 +83,7 @@ function createDraftSendRequest(id: string): TaskCenterDraftSendRequest {
 function Harness({
   agentEntry = "claw",
   normalizedInitialSessionId = "topic-a",
+  newChatAt,
   sessionId = "topic-a",
   taskCenterWorkspaceId = "workspace-a",
   topics = [createTopic("topic-a")],
@@ -108,6 +110,7 @@ function Harness({
   const runtime = useTaskCenterTabSessionRuntime({
     agentEntry,
     normalizedInitialSessionId,
+    newChatAt,
     sessionId,
     taskCenterDraftSurfaceActiveRef,
     taskCenterWorkspaceId,
@@ -221,6 +224,45 @@ describe("useTaskCenterTabSessionRuntime", () => {
     });
 
     expect(latest?.runtime.taskCenterDetachedTopicId).toBe("topic-missing");
+  });
+
+  it("new-task 显式新建时应清空当前工作区打开标签和 draft UI 态", () => {
+    const persisted: TaskCenterWorkspaceTabMap = {
+      "workspace-a": ["topic-a", "topic-b"],
+    };
+    window.localStorage.setItem(
+      TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY,
+      JSON.stringify(persisted),
+    );
+
+    renderHarness({
+      agentEntry: "new-task",
+      normalizedInitialSessionId: null,
+      sessionId: "topic-a",
+      topics: [createTopic("topic-a"), createTopic("topic-b")],
+    });
+
+    expect(latest?.runtime.taskCenterOpenTabIds).toEqual([
+      "topic-a",
+      "topic-b",
+    ]);
+
+    renderHarness({
+      agentEntry: "new-task",
+      normalizedInitialSessionId: null,
+      newChatAt: 123,
+      sessionId: "topic-a",
+      topics: [createTopic("topic-a"), createTopic("topic-b")],
+    });
+
+    expect(latest?.runtime.taskCenterOpenTabIds).toEqual([]);
+    expect(latest?.activeDraftTabId).toBeNull();
+    expect(latest?.draftTabs).toEqual([]);
+    expect(latest?.draftSendRequest).toBeNull();
+    expect(latest?.homePendingPreviewRequest).toBeNull();
+    expect(latest?.draftSurfaceActive).toBe(false);
+    expect(latest?.runtime.taskCenterDetachedTopicId).toBeNull();
+    expect(latest?.runtime.taskCenterTransitionTopicId).toBeNull();
   });
 
   it("可维护打开标签、嵌入 home 标记和本地 session override", () => {

@@ -258,6 +258,7 @@ function buildToolProjection(
     persistence: completed || failed ? "archive" : "ephemeral_live",
     toolCallId: readToolCallId(event),
     payload: {
+      ...runtimeTimelinePayload(event),
       title: readString(payload, "title"),
       displayTitle: readString(payload, "displayTitle"),
       toolName: readToolName(event),
@@ -319,6 +320,7 @@ function buildArtifactProjection(
     artifactId: readArtifactId(event) ?? artifactRef,
     refs: artifactRef ? { artifactPaths: [artifactRef] } : undefined,
     payload: {
+      ...runtimeTimelinePayload(event),
       status,
       artifactRef,
       preview: truncateText(artifactPreview),
@@ -423,6 +425,7 @@ function buildRuntimeStatusProjection(
     runtimeStatus: runtimeStatusForTaskStatus(status),
     persistence: status === "completed" || status === "failed" ? "archive" : "ephemeral_live",
     payload: {
+      ...runtimeTimelinePayload(event),
       status,
       title: readString(payload, "title"),
       displayTitle: readString(payload, "displayTitle"),
@@ -433,6 +436,29 @@ function buildRuntimeStatusProjection(
       payloadKeys: payloadKeys(event),
     },
   });
+}
+
+function runtimeTimelinePayload(
+  event: Record<string, unknown>,
+): Record<string, unknown> {
+  const payload = recordValue(event, "payload");
+  return {
+    displayTitle: readString(payload, "displayTitle"),
+    displayMessage: readString(payload, "displayMessage"),
+    displayTitleKey: readString(payload, "displayTitleKey"),
+    displayMessageKey: readString(payload, "displayMessageKey"),
+    displayValues: recordValue(payload, "displayValues"),
+    soulLifecycle: recordValue(payload, "soulLifecycle"),
+    soulSurface: readString(payload, "soulSurface"),
+    soulPhase: readString(payload, "soulPhase"),
+    styleLevel: readString(payload, "styleLevel"),
+    riskLevel: readString(payload, "riskLevel"),
+    toneVariant: readString(payload, "toneVariant"),
+    profileId: readString(payload, "profileId"),
+    packId: readString(payload, "packId"),
+    generationBriefBoundary: recordValue(payload, "generationBriefBoundary"),
+    metadata: recordValue(payload, "metadata"),
+  };
 }
 
 function buildBaseProjection(

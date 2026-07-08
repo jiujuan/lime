@@ -322,6 +322,7 @@ interface UseWorkspaceSendActionsParams {
     request: RuntimeSceneGateRequest,
   ) => Promise<void> | void;
   ensureSessionForCommandMetadata?: (options?: {
+    targetSessionId?: string;
     skipSessionRestore?: boolean;
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
@@ -750,6 +751,7 @@ export function useWorkspaceSendActions({
         setSubmissionPreview(null);
       };
       const resolveCommandSessionEnsureOptions = () => ({
+        targetSessionId: sendOptions?.targetSessionId?.trim() || undefined,
         skipSessionRestore: sendOptions?.skipSessionRestore === true,
         skipSessionStartHooks: sendOptions?.skipSessionStartHooks === true,
       });
@@ -763,6 +765,7 @@ export function useWorkspaceSendActions({
             sessionId: commandSessionId,
             skipSessionRestore: ensureOptions.skipSessionRestore,
             skipSessionStartHooks: ensureOptions.skipSessionStartHooks,
+            targetSessionId: ensureOptions.targetSessionId ?? null,
           });
           return Promise.resolve(commandSessionId);
         }
@@ -772,6 +775,7 @@ export function useWorkspaceSendActions({
             reason,
             skipSessionRestore: ensureOptions.skipSessionRestore,
             skipSessionStartHooks: ensureOptions.skipSessionStartHooks,
+            targetSessionId: ensureOptions.targetSessionId ?? null,
           });
           commandSessionPromise = (async () => {
             try {
@@ -784,6 +788,7 @@ export function useWorkspaceSendActions({
                 sessionId: commandSessionId,
                 skipSessionRestore: ensureOptions.skipSessionRestore,
                 skipSessionStartHooks: ensureOptions.skipSessionStartHooks,
+                targetSessionId: ensureOptions.targetSessionId ?? null,
               });
               return commandSessionId;
             } catch (error) {
@@ -796,6 +801,7 @@ export function useWorkspaceSendActions({
                   reason,
                   skipSessionRestore: ensureOptions.skipSessionRestore,
                   skipSessionStartHooks: ensureOptions.skipSessionStartHooks,
+                  targetSessionId: ensureOptions.targetSessionId ?? null,
                 },
                 { level: "error" },
               );

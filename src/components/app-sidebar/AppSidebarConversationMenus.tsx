@@ -54,7 +54,6 @@ interface AppSidebarConversationMenusProps {
   conversationMenuState: ConversationMenuState;
   projectMenuState: ProjectMenuState;
   favoriteSessionIds: readonly string[];
-  importableProjectIds?: ReadonlySet<string>;
   resolveSessionTitle: (session: AsterSessionInfo) => string;
   onCloseMenus: () => void;
   onToggleFavoriteSession: (session: AsterSessionInfo) => void;
@@ -137,7 +136,6 @@ export function AppSidebarConversationMenus({
   conversationMenuState,
   projectMenuState,
   favoriteSessionIds,
-  importableProjectIds,
   resolveSessionTitle,
   onCloseMenus,
   onToggleFavoriteSession,
@@ -299,8 +297,7 @@ export function AppSidebarConversationMenus({
               {projectLabels.createWorktree}
             </ConversationMenuItem>
           ) : null}
-          {onImportConversation &&
-          importableProjectIds?.has(projectMenuState.project.id) ? (
+          {onImportConversation ? (
             <ConversationMenuItem
               type="button"
               role="menuitem"

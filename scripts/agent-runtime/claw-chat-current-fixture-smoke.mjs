@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import electronPath from "electron";
-import { _electron as electron } from "playwright";
+import { _electron as electron, chromium } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import { ensureElectronFixtureBuild } from "../lib/electron-fixture-build.mjs";
@@ -17,6 +17,8 @@ import {
   FIXTURE_PROVIDER,
   IMAGE_COMMAND_SCENARIO,
   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+  INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO,
+  INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO,
   INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_PROMPT,
   INPUTBAR_RICH_RESTORE_SCENARIO,
@@ -113,9 +115,10 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
   --soul-style-profile <id>   soul-style 场景使用的 profile，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID}
   --soul-style-intensity <v>  soul-style 场景使用的强度，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY}
+  --cdp-port <port>      可选 Electron remote debugging port；传入后通过 CDP renderer 执行 GUI 动作
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -126,6 +129,8 @@ Claw Chat Current Electron Fixture Smoke
 function parseArgs(argv) {
   const options = {
     ...DEFAULTS,
+    cdpPort: null,
+    cdpUrl: null,
     soulStyleProfileId: DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
     soulStyleIntensity: DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
   };
@@ -166,6 +171,11 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--cdp-port" && next) {
+      options.cdpPort = Number(next);
+      index += 1;
+      continue;
+    }
     if (arg === "--timeout-ms" && next) {
       options.timeoutMs = Number(next);
       index += 1;
@@ -189,6 +199,17 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.intervalMs) || options.intervalMs < 100) {
     throw new Error("--interval-ms 必须是 >= 100 的数字");
   }
+  if (
+    options.cdpPort !== null &&
+    (!Number.isFinite(options.cdpPort) ||
+      options.cdpPort < 1 ||
+      options.cdpPort > 65535)
+  ) {
+    throw new Error("--cdp-port 必须是 1 到 65535 的数字");
+  }
+  if (options.cdpPort !== null) {
+    options.cdpUrl = `http://127.0.0.1:${options.cdpPort}`;
+  }
   if (!options.evidenceDir || !options.prefix) {
     throw new Error("--evidence-dir / --prefix 均不能为空");
   }
@@ -198,6 +219,8 @@ function parseArgs(argv) {
     "cancel-then-continue",
     INPUTBAR_RICH_RESTORE_SCENARIO,
     INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
+    INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO,
+    INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO,
     "plan",
     "goal",
     SOUL_STYLE_SCENARIO,
@@ -257,7 +280,21 @@ function shouldUseTextProviderFixture(scenario) {
     isImageWorkflowScenario(scenario) ||
     scenario === SOUL_STYLE_SCENARIO ||
     scenario === INPUTBAR_RICH_RESTORE_SCENARIO ||
-    scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO
+    scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO ||
+    scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO ||
+    scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO
+  );
+}
+
+function scenarioWaitsForExternalBackendCancel(scenario) {
+  return (
+    scenario === "cancel" ||
+    scenario === "cancel-then-continue" ||
+    scenario === INPUTBAR_RICH_RESTORE_SCENARIO ||
+    scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO ||
+    scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO ||
+    scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO ||
+    scenario === TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO
   );
 }
 
@@ -283,6 +320,10 @@ function resolveScenarioBackendEnv(options, runtimeEnv) {
     };
   }
 
+  const backendTimeoutMs = scenarioWaitsForExternalBackendCancel(options.scenario)
+    ? String(Math.max(options.timeoutMs, 130_000))
+    : "10000";
+
   return {
     APP_SERVER_BACKEND_MODE: "external",
     APP_SERVER_BACKEND_COMMAND: process.execPath,
@@ -291,8 +332,94 @@ function resolveScenarioBackendEnv(options, runtimeEnv) {
       runtimeEnv.backendLedgerPath,
       runtimeEnv.cancelSignalPath,
     ]),
-    APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
+    APP_SERVER_BACKEND_TIMEOUT_MS: backendTimeoutMs,
   };
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, { method: "GET" });
+  if (!response.ok) {
+    throw new Error(`${url} returned HTTP ${response.status}`);
+  }
+  return await response.json();
+}
+
+async function waitForCdpEndpoint(options) {
+  const startedAt = Date.now();
+  let lastError = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    try {
+      const [version, targets] = await Promise.all([
+        fetchJson(`${options.cdpUrl}/json/version`),
+        fetchJson(`${options.cdpUrl}/json/list`),
+      ]);
+      return sanitizeJson({
+        url: options.cdpUrl,
+        waitedMs: Date.now() - startedAt,
+        version: {
+          browser: version?.Browser ?? null,
+          protocolVersion: version?.["Protocol-Version"] ?? null,
+          userAgent: version?.["User-Agent"] ?? null,
+          webSocketDebuggerUrl: version?.webSocketDebuggerUrl
+            ? "present"
+            : null,
+        },
+        targets: Array.isArray(targets)
+          ? targets.map((target) => ({
+              id: target?.id ?? null,
+              type: target?.type ?? null,
+              title: target?.title ?? null,
+              url: target?.url ?? null,
+            }))
+          : [],
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      await new Promise((resolve) => setTimeout(resolve, options.intervalMs));
+    }
+  }
+  throw new Error(`Electron CDP endpoint 未就绪: ${lastError}`);
+}
+
+async function findElectronCdpPage(browser, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const pages = browser.contexts().flatMap((context) => context.pages());
+    for (const page of pages) {
+      const snapshot = await page
+        .evaluate(() => ({
+          url: window.location.href,
+          title: document.title || "",
+          electron: window.__LIME_ELECTRON__ === true,
+          hasInvokeBridge: typeof window.electronAPI?.invoke === "function",
+          supportsAppServer:
+            typeof window.electronAPI?.supportsCommand === "function" &&
+            window.electronAPI.supportsCommand("app_server_handle_json_lines"),
+          startupVisible: Boolean(
+            document.querySelector("[data-lime-startup-shell]"),
+          ),
+          appSidebarVisible: Boolean(
+            document.querySelector('[data-testid="app-sidebar"]'),
+          ),
+        }))
+        .catch(() => null);
+      lastSnapshot = snapshot;
+      if (
+        snapshot?.electron &&
+        snapshot.hasInvokeBridge &&
+        snapshot.supportsAppServer
+      ) {
+        return page;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, options.intervalMs));
+  }
+  throw new Error(
+    `未找到真实 Electron renderer CDP 页签: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
 }
 
 async function updateAgentUiPerformanceTraceEvidence(summary, page) {
@@ -362,7 +489,9 @@ async function run() {
     prompt:
       options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO
         ? INPUTBAR_RICH_RESTORE_PROMPT
-        : options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO
+        : options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO ||
+            options.scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO ||
+            options.scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO
           ? INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
           : options.scenario === MEDIA_REFERENCE_SCENARIO
             ? MEDIA_REFERENCE_PROMPT
@@ -377,6 +506,10 @@ async function run() {
     model: FIXTURE_MODEL,
     backendMode: scenarioBackendEnv.APP_SERVER_BACKEND_MODE,
     appUrl: options.appUrl || null,
+    proofLevel: options.cdpPort ? "Gate B CDP controlled fixture" : "Gate B controlled fixture",
+    cdpUrl: options.cdpUrl,
+    cdpEndpoint: null,
+    cdpPage: null,
     checkedAt: new Date().toISOString(),
     tempRoot: options.keepTemp ? runtimeEnv.tempRoot : null,
     electronUserDataDir: options.keepTemp
@@ -417,11 +550,20 @@ async function run() {
     inputbarPendingSteerActiveStreaming: null,
     inputbarPendingSteerDraftPrepared: null,
     inputbarPendingSteerInputDefer: null,
+    inputbarPendingSteerSecondInputDefer: null,
     inputbarPendingSteerQueuedReadModel: null,
     inputbarPendingSteerBackendBeforeCancel: null,
     inputbarPendingSteerStopClick: null,
     inputbarPendingSteerBackendCancel: null,
     inputbarPendingSteerGuiCanceled: null,
+    inputbarPendingSteerPopFrontGuiPromote: null,
+    inputbarPendingSteerPopFrontAfterGuiPromote: null,
+    inputbarPendingSteerPopFrontActiveCancel: null,
+    inputbarPendingSteerPopFrontBackendCancel: null,
+    inputbarPendingSteerPopFrontQueueResume: null,
+    inputbarPendingSteerPopFrontRichBackendTurnStart: null,
+    inputbarPendingSteerPopFrontReadModelAfterResume: null,
+    inputbarPendingSteerPopFrontGuiHydrated: null,
     continueInputSend: null,
     guiContinueCompleted: null,
     planModeEnabled: null,
@@ -527,6 +669,7 @@ async function run() {
   };
 
   let app = null;
+  let cdpBrowser = null;
   let page = null;
   let imageProviderFixtureServer = null;
   let textProviderFixtureServer = null;
@@ -585,7 +728,13 @@ async function run() {
     logStage("launch-electron");
     app = await electron.launch({
       executablePath: electronPath,
-      args: ["--use-mock-keychain", "."],
+      args: [
+        ...(options.cdpPort
+          ? [`--remote-debugging-port=${options.cdpPort}`]
+          : []),
+        "--use-mock-keychain",
+        ".",
+      ],
       cwd: process.cwd(),
       env: {
         ...runtimeEnv.env,
@@ -599,6 +748,11 @@ async function run() {
         LIME_ELECTRON_BRAND_DEV_APP: "0",
         LIME_ELECTRON_CLEAR_RENDERER_CACHE: "0",
         LIME_ELECTRON_DEV_HTTP_BRIDGE: "0",
+        ...(options.cdpPort
+          ? {
+              LIME_ELECTRON_REMOTE_DEBUGGING_PORT: String(options.cdpPort),
+            }
+          : {}),
         LIME_TRACE_EXPORT_OUTPUT_DIR: path.join(
           runtimeEnv.tempRoot,
           "trace-exports",
@@ -636,6 +790,34 @@ async function run() {
     });
     page.setDefaultTimeout(options.timeoutMs);
     await page.setViewportSize({ width: 1440, height: 1000 });
+
+    if (options.cdpPort) {
+      logStage("wait-cdp-endpoint");
+      summary.cdpEndpoint = await waitForCdpEndpoint(options);
+
+      logStage("connect-over-cdp");
+      cdpBrowser = await chromium.connectOverCDP(options.cdpUrl);
+      page = await findElectronCdpPage(cdpBrowser, options);
+      page.on("console", collectConsoleMessage);
+      page.on("close", () => {
+        pageLifecycleEvents.push({
+          type: "cdp-page-close",
+          timestamp: new Date().toISOString(),
+        });
+      });
+      page.on("crash", () => {
+        pageLifecycleEvents.push({
+          type: "cdp-page-crash",
+          timestamp: new Date().toISOString(),
+        });
+      });
+      page.setDefaultTimeout(options.timeoutMs);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      summary.cdpPage = sanitizeJson({
+        url: page.url(),
+        title: await page.title().catch(() => ""),
+      });
+    }
 
     logStage("enable-claw-trace-debug-override");
     summary.clawTraceDebugOverride = sanitizeJson(
@@ -977,6 +1159,9 @@ async function run() {
     console.error(LOG_PREFIX + " failureSummary=" + summaryPath);
     process.exitCode = 1;
   } finally {
+    if (cdpBrowser) {
+      await cdpBrowser.close().catch(() => undefined);
+    }
     if (app) {
       await app.close().catch(() => undefined);
     }

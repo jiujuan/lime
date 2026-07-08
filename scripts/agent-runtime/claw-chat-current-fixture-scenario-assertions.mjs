@@ -10,13 +10,6 @@ import {
   CONTENT_FACTORY_INLINE_IMAGE_URL,
   EVENT_READ_PROBE_TOOL_NAME,
   EVENT_READ_PROBE_TURN_ID,
-  EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF,
-  EXPERT_SKILLS_RUNTIME_ID,
-  EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-  EXPERT_SKILLS_RUNTIME_PROMPT,
-  EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-  EXPERT_SKILLS_RUNTIME_SKILL_REF,
-  EXPERT_SKILLS_RUNTIME_TITLE,
   GOAL_PROMPT,
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_PROMPT,
@@ -25,42 +18,26 @@ import {
   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
   INPUTBAR_RICH_RESTORE_PATH_NAME,
   INPUTBAR_RICH_RESTORE_PROMPT,
-  MCP_STRUCTURED_CONTENT_PROMPT,
-  MULTI_AGENT_TEAM_DONE_TEXT,
-  MULTI_AGENT_TEAM_PROMPT,
-  MULTI_AGENT_TEAM_SUMMARY_TEXT,
   NEWS_PROMPT,
   PLAN_PROMPT,
   PLAN_STEPS,
-  REASONING_FIRST_VISIBLE_PROMPT,
-  TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT,
-  TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
-  TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-  TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-  TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
-  TERMINAL_STALE_GUARD_DONE_TEXT,
-  TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
-  TERMINAL_STALE_GUARD_FIRST_PROMPT,
-  TERMINAL_STALE_GUARD_SECOND_PROMPT,
-  TERMINAL_STALE_GUARD_STALE_DONE_TEXT,
   SESSION_ID,
   SOUL_STYLE_SCENARIO,
-  SKILLS_RUNTIME_EXPLICIT_PROMPT,
-  SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
-  SKILLS_RUNTIME_PROMPT,
-  SKILLS_RUNTIME_QUERY,
-  SKILLS_RUNTIME_SKILL_NAME,
-  WEB_TOOLS_RENDERING_PROMPT,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildContentFactoryArticleWorkspaceScenarioAssertions } from "./claw-chat-current-fixture-content-factory-assertions.mjs";
-import { EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF } from "./claw-chat-current-fixture-expert-actions.mjs";
 import {
-  MEDIA_REFERENCE_MIME_TYPE,
-  MEDIA_REFERENCE_PROMPT,
-  MEDIA_REFERENCE_SUMMARY_TEXT,
-  MEDIA_REFERENCE_URI,
-} from "./claw-chat-current-fixture-media-reference.mjs";
+  buildMcpStructuredContentScenarioAssertions,
+  buildMediaReferenceScenarioAssertions,
+  buildMultiAgentTeamScenarioAssertions,
+  buildReasoningFirstVisibleScenarioAssertions,
+} from "./claw-chat-current-fixture-runtime-surface-assertions.mjs";
+import {
+  buildExpertSkillsRuntimeScenarioAssertions,
+  buildSkillsRuntimeScenarioAssertions,
+} from "./claw-chat-current-fixture-skills-runtime-assertions.mjs";
+import { buildPendingSteerPopFrontResumeScenarioAssertions } from "./claw-chat-current-fixture-pending-steer-assertions.mjs";
+import { buildTerminalScenarioAssertions } from "./claw-chat-current-fixture-terminal-assertions.mjs";
+import { buildWebToolsRenderingScenarioAssertions } from "./claw-chat-current-fixture-web-tools-assertions.mjs";
 import { buildSoulStyleScenarioAssertions } from "./claw-chat-current-fixture-soul-style.mjs";
 
 function readImageCommandTaskFromHarness(harness) {
@@ -106,6 +83,8 @@ export function buildScenarioAssertions(context) {
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarPendingSteerMultiQueueScenario,
+    isInputbarPendingSteerPopFrontResumeScenario,
     isInputbarPendingSteerRichRestoreScenario,
     isInputbarRichRestoreScenario,
     isMcpStructuredContentScenario,
@@ -638,948 +617,67 @@ export function buildScenarioAssertions(context) {
                       ?.createTaskOutputContainsTaskFile === true,
                 }
               : isWebToolsRenderingScenario
-                ? {
-                    webToolsRenderingPromptReachedBackend:
-                      webToolsRenderingTurnStart?.inputText ===
-                      WEB_TOOLS_RENDERING_PROMPT,
-                    guiWebToolsRenderingInputSubmitted:
-                      summary.webToolsRenderingInputSend?.afterFill
-                        ?.promptVisibleInTextarea === true &&
-                      summary.webToolsRenderingInputSend?.clicked?.clicked ===
-                        true,
-                    guiWebToolsLiveRunningStateCaptured:
-                      (summary.guiWebToolsRenderingInProgress
-                        ?.webToolsLiveRunningStateCaptured === true &&
-                        summary.guiWebToolsRenderingInProgress?.hasPrompt ===
-                          true &&
-                        summary.guiWebToolsRenderingInProgress
-                          ?.webProcessGroupExpanded === true &&
-                        summary.guiWebToolsRenderingInProgress
-                          ?.hasAssistantSummary === false &&
-                        summary.guiWebToolsRenderingInProgress?.hasDoneText ===
-                          false) ||
-                      (summary.guiWebToolsRenderingInProgress
-                        ?.fastCompletedBeforeLiveCapture === true &&
-                        summary.guiWebToolsRenderingInProgress?.hasPrompt ===
-                          true &&
-                        summary.guiWebToolsRenderingInProgress
-                          ?.hasAssistantSummary === true &&
-                        summary.guiWebToolsRenderingInProgress
-                          ?.hasFinalTextAfterProcess === true),
-                    guiWebToolsLiveNoLegacyTextAfterProcess:
-                      summary.guiWebToolsRenderingInProgress
-                        ?.runningProcessHasLegacyTextAfterProcess === false &&
-                      (summary.guiWebToolsRenderingInProgress
-                        ?.webToolsLiveRunningStateCaptured === true
-                        ? summary.guiWebToolsRenderingInProgress
-                            ?.latestAssistantTextAfterProcessPart === false
-                        : summary.guiWebToolsRenderingInProgress
-                            ?.fastCompletedBeforeLiveCapture === true),
-                    guiWebSearchProcessDefaultCollapsed:
-                      summary.guiWebToolsRenderingCompleted
-                        ?.webProcessGroupExpanded === false,
-                    guiWebSearchProcessShowsSourcesAfterExpand:
-                      summary.guiWebToolsRenderingCompleted?.expandedDetails
-                        ?.hasSearchSourceSection === true &&
-                      summary.guiWebToolsRenderingCompleted?.expandedDetails
-                        ?.hasSearchTitle === true &&
-                      summary.guiWebToolsRenderingCompleted?.expandedDetails
-                        ?.hasSearchSourceLabel === true &&
-                      summary.guiWebToolsRenderingCompleted?.expandedDetails
-                        ?.hasFullSearchUrlVisible === false,
-                    guiWebFetchProcessShowsReadPagesAfterExpand:
-                      summary.guiWebToolsRenderingCompleted?.expandedDetails
-                        ?.hasFetchPageSection === true &&
-                      summary.guiWebToolsRenderingCompleted?.expandedDetails
-                        ?.hasFetchPageUrl === true,
-                    guiWebToolsTimelineOrderPreserved:
-                      summary.guiWebToolsRenderingCompleted?.expandedDetails
-                        ?.hasTimelineOrderPreserved === true,
-                    guiWebSearchNoiseHidden:
-                      summary.guiWebToolsRenderingCompleted
-                        ?.searchNoiseVisible === false,
-                    guiMarkdownRendered:
-                      summary.guiWebToolsRenderingCompleted
-                        ?.rawMarkdownVisible === false &&
-                      summary.guiWebToolsRenderingCompleted
-                        ?.markdownHeadingVisible === true &&
-                      summary.guiWebToolsRenderingCompleted
-                        ?.markdownStrongVisible === true &&
-                      summary.guiWebToolsRenderingCompleted
-                        ?.markdownTableVisible === true,
-                    guiWebSearchFinalTextInterleaved:
-                      summary.guiWebToolsRenderingCompleted
-                        ?.hasFinalTextAfterProcess === true,
-                    guiWebFetchTransportEnvelopeHidden:
-                      summary.guiWebToolsRenderingCompleted
-                        ?.rawJsonEnvelopeVisible === false &&
-                      summary.guiWebToolsRenderingCompleted
-                        ?.hasFetchMarkdownHidden === true,
-                    readModelWebToolsRenderingCompleted:
-                      summary.readModelWebToolsRenderingCompleted
-                        ?.includesPrompt === true &&
-                      (summary.readModelWebToolsRenderingCompleted
-                        ?.includesAssistantDone === true ||
-                        summary.readModelWebToolsRenderingCompleted
-                          ?.includesAssistantSummary === true) &&
-                      summary.readModelWebToolsRenderingCompleted
-                        ?.includesWebSearchTool === true &&
-                      summary.readModelWebToolsRenderingCompleted
-                        ?.includesWebFetchTool === true,
-                    readModelWebToolsReasoningProviderMetadataPreserved:
-                      summary.readModelWebToolsRenderingCompleted
-                        ?.includesReasoningFinal === true &&
-                      summary.readModelWebToolsRenderingCompleted
-                        ?.includesReasoningFinalProviderMetadata === true &&
-                      summary.readModelWebToolsRenderingCompleted
-                        ?.includesReasoningItem === true &&
-                      summary.readModelWebToolsRenderingCompleted
-                        ?.includesReasoningItemProviderMetadata === true,
-                    guiWebToolsReasoningDidNotOpenPlanRail:
-                      summary.guiWebToolsRenderingCompleted?.hasAllPlanSteps ===
-                        false &&
-                      summary.guiWebToolsRenderingCompleted
-                        ?.planDecisionVisible === false,
-                  }
+                ? buildWebToolsRenderingScenarioAssertions({
+                    summary,
+                    webToolsRenderingTurnStart,
+                  })
                 : isReasoningFirstVisibleScenario
-                  ? {
-                      reasoningFirstVisiblePromptReachedBackend:
-                        reasoningFirstVisibleTurnStart?.inputText ===
-                        REASONING_FIRST_VISIBLE_PROMPT,
-                      guiReasoningFirstVisibleInputSubmitted:
-                        summary.reasoningFirstVisibleInputSend?.afterFill
-                          ?.promptVisibleInTextarea === true &&
-                        summary.reasoningFirstVisibleInputSend?.clicked
-                          ?.clicked === true,
-                      guiReasoningFirstVisibleBeforeAnswer:
-                        summary.guiReasoningFirstVisibleBeforeAnswer
-                          ?.reasoningFirstVisibleBeforeAnswerCaptured ===
-                          true &&
-                        summary.guiReasoningFirstVisibleBeforeAnswer
-                          ?.hasPrompt === true &&
-                        summary.guiReasoningFirstVisibleBeforeAnswer
-                          ?.hasReasoningText === true &&
-                        summary.guiReasoningFirstVisibleBeforeAnswer
-                          ?.hasReasoningProcess === true &&
-                        summary.guiReasoningFirstVisibleBeforeAnswer
-                          ?.hasReasoningBeforeFinalAnswer === true &&
-                        summary.guiReasoningFirstVisibleBeforeAnswer
-                          ?.hasFinalText === false &&
-                        summary.guiReasoningFirstVisibleBeforeAnswer
-                          ?.startupNoteVisible === false,
-                      guiReasoningFirstVisibleCompleted:
-                        summary.guiReasoningFirstVisibleCompleted?.hasPrompt ===
-                          true &&
-                        summary.guiReasoningFirstVisibleCompleted
-                          ?.hasReasoningText === true &&
-                        summary.guiReasoningFirstVisibleCompleted
-                          ?.hasFinalText === true &&
-                        summary.guiReasoningFirstVisibleCompleted
-                          ?.hasReasoningBeforeFinalAnswer === true &&
-                        summary.guiReasoningFirstVisibleCompleted
-                          ?.startupNoteVisible === false &&
-                        summary.guiReasoningFirstVisibleCompleted
-                          ?.textareaDisabled === false &&
-                        summary.guiReasoningFirstVisibleCompleted
-                          ?.stopButtonVisible === false,
-                      readModelReasoningFirstVisibleCompleted:
-                        summary.readModelReasoningFirstVisibleCompleted
-                          ?.includesPrompt === true &&
-                        summary.readModelReasoningFirstVisibleCompleted
-                          ?.latestTurnStatus === "completed" &&
-                        summary.readModelReasoningFirstVisibleCompleted
-                          ?.includesFinalText === true &&
-                        summary.readModelReasoningFirstVisibleCompleted
-                          ?.includesReasoningText === true,
-                      readModelReasoningFirstVisibleItemObserved:
-                        summary.readModelReasoningFirstVisibleCompleted
-                          ?.includesReasoningItem === true &&
-                        summary.readModelReasoningFirstVisibleCompleted
-                          ?.reasoningItemCount >= 1 &&
-                        summary.readModelReasoningFirstVisibleCompleted
-                          ?.reasoningSequenceBeforeFinal === true,
-                    }
-                  : isTerminalStaleGuardScenario
-                    ? {
-                        terminalStaleGuardFirstPromptReachedBackend:
-                          terminalStaleGuardFirstTurnStart?.inputText ===
-                          TERMINAL_STALE_GUARD_FIRST_PROMPT,
-                        terminalStaleGuardSecondPromptReachedBackend:
-                          terminalStaleGuardSecondTurnStart?.inputText ===
-                          TERMINAL_STALE_GUARD_SECOND_PROMPT,
-                        terminalStaleGuardFirstCompleted:
-                          summary.guiTerminalStaleGuardFirstCompleted
-                            ?.hasPrompt === true &&
-                          summary.guiTerminalStaleGuardFirstCompleted
-                            ?.hasDoneText === true &&
-                          summary.readModelTerminalStaleGuardFirstCompleted
-                            ?.includesPrompt === true &&
-                          summary.readModelTerminalStaleGuardFirstCompleted
-                            ?.includesAssistantDone === true,
-                        terminalStaleGuardSecondInputSubmitted:
-                          summary.terminalStaleGuardSecondInputSend?.afterFill
-                            ?.promptVisibleInTextarea === true &&
-                          summary.terminalStaleGuardSecondInputSend?.clicked
-                            ?.clicked === true,
-                        terminalStaleGuardSecondCompleted:
-                          summary.guiTerminalStaleGuardSecondCompleted
-                            ?.hasPrompt === true &&
-                          summary.guiTerminalStaleGuardSecondCompleted
-                            ?.hasDoneText === true &&
-                          summary.guiTerminalStaleGuardSecondCompleted
-                            ?.textareaDisabled === false &&
-                          summary.guiTerminalStaleGuardSecondCompleted
-                            ?.stopButtonVisible === false &&
-                          (
-                            summary.guiTerminalStaleGuardSecondCompleted
-                              ?.disallowedVisibleTextHits ?? []
-                          ).every((hit) => hit.occurrences === 0),
-                        terminalStaleGuardReadModelCompleted:
-                          summary.readModelTerminalStaleGuardSecondCompleted
-                            ?.includesPrompt === true &&
-                          summary.readModelTerminalStaleGuardSecondCompleted
-                            ?.includesAssistantDone === true &&
-                          summary.readModelTerminalStaleGuardSecondCompleted
-                            ?.latestTurnStatus === "completed",
-                        terminalStaleGuardStaleTerminalIgnored:
-                          summary.terminalStaleGuardStaleTerminal
-                            ?.staleEventType === "turn.completed" &&
-                          summary.terminalStaleGuardStaleTerminal
-                            ?.staleDoneText ===
-                            TERMINAL_STALE_GUARD_STALE_DONE_TEXT &&
-                          summary.terminalStaleGuardStaleTerminal
-                            ?.staleTurnDiffersFromCurrent === true &&
-                          summary.guiTerminalStaleGuardSecondCompleted
-                            ?.bodyText?.includes(
-                              TERMINAL_STALE_GUARD_DONE_TEXT,
-                            ) === true &&
-                          summary.guiTerminalStaleGuardSecondCompleted
-                            ?.bodyText?.includes(
-                              TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
-                            ) === true &&
-                          summary.guiTerminalStaleGuardSecondCompleted
-                            ?.bodyText?.includes(
-                              TERMINAL_STALE_GUARD_STALE_DONE_TEXT,
-                            ) === false,
-                      }
-                    : isTerminalCanceledAfterAnswerScenario
-                      ? {
-                          terminalCanceledAfterAnswerPromptReachedBackend:
-                            terminalCanceledAfterAnswerTurnStart?.inputText ===
-                            TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
-                          guiTerminalCanceledAfterAnswerInputSubmitted:
-                            summary.terminalCanceledAfterAnswerInputSend
-                              ?.afterFill?.promptVisibleInTextarea === true &&
-                            summary.terminalCanceledAfterAnswerInputSend
-                              ?.clicked?.clicked === true,
-                          guiTerminalCanceledAfterAnswerPartialVisibleBeforeStop:
-                            summary.terminalCanceledAfterAnswerStopClick
-                              ?.beforeClick?.hasPrompt === true &&
-                            summary.terminalCanceledAfterAnswerStopClick
-                              ?.beforeClick?.hasVisibleAssistantOutput ===
-                              true &&
-                            summary.terminalCanceledAfterAnswerStopClick
-                              ?.beforeClick?.hasRunningStatus === true &&
-                            summary.terminalCanceledAfterAnswerStopClick
-                              ?.beforeClick?.scopedText?.includes(
-                                TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-                              ) === true,
-                          guiTerminalCanceledAfterAnswerStopClicked:
-                            summary.terminalCanceledAfterAnswerStopClick
-                              ?.clicked?.clicked === true,
-                          guiTerminalCanceledAfterAnswerPartialRetained:
-                            summary.guiTerminalCanceledAfterAnswerCanceled
-                              ?.hasPrompt === true &&
-                            summary.guiTerminalCanceledAfterAnswerCanceled
-                              ?.hasPartialText === true &&
-                            summary.guiTerminalCanceledAfterAnswerCanceled
-                              ?.bodyText?.includes(
-                                TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-                              ) === true,
-                          guiTerminalCanceledAfterAnswerNoDuplicates:
-                            (summary.guiTerminalCanceledAfterAnswerCanceled
-                              ?.bodyText?.split(
-                                TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-                              ).length ?? 1) -
-                              1 ===
-                            1,
-                          guiTerminalCanceledAfterAnswerInputReady:
-                            summary.guiTerminalCanceledAfterAnswerCanceled
-                              ?.textareaVisible === true &&
-                            summary.guiTerminalCanceledAfterAnswerCanceled
-                              ?.textareaDisabled === false &&
-                            summary.guiTerminalCanceledAfterAnswerCanceled
-                              ?.stopButtonVisible === false,
-                          readModelTerminalCanceledAfterAnswerCanceled:
-                            summary.readModelTerminalCanceledAfterAnswer
-                              ?.includesPrompt === true &&
-                            summary.readModelTerminalCanceledAfterAnswer
-                              ?.includesPartialText === true &&
-                            summary.readModelTerminalCanceledAfterAnswer
-                              ?.includesCanceled === true &&
-                            summary.readModelTerminalCanceledAfterAnswer
-                              ?.latestTurnStatus === "canceled",
-                          backendTerminalCanceledAfterAnswerRecorded:
-                            summary.terminalCanceledAfterAnswerBackend
-                              ?.eventType === "turn.canceled" &&
-                            summary.terminalCanceledAfterAnswerBackend
-                              ?.partialText ===
-                              TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT &&
-                            summary.terminalCanceledAfterAnswerBackend
-                              ?.canceledText ===
-                              TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT,
-                        }
-                    : isTerminalFailedAfterAnswerScenario
-                      ? {
-                          terminalFailedAfterAnswerPromptReachedBackend:
-                            terminalFailedAfterAnswerTurnStart?.inputText ===
-                            TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
-                          guiTerminalFailedAfterAnswerInputSubmitted:
-                            summary.terminalFailedAfterAnswerInputSend
-                              ?.afterFill?.promptVisibleInTextarea === true &&
-                            summary.terminalFailedAfterAnswerInputSend?.clicked
-                              ?.clicked === true,
-                          guiTerminalFailedAfterAnswerPartialRetained:
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.hasPrompt === true &&
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.hasAssistantSummary === true &&
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.completionScope?.assistantText?.includes(
-                                TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-                              ) === true,
-                          guiTerminalFailedAfterAnswerFailureVisible:
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.hasDoneText === true &&
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.completionScope?.assistantText?.includes(
-                                TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-                              ) === true,
-                          guiTerminalFailedAfterAnswerNoDuplicates:
-                            (
-                              summary.guiTerminalFailedAfterAnswerCompleted
-                                ?.assistantScopeDedupeGuardHits ?? []
-                            ).every((hit) => hit.occurrences === 1),
-                          guiTerminalFailedAfterAnswerInputReady:
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.textareaVisible === true &&
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.textareaDisabled === false &&
-                            summary.guiTerminalFailedAfterAnswerCompleted
-                              ?.stopButtonVisible === false,
-                          readModelTerminalFailedAfterAnswerFailed:
-                            summary.readModelTerminalFailedAfterAnswer
-                              ?.includesPrompt === true &&
-                            summary.readModelTerminalFailedAfterAnswer
-                              ?.includesPartialText === true &&
-                            summary.readModelTerminalFailedAfterAnswer
-                              ?.includesFailureText === true &&
-                            summary.readModelTerminalFailedAfterAnswer
-                              ?.latestTurnStatus === "failed",
-                          backendTerminalFailedAfterAnswerRecorded:
-                            summary.terminalFailedAfterAnswerBackend
-                              ?.eventType === "turn.failed" &&
-                            summary.terminalFailedAfterAnswerBackend
-                              ?.partialText ===
-                              TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT &&
-                            summary.terminalFailedAfterAnswerBackend
-                              ?.failureText ===
-                              TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-                        }
+                  ? buildReasoningFirstVisibleScenarioAssertions({
+                      reasoningFirstVisibleTurnStart,
+                      summary,
+                    })
+                  : isTerminalStaleGuardScenario ||
+                      isTerminalCanceledAfterAnswerScenario ||
+                      isTerminalFailedAfterAnswerScenario
+                    ? buildTerminalScenarioAssertions({
+                        isTerminalCanceledAfterAnswerScenario,
+                        isTerminalFailedAfterAnswerScenario,
+                        isTerminalStaleGuardScenario,
+                        summary,
+                        terminalCanceledAfterAnswerTurnStart,
+                        terminalFailedAfterAnswerTurnStart,
+                        terminalStaleGuardFirstTurnStart,
+                        terminalStaleGuardSecondTurnStart,
+                      })
                   : isMcpStructuredContentScenario
-                  ? {
-                      mcpStructuredContentPromptReachedBackend:
-                        mcpStructuredContentTurnStart?.inputText ===
-                        MCP_STRUCTURED_CONTENT_PROMPT,
-                      guiMcpStructuredContentInputSubmitted:
-                        summary.mcpStructuredContentInputSend?.afterFill
-                          ?.promptVisibleInTextarea === true &&
-                        summary.mcpStructuredContentInputSend?.clicked
-                          ?.clicked === true,
-                      guiMcpStructuredContentVisible:
-                        summary.guiMcpStructuredContentCompleted?.hasPrompt ===
-                          true &&
-                        summary.guiMcpStructuredContentCompleted
-                          ?.hasStructuredAnswer === true &&
-                        (summary.guiMcpStructuredContentCompleted
-                          ?.hasToolName === true ||
-                          summary.guiMcpStructuredContentCompleted
-                            ?.expandedDetails?.hasToolName === true) &&
-                        summary.guiMcpStructuredContentCompleted
-                          ?.textareaVisible === true &&
-                        summary.guiMcpStructuredContentCompleted
-                          ?.textareaDisabled === false &&
-                        summary.guiMcpStructuredContentCompleted
-                          ?.stopButtonVisible === false,
-                      guiMcpStructuredContentEnvelopeHidden:
-                        summary.guiMcpStructuredContentCompleted
-                          ?.envelopeVisible === false,
-                      readModelMcpStructuredContentCompleted:
-                        summary.readModelMcpStructuredContentCompleted
-                          ?.includesPrompt === true &&
-                        (summary.readModelMcpStructuredContentCompleted
-                          ?.includesAssistantDone === true ||
-                          summary.readModelMcpStructuredContentCompleted
-                            ?.includesAssistantSummary === true) &&
-                        summary.readModelMcpStructuredContentCompleted
-                          ?.includesMcpTool === true,
-                      readModelMcpStructuredContentObserved:
-                        summary.readModelMcpStructuredContentCompleted
-                          ?.includesStructuredContent === true &&
-                        summary.readModelMcpStructuredContentCompleted
-                          ?.structuredContentAnswerVisible === true &&
-                        summary.readModelMcpStructuredContentCompleted
-                          ?.structuredContentReferenceVisible === true &&
-                        summary.readModelMcpStructuredContentCompleted
-                          ?.outputContainsEnvelope === true,
-                    }
+                  ? buildMcpStructuredContentScenarioAssertions({
+                      mcpStructuredContentTurnStart,
+                      summary,
+                    })
                   : isMediaReferenceScenario
-                    ? {
-                        mediaReferencePromptReachedBackend:
-                          mediaReferenceTurnStart?.inputText ===
-                          MEDIA_REFERENCE_PROMPT,
-                        guiMediaReferenceInputSubmitted:
-                          summary.mediaReferenceInputSend?.afterFill
-                            ?.promptVisibleInTextarea === true &&
-                          summary.mediaReferenceInputSend?.clicked?.clicked ===
-                            true,
-                        guiMediaReferenceCardVisible:
-                          summary.guiMediaReferenceCompleted?.hasPrompt ===
-                            true &&
-                          summary.guiMediaReferenceCompleted
-                            ?.hasAssistantSummary === true &&
-                          summary.guiMediaReferenceSnapshot?.hasCard === true &&
-                          summary.guiMediaReferenceSnapshot?.hasUri === true &&
-                          summary.guiMediaReferenceSnapshot?.hasMimeType ===
-                            true,
-                        guiMediaReferenceDoesNotExposeInlinePayload:
-                          summary.guiMediaReferenceSnapshot
-                            ?.bodyTextIncludesInlinePayload === false &&
-                          summary.readModelMediaReferenceCompleted
-                            ?.noInlinePayload === true,
-                        guiMediaReferencePreviewOpened:
-                          summary.guiMediaReferencePreview?.click?.clicked ===
-                            true &&
-                          summary.guiMediaReferencePreview?.preview
-                            ?.workbenchPreviewVisible === true &&
-                          summary.guiMediaReferencePreview?.preview
-                            ?.previewImageVisible === true &&
-                          summary.guiMediaReferencePreview?.preview
-                            ?.previewTextIncludesSidecarSource === false &&
-                          summary.guiMediaReferencePreview?.preview
-                            ?.bodyTextIncludesInlinePayload === false,
-                        readModelMediaReferenceCompleted:
-                          summary.readModelMediaReferenceCompleted
-                            ?.includesPrompt === true &&
-                          (summary.readModelMediaReferenceCompleted
-                            ?.includesAssistantDone === true ||
-                            summary.readModelMediaReferenceCompleted
-                              ?.includesAssistantSummary === true) &&
-                          summary.readModelMediaReferenceCompleted
-                            ?.latestTurnStatus === "completed",
-                        readModelMediaReferenceObserved:
-                          summary.readModelMediaReferenceCompleted
-                            ?.hasMediaReference === true &&
-                          summary.readModelMediaReferenceCompleted
-                            ?.hasReferenceUri === true &&
-                          summary.readModelMediaReferenceCompleted
-                            ?.hasMimeType === true &&
-                          summary.readModelMediaReferenceCompleted
-                            ?.hasCaption === true &&
-                          summary.readModelMediaReferenceCompleted
-                            ?.hasSourceOwner === true &&
-                          summary.readModelMediaReferenceCompleted
-                            ?.contentPartsKeyObserved === true &&
-                          pageText.includes(MEDIA_REFERENCE_PROMPT) &&
-                          pageText.includes(MEDIA_REFERENCE_SUMMARY_TEXT) &&
-                          pageText.includes(MEDIA_REFERENCE_URI) &&
-                          pageText.includes(MEDIA_REFERENCE_MIME_TYPE),
-                      }
+                    ? buildMediaReferenceScenarioAssertions({
+                        mediaReferenceTurnStart,
+                        pageText,
+                        summary,
+                      })
                   : isMultiAgentTeamScenario
-                    ? {
-                        multiAgentTeamPromptReachedBackend:
-                          multiAgentTeamTurnStart?.inputText ===
-                          MULTI_AGENT_TEAM_PROMPT,
-                        guiMultiAgentTeamInputSubmitted:
-                          summary.multiAgentTeamInputSend?.afterFill
-                            ?.promptVisibleInTextarea === true &&
-                          summary.multiAgentTeamInputSend?.clicked?.clicked ===
-                            true,
-                        guiMultiAgentTeamCompleted:
-                          summary.guiMultiAgentTeamCompleted?.hasPrompt ===
-                            true &&
-                          (summary.guiMultiAgentTeamCompleted
-                            ?.hasAssistantSummary === true ||
-                            summary.guiMultiAgentTeamCompleted?.hasDoneText ===
-                              true) &&
-                          summary.guiMultiAgentTeamCompleted
-                            ?.textareaVisible === true &&
-                          summary.guiMultiAgentTeamCompleted
-                            ?.textareaDisabled === false &&
-                          summary.guiMultiAgentTeamCompleted
-                            ?.stopButtonVisible === false &&
-                          pageText.includes(MULTI_AGENT_TEAM_PROMPT) &&
-                          (pageText.includes(MULTI_AGENT_TEAM_SUMMARY_TEXT) ||
-                            pageText.includes(MULTI_AGENT_TEAM_DONE_TEXT)),
-                        readModelMultiAgentTeamCompleted:
-                          summary.readModelMultiAgentTeamCompleted
-                            ?.includesPrompt === true &&
-                          (summary.readModelMultiAgentTeamCompleted
-                            ?.includesAssistantDone === true ||
-                            summary.readModelMultiAgentTeamCompleted
-                              ?.includesAssistantSummary === true) &&
-                          summary.readModelMultiAgentTeamCompleted
-                            ?.latestTurnStatus === "completed",
-                        readModelMultiAgentTeamFactsObserved:
-                          summary.readModelMultiAgentTeamCompleted
-                            ?.includesTeamSummary === true &&
-                          summary.readModelMultiAgentTeamCompleted
-                            ?.includesSubagentStatus === true,
-                        evidencePackMultiAgentTeamExported:
-                          summary.evidencePackMultiAgentTeam?.exported ===
-                            true &&
-                          summary.evidencePackMultiAgentTeam
-                            ?.teamFactsStatus === "exported",
-                        evidencePackMultiAgentTeamParentThreadBound:
-                          summary.evidencePackMultiAgentTeam
-                            ?.includesParentSession === true &&
-                          summary.evidencePackMultiAgentTeam?.includesThread ===
-                            true &&
-                          summary.evidencePackMultiAgentTeam?.includesTurn ===
-                            true &&
-                          summary.evidencePackMultiAgentTeam
-                            ?.includesResearcher === true &&
-                          summary.evidencePackMultiAgentTeam
-                            ?.includesReviewer === true,
-                        evidencePackMultiAgentTeamHandoffObserved:
-                          summary.evidencePackMultiAgentTeam
-                            ?.includesHandoff === true &&
-                          summary.evidencePackMultiAgentTeam?.handoffCount >= 1,
-                        evidencePackMultiAgentTeamWorkerNotificationObserved:
-                          summary.evidencePackMultiAgentTeam
-                            ?.includesWorkerNotification === true &&
-                          summary.evidencePackMultiAgentTeam
-                            ?.workerNotificationCount >= 1,
-                        evidencePackMultiAgentTeamReviewLaneObserved:
-                          summary.evidencePackMultiAgentTeam?.includesReview ===
-                            true &&
-                          summary.evidencePackMultiAgentTeam?.reviewLaneCount >=
-                            1 &&
-                          summary.evidencePackMultiAgentTeam
-                            ?.includesQueuedPhase === true,
-                        multiAgentTeamNoAgentFirstHistory:
-                          summary.readModelMultiAgentTeamCompleted
-                            ?.forbiddenAgentFirstHistory === false &&
-                          summary.evidencePackMultiAgentTeam
-                            ?.forbiddenAgentFirstHistory === false,
-                      }
+                    ? buildMultiAgentTeamScenarioAssertions({
+                        multiAgentTeamTurnStart,
+                        pageText,
+                        summary,
+                      })
                     : isSkillsRuntimeScenario
-                      ? {
-                          skillsRuntimePromptReachedBackend:
-                            skillsRuntimeTurnStart?.inputText ===
-                            SKILLS_RUNTIME_PROMPT,
-                          guiSkillsRuntimeInputSubmitted:
-                            summary.skillsRuntimeInputSend?.afterFill
-                              ?.promptVisibleInTextarea === true &&
-                            summary.skillsRuntimeInputSend?.clicked?.clicked ===
-                              true,
-                          guiSkillsRuntimeCompleted:
-                            summary.guiSkillsRuntimeCompleted?.hasPrompt ===
-                              true &&
-                            (summary.guiSkillsRuntimeCompleted
-                              ?.hasAssistantSummary === true ||
-                              summary.guiSkillsRuntimeCompleted?.hasDoneText ===
-                                true) &&
-                            summary.guiSkillsRuntimeCompleted
-                              ?.textareaVisible === true &&
-                            summary.guiSkillsRuntimeCompleted
-                              ?.textareaDisabled === false &&
-                            summary.guiSkillsRuntimeCompleted
-                              ?.stopButtonVisible === false,
-                          readModelSkillsRuntimeCompleted:
-                            summary.readModelSkillsRuntimeCompleted
-                              ?.includesPrompt === true &&
-                            (summary.readModelSkillsRuntimeCompleted
-                              ?.includesAssistantDone === true ||
-                              summary.readModelSkillsRuntimeCompleted
-                                ?.includesAssistantSummary === true),
-                          readModelSkillSearchObserved:
-                            summary.readModelSkillsRuntimeCompleted
-                              ?.includesSkillSearchTool === true,
-                          readModelSkillInvocationObserved:
-                            summary.readModelSkillsRuntimeCompleted
-                              ?.includesSkillTool === true &&
-                            summary.readModelSkillsRuntimeCompleted
-                              ?.includesSkillName === true,
-                          evidenceSkillBodyReadObserved:
-                            summary.evidencePackSkillsRuntime
-                              ?.skillBodyReadObserved === true,
-                          evidenceSkillGateObserved:
-                            summary.evidencePackSkillsRuntime
-                              ?.skillGateObserved === true,
-                          evidencePackSkillSearchObserved:
-                            summary.evidencePackSkillsRuntime
-                              ?.hasSkillSearchSummary === true &&
-                            summary.evidencePackSkillsRuntime?.searchQuery ===
-                              SKILLS_RUNTIME_QUERY,
-                          evidencePackSkillInvocationObserved:
-                            summary.evidencePackSkillsRuntime
-                              ?.hasSkillInvocationSummary === true &&
-                            summary.evidencePackSkillsRuntime
-                              ?.invocationSkillName ===
-                              SKILLS_RUNTIME_SKILL_NAME,
-                          skillSearchBeforeSkillInvocation:
-                            summary.evidencePackSkillsRuntime
-                              ?.skillSearchBeforeSkillInvocation === true,
-                          explicitSkillsRuntimePromptReachedBackend:
-                            explicitSkillsRuntimeTurnStart?.inputText ===
-                            SKILLS_RUNTIME_EXPLICIT_PROMPT,
-                          guiExplicitSkillsRuntimeInputSubmitted:
-                            summary.explicitSkillsRuntimeInputSend?.afterFill
-                              ?.promptVisibleInTextarea === true &&
-                            summary.explicitSkillsRuntimeInputSend?.clicked
-                              ?.clicked === true,
-                          guiExplicitSkillsRuntimeCompleted:
-                            summary.guiExplicitSkillsRuntimeCompleted
-                              ?.hasPrompt === true &&
-                            (summary.guiExplicitSkillsRuntimeCompleted
-                              ?.hasAssistantSummary === true ||
-                              summary.guiExplicitSkillsRuntimeCompleted
-                                ?.hasDoneText === true) &&
-                            summary.guiExplicitSkillsRuntimeCompleted
-                              ?.textareaVisible === true &&
-                            summary.guiExplicitSkillsRuntimeCompleted
-                              ?.textareaDisabled === false &&
-                            summary.guiExplicitSkillsRuntimeCompleted
-                              ?.stopButtonVisible === false,
-                          readModelExplicitSkillsRuntimeCompleted:
-                            summary.readModelExplicitSkillsRuntimeCompleted
-                              ?.includesPrompt === true &&
-                            (summary.readModelExplicitSkillsRuntimeCompleted
-                              ?.includesAssistantDone === true ||
-                              summary.readModelExplicitSkillsRuntimeCompleted
-                                ?.includesAssistantSummary === true),
-                          readModelExplicitSkillSearchObserved:
-                            summary.readModelExplicitSkillsRuntimeCompleted
-                              ?.includesSkillSearchTool === true,
-                          readModelExplicitSkillInvocationObserved:
-                            summary.readModelExplicitSkillsRuntimeCompleted
-                              ?.includesSkillTool === true &&
-                            summary.readModelExplicitSkillsRuntimeCompleted
-                              ?.includesSkillName === true,
-                          evidenceExplicitSkillBodyReadObserved:
-                            summary.evidencePackExplicitSkillsRuntime
-                              ?.skillBodyReadObserved === true,
-                          evidenceExplicitSkillGateObserved:
-                            summary.evidencePackExplicitSkillsRuntime
-                              ?.skillGateObserved === true,
-                          evidencePackExplicitSkillSearchObserved:
-                            summary.evidencePackExplicitSkillsRuntime
-                              ?.hasSkillSearchSummary === true &&
-                            summary.evidencePackExplicitSkillsRuntime
-                              ?.searchQuery === SKILLS_RUNTIME_QUERY,
-                          evidencePackExplicitSkillInvocationObserved:
-                            summary.evidencePackExplicitSkillsRuntime
-                              ?.hasSkillInvocationSummary === true &&
-                            summary.evidencePackExplicitSkillsRuntime
-                              ?.invocationSkillName ===
-                              SKILLS_RUNTIME_SKILL_NAME,
-                          explicitSkillSearchBeforeSkillInvocation:
-                            summary.evidencePackExplicitSkillsRuntime
-                              ?.skillSearchBeforeSkillInvocation === true,
-                          manualEnableSkillsRuntimePromptReachedBackend:
-                            manualEnableSkillsRuntimeTurnStart?.inputText ===
-                            SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
-                          manualEnableSkillsRuntimeMetadataReachedBackend:
-                            manualEnableRuntimeMetadata?.source ===
-                              "manual_session_enable" &&
-                            manualEnableRuntimeMetadata?.approval ===
-                              "manual" &&
-                            manualEnableRuntimeMetadata?.workspace_root ===
-                              workspace.rootPath &&
-                            manualEnableRuntimeBinding?.directory ===
-                              "capability-report" &&
-                            manualEnableRuntimeBinding?.skill ===
-                              SKILLS_RUNTIME_SKILL_NAME &&
-                            manualEnableRuntimeBinding?.registered_skill_directory ===
-                              summary.manualEnableSkillsRuntimeSkill
-                                ?.skillDirectory &&
-                            manualEnableRuntimeBinding?.source_draft_id ===
-                              "capdraft-fixture-capability-report" &&
-                            manualEnableRuntimeBinding?.source_verification_report_id ===
-                              "capver-fixture-capability-report",
-                          manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace:
-                            summary.manualEnableSkillsRuntimeTurnStart?.launch
-                              ?.clicked === true &&
-                            summary.manualEnableSkillsRuntimeTurnStart?.launch
-                              ?.registeredPanelVisible === true &&
-                            summary.manualEnableSkillsRuntimeTurnStart?.launch
-                              ?.enableButtonVisible === true &&
-                            summary.manualEnableSkillsRuntimeTurnStart?.launch
-                              ?.enableButtonDisabled === false,
-                          manualEnableSkillsRuntimeUsedAgentSession:
-                            typeof summary.manualEnableSkillsRuntimeTurnStart
-                              ?.backend?.sessionId === "string" &&
-                            summary.manualEnableSkillsRuntimeTurnStart.backend
-                              .sessionId.length > 0 &&
-                            typeof summary.manualEnableSkillsRuntimeTurnStart
-                              ?.backend?.turnId === "string" &&
-                            summary.manualEnableSkillsRuntimeTurnStart.backend
-                              .turnId.length > 0,
-                          manualEnableSkillsRuntimeSkillDirectoryPrepared:
-                            typeof summary.manualEnableSkillsRuntimeSkill
-                              ?.skillFilePath === "string" &&
-                            fs.existsSync(
-                              summary.manualEnableSkillsRuntimeSkill
-                                .skillFilePath,
-                            ),
-                          guiManualEnableSkillsRuntimeCompleted:
-                            summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.hasPrompt === true &&
-                            (summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.hasAssistantSummary === true ||
-                              summary.guiManualEnableSkillsRuntimeCompleted
-                                ?.hasDoneText === true) &&
-                            summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.textareaVisible === true &&
-                            summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.textareaDisabled === false &&
-                            summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.stopButtonVisible === false,
-                          readModelManualEnableSkillsRuntimeCompleted:
-                            summary.readModelManualEnableSkillsRuntimeCompleted
-                              ?.includesPrompt === true &&
-                            (summary.readModelManualEnableSkillsRuntimeCompleted
-                              ?.includesAssistantDone === true ||
-                              summary
-                                .readModelManualEnableSkillsRuntimeCompleted
-                                ?.includesAssistantSummary === true),
-                          readModelManualEnableSkillSearchObserved:
-                            summary.readModelManualEnableSkillsRuntimeCompleted
-                              ?.includesSkillSearchTool === true,
-                          readModelManualEnableSkillInvocationObserved:
-                            summary.readModelManualEnableSkillsRuntimeCompleted
-                              ?.includesSkillTool === true &&
-                            summary.readModelManualEnableSkillsRuntimeCompleted
-                              ?.includesSkillName === true,
-                          evidenceManualEnableSkillBodyReadObserved:
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.skillBodyReadObserved === true,
-                          evidenceManualEnableSkillGateObserved:
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.skillGateObserved === true &&
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.skillGateMode === "workspace_runtime_enable",
-                          evidenceManualEnableWorkspaceRuntimeEnableObserved:
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.skillGateWorkspaceRuntimeEnable === true &&
-                            summary.evidencePackManualEnableSkillsRuntime?.skillGateSourceAllowlist?.includes(
-                              SKILLS_RUNTIME_SKILL_NAME,
-                            ) === true,
-                          evidencePackManualEnableSkillSearchObserved:
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.hasSkillSearchSummary === true &&
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.searchQuery === SKILLS_RUNTIME_QUERY,
-                          evidencePackManualEnableSkillInvocationObserved:
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.hasSkillInvocationSummary === true &&
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.invocationSkillName ===
-                              SKILLS_RUNTIME_SKILL_NAME,
-                          manualEnableSkillSearchBeforeSkillInvocation:
-                            summary.evidencePackManualEnableSkillsRuntime
-                              ?.skillSearchBeforeSkillInvocation === true,
-                        }
+                      ? buildSkillsRuntimeScenarioAssertions({
+                          explicitSkillsRuntimeTurnStart,
+                          manualEnableRuntimeBinding,
+                          manualEnableRuntimeMetadata,
+                          manualEnableSkillsRuntimeTurnStart,
+                          skillsRuntimeTurnStart,
+                          summary,
+                          workspace,
+                        })
                       : isAnyExpertSkillsRuntimeScenario
-                        ? {
-                            ...(isExpertPanelSkillsRuntimeScenario
-                              ? {}
-                              : {
-                                  expertSkillsRuntimePromptReachedBackend:
-                                    expertSkillsRuntimeTurnStart?.inputText?.includes(
-                                      EXPERT_SKILLS_RUNTIME_PROMPT,
-                                    ) === true,
-                                  expertSkillsRuntimeMetadataReachedBackend:
-                                    (expertRuntimeMetadata?.expertId ===
-                                      EXPERT_SKILLS_RUNTIME_ID ||
-                                      expertRuntimeMetadata?.expert_id ===
-                                        EXPERT_SKILLS_RUNTIME_ID) &&
-                                    (expertHarnessMetadata?.expert_id ===
-                                      EXPERT_SKILLS_RUNTIME_ID ||
-                                      expertHarnessMetadata?.expertId ===
-                                        EXPERT_SKILLS_RUNTIME_ID) &&
-                                    expertHarnessSkillRefs.includes(
-                                      expectedExpertHarnessSkillRef,
-                                    ) === true,
-                                  expertDeclaredSkillRefsObserved:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.expertDeclaredObserved === true &&
-                                    summary.evidencePackExpertSkillsRuntime?.expertDeclaredSkillRefs?.includes(
-                                      EXPERT_SKILLS_RUNTIME_SKILL_REF,
-                                    ) === true,
-                                  expertSelectedSkillObserved:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.expertSelectedObserved === true &&
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.expertSelectedSkill ===
-                                      SKILLS_RUNTIME_SKILL_NAME,
-                                  expertInvokedSkillObserved:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.expertInvokedObserved === true &&
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.expertInvokedSkill ===
-                                      SKILLS_RUNTIME_SKILL_NAME,
-                                  guiExpertSkillsRuntimeSessionVisible:
-                                    summary.guiExpertSkillsRuntimeSessionVisible
-                                      ?.hasSessionTitle === true ||
-                                    summary.guiExpertSkillsRuntimeCompleted?.bodyText?.includes(
-                                      EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-                                    ) === true ||
-                                    summary.guiExpertSkillsRuntimeCompleted?.bodyText?.includes(
-                                      EXPERT_SKILLS_RUNTIME_TITLE,
-                                    ) === true,
-                                  readModelExpertSkillsRuntimeCompleted:
-                                    summary
-                                      .readModelExpertSkillsRuntimeCompleted
-                                      ?.includesPrompt === true &&
-                                    (summary
-                                      .readModelExpertSkillsRuntimeCompleted
-                                      ?.includesAssistantDone === true ||
-                                      summary
-                                        .readModelExpertSkillsRuntimeCompleted
-                                        ?.includesAssistantSummary === true),
-                                  readModelExpertSkillSearchObserved:
-                                    summary
-                                      .readModelExpertSkillsRuntimeCompleted
-                                      ?.includesSkillSearchTool === true,
-                                  readModelExpertSkillInvocationObserved:
-                                    summary
-                                      .readModelExpertSkillsRuntimeCompleted
-                                      ?.includesSkillTool === true &&
-                                    summary
-                                      .readModelExpertSkillsRuntimeCompleted
-                                      ?.includesSkillName === true,
-                                  evidenceExpertSkillBodyReadObserved:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.skillBodyReadObserved === true,
-                                  evidenceExpertSkillGateObserved:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.skillGateObserved === true &&
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.skillGateMode === "selected_skills",
-                                  evidencePackExpertSkillSearchObserved:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.hasSkillSearchSummary === true &&
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.searchQuery === SKILLS_RUNTIME_QUERY,
-                                  evidencePackExpertSkillInvocationObserved:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.hasSkillInvocationSummary === true &&
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.invocationSkillName ===
-                                      SKILLS_RUNTIME_SKILL_NAME,
-                                  expertSkillSearchBeforeSkillInvocation:
-                                    summary.evidencePackExpertSkillsRuntime
-                                      ?.skillSearchBeforeSkillInvocation ===
-                                    true,
-                                }),
-                            ...(isExpertPlazaSkillsRuntimeScenario ||
-                            isExpertPanelSkillsRuntimeScenario
-                              ? {
-                                  expertPlazaCatalogInjected:
-                                    summary.expertPlazaSkillsRuntimeCatalog
-                                      ?.expertId === EXPERT_SKILLS_RUNTIME_ID &&
-                                    summary.expertPlazaSkillsRuntimeCatalog?.skillRefs?.includes(
-                                      isExpertPanelSkillsRuntimeScenario
-                                        ? EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF
-                                        : EXPERT_SKILLS_RUNTIME_SKILL_REF,
-                                    ) === true &&
-                                    summary.expertPlazaSkillsRuntimeCatalog
-                                      ?.promptStarter ===
-                                      EXPERT_SKILLS_RUNTIME_PROMPT,
-                                  expertPlazaCardClicked:
-                                    summary.expertPlazaSkillsRuntimeLaunch
-                                      ?.clicked === true &&
-                                    summary.expertPlazaSkillsRuntimeLaunch
-                                      ?.plazaVisible === true &&
-                                    summary.expertPlazaSkillsRuntimeLaunch
-                                      ?.cardVisible === true &&
-                                    summary.expertPlazaSkillsRuntimeLaunch
-                                      ?.startButtonVisible === true,
-                                  expertPlazaAutoSendTurnStarted:
-                                    typeof summary.expertSkillsRuntimeTurnStart
-                                      ?.sessionId === "string" &&
-                                    summary.expertSkillsRuntimeTurnStart
-                                      .sessionId.length > 0 &&
-                                    summary.expertSkillsRuntimeTurnStart?.inputText?.includes(
-                                      EXPERT_SKILLS_RUNTIME_PROMPT,
-                                    ) === true,
-                                }
-                              : {}),
-                            ...(isExpertPanelSkillsRuntimeScenario
-                              ? {
-                                  expertPanelSkillPickerOpened:
-                                    summary.expertPanelSkillsRuntimeAddSkill
-                                      ?.pickerOpened?.dialogVisible === true,
-                                  expertPanelSkillAdded:
-                                    summary.expertPanelSkillsRuntimeAddSkill
-                                      ?.candidate?.addButtonVisible === true &&
-                                    summary.expertPanelSkillsRuntimeAddSkill
-                                      ?.candidate?.addButtonDisabled === false,
-                                  expertPanelAddedSkillVisible:
-                                    summary.expertPanelSkillsRuntimeAddSkill
-                                      ?.added?.baseSkillVisible === true &&
-                                    summary.expertPanelSkillsRuntimeAddSkill
-                                      ?.added?.addedSkillVisible === true,
-                                  expertPanelSecondTurnPromptReachedBackend:
-                                    expertPanelSkillsRuntimeTurnStart?.inputText ===
-                                    EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-                                  expertPanelSkillRefsOverrideReachedBackend:
-                                    summary.evidencePackExpertPanelSkillsRuntime?.expertDeclaredSkillRefs?.includes(
-                                      EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF,
-                                    ) === true,
-                                  expertPanelReadModelCompleted:
-                                    summary
-                                      .readModelExpertPanelSkillsRuntimeCompleted
-                                      ?.includesPrompt === true &&
-                                    (summary
-                                      .readModelExpertPanelSkillsRuntimeCompleted
-                                      ?.includesAssistantDone === true ||
-                                      summary
-                                        .readModelExpertPanelSkillsRuntimeCompleted
-                                        ?.includesAssistantSummary === true),
-                                  expertPanelEvidenceSkillBodyReadObserved:
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.skillBodyReadObserved === true,
-                                  expertPanelEvidenceSkillGateObserved:
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.skillGateObserved === true &&
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.skillGateMode === "selected_skills",
-                                  expertPanelEvidenceSkillSearchObserved:
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.hasSkillSearchSummary === true &&
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.searchQuery === SKILLS_RUNTIME_QUERY,
-                                  expertPanelEvidenceSkillInvocationObserved:
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.hasSkillInvocationSummary === true &&
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.invocationSkillName ===
-                                      SKILLS_RUNTIME_SKILL_NAME,
-                                  expertPanelSkillSearchBeforeSkillInvocation:
-                                    summary.evidencePackExpertPanelSkillsRuntime
-                                      ?.skillSearchBeforeSkillInvocation ===
-                                    true,
-                                  expertPanelEvidencePackExportedFromHarnessPanel:
-                                    summary.expertPanelEvidencePackGuiExport
-                                      ?.clicked?.clicked === true &&
-                                    summary.expertPanelEvidencePackGuiExport
-                                      ?.exported?.hasExportedPack === true,
-                                }
-                              : {}),
-                          }
+                        ? buildExpertSkillsRuntimeScenarioAssertions({
+                            expectedExpertHarnessSkillRef,
+                            expertHarnessMetadata,
+                            expertHarnessSkillRefs,
+                            expertPanelSkillsRuntimeTurnStart,
+                            expertRuntimeMetadata,
+                            expertSkillsRuntimeTurnStart,
+                            isExpertPanelSkillsRuntimeScenario,
+                            isExpertPlazaSkillsRuntimeScenario,
+                            summary,
+                          })
                         : hasCancelPhase
                           ? {
                               usedCurrentTurnCancel:
@@ -1710,6 +808,46 @@ export function buildScenarioAssertions(context) {
                                   summary.inputbarRichRestoreReadModelCanceled
                                     ?.forbiddenAssistantOutput === false,
                               }
+                            : isInputbarPendingSteerPopFrontResumeScenario
+                              ? buildPendingSteerPopFrontResumeScenarioAssertions(
+                                  context,
+                                )
+                            : isInputbarPendingSteerMultiQueueScenario
+                              ? {
+                                  inputbarPendingSteerActivePromptReachedBackend:
+                                    inputbarPendingSteerActiveTurnStart
+                                      ?.inputText ===
+                                    INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+                                  inputbarPendingSteerActiveOutputVisible:
+                                    summary.inputbarPendingSteerActiveStreaming
+                                      ?.stopButtonVisible === true &&
+                                    summary.inputbarPendingSteerActiveStreaming
+                                      ?.bodyText?.includes(
+                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+                                      ) === true,
+                                  inputbarPendingSteerRichInputDeferred:
+                                    summary.inputbarPendingSteerInputDefer
+                                      ?.afterFill?.promptVisibleInTextarea ===
+                                      true &&
+                                    summary.inputbarPendingSteerInputDefer
+                                      ?.clicked?.clicked === true,
+                                  inputbarPendingSteerMultipleQueued:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.queue?.multipleQueued === true,
+                                  inputbarPendingSteerQueueOrderPreserved:
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.queue?.orderPreserved === true,
+                                  inputbarPendingSteerSecondTextQueued:
+                                    summary.inputbarPendingSteerSecondInputDefer
+                                      ?.clicked?.clicked === true &&
+                                    summary.inputbarPendingSteerQueuedReadModel
+                                      ?.queue?.secondTextQueued === true,
+                                  inputbarPendingSteerRichPromptNotStartedBeforeCancel:
+                                    summary.inputbarPendingSteerBackendBeforeCancel
+                                      ?.richPromptStarted === false &&
+                                    summary.inputbarPendingSteerBackendBeforeCancel
+                                      ?.secondPromptStarted === false,
+                                }
                             : isInputbarPendingSteerRichRestoreScenario
                               ? {
                                   inputbarPendingSteerActivePromptReachedBackend:
@@ -1765,23 +903,12 @@ export function buildScenarioAssertions(context) {
                                   inputbarPendingSteerRichPromptNotStartedBeforeCancel:
                                     summary.inputbarPendingSteerBackendBeforeCancel
                                       ?.richPromptStarted === false,
-                                  inputbarPendingSteerUsedCurrentTurnCancel:
-                                    appServerRequestMethods.includes(
-                                      APP_SERVER_METHOD_SESSION_TURN_CANCEL,
-                                    ),
-                                  inputbarPendingSteerActiveBackendCanceled:
-                                    latestTurnCancel?.sessionId ===
-                                      inputbarPendingSteerActiveTurnStart
-                                        ?.sessionId &&
-                                    latestTurnCancel?.turnId ===
-                                      inputbarPendingSteerActiveTurnStart
-                                        ?.turnId &&
-                                    typeof latestTurnCancel?.turnId ===
-                                      "string" &&
-                                    latestTurnCancel.turnId.trim().length > 0,
+                                  inputbarPendingSteerQueuedRestoreClicked:
+                                    summary.inputbarPendingSteerStopClick
+                                      ?.clicked?.clicked === true,
                                   inputbarPendingSteerGuiCanceled:
                                     summary.inputbarPendingSteerGuiCanceled
-                                      ?.stopButtonVisible === false &&
+                                      ?.stopButtonVisible === true &&
                                     summary.inputbarPendingSteerGuiCanceled
                                       ?.textareaDisabled === false,
                                   inputbarPendingSteerTextRestored:

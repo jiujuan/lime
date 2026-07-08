@@ -19,6 +19,7 @@ import type {
   InputbarKnowledgePackSelection,
 } from "./Inputbar/types";
 import type { CreationMode } from "./types";
+import type { HomeRecoverySession } from "../home/homeSurfaceTypes";
 
 export type AgentI18nKey = keyof AgentI18nResource;
 
@@ -69,6 +70,8 @@ export interface EmptyStateProps extends SkillSelectionSourceProps {
   recentSessionSummary?: string | null;
   /** 最近会话恢复动作文案 */
   recentSessionActionLabel?: string;
+  /** 首页未完成会话恢复卡 */
+  homeRecoverySession?: HomeRecoverySession | null;
   /** 恢复最近一次会话上下文 */
   onResumeRecentSession?: () => void;
   /** 当前项目下可继续的会话列表 */

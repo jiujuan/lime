@@ -24,6 +24,7 @@ export type AppendThinkingToPartsFn = (
 export interface AgentStreamPreparedSendEnv {
   runtime: AgentRuntimeAdapter;
   ensureSession: (options?: {
+    targetSessionId?: string;
     skipSessionRestore?: boolean;
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;

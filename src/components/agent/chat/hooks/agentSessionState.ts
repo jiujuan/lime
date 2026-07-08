@@ -27,6 +27,7 @@ import {
 } from "../utils/threadTimelineView";
 import {
   mergeRuntimeSyncThreadItems,
+  hasTerminalDetailTimeline,
   normalizeAgentSessionDetailMergeMode,
   resolveAgentSessionTimelineMergeDecision,
   shouldPreserveDetachedLocalSnapshot,
@@ -159,10 +160,19 @@ export function hasActiveRuntimeTurn(options: {
     const readModelReportsRunning =
       normalizedThreadReadStatus === "running" ||
       normalizedProfileStatus === "running";
+    const readModelReportsQueued =
+      normalizedThreadReadStatus === "queued" ||
+      normalizedProfileStatus === "queued";
+    const readModelQueuedTurnsCount =
+      options.threadRead.queued_turns?.length ?? 0;
     const hasAuthoritativeReadModelStatus = Boolean(
       normalizedThreadReadStatus || normalizedProfileStatus,
     );
-    if (hasAuthoritativeReadModelStatus && !readModelReportsRunning) {
+    if (
+      hasAuthoritativeReadModelStatus &&
+      !readModelReportsRunning &&
+      !(readModelReportsQueued && readModelQueuedTurnsCount > 0)
+    ) {
       return false;
     }
     if (
@@ -172,20 +182,17 @@ export function hasActiveRuntimeTurn(options: {
     ) {
       return true;
     }
+    if (readModelReportsQueued && readModelQueuedTurnsCount > 0) {
+      return true;
+    }
     if (readModelReportsRunning) {
-      return false;
+      return Boolean(options.threadRead.active_turn_id?.trim());
     }
   } else if (normalizedThreadReadStatus === "running") {
     return true;
   }
 
-  if (
-    options.turns.some((turn) =>
-      hasRunningTurnRecordActivity(turn, {
-        staleRunningMs: Number.POSITIVE_INFINITY,
-      }),
-    )
-  ) {
+  if (options.turns.some((turn) => hasRunningTurnRecordActivity(turn))) {
     return true;
   }
 
@@ -431,6 +438,12 @@ export function buildHydratedAgentSessionSnapshot(
   const incomingItems = normalizeLegacyThreadItems(
     collectDetailThreadItems(detail),
   );
+  const hasIncomingTerminalTimeline = hasTerminalDetailTimeline({
+    thread_read: detail.thread_read,
+    turns: incomingTurns,
+  });
+  const shouldReconcileTerminalRuntimeDetail =
+    hasIncomingTerminalTimeline && normalizedDetailMergeMode !== "history_hydrate";
   const mayPreserveExistingTimelineBySession =
     effectiveCurrentSessionId === topicId ||
     (effectiveCurrentSessionId === null &&
@@ -444,8 +457,10 @@ export function buildHydratedAgentSessionSnapshot(
     {
       compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
       includeTimelineFallback:
+        shouldReconcileTerminalRuntimeDetail ||
         !mayPreserveExistingTimelineBySession ||
         effectiveCurrentMessages.length === 0,
+      includeTimelineFallbackUsers: shouldReconcileTerminalRuntimeDetail,
     },
   );
   const hydratedMessagesForCompatibility =
@@ -453,6 +468,7 @@ export function buildHydratedAgentSessionSnapshot(
       ? hydrateSessionDetailMessages(detail, topicId, {
           compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
           includeTimelineFallback: true,
+          includeTimelineFallbackUsers: shouldReconcileTerminalRuntimeDetail,
         })
       : hydratedMessagesForCurrentMode;
   const timelineMergeDecision = resolveAgentSessionTimelineMergeDecision({
@@ -506,6 +522,10 @@ export function buildHydratedAgentSessionSnapshot(
         ? mergeHydratedMessagesWithLocalState(
             effectiveCurrentMessages,
             hydratedMessages,
+            {
+              preferHydratedAssistantOutput:
+                shouldReconcileTerminalRuntimeDetail,
+            },
           )
         : hydratedMessages;
   const nextMessagesWithThreadReasoning = mergeThreadItemReasoningIntoMessages(

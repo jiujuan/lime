@@ -158,15 +158,21 @@ mod tests {
 
     #[test]
     fn rejects_shortcuts_that_would_leave_half_installed_packs_readable() {
-        assert!(StylePackInstallStatus::Discovered
-            .ensure_transition_to(StylePackInstallStatus::Enabled)
-            .is_err());
-        assert!(StylePackInstallStatus::Failed
-            .ensure_transition_to(StylePackInstallStatus::Enabled)
-            .is_err());
-        assert!(StylePackInstallStatus::Uninstalled
-            .ensure_transition_to(StylePackInstallStatus::Enabled)
-            .is_err());
+        assert!(
+            StylePackInstallStatus::Discovered
+                .ensure_transition_to(StylePackInstallStatus::Enabled)
+                .is_err()
+        );
+        assert!(
+            StylePackInstallStatus::Failed
+                .ensure_transition_to(StylePackInstallStatus::Enabled)
+                .is_err()
+        );
+        assert!(
+            StylePackInstallStatus::Uninstalled
+                .ensure_transition_to(StylePackInstallStatus::Enabled)
+                .is_err()
+        );
     }
 
     #[test]

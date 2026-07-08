@@ -153,6 +153,10 @@ export const SOUL_STYLE_SCENARIO = "soul-style";
 export const INPUTBAR_RICH_RESTORE_SCENARIO = "inputbar-rich-restore";
 export const INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO =
   "inputbar-pending-steer-rich-restore";
+export const INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO =
+  "inputbar-pending-steer-multi-queue";
+export const INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO =
+  "inputbar-pending-steer-pop-front-resume";
 export const NEWS_PROMPT = "整理今天的国际新闻";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
@@ -161,6 +165,8 @@ export const INPUTBAR_PENDING_STEER_ACTIVE_PROMPT =
   "请持续输出一段用于 pending steer fixture 的长回复。";
 export const INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT =
   "pending steer active turn 正在输出，后续 rich draft 应先进入 queue。";
+export const INPUTBAR_PENDING_STEER_SECOND_PROMPT =
+  "第二个 pending steer 应排在 rich draft 之后。";
 export const INPUTBAR_RICH_RESTORE_PROMPT =
   "请结合这个截图、文件和 Capability Report 技能，先不要输出正文。";
 export const INPUTBAR_RICH_RESTORE_PATH_NAME =
@@ -501,14 +507,37 @@ export const INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS = [
   "inputbarPendingSteerQueuedRichTextElementsPreserved",
   "inputbarPendingSteerQueuedRichSkillPreserved",
   "inputbarPendingSteerRichPromptNotStartedBeforeCancel",
-  "inputbarPendingSteerUsedCurrentTurnCancel",
-  "inputbarPendingSteerActiveBackendCanceled",
+  "inputbarPendingSteerQueuedRestoreClicked",
   "inputbarPendingSteerGuiCanceled",
   "inputbarPendingSteerTextRestored",
   "inputbarPendingSteerImageRestored",
   "inputbarPendingSteerPathRestored",
   "inputbarPendingSteerSkillRestored",
   "inputbarPendingSteerActiveAssistantOutputKept",
+];
+export const INPUTBAR_PENDING_STEER_MULTI_QUEUE_ASSERTION_KEYS = [
+  "inputbarPendingSteerActivePromptReachedBackend",
+  "inputbarPendingSteerActiveOutputVisible",
+  "inputbarPendingSteerRichInputDeferred",
+  "inputbarPendingSteerMultipleQueued",
+  "inputbarPendingSteerQueueOrderPreserved",
+  "inputbarPendingSteerSecondTextQueued",
+  "inputbarPendingSteerRichPromptNotStartedBeforeCancel",
+];
+export const INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_ASSERTION_KEYS = [
+  "inputbarPendingSteerActivePromptReachedBackend",
+  "inputbarPendingSteerActiveOutputVisible",
+  "inputbarPendingSteerMultipleQueued",
+  "inputbarPendingSteerQueueOrderPreserved",
+  "inputbarPendingSteerPopFrontGuiPromoteClicked",
+  "inputbarPendingSteerPopFrontUsedCurrentCancel",
+  "inputbarPendingSteerPopFrontBackendCanceled",
+  "inputbarPendingSteerPopFrontUsedCurrentResume",
+  "inputbarPendingSteerPopFrontRichStartedBackend",
+  "inputbarPendingSteerPopFrontRichDequeued",
+  "inputbarPendingSteerPopFrontSecondReindexed",
+  "inputbarPendingSteerPopFrontGuiHydratedSecondQueue",
+  "inputbarPendingSteerPopFrontGuiInputReady",
 ];
 export const RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS = [
   "rightSurfaceVisualMatrixRequestedThroughAppServer",

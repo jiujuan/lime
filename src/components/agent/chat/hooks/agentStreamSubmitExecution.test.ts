@@ -16,6 +16,7 @@ import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
 import { executeAgentStreamSubmit } from "./agentStreamSubmitExecution";
+import { MODEL_SELECTION_REQUIRED_ERROR_MESSAGE } from "../utils/agentRuntimeErrorPresentation";
 
 const { getModelRegistryMock, setAgentRuntimeObjectiveMock } = vi.hoisted(
   () => ({
@@ -94,6 +95,83 @@ describe("agentStreamSubmitExecution", () => {
     activityLogger.clear();
     vi.clearAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it("provider/model 不完整时应在创建会话和 turn/start 前直接失败", async () => {
+    const submitOp = vi.fn(async () => {});
+    const ensureSession = vi.fn(async () => "session-should-not-create");
+    const runtime = {
+      listenToTurnEvents: vi.fn(async () => vi.fn()),
+      submitOp,
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await expect(
+      executeAgentStreamSubmit({
+        runtime,
+        ensureSession,
+        attemptSilentTurnRecovery: async () => false,
+        sessionIdRef: { current: null } as MutableRefObject<string | null>,
+        getWorkspaceIdForSubmit: () => "workspace-1",
+        getSyncedSessionExecutionStrategy: () => "react",
+        getSyncedSessionRecentPreferences: () => null,
+        effectiveAccessMode: "current",
+        content: "只回答绿灯",
+        images: [],
+        skipUserMessage: false,
+        expectingQueue: false,
+        effectiveProviderType: "lime-hub",
+        effectiveModel: "",
+        effectiveExecutionStrategy: "react",
+        eventName: "event-missing-model",
+        requestTurnId: "turn-missing-model",
+        requestState,
+        assistantMsgId: "assistant-missing-model",
+        pendingTurnKey: "pending-turn-missing-model",
+        pendingItemKey: "pending-item-missing-model",
+        warnedKeysRef: { current: new Set<string>() },
+        actionLoggedKeys: new Set<string>(),
+        toolLogIdByToolId: new Map<string, string>(),
+        toolStartedAtByToolId: new Map<string, number>(),
+        toolNameByToolId: new Map<string, string>(),
+        callbacks: {
+          activateStream: vi.fn(),
+          isStreamActivated: () => false,
+          clearOptimisticItem: () => {},
+          clearOptimisticTurn: () => {},
+          disposeListener: () => {},
+          removeQueuedDraftMessages: () => {},
+          clearActiveStreamIfMatch: () => false,
+          upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+          removeQueuedTurnsFromProjection: () => {},
+          registerListener: vi.fn(),
+        },
+        sounds: {
+          playToolcallSound: () => {},
+          playTypewriterSound: () => {},
+        },
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+        setMessages: noopDispatch<Message[]>(),
+        setIsSending: noopDispatch<boolean>(),
+        setPendingActions: noopDispatch<ActionRequired[]>(),
+        setThreadItems: noopDispatch<AgentThreadItem[]>(),
+        setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+        setCurrentTurnId: noopDispatch<string | null>(),
+        setExecutionRuntime:
+          noopDispatch<AsterSessionExecutionRuntime | null>(),
+      }),
+    ).rejects.toThrow(MODEL_SELECTION_REQUIRED_ERROR_MESSAGE);
+
+    expect(ensureSession).not.toHaveBeenCalled();
+    expect(runtime.listenToTurnEvents).not.toHaveBeenCalled();
+    expect(submitOp).not.toHaveBeenCalled();
   });
 
   it("应串起 submit context、listener 绑定与 submitOp", async () => {
@@ -175,7 +253,7 @@ describe("agentStreamSubmitExecution", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         registerListener,
       },
       sounds: {
@@ -225,6 +303,107 @@ describe("agentStreamSubmitExecution", () => {
     });
     expect(activateStream).toHaveBeenCalled();
     expect(requestState.requestLogId).toBeTruthy();
+  });
+
+  it("存在 targetSessionId 时应把 submit 绑定到指定会话", async () => {
+    const unlisten = vi.fn();
+    const submitOp = vi.fn(async () => {});
+    const ensureSession = vi.fn(async () => "session-materialized");
+    const registerListener = vi.fn();
+    const activateStream = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async () => unlisten),
+      submitOp,
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await executeAgentStreamSubmit({
+      runtime,
+      ensureSession,
+      attemptSilentTurnRecovery: async () => false,
+      sessionIdRef: {
+        current: "session-previous",
+      } as MutableRefObject<string | null>,
+      getWorkspaceIdForSubmit: () => "workspace-1",
+      getSyncedSessionExecutionStrategy: () => "react",
+      getSyncedSessionRecentPreferences: () => null,
+      effectiveAccessMode: "read-only",
+      content: "从草稿进入正式会话",
+      images: [],
+      skipUserMessage: false,
+      expectingQueue: false,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      effectiveExecutionStrategy: "react",
+      targetSessionId: "session-materialized",
+      skipSessionRestore: true,
+      skipSessionStartHooks: true,
+      skipPreSubmitResume: true,
+      eventName: "event-materialized",
+      requestTurnId: "turn-materialized",
+      requestState,
+      assistantMsgId: "assistant-materialized",
+      pendingTurnKey: "pending-turn-materialized",
+      pendingItemKey: "pending-item-materialized",
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream,
+        isStreamActivated: () => false,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => false,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnsFromProjection: () => {},
+        registerListener,
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+        parts,
+      setMessages: noopDispatch<Message[]>(),
+      setIsSending: noopDispatch<boolean>(),
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+    });
+
+    expect(ensureSession).toHaveBeenCalledWith({
+      targetSessionId: "session-materialized",
+      skipSessionRestore: true,
+      skipSessionStartHooks: true,
+    });
+    expect(runtime.listenToTurnEvents).toHaveBeenCalledWith(
+      "event-materialized",
+      expect.any(Function),
+    );
+    expect(submitOp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-materialized",
+        eventName: "event-materialized",
+        turnId: "turn-materialized",
+        text: "从草稿进入正式会话",
+      }),
+    );
+    expect(activateStream).toHaveBeenCalledWith(
+      "session-materialized",
+      expect.anything(),
+    );
   });
 
   it("图片输入不满足 selected model input_modalities 时不应调用 runtime submitOp", async () => {
@@ -305,7 +484,7 @@ describe("agentStreamSubmitExecution", () => {
           removeQueuedDraftMessages: () => {},
           clearActiveStreamIfMatch: () => false,
           upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-          removeQueuedTurnState: () => {},
+          removeQueuedTurnsFromProjection: () => {},
           registerListener,
         },
         sounds: {
@@ -434,7 +613,7 @@ describe("agentStreamSubmitExecution", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         registerListener,
       },
       sounds: {
@@ -571,7 +750,7 @@ describe("agentStreamSubmitExecution", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
         registerListener,
       },
       sounds: {

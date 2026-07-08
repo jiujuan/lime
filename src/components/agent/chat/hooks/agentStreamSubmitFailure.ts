@@ -37,7 +37,6 @@ interface HandleSubmitFailureOptions {
   setIsSending: Dispatch<SetStateAction<boolean>>;
   clearActiveStreamIfMatch: (eventName: string) => boolean;
   disposeListener: () => void;
-  removeQueuedTurnState: (queuedTurnIds: string[]) => void;
   markOptimisticFailure: (errorMessage: string) => void;
   soulCopy?: SoulInteractionCopy;
 }
@@ -60,7 +59,6 @@ export function handleAgentStreamSubmitFailure(
     setIsSending,
     clearActiveStreamIfMatch,
     disposeListener,
-    removeQueuedTurnState,
     markOptimisticFailure,
     soulCopy,
   } = options;
@@ -94,9 +92,6 @@ export function handleAgentStreamSubmitFailure(
   }
 
   markOptimisticFailure(errMsg);
-  removeQueuedTurnState(
-    requestState.queuedTurnId ? [requestState.queuedTurnId] : [],
-  );
   setMessages((prev) =>
     prev.map((msg) =>
       msg.id === assistantMsgId

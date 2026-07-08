@@ -21,24 +21,31 @@ export interface AgentRuntimeExportClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeEvidenceExportAppServerClient;
 }
+export interface AgentRuntimeExportOptions {
+  locale?: string | null;
+}
 export declare function createExportClient({
   appServerClient,
   invokeCommand,
 }?: AgentRuntimeExportClientDeps): {
   exportAgentRuntimeAnalysisHandoff: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeAnalysisHandoff>;
   exportAgentRuntimeEvidencePack: (
     sessionId: string,
   ) => Promise<AgentRuntimeEvidencePack>;
   exportAgentRuntimeHandoffBundle: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeHandoffBundle>;
   exportAgentRuntimeReplayCase: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeReplayCase>;
   exportAgentRuntimeReviewDecisionTemplate: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeReviewDecisionTemplate>;
   saveAgentRuntimeReviewDecision: (
     request: AgentRuntimeSaveReviewDecisionRequest,
@@ -46,18 +53,22 @@ export declare function createExportClient({
 };
 export declare const exportAgentRuntimeAnalysisHandoff: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeAnalysisHandoff>,
   exportAgentRuntimeEvidencePack: (
     sessionId: string,
   ) => Promise<AgentRuntimeEvidencePack>,
   exportAgentRuntimeHandoffBundle: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeHandoffBundle>,
   exportAgentRuntimeReplayCase: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeReplayCase>,
   exportAgentRuntimeReviewDecisionTemplate: (
     sessionId: string,
+    options?: AgentRuntimeExportOptions,
   ) => Promise<AgentRuntimeReviewDecisionTemplate>,
   saveAgentRuntimeReviewDecision: (
     request: AgentRuntimeSaveReviewDecisionRequest,

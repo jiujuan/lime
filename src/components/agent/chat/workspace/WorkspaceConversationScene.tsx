@@ -412,6 +412,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   recentSessionActionLabel?: ComponentProps<
     typeof EmptyState
   >["recentSessionActionLabel"];
+  homeRecoverySession?: ComponentProps<
+    typeof EmptyState
+  >["homeRecoverySession"];
   handleResumeRecentSession?: ComponentProps<
     typeof EmptyState
   >["onResumeRecentSession"];
@@ -612,6 +615,7 @@ export function WorkspaceConversationScene({
   recentSessionTitle,
   recentSessionSummary,
   recentSessionActionLabel,
+  homeRecoverySession,
   handleResumeRecentSession,
   projectConversationGroups,
   handleOpenProjectConversation,
@@ -740,6 +744,7 @@ export function WorkspaceConversationScene({
     recentSessionTitle,
     recentSessionSummary,
     recentSessionActionLabel,
+    homeRecoverySession,
     onResumeRecentSession: handleResumeRecentSession,
     projectConversationGroups,
     onOpenProjectConversation: handleOpenProjectConversation,

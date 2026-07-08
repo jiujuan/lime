@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "status": "current",
   "owner": "internal/roadmap/test/clawstream/scenario-ledger.md",
-  "updatedAt": "2026-07-07",
+  "updatedAt": "2026-07-08",
   "layerDefinitions": {
     "event-item": "规范化 Runtime Event / Thread / Turn / Item 事件项",
     "projection-oracle": "Projection / ReadModel / ContentPart / render snapshot oracle",
@@ -11,15 +11,54 @@
   },
   "skeletonDefinition": {
     "mode": "finish-skeleton-before-detail",
-    "ledgerColumns": ["scenarioId", "codexSource", "standardEventItem", "projectionGuiOracle", "cleanupTarget", "status"],
-    "requiredScenarioFields": ["id", "priority", "family", "status", "requiredLayers", "nextDetail"],
-    "requiredBatchFields": ["id", "priority", "family", "evidenceGate", "detailOrder", "verificationCommands"]
+    "ledgerColumns": [
+      "scenarioId",
+      "codexSource",
+      "standardEventItem",
+      "projectionGuiOracle",
+      "cleanupTarget",
+      "status"
+    ],
+    "requiredScenarioFields": [
+      "id",
+      "priority",
+      "family",
+      "status",
+      "requiredLayers",
+      "nextDetail"
+    ],
+    "requiredBatchFields": [
+      "id",
+      "priority",
+      "family",
+      "evidenceGate",
+      "detailOrder",
+      "verificationCommands"
+    ]
   },
   "governanceClassification": {
-    "current": ["Runtime Event -> Thread / Turn / Item materialization", "Projection / ReadModel / ContentPart", "GUI / Electron current fixture evidence"],
-    "compat": ["无 itemId / phase / sequence 的 legacy delta 只允许 fail-closed", "历史 Message.content hydrate 兜底不作为新证据"],
-    "deprecated": ["timeline 二次重建完整过程流", "overlay 全局助手文本缓冲", "legacy update_plan UI owner", "多套 input restore fallback"],
-    "dead": ["生产 mock fallback", "agent_runtime_* 生产 surface", "旧 Tauri wrapper", "自然语言 lifecycle regex", "无 turnId terminal fallback"]
+    "current": [
+      "Runtime Event -> Thread / Turn / Item materialization",
+      "Projection / ReadModel / ContentPart",
+      "GUI / Electron current fixture evidence"
+    ],
+    "compat": [
+      "无 itemId / phase / sequence 的 legacy delta 只允许 fail-closed",
+      "历史 Message.content hydrate 兜底不作为新证据"
+    ],
+    "deprecated": [
+      "timeline 二次重建完整过程流",
+      "overlay 全局助手文本缓冲",
+      "legacy update_plan UI owner",
+      "多套 input restore fallback"
+    ],
+    "dead": [
+      "生产 mock fallback",
+      "agent_runtime_* 生产 surface",
+      "旧 Tauri wrapper",
+      "自然语言 lifecycle regex",
+      "无 turnId terminal fallback"
+    ]
   },
   "executionBatches": [
     {
@@ -49,7 +88,8 @@
         "npx vitest run \"src/components/agent/chat/components/streamingProjectionGuard.unit.test.ts\" \"src/components/agent/chat/components/MessageList.runtimeStatus.test.tsx\" \"src/components/agent/chat/components/MessageList.streamingTurns.test.tsx\"",
         "npx vitest run \"src/lib/api/queuedTurn.test.ts\"",
         "cargo test --manifest-path \"lime-rs/Cargo.toml\" -p app-server queued_turn_read_model_reindexes_after_pop_front_resume -- --nocapture",
-        "npm run smoke:claw-chat-current-fixture -- --scenario inputbar-pending-steer-rich-restore --timeout-ms 180000"
+        "npm run smoke:claw-chat-current-fixture -- --scenario inputbar-pending-steer-rich-restore --timeout-ms 180000",
+        "npm run smoke:claw-chat-current-fixture -- --scenario inputbar-pending-steer-pop-front-resume --timeout-ms 240000"
       ],
       "scenarioIds": [
         "startup-prewarm-first-output",
@@ -335,8 +375,13 @@
       "priority": "P0",
       "family": "首字、reasoning、terminal、输入恢复",
       "status": "covered-electron",
-      "requiredLayers": ["event-item", "projection-oracle", "governance-guard", "gui-electron"],
-      "nextDetail": "已补 failed-after-answer 与 canceled-after-answer Electron current fixture；下一步补真实旧 terminal owner 投影细节，并删除 final_done grace timer 旧路径。"
+      "requiredLayers": [
+        "event-item",
+        "projection-oracle",
+        "governance-guard",
+        "gui-electron"
+      ],
+      "nextDetail": "已补 failed-after-answer 与 canceled-after-answer Electron current fixture；completion plan 命名与 fixture terminal summary 已改回 current turn_completed/turn.completed 口径，不再把 legacy final_done 算作 current 成功终态；下一步补真实旧 terminal owner 投影细节，并确认 final_done / grace timer 旧路径没有其它生产入口。"
     },
     {
       "id": "inputbar-restore-matrix",
@@ -344,7 +389,7 @@
       "family": "首字、reasoning、terminal、输入恢复",
       "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 packaged dist pending steer rich restore 和 restore hydrate oracle。"
+      "nextDetail": "packaged rich restore、multi queue、pop-front resume hydrate 与 GUI 一键 product promote/cancel/resume 已补；inputbar-pending-steer fixture 已拆成 scenario facade、GUI action helper 与 read-model helper；EmptyStateComposerPanel text-only restore fallback、AgentChatWorkspace 父级 text/path-only 预恢复 fallback、stop restore 的 getSessionReadModel optional runtime fallback、stop restore queued draft 本地队列裁剪、explicit remove/promote 本地队列裁剪、submit failure 与 terminal side-effect 本地队列删除、queue event 本地 position 重排、Hook 内联 queued turn projection helper 已删除并加 source guard；下一步补 queue / steer / draft 并行状态 inventory。"
     },
     {
       "id": "pending-steer-queue",
@@ -352,7 +397,7 @@
       "family": "首字、reasoning、terminal、输入恢复",
       "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 Electron 多 pending steer 证据和 packaged dist pending steer rich restore evidence。"
+      "nextDetail": "inputbar-pending-steer-pop-front-resume packaged Gate B 与 product-current GUI 一键 promote/cancel/resume 已通过；fixture 已拆成 scenario facade、GUI action helper 与 read-model helper；stop restore 的 getSessionReadModel optional runtime fallback、stop restore queued draft 本地队列裁剪、explicit remove/promote 本地队列裁剪、submit failure 与 terminal side-effect 本地队列删除、queue event 本地 position 重排、Hook 内联 queued turn projection helper 已删除并加 source guard；下一步继续清理 queue / steer / draft 旧 fallback inventory。"
     },
     {
       "id": "cancel-then-continue",
@@ -360,14 +405,19 @@
       "family": "首字、reasoning、terminal、输入恢复",
       "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 stale terminal projection oracle，避免只靠 Electron happy path。"
+      "nextDetail": "Electron stop helper 已要求可见 assistant 输出与 running status 同屏后再点击；下一步补 stale terminal projection oracle，避免只靠 Electron happy path。"
     },
     {
       "id": "stale-terminal-does-not-stop-new-turn",
       "priority": "P0",
       "family": "首字、reasoning、terminal、输入恢复",
       "status": "covered-electron",
-      "requiredLayers": ["event-item", "projection-oracle", "governance-guard", "gui-electron"],
+      "requiredLayers": [
+        "event-item",
+        "projection-oracle",
+        "governance-guard",
+        "gui-electron"
+      ],
       "nextDetail": "已补 terminal-stale-guard Electron current 骨架；下一步把旧 terminal owner 投影扩到真实 event 注入后再删除无 turnId terminal fallback。"
     },
     {
@@ -376,7 +426,7 @@
       "family": "首字、reasoning、terminal、输入恢复",
       "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 status item owner / stale terminal projection oracle，确保 completed 后只清 running 不删输出。"
+      "nextDetail": "cancel/cancel-then-continue stop 前已要求可见 assistant 输出与 running status 同屏，避免首字前 loading 误作证据；下一步补 status item owner / stale terminal projection oracle，确保 completed 后只清 running 不删输出。"
     },
     {
       "id": "no-natural-language-lifecycle-regex",
@@ -719,7 +769,11 @@
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
       "status": "missing",
-      "requiredLayers": ["projection-oracle", "gui-electron", "governance-guard"],
+      "requiredLayers": [
+        "projection-oracle",
+        "gui-electron",
+        "governance-guard"
+      ],
       "nextDetail": "建立 markdown headings/table/file link/code block/CJK wrap snapshot。"
     },
     {
@@ -735,7 +789,11 @@
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
       "status": "missing",
-      "requiredLayers": ["projection-oracle", "gui-electron", "governance-guard"],
+      "requiredLayers": [
+        "projection-oracle",
+        "gui-electron",
+        "governance-guard"
+      ],
       "nextDetail": "建立 resize 后 MessageList/Inputbar/right surface 锚定 snapshot。"
     },
     {
@@ -767,7 +825,11 @@
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
       "status": "covered-electron",
-      "requiredLayers": ["projection-oracle", "gui-electron", "governance-guard"],
+      "requiredLayers": [
+        "projection-oracle",
+        "gui-electron",
+        "governance-guard"
+      ],
       "nextDetail": "沉淀稳定 screenshot baseline，不只检查 rootVisible。"
     }
   ]

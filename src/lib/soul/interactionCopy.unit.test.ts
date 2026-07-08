@@ -10,7 +10,7 @@ import {
 } from "./interactionCopy";
 
 const LOCALES = ["zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR"] as const;
-const REQUIRED_NEUTRAL_KEYS = [
+const REQUIRED_COPY_KEYS = [
   "agentChat.soulInteraction.neutral.preparing.title",
   "agentChat.soulInteraction.neutral.preparing.detail",
   "agentChat.soulInteraction.neutral.preparing.checkpoints.0",
@@ -28,10 +28,35 @@ const REQUIRED_NEUTRAL_KEYS = [
   "agentChat.soulInteraction.neutral.waitingRuntime.checkpoints.2",
   "agentChat.soulInteraction.neutral.waitingRuntime.checkpoints.3",
   "agentChat.soulInteraction.neutral.initialDispatch.waiting",
-  "agentChat.soulInteraction.neutral.subagents.readyTitle",
-  "agentChat.soulInteraction.neutral.subagents.readyContent",
-  "agentChat.soulInteraction.neutral.subagents.preparingContent",
-  "agentChat.soulInteraction.neutral.failure.prefix",
+  "agentChat.collaboration.runtime.readyTitle",
+  "agentChat.collaboration.runtime.readyContent",
+  "agentChat.collaboration.runtime.preparingContent",
+  "agentChat.collaboration.runtime.defaultTeamLabel",
+  "agentChat.collaboration.runtime.memberFallbackLabel",
+  "agentChat.collaboration.runtime.memberFallbackSummary",
+  "agentChat.collaboration.runtime.memberOverflow",
+  "agentChat.collaboration.runtime.memberPlanLine",
+  "agentChat.collaboration.runtime.readyLeadFallback",
+  "agentChat.collaboration.runtime.readyTailFallback",
+  "agentChat.collaboration.runtime.summaryLine",
+  "agentChat.collaboration.runtime.planIntro",
+  "agentChat.collaboration.runtime.readyDetailFallback",
+  "agentChat.collaboration.runtime.readyCheckpoint.currentConfig",
+  "agentChat.collaboration.runtime.readyCheckpoint.assignedCount",
+  "agentChat.collaboration.runtime.readyCheckpoint.syncProgress",
+  "agentChat.collaboration.runtime.waitingTitle",
+  "agentChat.collaboration.runtime.waitingDetailFallback",
+  "agentChat.collaboration.runtime.waitingCheckpoint.firstPlanFallback",
+  "agentChat.collaboration.runtime.waitingCheckpoint.starting",
+  "agentChat.collaboration.runtime.failedTitle",
+  "agentChat.collaboration.runtime.failedDetailFallback",
+  "agentChat.collaboration.runtime.failedContent",
+  "agentChat.collaboration.runtime.formingTitle",
+  "agentChat.collaboration.runtime.formingDetail",
+  "agentChat.collaboration.runtime.formingCheckpoint.intent",
+  "agentChat.collaboration.runtime.formingCheckpoint.prepare",
+  "agentChat.collaboration.runtime.formingCheckpoint.waiting",
+  "agentChat.runtime.failure.prefix",
 ] as const;
 
 function allDescriptors(
@@ -111,7 +136,7 @@ describe("resolveSoulInteractionCopy", () => {
       riskLevel: "high",
     });
     expect(copy.descriptors.failurePrefix).toMatchObject({
-      key: "soulInteraction.neutral.failure.prefix",
+      key: "runtime.failure.prefix",
       toneVariant: "neutral",
       profileId: "calm_professional_partner",
       riskLevel: "high",
@@ -132,14 +157,21 @@ describe("resolveSoulInteractionCopy", () => {
       expect.arrayContaining([
         "soulInteraction.neutral.preparing.title",
         "soulInteraction.neutral.waitingRuntime.title",
-        "soulInteraction.neutral.subagents.readyContent",
+        "collaboration.runtime.readyContent",
+        "runtime.failure.prefix",
       ]),
     );
     expect(
-      allDescriptors(descriptors).every((item) =>
-        item.key.startsWith("soulInteraction.neutral."),
+      allDescriptors(descriptors).filter((item) =>
+        item.key.startsWith("soulInteraction."),
       ),
-    ).toBe(true);
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "soulInteraction.neutral.preparing.title",
+        }),
+      ]),
+    );
     expect(descriptors.waitingRuntimeTitle).toMatchObject({
       toneVariant: "cool_confident",
       profileId: "cool_confident_operator",
@@ -157,7 +189,7 @@ describe("resolveSoulInteractionCopy", () => {
 
     expect(copy.subagentsReadyContent("内容团队")).toContain("内容团队");
     expect(copy.descriptors.subagentsReadyContent("内容团队")).toMatchObject({
-      key: "soulInteraction.neutral.subagents.readyContent",
+      key: "collaboration.runtime.readyContent",
       values: { teamLabel: "内容团队" },
       toneVariant: "warm_supportive",
       profileId: "warm_supportive_companion",
@@ -177,7 +209,7 @@ describe("resolveSoulInteractionCopy", () => {
           "utf8",
         ),
       ) as Record<string, unknown>;
-      for (const key of REQUIRED_NEUTRAL_KEYS) {
+      for (const key of REQUIRED_COPY_KEYS) {
         expect(resource[key], `${locale} missing ${key}`).toBeTypeOf("string");
       }
       expect(

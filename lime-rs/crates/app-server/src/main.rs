@@ -82,20 +82,32 @@ fn parse_args() -> anyhow::Result<CliConfig> {
 async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
     let initialized = initialize_database(config)?;
     let db = initialized.db;
-    let _image_task_worker_scheduler = app_server::spawn_image_task_worker_scheduler(db.clone());
+    let sidecar_store = initialized
+        .storage_roots
+        .as_ref()
+        .map(|storage_roots| {
+            SidecarStore::new(&storage_roots.sidecar_root)
+                .map(Arc::new)
+                .map_err(|error| anyhow::anyhow!("failed to initialize sidecar store: {error}"))
+        })
+        .transpose()?;
+    let _image_task_worker_scheduler =
+        app_server::spawn_image_task_worker_scheduler(db.clone(), sidecar_store.clone());
     let data_root = initialized
         .storage_roots
         .as_ref()
         .map(|storage_roots| storage_roots.data_root.clone());
-    let app_data_source: Arc<dyn AppDataSource> = Arc::new(
-        match data_root {
-            Some(data_root) => {
-                LocalAppDataSource::initialize_with_db_and_data_root(db.clone(), data_root).await
-            }
-            None => LocalAppDataSource::initialize_with_db(db.clone()).await,
+    let mut app_data_source = match data_root {
+        Some(data_root) => {
+            LocalAppDataSource::initialize_with_db_and_data_root(db.clone(), data_root).await
         }
-        .map_err(|error| anyhow::anyhow!("failed to initialize local app data source: {error}"))?,
-    );
+        None => LocalAppDataSource::initialize_with_db(db.clone()).await,
+    }
+    .map_err(|error| anyhow::anyhow!("failed to initialize local app data source: {error}"))?;
+    if let Some(sidecar_store) = sidecar_store.clone() {
+        app_data_source = app_data_source.with_sidecar_store(sidecar_store);
+    }
+    let app_data_source: Arc<dyn AppDataSource> = Arc::new(app_data_source);
     let capability_source = config
         .app_policy_path
         .as_deref()
@@ -143,14 +155,12 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
                     &storage_roots.sidecar_root,
                 ),
             ))
-            .with_output_snapshot_store(Arc::new(FilesystemOutputSnapshotStore::with_sidecar_root(
-                &storage_roots.sidecar_root,
-            )))
-            .with_sidecar_store(Arc::new(
-                SidecarStore::new(&storage_roots.sidecar_root).map_err(|error| {
-                    anyhow::anyhow!("failed to initialize sidecar store: {error}")
-                })?,
+            .with_output_snapshot_store(Arc::new(
+                FilesystemOutputSnapshotStore::with_sidecar_root(&storage_roots.sidecar_root),
             ));
+        if let Some(sidecar_store) = sidecar_store.clone() {
+            runtime = runtime.with_sidecar_store(sidecar_store);
+        }
         let event_log_writer = EventLogWriter::new(&storage_roots.event_log_root)
             .map_err(|error| anyhow::anyhow!("failed to initialize event log writer: {error}"))?;
         let trace_event_writer = TraceEventWriter::new(&storage_roots.trace_log_root)

@@ -8,6 +8,7 @@ import {
   resolveDevAppServerBackendEnv,
   resolveDevAppServerBinary,
   resolveCargoTargetDirectory,
+  shouldRebuildAppServer,
 } from "./electron-dev-sidecar.mjs";
 
 describe("electron dev sidecar", () => {
@@ -108,6 +109,18 @@ describe("electron dev sidecar", () => {
         build() {},
       }),
     ).toThrow(/app-server binary was not created/);
+  });
+
+  it("watcher 不应被 Cargo target 产物触发重建", () => {
+    expect(
+      shouldRebuildAppServer(
+        "target/debug/build/mime_guess/out/mime_types_generated.rs",
+      ),
+    ).toBe(false);
+    expect(
+      shouldRebuildAppServer("crates/agent/src/tools/skill_tool_gate.rs"),
+    ).toBe(true);
+    expect(shouldRebuildAppServer("Cargo.toml")).toBe(true);
   });
 
   it("默认 dev App Server backend 使用 App Server 内部 runtime", () => {

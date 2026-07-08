@@ -1,4 +1,5 @@
 mod agent_message;
+pub(in crate::runtime) mod media_result;
 mod plan;
 
 use super::raw_string_field;
@@ -19,6 +20,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     let mut approval_items = HashMap::<String, Value>::new();
     let mut context_compaction_items = HashMap::<String, Value>::new();
     let mut subagent_items = HashMap::<String, Value>::new();
+    let mut media_result_items = HashMap::<String, Value>::new();
 
     for event in &stored.events {
         match event.event_type.as_str() {
@@ -64,13 +66,16 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
                     continue;
                 }
                 upsert_reasoning_item(stored, event, &mut reasoning_items);
+                media_result::upsert_from_event(stored, event, &mut media_result_items);
             }
             "plan.delta" | "plan.final" => {
                 if let Some(item) = plan::plan_item(stored, event) {
                     items.push(item);
                 }
             }
-            "tool.started" | "tool.result" | "tool.failed" => {}
+            "tool.started" | "tool.result" | "tool.failed" => {
+                media_result::upsert_from_event(stored, event, &mut media_result_items);
+            }
             "command.started" | "command.output" | "command.exited" => {
                 upsert_command_item(stored, event, &mut command_items);
             }
@@ -102,6 +107,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     items.extend(approval_items.into_values());
     items.extend(context_compaction_items.into_values());
     items.extend(subagent_items.into_values());
+    items.extend(media_result_items.into_values());
     sort_thread_items(&mut items);
     items
 }

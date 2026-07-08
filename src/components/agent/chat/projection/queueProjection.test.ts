@@ -37,9 +37,10 @@ describe("queueProjection", () => {
       persistence: "snapshot",
       control: "queue",
       runtimeStatus: "queued",
-      queuedTurnCount: 1,
+      queuedTurnCount: 2,
       payload: {
         queueEvent: "queue_added",
+        queuedTurnCount: 2,
         queuedTurnId: "queued-1",
         position: 1,
         messagePreview: "下一轮",
@@ -55,10 +56,12 @@ describe("queueProjection", () => {
       scope: "turn",
       phase: "submitted",
       control: "steer",
+      queuedTurnCount: 2,
       payload: {
         taskEvent: "steer_intent",
         intentKind: "queued_user_input",
         queuedTurnId: "queued-1",
+        position: 1,
         messageLength: 3,
       },
     });

@@ -1,6 +1,5 @@
 import {
   buildLimeCapabilityInvokeRequest,
-  type LimeCapabilityInvoker,
   type LimeCapabilityInvokeRequest,
   type LimeCapabilityInvokeResponse,
   type LimeCapabilityMethod,
@@ -12,466 +11,79 @@ import {
   toLimeCapabilityError,
   type LimeCapabilityError,
 } from "./capabilityErrors";
-
-export const LIME_PLUGIN_BRIDGE_PROTOCOL = "lime.plugin.bridge";
-export const LIME_PLUGIN_BRIDGE_VERSION = 1;
-
-export interface LimePluginBridgeClientMessage {
-  protocol: typeof LIME_PLUGIN_BRIDGE_PROTOCOL;
-  version: typeof LIME_PLUGIN_BRIDGE_VERSION;
-  type: string;
-  requestId?: string;
-  appId: string;
-  entryKey?: string;
-  payload?: unknown;
-}
-
-interface LimeHostBridgeMessageEvent {
-  data: unknown;
-  origin: string;
-  source: unknown;
-}
-
-interface LimeHostBridgeWindowLike {
-  readonly parent: {
-    postMessage(message: LimePluginBridgeClientMessage, targetOrigin: string): void;
-  };
-  readonly self?: unknown;
-  addEventListener(
-    type: "message",
-    listener: (event: LimeHostBridgeMessageEvent) => void,
-  ): void;
-  removeEventListener(
-    type: "message",
-    listener: (event: LimeHostBridgeMessageEvent) => void,
-  ): void;
-  setTimeout(handler: () => void, timeoutMs: number): number;
-  clearTimeout(timerId: number): void;
-}
-
-export interface CreateLimeHostBridgeCapabilityInvokerOptions {
-  appId: string;
-  entryKey?: string;
-  windowRef?: LimeHostBridgeWindowLike;
-  hostWindow?: LimeHostBridgeWindowLike;
-  targetOrigin?: string;
-  trustedHostOrigin?: string;
-  requestTimeoutMs?: number;
-  requestIdPrefix?: string;
-  onSnapshot?: LimeHostBridgeEventHandler;
-  onTheme?: LimeHostBridgeEventHandler;
-  onVisibility?: LimeHostBridgeEventHandler;
-  onCapabilityEvent?: LimeHostBridgeCapabilityEventHandler;
-}
-
-export interface LimeHostBridgeCapabilityInvoker extends LimeCapabilityInvoker {
-  send(type: string, payload?: unknown, requestId?: string): void;
-  request(
-    type: string,
-    payload?: unknown,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<unknown>;
-  ready(): void;
-  getSnapshot(): void;
-  notifyHost(
-    message: string,
-    level?: LimeHostBridgeNotifyPayload["level"],
-  ): Promise<LimeCapabilityInvokeResponse<{ accepted: true }>>;
-  sendReady(): void;
-  getHostSnapshot(): Promise<LimeCapabilityInvokeResponse<unknown>>;
-  notifyHost(
-    payload: LimeHostBridgeNotifyPayload,
-  ): Promise<LimeCapabilityInvokeResponse<{ accepted: true }>>;
-  navigateHost(
-    payload: LimeHostBridgeNavigatePayload,
-  ): Promise<LimeCapabilityInvokeResponse<{ navigatedTo: string }>>;
-  openExternalHost(
-    payload: LimeHostBridgeOpenExternalPayload,
-  ): Promise<LimeCapabilityInvokeResponse<{ opened: true }>>;
-  selectDirectoryHost(
-    payload?: LimeHostBridgeSelectDirectoryPayload,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeSelectDirectoryResult>>;
-  downloadHost(
-    payload: LimeHostBridgeDownloadPayload,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<LimeCapabilityInvokeResponse<{ downloaded: true }>>;
-  onHostSnapshot(handler: LimeHostBridgeEventHandler): () => void;
-  onThemeUpdate(handler: LimeHostBridgeEventHandler): () => void;
-  onVisibilityChange(handler: LimeHostBridgeEventHandler): () => void;
-  onCapabilityEvent(handler: LimeHostBridgeCapabilityEventHandler): () => void;
-  invoke<
-    Capability extends LimeCapabilityName,
-    Method extends LimeCapabilityMethod<Capability>,
-  >(
-    request: LimeHostBridgeLegacyInvokeRequest<Capability, Method>,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<unknown>;
-  subscribe(
-    request: LimeHostBridgeCapabilitySubscribeRequest,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<unknown>;
-  unsubscribe(
-    subscriptionId: string,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<unknown>;
-  subscribeCapability(
-    request: LimeHostBridgeCapabilitySubscribeRequest,
-    handler?: LimeHostBridgeCapabilityEventHandler,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeCapabilitySubscription>>;
-  unsubscribeCapability(
-    subscriptionId: string,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeCapabilityUnsubscribeResult>>;
-  download(
-    url: string,
-    fileName?: string,
-    options?: LimeHostBridgeLegacyRequestOptions,
-  ): Promise<unknown>;
-  getCallLog(): LimeHostBridgeLegacyCallLogEntry[];
-  dispose(): void;
-  readonly pendingRequestCount: number;
-}
-
-export interface LimeHostBridgeLegacyRequestOptions {
-  requestId?: string;
-  timeoutMs?: number;
-}
-
-export interface LimeHostBridgeLegacyInvokeRequest<
-  Capability extends LimeCapabilityName = LimeCapabilityName,
-  Method extends LimeCapabilityMethod<Capability> = LimeCapabilityMethod<Capability>,
-> {
-  capability: Capability;
-  method: Method;
-  args?: unknown;
-  provenance?: LimeCapabilityInvokeRequest["provenance"];
-}
-
-export interface LimeHostBridgeLegacyCallLogEntry {
-  capability: string;
-  method: string;
-  args?: unknown;
-}
-
-export interface LimeHostBridgeNotifyPayload {
-  message: string;
-  level?: "info" | "success" | "warning" | "error";
-}
-
-export interface LimeHostBridgeDownloadPayload {
-  url: string;
-  fileName?: string;
-}
-
-export interface LimeHostBridgeNavigatePayload {
-  route?: string;
-  url?: string;
-}
-
-export interface LimeHostBridgeOpenExternalPayload {
-  url: string;
-}
-
-export interface LimeHostBridgeSelectDirectoryPayload {
-  title?: string;
-}
-
-export interface LimeHostBridgeSelectDirectoryResult {
-  path: string | null;
-  cancelled: boolean;
-  message?: string;
-}
-
-export type LimeHostBridgeEventHandler = (payload: unknown) => void;
-
-export interface LimeHostThemeSnapshot {
-  themeMode?: string;
-  effectiveThemeMode?: string;
-  colorSchemeId?: string;
-  tokens?: Record<string, string>;
-}
-
-export interface LimeHostThemeDocumentLike {
-  documentElement: LimeHostThemeElementLike;
-}
-
-export interface LimeHostThemeElementLike {
-  dataset: Record<string, string | undefined>;
-  style: {
-    colorScheme?: string;
-    setProperty(name: string, value: string): void;
-  };
-}
-
-export interface SyncLimeHostThemeOptions {
-  documentRef?: LimeHostThemeDocumentLike;
-  allowedTokenPrefixes?: string[];
-}
-
-export interface LimeHostBridgeCapabilitySubscribeRequest {
-  capability: LimeCapabilityName;
-  topic: string;
-  input?: unknown;
-  subscriptionId?: string;
-  pollIntervalMs?: number;
-  bridgeAction?: string;
-}
-
-export interface LimeHostBridgeCapabilitySubscription {
-  subscriptionId: string;
-  capability: LimeCapabilityName;
-  topic: string;
-  taskId?: string;
-  pollIntervalMs?: number;
-  bridgeAction?: string;
-}
-
-export interface LimeHostBridgeCapabilityUnsubscribeResult {
-  subscriptionId: string;
-  unsubscribed: boolean;
-}
-
-export interface LimeHostBridgeCapabilityEvent {
-  subscriptionId?: string;
-  capability?: string;
-  topic?: string;
-  eventType?: string;
-  taskId?: string;
-  task?: unknown;
-  events?: unknown[];
-  snapshot?: unknown;
-  error?: unknown;
-  emittedAt?: string;
-}
-
-export type LimeHostBridgeCapabilityEventHandler = (
-  event: LimeHostBridgeCapabilityEvent,
-) => void;
-
-interface PendingBridgeRequest {
-  request: LimeCapabilityInvokeRequest;
-  resolve: (response: LimeCapabilityInvokeResponse) => void;
-  timerId: number;
-}
-
-const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
-const DEFAULT_DIRECTORY_PICKER_TIMEOUT_MS = 5 * 60_000;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function attachOptional<T extends Record<string, unknown>>(
-  target: T,
-  values: Record<string, unknown | undefined>,
-): T {
-  Object.entries(values).forEach(([key, value]) => {
-    if (value !== undefined) {
-      (target as Record<string, unknown>)[key] = value;
-    }
-  });
-  return target;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function readThemePayload(value: unknown): LimeHostThemeSnapshot | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const theme = isRecord(value.theme) ? value.theme : value;
-  if (!isRecord(theme)) {
-    return null;
-  }
-  const tokens = isRecord(theme.tokens)
-    ? Object.fromEntries(
-        Object.entries(theme.tokens).filter(
-          (entry): entry is [string, string] =>
-            typeof entry[0] === "string" &&
-            typeof entry[1] === "string" &&
-            entry[1].trim().length > 0,
-        ),
-      )
-    : undefined;
-  const snapshot: LimeHostThemeSnapshot = {};
-  const themeMode = readString(theme.themeMode);
-  const effectiveThemeMode = readString(theme.effectiveThemeMode);
-  const colorSchemeId = readString(theme.colorSchemeId);
-  if (themeMode) snapshot.themeMode = themeMode;
-  if (effectiveThemeMode) snapshot.effectiveThemeMode = effectiveThemeMode;
-  if (colorSchemeId) snapshot.colorSchemeId = colorSchemeId;
-  if (tokens) snapshot.tokens = tokens;
-  return snapshot;
-}
-
-export function applyLimeHostTheme(
-  payload: unknown,
-  options: SyncLimeHostThemeOptions = {},
-): LimeHostThemeSnapshot | null {
-  const theme = readThemePayload(payload);
-  if (!theme) {
-    return null;
-  }
-  const documentRef =
-    options.documentRef ??
-    (typeof document === "undefined"
-      ? undefined
-      : (document as unknown as LimeHostThemeDocumentLike));
-  const root = documentRef?.documentElement;
-  if (!root) {
-    return theme;
-  }
-  const allowedTokenPrefixes = options.allowedTokenPrefixes ?? [
-    "--lime-",
-    "--app-",
-  ];
-  for (const [name, value] of Object.entries(theme.tokens ?? {})) {
-    if (!allowedTokenPrefixes.some((prefix) => name.startsWith(prefix))) {
-      continue;
-    }
-    root.style.setProperty(name, value);
-  }
-  if (theme.themeMode) {
-    root.dataset.limeTheme = theme.themeMode;
-  }
-  if (theme.effectiveThemeMode) {
-    root.dataset.limeThemeEffective = theme.effectiveThemeMode;
-    root.style.colorScheme = theme.effectiveThemeMode === "dark" ? "dark" : "light";
-  }
-  if (theme.colorSchemeId) {
-    root.dataset.limeColorScheme = theme.colorSchemeId;
-  }
-  return theme;
-}
-
-export function syncLimeHostTheme(
-  invoker: Pick<
-    LimeHostBridgeCapabilityInvoker,
-    "onHostSnapshot" | "onThemeUpdate" | "getHostSnapshot"
-  >,
-  options: SyncLimeHostThemeOptions = {},
-): () => void {
-  const apply = (payload: unknown) => {
-    applyLimeHostTheme(payload, options);
-  };
-  const offSnapshot = invoker.onHostSnapshot(apply);
-  const offTheme = invoker.onThemeUpdate(apply);
-  void invoker.getHostSnapshot().then((response) => {
-    if (response.ok) {
-      apply(response.value);
-    }
-  });
-  return () => {
-    offSnapshot();
-    offTheme();
-  };
-}
-
-function unwrapLegacyResponse<T>(response: LimeCapabilityInvokeResponse<T>): T {
-  if (response.ok) {
-    return response.value;
-  }
-  const error = new Error(response.error.message) as Error & {
-    code?: string;
-    payload?: unknown;
-    capability?: string;
-    method?: string;
-    requestId?: string;
-  };
-  error.code = response.error.code;
-  error.payload = response.error;
-  error.capability = response.error.capability;
-  error.method = response.error.method;
-  error.requestId = response.error.requestId;
-  throw error;
-}
-
-function isBridgeMessage(
-  value: unknown,
-): value is LimePluginBridgeClientMessage {
-  return (
-    isRecord(value) &&
-    value.protocol === LIME_PLUGIN_BRIDGE_PROTOCOL &&
-    value.version === LIME_PLUGIN_BRIDGE_VERSION &&
-    typeof value.type === "string" &&
-    typeof value.appId === "string" &&
-    (value.requestId === undefined || typeof value.requestId === "string") &&
-    (value.entryKey === undefined || typeof value.entryKey === "string")
-  );
-}
-
-function normalizeHostResponsePayload(
-  payload: unknown,
-  context: {
-    appId: string;
-    entryKey?: string;
-    request: LimeCapabilityInvokeRequest;
-  },
-): LimeCapabilityInvokeResponse {
-  if (isRecord(payload) && payload.ok === false) {
-    return {
-      ok: false,
-      error: toLimeCapabilityError(payload.error ?? payload, {
-        appId: context.appId,
-        entryKey: context.entryKey,
-        capability: context.request.capability,
-        method: context.request.method,
-        requestId: context.request.requestId,
-      }),
-    };
-  }
-
-  if (isRecord(payload) && payload.ok === true) {
-    const value = Object.prototype.hasOwnProperty.call(payload, "value")
-      ? payload.value
-      : Object.prototype.hasOwnProperty.call(payload, "result")
-        ? payload.result
-        : undefined;
-    return attachOptional<LimeCapabilityInvokeResponse & Record<string, unknown>>(
-      {
-        ok: true,
-        value,
-      },
-      {
-        traceId: readString(payload.traceId),
-        evidenceId: readString(payload.evidenceId),
-      },
-    ) as LimeCapabilityInvokeResponse;
-  }
-
-  if (isRecord(payload) && Object.prototype.hasOwnProperty.call(payload, "result")) {
-    return {
-      ok: true,
-      value: payload.result,
-    };
-  }
-
-  return {
-    ok: true,
-    value: payload,
-  };
-}
-
-function buildBridgePayload(
-  request: LimeCapabilityInvokeRequest,
-): Record<string, unknown> {
-  return attachOptional<Record<string, unknown>>(
-    {
-      capability: request.capability,
-      method: request.method,
-    },
-    {
-      input: request.args,
-      idempotencyKey: request.idempotencyKey,
-      expectedSchema: request.expectedSchema,
-      provenance: request.provenance,
-    },
-  );
-}
+import {
+  attachOptional,
+  buildBridgePayload,
+  isBridgeMessage,
+  isRecord,
+  normalizeHostResponsePayload,
+  readString,
+  unwrapLegacyResponse,
+} from "./hostBridgeClientProtocol";
+export {
+  LIME_PLUGIN_BRIDGE_PROTOCOL,
+  LIME_PLUGIN_BRIDGE_VERSION,
+} from "./hostBridgeClientTypes";
+import {
+  DEFAULT_DIRECTORY_PICKER_TIMEOUT_MS,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  LIME_PLUGIN_BRIDGE_PROTOCOL,
+  LIME_PLUGIN_BRIDGE_VERSION,
+} from "./hostBridgeClientTypes";
+export {
+  applyLimeHostTheme,
+  syncLimeHostTheme,
+} from "./hostBridgeClientTheme";
+export type {
+  CreateLimeHostBridgeCapabilityInvokerOptions,
+  LimeHostBridgeCapabilityEvent,
+  LimeHostBridgeCapabilityEventHandler,
+  LimeHostBridgeCapabilityInvoker,
+  LimeHostBridgeCapabilitySubscribeRequest,
+  LimeHostBridgeCapabilitySubscription,
+  LimeHostBridgeCapabilityUnsubscribeResult,
+  LimeHostBridgeDownloadPayload,
+  LimeHostBridgeEventHandler,
+  LimeHostBridgeLegacyCallLogEntry,
+  LimeHostBridgeLegacyInvokeRequest,
+  LimeHostBridgeLegacyRequestOptions,
+  LimeHostBridgeMessageEvent,
+  LimeHostBridgeNavigatePayload,
+  LimeHostBridgeNotifyPayload,
+  LimeHostBridgeOpenExternalPayload,
+  LimeHostBridgeSelectDirectoryPayload,
+  LimeHostBridgeSelectDirectoryResult,
+  LimeHostBridgeWindowLike,
+  LimeHostThemeDocumentLike,
+  LimeHostThemeElementLike,
+  LimeHostThemeSnapshot,
+  LimePluginBridgeClientMessage,
+  PendingBridgeRequest,
+  SyncLimeHostThemeOptions,
+} from "./hostBridgeClientTypes";
+import type {
+  CreateLimeHostBridgeCapabilityInvokerOptions,
+  LimeHostBridgeCapabilityEvent,
+  LimeHostBridgeCapabilityEventHandler,
+  LimeHostBridgeCapabilityInvoker,
+  LimeHostBridgeCapabilitySubscribeRequest,
+  LimeHostBridgeCapabilitySubscription,
+  LimeHostBridgeCapabilityUnsubscribeResult,
+  LimeHostBridgeDownloadPayload,
+  LimeHostBridgeEventHandler,
+  LimeHostBridgeLegacyCallLogEntry,
+  LimeHostBridgeLegacyInvokeRequest,
+  LimeHostBridgeLegacyRequestOptions,
+  LimeHostBridgeMessageEvent,
+  LimeHostBridgeNavigatePayload,
+  LimeHostBridgeNotifyPayload,
+  LimeHostBridgeOpenExternalPayload,
+  LimeHostBridgeSelectDirectoryPayload,
+  LimeHostBridgeSelectDirectoryResult,
+  LimeHostBridgeWindowLike,
+  LimePluginBridgeClientMessage,
+  PendingBridgeRequest,
+} from "./hostBridgeClientTypes";
 
 class BrowserLimeHostBridgeCapabilityInvoker
   implements LimeHostBridgeCapabilityInvoker

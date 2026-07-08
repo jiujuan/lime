@@ -7,6 +7,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   APP_SERVER_METHOD_AGENT_SESSION_LIST,
   APP_SERVER_METHOD_AGENT_SESSION_MEDIA_READ,
+  APP_SERVER_METHOD_CANCEL_REQUEST,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET,
@@ -65,6 +66,7 @@ import {
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   APP_SERVER_PROTOCOL_VERSION,
   AppServerClient,
+  AppServerRequestAbortedError,
   AppServerRpcError,
   createAppServerRequest,
   decodeAppServerMessage,
@@ -194,22 +196,26 @@ describe("App Server API", () => {
 
     expect(result.result.capabilities[0].id).toBe("session.draft.write");
     expect(result.result.nextCursor).toBe("1");
-    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
-      request: {
-        lines: [
-          line({
-            id: 3,
-            method: APP_SERVER_METHOD_CAPABILITY_LIST,
-            params: {
-              appId: "content-studio",
-              workspaceId: "default",
-              sessionId: "session-1",
-              limit: 1,
-            },
-          }),
-        ],
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 3,
+              method: APP_SERVER_METHOD_CAPABILITY_LIST,
+              params: {
+                appId: "content-studio",
+                workspaceId: "default",
+                sessionId: "session-1",
+                limit: 1,
+              },
+            }),
+          ],
+        },
       },
-    });
+    );
   });
 
   it("workspaceRightSurface methods 应通过 App Server JSON-RPC 调度右侧 surface", async () => {
@@ -584,6 +590,11 @@ describe("App Server API", () => {
             uri: "sidecar://media/demo",
             mimeType: "image/png",
             bytes: 4,
+            totalBytes: 4,
+            offset: 0,
+            length: 4,
+            contentRange: "bytes 0-3/4",
+            hasMore: false,
             sha256: "sha256:demo",
             contentBase64: "iVBORw==",
             sidecarRef: {
@@ -604,10 +615,62 @@ describe("App Server API", () => {
     });
 
     expect(result.result.contentBase64).toBe("iVBORw==");
+    expect(result.result.contentRange).toBe("bytes 0-3/4");
+    expect(result.result.hasMore).toBe(false);
     expect(result.result.sidecarRef).toMatchObject({
       ref: "sidecar://media/demo",
       kind: "media",
     });
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 6,
+              method: APP_SERVER_METHOD_AGENT_SESSION_MEDIA_READ,
+              params: {
+                sessionId: "session-media",
+                uri: "sidecar://media/demo",
+                maxBytes: 1024,
+              },
+            }),
+          ],
+        },
+      },
+    );
+  });
+
+  it("readAgentSessionMedia abort 后应拒绝并忽略迟到 bridge 结果", async () => {
+    let resolveSafeInvoke!: (value: unknown) => void;
+    const pendingSafeInvoke = new Promise((resolve) => {
+      resolveSafeInvoke = resolve;
+    });
+    vi.mocked(safeInvoke).mockReturnValueOnce(
+      pendingSafeInvoke as ReturnType<typeof safeInvoke>,
+    );
+    const abortController = new AbortController();
+
+    const client = new AppServerClient({ initialRequestId: 6 });
+    const result = client.readAgentSessionMedia(
+      {
+        sessionId: "session-media",
+        uri: "sidecar://media/demo",
+        maxBytes: 1024,
+      },
+      { signal: abortController.signal },
+    );
+
+    abortController.abort("preview superseded");
+
+    await expect(result).rejects.toMatchObject({
+      name: "AppServerRequestAbortedError",
+      method: APP_SERVER_METHOD_AGENT_SESSION_MEDIA_READ,
+      requestId: 6,
+      reason: "preview superseded",
+    });
+    await expect(result).rejects.toBeInstanceOf(AppServerRequestAbortedError);
     expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
       request: {
         lines: [
@@ -623,6 +686,47 @@ describe("App Server API", () => {
         ],
       },
     });
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      2,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              method: APP_SERVER_METHOD_CANCEL_REQUEST,
+              params: { id: 6 },
+            }),
+          ],
+        },
+      },
+    );
+
+    resolveSafeInvoke({
+      lines: [
+        line({
+          id: 6,
+          result: {
+            sessionId: "session-media",
+            uri: "sidecar://media/demo",
+            mimeType: "image/png",
+            bytes: 4,
+            totalBytes: 4,
+            offset: 0,
+            length: 4,
+            contentRange: "bytes 0-3/4",
+            hasMore: false,
+            sha256: "sha256:demo",
+            contentBase64: "iVBORw==",
+            sidecarRef: {
+              ref: "sidecar://media/demo",
+              kind: "media",
+              relativePath: "sessions/session-media/media/demo.png",
+            },
+          },
+        }),
+      ],
+    });
+    await Promise.resolve();
   });
 
   it("appendAgentSessionRuntimeEvents 应通过 App Server current method 写入 runtime event", async () => {

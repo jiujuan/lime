@@ -304,6 +304,82 @@ describe("resolveClawWorkspaceProviderSelection", () => {
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("lime-hub");
   });
 
+  it("自动解析 Claw provider 时应跳过需要登录的 Lime Hub 提示", async () => {
+    mockLoadConfiguredProviders.mockResolvedValueOnce([
+      createProvider({
+        key: "lime-hub",
+        label: "Lime Hub",
+        registryId: "lime-hub",
+        providerId: "lime-hub",
+        apiHost: "https://hub.example.com/v1",
+        authStatus: "login_required",
+      }),
+      createProvider({
+        key: "deepseek",
+        label: "DeepSeek",
+        registryId: "deepseek",
+        providerId: "deepseek",
+        apiHost: "https://api.deepseek.com/v1",
+      }),
+    ]);
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      models: [
+        createModel("deepseek-chat", {
+          provider_id: "deepseek",
+          provider_name: "DeepSeek",
+        }),
+      ],
+      source: "Api",
+      error: null,
+    });
+
+    const result = await resolveClawWorkspaceProviderSelection({
+      currentProviderType: "lime-hub",
+      currentModel: "gpt-5.5",
+      theme: "general",
+    });
+
+    expect(result).toEqual({
+      providerType: "deepseek",
+      model: "deepseek-chat",
+    });
+    expect(mockFetchProviderModelsAuto).toHaveBeenCalledTimes(1);
+    expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("deepseek");
+  });
+
+  it("需要登录但已有声明模型的 Lime Hub 应保留为可选模型", async () => {
+    mockLoadConfiguredProviders.mockResolvedValueOnce([
+      createProvider({
+        key: "lime-hub",
+        label: "Lime Hub",
+        registryId: "lime-hub",
+        providerId: "lime-hub",
+        apiHost: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+        authStatus: "login_required",
+        customModels: ["agnes-2.0-flash"],
+      }),
+      createProvider({
+        key: "deepseek",
+        label: "DeepSeek",
+        registryId: "deepseek",
+        providerId: "deepseek",
+        apiHost: "https://api.deepseek.com/v1",
+      }),
+    ]);
+
+    const result = await resolveClawWorkspaceProviderSelection({
+      currentProviderType: "lime-hub",
+      currentModel: "",
+      theme: "general",
+    });
+
+    expect(result).toEqual({
+      providerType: "lime-hub",
+      model: "agnes-2.0-flash",
+    });
+    expect(mockFetchProviderModelsAuto).not.toHaveBeenCalled();
+  });
+
   it("只有图片生成模型时不应为普通 Claw 聊天选择该 Provider", async () => {
     mockLoadConfiguredProviders.mockResolvedValueOnce([
       createProvider({

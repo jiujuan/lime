@@ -1,43 +1,45 @@
-## Lime v1.94.0
+## Lime v1.95.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Moved Soul Style Packs onto the App Server current path with install, list, enable / disable, and uninstall protocol methods, plus a settings UI that imports five-locale packs and shows built-in and installed profiles together.
-- Improved Agent chat unfinished-session recovery, queued turns, input restoration after stop, structured `contentParts`, media reference cards, provider safety buffering diagnostics, and sidebar session projection for long-running and interrupted conversations.
-- Expanded the runtime native tool surface to include `view_image`, `apply_patch`, `skill_search`, `sleep`, `update_plan`, `WebFetch`, `WebSearch`, memory, and image task tools through current `tool-runtime` dispatch modules.
-- Added App Server protocol coverage for content references, message content parts, session archive / update / list responses, and config warning projection so GUI, client, and schema export share one contract source.
+- Continued moving the Agent / Claw workspace onto the current path with a richer home surface, task-center tabs, queued turns, input restoration after stop, terminal event handling, media reference previews, Browser Assist, and Team collaboration projection.
+- Added App Server session media read protocol, media task read models, sidecar / idempotency support, and image-command Soul presentation so media tasks, session history, and GUI previews share one source of truth.
+- Strengthened runtime tool surfaces with reply backend / stream handling, provider stream handling, native overlay dispatch, Skill runtime gates, and tool-runtime contracts, reducing central dispatch inside the agent crate.
+- Expanded the Plugin App Center and runtime host with install, launch, uninstall preview, cleanup evidence, cloud bootstrap, and capability dispatch flows, while splitting detail and runtime projections into reusable modules.
 
 ### Fixes
 
-- Fixed Claw / Agent chat interrupt, queued-turn, history hydrate, and input-restore boundaries so tool side effects, placeholder output, and stale terminal events no longer trigger the wrong restore or cleanup path.
-- Fixed App Server config warning propagation through frontend toasts, API responses, Electron bridge, and runtime read models so local configuration failures are visible sooner.
-- Fixed model provider stream safety buffering and message projection to preserve structured content parts, media references, media-only history messages, and final-answer phases across reasoning / tool / final text rendering.
-- Fixed Electron renderer packaging builds to use a relative asset base, reducing packaged fixture and desktop resource path mismatches.
-- Fixed Soul profile resolution and fallback behavior so unknown profiles, built-in registries, and installed pack profiles stay aligned between settings and prompt context.
+- Fixed Agent / Claw cleanup boundaries for stale terminal events, queued turns, stop-then-continue input, history hydrate, and workspace topic switching so old events do not restore input or stop a newer stream incorrectly.
+- Fixed App Server / client event streams, read-model normalizers, media result projection, and export normalizers to reduce frontend/backend protocol drift.
+- Fixed Codex conversation import path resolution and project filtering for more reliable cross-directory import and history recovery.
+- Fixed provider/model loading, OEM LimeHub synchronization, and Prompt Cache capability presentation so UI and runtime capability signals stay aligned.
+- Fixed Electron dev sidecar, fixture build, and packaged app-server asset handling to reduce development-vs-packaged resource path mismatches.
 
 ### Improvements and Refactors
 
-- Continued shrinking Aster residuals under the Codex-first boundary by deleting dead vendor Aster session memory, config, cron, notebook edit, plan, remote trigger, task, workflow, web, view image, and worktree tool surfaces.
-- Moved image task, memory, Skill search, sleep, update plan, view image, and web retrieval implementations from the agent crate into narrower `tool-runtime` modules, leaving central files focused on registration and dispatch.
-- Split App Server runtime context media, evidence context, Soul style pack registry / store / paths / installer, and session projection into smaller domain modules.
-- Split frontend chat logic for unfinished session projection, thread message content parts, runtime status, workspace projection, input restore policy, and tool display copy out of heavy React components.
+- Removed the old ChatSidebar and several legacy Harness export cards, consolidating conversation, task, evidence-pack, and workbench state into current Workspace / Task Center / HarnessStatusPanel components.
+- Split large frontend modules including `agentProtocol`, Agent Runtime normalizers / types, App Server client methods, OEM cloud control plane, plugin capability dispatcher, host bridge, and Plugins page into narrower domain modules.
+- Split Agent chat message projection, timeline content parts, stream event processing, flow control, harness state, thread reliability, and workspace browser-assist runtime out of overloaded hooks and components.
+- Split Rust backend media task, conversation import, runtime exports, Soul locale copy, image-command presentation, model routing, plugin worker generation, and tool inventory modules.
+- Continued Codex-first cleanup of Aster / legacy residuals by moving Skill gates, native tools, provider stream handling, and retired command guards back to current owners.
 
 ### Tests and Quality
 
-- Added and updated regressions for Soul style pack API / UI, style profile registry, queued turns, App Server warnings, content part projection, unfinished-session recovery, and sidebar conversation rows.
-- Added Rust targeted tests for Soul style pack store / processor, media context, queue order, session list projection, message diagnostics, agent skill telemetry, and provider safety buffering.
-- Added `smoke:agent-session-recovery-cdp-gate` and expanded the Claw current fixture suite with a CDP recovery gate, media reference smoke, scenario registry, GUI completion waits, and assertion context coverage.
-- Updated App Server protocol schemas, generated TypeScript types, client contracts, Aster migration boundaries, scripts governance, and release workflow guards to keep retired tool surfaces from returning.
+- Added and updated regressions for Agent stream handling, queued turns, input restore, workspace topic switching, media reference preview, task center, message projection, thread reliability, and Claw provider selection.
+- Added and updated Plugin App Center, capability dispatcher, host bridge, cloud bootstrap, runtime projection, and install / uninstall evidence tests.
+- Added Rust targeted tests for media task JSON-RPC, session media read, conversation import path resolution, runtime export rollout, tool inventory, model routing, and image-command presentation.
+- Expanded Claw current fixtures, terminal guards, pending steer coverage, web tools, skills runtime, Electron fixture build, and reopen-running-turn CDP gates for stronger GUI release evidence.
+- Updated App Server protocol schemas, generated TypeScript types, client contracts, legacy surface catalog, MCP contract guards, and five-locale i18n resources.
 
 ### Documentation
 
-- Updated `AGENTS.md`, engineering navigation, governance, quality workflow, release workflow, and the Codex skill index with current release boundaries and Aster migration rules.
-- Updated Aster migration, Soul style output / pack installation / profiles, Claw stream, unfinished-session recovery, and refactor v1 research materials with the v1.94.0 release context and exit criteria.
+- Updated Claw stream, Soul style output, refactor v1, Aster migration, Skills, Agent runtime recovery, and test scenario ledger / registry planning materials.
+- Updated release-candidate research notes with the v1.95.0 closure points for the Agent, Plugin, Media, and Runtime current paths.
 
 ### Other
 
-- Bumped version facts to `1.94.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, `lime-rs/vendor/aster-rust/Cargo.lock`, and release notes.
+- Bumped version facts to `1.95.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, `lime-rs/vendor/aster-rust/Cargo.lock`, and release notes.
 
-**Full changes**: `v1.93.0` -> `v1.94.0`
+**Full changes**: `v1.94.0` -> `v1.95.0`

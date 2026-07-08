@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveInterruptedInputRestorePlan } from "./agentStreamFlowControl";
+import { resolveInterruptedInputRestorePlan } from "./agentStreamInputRestorePlan";
 
 describe("agentStream input restore policy", () => {
   it("output-free interrupt 应恢复原始输入与富输入引用", () => {

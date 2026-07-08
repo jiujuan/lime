@@ -173,15 +173,40 @@ export function DefaultConversationEmptyState() {
   const { t } = useTranslation("agent");
 
   return (
-    <div className="flex h-64 flex-col items-center justify-center text-muted-foreground opacity-50">
-      <img
-        src={LIME_BRAND_LOGO_SRC}
-        alt={LIME_BRAND_NAME}
-        className="mb-4 h-12 w-12 opacity-20"
-      />
-      <p className="text-lg font-medium">
-        {t("agentChat.messageList.empty.defaultTitle")}
-      </p>
+    <div className="flex min-h-[18rem] items-center justify-center px-6 py-8">
+      <section
+        data-testid="message-list-empty-default"
+        className="w-full max-w-[560px] text-left"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-slate-200/80 bg-slate-50/80">
+            <img
+              src={LIME_BRAND_LOGO_SRC}
+              alt={LIME_BRAND_NAME}
+              className="h-5 w-5 opacity-80"
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-slate-500">
+                {t("agentChat.messageList.empty.defaultBadge")}
+              </div>
+              <h2 className="text-xl font-semibold text-slate-900">
+                {t("agentChat.messageList.empty.defaultTitle")}
+              </h2>
+              <p className="max-w-[34rem] text-sm leading-6 text-slate-600">
+                {t("agentChat.messageList.empty.defaultDescription")}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-1.5 pl-12 text-xs text-slate-500">
+          <span>{t("agentChat.messageList.empty.defaultChip.input")}</span>
+          <span>{t("agentChat.messageList.empty.defaultChip.context")}</span>
+          <span>{t("agentChat.messageList.empty.defaultChip.save")}</span>
+        </div>
+      </section>
     </div>
   );
 }

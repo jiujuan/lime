@@ -333,11 +333,16 @@ export interface PluginRuntimeToolBinding {
   required?: boolean;
 }
 
+export interface PluginRuntimeMcpCallProof {
+  arguments: Record<string, unknown>;
+}
+
 export interface PluginRuntimeMcpBinding {
   serverId: string;
   toolKey: string;
   provider: string;
   required?: boolean;
+  callProof?: PluginRuntimeMcpCallProof;
 }
 
 export interface PluginRuntimeWorkflowBinding {
@@ -1357,6 +1362,21 @@ export interface PluginRuntimeProcessTimelineItem {
   detail?: string;
   meta?: string;
   collapseKey?: string;
+  displayTitleKey?: string;
+  displayMessageKey?: string;
+  displayValues?: Record<string, unknown>;
+  displayTitle?: string;
+  displayMessage?: string;
+  soulLifecycle?: Record<string, unknown>;
+  soulSurface?: string;
+  soulPhase?: string;
+  styleLevel?: string;
+  riskLevel?: string;
+  toneVariant?: string;
+  profileId?: string;
+  packId?: string;
+  generationBriefBoundary?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PluginRuntimeProcessModel {

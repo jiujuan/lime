@@ -2,7 +2,7 @@ use super::boundary::default_prompt_boundary;
 use super::style_profile::resolve_style_profile;
 use crate::runtime::context_packet::ContextPacket;
 use lime_core::config::MemorySoulConfig;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const SOUL_CONTEXT_VERSION: &str = "memory_soul_prompt_context.v2";
 const SOUL_TEXT_MAX_CHARS: usize = 600;

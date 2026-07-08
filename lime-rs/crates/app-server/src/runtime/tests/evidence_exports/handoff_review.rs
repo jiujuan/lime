@@ -275,6 +275,106 @@ async fn export_runtime_review_residuals_write_current_session_artifacts() {
     assert_eq!(rollout_candidate_count(&rollout_summaries), 3);
 }
 
+#[tokio::test]
+async fn export_runtime_handoff_residuals_apply_locale_copy_and_generation_brief_boundary() {
+    let temp = tempfile::tempdir().expect("workspace");
+    let workspace_root = temp.path().to_string_lossy().to_string();
+    let app_data_source = Arc::new(
+        TestSessionDataSource::new(empty_agent_session_read_response("unused"))
+            .with_memory_data_root(temp.path().join("data-root")),
+    );
+    let core = RuntimeCore::default().with_app_data_source(app_data_source);
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_locale_export".to_string()),
+        thread_id: Some("thread_locale_export".to_string()),
+        app_id: "content-studio".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "sess_locale_export".to_string(),
+            title: Some("Locale Export".to_string()),
+            uri: None,
+            metadata: Some(json!({
+                "workspaceRoot": workspace_root,
+            })),
+        }),
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_locale_export".to_string(),
+            turn_id: Some("turn_locale_export".to_string()),
+            input: AgentInput {
+                text: "生成 locale export".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let analysis = core
+        .export_analysis_handoff(AgentSessionAnalysisHandoffExportParams {
+            session_id: "sess_locale_export".to_string(),
+            locale: Some("ja-JP".to_string()),
+        })
+        .await
+        .expect("analysis locale export");
+    assert_eq!(analysis.title, "外部分析引き継ぎ");
+    assert_eq!(analysis.artifacts[0].title, "外部分析ブリーフ");
+    assert!(analysis.copy_prompt.contains("Generation Brief"));
+    assert!(analysis.copy_prompt.contains("sess_locale_export"));
+
+    let analysis_brief = fs::read_to_string(
+        temp.path()
+            .join(".lime")
+            .join("harness")
+            .join("sessions")
+            .join("sess_locale_export")
+            .join("analysis")
+            .join("analysis-brief.md"),
+    )
+    .expect("analysis brief");
+    assert!(analysis_brief.contains("## Generation Brief 境界"));
+    assert!(analysis_brief.contains("generation_brief_only"));
+    assert!(analysis_brief.contains("Product Soul"));
+    assert!(!analysis_brief.contains("Review the current App Server read model"));
+    assert!(!analysis_brief.contains("cheeky_sassy_executor"));
+
+    let review = core
+        .export_review_decision_template(AgentSessionReviewDecisionTemplateExportParams {
+            session_id: "sess_locale_export".to_string(),
+            locale: Some("ko-KR".to_string()),
+        })
+        .await
+        .expect("review locale export");
+    assert_eq!(review.title, "리뷰 결정");
+    assert_eq!(review.artifacts[0].title, "리뷰 결정");
+    assert!(
+        review
+            .review_checklist
+            .iter()
+            .any(|item| item.contains("App Server current 경로 증거"))
+    );
+    let review_markdown = fs::read_to_string(
+        temp.path()
+            .join(".lime")
+            .join("harness")
+            .join("sessions")
+            .join("sess_locale_export")
+            .join("review")
+            .join("review-decision.md"),
+    )
+    .expect("review markdown");
+    assert!(review_markdown.contains("## Generation Brief 경계"));
+    assert!(review_markdown.contains("generation_brief_only"));
+}
+
 fn read_rollout_candidate(root: &Path, marker: &str) -> String {
     let path = fs::read_dir(root)
         .expect("rollout summaries")

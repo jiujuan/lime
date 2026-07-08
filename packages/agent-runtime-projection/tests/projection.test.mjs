@@ -1829,11 +1829,11 @@ test("queue event helpers build standard queue and steer task events", () => {
   assert.equal(added[0].persistence, "snapshot");
   assert.equal(added[0].control, "queue");
   assert.equal(added[0].runtimeStatus, "queued");
-  assert.equal(added[0].queuedTurnCount, 1);
+  assert.equal(added[0].queuedTurnCount, 2);
   assert.deepEqual(added[0].payload, {
     runtimeEntity: "agent_turn",
     queueEvent: "queue_added",
-    queuedTurnCount: 1,
+    queuedTurnCount: 2,
     queuedTurnId: "queued-1",
     position: 1,
     messagePreview: "下一轮",
@@ -1850,6 +1850,7 @@ test("queue event helpers build standard queue and steer task events", () => {
   assert.equal(added[1].persistence, "snapshot");
   assert.equal(added[1].control, "steer");
   assert.equal(added[1].runtimeStatus, "queued");
+  assert.equal(added[1].queuedTurnCount, 2);
   assert.deepEqual(added[1].payload, {
     runtimeEntity: "agent_turn",
     taskEvent: "steer_intent",

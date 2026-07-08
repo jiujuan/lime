@@ -54,6 +54,13 @@ struct PluginMcpBinding {
     tool_key: String,
     provider: String,
     required: bool,
+    call_proof: Option<PluginMcpCallProof>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginMcpCallProof {
+    arguments: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -151,43 +158,60 @@ fn skill_capabilities_from_manifest(manifest: &Value) -> Vec<PluginSkillCapabili
 fn tool_bindings_from_manifest(manifest: &Value) -> Vec<PluginToolBinding> {
     array_field(manifest, "toolRefs")
         .into_iter()
-        .filter_map(|tool| {
-            let key = tool
-                .as_str()
-                .map(str::to_string)
-                .or_else(|| read_string(tool, &["key"]))
-                .or_else(|| read_string(tool, &["id"]))?;
-            let provider =
-                read_string(tool, &["provider"]).unwrap_or_else(|| "unknown".to_string());
-            Some(PluginToolBinding {
-                binding_kind: tool_binding_kind(tool, &key, &provider),
-                key,
-                title: read_string(tool, &["title"]),
-                provider,
-                path: read_string(tool, &["path"]),
-                capabilities: read_string_array_from_keys(tool, &["capabilities", "taskKinds"]),
-                required: tool
-                    .get("required")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-            })
-        })
+        .filter_map(tool_binding_from_manifest)
         .collect()
 }
 
 fn mcp_bindings_from_manifest(manifest: &Value) -> Vec<PluginMcpBinding> {
-    tool_bindings_from_manifest(manifest)
+    array_field(manifest, "toolRefs")
         .into_iter()
-        .filter_map(|tool| {
+        .filter_map(|tool_value| {
+            let tool = tool_binding_from_manifest(tool_value)?;
             let server_id = mcp_server_id(&tool.key, &tool.provider)?;
             Some(PluginMcpBinding {
                 server_id,
                 tool_key: tool.key,
                 provider: tool.provider,
                 required: tool.required,
+                call_proof: mcp_call_proof_from_tool(tool_value),
             })
         })
         .collect()
+}
+
+fn tool_binding_from_manifest(tool: &Value) -> Option<PluginToolBinding> {
+    let key = tool
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| read_string(tool, &["key"]))
+        .or_else(|| read_string(tool, &["id"]))?;
+    let provider = read_string(tool, &["provider"]).unwrap_or_else(|| "unknown".to_string());
+    Some(PluginToolBinding {
+        binding_kind: tool_binding_kind(tool, &key, &provider),
+        key,
+        title: read_string(tool, &["title"]),
+        provider,
+        path: read_string(tool, &["path"]),
+        capabilities: read_string_array_from_keys(tool, &["capabilities", "taskKinds"]),
+        required: tool
+            .get("required")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    })
+}
+
+fn mcp_call_proof_from_tool(tool: &Value) -> Option<PluginMcpCallProof> {
+    let proof = tool
+        .get("callProof")
+        .or_else(|| tool.get("call_proof"))?
+        .as_object()?;
+    let arguments = proof
+        .get("arguments")
+        .or_else(|| proof.get("args"))?
+        .clone();
+    arguments
+        .is_object()
+        .then_some(PluginMcpCallProof { arguments })
 }
 
 fn workflow_bindings_from_manifest(manifest: &Value) -> Vec<PluginWorkflowBinding> {
@@ -375,7 +399,12 @@ mod tests {
                 {
                     "key": "browser/search",
                     "provider": "mcp",
-                    "required": true
+                    "required": true,
+                    "callProof": {
+                        "arguments": {
+                            "query": "lime"
+                        }
+                    }
                 },
                 {
                     "key": "filesystem-read",
@@ -394,7 +423,15 @@ mod tests {
         assert_eq!(snapshot.mcp_bindings.len(), 2);
         assert_eq!(snapshot.mcp_bindings[0].server_id, "browser");
         assert_eq!(snapshot.mcp_bindings[0].tool_key, "browser/search");
+        assert_eq!(
+            snapshot.mcp_bindings[0]
+                .call_proof
+                .as_ref()
+                .map(|proof| &proof.arguments),
+            Some(&json!({ "query": "lime" }))
+        );
         assert_eq!(snapshot.mcp_bindings[1].server_id, "filesystem");
+        assert!(snapshot.mcp_bindings[1].call_proof.is_none());
         assert_eq!(snapshot.tools[2].binding_kind, "cli");
     }
 

@@ -195,7 +195,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
     removeQueuedDraftMessages: () => void;
     clearActiveStreamIfMatch: (eventName: string) => boolean;
     upsertQueuedTurn: (queuedTurn: QueuedTurnSnapshot) => void;
-    removeQueuedTurnState: (queuedTurnIds: string[]) => void;
+    removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
   };
   sounds: {
     playToolcallSound: () => void;
@@ -486,7 +486,7 @@ export async function registerAgentStreamTurnEventBinding(
         removeQueuedDraftMessages: callbacks.removeQueuedDraftMessages,
         clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
         upsertQueuedTurn: callbacks.upsertQueuedTurn,
-        removeQueuedTurnState: callbacks.removeQueuedTurnState,
+        removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
         playToolcallSound: sounds.playToolcallSound,
         playTypewriterSound: sounds.playTypewriterSound,
         appendThinkingToParts,
@@ -769,7 +769,7 @@ export async function registerAgentStreamTurnEventBinding(
           removeQueuedDraftMessages: callbacks.removeQueuedDraftMessages,
           clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
           upsertQueuedTurn: callbacks.upsertQueuedTurn,
-          removeQueuedTurnState: callbacks.removeQueuedTurnState,
+          removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
           playToolcallSound: sounds.playToolcallSound,
           playTypewriterSound: sounds.playTypewriterSound,
           appendThinkingToParts,

@@ -1,6 +1,9 @@
 use super::*;
 use crate::request_tool_policy::aster_reply_adapter::AsterReplyRuntimeHost;
+use agent_runtime::reply_stream::MIN_PROVIDER_STREAM_FIRST_EVENT_TIMEOUT;
 use aster::conversation::message::Message;
+
+const PROVIDER_STREAM_IDLE_TIMEOUT: Duration = Duration::from_millis(200);
 
 struct IdleThenTextProvider {
     attempts: Arc<AtomicUsize>,
@@ -145,7 +148,7 @@ async fn stream_message_reply_with_policy_should_retry_provider_stream_idle_afte
         &policy,
         |event| runtime_events.push(event.clone()),
         StreamReplyPolicyExecutionOptions {
-            provider_stream_idle_timeout: Some(Duration::from_millis(200)),
+            provider_stream_idle_timeout: Some(PROVIDER_STREAM_IDLE_TIMEOUT),
             persist_runtime_status: true,
         },
     )
@@ -177,7 +180,7 @@ async fn stream_message_reply_with_policy_should_fail_closed_when_provider_strea
     let reply_host = AsterReplyRuntimeHost::new(&agent);
 
     let error = tokio::time::timeout(
-        Duration::from_secs(3),
+        MIN_PROVIDER_STREAM_FIRST_EVENT_TIMEOUT + Duration::from_secs(3),
         stream_message_reply_with_policy_with_options(
             &reply_host,
             ReplyInput::text("请回复").into(),
@@ -187,7 +190,7 @@ async fn stream_message_reply_with_policy_should_fail_closed_when_provider_strea
             &policy,
             |event| runtime_events.push(event.clone()),
             StreamReplyPolicyExecutionOptions {
-                provider_stream_idle_timeout: Some(Duration::from_millis(200)),
+                provider_stream_idle_timeout: Some(PROVIDER_STREAM_IDLE_TIMEOUT),
                 persist_runtime_status: true,
             },
         ),

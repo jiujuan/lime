@@ -788,7 +788,7 @@ describe("taskCenterTabs", () => {
     });
   });
 
-  it("new-task 当前没有有效任务会话时，也应恢复第一个可见旧任务标签", () => {
+  it("new-task 首页当前没有有效任务会话时，不应自动恢复旧任务标签", () => {
     expect(
       resolveTaskCenterFallbackRestorePlan(
         createFallbackRestoreParams({
@@ -797,12 +797,8 @@ describe("taskCenterTabs", () => {
         }),
       ),
     ).toEqual({
-      action: "restore",
-      fallbackTopicId: "topic-old",
-      nextRestore: {
-        topicId: "topic-old",
-        startedAt: 10_000,
-      },
+      action: "skip",
+      reason: "new-task-home",
     });
   });
 
@@ -812,6 +808,24 @@ describe("taskCenterTabs", () => {
         createFallbackRestoreParams({
           agentEntry: "new-task",
           isHomeSessionBackgroundRecovery: true,
+          now: 10_000,
+        }),
+      ),
+    ).toEqual({
+      action: "skip",
+      reason: "home-background-recovery",
+    });
+  });
+
+  it("new-task 首页后台恢复运行候选时，即使旧 sessionId 尚未清空也不应恢复旧详情", () => {
+    expect(
+      resolveTaskCenterFallbackRestorePlan(
+        createFallbackRestoreParams({
+          agentEntry: "new-task",
+          isHomeSessionBackgroundRecovery: true,
+          sessionId: "topic-old",
+          currentSessionIsKnownTopic: true,
+          hasDisplayMessages: true,
           now: 10_000,
         }),
       ),

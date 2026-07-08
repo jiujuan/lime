@@ -1,13 +1,11 @@
-use crate::native_tools::runtime_tool_bridge::execute_runtime_tool;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
-use async_trait::async_trait;
+use crate::native_tools::runtime_tool_bridge::RuntimeDefinitionToolAdapter;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext};
 use serde_json::Value;
 use std::sync::Arc;
 use tool_runtime::memory_store::{
     check_runtime_memory_store_permissions, memory_store_tool_definitions, MemoryStoreGateway,
 };
 use tool_runtime::native_dispatch::NativeDispatch;
-use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_executor::RuntimeToolExecutorHandle;
 
 pub(crate) fn create_memory_tools(gateway: Arc<dyn MemoryStoreGateway>) -> Vec<Box<dyn Tool>> {
@@ -19,64 +17,26 @@ pub(crate) fn create_memory_tools(gateway: Arc<dyn MemoryStoreGateway>) -> Vec<B
     memory_store_tool_definitions()
         .into_iter()
         .map(|definition| {
-            Box::new(MemoryStoreTool::new(definition, executor.clone())) as Box<dyn Tool>
+            Box::new(
+                RuntimeDefinitionToolAdapter::new(
+                    definition,
+                    executor.clone(),
+                    check_memory_store_permissions,
+                )
+                .with_max_retries(0),
+            ) as Box<dyn Tool>
         })
         .collect()
 }
 
-struct MemoryStoreTool {
-    definition: RuntimeToolDefinition,
-    executor: RuntimeToolExecutorHandle,
-}
-
-impl MemoryStoreTool {
-    fn new(definition: RuntimeToolDefinition, executor: RuntimeToolExecutorHandle) -> Self {
-        Self {
-            definition,
-            executor,
-        }
-    }
-}
-
-#[async_trait]
-impl Tool for MemoryStoreTool {
-    fn name(&self) -> &str {
-        &self.definition.name
-    }
-
-    fn description(&self) -> &str {
-        &self.definition.description
-    }
-
-    fn input_schema(&self) -> Value {
-        self.definition.input_schema.clone()
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if context.is_cancelled() {
-            return Err(ToolError::Cancelled);
-        }
-
-        execute_runtime_tool(self.executor.clone(), self.name(), &params, context, None).await
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        context: &ToolContext,
-    ) -> PermissionCheckResult {
-        match check_runtime_memory_store_permissions(
-            self.name(),
-            params,
-            &context.working_directory,
-        ) {
-            Ok(()) => PermissionCheckResult::allow(),
-            Err(error) => PermissionCheckResult::deny(error.message().to_string()),
-        }
-    }
-
-    fn options(&self) -> ToolOptions {
-        ToolOptions::new().with_max_retries(0)
+fn check_memory_store_permissions(
+    tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> PermissionCheckResult {
+    match check_runtime_memory_store_permissions(tool_name, params, &context.working_directory) {
+        Ok(()) => PermissionCheckResult::allow(),
+        Err(error) => PermissionCheckResult::deny(error.message().to_string()),
     }
 }
 
@@ -88,6 +48,7 @@ mod tests {
         MemoryStoreListParams, MemoryStoreListResponse, MemoryStoreReadParams,
         MemoryStoreReadResponse, MemoryStoreSearchParams, MemoryStoreSearchResponse,
     };
+    use async_trait::async_trait;
     use serde_json::json;
     use tempfile::tempdir;
 

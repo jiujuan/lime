@@ -483,6 +483,10 @@ describe("useAsterAgentChat 首页新会话", () => {
       provider_name: "openai",
       model_name: "gpt-5.4-mini",
     });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "openai",
+      model: "gpt-5.4-mini",
+    });
 
     const harness = mountHook(workspaceId);
 
@@ -490,6 +494,12 @@ describe("useAsterAgentChat 首页新会话", () => {
       await flushEffects();
       await flushEffects();
 
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: "openai",
+        currentModel: "gpt-5.4-mini",
+        theme: "general",
+        allowProviderFallback: false,
+      });
       expect(harness.getValue().providerType).toBe("openai");
       expect(harness.getValue().model).toBe("gpt-5.4-mini");
       expect(
@@ -502,6 +512,52 @@ describe("useAsterAgentChat 首页新会话", () => {
           localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
         ),
       ).toBe("gpt-5.4-mini");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("Agent 初始化返回不可执行 provider/model 时应回退解析真实工作区模型", async () => {
+    const workspaceId = "ws-init-runtime-login-required-provider";
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_name: "Lime Hub",
+      provider_selector: "lime-hub",
+      model_name: "gpt-5.5",
+    });
+    mockResolveClawWorkspaceProviderSelection
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        providerType: "deepseek",
+        model: "deepseek-chat",
+      });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenNthCalledWith(
+        1,
+        {
+          currentProviderType: "lime-hub",
+          currentModel: "gpt-5.5",
+          theme: "general",
+          allowProviderFallback: false,
+        },
+      );
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenNthCalledWith(
+        2,
+        {
+          currentProviderType: "lime-hub",
+          currentModel: "",
+          theme: "general",
+        },
+      );
+      expect(harness.getValue().providerType).toBe("deepseek");
+      expect(harness.getValue().model).toBe("deepseek-chat");
     } finally {
       harness.unmount();
     }

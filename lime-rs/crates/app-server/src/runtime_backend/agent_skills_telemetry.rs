@@ -1,7 +1,5 @@
 use crate::{ExecutionRequest, RuntimeEvent};
-use lime_skills::{
-    build_agent_skill_snapshot_from_workspace, read_agent_skill_body, AgentSkillSelection,
-};
+use lime_skills::{read_agent_skill_body, AgentSkillSelection};
 use serde_json::{json, Value};
 
 pub(super) fn runtime_status_events_for_agent_skills(
@@ -11,9 +9,10 @@ pub(super) fn runtime_status_events_for_agent_skills(
     let workspace_scope =
         super::request_context::request_workspace_scope(request, host_request.as_ref());
     let metadata_values = super::skill_runtime_enable::request_metadata_values(request);
-    let snapshot = build_agent_skill_snapshot_from_workspace(
+    let snapshot = super::agent_skills_context::build_agent_skill_snapshot_for_turn(
         workspace_scope.working_dir.as_deref(),
         workspace_scope.project_root.as_deref(),
+        &metadata_values,
     );
     let selections = super::agent_skills_context::selected_agent_skill_selections(
         &request.input.text,

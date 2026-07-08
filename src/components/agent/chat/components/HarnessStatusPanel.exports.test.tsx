@@ -517,6 +517,16 @@ describe("HarnessStatusPanel exports", () => {
     expect(document.body.textContent).toContain(
       ".lime/harness/sessions/session-evidence-1/evidence/summary.md",
     );
+    expect(document.body.textContent).toContain("相对路径：");
+    expect(document.body.textContent).toContain("绝对路径：");
+    expect(
+      document.body.querySelector('button[aria-label="预览问题证据：问题摘要"]'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        'button[aria-label="系统打开问题证据：/tmp/workspace-evidence-1/.lime/harness/sessions/session-evidence-1/evidence/summary.md"]',
+      ),
+    ).not.toBeNull();
     expect(mockToast.success).toHaveBeenCalledWith("已导出 1 个问题证据文件");
     expect(
       selectLatestAgentUiProjectionEventForEvidence(

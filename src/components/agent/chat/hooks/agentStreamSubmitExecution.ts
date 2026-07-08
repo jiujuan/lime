@@ -20,6 +20,7 @@ import {
   mergeModelRequestPolicyMetadata,
   resolveModelRequestPolicyMetadataForSelection,
 } from "@/lib/model/modelRequestPolicyMetadata";
+import { MODEL_SELECTION_REQUIRED_ERROR_MESSAGE } from "../utils/agentRuntimeErrorPresentation";
 import type {
   AssistantDraftState,
   SendMessageObserver,
@@ -46,6 +47,7 @@ type MessageParts = NonNullable<Message["contentParts"]>;
 interface ExecuteAgentStreamSubmitOptions {
   runtime: AgentRuntimeAdapter;
   ensureSession: (options?: {
+    targetSessionId?: string;
     skipSessionRestore?: boolean;
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
@@ -81,6 +83,7 @@ interface ExecuteAgentStreamSubmitOptions {
   systemPrompt?: string;
   requestMetadata?: Record<string, unknown>;
   assistantDraft?: AssistantDraftState;
+  targetSessionId?: string;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;
@@ -115,7 +118,7 @@ interface ExecuteAgentStreamSubmitOptions {
     removeQueuedDraftMessages: () => void;
     clearActiveStreamIfMatch: (eventName: string) => boolean;
     upsertQueuedTurn: (queuedTurn: QueuedTurnSnapshot) => void;
-    removeQueuedTurnState: (queuedTurnIds: string[]) => void;
+    removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
     registerListener: (unlisten: () => void) => void;
   };
   sounds: {
@@ -205,6 +208,7 @@ export async function executeAgentStreamSubmit(
     systemPrompt,
     requestMetadata,
     assistantDraft,
+    targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
     skipPreSubmitResume,
@@ -237,6 +241,10 @@ export async function executeAgentStreamSubmit(
     soulCopy,
   } = options;
 
+  if (!effectiveProviderType.trim() || !effectiveModel.trim()) {
+    throw new Error(MODEL_SELECTION_REQUIRED_ERROR_MESSAGE);
+  }
+
   let resolvedRequestMetadata = requestMetadata;
   let performanceTrace =
     extractAgentUiPerformanceTraceMetadata(requestMetadata);
@@ -258,6 +266,7 @@ export async function executeAgentStreamSubmit(
     effectiveExecutionStrategy,
     assistantDraft,
     expectingQueue,
+    targetSessionId,
     skipSessionRestore,
     skipSessionStartHooks,
     performanceTrace,
@@ -334,7 +343,7 @@ export async function executeAgentStreamSubmit(
       removeQueuedDraftMessages: callbacks.removeQueuedDraftMessages,
       clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
       upsertQueuedTurn: callbacks.upsertQueuedTurn,
-      removeQueuedTurnState: callbacks.removeQueuedTurnState,
+      removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
     },
     sounds,
     appendThinkingToParts,

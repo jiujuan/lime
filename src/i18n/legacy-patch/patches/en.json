@@ -505,7 +505,6 @@
   "长文本粘贴为文件": "Paste Long Text as File",
   "渲染输入消息": "Render Input Messages",
   "个空格快速翻译": "spaces for quick translation",
-  "// === components\\agent\\chat\\components\\ChatSidebar.tsx ===": "",
   "加载技能列表失败": "Failed to load skills list",
   "已卸载": "Uninstalled",
   "技能": "Skills",

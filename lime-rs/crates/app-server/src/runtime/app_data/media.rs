@@ -1,8 +1,10 @@
 use super::unavailable;
 use super::NoopAppDataSource;
 use super::RuntimeCoreError;
+use crate::runtime::SidecarStore;
 use app_server_protocol::*;
 use async_trait::async_trait;
+use std::sync::Arc;
 
 #[async_trait]
 pub trait MediaAppDataSource: Send + Sync {
@@ -30,6 +32,7 @@ pub trait MediaAppDataSource: Send + Sync {
     async fn complete_audio_media_task_artifact(
         &self,
         _params: MediaTaskArtifactAudioCompleteParams,
+        _sidecar_store: Option<Arc<SidecarStore>>,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
         Err(unavailable("mediaTaskArtifact/audio/complete"))
     }
@@ -37,6 +40,7 @@ pub trait MediaAppDataSource: Send + Sync {
     async fn complete_image_media_task_artifact(
         &self,
         _params: MediaTaskArtifactImageCompleteParams,
+        _sidecar_store: Option<Arc<SidecarStore>>,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
         Err(unavailable("mediaTaskArtifact/image/complete"))
     }

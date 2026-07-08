@@ -180,6 +180,31 @@ describe("useOemLimeHubProviderSync", () => {
     expect(controlPlaneMocks.createClientAccessToken).not.toHaveBeenCalled();
   });
 
+  it("未登录且云端目录不可读时应给 Lime Hub 写入默认聊天模型", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mountedHarness = { container, root };
+
+    act(() => {
+      root.render(<HookHarness />);
+    });
+
+    await flushEffects();
+
+    expect(apiKeyProviderMocks.updateProvider).toHaveBeenCalledWith(
+      "lime-hub",
+      expect.objectContaining({
+        custom_models: ["gpt-5.2-pro"],
+      }),
+    );
+    expect(
+      controlPlaneMocks.listClientProviderOfferModels,
+    ).not.toHaveBeenCalled();
+    expect(controlPlaneMocks.createClientAccessToken).not.toHaveBeenCalled();
+    expect(apiKeyProviderMocks.addApiKey).not.toHaveBeenCalled();
+  });
+
   it("应把默认云端来源的模型目录同步到内部 lime-hub provider", async () => {
     controlPlaneMocks.listClientProviderOfferModels.mockImplementation(
       async (_tenantId: string, providerKey: string) =>

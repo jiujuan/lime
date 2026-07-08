@@ -150,13 +150,10 @@
     },
     {
       "id": "agent-chat-legacy-history-sidebar-runtime-entry",
-      "classification": "dead-candidate",
-      "description": "旧会话历史侧栏已退出 WorkspaceShell 生产主路径；多对话打开与切换必须收敛到任务中心 tab/dropdown，不得重新从运行时代码 import ChatSidebar",
+      "classification": "dead",
+      "description": "已删除的旧会话历史侧栏；多对话打开与切换必须收敛到任务中心 tab/dropdown，不得重新从运行时代码 import ChatSidebar",
       "targets": ["src/components/agent/chat/components/ChatSidebar.tsx"],
-      "allowedPaths": [
-        "src/components/agent/chat/components/ChatSidebar.testFixtures.tsx",
-        "src/components/agent/chat/index.testFixtures.tsx"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "sceneapps-workflow-rail-entry",
@@ -3885,8 +3882,8 @@
       ],
       "includePathPrefixes": ["src/features/plugin", "src/i18n/resources"],
       "allowedPaths": [
-        "src/features/plugin/runtime/workflowRuntimeCapabilityProfile.ts",
-        "src/features/plugin/runtime/capabilityDispatcherTestFixtures.ts",
+        "src/features/plugin/testing/workflowRuntimeCapabilityProfile.ts",
+        "src/features/plugin/testing/capabilityDispatcherTestFixtures.ts",
         "src/features/plugin/runtime/agentRuntimeCapabilityHost.test.ts",
         "src/features/plugin/runtime/entryRuntimeGuard.test.ts",
         "src/features/plugin/adapters/AdapterCapabilityHost.test.ts",
@@ -5275,13 +5272,20 @@
       "allowedPaths": [
         "lime-rs/crates/app-server/src/file_checkpoint.rs",
         "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
+        "lime-rs/crates/app-server/src/media_task.rs",
+        "lime-rs/crates/app-server/src/media_task/sidecar.rs",
+        "lime-rs/crates/app-server/src/media_task/tests.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_projection.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
+        "lime-rs/crates/app-server/src/runtime/context_media.rs",
+        "lime-rs/crates/app-server/src/runtime/context_packet.rs",
         "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
         "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
         "lime-rs/crates/app-server/src/runtime/output_refs.rs",
         "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
+        "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
+        "lime-rs/crates/app-server/src/runtime/session_media_reader.rs",
         "lime-rs/crates/app-server/src/runtime/session_hydration.rs"
       ]
     },
@@ -5518,17 +5522,11 @@
     },
     {
       "id": "rust-agent-subagent-metadata-direct-read",
-      "classification": "deprecated",
-      "description": "subagent metadata 直读只允许 query 与 session_store 投影边界持有",
+      "classification": "dead-candidate",
+      "description": "已零引用的 subagent metadata 直读回流",
       "patterns": ["resolve_subagent_session_metadata("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/session_query.rs",
-        "lime-rs/crates/agent/src/session_store.rs",
-        "lime-rs/crates/agent/src/session_store_subagent_context.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-session-extension-data-direct-update",

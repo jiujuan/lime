@@ -85,7 +85,6 @@ function inferActiveTurnId(turns: AppServerAgentTurn[]): string | undefined {
 function isActiveTurnStatus(status: AppServerAgentTurnStatus): boolean {
   return (
     status === "accepted" ||
-    status === "queued" ||
     status === "running" ||
     status === "waitingAction"
   );

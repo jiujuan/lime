@@ -84,11 +84,11 @@ function mountDraftSendRuntime({
     const materializedSessionIdsRef = useRef(new Map<string, string>());
     const sendRef = useRef(send);
 
-	    useEffect(() => {
-	      if (rerenderAfterMount && renderTick === 0) {
-	        setRenderTick(1);
-	      }
-	    }, [renderTick]);
+    useEffect(() => {
+      if (rerenderAfterMount && renderTick === 0) {
+        setRenderTick(1);
+      }
+    }, [renderTick]);
 
     useTaskCenterDraftSendDispatchRuntime({
       taskCenterDraftSendRequest,
@@ -460,7 +460,56 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     expect(runtime.commitMaterializedDraftTab).toHaveBeenCalledWith(
       request.draftTabId,
       "session-materialized",
-      { preserveInput: false, syncRoute: false },
+      { preserveInput: false },
+    );
+    expect(runtime.send).toHaveBeenCalledWith(
+      request.images,
+      undefined,
+      undefined,
+      request.text,
+      undefined,
+      undefined,
+      expect.objectContaining({
+        targetSessionId: "session-materialized",
+        requestMetadata: expect.objectContaining({
+          agentUiPerformanceTrace: expect.objectContaining({
+            sessionId: "session-materialized",
+          }),
+        }),
+      }),
+    );
+    expect(
+      runtime.commitMaterializedDraftTab.mock.invocationCallOrder[0],
+    ).toBeLessThan(runtime.send.mock.invocationCallOrder[0]);
+  });
+
+  it("materialized 草稿发送成功后应允许进入 Claw 会话路由", async () => {
+    const request = createDraftSendRequest({
+      draftTabId: "task-draft-route-sync",
+      materializeDraft: true,
+      source: "task-center-empty-state",
+      text: "从草稿进入正式会话",
+    });
+
+    const runtime = mountDraftSendRuntime({
+      displayMessagesLength: 1,
+      materializeDraftResult: "session-route-sync",
+      messagesLength: 1,
+      request,
+      sendResult: true,
+      onSnapshot: () => {},
+    });
+
+    await vi.waitFor(() => {
+      expect(runtime.commitMaterializedDraftTab).toHaveBeenCalledWith(
+        request.draftTabId,
+        "session-route-sync",
+        { preserveInput: false },
+      );
+    });
+    const commitOptions = runtime.commitMaterializedDraftTab.mock.calls[0]?.[2];
+    expect(commitOptions).not.toEqual(
+      expect.objectContaining({ syncRoute: false }),
     );
   });
 
@@ -661,6 +710,20 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
         workspaceId: "workspace-test",
       }),
     );
+    const initialTrackingRequest =
+      runtime.setTaskCenterDraftSendRequest.mock.calls[0]?.[0];
+    const clearTrackingRequest = runtime.setTaskCenterDraftSendRequest.mock
+      .calls[1]?.[0] as
+      | ((
+          current: TaskCenterDraftSendRequest | null,
+        ) => TaskCenterDraftSendRequest | null)
+      | undefined;
+    expect(
+      clearTrackingRequest?.(
+        initialTrackingRequest as TaskCenterDraftSendRequest,
+      ),
+    ).toBeNull();
+    expect(runtime.setHomePendingPreviewRequest).toHaveBeenCalledTimes(1);
   });
 
   it("Task Center 首页已有 session 时应直接进入普通发送流并保留 pending preview", async () => {
@@ -724,6 +787,20 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
         workspaceId: "workspace-test",
       }),
     );
+    const initialTrackingRequest =
+      runtime.setTaskCenterDraftSendRequest.mock.calls[0]?.[0];
+    const clearTrackingRequest = runtime.setTaskCenterDraftSendRequest.mock
+      .calls[1]?.[0] as
+      | ((
+          current: TaskCenterDraftSendRequest | null,
+        ) => TaskCenterDraftSendRequest | null)
+      | undefined;
+    expect(
+      clearTrackingRequest?.(
+        initialTrackingRequest as TaskCenterDraftSendRequest,
+      ),
+    ).toBeNull();
+    expect(runtime.setHomePendingPreviewRequest).toHaveBeenCalledTimes(1);
   });
 
   it("Task Center 首页已有 session 普通发送派发失败时应恢复输入并清理 pending preview", async () => {

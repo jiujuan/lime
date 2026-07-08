@@ -731,6 +731,16 @@ function getQueuedTurnCount(
   return current?.queuedTurnCount ?? session.queuedTurnCount ?? 0;
 }
 
+function getQueueAddedQueuedTurnCount(
+  event: Extract<AgentEvent, { type: "queue_added" }>,
+  session: TeamWorkspaceRuntimeSessionSnapshot,
+  current?: TeamWorkspaceLiveRuntimeState,
+): number {
+  return event.queued_turn?.position !== undefined
+    ? event.queued_turn.position + 1
+    : getQueuedTurnCount(session, current) + 1;
+}
+
 function resolveQueueDrainedRuntimeStatus(
   session: TeamWorkspaceRuntimeSessionSnapshot,
   current?: TeamWorkspaceLiveRuntimeState,
@@ -936,7 +946,11 @@ export function projectRuntimeStreamEvent(params: {
         liveRuntimePatch: {
           runtimeStatus: "queued",
           latestTurnStatus: "queued",
-          queuedTurnCount: getQueuedTurnCount(session, currentRuntime) + 1,
+          queuedTurnCount: getQueueAddedQueuedTurnCount(
+            event,
+            session,
+            currentRuntime,
+          ),
         },
       };
     case "queue_started":

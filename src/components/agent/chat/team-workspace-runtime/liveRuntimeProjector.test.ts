@@ -191,6 +191,39 @@ describe("liveRuntimeProjector", () => {
     });
   });
 
+  it("queue_added live 摘要应优先使用 current queue position，避免重复事件让计数漂移", () => {
+    const projection = projectRuntimeStreamEvent({
+      sessionId: "child-1",
+      session: createSessionSnapshot({
+        queuedTurnCount: 1,
+      }),
+      currentRuntime: {
+        runtimeStatus: "queued",
+        latestTurnStatus: "queued",
+        queuedTurnCount: 5,
+        baseFingerprint: "live-runtime:child-1",
+      },
+      event: {
+        type: "queue_added",
+        session_id: "child-1",
+        queued_turn: {
+          queued_turn_id: "queued-2",
+          message_preview: "第二条排队输入",
+          message_text: "第二条排队输入",
+          created_at: 0,
+          image_count: 0,
+          position: 1,
+        },
+      } as AgentEvent,
+    });
+
+    expect(projection?.liveRuntimePatch).toMatchObject({
+      runtimeStatus: "queued",
+      latestTurnStatus: "queued",
+      queuedTurnCount: 2,
+    });
+  });
+
   it("内部路由型 runtime_status 不应投影为用户可见 activity", () => {
     const projection = projectRuntimeStreamEvent({
       sessionId: "child-1",

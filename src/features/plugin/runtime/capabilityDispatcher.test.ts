@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildDispatcherWithCloudSessionCapability } from "./capabilityDispatcherTestFixtures";
+import { buildDispatcherWithCloudSessionCapability } from "../testing/capabilityDispatcherTestFixtures";
 
 const loginLauncherMocks = vi.hoisted(() => ({
   startOemCloudLogin: vi.fn(),

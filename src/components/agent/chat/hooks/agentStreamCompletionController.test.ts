@@ -6,9 +6,9 @@ import {
   AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE,
   buildAgentStreamCompletedAssistantMessagePatch,
   buildAgentStreamEmptyFinalErrorPlan,
-  buildAgentStreamFinalDonePlan,
   buildAgentStreamMissingFinalReplyFailurePlan,
   buildAgentStreamMissingFinalReplyFailureSideEffectPlan,
+  buildAgentStreamTerminalCompletionPlan,
   isAgentStreamEmptyFinalReplyError,
   reconcileAgentStreamFinalContentParts,
   resolveAgentStreamCompletedVisibleContent,
@@ -450,9 +450,9 @@ describe("agentStreamCompletionController", () => {
     });
   });
 
-  it("应为 final_done 构造完成副作用计划", () => {
+  it("应为 turn_completed terminal 构造完成副作用计划", () => {
     expect(
-      buildAgentStreamFinalDonePlan({
+      buildAgentStreamTerminalCompletionPlan({
         accumulatedContent:
           '<tool_result>{"output":"saved"}</tool_result>\n\n已保存。',
         queuedTurnId: "queued-1",
@@ -470,9 +470,9 @@ describe("agentStreamCompletionController", () => {
     });
   });
 
-  it("final_done 在显式空 fallback 下不应回退到通用完成文案", () => {
+  it("turn_completed terminal 在显式空 fallback 下不应回退到通用完成文案", () => {
     expect(
-      buildAgentStreamFinalDonePlan({
+      buildAgentStreamTerminalCompletionPlan({
         accumulatedContent: "<tool_result>{}</tool_result>",
         fallbackContent: "",
         hasMeaningfulCompletionSignal: true,
@@ -486,11 +486,11 @@ describe("agentStreamCompletionController", () => {
     });
   });
 
-  it("应为缺少最终回复的 final_done 构造失败计划并保留 usage", () => {
+  it("应为缺少最终回复的 turn_completed terminal 构造失败计划并保留 usage", () => {
     const usage = { input_tokens: 5, output_tokens: 0 };
 
     expect(
-      buildAgentStreamFinalDonePlan({
+      buildAgentStreamTerminalCompletionPlan({
         accumulatedContent: "",
         hasMeaningfulCompletionSignal: false,
         queuedTurnId: "queued-missing",
@@ -513,7 +513,7 @@ describe("agentStreamCompletionController", () => {
 
   it("搜索等过程边界后没有 assistant 正文时应构造缺少最终回复失败计划", () => {
     expect(
-      buildAgentStreamFinalDonePlan({
+      buildAgentStreamTerminalCompletionPlan({
         accumulatedContent: "我先联网核实信息。",
         hasFinalAnswerRequiredProcessBoundary: true,
         hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
@@ -535,7 +535,7 @@ describe("agentStreamCompletionController", () => {
 
   it("搜索等过程边界后已有 assistant 正文时应正常完成", () => {
     expect(
-      buildAgentStreamFinalDonePlan({
+      buildAgentStreamTerminalCompletionPlan({
         accumulatedContent: "我先联网核实信息。最终摘要。",
         hasFinalAnswerRequiredProcessBoundary: true,
         hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: true,

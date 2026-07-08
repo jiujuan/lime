@@ -564,9 +564,11 @@ fn image_command_task_created_turn_completed_includes_presentation_usage() {
         turn_completed.payload["usage"]["cached_input_tokens"].as_u64(),
         Some(1_024)
     );
-    assert!(turn_completed.payload["usage"]
-        .get("cache_creation_input_tokens")
-        .is_none());
+    assert!(
+        turn_completed.payload["usage"]
+            .get("cache_creation_input_tokens")
+            .is_none()
+    );
 }
 
 #[tokio::test]

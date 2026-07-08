@@ -38,6 +38,8 @@ import {
 import type {
   McpPromptDefinition,
   McpPromptResult,
+  McpCallProofRequest,
+  McpCallProofResult,
   McpPrepareRequest,
   McpPrepareResult,
   McpResourceContent,
@@ -326,9 +328,11 @@ export const mcpApi = {
   listResources: (): Promise<McpResourceDefinition[]> =>
     requestMcpAppServer<AppServerMcpResourceListResponse>(
       METHOD_MCP_RESOURCE_LIST,
-    ).then((response) =>
-      assertMcpResourceListResponse(METHOD_MCP_RESOURCE_LIST, response),
-    ).then((response) => response.resources),
+    )
+      .then((response) =>
+        assertMcpResourceListResponse(METHOD_MCP_RESOURCE_LIST, response),
+      )
+      .then((response) => response.resources),
 
   /** 获取所有可用资源及资源模板 */
   listResourcesWithTemplates: (): Promise<McpResourceListResult> =>
@@ -373,6 +377,16 @@ export const mcpApi = {
     const results: McpPrepareResult[] = [];
     for (const request of requests) {
       results.push(await executeMcpPrepareRequest(request));
+    }
+    return results;
+  },
+
+  executeCallProofRequests: async (
+    requests: McpCallProofRequest[],
+  ): Promise<McpCallProofResult[]> => {
+    const results: McpCallProofResult[] = [];
+    for (const request of requests) {
+      results.push(await executeMcpCallProofRequest(request));
     }
     return results;
   },
@@ -436,6 +450,18 @@ function readOptionalBooleanPrepareParam(
   return value;
 }
 
+function readRecordPrepareParam(
+  method: string,
+  params: Record<string, unknown>,
+  field: string,
+): Record<string, unknown> {
+  const value = params[field];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${method} prepare params require ${field} object`);
+  }
+  return value as Record<string, unknown>;
+}
+
 async function executeMcpPrepareRequest(
   request: McpPrepareRequest,
 ): Promise<McpPrepareResult> {
@@ -482,4 +508,35 @@ async function executeMcpPrepareRequest(
   throw new Error(
     `Unsupported MCP prepare request method: ${String(request.method)}`,
   );
+}
+
+function assertCallProofCandidate(request: McpCallProofRequest): void {
+  if (request.status !== "candidate") {
+    throw new Error("MCP call proof request must be candidate");
+  }
+}
+
+async function executeMcpCallProofRequest(
+  request: McpCallProofRequest,
+): Promise<McpCallProofResult> {
+  assertCallProofCandidate(request);
+  if (request.method !== METHOD_MCP_TOOL_CALL_WITH_CALLER) {
+    throw new Error(
+      `Unsupported MCP call proof request method: ${String(request.method)}`,
+    );
+  }
+
+  const params = getPrepareParams(request.method, request.params);
+  const toolName = readStringPrepareParam(request.method, params, "toolName");
+  const caller = readStringPrepareParam(request.method, params, "caller");
+  const args = readRecordPrepareParam(request.method, params, "arguments");
+  const result = await mcpApi.callToolWithCaller(toolName, args, caller);
+  if (result.is_error) {
+    throw new Error("MCP call proof returned tool error");
+  }
+  return {
+    method: METHOD_MCP_TOOL_CALL_WITH_CALLER,
+    status: "completed",
+    result,
+  };
 }

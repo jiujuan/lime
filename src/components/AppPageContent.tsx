@@ -21,6 +21,7 @@ import type {
   SkillsPageParams,
 } from "@/types/page";
 import type { PluginRightSurfaceLaunchTarget } from "@/features/plugin/ui/pluginRightSurfaceLaunch";
+import type { AgentBackgroundSessionRuntimeSnapshot } from "./agent/chat";
 import { AutomationPage } from "./automation";
 import { ImConfigPage } from "./channels/ImConfigPage";
 import { SettingsPageV2 } from "./settings-v2";
@@ -96,6 +97,9 @@ interface AppPageContentProps {
   onAgentHasMessagesChange: (hasMessages: boolean) => void;
   onAgentSessionChange?: (sessionId: string | null) => void;
   onAgentStreamingChange?: (isStreaming: boolean) => void;
+  onBackgroundSessionRuntimeChange?: (
+    snapshot: AgentBackgroundSessionRuntimeSnapshot | null,
+  ) => void;
   activeAgentSessionTarget?: PluginRightSurfaceLaunchTarget | null;
   agentSessionTargets?: PluginRightSurfaceLaunchTarget[] | null;
   onAgentSessionTargetChange?: (
@@ -112,6 +116,7 @@ export function AppPageContent({
   onAgentHasMessagesChange,
   onAgentSessionChange,
   onAgentStreamingChange,
+  onBackgroundSessionRuntimeChange,
   activeAgentSessionTarget,
   agentSessionTargets,
   onAgentSessionTargetChange,
@@ -215,6 +220,7 @@ export function AppPageContent({
           onHasMessagesChange={onAgentHasMessagesChange}
           onSessionChange={handleAgentSessionChange}
           onAgentStreamingChange={onAgentStreamingChange}
+          onBackgroundSessionRuntimeChange={onBackgroundSessionRuntimeChange}
         />
       </div>
     );

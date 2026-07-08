@@ -11,7 +11,6 @@ export interface AgentChatWorkspaceShellViewModelInput {
   isThemeWorkbench: boolean;
   shouldUseCompactGeneralWorkbench: boolean;
   isBootstrapDispatchPending: boolean;
-  isSessionHydrating: boolean;
   isSending: boolean;
   queuedTurnCount: number;
 }
@@ -36,7 +35,6 @@ export function resolveAgentChatWorkspaceShellViewModel({
   isThemeWorkbench,
   shouldUseCompactGeneralWorkbench,
   isBootstrapDispatchPending,
-  isSessionHydrating,
   isSending,
   queuedTurnCount,
 }: AgentChatWorkspaceShellViewModelInput): AgentChatWorkspaceShellViewModel {
@@ -53,7 +51,6 @@ export function resolveAgentChatWorkspaceShellViewModel({
       (hasDisplayMessages ||
         isThemeWorkbench ||
         (!shouldUseCompactGeneralWorkbench && isBootstrapDispatchPending) ||
-        isSessionHydrating ||
         isHomePendingPreviewActive ||
         isSending ||
         queuedTurnCount > 0));

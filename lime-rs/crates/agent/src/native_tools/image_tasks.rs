@@ -1,16 +1,13 @@
-use crate::native_tools::runtime_tool_bridge::execute_runtime_tool;
+use crate::native_tools::runtime_tool_bridge::RuntimeDefinitionToolAdapter;
 use crate::runtime_facade::current_agent_turn_context;
 use aster::session_context::{current_action_scope, current_session_id};
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
-use async_trait::async_trait;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tool_runtime::image_task::{
     check_runtime_image_task_permissions, image_task_tool_definition, ImageTaskGateway,
-    IMAGE_TASK_TOOL_NAME,
 };
 use tool_runtime::native_dispatch::NativeDispatch;
-use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_executor::{RuntimeToolExecutorHandle, RuntimeToolTurnContext};
 
 pub(crate) fn create_image_tools(gateway: Arc<dyn ImageTaskGateway>) -> Vec<Box<dyn Tool>> {
@@ -19,75 +16,31 @@ pub(crate) fn create_image_tools(gateway: Arc<dyn ImageTaskGateway>) -> Vec<Box<
             .with_image_task_gateway(gateway)
             .build(),
     ));
-    vec![Box::new(ImageTaskTool::new(
-        image_task_tool_definition(),
-        executor,
-    ))]
-}
-
-struct ImageTaskTool {
-    definition: RuntimeToolDefinition,
-    executor: RuntimeToolExecutorHandle,
-}
-
-impl ImageTaskTool {
-    fn new(definition: RuntimeToolDefinition, executor: RuntimeToolExecutorHandle) -> Self {
-        Self {
-            definition,
+    vec![Box::new(
+        RuntimeDefinitionToolAdapter::new(
+            image_task_tool_definition(),
             executor,
-        }
-    }
+            check_image_task_permissions,
+        )
+        .with_turn_context_provider(runtime_turn_context_from_aster)
+        .with_max_retries(0),
+    ) as Box<dyn Tool>]
 }
 
-#[async_trait]
-impl Tool for ImageTaskTool {
-    fn name(&self) -> &str {
-        &self.definition.name
-    }
-
-    fn description(&self) -> &str {
-        &self.definition.description
-    }
-
-    fn input_schema(&self) -> Value {
-        self.definition.input_schema.clone()
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if context.is_cancelled() {
-            return Err(ToolError::Cancelled);
-        }
-
-        let turn_context = runtime_turn_context_from_aster();
-        execute_runtime_tool(
-            self.executor.clone(),
-            IMAGE_TASK_TOOL_NAME,
-            &params,
-            context,
-            turn_context.as_ref(),
-        )
-        .await
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        context: &ToolContext,
-    ) -> PermissionCheckResult {
-        let turn_context = runtime_turn_context_from_aster();
-        match check_runtime_image_task_permissions(
-            params,
-            &context.working_directory,
-            &context.session_id,
-            turn_context.as_ref(),
-        ) {
-            Ok(()) => PermissionCheckResult::allow(),
-            Err(error) => PermissionCheckResult::deny(error.message().to_string()),
-        }
-    }
-
-    fn options(&self) -> ToolOptions {
-        ToolOptions::new().with_max_retries(0)
+fn check_image_task_permissions(
+    _tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> PermissionCheckResult {
+    let turn_context = runtime_turn_context_from_aster();
+    match check_runtime_image_task_permissions(
+        params,
+        &context.working_directory,
+        &context.session_id,
+        turn_context.as_ref(),
+    ) {
+        Ok(()) => PermissionCheckResult::allow(),
+        Err(error) => PermissionCheckResult::deny(error.message().to_string()),
     }
 }
 

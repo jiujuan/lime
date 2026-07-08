@@ -1,11 +1,11 @@
 use super::style_pack_install::StylePackInstallStatus;
-use super::style_pack_paths::{validate_storage_id, REGISTRY_FILE_NAME, REQUIRED_LOCALES};
+use super::style_pack_paths::{REGISTRY_FILE_NAME, REQUIRED_LOCALES, validate_storage_id};
 use super::style_pack_registry::{
     required_locale_keys, required_manifest_string, validate_installed_pack_locale_resource_value,
 };
 use super::style_profile::installed_style_profile_seeds_from_manifest_source;
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -406,20 +406,22 @@ mod tests {
         assert_eq!(record.pack_id, pack_id);
         assert_eq!(record.profile_ids, vec!["local_sassy_executor"]);
         assert_eq!(record.status, StylePackInstallStatus::Enabled);
-        assert!(temp
-            .path()
-            .join("packs")
-            .join(pack_id)
-            .join("manifest.json")
-            .exists());
-        for locale in REQUIRED_LOCALES {
-            assert!(temp
-                .path()
+        assert!(
+            temp.path()
                 .join("packs")
                 .join(pack_id)
-                .join("locales")
-                .join(format!("{locale}.json"))
-                .exists());
+                .join("manifest.json")
+                .exists()
+        );
+        for locale in REQUIRED_LOCALES {
+            assert!(
+                temp.path()
+                    .join("packs")
+                    .join(pack_id)
+                    .join("locales")
+                    .join(format!("{locale}.json"))
+                    .exists()
+            );
         }
 
         let registry_source =

@@ -33,6 +33,10 @@ const TASK_CENTER_TAB_STATUS_META: Record<
     label: "进行中",
     iconClassName: "text-[color:var(--lime-info)]",
   },
+  queued: {
+    label: "排队中",
+    iconClassName: "text-sky-600 dark:text-sky-300",
+  },
   waiting: {
     label: "待继续",
     iconClassName: "text-[color:var(--lime-warning)]",

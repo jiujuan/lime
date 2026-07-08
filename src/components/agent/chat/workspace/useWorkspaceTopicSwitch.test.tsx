@@ -175,6 +175,30 @@ describe("useWorkspaceTopicSwitch", () => {
     );
   });
 
+  it("锁定项目与话题绑定冲突时应返回 blocked 且不弹出全局 tip", async () => {
+    const originalSwitchTopic = vi.fn(async () => undefined);
+    const onBeforeTopicSwitch = vi.fn();
+    const props = createBaseProps({
+      projectId: "locked-project",
+      externalProjectId: "locked-project",
+      originalSwitchTopic,
+      onBeforeTopicSwitch,
+      loadTopicBoundProjectId: vi.fn(() => "topic-project"),
+    });
+    const mounted = renderHook(props);
+
+    let result: Awaited<ReturnType<HookValue["switchTopic"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getValue().switchTopic("topic-bound-elsewhere");
+    });
+
+    expect(result).toBe("blocked");
+    expect(onBeforeTopicSwitch).toHaveBeenCalledWith("topic-bound-elsewhere");
+    expect(originalSwitchTopic).not.toHaveBeenCalled();
+    expect(props.deferTopicSwitch).not.toHaveBeenCalled();
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
   it("当前项目已知但话题未绑定时应直接切换，不再等待项目解析", async () => {
     const originalSwitchTopic = vi.fn(async () => undefined);
     const onBeforeTopicSwitch = vi.fn();

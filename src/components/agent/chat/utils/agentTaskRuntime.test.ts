@@ -182,7 +182,7 @@ describe("agentTaskRuntime", () => {
     expect(model?.detail).toContain("等待你确认");
   });
 
-  it("turn_completed 早于 final_done 时不应把等待首个输出的助手草稿标记为已完成", () => {
+  it("turn_completed 没有可见输出时不应把等待首个输出的助手草稿标记为已完成", () => {
     const messages: Message[] = [
       {
         id: "msg-user-streaming",

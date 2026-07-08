@@ -1,5 +1,6 @@
 use super::provider_env::{set_provider_env_vars, should_disable_provider_default_fast_model};
 use super::CredentialBridgeError;
+use agent_runtime::reply_backend::RuntimeReplyProviderCall;
 use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
 use aster::conversation::message::{Message, MessageContent};
 use aster::model::ModelConfig;
@@ -13,7 +14,6 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use model_provider::provider_stream::{
     RuntimeProviderBackend, RuntimeReplyProviderCapabilities, RuntimeReplyProviderHandle,
-    RuntimeReplyStreamRequest,
 };
 use model_provider::runtime_provider::RuntimeProviderConfig;
 use model_provider::safety::{
@@ -22,7 +22,6 @@ use model_provider::safety::{
 };
 use rmcp::model::Tool;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 
 /// 当前回合配置好的 reply provider。
 ///
@@ -41,25 +40,20 @@ impl ConfiguredReplyProvider {
 
     pub(crate) async fn stream_reply_with_agent<'a>(
         &self,
-        stream_request: &RuntimeReplyStreamRequest,
         agent: &'a Agent,
-        user_message: Message,
-        session_config: aster::agents::SessionConfig,
-        cancel_token: Option<CancellationToken>,
+        provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>,
     ) -> anyhow::Result<BoxStream<'a, anyhow::Result<AsterAgentEvent>>> {
-        debug_assert_eq!(stream_request.provider.as_ref(), Some(&self.handle));
+        let trace = provider_call.trace();
         tracing::debug!(
-            session_id = %stream_request.session_id,
-            input_kind = ?stream_request.input_kind,
-            message_chars = stream_request.message_chars,
-            provider_backend = ?stream_request.provider_backend(),
-            provider_name = ?stream_request.provider_name(),
-            model_name = ?stream_request.model_name(),
+            session_id = %trace.session_id,
+            input_kind = ?trace.input_kind,
+            message_chars = trace.message_chars,
+            provider_backend = ?trace.provider_backend,
+            provider_name = ?trace.provider_name,
+            model_name = ?trace.model_name,
             "[CredentialBridge] streaming reply with configured runtime provider"
         );
-        self.backend
-            .stream_reply_with_agent(agent, user_message, session_config, cancel_token)
-            .await
+        self.backend.stream_reply_with_agent(agent, provider_call).await
     }
 }
 
@@ -121,10 +115,9 @@ impl CompatAsterReplyProviderBackend {
     async fn stream_reply_with_agent<'a>(
         &self,
         agent: &'a Agent,
-        user_message: Message,
-        session_config: aster::agents::SessionConfig,
-        cancel_token: Option<CancellationToken>,
+        provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>,
     ) -> anyhow::Result<BoxStream<'a, anyhow::Result<AsterAgentEvent>>> {
+        let (_, user_message, session_config, cancel_token) = provider_call.into_parts();
         agent
             .reply_with_provider(
                 user_message,

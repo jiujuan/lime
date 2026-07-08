@@ -1,0 +1,416 @@
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, OnceLock};
+
+use serde_json::{json, Value};
+
+pub const IMAGE_GENERATION_CONTRACT_KEY: &str = "image_generation";
+pub const IMAGE_GENERATE_SKILL_NAME: &str = "image_generate";
+pub const SKILL_TOOL_NAME: &str = "Skill";
+pub const SKILL_TOOL_DESCRIPTION: &str = "在显式启用的工作流中执行技能。通用对话默认不会暴露技能自动调用能力；专家绑定或 workspace runtime enable 的候选技能必须先调用 skill_search 记录 selector 证据，再调用 Skill。";
+
+pub fn skill_tool_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "skill": {
+                "type": "string",
+                "description": "The skill name. E.g., 'pdf', 'user:my-skill'"
+            },
+            "args": {
+                "type": "string",
+                "description": "Optional arguments for the skill"
+            }
+        },
+        "required": ["skill"]
+    })
+}
+
+pub fn normalize_skill_invocation_params(mut params: Value) -> Value {
+    if let Some(object) = params.as_object_mut() {
+        let should_stringify_args = object
+            .get("args")
+            .is_some_and(|args| args.is_object() || args.is_array());
+        if should_stringify_args {
+            if let Some(args) = object.get("args").cloned() {
+                object.insert(
+                    "args".to_string(),
+                    Value::String(
+                        serde_json::to_string(&args).unwrap_or_else(|_| args.to_string()),
+                    ),
+                );
+            }
+        }
+    }
+    params
+}
+
+#[derive(Debug, Clone, Default)]
+struct SkillToolSessionAccess {
+    enabled: bool,
+    allowed_skills: Option<HashSet<String>>,
+    skill_sources: HashMap<String, SkillToolSessionSkillSource>,
+    allowed_capabilities: HashSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillToolSessionSkillSource {
+    pub workspace_root: String,
+    pub source: String,
+    pub approval: String,
+    pub directory: String,
+    pub registered_skill_directory: String,
+    pub skill_name: String,
+    pub source_draft_id: String,
+    pub source_verification_report_id: String,
+    pub permission_summary: Vec<String>,
+}
+
+fn session_access_store() -> &'static Mutex<HashMap<String, SkillToolSessionAccess>> {
+    static STORE: OnceLock<Mutex<HashMap<String, SkillToolSessionAccess>>> = OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub fn set_skill_tool_session_access(session_id: &str, enabled: bool) {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return;
+    }
+
+    let store = session_access_store();
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    guard.insert(
+        session_id.to_string(),
+        SkillToolSessionAccess {
+            enabled,
+            allowed_skills: None,
+            skill_sources: HashMap::new(),
+            allowed_capabilities: HashSet::new(),
+        },
+    );
+}
+
+pub fn set_skill_tool_session_allowed_skills<I, S>(session_id: &str, allowed_skills: I)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return;
+    }
+
+    let allowed = allowed_skills
+        .into_iter()
+        .flat_map(|skill| skill_name_gate_aliases(skill.as_ref()))
+        .collect::<HashSet<_>>();
+    let store = session_access_store();
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    guard.insert(
+        session_id.to_string(),
+        SkillToolSessionAccess {
+            enabled: !allowed.is_empty(),
+            allowed_skills: Some(allowed),
+            skill_sources: HashMap::new(),
+            allowed_capabilities: HashSet::new(),
+        },
+    );
+}
+
+pub fn add_skill_tool_session_allowed_capabilities<I, S>(session_id: &str, capabilities: I)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return;
+    }
+
+    let capabilities = capabilities
+        .into_iter()
+        .map(|capability| capability.as_ref().trim().to_ascii_lowercase())
+        .filter(|capability| !capability.is_empty())
+        .collect::<HashSet<_>>();
+    if capabilities.is_empty() {
+        return;
+    }
+
+    let store = session_access_store();
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    let access = guard
+        .entry(session_id.to_string())
+        .or_insert_with(|| SkillToolSessionAccess {
+            enabled: true,
+            allowed_skills: Some(HashSet::new()),
+            skill_sources: HashMap::new(),
+            allowed_capabilities: HashSet::new(),
+        });
+    access.enabled = true;
+    access.allowed_capabilities.extend(capabilities);
+}
+
+pub fn set_skill_tool_session_allowed_skill_sources<I>(session_id: &str, sources: I)
+where
+    I: IntoIterator<Item = SkillToolSessionSkillSource>,
+{
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return;
+    }
+
+    let mut allowed = HashSet::new();
+    let mut skill_sources = HashMap::new();
+    for source in sources {
+        for alias in skill_name_gate_aliases(&source.skill_name)
+            .into_iter()
+            .chain(skill_name_gate_aliases(&source.directory).into_iter())
+        {
+            allowed.insert(alias.clone());
+            skill_sources.insert(alias, source.clone());
+        }
+    }
+
+    let store = session_access_store();
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    guard.insert(
+        session_id.to_string(),
+        SkillToolSessionAccess {
+            enabled: !allowed.is_empty(),
+            allowed_skills: Some(allowed),
+            skill_sources,
+            allowed_capabilities: HashSet::new(),
+        },
+    );
+}
+
+pub fn clear_skill_tool_session_access(session_id: &str) {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return;
+    }
+
+    let store = session_access_store();
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    guard.remove(session_id);
+}
+
+pub fn is_skill_tool_session_skill_allowed(session_id: &str, skill_name: &str) -> bool {
+    is_skill_allowed_for_session(session_id, skill_name)
+}
+
+pub fn is_skill_tool_enabled_for_session(session_id: &str) -> bool {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return false;
+    }
+
+    let store = session_access_store();
+    let guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    guard
+        .get(session_id)
+        .map(|access| access.enabled)
+        .unwrap_or(false)
+}
+
+pub fn skill_tool_disabled_message() -> &'static str {
+    "当前会话未启用技能自动调用。请改用显式 /skill-name 指令，或切换到需要技能编排的工作流。"
+}
+
+fn skill_name_gate_aliases(skill_name: &str) -> Vec<String> {
+    let full = skill_name
+        .trim()
+        .trim_start_matches('/')
+        .to_ascii_lowercase();
+    if full.is_empty() {
+        return Vec::new();
+    }
+
+    let short = full
+        .rsplit(':')
+        .next()
+        .unwrap_or(full.as_str())
+        .trim()
+        .to_string();
+    if short.is_empty() || short == full {
+        vec![full]
+    } else {
+        vec![full, short]
+    }
+}
+
+fn skill_required_turn_capability(skill_name: &str) -> Option<&'static str> {
+    match normalize_skill_name(skill_name).as_str() {
+        IMAGE_GENERATE_SKILL_NAME => Some(IMAGE_GENERATION_CONTRACT_KEY),
+        _ => None,
+    }
+}
+
+fn normalize_skill_name(skill_name: &str) -> String {
+    skill_name
+        .trim()
+        .trim_start_matches('/')
+        .rsplit(':')
+        .next()
+        .unwrap_or(skill_name)
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn is_skill_allowed_by_turn_capability(
+    skill_name: &str,
+    allowed_capabilities: &HashSet<String>,
+) -> bool {
+    skill_required_turn_capability(skill_name).is_some_and(|required| {
+        allowed_capabilities
+            .iter()
+            .any(|capability| capability.eq_ignore_ascii_case(required))
+    })
+}
+
+pub fn is_skill_allowed_for_session(session_id: &str, skill_name: &str) -> bool {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return false;
+    }
+
+    let store = session_access_store();
+    let guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    let Some(access) = guard.get(session_id) else {
+        return false;
+    };
+    if !access.enabled {
+        return false;
+    }
+
+    if is_skill_allowed_by_turn_capability(skill_name, &access.allowed_capabilities) {
+        return true;
+    }
+
+    let Some(allowed_skills) = access.allowed_skills.as_ref() else {
+        return true;
+    };
+    skill_name_gate_aliases(skill_name)
+        .iter()
+        .any(|alias| allowed_skills.contains(alias))
+}
+
+pub fn workspace_skill_source_for_session_skill(
+    session_id: &str,
+    skill_name: &str,
+) -> Option<SkillToolSessionSkillSource> {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return None;
+    }
+
+    let store = session_access_store();
+    let guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    let access = guard.get(session_id)?;
+    if !access.enabled {
+        return None;
+    }
+    skill_name_gate_aliases(skill_name)
+        .iter()
+        .find_map(|alias| access.skill_sources.get(alias).cloned())
+}
+
+pub fn skill_tool_not_allowed_message(skill_name: &str) -> String {
+    format!(
+        "当前会话未授权执行 Skill({})；请先通过 workspace skill runtime enable gate 显式启用该能力。",
+        skill_name.trim()
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allowlisted_session_allows_short_alias() {
+        let session_id = "skill-gate-alias-session";
+        set_skill_tool_session_allowed_skills(session_id, ["project:capability-report"]);
+
+        assert!(is_skill_allowed_for_session(
+            session_id,
+            "capability-report"
+        ));
+        assert!(is_skill_allowed_for_session(
+            session_id,
+            "project:capability-report"
+        ));
+        assert!(!is_skill_allowed_for_session(session_id, "other-skill"));
+
+        clear_skill_tool_session_access(session_id);
+    }
+
+    #[test]
+    fn turn_capability_allows_mapped_skill_only() {
+        let session_id = "skill-gate-capability-session";
+        add_skill_tool_session_allowed_capabilities(session_id, [IMAGE_GENERATION_CONTRACT_KEY]);
+
+        assert!(is_skill_allowed_for_session(
+            session_id,
+            IMAGE_GENERATE_SKILL_NAME
+        ));
+        assert!(!is_skill_allowed_for_session(session_id, "research"));
+
+        clear_skill_tool_session_access(session_id);
+    }
+
+    #[test]
+    fn skill_tool_surface_matches_current_contract() {
+        let schema = skill_tool_input_schema();
+
+        assert_eq!(SKILL_TOOL_NAME, "Skill");
+        assert!(SKILL_TOOL_DESCRIPTION.contains("skill_search"));
+        assert_eq!(schema.get("type"), Some(&serde_json::json!("object")));
+        assert_eq!(
+            schema.pointer("/properties/skill/type"),
+            Some(&serde_json::json!("string"))
+        );
+        assert_eq!(
+            schema.pointer("/properties/args/type"),
+            Some(&serde_json::json!("string"))
+        );
+        assert_eq!(schema.get("required"), Some(&serde_json::json!(["skill"])));
+    }
+
+    #[test]
+    fn skill_invocation_params_stringify_structured_args() {
+        let params = normalize_skill_invocation_params(serde_json::json!({
+            "skill": "content-reviewer",
+            "args": {
+                "projectId": "project-1"
+            }
+        }));
+
+        assert!(params
+            .get("args")
+            .and_then(Value::as_str)
+            .is_some_and(|args| args.contains("project-1")));
+    }
+}

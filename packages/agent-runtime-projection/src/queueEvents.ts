@@ -44,6 +44,7 @@ export function buildAgentUiQueueAddedEvents(
     context,
   );
   const queuedTurn = input.queuedTurn;
+  const queuedTurnCount = queuedTurn.position + 1;
   return [
     {
       ...base,
@@ -58,11 +59,11 @@ export function buildAgentUiQueueAddedEvents(
       control: "queue",
       runtimeStatus: "queued",
       latestTurnStatus: "queued",
-      queuedTurnCount: 1,
+      queuedTurnCount,
       payload: {
         runtimeEntity: base.runtimeEntity,
         queueEvent: "queue_added",
-        queuedTurnCount: 1,
+        queuedTurnCount,
         queuedTurnId: queuedTurn.queuedTurnId,
         position: queuedTurn.position,
         messagePreview: truncateText(queuedTurn.messagePreview),
@@ -83,7 +84,7 @@ export function buildAgentUiQueueAddedEvents(
       control: "steer",
       runtimeStatus: "queued",
       latestTurnStatus: "queued",
-      queuedTurnCount: 1,
+      queuedTurnCount,
       payload: {
         runtimeEntity: base.runtimeEntity,
         taskEvent: "steer_intent",

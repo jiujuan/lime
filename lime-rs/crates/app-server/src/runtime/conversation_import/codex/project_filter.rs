@@ -15,6 +15,15 @@ pub(super) fn matches(cwd: &str, project_path: &str) -> bool {
     contains_path_segment(&cwd, &project_path)
 }
 
+pub(super) fn mentions(value: &str, project_path: &str) -> bool {
+    let value = normalize(value).to_lowercase();
+    let project_path = normalize(project_path).to_lowercase();
+    if value.is_empty() || project_path.is_empty() {
+        return false;
+    }
+    value.contains(project_path.as_str())
+}
+
 fn normalize(path: &str) -> String {
     path.trim()
         .replace('\\', "/")

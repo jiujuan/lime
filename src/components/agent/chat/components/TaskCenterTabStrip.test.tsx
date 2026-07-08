@@ -150,6 +150,33 @@ describe("TaskCenterTabStrip", () => {
     expect(onSelectTask).toHaveBeenCalledWith("topic-b");
   });
 
+  it("排队标签应显示排队状态且不使用运行中旋转图标", () => {
+    const { container } = renderTabStrip({
+      items: [
+        {
+          id: "topic-queued",
+          title: "排队任务",
+          status: "queued",
+          updatedAt: new Date("2026-04-24T10:00:00.000Z"),
+          isActive: true,
+          hasUnread: false,
+          isPinned: false,
+        },
+      ],
+    });
+
+    const tab = container.querySelector(
+      '[data-testid="task-center-tab-topic-queued"] button[title]',
+    ) as HTMLButtonElement | null;
+
+    expect(tab?.getAttribute("title")).toContain("排队中");
+    expect(
+      container.querySelector(
+        '[data-testid="task-center-tab-loading-topic-queued"]',
+      ),
+    ).toBeNull();
+  });
+
   it("关闭标签时不应触发切换", () => {
     const onSelectTask = vi.fn();
     const onCloseTask = vi.fn();

@@ -84,8 +84,7 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
         provider_id: "openai",
         model: "gpt-image-2",
         presentation: {
-          assistant_intro:
-            "我先按城市夜景分镜整理两张画面，保留全景和细节。",
+          assistant_intro: "我先按城市夜景分镜整理两张画面，保留全景和细节。",
         },
         layout_hint: "storyboard_3x3",
         storyboard_slots: [
@@ -181,6 +180,25 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
           presentation: {
             assistant_intro:
               "我先按春日咖啡馆插画整理构图，保留窗边和细节两张。",
+            styleLevels: {
+              runningStatus: { styleLevel: "L1" },
+              assistantIntro: { styleLevel: "L2" },
+              completionCaption: { styleLevel: "L2" },
+              mediaArtifact: { styleLevel: "L3" },
+            },
+            generationBriefBoundary: {
+              formalArtifactVoiceSource: "generation_brief_only",
+              productSoulDefault: "interaction_only",
+            },
+            soul_lifecycle: {
+              surface: "image_generation",
+              phase: "image_generation_presentation",
+              styleLevel: "L2",
+              riskLevel: "normal",
+              profileId: "cheeky_sassy_executor",
+              packId: "com.lime.soul.cheeky-sassy-executor",
+              toneVariant: "cheeky_sassy",
+            },
           },
           modality_contract_key: "image_generation",
           routing_slot: "primary-image",
@@ -319,6 +337,28 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
         modelSupportsImageGeneration: true,
         limecorePolicyDecision: "allow",
       },
+      soulMetadata: {
+        surface: "image_generation",
+        phase: "image_generation_presentation",
+        styleLevel: "L2",
+        riskLevel: "normal",
+        profileId: "cheeky_sassy_executor",
+        packId: "com.lime.soul.cheeky-sassy-executor",
+        toneVariant: "cheeky_sassy",
+        runningStatusStyleLevel: "L1",
+        assistantIntroStyleLevel: "L2",
+        completionCaptionStyleLevel: "L2",
+        mediaArtifactStyleLevel: "L3",
+        formalArtifactVoiceSource: "generation_brief_only",
+        productSoulDefault: "interaction_only",
+      },
+    });
+    expect(snapshot?.task.soulMetadata).toMatchObject({
+      profileId: "cheeky_sassy_executor",
+      packId: "com.lime.soul.cheeky-sassy-executor",
+      toneVariant: "cheeky_sassy",
+      mediaArtifactStyleLevel: "L3",
+      formalArtifactVoiceSource: "generation_brief_only",
     });
   });
 

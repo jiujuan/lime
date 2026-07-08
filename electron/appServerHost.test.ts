@@ -37,6 +37,7 @@ const {
   let turnStartRequestMode:
     | "resolve"
     | "hang"
+    | "hang-request"
     | "throw-stale-once"
     | "throw-exited-before-next-message"
     | "throw-exited-before-next-message-after-release" = "resolve";
@@ -132,6 +133,10 @@ const {
       },
     ),
     request: vi.fn(async (request: JsonRpcRequest) => {
+      if (turnStartRequestMode === "hang-request") {
+        recordedRequests.push(request);
+        await new Promise(() => undefined);
+      }
       if (turnStartRequestMode === "throw-stale-once") {
         turnStartRequestMode = "resolve";
         throw new Error("app-server sidecar stdin is closed");
@@ -189,6 +194,9 @@ const {
         ],
       };
     }),
+    transport: {
+      send: vi.fn(),
+    },
     nextNotification: vi.fn(async () => {
       const notification = mirroredNotifications.shift();
       if (!notification) {
@@ -277,6 +285,7 @@ const {
       turnStartRequestMode = "resolve";
       fakeConnection.request.mockClear();
       fakeConnection.requestUntilFirstNotificationOrResponse.mockClear();
+      fakeConnection.transport.send.mockClear();
       fakeConnection.nextNotification.mockClear();
     },
     setSystemProxyRules: (rules: string) => {
@@ -511,6 +520,42 @@ describe("ElectronAppServerHost", () => {
         method: "agentSession/turn/start",
       },
     });
+  });
+
+  it("取消 JSON-RPC request 时应把 renderer id 映射成 sidecar 内部 id", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+    setTurnStartRequestMode("hang-request");
+
+    const pending = host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: 7,
+          method: "agentSession/read",
+          params: { sessionId: "session-cancel" },
+        }),
+      ],
+    });
+    await vi.waitFor(() => {
+      expect(recordedRequests).toHaveLength(1);
+    });
+
+    await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          method: "$/cancelRequest",
+          params: { id: 7 },
+        }),
+      ],
+    });
+
+    expect(fakeConnection.transport.send).toHaveBeenCalledWith({
+      method: "$/cancelRequest",
+      params: { id: "electron-host:1" },
+    });
+    await expect(
+      Promise.race([pending, Promise.resolve("still-pending")]),
+    ).resolves.toBe("still-pending");
   });
 
   it("发现 stale sidecar stdin 已关闭时应丢弃旧连接并重启后重试当前请求", async () => {

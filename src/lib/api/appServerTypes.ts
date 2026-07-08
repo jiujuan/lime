@@ -477,3 +477,7 @@ export type AppServerRequestResult<T> = {
   configWarnings: AppServerConfigWarningNotification[];
   messages: AppServerJsonRpcMessage[];
 };
+
+export type AppServerRequestOptions = {
+  signal?: AbortSignal;
+};

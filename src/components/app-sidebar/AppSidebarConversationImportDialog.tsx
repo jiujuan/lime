@@ -77,6 +77,7 @@ export function AppSidebarConversationImportDialog({
   const [preview, setPreview] =
     useState<ConversationImportThreadPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sourceMessage, setSourceMessage] = useState<string | null>(null);
 
   const sourceRoot = normalizeOptional(sourceRootInput);
   const sourceRootRef = useRef<string | undefined>(sourceRoot);
@@ -120,7 +121,10 @@ export function AppSidebarConversationImportDialog({
   const targetLabel =
     normalizeOptional(projectName) ||
     normalizeOptional(workspaceId) ||
-    t("navigation.sidebar.importDialog.target.standalone", "Standalone conversation");
+    t(
+      "navigation.sidebar.importDialog.target.standalone",
+      "Standalone conversation",
+    );
   const selectedUpdatedAt = formatImportOptionalDate(
     preview?.thread.updatedAt ?? selectedThread?.updatedAt,
     i18n.language,
@@ -147,6 +151,7 @@ export function AppSidebarConversationImportDialog({
     async (nextSourceRoot?: string) => {
       setStage("scanning");
       setError(null);
+      setSourceMessage(null);
       setPreview(null);
       try {
         let cursor: string | undefined;
@@ -162,6 +167,7 @@ export function AppSidebarConversationImportDialog({
             ...(cursor ? { cursor } : {}),
           });
           resolvedSourceRoot = result.source.sourceRoot ?? resolvedSourceRoot;
+          setSourceMessage(result.source.message ?? null);
           nextThreads.push(...result.threads);
           cursor = result.nextCursor ?? undefined;
         } while (cursor);
@@ -176,6 +182,7 @@ export function AppSidebarConversationImportDialog({
         setThreads([]);
         setSelectedThreadId(null);
         setCheckedThreadIds(new Set());
+        setSourceMessage(null);
         setError(
           scanError instanceof Error && scanError.message.trim()
             ? scanError.message.trim()
@@ -199,6 +206,7 @@ export function AppSidebarConversationImportDialog({
     if (!isOpen) {
       setStage("idle");
       setError(null);
+      setSourceMessage(null);
       setPreview(null);
       return;
     }
@@ -407,7 +415,10 @@ export function AppSidebarConversationImportDialog({
             <div className="flex items-center gap-2">
               <FileInput className="h-4 w-4 text-emerald-700" />
               <h2 className="text-lg font-semibold text-slate-950">
-                {t("navigation.sidebar.importDialog.title", "Import Conversation")}
+                {t(
+                  "navigation.sidebar.importDialog.title",
+                  "Import Conversation",
+                )}
               </h2>
             </div>
             <p className="mt-1 truncate text-sm text-slate-500">
@@ -435,6 +446,7 @@ export function AppSidebarConversationImportDialog({
             importGroups={importGroups}
             loading={loading}
             locale={i18n.language}
+            emptyMessage={sourceMessage}
             selectableThreadCount={selectableThreads.length}
             selectedThreadId={selectedThreadId}
             selectingSourceRoot={selectingSourceRoot}
@@ -468,7 +480,10 @@ export function AppSidebarConversationImportDialog({
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <span className="text-xs font-semibold text-slate-500">
-                  {t("navigation.sidebar.importDialog.meta.selected", "Selected")}
+                  {t(
+                    "navigation.sidebar.importDialog.meta.selected",
+                    "Selected",
+                  )}
                 </span>
                 <strong className="mt-1 block truncate text-sm text-slate-950">
                   {formatNumber(checkedCount, { locale: i18n.language })}
@@ -593,7 +608,9 @@ export function AppSidebarConversationImportDialog({
                       </div>
                       <ul className="space-y-1">
                         {preview.summary.warnings.map((warning) => (
-                          <li key={warning}>{resolveImportWarningText(warning, t)}</li>
+                          <li key={warning}>
+                            {resolveImportWarningText(warning, t)}
+                          </li>
                         ))}
                       </ul>
                     </section>

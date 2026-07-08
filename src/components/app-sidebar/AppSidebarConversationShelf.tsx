@@ -9,6 +9,7 @@ import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import { FileInput, MessageSquarePlus } from "lucide-react";
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentBackgroundSessionRuntimeSnapshot } from "@/components/agent/chat";
 import {
   resolveUnfinishedSessionProjection,
   type AgentUnfinishedSessionStatus,
@@ -38,12 +39,13 @@ interface AppSidebarConversationShelfProps {
   openedProjects?: SidebarOpenedProjectSummary[];
   recentSessions: AsterSessionInfo[];
   currentSessionId?: string | null;
+  activeAgentStreaming?: boolean;
+  backgroundAgentSessionRuntime?: AgentBackgroundSessionRuntimeSnapshot | null;
   recentLoading: boolean;
   hasMoreRecent: boolean;
   actionSessionId: string | null;
   onCreateConversation: (project?: SidebarOpenedProjectSummary) => void;
   onImportConversation?: (project?: SidebarOpenedProjectSummary) => void;
-  importableProjectIds?: ReadonlySet<string>;
   onNavigateToConversation: (session: AsterSessionInfo) => void;
   onRenameConversation?: (session: AsterSessionInfo) => void;
   onDeleteConversation?: (session: AsterSessionInfo) => void;
@@ -85,6 +87,60 @@ function persistFavoriteSessionIds(sessionIds: string[]) {
     FAVORITE_SESSION_IDS_STORAGE_KEY,
     JSON.stringify(sessionIds),
   );
+}
+
+const TERMINAL_SIDEBAR_SESSION_STATUSES = new Set([
+  "completed",
+  "failed",
+  "canceled",
+  "aborted",
+]);
+
+function normalizeSidebarRuntimeStatus(value?: string | null): string | null {
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (!normalized) {
+    return null;
+  }
+  return normalized === "cancelled" ? "canceled" : normalized;
+}
+
+function hasTerminalSidebarRuntimeStatus(session: AsterSessionInfo): boolean {
+  const threadStatus = normalizeSidebarRuntimeStatus(session.thread_status);
+  const latestTurnStatus = normalizeSidebarRuntimeStatus(
+    session.latest_turn_status,
+  );
+  return Boolean(
+    (threadStatus && TERMINAL_SIDEBAR_SESSION_STATUSES.has(threadStatus)) ||
+    (latestTurnStatus &&
+      TERMINAL_SIDEBAR_SESSION_STATUSES.has(latestTurnStatus)),
+  );
+}
+
+function resolveBackgroundSidebarRuntimeStatus(
+  session: AsterSessionInfo,
+  backgroundAgentSessionRuntime?: AgentBackgroundSessionRuntimeSnapshot | null,
+): AgentUnfinishedSessionStatus | null {
+  const backgroundSessionId = backgroundAgentSessionRuntime?.sessionId.trim();
+  if (
+    !backgroundAgentSessionRuntime ||
+    !backgroundSessionId ||
+    backgroundSessionId !== session.id ||
+    hasTerminalSidebarRuntimeStatus(session)
+  ) {
+    return null;
+  }
+
+  switch (backgroundAgentSessionRuntime.status) {
+    case "waiting":
+      return "waitingAction";
+    case "queued":
+      return "queued";
+    case "running":
+      return "running";
+  }
 }
 
 function compareSessionTimeDesc(left?: number, right?: number): number {
@@ -236,12 +292,13 @@ export function AppSidebarConversationShelf({
   openedProjects = [],
   recentSessions,
   currentSessionId,
+  activeAgentStreaming = false,
+  backgroundAgentSessionRuntime = null,
   recentLoading,
   hasMoreRecent,
   actionSessionId,
   onCreateConversation,
   onImportConversation,
-  importableProjectIds,
   onNavigateToConversation,
   onRenameConversation,
   onDeleteConversation,
@@ -498,10 +555,7 @@ export function AppSidebarConversationShelf({
     "项目操作",
   );
   const runtimeStatusLabels: Record<AgentUnfinishedSessionStatus, string> = {
-    running: t(
-      "navigation.sidebar.conversations.status.running",
-      "正在输出",
-    ),
+    running: t("navigation.sidebar.conversations.status.running", "正在输出"),
     queued: t("navigation.sidebar.conversations.status.queued", "排队中"),
     waitingAction: t(
       "navigation.sidebar.conversations.status.waitingAction",
@@ -513,7 +567,19 @@ export function AppSidebarConversationShelf({
     const active = currentSessionId === session.id;
     const title = resolveLocalizedSessionTitle(session);
     const runtimeProjection = resolveUnfinishedSessionProjection(session);
-    const runtimeStatus = runtimeProjection?.status ?? null;
+    const terminalRuntimeStatus = hasTerminalSidebarRuntimeStatus(session);
+    const backgroundRuntimeStatus = resolveBackgroundSidebarRuntimeStatus(
+      session,
+      backgroundAgentSessionRuntime,
+    );
+    const activeRuntimeStatus: AgentUnfinishedSessionStatus | null =
+      active && activeAgentStreaming && !terminalRuntimeStatus
+        ? "running"
+        : null;
+    const runtimeStatus: AgentUnfinishedSessionStatus | null =
+      runtimeProjection?.status ??
+      backgroundRuntimeStatus ??
+      activeRuntimeStatus;
     return (
       <AppSidebarConversationRow
         key={session.id}
@@ -637,7 +703,6 @@ export function AppSidebarConversationShelf({
         conversationMenuState={menuState}
         projectMenuState={projectMenuState}
         favoriteSessionIds={favoriteSessionIds}
-        importableProjectIds={importableProjectIds}
         resolveSessionTitle={resolveLocalizedSessionTitle}
         onCloseMenus={closeMenus}
         onToggleFavoriteSession={toggleFavoriteSession}

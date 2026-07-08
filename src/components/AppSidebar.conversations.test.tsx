@@ -892,7 +892,7 @@ describe("AppSidebar conversations", () => {
     ).not.toBeNull();
   });
 
-  it("项目没有可导入本地历史时项目菜单不显示导入入口", async () => {
+  it("项目没有可导入本地历史时项目菜单仍保留导入入口", async () => {
     mockGetProject.mockResolvedValue({
       id: "project-1",
       name: "示例项目",
@@ -906,6 +906,8 @@ describe("AppSidebar conversations", () => {
         sourceRoot: "/Users/example/.codex",
         readable: true,
         threadCount: 0,
+        message:
+          "Found 2 matching Codex index records, but their rollout files are missing.",
         indexedAt: "2026-06-16T00:00:00.000Z",
         statePath: "/Users/example/.codex/state_5.sqlite",
       },
@@ -928,18 +930,32 @@ describe("AppSidebar conversations", () => {
     ).toBeNull();
     const projectMenu = await openProjectMenu("示例项目");
 
-    expect(projectMenu?.textContent).not.toContain("导入对话");
+    expect(projectMenu?.textContent).toContain("导入对话");
     expect(
       document.body.querySelector(
         '[data-testid="app-sidebar-project-menu-import-conversation"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
+
+    await act(async () => {
+      document.body
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-project-menu-import-conversation"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
     expect(mockScanConversationImportSource).toHaveBeenCalledWith({
       sourceClient: "codex",
       projectPath: "/repo/project-1",
       includeArchived: true,
       limit: 40,
     });
+    expect(document.body.textContent).toContain(
+      "Found 2 matching Codex index records",
+    );
   });
 
   it("从项目会话切到无项目对话时不应继承当前项目 ID", async () => {
@@ -1909,8 +1925,7 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    const callsBeforeStreaming =
-      mockListAgentRuntimeSessions.mock.calls.length;
+    const callsBeforeStreaming = mockListAgentRuntimeSessions.mock.calls.length;
     expect(callsBeforeStreaming).toBeGreaterThan(0);
 
     mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
@@ -1948,6 +1963,12 @@ describe("AppSidebar conversations", () => {
       );
     });
     await flushEffects(2);
+
+    const runtimeStatus = mounted.container.querySelector(
+      '[data-testid="app-sidebar-conversation-runtime-status"]',
+    );
+    expect(runtimeStatus?.getAttribute("data-status")).toBe("running");
+    expect(runtimeStatus?.getAttribute("aria-label")).toBe("正在输出");
 
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(
       callsBeforeStreaming,
@@ -1988,6 +2009,110 @@ describe("AppSidebar conversations", () => {
       limit: 11,
       cwd: "/repo/project-1",
     });
+  });
+
+  it("回到首页时应按后台未完成会话状态显示侧栏运行图标", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-current",
+        name: "正在后台输出的会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        messages_count: 3,
+      },
+    ]);
+
+    const mounted = mountSidebar({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+      } as AgentPageParams,
+      activeAgentSessionId: null,
+      activeAgentStreaming: false,
+      backgroundAgentSessionRuntime: {
+        sessionId: "session-current",
+        status: "running",
+      },
+    });
+    await flushEffects(2);
+
+    const runtimeStatus = mounted.container.querySelector(
+      '[data-testid="app-sidebar-conversation-runtime-status"]',
+    );
+    expect(runtimeStatus?.getAttribute("data-status")).toBe("running");
+    expect(runtimeStatus?.getAttribute("aria-label")).toBe("正在输出");
+    expect(
+      runtimeStatus?.closest("[data-active]")?.getAttribute("data-active"),
+    ).toBe("false");
+  });
+
+  it("回到首页时应按后台排队会话状态显示侧栏排队图标", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-current",
+        name: "正在后台排队的会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        messages_count: 3,
+      },
+    ]);
+
+    const mounted = mountSidebar({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+      } as AgentPageParams,
+      activeAgentSessionId: null,
+      activeAgentStreaming: false,
+      backgroundAgentSessionRuntime: {
+        sessionId: "session-current",
+        status: "queued",
+      },
+    });
+    await flushEffects(2);
+
+    const runtimeStatus = mounted.container.querySelector(
+      '[data-testid="app-sidebar-conversation-runtime-status"]',
+    );
+    expect(runtimeStatus?.getAttribute("data-status")).toBe("queued");
+    expect(runtimeStatus?.getAttribute("aria-label")).toBe("排队中");
+    expect(
+      runtimeStatus?.closest("[data-active]")?.getAttribute("data-active"),
+    ).toBe("false");
+  });
+
+  it("后台状态不会覆盖已完成的侧栏会话终态", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-current",
+        name: "已完成的会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        messages_count: 3,
+        latest_turn_status: "completed",
+      },
+    ]);
+
+    const mounted = mountSidebar({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+      } as AgentPageParams,
+      backgroundAgentSessionRuntime: {
+        sessionId: "session-current",
+        status: "running",
+      },
+    });
+    await flushEffects(2);
+
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="app-sidebar-conversation-runtime-status"]',
+      ),
+    ).toBeNull();
   });
 
   it("点击会话菜单归档动作时应走统一 session update 命令", async () => {
@@ -2271,11 +2396,12 @@ describe("AppSidebar conversations", () => {
       "agent",
       expect.objectContaining({
         agentEntry: "new-task",
+        newChatAt: expect.any(Number),
       }),
     );
-    expect((onNavigate.mock.calls[0]?.[1] as AgentPageParams).projectId).toBe(
-      undefined,
-    );
+    const nextParams = onNavigate.mock.calls[0]?.[1] as AgentPageParams;
+    expect(nextParams.projectId).toBe(undefined);
+    expect(nextParams.initialSessionId).toBe(undefined);
   });
 
   it("项目分组的新建对话入口应显式创建项目内对话", async () => {

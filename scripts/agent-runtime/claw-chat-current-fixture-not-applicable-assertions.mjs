@@ -4,6 +4,8 @@ import {
   EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
   EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
   IMAGE_COMMAND_ASSERTION_KEYS,
+  INPUTBAR_PENDING_STEER_MULTI_QUEUE_ASSERTION_KEYS,
+  INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_ASSERTION_KEYS,
   INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS,
   INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
   MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
@@ -28,6 +30,8 @@ export function buildNotApplicableAssertions(context) {
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarPendingSteerMultiQueueScenario,
+    isInputbarPendingSteerPopFrontResumeScenario,
     isInputbarPendingSteerRichRestoreScenario,
     isInputbarRichRestoreScenario,
     isMediaReferenceScenario,
@@ -88,6 +92,7 @@ export function buildNotApplicableAssertions(context) {
       ...IMAGE_COMMAND_ASSERTION_KEYS,
       ...INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
       ...INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS,
+      ...INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_ASSERTION_KEYS,
       ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
       ...SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -613,6 +618,12 @@ export function buildNotApplicableAssertions(context) {
     ...(isInputbarPendingSteerRichRestoreScenario
       ? []
       : INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS),
+    ...(isInputbarPendingSteerMultiQueueScenario
+      ? []
+      : INPUTBAR_PENDING_STEER_MULTI_QUEUE_ASSERTION_KEYS),
+    ...(isInputbarPendingSteerPopFrontResumeScenario
+      ? []
+      : INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_ASSERTION_KEYS),
     ...(isReasoningFirstVisibleScenario
       ? []
       : REASONING_FIRST_VISIBLE_ASSERTION_KEYS),

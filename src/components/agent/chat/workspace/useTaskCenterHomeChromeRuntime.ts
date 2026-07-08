@@ -32,6 +32,7 @@ interface UseTaskCenterHomeChromeRuntimeParams {
   shouldSuppressDraftContent: boolean;
   draftSendRequest: TaskCenterDraftSendRequest | null;
   normalizedInitialSessionId?: string | null;
+  isHomeSessionBackgroundRecovery: boolean;
   displayMessageCount: number;
   threadItemCount: number;
   hasPendingA2UIForm: boolean;
@@ -68,6 +69,7 @@ export function useTaskCenterHomeChromeRuntime({
   shouldSuppressDraftContent,
   draftSendRequest,
   normalizedInitialSessionId,
+  isHomeSessionBackgroundRecovery,
   displayMessageCount,
   threadItemCount,
   hasPendingA2UIForm,
@@ -133,6 +135,7 @@ export function useTaskCenterHomeChromeRuntime({
     draftSendRequest,
     sessionSwitchPending: taskCenterSessionSwitchPending,
     hasInitialSessionRoute: Boolean(normalizedInitialSessionId),
+    isHomeSessionBackgroundRecovery,
     displayMessageCount,
     threadItemCount,
     hasPendingA2UIForm,

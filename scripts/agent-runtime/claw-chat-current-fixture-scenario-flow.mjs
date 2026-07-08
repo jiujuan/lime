@@ -1,20 +1,16 @@
 import {
-  APP_SERVER_METHOD_SESSION_READ,
   ASSISTANT_DONE_TEXT,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
-  EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
-  EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF,
-  EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-  EXPERT_SKILLS_RUNTIME_PROMPT,
-  EXPERT_SKILLS_RUNTIME_SCENARIO,
   EXPERT_SKILLS_RUNTIME_SESSION_ID,
   EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
   IMAGE_COMMAND_SCENARIO,
+  INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO,
+  INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO,
   INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_SCENARIO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
@@ -33,147 +29,75 @@ import {
   REASONING_FIRST_VISIBLE_PROMPT,
   REASONING_FIRST_VISIBLE_SCENARIO,
   REASONING_FIRST_VISIBLE_TEXT,
-  TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
-  TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
-  TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-  TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-  TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
-  TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
   SOUL_STYLE_SCENARIO,
-  SKILLS_RUNTIME_EXPLICIT_PROMPT,
-  SKILLS_RUNTIME_EXPLICIT_SCENARIO,
-  SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
-  SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
-  SKILLS_RUNTIME_PROMPT,
-  SKILLS_RUNTIME_SCENARIO,
-  TERMINAL_STALE_GUARD_DONE_TEXT,
-  TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
-  TERMINAL_STALE_GUARD_FIRST_PROMPT,
-  TERMINAL_STALE_GUARD_FIRST_TEXT,
+  TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
+  TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
   TERMINAL_STALE_GUARD_SCENARIO,
-  TERMINAL_STALE_GUARD_SECOND_PROMPT,
-  TERMINAL_STALE_GUARD_SECOND_TEXT,
-  TERMINAL_STALE_GUARD_STALE_DONE_TEXT,
-  WEB_TOOLS_FETCH_TOOL_CALL_ID,
-  WEB_TOOLS_MID_THINKING_TEXT,
-  WEB_TOOLS_REASONING_FINAL_SIGNATURE,
-  WEB_TOOLS_RENDERING_DONE_TEXT,
-  WEB_TOOLS_RENDERING_PROMPT,
-  WEB_TOOLS_REASONING_ITEM_ID,
-  WEB_TOOLS_REASONING_ITEM_SIGNATURE,
-  WEB_TOOLS_REASONING_NATIVE_ITEM_ID,
-  WEB_TOOLS_REASONING_PROVIDER_BACKEND,
-  WEB_TOOLS_SEARCH_TOOL_CALL_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { runContentFactoryArticleWorkspaceScenario } from "./claw-chat-current-fixture-content-factory-article-workspace.mjs";
 import { runContentFactoryInlineImageArticleWorkspaceScenario } from "./claw-chat-current-fixture-inline-image-article-workspace.mjs";
 import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
-import {
-  addExpertSkillsRuntimeSkillFromInfoPanel,
-  exportExpertPanelEvidencePackFromHarnessPanel,
-  launchExpertSkillsRuntimeFromExpertPlaza,
-  reloadRendererAfterExpertPanelSkillCatalogInjection,
-  selectExpertPanelSkillsRuntimeSessionId,
-  summarizeExpertPanelSkillsRuntimeTurnStart,
-} from "./claw-chat-current-fixture-expert-actions.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
 import {
   enableGoalModeFromGui,
   enablePlanModeFromGui,
 } from "./claw-chat-current-fixture-gui-input-modes.mjs";
 import {
-  runInputbarPendingSteerRichRestoreScenario,
   runInputbarRichRestoreScenario,
 } from "./claw-chat-current-fixture-inputbar-rich-restore.mjs";
+import {
+  runInputbarPendingSteerMultiQueueScenario,
+  runInputbarPendingSteerPopFrontResumeScenario,
+  runInputbarPendingSteerRichRestoreScenario,
+} from "./claw-chat-current-fixture-inputbar-pending-steer.mjs";
 import {
   waitForGuiChatCanceled,
   waitForGuiChatCompleted,
   waitForGuiPlanCompleted,
   waitForGuiReasoningFirstVisibleBeforeAnswer,
   waitForGuiReasoningFirstVisibleCompleted,
-  waitForGuiSkillsRuntimeCompleted,
   waitForStopButtonVisibleAndClick,
 } from "./claw-chat-current-fixture-gui-completion-waits.mjs";
 import { waitForGuiMcpStructuredContentCompleted } from "./claw-chat-current-fixture-gui-tool-waits.mjs";
-import {
-  inspectGuiWebToolsRenderingDebug,
-  waitForGuiWebToolsRenderingCompleted,
-  waitForGuiWebToolsRenderingInProgress,
-} from "./claw-chat-current-fixture-gui-web-tools-waits.mjs";
 import { runImageCommandScenario } from "./claw-chat-current-fixture-image-command.mjs";
 import {
   MEDIA_REFERENCE_SCENARIO,
   runMediaReferenceScenario,
 } from "./claw-chat-current-fixture-media-reference.mjs";
 import {
+  runTerminalCanceledAfterAnswerScenario,
+  runTerminalFailedAfterAnswerScenario,
+} from "./claw-chat-current-fixture-terminal-after-answer.mjs";
+import { runTerminalStaleGuardScenario } from "./claw-chat-current-fixture-terminal-stale-guard.mjs";
+import {
   createExpertSkillsRuntimeSession,
-  injectExpertSkillsRuntimeCatalog,
   openSessionFromSidebar,
   sendNewsPromptFromGui,
   waitForGuiSessionVisible,
 } from "./claw-chat-current-fixture-session.mjs";
 import {
-  ensureManualEnableWorkspaceSkill,
-  ensureUserVisibleCapabilityReportSkill,
-  launchSkillsRuntimeFromWorkspacePanel,
-  waitForExpertPanelSkillsRuntimeSessionReady,
-} from "./claw-chat-current-fixture-skills-workspace.mjs";
-import {
-  clearInvokeBuffers,
-  invokeAppServerFromPage,
-  waitForRendererReady,
-} from "./claw-chat-current-fixture-rpc.mjs";
+  runExpertSkillsRuntimeScenario,
+  runSkillsRuntimeScenario,
+} from "./claw-chat-current-fixture-skills-runtime-flow.mjs";
 import { verifyPlanHistoryHydrate } from "./claw-chat-current-fixture-plan-history.mjs";
 import { runRightSurfaceVisualMatrix } from "./claw-chat-current-fixture-right-surface-visual.mjs";
-import { collectReadModelToolCalls } from "./claw-chat-current-fixture-read-model-core.mjs";
+import { runWebToolsRenderingScenario } from "./claw-chat-current-fixture-web-tools-rendering.mjs";
 import {
   exportMultiAgentTeamEvidencePack,
-  exportSkillsRuntimeEvidencePack,
   runEventReadProbe,
-  waitForBackendTurnStartWithCurrentQueueResume,
   waitForSessionReadCanceled,
   waitForSessionReadCompleted,
-  waitForSessionReadFailedAfterAnswer,
   waitForSessionReadMcpStructuredContentCompleted,
   waitForSessionReadPlanCompleted,
-  waitForSessionReadSkillsRuntimeCompleted,
 } from "./claw-chat-current-fixture-read-model-waits.mjs";
 import {
   waitForBackendLedgerEntry,
   waitForBackendLedgerTurnStart,
-  waitForBackendLedgerTurnStartContaining,
 } from "./claw-chat-current-fixture-backend-ledger.mjs";
 import { resolveSoulStyleFixtureExpectedTexts } from "./claw-chat-current-fixture-soul-style.mjs";
 import { logStage, sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
-
-function summarizeThreadItemsForProbe(items) {
-  if (!Array.isArray(items)) {
-    return [];
-  }
-  return items.map((item) => ({
-    id: typeof item?.id === "string" ? item.id : null,
-    type: typeof item?.type === "string" ? item.type : null,
-    phase: typeof item?.phase === "string" ? item.phase : null,
-    sequence: typeof item?.sequence === "number" ? item.sequence : null,
-    text:
-      typeof item?.text === "string"
-        ? item.text.slice(0, 120)
-        : typeof item?.message === "string"
-          ? item.message.slice(0, 120)
-          : typeof item?.content === "string"
-            ? item.content.slice(0, 120)
-            : null,
-    turnId:
-      typeof item?.turn_id === "string"
-        ? item.turn_id
-        : typeof item?.turnId === "string"
-          ? item.turnId
-          : null,
-  }));
-}
 
 function collectReadModelThreadItems(readModel) {
   const detailItems = Array.isArray(readModel?.detail?.items)
@@ -231,83 +155,6 @@ function summarizeReasoningFirstVisibleReadModel(readModel) {
       reasoningSequence != null &&
       finalSequence != null &&
       reasoningSequence < finalSequence,
-  };
-}
-
-function summarizeTerminalStaleGuardReadModel(readModel, { prompt, doneText }) {
-  const serialized = JSON.stringify(readModel || {});
-  return {
-    detailItemCount: Array.isArray(readModel?.detail?.items)
-      ? readModel.detail.items.length
-      : null,
-    threadReadItemCount: Array.isArray(
-      readModel?.detail?.thread_read?.thread_items,
-    )
-      ? readModel.detail.thread_read.thread_items.length
-      : null,
-    latestTurnStatus:
-      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
-      readModel?.detail?.thread_read?.status ??
-      readModel?.detail?.status ??
-      null,
-    includesPrompt: serialized.includes(prompt),
-    includesAssistantDone: serialized.includes(doneText),
-  };
-}
-
-function summarizeTerminalFailedAfterAnswerReadModel(readModel) {
-  const serialized = JSON.stringify(readModel || {});
-  return {
-    detailItemCount: Array.isArray(readModel?.detail?.items)
-      ? readModel.detail.items.length
-      : null,
-    threadReadItemCount: Array.isArray(
-      readModel?.detail?.thread_read?.thread_items,
-    )
-      ? readModel.detail.thread_read.thread_items.length
-      : null,
-    latestTurnStatus:
-      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
-      readModel?.detail?.thread_read?.status ??
-      readModel?.detail?.status ??
-      null,
-    latestTurnErrorMessage:
-      readModel?.detail?.thread_read?.diagnostics
-        ?.latest_turn_error_message ??
-      readModel?.detail?.thread_read?.diagnostics
-        ?.latestTurnErrorMessage ??
-      null,
-    includesPrompt: serialized.includes(TERMINAL_FAILED_AFTER_ANSWER_PROMPT),
-    includesPartialText: serialized.includes(
-      TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-    ),
-    includesFailureText: serialized.includes(
-      TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-    ),
-  };
-}
-
-function summarizeTerminalCanceledAfterAnswerReadModel(readModel) {
-  const serialized = JSON.stringify(readModel || {});
-  return {
-    detailItemCount: Array.isArray(readModel?.detail?.items)
-      ? readModel.detail.items.length
-      : null,
-    threadReadItemCount: Array.isArray(
-      readModel?.detail?.thread_read?.thread_items,
-    )
-      ? readModel.detail.thread_read.thread_items.length
-      : null,
-    latestTurnStatus:
-      readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
-      readModel?.detail?.thread_read?.status ??
-      readModel?.detail?.status ??
-      null,
-    includesPrompt: serialized.includes(TERMINAL_CANCELED_AFTER_ANSWER_PROMPT),
-    includesPartialText: serialized.includes(
-      TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-    ),
-    includesCanceled: serialized.includes("canceled"),
   };
 }
 
@@ -431,6 +278,32 @@ export async function executeScenarioFlow({
     Object.assign(
       summary,
       await runInputbarPendingSteerRichRestoreScenario({
+        page,
+        options,
+        summary,
+        appServerRequests,
+        runtimeEnv,
+      }),
+    );
+  } else if (options.scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO) {
+    logStage("run-inputbar-pending-steer-multi-queue");
+    Object.assign(
+      summary,
+      await runInputbarPendingSteerMultiQueueScenario({
+        page,
+        options,
+        summary,
+        appServerRequests,
+        runtimeEnv,
+      }),
+    );
+  } else if (
+    options.scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO
+  ) {
+    logStage("run-inputbar-pending-steer-pop-front-resume");
+    Object.assign(
+      summary,
+      await runInputbarPendingSteerPopFrontResumeScenario({
         page,
         options,
         summary,
@@ -613,325 +486,48 @@ export async function executeScenarioFlow({
 
     await recordAgentUiPerformanceTraceEvidence(summary, page);
   } else if (options.scenario === TERMINAL_FAILED_AFTER_ANSWER_SCENARIO) {
-    logStage("send-terminal-failed-after-answer-prompt-from-gui");
-    summary.terminalFailedAfterAnswerInputSend = sanitizeJson(
-      await sendPromptFromGui(
-        page,
-        options,
-        TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
-      ),
-    );
-
-    logStage("wait-gui-terminal-failed-after-answer-failed");
-    summary.guiTerminalFailedAfterAnswerCompleted = sanitizeJson(
-      await waitForGuiChatCompleted(page, options, {
-        prompt: TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
-        doneText: TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-        summaryText: TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-        requiredVisibleTexts: [TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT],
-        dedupeGuardTexts: [
-          TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-          TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-        ],
-      }),
-    );
-
-    logStage("wait-read-model-terminal-failed-after-answer-failed");
-    const readModelTerminalFailedAfterAnswer =
-      await waitForSessionReadFailedAfterAnswer(
+    Object.assign(
+      summary,
+      await runTerminalFailedAfterAnswerScenario({
         page,
         options,
         appServerRequests,
-        {
-          prompt: TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
-          partialText: TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-          failureText: TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-        },
-      );
-    summary.readModelTerminalFailedAfterAnswer = sanitizeJson(
-      summarizeTerminalFailedAfterAnswerReadModel(
-        readModelTerminalFailedAfterAnswer,
-      ),
+        runtimeEnv,
+        logStage,
+      }),
     );
-
-    const failedAfterAnswerLedger = await waitForBackendLedgerEntry(
-      runtimeEnv.backendLedgerPath,
-      (entry) => entry.kind === "terminalFailedAfterAnswerTurnFailed",
-      options,
-    );
-    summary.terminalFailedAfterAnswerBackend = sanitizeJson({
-      eventType: failedAfterAnswerLedger.entry.eventType,
-      turnId: failedAfterAnswerLedger.entry.turnId,
-      partialText: failedAfterAnswerLedger.entry.partialText,
-      failureText: failedAfterAnswerLedger.entry.failureText,
-      ledgerCount: failedAfterAnswerLedger.ledger.length,
-    });
   } else if (options.scenario === TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO) {
-    logStage("send-terminal-canceled-after-answer-prompt-from-gui");
-    summary.terminalCanceledAfterAnswerInputSend = sanitizeJson(
-      await sendPromptFromGui(
+    Object.assign(
+      summary,
+      await runTerminalCanceledAfterAnswerScenario({
         page,
         options,
-        TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
-      ),
-    );
-
-    logStage("click-stop-after-terminal-canceled-partial-from-gui");
-    summary.terminalCanceledAfterAnswerStopClick = sanitizeJson(
-      await waitForStopButtonVisibleAndClick(page, options, {
-        prompt: TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
-        visibleOutputText: TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-        requireVisibleOutput: true,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
       }),
     );
-
-    logStage("wait-gui-terminal-canceled-after-answer-canceled");
-    summary.guiTerminalCanceledAfterAnswerCanceled = sanitizeJson(
-      await waitForGuiChatCanceled(page, options, {
-        prompt: TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
-        partialText: TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-      }),
-    );
-
-    logStage("wait-read-model-terminal-canceled-after-answer-canceled");
-    const readModelTerminalCanceledAfterAnswer =
-      await waitForSessionReadCanceled(page, options, appServerRequests, {
-        prompt: TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
-        partialText: TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT,
-      });
-    summary.readModelTerminalCanceledAfterAnswer = sanitizeJson(
-      summarizeTerminalCanceledAfterAnswerReadModel(
-        readModelTerminalCanceledAfterAnswer,
-      ),
-    );
-
-    const canceledAfterAnswerLedger = await waitForBackendLedgerEntry(
-      runtimeEnv.backendLedgerPath,
-      (entry) => entry.kind === "terminalCanceledAfterAnswerTurnCanceled",
-      options,
-    );
-    summary.terminalCanceledAfterAnswerBackend = sanitizeJson({
-      eventType: canceledAfterAnswerLedger.entry.eventType,
-      turnId: canceledAfterAnswerLedger.entry.turnId,
-      partialText: canceledAfterAnswerLedger.entry.partialText,
-      canceledText: canceledAfterAnswerLedger.entry.canceledText,
-      ledgerCount: canceledAfterAnswerLedger.ledger.length,
-    });
   } else if (options.scenario === TERMINAL_STALE_GUARD_SCENARIO) {
-    logStage("send-terminal-stale-guard-first-prompt-from-gui");
-    summary.terminalStaleGuardFirstInputSend = sanitizeJson(
-      await sendPromptFromGui(
+    Object.assign(
+      summary,
+      await runTerminalStaleGuardScenario({
         page,
         options,
-        TERMINAL_STALE_GUARD_FIRST_PROMPT,
-      ),
-    );
-
-    logStage("wait-gui-terminal-stale-guard-first-completed");
-    summary.guiTerminalStaleGuardFirstCompleted = sanitizeJson(
-      await waitForGuiChatCompleted(page, options, {
-        prompt: TERMINAL_STALE_GUARD_FIRST_PROMPT,
-        doneText: TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
-        summaryText: TERMINAL_STALE_GUARD_FIRST_TEXT,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
       }),
     );
-
-    logStage("wait-read-model-terminal-stale-guard-first-completed");
-    const readModelTerminalStaleGuardFirstCompleted =
-      await waitForSessionReadCompleted(page, options, appServerRequests, {
-        prompt: TERMINAL_STALE_GUARD_FIRST_PROMPT,
-        doneText: TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
-        summaryText: TERMINAL_STALE_GUARD_FIRST_TEXT,
-      });
-    summary.readModelTerminalStaleGuardFirstCompleted = sanitizeJson(
-      summarizeTerminalStaleGuardReadModel(
-        readModelTerminalStaleGuardFirstCompleted,
-        {
-          prompt: TERMINAL_STALE_GUARD_FIRST_PROMPT,
-          doneText: TERMINAL_STALE_GUARD_FIRST_DONE_TEXT,
-        },
-      ),
-    );
-
-    logStage("send-terminal-stale-guard-second-prompt-from-gui");
-    summary.terminalStaleGuardSecondInputSend = sanitizeJson(
-      await sendPromptFromGui(
-        page,
-        options,
-        TERMINAL_STALE_GUARD_SECOND_PROMPT,
-      ),
-    );
-
-    logStage("wait-gui-terminal-stale-guard-second-completed");
-    summary.guiTerminalStaleGuardSecondCompleted = sanitizeJson(
-      await waitForGuiChatCompleted(page, options, {
-        prompt: TERMINAL_STALE_GUARD_SECOND_PROMPT,
-        doneText: TERMINAL_STALE_GUARD_DONE_TEXT,
-        summaryText: TERMINAL_STALE_GUARD_SECOND_TEXT,
-        disallowedVisibleTexts: [TERMINAL_STALE_GUARD_STALE_DONE_TEXT],
-      }),
-    );
-
-    logStage("wait-read-model-terminal-stale-guard-second-completed");
-    const readModelTerminalStaleGuardSecondCompleted =
-      await waitForSessionReadCompleted(page, options, appServerRequests, {
-        prompt: TERMINAL_STALE_GUARD_SECOND_PROMPT,
-        doneText: TERMINAL_STALE_GUARD_DONE_TEXT,
-        summaryText: TERMINAL_STALE_GUARD_SECOND_TEXT,
-      });
-    summary.readModelTerminalStaleGuardSecondCompleted = sanitizeJson(
-      summarizeTerminalStaleGuardReadModel(
-        readModelTerminalStaleGuardSecondCompleted,
-        {
-          prompt: TERMINAL_STALE_GUARD_SECOND_PROMPT,
-          doneText: TERMINAL_STALE_GUARD_DONE_TEXT,
-        },
-      ),
-    );
-
-    const staleTerminalLedger = await waitForBackendLedgerEntry(
-      runtimeEnv.backendLedgerPath,
-      (entry) => entry.kind === "terminalStaleGuardStaleTerminal",
-      options,
-    );
-    const staleTerminalEntry = staleTerminalLedger.entry;
-    summary.terminalStaleGuardStaleTerminal = sanitizeJson({
-      currentTurnId: staleTerminalEntry.currentTurnId,
-      staleTurnId: staleTerminalEntry.staleTurnId,
-      staleEventType: staleTerminalEntry.staleEventType,
-      staleDoneText: staleTerminalEntry.staleDoneText,
-      staleTurnDiffersFromCurrent:
-        Boolean(staleTerminalEntry.currentTurnId) &&
-        Boolean(staleTerminalEntry.staleTurnId) &&
-        staleTerminalEntry.staleTurnId !== staleTerminalEntry.currentTurnId,
-      ledgerCount: staleTerminalLedger.ledger.length,
-    });
   } else if (options.scenario === "web-tools-rendering") {
-    logStage("send-web-tools-rendering-prompt-from-gui");
-    summary.webToolsRenderingInputSend = sanitizeJson(
-      await sendPromptFromGui(page, options, WEB_TOOLS_RENDERING_PROMPT),
+    Object.assign(
+      summary,
+      await runWebToolsRenderingScenario({
+        page,
+        options,
+        appServerRequests,
+        logStage,
+      }),
     );
-
-    logStage("wait-gui-web-tools-rendering-in-progress");
-    summary.guiWebToolsRenderingInProgress = sanitizeJson(
-      await waitForGuiWebToolsRenderingInProgress(page, options),
-    );
-
-    logStage("wait-gui-web-tools-rendering-completed");
-    try {
-      summary.guiWebToolsRenderingCompleted = sanitizeJson(
-        await waitForGuiWebToolsRenderingCompleted(page, options),
-      );
-    } catch (error) {
-      try {
-        summary.guiWebToolsRenderingDebug = sanitizeJson(
-          await inspectGuiWebToolsRenderingDebug(page),
-        );
-      } catch (debugError) {
-        summary.guiWebToolsRenderingDebug = sanitizeJson({
-          error: String(debugError?.message || debugError),
-        });
-      }
-      try {
-        const probe = await invokeAppServerFromPage(
-          page,
-          APP_SERVER_METHOD_SESSION_READ,
-          {
-            sessionId: SESSION_ID,
-            historyLimit: 100,
-          },
-          appServerRequests,
-        );
-        const serializedProbe = JSON.stringify(probe.result || {});
-        const detailItems = probe.result?.detail?.items;
-        const threadReadItems = probe.result?.detail?.thread_read?.thread_items;
-        summary.readModelWebToolsRenderingFailureProbe = sanitizeJson({
-          detailItemCount: Array.isArray(detailItems)
-            ? detailItems.length
-            : null,
-          detailItems: summarizeThreadItemsForProbe(detailItems),
-          includesMidThinking: serializedProbe.includes(
-            WEB_TOOLS_MID_THINKING_TEXT,
-          ),
-          includesIntroText:
-            serializedProbe.includes("我先联网核实目标页面来源。"),
-          includesWebSearchTool: serializedProbe.includes(
-            WEB_TOOLS_SEARCH_TOOL_CALL_ID,
-          ),
-          includesWebFetchTool: serializedProbe.includes(
-            WEB_TOOLS_FETCH_TOOL_CALL_ID,
-          ),
-          threadReadItemCount: Array.isArray(threadReadItems)
-            ? threadReadItems.length
-            : null,
-          threadReadItems: summarizeThreadItemsForProbe(threadReadItems),
-        });
-      } catch (probeError) {
-        summary.readModelWebToolsRenderingFailureProbe = sanitizeJson({
-          error: String(probeError?.message || probeError),
-        });
-      }
-      throw error;
-    }
-
-    logStage("wait-read-model-web-tools-rendering-completed");
-    const readModelWebToolsRenderingCompleted =
-      await waitForSessionReadCompleted(page, options, appServerRequests, {
-        prompt: WEB_TOOLS_RENDERING_PROMPT,
-        doneText: WEB_TOOLS_RENDERING_DONE_TEXT,
-        summaryText: "网页搜索渲染结论",
-      });
-    summary.readModelWebToolsRenderingCompleted = sanitizeJson({
-      detailItemCount: Array.isArray(
-        readModelWebToolsRenderingCompleted?.detail?.items,
-      )
-        ? readModelWebToolsRenderingCompleted.detail.items.length
-        : null,
-      toolCallCount: collectReadModelToolCalls(
-        readModelWebToolsRenderingCompleted,
-      ).length,
-      latestTurnStatus:
-        readModelWebToolsRenderingCompleted?.detail?.thread_read
-          ?.runtime_summary?.latestTurnStatus ??
-        readModelWebToolsRenderingCompleted?.detail?.thread_read?.status ??
-        readModelWebToolsRenderingCompleted?.detail?.status ??
-        null,
-      includesPrompt: JSON.stringify(
-        readModelWebToolsRenderingCompleted || {},
-      ).includes(WEB_TOOLS_RENDERING_PROMPT),
-      includesAssistantDone: JSON.stringify(
-        readModelWebToolsRenderingCompleted || {},
-      ).includes(WEB_TOOLS_RENDERING_DONE_TEXT),
-      includesAssistantSummary: JSON.stringify(
-        readModelWebToolsRenderingCompleted || {},
-      ).includes("网页搜索渲染结论"),
-      includesWebSearchTool: JSON.stringify(
-        readModelWebToolsRenderingCompleted || {},
-      ).includes(WEB_TOOLS_SEARCH_TOOL_CALL_ID),
-      includesWebFetchTool: JSON.stringify(
-        readModelWebToolsRenderingCompleted || {},
-      ).includes(WEB_TOOLS_FETCH_TOOL_CALL_ID),
-      includesReasoningFinal: JSON.stringify(
-        readModelWebToolsRenderingCompleted || {},
-      ).includes(WEB_TOOLS_REASONING_FINAL_SIGNATURE),
-      includesReasoningFinalProviderMetadata:
-        JSON.stringify(readModelWebToolsRenderingCompleted || {}).includes(
-          WEB_TOOLS_REASONING_FINAL_SIGNATURE,
-        ) &&
-        JSON.stringify(readModelWebToolsRenderingCompleted || {}).includes(
-          WEB_TOOLS_REASONING_PROVIDER_BACKEND,
-        ),
-      includesReasoningItem: JSON.stringify(
-        readModelWebToolsRenderingCompleted || {},
-      ).includes(WEB_TOOLS_REASONING_ITEM_ID),
-      includesReasoningItemProviderMetadata:
-        JSON.stringify(readModelWebToolsRenderingCompleted || {}).includes(
-          WEB_TOOLS_REASONING_ITEM_SIGNATURE,
-        ) &&
-        JSON.stringify(readModelWebToolsRenderingCompleted || {}).includes(
-          WEB_TOOLS_REASONING_NATIVE_ITEM_ID,
-        ),
-    });
   } else if (options.scenario === "mcp-structured-content") {
     logStage("send-mcp-structured-content-prompt-from-gui");
     summary.mcpStructuredContentInputSend = sanitizeJson(
@@ -1035,458 +631,33 @@ export async function executeScenarioFlow({
     );
     summary.evidencePackMultiAgentTeam = evidencePackMultiAgentTeam.summary;
   } else if (options.scenario === "skills-runtime") {
-    logStage("send-skills-runtime-prompt-from-gui");
-    summary.skillsRuntimeInputSend = sanitizeJson(
-      await sendPromptFromGui(page, options, SKILLS_RUNTIME_PROMPT),
-    );
-
-    logStage("wait-gui-skills-runtime-completed");
-    summary.guiSkillsRuntimeCompleted = sanitizeJson(
-      await waitForGuiSkillsRuntimeCompleted(page, options),
-    );
-
-    logStage("wait-read-model-skills-runtime-completed");
-    const readModelSkillsRuntimeCompleted =
-      await waitForSessionReadSkillsRuntimeCompleted(
+    Object.assign(
+      summary,
+      await runSkillsRuntimeScenario({
         page,
         options,
+        workspace,
         appServerRequests,
-      );
-    summary.readModelSkillsRuntimeCompleted =
-      readModelSkillsRuntimeCompleted.summary;
-
-    logStage("export-skills-runtime-evidence-pack");
-    const evidencePackSkillsRuntime = await exportSkillsRuntimeEvidencePack(
-      page,
-      appServerRequests,
-      SKILLS_RUNTIME_SCENARIO,
-    );
-    summary.evidencePackSkillsRuntime = evidencePackSkillsRuntime.summary;
-
-    logStage("send-explicit-skills-runtime-prompt-from-gui");
-    summary.explicitSkillsRuntimeInputSend = sanitizeJson(
-      await sendPromptFromGui(page, options, SKILLS_RUNTIME_EXPLICIT_PROMPT),
-    );
-
-    logStage("wait-gui-explicit-skills-runtime-completed");
-    summary.guiExplicitSkillsRuntimeCompleted = sanitizeJson(
-      await waitForGuiSkillsRuntimeCompleted(
-        page,
-        options,
-        SKILLS_RUNTIME_EXPLICIT_SCENARIO,
-      ),
-    );
-
-    logStage("wait-read-model-explicit-skills-runtime-completed");
-    const readModelExplicitSkillsRuntimeCompleted =
-      await waitForSessionReadSkillsRuntimeCompleted(
-        page,
-        options,
-        appServerRequests,
-        SKILLS_RUNTIME_EXPLICIT_SCENARIO,
-      );
-    summary.readModelExplicitSkillsRuntimeCompleted =
-      readModelExplicitSkillsRuntimeCompleted.summary;
-
-    logStage("export-explicit-skills-runtime-evidence-pack");
-    const evidencePackExplicitSkillsRuntime =
-      await exportSkillsRuntimeEvidencePack(
-        page,
-        appServerRequests,
-        SKILLS_RUNTIME_EXPLICIT_SCENARIO,
-      );
-    summary.evidencePackExplicitSkillsRuntime =
-      evidencePackExplicitSkillsRuntime.summary;
-
-    logStage("launch-manual-enable-skills-runtime-from-workspace-panel");
-    const manualEnableSkillsRuntimeLaunch =
-      await launchSkillsRuntimeFromWorkspacePanel(page, options, workspace);
-    summary.manualEnableSkillsRuntimeTurnStart = sanitizeJson({
-      launch: manualEnableSkillsRuntimeLaunch,
-    });
-    summary.manualEnableSkillsRuntimeSkill =
-      manualEnableSkillsRuntimeLaunch.workspaceSkill;
-
-    logStage("wait-manual-enable-skills-runtime-backend-turn-start");
-    const manualEnableSkillsRuntimeBackendTurn =
-      await waitForBackendLedgerTurnStart(
-        runtimeEnv.backendLedgerPath,
-        SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
-        options,
-      );
-    const manualEnableSkillsRuntimeSessionId =
-      manualEnableSkillsRuntimeBackendTurn.entry.sessionId ?? SESSION_ID;
-    summary.manualEnableSkillsRuntimeTurnStart = sanitizeJson({
-      ...summary.manualEnableSkillsRuntimeTurnStart,
-      backend: {
-        sessionId: manualEnableSkillsRuntimeSessionId,
-        turnId: manualEnableSkillsRuntimeBackendTurn.entry.turnId ?? null,
-        inputText: manualEnableSkillsRuntimeBackendTurn.entry.inputText ?? null,
-      },
-    });
-
-    logStage("wait-gui-manual-enable-skills-runtime-completed");
-    summary.guiManualEnableSkillsRuntimeCompleted = sanitizeJson(
-      await waitForGuiSkillsRuntimeCompleted(
-        page,
-        options,
-        SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
-      ),
-    );
-
-    logStage("wait-read-model-manual-enable-skills-runtime-completed");
-    const readModelManualEnableSkillsRuntimeCompleted =
-      await waitForSessionReadSkillsRuntimeCompleted(
-        page,
-        options,
-        appServerRequests,
-        SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
-        manualEnableSkillsRuntimeSessionId,
-      );
-    summary.readModelManualEnableSkillsRuntimeCompleted =
-      readModelManualEnableSkillsRuntimeCompleted.summary;
-
-    logStage("export-manual-enable-skills-runtime-evidence-pack");
-    const evidencePackManualEnableSkillsRuntime =
-      await exportSkillsRuntimeEvidencePack(
-        page,
-        appServerRequests,
-        SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO,
-        manualEnableSkillsRuntimeSessionId,
-      );
-    summary.evidencePackManualEnableSkillsRuntime =
-      evidencePackManualEnableSkillsRuntime.summary;
-  } else if (options.scenario === "expert-skills-runtime") {
-    logStage("prepare-expert-skills-runtime-workspace-skill");
-    summary.expertSkillsRuntimeSkill = sanitizeJson(
-      ensureManualEnableWorkspaceSkill(workspace.rootPath),
-    );
-
-    logStage("create-expert-skills-runtime-session");
-    const expertSessionCreation = await createExpertSkillsRuntimeSession(
-      page,
-      workspace,
-      appServerRequests,
-    );
-    summary.expertSkillsRuntimeSessionCreation = sanitizeJson({
-      sessionId:
-        expertSessionCreation.session?.session?.sessionId ??
-        expertSessionCreation.session?.sessionId ??
-        null,
-      updatedSessionId:
-        expertSessionCreation.update?.session?.sessionId ??
-        expertSessionCreation.update?.sessionId ??
-        null,
-      expertId: expertSessionCreation.expertMetadata?.expert?.expertId ?? null,
-      skillRefs: expertSessionCreation.expertMetadata?.expert?.skillRefs ?? [],
-    });
-
-    logStage("open-expert-skills-runtime-session-from-sidebar");
-    summary.guiExpertSkillsRuntimeSessionVisible = sanitizeJson(
-      await waitForGuiSessionVisible(
-        page,
-        options,
-        EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
-      ),
-    );
-    summary.guiExpertSkillsRuntimeSessionOpened = sanitizeJson(
-      await openSessionFromSidebar(page, options, appServerRequests, {
-        sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-        title: EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
+        runtimeEnv,
+        logStage,
       }),
-    );
-
-    logStage("send-expert-skills-runtime-prompt-from-gui");
-    summary.expertSkillsRuntimeInputSend = sanitizeJson(
-      await sendPromptFromGui(page, options, EXPERT_SKILLS_RUNTIME_PROMPT, {
-        expectedSessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
-      }),
-    );
-
-    logStage("wait-expert-skills-runtime-backend-turn-start");
-    const expertSkillsRuntimeBackendStart =
-      await waitForBackendTurnStartWithCurrentQueueResume(
-        page,
-        options,
-        appServerRequests,
-        runtimeEnv.backendLedgerPath,
-        EXPERT_SKILLS_RUNTIME_SESSION_ID,
-        EXPERT_SKILLS_RUNTIME_PROMPT,
-      );
-    const expertSkillsRuntimeBackendTurn =
-      expertSkillsRuntimeBackendStart.backendTurn;
-    const expertSkillsRuntimeSessionId =
-      expertSkillsRuntimeBackendTurn.entry.sessionId ??
-      EXPERT_SKILLS_RUNTIME_SESSION_ID;
-    summary.expertSkillsRuntimeQueueResume = sanitizeJson(
-      expertSkillsRuntimeBackendStart.queueResume,
-    );
-    summary.expertSkillsRuntimeTurnStart = sanitizeJson({
-      sessionId: expertSkillsRuntimeSessionId,
-      turnId: expertSkillsRuntimeBackendTurn.entry.turnId ?? null,
-      inputText: expertSkillsRuntimeBackendTurn.entry.inputText ?? null,
-    });
-
-    logStage("wait-read-model-expert-skills-runtime-completed");
-    const readModelExpertSkillsRuntimeCompleted =
-      await waitForSessionReadSkillsRuntimeCompleted(
-        page,
-        options,
-        appServerRequests,
-        EXPERT_SKILLS_RUNTIME_SCENARIO,
-        expertSkillsRuntimeSessionId,
-      );
-    summary.readModelExpertSkillsRuntimeCompleted =
-      readModelExpertSkillsRuntimeCompleted.summary;
-
-    logStage("export-expert-skills-runtime-evidence-pack");
-    const evidencePackExpertSkillsRuntime =
-      await exportSkillsRuntimeEvidencePack(
-        page,
-        appServerRequests,
-        EXPERT_SKILLS_RUNTIME_SCENARIO,
-        expertSkillsRuntimeSessionId,
-      );
-    summary.evidencePackExpertSkillsRuntime =
-      evidencePackExpertSkillsRuntime.summary;
-
-    logStage("wait-gui-expert-skills-runtime-completed");
-    summary.guiExpertSkillsRuntimeCompleted = sanitizeJson(
-      await waitForGuiSkillsRuntimeCompleted(
-        page,
-        options,
-        EXPERT_SKILLS_RUNTIME_SCENARIO,
-      ),
     );
   } else if (
+    options.scenario === "expert-skills-runtime" ||
     options.scenario === "expert-plaza-skills-runtime" ||
     options.scenario === "expert-panel-skills-runtime"
   ) {
-    const isExpertPanelSkillsRuntimeScenario =
-      options.scenario === "expert-panel-skills-runtime";
-    logStage(
-      isExpertPanelSkillsRuntimeScenario
-        ? "prepare-expert-panel-skills-runtime-workspace-skill"
-        : "prepare-expert-plaza-skills-runtime-workspace-skill",
-    );
-    const expertSkillsRuntimeSkill = ensureManualEnableWorkspaceSkill(
-      workspace.rootPath,
-    );
-    summary.expertSkillsRuntimeSkill = sanitizeJson(expertSkillsRuntimeSkill);
-    if (isExpertPanelSkillsRuntimeScenario) {
-      summary.expertPanelSkillsRuntimeUserSkill = sanitizeJson(
-        ensureUserVisibleCapabilityReportSkill(runtimeEnv),
-      );
-    }
-
-    logStage(
-      isExpertPanelSkillsRuntimeScenario
-        ? "inject-expert-panel-skills-runtime-catalog"
-        : "inject-expert-plaza-skills-runtime-catalog",
-    );
-    summary.expertPlazaSkillsRuntimeCatalog = sanitizeJson(
-      await injectExpertSkillsRuntimeCatalog(page, {
-        ...(isExpertPanelSkillsRuntimeScenario
-          ? {
-              releaseSkillRefs: [EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF],
-            }
-          : {}),
-        workspaceSkill: expertSkillsRuntimeSkill,
+    Object.assign(
+      summary,
+      await runExpertSkillsRuntimeScenario({
+        page,
+        options,
+        workspace,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
       }),
     );
-    if (isExpertPanelSkillsRuntimeScenario) {
-      logStage("reload-expert-panel-skills-runtime-catalog");
-      summary.expertPanelSkillsRuntimeCatalogReload = sanitizeJson(
-        await reloadRendererAfterExpertPanelSkillCatalogInjection(
-          page,
-          options,
-          waitForRendererReady,
-          clearInvokeBuffers,
-        ),
-      );
-    }
-
-    logStage("launch-expert-skills-runtime-from-expert-plaza");
-    summary.expertPlazaSkillsRuntimeLaunch = sanitizeJson(
-      await launchExpertSkillsRuntimeFromExpertPlaza(page, options),
-    );
-
-    logStage("wait-expert-plaza-skills-runtime-backend-turn-start");
-    const expertPlazaSkillsRuntimeBackendTurn =
-      await waitForBackendLedgerTurnStartContaining(
-        runtimeEnv.backendLedgerPath,
-        EXPERT_SKILLS_RUNTIME_PROMPT,
-        options,
-      );
-    const expertPlazaSkillsRuntimeSessionId =
-      expertPlazaSkillsRuntimeBackendTurn.entry.sessionId ??
-      EXPERT_SKILLS_RUNTIME_SESSION_ID;
-    summary.expertSkillsRuntimeTurnStart = sanitizeJson({
-      sessionId: expertPlazaSkillsRuntimeSessionId,
-      turnId: expertPlazaSkillsRuntimeBackendTurn.entry.turnId ?? null,
-      inputText: expertPlazaSkillsRuntimeBackendTurn.entry.inputText ?? null,
-    });
-
-    logStage("wait-read-model-expert-plaza-skills-runtime-completed");
-    const readModelExpertSkillsRuntimeCompleted =
-      await waitForSessionReadSkillsRuntimeCompleted(
-        page,
-        options,
-        appServerRequests,
-        EXPERT_SKILLS_RUNTIME_SCENARIO,
-        expertPlazaSkillsRuntimeSessionId,
-      );
-    summary.readModelExpertSkillsRuntimeCompleted =
-      readModelExpertSkillsRuntimeCompleted.summary;
-
-    logStage("export-expert-plaza-skills-runtime-evidence-pack");
-    const evidencePackExpertSkillsRuntime =
-      await exportSkillsRuntimeEvidencePack(
-        page,
-        appServerRequests,
-        EXPERT_SKILLS_RUNTIME_SCENARIO,
-        expertPlazaSkillsRuntimeSessionId,
-      );
-    summary.evidencePackExpertSkillsRuntime =
-      evidencePackExpertSkillsRuntime.summary;
-
-    logStage("wait-gui-expert-plaza-skills-runtime-completed");
-    summary.guiExpertSkillsRuntimeCompleted = sanitizeJson(
-      await waitForGuiSkillsRuntimeCompleted(
-        page,
-        options,
-        EXPERT_SKILLS_RUNTIME_SCENARIO,
-      ),
-    );
-
-    if (isExpertPanelSkillsRuntimeScenario) {
-      logStage("add-expert-panel-skills-runtime-skill");
-      summary.expertPanelSkillsRuntimeAddSkill = sanitizeJson(
-        await addExpertSkillsRuntimeSkillFromInfoPanel(page, options),
-      );
-
-      logStage("wait-expert-panel-skills-runtime-session-ready");
-      summary.guiExpertPanelSkillsRuntimeSessionReady = sanitizeJson(
-        await waitForExpertPanelSkillsRuntimeSessionReady(
-          page,
-          options,
-          expertPlazaSkillsRuntimeSessionId,
-        ),
-      );
-
-      const expertPanelReadySnapshot =
-        summary.guiExpertPanelSkillsRuntimeSessionReady ?? {};
-      const expertPanelInputMatchesSession =
-        expertPanelReadySnapshot.textareaVisible === true &&
-        expertPanelReadySnapshot.textareaDisabled === false &&
-        expertPanelReadySnapshot.textareaSessionId ===
-          expertPlazaSkillsRuntimeSessionId;
-      const expertPanelFallbackInputReady =
-        expertPanelReadySnapshot.fallbackTextareaVisible === true &&
-        expertPanelReadySnapshot.fallbackTextareaDisabled === false;
-      let expertPanelFollowupConstraints = expertPanelInputMatchesSession
-        ? { expectedSessionId: expertPlazaSkillsRuntimeSessionId }
-        : {};
-
-      if (!expertPanelInputMatchesSession && !expertPanelFallbackInputReady) {
-        logStage("reopen-expert-panel-skills-runtime-session");
-        summary.guiExpertPanelSkillsRuntimeSessionReopened = sanitizeJson(
-          await openSessionFromSidebar(page, options, appServerRequests, {
-            sessionId: expertPlazaSkillsRuntimeSessionId,
-            title: "请以「代码文学专家」专家身份工作。",
-          }),
-        );
-        expertPanelFollowupConstraints = {
-          expectedSessionId: expertPlazaSkillsRuntimeSessionId,
-        };
-      } else {
-        summary.guiExpertPanelSkillsRuntimeSessionReopened = sanitizeJson({
-          skipped: true,
-          reason: expertPanelInputMatchesSession
-            ? "expert panel session input already ready"
-            : "expert panel current page input ready without session marker",
-          sessionId: expertPlazaSkillsRuntimeSessionId,
-          textareaSessionId:
-            expertPanelReadySnapshot.textareaSessionId ??
-            expertPanelReadySnapshot.fallbackTextareaSessionId ??
-            null,
-        });
-      }
-
-      logStage("send-expert-panel-skills-runtime-followup");
-      summary.expertPanelSkillsRuntimeInputSend = sanitizeJson(
-        await sendPromptFromGui(
-          page,
-          options,
-          EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-          expertPanelFollowupConstraints,
-        ),
-      );
-
-      logStage("wait-expert-panel-skills-runtime-backend-turn-start");
-      const expertPanelSkillsRuntimeBackendStart =
-        await waitForBackendTurnStartWithCurrentQueueResume(
-          page,
-          options,
-          appServerRequests,
-          runtimeEnv.backendLedgerPath,
-          expertPlazaSkillsRuntimeSessionId,
-          EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-        );
-      const expertPanelSkillsRuntimeBackendTurn =
-        expertPanelSkillsRuntimeBackendStart.backendTurn;
-      const expertPanelSkillsRuntimeSessionId =
-        selectExpertPanelSkillsRuntimeSessionId(
-          expertPanelSkillsRuntimeBackendTurn,
-          expertPlazaSkillsRuntimeSessionId,
-        );
-      summary.expertPanelSkillsRuntimeQueueResume = sanitizeJson(
-        expertPanelSkillsRuntimeBackendStart.queueResume,
-      );
-      summary.expertPanelSkillsRuntimeTurnStart =
-        summarizeExpertPanelSkillsRuntimeTurnStart(
-          expertPanelSkillsRuntimeBackendTurn,
-        );
-      summary.expertPanelSkillsRuntimeSessionId =
-        expertPanelSkillsRuntimeSessionId;
-
-      logStage("wait-read-model-expert-panel-skills-runtime-completed");
-      const readModelExpertPanelSkillsRuntimeCompleted =
-        await waitForSessionReadSkillsRuntimeCompleted(
-          page,
-          options,
-          appServerRequests,
-          EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
-          expertPanelSkillsRuntimeSessionId,
-        );
-      summary.readModelExpertPanelSkillsRuntimeCompleted =
-        readModelExpertPanelSkillsRuntimeCompleted.summary;
-
-      logStage("export-expert-panel-skills-runtime-evidence-pack");
-      const evidencePackExpertPanelSkillsRuntime =
-        await exportSkillsRuntimeEvidencePack(
-          page,
-          appServerRequests,
-          EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
-          expertPanelSkillsRuntimeSessionId,
-        );
-      summary.evidencePackExpertPanelSkillsRuntime =
-        evidencePackExpertPanelSkillsRuntime.summary;
-
-      logStage("wait-gui-expert-panel-skills-runtime-completed");
-      summary.guiExpertPanelSkillsRuntimeCompleted = sanitizeJson(
-        await waitForGuiSkillsRuntimeCompleted(
-          page,
-          options,
-          EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
-        ),
-      );
-
-      logStage("export-expert-panel-evidence-pack-from-harness-panel");
-      summary.expertPanelEvidencePackGuiExport = sanitizeJson(
-        await exportExpertPanelEvidencePackFromHarnessPanel(page, options),
-      );
-    }
   } else {
     logStage("send-news-prompt-from-gui");
     summary.inputSend = sanitizeJson(
@@ -1500,7 +671,9 @@ export async function executeScenarioFlow({
   ) {
     logStage("click-stop-from-gui");
     summary.stopClick = sanitizeJson(
-      await waitForStopButtonVisibleAndClick(page, options),
+      await waitForStopButtonVisibleAndClick(page, options, {
+        requireVisibleOutput: true,
+      }),
     );
 
     logStage("wait-gui-canceled");
@@ -1610,6 +783,8 @@ export async function executeScenarioFlow({
     options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO &&
     options.scenario !== INPUTBAR_RICH_RESTORE_SCENARIO &&
     options.scenario !== INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO &&
+    options.scenario !== INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO &&
+    options.scenario !== INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO &&
     options.scenario !== CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO &&
     options.scenario !== CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
   ) {

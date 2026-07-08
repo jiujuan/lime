@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import { buildWorkflowRuntimeCapabilityProfile } from "../testing/workflowRuntimeCapabilityProfile";
 import { buildInstalledAppPreview } from "./installedAppPreview";
 import {
   buildPluginLabResolvedSetupState,

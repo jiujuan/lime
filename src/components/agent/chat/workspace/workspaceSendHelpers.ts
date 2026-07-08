@@ -55,6 +55,31 @@ import type {
   OemCloudFeatureFlags,
 } from "@/lib/api/oemCloudControlPlane";
 import { getOemCloudBootstrapSnapshot } from "@/lib/oemCloudSession";
+import {
+  resolveRuntimeTeamAssignedCountCheckpoint,
+  resolveRuntimeTeamCurrentConfigCheckpoint,
+  resolveRuntimeTeamDefaultLabel,
+  resolveRuntimeTeamFailedContent,
+  resolveRuntimeTeamFailedDetailFallback,
+  resolveRuntimeTeamFailedTitle,
+  resolveRuntimeTeamFirstPlanFallback,
+  resolveRuntimeTeamFormingCheckpoints,
+  resolveRuntimeTeamFormingDetail,
+  resolveRuntimeTeamFormingTitle,
+  resolveRuntimeTeamMemberFallbackLabel,
+  resolveRuntimeTeamMemberFallbackSummary,
+  resolveRuntimeTeamMemberOverflowLine,
+  resolveRuntimeTeamMemberPlanLine,
+  resolveRuntimeTeamPlanSection,
+  resolveRuntimeTeamReadyDetailFallback,
+  resolveRuntimeTeamReadyLeadFallback,
+  resolveRuntimeTeamReadyTailFallback,
+  resolveRuntimeTeamStartingCheckpoint,
+  resolveRuntimeTeamSummaryLine,
+  resolveRuntimeTeamSyncProgressCheckpoint,
+  resolveRuntimeTeamWaitingDetailFallback,
+  resolveRuntimeTeamWaitingTitle,
+} from "./runtimeTeamCollaborationCopy";
 
 const GENERAL_BROWSER_ASSIST_PROFILE_KEY = "general_browser_assist";
 const OEM_CLOUD_FEATURE_FLAG_KEYS = [
@@ -1110,16 +1135,17 @@ function buildRuntimeTeamMemberPlanLines(
   const members = state.members.slice(0, 3);
   const lines = members.map((member, index) => {
     const label =
-      normalizeTeamWorkspaceDisplayValue(member.label) || `任务 ${index + 1}`;
+      normalizeTeamWorkspaceDisplayValue(member.label) ||
+      resolveRuntimeTeamMemberFallbackLabel(index);
     const summary =
       normalizeTeamWorkspaceDisplayValue(member.summary) ||
-      "负责推进当前任务中的一部分工作。";
-    return `${index + 1}. ${label}：${summary}`;
+      resolveRuntimeTeamMemberFallbackSummary();
+    return resolveRuntimeTeamMemberPlanLine({ index, label, summary });
   });
 
   if (state.members.length > members.length) {
     lines.push(
-      `另外还有 ${state.members.length - members.length} 项任务会继续接手处理。`,
+      resolveRuntimeTeamMemberOverflowLine(state.members.length - members.length),
     );
   }
 
@@ -1136,47 +1162,46 @@ function buildRuntimeTeamAssistantDraft(
 
   const teamLabel =
     normalizeTeamWorkspaceDisplayValue(state.label || state.blueprint?.label) ||
-    "当前协作配置";
+    resolveRuntimeTeamDefaultLabel();
   const summary =
     normalizeTeamWorkspaceDisplayValue(
       state.summary || state.blueprint?.summary,
     ) || "";
   const planLines = buildRuntimeTeamMemberPlanLines(state);
   const readyCopySections = soulCopy.subagentsReadyContent(teamLabel).split("\n\n");
-  const readyLead = readyCopySections[0] || `已为这项任务准备「${teamLabel}」。`;
+  const readyLead =
+    readyCopySections[0] || resolveRuntimeTeamReadyLeadFallback(teamLabel);
   const readyTail =
     readyCopySections.slice(1).join("\n\n") ||
-    "这些任务会分别展开处理，关键进展、风险和需确认事项会回到主对话。";
+    resolveRuntimeTeamReadyTailFallback();
   const contentSections = [
     readyLead,
-    summary ? `执行方向：“${summary}”。` : null,
-    planLines.length > 0 ? `协作分工如下：\n${planLines.join("\n")}` : null,
+    summary ? resolveRuntimeTeamSummaryLine(summary) : null,
+    planLines.length > 0 ? resolveRuntimeTeamPlanSection(planLines) : null,
     readyTail,
   ].filter(Boolean);
 
   const initialRuntimeStatus: AgentRuntimeStatus = {
     phase: "routing",
     title: soulCopy.subagentsReadyTitle,
-    detail:
-      summary ||
-      "已整理好当前任务的协作执行，接下来会分别展开处理并同步结果。",
+    detail: summary || resolveRuntimeTeamReadyDetailFallback(),
     checkpoints: [
-      `当前协作配置：${teamLabel}`,
-      `已分配 ${Math.max(state.members.length, 1)} 项任务`,
-      "主对话会持续同步关键进展",
+      resolveRuntimeTeamCurrentConfigCheckpoint(teamLabel),
+      resolveRuntimeTeamAssignedCountCheckpoint(
+        Math.max(state.members.length, 1),
+      ),
+      resolveRuntimeTeamSyncProgressCheckpoint(),
     ],
   };
 
   const waitingRuntimeStatus: AgentRuntimeStatus = {
     phase: "routing",
-    title: "任务开始接手",
-    detail:
-      summary ||
-      "协作执行已经确认，这些任务会按各自职责继续处理并回传关键结果。",
+    title: resolveRuntimeTeamWaitingTitle(),
+    detail: summary || resolveRuntimeTeamWaitingDetailFallback(),
     checkpoints: [
-      `当前协作配置：${teamLabel}`,
-      planLines[0] || "这些任务会分别接手自己的部分",
-      "主对话会持续同步关键进展",
+      resolveRuntimeTeamCurrentConfigCheckpoint(teamLabel),
+      planLines[0] || resolveRuntimeTeamFirstPlanFallback(),
+      resolveRuntimeTeamSyncProgressCheckpoint(),
     ],
   };
 
@@ -1201,7 +1226,7 @@ export function buildRuntimeTeamDispatchPreviewMessages(
     normalizeTeamWorkspaceDisplayValue(
       snapshot.formationState?.label ||
         snapshot.formationState?.blueprint?.label,
-    ) || "当前协作配置";
+    ) || resolveRuntimeTeamDefaultLabel();
   const formedSummary =
     normalizeTeamWorkspaceDisplayValue(
       snapshot.formationState?.summary ||
@@ -1211,34 +1236,27 @@ export function buildRuntimeTeamDispatchPreviewMessages(
     snapshot.status === "failed"
       ? {
           phase: "failed" as const,
-          title: "协作执行准备失败",
+          title: resolveRuntimeTeamFailedTitle(),
           detail:
             normalizeTeamWorkspaceDisplayValue(snapshot.failureMessage) ||
-            "协作执行准备失败，已回退到普通对话发送。",
+            resolveRuntimeTeamFailedDetailFallback(),
         }
       : snapshot.status === "formed"
         ? formedAssistantDraft?.initialRuntimeStatus || {
             phase: "routing" as const,
             title: soulCopy.subagentsReadyTitle,
-            detail:
-              formedSummary ||
-              "已整理好当前任务的协作执行，接下来会分别展开处理并同步结果。",
+            detail: formedSummary || resolveRuntimeTeamReadyDetailFallback(),
             checkpoints: [
-              `当前协作配置：${formedTeamLabel}`,
-              "这些任务会按协作分工开始接手",
-              "主对话会持续同步关键进展",
+              resolveRuntimeTeamCurrentConfigCheckpoint(formedTeamLabel),
+              resolveRuntimeTeamStartingCheckpoint(),
+              resolveRuntimeTeamSyncProgressCheckpoint(),
             ],
           }
         : {
             phase: "routing" as const,
-            title: "正在准备协作执行",
-            detail:
-              "系统正在根据当前任务准备协作执行，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
-            checkpoints: [
-              "确认当前任务目标",
-              "准备协作执行",
-              "等待任务接手处理",
-            ],
+            title: resolveRuntimeTeamFormingTitle(),
+            detail: resolveRuntimeTeamFormingDetail(),
+            checkpoints: resolveRuntimeTeamFormingCheckpoints(),
           };
 
   return [
@@ -1254,7 +1272,7 @@ export function buildRuntimeTeamDispatchPreviewMessages(
       role: "assistant",
       content:
         snapshot.status === "failed"
-          ? "协作执行准备失败，已回退到普通执行。"
+          ? resolveRuntimeTeamFailedContent()
           : snapshot.status === "formed"
             ? formedAssistantDraft?.content ||
               soulCopy.subagentsReadyContent(formedTeamLabel)

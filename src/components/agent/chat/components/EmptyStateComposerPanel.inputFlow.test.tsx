@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -7,6 +9,19 @@ import {
 } from "./EmptyStateComposerPanel.testFixtures";
 
 describe("EmptyStateComposerPanel", () => {
+  it("不应重新接入 input restore request 子面板 fallback", () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/components/EmptyStateComposerPanel.tsx",
+      ),
+      "utf8",
+    );
+
+    expect(source).not.toContain("inputRestoreRequest");
+    expect(source).not.toContain("InterruptedInputRestoreRequest");
+  });
+
   it("输入为空时展示 Tab 起手建议，按 Tab 后填入当前建议", async () => {
     const container = renderPanel({
       inputSuggestions: [

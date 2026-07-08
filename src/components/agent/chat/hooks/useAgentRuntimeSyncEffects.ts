@@ -11,6 +11,7 @@ import { hasDesktopHostEventListenerCapability } from "@/lib/desktop-runtime";
 import type { AgentThreadTurn } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { AgentSessionDetailRefreshRequest } from "./agentSessionRefresh";
+import { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
 
 const APP_SERVER_BRIDGE_RUNTIME_POLL_MS = 1000;
 const RECOVERED_RUNTIME_POLL_ACTIVE_WINDOW_MS = 30 * 60 * 1000;
@@ -47,6 +48,53 @@ function parseTimestampMs(value: string | null | undefined): number | null {
   return Number.isFinite(timestampMs) ? timestampMs : null;
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readString(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function normalizeRuntimeStatus(value: unknown): string | null {
+  return typeof value === "string"
+    ? value.trim().toLowerCase().replace(/[\s-]+/g, "_") || null
+    : null;
+}
+
+function hasRunningThreadReadForRuntimeSync(threadRead: unknown): boolean {
+  if (
+    hasRunningThreadReadActivity(threadRead, {
+      allowThreadStatusWithoutTurn: true,
+    })
+  ) {
+    return true;
+  }
+
+  const record = readRecord(threadRead);
+  if (!record) {
+    return false;
+  }
+
+  const status =
+    normalizeRuntimeStatus(record.status) ??
+    normalizeRuntimeStatus(record.profile_status) ??
+    normalizeRuntimeStatus(record.profileStatus);
+  const activeTurnId = readString(record, ["active_turn_id", "activeTurnId"]);
+  return status === "running" && Boolean(activeTurnId);
+}
+
 function hasRecentRunningTurn(threadTurns: AgentThreadTurn[]): boolean {
   const nowMs = Date.now();
   return threadTurns.some((turn) => {
@@ -65,6 +113,7 @@ function hasRecentRunningTurn(threadTurns: AgentThreadTurn[]): boolean {
 }
 
 function shouldPollRecoveredRuntimeWork(params: {
+  threadRead?: unknown;
   threadReadStatus?: string | null;
   queuedTurnCount: number;
   threadTurns: AgentThreadTurn[];
@@ -79,6 +128,14 @@ function shouldPollRecoveredRuntimeWork(params: {
   if (isExplicitTerminalRuntimeStatus(normalizedThreadReadStatus)) {
     return false;
   }
+
+  if (params.threadRead !== undefined && params.threadRead !== null) {
+    if (hasRunningThreadReadForRuntimeSync(params.threadRead)) {
+      return true;
+    }
+    return normalizedThreadReadStatus === "queued";
+  }
+
   const hasRunningTurn = params.threadTurns.some(
     (turn) => turn.status === "running",
   );
@@ -170,6 +227,7 @@ interface UseAgentRuntimeSyncEffectsOptions {
   parentSessionId?: string | null;
   currentTurnEventName?: string | null;
   isSending: boolean;
+  threadRead?: unknown;
   threadReadStatus?: string | null;
   queuedTurnCount: number;
   threadTurns: AgentThreadTurn[];
@@ -190,6 +248,7 @@ export function useAgentRuntimeSyncEffects(
     parentSessionId,
     currentTurnEventName,
     isSending,
+    threadRead,
     threadReadStatus,
     queuedTurnCount,
     threadTurns,
@@ -210,7 +269,10 @@ export function useAgentRuntimeSyncEffects(
   const hasRuntimeEventListenerCapability =
     hasDesktopRuntimeEventListenerCapability ||
     hasDevBridgeEventListenerCapability();
+  const cannotSubscribeCurrentTurnRuntimeEvent =
+    !hasRuntimeEventListenerCapability || !normalizedCurrentTurnEventName;
   const hasActiveRuntimeWork = shouldPollRecoveredRuntimeWork({
+    threadRead,
     threadReadStatus,
     queuedTurnCount,
     threadTurns,
@@ -219,8 +281,8 @@ export function useAgentRuntimeSyncEffects(
     Boolean(sessionId) &&
     isSending &&
     !normalizedCurrentTurnEventName &&
-    isAppServerBridgeAvailable() &&
-    !hasRuntimeEventListenerCapability;
+    cannotSubscribeCurrentTurnRuntimeEvent &&
+    isAppServerBridgeAvailable();
   const shouldSubscribeTeamEvents =
     Boolean(sessionId) &&
     (hasDesktopRuntimeEventListenerCapability ||
@@ -321,7 +383,11 @@ export function useAgentRuntimeSyncEffects(
     if (!observedActiveRuntimeWorkRef.current && !hasTerminalReadModel) {
       return;
     }
-    if (queuedTurnCount > 0 || hasRunningTurn(threadTurns)) {
+    if (
+      queuedTurnCount > 0 ||
+      hasRunningThreadReadForRuntimeSync(threadRead) ||
+      (!threadRead && hasRunningTurn(threadTurns))
+    ) {
       if (shouldForceSettleStaleRunningTurn(threadReadStatus)) {
         observedActiveRuntimeWorkRef.current = false;
         settleActiveRuntimeStream(sessionId);
@@ -342,6 +408,7 @@ export function useAgentRuntimeSyncEffects(
     queuedTurnCount,
     sessionId,
     settleActiveRuntimeStream,
+    threadRead,
     threadReadStatus,
     threadTurns,
   ]);
@@ -353,6 +420,7 @@ export function useAgentRuntimeSyncEffects(
 
     if (
       !shouldPollRecoveredRuntimeWork({
+        threadRead,
         threadReadStatus,
         queuedTurnCount,
         threadTurns,
@@ -373,6 +441,7 @@ export function useAgentRuntimeSyncEffects(
     };
   }, [
     isSending,
+    threadRead,
     threadReadStatus,
     queuedTurnCount,
     normalizedCurrentTurnEventName,

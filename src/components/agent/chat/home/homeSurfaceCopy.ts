@@ -1,6 +1,7 @@
 import type {
   HomeGuideCard,
   HomeInputSuggestion,
+  HomeRecoverySessionStatus,
   HomeSkillCategory,
   HomeStarterChip,
 } from "./homeSurfaceTypes";
@@ -121,6 +122,15 @@ export type HomeSurfaceCopyKey =
   | "agentChat.home.scrollCue.label"
   | "agentChat.home.secondScreen.label"
   | "agentChat.home.projectConversations.more"
+  | "agentChat.home.recovery.running.title"
+  | "agentChat.home.recovery.running.summary"
+  | "agentChat.home.recovery.running.action"
+  | "agentChat.home.recovery.queued.title"
+  | "agentChat.home.recovery.queued.summary"
+  | "agentChat.home.recovery.queued.action"
+  | "agentChat.home.recovery.waiting.title"
+  | "agentChat.home.recovery.waiting.summary"
+  | "agentChat.home.recovery.waiting.action"
   | "agentChat.home.supplemental.recentSession.defaultAction";
 
 type HomeSurfaceCopyValue = number | string;
@@ -140,6 +150,12 @@ export interface HomeSurfaceChromeCopy {
   scrollCueLabel: string;
   secondScreenLabel: string;
   projectConversationsMoreLabel: (count: number) => string;
+  recoverySessionTitle: (
+    status: HomeRecoverySessionStatus,
+    title: string,
+  ) => string;
+  recoverySessionSummary: (status: HomeRecoverySessionStatus) => string;
+  recoverySessionActionLabel: (status: HomeRecoverySessionStatus) => string;
   recentSessionDefaultActionLabel: string;
 }
 
@@ -243,6 +259,31 @@ export const HOME_CATEGORY_ORDER: HomeSkillCategory[] = [
   "audio_music",
   "other",
 ];
+
+const HOME_RECOVERY_COPY_KEYS = {
+  running: {
+    title: "agentChat.home.recovery.running.title",
+    summary: "agentChat.home.recovery.running.summary",
+    action: "agentChat.home.recovery.running.action",
+  },
+  queued: {
+    title: "agentChat.home.recovery.queued.title",
+    summary: "agentChat.home.recovery.queued.summary",
+    action: "agentChat.home.recovery.queued.action",
+  },
+  waiting: {
+    title: "agentChat.home.recovery.waiting.title",
+    summary: "agentChat.home.recovery.waiting.summary",
+    action: "agentChat.home.recovery.waiting.action",
+  },
+} as const satisfies Record<
+  HomeRecoverySessionStatus,
+  {
+    title: HomeSurfaceCopyKey;
+    summary: HomeSurfaceCopyKey;
+    action: HomeSurfaceCopyKey;
+  }
+>;
 
 export function buildHomeSurfaceCopy(
   translate: HomeSurfaceCopyTranslate,
@@ -421,6 +462,12 @@ export function buildHomeSurfaceCopy(
       secondScreenLabel: translate("agentChat.home.secondScreen.label"),
       projectConversationsMoreLabel: (count) =>
         translate("agentChat.home.projectConversations.more", { count }),
+      recoverySessionTitle: (status, title) =>
+        translate(HOME_RECOVERY_COPY_KEYS[status].title, { title }),
+      recoverySessionSummary: (status) =>
+        translate(HOME_RECOVERY_COPY_KEYS[status].summary),
+      recoverySessionActionLabel: (status) =>
+        translate(HOME_RECOVERY_COPY_KEYS[status].action),
       recentSessionDefaultActionLabel: translate(
         "agentChat.home.supplemental.recentSession.defaultAction",
       ),

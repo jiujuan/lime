@@ -73,7 +73,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch: () => false,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -179,7 +179,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -275,7 +275,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -375,7 +375,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -471,7 +471,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -584,7 +584,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -712,7 +712,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -829,7 +829,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -960,7 +960,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -1086,7 +1086,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -1230,7 +1230,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -1362,7 +1362,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -1532,7 +1532,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},
@@ -1794,7 +1794,7 @@ describe("agentStreamTurnEventBinding", () => {
         removeQueuedDraftMessages: () => {},
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
-        removeQueuedTurnState: () => {},
+        removeQueuedTurnsFromProjection: () => {},
       },
       sounds: {
         playToolcallSound: () => {},

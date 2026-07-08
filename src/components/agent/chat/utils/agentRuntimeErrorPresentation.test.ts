@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX } from "@/lib/model/modelCapabilitySendGate";
 
-import { resolveAgentRuntimeErrorPresentation } from "./agentRuntimeErrorPresentation";
+import {
+  MODEL_SELECTION_REQUIRED_ERROR_MESSAGE,
+  resolveAgentRuntimeErrorPresentation,
+} from "./agentRuntimeErrorPresentation";
 
 describe("agentRuntimeErrorPresentation", () => {
   it("普通错误应保留原始文案", () => {
@@ -95,6 +98,30 @@ describe("agentRuntimeErrorPresentation", () => {
         "当前模型不支持本次输入的媒体类型，请切换到支持图片或文件输入的模型后再发送。",
       toastMessage:
         "当前模型不支持本次输入的媒体类型，请切换到支持图片或文件输入的模型后再发送。",
+    });
+  });
+
+  it("缺少完整模型选择时应转换为可恢复提示", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        MODEL_SELECTION_REQUIRED_ERROR_MESSAGE,
+      ),
+    ).toEqual({
+      displayMessage:
+        "请先在输入框底部选择可用模型，或完成服务商登录后再发送。",
+      toastMessage: "请先在输入框底部选择可用模型，或完成服务商登录后再发送。",
+    });
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        "agentSession/turn/start failed: App Server runtime backend requires provider/model selection.",
+      ),
+    ).toEqual({
+      displayMessage:
+        "请先在输入框底部选择可用模型，或完成服务商登录后再发送。",
+      toastMessage: "请先在输入框底部选择可用模型，或完成服务商登录后再发送。",
     });
   });
 

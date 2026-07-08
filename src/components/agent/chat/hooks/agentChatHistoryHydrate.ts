@@ -491,7 +491,15 @@ export const hydrateSessionDetailMessages = (
 
   if (options.includeTimelineFallback !== false) {
     if (timelineMessages.length > 0) {
-      return projectConversationMessagesByRuntimeTurn(timelineMessages);
+      return projectConversationMessagesByRuntimeTurn(
+        options.includeTimelineFallbackUsers === true
+          ? mergeMissingUserMessagesFromTimeline(
+              timelineMessages,
+              detail,
+              topicId,
+            )
+          : timelineMessages,
+      );
     }
 
     return projectConversationMessagesByRuntimeTurn(

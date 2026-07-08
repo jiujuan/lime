@@ -15,6 +15,10 @@ import {
   formatAgentRuntimeStatusSummary,
 } from "../utils/agentRuntimeStatus";
 import type { AgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
+import {
+  removeQueuedTurnSnapshots,
+  upsertQueuedTurnSnapshot,
+} from "./agentQueuedTurnProjection";
 
 export interface ActiveStreamState {
   assistantMsgId: string;
@@ -211,34 +215,14 @@ export function createAgentStreamSubmissionLifecycle(
   const actionLoggedKeys = new Set<string>();
 
   const upsertQueuedTurn = (nextQueuedTurn: QueuedTurnSnapshot) => {
-    setQueuedTurns((prev) =>
-      [
-        ...prev.filter(
-          (item) => item.queued_turn_id !== nextQueuedTurn.queued_turn_id,
-        ),
-        nextQueuedTurn,
-      ].sort((left, right) => {
-        if (left.position !== right.position) {
-          return left.position - right.position;
-        }
-        return left.created_at - right.created_at;
-      }),
-    );
+    setQueuedTurns((prev) => upsertQueuedTurnSnapshot(prev, nextQueuedTurn));
   };
 
-  const removeQueuedTurnState = (queuedTurnIds: string[]) => {
+  const removeQueuedTurnsFromProjection = (queuedTurnIds: string[]) => {
     if (queuedTurnIds.length === 0) {
       return;
     }
-    setQueuedTurns((prev) => {
-      const idSet = new Set(queuedTurnIds);
-      return prev
-        .filter((item) => !idSet.has(item.queued_turn_id))
-        .map((item, index) => ({
-          ...item,
-          position: index + 1,
-        }));
-    });
+    setQueuedTurns((prev) => removeQueuedTurnSnapshots(prev, queuedTurnIds));
   };
 
   const removeQueuedDraftMessages = () => {
@@ -478,7 +462,7 @@ export function createAgentStreamSubmissionLifecycle(
     clearOptimisticTurn,
     disposeListener,
     upsertQueuedTurn,
-    removeQueuedTurnState,
+    removeQueuedTurnsFromProjection,
     removeQueuedDraftMessages,
     markOptimisticFailure,
     registerListener,

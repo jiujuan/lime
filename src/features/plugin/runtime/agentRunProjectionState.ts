@@ -316,6 +316,24 @@ function timelineRecordToProjectionSourceEvent(
     title,
     displayTitle: readString(value, "displayTitle"),
     displayMessage: readString(value, "displayMessage"),
+    displayTitleKey: readString(value, "displayTitleKey"),
+    displayMessageKey: readString(value, "displayMessageKey"),
+    displayValues: recordValue(value, "displayValues"),
+    soulLifecycle:
+      recordValue(value, "soulLifecycle") ?? recordValue(value, "soul_lifecycle"),
+    soulSurface:
+      readString(value, "soulSurface") ?? readString(value, "soul_surface"),
+    soulPhase: readString(value, "soulPhase") ?? readString(value, "soul_phase"),
+    styleLevel: readString(value, "styleLevel") ?? readString(value, "style_level"),
+    riskLevel: readString(value, "riskLevel") ?? readString(value, "risk_level"),
+    toneVariant:
+      readString(value, "toneVariant") ?? readString(value, "tone_variant"),
+    profileId: readString(value, "profileId") ?? readString(value, "profile_id"),
+    packId: readString(value, "packId") ?? readString(value, "pack_id"),
+    generationBriefBoundary:
+      recordValue(value, "generationBriefBoundary") ??
+      recordValue(value, "generation_brief_boundary"),
+    metadata: recordValue(value, "metadata"),
   };
 
   if (kind === "tool" || kind === "skill") {

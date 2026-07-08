@@ -1,11 +1,11 @@
 use crate::ExecutionRequest;
 use lime_agent::register_lime_project_skill_from_directory;
-use lime_agent::tools::{
+use serde_json::{Map, Value};
+use std::path::{Component, Path, PathBuf};
+use tool_runtime::skill_gate::{
     clear_skill_tool_session_access, set_skill_tool_session_allowed_skill_sources,
     set_skill_tool_session_allowed_skills, SkillToolSessionSkillSource,
 };
-use serde_json::{Map, Value};
-use std::path::{Component, Path, PathBuf};
 
 const ENABLE_SOURCE_MANUAL_SESSION: &str = "manual_session_enable";
 const ENABLE_APPROVAL_MANUAL: &str = "manual";
@@ -292,9 +292,9 @@ fn read_string_array(value: Option<&Value>) -> Vec<String> {
 mod tests {
     use super::*;
     use lime_agent::is_lime_skill_registered;
-    use lime_agent::tools::is_skill_tool_session_skill_allowed;
     use serde_json::json;
     use tempfile::TempDir;
+    use tool_runtime::skill_gate::is_skill_tool_session_skill_allowed;
 
     fn request_with_metadata(metadata: Value) -> ExecutionRequest {
         super::super::tests::request_for_test("hello", None, Some(metadata))

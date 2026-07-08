@@ -1,6 +1,6 @@
 //! diagnostics handlers for the App Server processor.
 
-use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
+use super::{RequestProcessor, RpcDispatch, dispatch_result, parse_params, to_jsonrpc_error};
 use app_server_protocol::{
     DiagnosticsTraceExportParams, DiagnosticsTraceListParams, DiagnosticsTraceReadParams,
     JsonRpcError, SupportBundleExportParams,

@@ -24,6 +24,12 @@ const INTERNAL_RUNTIME_ERROR_MESSAGE =
 const MODEL_INPUT_CAPABILITY_GAP_ERROR_MESSAGE =
   "当前模型不支持本次输入的媒体类型，请切换到支持图片或文件输入的模型后再发送。";
 
+export const MODEL_SELECTION_REQUIRED_ERROR_MESSAGE =
+  "lime_model_selection_required: provider/model selection incomplete";
+
+const MODEL_SELECTION_REQUIRED_DISPLAY_MESSAGE =
+  "请先在输入框底部选择可用模型，或完成服务商登录后再发送。";
+
 function normalizeRuntimeErrorMessage(errorMessage: string): string {
   const normalized = errorMessage.trim();
   return normalized || DEFAULT_RUNTIME_ERROR_MESSAGE;
@@ -153,12 +159,31 @@ function isModelInputCapabilityGapError(message: string): boolean {
   );
 }
 
+function isModelSelectionRequiredError(message: string): boolean {
+  return (
+    message === MODEL_SELECTION_REQUIRED_ERROR_MESSAGE ||
+    message.startsWith(`${MODEL_SELECTION_REQUIRED_ERROR_MESSAGE}:`) ||
+    message.includes("requires provider/model selection")
+  );
+}
+
 export function resolveAgentRuntimeErrorPresentation(errorMessage: string): {
   displayMessage: string;
   toastMessage: string;
 } {
   const normalizedMessage = normalizeRuntimeErrorMessage(errorMessage);
   const lowerMessage = normalizedMessage.toLowerCase();
+
+  if (isModelSelectionRequiredError(lowerMessage)) {
+    const message = readAgentRuntimeCopy(
+      "agentChat.runtimeError.modelSelectionRequired",
+      MODEL_SELECTION_REQUIRED_DISPLAY_MESSAGE,
+    );
+    return {
+      displayMessage: message,
+      toastMessage: message,
+    };
+  }
 
   if (isModelInputCapabilityGapError(lowerMessage)) {
     const message = readAgentRuntimeCopy(

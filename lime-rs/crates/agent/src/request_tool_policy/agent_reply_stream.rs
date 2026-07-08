@@ -1,7 +1,6 @@
 use super::policy_config::RequestToolPolicy;
 use super::runtime_status::build_web_retrieval_synthesis_runtime_status;
 use super::stream_diagnostics::{update_stream_event_diagnostics, StreamEventDiagnostics};
-use super::stream_idle::provider_stream_idle_timeout_message;
 use super::stream_text_batcher::{emit_text_delta_batch, TextDeltaBatcher};
 use super::web_retrieval_process::WebRetrievalProcessState;
 use super::web_search_execution_tracker::WebSearchExecutionTracker;
@@ -12,12 +11,14 @@ use crate::model_request_policy::{
 };
 use crate::protocol::TextDeltaBatchBoundary;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
-use agent_runtime::reply_host::{
-    RuntimeReplyPolicyHost, RuntimeReplyStartError, RuntimeReplyStartRequest,
-};
+use agent_runtime::reply_backend::RuntimeReplyBackend;
+use agent_runtime::reply_execution::RuntimeReplyAttemptState;
+use agent_runtime::reply_host::{RuntimeReplyPolicyHost, RuntimeReplyStartRequest};
 use agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput;
 use agent_runtime::reply_request::RuntimeReplyRequest;
-use agent_runtime::reply_stream::RuntimeReplyStreamEvent;
+use agent_runtime::reply_stream::{
+    RuntimeReplyStreamEvent, RuntimeReplyStreamIdleTimeout, RuntimeReplyStreamState,
+};
 use agent_runtime::session_config::AgentSessionConfig;
 use futures::StreamExt;
 use model_provider::provider_stream::{
@@ -53,15 +54,8 @@ where
         diagnostics.tool_end_count
     );
     ReplyAttemptError {
-        message: provider_stream_idle_timeout_message(timeout),
+        message: RuntimeReplyStreamIdleTimeout::new(timeout).message(),
         emitted_any: *emitted_any,
-    }
-}
-
-fn reply_attempt_error_from_runtime(error: RuntimeReplyStartError) -> ReplyAttemptError {
-    ReplyAttemptError {
-        message: error.message,
-        emitted_any: error.emitted_any,
     }
 }
 
@@ -95,9 +89,7 @@ pub(super) async fn stream_agent_reply_once<F>(
     request_tool_policy: &RequestToolPolicy,
     web_search_tracker: &mut WebSearchExecutionTracker,
     write_artifact_emitter: &mut WriteArtifactEventEmitter,
-    emitted_any: &mut bool,
-    text_chunks: &mut Vec<String>,
-    event_errors: &mut Vec<String>,
+    attempt_state: &mut RuntimeReplyAttemptState,
     diagnostics: &mut StreamEventDiagnostics,
     on_event: &mut F,
 ) -> Result<(), ReplyAttemptError>
@@ -105,34 +97,34 @@ where
     F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let started_at = Instant::now();
-    let mut inline_provider_error = None;
+    let mut stream_state = RuntimeReplyStreamState::new();
     let mut text_delta_batcher = TextDeltaBatcher::default();
     let mut web_retrieval_process_state = WebRetrievalProcessState::default();
     let session_id = session_config.id.clone();
-    let uses_pinned_provider = host.uses_pinned_provider();
+    let reply_backend = host.reply_backend();
+    let uses_pinned_provider = reply_backend.uses_pinned_provider();
     let cancel_probe = cancel_token.clone();
     let provider_cancel_token = cancel_token
         .clone()
         .or_else(|| stream_idle_timeout.map(|_| CancellationToken::new()));
+    let idle_cancel_token = provider_cancel_token.clone();
     let model_request_policy =
         runtime_reply_model_request_policy_from_turn_context(session_config.turn_context.as_ref());
     let reply_request = RuntimeReplyRequest::from_attempt_input(
         session_id.clone(),
         user_input,
-        host.provider_handle().cloned(),
+        reply_backend.provider_handle().cloned(),
         model_request_policy,
     );
-    validate_reply_request_modalities(&reply_request, session_config, *emitted_any)?;
+    validate_reply_request_modalities(&reply_request, session_config, attempt_state.emitted_any())?;
     let start_request = RuntimeReplyStartRequest::new(
         reply_request,
         session_config.clone(),
         provider_cancel_token,
-        *emitted_any,
+        attempt_state.emitted_any(),
     );
-    let (mut stream, message_chars) = host
-        .start_reply_stream(start_request)
-        .await
-        .map_err(reply_attempt_error_from_runtime)?;
+    let start_result = reply_backend.start_reply_stream(start_request).await;
+    let (mut stream, message_chars) = start_result.map_err(ReplyAttemptError::from)?;
     tracing::info!(
         "[AgentRuntime][TTFT] agent.reply start: session_id={}, message_chars={}, pinned_provider={}",
         session_id,
@@ -145,7 +137,8 @@ where
     );
 
     'stream_loop: loop {
-        let event_result = match (cancel_probe.as_ref(), stream_idle_timeout) {
+        let next_timeout = stream_state.next_timeout(stream_idle_timeout);
+        let event_result = match (cancel_probe.as_ref(), next_timeout) {
             (Some(token), Some(timeout)) => {
                 tokio::select! {
                     _ = token.cancelled() => None,
@@ -155,7 +148,7 @@ where
                             return Err(build_provider_stream_idle_timeout_error(
                                 timeout,
                                 &session_id,
-                                emitted_any,
+                                attempt_state.emitted_any_mut(),
                                 diagnostics,
                                 &mut text_delta_batcher,
                                 on_event,
@@ -173,10 +166,13 @@ where
             (None, Some(timeout)) => match tokio::time::timeout(timeout, stream.next()).await {
                 Ok(next) => next,
                 Err(_) => {
+                    if let Some(token) = idle_cancel_token.as_ref() {
+                        token.cancel();
+                    }
                     return Err(build_provider_stream_idle_timeout_error(
                         timeout,
                         &session_id,
-                        emitted_any,
+                        attempt_state.emitted_any_mut(),
                         diagnostics,
                         &mut text_delta_batcher,
                         on_event,
@@ -188,13 +184,12 @@ where
         let Some(event_result) = event_result else {
             break;
         };
+        stream_state.mark_stream_event_seen();
         match event_result {
             Ok(stream_event) => {
                 let runtime_events = match stream_event {
                     RuntimeReplyStreamEvent::SuppressedInlineProviderError(provider_error) => {
-                        if inline_provider_error.is_none() {
-                            inline_provider_error = Some(provider_error);
-                        }
+                        stream_state.capture_inline_provider_error(provider_error);
                         tracing::warn!(
                             "[AgentRuntime][ReplyPolicy] suppressed inline provider error text from runtime stream: session_id={}",
                             session_id
@@ -212,18 +207,18 @@ where
                 for mut runtime_event in runtime_events {
                     enrich_provider_trace_with_runtime_provider(
                         &mut runtime_event,
-                        host.provider_handle(),
+                        reply_backend.provider_handle(),
                     );
                     let extra_events = write_artifact_emitter.process_event(&mut runtime_event);
                     for extra_event in &extra_events {
                         emit_text_delta_batch(
                             &mut text_delta_batcher,
                             TextDeltaBatchBoundary::Provider,
-                            emitted_any,
+                            attempt_state.emitted_any_mut(),
                             on_event,
                         );
                         update_stream_event_diagnostics(diagnostics, extra_event);
-                        *emitted_any = true;
+                        attempt_state.mark_emitted();
                         on_event(extra_event);
                     }
 
@@ -238,13 +233,13 @@ where
                                     );
                                 }
                                 web_retrieval_process_state.observe_text_delta(text);
-                                text_chunks.push(text.clone());
+                                attempt_state.push_text(text);
                             }
                         }
 
                         RuntimeAgentEvent::Error { message } => {
                             if !message.trim().is_empty() {
-                                event_errors.push(message.clone());
+                                attempt_state.push_error(message.clone());
                             }
                         }
                         RuntimeAgentEvent::ItemStarted { item }
@@ -290,7 +285,7 @@ where
                     match runtime_event {
                         RuntimeAgentEvent::TextDelta { text } => {
                             if let Some(batch_event) = text_delta_batcher.push(text) {
-                                *emitted_any = true;
+                                attempt_state.mark_emitted();
                                 on_event(&batch_event);
                             }
                         }
@@ -298,10 +293,10 @@ where
                             emit_text_delta_batch(
                                 &mut text_delta_batcher,
                                 TextDeltaBatchBoundary::Provider,
-                                emitted_any,
+                                attempt_state.emitted_any_mut(),
                                 on_event,
                             );
-                            *emitted_any = true;
+                            attempt_state.mark_emitted();
                             on_event(&other_event);
                         }
                     }
@@ -339,13 +334,14 @@ where
                 emit_text_delta_batch(
                     &mut text_delta_batcher,
                     TextDeltaBatchBoundary::Provider,
-                    emitted_any,
+                    attempt_state.emitted_any_mut(),
                     on_event,
                 );
-                return Err(ReplyAttemptError {
-                    message: inline_provider_error.unwrap_or_else(|| format!("Stream error: {e}")),
-                    emitted_any: *emitted_any,
-                });
+                return Err(attempt_state.error(
+                    stream_state
+                        .take_inline_provider_error()
+                        .unwrap_or_else(|| format!("Stream error: {e}")),
+                ));
             }
         }
     }
@@ -353,15 +349,12 @@ where
     emit_text_delta_batch(
         &mut text_delta_batcher,
         TextDeltaBatchBoundary::Final,
-        emitted_any,
+        attempt_state.emitted_any_mut(),
         on_event,
     );
 
-    if let Some(message) = inline_provider_error {
-        return Err(ReplyAttemptError {
-            message,
-            emitted_any: *emitted_any,
-        });
+    if let Some(message) = stream_state.take_inline_provider_error() {
+        return Err(attempt_state.error(message));
     }
 
     Ok(())

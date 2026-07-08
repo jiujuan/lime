@@ -115,6 +115,34 @@ describe("buildConfiguredProviders", () => {
     ]);
   });
 
+  it("OEM Runtime 未登录但托管网关已有声明模型时应作为可选 Provider", () => {
+    const providers = buildConfiguredProviders(
+      [
+        createApiKeyProvider({
+          id: "lime-hub",
+          name: "Lime 云端",
+          type: "openai",
+          api_host: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+          api_key_count: 0,
+          custom_models: ["agnes-2.0-flash"],
+        }),
+      ],
+      {
+        oemRuntime: createOemRuntime({ sessionToken: null }),
+      },
+    );
+
+    expect(providers).toEqual([
+      expect.objectContaining({
+        key: "lime-hub",
+        providerId: "lime-hub",
+        label: "Lime 云端",
+        authStatus: "ready",
+        customModels: ["agnes-2.0-flash"],
+      }),
+    ]);
+  });
+
   it("后端未返回 Lime Hub 但 OEM Runtime 未登录时应合成登录提示 Provider", () => {
     const providers = buildConfiguredProviders([], {
       oemRuntime: createOemRuntime({ sessionToken: null }),
@@ -162,6 +190,34 @@ describe("buildConfiguredProviders", () => {
         providerId: "lime-hub",
         label: "Lime Hub",
         authStatus: "ready",
+        customModels: ["gpt-5.2-pro"],
+      }),
+    ]);
+  });
+
+  it("tenant Lime Hub 后端暂未返回模型目录时应使用默认聊天模型", () => {
+    const providers = buildConfiguredProviders(
+      [
+        createApiKeyProvider({
+          id: "lime-hub",
+          name: "Lime Hub",
+          type: "openai",
+          api_host: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+          api_key_count: 0,
+          custom_models: [],
+        }),
+      ],
+      {
+        oemRuntime: createOemRuntime({ sessionToken: null }),
+      },
+    );
+
+    expect(providers).toEqual([
+      expect.objectContaining({
+        key: "lime-hub",
+        providerId: "lime-hub",
+        authStatus: "ready",
+        customModels: ["gpt-5.2-pro"],
       }),
     ]);
   });

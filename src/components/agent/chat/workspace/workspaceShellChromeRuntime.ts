@@ -92,6 +92,11 @@ export function resolveWorkspaceShellChromeRuntime({
       !hasHomeConversationActivity &&
       !normalizedInitialSessionId
     );
+  const shouldTreatCurrentSessionAsBackground =
+    agentEntry === "new-task" &&
+    shouldUseBrowserWorkspaceHomeChrome &&
+    !hasHomeConversationActivity &&
+    !normalizedInitialSessionId;
 
   const showChatLayout = shouldRenderTaskCenterHomeSurface
     ? false
@@ -100,14 +105,20 @@ export function resolveWorkspaceShellChromeRuntime({
         preferEmptyStateForFreshTaskCenterTab:
           shouldRenderTaskCenterHomeSurface,
         hasSession: hasConversationSessionForLayout,
-        hasDisplayMessages,
+        hasDisplayMessages: shouldTreatCurrentSessionAsBackground
+          ? false
+          : hasDisplayMessages,
         hasPendingA2UIForm,
         hasCanvasContent: hasCanvasWorkbenchContent,
         isThemeWorkbench,
         hasUnconsumedInitialDispatch,
-        isPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
-        isSending,
-        queuedTurnCount,
+        isPreparingSend: shouldTreatCurrentSessionAsBackground
+          ? false
+          : isPreparingSend || isTaskCenterDraftSendPending,
+        isSending: shouldTreatCurrentSessionAsBackground ? false : isSending,
+        queuedTurnCount: shouldTreatCurrentSessionAsBackground
+          ? 0
+          : queuedTurnCount,
       });
 
   const shouldHideGeneralWorkbenchInputForTheme =

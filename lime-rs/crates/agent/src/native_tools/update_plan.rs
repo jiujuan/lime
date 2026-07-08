@@ -1,68 +1,28 @@
-use crate::native_tools::runtime_tool_bridge::execute_runtime_tool;
+use crate::native_tools::runtime_tool_bridge::RuntimeNativeToolAdapter;
 use crate::runtime_facade::current_agent_turn_context;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
-use async_trait::async_trait;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext};
 use serde_json::Value;
-use tool_runtime::native_dispatch::runtime_native_dispatch_handle;
-use tool_runtime::update_plan::{
-    check_plan_update_permissions, update_plan_definition, UPDATE_PLAN_LEGACY_ALIASES,
-    UPDATE_PLAN_NAME,
-};
+use tool_runtime::native_overlay::RuntimeNativeToolOverlay;
+use tool_runtime::update_plan::{check_plan_update_permissions, UPDATE_PLAN_NAME};
 
 pub(crate) fn create_update_plan_tool() -> Box<dyn Tool> {
-    Box::new(PlanUpdateAdapter)
+    debug_assert_eq!(
+        RuntimeNativeToolOverlay::UpdatePlan.name(),
+        UPDATE_PLAN_NAME
+    );
+    Box::new(
+        RuntimeNativeToolAdapter::new(
+            RuntimeNativeToolOverlay::UpdatePlan,
+            check_update_plan_permissions,
+        )
+        .with_turn_context_provider(current_agent_turn_context),
+    )
 }
 
-#[derive(Debug, Default)]
-struct PlanUpdateAdapter;
-
-#[async_trait]
-impl Tool for PlanUpdateAdapter {
-    fn name(&self) -> &str {
-        UPDATE_PLAN_NAME
-    }
-
-    fn description(&self) -> &str {
-        "Updates the task plan."
-    }
-
-    fn input_schema(&self) -> Value {
-        update_plan_definition().input_schema
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        UPDATE_PLAN_LEGACY_ALIASES
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if context.is_cancelled() {
-            return Err(ToolError::Cancelled);
-        }
-
-        let turn_context = current_agent_turn_context();
-        execute_runtime_tool(
-            runtime_native_dispatch_handle(),
-            UPDATE_PLAN_NAME,
-            &params,
-            context,
-            turn_context.as_ref(),
-        )
-        .await
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        _context: &ToolContext,
-    ) -> PermissionCheckResult {
-        match check_plan_update_permissions(params) {
-            Ok(()) => PermissionCheckResult::allow(),
-            Err(error) => PermissionCheckResult::deny(error.message().to_string()),
-        }
-    }
-
-    fn options(&self) -> ToolOptions {
-        ToolOptions::new().with_max_retries(0)
+fn check_update_plan_permissions(params: &Value, _context: &ToolContext) -> PermissionCheckResult {
+    match check_plan_update_permissions(params) {
+        Ok(()) => PermissionCheckResult::allow(),
+        Err(error) => PermissionCheckResult::deny(error.message().to_string()),
     }
 }
 
@@ -74,7 +34,8 @@ mod tests {
 
     #[tokio::test]
     async fn update_plan_permission_delegates_to_current_runtime_rules() {
-        let result = PlanUpdateAdapter
+        let tool = create_update_plan_tool();
+        let result = tool
             .check_permissions(
                 &json!({
                     "plan": [
@@ -91,7 +52,8 @@ mod tests {
 
     #[tokio::test]
     async fn update_plan_tool_delegates_to_current_executor() {
-        let result = PlanUpdateAdapter
+        let tool = create_update_plan_tool();
+        let result = tool
             .execute(
                 json!({
                     "explanation": "继续实现",
@@ -121,14 +83,18 @@ mod tests {
                 collaboration_mode: Some("plan".to_string()),
                 ..TurnContextOverride::default()
             }),
-            PlanUpdateAdapter.execute(
-                json!({
-                    "plan": [
-                        { "step": "写计划", "status": "in_progress" }
-                    ]
-                }),
-                &ToolContext::default(),
-            ),
+            async {
+                let tool = create_update_plan_tool();
+                tool.execute(
+                    json!({
+                        "plan": [
+                            { "step": "写计划", "status": "in_progress" }
+                        ]
+                    }),
+                    &ToolContext::default(),
+                )
+                .await
+            },
         )
         .await
         .expect_err("update_plan should be rejected in Plan mode");

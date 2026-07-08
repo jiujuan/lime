@@ -61,6 +61,13 @@ pub(super) fn count_rollout_files(source_root: &Path) -> usize {
         + count_rollout_files_in_subdir(source_root, ARCHIVED_SESSIONS_SUBDIR)
 }
 
+pub(super) fn discover_rollout_paths(source_root: &Path) -> Vec<(PathBuf, bool)> {
+    let mut paths = Vec::new();
+    collect_rollout_paths_in_subdir(source_root, SESSIONS_SUBDIR, false, &mut paths);
+    collect_rollout_paths_in_subdir(source_root, ARCHIVED_SESSIONS_SUBDIR, true, &mut paths);
+    paths
+}
+
 fn count_rollout_files_in_subdir(source_root: &Path, subdir: &str) -> usize {
     let root = source_root.join(subdir);
     if !root.is_dir() {
@@ -86,6 +93,39 @@ fn count_rollout_files_in_subdir(source_root: &Path, subdir: &str) -> usize {
         }
     }
     count
+}
+
+fn collect_rollout_paths_in_subdir(
+    source_root: &Path,
+    subdir: &str,
+    archived: bool,
+    paths: &mut Vec<(PathBuf, bool)>,
+) {
+    let root = source_root.join(subdir);
+    if !root.is_dir() {
+        return;
+    }
+
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        let Ok(read_dir) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in read_dir.filter_map(Result::ok) {
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                stack.push(path);
+            } else if file_type.is_file()
+                && plain_rollout_file_name(&path).is_some()
+                && existing_allowed_rollout_path(source_root, &path).is_some()
+            {
+                paths.push((path, archived));
+            }
+        }
+    }
 }
 
 fn find_rollout_path_in_subdir(

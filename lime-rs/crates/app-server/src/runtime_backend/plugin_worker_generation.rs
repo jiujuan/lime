@@ -1,16 +1,16 @@
+use super::tool_process_metadata::SoulStyleMetadata;
 use super::{
-    backend_error, current_agent_runtime_config_metadata, direct_provider_config_from_request,
-    initialize_runtime_database, model_route_contract, model_route_resolver, request_context,
-    selection_with_effective_reasoning, RuntimeBackend,
+    RuntimeBackend, backend_error, current_agent_runtime_config_metadata,
+    direct_provider_config_from_request, initialize_runtime_database, model_route_contract,
+    model_route_resolver, request_context, selection_with_effective_reasoning,
 };
 use crate::runtime::memory_prompt::append_soul_context_to_system_prompt;
 use crate::{ExecutionRequest, RuntimeCoreError};
 use lime_agent::{
-    host_managed_generation_session_id, run_host_managed_generation,
-    write_host_managed_generation_status, HostManagedGenerationPlan,
-    HostManagedGenerationRunRequest,
+    HostManagedGenerationPlan, HostManagedGenerationRunRequest, host_managed_generation_session_id,
+    run_host_managed_generation, write_host_managed_generation_status,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(super) async fn prepare_plugin_worker_request(
     runtime_backend: &RuntimeBackend,
@@ -20,30 +20,58 @@ pub(super) async fn prepare_plugin_worker_request(
     let Some(plan) = HostManagedGenerationPlan::from_worker_request(worker_request) else {
         return Ok(());
     };
+    let config_metadata = current_agent_runtime_config_metadata();
+    let runtime_metadata = request
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .or(request.metadata.as_ref());
+    let soul_style = host_generation_soul_style(config_metadata.as_ref(), runtime_metadata);
     if plan.requests.is_empty() {
-        write_host_managed_generation_status(worker_request, json!({ "status": "skipped" }));
+        write_host_managed_generation_status(
+            worker_request,
+            host_generation_status_payload(HostGenerationStatusPayload {
+                status: "skipped",
+                soul_style: soul_style.as_ref(),
+                ..HostGenerationStatusPayload::default()
+            }),
+        );
         return Ok(());
     }
 
-    match generate_outputs(runtime_backend, request, worker_request, &plan).await {
+    match generate_outputs(
+        runtime_backend,
+        request,
+        worker_request,
+        &plan,
+        config_metadata.as_ref(),
+        runtime_metadata,
+    )
+    .await
+    {
         Ok(generated) => {
             write_host_managed_generation_status(
                 worker_request,
-                json!({
-                    "status": "completed",
-                    "provider": generated.provider,
-                    "model": generated.model,
-                    "outputs": generated.outputs,
+                host_generation_status_payload(HostGenerationStatusPayload {
+                    status: "completed",
+                    provider: Some(generated.provider.as_str()),
+                    model: Some(generated.model.as_str()),
+                    outputs: Some(generated.outputs.as_slice()),
+                    soul_style: soul_style.as_ref(),
+                    ..HostGenerationStatusPayload::default()
                 }),
             );
         }
         Err(error) => {
+            let message = error.to_string();
             write_host_managed_generation_status(
                 worker_request,
-                json!({
-                    "status": "unavailable",
-                    "reasonCode": "host_generation_unavailable",
-                    "message": error.to_string(),
+                host_generation_status_payload(HostGenerationStatusPayload {
+                    status: "unavailable",
+                    reason_code: Some("host_generation_unavailable"),
+                    message: Some(message.as_str()),
+                    soul_style: soul_style.as_ref(),
+                    ..HostGenerationStatusPayload::default()
                 }),
             );
         }
@@ -63,6 +91,8 @@ async fn generate_outputs(
     request: &ExecutionRequest,
     worker_request: &Value,
     plan: &HostManagedGenerationPlan,
+    config_metadata: Option<&Value>,
+    runtime_metadata: Option<&Value>,
 ) -> Result<GeneratedOutputs, RuntimeCoreError> {
     let db = initialize_runtime_database(runtime_backend.db.as_ref())?;
     runtime_backend.ensure_agent_initialized(&db).await?;
@@ -92,14 +122,8 @@ async fn generate_outputs(
     }
 
     let generation_session_id = host_managed_generation_session_id(worker_request);
-    let config_metadata = current_agent_runtime_config_metadata();
-    let runtime_metadata = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-        .or(request.metadata.as_ref());
     let system_prompt_context =
-        append_soul_context_to_system_prompt(None, config_metadata.as_ref(), runtime_metadata);
+        append_soul_context_to_system_prompt(None, config_metadata, runtime_metadata);
     let generated = run_host_managed_generation(
         &runtime_backend.agent_state,
         HostManagedGenerationRunRequest {
@@ -133,6 +157,205 @@ async fn generate_outputs(
         model,
         outputs: generated.outputs,
     })
+}
+
+#[derive(Default)]
+struct HostGenerationStatusPayload<'a> {
+    status: &'a str,
+    provider: Option<&'a str>,
+    model: Option<&'a str>,
+    outputs: Option<&'a [Value]>,
+    reason_code: Option<&'a str>,
+    message: Option<&'a str>,
+    soul_style: Option<&'a SoulStyleMetadata>,
+}
+
+fn host_generation_soul_style(
+    config_metadata: Option<&Value>,
+    runtime_metadata: Option<&Value>,
+) -> Option<SoulStyleMetadata> {
+    SoulStyleMetadata::from_config_metadata(config_metadata)
+        .or_else(|| SoulStyleMetadata::from_config_metadata(runtime_metadata))
+}
+
+fn host_generation_status_payload(input: HostGenerationStatusPayload<'_>) -> Value {
+    let mut payload = serde_json::Map::new();
+    payload.insert("status".to_string(), json!(input.status));
+    insert_optional_string(&mut payload, "provider", input.provider);
+    insert_optional_string(&mut payload, "model", input.model);
+    insert_optional_string(&mut payload, "reasonCode", input.reason_code);
+    insert_optional_string(&mut payload, "message", input.message);
+    if let Some(outputs) = input.outputs {
+        payload.insert("outputs".to_string(), Value::Array(outputs.to_vec()));
+    }
+
+    let lifecycle = host_generation_lifecycle(input.status, input.soul_style);
+    payload.insert(
+        "presentation".to_string(),
+        host_generation_presentation(
+            input.status,
+            input.provider,
+            input.model,
+            input.outputs,
+            &lifecycle,
+        ),
+    );
+    payload.insert(
+        "generationBriefBoundary".to_string(),
+        host_generation_brief_boundary(),
+    );
+    payload.insert(
+        "host_managed_generation_facts".to_string(),
+        host_generation_facts(input.status, input.provider, input.model, input.outputs),
+    );
+    payload.insert(
+        "soul_lifecycle".to_string(),
+        Value::Object(lifecycle.clone()),
+    );
+    payload.insert(
+        "soul_surface".to_string(),
+        Value::String("plugin_host_managed_generation".to_string()),
+    );
+    if let Some(phase) = lifecycle.get("phase").and_then(Value::as_str) {
+        payload.insert("soul_phase".to_string(), Value::String(phase.to_string()));
+    }
+    if let Some(style_level) = lifecycle.get("styleLevel").and_then(Value::as_str) {
+        payload.insert(
+            "style_level".to_string(),
+            Value::String(style_level.to_string()),
+        );
+    }
+    if let Some(risk_level) = lifecycle.get("riskLevel").and_then(Value::as_str) {
+        payload.insert(
+            "risk_level".to_string(),
+            Value::String(risk_level.to_string()),
+        );
+    }
+    if let Some(soul_style) = input.soul_style {
+        soul_style.insert_top_level_fields(&mut payload);
+    }
+
+    Value::Object(payload)
+}
+
+fn host_generation_lifecycle(
+    status: &str,
+    soul_style: Option<&SoulStyleMetadata>,
+) -> serde_json::Map<String, Value> {
+    let (phase, style_level) = match status {
+        "completed" => ("after_artifact", "L2"),
+        "unavailable" | "failed" => ("after_artifact_failure", "L2"),
+        _ => ("artifact_generation_progress", "L1"),
+    };
+    let mut lifecycle = serde_json::Map::from_iter([
+        (
+            "surface".to_string(),
+            Value::String("plugin_host_managed_generation".to_string()),
+        ),
+        ("phase".to_string(), Value::String(phase.to_string())),
+        ("status".to_string(), Value::String(status.to_string())),
+        (
+            "styleLevel".to_string(),
+            Value::String(style_level.to_string()),
+        ),
+        ("riskLevel".to_string(), Value::String("normal".to_string())),
+    ]);
+    if let Some(soul_style) = soul_style {
+        soul_style.insert_lifecycle_fields(&mut lifecycle);
+    }
+    lifecycle
+}
+
+fn host_generation_presentation(
+    status: &str,
+    provider: Option<&str>,
+    model: Option<&str>,
+    outputs: Option<&[Value]>,
+    lifecycle: &serde_json::Map<String, Value>,
+) -> Value {
+    let status_key = match status {
+        "completed" => "completed",
+        "unavailable" | "failed" => "unavailable",
+        "skipped" => "skipped",
+        _ => "requested",
+    };
+    let output_count = outputs.map(|items| items.len()).unwrap_or(0);
+    json!({
+        "schemaVersion": "lime.plugin.host_managed_generation.presentation.v1",
+        "surface": "plugin_host_managed_generation",
+        "status": status,
+        "styleLevel": lifecycle.get("styleLevel").and_then(Value::as_str).unwrap_or("L1"),
+        "riskLevel": lifecycle.get("riskLevel").and_then(Value::as_str).unwrap_or("normal"),
+        "soulSurface": lifecycle.get("surface").and_then(Value::as_str).unwrap_or("plugin_host_managed_generation"),
+        "soulPhase": lifecycle.get("phase").and_then(Value::as_str).unwrap_or("artifact_generation_progress"),
+        "titleKey": format!("plugin.apps.runtime.agentRun.hostManagedGeneration.{status_key}.title"),
+        "messageKey": format!("plugin.apps.runtime.agentRun.hostManagedGeneration.{status_key}.message"),
+        "values": {
+            "provider": provider.unwrap_or(""),
+            "model": model.unwrap_or(""),
+            "outputCount": output_count,
+        },
+        "toneVariant": lifecycle.get("toneVariant").and_then(Value::as_str).unwrap_or("neutral"),
+        "profileId": lifecycle.get("profileId").and_then(Value::as_str),
+        "packId": lifecycle.get("packId").and_then(Value::as_str),
+    })
+}
+
+fn host_generation_brief_boundary() -> Value {
+    json!({
+        "schemaVersion": "lime.plugin.host_managed_generation.boundary.v1",
+        "artifactBodyStyleLevel": "L3",
+        "formalArtifactVoiceSource": "generation_brief_only",
+        "productSoulDefault": "interaction_only",
+        "rules": [
+            "Process narration may follow Interaction Soul at L1/L2.",
+            "Generated artifact body is L3 and must use explicit Generation Brief or plugin-declared voice.",
+            "Product Soul must not rewrite plugin artifact body by default."
+        ],
+    })
+}
+
+fn host_generation_facts(
+    status: &str,
+    provider: Option<&str>,
+    model: Option<&str>,
+    outputs: Option<&[Value]>,
+) -> Value {
+    let output_refs = outputs
+        .unwrap_or_default()
+        .iter()
+        .map(|output| {
+            json!({
+                "id": output.get("id").and_then(Value::as_str),
+                "kind": output.get("kind").and_then(Value::as_str),
+                "targetObjectKind": output.get("targetObjectKind").and_then(Value::as_str),
+                "outputField": output.get("outputField").and_then(Value::as_str),
+                "contentType": output.get("contentType").and_then(Value::as_str),
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "source": "app_server_runtime_backend",
+        "surface": "plugin_host_managed_generation",
+        "status": status,
+        "provider": provider,
+        "model": model,
+        "outputCount": output_refs.len(),
+        "outputs": output_refs,
+        "artifactBodyStyleLevel": "L3",
+        "formalArtifactVoiceSource": "generation_brief_only",
+        "productSoulDefault": "interaction_only",
+    })
+}
+
+fn insert_optional_string(
+    target: &mut serde_json::Map<String, Value>,
+    key: &str,
+    value: Option<&str>,
+) {
+    if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+        target.insert(key.to_string(), Value::String(value.to_string()));
+    }
 }
 
 #[cfg(test)]
@@ -321,8 +544,69 @@ mod tests {
             generated_markdown
         );
         assert_eq!(
+            worker_request["hostManagedGeneration"]["presentation"]["surface"],
+            "plugin_host_managed_generation"
+        );
+        assert_eq!(
+            worker_request["hostManagedGeneration"]["presentation"]["styleLevel"],
+            "L2"
+        );
+        assert_eq!(
+            worker_request["hostManagedGeneration"]["presentation"]["messageKey"],
+            "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.message"
+        );
+        assert_eq!(
+            worker_request["hostManagedGeneration"]["generationBriefBoundary"]["formalArtifactVoiceSource"],
+            "generation_brief_only"
+        );
+        assert_eq!(
+            worker_request["hostManagedGeneration"]["host_managed_generation_facts"]["artifactBodyStyleLevel"],
+            "L3"
+        );
+        assert_eq!(
             worker_request["runtime"]["hostManagedGenerationResult"],
             worker_request["hostManagedGeneration"]
+        );
+    }
+
+    #[test]
+    fn host_generation_status_payload_marks_process_and_formal_artifact_boundary() {
+        let soul_style = SoulStyleMetadata {
+            profile_id: Some("cheeky_sassy_executor".to_string()),
+            pack_id: Some("com.lime.soul.cheeky-sassy-executor".to_string()),
+            tone_variant: Some("cheeky_sassy".to_string()),
+        };
+
+        let payload = host_generation_status_payload(HostGenerationStatusPayload {
+            status: "completed",
+            provider: Some("fixture-openai"),
+            model: Some("lime-fixture-chat"),
+            outputs: Some(&[json!({
+                "id": "article-draft-document",
+                "kind": "markdown_document",
+                "targetObjectKind": "articleDraft",
+                "outputField": "documentText",
+                "contentType": "text/markdown",
+                "content": "# 正文"
+            })]),
+            soul_style: Some(&soul_style),
+            ..HostGenerationStatusPayload::default()
+        });
+
+        assert_eq!(payload["presentation"]["styleLevel"], "L2");
+        assert_eq!(payload["presentation"]["toneVariant"], "cheeky_sassy");
+        assert_eq!(
+            payload["presentation"]["packId"],
+            "com.lime.soul.cheeky-sassy-executor"
+        );
+        assert_eq!(payload["soul_lifecycle"]["phase"], "after_artifact");
+        assert_eq!(
+            payload["host_managed_generation_facts"]["formalArtifactVoiceSource"],
+            "generation_brief_only"
+        );
+        assert_eq!(
+            payload["generationBriefBoundary"]["productSoulDefault"],
+            "interaction_only"
         );
     }
 
