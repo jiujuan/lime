@@ -611,7 +611,7 @@ npm run verify:gui-smoke
 
 1. `npm run verify:local` 曾完整推进到 Vitest 第 56 批并暴露两个与本主线相邻的测试隔离 / UI 安全问题：live runtime copy 的 locale 泄漏、completed reasoning 默认 inline 泄露正文。两处均已通过定向测试修复。
 2. 中断恢复后，`verify:local` smart 模式只看到 `test-results/.last-run.json` 并 no-op，因此最终以显式定向测试 + contracts + current fixture + GUI smoke 作为本轮可交付证据。
-3. `smoke:agent-runtime-current-fixture` 已覆盖 history/cache hydration、final_done 工具收尾、Claw 终态 UI、Electron fixture guard、Coding Workbench Electron fixture、Claw GUI current fixture guard 与 cancel-then-continue。
+3. `smoke:agent-runtime-current-fixture` 已覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、Claw 终态 UI、Electron fixture guard、Coding Workbench Electron fixture、Claw GUI current fixture guard 与 cancel-then-continue。
 4. `verify:gui-smoke` 已完成 Electron renderer / host build、App Server 初始化、Claw workbench shell ready 与 memory settings ready。
 
 剩余下一刀：

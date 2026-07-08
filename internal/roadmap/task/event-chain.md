@@ -176,7 +176,7 @@ Lime 其实不是没有事件，而是已经有一条相当强的事件骨架。
 - `context_compaction_started / completed`
 - `runtime_status`
 - `queue_added / queue_removed / queue_started / queue_cleared`
-- `done / final_done`
+- 回合终态由 App Server current `turn.completed / turn.failed / turn.canceled` 表达；旧 `done / final_done` 不再属于 `AgentEvent` current surface
 - `warning / error / message`
 
 这说明 Lime 已经有“流式 runtime 事件层”，不是从零开始。

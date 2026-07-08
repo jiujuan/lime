@@ -240,7 +240,7 @@ npx eslint "src/components/agent/chat/components/messageListItemProjection.ts" "
 - `lime-agent request_tool_policy`：`48 passed`。
 - `app-server runtime::tests::read_model`：`9 passed`。
 - `npm run test:contracts`：通过，`app-server-client-contract` 为 `277 checks`，`mock priority commands: 0`。
-- `npm run smoke:agent-runtime-current-fixture`：通过，包含 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Coding Workbench Electron fixture、Claw 停止后同会话继续输出；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过，包含 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、failed read model、Claw 终态 UI、Coding Workbench Electron fixture、Claw 停止后同会话继续输出；`liveProviderUsed=false`。
 - `agentStreamRuntimeHandler.unit.test.ts`：`31 passed`，覆盖 `item_completed 应把已有 legacy 工具卡同步为完成态`。
 - `agentStreamTurnEventBinding.test.ts` + `agentStreamSubmitExecution.test.ts`：`11 passed`，覆盖 `getThreadItems` 透传链路不破坏事件绑定和提交执行。
 - `npm run verify:gui-smoke`：通过，最终输出 `claw workbench shell ready`；本轮复跑包含 `packages/app-server-client` build、Electron typecheck、host build 与 app-server sidecar 准备。
@@ -749,7 +749,7 @@ npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
 - 正常 SkillTool 输出不被误吞：`output: "已完成能力分析。"` 仍进入 UI；只隐藏运行时证明包络字段如 `sourceDraftId / workspaceSkillRuntimeEnable`。
 - ESLint 与 `git diff --check`：通过。
 - `service-skill-entry-smoke.mjs`：通过；继续证明 SkillTool gate allow/deny、source metadata、服务技能入口路由与 A2UI 主链仍可用。
-- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、final_done 工具收尾、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
 - Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
 - 产品结论：普通 `SkillTool` 的运行时 gate proof 与服务技能运行包络一样被视为协议证据，不再作为用户可读正文；搜索、思考、WebFetch 和 Codex 导入渲染主链未回退。
 
@@ -769,7 +769,7 @@ npx playwright test --config ".lime/qc/playwright-cli/playwright.config.mjs"
 - 误吞保护：命令类工具如 `Bash` 的 JSON stdout 不走通用协议包络隐藏，仍保留 `durationMs / result.ok` 等真实命令输出；带 `output` 正文的协议包络也不隐藏。
 - ESLint 与 `git diff --check`：通过。
 - `service-skill-entry-smoke.mjs`：通过；继续覆盖前端 metadata、App Server workspace skills、`lime-agent` SkillTool gate、服务技能入口路由与 Agent 对话内 A2UI 挂起主链。
-- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、final_done 工具收尾、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、MessageList 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
 - Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
 - 产品结论：工具结果展示现在区分“协议诊断证据”和“用户输出”；非命令工具的 metadata-only / diagnostics-only 包络不会再被当作用户正文，命令 stdout 与真实正文不被误吞。
 
@@ -797,7 +797,7 @@ wc -l "src/components/agent/chat/components/ToolCallDisplay.tsx" "src/components
 - ESLint：本轮新增 / 拆分实现文件与相关测试文件全部通过。
 - 超限拆分：`ToolCallDisplay.tsx` 从 `1830` 行拆到 `923` 行，`InlineToolProcessStep.tsx` 从 `1111` 行拆到 `849` 行，`StreamingRenderer.tsx` 从 `1687` 行拆到 `996` 行；拆出的职责文件均低于 `500` 行。
 - `service-skill-entry-smoke.mjs`：通过；继续覆盖前端 metadata、App Server workspace skills、`lime-agent` SkillTool gate、服务技能入口路由与 Agent 对话内 A2UI 挂起主链。
-- `npm run smoke:agent-runtime-current-fixture`：通过；继续覆盖 history/cache hydration、final_done 工具收尾、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过；继续覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw 停止后同会话继续输出 Electron fixture；`liveProviderUsed=false`。
 - Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown / 搜索过程 / 继续对话。
 - `npm run verify:gui-smoke`：通过；Electron renderer build、Electron host typecheck、app-server sidecar 与 claw workbench / memory settings smoke 均可启动。
 - `git diff --check`：通过。
@@ -885,7 +885,7 @@ wc -l "src/components/agent/chat/components/messageListItemProjection"*.ts "src/
 - Projection ESLint：通过。
 - Projection 定向 Vitest：`8 files passed, 36 tests passed`，覆盖搜索 running 不提前显示最终正文、搜索完成后穿插 final answer、running 残留完成态归一、Codex 导入只读工具过程、legacy toolCalls 兜底边界、timeline 审批 / 图片 / 任务板穿插、文件 artifact 去重与失败正文去重。
 - MarkdownRenderer + MessageList 合并渲染回归：`20 files passed, 198 tests passed`，覆盖 Markdown 标题 / 表格 / 代码块、导入历史、搜索过程流、思考持久化、运行态完成、artifact timeline、媒体任务与失败 Web tools。
-- `npm run smoke:agent-runtime-current-fixture`：通过；继续覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Skills Runtime natural + 显式 `$skill` + 技能中心试用入口三入口按需加载 Electron fixture；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过；继续覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Skills Runtime natural + 显式 `$skill` + 技能中心试用入口三入口按需加载 Electron fixture；`liveProviderUsed=false`。
 - Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
 - `npm run verify:gui-smoke`：通过；Electron renderer build、Electron host typecheck、App Server sidecar 初始化、Claw workbench shell 与 memory settings smoke 均通过。
 - `git diff --check`：通过。
@@ -975,7 +975,7 @@ git diff --check
 - `agentChatHistory` 定向 Vitest：`7 files passed, 61 tests passed`，覆盖累计正文去重、Codex 导入 detail.items / reasoning / tool call、thread_read 工具摘要、失败 read model、历史压缩、图片 / 视频任务预览、token usage、本地消息图片和流式尾部保留。
 - Codex 导入 / 搜索渲染回归：`6 files passed, 35 tests passed`，覆盖 MessageList 导入历史、StreamingRenderer 导入态、WebSearch imported 和 timeline reasoning 合并。
 - StreamingRenderer / WebSearch / InlineToolProcessStep / ToolCallDisplay 回归：`7 files passed, 88 tests passed`，覆盖 WebSearch/WebFetch 运行中默认展开、搜索 / 思考 / 读取页面时间顺序、工具轻卡摘要与 Markdown 渲染。
-- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench、停止后同会话继续输出、Skills Runtime、MCP structuredContent、Expert Skills Runtime 和 Expert Plaza 技能闭环；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过；覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench、停止后同会话继续输出、Skills Runtime、MCP structuredContent、Expert Skills Runtime 和 Expert Plaza 技能闭环；`liveProviderUsed=false`。
 - Playwright CLI：`2 passed`，继续覆盖 Codex 对话 WebSearch/WebFetch 过程流折叠、展开、Markdown 渲染一致，以及 Codex 导入态 Markdown、搜索过程和继续对话。
 - `npm run verify:gui-smoke`：通过；Electron renderer build、Electron host typecheck、App Server sidecar 初始化、Claw workbench shell 与 memory settings smoke 均通过。
 - `git diff --check`：通过。

@@ -186,7 +186,7 @@ npx vitest run "src/components/agent/chat/hooks/agentStreamTurnEventBinding.test
 
 - `agentStreamRuntimeHandler.unit.test.ts` 定向：`4 passed, 28 skipped`，覆盖已有 item lifecycle 时 `tool_input_delta/tool_progress/tool_output_delta/tool.failed` 不再新建或改写 `message.toolCalls`，但仍更新 `threadItems` 与 Agent UI projection detail。
 - `conversationProjectionStore.test.ts`：`9 passed`，保持 item lifecycle 回收 legacy `tool.started/tool.result` 主事件、不同 turn 同名 toolCallId 不误删。
-- `npm run smoke:agent-runtime-current-fixture`：通过，覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、code artifact workbench Electron fixture、Claw cancel-then-continue Electron fixture；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过，覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、failed read model、Claw 终态 UI、code artifact workbench Electron fixture、Claw cancel-then-continue Electron fixture；`liveProviderUsed=false`。
 2026-06-19 本轮补充 history hydrate item-first 收口证据：
 
 - `agentChatHistory.test.ts` 定向：`5 passed, 56 skipped`，覆盖无 timeline 时 `thread_read.tool_calls` 仍兜底、Codex 导入 `detail.items` 合入助手消息、timeline 已有工具过程时不再注入 `thread_read.tool_calls` 兼容摘要。

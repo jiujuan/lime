@@ -67,7 +67,7 @@ flowchart TB
 | `src/lib/api/agentRuntime/sessionClient.ts` | create/list/get/update session | `getAgentRuntimeSession(sessionId, { historyLimit, historyOffset, historyBeforeMessageId })`；有 `runtimeGetSession.slow` 日志 |
 | `src/lib/api/agentRuntime/threadClient.ts` | submit、interrupt、compact、resume、respond action、queue 操作、thread read | `submitAgentRuntimeTurn`、`respondAgentRuntimeAction`、`getAgentRuntimeThreadRead` |
 | `src/lib/api/agentRuntime/types.ts` | DTO 类型 | `AsterSessionDetail`、`AgentRuntimeThreadReadModel`、`AgentRuntimeSubmitTurnRequest`、history cursor |
-| `src/lib/api/agentProtocol.ts` | AgentEvent 类型和兼容 normalizer | `turn_started`、`text_delta`、`thinking_delta`、`tool_start/end`、`artifact_snapshot`、`runtime_status`、queue、subagent、`done/final_done` |
+| `src/lib/api/agentProtocol.ts` | AgentEvent 类型和兼容 normalizer | `turn_started`、`text_delta`、`thinking_delta`、`tool_start/end`、`artifact_snapshot`、`runtime_status`、queue、subagent、current terminal；legacy `done/final_done` fail-closed |
 | `src/lib/api/agentTextNormalization.ts` | legacy 文本与 item normalizer | 兼容旧事件/旧 item | 继续收口 compat，不新增旧形态 |
 
 协议层的架构判断：

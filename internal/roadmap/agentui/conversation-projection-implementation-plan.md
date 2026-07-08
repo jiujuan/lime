@@ -275,8 +275,8 @@ AgentChatWorkspace
 - Phase 3 已继续抽出 `agentStreamArtifactActionController`，统一 `artifact_snapshot / action_required` 前置 activate、清 optimistic item 与 meaningful completion signal 计划。
 - Phase 3 已继续抽出 `agentStreamRuntimeContextController`，统一 `context_trace / turn_context / model_change` 前置 activate / clear optimistic item 计划与 execution runtime apply wrapper。
 - Phase 3 已继续抽出 `agentStreamThinkingDeltaController`，统一 `thinking_delta` 前置 activate / surface guard 与 thinking 消息 patch。
-- Phase 3 已继续扩展 `agentStreamCompletionController`，统一完成态 assistant message patch，`final_done` 与 empty-final graceful completion 不再内联拼 `content / contentParts / usage / runtimeStatus`。
-- Phase 3 已继续扩展 `agentStreamCompletionController`，统一 `final_done` 与 empty-final error 的 completion side-effect plan，handler 只执行日志、队列清理、observer 与 listener 副作用。
+- Phase 3 已继续扩展 `agentStreamCompletionController`，统一 current terminal assistant message patch，legacy `final_done` 与 empty-final graceful completion 不再内联拼 `content / contentParts / usage / runtimeStatus`。
+- Phase 3 已继续扩展 `agentStreamCompletionController`，统一 current terminal 与 empty-final error 的 completion side-effect plan；legacy `final_done` 只保留 fail-closed 语义，handler 只执行日志、队列清理、observer 与 listener 副作用。
 - Phase 3 已继续扩展 `agentStreamErrorController`，统一普通 runtime error 的失败 side-effect plan，error 分支不再内联 queued turn 清理、request log payload 与 toast plan。
 - Phase 3 已继续扩展 `agentStreamErrorController`，统一 failed timeline turn / turn_summary 更新计划，handler 不再内联查找 running turn 或拼失败 summary 文案。
 - Phase 3 已继续扩展 `agentStreamWarningController`，统一 warning toast action 与 dispatcher 执行，warning 分支不再内联 toast level switch。

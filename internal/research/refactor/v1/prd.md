@@ -131,7 +131,7 @@ Lime current 主链是落点
 
 ### 6.4 修 Agent turn streaming 卡住
 
-作为 Agent Runtime 维护者，当 Lime 出现停止后不能继续、final_done 后仍显示输出中、reasoning/tool/final answer 顺序错乱时，我希望参考 Codex 的 turn/item lifecycle，而不是在 UI 上加 timeout 或文案正则。
+作为 Agent Runtime 维护者，当 Lime 出现停止后不能继续、current turn terminal 后仍显示输出中，或旧 `final_done` 残留误关流、reasoning/tool/final answer 顺序错乱时，我希望参考 Codex 的 turn/item lifecycle，而不是在 UI 上加 timeout 或文案正则。
 
 验收：
 

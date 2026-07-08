@@ -42,7 +42,7 @@ sequenceDiagram
   Bind->>State: threadItems + tool parts
   RT-->>Bind: artifact_snapshot
   Bind->>State: artifact signal
-  RT-->>Bind: done / final_done
+  RT-->>Bind: turn.completed / turn.failed / turn.canceled
   Bind->>State: reconcileFinalContentParts
   State->>UI: completed message
 ```
@@ -51,7 +51,7 @@ sequenceDiagram
 
 - `registerAgentStreamTurnEventBinding` 早于 submit invoke。
 - 首个 `runtime_status` 能在首个 `text_delta` 前显示。
-- `final_done` 不导致完整答案重复追加。
+- current terminal 不导致完整答案重复追加；legacy `final_done` fail closed。
 
 ## 2. 打开旧会话渐进恢复
 
