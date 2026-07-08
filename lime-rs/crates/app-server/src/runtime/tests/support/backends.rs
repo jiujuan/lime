@@ -407,12 +407,12 @@ impl ExecutionBackend for RunningCountingBackend {
     }
 }
 
-pub(in crate::runtime::tests) struct FinalDoneRecordingBackend {
+pub(in crate::runtime::tests) struct TurnCompletedRecordingBackend {
     pub(in crate::runtime::tests) requests: Mutex<Vec<ExecutionRequest>>,
 }
 
 #[async_trait]
-impl ExecutionBackend for FinalDoneRecordingBackend {
+impl ExecutionBackend for TurnCompletedRecordingBackend {
     async fn start_turn(
         &self,
         request: ExecutionRequest,

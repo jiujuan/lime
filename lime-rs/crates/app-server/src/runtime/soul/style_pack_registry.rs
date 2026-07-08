@@ -1,8 +1,8 @@
 use super::style_pack_install::StylePackInstallStatus;
 use super::style_pack_paths::{
-    REGISTRY_FILE_NAME, REQUIRED_LOCALES, style_pack_data_root, validate_storage_id,
+    style_pack_data_root, validate_storage_id, REGISTRY_FILE_NAME, REQUIRED_LOCALES,
 };
-use super::style_profile::{StyleProfileSeed, installed_style_profile_seeds_from_manifest_source};
+use super::style_profile::{installed_style_profile_seeds_from_manifest_source, StyleProfileSeed};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

@@ -136,77 +136,6 @@ const PrimaryStackFrame = styled.div`
   gap: 0.75rem;
 `;
 
-const ScrollCue = styled.a`
-  position: absolute;
-  left: 50%;
-  bottom: clamp(0.7rem, 1.9vh, 1.25rem);
-  z-index: 0;
-  display: grid;
-  width: min(680px, calc(100% - 2rem));
-  max-width: calc(100% - 2rem);
-  grid-template-columns: minmax(64px, 1fr) auto minmax(64px, 1fr);
-  align-items: center;
-  justify-content: center;
-  gap: 0.9rem;
-  transform: translateX(-50%);
-  padding: 0.35rem 0;
-  color: var(--lime-brand-strong, rgb(47 83 60));
-  font-size: 13px;
-  font-weight: 760;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  pointer-events: none;
-  transition:
-    color 160ms ease,
-    transform 160ms ease;
-
-  &:hover {
-    color: var(--lime-text, rgb(71 85 105));
-    transform: translateX(-50%) translateY(-1px);
-  }
-`;
-
-const ScrollCueLine = styled.span`
-  display: block;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--lime-surface-border-strong, rgba(203, 213, 225, 0.82)) 18%,
-    var(--lime-surface-border-strong, rgba(203, 213, 225, 0.82)) 82%,
-    transparent 100%
-  );
-`;
-
-const ScrollCueText = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.32rem;
-  border-radius: 999px;
-  border: 1px solid rgba(187, 247, 208, 0.86);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.94),
-      rgba(240, 253, 244, 0.88)
-    ),
-    var(--lime-surface, #fff);
-  padding: 0.42rem 0.78rem;
-  box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.055),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
-`;
-
-const ScrollCueArrow = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: inherit;
-  font-size: 14px;
-  line-height: 1;
-`;
-
 const SecondScreenSection = styled.section`
   display: flex;
   flex: 0 0 auto;
@@ -338,20 +267,6 @@ export function EmptyStateLayout({
           prioritySlot={prioritySlot}
           supportingSlot={supportingSlot}
         />
-        {shouldShowSecondScreen ? (
-          <ScrollCue
-            href="#home-skill-gallery-screen"
-            data-testid="home-scroll-cue"
-            aria-label={chromeCopy.scrollCueLabel}
-          >
-            <ScrollCueLine aria-hidden />
-            <ScrollCueText>
-              {chromeCopy.scrollCueLabel}
-              <ScrollCueArrow aria-hidden>↓</ScrollCueArrow>
-            </ScrollCueText>
-            <ScrollCueLine aria-hidden />
-          </ScrollCue>
-        ) : null}
       </ContentWrapper>
       {shouldShowSecondScreen ? (
         <SecondScreenSection

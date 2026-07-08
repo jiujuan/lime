@@ -90,7 +90,7 @@ async fn compact_agent_session_writes_session_context_artifact() {
 async fn compact_agent_session_injects_next_turn_session_context_packet() {
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let sidecar_store = Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store"));
-    let backend = Arc::new(FinalDoneRecordingBackend {
+    let backend = Arc::new(TurnCompletedRecordingBackend {
         requests: Mutex::new(Vec::new()),
     });
     let core = RuntimeCore::with_backend(backend.clone()).with_sidecar_store(sidecar_store.clone());

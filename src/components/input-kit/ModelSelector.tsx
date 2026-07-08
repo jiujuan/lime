@@ -336,13 +336,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           ? hasProviderDeclaredModel(selectedProvider)
           : false,
       }),
-    [
-      selectedProvider?.apiHost,
-      selectedProvider?.customModels,
-      selectedProvider?.hasApiKey,
-      selectedProvider?.providerId,
-      selectedProvider?.type,
-    ],
+    [selectedProvider],
   );
 
   const { models: providerModels, loading: modelsLoading } = useProviderModels(

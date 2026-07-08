@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import type { AppCenterItem } from "./PluginsPageViewModel";
 import {
@@ -20,7 +21,7 @@ function DetailDeclarationSection({
   testId,
   itemTestIdPrefix,
   declarations,
-}: DetailDeclarationSectionProps): JSX.Element | null {
+}: DetailDeclarationSectionProps): ReactElement | null {
   const { t } = useTranslation("agent");
 
   if (declarations.length === 0) {
@@ -89,7 +90,7 @@ export function PluginDetailSubagentsSection({
   item,
 }: {
   item: AppCenterItem;
-}): JSX.Element | null {
+}): ReactElement | null {
   return (
     <DetailDeclarationSection
       titleKey="plugin.apps.center.detail.subagents"
@@ -104,7 +105,7 @@ export function PluginDetailRuntimeRequirementSections({
   item,
 }: {
   item: AppCenterItem;
-}): JSX.Element {
+}): ReactElement {
   return (
     <>
       <DetailDeclarationSection

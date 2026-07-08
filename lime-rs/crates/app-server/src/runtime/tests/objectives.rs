@@ -117,7 +117,7 @@ async fn objective_continue_uses_host_provider_config_without_runtime_explicit_p
     let app_data_source = Arc::new(
         TestSessionDataSource::new(persisted).with_objective(managed_objective(session_id)),
     );
-    let backend = Arc::new(FinalDoneRecordingBackend {
+    let backend = Arc::new(TurnCompletedRecordingBackend {
         requests: Mutex::new(Vec::new()),
     });
     let core =
@@ -380,7 +380,7 @@ async fn managed_objective_auto_continuation_stops_at_budget_after_auto_turn() {
     }));
     objective.budget_policy = Some(json!({ "maxTurns": 1 }));
     let app_data_source = Arc::new(TestSessionDataSource::new(persisted).with_objective(objective));
-    let backend = Arc::new(FinalDoneRecordingBackend {
+    let backend = Arc::new(TurnCompletedRecordingBackend {
         requests: Mutex::new(Vec::new()),
     });
     let core =

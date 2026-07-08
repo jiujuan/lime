@@ -3,7 +3,9 @@
 //! 该类型只描述 runtime reply stream 如何携带 current event 或边界诊断，
 //! 不绑定 Aster `AgentEvent`，也不反向依赖 lime-agent 的协议实现。
 
+use futures::stream::{BoxStream, StreamExt};
 use model_provider::provider_stream::RuntimeReplyProviderStreamEvent;
+use std::collections::VecDeque;
 use std::time::Duration;
 
 pub const MIN_PROVIDER_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -116,6 +118,44 @@ pub trait RuntimeReplyStreamProjector<SourceEvent, RuntimeEvent> {
         &mut self,
         event: SourceEvent,
     ) -> Vec<RuntimeReplyStreamEvent<RuntimeEvent>>;
+}
+
+struct RuntimeReplyStreamProjectionState<'a, SourceEvent, RuntimeEvent, Projector> {
+    stream: BoxStream<'a, anyhow::Result<SourceEvent>>,
+    projector: Projector,
+    pending: VecDeque<RuntimeReplyStreamEvent<RuntimeEvent>>,
+}
+
+pub fn project_reply_stream<'a, SourceEvent, RuntimeEvent, Projector>(
+    stream: BoxStream<'a, anyhow::Result<SourceEvent>>,
+    projector: Projector,
+) -> BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeEvent>>>
+where
+    SourceEvent: 'a,
+    RuntimeEvent: Send + 'a,
+    Projector: RuntimeReplyStreamProjector<SourceEvent, RuntimeEvent> + Send + 'a,
+{
+    let state = RuntimeReplyStreamProjectionState {
+        stream,
+        projector,
+        pending: VecDeque::new(),
+    };
+
+    Box::pin(futures::stream::try_unfold(state, |mut state| async move {
+        loop {
+            if let Some(event) = state.pending.pop_front() {
+                return Ok(Some((event, state)));
+            }
+
+            let Some(source_event) = state.stream.next().await else {
+                return Ok(None);
+            };
+            state.pending = state
+                .projector
+                .project_reply_stream_event(source_event?)
+                .into();
+        }
+    }))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -341,6 +381,47 @@ mod tests {
             projector.project_reply_stream_event("  turn.item  "),
             vec![RuntimeReplyStreamEvent::Event("turn.item".to_string())]
         );
+    }
+
+    #[test]
+    fn project_reply_stream_maps_source_stream_without_backend_type() {
+        use futures::{stream, StreamExt};
+
+        let source_stream = stream::iter(vec![Ok("  first  "), Ok("second")]).boxed();
+
+        let events = futures::executor::block_on(
+            project_reply_stream(source_stream, TextReplyStreamProjector).collect::<Vec<_>>(),
+        );
+
+        let events = events
+            .into_iter()
+            .collect::<anyhow::Result<Vec<_>>>()
+            .expect("projected stream");
+        assert_eq!(
+            events,
+            vec![
+                RuntimeReplyStreamEvent::Event("first".to_string()),
+                RuntimeReplyStreamEvent::Event("second".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn project_reply_stream_preserves_source_error() {
+        use futures::{stream, StreamExt};
+
+        let source_stream =
+            stream::iter(vec![Ok("first"), Err(anyhow::anyhow!("source failed"))]).boxed();
+
+        let events = futures::executor::block_on(
+            project_reply_stream(source_stream, TextReplyStreamProjector).collect::<Vec<_>>(),
+        );
+
+        assert!(matches!(
+            events.as_slice(),
+            [Ok(RuntimeReplyStreamEvent::Event(_)), Err(_)]
+        ));
+        assert_eq!(events[1].as_ref().unwrap_err().to_string(), "source failed");
     }
 
     #[test]

@@ -5,12 +5,12 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-struct FinalDoneHostGenerationBackend {
+struct TurnCompletedHostGenerationBackend {
     requests: Mutex<Vec<ExecutionRequest>>,
 }
 
 #[async_trait]
-impl ExecutionBackend for FinalDoneHostGenerationBackend {
+impl ExecutionBackend for TurnCompletedHostGenerationBackend {
     async fn start_turn(
         &self,
         request: ExecutionRequest,
@@ -223,7 +223,7 @@ async fn plugin_activation_turn_uses_regular_agent_backend() {
     let event_log_root = tempfile::tempdir().expect("event log root");
     let event_log_writer =
         Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
-    let backend = Arc::new(FinalDoneHostGenerationBackend {
+    let backend = Arc::new(TurnCompletedHostGenerationBackend {
         requests: Mutex::new(Vec::new()),
     });
     let sidecar_root = tempfile::tempdir().expect("sidecar root");

@@ -3,11 +3,11 @@
 use super::super::*;
 use app_server_protocol::CapabilityDescriptor;
 use app_server_protocol::ClientCapabilities;
+use app_server_protocol::RequestId;
 use app_server_protocol::METHOD_AGENT_SESSION_START;
 use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
 use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED;
-use app_server_protocol::RequestId;
 use serde_json::json;
 
 pub(super) struct ScopedCapabilitySource;

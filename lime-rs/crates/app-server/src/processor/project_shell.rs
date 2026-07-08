@@ -1,8 +1,8 @@
-use super::{RequestProcessor, RpcDispatch, dispatch_result, parse_params};
+use super::{dispatch_result, parse_params, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    JsonRpcError, ProjectShellSessionDrainEventsParams, ProjectShellSessionKillParams,
+    error_codes, JsonRpcError, ProjectShellSessionDrainEventsParams, ProjectShellSessionKillParams,
     ProjectShellSessionResizeParams, ProjectShellSessionStartParams,
-    ProjectShellSessionWriteParams, error_codes,
+    ProjectShellSessionWriteParams,
 };
 use serde_json::Value;
 

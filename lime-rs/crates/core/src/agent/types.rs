@@ -551,11 +551,6 @@ pub enum StreamEvent {
     #[serde(rename = "done")]
     Done { usage: Option<TokenUsage> },
 
-    /// 最终完成（整个对话完成，包括所有工具调用循环）
-    /// 前端收到此事件后才能取消监听
-    #[serde(rename = "final_done")]
-    FinalDone { usage: Option<TokenUsage> },
-
     /// 错误
     /// Requirements: 1.4 - IF a streaming error occurs, THEN THE Streaming_Handler SHALL emit an error event
     #[serde(rename = "error")]

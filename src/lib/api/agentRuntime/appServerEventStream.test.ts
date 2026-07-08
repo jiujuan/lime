@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES } from "@limecloud/agent-ui-contracts";
 import { APP_SERVER_METHOD_AGENT_SESSION_EVENT } from "@/lib/api/appServer";
 import { projectAppServerAgentEventPayload } from "./appServerEventStream";
 
@@ -112,14 +113,7 @@ describe("appServerEventStream", () => {
   });
 
   it("legacy terminal 事件不应投影成 current turn terminal payload", () => {
-    for (const type of [
-      "done",
-      "final_done",
-      "cancelled",
-      "turn.done",
-      "turn.final_done",
-      "turn.cancelled",
-    ]) {
+    for (const type of LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES) {
       const payload = projectAppServerAgentEventPayload({
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         params: {

@@ -91,7 +91,7 @@
 
 步骤：
 
-1. 发送会产生 thinking、tool、text、final_done 的 prompt。
+1. 发送会产生 thinking、tool、text、`turn.completed` 的 prompt。
 2. 观察流式过程。
 3. 等完成后恢复历史。
 
@@ -99,7 +99,7 @@
 
 1. `thinking_delta` 不污染最终正文。
 2. `text_delta` 不重复追加。
-3. `final_done` 只 reconcile。
+3. `turn.completed` 只 reconcile；legacy `final_done` fail closed。
 4. 工具日志不混入最终 Markdown 正文。
 5. 历史恢复不把完成 thinking 当正文重放。
 

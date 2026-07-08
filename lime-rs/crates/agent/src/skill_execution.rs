@@ -1,4 +1,4 @@
-use crate::protocol::AgentEvent as RuntimeAgentEvent;
+use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::{
     artifact_protocol::{
         extend_unique_artifact_protocol_paths, push_unique_artifact_protocol_path,
@@ -91,6 +91,73 @@ struct StreamedSkillReply {
 
 fn emit_skill_event(emitter: &SkillEventEmitter, event_name: &str, event: RuntimeAgentEvent) {
     emitter(event_name.to_string(), event);
+}
+
+fn build_skill_workflow_runtime_status(
+    skill: &LoadedSkillDefinition,
+    execution_id: &str,
+    success: bool,
+    steps_completed: usize,
+    total_steps: usize,
+    error: Option<&str>,
+) -> AgentRuntimeStatus {
+    let phase = if success { "completed" } else { "failed" };
+    let title = if success {
+        format!("{} workflow 已完成", skill.display_name)
+    } else {
+        format!("{} workflow 执行失败", skill.display_name)
+    };
+    let detail = error
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if success {
+                "所有 workflow 步骤已执行完成。".to_string()
+            } else {
+                "workflow 在执行过程中失败。".to_string()
+            }
+        });
+    let mut metadata = HashMap::new();
+    metadata.insert("source".to_string(), json!("skill_workflow"));
+    metadata.insert("skill_name".to_string(), json!(skill.skill_name));
+    metadata.insert("execution_id".to_string(), json!(execution_id));
+    metadata.insert("success".to_string(), json!(success));
+    metadata.insert("steps_completed".to_string(), json!(steps_completed));
+    metadata.insert("total_steps".to_string(), json!(total_steps));
+
+    AgentRuntimeStatus {
+        phase: phase.to_string(),
+        title,
+        detail,
+        checkpoints: vec![format!("已完成 {steps_completed}/{total_steps} 个步骤")],
+        metadata: Some(metadata),
+    }
+}
+
+fn emit_skill_workflow_runtime_status(
+    emitter: &SkillEventEmitter,
+    event_name: &str,
+    skill: &LoadedSkillDefinition,
+    execution_id: &str,
+    success: bool,
+    steps_completed: usize,
+    total_steps: usize,
+    error: Option<&str>,
+) {
+    emit_skill_event(
+        emitter,
+        event_name,
+        RuntimeAgentEvent::RuntimeStatus {
+            status: build_skill_workflow_runtime_status(
+                skill,
+                execution_id,
+                success,
+                steps_completed,
+                total_steps,
+                error,
+            ),
+        },
+    );
 }
 
 fn collect_artifact_path_from_event(target: &mut Vec<String>, event: &RuntimeAgentEvent) {
@@ -354,10 +421,15 @@ pub async fn execute_skill_workflow(
 
             let final_error = format!("步骤 '{}' 执行失败: {}", step.name, error);
             callback.on_complete(false, None, Some(&final_error));
-            emit_skill_event(
+            emit_skill_workflow_runtime_status(
                 &emitter,
                 &event_name,
-                RuntimeAgentEvent::FinalDone { usage: None },
+                skill,
+                execution_id,
+                false,
+                steps_completed.len(),
+                total_steps,
+                Some(&final_error),
             );
 
             return Ok(SkillExecutionResult {
@@ -382,10 +454,15 @@ pub async fn execute_skill_workflow(
     }
 
     callback.on_complete(true, Some(&final_output), None);
-    emit_skill_event(
+    emit_skill_workflow_runtime_status(
         &emitter,
         &event_name,
-        RuntimeAgentEvent::FinalDone { usage: None },
+        skill,
+        execution_id,
+        true,
+        steps_completed.len(),
+        total_steps,
+        None,
     );
 
     tracing::info!(
@@ -466,7 +543,7 @@ pub async fn execute_skill_prompt(
 mod tests {
     use super::{
         build_prompt_session_config, build_reply_input, build_skill_turn_context,
-        build_step_session_config, build_step_system_prompt,
+        build_skill_workflow_runtime_status, build_step_session_config, build_step_system_prompt,
     };
     use lime_skills::LoadedSkillDefinition;
     use std::collections::HashMap;
@@ -617,5 +694,35 @@ mod tests {
         assert!(system_prompt.contains("Skill 主体指令"));
         assert!(system_prompt.contains("## 当前步骤: 分析 (1/2)"));
         assert!(system_prompt.contains("执行当前分析步骤"));
+    }
+
+    #[test]
+    fn skill_workflow_completion_uses_runtime_status_not_legacy_terminal() {
+        let skill = build_loaded_skill(None);
+        let status = build_skill_workflow_runtime_status(&skill, "exec-1", true, 2, 2, None);
+        let event = serde_json::to_value(crate::protocol::AgentEvent::RuntimeStatus { status })
+            .expect("serialize runtime status");
+
+        assert_eq!(event["type"], "runtime_status");
+        assert_eq!(event["status"]["phase"], "completed");
+        assert_eq!(event["status"]["metadata"]["source"], "skill_workflow");
+        assert_ne!(event["type"], "final_done");
+    }
+
+    #[test]
+    fn skill_workflow_failure_status_keeps_error_detail() {
+        let skill = build_loaded_skill(None);
+        let status = build_skill_workflow_runtime_status(
+            &skill,
+            "exec-2",
+            false,
+            1,
+            3,
+            Some("步骤 '生成' 执行失败: model error"),
+        );
+
+        assert_eq!(status.phase, "failed");
+        assert!(status.detail.contains("model error"));
+        assert_eq!(status.checkpoints, vec!["已完成 1/3 个步骤"]);
     }
 }

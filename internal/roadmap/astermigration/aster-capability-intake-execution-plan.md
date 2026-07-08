@@ -299,6 +299,32 @@ npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=pass
 
 ## 进度日志
 
+### 2026-07-08：Batch A/D reply source stream projection runner 骨架
+
+- `completed`：`agent-runtime::reply_stream::project_reply_stream(...)` 上提 source stream -> current `RuntimeReplyStreamEvent` envelope 的通用 runner，负责读取 source stream、调用 `RuntimeReplyStreamProjector`、保留多事件 projection 和 source error 传播规则；该 runner 不依赖 Aster。
+- `completed`：`request_tool_policy/aster_reply_stream_adapter.rs::project_aster_reply_stream(...)` 现在只创建 `AsterReplyStreamProjector` 并调用 current runner；Aster adapter 不再拥有 `async_stream::try_stream!` / `.next().await` stream plumbing。
+- `guarded`：`asterMigrationBoundary.test.ts` 要求 `agent-runtime::reply_stream` 暴露 `project_reply_stream(...)` 与 source-agnostic projection state，要求 Aster stream adapter 委托 `project_reply_stream(stream, AsterReplyStreamProjector::new(stream_request))`，并禁止把 `async_stream::try_stream!` / `.next().await` 恢复到 Aster adapter。
+- `Thread / Turn / Item`：该骨架属于 Turn event materialization runner。Codex 对照是 Turn runtime 统一发送 / materialize `EventMsg`，source adapter 只负责 source-specific projection；Lime 当前仍消费 Aster `AgentEvent` source，但 stream runner 已进入 Aster-free current owner。
+- `classification`：`current skeleton` 是 `agent-runtime::reply_stream::project_reply_stream(...)`；`compat` 是 `AsterReplyStreamProjector` 对 Aster `AgentEvent` / Aster provider side-channel message 的投影；`dead / guarded` 是 Aster adapter 自持 source stream loop。
+- `validated`：`CARGO_HOME="/tmp/lime-cargo-home-reply-stream" CARGO_TARGET_DIR="/tmp/lime-reply-stream-runner-agent-runtime-target" CARGO_BUILD_JOBS=4 cargo test --manifest-path "lime-rs/Cargo.toml" -p agent-runtime reply_stream --lib -j 2` 通过，`15 passed`。
+- `validated`：`CARGO_HOME="/tmp/lime-cargo-home-reply-stream" CARGO_TARGET_DIR="/tmp/lime-reply-stream-runner-lime-agent-target" CARGO_BUILD_JOBS=4 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 2` 通过，`68 passed`。
+- `validated`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，`123 passed`。
+- `validated`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts" "internal/roadmap/astermigration/aster-capability-intake-execution-plan.md" "internal/roadmap/astermigration/refactor-v1-impact-audit.md"` 通过。
+- `remaining`：这一步仍未删除 root `aster` dependency。Aster `Agent::reply` / `Agent::reply_with_provider`、Aster `Message` lowering、Aster `AgentEvent` source、native `Tool` trait 注册壳、Aster `SessionStore` / `ThreadRuntimeStore` adapter 仍是 Phase 6 blocker；下一刀继续迁出 source execution body 或 native tool registry 壳。
+
+### 2026-07-08：Batch A/D compat source executor boundary 骨架
+
+- `completed`：`request_tool_policy/aster_reply_backend_adapter.rs` 新增私有 `CompatReplySourceExecutor` 与 `CompatReplySourceCall`，把 Aster `Agent::reply(...)` / `ConfiguredReplyProvider::stream_reply_with_agent(...)` 的最终执行体集中到单一 compat executor。
+- `completed`：`AsterReplySource::run(call)` 现在只做 current `RuntimeReplySourceRun` -> mapped Aster payload lowering，并委托 `CompatReplySourceExecutor::run(...)`；source adapter 不再同时持有 lowering、source path dispatch 和 Aster execution body 三种职责。
+- `guarded`：`asterMigrationBoundary.test.ts` 要求 `AsterReplySource` 只包含 `CompatReplySourceExecutor::new(self.agent, self.provider).run(call).await` 委托，并禁止 `AsterReplySource` body 恢复 `RuntimeReplySourceCall::{Default, Provider}` path match、`.reply(...)` 或 `.stream_reply_with_agent(...)` 直接调用；同时要求这些 Aster 调用只停留在 `CompatReplySourceExecutor`。
+- `Thread / Turn / Item`：该骨架属于 Turn source backend execution boundary。Codex 对照是 Turn runner 决定 source call shape，source adapter 只把 source facts 交给具体 executor；Lime 当前仍经 Aster executor，但删除点已集中。
+- `classification`：`current skeleton` 是 `agent-runtime::reply_backend::RuntimeReplySourceCall` / `RuntimeReplySource::run(call)`；`compat` 是私有 `CompatReplySourceExecutor`，仍调用 Aster `Agent::reply` / provider bridge；`dead / guarded` 是 `AsterReplySource` 本体直接拥有 default/provider path dispatch 和 Aster execution body。
+- `validated`：`rustfmt --edition 2021 --check "lime-rs/crates/agent/src/request_tool_policy/aster_reply_backend_adapter.rs"` 通过。
+- `validated`：`CARGO_HOME="/tmp/lime-cargo-home-reply-stream" CARGO_TARGET_DIR="/tmp/lime-reply-source-executor-target" CARGO_BUILD_JOBS=4 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 2` 通过，`68 passed`。
+- `validated`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，`123 passed`。
+- `validated`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts" "internal/roadmap/astermigration/aster-capability-intake-execution-plan.md"` 通过。
+- `remaining`：这一步仍未删除 Aster backend。Aster `Agent::reply` / `Agent::reply_with_provider`、Aster `Message` lowering、Aster `AgentEvent` source、native `Tool` trait 注册壳、Aster `SessionStore` / `ThreadRuntimeStore` adapter 与 root `aster` dependency 仍是 Phase 6 blocker；下一刀继续把 `CompatReplySourceExecutor` 的 default/provider execution body 替换为 Lime current backend 或继续迁出 message/event/tool source。
+
 ### 2026-07-08：Batch A/D unified source call entry 骨架
 
 - `completed`：`agent-runtime::reply_backend` 新增 `RuntimeReplySourceCall<M, C>` 与 Aster-free `RuntimeReplySourceRun`，把 default / provider 两条 source call envelope 统一到单一 current enum；`run_reply_source(...)` 现在只构造 `RuntimeReplySourceCall::{Default, Provider}` 后调用 `RuntimeReplySource::run(call)`。
@@ -339,7 +365,10 @@ npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=pass
 - `classification`：`current skeleton` 是 `agent-runtime::reply_backend::RuntimeReplyProviderSourceCall`；`compat` 是 `RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>` 仍作为 Aster provider bridge 的临时 mapped payload，且解包点只允许停留在私有 `CompatAsterReplyProviderBackend`；`dead / guarded` 是 provider source call 的四散参签名、credential bridge 直接消费 `RuntimeReplyProviderStreamStart`、以及 `ConfiguredReplyProvider` 外层解包 mapped call。
 - `validated`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package agent-runtime --package lime-agent` 已应用。
 - `validated`：`CARGO_HOME="/tmp/lime-cargo-home-reply-stream" CARGO_TARGET_DIR="/tmp/lime-reply-provider-call-target" CARGO_BUILD_JOBS=4 cargo test --manifest-path "lime-rs/Cargo.toml" -p agent-runtime reply_backend --lib -j 2` 通过，`14 passed`。
-- `pending validation`：`lime-agent request_tool_policy` 定向测试、治理守卫和文档格式检查仍在本轮后续验证。
+- `validated`：`CARGO_HOME="/tmp/lime-cargo-home-reply-stream" CARGO_TARGET_DIR="/tmp/lime-provider-bridge-call-target" CARGO_BUILD_JOBS=4 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib -j 2` 通过，`27 passed`。
+- `validated`：`CARGO_HOME="/tmp/lime-cargo-home-reply-stream" CARGO_TARGET_DIR="/tmp/lime-reply-provider-bridge-agent-target" CARGO_BUILD_JOBS=4 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 2` 通过，`68 passed`。
+- `validated`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，`123 passed`。
+- `validated`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts" "internal/roadmap/astermigration/aster-capability-intake-execution-plan.md" "internal/roadmap/astermigration/refactor-v1-impact-audit.md"` 通过。
 - `remaining`：这一步仍未删除 Aster source backend。Aster `Agent::reply` / `Agent::reply_with_provider`、Aster `Message` lowering、Aster `AgentEvent` source、native `Tool` trait 注册壳、Aster `SessionStore` / `ThreadRuntimeStore` adapter 与 root `aster` dependency 仍是 Phase 6 blocker；下一刀继续 provider/reply loop，优先把 provider source backend execution body 或 Aster provider trait object 迁出 Aster。
 
 ### 2026-07-08：Batch A provider stream start trace snapshot 骨架

@@ -491,7 +491,7 @@ fn spawn_transport_request(
     streamed_tx: mpsc::UnboundedSender<StreamedTransportMessage>,
 ) {
     tokio::spawn(async move {
-        if is_streaming_turn_start_request(&message) {
+        if should_stream_transport_request(&message) {
             let mut event_callback = |message: JsonRpcMessage| {
                 let _ = streamed_tx.send(Ok((connection_id, message)));
             };
@@ -541,11 +541,18 @@ fn enqueue_transport_outbound_message(writers: &TransportWriters, message: JsonR
     }
 }
 
-fn is_streaming_turn_start_request(message: &JsonRpcMessage) -> bool {
+fn should_stream_transport_request(message: &JsonRpcMessage) -> bool {
     matches!(
         message,
         JsonRpcMessage::Request(request)
             if request.method == METHOD_AGENT_SESSION_TURN_START
+                || request.method == METHOD_AGENT_SESSION_MEDIA_READ
+                    && request
+                        .params
+                        .as_ref()
+                        .and_then(|params| params.get("stream"))
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false)
     )
 }
 
@@ -2632,7 +2639,36 @@ mod tests {
             ),
         )));
         assert!(!should_spawn_transport_request(&JsonRpcMessage::Request(
-            JsonRpcRequest::new(RequestId::Integer(3), METHOD_AGENT_SESSION_START, Some(json!({}))),
+            JsonRpcRequest::new(
+                RequestId::Integer(3),
+                METHOD_AGENT_SESSION_START,
+                Some(json!({}))
+            ),
+        )));
+    }
+
+    #[test]
+    fn media_read_streaming_transport_requires_stream_flag() {
+        assert!(should_stream_transport_request(&JsonRpcMessage::Request(
+            JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_AGENT_SESSION_MEDIA_READ,
+                Some(json!({ "stream": true })),
+            ),
+        )));
+        assert!(!should_stream_transport_request(&JsonRpcMessage::Request(
+            JsonRpcRequest::new(
+                RequestId::Integer(2),
+                METHOD_AGENT_SESSION_MEDIA_READ,
+                Some(json!({})),
+            ),
+        )));
+        assert!(should_stream_transport_request(&JsonRpcMessage::Request(
+            JsonRpcRequest::new(
+                RequestId::Integer(3),
+                METHOD_AGENT_SESSION_TURN_START,
+                Some(json!({})),
+            ),
         )));
     }
 }

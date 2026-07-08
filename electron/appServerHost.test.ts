@@ -295,6 +295,7 @@ const {
       mode:
         | "resolve"
         | "hang"
+        | "hang-request"
         | "throw-stale-once"
         | "throw-exited-before-next-message"
         | "throw-exited-before-next-message-after-release",

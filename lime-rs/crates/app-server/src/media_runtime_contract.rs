@@ -331,7 +331,9 @@ mod tests {
         assert!(contract.get("executor_binding").is_none());
         assert_eq!(
             contract["route_execution_exit_condition"].as_str(),
-            Some("audio worker or RuntimeCore provider protocol mapper consumes ResolvedModelRoute and writes model_route_execution for voice_generation")
+            Some(
+                "audio worker or RuntimeCore provider protocol mapper consumes ResolvedModelRoute and writes model_route_execution for voice_generation"
+            )
         );
         assert!(contract.get("resolved_route").is_none());
         assert!(contract.get("model_route_execution").is_none());

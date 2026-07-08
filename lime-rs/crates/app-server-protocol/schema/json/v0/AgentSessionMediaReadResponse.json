@@ -6,10 +6,10 @@
       "minimum": 0,
       "type": "integer"
     },
-    "contentRange": {
+    "contentBase64": {
       "type": "string"
     },
-    "contentBase64": {
+    "contentRange": {
       "type": "string"
     },
     "hasMore": {
@@ -49,8 +49,8 @@
   },
   "required": [
     "bytes",
-    "contentRange",
     "contentBase64",
+    "contentRange",
     "hasMore",
     "length",
     "offset",

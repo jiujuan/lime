@@ -30,7 +30,6 @@ import {
   type PluginPackageScanReport,
   type PluginReleaseSubmission,
   type PluginPackageUploadSession,
-  type UploadPluginPackageContentResponse,
 } from "@/lib/api/oemCloudPluginPublish";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import type { HostCapabilityProfile } from "../types";

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -22,22 +23,12 @@ describe("EmptyStateComposerPanel", () => {
     expect(source).not.toContain("InterruptedInputRestoreRequest");
   });
 
-  it("输入为空时展示 Tab 起手建议，按 Tab 后填入当前建议", async () => {
-    const container = renderPanel({
-      inputSuggestions: [
-        {
-          id: "suggestion-email",
-          label: "帮我写一封工作邮件",
-          prompt: "请帮我写一封工作邮件。",
-          order: 10,
-        },
-      ],
-    });
+  it("输入为空时不再展示 Tab 起手建议，也不拦截 Tab 输入", async () => {
+    const container = renderPanel();
 
     expect(
-      container.querySelector('[data-testid="home-input-tab-suggestion"]')
-        ?.textContent,
-    ).toContain("帮我写一封工作邮件");
+      container.querySelector('[data-testid="home-input-tab-suggestion"]'),
+    ).toBeNull();
 
     const textarea = container.querySelector("textarea");
     await act(async () => {
@@ -53,23 +44,11 @@ describe("EmptyStateComposerPanel", () => {
 
     expect(
       (container.querySelector("textarea") as HTMLTextAreaElement).value,
-    ).toBe("请帮我写一封工作邮件。");
-    expect(
-      container.querySelector('[data-testid="home-input-tab-suggestion"]'),
-    ).toBeNull();
+    ).toBe("");
   });
 
   it("Shift+Tab 保持焦点切换，不填入起手建议", () => {
-    const container = renderPanel({
-      inputSuggestions: [
-        {
-          id: "suggestion-email",
-          label: "帮我写一封工作邮件",
-          prompt: "请帮我写一封工作邮件。",
-          order: 10,
-        },
-      ],
-    });
+    const container = renderPanel();
 
     const textarea = container.querySelector("textarea");
     act(() => {
@@ -94,14 +73,6 @@ describe("EmptyStateComposerPanel", () => {
       guideHelpActive: true,
       guideHelpLabel: "Lime 引导帮助",
       onClearGuideHelp,
-      inputSuggestions: [
-        {
-          id: "suggestion-meeting",
-          label: "帮我整理一下会议纪要",
-          prompt: "帮我整理一下会议纪要。",
-          order: 10,
-        },
-      ],
     });
 
     expect(

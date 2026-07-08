@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendMessageFn } from "./agentChatShared";
 import { createAgentChatSendMessage } from "./agentChatSendMessage";
 import { listSlashEntryUsage } from "../skill-selection/slashEntryUsage";
-import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 
 type CreateSendMessageOptions = Parameters<
   typeof createAgentChatSendMessage
@@ -11,28 +10,6 @@ type CreateSendMessageOptions = Parameters<
 beforeEach(() => {
   window.localStorage.clear();
 });
-
-const textAndImageModelCapabilitySummary: ModelCapabilitySummary = {
-  capabilities: {
-    vision: true,
-    tools: true,
-    streaming: true,
-    json_mode: true,
-    function_calling: true,
-    reasoning: false,
-  },
-  task_families: ["chat", "vision_understanding"],
-  input_modalities: ["text", "image"],
-  output_modalities: ["text"],
-  runtime_features: ["streaming", "tool_calling"],
-  supports_tools: true,
-  supports_reasoning: false,
-  supports_prompt_cache: false,
-  supports_media_input: true,
-  supports_media_output: false,
-  context_length: 128000,
-  max_output_tokens: 4096,
-};
 
 function createTestAgentChatSendMessage(
   options: CreateSendMessageOptions,

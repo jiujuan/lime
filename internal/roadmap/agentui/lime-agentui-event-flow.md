@@ -8,13 +8,13 @@
 
 AgentUI 的运行事实来自五类投影：
 
-| 投影 | 入口 | UI 消费 |
-| --- | --- | --- |
-| AgentEvent stream | `src/lib/api/agentProtocol.ts` | 流式文本、thinking、tool、artifact、runtime status、queue、done |
-| Session detail | `getAgentRuntimeSession` / `agent_runtime_get_session` | 打开旧会话、历史窗口、thread items、queued turns、thread read |
-| Thread read | `getAgentRuntimeThreadRead` / session detail 内联 | pending requests、last outcome、incident、interrupt、queue |
-| Timeline | `AgentTimelineRecorder` 持久化的 turn/item | Process layer、Evidence layer |
-| Artifact/Evidence files | `.lime/artifacts`、`.lime/harness` | Workbench、Harness、Review、Replay |
+| 投影                    | 入口                                                   | UI 消费                                                         |
+| ----------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| AgentEvent stream       | `src/lib/api/agentProtocol.ts`                         | 流式文本、thinking、tool、artifact、runtime status、queue、done |
+| Session detail          | `getAgentRuntimeSession` / `agent_runtime_get_session` | 打开旧会话、历史窗口、thread items、queued turns、thread read   |
+| Thread read             | `getAgentRuntimeThreadRead` / session detail 内联      | pending requests、last outcome、incident、interrupt、queue      |
+| Timeline                | `AgentTimelineRecorder` 持久化的 turn/item             | Process layer、Evidence layer                                   |
+| Artifact/Evidence files | `.lime/artifacts`、`.lime/harness`                     | Workbench、Harness、Review、Replay                              |
 
 事件流原则：
 
@@ -44,7 +44,7 @@ flowchart TB
   FrontendReducer --> UI[Conversation / Process / Task / Artifact UI]
   Events --> Recorder[AgentTimelineRecorder]
   Recorder --> TimelineDb[(timeline DB)]
-  Runtime --> Done[done / final_done]
+  Runtime --> Done[turn.completed / turn.failed / turn.canceled]
   Done --> Reconcile[reconcileFinalContentParts 防重复吐字]
   Reconcile --> Complete[停止 sending，收起 transient status]
 ```
@@ -54,7 +54,7 @@ flowchart TB
 - listener 必须先于 submit 注册，避免首事件丢失。
 - `runtime_status` 应早于首个 `text_delta`，用于首字前反馈。
 - `text_delta` 只进入 text part；`thinking_delta` 只进入 thinking part。
-- `final_done` 只能 reconcile，不应把完整 final text 再追加一遍。
+- `turn.completed` 只能 reconcile，不应把完整 final text 再追加一遍；legacy `final_done` fail closed。
 - tool/artifact/action 事件进入 process/task/artifact 投影，不污染最终正文。
 
 ## 3. 打开旧会话流程

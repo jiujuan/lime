@@ -795,7 +795,7 @@ describe("workspaceSendHelpers runtime team preview", () => {
     expect(messages[1]?.content).not.toMatch(/小活儿|活儿|小队|Subagents|别急|安排/u);
   });
 
-  it("提交预览只回显用户消息，不再渲染启动说明", () => {
+  it("提交预览应回显用户消息并保留 assistant 等待态", () => {
     vi.spyOn(Date, "now").mockReturnValue(1_710_000_000_000);
 
     const snapshot = createSubmissionPreviewSnapshot({
@@ -818,7 +818,7 @@ describe("workspaceSendHelpers runtime team preview", () => {
     });
 
     const messages = buildSubmissionPreviewMessages(snapshot);
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
       id: "submission-preview:submission-preview-1:user",
       role: "user",
@@ -827,6 +827,15 @@ describe("workspaceSendHelpers runtime team preview", () => {
         kind: "installed_skill",
         skillKey: "brand-product-knowledge-builder",
         skillName: "产品知识库",
+      },
+    });
+    expect(messages[1]).toMatchObject({
+      id: "submission-preview:submission-preview-1:assistant",
+      role: "assistant",
+      content: "",
+      isThinking: true,
+      runtimeStatus: {
+        phase: "preparing",
       },
     });
 

@@ -94,11 +94,3 @@ export interface HomeRecoverySession {
   summary?: string;
   status: HomeRecoverySessionStatus;
 }
-
-export interface HomeInputSuggestion {
-  id: string;
-  label: string;
-  prompt: string;
-  order: number;
-  testId?: string;
-}

@@ -1,4 +1,5 @@
 import type { AppServerAgentEvent } from "@/lib/api/appServer";
+import { isLegacyRuntimeTurnTerminalEventClass } from "@limecloud/agent-ui-contracts";
 
 export function parseEventTimestampMs(
   timestamp: string | undefined,
@@ -11,14 +12,7 @@ export function parseEventTimestampMs(
 }
 
 export function isLegacyTurnTerminalAppServerEventType(type: string): boolean {
-  return (
-    type === "done" ||
-    type === "final_done" ||
-    type === "cancelled" ||
-    type === "turn.done" ||
-    type === "turn.final_done" ||
-    type === "turn.cancelled"
-  );
+  return isLegacyRuntimeTurnTerminalEventClass(type);
 }
 
 export function readAppServerAgentEvent(

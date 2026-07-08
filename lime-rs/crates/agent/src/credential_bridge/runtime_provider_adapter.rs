@@ -53,7 +53,9 @@ impl ConfiguredReplyProvider {
             model_name = ?trace.model_name,
             "[CredentialBridge] streaming reply with configured runtime provider"
         );
-        self.backend.stream_reply_with_agent(agent, provider_call).await
+        self.backend
+            .stream_reply_with_agent(agent, provider_call)
+            .await
     }
 }
 

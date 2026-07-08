@@ -35,13 +35,6 @@ const Title = styled.h2`
   line-height: 1.35;
 `;
 
-const Description = styled.p`
-  margin: 0;
-  color: var(--lime-text-muted, rgb(100 116 139));
-  font-size: 12px;
-  line-height: 1.6;
-`;
-
 const Grid = styled.div`
   display: grid;
   min-width: 0;
@@ -141,7 +134,7 @@ function resolveCoverGradient(token: string): string {
 
 interface HomeSkillGalleryProps {
   items: HomeSkillSurfaceItem[];
-  copy: Pick<HomeSurfaceChromeCopy, "galleryDescription" | "galleryTitle">;
+  copy: Pick<HomeSurfaceChromeCopy, "galleryTitle">;
   onSelectItem: (item: HomeSkillSurfaceItem) => void;
 }
 
@@ -159,7 +152,6 @@ export function HomeSkillGallery({
       <GalleryHeader>
         <HeaderText>
           <Title>{copy.galleryTitle}</Title>
-          <Description>{copy.galleryDescription}</Description>
         </HeaderText>
       </GalleryHeader>
       <Grid>

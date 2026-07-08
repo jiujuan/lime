@@ -1,6 +1,6 @@
 //! connect handlers for the App Server processor.
 
-use super::{RequestProcessor, RpcDispatch, dispatch_result, parse_params, to_jsonrpc_error};
+use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     ConnectCallbackSendParams, ConnectDeepLinkResolveParams, ConnectOpenDeepLinkResolveParams,
     ConnectRelayApiKeySaveParams, JsonRpcError,

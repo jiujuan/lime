@@ -921,7 +921,7 @@ describe("AgentRuntimeCapabilityHost", () => {
             message: "AgentRuntime 本轮输出已结束",
             payload: {
               runtimeEvent: {
-                type: "final_done",
+                type: "turn.completed",
                 usage: { input_tokens: 1200, output_tokens: 340 },
               },
             },

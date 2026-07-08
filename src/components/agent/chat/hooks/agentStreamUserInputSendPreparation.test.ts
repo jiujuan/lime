@@ -448,10 +448,15 @@ describe("agentStreamUserInputSendPreparation", () => {
     });
   });
 
-  it("默认 Claw 发送不应生成诊断 requestMetadata", () => {
+  it("默认 Claw 发送应生成 summary trace metadata", () => {
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("00000000-0000-0000-0000-000000000301")
-      .mockReturnValueOnce("00000000-0000-0000-0000-000000000302");
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000302")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000303")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000304")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000305")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000306")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000307");
 
     const result = prepareAgentStreamUserInputSend({
       content: "整理今天的国际新闻",
@@ -460,7 +465,27 @@ describe("agentStreamUserInputSendPreparation", () => {
       env: createEnv(),
     });
 
-    expect(result.requestMetadata).toBeUndefined();
+    expect(result.assistantMsg.id).toBe(
+      "00000000-0000-0000-0000-000000000301",
+    );
+    expect(result.userMsg?.id).toBe(
+      "00000000-0000-0000-0000-000000000302",
+    );
+    expect(result.requestMetadata).toMatchObject({
+      agentUiPerformanceTrace: expect.objectContaining({
+        requestId: expect.stringMatching(/^claw_request_/),
+        runId: expect.stringMatching(/^claw_run_/),
+        sessionId: "session-1",
+        source: "agent-chat",
+        traceId: expect.stringMatching(/^claw_trace_/),
+        workspaceId: "workspace-1",
+        w3cTraceContext: expect.objectContaining({
+          traceparent: expect.stringMatching(
+            /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/,
+          ),
+        }),
+      }),
+    });
     expect(result.assistantMsg.requestMetadata).toBeUndefined();
     expect(result.userMsg?.requestMetadata).toBeUndefined();
   });

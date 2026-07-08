@@ -1,7 +1,7 @@
-use super::{RequestProcessor, RpcDispatch, dispatch_result, parse_params};
+use super::{dispatch_result, parse_params, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    ExecutionProcessDrainOutputParams, ExecutionProcessIdParams, ExecutionProcessStartParams,
-    ExecutionProcessWriteStdinParams, JsonRpcError, error_codes,
+    error_codes, ExecutionProcessDrainOutputParams, ExecutionProcessIdParams,
+    ExecutionProcessStartParams, ExecutionProcessWriteStdinParams, JsonRpcError,
 };
 use serde_json::Value;
 

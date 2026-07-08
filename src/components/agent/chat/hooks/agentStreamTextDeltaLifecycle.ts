@@ -26,12 +26,6 @@ function isLegacyFinalFallbackEligibility(
   );
 }
 
-function isUnscopedLegacyFinalFallbackEligibility(
-  eligibility: TextSegmentFinalEligibility | null,
-): eligibility is "legacy_unphased" {
-  return eligibility === "legacy_unphased";
-}
-
 export function resolveTextSegmentFinalEligibility(
   event: TextDeltaAgentEvent,
 ): TextSegmentFinalEligibility | null {

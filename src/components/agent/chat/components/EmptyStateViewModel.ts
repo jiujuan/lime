@@ -305,13 +305,3 @@ export function buildEmptyStateProjectConversationGroups({
     })
     .filter((group) => group.conversations.length > 0);
 }
-
-export function shouldExposeHomeInputSuggestions({
-  hasAutoLaunchSiteSkill,
-  guideHelpActive,
-}: {
-  hasAutoLaunchSiteSkill: boolean;
-  guideHelpActive: boolean;
-}): boolean {
-  return !hasAutoLaunchSiteSkill && !guideHelpActive;
-}

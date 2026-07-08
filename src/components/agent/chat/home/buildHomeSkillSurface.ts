@@ -17,7 +17,6 @@ import {
 import type {
   HomeSkillCategory,
   HomeGuideCard,
-  HomeInputSuggestion,
   HomeSkillSection,
   HomeSkillSurfaceItem,
   HomeStarterChip,
@@ -247,37 +246,6 @@ export function buildHomeStarterChips(
       testId: "home-skill-manager-trigger",
     },
   ];
-}
-
-export function buildHomeInputSuggestions(
-  entries: SkillCatalogEntry[] | undefined,
-  copy: HomeSurfaceCopy,
-): HomeInputSuggestion[] {
-  const dynamicSuggestions = listHomePresentationEntries(
-    entries,
-    "input_suggestion",
-  )
-    .map((entry) => {
-      const prompt = getHomePresentationPrompt(entry);
-      const label = entry.homePresentation?.label?.trim() || entry.title;
-      if (!prompt || !label) {
-        return null;
-      }
-
-      const suggestion: HomeInputSuggestion = {
-        id: entry.id,
-        label,
-        prompt,
-        order: normalizeHomePresentationOrder(entry),
-        testId: buildHomeTestId("home-input-suggestion", entry),
-      };
-      return suggestion;
-    })
-    .filter((item): item is HomeInputSuggestion => Boolean(item));
-
-  return dynamicSuggestions.length > 0
-    ? dynamicSuggestions
-    : copy.inputSuggestions;
 }
 
 export function buildHomeGuideCards(

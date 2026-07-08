@@ -670,9 +670,7 @@ fn build_audit_summary_text(
         .unwrap_or_default();
     format!(
         "decision={decision}; pending_requests={}; queued_turns={}; running_turns={}; evidence_pack={evidence_pack_ref}; artifacts={artifact_count}; blockers={blockers}; note={note}",
-        metrics.pending_request_count,
-        metrics.queued_turn_count,
-        metrics.running_turn_count,
+        metrics.pending_request_count, metrics.queued_turn_count, metrics.running_turn_count,
     )
 }
 

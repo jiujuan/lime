@@ -11,7 +11,6 @@ import {
 import {
   buildHomeGalleryItems,
   buildHomeGuideCards,
-  buildHomeInputSuggestions,
   buildHomeSkillItems,
   buildHomeSkillSections,
   buildHomeStarterChips,
@@ -98,10 +97,6 @@ export function useHomeSkillSurface({
     () => buildHomeStarterChips(catalogEntries, copy),
     [catalogEntries, copy],
   );
-  const inputSuggestions = useMemo(
-    () => buildHomeInputSuggestions(catalogEntries, copy),
-    [catalogEntries, copy],
-  );
   const guideCards = useMemo(
     () => buildHomeGuideCards(catalogEntries, copy),
     [catalogEntries, copy],
@@ -136,7 +131,6 @@ export function useHomeSkillSurface({
   return {
     galleryItems,
     guideCards,
-    inputSuggestions,
     serviceSkillItems,
     skillItems,
     skillSections,

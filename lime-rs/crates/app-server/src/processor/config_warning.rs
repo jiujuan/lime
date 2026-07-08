@@ -167,12 +167,10 @@ mod tests {
             json!("App Server config warning during turn start")
         );
         assert_eq!(params["path"], json!(yaml_path.display().to_string()));
-        assert!(
-            params["details"]
-                .as_str()
-                .expect("details")
-                .contains("YAML")
-        );
+        assert!(params["details"]
+            .as_str()
+            .expect("details")
+            .contains("YAML"));
     }
 
     #[test]

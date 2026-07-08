@@ -8,6 +8,7 @@ import {
   METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
 } from "./generated/protocol-types.js";
 import type {
+  AgentSessionMediaReadResponse as GeneratedAgentSessionMediaReadResponse,
   ConversationImportSourceClient as GeneratedConversationImportSourceClient,
   ConversationImportSourceStatus as GeneratedConversationImportSourceStatus,
   ConversationImportThreadStatus as GeneratedConversationImportThreadStatus,
@@ -2858,6 +2859,45 @@ export type AgentSessionEventNotification = JsonRpcNotification & {
   params: AgentSessionEventParams;
 };
 
+export const AGENT_SESSION_MEDIA_READ_CHUNK_EVENT_TYPE = "media.read.chunk";
+export const AGENT_SESSION_MEDIA_READ_COMPLETED_EVENT_TYPE =
+  "media.read.completed";
+
+export type AgentSessionMediaReadChunk = Omit<
+  GeneratedAgentSessionMediaReadResponse,
+  "sha256"
+> & {
+  sha256?: string | null;
+};
+
+export type AgentSessionMediaReadChunkEventPayload = {
+  streamId: string;
+  chunkIndex: number;
+  done: false;
+  chunk: AgentSessionMediaReadChunk;
+};
+
+export type AgentSessionMediaReadCompletedEventPayload = {
+  streamId: string;
+  chunkCount: number;
+  done: true;
+  media: Omit<GeneratedAgentSessionMediaReadResponse, "contentBase64">;
+};
+
+export type AgentSessionMediaReadEventNotification =
+  AgentSessionEventNotification & {
+    params: AgentSessionEventParams & {
+      event: AgentEvent & {
+        type:
+          | typeof AGENT_SESSION_MEDIA_READ_CHUNK_EVENT_TYPE
+          | typeof AGENT_SESSION_MEDIA_READ_COMPLETED_EVENT_TYPE;
+        payload:
+          | AgentSessionMediaReadChunkEventPayload
+          | AgentSessionMediaReadCompletedEventPayload;
+      };
+    };
+  };
+
 export type WorkspaceRightSurfacePendingChangedParams =
   GeneratedWorkspaceRightSurfacePendingChangedParams;
 
@@ -3254,6 +3294,46 @@ export function agentSessionEventNotification(
     return undefined;
   }
   return message as AgentSessionEventNotification;
+}
+
+export function agentSessionMediaReadEventNotification(
+  message: JsonRpcMessage,
+): AgentSessionMediaReadEventNotification | undefined {
+  const notification = agentSessionEventNotification(message);
+  if (!notification) {
+    return undefined;
+  }
+  const eventType = notification.params.event.type;
+  if (
+    eventType !== AGENT_SESSION_MEDIA_READ_CHUNK_EVENT_TYPE &&
+    eventType !== AGENT_SESSION_MEDIA_READ_COMPLETED_EVENT_TYPE
+  ) {
+    return undefined;
+  }
+  const payload = notification.params.event.payload as
+    | Partial<AgentSessionMediaReadChunkEventPayload>
+    | Partial<AgentSessionMediaReadCompletedEventPayload>
+    | undefined;
+  if (!payload || typeof payload.streamId !== "string") {
+    return undefined;
+  }
+  if (
+    eventType === AGENT_SESSION_MEDIA_READ_CHUNK_EVENT_TYPE &&
+    payload.done === false &&
+    typeof (payload as Partial<AgentSessionMediaReadChunkEventPayload>)
+      .chunk === "object"
+  ) {
+    return notification as AgentSessionMediaReadEventNotification;
+  }
+  if (
+    eventType === AGENT_SESSION_MEDIA_READ_COMPLETED_EVENT_TYPE &&
+    payload.done === true &&
+    typeof (payload as Partial<AgentSessionMediaReadCompletedEventPayload>)
+      .media === "object"
+  ) {
+    return notification as AgentSessionMediaReadEventNotification;
+  }
+  return undefined;
 }
 
 export function agentSessionRuntimeEventNotification(

@@ -3,8 +3,8 @@
 use serde_json::Value;
 
 use super::{
-    RequestProcessor, RpcDispatch, dispatch_result, parse_params, to_jsonrpc_error,
-    workspace_right_surface_pending_changed_notification,
+    dispatch_result, parse_params, to_jsonrpc_error,
+    workspace_right_surface_pending_changed_notification, RequestProcessor, RpcDispatch,
 };
 use app_server_protocol::JsonRpcError;
 use app_server_protocol::WorkspaceRightSurfacePendingChangedParams;

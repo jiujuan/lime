@@ -764,12 +764,16 @@ describe("EmptyState", () => {
     expect(
       container.querySelector('[data-testid="entry-home-knowledge-import"]'),
     ).toBeTruthy();
-    const scrollCue = container.querySelector(
-      '[data-testid="home-scroll-cue"]',
-    );
-    expect(scrollCue).toBeTruthy();
-    expect(scrollCue?.textContent).toContain(
-      "向下滑，看看 Lime 可以帮你做什么",
+    expect(
+      container.querySelector('[data-testid="home-scroll-cue"]'),
+    ).toBeNull();
+    expect(
+      container.textContent,
+    ).not.toContain("向下滑，看看 Lime 可以帮你做什么");
+    expect(
+      container.textContent,
+    ).not.toContain(
+      "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
     );
     expect(
       container.querySelector('[data-testid="home-second-screen"]'),
@@ -1035,8 +1039,8 @@ describe("EmptyState", () => {
     expect(container.textContent).toContain("More methods");
     expect(container.textContent).toContain("Start from these tasks");
     expect(
-      container.querySelector('[data-testid="home-scroll-cue"]')?.textContent,
-    ).toContain("Scroll down to see what Lime can help you do");
+      container.querySelector('[data-testid="home-scroll-cue"]'),
+    ).toBeNull();
 
     const guideTrigger = container.querySelector(
       '[data-testid="home-guide-help-trigger"]',
@@ -1398,7 +1402,7 @@ describe("EmptyState", () => {
     ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="home-input-tab-suggestion"]'),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
   it("点击首屏起手任务只挂载输入区能力，不弹出启动表单", async () => {
@@ -3280,7 +3284,7 @@ describe("EmptyState", () => {
     );
   });
 
-  it("通用对话默认展示 参考站式 Tab 起手建议", async () => {
+  it("通用对话默认不展示 Tab 起手建议", async () => {
     const container = renderEmptyState({
       activeTheme: "general",
       serviceSkills: [],
@@ -3291,10 +3295,8 @@ describe("EmptyState", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="home-input-tab-suggestion"]')
-        ?.textContent,
-    ).toContain("Tab");
-    expect(container.textContent).toContain("帮我整理一下会议纪要");
+      container.querySelector('[data-testid="home-input-tab-suggestion"]'),
+    ).toBeNull();
   });
 
   it("高级设置不再渲染联网搜索前置开关", async () => {

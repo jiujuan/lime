@@ -1,5 +1,5 @@
 use super::presentation_soul::insert_image_generation_soul_payload_fields;
-use super::{ImageCommandIntent, workflow_run_id};
+use super::{workflow_run_id, ImageCommandIntent};
 use crate::runtime::memory_prompt::append_soul_context_to_system_prompt;
 use crate::runtime_backend::{
     backend_error, current_agent_runtime_config_metadata, direct_provider_config_from_request,
@@ -10,10 +10,10 @@ use crate::runtime_backend::{
 };
 use crate::{ExecutionRequest, RuntimeCoreError};
 use lime_agent::{
-    AgentTokenUsage, DirectTextGenerationRequest, insert_agent_turn_metadata,
-    run_direct_text_generation_with_db, set_agent_turn_user_visible_input_text,
+    insert_agent_turn_metadata, run_direct_text_generation_with_db,
+    set_agent_turn_user_visible_input_text, AgentTokenUsage, DirectTextGenerationRequest,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 const PRESENTATION_SCHEMA_VERSION: &str = "image_task_presentation.v1";
 const PRESENTATION_SOURCE: &str = "model_generated";

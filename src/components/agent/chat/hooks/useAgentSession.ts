@@ -2620,14 +2620,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     },
     [
       createFreshSession,
-      disableSessionRestore,
       applySessionSnapshot,
       normalizedWorkingDir,
       persistSessionRestoreCandidate,
       runtime,
       sessionIdRef,
-      switchTopic,
-      topics,
       workspaceId,
     ],
   );

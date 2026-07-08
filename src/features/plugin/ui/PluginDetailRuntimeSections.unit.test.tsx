@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   afterAll,
@@ -44,7 +44,7 @@ afterAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT;
 });
 
-function mount(element: JSX.Element): HTMLDivElement {
+function mount(element: ReactElement): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);

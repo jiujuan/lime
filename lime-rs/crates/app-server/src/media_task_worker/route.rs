@@ -690,7 +690,9 @@ mod tests {
         });
         assert_eq!(
             image_generation_endpoint_from_route(&dashscope_route, "openai_images").as_deref(),
-            Some("https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation")
+            Some(
+                "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+            )
         );
         assert_eq!(
             image_executor_mode_from_route(&dashscope_route, "openai_images"),
@@ -791,7 +793,9 @@ mod tests {
         provider.custom_models = Vec::new();
         assert_eq!(
             image_generation_endpoint_from_provider(&provider, Some("qwen-image-plus")).as_deref(),
-            Some("https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation")
+            Some(
+                "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+            )
         );
         assert_eq!(
             image_executor_mode_from_provider(&provider, Some("qwen-image-plus")),

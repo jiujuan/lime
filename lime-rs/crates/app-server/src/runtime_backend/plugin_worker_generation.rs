@@ -1,16 +1,17 @@
 use super::tool_process_metadata::SoulStyleMetadata;
 use super::{
-    RuntimeBackend, backend_error, current_agent_runtime_config_metadata,
-    direct_provider_config_from_request, initialize_runtime_database, model_route_contract,
-    model_route_resolver, request_context, selection_with_effective_reasoning,
+    backend_error, current_agent_runtime_config_metadata, direct_provider_config_from_request,
+    initialize_runtime_database, model_route_contract, model_route_resolver, request_context,
+    selection_with_effective_reasoning, RuntimeBackend,
 };
 use crate::runtime::memory_prompt::append_soul_context_to_system_prompt;
 use crate::{ExecutionRequest, RuntimeCoreError};
 use lime_agent::{
-    HostManagedGenerationPlan, HostManagedGenerationRunRequest, host_managed_generation_session_id,
-    run_host_managed_generation, write_host_managed_generation_status,
+    host_managed_generation_session_id, run_host_managed_generation,
+    write_host_managed_generation_status, HostManagedGenerationPlan,
+    HostManagedGenerationRunRequest,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub(super) async fn prepare_plugin_worker_request(
     runtime_backend: &RuntimeBackend,
@@ -556,11 +557,13 @@ mod tests {
             "plugin.apps.runtime.agentRun.hostManagedGeneration.completed.message"
         );
         assert_eq!(
-            worker_request["hostManagedGeneration"]["generationBriefBoundary"]["formalArtifactVoiceSource"],
+            worker_request["hostManagedGeneration"]["generationBriefBoundary"]
+                ["formalArtifactVoiceSource"],
             "generation_brief_only"
         );
         assert_eq!(
-            worker_request["hostManagedGeneration"]["host_managed_generation_facts"]["artifactBodyStyleLevel"],
+            worker_request["hostManagedGeneration"]["host_managed_generation_facts"]
+                ["artifactBodyStyleLevel"],
             "L3"
         );
         assert_eq!(

@@ -59,7 +59,6 @@ import {
 import {
   buildEmptyStateQuickActionItems,
   resolveEffectiveCuratedTaskReferences,
-  shouldExposeHomeInputSuggestions,
 } from "./EmptyStateViewModel";
 import { useEmptyStateAttachments } from "./useEmptyStateAttachments";
 import { useEmptyStateRecommendationPreferences } from "./useEmptyStateRecommendationPreferences";
@@ -754,7 +753,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const {
     galleryItems: homeGalleryItems,
     guideCards: homeGuideCards,
-    inputSuggestions: homeInputSuggestions,
     serviceSkillItems: homeServiceSkillItems,
     skillItems: homeSkillItems,
     skillSections: homeSkillSections,
@@ -908,14 +906,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onRemovePathReference={onRemovePathReference}
         fileManagerOpen={fileManagerOpen}
         onToggleFileManager={onToggleFileManager}
-        inputSuggestions={
-          shouldExposeHomeInputSuggestions({
-            hasAutoLaunchSiteSkill,
-            guideHelpActive,
-          })
-            ? homeInputSuggestions
-            : []
-        }
         guideHelpActive={guideHelpActive}
         guideHelpLabel={guideHelpLabel}
         onClearGuideHelp={() => setGuideHelpActive(false)}

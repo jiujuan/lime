@@ -1,6 +1,5 @@
 import type {
   HomeGuideCard,
-  HomeInputSuggestion,
   HomeRecoverySessionStatus,
   HomeSkillCategory,
   HomeStarterChip,
@@ -91,18 +90,6 @@ export type HomeSurfaceCopyKey =
   | "agentChat.home.starter.code.label"
   | "agentChat.home.starter.code.prompt"
   | "agentChat.home.starter.more.label"
-  | "agentChat.home.inputSuggestion.meetingNotes.label"
-  | "agentChat.home.inputSuggestion.meetingNotes.prompt"
-  | "agentChat.home.inputSuggestion.knowledgeImport.label"
-  | "agentChat.home.inputSuggestion.knowledgeImport.prompt"
-  | "agentChat.home.inputSuggestion.researchReport.label"
-  | "agentChat.home.inputSuggestion.researchReport.prompt"
-  | "agentChat.home.inputSuggestion.pptOutline.label"
-  | "agentChat.home.inputSuggestion.pptOutline.prompt"
-  | "agentChat.home.inputSuggestion.requirementAnalysis.label"
-  | "agentChat.home.inputSuggestion.requirementAnalysis.prompt"
-  | "agentChat.home.inputSuggestion.videoScript.label"
-  | "agentChat.home.inputSuggestion.videoScript.prompt"
   | "agentChat.home.guide.longTermPlan.title"
   | "agentChat.home.guide.longTermPlan.summary"
   | "agentChat.home.guide.longTermPlan.prompt"
@@ -118,8 +105,6 @@ export type HomeSurfaceCopyKey =
   | "agentChat.home.guideCards.label"
   | "agentChat.home.moreSkills.drawerLabel"
   | "agentChat.home.gallery.title"
-  | "agentChat.home.gallery.description"
-  | "agentChat.home.scrollCue.label"
   | "agentChat.home.secondScreen.label"
   | "agentChat.home.projectConversations.more"
   | "agentChat.home.recovery.running.title"
@@ -146,8 +131,6 @@ export interface HomeSurfaceChromeCopy {
   guideCardsLabel: string;
   moreSkillsDrawerLabel: string;
   galleryTitle: string;
-  galleryDescription: string;
-  scrollCueLabel: string;
   secondScreenLabel: string;
   projectConversationsMoreLabel: (count: number) => string;
   recoverySessionTitle: (
@@ -246,7 +229,6 @@ export interface HomeSurfaceCopy {
   categoryLabels: Record<HomeSkillCategory, string>;
   starterChips: HomeStarterChip[];
   starterMoreLabel: string;
-  inputSuggestions: HomeInputSuggestion[];
   guideCards: HomeGuideCard[];
 }
 
@@ -457,8 +439,6 @@ export function buildHomeSurfaceCopy(
       guideCardsLabel: translate("agentChat.home.guideCards.label"),
       moreSkillsDrawerLabel: translate("agentChat.home.moreSkills.drawerLabel"),
       galleryTitle: translate("agentChat.home.gallery.title"),
-      galleryDescription: translate("agentChat.home.gallery.description"),
-      scrollCueLabel: translate("agentChat.home.scrollCue.label"),
       secondScreenLabel: translate("agentChat.home.secondScreen.label"),
       projectConversationsMoreLabel: (count) =>
         translate("agentChat.home.projectConversations.more", { count }),
@@ -578,60 +558,6 @@ export function buildHomeSurfaceCopy(
       },
     ],
     starterMoreLabel,
-    inputSuggestions: [
-      {
-        id: "suggestion-meeting-notes",
-        label: translate("agentChat.home.inputSuggestion.meetingNotes.label"),
-        prompt: translate("agentChat.home.inputSuggestion.meetingNotes.prompt"),
-        order: 5,
-        testId: "home-input-suggestion-meeting-notes",
-      },
-      {
-        id: "suggestion-knowledge-import",
-        label: translate(
-          "agentChat.home.inputSuggestion.knowledgeImport.label",
-        ),
-        prompt: translate(
-          "agentChat.home.inputSuggestion.knowledgeImport.prompt",
-        ),
-        order: 8,
-        testId: "home-input-suggestion-knowledge-import",
-      },
-      {
-        id: "suggestion-research-report",
-        label: translate("agentChat.home.inputSuggestion.researchReport.label"),
-        prompt: translate(
-          "agentChat.home.inputSuggestion.researchReport.prompt",
-        ),
-        order: 10,
-        testId: "home-input-suggestion-research-report",
-      },
-      {
-        id: "suggestion-ppt-outline",
-        label: translate("agentChat.home.inputSuggestion.pptOutline.label"),
-        prompt: translate("agentChat.home.inputSuggestion.pptOutline.prompt"),
-        order: 20,
-        testId: "home-input-suggestion-ppt-outline",
-      },
-      {
-        id: "suggestion-requirement-analysis",
-        label: translate(
-          "agentChat.home.inputSuggestion.requirementAnalysis.label",
-        ),
-        prompt: translate(
-          "agentChat.home.inputSuggestion.requirementAnalysis.prompt",
-        ),
-        order: 30,
-        testId: "home-input-suggestion-requirement-analysis",
-      },
-      {
-        id: "suggestion-video-script",
-        label: translate("agentChat.home.inputSuggestion.videoScript.label"),
-        prompt: translate("agentChat.home.inputSuggestion.videoScript.prompt"),
-        order: 40,
-        testId: "home-input-suggestion-video-script",
-      },
-    ],
     guideCards: [
       {
         id: "guide-long-term-plan",

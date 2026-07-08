@@ -1,8 +1,8 @@
 //! agent_session domain handlers for the App Server processor.
 
 use super::{
-    RequestProcessor, RpcDispatch, dispatch_result, dispatch_result_with_events, parse_params,
-    to_jsonrpc_error,
+    dispatch_result, dispatch_result_with_events, event_notification_jsonrpc, parse_params,
+    to_jsonrpc_error, RequestProcessor, RpcDispatch,
 };
 use crate::RuntimeEvent;
 use app_server_protocol::{
@@ -15,7 +15,7 @@ use app_server_protocol::{
     AgentSessionObjectiveStatusUpdateParams, AgentSessionQueuedTurnPromoteParams,
     AgentSessionQueuedTurnRemoveParams, AgentSessionRuntimeEventAppendParams,
     AgentSessionRuntimeEventAppendResponse, AgentSessionThreadResumeParams,
-    AgentSessionToolInventoryReadParams, AgentSessionUpdateParams, JsonRpcError,
+    AgentSessionToolInventoryReadParams, AgentSessionUpdateParams, JsonRpcError, JsonRpcMessage,
     RequestId,
 };
 
@@ -80,13 +80,43 @@ impl RequestProcessor {
         &self,
         request_id: &RequestId,
         params: Option<serde_json::Value>,
+        event_callback: Option<&mut (dyn FnMut(JsonRpcMessage) + Send)>,
     ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let params: AgentSessionMediaReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_agent_session_media_with_cancel(params, || self.is_request_canceled(request_id))
-            .map_err(to_jsonrpc_error)?;
+        let response = if params.stream {
+            if let Some(event_callback) = event_callback {
+                let mut runtime_event_callback = |event| {
+                    let message = event_notification_jsonrpc(event).map_err(|error| {
+                        crate::RuntimeCoreError::Backend(format!(
+                            "failed to serialize media read streaming event: {}",
+                            error.message
+                        ))
+                    })?;
+                    event_callback(message);
+                    Ok(())
+                };
+                self.runtime
+                    .read_agent_session_media_streaming_with_cancel(
+                        params,
+                        || self.is_request_canceled(request_id),
+                        &mut runtime_event_callback,
+                    )
+                    .map_err(to_jsonrpc_error)?
+            } else {
+                self.runtime
+                    .read_agent_session_media_with_cancel(params, || {
+                        self.is_request_canceled(request_id)
+                    })
+                    .map_err(to_jsonrpc_error)?
+            }
+        } else {
+            self.runtime
+                .read_agent_session_media_with_cancel(params, || {
+                    self.is_request_canceled(request_id)
+                })
+                .map_err(to_jsonrpc_error)?
+        };
         dispatch_result(response)
     }
 
@@ -337,8 +367,8 @@ mod tests {
     use app_server_protocol::{
         AgentInput, AgentSessionStartParams, AgentSessionTurnStartParams, ClientCapabilities,
         ClientInfo, InitializeParams, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
-        METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, METHOD_INITIALIZE, METHOD_INITIALIZED,
-        RequestId,
+        RequestId, METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, METHOD_INITIALIZE,
+        METHOD_INITIALIZED,
     };
     use serde_json::json;
     use std::sync::Arc;

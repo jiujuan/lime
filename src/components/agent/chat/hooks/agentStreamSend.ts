@@ -39,6 +39,15 @@ export async function sendAgentStreamMessage(
     env,
   } = options;
 
+  const hasCurrentSession = Boolean(env.sessionIdRef.current?.trim());
+  const targetSessionId = sendOptions?.targetSessionId?.trim();
+  if (!skipUserMessage && !hasCurrentSession && !targetSessionId) {
+    await env.ensureSession({
+      skipSessionRestore: sendOptions?.skipSessionRestore === true,
+      skipSessionStartHooks: sendOptions?.skipSessionStartHooks === true,
+    });
+  }
+
   const preparedSend = prepareAgentStreamUserInputSend({
     content,
     images,

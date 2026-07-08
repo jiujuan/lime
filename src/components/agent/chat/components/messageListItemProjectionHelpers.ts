@@ -50,6 +50,7 @@ export function shouldUseFirstTokenRuntimeStatus(
   const phase = status?.phase;
   return (
     phase === "routing" ||
+    phase === "preparing" ||
     phase === "context" ||
     phase === "synthesizing" ||
     phase === "continuing" ||

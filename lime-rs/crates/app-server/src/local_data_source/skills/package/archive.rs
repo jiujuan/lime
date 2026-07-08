@@ -271,7 +271,7 @@ fn build_skill_package_file_entries(package: &SkillZipPackage) -> Result<Vec<Val
                     return Err(format!(
                         "Invalid skill zip entry path: {}",
                         relative_path.display()
-                    ))
+                    ));
                 }
             }
         }

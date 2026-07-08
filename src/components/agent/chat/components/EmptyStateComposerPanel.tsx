@@ -35,7 +35,6 @@ import {
   EMPTY_STATE_SELECT_TRIGGER_CLASSNAME,
 } from "./emptyStateSurfaceTokens";
 import {
-  buildEmptyStateInputSuggestionState,
   resolveEmptyStateActiveCapability,
 } from "./EmptyStateComposerPanelViewModel";
 import { MetaIconButton } from "./Inputbar/styles";
@@ -52,7 +51,6 @@ import type {
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
-import type { HomeInputSuggestion } from "../home/homeSurfaceTypes";
 import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
@@ -164,7 +162,6 @@ interface EmptyStateComposerPanelProps {
   onRemovePathReference?: (id: string) => void;
   fileManagerOpen?: boolean;
   onToggleFileManager?: () => void;
-  inputSuggestions?: HomeInputSuggestion[];
   guideHelpActive?: boolean;
   guideHelpLabel?: string;
   onClearGuideHelp?: () => void;
@@ -294,7 +291,6 @@ export function EmptyStateComposerPanel({
   onRemovePathReference,
   fileManagerOpen = false,
   onToggleFileManager,
-  inputSuggestions = [],
   guideHelpActive = false,
   guideHelpLabel,
   onClearGuideHelp,
@@ -373,59 +369,6 @@ export function EmptyStateComposerPanel({
       return;
     }
     setDraftInput("");
-  };
-
-  const [inputSuggestionIndex, setInputSuggestionIndex] = useState(0);
-  const {
-    sortedInputSuggestions,
-    shouldShowInputSuggestion,
-    activeInputSuggestion,
-  } = buildEmptyStateInputSuggestionState({
-    inputSuggestions,
-    isLoading,
-    disabled,
-    draftInput,
-    pendingImageCount: pendingImages.length,
-    guideHelpActive,
-    activeCapability: activeCapabilityState,
-    creationReplaySurface,
-    inputSuggestionIndex,
-  });
-
-  useEffect(() => {
-    if (inputSuggestionIndex < sortedInputSuggestions.length) {
-      return;
-    }
-    setInputSuggestionIndex(0);
-  }, [inputSuggestionIndex, sortedInputSuggestions.length]);
-
-  useEffect(() => {
-    if (!shouldShowInputSuggestion || sortedInputSuggestions.length <= 1) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setInputSuggestionIndex(
-        (current) => (current + 1) % sortedInputSuggestions.length,
-      );
-    }, 3500);
-
-    return () => window.clearInterval(timer);
-  }, [shouldShowInputSuggestion, sortedInputSuggestions.length]);
-
-  const handleAcceptInputSuggestion = (suggestion: {
-    label: string;
-    prompt: string;
-    testId?: string;
-  }) => {
-    setDraftInput(suggestion.prompt);
-    window.requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(
-        suggestion.prompt.length,
-        suggestion.prompt.length,
-      );
-    });
   };
 
   const handleToggleSubagentMode = () => {
@@ -849,8 +792,6 @@ export function EmptyStateComposerPanel({
           onRemovePathReference={onRemovePathReference}
           showMetaTools={false}
           plusMenu={plusMenu}
-          inputSuggestion={activeInputSuggestion}
-          onAcceptInputSuggestion={handleAcceptInputSuggestion}
         />
         {projectContextBar}
       </ConnectedComposerShell>

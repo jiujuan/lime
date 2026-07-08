@@ -52,13 +52,7 @@ export const InputbarVisionCapabilityNotice: React.FC<
         hasApiKey: selectedProvider?.hasApiKey,
         hasDeclaredModels: hasDeclaredProviderModels(selectedProvider),
       }),
-    [
-      selectedProvider?.apiHost,
-      selectedProvider?.customModels,
-      selectedProvider?.hasApiKey,
-      selectedProvider?.providerId,
-      selectedProvider?.type,
-    ],
+    [selectedProvider],
   );
 
   const { models, loading: modelsLoading } = useProviderModels(

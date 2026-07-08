@@ -350,10 +350,12 @@ export function prepareAgentStreamUserInputSend(
   const effectiveProviderType = resolvedModelPreference?.providerType ?? "";
   const effectiveModel = resolvedModelPreference?.model ?? "";
   const observer = sendOptions?.observer;
+  const assistantMsgId = crypto.randomUUID();
+  const userMsgId = skipUserMessage ? null : crypto.randomUUID();
   const baseRequestMetadata = ensureAgentUiPerformanceTraceMetadata(
     sendOptions?.requestMetadata,
     {
-      enabled: env.clawTraceEnabled,
+      enabled: true,
       sessionId: sessionIdForSend,
       source: "agent-chat",
       submittedAt: Date.now(),
@@ -411,8 +413,6 @@ export function prepareAgentStreamUserInputSend(
     threadBusy: env.isThreadBusy(),
     pendingPreparedSubmit: env.hasPendingPreparedSubmit(),
   });
-  const assistantMsgId = crypto.randomUUID();
-  const userMsgId = skipUserMessage ? null : crypto.randomUUID();
   const { assistantMsg, userMsg } = prepareAgentStreamSubmitDraft({
     content,
     displayContent,

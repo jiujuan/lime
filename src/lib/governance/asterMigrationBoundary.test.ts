@@ -410,10 +410,6 @@ const FORBIDDEN_ASTER_SNIPPETS = [
   'package = "aster-core"',
 ];
 
-const PROVIDER_SAFETY_FORBIDDEN_ASTER_SNIPPETS = [
-  "aster::utils::safe_truncate",
-];
-
 const CREDENTIAL_BRIDGE_FORBIDDEN_INLINE_ENV_HELPERS = [
   "fn should_disable_provider_default_fast_model",
   "fn split_url_host_and_path",
@@ -1212,27 +1208,6 @@ const PROVIDER_CONTINUATION_REQUIRED_MODEL_PROVIDER_SNIPPETS = [
 const PROVIDER_CONTINUATION_FORBIDDEN_ASTER_DECISION_SNIPPETS = [
   "protocol.is_some_and(RuntimeProviderProtocol::uses_responses_api)",
   "fn model_provider_protocol_from_runtime_protocol",
-];
-
-const SESSION_QUERY_FORBIDDEN_ASTER_TREE_HELPER_SNIPPETS = [
-  "collect_subagent_cascade_session_ids as collect_query_subagent_cascade_session_ids",
-  "collect_query_subagent_cascade_session_ids(",
-];
-
-const SESSION_QUERY_FORBIDDEN_PUBLIC_ASTER_SESSION_SNIPPETS = [
-  "pub async fn read_session",
-  "pub async fn list_child_subagent_sessions",
-  "pub(crate) async fn list_child_subagent_sessions",
-  "pub async fn list_subagent_status_scope_session_ids",
-  "pub async fn list_subagent_cascade_session_ids",
-  "pub fn collect_subagent_cascade_session_ids",
-  "query_all_subagent_sessions_with_metadata",
-  "query_subagent_parent_session_id",
-  "collect_current_subagent_cascade_session_ids",
-  "SubagentSessionTreeNode",
-  "list_subagent_sessions_with_metadata_query",
-  "resolve_subagent_parent_session_id",
-  "project_subagent_session_tree_node",
 ];
 
 const SESSION_STORE_FORBIDDEN_ASTER_DELETE_SNIPPETS = [
@@ -2391,8 +2366,8 @@ describe("aster migration boundary", () => {
           "pub(crate) async fn create_configured_reply_provider",
         ),
       );
-    expect(configuredReplyProviderStreamBody).toContain(
-      "self.backend.stream_reply_with_agent(agent, provider_call).await",
+    expect(configuredReplyProviderStreamBody).toMatch(
+      /self\.backend\s*\.stream_reply_with_agent\(agent, provider_call\)\s*\.await/,
     );
     expect(configuredReplyProviderStreamBody).not.toContain(
       "provider_call.into_parts()",
@@ -3364,6 +3339,15 @@ describe("aster migration boundary", () => {
       "pub trait RuntimeReplyStreamProjector<SourceEvent, RuntimeEvent>",
     );
     expect(agentRuntimeReplyStreamSource).toContain(
+      "pub fn project_reply_stream",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "RuntimeReplyStreamProjectionState",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "projector.project_reply_stream_event",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
       "pub struct RuntimeReplyStreamProjection",
     );
     expect(agentRuntimeReplyStreamSource).toContain("pub fn from_parts");
@@ -3408,6 +3392,13 @@ describe("aster migration boundary", () => {
       "RuntimeReplyStreamProjection::events",
     );
     expect(asterReplyStreamAdapterSource).toContain(".into_events()");
+    expect(asterReplyStreamAdapterSource).toContain(
+      "project_reply_stream(stream, AsterReplyStreamProjector::new(stream_request))",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "async_stream::try_stream",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(".next().await");
     expect(asterReplyStreamAdapterSource).not.toContain(
       "RuntimeReplyStreamEvent::ProviderStreamEvent",
     );
@@ -3594,6 +3585,12 @@ describe("aster migration boundary", () => {
         /call\.map\(lower_aster_reply_message, to_aster_session_config\)/g,
       ) ?? [],
     ).toHaveLength(1);
+    expect(asterReplyBackendAdapterSource).toContain(
+      "struct CompatReplySourceExecutor",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "type CompatReplySourceCall",
+    );
     expect(asterReplyBackendAdapterSource).toContain("outcome.finish_stream");
     const runtimeReplySourceTraitBody = agentRuntimeReplyBackendSource.slice(
       agentRuntimeReplyBackendSource.indexOf("pub trait RuntimeReplySource"),
@@ -3604,6 +3601,38 @@ describe("aster migration boundary", () => {
         "pub(super) async fn start_aster_reply_stream",
       ),
       asterReplyBackendAdapterSource.indexOf("struct AsterReplySource"),
+    );
+    const asterReplySourceBody = asterReplyBackendAdapterSource.slice(
+      asterReplyBackendAdapterSource.indexOf("struct AsterReplySource"),
+      asterReplyBackendAdapterSource.indexOf(
+        "struct CompatReplySourceExecutor",
+      ),
+    );
+    const compatReplySourceExecutorBody = asterReplyBackendAdapterSource.slice(
+      asterReplyBackendAdapterSource.indexOf(
+        "struct CompatReplySourceExecutor",
+      ),
+    );
+    expect(asterReplySourceBody).toContain(
+      "CompatReplySourceExecutor::new(self.agent, self.provider)",
+    );
+    expect(asterReplySourceBody).not.toContain(
+      "RuntimeReplySourceCall::Default",
+    );
+    expect(asterReplySourceBody).not.toContain(
+      "RuntimeReplySourceCall::Provider",
+    );
+    expect(asterReplySourceBody).not.toContain(".reply(");
+    expect(asterReplySourceBody).not.toContain(".stream_reply_with_agent(");
+    expect(compatReplySourceExecutorBody).toContain(
+      "RuntimeReplySourceCall::Default",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "RuntimeReplySourceCall::Provider",
+    );
+    expect(compatReplySourceExecutorBody).toContain(".reply(");
+    expect(compatReplySourceExecutorBody).toContain(
+      ".stream_reply_with_agent(",
     );
     expect(startAsterReplyStreamBody).not.toContain(
       "RuntimeReplyBackendRunPath::Provider",
@@ -3851,6 +3880,9 @@ describe("aster migration boundary", () => {
     expect(asterReplyStreamAdapterSource).toContain(
       "impl RuntimeReplyStreamProjector<AsterAgentEvent, RuntimeAgentEvent>",
     );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "project_reply_stream(stream, AsterReplyStreamProjector::new(stream_request))",
+    );
     expect(asterReplyStreamAdapterSource).toContain("AsterEventProjector::new");
     expect(asterReplyStreamAdapterSource).toContain(
       "agent_runtime::event_stream::EventProjector",
@@ -3870,6 +3902,10 @@ describe("aster migration boundary", () => {
     expect(asterReplyStreamAdapterSource).not.toContain(
       "extract_inline_agent_provider_error",
     );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "async_stream::try_stream",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(".next().await");
     expect(asterReplyStreamAdapterSource).toContain(
       "provider_stream_event_from_aster_message",
     );
@@ -4277,10 +4313,14 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).toContain(
       "pub struct RuntimeNativeToolRegistration",
     );
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeNativeToolInstallStep",
+    );
     expect(currentOwnerSource).toContain("pub struct RuntimeNativeToolSurface");
     expect(currentOwnerSource).toContain(
       "runtime_native_tool_overlay_registrations",
     );
+    expect(currentOwnerSource).toContain("runtime_native_tool_install_plan");
     expect(currentOwnerSource).toContain("runtime_native_tool_surface");
     expect(currentOwnerSource).toContain(
       "RuntimeNativeToolRegistrationOwner::NativeDispatch",
@@ -4385,9 +4425,17 @@ describe("aster migration boundary", () => {
     expect(vendorToolsModSource).not.toContain(
       'config.allows_tool("ViewImage")',
     );
+    expect(nativeOverlaySource).toContain("runtime_native_tool_install_plan");
     expect(nativeOverlaySource).toContain(
-      "runtime_native_tool_overlay_registrations",
+      "register_runtime_native_tool_overlay(&mut registry, *step)",
     );
+    expect(nativeOverlaySource).toContain(
+      "fn create_runtime_native_tool(step: RuntimeNativeToolInstallStep)",
+    );
+    expect(nativeOverlaySource).not.toContain(
+      "for registration in runtime_native_tool_overlay_registrations()",
+    );
+    expect(nativeOverlaySource).not.toContain("match registration.tool()");
     expect(nativeOverlaySource).not.toContain(
       "for overlay_tool in runtime_native_tool_overlay_tools()",
     );

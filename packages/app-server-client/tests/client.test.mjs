@@ -45,6 +45,7 @@ const {
   AppServerRequestAbortedError,
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
+  agentSessionMediaReadEventNotification,
   createAgentRuntimeClient,
   getAppServerRequestSerializationScope,
   METHOD_PLUGIN_INSTALLED_DISABLED_SET,
@@ -2826,6 +2827,148 @@ test("connection detaches streaming request after first notification and drops i
   assert.equal(start.completed, false);
   assert.equal(start.notifications.length, 1);
   assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
+  assert.equal(sent[1].method, METHOD_AGENT_SESSION_LIST);
+  assert.equal(list.id, 2);
+  assert.equal(list.result.sessions[0].sessionId, "sess_external");
+});
+
+test("connection can consume streamed media read chunk notifications", async () => {
+  const sent = [];
+  const inbound = [
+    {
+      method: METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-media-chunk",
+          sequence: 1,
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          type: "media.read.chunk",
+          timestamp: "2026-06-04T00:00:00Z",
+          payload: {
+            streamId: "media-read:sess_external:0",
+            chunkIndex: 1,
+            done: false,
+            chunk: {
+              sessionId: "sess_external",
+              uri: "sidecar://media/demo",
+              bytes: 4,
+              totalBytes: 4,
+              offset: 0,
+              length: 4,
+              contentRange: "bytes 0-3/4",
+              hasMore: false,
+              contentBase64: "iVBORw==",
+            },
+          },
+        },
+      },
+    },
+    {
+      method: METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-media-completed",
+          sequence: 2,
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          type: "media.read.completed",
+          timestamp: "2026-06-04T00:00:01Z",
+          payload: {
+            streamId: "media-read:sess_external:0",
+            chunkCount: 1,
+            done: true,
+            media: {
+              sessionId: "sess_external",
+              uri: "sidecar://media/demo",
+              bytes: 4,
+              totalBytes: 4,
+              offset: 0,
+              length: 4,
+              contentRange: "bytes 0-3/4",
+              hasMore: false,
+              sha256: "sha256:demo",
+            },
+          },
+        },
+      },
+    },
+    {
+      id: 1,
+      result: {
+        sessionId: "sess_external",
+        uri: "sidecar://media/demo",
+        bytes: 4,
+        totalBytes: 4,
+        offset: 0,
+        length: 4,
+        contentRange: "bytes 0-3/4",
+        hasMore: false,
+        sha256: "sha256:demo",
+        contentBase64: "iVBORw==",
+      },
+    },
+    {
+      id: 2,
+      result: {
+        sessions: [
+          {
+            sessionId: "sess_external",
+            threadId: "thread_external",
+            appId: "content-studio",
+            status: "running",
+            createdAt: "2026-06-04T00:00:00Z",
+            updatedAt: "2026-06-04T00:00:01Z",
+          },
+        ],
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+
+  const request = connection.client.readAgentSessionMedia({
+    sessionId: "sess_external",
+    uri: "sidecar://media/demo",
+    stream: true,
+  });
+  const first = await connection.requestUntilFirstNotificationOrResponse(
+    request,
+    METHOD_AGENT_SESSION_MEDIA_READ,
+    { timeoutMs: 100 },
+  );
+  const mirroredChunk = await connection.nextNotification(100);
+  const completed = await connection.nextNotification(100);
+  const list = await connection.listSessions({}, { timeoutMs: 100 });
+
+  assert.equal(first.completed, false);
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_MEDIA_READ);
+  assert.equal(sent[0].params.stream, true);
+  assert.equal(
+    agentSessionMediaReadEventNotification(first.notifications[0])?.params.event
+      .payload.chunk.contentBase64,
+    "iVBORw==",
+  );
+  assert.equal(
+    agentSessionMediaReadEventNotification(mirroredChunk)?.params.event.payload
+      .chunk.contentBase64,
+    "iVBORw==",
+  );
+  assert.equal(
+    agentSessionMediaReadEventNotification(completed)?.params.event.payload
+      .media.sha256,
+    "sha256:demo",
+  );
   assert.equal(sent[1].method, METHOD_AGENT_SESSION_LIST);
   assert.equal(list.id, 2);
   assert.equal(list.result.sessions[0].sessionId, "sess_external");

@@ -10,10 +10,9 @@ const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
 const TEST_CHROME_COPY: Pick<
   HomeSurfaceChromeCopy,
-  "galleryDescription" | "galleryTitle"
+  "galleryTitle"
 > = {
   galleryTitle: "你可以从这些任务开始",
-  galleryDescription: "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
 };
 
 beforeEach(() => {
@@ -85,6 +84,9 @@ describe("HomeSkillGallery", () => {
 
     expect(container.textContent).toContain("你可以从这些任务开始");
     expect(container.textContent).toContain("每日趋势摘要");
+    expect(container.textContent).not.toContain(
+      "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
+    );
 
     const button = container.querySelector(
       '[data-testid="home-gallery-entry-recommended-daily-trend-briefing"]',

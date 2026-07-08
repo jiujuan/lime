@@ -65,7 +65,7 @@ describe("messageListItemProjection basic state", () => {
     expect(projection.shouldReadOnlyInteractiveContent).toBe(false);
   });
 
-  it("首字前启动态 runtimeStatus 不应被投影为 assistant 正文", () => {
+  it("首字前启动态 runtimeStatus 应作为轻量等待态展示且不投影为 assistant 正文", () => {
     const message: Message = {
       id: "assistant-startup-note-placeholder",
       role: "assistant",
@@ -73,7 +73,7 @@ describe("messageListItemProjection basic state", () => {
       timestamp: new Date("2026-06-07T10:00:00.000Z"),
       isThinking: true,
       runtimeStatus: {
-        phase: "routing",
+        phase: "preparing",
         title: "正在启动处理流程",
         detail: "已接收请求，正在准备上下文。",
         checkpoints: ["等待首个模型事件"],

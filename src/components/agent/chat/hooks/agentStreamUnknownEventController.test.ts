@@ -69,6 +69,32 @@ describe("agentStreamUnknownEventController", () => {
     });
   });
 
+  it("应把 App Server current 生命周期旁路事件静默处理", () => {
+    expect(
+      resolveAgentStreamUnknownEventPlan({
+        eventName: "event-a",
+        eventType: "turn_accepted",
+        warnedEventTypes: new Set(),
+      }),
+    ).toEqual({
+      eventType: "turn_accepted",
+      shouldWarn: false,
+      warningMessage: null,
+    });
+
+    expect(
+      resolveAgentStreamUnknownEventPlan({
+        eventName: "event-a",
+        eventType: "turn.accepted",
+        warnedEventTypes: new Set(),
+      }),
+    ).toEqual({
+      eventType: "turn.accepted",
+      shouldWarn: false,
+      warningMessage: null,
+    });
+  });
+
   it("应记录已告警未知 event type 并返回是否首次记录", () => {
     const warnedEventTypes = new Set<string>();
 

@@ -3,7 +3,7 @@ use crate::{ExecutionRequest, RuntimeHostContext};
 use app_server_protocol::{
     AgentInput, AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn request_for_presentation_test(
     host_options: Option<Value>,
@@ -168,15 +168,13 @@ fn rejects_internal_or_branded_visible_copy() {
         r#"{{"assistant_intro":"{} 马上写入 JSONL。","completion_caption":"workflow 已完成"}}"#,
         concat!("R", "ibbi")
     );
-    assert!(
-        parse_generated_presentation(
-            &raw,
-            "openai",
-            "gpt-4.1",
-            PresentationLanguage::ChineseSimplified,
-        )
-        .is_none()
-    );
+    assert!(parse_generated_presentation(
+        &raw,
+        "openai",
+        "gpt-4.1",
+        PresentationLanguage::ChineseSimplified,
+    )
+    .is_none());
 }
 
 #[test]
@@ -335,11 +333,9 @@ fn presentation_selection_rejects_image_only_host_config() {
 
     let error = resolve_presentation_model_selection(&request).expect_err("image only");
 
-    assert!(
-        error
-            .to_string()
-            .contains("presentation_text_model_unavailable")
-    );
+    assert!(error
+        .to_string()
+        .contains("presentation_text_model_unavailable"));
 }
 
 #[test]

@@ -127,6 +127,10 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain('type: "artifact.snapshot"');
     expect(content).toContain('type: "turn.completed"');
     expect(content).not.toContain('type: "turn.final_done"');
+    expect(content).toContain('kind: "backendEvents"');
+    expect(content).toContain("backendEmittedEventTypes");
+    expect(content).toContain("backendEmittedCurrentTerminal");
+    expect(content).toContain("backendDidNotEmitLegacyTerminal");
     expect(content).toContain("Hello Lime Workbench");
     expect(content).toContain("CODE_ARTIFACT_WORKBENCH_DONE");
     expect(content).toContain("waitForFixtureSessionOpenedFromSidebar");

@@ -218,7 +218,9 @@ impl RuntimeCoreError {
                 error_codes::CAPABILITY_DENIED,
                 format!("capability denied: {capability_id}"),
             ),
-            Self::RequestCanceled => JsonRpcError::new(error_codes::REQUEST_CANCELLED, "request canceled"),
+            Self::RequestCanceled => {
+                JsonRpcError::new(error_codes::REQUEST_CANCELLED, "request canceled")
+            }
             Self::Backend(message) => JsonRpcError::new(error_codes::RUNTIME_ERROR, message),
         }
     }

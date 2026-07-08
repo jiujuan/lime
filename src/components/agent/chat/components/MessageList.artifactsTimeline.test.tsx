@@ -867,7 +867,7 @@ describe("MessageList artifacts timeline", () => {
     expect(container.textContent).not.toContain("正在打开 GitHub");
   });
 
-  it("首字前已有运行中 turn_summary 时不应展示启动占位或提前展开过程", () => {
+  it("首字前已有运行中 turn_summary 时应保留等待态但不提前展开过程", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -918,11 +918,11 @@ describe("MessageList artifacts timeline", () => {
       container.querySelector(
         '[data-testid="assistant-first-token-runtime-status"]',
       ),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).toBeNull();
-    expect(container.textContent).not.toContain("Preparing reply");
+    expect(container.textContent).toContain("Preparing reply");
     expect(container.textContent).not.toContain("已接收请求，正在准备执行");
   });
 

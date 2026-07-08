@@ -6,7 +6,7 @@ export type MessageContentPart = NonNullable<Message["contentParts"]>[number];
 
 export function hasInlineProcessContentParts(
   message: Message,
-  options: {
+  _options: {
     displayContent: string;
     timelineItems?: AgentThreadItem[];
   },

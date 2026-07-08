@@ -355,12 +355,10 @@ async fn export_runtime_handoff_residuals_apply_locale_copy_and_generation_brief
         .expect("review locale export");
     assert_eq!(review.title, "리뷰 결정");
     assert_eq!(review.artifacts[0].title, "리뷰 결정");
-    assert!(
-        review
-            .review_checklist
-            .iter()
-            .any(|item| item.contains("App Server current 경로 증거"))
-    );
+    assert!(review
+        .review_checklist
+        .iter()
+        .any(|item| item.contains("App Server current 경로 증거")));
     let review_markdown = fs::read_to_string(
         temp.path()
             .join(".lime")

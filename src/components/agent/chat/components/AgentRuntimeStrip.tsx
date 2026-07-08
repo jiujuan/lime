@@ -395,7 +395,9 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
 
     return nextItems;
   }, [
+    activeTeamSessions,
     childSubagentSessions,
+    completedTeamSessions,
     executionRuntime,
     fileCheckpointCount,
     harnessState,
@@ -403,6 +405,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     hasReasoningSignal,
     isExecutionRuntimeActive,
     isSending,
+    queuedTeamSessions,
     reasoningRunStatus,
     runtimeToolAvailability,
     runtimeStatusTitle,

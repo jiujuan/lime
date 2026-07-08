@@ -1,3 +1,5 @@
+import { LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES } from "./runtimeTerminal.js";
+
 export type JsonSchemaObject = Record<string, unknown>;
 
 const stringSchema = { type: "string", minLength: 1 } as const;
@@ -25,14 +27,7 @@ export const AGENT_RUNTIME_EVENT_SCHEMA: JsonSchemaObject = {
   not: {
     properties: {
       eventClass: {
-        enum: [
-          "done",
-          "final_done",
-          "cancelled",
-          "turn.done",
-          "turn.final_done",
-          "turn.cancelled",
-        ],
+        enum: [...LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES],
       },
     },
     required: ["eventClass"],

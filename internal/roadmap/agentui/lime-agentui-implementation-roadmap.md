@@ -6,12 +6,12 @@
 
 ## 1. 阶段目标
 
-| 阶段 | 目标 | 用户体感 |
-| --- | --- | --- |
-| P0 | 稳住当前对话主链和性能热点 | 旧会话能快速显示，首字前有可信反馈，流式不重复吐字 |
-| P1 | 建立 task capsule 与 tab 管理 | 多会话、多后台任务不拖慢主页面 |
-| P2 | 强化 artifact/workbench/evidence 分层 | 最终产物和证据离开正文，进入可编辑/可审计工作台 |
-| P3 | 抽象 AgentUI 子系统 | `AgentChatWorkspace` 从巨石入口变成稳定 shell |
+| 阶段 | 目标                                  | 用户体感                                           |
+| ---- | ------------------------------------- | -------------------------------------------------- |
+| P0   | 稳住当前对话主链和性能热点            | 旧会话能快速显示，首字前有可信反馈，流式不重复吐字 |
+| P1   | 建立 task capsule 与 tab 管理         | 多会话、多后台任务不拖慢主页面                     |
+| P2   | 强化 artifact/workbench/evidence 分层 | 最终产物和证据离开正文，进入可编辑/可审计工作台    |
+| P3   | 抽象 AgentUI 子系统                   | `AgentChatWorkspace` 从巨石入口变成稳定 shell      |
 
 结构收敛从 2026-05-05 起按 [conversation-projection-implementation-plan.md](conversation-projection-implementation-plan.md) 继续推进。它是本路线图的 P3 子计划，但 Phase 0 / Phase 1 可以提前穿插执行，因为事实源盘点和最小 Projection Store 会直接降低 P0/P1 性能问题的排查成本。
 
@@ -82,8 +82,8 @@ Warp runtime fact sources
 
 目标：
 
-- `thinking_delta`、`text_delta`、`final_done` 严格分型。
-- `final_done` 只 reconcile，不二次 append 完整正文。
+- `thinking_delta`、`text_delta`、`turn.completed` 严格分型。
+- `turn.completed` 只 reconcile，不二次 append 完整正文；legacy `final_done` fail closed。
 - `<think>`、工具日志、过程 status 不进入最终 Markdown 正文。
 
 代码入口：
@@ -299,14 +299,14 @@ useAgentSession
 
 ## 6. 验证矩阵
 
-| 改动类型 | 最低验证 |
-| --- | --- |
-| 文档变更 | markdown 格式检查、`git status --short` |
-| 前端 UI/Hook | 受影响 `*.test.tsx` / `*.test.ts`，默认 `npm run verify:local` |
-| 流式事件逻辑 | `agentStreamRuntimeHandler.test.ts`、`agentStreamTurnEventBinding.test.ts` |
-| Electron Desktop Host / App Server command boundary | `npm run verify:local` + `npm run test:contracts` |
-| GUI 主路径 | `npm run verify:local` + `npm run verify:gui-smoke` |
-| 真实交互 | Playwright E2E：新建对话、打开两个历史会话、发送消息、queue/steer、pending action |
+| 改动类型                                            | 最低验证                                                                          |
+| --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 文档变更                                            | markdown 格式检查、`git status --short`                                           |
+| 前端 UI/Hook                                        | 受影响 `*.test.tsx` / `*.test.ts`，默认 `npm run verify:local`                    |
+| 流式事件逻辑                                        | `agentStreamRuntimeHandler.test.ts`、`agentStreamTurnEventBinding.test.ts`        |
+| Electron Desktop Host / App Server command boundary | `npm run verify:local` + `npm run test:contracts`                                 |
+| GUI 主路径                                          | `npm run verify:local` + `npm run verify:gui-smoke`                               |
+| 真实交互                                            | Playwright E2E：新建对话、打开两个历史会话、发送消息、queue/steer、pending action |
 
 ## 7. E2E 场景清单
 

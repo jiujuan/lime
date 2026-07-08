@@ -1,5 +1,5 @@
 use crate::runtime_backend::tool_process_metadata::SoulStyleMetadata;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 const PRESENTATION_CONTRACT_SCHEMA_VERSION: &str = "lime.image_generation.presentation.v1";
 const PRESENTATION_BOUNDARY_SCHEMA_VERSION: &str = "lime.image_generation.boundary.v1";

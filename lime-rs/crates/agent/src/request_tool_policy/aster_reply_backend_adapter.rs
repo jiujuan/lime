@@ -14,9 +14,12 @@ use agent_runtime::reply_host::RuntimeReplyStartRequest;
 use agent_runtime::reply_host::RuntimeReplyStartResult;
 use aster::agents::Agent;
 use aster::agents::AgentEvent as AsterAgentEvent;
+use aster::conversation::message::Message;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use model_provider::provider_stream::RuntimeReplyProviderHandle;
+
+type CompatReplySourceCall = RuntimeReplySourceCall<Message, aster::agents::SessionConfig>;
 
 pub(super) struct AsterReplyBackend<'a> {
     agent: &'a Agent,
@@ -140,20 +143,40 @@ impl<'source> RuntimeReplySource for AsterReplySource<'source> {
     {
         Box::pin(async move {
             let call = call.map(lower_aster_reply_message, to_aster_session_config);
-            match call {
-                RuntimeReplySourceCall::Default(call) => {
-                    let (user_message, aster_session_config, cancel_token) = call.into_parts();
-                    self.agent
-                        .reply(user_message, aster_session_config, cancel_token)
-                        .await
-                }
-                RuntimeReplySourceCall::Provider(call) => {
-                    let provider = self
-                        .provider
-                        .expect("provider run path requires configured provider");
-                    provider.stream_reply_with_agent(self.agent, call).await
-                }
-            }
+            CompatReplySourceExecutor::new(self.agent, self.provider)
+                .run(call)
+                .await
         })
+    }
+}
+
+struct CompatReplySourceExecutor<'a> {
+    agent: &'a Agent,
+    provider: Option<&'a ConfiguredReplyProvider>,
+}
+
+impl<'a> CompatReplySourceExecutor<'a> {
+    fn new(agent: &'a Agent, provider: Option<&'a ConfiguredReplyProvider>) -> Self {
+        Self { agent, provider }
+    }
+
+    async fn run(
+        self,
+        call: CompatReplySourceCall,
+    ) -> anyhow::Result<BoxStream<'a, anyhow::Result<AsterAgentEvent>>> {
+        match call {
+            RuntimeReplySourceCall::Default(call) => {
+                let (user_message, aster_session_config, cancel_token) = call.into_parts();
+                self.agent
+                    .reply(user_message, aster_session_config, cancel_token)
+                    .await
+            }
+            RuntimeReplySourceCall::Provider(call) => {
+                let provider = self
+                    .provider
+                    .expect("provider run path requires configured provider");
+                provider.stream_reply_with_agent(self.agent, call).await
+            }
+        }
     }
 }

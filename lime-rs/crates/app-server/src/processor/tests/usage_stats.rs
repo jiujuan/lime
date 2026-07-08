@@ -2,9 +2,9 @@
 
 use super::super::*;
 use app_server_protocol::{
-    ClientCapabilities, JsonRpcMessage, METHOD_INITIALIZE, METHOD_INITIALIZED,
+    ClientCapabilities, JsonRpcMessage, RequestId, METHOD_INITIALIZE, METHOD_INITIALIZED,
     METHOD_USAGE_STATS_DAILY_TRENDS_LIST, METHOD_USAGE_STATS_MODEL_RANKING_LIST,
-    METHOD_USAGE_STATS_READ, RequestId,
+    METHOD_USAGE_STATS_READ,
 };
 use serde_json::json;
 

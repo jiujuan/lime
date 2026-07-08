@@ -1,12 +1,12 @@
 //! JSON-RPC method dispatch for the App Server processor.
 
-use super::{JsonRpcError, RequestProcessor, event_notification};
+use super::{event_notification, JsonRpcError, RequestProcessor};
 use crate::AppServerError;
+use app_server_protocol::error_codes;
 use app_server_protocol::JsonRpcErrorResponse;
 use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
-use app_server_protocol::error_codes;
 use app_server_protocol::*;
 
 impl RequestProcessor {
@@ -173,7 +173,8 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).await,
             METHOD_AGENT_SESSION_MEDIA_READ => {
-                self.handle_session_media_read_impl(&id, params).await
+                self.handle_session_media_read_impl(&id, params, event_callback)
+                    .await
             }
             METHOD_WORKFLOW_READ => self.handle_workflow_read_impl(params).await,
             METHOD_WORKFLOW_CANCEL => self.handle_workflow_cancel_impl(params).await,

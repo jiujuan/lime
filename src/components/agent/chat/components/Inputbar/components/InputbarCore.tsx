@@ -5,9 +5,6 @@ import {
   InputBarContainer,
   InputColumn,
   InputIconButton,
-  InputSuggestionKeycap,
-  InputSuggestionLayer,
-  InputSuggestionText,
   MainRow,
   MetaSlot,
   StyledTextarea,
@@ -122,16 +119,6 @@ interface InputbarCoreProps {
   onRemoveQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   showMetaTools?: boolean;
   plusMenu?: InputbarPlusMenuConfig;
-  inputSuggestion?: {
-    label: string;
-    prompt: string;
-    testId?: string;
-  } | null;
-  onAcceptInputSuggestion?: (suggestion: {
-    label: string;
-    prompt: string;
-    testId?: string;
-  }) => void;
 }
 
 export const InputbarCore: React.FC<InputbarCoreProps> = ({
@@ -170,8 +157,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   onRemoveQueuedTurn,
   showMetaTools = true,
   plusMenu,
-  inputSuggestion = null,
-  onAcceptInputSuggestion,
 }) => {
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const inputBarContainerRef = useRef<HTMLDivElement | null>(null);
@@ -235,57 +220,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
       (showMetaTools &&
         toolMode === "default" &&
         !shouldCollapseFloatingTools));
-  const shouldShowInputSuggestion =
-    Boolean(inputSuggestion) && text.trim().length === 0 && !disabled;
-  const handleInputSuggestionKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (
-        !inputSuggestion ||
-        event.key !== "Tab" ||
-        event.shiftKey ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        text.trim().length > 0 ||
-        disabled
-      ) {
-        return;
-      }
-
-      const nativeEvent = event.nativeEvent as KeyboardEvent & {
-        isComposing?: boolean;
-      };
-      if (
-        nativeEvent.isComposing ||
-        nativeEvent.key === "Process" ||
-        nativeEvent.keyCode === 229
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      const acceptedText = inputSuggestion.prompt;
-      if (onAcceptInputSuggestion) {
-        onAcceptInputSuggestion(inputSuggestion);
-      } else {
-        setText(acceptedText);
-      }
-      window.requestAnimationFrame(() => {
-        const textarea = resolvedTextareaRef.current;
-        textarea?.focus();
-        textarea?.setSelectionRange(acceptedText.length, acceptedText.length);
-      });
-    },
-    [
-      disabled,
-      inputSuggestion,
-      onAcceptInputSuggestion,
-      resolvedTextareaRef,
-      setText,
-      text,
-    ],
-  );
-
   const handleRemoveImageMouseDown = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
@@ -351,7 +285,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
       isLoading={isLoading}
       disabled={disabled}
       onPaste={onPaste}
-      onKeyDown={handleInputSuggestionKeyDown}
       isFullscreen={isFullscreen}
       fillHeightWhenFullscreen
       hasAdditionalContent={
@@ -364,12 +297,8 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
       deferSendOnEnter={deferSendOnEnter}
       rows={isTextareaExpanded ? 7 : isFloatingVariant ? 3 : 1}
       placeholder={
-        shouldShowInputSuggestion
-          ? ""
-          : placeholder ||
-            (isFullscreen
-              ? uiCopy.placeholder.fullscreen
-              : uiCopy.placeholder.default)
+        placeholder ||
+        (isFullscreen ? uiCopy.placeholder.fullscreen : uiCopy.placeholder.default)
       }
     >
       {({ textareaProps, textareaRef, isPrimaryDisabled, onPrimaryAction }) => {
@@ -498,20 +427,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                   <ImagePlus size={14} />
                 </InputIconButton>
                 <InputColumn>
-                  {shouldShowInputSuggestion && inputSuggestion ? (
-                    <InputSuggestionLayer
-                      className={textareaClassName}
-                      data-testid="home-input-tab-suggestion"
-                      title={uiCopy.suggestion.acceptTitle}
-                    >
-                      <InputSuggestionText>
-                        {inputSuggestion.label}
-                      </InputSuggestionText>
-                      <InputSuggestionKeycap>
-                        {uiCopy.suggestion.acceptKey}
-                      </InputSuggestionKeycap>
-                    </InputSuggestionLayer>
-                  ) : null}
                   <StyledTextarea
                     ref={textareaRef}
                     {...textareaProps}

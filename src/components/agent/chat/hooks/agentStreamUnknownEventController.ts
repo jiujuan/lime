@@ -5,6 +5,10 @@ export interface AgentStreamUnknownEventPlan {
 }
 
 const LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION = "lime-profile-0.4.0";
+const SILENT_CURRENT_LIFECYCLE_EVENT_TYPES = new Set([
+  "turn.accepted",
+  "turn_accepted",
+]);
 
 export function buildAgentStreamUnknownEventWarningMessage(params: {
   eventName: string;
@@ -25,8 +29,11 @@ export function resolveAgentStreamUnknownEventPlan(params: {
 
   const isLimeAgentRuntimeProfileEvent =
     params.schemaVersion === LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION;
+  const isSilentCurrentLifecycleEvent =
+    SILENT_CURRENT_LIFECYCLE_EVENT_TYPES.has(params.eventType);
   const shouldWarn =
     !isLimeAgentRuntimeProfileEvent &&
+    !isSilentCurrentLifecycleEvent &&
     !params.warnedEventTypes.has(params.eventType);
   return {
     eventType: params.eventType,

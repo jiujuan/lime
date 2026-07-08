@@ -27,7 +27,7 @@ use super::projection_status::{session_status_from_event, turn_status_from_event
 use super::session_list_scope::SessionListScope;
 use super::session_title;
 use super::status::resolve_session_runtime_state;
-use super::status::RuntimeTurnState;
+use super::status::RuntimeTurnSnapshot;
 
 const PROJECTION_SUMMARY_MESSAGE_TEXT_MAX_CHARS: usize = 2_000;
 const PROJECTION_SUMMARY_MESSAGE_ROW_LIMIT: i64 = 20_000;
@@ -486,7 +486,7 @@ fn projected_session_overview(conn: &Connection, row: ProjectedSessionRow) -> Ag
     let runtime_state = resolve_session_runtime_state(
         row.status.as_str(),
         0,
-        turns.iter().map(|turn| RuntimeTurnState {
+        turns.iter().map(|turn| RuntimeTurnSnapshot {
             turn_id: turn.turn_id.as_str(),
             status: turn.status.as_str(),
             started_at: turn.started_at.as_deref(),

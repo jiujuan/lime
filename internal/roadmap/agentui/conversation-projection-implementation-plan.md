@@ -139,15 +139,15 @@
 
 1. 首轮无 session 时，UI shell 和 waiting status 先出现。
 2. listener bound 早于 submit dispatch。
-3. `thinking_delta`、`text_delta`、`tool_*`、`final_done` 严格分型。
-4. `final_done` 只 reconcile，不二次 append。
+3. `thinking_delta`、`text_delta`、`tool_*`、`turn.completed` 严格分型。
+4. `turn.completed` 只 reconcile，不二次 append；legacy `final_done` fail closed。
 5. queue / steer / follow-up 不绕过 runtime 主链。
 
 ### 验收
 
 1. TTFT 日志覆盖 ensure、listener、submit、first event、first status、first delta、first paint。
 2. 首字慢能从日志判断慢在 invoke、queue、provider、event bridge、flush 或 render。
-3. 重复吐字、thinking 污染正文、空 final_done 均有回归。
+3. 重复吐字、thinking 污染正文、空 `turn.completed` 和 legacy `final_done` fail-closed 均有回归。
 
 ## Phase 4：Message render projection
 

@@ -254,6 +254,14 @@ mod tests {
     }
 
     #[test]
+    fn runtime_status_raw_runtime_event_maps_to_non_terminal_status_event() {
+        assert_eq!(
+            runtime_event_type_from_raw("runtime_status"),
+            "runtime.status"
+        );
+    }
+
+    #[test]
     fn thinking_delta_maps_to_standard_reasoning_delta_event() {
         let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ThinkingDelta {
             text: "先理解目标".to_string(),

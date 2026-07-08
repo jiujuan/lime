@@ -68,7 +68,7 @@ pub(super) fn session_status_from_turn_status(turn_status: AgentTurnStatus) -> A
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct RuntimeTurnState<'a> {
+pub(super) struct RuntimeTurnSnapshot<'a> {
     pub turn_id: &'a str,
     pub status: &'a str,
     pub started_at: Option<&'a str>,
@@ -86,7 +86,7 @@ pub(super) struct SessionRuntimeState {
 pub(super) fn resolve_session_runtime_state<'a>(
     session_status: &str,
     pending_request_count: usize,
-    turns: impl IntoIterator<Item = RuntimeTurnState<'a>>,
+    turns: impl IntoIterator<Item = RuntimeTurnSnapshot<'a>>,
     now: DateTime<Utc>,
 ) -> SessionRuntimeState {
     let turns = turns.into_iter().collect::<Vec<_>>();
@@ -158,8 +158,8 @@ pub(super) fn resolve_agent_session_runtime_state(
 pub(super) fn runtime_turn_state_from_agent_turn<'a>(
     turn: &'a AgentTurn,
     events: &'a [AgentEvent],
-) -> RuntimeTurnState<'a> {
-    RuntimeTurnState {
+) -> RuntimeTurnSnapshot<'a> {
+    RuntimeTurnSnapshot {
         turn_id: turn.turn_id.as_str(),
         status: agent_turn_status_label(turn.status),
         started_at: turn.started_at.as_deref(),
@@ -167,7 +167,7 @@ pub(super) fn runtime_turn_state_from_agent_turn<'a>(
     }
 }
 
-fn runtime_turn_has_active_activity(turn: &RuntimeTurnState<'_>, now: DateTime<Utc>) -> bool {
+fn runtime_turn_has_active_activity(turn: &RuntimeTurnSnapshot<'_>, now: DateTime<Utc>) -> bool {
     match normalize_turn_runtime_status(turn.status).as_str() {
         "queued" | "waitingAction" => true,
         "accepted" | "running" => {

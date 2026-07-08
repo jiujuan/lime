@@ -492,9 +492,10 @@ mod tests {
         assert!(trace["actionId"]
             .as_str()
             .is_some_and(|value| value.starts_with("browser-action:browser-session-1:")));
-        assert!(trace["evidenceRefs"].as_array().is_some_and(|refs| refs
-            .iter()
-            .any(|value| value.as_str() == Some("browser_session:browser-session-1"))));
+        assert!(trace["evidenceRefs"].as_array().is_some_and(|refs| {
+            refs.iter()
+                .any(|value| value.as_str() == Some("browser_session:browser-session-1"))
+        }));
         assert!(trace["evidenceRefs"]
             .as_array()
             .is_some_and(|refs| refs.iter().any(|value| value

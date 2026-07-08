@@ -202,7 +202,8 @@ fn zh_cn_copy() -> RuntimeExportCopy {
             no_recent_artifacts: "当前没有可引用的最近产物。",
             next_step_title: "推荐接手顺序",
             next_step_body: "先读 progress.json 确认结构化状态，再读 handoff.md 决定下一刀。",
-            review_note: "此摘要来自 App Server current read model；不要把 legacy command 输出当成交付证据。",
+            review_note:
+                "此摘要来自 App Server current read model；不要把 legacy command 输出当成交付证据。",
         },
         replay: ReplayExportCopy {
             input_title: "回放输入",
@@ -256,8 +257,10 @@ fn zh_cn_copy() -> RuntimeExportCopy {
             heading: "Generation Brief 边界",
             voice_source_label: "正式产物声线来源",
             default_voice: "默认使用中性、可审计的导出语气。",
-            explicit_voice: "只有显式 generation_brief / creator voice / brand voice 可以影响正式产物正文。",
-            fidelity_rule: "Product Soul 只影响交互表达，不会自动改写正式 artifact、导出正文或报告正文。",
+            explicit_voice:
+                "只有显式 generation_brief / creator voice / brand voice 可以影响正式产物正文。",
+            fidelity_rule:
+                "Product Soul 只影响交互表达，不会自动改写正式 artifact、导出正文或报告正文。",
         },
     }
 }
@@ -279,7 +282,8 @@ fn zh_tw_copy() -> RuntimeExportCopy {
             no_recent_artifacts: "目前沒有可引用的最近產物。",
             next_step_title: "建議接手順序",
             next_step_body: "先讀 progress.json 確認結構化狀態，再讀 handoff.md 決定下一刀。",
-            review_note: "此摘要來自 App Server current read model；不要把 legacy command 輸出當成交付證據。",
+            review_note:
+                "此摘要來自 App Server current read model；不要把 legacy command 輸出當成交付證據。",
         },
         replay: ReplayExportCopy {
             input_title: "回放輸入",
@@ -333,8 +337,10 @@ fn zh_tw_copy() -> RuntimeExportCopy {
             heading: "Generation Brief 邊界",
             voice_source_label: "正式產物聲線來源",
             default_voice: "預設使用中性、可審計的匯出語氣。",
-            explicit_voice: "只有明確的 generation_brief / creator voice / brand voice 可以影響正式產物正文。",
-            fidelity_rule: "Product Soul 只影響互動表達，不會自動改寫正式 artifact、匯出正文或報告正文。",
+            explicit_voice:
+                "只有明確的 generation_brief / creator voice / brand voice 可以影響正式產物正文。",
+            fidelity_rule:
+                "Product Soul 只影響互動表達，不會自動改寫正式 artifact、匯出正文或報告正文。",
         },
     }
 }
@@ -590,14 +596,11 @@ mod tests {
         let copy = runtime_export_copy(Some("en-US"));
 
         assert!(copy.generation_brief.fidelity_rule.contains("Product Soul"));
-        assert!(
-            copy.analysis_copy_prompt("session-1", "analysis", "replay")
-                .contains("Generation Brief")
-        );
-        assert!(
-            !copy
-                .analysis_copy_prompt("session-1", "analysis", "replay")
-                .contains("cheeky_sassy_executor")
-        );
+        assert!(copy
+            .analysis_copy_prompt("session-1", "analysis", "replay")
+            .contains("Generation Brief"));
+        assert!(!copy
+            .analysis_copy_prompt("session-1", "analysis", "replay")
+            .contains("cheeky_sassy_executor"));
     }
 }

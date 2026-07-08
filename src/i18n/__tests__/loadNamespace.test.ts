@@ -358,7 +358,6 @@ describe("i18n namespace loader", () => {
         "agentChat.home.starter.rowLabel",
         "agentChat.home.starter.guideHelp.label",
         "agentChat.home.starter.ppt.prompt",
-        "agentChat.home.inputSuggestion.meetingNotes.label",
         "agentChat.home.guide.longTermPlan.title",
         "agentChat.home.guideCards.label",
         "agentChat.home.gallery.title",

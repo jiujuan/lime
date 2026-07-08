@@ -8,6 +8,7 @@ import type {
   AgentRuntimeExecutionEvent,
   AgentRuntimeReadModel,
 } from "./runtime";
+import { isLegacyRuntimeTurnTerminalEventClass } from "./runtimeTerminal.js";
 import { verifyRuntimeEventSequence } from "./sequenceVerifier.js";
 
 export type AgentUiContractValidationCode =
@@ -43,9 +44,7 @@ export function validateRuntimeEvent(
   return input as AgentRuntimeExecutionEvent;
 }
 
-export function validateThreadReadModel(
-  input: unknown,
-): AgentRuntimeReadModel {
+export function validateThreadReadModel(input: unknown): AgentRuntimeReadModel {
   const issues = collectThreadReadModelValidationIssues(input);
   throwIfIssues(issues);
   return input as AgentRuntimeReadModel;
@@ -88,9 +87,7 @@ export function collectRuntimeEventValidationIssues(
   const issues: AgentUiContractValidationIssue[] = [];
 
   if (!isRecord(input)) {
-    return [
-      issue("schema_mismatch", path, "Runtime event must be an object."),
-    ];
+    return [issue("schema_mismatch", path, "Runtime event must be an object.")];
   }
 
   requireString(input, "id", path, issues);
@@ -112,7 +109,11 @@ export function collectRuntimeEventValidationIssues(
   }
 
   if (typeof input.eventClass === "string") {
-    collectLegacyTurnTerminalIssues(input.eventClass, `${path}.eventClass`, issues);
+    collectLegacyTurnTerminalIssues(
+      input.eventClass,
+      `${path}.eventClass`,
+      issues,
+    );
     collectScopeIssues(input, path, issues);
   }
 
@@ -351,7 +352,9 @@ function collectMessagePartValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Message part must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Message part must be an object."),
+    );
     return;
   }
   requireString(input, "type", path, issues);
@@ -375,7 +378,9 @@ function collectCapabilityEntryValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Capability entry must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Capability entry must be an object."),
+    );
     return;
   }
   requireString(input, "id", path, issues);
@@ -396,7 +401,9 @@ function collectResumeDecisionValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Resume decision must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Resume decision must be an object."),
+    );
     return;
   }
   requireString(input, "actionId", path, issues);
@@ -422,17 +429,19 @@ function collectResumeCoverageIssues(
     input.decisions
       .filter(isRecord)
       .map((decision) => decision.actionId)
-      .filter((value): value is string => typeof value === "string" && value.length > 0),
+      .filter(
+        (value): value is string =>
+          typeof value === "string" && value.length > 0,
+      ),
   );
   const resumeMode =
     typeof input.resumeMode === "string" ? input.resumeMode : undefined;
-  if (
-    resumeMode !== "all-open-actions" &&
-    resumeMode !== "selected-actions"
-  ) {
+  if (resumeMode !== "all-open-actions" && resumeMode !== "selected-actions") {
     return;
   }
-  const missing = openActionIds.filter((actionId) => !decisionIds.has(actionId));
+  const missing = openActionIds.filter(
+    (actionId) => !decisionIds.has(actionId),
+  );
   if (missing.length === 0) {
     return;
   }
@@ -451,7 +460,9 @@ function collectTimelineEntryValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Timeline entry must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Timeline entry must be an object."),
+    );
     return;
   }
   requireString(input, "entryId", path, issues);
@@ -476,7 +487,9 @@ function collectGraphNodeValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Graph node must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Graph node must be an object."),
+    );
     return;
   }
   requireString(input, "nodeId", path, issues);
@@ -496,7 +509,13 @@ function collectRuntimeEventProjectionValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Runtime projection event must be an object."));
+    issues.push(
+      issue(
+        "schema_mismatch",
+        path,
+        "Runtime projection event must be an object.",
+      ),
+    );
     return;
   }
   requireString(input, "id", path, issues);
@@ -511,7 +530,9 @@ function collectRuntimeEventProjectionValidationIssues(
   optionalString(input, "detail", path, issues);
   optionalString(input, "actionId", path, issues);
   if (isRecord(input.source)) {
-    issues.push(...collectRuntimeEventValidationIssues(input.source, `${path}.source`));
+    issues.push(
+      ...collectRuntimeEventValidationIssues(input.source, `${path}.source`),
+    );
   }
 }
 
@@ -521,7 +542,9 @@ function collectRefValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Runtime ref must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Runtime ref must be an object."),
+    );
     return;
   }
   requireString(input, "id", path, issues);
@@ -554,7 +577,9 @@ function collectDiagnosticValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Diagnostic must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Diagnostic must be an object."),
+    );
     return;
   }
   requireString(input, "id", path, issues);
@@ -612,7 +637,9 @@ function collectSubagentThreadValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Subagent thread must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Subagent thread must be an object."),
+    );
     return;
   }
   requireString(input, "threadId", path, issues);
@@ -671,7 +698,9 @@ function collectSubagentDelegationValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Subagent delegation must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Subagent delegation must be an object."),
+    );
     return;
   }
   requireString(input, "callId", path, issues);
@@ -692,7 +721,9 @@ function collectSubagentActivityValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   if (!isRecord(input)) {
-    issues.push(issue("schema_mismatch", path, "Subagent activity must be an object."));
+    issues.push(
+      issue("schema_mismatch", path, "Subagent activity must be an object."),
+    );
     return;
   }
   requireString(input, "activityId", path, issues);
@@ -730,7 +761,10 @@ export function collectAgentUiFixtureValidationIssues(
   if (Array.isArray(input.events)) {
     input.events.forEach((event, index) => {
       issues.push(
-        ...collectRuntimeEventValidationIssues(event, `${path}.events[${index}]`),
+        ...collectRuntimeEventValidationIssues(
+          event,
+          `${path}.events[${index}]`,
+        ),
       );
     });
     issues.push(...collectSequenceIssues(input, path));
@@ -842,10 +876,10 @@ function collectSequenceIssues(
     return [];
   }
 
-  const expectedDiagnostics = isRecord(fixture.expected)
-    && Array.isArray(fixture.expected.diagnostics)
-    ? fixture.expected.diagnostics
-    : [];
+  const expectedDiagnostics =
+    isRecord(fixture.expected) && Array.isArray(fixture.expected.diagnostics)
+      ? fixture.expected.diagnostics
+      : [];
   const allowsSequenceGap = expectedDiagnostics.includes("sequence_gap");
   if (allowsSequenceGap) {
     return [];
@@ -858,10 +892,7 @@ function collectSequenceIssues(
       return;
     }
     const sequence = event.sequence as number;
-    if (
-      previousSequence !== undefined
-      && sequence !== previousSequence + 1
-    ) {
+    if (previousSequence !== undefined && sequence !== previousSequence + 1) {
       issues.push(
         issue(
           "sequence_gap",
@@ -895,16 +926,18 @@ function collectSequenceViolationIssues(
       eventIndexById.set(event.id, index);
     }
   });
-  const events = fixture.events.filter(isRecord) as unknown as AgentRuntimeExecutionEvent[];
+  const events = fixture.events.filter(
+    isRecord,
+  ) as unknown as AgentRuntimeExecutionEvent[];
   const violations = verifyRuntimeEventSequence(events);
   if (violations.length === 0) {
     return [];
   }
 
-  const expectedDiagnostics = isRecord(fixture.expected)
-    && Array.isArray(fixture.expected.diagnostics)
-    ? fixture.expected.diagnostics
-    : [];
+  const expectedDiagnostics =
+    isRecord(fixture.expected) && Array.isArray(fixture.expected.diagnostics)
+      ? fixture.expected.diagnostics
+      : [];
 
   return violations
     .filter((violation) => !expectedDiagnostics.includes(violation.code))
@@ -946,10 +979,7 @@ function collectScopeIssues(
     );
   }
 
-  if (
-    eventClass.startsWith("action.")
-    && typeof event.actionId !== "string"
-  ) {
+  if (eventClass.startsWith("action.") && typeof event.actionId !== "string") {
     issues.push(
       issue(
         "missing_scope_id",
@@ -960,9 +990,9 @@ function collectScopeIssues(
   }
 
   if (
-    eventClass.startsWith("artifact.")
-    && typeof event.artifactId !== "string"
-    && !hasNonEmptyStringArray(event.artifactRefs)
+    eventClass.startsWith("artifact.") &&
+    typeof event.artifactId !== "string" &&
+    !hasNonEmptyStringArray(event.artifactRefs)
   ) {
     issues.push(
       issue(
@@ -1114,9 +1144,9 @@ function collectScopeIssues(
   }
 
   if (
-    (eventClass.startsWith("evidence.") || eventClass.startsWith("review."))
-    && typeof event.evidenceId !== "string"
-    && !hasNonEmptyStringArray(event.evidenceRefs)
+    (eventClass.startsWith("evidence.") || eventClass.startsWith("review.")) &&
+    typeof event.evidenceId !== "string" &&
+    !hasNonEmptyStringArray(event.evidenceRefs)
   ) {
     issues.push(
       issue(
@@ -1155,16 +1185,7 @@ function collectLegacyTurnTerminalIssues(
   path: string,
   issues: AgentUiContractValidationIssue[],
 ): void {
-  if (
-    [
-      "done",
-      "final_done",
-      "cancelled",
-      "turn.done",
-      "turn.final_done",
-      "turn.cancelled",
-    ].includes(eventClass.trim())
-  ) {
+  if (isLegacyRuntimeTurnTerminalEventClass(eventClass)) {
     issues.push(
       issue(
         "schema_mismatch",
@@ -1208,7 +1229,9 @@ function scanSecretKeys(
   }
 
   Object.entries(input).forEach(([key, value]) => {
-    const childPath = Array.isArray(input) ? `${path}[${key}]` : `${path}.${key}`;
+    const childPath = Array.isArray(input)
+      ? `${path}[${key}]`
+      : `${path}.${key}`;
     if (/(api[-_]?key|authorization|password|secret|token)/i.test(key)) {
       issues.push(
         issue(
@@ -1248,7 +1271,11 @@ function requireNumber(
 ): void {
   if (typeof input[field] !== "number" || !Number.isFinite(input[field])) {
     issues.push(
-      issue("schema_mismatch", `${path}.${field}`, `${field} must be a number.`),
+      issue(
+        "schema_mismatch",
+        `${path}.${field}`,
+        `${field} must be a number.`,
+      ),
     );
   }
 }
@@ -1278,7 +1305,11 @@ function requireArray(
 ): void {
   if (!Array.isArray(input[field])) {
     issues.push(
-      issue("schema_mismatch", `${path}.${field}`, `${field} must be an array.`),
+      issue(
+        "schema_mismatch",
+        `${path}.${field}`,
+        `${field} must be an array.`,
+      ),
     );
   }
 }
@@ -1291,7 +1322,11 @@ function requireRecord(
 ): void {
   if (!isRecord(input[field])) {
     issues.push(
-      issue("schema_mismatch", `${path}.${field}`, `${field} must be an object.`),
+      issue(
+        "schema_mismatch",
+        `${path}.${field}`,
+        `${field} must be an object.`,
+      ),
     );
   }
 }
@@ -1302,9 +1337,17 @@ function optionalString(
   path: string,
   issues: AgentUiContractValidationIssue[],
 ): void {
-  if (field in input && input[field] !== undefined && typeof input[field] !== "string") {
+  if (
+    field in input &&
+    input[field] !== undefined &&
+    typeof input[field] !== "string"
+  ) {
     issues.push(
-      issue("schema_mismatch", `${path}.${field}`, `${field} must be a string.`),
+      issue(
+        "schema_mismatch",
+        `${path}.${field}`,
+        `${field} must be a string.`,
+      ),
     );
   }
 }
@@ -1360,8 +1403,8 @@ function isRecord(input: unknown): input is Record<string, unknown> {
 
 function hasNonEmptyStringArray(input: unknown): boolean {
   return (
-    Array.isArray(input)
-    && input.some((item) => typeof item === "string" && item.length > 0)
+    Array.isArray(input) &&
+    input.some((item) => typeof item === "string" && item.length > 0)
   );
 }
 

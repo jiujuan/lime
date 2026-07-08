@@ -517,9 +517,6 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.home.starter.rowLabel", { ns: "agent" });
   i18n.t("agentChat.home.starter.guideHelp.label", { ns: "agent" });
   i18n.t("agentChat.home.starter.ppt.prompt", { ns: "agent" });
-  i18n.t("agentChat.home.inputSuggestion.meetingNotes.label", {
-    ns: "agent",
-  });
   i18n.t("agentChat.home.guide.longTermPlan.title", { ns: "agent" });
   i18n.t("agentChat.home.guideCards.label", { ns: "agent" });
   i18n.t("agentChat.home.gallery.title", { ns: "agent" });

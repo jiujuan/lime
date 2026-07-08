@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./agentStreamUserInputSendPreparation", () => ({
   prepareAgentStreamUserInputSend: vi.fn(),
@@ -13,8 +13,19 @@ import { prepareAgentStreamUserInputSend } from "./agentStreamUserInputSendPrepa
 import { sendAgentStreamMessage } from "./agentStreamSend";
 
 describe("sendAgentStreamMessage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const createEnv = (overrides?: Record<string, unknown>) =>
+    ({
+      sessionIdRef: { current: "session-existing" },
+      ensureSession: vi.fn(async () => "session-existing"),
+      ...overrides,
+    }) as never;
+
   it("应串起 prepare 与 dispatch", async () => {
-    const env = { test: true } as never;
+    const env = createEnv();
     const preparedSend = { prepared: true };
     vi.mocked(prepareAgentStreamUserInputSend).mockReturnValue(
       preparedSend as never,
@@ -39,6 +50,44 @@ describe("sendAgentStreamMessage", () => {
         systemPrompt: "system",
         env,
       }),
+    );
+    expect(dispatchPreparedAgentStreamSend).toHaveBeenCalledWith({
+      preparedSend,
+      env,
+    });
+  });
+
+  it("空态首发应先创建会话再准备乐观消息", async () => {
+    const order: string[] = [];
+    const sessionIdRef = { current: null as string | null };
+    const ensureSession = vi.fn(async () => {
+      order.push("ensureSession");
+      sessionIdRef.current = "session-created";
+      return "session-created";
+    });
+    const env = createEnv({
+      sessionIdRef,
+      ensureSession,
+    });
+    const preparedSend = { prepared: true };
+    vi.mocked(prepareAgentStreamUserInputSend).mockImplementation(() => {
+      order.push("prepare");
+      return preparedSend as never;
+    });
+
+    await sendAgentStreamMessage({
+      content: "第一条消息",
+      images: [],
+      env,
+    });
+
+    expect(order).toEqual(["ensureSession", "prepare"]);
+    expect(ensureSession).toHaveBeenCalledWith({
+      skipSessionRestore: false,
+      skipSessionStartHooks: false,
+    });
+    expect(prepareAgentStreamUserInputSend).toHaveBeenCalledWith(
+      expect.objectContaining({ env }),
     );
     expect(dispatchPreparedAgentStreamSend).toHaveBeenCalledWith({
       preparedSend,

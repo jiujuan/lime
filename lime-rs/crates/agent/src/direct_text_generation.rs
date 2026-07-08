@@ -151,7 +151,7 @@ fn collect_model_text(
     match event {
         AgentEvent::TextDelta { text } => output.push_str(text),
         AgentEvent::TextDeltaBatch { text, .. } => output.push_str(text),
-        AgentEvent::Done { usage: event_usage } | AgentEvent::FinalDone { usage: event_usage } => {
+        AgentEvent::Done { usage: event_usage } => {
             if event_usage.is_some() {
                 *usage = event_usage.clone();
             }
@@ -177,7 +177,7 @@ mod tests {
             &mut usage,
         );
         collect_model_text(
-            &AgentEvent::FinalDone {
+            &AgentEvent::Done {
                 usage: Some(AgentTokenUsage {
                     input_tokens: 31_000,
                     output_tokens: 0,

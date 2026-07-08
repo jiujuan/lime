@@ -1,4 +1,4 @@
-use super::{RequestProcessor, RpcDispatch, dispatch_result, parse_params, to_jsonrpc_error};
+use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     JsonRpcError, WorkflowCancelParams, WorkflowReadParams, WorkflowRespondParams,
     WorkflowRetryParams,
@@ -74,8 +74,8 @@ mod tests {
     use app_server_protocol::{
         AgentInput, AgentSessionStartParams, AgentSessionTurnStartParams, ClientCapabilities,
         ClientInfo, InitializeParams, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
-        METHOD_INITIALIZE, METHOD_INITIALIZED, METHOD_WORKFLOW_CANCEL, METHOD_WORKFLOW_READ,
-        METHOD_WORKFLOW_RESPOND, METHOD_WORKFLOW_RETRY, RequestId,
+        RequestId, METHOD_INITIALIZE, METHOD_INITIALIZED, METHOD_WORKFLOW_CANCEL,
+        METHOD_WORKFLOW_READ, METHOD_WORKFLOW_RESPOND, METHOD_WORKFLOW_RETRY,
     };
     use async_trait::async_trait;
     use serde_json::json;

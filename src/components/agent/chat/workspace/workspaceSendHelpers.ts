@@ -1327,5 +1327,19 @@ export function buildSubmissionPreviewMessages(
       timestamp,
       inputCapabilityRoute: snapshot.inputCapabilityRoute,
     },
+    {
+      id: `submission-preview:${snapshot.key}:assistant`,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(timestamp.getTime() + 1),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: {
+        phase: "preparing",
+        title: "正在准备回复",
+        detail: "已收到请求，正在准备会话和执行环境。",
+        checkpoints: ["请求已接收", "等待会话就绪", "准备开始输出"],
+      },
+    },
   ];
 }

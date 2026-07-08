@@ -48,6 +48,11 @@ pub struct RuntimeNativeToolRegistration {
     owner: RuntimeNativeToolRegistrationOwner,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RuntimeNativeToolInstallStep {
+    registration: RuntimeNativeToolRegistration,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeNativeToolSurface {
     definition: RuntimeToolDefinition,
@@ -74,6 +79,28 @@ impl RuntimeNativeToolRegistration {
 
     pub const fn owner(self) -> RuntimeNativeToolRegistrationOwner {
         self.owner
+    }
+}
+
+impl RuntimeNativeToolInstallStep {
+    pub const fn new(registration: RuntimeNativeToolRegistration) -> Self {
+        Self { registration }
+    }
+
+    pub const fn registration(self) -> RuntimeNativeToolRegistration {
+        self.registration
+    }
+
+    pub const fn tool(self) -> RuntimeNativeToolOverlay {
+        self.registration.tool()
+    }
+
+    pub const fn name(self) -> &'static str {
+        self.registration.name()
+    }
+
+    pub const fn owner(self) -> RuntimeNativeToolRegistrationOwner {
+        self.registration.owner()
     }
 }
 
@@ -153,6 +180,33 @@ const RUNTIME_NATIVE_TOOL_OVERLAY_REGISTRATIONS: &[RuntimeNativeToolRegistration
     RuntimeNativeToolRegistration::new(RuntimeNativeToolOverlay::WebSearch),
 ];
 
+const RUNTIME_NATIVE_TOOL_INSTALL_PLAN: &[RuntimeNativeToolInstallStep] = &[
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::ViewImage,
+    )),
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::ApplyPatch,
+    )),
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::SkillSearch,
+    )),
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::Skill,
+    )),
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::Sleep,
+    )),
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::UpdatePlan,
+    )),
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::WebFetch,
+    )),
+    RuntimeNativeToolInstallStep::new(RuntimeNativeToolRegistration::new(
+        RuntimeNativeToolOverlay::WebSearch,
+    )),
+];
+
 const RUNTIME_NATIVE_TOOL_OVERLAY_NAMES: &[&str] = &[
     "view_image",
     "apply_patch",
@@ -170,6 +224,10 @@ pub fn runtime_native_tool_overlay_tools() -> &'static [RuntimeNativeToolOverlay
 
 pub fn runtime_native_tool_overlay_registrations() -> &'static [RuntimeNativeToolRegistration] {
     RUNTIME_NATIVE_TOOL_OVERLAY_REGISTRATIONS
+}
+
+pub fn runtime_native_tool_install_plan() -> &'static [RuntimeNativeToolInstallStep] {
+    RUNTIME_NATIVE_TOOL_INSTALL_PLAN
 }
 
 pub fn runtime_native_tool_overlay_tool_names() -> &'static [&'static str] {
@@ -309,22 +367,39 @@ mod tests {
     }
 
     #[test]
+    fn runtime_native_tool_install_plan_matches_registration_contract() {
+        let registrations = runtime_native_tool_overlay_registrations()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        let plan_registrations = runtime_native_tool_install_plan()
+            .iter()
+            .map(|step| step.registration())
+            .collect::<Vec<_>>();
+        let plan_names = runtime_native_tool_install_plan()
+            .iter()
+            .map(|step| step.name())
+            .collect::<Vec<_>>();
+
+        assert_eq!(plan_registrations, registrations);
+        assert_eq!(plan_names, runtime_native_tool_overlay_tool_names());
+    }
+
+    #[test]
     fn runtime_native_tool_overlay_dispatch_plan_matches_current_dispatch() {
         let dispatch_names = crate::native_dispatch::runtime_native_dispatch_tool_names();
 
-        for registration in runtime_native_tool_overlay_registrations() {
-            match registration.owner() {
+        for step in runtime_native_tool_install_plan() {
+            match step.owner() {
                 RuntimeNativeToolRegistrationOwner::NativeDispatch => {
                     assert!(
-                        dispatch_names
-                            .iter()
-                            .any(|name| name == registration.name()),
+                        dispatch_names.iter().any(|name| name == step.name()),
                         "{} must be backed by tool-runtime native dispatch",
-                        registration.name()
+                        step.name()
                     );
                 }
                 RuntimeNativeToolRegistrationOwner::SkillGate => {
-                    assert_eq!(registration.name(), "Skill");
+                    assert_eq!(step.name(), "Skill");
                 }
             }
         }

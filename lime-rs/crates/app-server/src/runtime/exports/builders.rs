@@ -1,7 +1,7 @@
-use super::super::RuntimeCoreError;
 use super::super::soul::locale_copy::HandoffCopy;
 use super::super::soul::locale_copy::RuntimeExportCopy;
 use super::super::status::agent_turn_status_label;
+use super::super::RuntimeCoreError;
 use super::metrics::HandoffMetrics;
 use super::metrics::HandoffRecentArtifact;
 use app_server_protocol::AgentSessionReadResponse;
@@ -240,11 +240,10 @@ pub(super) fn default_review_decision(copy: &RuntimeExportCopy) -> AgentSessionR
         risk_tags: Vec::new(),
         human_reviewer: String::new(),
         followup_actions: Vec::new(),
-        regression_requirements: vec![
-            copy.review
-                .default_decision_regression_requirement
-                .to_string(),
-        ],
+        regression_requirements: vec![copy
+            .review
+            .default_decision_regression_requirement
+            .to_string()],
         notes: String::new(),
     }
 }

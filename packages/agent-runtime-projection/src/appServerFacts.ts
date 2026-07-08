@@ -7,6 +7,7 @@ import type {
 import {
   type AgentUiPhase,
   normalizeRuntimeStatusValue,
+  isLegacyRuntimeTurnTerminalEventClass,
   normalizeRuntimeTurnTerminalEventClass,
   runtimeStatusForTerminalEventClass,
   runtimeTurnTerminalProjectionFromStatus,
@@ -21,9 +22,7 @@ import {
   readStringField,
 } from "./normalization.js";
 import { buildAgentUiCollaborationPayloadMetadata } from "./collaborationFacts.js";
-import {
-  extractAgentUiToolLifecyclePayloadMetadata,
-} from "./toolLifecycleMetadata.js";
+import { extractAgentUiToolLifecyclePayloadMetadata } from "./toolLifecycleMetadata.js";
 import { projectAgentUiState } from "./uiState.js";
 
 export interface AppServerAgentSessionFact {
@@ -258,8 +257,10 @@ function projectAppServerEventToExecutionEvent(
   ]);
 
   const projectedStatus =
-    runtimeTurnTerminalProjectionFromStatus(payloadStatus)?.status ??
-    statusFromDomainPayloadStatus(payloadStatus) ??
+    (isLegacyRuntimeTurnTerminalEventClass(event.type)
+      ? undefined
+      : (runtimeTurnTerminalProjectionFromStatus(payloadStatus)?.status ??
+        statusFromDomainPayloadStatus(payloadStatus))) ??
     statusForEventClass(eventClass);
   const taskId = readStringField(payload, ["taskId", "task_id"]);
   const subagentId = readStringField(payload, ["subagentId", "subagent_id"]);
@@ -407,8 +408,7 @@ function projectAppServerTurnToExecutionEvent(
     schemaVersion: "lime-runtime-event/v0.1",
     kind: "state",
     status:
-      terminalProjection?.status ??
-      statusFromTurnSnapshotStatus(turn.status),
+      terminalProjection?.status ?? statusFromTurnSnapshotStatus(turn.status),
     eventClass,
     runtimeId: "app-server",
     threadId: turn.threadId ?? session.threadId,
@@ -590,10 +590,7 @@ function statusForEventClass(
 ): AgentRuntimeExecutionEventStatus {
   const terminalStatus = runtimeStatusForTerminalEventClass(eventClass);
   if (terminalStatus) return terminalStatus;
-  if (
-    eventClass.endsWith(".failed") ||
-    eventClass === "runtime.error"
-  ) {
+  if (eventClass.endsWith(".failed") || eventClass === "runtime.error") {
     return "failed";
   }
   if (eventClass === "action.required" || eventClass === "handoff.requested") {
@@ -615,9 +612,8 @@ function statusFromSessionStatus(
   status: string | undefined,
 ): AgentRuntimeExecutionEventStatus {
   const normalized = normalizeStatus(status);
-  const terminalStatus = runtimeTurnTerminalProjectionFromStatus(
-    normalized,
-  )?.status;
+  const terminalStatus =
+    runtimeTurnTerminalProjectionFromStatus(normalized)?.status;
   if (terminalStatus) return terminalStatus;
   if (normalized === "completed" || normalized === "idle") return "completed";
   if (status === "waitingAction") return "blocked";
@@ -629,9 +625,8 @@ function statusFromTurnSnapshotStatus(
   status: string | undefined,
 ): AgentRuntimeExecutionEventStatus {
   const normalized = normalizeStatus(status);
-  const terminalStatus = runtimeTurnTerminalProjectionFromStatus(
-    normalized,
-  )?.status;
+  const terminalStatus =
+    runtimeTurnTerminalProjectionFromStatus(normalized)?.status;
   if (terminalStatus) return terminalStatus;
   if (status === "waitingAction") return "pending";
   if (normalized === "running" || normalized === "accepted") return "running";
@@ -651,10 +646,9 @@ function eventClassForTurnSnapshotStatus(status: string | undefined): string {
 }
 
 function phaseForEventClass(eventClass: string): string {
-  const terminalPhase =
-    runtimeTurnTerminalProjectionFromStatus(
-      runtimeStatusForTerminalEventClass(eventClass),
-    )?.phase;
+  const terminalPhase = runtimeTurnTerminalProjectionFromStatus(
+    runtimeStatusForTerminalEventClass(eventClass),
+  )?.phase;
   if (terminalPhase) return terminalPhase;
   if (eventClass === "action.required") return "action_required";
   if (eventClass.endsWith(".failed") || eventClass === "runtime.error") {

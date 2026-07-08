@@ -1946,13 +1946,14 @@ export interface AgentSessionMediaReadParams {
   refId?: null | string;
   sessionId: string;
   sidecarRef?: unknown;
+  stream?: boolean;
   uri?: null | string;
 }
 
 export interface AgentSessionMediaReadResponse {
   bytes: number;
-  contentRange: string;
   contentBase64: string;
+  contentRange: string;
   hasMore: boolean;
   length: number;
   mimeType?: null | string;

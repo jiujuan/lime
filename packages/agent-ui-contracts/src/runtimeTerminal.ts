@@ -4,10 +4,7 @@ import type {
   AgentRuntimePhase,
 } from "./runtime";
 
-export type AgentRuntimeTurnTerminalKind =
-  | "completed"
-  | "failed"
-  | "canceled";
+export type AgentRuntimeTurnTerminalKind = "completed" | "failed" | "canceled";
 
 export interface AgentRuntimeTurnTerminalProjection {
   kind: AgentRuntimeTurnTerminalKind;
@@ -21,6 +18,15 @@ const FAILED_STATUS_VALUES = new Set(["failed"]);
 const CANCELED_STATUS_VALUES = new Set(["canceled"]);
 const SETTLED_STATUS_VALUES = new Set(["idle"]);
 
+export const LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES = [
+  "done",
+  "final_done",
+  "cancelled",
+  "turn.done",
+  "turn.final_done",
+  "turn.cancelled",
+] as const;
+
 const TERMINAL_EVENT_CLASS_TO_KIND = new Map<
   string,
   AgentRuntimeTurnTerminalKind
@@ -29,6 +35,10 @@ const TERMINAL_EVENT_CLASS_TO_KIND = new Map<
   ["turn.failed", "failed"],
   ["turn.canceled", "canceled"],
 ]);
+
+const LEGACY_TURN_TERMINAL_EVENT_CLASSES = new Set<string>(
+  LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES,
+);
 
 export function normalizeRuntimeStatusValue(
   value: string | null | undefined,
@@ -89,13 +99,24 @@ export function normalizeRuntimeTurnTerminalEventClass(
   if (!normalized) return undefined;
 
   const kind = TERMINAL_EVENT_CLASS_TO_KIND.get(normalized);
-  return kind ? runtimeTurnTerminalProjectionFromKind(kind).eventClass : undefined;
+  return kind
+    ? runtimeTurnTerminalProjectionFromKind(kind).eventClass
+    : undefined;
 }
 
 export function isRuntimeTurnTerminalEventClass(
   eventClass: string | null | undefined,
 ): boolean {
   return Boolean(normalizeRuntimeTurnTerminalEventClass(eventClass));
+}
+
+export function isLegacyRuntimeTurnTerminalEventClass(
+  eventClass: string | null | undefined,
+): boolean {
+  const normalized = eventClass?.trim().toLowerCase();
+  return Boolean(
+    normalized && LEGACY_TURN_TERMINAL_EVENT_CLASSES.has(normalized),
+  );
 }
 
 export function isRuntimeTerminalStatusValue(
@@ -117,7 +138,8 @@ export function isRuntimeSettledStatusValue(
 export function runtimeStatusForTerminalEventClass(
   eventClass: string | null | undefined,
 ): AgentRuntimeExecutionEventStatus | undefined {
-  const normalizedEventClass = normalizeRuntimeTurnTerminalEventClass(eventClass);
+  const normalizedEventClass =
+    normalizeRuntimeTurnTerminalEventClass(eventClass);
   if (!normalizedEventClass) return undefined;
   if (normalizedEventClass === "turn.completed") return "completed";
   if (normalizedEventClass === "turn.canceled") return "canceled";

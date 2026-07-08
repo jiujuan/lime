@@ -20,9 +20,11 @@ import {
   collectRuntimeResumeContractValidationIssues,
   createRuntimeSequenceVerifier,
   getAgentUiFixture,
+  isLegacyRuntimeTurnTerminalEventClass,
   isRuntimeSettledStatusValue,
   isRuntimeTerminalStatusValue,
   isRuntimeTurnTerminalEventClass,
+  LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES,
   normalizeRuntimeTurnTerminalEventClass,
   runtimeStatusForTerminalEventClass,
   runtimeTurnTerminalProjectionFromStatus,
@@ -69,9 +71,11 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
       "collectThreadReadModelValidationIssues",
       "createRuntimeSequenceVerifier",
       "getAgentUiFixture",
+      "isLegacyRuntimeTurnTerminalEventClass",
       "isRuntimeSettledStatusValue",
       "isRuntimeTerminalStatusValue",
       "isRuntimeTurnTerminalEventClass",
+      "LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES",
       "normalizeRuntimeStatusValue",
       "normalizeRuntimeTurnTerminalEventClass",
       "runtimeStatusForTerminalEventClass",
@@ -89,25 +93,25 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
   );
 
   const indexDeclarations = await readDeclaration("index");
-    assert.equal(
-      indexDeclarations,
-      [
-        'export type * from "./capabilities";',
-        'export type * from "./events";',
-        'export * from "./fixtures.js";',
-        'export type * from "./graph";',
-        'export type * from "./messages";',
-        'export type * from "./projection";',
-        'export type * from "./runtime";',
-        'export * from "./runtimeTerminal.js";',
-        'export * from "./schemas.js";',
-        'export * from "./sequenceVerifier.js";',
-        'export type * from "./timeline";',
-        'export type * from "./tools";',
-        'export * from "./validation.js";',
-        "",
-      ].join("\n"),
-    );
+  assert.equal(
+    indexDeclarations,
+    [
+      'export type * from "./capabilities";',
+      'export type * from "./events";',
+      'export * from "./fixtures.js";',
+      'export type * from "./graph";',
+      'export type * from "./messages";',
+      'export type * from "./projection";',
+      'export type * from "./runtime";',
+      'export * from "./runtimeTerminal.js";',
+      'export * from "./schemas.js";',
+      'export * from "./sequenceVerifier.js";',
+      'export type * from "./timeline";',
+      'export type * from "./tools";',
+      'export * from "./validation.js";',
+      "",
+    ].join("\n"),
+  );
 
   const typeDeclarations = [
     await readDeclaration("capabilities"),
@@ -167,7 +171,10 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
   assert.match(typeDeclarations, /artifacts: AgentUiArtifactRefView\[\]/);
   assert.match(typeDeclarations, /evidence: AgentUiEvidenceRefView\[\]/);
   assert.match(typeDeclarations, /subagents: AgentUiSubagentsModel/);
-  assert.match(typeDeclarations, /collaboration\?: AgentUiCollaborationFactsView/);
+  assert.match(
+    typeDeclarations,
+    /collaboration\?: AgentUiCollaborationFactsView/,
+  );
   assert.match(typeDeclarations, /toolCalls: AgentUiToolSurfaceModel/);
   assert.match(typeDeclarations, /mcp: AgentUiMcpSurfaceModel/);
   assert.match(typeDeclarations, /actions\?: AgentRuntimeActionProjection\[\]/);
@@ -204,12 +211,24 @@ test("runtime terminal helpers expose the single current turn terminal contract"
     normalizeRuntimeTurnTerminalEventClass("turn.canceled"),
     "turn.canceled",
   );
-  assert.equal(normalizeRuntimeTurnTerminalEventClass("turn.final_done"), undefined);
+  assert.equal(
+    normalizeRuntimeTurnTerminalEventClass("turn.final_done"),
+    undefined,
+  );
   assert.equal(normalizeRuntimeTurnTerminalEventClass("turn.done"), undefined);
-  assert.equal(normalizeRuntimeTurnTerminalEventClass("turn.cancelled"), undefined);
+  assert.equal(
+    normalizeRuntimeTurnTerminalEventClass("turn.cancelled"),
+    undefined,
+  );
+  assert.equal(isLegacyRuntimeTurnTerminalEventClass("turn.final_done"), true);
+  assert.equal(isLegacyRuntimeTurnTerminalEventClass("final_done"), true);
+  assert.equal(isLegacyRuntimeTurnTerminalEventClass("turn.completed"), false);
   assert.equal(isRuntimeTurnTerminalEventClass("turn.canceled"), true);
   assert.equal(isRuntimeTurnTerminalEventClass("turn.final_done"), false);
-  assert.equal(runtimeStatusForTerminalEventClass("turn.completed"), "completed");
+  assert.equal(
+    runtimeStatusForTerminalEventClass("turn.completed"),
+    "completed",
+  );
   assert.equal(runtimeStatusForTerminalEventClass("turn.failed"), "failed");
   assert.equal(runtimeStatusForTerminalEventClass("turn.canceled"), "canceled");
   assert.deepEqual(runtimeTurnTerminalProjectionFromStatus("canceled"), {
@@ -229,12 +248,7 @@ test("agent ui contracts expose JSON schemas for cross-language validation", () 
     "lime-runtime-event/v0.1",
   );
   assert.deepEqual(AGENT_RUNTIME_EVENT_SCHEMA.not.properties.eventClass.enum, [
-    "done",
-    "final_done",
-    "cancelled",
-    "turn.done",
-    "turn.final_done",
-    "turn.cancelled",
+    ...LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES,
   ]);
   assert.deepEqual(AGENT_RUNTIME_EVENT_SCHEMA.required, [
     "id",
@@ -522,9 +536,7 @@ test("agent ui conformance fixtures cover the standard runtime slices", () => {
   assert.ok(
     handoff.events.some((event) => event.eventClass === "task.completed"),
   );
-  assert.ok(
-    handoff.events.some((event) => event.eventClass === "state.delta"),
-  );
+  assert.ok(handoff.events.some((event) => event.eventClass === "state.delta"));
   assert.ok(
     handoff.events.some((event) => event.eventClass === "snapshot.updated"),
   );
@@ -557,12 +569,18 @@ test("coding conformance fixtures pin the required workbench fact families", () 
     failedPatchCount: 0,
     failedTestCount: 0,
   });
-  assert.deepEqual(getAgentUiFixture("coding-command-approval").expected.coding, {
-    commandCount: 1,
-  });
-  assert.deepEqual(getAgentUiFixture("coding-sandbox-blocked").expected.coding, {
-    blockedCount: 1,
-  });
+  assert.deepEqual(
+    getAgentUiFixture("coding-command-approval").expected.coding,
+    {
+      commandCount: 1,
+    },
+  );
+  assert.deepEqual(
+    getAgentUiFixture("coding-sandbox-blocked").expected.coding,
+    {
+      blockedCount: 1,
+    },
+  );
   assert.deepEqual(getAgentUiFixture("coding-patch-failure").expected.coding, {
     patchCount: 1,
     testCount: 1,
@@ -570,16 +588,22 @@ test("coding conformance fixtures pin the required workbench fact families", () 
     failedPatchCount: 1,
     failedTestCount: 1,
   });
-  assert.deepEqual(getAgentUiFixture("coding-test-failure-fix").expected.coding, {
-    changeCount: 1,
-    patchCount: 1,
-    commandCount: 2,
-    testCount: 1,
-    failedTestCount: 0,
-  });
-  assert.deepEqual(getAgentUiFixture("coding-hydration-repair").expected.coding, {
-    changeCount: 1,
-  });
+  assert.deepEqual(
+    getAgentUiFixture("coding-test-failure-fix").expected.coding,
+    {
+      changeCount: 1,
+      patchCount: 1,
+      commandCount: 2,
+      testCount: 1,
+      failedTestCount: 0,
+    },
+  );
+  assert.deepEqual(
+    getAgentUiFixture("coding-hydration-repair").expected.coding,
+    {
+      changeCount: 1,
+    },
+  );
 
   for (const fixture of codingFixtures) {
     assert.equal(
@@ -1291,12 +1315,7 @@ test("runtime resume contract validation requires selected actions to cover open
     collectRuntimeResumeContractValidationIssues(missingDecision).map(
       (issue) => [issue.path, issue.message],
     ),
-    [
-      [
-        "$.decisions",
-        "Resume contract must cover open actions: action-b.",
-      ],
-    ],
+    [["$.decisions", "Resume contract must cover open actions: action-b."]],
   );
   assert.throws(
     () => validateRuntimeResumeContract(missingDecision),

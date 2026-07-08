@@ -513,12 +513,6 @@ pub enum AgentEvent {
         usage: Option<AgentTokenUsage>,
     },
 
-    #[serde(rename = "final_done")]
-    FinalDone {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        usage: Option<AgentTokenUsage>,
-    },
-
     #[serde(rename = "error")]
     Error { message: String },
 

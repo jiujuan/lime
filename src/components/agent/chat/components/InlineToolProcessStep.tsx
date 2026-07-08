@@ -227,15 +227,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   );
   const soulLifecycleAttributes = useMemo(
     () => resolveToolSoulMetadataDomAttributes(processNarrative),
-    [
-      processNarrative.packId,
-      processNarrative.profileId,
-      processNarrative.riskLevel,
-      processNarrative.soulPhase,
-      processNarrative.soulSurface,
-      processNarrative.styleLevel,
-      processNarrative.toneVariant,
-    ],
+    [processNarrative],
   );
   const memoryToolEvidence = useMemo(
     () => resolveMemoryToolEvidence(toolCall),

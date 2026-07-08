@@ -8,7 +8,6 @@ import {
 import { PluginCapabilityDispatcherError } from "./capabilityDispatcherError";
 import {
   recordNumberByKeys,
-  recordString,
   readString,
 } from "./capabilityDispatcherRecord";
 import {

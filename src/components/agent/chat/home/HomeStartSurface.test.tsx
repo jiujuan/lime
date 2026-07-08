@@ -38,8 +38,6 @@ const TEST_CHROME_COPY: HomeSurfaceChromeCopy = {
   guideCardsLabel: "首页引导帮助",
   moreSkillsDrawerLabel: "更多做法",
   galleryTitle: "你可以从这些任务开始",
-  galleryDescription: "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
-  scrollCueLabel: "向下滑，看看 Lime 可以帮你做什么",
   secondScreenLabel: "Lime 可执行任务示例",
   projectConversationsMoreLabel: (count) => `更多 ${count} 个对话`,
   recoverySessionTitle: (status, title) => {

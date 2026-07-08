@@ -387,8 +387,7 @@ if (input.kind === "turnStart") {
   const assistantText = isRecoveryTurn
     ? "已继续修复 coding-target，并通过 npm test -- coding-target。"
     : "${ASSISTANT_ARTIFACT_TEXT}";
-  console.log(JSON.stringify({
-    events: [
+  const events = [
       {
         type: "message.delta",
         payload: {
@@ -523,8 +522,17 @@ if (input.kind === "turnStart") {
           text: "${FINAL_DONE_TEXT}"
         }
       }
-    ]
-  }));
+    ];
+  if (ledgerPath) {
+    appendFileSync(ledgerPath, JSON.stringify({
+      kind: "backendEvents",
+      sessionId: input.request?.session?.sessionId,
+      turnId: input.request?.turn?.turnId,
+      eventTypes: events.map((event) => event.type),
+      recordedAt: new Date().toISOString()
+    }) + "\\n");
+  }
+  console.log(JSON.stringify({ events }));
   process.exit(0);
 }
 
@@ -2835,6 +2843,16 @@ async function run() {
     const backendTurnStartObserved = backendLedger.some(
       (entry) => entry.kind === "turnStart",
     );
+    const backendEmittedEventTypes = Array.from(
+      new Set(
+        backendLedger
+          .filter((entry) => entry.kind === "backendEvents")
+          .flatMap((entry) =>
+            Array.isArray(entry.eventTypes) ? entry.eventTypes : [],
+          )
+          .filter((type) => typeof type === "string" && type.trim()),
+      ),
+    );
     const appServerJsonRpcObserved =
       appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) ||
       backendTurnStartObserved ||
@@ -2932,6 +2950,18 @@ async function run() {
       guiPromptSubmitted:
         options.scenario !== "gui-coding-input" ||
         summary.sessionCreation?.guiPromptSubmitted === true,
+      backendEmittedCurrentTerminal:
+        backendEmittedEventTypes.includes("turn.completed"),
+      backendDidNotEmitLegacyTerminal: !backendEmittedEventTypes.some((type) =>
+        [
+          "done",
+          "final_done",
+          "cancelled",
+          "turn.done",
+          "turn.final_done",
+          "turn.cancelled",
+        ].includes(type),
+      ),
       noInvokeErrors: !errorRaw,
     };
 
@@ -2951,6 +2981,7 @@ async function run() {
     summary.pageErrors = pageErrors;
     summary.appServerRequestMethods = appServerRequestMethods;
     summary.backendKinds = backendLedger.map((entry) => entry.kind);
+    summary.backendEmittedEventTypes = backendEmittedEventTypes;
     summary.traceRecoveryTurnStart = sanitizeJson(traceRecoveryTurnStart);
     summary.guiToolTimelineEvidencePresent = guiToolTimelineEvidencePresent;
     summary.assertions = assertions;

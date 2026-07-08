@@ -1,28 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Skill } from "@/lib/api/skills";
-import type { HomeInputSuggestion } from "../home/homeSurfaceTypes";
 import type { InputCapabilitySelection } from "../skill-selection/inputCapabilitySelection";
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
-import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 import {
   buildEmptyStateAdvancedControlsState,
-  buildEmptyStateInputSuggestionState,
   resolveEmptyStateActiveCapability,
   resolveCurrentModelSummary,
-  sortInputSuggestions,
 } from "./EmptyStateComposerPanelViewModel";
-
-function suggestion(
-  overrides: Partial<HomeInputSuggestion>,
-): HomeInputSuggestion {
-  return {
-    id: "suggestion",
-    label: "默认建议",
-    prompt: "默认提示",
-    order: 10,
-    ...overrides,
-  };
-}
 
 function skill(overrides: Partial<Skill> = {}): Skill {
   return {
@@ -62,112 +46,7 @@ function curatedTask(
   };
 }
 
-function creationReplaySurface(
-  overrides: Partial<CreationReplaySurfaceModel> = {},
-): CreationReplaySurfaceModel {
-  return {
-    kind: "memory_entry",
-    eyebrow: "带入灵感",
-    badgeLabel: "参考",
-    title: "品牌风格",
-    summary: "轻盈专业",
-    hint: "后续结果模板会默认沿用这条风格参考。",
-    defaultReferenceMemoryIds: [],
-    defaultReferenceEntries: [],
-    ...overrides,
-  };
-}
-
-function defaultActiveCapability() {
-  return resolveEmptyStateActiveCapability({
-    activeCapability: null,
-    fallbackActiveSkill: null,
-  });
-}
-
 describe("EmptyStateComposerPanelViewModel", () => {
-  it("应按 order 和中文 label 排序输入建议", () => {
-    expect(
-      sortInputSuggestions([
-        suggestion({ id: "b", label: "整理会议", order: 20 }),
-        suggestion({ id: "c", label: "写邮件", order: 10 }),
-        suggestion({ id: "a", label: "分析需求", order: 10 }),
-      ]).map((item) => item.id),
-    ).toEqual(["a", "c", "b"]);
-  });
-
-  it("应只在空输入且没有其他上下文时展示 Tab 起手建议", () => {
-    const visibleState = buildEmptyStateInputSuggestionState({
-      inputSuggestions: [suggestion({ id: "email" })],
-      isLoading: false,
-      disabled: false,
-      draftInput: "   ",
-      pendingImageCount: 0,
-      guideHelpActive: false,
-      activeCapability: defaultActiveCapability(),
-      creationReplaySurface: null,
-      inputSuggestionIndex: 0,
-    });
-    expect(visibleState.shouldShowInputSuggestion).toBe(true);
-    expect(visibleState.activeInputSuggestion?.id).toBe("email");
-
-    const hiddenCases = [
-      { draftInput: "已有输入" },
-      { pendingImageCount: 1 },
-      { guideHelpActive: true },
-      { isLoading: true },
-      { disabled: true },
-      {
-        activeCapability: resolveEmptyStateActiveCapability({
-          activeCapability: {
-            kind: "installed_skill",
-            skill: skill(),
-          },
-          fallbackActiveSkill: null,
-        }),
-      },
-      {
-        creationReplaySurface: creationReplaySurface(),
-      },
-    ];
-
-    hiddenCases.forEach((overrides) => {
-      expect(
-        buildEmptyStateInputSuggestionState({
-          inputSuggestions: [suggestion({ id: "email" })],
-          isLoading: false,
-          disabled: false,
-          draftInput: "",
-          pendingImageCount: 0,
-          guideHelpActive: false,
-          activeCapability: defaultActiveCapability(),
-          creationReplaySurface: null,
-          inputSuggestionIndex: 0,
-          ...overrides,
-        }).activeInputSuggestion,
-      ).toBeNull();
-    });
-  });
-
-  it("应按 suggestion index 取模选中当前起手建议", () => {
-    const state = buildEmptyStateInputSuggestionState({
-      inputSuggestions: [
-        suggestion({ id: "first", order: 10 }),
-        suggestion({ id: "second", order: 20 }),
-      ],
-      isLoading: false,
-      disabled: false,
-      draftInput: "",
-      pendingImageCount: 0,
-      guideHelpActive: false,
-      activeCapability: defaultActiveCapability(),
-      creationReplaySurface: null,
-      inputSuggestionIndex: 3,
-    });
-
-    expect(state.activeInputSuggestion?.id).toBe("second");
-  });
-
   it("应派生当前能力 badge，且过滤知识包内置命令", () => {
     const fallbackSkill = skill({ key: "fallback" });
     const knowledgePackCapability: InputCapabilitySelection = {

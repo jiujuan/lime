@@ -20,8 +20,6 @@ const chromeCopy = {
   guideCardsLabel: "引导",
   moreSkillsDrawerLabel: "更多",
   galleryTitle: "更多做法",
-  galleryDescription: "看看 Lime 可以帮你做什么",
-  scrollCueLabel: "向下滑，看看 Lime 可以帮你做什么",
   secondScreenLabel: "更多做法",
   projectConversationsMoreLabel: (count: number) => `更多 ${count} 个对话`,
   recentSessionDefaultActionLabel: "继续",

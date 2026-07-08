@@ -229,6 +229,31 @@ test("App Server facts do not promote legacy final_done to current terminal", ()
   assert.equal(events[0].completedAt, undefined);
 });
 
+test("App Server facts ignore legacy terminal payload status", () => {
+  const events = projectAppServerEventsToExecutionEvents([
+    appServerEvent("evt-legacy-done", 1, "done", { status: "done" }),
+    appServerEvent("evt-legacy-final", 2, "turn.final_done", {
+      status: "completed",
+    }),
+    appServerEvent("evt-legacy-cancelled", 3, "turn.cancelled", {
+      status: "cancelled",
+    }),
+  ]);
+
+  assert.deepEqual(
+    events.map((event) => event.eventClass),
+    ["done", "turn.final_done", "turn.cancelled"],
+  );
+  assert.deepEqual(
+    events.map((event) => event.status),
+    ["running", "running", "running"],
+  );
+  assert.deepEqual(
+    events.map((event) => event.completedAt),
+    [undefined, undefined, undefined],
+  );
+});
+
 test("App Server tool events normalize Soul lifecycle metadata for package projection", () => {
   const events = projectAppServerEventsToExecutionEvents([
     appServerEvent("evt-tool-progress", 1, "tool.progress", {

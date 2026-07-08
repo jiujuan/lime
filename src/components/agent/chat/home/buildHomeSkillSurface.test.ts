@@ -11,7 +11,6 @@ import { agentEnUSResource, agentZhCNResource } from "@/i18n/agentResources";
 import {
   buildHomeGalleryItems,
   buildHomeGuideCards,
-  buildHomeInputSuggestions,
   buildHomeSkillItems,
   buildHomeSkillSections,
   buildHomeStarterChips,
@@ -124,7 +123,7 @@ describe("buildHomeSkillSurface", () => {
     ]);
   });
 
-  it("优先使用服务端下发的首页展示入口、Tab 建议与帮助卡", () => {
+  it("优先使用服务端下发的首页展示入口与帮助卡，并忽略旧输入建议 slot", () => {
     const entries: SkillCatalogEntry[] = [
       {
         id: "home:starter:poster",
@@ -186,12 +185,6 @@ describe("buildHomeSkillSurface", () => {
       launchKind: "prefill_prompt",
       prompt: "请帮我做一张海报。",
     });
-    expect(buildHomeInputSuggestions(entries, TEST_HOME_SURFACE_COPY)).toEqual([
-      expect.objectContaining({
-        label: "帮我写一封工作邮件",
-        prompt: "请帮我写一封工作邮件。",
-      }),
-    ]);
     expect(buildHomeGuideCards(entries, TEST_HOME_SURFACE_COPY)).toEqual([
       expect.objectContaining({
         title: "怎么添加模型？",
@@ -316,11 +309,6 @@ describe("buildHomeSkillSurface", () => {
         (chip) => chip.label,
       ),
     ).toContain("Guide help");
-    expect(
-      buildHomeInputSuggestions(undefined, TEST_HOME_SURFACE_EN_COPY)[0],
-    ).toMatchObject({
-      label: "Help me summarize meeting notes",
-    });
     expect(
       buildHomeGuideCards(undefined, TEST_HOME_SURFACE_EN_COPY)[0],
     ).toMatchObject({
