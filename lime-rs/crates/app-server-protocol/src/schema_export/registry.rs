@@ -378,6 +378,10 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<VoiceTranscriptionTranscribeAudioResponse>(
             "VoiceTranscriptionTranscribeAudioResponse",
         ),
+        typed_schema::<VoiceTranscriptionPolishTextParams>("VoiceTranscriptionPolishTextParams"),
+        typed_schema::<VoiceTranscriptionPolishTextResponse>(
+            "VoiceTranscriptionPolishTextResponse",
+        ),
         typed_schema::<WorkspaceSkillBindingsListParams>("WorkspaceSkillBindingsListParams"),
         typed_schema::<WorkspaceSkillBindingsListResponse>("WorkspaceSkillBindingsListResponse"),
         typed_schema::<WorkspaceRegisteredSkillsListParams>("WorkspaceRegisteredSkillsListParams"),

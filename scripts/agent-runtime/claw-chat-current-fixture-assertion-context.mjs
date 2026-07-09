@@ -1,6 +1,8 @@
 import {
   APPROVAL_REQUEST_CANCEL_SCENARIO,
   APPROVAL_REQUEST_DECLINE_SCENARIO,
+  APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+  APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
   APPROVAL_REQUEST_RESUME_PROMPT,
   APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTINUE_PROMPT,
@@ -11,6 +13,8 @@ import {
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
   ELECTRON_RESIZE_REFLOW_SCENARIO,
   GOAL_PROMPT,
+  HOME_HOTPATH_GREETING_SCENARIO,
+  HOME_HOTPATH_SCENARIO,
   IMAGE_COMMAND_PROMPT,
   IMAGE_COMMAND_SCENARIO,
   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
@@ -108,6 +112,21 @@ export function buildAssertionContext({
       entry.transport === "electron-ipc" &&
       entry.status === "success",
   );
+  const homeHotpathPrompt =
+    typeof summary?.homeHotpath?.prompt === "string" &&
+    summary.homeHotpath.prompt.trim()
+      ? summary.homeHotpath.prompt
+      : NEWS_PROMPT;
+  const homeHotpathTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" && entry.inputText === homeHotpathPrompt,
+  );
+  const homeHotpathTraceTurnStart = traceTurnStarts.find(
+    (entry) =>
+      entry.inputText === homeHotpathPrompt &&
+      entry.transport === "electron-ipc" &&
+      entry.status === "success",
+  );
   const planTurnStart = backendLedger.find(
     (entry) => entry.kind === "turnStart" && entry.inputText === PLAN_PROMPT,
   );
@@ -157,6 +176,11 @@ export function buildAssertionContext({
     (entry) =>
       entry.kind === "turnStart" &&
       entry.inputText === APPROVAL_REQUEST_RESUME_PROMPT,
+  );
+  const approvalRequestFullAccessTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
   );
   const terminalCanceledAfterAnswerTurnStart = backendLedger.find(
     (entry) =>
@@ -227,6 +251,9 @@ export function buildAssertionContext({
     options.scenario === "cancel-then-continue";
   const isPlanScenario = options.scenario === "plan";
   const isGoalScenario = options.scenario === "goal";
+  const isHomeHotpathScenario =
+    options.scenario === HOME_HOTPATH_SCENARIO ||
+    options.scenario === HOME_HOTPATH_GREETING_SCENARIO;
   const isImageCommandScenario =
     options.scenario === IMAGE_COMMAND_SCENARIO ||
     options.scenario === PLAIN_IMAGE_INTENT_SCENARIO;
@@ -256,6 +283,8 @@ export function buildAssertionContext({
     options.scenario === APPROVAL_REQUEST_DECLINE_SCENARIO;
   const isApprovalRequestCancelScenario =
     options.scenario === APPROVAL_REQUEST_CANCEL_SCENARIO;
+  const isApprovalRequestFullAccessScenario =
+    options.scenario === APPROVAL_REQUEST_FULL_ACCESS_SCENARIO;
   const isApprovalRequestDecisionScenario =
     isApprovalRequestDeclineScenario || isApprovalRequestCancelScenario;
   const isTerminalCanceledAfterAnswerScenario =
@@ -315,6 +344,8 @@ export function buildAssertionContext({
                       : isApprovalRequestResumeScenario ||
                           isApprovalRequestDecisionScenario
                         ? approvalRequestResumeTurnStart?.asterChatRequest
+                        : isApprovalRequestFullAccessScenario
+                          ? approvalRequestFullAccessTurnStart?.asterChatRequest
                         : isTerminalCanceledAfterAnswerScenario
                           ? terminalCanceledAfterAnswerTurnStart?.asterChatRequest
                           : isTerminalFailedAfterAnswerScenario
@@ -331,7 +362,9 @@ export function buildAssertionContext({
                                       ? expertRuntimeTurnStartForAssertions?.asterChatRequest
                                       : isContentFactoryArticleWorkspaceScenario
                                         ? {}
-                                        : newsTurnStart?.asterChatRequest) ??
+                                        : isHomeHotpathScenario
+                                          ? homeHotpathTurnStart?.asterChatRequest
+                                          : newsTurnStart?.asterChatRequest) ??
     {};
   const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
   const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
@@ -385,7 +418,10 @@ export function buildAssertionContext({
     ? planTurnStart?.inputText === PLAN_PROMPT
     : isGoalScenario
       ? goalTurnStart?.inputText === GOAL_PROMPT
-      : isImageCommandScenario
+      : isHomeHotpathScenario
+        ? homeHotpathTurnStart?.inputText === homeHotpathPrompt ||
+          homeHotpathTraceTurnStart?.inputText === homeHotpathPrompt
+        : isImageCommandScenario
         ? imageCommandTurnStart?.inputText === expectedImageIntentRoutedPrompt
         : isInputbarRichRestoreScenario
           ? String(inputbarRichRestoreTurnStart?.inputText || "").includes(
@@ -410,6 +446,9 @@ export function buildAssertionContext({
                         isApprovalRequestDecisionScenario
                       ? approvalRequestResumeTurnStart?.inputText ===
                         APPROVAL_REQUEST_RESUME_PROMPT
+                      : isApprovalRequestFullAccessScenario
+                        ? approvalRequestFullAccessTurnStart?.inputText ===
+                          APPROVAL_REQUEST_FULL_ACCESS_PROMPT
                       : isTerminalCanceledAfterAnswerScenario
                         ? terminalCanceledAfterAnswerTurnStart?.inputText ===
                           TERMINAL_CANCELED_AFTER_ANSWER_PROMPT
@@ -468,6 +507,9 @@ export function buildAssertionContext({
     planImplementationTurnStart,
     newsTurnStart,
     newsTraceTurnStart,
+    homeHotpathPrompt,
+    homeHotpathTurnStart,
+    homeHotpathTraceTurnStart,
     planTurnStart,
     goalTurnStart,
     inputbarRichRestoreTurnStart,
@@ -479,6 +521,7 @@ export function buildAssertionContext({
     liveTailCommitTurnStart,
     electronResizeReflowTurnStart,
     approvalRequestResumeTurnStart,
+    approvalRequestFullAccessTurnStart,
     terminalCanceledAfterAnswerTurnStart,
     terminalFailedAfterAnswerTurnStart,
     terminalStaleGuardFirstTurnStart,
@@ -497,6 +540,7 @@ export function buildAssertionContext({
     isCancelThenContinueScenario,
     isPlanScenario,
     isGoalScenario,
+    isHomeHotpathScenario,
     isImageCommandScenario,
     isInputbarRichRestoreScenario,
     isInputbarPendingSteerRichRestoreScenario,
@@ -510,6 +554,7 @@ export function buildAssertionContext({
     isApprovalRequestResumeScenario,
     isApprovalRequestDeclineScenario,
     isApprovalRequestCancelScenario,
+    isApprovalRequestFullAccessScenario,
     isApprovalRequestDecisionScenario,
     isTerminalCanceledAfterAnswerScenario,
     isTerminalFailedAfterAnswerScenario,

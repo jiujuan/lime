@@ -325,6 +325,10 @@ function hasUsefulSkillResultDetail(value: unknown): boolean {
   return Boolean(detail && !looksLikeSkillToolGateDetail(detail));
 }
 
+function hasStructuredContentDetail(value: unknown): boolean {
+  return Boolean(extractStructuredToolDetailText(value));
+}
+
 function isWorkspaceSkillRuntimeEnableRecord(
   record: Record<string, unknown>,
 ): boolean {
@@ -567,12 +571,21 @@ function hasProtocolEnvelope(
 export function shouldHideProtocolToolResultEnvelope(params: {
   toolName?: string;
   rawResultText: string;
+  structuredContent?: unknown;
 }): boolean {
   const parsed = parseStructuredToolResult(params.rawResultText);
   if (isCommandLikeToolName(params.toolName)) {
     return false;
   }
-  if (!parsed || !hasProtocolEnvelope(parsed) || hasUserFacingDetail(parsed)) {
+  if (!parsed || !hasProtocolEnvelope(parsed)) {
+    return false;
+  }
+
+  if (hasStructuredContentDetail(params.structuredContent)) {
+    return true;
+  }
+
+  if (hasUserFacingDetail(parsed)) {
     return false;
   }
 
@@ -628,10 +641,16 @@ export function shouldHideToolResultEnvelope(params: {
   metadata?: unknown;
   result?: unknown;
 }): boolean {
+  const resultRecord = asRecord(params.result);
+  const structuredContent =
+    resultRecord?.structuredContent ?? resultRecord?.structured_content;
   return (
     shouldHideImageTaskToolResultEnvelope(params) ||
     shouldHideServiceSkillToolResultEnvelope(params) ||
     shouldHideSkillToolGateResultEnvelope(params) ||
-    shouldHideProtocolToolResultEnvelope(params)
+    shouldHideProtocolToolResultEnvelope({
+      ...params,
+      structuredContent,
+    })
   );
 }

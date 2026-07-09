@@ -407,6 +407,87 @@ impl ExecutionBackend for RunningCountingBackend {
     }
 }
 
+#[derive(Default)]
+pub(in crate::runtime::tests) struct ApprovalCancelRespondTerminalBackend {
+    pub(in crate::runtime::tests) cancel_count: AtomicUsize,
+}
+
+#[async_trait]
+impl ExecutionBackend for ApprovalCancelRespondTerminalBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new(
+            "tool.started",
+            json!({
+                "toolCallId": "approval-tool-1",
+                "toolName": "BrowserControl",
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "action.required",
+            json!({
+                "requestId": "approval-cancel-1",
+                "actionId": "approval-cancel-1",
+                "actionType": "tool_confirmation",
+                "availableDecisions": ["allow_once", "decline", "cancel"],
+                "toolCallId": "approval-tool-1",
+                "toolName": "BrowserControl",
+                "prompt": "是否允许浏览器控制？",
+            }),
+        ))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.cancel_count.fetch_add(1, Ordering::SeqCst);
+        sink.emit(RuntimeEvent::new(
+            "turn.canceled",
+            json!({ "backend": "test_cancel_turn" }),
+        ))
+    }
+
+    async fn respond_action(
+        &self,
+        request: ActionRespondRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new(
+            "action.resolved",
+            json!({
+                "requestId": request.request_id,
+                "actionId": request.request_id,
+                "actionType": "tool_confirmation",
+                "decision": "cancel",
+                "confirmed": false,
+                "toolCallId": "approval-tool-1",
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "tool.failed",
+            json!({
+                "toolCallId": "approval-tool-1",
+                "toolName": "BrowserControl",
+                "error": "用户已取消",
+                "status": "failed",
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "turn.canceled",
+            json!({
+                "backend": "action_respond",
+                "reason": "approval_request_cancelled",
+            }),
+        ))
+    }
+}
+
 pub(in crate::runtime::tests) struct TurnCompletedRecordingBackend {
     pub(in crate::runtime::tests) requests: Mutex<Vec<ExecutionRequest>>,
 }

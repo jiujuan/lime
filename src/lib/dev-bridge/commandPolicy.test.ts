@@ -713,6 +713,21 @@ describe("commandPolicy", () => {
       }),
     ).toBe("app-server-read");
     expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "voice-transcription-polish",
+              method: "voiceTranscription/polishText",
+              params: {
+                text: "帮我整理整理这段话",
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_drain_events", {
         request: { limit: 20 },
       }),

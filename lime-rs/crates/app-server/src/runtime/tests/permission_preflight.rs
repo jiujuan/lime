@@ -579,6 +579,100 @@ async fn browser_control_preflight_cancel_stops_turn() {
     );
 }
 
+#[tokio::test]
+async fn approval_cancel_skips_backend_cancel_when_action_response_already_terminal() {
+    let backend = Arc::new(support::ApprovalCancelRespondTerminalBackend::default());
+    let core = RuntimeCore::with_backend(backend.clone());
+    let session_id = format!("{SESSION_ID}_respond_terminal_cancel");
+    let thread_id = format!("{THREAD_ID}_respond_terminal_cancel");
+    let turn_id = format!("{TURN_ID}_respond_terminal_cancel");
+
+    core.start_session(AgentSessionStartParams {
+        session_id: Some(session_id.clone()),
+        thread_id: Some(thread_id.clone()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-permission".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: session_id.clone(),
+            turn_id: Some(turn_id.clone()),
+            input: AgentInput {
+                text: "打开浏览器并执行需要权限的操作".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: true,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("backend should request approval");
+
+    let before = read_thread_for(&core, &session_id);
+    assert_eq!(before["status"].as_str(), Some("waitingAction"));
+    let request_id = "approval-cancel-1";
+
+    let responded = core
+        .respond_action(
+            AgentSessionActionRespondParams {
+                session_id: session_id.clone(),
+                request_id: request_id.to_string(),
+                action_type: AgentSessionActionType::ToolConfirmation,
+                decision: Some(AgentSessionApprovalDecision::Cancel),
+                confirmed: None,
+                response: Some("{\"answer\":\"取消\"}".to_string()),
+                user_data: Some(json!({ "answer": "取消" })),
+                metadata: None,
+                event_name: None,
+                action_scope: Some(AgentSessionActionScope {
+                    session_id: Some(session_id.clone()),
+                    thread_id: Some(thread_id.clone()),
+                    turn_id: Some(turn_id.clone()),
+                }),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("cancel action response with backend terminal should not duplicate terminal");
+
+    let event_types = responded
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"action.resolved"));
+    assert!(event_types.contains(&"tool.failed"));
+    assert_eq!(
+        event_types
+            .iter()
+            .filter(|event_type| **event_type == "turn.canceled")
+            .count(),
+        1
+    );
+    assert_eq!(
+        backend
+            .cancel_count
+            .load(std::sync::atomic::Ordering::SeqCst),
+        0
+    );
+
+    let after = read_thread_for(&core, &session_id);
+    assert_eq!(after["status"].as_str(), Some("canceled"));
+    assert_eq!(
+        after["pending_requests"]
+            .as_array()
+            .expect("pending requests")
+            .len(),
+        0
+    );
+}
+
 fn browser_control_runtime_options() -> RuntimeOptions {
     browser_control_runtime_options_for(SESSION_ID, TURN_ID)
 }

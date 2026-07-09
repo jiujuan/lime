@@ -61,7 +61,8 @@ export function resolveTaskCenterNewTaskPageRequestPlan({
   }
 
   const normalizedRequestedProjectId =
-    requestedProjectId === undefined
+    requestedProjectId === undefined ||
+    (requestedProjectId === null && normalizedInitialSessionId)
       ? normalizeProjectId(externalProjectId)
       : normalizeProjectId(requestedProjectId);
   const normalizedExternalProjectId = normalizeProjectId(externalProjectId);

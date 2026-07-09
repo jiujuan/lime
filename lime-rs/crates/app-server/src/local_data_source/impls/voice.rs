@@ -58,6 +58,13 @@ impl VoiceAppDataSource for LocalAppDataSource {
         voice_asr_credentials::transcribe_voice_audio(params).await
     }
 
+    async fn polish_voice_text(
+        &self,
+        params: VoiceTranscriptionPolishTextParams,
+    ) -> Result<VoiceTranscriptionPolishTextResponse, RuntimeCoreError> {
+        voice_text_processing::polish_voice_text(params).await
+    }
+
     async fn list_voice_instructions(
         &self,
     ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {

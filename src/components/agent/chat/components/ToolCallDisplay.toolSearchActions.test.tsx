@@ -188,15 +188,6 @@ describe("ToolCallDisplay tool search and actions", () => {
           startTime: new Date("2026-03-20T12:20:09.000Z"),
         },
         {
-          id: "tool-send-user-message-1",
-          name: "SendUserMessage",
-          arguments: JSON.stringify({ message: "修复已完成" }),
-          status: "completed",
-          result: { success: true, output: "Message delivered to user." },
-          startTime: new Date("2026-03-20T12:20:09.500Z"),
-          endTime: new Date("2026-03-20T12:20:09.900Z"),
-        },
-        {
           id: "tool-list-peers-1",
           name: "ListPeers",
           arguments: JSON.stringify({}),
@@ -253,8 +244,6 @@ describe("ToolCallDisplay tool search and actions", () => {
     expect(container.textContent).toContain("已加载技能 lime-governance");
     expect(container.textContent).toContain("已找到 src/**/*.tsx");
     expect(container.textContent).toContain("等待输入 需要继续吗？");
-    expect(container.textContent).toContain("已发送");
-    expect(container.textContent).toContain("修复已完成");
     expect(container.textContent).toContain("已查看 当前子代理组");
     expect(container.textContent).toContain("已创建 当前子代理组");
     expect(container.textContent).toContain("已删除 当前子代理组");

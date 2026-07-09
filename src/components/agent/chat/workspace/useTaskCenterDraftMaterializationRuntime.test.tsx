@@ -170,6 +170,11 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
     vi.useRealTimers();
   });
 
+  it("输入预热延迟应保持在首发热路径预算内", () => {
+    expect(TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS).toBeGreaterThan(0);
+    expect(TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS).toBeLessThanOrEqual(50);
+  });
+
   it("输入预热只应创建底层会话，不应提交并移除草稿标签", async () => {
     const createFreshSession = vi.fn(async () => "session-warmup");
     const upsertTaskCenterOpenTab = vi.fn();
@@ -195,6 +200,7 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
 
     expect(createFreshSession).toHaveBeenCalledWith("新对话", {
       preserveCurrentSnapshot: false,
+      skipSessionStartHooks: true,
     });
     expect(upsertTaskCenterOpenTab).not.toHaveBeenCalled();
     const latestSnapshot = snapshots.at(-1);
@@ -309,6 +315,7 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
     expect(materializedSessionId).toBe("session-immediate-send");
     expect(createFreshSession).toHaveBeenCalledWith("新对话", {
       preserveCurrentSnapshot: false,
+      skipSessionStartHooks: true,
     });
     expect(
       snapshots.at(-1)?.draftTabs.some((tab) => tab.id === draftTabId),
@@ -396,9 +403,7 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
       root.render(
         <Probe
           createFreshSession={createFreshSession}
-          markTaskCenterEmbeddedHomeSession={
-            markTaskCenterEmbeddedHomeSession
-          }
+          markTaskCenterEmbeddedHomeSession={markTaskCenterEmbeddedHomeSession}
           markTaskCenterLocalSessionOverride={
             markTaskCenterLocalSessionOverride
           }

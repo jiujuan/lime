@@ -268,12 +268,19 @@ describe("ToolCallDisplay", () => {
         success: true,
         output: JSON.stringify({
           request_metadata: {
-            event: "agentSession/turn/start",
-            session_id: "session-structured",
+            projection: "mcp_tool_result_projection",
+            trace_id: "trace-structured-content",
           },
           diagnostics: {
-            projection: "mcp_tool_result_projection",
+            elapsed_ms: 12,
+            raw_transport_payload: "doc-hidden-envelope",
           },
+          content: [
+            {
+              type: "text",
+              text: "control-plane envelope only; user answer is stored in structuredContent",
+            },
+          ],
         }),
         structuredContent: {
           answer: "MCP 结构化答案已进入 GUI",
@@ -296,7 +303,9 @@ describe("ToolCallDisplay", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("MCP 结构化答案已进入 GUI");
     expect(container.textContent).toContain("doc-1");
+    expect(container.textContent).not.toContain("control-plane envelope only");
     expect(container.textContent).not.toContain("request_metadata");
+    expect(container.textContent).not.toContain("doc-hidden-envelope");
     expect(container.textContent).not.toContain("mcp_tool_result_projection");
   });
 

@@ -26,11 +26,10 @@ import {
   type TaskCenterDraftTab,
 } from "./agentChatWorkspaceHelpers";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
-import {
-  markTaskCenterDraftTabRunning,
-} from "./taskCenterDraftTabs";
+import { markTaskCenterDraftTabRunning } from "./taskCenterDraftTabs";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { logAgentDebug } from "@/lib/agentDebug";
+import { applyHomeHotpathPendingShell } from "./homeHotpathPendingShell";
 
 type TaskCenterDraftSendExecutionStrategy = NonNullable<
   TaskCenterDraftSendRequest["sendExecutionStrategy"]
@@ -94,7 +93,10 @@ interface UseTaskCenterDraftSendDispatchRuntimeParams {
       syncRoute?: boolean;
     },
   ) => void;
-  onNonMaterializedSessionReady?: (sessionId: string) => void;
+  onNonMaterializedSessionReady?: (
+    sessionId: string,
+    options?: { sourceDraftTabId?: string | null },
+  ) => void;
   restoreInput?: (value: string) => void;
   sendRef: MutableRefObject<WorkspaceHandleSend>;
   workspaceId?: string | null;
@@ -122,7 +124,10 @@ interface UseTaskCenterEmptyStateSendRuntimeParams {
   setHomePendingPreviewRequest: Dispatch<
     SetStateAction<TaskCenterDraftSendRequest | null>
   >;
-  onNonMaterializedSessionReady?: (sessionId: string) => void;
+  onNonMaterializedSessionReady?: (
+    sessionId: string,
+    options?: { sourceDraftTabId?: string | null },
+  ) => void;
 }
 
 export function useTaskCenterHomePendingPreviewRuntime({
@@ -137,10 +142,12 @@ export function useTaskCenterHomePendingPreviewRuntime({
 } {
   const committedRequestIdsRef = useRef<Set<string>>(new Set());
   const paintedRequestIdsRef = useRef<Set<string>>(new Set());
+  const shouldRenderPendingPreview =
+    Boolean(homePendingPreviewRequest) &&
+    (!homePendingPreviewRequest?.sessionReady || displayMessagesLength === 0);
   const homePendingPreviewMessages = useMemo(
     () =>
-      homePendingPreviewRequest &&
-      displayMessagesLength === 0
+      homePendingPreviewRequest && shouldRenderPendingPreview
         ? buildHomePendingPreviewMessages(
             homePendingPreviewRequest,
             executionStrategy,
@@ -148,9 +155,9 @@ export function useTaskCenterHomePendingPreviewRuntime({
           )
         : [],
     [
-      displayMessagesLength,
       executionStrategy,
       homePendingPreviewRequest,
+      shouldRenderPendingPreview,
       soulCopy,
     ],
   );
@@ -263,7 +270,6 @@ export function useTaskCenterEmptyStateSendRuntime({
       const images = payload.images ?? [];
       const sendOptions = payload.sendOptions;
       const normalizedText = text.trim();
-      setInput("");
       const activeDraftTabId = activeDraftTabIdRef.current;
       if (
         (agentEntry === "claw" || agentEntry === "new-task") &&
@@ -272,6 +278,23 @@ export function useTaskCenterEmptyStateSendRuntime({
         homeSendInFlightRef.current = true;
         const submittedAt = triggeredAt;
         const requestId = createTaskCenterDraftSendRequestId();
+        const tracedSendOptions: HandleSendOptions = {
+          ...(sendOptions || {}),
+          skipWorkspaceCommandRouting: true,
+          skipSessionRestore: true,
+          skipSessionStartHooks: true,
+          skipPreSubmitResume: true,
+          requestMetadata: mergeAgentUiPerformanceTraceMetadata(
+            sendOptions?.requestMetadata,
+            {
+              requestId,
+              sessionId: null,
+              source: "task-center-empty-state",
+              submittedAt,
+              workspaceId: taskCenterWorkspaceId ?? null,
+            },
+          ),
+        };
         recordAgentUiPerformanceMetric("homeInput.submit", {
           hasDraftTab: true,
           inputbarHandlerToHomeSubmitMs: Math.max(
@@ -288,16 +311,22 @@ export function useTaskCenterEmptyStateSendRuntime({
         });
         const request: TaskCenterDraftSendRequest = {
           id: requestId,
-          draftTabId: activeDraftTabId,
+          draftTabId: requestId,
           text,
           images,
-          sendOptions,
+          sendOptions: tracedSendOptions,
           submittedAt,
-          materializeDraft: true,
+          materializeDraft: false,
+          dispatchState: "dispatched",
           source: "task-center-empty-state",
           triggerSource,
         };
+        const pendingShell = applyHomeHotpathPendingShell({
+          requestId,
+          text,
+        });
         flushHomePendingPreviewShell(() => {
+          setInput("");
           if (
             displayMessagesLength > 0 ||
             turnsLength > 0 ||
@@ -308,6 +337,7 @@ export function useTaskCenterEmptyStateSendRuntime({
           setTaskCenterDraftSendRequest(request);
           setHomePendingPreviewRequest(request);
         });
+        pendingShell.refresh();
         scheduleAfterNextPaint(() => {
           setTaskCenterDraftTabs((current) =>
             markTaskCenterDraftTabRunning({
@@ -315,6 +345,80 @@ export function useTaskCenterEmptyStateSendRuntime({
               draftTabId: activeDraftTabId,
               title: resolveTaskCenterDraftSendTitle(text),
             }),
+          );
+          recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
+            elapsedMs: Date.now() - submittedAt,
+            requestId,
+            sessionId: null,
+            source: "task-center-empty-state",
+            workspaceId: taskCenterWorkspaceId ?? null,
+          });
+          void handleSend(
+            images,
+            undefined,
+            undefined,
+            text,
+            undefined,
+            undefined,
+            tracedSendOptions,
+          ).then(
+            (result) => {
+              recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
+                durationMs: Date.now() - submittedAt,
+                requestId,
+                result,
+                sessionId: null,
+                source: "task-center-empty-state",
+                workspaceId: taskCenterWorkspaceId ?? null,
+              });
+              if (result !== true) {
+                pendingShell.clear(true);
+                setInput(text);
+                setHomePendingPreviewRequest((current) =>
+                  current?.id === requestId ? null : current,
+                );
+              } else {
+                const readySessionId =
+                  activeSessionIdRef?.current?.trim() || null;
+                if (readySessionId) {
+                  onNonMaterializedSessionReady?.(readySessionId, {
+                    sourceDraftTabId: activeDraftTabId,
+                  });
+                  setHomePendingPreviewRequest((current) =>
+                    current?.id === requestId
+                      ? {
+                          ...current,
+                          draftTabId: readySessionId,
+                          sessionReady: true,
+                        }
+                      : current,
+                  );
+                }
+              }
+              setTaskCenterDraftSendRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              homeSendInFlightRef.current = false;
+            },
+            (error) => {
+              recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+                durationMs: Date.now() - submittedAt,
+                error: error instanceof Error ? error.message : String(error),
+                requestId,
+                sessionId: null,
+                source: "task-center-empty-state",
+                workspaceId: taskCenterWorkspaceId ?? null,
+              });
+              pendingShell.clear(true);
+              setInput(text);
+              setTaskCenterDraftSendRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              setHomePendingPreviewRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              homeSendInFlightRef.current = false;
+            },
           );
         });
         recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
@@ -352,6 +456,7 @@ export function useTaskCenterEmptyStateSendRuntime({
         if (!existingSessionId) {
           const tracedSendOptions: HandleSendOptions = {
             ...(sendOptions || {}),
+            skipWorkspaceCommandRouting: true,
             skipSessionRestore: true,
             skipSessionStartHooks: true,
             skipPreSubmitResume: true,
@@ -378,10 +483,16 @@ export function useTaskCenterEmptyStateSendRuntime({
             source: "empty-state",
             triggerSource,
           };
+          const pendingShell = applyHomeHotpathPendingShell({
+            requestId,
+            text,
+          });
           flushHomePendingPreviewShell(() => {
+            setInput("");
             setTaskCenterDraftSendRequest(previewRequest);
             setHomePendingPreviewRequest(previewRequest);
           });
+          pendingShell.refresh();
           recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
             durationMs: Date.now() - submittedAt,
             requestId,
@@ -395,6 +506,13 @@ export function useTaskCenterEmptyStateSendRuntime({
             workspaceId: taskCenterWorkspaceId,
           });
           scheduleAfterNextPaint(() => {
+            recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
+              elapsedMs: Date.now() - submittedAt,
+              requestId,
+              sessionId: null,
+              source: "empty-state",
+              workspaceId: taskCenterWorkspaceId ?? null,
+            });
             void handleSend(
               images,
               undefined,
@@ -413,13 +531,18 @@ export function useTaskCenterEmptyStateSendRuntime({
                   source: "empty-state",
                   workspaceId: taskCenterWorkspaceId ?? null,
                 });
-                logAgentDebug("AgentChatPage", "homeInput.directDispatch.done", {
-                  requestId,
-                  result,
-                  source: "empty-state",
-                  workspaceId: taskCenterWorkspaceId,
-                });
+                logAgentDebug(
+                  "AgentChatPage",
+                  "homeInput.directDispatch.done",
+                  {
+                    requestId,
+                    result,
+                    source: "empty-state",
+                    workspaceId: taskCenterWorkspaceId,
+                  },
+                );
                 if (result !== true) {
+                  pendingShell.clear(true);
                   setInput(text);
                   setHomePendingPreviewRequest((current) =>
                     current?.id === requestId ? null : current,
@@ -465,6 +588,7 @@ export function useTaskCenterEmptyStateSendRuntime({
                   },
                   { level: "error" },
                 );
+                pendingShell.clear(true);
                 setInput(text);
                 setTaskCenterDraftSendRequest((current) =>
                   current?.id === requestId ? null : current,
@@ -480,6 +604,7 @@ export function useTaskCenterEmptyStateSendRuntime({
         }
         const tracedSendOptions: HandleSendOptions = {
           ...(sendOptions || {}),
+          skipWorkspaceCommandRouting: true,
           skipSessionRestore: true,
           skipSessionStartHooks: true,
           skipPreSubmitResume: true,
@@ -506,10 +631,16 @@ export function useTaskCenterEmptyStateSendRuntime({
           source: "empty-state",
           triggerSource,
         };
+        const pendingShell = applyHomeHotpathPendingShell({
+          requestId,
+          text,
+        });
         flushHomePendingPreviewShell(() => {
+          setInput("");
           setTaskCenterDraftSendRequest(previewRequest);
           setHomePendingPreviewRequest(previewRequest);
         });
+        pendingShell.refresh();
         recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
           durationMs: Date.now() - submittedAt,
           requestId,
@@ -518,6 +649,13 @@ export function useTaskCenterEmptyStateSendRuntime({
           workspaceId: taskCenterWorkspaceId,
         });
         scheduleAfterNextPaint(() => {
+          recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
+            elapsedMs: Date.now() - submittedAt,
+            requestId,
+            sessionId: existingSessionId,
+            source: "empty-state",
+            workspaceId: taskCenterWorkspaceId ?? null,
+          });
           void handleSend(
             images,
             undefined,
@@ -537,6 +675,7 @@ export function useTaskCenterEmptyStateSendRuntime({
                 workspaceId: taskCenterWorkspaceId ?? null,
               });
               if (result !== true) {
+                pendingShell.clear(true);
                 setInput(text);
                 setHomePendingPreviewRequest((current) =>
                   current?.id === requestId ? null : current,
@@ -556,6 +695,7 @@ export function useTaskCenterEmptyStateSendRuntime({
                 source: "empty-state",
                 workspaceId: taskCenterWorkspaceId ?? null,
               });
+              pendingShell.clear(true);
               setInput(text);
               setTaskCenterDraftSendRequest((current) =>
                 current?.id === requestId ? null : current,
@@ -720,12 +860,20 @@ export function useTaskCenterDraftSendDispatchRuntime({
   ]);
 
   useEffect(() => {
-    if (messagesLength === 0) {
+    if (
+      messagesLength === 0 ||
+      !taskCenterDraftSendRequest ||
+      taskCenterDraftSendRequest.materializeDraft
+    ) {
       return;
     }
 
     setTaskCenterDraftSendRequest((current) => {
-      if (!current || current.materializeDraft) {
+      if (
+        !current ||
+        current.materializeDraft ||
+        current.id !== taskCenterDraftSendRequest.id
+      ) {
         return current;
       }
       const readySessionId = resolveNonMaterializedReadySessionId(
@@ -748,6 +896,7 @@ export function useTaskCenterDraftSendDispatchRuntime({
     onNonMaterializedSessionReady,
     setHomePendingPreviewRequest,
     setTaskCenterDraftSendRequest,
+    taskCenterDraftSendRequest,
   ]);
 
   useEffect(() => {
@@ -817,15 +966,20 @@ export function useTaskCenterDraftSendDispatchRuntime({
       };
 
       void (async () => {
+        const readyMaterializedSessionId = latestRequest.materializeDraft
+          ? (materializedSessionIdsRef.current.get(latestRequest.draftTabId) ??
+            null)
+          : null;
         const hasPrewarmedMaterializedSession =
           latestRequest.materializeDraft &&
-          (materializedSessionIdsRef.current.has(latestRequest.draftTabId) ||
+          (Boolean(readyMaterializedSessionId) ||
             prewarmedDraftSessionIdsRef?.current.has(latestRequest.draftTabId));
         const materializedSessionId = latestRequest.materializeDraft
-          ? await materializeDraftTab(latestRequest.draftTabId, {
+          ? (readyMaterializedSessionId ??
+            (await materializeDraftTab(latestRequest.draftTabId, {
               reason: "send",
               commit: false,
-            })
+            })))
           : null;
         if (latestRequest.materializeDraft && !materializedSessionId) {
           recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
@@ -842,6 +996,20 @@ export function useTaskCenterDraftSendDispatchRuntime({
 
         const dispatchSessionId =
           materializedSessionId ?? latestRequest.draftTabId;
+        if (latestRequest.materializeDraft && materializedSessionId) {
+          const markMaterializedSessionReady = (
+            current: TaskCenterDraftSendRequest | null,
+          ) =>
+            current?.id === latestRequest.id
+              ? {
+                  ...current,
+                  draftTabId: materializedSessionId,
+                  sessionReady: true,
+                }
+              : current;
+          setTaskCenterDraftSendRequest(markMaterializedSessionReady);
+          setHomePendingPreviewRequest(markMaterializedSessionReady);
+        }
         if (latestRequest.materializeDraft && materializedSessionId) {
           const commitOptions: Parameters<
             typeof commitMaterializedDraftTab
@@ -911,9 +1079,15 @@ export function useTaskCenterDraftSendDispatchRuntime({
               restoreInput?.(latestRequest.text);
             }
             const latestCounts = messageCountsRef.current;
+            const latestActiveSessionId =
+              latestDispatchContextRef.current.currentSessionId?.trim() ||
+              null;
             clearRequest({
               keepHomePreview:
-                result === true && latestCounts.messagesLength === 0,
+                result === true &&
+                (latestCounts.messagesLength === 0 ||
+                  (latestRequest.materializeDraft &&
+                    latestActiveSessionId !== dispatchSessionId)),
             });
           },
           (error) => {

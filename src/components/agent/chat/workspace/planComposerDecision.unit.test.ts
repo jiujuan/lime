@@ -7,9 +7,7 @@ import {
   selectLatestPlanComposerDecision,
 } from "./planComposerDecision";
 
-function createAction(
-  overrides: Partial<ActionRequired> = {},
-): ActionRequired {
+function createAction(overrides: Partial<ActionRequired> = {}): ActionRequired {
   return {
     requestId: "request-1",
     actionType: "ask_user",
@@ -79,6 +77,23 @@ describe("planComposerDecision", () => {
     });
 
     expect(selectLatestPlanComposerDecision([first, second])).toBe(second);
+  });
+
+  it("已进入提交中的计划确认不应继续占用输入区", () => {
+    const submitted = createAction({ requestId: "plan-submitted" });
+
+    expect(
+      selectLatestPlanComposerDecision(
+        [submitted],
+        [
+          {
+            requestId: "plan-submitted",
+            actionType: "ask_user",
+            status: "submitted",
+          },
+        ],
+      ),
+    ).toBeNull();
   });
 
   it("过滤 pendingActions 时只移除被选中的计划确认", () => {

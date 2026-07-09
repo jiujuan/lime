@@ -118,9 +118,9 @@ pub use prompt::{
 pub use protocol::{
     build_diagnostics_runtime_status_metadata, AgentActionRequiredScope, AgentArtifactSignal,
     AgentEvent, AgentImageAttachment, AgentMessage, AgentMessageContent, AgentOp,
-    AgentProviderTraceStage, AgentRuntimeStatus, AgentTokenUsage, AgentToolImage,
-    AgentToolProgressPayload, AgentToolResult, AgentUserInputOp, AgentUserPreferences,
-    TextDeltaBatchBoundary,
+    AgentProviderTraceEvent, AgentProviderTraceStage, AgentRuntimeStatus, AgentTokenUsage,
+    AgentToolImage, AgentToolProgressPayload, AgentToolResult, AgentUserInputOp,
+    AgentUserPreferences, TextDeltaBatchBoundary,
 };
 pub use protocol_projection::{project_item_runtime, project_turn_runtime};
 pub use provider_configuration::{

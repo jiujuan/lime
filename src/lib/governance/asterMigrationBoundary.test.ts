@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = process.cwd();
 
+function readTextIfExists(path: string): string {
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
 function rustProductionSource(source: string): string {
   return source
     .replace(/^#\[cfg\(test\)\]\r?\nuse [^\r\n]+;\r?\n/gmu, "")
@@ -21,6 +25,29 @@ const CURRENT_RUNTIME_CRATES = [
   "thread-store",
   "tool-runtime",
   "agent-runtime",
+];
+
+const AGENT_COMPAT_CURRENT_OWNER_DEPENDENCY_BURN_DOWN_ALLOWLIST = [
+  "document-preview",
+  "model-provider",
+  "tool-runtime",
+];
+
+const AGENT_COMPAT_FORBIDDEN_CURRENT_OWNER_DEPENDENCIES = [
+  "agent-protocol",
+  "agent-runtime",
+  "thread-store",
+  "runtime-core",
+  "lime-mcp",
+  "lime-skills",
+  "lime-media-runtime",
+  "media-runtime",
+  "app-server",
+  "app-server-client",
+  "app-server-daemon",
+  "app-server-protocol",
+  "app-server-test-client",
+  "app-server-transport",
 ];
 
 const DIRECT_ASTER_DEPENDENCY_MIGRATED_CRATES = [
@@ -48,6 +75,7 @@ const DELETED_ASTER_VENDOR_PUBLIC_MODULES = [
   "lsp",
   "map",
   "memory",
+  "mcp",
   "notifications",
   "observability",
   "plugins",
@@ -64,36 +92,120 @@ const DELETED_ASTER_VENDOR_PUBLIC_MODULES = [
 
 const DELETED_ASTER_VENDOR_SESSION_PUBLIC_MODULES = ["cleanup", "statistics"];
 
+const AGENT_COMPAT_PRIVATE_PUBLIC_SURFACE_MODULES = [
+  "claude_plugin_cache",
+  "context_mgmt",
+  "execution",
+  "mcp_utils",
+  "media",
+  "posthog",
+  "prompt_template",
+  "scheduler_trait",
+  "security",
+  "slash_commands",
+  "tool_monitor",
+  "user_message_manager",
+  "utils",
+];
+
+const DELETED_ASTER_COMPAT_ZERO_REF_FILES = [
+  "lime-rs/crates/agent-compat/src/claude_plugin_cache.rs",
+  "lime-rs/crates/agent-compat/src/oauth.rs",
+  "lime-rs/crates/agent-compat/src/agents/platform_tools.rs",
+  "lime-rs/crates/agent-compat/src/agents/schedule_tool.rs",
+];
+
+const DELETED_ASTER_COMPAT_NOOP_STUB_FILES = [
+  "lime-rs/crates/agent-compat/src/hints/mod.rs",
+  "lime-rs/crates/agent-compat/src/posthog.rs",
+  "lime-rs/crates/agent-compat/src/security.rs",
+  "lime-rs/crates/agent-compat/src/slash_commands.rs",
+  "lime-rs/crates/agent-compat/src/tool_monitor.rs",
+  "lime-rs/crates/agent-compat/src/user_message_manager.rs",
+];
+
+const DELETED_ASTER_COMPAT_MIGRATED_HELPER_FILES = [
+  "lime-rs/crates/agent-compat/src/network/mod.rs",
+  "lime-rs/crates/agent-compat/src/token_counter.rs",
+];
+
+const DELETED_ASTER_COMPAT_NOOP_STUB_SNIPPETS = [
+  "mod posthog;",
+  "mod security;",
+  "mod slash_commands;",
+  "mod hints;",
+  "mod tool_monitor;",
+  "mod user_message_manager;",
+  "load_hint_files",
+  "ASTER_HINTS_FILENAME",
+  "get_recipe_for_command",
+  "handle_recipe_command",
+  "emit_custom_slash_command_used",
+  "crate::posthog::",
+  "SecurityInspector",
+  "security_inspector",
+  "RepetitionInspector",
+  "with_repetition_inspector",
+  "UserMessageManager",
+];
+
+const DELETED_ASTER_COMPAT_MIGRATED_HELPER_SNIPPETS = [
+  "mod network;",
+  "mod token_counter;",
+  "crate::network::",
+  "should_bypass_system_proxy_for_url",
+  "create_token_counter",
+  "TokenCounter",
+];
+
 const DELETED_ASTER_VENDOR_TASK_TOOL_FILES = [
-  "lime-rs/vendor/aster-rust/crates/aster/src/tools/task_list_tools.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/tools/task_output_tool.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/tools/task_stop_tool.rs",
+  "lime-rs/crates/agent-compat/src/tools/task_list_tools.rs",
+  "lime-rs/crates/agent-compat/src/tools/task_output_tool.rs",
+  "lime-rs/crates/agent-compat/src/tools/task_stop_tool.rs",
 ];
 
 const DELETED_ASTER_VENDOR_TOOL_SEARCH_FILES = [
-  "lime-rs/vendor/aster-rust/crates/aster/src/tools/tool_search_tool.rs",
+  "lime-rs/crates/agent-compat/src/tools/tool_search_tool.rs",
 ];
 
 const DELETED_ASTER_VENDOR_MCP_RESOURCE_TOOL_FILES = [
-  "lime-rs/vendor/aster-rust/crates/aster/src/tools/mcp_resource_tools.rs",
+  "lime-rs/crates/agent-compat/src/tools/mcp_resource_tools.rs",
 ];
 
 const DELETED_ASTER_VENDOR_SKILL_TOOL_FILES = [
-  "lime-rs/vendor/aster-rust/crates/aster/src/skills/tool.rs",
+  "lime-rs/crates/agent-compat/src/skills/tool.rs",
+];
+
+const DELETED_ASTER_VENDOR_SKILLS_PATHS = [
+  "lime-rs/crates/agent-compat/src/skills",
+  "lime-rs/crates/agent-compat/src/agents/skills_extension.rs",
 ];
 
 const DELETED_ASTER_VENDOR_PLAN_MODE_TOOL_FILES = [
-  "lime-rs/vendor/aster-rust/crates/aster/src/tools/plan_mode_tool.rs",
+  "lime-rs/crates/agent-compat/src/tools/plan_mode_tool.rs",
+];
+
+const DELETED_ASTER_VENDOR_SEND_USER_MESSAGE_TOOL_FILES = [
+  "lime-rs/crates/agent-compat/src/tools/send_user_message_tool.rs",
+];
+
+const DELETED_ASTER_VENDOR_ANALYZE_IMAGE_TOOL_FILES = [
+  "lime-rs/crates/agent-compat/src/tools/analyze_image.rs",
+];
+
+const DELETED_ASTER_VENDOR_FILE_MUTATION_TOOL_FILES = [
+  "lime-rs/crates/agent-compat/src/tools/file/write.rs",
+  "lime-rs/crates/agent-compat/src/tools/file/edit.rs",
 ];
 
 const DELETED_ASTER_LSP_FILES = [
   "lime-rs/crates/agent/src/lsp_bridge.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/tools/lsp.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/parser/mod.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/parser/lsp_client.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/parser/lsp_manager.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/parser/symbol_extractor.rs",
-  "lime-rs/vendor/aster-rust/crates/aster/src/parser/types.rs",
+  "lime-rs/crates/agent-compat/src/tools/lsp.rs",
+  "lime-rs/crates/agent-compat/src/parser/mod.rs",
+  "lime-rs/crates/agent-compat/src/parser/lsp_client.rs",
+  "lime-rs/crates/agent-compat/src/parser/lsp_manager.rs",
+  "lime-rs/crates/agent-compat/src/parser/symbol_extractor.rs",
+  "lime-rs/crates/agent-compat/src/parser/types.rs",
 ];
 
 const DELETED_ASTER_MCP_BROWSER_TOOL_FILES = [
@@ -113,6 +225,66 @@ const DELETED_GATEWAY_BACKED_NATIVE_TOOL_WRAPPER_FILES = [
   "lime-rs/crates/agent/src/native_tools/memory_store.rs",
   "lime-rs/crates/agent/src/native_tools/image_tasks.rs",
   "lime-rs/crates/agent/src/native_tools/tool_search.rs",
+];
+
+const MOVED_ASTER_OWNER_REFERENCE_DIRS = [
+  {
+    source: "lime-rs/crates/agent-compat/src/plan",
+    target: "lime-rs/crates/tool-runtime/src/compat/aster_reference/plan",
+    marker: "mod.rs",
+  },
+  {
+    source: "lime-rs/crates/agent-compat/src/rules",
+    target: "lime-rs/crates/agent-runtime/src/compat/aster_reference/rules",
+    marker: "mod.rs",
+  },
+  {
+    source: "lime-rs/crates/agent-compat/src/streaming",
+    target:
+      "lime-rs/crates/model-provider/src/compat/aster_reference/streaming",
+    marker: "mod.rs",
+  },
+];
+
+const DELETED_ASTER_PROVIDER_CANONICAL_DUPLICATE_PATHS = [
+  "lime-rs/crates/agent-compat/src/providers/canonical",
+];
+
+const DELETED_ASTER_COMPAT_MODEL_PATHS = ["lime-rs/crates/agent-compat-models"];
+
+const DELETED_ASTER_COMPAT_TEST_PATHS = ["lime-rs/crates/agent-compat/tests"];
+
+const DELETED_ASTER_COMPAT_SRC_TEST_FILE_PATTERN =
+  /(?:^|\/)(?:tests|.*_tests|.*_property_tests)\.rs$/u;
+
+const DELETED_ASTER_COMPAT_SIGNUP_PATHS = [
+  "lime-rs/crates/agent-compat/src/config/signup_openrouter",
+  "lime-rs/crates/agent-compat/src/config/signup_tetrate",
+];
+
+const DELETED_ASTER_COMPAT_CONFIG_FILES = [
+  "lime-rs/crates/agent-compat/src/config/agents_md_parser.rs",
+  "lime-rs/crates/agent-compat/src/config/config_command.rs",
+  "lime-rs/crates/agent-compat/src/config/config_manager.rs",
+  "lime-rs/crates/agent-compat/src/config/experiments.rs",
+  "lime-rs/crates/agent-compat/src/config/watcher.rs",
+];
+
+const DELETED_ASTER_COMPAT_CONTEXT_HELPER_FILES = [
+  "lime-rs/crates/agent-compat/src/context/agents_md_parser.rs",
+  "lime-rs/crates/agent-compat/src/context/cache_controller.rs",
+  "lime-rs/crates/agent-compat/src/context/compressor.rs",
+  "lime-rs/crates/agent-compat/src/context/context_service.rs",
+  "lime-rs/crates/agent-compat/src/context/context_uri.rs",
+  "lime-rs/crates/agent-compat/src/context/file_mention.rs",
+  "lime-rs/crates/agent-compat/src/context/manager.rs",
+  "lime-rs/crates/agent-compat/src/context/priority_sorter.rs",
+  "lime-rs/crates/agent-compat/src/context/pruner.rs",
+  "lime-rs/crates/agent-compat/src/context/summarizer.rs",
+  "lime-rs/crates/agent-compat/src/context/token_estimator.rs",
+  "lime-rs/crates/agent-compat/src/context/tool_io.rs",
+  "lime-rs/crates/agent-compat/src/context/types.rs",
+  "lime-rs/crates/agent-compat/src/context/window_manager.rs",
 ];
 
 const RUNTIME_TOOL_BRIDGE_ADAPTER_FILES = [
@@ -751,22 +923,33 @@ const MODEL_PROVIDER_STREAM_CONTRACT_REQUIRED_SNIPPETS = [
   "pub fn as_wire_str(self) -> &'static str",
   "pub enum RuntimeReplyInputKind",
   "pub struct RuntimeReplyProviderHandle",
+  "pub struct RuntimeReplyProviderBinding",
   "pub struct RuntimeReplyStreamRequest",
   "pub struct RuntimeReplyProviderStreamStart",
   "pub struct RuntimeReplyProviderStreamTrace",
+  "pub type RuntimeReplyProviderSourceFuture",
+  "pub struct RuntimeReplyProviderSourceBackendCall",
+  "pub trait RuntimeReplyProviderSourceBackend",
+  "pub trait RuntimeReplyProviderExecutionRunner",
+  "pub struct RuntimeReplyProviderExecutionSource",
+  "pub fn run_provider_source_execution",
+  "pub enum ProviderStreamPoll",
+  "pub enum ProviderStreamCancelReason",
+  "pub fn provider_stream_cancel_poll_interval",
+  "pub fn provider_stream_timeout_poll",
+  "pub fn provider_stream_event_poll",
   "RuntimeProviderBackend::AsterCompat",
 ];
 
 const CONFIGURED_REPLY_PROVIDER_REQUIRED_CURRENT_HANDLE_SNIPPETS = [
   "RuntimeReplyProviderHandle",
+  "RuntimeReplyProviderBinding",
   "RuntimeReplyProviderCapabilities",
-  "RuntimeReplyProviderCall",
+  "pub(crate) fn into_compat_provider",
   "RuntimeProviderBackend::AsterCompat",
-  "backend: CompatAsterReplyProviderBackend",
+  "binding: RuntimeReplyProviderBinding<CompatAsterReplyProviderBackend>",
   "struct CompatAsterReplyProviderBackend",
   "pub(crate) fn runtime_handle(&self) -> &RuntimeReplyProviderHandle",
-  "provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>",
-  "provider_call.trace()",
 ];
 
 const PROVIDER_TRACE_RUNTIME_PROVIDER_METADATA_REQUIRED_SNIPPETS = [
@@ -774,6 +957,46 @@ const PROVIDER_TRACE_RUNTIME_PROVIDER_METADATA_REQUIRED_SNIPPETS = [
   "runtime_provider_selector",
   "runtime_provider_protocol",
   "runtime_provider_active_model",
+];
+
+const PROVIDER_TRACE_RUNTIME_METADATA_OWNER_REQUIRED_SNIPPETS = [
+  "pub struct RuntimeReplyProviderTraceMetadata",
+  "pub fn apply_runtime_provider_metadata",
+  "pub fn provider_trace_metadata",
+  "pub fn apply_to_provider_trace_event",
+  "fn model_provider_protocol_wire_value",
+  "runtime_provider_backend",
+  "runtime_provider_selector",
+  "runtime_provider_protocol",
+  "runtime_provider_active_model",
+];
+
+const PROVIDER_TRACE_CURRENT_OWNER_REQUIRED_SNIPPETS = [
+  "pub struct ProviderTraceEvent",
+  "pub struct ProviderTraceFailure",
+  "pub struct ProviderTraceResponseContext",
+  "runtime_provider_backend",
+  "runtime_provider_selector",
+  "runtime_provider_protocol",
+  "runtime_provider_active_model",
+  "pub fn runtime_event_type_for_provider_trace_stage",
+];
+
+const PROVIDER_TRACE_LIME_AGENT_FLATTENED_DTO_REQUIRED_SNIPPETS = [
+  "ProviderTraceEvent",
+  "pub type AgentProviderTraceEvent = ProviderTraceEvent",
+  "ProviderTrace {",
+  "#[serde(flatten)]",
+  "event: AgentProviderTraceEvent",
+];
+
+const PROVIDER_TRACE_RUNTIME_LIFECYCLE_REQUIRED_SNIPPETS = [
+  "pub struct RuntimeProviderTraceAttempt",
+  "pub fn request_started(&self) -> ProviderTraceEvent",
+  "pub fn first_event_received(&mut self) -> Option<ProviderTraceEvent>",
+  "pub fn first_text_delta_received(&mut self, text_chars: usize) -> Option<ProviderTraceEvent>",
+  "pub fn failed(&self, failure: ProviderTraceFailure) -> ProviderTraceEvent",
+  "pub fn canceled(&self, reason: impl Into<String>) -> ProviderTraceEvent",
 ];
 
 const MODEL_RUNTIME_PROVIDER_FORBIDDEN_DEAD_EXECUTION_SNIPPETS = [
@@ -802,7 +1025,10 @@ const MODEL_PROVIDER_FORBIDDEN_DEAD_CATALOG_SNIPPETS = [
 const CONFIGURED_REPLY_PROVIDER_REQUIRED_SNIPPETS = [
   "ConfiguredReplyProvider",
   "create_configured_reply_provider",
-  "stream_reply_with_agent",
+  "RuntimeReplyProviderBinding",
+  "pub(crate) fn runtime_handle(&self) -> &RuntimeReplyProviderHandle",
+  "pub(crate) fn into_compat_provider",
+  "struct CompatAsterReplyProviderBackend",
 ];
 
 const CONFIGURED_REPLY_PROVIDER_FORBIDDEN_SNIPPETS = [
@@ -811,6 +1037,8 @@ const CONFIGURED_REPLY_PROVIDER_FORBIDDEN_SNIPPETS = [
   "RuntimeProviderReplyHandle",
   "create_runtime_provider_reply_handle",
   "reply_stream_with_agent",
+  "pub(crate) async fn stream_reply_with_agent",
+  ".stream_reply_with_agent(",
   "pub(crate) fn aster_provider(&self)",
   "pub(crate) async fn aster_provider(",
 ];
@@ -1754,33 +1982,497 @@ function collectTextFiles(dir: string): string[] {
   return files;
 }
 
+function cargoDependencyNames(manifest: string): string[] {
+  const dependenciesSection =
+    /\[dependencies\]\r?\n([\s\S]*?)(?:\r?\n\[|$)/u.exec(manifest)?.[1] ?? "";
+  return [...dependenciesSection.matchAll(/^([A-Za-z0-9_-]+)\s*=/gmu)]
+    .map((match) => match[1])
+    .sort();
+}
+
+function cargoPathDependencyNames(manifest: string): string[] {
+  const dependenciesSection =
+    /\[dependencies\]\r?\n([\s\S]*?)(?:\r?\n\[|$)/u.exec(manifest)?.[1] ?? "";
+  return [
+    ...dependenciesSection.matchAll(
+      /^([A-Za-z0-9_-]+)\s*=\s*\{[^}\r\n]*\bpath\s*=/gmu,
+    ),
+  ]
+    .map((match) => match[1])
+    .sort();
+}
+
 describe("aster migration boundary", () => {
-  it("Aster vendor dependency 只能停留在 vendor compat 路径", () => {
+  it("agent-compat 只能作为待迁出 staging，不是 current owner", () => {
     const rootCargoPath = join(REPO_ROOT, "lime-rs/Cargo.toml");
     const rootCargo = readFileSync(rootCargoPath, "utf8");
+    const compatCargo = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-compat/Cargo.toml"),
+      "utf8",
+    );
     const legacyCratePath = join(REPO_ROOT, "lime-rs/crates/aster-rust");
-    const vendorPath = join(REPO_ROOT, "lime-rs/vendor/aster-rust");
+    const vendorImplementationPaths = [
+      "lime-rs/vendor/aster-rust/crates/aster",
+      "lime-rs/vendor/aster-rust/crates/aster-models",
+    ];
+    const compatCratePath = join(REPO_ROOT, "lime-rs/crates/agent-compat");
+    const protocolOpenAiPath = join(
+      REPO_ROOT,
+      "lime-rs/crates/agent-protocol/src/openai.rs",
+    );
+    const protocolAnthropicPath = join(
+      REPO_ROOT,
+      "lime-rs/crates/agent-protocol/src/anthropic.rs",
+    );
 
     expect(
       existsSync(legacyCratePath),
       "lime-rs/crates/aster-rust 是 dead / forbidden-to-restore，Aster 不得回到 current crate 区",
     ).toBe(false);
     expect(
-      existsSync(vendorPath),
-      "迁移期 Aster 只能作为 vendor compat dependency 保留",
+      existsSync(compatCratePath),
+      "剩余 Aster-shaped blocker 只能暂存在 agent-compat，退出条件是迁出到 current owner 或删除；agent-compat 不是 owner",
     ).toBe(true);
+    expect(compatCargo).toContain(
+      'description = "Temporary agent runtime compatibility staging crate"',
+    );
+    for (const deletedPath of DELETED_ASTER_COMPAT_MODEL_PATHS) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 已由 agent-protocol 承接 DTO，不得恢复重复 crate`,
+      ).toBe(false);
+    }
+    expect(compatCargo).not.toContain("agent-compat-models");
+    expect(compatCargo).not.toContain("aster-models");
+    expect(
+      compatCargo,
+      "agent-compat 是待迁出 staging crate，不得反向依赖 agent-runtime 给旧 reply loop 补血",
+    ).not.toContain("agent-runtime");
+    expect(compatCargo).not.toContain("agent_runtime");
+    const compatDependencyNames = cargoDependencyNames(compatCargo);
+    const compatPathDependencyNames = cargoPathDependencyNames(compatCargo);
+    const unexpectedCurrentOwnerDependencies = compatDependencyNames.filter(
+      (name) =>
+        AGENT_COMPAT_FORBIDDEN_CURRENT_OWNER_DEPENDENCIES.includes(name) ||
+        (CURRENT_RUNTIME_CRATES.includes(name) &&
+          !AGENT_COMPAT_CURRENT_OWNER_DEPENDENCY_BURN_DOWN_ALLOWLIST.includes(
+            name,
+          )),
+    );
+    const unexpectedPathDependencies = compatPathDependencyNames.filter(
+      (name) =>
+        !AGENT_COMPAT_CURRENT_OWNER_DEPENDENCY_BURN_DOWN_ALLOWLIST.includes(
+          name,
+        ),
+    );
+    expect(
+      unexpectedCurrentOwnerDependencies,
+      "agent-compat 是迁出对象，不得新增 current owner 依赖；现存 document-preview/model-provider/tool-runtime 只能作为 burn-down allowlist",
+    ).toEqual([]);
+    expect(
+      unexpectedPathDependencies,
+      "agent-compat 不是 current owner；除现存 document-preview/model-provider/tool-runtime burn-down 依赖外，不得新增本地 path dependency 给 staging crate 续命",
+    ).toEqual([]);
+    expect(rootCargo).not.toContain("agent-compat-models");
+    expect(existsSync(protocolOpenAiPath)).toBe(true);
+    expect(existsSync(protocolAnthropicPath)).toBe(true);
+    expect(readFileSync(protocolOpenAiPath, "utf8")).toContain(
+      "pub struct ChatCompletionRequest",
+    );
+    expect(readFileSync(protocolAnthropicPath, "utf8")).toContain(
+      "pub struct AnthropicMessagesRequest",
+    );
     expect(rootCargo).toContain('"vendor/aster-rust"');
     expect(rootCargo).toContain(
+      "# Agent compat staging - temporary alias for remaining Aster-shaped adapters.",
+    );
+    expect(rootCargo).toContain(
+      "# 退出条件：Phase 6 完成后删除该 alias 和 crates/agent-compat*。",
+    );
+    expect(rootCargo).toContain(
+      'aster = { package = "aster-core", path = "crates/agent-compat" }',
+    );
+    expect(rootCargo).not.toContain(
       'aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }',
     );
     expect(rootCargo).not.toContain('path = "crates/aster-rust/crates/aster"');
+    for (const vendorPath of vendorImplementationPaths) {
+      expect(
+        existsSync(join(REPO_ROOT, vendorPath)),
+        `${vendorPath} 已迁出 vendor，不能恢复 vendor implementation`,
+      ).toBe(false);
+    }
+  });
+
+  it("当前计划不得把 agent-compat 写成保护区", () => {
+    const currentPlanningDocs = [
+      "internal/exec-plans/aster-phase6-provider-reply-backend-plan.md",
+      "internal/roadmap/astermigration/README.md",
+      "internal/roadmap/astermigration/phase6-continuation-tracker.md",
+      "internal/roadmap/astermigration/refactor-v1-impact-audit.md",
+    ];
+
+    for (const docPath of currentPlanningDocs) {
+      const doc = readFileSync(join(REPO_ROOT, docPath), "utf8");
+      expect(
+        doc,
+        `${docPath} 必须把 agent-compat 明确写成待迁出 / 迁移对象，而不是 current owner`,
+      ).toMatch(
+        /agent-compat[\s\S]*(?:待迁出|迁移走|不是冻结目录|不是保护区)/u,
+      );
+      expect(
+        doc,
+        `${docPath} 不得把 agent-compat 写成不触碰的保护区；只允许禁止在 staging 内补新业务逻辑`,
+      ).not.toMatch(/不触碰\s*`agent-compat`/u);
+    }
+  });
+
+  it("已按 owner 移动的 Aster reference 不能回到 agent-compat public surface", () => {
+    const compatLibPath = join(
+      REPO_ROOT,
+      "lime-rs/crates/agent-compat/src/lib.rs",
+    );
+    const compatLibSource = readFileSync(compatLibPath, "utf8");
+    const movePlanPath = join(
+      REPO_ROOT,
+      "internal/roadmap/astermigration/owner-file-move-skeleton-plan.md",
+    );
+
+    for (const { source, target, marker } of MOVED_ASTER_OWNER_REFERENCE_DIRS) {
+      expect(
+        existsSync(join(REPO_ROOT, source)),
+        `${source} 已按 owner 移走，不得恢复到 agent-compat`,
+      ).toBe(false);
+      expect(
+        existsSync(join(REPO_ROOT, target, marker)),
+        `${target} 是该 Aster reference 的 owner 暂存位置`,
+      ).toBe(true);
+    }
+    expect(compatLibSource).not.toContain("pub mod plan;");
+    expect(compatLibSource).not.toContain("pub mod rules;");
+    expect(compatLibSource).not.toContain("pub mod streaming;");
+    expect(existsSync(movePlanPath)).toBe(true);
+  });
+
+  it("provider canonical current owner 只能是 model-provider", () => {
+    const compatProvidersModPath = join(
+      REPO_ROOT,
+      "lime-rs/crates/agent-compat/src/providers/mod.rs",
+    );
+    const compatProvidersModSource = readFileSync(
+      compatProvidersModPath,
+      "utf8",
+    );
+    const compatProviderBaseSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-compat/src/providers/base.rs"),
+      "utf8",
+    );
+    const compatReplyPartsSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-compat/src/agents/reply_parts.rs"),
+      "utf8",
+    );
+
+    for (const deletedPath of DELETED_ASTER_PROVIDER_CANONICAL_DUPLICATE_PATHS) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 是 model-provider canonical 的 duplicate，不得恢复`,
+      ).toBe(false);
+    }
+    expect(compatProvidersModSource).not.toContain("pub mod canonical;");
+    expect(compatProviderBaseSource).toContain(
+      "use model_provider::canonical::{map_to_canonical_model, CanonicalModelRegistry};",
+    );
+    expect(compatReplyPartsSource).toContain(
+      "use model_provider::canonical::maybe_get_canonical_model;",
+    );
+    expect(
+      existsSync(
+        join(REPO_ROOT, "lime-rs/crates/model-provider/src/canonical/mod.rs"),
+      ),
+    ).toBe(true);
+  });
+
+  it("agent-compat 不得恢复 Aster 自身 integration / property tests", () => {
+    const compatSrcRoot = join(REPO_ROOT, "lime-rs/crates/agent-compat/src");
+    const compatCargoSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-compat/Cargo.toml"),
+      "utf8",
+    );
+
+    for (const deletedPath of DELETED_ASTER_COMPAT_TEST_PATHS) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 是 Aster compat staging crate 的旧正向测试面；current 验证必须归属 Lime owner crate`,
+      ).toBe(false);
+    }
+    const restoredSrcTestFiles = collectTextFiles(compatSrcRoot)
+      .map(repoRelative)
+      .filter((file) => DELETED_ASTER_COMPAT_SRC_TEST_FILE_PATTERN.test(file));
+    expect(
+      restoredSrcTestFiles,
+      "agent-compat/src 独立 *_tests.rs / *_property_tests.rs / tests.rs 文件是 Aster staging crate 正向测试面，必要回归必须迁到 current owner crate",
+    ).toEqual([]);
+    const restoredCfgTestModuleDeclarations = collectTextFiles(
+      compatSrcRoot,
+    ).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      const matches = source.match(
+        /#\[cfg\(test\)\]\s*mod\s+(?:tests|[A-Za-z0-9_]+_(?:tests|property_tests));/gu,
+      );
+      return (matches ?? []).map((match) => `${repoRelative(file)}: ${match}`);
+    });
+    expect(
+      restoredCfgTestModuleDeclarations,
+      "agent-compat/src 不得恢复 cfg(test) 独立测试模块声明；旧 Aster 正向测试不能作为 current 迁移证据",
+    ).toEqual([]);
+    expect(compatCargoSource).not.toContain("[[example]]");
+    expect(compatCargoSource).not.toContain('path = "examples/');
+    for (const staleDependency of [
+      "agent-client-protocol-schema",
+      "criterion",
+      "dotenvy",
+      "ctor",
+      "sacp",
+    ]) {
+      expect(
+        compatCargoSource,
+        `${staleDependency} 只服务已删除的 agent-compat tests/examples，不得恢复为 dev-dependency`,
+      ).not.toContain(staleDependency);
+    }
+  });
+
+  it("agent-compat 不得恢复 Aster-only provider signup flows", () => {
+    const compatSrcRoot = join(REPO_ROOT, "lime-rs/crates/agent-compat/src");
+    const configModSource = readFileSync(
+      join(compatSrcRoot, "config/mod.rs"),
+      "utf8",
+    );
+    const tetrateProviderSource = readFileSync(
+      join(compatSrcRoot, "providers/tetrate.rs"),
+      "utf8",
+    );
+
+    for (const deletedPath of DELETED_ASTER_COMPAT_SIGNUP_PATHS) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 是 Aster-only 本地浏览器 signup 向导；Codex 无对应 current 面，Lime provider 配置不得恢复该目录`,
+      ).toBe(false);
+    }
+
+    expect(configModSource).not.toContain("signup_openrouter");
+    expect(configModSource).not.toContain("signup_tetrate");
+    expect(configModSource).not.toContain("configure_openrouter");
+    expect(configModSource).not.toContain("configure_tetrate");
+    expect(tetrateProviderSource).toContain(
+      'pub const TETRATE_DEFAULT_MODEL: &str = "claude-haiku-4-5";',
+    );
+
+    const forbiddenSignupSnippets = [
+      "OpenRouterAuth",
+      "TetrateAuth",
+      "configure_openrouter",
+      "configure_tetrate",
+      "OPENROUTER_AUTH_URL",
+      "TETRATE_AUTH_URL",
+      "$CARGO_MANIFEST_DIR/src/config/signup_openrouter/templates",
+      "$CARGO_MANIFEST_DIR/src/config/signup_tetrate/templates",
+    ];
+    const leaks = collectTextFiles(compatSrcRoot).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return forbiddenSignupSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${repoRelative(file)}: ${snippet}`);
+    });
+    expect(
+      leaks,
+      "OpenRouter/Tetrate signup flow 不得回流；如需 provider credential onboarding，必须进入 Lime current provider/settings 主链",
+    ).toEqual([]);
+  });
+
+  it("agent-compat 不得恢复 Aster-only config CLI / watcher / experiments", () => {
+    const compatSrcRoot = join(REPO_ROOT, "lime-rs/crates/agent-compat/src");
+    const configSrcRoot = join(compatSrcRoot, "config");
+    const configModSource = readFileSync(join(configSrcRoot, "mod.rs"), "utf8");
+    const configReadmeSource = readFileSync(
+      join(configSrcRoot, "README.md"),
+      "utf8",
+    );
+
+    for (const deletedPath of DELETED_ASTER_COMPAT_CONFIG_FILES) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 是 Aster-only config staging surface；Codex 无对应 current 面，不得恢复`,
+      ).toBe(false);
+    }
+
+    const forbiddenModuleSnippets = [
+      "agents_md_parser",
+      "config_command",
+      "config_manager",
+      "experiments",
+      "watcher",
+      "AgentsMdParser",
+      "ConfigCommand",
+      "create_config_command",
+      "ConfigManagerOptions",
+      "EnterprisePolicyConfig",
+      "ExperimentManager",
+      "AtomicConfigUpdate",
+      "ConfigValidator",
+      "DebouncedNotifier",
+    ];
+    const moduleLeaks = forbiddenModuleSnippets.filter((snippet) =>
+      configModSource.includes(snippet),
+    );
+    expect(
+      moduleLeaks,
+      "agent-compat config public surface 不得恢复旧 CLI/manager/watcher/experiments re-export",
+    ).toEqual([]);
+    expect(configReadmeSource).not.toContain("config_command.rs");
+    expect(configReadmeSource).not.toContain("config_manager.rs");
+    expect(configReadmeSource).not.toContain("experiments.rs");
+    expect(configReadmeSource).not.toContain("agents_md_parser.rs");
+    expect(configReadmeSource).not.toContain("watcher.rs");
+
+    const leaks = collectTextFiles(configSrcRoot).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return forbiddenModuleSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${repoRelative(file)}: ${snippet}`);
+    });
+    expect(
+      leaks,
+      "旧 Aster config CLI/manager/watch/experiment surface 不得回流；如需配置 UI/API，必须进入 Lime current provider/settings 主链",
+    ).toEqual([]);
+  });
+
+  it("agent-compat 不得恢复未消费的 Aster context helper surface", () => {
+    const contextRoot = join(
+      REPO_ROOT,
+      "lime-rs/crates/agent-compat/src/context",
+    );
+    const contextModSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-compat/src/context/mod.rs"),
+      "utf8",
+    );
+
+    for (const deletedPath of DELETED_ASTER_COMPAT_CONTEXT_HELPER_FILES) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 是未被 Lime current/compat 主链消费的 Aster context helper，不得恢复`,
+      ).toBe(false);
+    }
+
+    const forbiddenPublicSurfaceSnippets = [
+      "agents_md_parser",
+      "cache_controller",
+      "compressor",
+      "context_service",
+      "context_uri",
+      "file_mention",
+      "manager;",
+      "priority_sorter",
+      "pruner",
+      "summarizer",
+      "token_estimator",
+      "tool_io",
+      "types;",
+      "window_manager",
+      "aster://",
+      "AgentsMdParser",
+      "CacheController",
+      "MessageCompressor",
+      "ContextDocument",
+      "ContextLayer",
+      "ContextNamespace",
+      "ContextNamespaceStatus",
+      "ContextReadResult",
+      "ContextService",
+      "ContextServiceStatus",
+      "ContextUri",
+      "FileMentionResolver",
+      "EnhancedContextManager",
+      "ProgressivePruner",
+      "PrioritySorter",
+      "PruningConfig",
+      "PruningLevel",
+      "Summarizer",
+      "TokenEstimator",
+      "ToolIo",
+      "ContextWindowManager",
+    ];
+    const publicSurfaceLeaks = forbiddenPublicSurfaceSnippets.filter(
+      (snippet) => contextModSource.includes(snippet),
+    );
+    expect(
+      publicSurfaceLeaks,
+      "agent-compat context 只允许保留 trace DTO；tool I/O 必须归属 tool-runtime current owner，不得恢复旧 context framework public API",
+    ).toEqual([]);
+    expect(contextModSource).not.toContain("pub(crate) mod types;");
+    expect(contextModSource).not.toContain("pub mod types;");
+
+    const forbiddenTypeSnippets = [
+      "AgentsMdConfig",
+      "CacheConfig",
+      "CacheStats",
+      "CodeBlock",
+      "CompressionConfig",
+      "CompressionResult",
+      "ContextConfig",
+      "ContextExport",
+      "ContextStats",
+      "ContextUsage",
+      "ContextWindowStats",
+      "ConversationTurn",
+      "FileMentionResult",
+      "PrioritizedMessage",
+      "PruningConfig",
+      "PruningLevel",
+      "ResolvedFile",
+      "TokenEstimator",
+      "ToolIo",
+    ];
+    const typeLeaks = collectTextFiles(contextRoot).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return forbiddenTypeSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${repoRelative(file)}: ${snippet}`);
+    });
+    expect(
+      typeLeaks,
+      "已删除 context helper 的 DTO 不得继续留在 agent-compat context 里成为下一轮回流入口",
+    ).toEqual([]);
+
+    const forbiddenContextFrameworkSnippets = [
+      "ContextDocument",
+      "ContextLayer",
+      "ContextNamespace",
+      "ContextNamespaceStatus",
+      "ContextReadResult",
+      "ContextService",
+      "ContextServiceStatus",
+      "ContextUri",
+      "ProgressivePruner",
+      "PruningConfig",
+      "PruningLevel",
+      "TokenEstimator",
+      "ToolIo",
+      "aster://",
+    ];
+    const frameworkLeaks = collectTextFiles(contextRoot).flatMap((file) => {
+      const source = readFileSync(file, "utf8");
+      return forbiddenContextFrameworkSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${repoRelative(file)}: ${snippet}`);
+    });
+    expect(
+      frameworkLeaks,
+      "Aster context service / context URI / aster:// storage API 是 Codex 无对应面的 dead surface，不得换文件名恢复",
+    ).toEqual([]);
   });
 
   it("已删除的 Aster vendor public modules 不得恢复", () => {
-    const vendorSrcRoot = join(
-      REPO_ROOT,
-      "lime-rs/vendor/aster-rust/crates/aster/src",
-    );
+    const vendorSrcRoot = join(REPO_ROOT, "lime-rs/crates/agent-compat/src");
     const vendorLibSource = readFileSync(join(vendorSrcRoot, "lib.rs"), "utf8");
 
     const restoredModuleDirs = DELETED_ASTER_VENDOR_PUBLIC_MODULES.filter(
@@ -1800,15 +2492,102 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
   });
 
+  it("agent-compat 未被外部消费的模块不得重新暴露为 public API", () => {
+    const compatLibSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-compat/src/lib.rs"),
+      "utf8",
+    );
+    const restoredPublicModules =
+      AGENT_COMPAT_PRIVATE_PUBLIC_SURFACE_MODULES.filter((moduleName) =>
+        compatLibSource.includes(`pub mod ${moduleName};`),
+      );
+
+    expect(
+      restoredPublicModules,
+      "这些 agent-compat 顶层模块在 Lime current crates 中没有外部 aster::module 消费；不得重新作为 public API 续命，后续只能迁到 current owner 或继续删除",
+    ).toEqual([]);
+  });
+
+  it("agent-compat 零引用 Aster-only stub 不得恢复", () => {
+    for (const deletedPath of DELETED_ASTER_COMPAT_ZERO_REF_FILES) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 已确认没有 Lime current/compat 消费，不得恢复空 stub`,
+      ).toBe(false);
+    }
+  });
+
+  it("agent-compat no-op Aster stub 不得恢复", () => {
+    for (const deletedPath of DELETED_ASTER_COMPAT_NOOP_STUB_FILES) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 已确认只是 Aster-only no-op/stub，必须保持删除`,
+      ).toBe(false);
+    }
+
+    const sourcePaths = [
+      "lime-rs/crates/agent-compat/src/lib.rs",
+      "lime-rs/crates/agent-compat/src/agents/agent.rs",
+      "lime-rs/crates/agent-compat/src/agents/execute_commands.rs",
+      "lime-rs/crates/agent-compat/src/agents/retry.rs",
+      "lime-rs/crates/agent-compat/src/scheduler.rs",
+      "lime-rs/crates/agent-compat/src/session/session_manager.rs",
+    ];
+
+    const leaks = sourcePaths.flatMap((filePath) => {
+      const source = rustProductionSource(
+        readTextIfExists(join(REPO_ROOT, filePath)),
+      );
+      return DELETED_ASTER_COMPAT_NOOP_STUB_SNIPPETS.filter((snippet) =>
+        source.includes(snippet),
+      ).map((snippet) => `${filePath}: ${snippet}`);
+    });
+
+    expect(
+      leaks,
+      "这些 no-op Aster stub 已删除，不得通过 mod、函数名或旧调用点恢复",
+    ).toEqual([]);
+  });
+
+  it("agent-compat 已迁出 helper 不得恢复", () => {
+    for (const deletedPath of DELETED_ASTER_COMPAT_MIGRATED_HELPER_FILES) {
+      expect(
+        existsSync(join(REPO_ROOT, deletedPath)),
+        `${deletedPath} 已迁到 Lime current owner 或调用点，不得在 agent-compat 恢复`,
+      ).toBe(false);
+    }
+
+    const sourcePaths = [
+      "lime-rs/crates/agent-compat/src/lib.rs",
+      "lime-rs/crates/agent-compat/src/providers/api_client.rs",
+      "lime-rs/crates/agent-compat/src/providers/toolshim.rs",
+      "lime-rs/crates/agent-compat/src/providers/usage_estimator.rs",
+    ];
+
+    const leaks = sourcePaths.flatMap((filePath) => {
+      const source = rustProductionSource(
+        readTextIfExists(join(REPO_ROOT, filePath)),
+      );
+      return DELETED_ASTER_COMPAT_MIGRATED_HELPER_SNIPPETS.filter((snippet) =>
+        source.includes(snippet),
+      ).map((snippet) => `${filePath}: ${snippet}`);
+    });
+
+    expect(
+      leaks,
+      "这些 helper 已从 agent-compat 迁出，不得通过 mod、旧函数名或旧调用点恢复",
+    ).toEqual([]);
+  });
+
   it("Aster LSP 工具面必须保持删除且不得恢复", () => {
     const deletedFiles = DELETED_ASTER_LSP_FILES.filter((filePath) =>
       existsSync(join(REPO_ROOT, filePath)),
     );
     const backendSources = [
-      "lime-rs/vendor/aster-rust/crates/aster/src/lib.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/registry.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs",
+      "lime-rs/crates/agent-compat/src/lib.rs",
+      "lime-rs/crates/agent-compat/src/tools/mod.rs",
+      "lime-rs/crates/agent-compat/src/tools/registry.rs",
+      "lime-rs/crates/agent-compat/src/agents/agent.rs",
       "lime-rs/crates/agent/src/lib.rs",
       "lime-rs/crates/agent/src/runtime_state_support.rs",
       "lime-rs/crates/tool-runtime/src/native_overlay.rs",
@@ -1877,7 +2656,7 @@ describe("aster migration boundary", () => {
   it("已删除的 Aster vendor session public wrappers 不得恢复", () => {
     const sessionRoot = join(
       REPO_ROOT,
-      "lime-rs/vendor/aster-rust/crates/aster/src/session",
+      "lime-rs/crates/agent-compat/src/session",
     );
     const sessionModSource = readFileSync(join(sessionRoot, "mod.rs"), "utf8");
 
@@ -2265,7 +3044,7 @@ describe("aster migration boundary", () => {
       CONFIGURED_REPLY_PROVIDER_REQUIRED_SNIPPETS.filter(
         (snippet) => !runtimeProviderAdapterSource.includes(snippet),
       ),
-      "主 turn provider 注入只能通过 ConfiguredReplyProvider 局部执行；不得恢复 crate-visible create_aster_runtime_provider factory",
+      "主 turn provider 注入只能通过 ConfiguredReplyProvider 创建 current binding；reply source execution 不得回流 credential_bridge",
     ).toEqual([]);
     expect(
       CONFIGURED_REPLY_PROVIDER_FORBIDDEN_SNIPPETS.filter((snippet) =>
@@ -2380,11 +3159,17 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_adapter.rs";
     const asterReplyBackendAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_backend_adapter.rs";
+    const providerReplyExitSourcePath =
+      "lime-rs/crates/agent/src/request_tool_policy/provider_reply_exit_source.rs";
     const agentRuntimeReplyBackendPath =
       "lime-rs/crates/agent-runtime/src/reply_backend.rs";
+    const agentRuntimeProviderTracePath =
+      "lime-rs/crates/agent-runtime/src/provider_trace.rs";
     const agentReplyStreamPath =
       "lime-rs/crates/agent/src/request_tool_policy/agent_reply_stream.rs";
     const agentProtocolPath = "lime-rs/crates/agent/src/protocol.rs";
+    const agentProtocolProviderTracePath =
+      "lime-rs/crates/agent-protocol/src/provider_trace.rs";
     const appServerToolEventsPath =
       "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs";
     const frontendAgentProtocolPath = "src/lib/api/agentProtocol.ts";
@@ -2420,8 +3205,16 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, asterReplyBackendAdapterPath),
       "utf8",
     );
+    const providerReplyExitSourceSource = readFileSync(
+      join(REPO_ROOT, providerReplyExitSourcePath),
+      "utf8",
+    );
     const agentRuntimeReplyBackendSource = readFileSync(
       join(REPO_ROOT, agentRuntimeReplyBackendPath),
+      "utf8",
+    );
+    const agentRuntimeProviderTraceSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeProviderTracePath),
       "utf8",
     );
     const agentReplyStreamSource = readFileSync(
@@ -2430,6 +3223,10 @@ describe("aster migration boundary", () => {
     );
     const agentProtocolSource = readFileSync(
       join(REPO_ROOT, agentProtocolPath),
+      "utf8",
+    );
+    const agentProtocolProviderTraceSource = readFileSync(
+      join(REPO_ROOT, agentProtocolProviderTracePath),
       "utf8",
     );
     const appServerToolEventsSource = readFileSync(
@@ -2471,6 +3268,23 @@ describe("aster migration boundary", () => {
       ).map((snippet) => `${providerStreamPath}: ${snippet}`),
       "model-provider provider_stream contract 不得引入 Aster 类型",
     ).toEqual([]);
+    expect(providerStreamSource).toContain(
+      "PROVIDER_STREAM_CANCEL_POLL_INTERVAL",
+    );
+    expect(providerStreamSource).toContain(
+      "PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON",
+    );
+    expect(providerStreamSource).toContain(
+      "PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON",
+    );
+    expect(providerStreamSource).toContain(
+      "pub trait RuntimeReplyProviderSourceBackend<R>",
+    );
+    expect(providerStreamSource).not.toContain(
+      "RuntimeReplyProviderSourceBackend<H",
+    );
+    expect(providerStreamSource).not.toContain("host: &'a H");
+    expect(providerStreamSource).not.toContain("H: Sync");
     expect(
       CONFIGURED_REPLY_PROVIDER_REQUIRED_CURRENT_HANDLE_SNIPPETS.filter(
         (snippet) => !runtimeProviderAdapterSource.includes(snippet),
@@ -2482,56 +3296,372 @@ describe("aster migration boundary", () => {
         /pub\(crate\) struct ConfiguredReplyProvider \{[\s\S]*?\n\}/,
       )?.[0] ?? "";
     expect(configuredReplyProviderStruct).toContain(
+      "binding: RuntimeReplyProviderBinding<CompatAsterReplyProviderBackend>",
+    );
+    expect(configuredReplyProviderStruct).not.toContain(
       "handle: RuntimeReplyProviderHandle",
     );
-    expect(configuredReplyProviderStruct).toContain(
+    expect(configuredReplyProviderStruct).not.toContain(
       "backend: CompatAsterReplyProviderBackend",
     );
     expect(
       configuredReplyProviderStruct.includes("Arc<dyn Provider>"),
-      "ConfiguredReplyProvider 只能持有 current handle + 私有 compat backend，不能直接保存 Aster Provider trait object",
+      "ConfiguredReplyProvider 只能持有 current provider binding，不能直接保存 Aster Provider trait object",
     ).toBe(false);
-    const configuredReplyProviderStreamBody =
-      runtimeProviderAdapterSource.slice(
-        runtimeProviderAdapterSource.indexOf(
-          "pub(crate) async fn stream_reply_with_agent",
-        ),
-        runtimeProviderAdapterSource.indexOf(
-          "pub(crate) async fn create_configured_reply_provider",
-        ),
-      );
-    expect(configuredReplyProviderStreamBody).toMatch(
-      /self\.backend\s*\.stream_reply_with_agent\(agent, provider_call\)\s*\.await/,
+    expect(runtimeProviderAdapterSource).toContain(
+      "pub(crate) fn into_compat_provider",
     );
-    expect(configuredReplyProviderStreamBody).not.toContain(
-      "provider_call.into_parts()",
+    expect(runtimeProviderAdapterSource).toContain("fn into_inner(self)");
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "ConfiguredReplyProviderSource",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceBackend",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceRequest",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceBackendCall",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain("AgentEvent");
+    expect(runtimeProviderAdapterSource).not.toContain("use aster::agents");
+    expect(runtimeProviderAdapterSource).not.toContain(".reply_with_provider(");
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "pub(crate) async fn stream_reply_with_agent",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      ".stream_reply_with_agent(",
+    );
+    const compatProviderBackendStart = runtimeProviderAdapterSource.indexOf(
+      "impl CompatAsterReplyProviderBackend",
     );
     const compatProviderBackendImpl = runtimeProviderAdapterSource.slice(
-      runtimeProviderAdapterSource.indexOf(
-        "impl CompatAsterReplyProviderBackend",
-      ),
+      compatProviderBackendStart,
       runtimeProviderAdapterSource.indexOf("fn build_provider_model_config"),
     );
-    expect(compatProviderBackendImpl).toContain(
-      "provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>",
-    );
-    expect(compatProviderBackendImpl).toContain(
-      "let (_, user_message, session_config, cancel_token) = provider_call.into_parts();",
-    );
-    expect(compatProviderBackendImpl).not.toContain("user_message: Message,");
     expect(compatProviderBackendImpl).not.toContain(
+      "RuntimeReplyProviderSourceRequest",
+    );
+    expect(compatProviderBackendImpl).not.toContain(".reply_with_provider(");
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "lime-rs/crates/agent/src/request_tool_policy/aster_provider_reply_execution.rs",
+        ),
+      ),
+      "compat provider reply backend 不能继续使用 aster_provider_reply_execution 旧模块名",
+    ).toBe(false);
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "lime-rs/crates/agent/src/request_tool_policy/provider_reply_exit_source.rs",
+        ),
+      ),
+      "provider reply exit source 必须保留为唯一 Aster provider reply 最后一跳退场模块",
+    ).toBe(true);
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "lime-rs/crates/agent/src/request_tool_policy/compat_provider_reply_backend.rs",
+        ),
+      ),
+      "不得把 provider reply 最后一跳重新命名为 compat_provider_reply_backend；agent-compat 是迁出对象，不是 current owner",
+    ).toBe(false);
+    const providerReplyExitSourceBody = providerReplyExitSourceSource;
+    expect(providerReplyExitSourceBody).not.toContain(
+      "CompatProviderReplyBackend",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "CompatReplySourceExecutor",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "pub(super) struct CompatReplySource",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "run_compat_provider_reply_backend",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "ProviderCompatReplySource",
+    );
+    expect(providerReplyExitSourceBody).not.toContain("AsterReplySource");
+    expect(providerReplyExitSourceBody).not.toContain(
+      "AsterReplySourceExecutor",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "AsterProviderReplySource",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "run_aster_provider_reply_source",
+    );
+    const compatReplySourceStart = providerReplyExitSourceBody.indexOf(
+      "pub(super) struct ReplyExitSource",
+    );
+    const compatReplySourceBody = providerReplyExitSourceBody.slice(
+      compatReplySourceStart,
+      providerReplyExitSourceBody.indexOf("struct ReplyExitSourceExecutor"),
+    );
+    const compatReplySourceExecutorBody = providerReplyExitSourceBody.slice(
+      providerReplyExitSourceBody.indexOf("struct ReplyExitSourceExecutor"),
+      providerReplyExitSourceBody.indexOf("type ProviderReplyExitSource"),
+    );
+    const providerReplyExitSourceStart = providerReplyExitSourceBody.indexOf(
+      "type ProviderReplyExitSource",
+    );
+    const providerReplyExitSourceImpl = providerReplyExitSourceBody.slice(
+      providerReplyExitSourceStart,
+      providerReplyExitSourceBody.indexOf("fn run_provider_reply_exit_source"),
+    );
+    expect(providerReplyExitSourceBody).toContain(
+      "pub(super) struct ReplyExitSource",
+    );
+    expect(compatReplySourceBody).toContain(
+      "impl<'source> RuntimeReplySource for ReplyExitSource<'source>",
+    );
+    expect(compatReplySourceBody).toContain(
+      "call.run_with(ReplyExitSourceExecutor::new(self.agent, self.provider))",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "struct ReplyExitSourceExecutor",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "RuntimeReplySourceExecutor<RuntimeReplyMessage, AgentSessionConfig>",
+    );
+    expect(compatReplySourceExecutorBody).toContain("fn run_default");
+    expect(compatReplySourceExecutorBody).toContain("fn run_provider");
+    expect(compatReplySourceExecutorBody).toContain(
+      "run_default_provider_source_backend(call, provider",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "run_provider_source_backend(call, self.provider",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "provider_reply_exit_source(self.agent, provider.into_compat_provider())",
+    );
+    expect(providerReplyExitSourceBody).toContain(
+      "type ProviderReplyExitSource",
+    );
+    expect(providerReplyExitSourceImpl).toContain(
+      "RuntimeReplyProviderExecutionSource<ProviderReplyExitRunner",
+    );
+    expect(providerReplyExitSourceImpl).toContain(
+      "RuntimeReplyProviderExecutionSource::new(ProviderReplyExitRunner::new(agent, provider))",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "impl<'source> RuntimeReplyProviderSourceBackend",
+    );
+    expect(providerReplyExitSourceImpl).toContain(
+      "RuntimeReplyStream<'run, RuntimeAgentEvent>",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "RuntimeReplyProviderSourceRunCall",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "RuntimeReplyProviderSourceBackendCall<",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "BoxStream<'run, anyhow::Result<AsterAgentEvent>>",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "RuntimeReplyProviderSourceRequest<RuntimeReplyMessage, AgentSessionConfig>",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "RuntimeReplyProviderSourceRequest<Message, aster::agents::SessionConfig>",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "RuntimeReplyProviderCall",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "provider_call.into_source_request()",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "super::provider_reply_exit_source::ReplyExitSource",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "ProviderReplyExitSource",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "struct ReplyExitSource",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "struct ReplyExitSourceExecutor",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "struct CompatProviderReplySource",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceBackend<RuntimeReplyProviderSourceBackendRequest>",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceRunCall",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceFuture",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "aster::providers::base::Provider",
+    );
+    expect(providerReplyExitSourceBody).toContain(
+      "fn run_provider_reply_exit_source",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "pub fn run_provider_reply_exit_source",
+    );
+    expect(providerStreamSource).toContain(
+      "pub trait RuntimeReplyProviderExecutionRunner",
+    );
+    expect(providerStreamSource).toContain(
+      "pub struct RuntimeReplyProviderExecutionSource",
+    );
+    expect(providerStreamSource).toContain(
+      "pub fn run_provider_source_execution",
+    );
+    expect(providerStreamSource).toContain(
+      "impl<R, X> RuntimeReplyProviderSourceBackend<R> for RuntimeReplyProviderExecutionSource<X>",
+    );
+    expect(agentRuntimeReplyBackendSource).not.toContain(
+      "pub trait RuntimeReplyProviderExecutionRunner",
+    );
+    expect(agentRuntimeReplyBackendSource).not.toContain(
+      "pub struct RuntimeReplyProviderExecutionSource",
+    );
+    expect(agentRuntimeReplyBackendSource).not.toContain(
+      "pub fn run_provider_source_execution",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn from_source_request",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("pub fn from_run_call");
+    expect(providerReplyExitSourceBody).toContain(
+      "struct ProviderReplyExitRunner",
+    );
+    expect(providerReplyExitSourceBody).toContain(
+      "impl<'source> RuntimeReplyProviderExecutionRunner<RuntimeReplyProviderSourceExecution>",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "impl<'source> RuntimeReplyProviderExecutionRunner<RuntimeReplyProviderSourceBackendRequest>",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "RuntimeReplyProviderSourceExecution::from_source_request(request)",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "run_provider_source_execution(",
+    );
+    expect(providerReplyExitSourceBody).toContain("execution.into_parts();");
+    expect(providerReplyExitSourceBody).not.toContain(
+      "RuntimeReplyProviderSourceExecution::from_run_call(call).into_parts();",
+    );
+    expect(providerReplyExitSourceBody).not.toContain(
+      "call.into_source_request().into_parts();",
+    );
+    expect(providerReplyExitSourceBody).toContain(
+      "lower_aster_reply_message(message)",
+    );
+    expect(providerReplyExitSourceBody).toContain(
+      "to_aster_session_config(session_config)",
+    );
+    expect(providerReplyExitSourceBody).toContain(".reply_with_provider(");
+    expect(providerReplyExitSourceBody).toContain(
+      "project_aster_reply_stream(stream, stream_request)",
+    );
+    expect(asterReplyBackendAdapterSource).toContain(
+      "super::provider_reply_exit_source::ReplyExitSource",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceExecution",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "lower_aster_reply_message(",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "to_aster_session_config(",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "project_aster_reply_stream(",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      ".reply_with_provider(",
+    );
+    expect(providerReplyExitSourceImpl).toContain(
+      "ProviderReplyExitRunner::new(agent, provider)",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "run_provider_reply_exit_source(self.agent, self.provider, call)",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "lower_aster_reply_message(",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "to_aster_session_config(",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(".reply_with_provider(");
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "provider_call.into_parts()",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain(
+      "source_request: RuntimeReplyProviderSourceRequest",
+    );
+    expect(providerReplyExitSourceImpl).not.toContain("user_message: Message,");
+    expect(providerReplyExitSourceImpl).not.toContain(
       "session_config: aster::agents::SessionConfig,",
     );
-    expect(compatProviderBackendImpl).not.toContain(
+    expect(providerReplyExitSourceImpl).not.toContain(
       "cancel_token: Option<CancellationToken>,",
     );
     expect(agentRuntimeReplyBackendSource).toContain(
       "RuntimeReplyStreamRequest",
     );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn run_provider_source_backend",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "call.required_provider(provider)",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "RuntimeReplyProviderSourceExecution::from_source_request(call.into_source_request())",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub type RuntimeReplyProviderSourceBackendRequest",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub type RuntimeReplyProviderSourceRunCall",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyProviderSourceExecution",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "stream_request: RuntimeReplyStreamRequest",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("pub fn from_run_call");
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn into_backend_call",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "source_execution.into_backend_call()",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(".stream_reply(");
     expect(asterReplyBackendAdapterSource).not.toContain(
       "RuntimeReplyStreamRequest",
     );
-    expect(asterReplyBackendAdapterSource).toContain(
+    expect(providerReplyExitSourceBody).toContain(
+      "run_provider_source_backend(call, self.provider",
+    );
+    expect(providerReplyExitSourceBody).toContain(
+      "provider_reply_exit_source(self.agent, provider.into_compat_provider())",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "run_provider_source_backend(call, self.provider",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "run_default_provider_source_backend(call, provider",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceBackendCall::new(source_request)",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
       ".stream_reply_with_agent(",
     );
     expect(asterReplyAdapterSource).not.toContain("RuntimeReplyStreamRequest");
@@ -2542,12 +3672,23 @@ describe("aster migration boundary", () => {
     expect(providerStreamSource).toContain(
       "pub struct RuntimeReplyProviderStreamTrace",
     );
+    expect(providerStreamSource).toContain(
+      "pub trait RuntimeReplyProviderSourceBackend",
+    );
     expect(providerStreamSource).toContain("pub fn trace(&self)");
     expect(providerStreamSource).toContain(
       "pub fn stream_request(&self) -> &RuntimeReplyStreamRequest",
     );
-    expect(runtimeProviderAdapterSource).toContain("RuntimeReplyProviderCall");
-    expect(runtimeProviderAdapterSource).toContain("provider_call.trace()");
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceRequest",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "RuntimeReplyProviderCall",
+    );
+    expect(runtimeProviderAdapterSource).not.toContain("provider_call.trace()");
+    expect(runtimeProviderAdapterSource).not.toContain(
+      "provider_call.into_source_request()",
+    );
     expect(runtimeProviderAdapterSource).not.toContain(
       "provider_start: &RuntimeReplyProviderStreamStart",
     );
@@ -2572,15 +3713,63 @@ describe("aster migration boundary", () => {
     expect(asterReplyBackendAdapterSource).toContain(
       "fn provider_handle(&self)",
     );
-    expect(agentReplyStreamSource).toContain(
-      "enrich_provider_trace_with_runtime_provider",
+    expect(agentReplyStreamSource).toContain("apply_runtime_provider_metadata");
+    expect(agentReplyStreamSource).toContain("model_provider::provider_stream");
+    expect(agentReplyStreamSource).not.toContain(
+      "agent_runtime::provider_trace::apply_runtime_provider_metadata",
     );
     expect(agentReplyStreamSource).toContain("reply_backend.provider_handle()");
+    expect(agentReplyStreamSource).not.toContain(
+      "fn enrich_provider_trace_with_runtime_provider",
+    );
+    expect(agentReplyStreamSource).not.toContain(
+      "fn provider_protocol_wire_value",
+    );
+    expect(agentReplyStreamSource).not.toContain("ModelProviderProtocol");
+    expect(
+      PROVIDER_TRACE_CURRENT_OWNER_REQUIRED_SNIPPETS.filter(
+        (snippet) => !agentProtocolProviderTraceSource.includes(snippet),
+      ),
+      "Provider trace event DTO / runtime event type mapping 必须归属 agent-protocol current owner",
+    ).toEqual([]);
+    expect(
+      PROVIDER_TRACE_LIME_AGENT_FLATTENED_DTO_REQUIRED_SNIPPETS.filter(
+        (snippet) => !agentProtocolSource.includes(snippet),
+      ),
+      "lime-agent ProviderTrace runtime event 必须 flatten agent-protocol current DTO，不能重新复制 provider trace 字段",
+    ).toEqual([]);
+    expect(
+      PROVIDER_TRACE_RUNTIME_LIFECYCLE_REQUIRED_SNIPPETS.filter(
+        (snippet) => !agentRuntimeProviderTraceSource.includes(snippet),
+      ),
+      "Provider trace attempt lifecycle 必须归属 agent-runtime current Turn owner，不能继续写进 agent-compat",
+    ).toEqual([]);
+    expect(appServerToolEventsSource).toContain(
+      "runtime_event_type_for_provider_trace_stage",
+    );
+    expect(
+      PROVIDER_TRACE_RUNTIME_METADATA_OWNER_REQUIRED_SNIPPETS.filter(
+        (snippet) => !providerStreamSource.includes(snippet),
+      ),
+      "Provider trace runtime provider metadata enrichment 必须归属 model-provider provider handle owner，不能继续散在 lime-agent adapter 或 agent-runtime lifecycle owner",
+    ).toEqual([]);
+    expect(agentRuntimeProviderTraceSource).not.toContain(
+      "RuntimeReplyProviderHandle",
+    );
+    expect(agentRuntimeProviderTraceSource).not.toContain(
+      "ModelProviderProtocol",
+    );
+    expect(agentRuntimeProviderTraceSource).not.toContain(
+      "RuntimeReplyProviderTraceMetadata",
+    );
+    expect(agentRuntimeProviderTraceSource).not.toContain(
+      "fn model_provider_protocol_wire_value",
+    );
     expect(
       PROVIDER_TRACE_RUNTIME_PROVIDER_METADATA_REQUIRED_SNIPPETS.filter(
         (snippet) =>
-          !agentProtocolSource.includes(snippet) ||
-          !agentReplyStreamSource.includes(snippet) ||
+          !agentProtocolProviderTraceSource.includes(snippet) ||
+          !providerStreamSource.includes(snippet) ||
           !appServerToolEventsSource.includes(snippet) ||
           !frontendAgentProtocolSource.includes(snippet) ||
           !frontendAppServerEventStreamSource.includes(snippet),
@@ -2947,10 +4136,14 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_adapter.rs";
     const asterReplyBackendAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_backend_adapter.rs";
+    const providerReplyExitSourcePath =
+      "lime-rs/crates/agent/src/request_tool_policy/provider_reply_exit_source.rs";
     const asterReplyMessageAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_message_adapter.rs";
     const asterReplyStreamAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_reply_stream_adapter.rs";
+    const responseEventAdapterPath =
+      "lime-rs/crates/agent/src/request_tool_policy/response_event_adapter.rs";
     const asterEventAdapterPath =
       "lime-rs/crates/agent/src/request_tool_policy/aster_event_adapter.rs";
     const webSearchPreflightPath =
@@ -2972,10 +4165,14 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent-runtime/src/reply_session.rs";
     const agentRuntimeReplyExecutionPath =
       "lime-rs/crates/agent-runtime/src/reply_execution.rs";
+    const agentRuntimeReplyLoopPath =
+      "lime-rs/crates/agent-runtime/src/reply_loop.rs";
     const agentRuntimeReplyStreamPath =
       "lime-rs/crates/agent-runtime/src/reply_stream.rs";
     const agentRuntimeEventStreamPath =
       "lime-rs/crates/agent-runtime/src/event_stream.rs";
+    const agentCompatAgentPath =
+      "lime-rs/crates/agent-compat/src/agents/agent.rs";
     const modelProviderStreamPath =
       "lime-rs/crates/model-provider/src/provider_stream.rs";
     const mainSource = readFileSync(join(REPO_ROOT, mainPath), "utf8");
@@ -2991,12 +4188,20 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, asterReplyBackendAdapterPath),
       "utf8",
     );
+    const providerReplyExitSourceSource = readFileSync(
+      join(REPO_ROOT, providerReplyExitSourcePath),
+      "utf8",
+    );
     const asterReplyMessageAdapterSource = readFileSync(
       join(REPO_ROOT, asterReplyMessageAdapterPath),
       "utf8",
     );
     const asterReplyStreamAdapterSource = readFileSync(
       join(REPO_ROOT, asterReplyStreamAdapterPath),
+      "utf8",
+    );
+    const responseEventAdapterSource = readFileSync(
+      join(REPO_ROOT, responseEventAdapterPath),
       "utf8",
     );
     const asterEventAdapterSource = readFileSync(
@@ -3043,6 +4248,10 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, agentRuntimeReplyExecutionPath),
       "utf8",
     );
+    const agentRuntimeReplyLoopSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyLoopPath),
+      "utf8",
+    );
     const agentRuntimeReplyStreamSource = readFileSync(
       join(REPO_ROOT, agentRuntimeReplyStreamPath),
       "utf8",
@@ -3050,6 +4259,13 @@ describe("aster migration boundary", () => {
     const agentRuntimeEventStreamSource = readFileSync(
       join(REPO_ROOT, agentRuntimeEventStreamPath),
       "utf8",
+    );
+    const agentCompatAgentSource = readFileSync(
+      join(REPO_ROOT, agentCompatAgentPath),
+      "utf8",
+    );
+    const agentCompatAgentProductionSource = rustProductionSource(
+      agentCompatAgentSource,
     );
     const modelProviderStreamSource = readFileSync(
       join(REPO_ROOT, modelProviderStreamPath),
@@ -3130,6 +4346,10 @@ describe("aster migration boundary", () => {
     expect(mainSource).toContain("mod aster_reply_backend_adapter;");
     expect(mainSource).toContain("mod aster_reply_message_adapter;");
     expect(mainSource).toContain("mod aster_reply_stream_adapter;");
+    expect(mainSource).toContain("mod provider_reply_exit_source;");
+    expect(mainSource).toContain("mod response_event_adapter;");
+    expect(mainSource).not.toContain("mod compat_provider_reply_backend;");
+    expect(mainSource).not.toContain("mod aster_provider_reply_execution;");
     expect(mainSource).toContain("agent_runtime::reply_input::{");
     expect(mainSource).toContain(
       "agent_runtime::session_config::AgentSessionConfig",
@@ -3162,9 +4382,11 @@ describe("aster migration boundary", () => {
     expect(adapterSource).toContain(
       "agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput",
     );
-    expect(adapterSource).toContain(
-      "agent_runtime::reply_stream::{\n    RuntimeReplyStreamEvent, RuntimeReplyStreamIdleTimeout, RuntimeReplyStreamState,\n}",
-    );
+    expect(adapterSource).toContain("agent_runtime::reply_stream::{");
+    expect(adapterSource).toContain("RuntimeReplyResponseEvent");
+    expect(adapterSource).toContain("RuntimeReplyStreamEvent");
+    expect(adapterSource).toContain("RuntimeReplyStreamIdleTimeout");
+    expect(adapterSource).toContain("RuntimeReplyStreamState");
     expect(adapterSource).toContain(
       "agent_runtime::reply_request::RuntimeReplyRequest",
     );
@@ -3240,8 +4462,97 @@ describe("aster migration boundary", () => {
     expect(agentRuntimeLibSource).toContain("pub mod reply_host;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_session;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_execution;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_loop;");
     expect(agentRuntimeLibSource).toContain("pub mod reply_stream;");
     expect(agentRuntimeLibSource).toContain("pub mod event_stream;");
+    expect(agentRuntimeReplyLoopSource).toContain(
+      "pub const DEFAULT_MAX_REPLY_TURNS",
+    );
+    expect(agentRuntimeReplyLoopSource).toContain(
+      "pub const MAX_REPLY_TURNS_REACHED_MESSAGE",
+    );
+    expect(agentRuntimeReplyLoopSource).toContain(
+      "pub struct RuntimeReplyLoop",
+    );
+    expect(agentRuntimeReplyLoopSource).toContain(
+      "pub enum RuntimeReplyLoopStep",
+    );
+    expect(agentRuntimeReplyLoopSource).toContain("pub fn next_attempt");
+    expect(agentRuntimeReplyLoopSource).toContain(
+      "RuntimeReplyLoopStep::MaxTurnsReached",
+    );
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        agentRuntimeReplyLoopSource.includes(snippet),
+      ),
+      "agent-runtime reply_loop 只能承接 max-turn / attempt 纯规则，不得引入 Aster 类型",
+    ).toEqual([]);
+    expect(
+      [
+        "Provider",
+        "ToolRegistry",
+        "ToolContext",
+        "SessionStore",
+        "AgentEvent",
+      ].filter((snippet) => agentRuntimeReplyLoopSource.includes(snippet)),
+      "reply_loop current owner 不能提前承接 provider/tool/session/event 具体执行；这些仍按 R2-R6 分批迁移",
+    ).toEqual([]);
+    expect(agentCompatAgentSource).not.toContain("agent_runtime::reply_loop");
+    expect(agentCompatAgentSource).not.toContain("RuntimeReplyLoop::new");
+    expect(agentCompatAgentSource).not.toContain("RuntimeReplyLoopStep");
+    expect(agentCompatAgentProductionSource).not.toContain(
+      "model_provider::provider_stream",
+    );
+    expect(agentCompatAgentProductionSource).not.toContain(
+      "ProviderStreamPoll",
+    );
+    expect(agentCompatAgentProductionSource).not.toContain(
+      "ProviderStreamCancelReason",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub fn provider_stream_cancel_poll_interval",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub fn provider_stream_timeout_poll",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub fn provider_stream_event_poll",
+    );
+    expect(modelProviderStreamSource).toContain(
+      '"cancelled_while_waiting_provider_stream"',
+    );
+    expect(modelProviderStreamSource).toContain(
+      '"cancelled_before_provider_event_processing"',
+    );
+    expect(modelProviderStreamSource).toContain(
+      "ProviderStreamCancelReason::WhileWaiting",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "ProviderStreamCancelReason::BeforeEventProcessing",
+    );
+    expect(agentCompatAgentProductionSource).toContain(
+      "PROVIDER_STREAM_CANCEL_POLL_INTERVAL",
+    );
+    expect(agentCompatAgentProductionSource).toContain(
+      "PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON",
+    );
+    expect(agentCompatAgentProductionSource).toContain(
+      "PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON",
+    );
+    expect(agentCompatAgentProductionSource).toContain(
+      '"cancelled_while_waiting_provider_stream"',
+    );
+    expect(agentCompatAgentProductionSource).toContain(
+      '"cancelled_before_provider_event_processing"',
+    );
+    expect(agentCompatAgentSource).toContain("const DEFAULT_MAX_TURNS");
+    expect(agentCompatAgentSource).toContain("let mut turns_taken");
+    expect(agentCompatAgentSource).toContain(
+      "session_config.max_turns.unwrap_or(DEFAULT_MAX_TURNS)",
+    );
+    expect(agentCompatAgentSource).toContain("MAX_REPLY_TURNS_REACHED_MESSAGE");
+    expect(agentCompatAgentProductionSource).toContain("let mut turns_taken");
+    expect(agentCompatAgentProductionSource).toContain("DEFAULT_MAX_TURNS");
     expect(agentRuntimeReplyHostSource).toContain(
       "pub trait RuntimeReplyStreamHost<E>",
     );
@@ -3453,6 +4764,76 @@ describe("aster migration boundary", () => {
       "pub enum RuntimeReplyStreamEvent<E>",
     );
     expect(agentRuntimeReplyStreamSource).toContain(
+      "pub enum RuntimeReplyResponseEvent",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub struct RuntimeReplyResponseItem",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub enum RuntimeReplyResponseItemPayload",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub struct RuntimeReplyResponseMaterializer",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub enum RuntimeReplyResponseProjection",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub struct RuntimeReplyResponseEventHints",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub trait RuntimeReplyResponseEventMapper<E>",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub fn project_runtime_event_as_response_event",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "RuntimeReplyResponseProjection::ItemStarted",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "RuntimeReplyResponseProjection::ItemUpdated",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "RuntimeReplyResponseProjection::ItemCompleted",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "RuntimeReplyResponseProjection::Done",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "RuntimeReplyResponseProjection::RateLimits",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain("pub fn project_event");
+    expect(agentRuntimeReplyStreamSource).toContain("fn project_response_item");
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "fn project_tool_call_input_item_update",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "fn parse_response_tool_arguments",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "project_runtime_timeline_item",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "ResponseEvent(RuntimeReplyResponseEvent)",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain("OutputItemAdded");
+    expect(agentRuntimeReplyStreamSource).toContain("OutputItemDone");
+    expect(agentRuntimeReplyStreamSource).toContain("TextDelta");
+    expect(agentRuntimeReplyStreamSource).toContain("ToolCallInputDelta");
+    expect(agentRuntimeReplyStreamSource).toContain("ReasoningDelta");
+    expect(agentRuntimeReplyStreamSource).toContain("Completed");
+    expect(agentRuntimeReplyStreamSource).toContain("RateLimits");
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "response_materializer_accumulates_tool_call_input_delta",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "response_materializer_uses_output_item_tool_name_for_input_delta_item_update",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "response_materializer_keeps_tool_input_delta_without_item_update_when_tool_name_unknown",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain("pub fn response_event");
+    expect(agentRuntimeReplyStreamSource).toContain(
       "pub struct RuntimeReplyStreamState",
     );
     expect(agentRuntimeReplyStreamSource).toContain(
@@ -3498,6 +4879,38 @@ describe("aster migration boundary", () => {
     expect(agentRuntimeReplyStreamSource).toContain("pub fn from_text");
     expect(agentRuntimeReplyStreamSource).toContain("ProviderStreamEvent");
     expect(agentRuntimeReplyStreamSource).not.toContain("aster::");
+    expect(adapterSource).toContain(
+      "RuntimeReplyStreamEvent::ResponseEvent(response_event)",
+    );
+    expect(adapterSource).toContain(
+      "runtime_agent_events_from_response_event(",
+    );
+    expect(adapterSource).toContain("&mut response_materializer");
+    expect(adapterSource).toContain(
+      "fn runtime_agent_events_from_response_event",
+    );
+    expect(adapterSource).toContain(
+      "fn runtime_agent_event_from_response_projection",
+    );
+    expect(adapterSource).toContain("project_response_token_usage");
+    expect(adapterSource).toContain("RESPONSE_RATE_LIMITS_RUNTIME_EVENT_KIND");
+    expect(adapterSource).toContain("RuntimeReplyResponseEvent::TextDelta");
+    expect(adapterSource).toContain(
+      "RuntimeReplyResponseEvent::ToolCallInputDelta",
+    );
+    expect(adapterSource).toContain(
+      "RuntimeReplyResponseEvent::ReasoningDelta",
+    );
+    expect(adapterSource).toContain("RuntimeAgentEvent::ToolInputDelta");
+    expect(adapterSource).toContain("RuntimeAgentEvent::ThinkingDelta");
+    expect(adapterSource).toContain("RuntimeAgentEvent::ItemStarted");
+    expect(adapterSource).toContain("RuntimeAgentEvent::ItemUpdated");
+    expect(adapterSource).toContain("RuntimeAgentEvent::ItemCompleted");
+    expect(adapterSource).toContain("RuntimeAgentEvent::Done");
+    expect(adapterSource).toContain("RuntimeReplyResponseProjection::Done");
+    expect(adapterSource).toContain(
+      "RuntimeReplyResponseProjection::RateLimits",
+    );
     expect(asterReplyStreamAdapterSource).toContain(
       "provider_stream_event_notification_payload_from_message",
     );
@@ -3522,10 +4935,64 @@ describe("aster migration boundary", () => {
     expect(asterReplyStreamAdapterSource).toContain(
       "RuntimeReplyStreamProjection::from_parts",
     );
-    expect(asterReplyStreamAdapterSource).toContain(
-      "RuntimeReplyStreamProjection::events",
-    );
     expect(asterReplyStreamAdapterSource).toContain(".into_events()");
+    expect(responseEventAdapterSource).toContain(
+      "project_runtime_event_as_response_event",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "RuntimeReplyResponseEventMapper",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "struct RuntimeAgentResponseEventMapper",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "response_stream_events_from_runtime_events",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "pub(super) fn response_stream_events_from_runtime_events",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "RuntimeReplyResponseEventHints::new()",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "RuntimeReplyResponseEvent::ToolCallInputDelta",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "RuntimeReplyResponseEvent::ToolCallInputDelta",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "RuntimeReplyResponseEvent::OutputItemAdded",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "RuntimeReplyResponseEvent::OutputItemDone",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "response_item_from_agent_thread_item",
+    );
+    expect(asterReplyStreamAdapterSource).toContain(
+      "aster_agent_tool_input_delta_projects_as_response_event",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "runtime_tool_item_started_projects_as_output_item_added_response_event",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "runtime_tool_item_completed_projects_as_output_item_done_response_event",
+    );
+    expect(responseEventAdapterSource).toContain(
+      "unsupported_item_payload_stays_runtime_event",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "project_runtime_event_as_response_event",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "RuntimeReplyResponseEventMapper",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "struct RuntimeAgentResponseEventMapper",
+    );
+    expect(asterReplyStreamAdapterSource).not.toContain(
+      "response_item_from_agent_thread_item",
+    );
     expect(asterReplyStreamAdapterSource).toContain(
       "project_reply_stream(stream, AsterReplyStreamProjector::new(stream_request))",
     );
@@ -3581,7 +5048,7 @@ describe("aster migration boundary", () => {
       "agent_runtime::reply_message::{",
     );
     expect(asterReplyMessageAdapterSource).toContain(
-      "pub(super) fn lower_aster_reply_message",
+      "pub(crate) fn lower_aster_reply_message",
     );
     expect(asterReplyMessageAdapterSource).toContain("RuntimeReplyMessage");
     expect(asterReplyMessageAdapterSource).toContain(
@@ -3640,6 +5107,27 @@ describe("aster migration boundary", () => {
       "pub struct RuntimeReplyProviderCall",
     );
     expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyProviderSourceRequest",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub type RuntimeReplyProviderSourceBackendRequest",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub type RuntimeReplyProviderSourceRunCall",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyProviderSourceExecution",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "stream_request: RuntimeReplyStreamRequest",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn into_backend_call",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub struct RuntimeReplyProviderSourceBindingError",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
       "pub type RuntimeReplyProviderSourceCall",
     );
     expect(agentRuntimeReplyBackendSource).toContain(
@@ -3672,10 +5160,21 @@ describe("aster migration boundary", () => {
     expect(agentRuntimeReplyBackendSource).toContain(
       "pub trait RuntimeReplySourceExecutor",
     );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn required_provider",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn into_source_request",
+    );
+    expect(agentRuntimeReplyBackendSource).not.toContain("pub fn map<M, C>");
+    expect(agentRuntimeReplyBackendSource).not.toContain("call.map(");
     expect(agentRuntimeReplyBackendSource).toContain("pub fn run_with");
     expect(agentRuntimeReplyBackendSource).toContain("pub fn run_reply_source");
     expect(agentRuntimeReplyBackendSource).toContain(
       "S: RuntimeReplySource + Send",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn run_default_provider_source_backend",
     );
     expect(agentRuntimeReplyBackendSource).toContain(
       "X: RuntimeReplySourceExecutor<M, C> + Send",
@@ -3706,28 +5205,53 @@ describe("aster migration boundary", () => {
     expect(asterReplyBackendAdapterSource).toContain("prepare_run(");
     expect(asterReplyBackendAdapterSource).toContain("backend_start.trace()");
     expect(asterReplyBackendAdapterSource).toContain("run_reply_source");
-    expect(asterReplyBackendAdapterSource).toContain("struct AsterReplySource");
     expect(asterReplyBackendAdapterSource).toContain(
-      "impl<'source> RuntimeReplySource for AsterReplySource<'source>",
+      "super::provider_reply_exit_source::ReplyExitSource",
     );
-    expect(asterReplyBackendAdapterSource).toContain("type Stream<'run>");
-    expect(asterReplyBackendAdapterSource).toContain("Self: 'run");
-    expect(asterReplyBackendAdapterSource).toContain("fn run");
-    expect(asterReplyBackendAdapterSource).toContain("RuntimeReplySourceRun");
-    expect(asterReplyBackendAdapterSource).toContain(
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "struct ReplyExitSource",
+    );
+    expect(providerReplyExitSourceSource).not.toContain("AsterReplySource");
+    expect(providerReplyExitSourceSource).not.toContain(
+      "AsterReplySourceExecutor",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "AsterProviderReplySource",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "run_aster_provider_reply_source",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "pub(super) struct ReplyExitSource",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "impl<'source> RuntimeReplySource for ReplyExitSource<'source>",
+    );
+    expect(providerReplyExitSourceSource).toContain("type Stream<'run>");
+    expect(providerReplyExitSourceSource).toContain("Self: 'run");
+    expect(providerReplyExitSourceSource).toContain("fn run");
+    expect(providerReplyExitSourceSource).toContain("RuntimeReplySourceRun");
+    expect(providerReplyExitSourceSource).toContain(
       "RuntimeReplySourceExecutor",
     );
-    expect(asterReplyBackendAdapterSource).toContain("call.run_with(");
+    expect(providerReplyExitSourceSource).toContain("call.run_with(");
     expect(
       asterReplyBackendAdapterSource.match(
         /call\.map\(lower_aster_reply_message, to_aster_session_config\)/g,
       ) ?? [],
-    ).toHaveLength(1);
-    expect(asterReplyBackendAdapterSource).toContain(
-      "struct CompatReplySourceExecutor",
+    ).toHaveLength(0);
+    expect(asterReplyBackendAdapterSource).not.toContain("call.map(");
+    expect(providerReplyExitSourceSource).toContain(
+      "struct ReplyExitSourceExecutor",
     );
-    expect(asterReplyBackendAdapterSource).toContain("fn run_default");
-    expect(asterReplyBackendAdapterSource).toContain("fn run_provider");
+    expect(providerReplyExitSourceSource).toContain(
+      "RuntimeReplySourceExecutor<RuntimeReplyMessage, AgentSessionConfig>",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "RuntimeReplySourceExecutor<Message, aster::agents::SessionConfig>",
+    );
+    expect(providerReplyExitSourceSource).toContain("fn run_default");
+    expect(providerReplyExitSourceSource).toContain("fn run_provider");
     expect(asterReplyBackendAdapterSource).toContain("outcome.finish_stream");
     const runtimeReplySourceTraitBody = agentRuntimeReplyBackendSource.slice(
       agentRuntimeReplyBackendSource.indexOf("pub trait RuntimeReplySource"),
@@ -3739,31 +5263,30 @@ describe("aster migration boundary", () => {
       asterReplyBackendAdapterSource.indexOf(
         "pub(super) async fn start_aster_reply_stream",
       ),
-      asterReplyBackendAdapterSource.indexOf("struct AsterReplySource"),
+      asterReplyBackendAdapterSource.length,
     );
-    const asterReplySourceBody = asterReplyBackendAdapterSource.slice(
-      asterReplyBackendAdapterSource.indexOf("struct AsterReplySource"),
-      asterReplyBackendAdapterSource.indexOf(
-        "struct CompatReplySourceExecutor",
+    const compatReplySourceBody = providerReplyExitSourceSource.slice(
+      providerReplyExitSourceSource.indexOf(
+        "pub(super) struct ReplyExitSource",
       ),
+      providerReplyExitSourceSource.indexOf("struct ReplyExitSourceExecutor"),
     );
-    const compatReplySourceExecutorBody = asterReplyBackendAdapterSource.slice(
-      asterReplyBackendAdapterSource.indexOf(
-        "struct CompatReplySourceExecutor",
-      ),
+    const compatReplySourceExecutorBody = providerReplyExitSourceSource.slice(
+      providerReplyExitSourceSource.indexOf("struct ReplyExitSourceExecutor"),
+      providerReplyExitSourceSource.indexOf("type ProviderReplyExitSource"),
     );
-    expect(asterReplySourceBody).toContain(
-      "CompatReplySourceExecutor::new(self.agent, self.provider)",
+    expect(compatReplySourceBody).toContain(
+      "ReplyExitSourceExecutor::new(self.agent, self.provider)",
     );
-    expect(asterReplySourceBody).toContain("call.run_with(");
-    expect(asterReplySourceBody).not.toContain(
+    expect(compatReplySourceBody).toContain("call.run_with(");
+    expect(compatReplySourceBody).not.toContain(
       "RuntimeReplySourceCall::Default",
     );
-    expect(asterReplySourceBody).not.toContain(
+    expect(compatReplySourceBody).not.toContain(
       "RuntimeReplySourceCall::Provider",
     );
-    expect(asterReplySourceBody).not.toContain(".reply(");
-    expect(asterReplySourceBody).not.toContain(".stream_reply_with_agent(");
+    expect(compatReplySourceBody).not.toContain(".reply(");
+    expect(compatReplySourceBody).not.toContain(".stream_reply_with_agent(");
     expect(compatReplySourceExecutorBody).not.toContain(
       "RuntimeReplySourceCall::Default",
     );
@@ -3772,10 +5295,53 @@ describe("aster migration boundary", () => {
     );
     expect(compatReplySourceExecutorBody).toContain("fn run_default");
     expect(compatReplySourceExecutorBody).toContain("fn run_provider");
-    expect(compatReplySourceExecutorBody).toContain(".reply(");
     expect(compatReplySourceExecutorBody).toContain(
+      "run_default_provider_source_backend(call, provider",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "provider_reply_exit_source(self.agent, provider)",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "run_provider_source_backend(call, self.provider",
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "provider_reply_exit_source(self.agent, provider.into_compat_provider())",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      "provider.into_reply_source(self.agent)",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      "call.required_provider(self.provider)?",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      "let source_request = call.into_source_request();",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      "RuntimeReplyProviderSourceBackendCall::new(source_request)",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      "source_request.into_backend_call()",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(".stream_reply(");
+    expect(compatReplySourceExecutorBody).not.toContain(
+      "lower_aster_reply_message(",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      "to_aster_session_config(",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
       ".stream_reply_with_agent(",
     );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      'expect("provider run path requires configured provider")',
+    );
+    expect(compatReplySourceExecutorBody).toContain(
+      "let provider = self.agent.provider().await?;",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(
+      ".reply_with_provider(",
+    );
+    expect(compatReplySourceExecutorBody).not.toContain(".reply(");
     expect(startAsterReplyStreamBody).not.toContain(
       "RuntimeReplyBackendRunPath::Provider",
     );
@@ -3872,8 +5438,8 @@ describe("aster migration boundary", () => {
     );
     expect(runtimeReplySourceTraitBody).not.toContain("fn run_default");
     expect(runtimeReplySourceTraitBody).not.toContain("fn run_provider");
-    expect(asterReplySourceBody).not.toContain("fn run_default");
-    expect(asterReplySourceBody).not.toContain("fn run_provider");
+    expect(compatReplySourceBody).not.toContain("fn run_default");
+    expect(compatReplySourceBody).not.toContain("fn run_provider");
     expect(asterReplyBackendAdapterSource).not.toContain(
       "RuntimeReplyStartRequest {\n        request,",
     );
@@ -3970,7 +5536,10 @@ describe("aster migration boundary", () => {
     expect(asterReplyAdapterSource).not.toContain(
       "input_modality_policy_allows_image_input",
     );
-    expect(asterReplyBackendAdapterSource).toContain(
+    expect(providerReplyExitSourceSource).toContain(
+      "lower_aster_reply_message",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
       "lower_aster_reply_message",
     );
     expect(asterReplyAdapterSource).not.toContain("lower_aster_reply_message");
@@ -4002,7 +5571,10 @@ describe("aster migration boundary", () => {
     expect(asterReplyAdapterSource).not.toContain(
       "enum RuntimeReplyStreamEvent",
     );
-    expect(asterReplyBackendAdapterSource).toContain(
+    expect(providerReplyExitSourceSource).toContain(
+      "project_aster_reply_stream",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
       "project_aster_reply_stream",
     );
     expect(asterReplyAdapterSource).not.toContain("project_aster_reply_stream");
@@ -4061,9 +5633,122 @@ describe("aster migration boundary", () => {
     expect(asterReplyBackendAdapterSource).toContain(
       "RuntimeReplyStartRequest",
     );
-    expect(asterReplyBackendAdapterSource).toContain("to_aster_session_config");
-    expect(asterReplyBackendAdapterSource).toContain(".reply(");
+    expect(providerReplyExitSourceSource).toContain(
+      "fn run_provider_reply_exit_source",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "pub fn run_provider_reply_exit_source",
+    );
     expect(asterReplyBackendAdapterSource).toContain(
+      "super::provider_reply_exit_source::ReplyExitSource",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "type ProviderReplyExitSource",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "fn run_provider_reply_exit_source",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub trait RuntimeReplyProviderExecutionRunner",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub struct RuntimeReplyProviderExecutionSource",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "pub fn run_provider_source_execution",
+    );
+    expect(modelProviderStreamSource).toContain(
+      "impl<R, X> RuntimeReplyProviderSourceBackend<R> for RuntimeReplyProviderExecutionSource<X>",
+    );
+    expect(agentRuntimeReplyBackendSource).not.toContain(
+      "pub trait RuntimeReplyProviderExecutionRunner",
+    );
+    expect(agentRuntimeReplyBackendSource).not.toContain(
+      "pub struct RuntimeReplyProviderExecutionSource",
+    );
+    expect(agentRuntimeReplyBackendSource).not.toContain(
+      "pub fn run_provider_source_execution",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain(
+      "pub fn from_source_request",
+    );
+    expect(agentRuntimeReplyBackendSource).toContain("pub fn from_run_call");
+    expect(providerReplyExitSourceSource).toContain(
+      "struct ProviderReplyExitRunner",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "impl<'source> RuntimeReplyProviderExecutionRunner<RuntimeReplyProviderSourceExecution>",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "impl<'source> RuntimeReplyProviderExecutionRunner<RuntimeReplyProviderSourceBackendRequest>",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "RuntimeReplyProviderSourceExecution::from_source_request(request)",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "run_provider_source_execution(",
+    );
+    expect(providerReplyExitSourceSource).toContain("execution.into_parts();");
+    expect(providerReplyExitSourceSource).not.toContain(
+      "RuntimeReplyProviderSourceExecution::from_run_call(call).into_parts();",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "call.into_source_request().into_parts();",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "project_aster_reply_stream(stream, stream_request)",
+    );
+    expect(providerReplyExitSourceSource).toContain("to_aster_session_config");
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "to_aster_session_config",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "let provider = self.agent.provider().await?;",
+    );
+    expect(providerReplyExitSourceSource).toContain(".reply_with_provider(");
+    expect(
+      providerReplyExitSourceSource.match(/\.reply_with_provider\(/g) ?? [],
+      "Aster provider reply execution 退场模块只能保留一处 Aster reply_with_provider 最后一跳",
+    ).toHaveLength(1);
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      ".reply_with_provider(",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(".reply(");
+    expect(providerReplyExitSourceSource).toContain(
+      "run_default_provider_source_backend(call, provider",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "run_provider_source_backend(call, self.provider",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "provider_reply_exit_source(self.agent, provider.into_compat_provider())",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "run_default_provider_source_backend(call, provider",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "run_provider_source_backend(call, self.provider",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "ProviderReplyExitSource::new(self.agent",
+    );
+    expect(providerReplyExitSourceSource).toContain(
+      "RuntimeReplyProviderExecutionSource::new(ProviderReplyExitRunner::new(agent, provider))",
+    );
+    expect(providerReplyExitSourceSource).not.toContain(
+      "run_provider_reply_exit_source(self.agent, self.provider, call)",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "run_provider_reply_exit_source(self.agent, self.provider, call)",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "provider.into_reply_source(self.agent)",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(
+      "RuntimeReplyProviderSourceBackendCall::new(source_request)",
+    );
+    expect(asterReplyBackendAdapterSource).not.toContain(".stream_reply(");
+    expect(asterReplyBackendAdapterSource).not.toContain(
       ".stream_reply_with_agent(",
     );
     expect(asterReplyBackendAdapterSource).not.toContain(
@@ -4666,8 +6351,7 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/prompt/templates.rs";
     const runtimeAvailabilityPath =
       "src/components/agent/chat/utils/runtimeToolAvailability.ts";
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
     const runtimeInventoryAdapterPath =
       "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs";
     const runtimeStateSource = readFileSync(
@@ -4834,6 +6518,15 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).toContain(
       "runtime_native_tool_registration_allowlist",
     );
+    expect(currentOwnerSource).toContain(
+      "runtime_native_tool_registration_is_allowed",
+    );
+    expect(nativeOverlayProductionSource).toContain(
+      "runtime_native_tool_registration_is_allowed(&definition.name)",
+    );
+    expect(nativeOverlayProductionSource).toContain(
+      "not allowed by tool-runtime current registration policy",
+    );
     expect(currentOwnerSource).toContain("RuntimeNativeToolOverlay::ViewImage");
     expect(currentOwnerSource).toContain("RuntimeNativeToolOverlay::Sleep");
     expect(currentOwnerSource).toContain(
@@ -4848,6 +6541,10 @@ describe("aster migration boundary", () => {
     expect(currentOwnerSource).toContain('!names.contains(&"Edit")');
     expect(currentOwnerSource).toContain('!names.contains(&"ToolSearch")');
     expect(currentOwnerSource).toContain('!names.contains(&"ToolSearchTool")');
+    expect(currentOwnerSource).toContain(
+      "!runtime_native_tool_registration_is_allowed(",
+    );
+    expect(currentOwnerSource).toContain('"RuntimeApprovalResume"');
     for (const retiredTaskTool of [
       "TaskCreate",
       "TaskList",
@@ -5004,12 +6701,11 @@ describe("aster migration boundary", () => {
     const appServerNativeToolsPath =
       "lime-rs/crates/app-server/src/runtime_backend/native_tools.rs";
     const runtimeStatePath = "lime-rs/crates/agent/src/runtime_state.rs";
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
-    const vendorAgentPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
+    const vendorAgentPath = "lime-rs/crates/agent-compat/src/agents/agent.rs";
+    const coreToolCallingPath = "lime-rs/crates/core/src/tool_calling.rs";
     const vendorReplyPartsPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/reply_parts.rs";
+      "lime-rs/crates/agent-compat/src/agents/reply_parts.rs";
     const currentOwnerSource = readFileSync(
       join(REPO_ROOT, currentOwnerPath),
       "utf8",
@@ -5152,12 +6848,10 @@ describe("aster migration boundary", () => {
     const appServerNativeToolsPath =
       "lime-rs/crates/app-server/src/runtime_backend/native_tools.rs";
     const runtimeStatePath = "lime-rs/crates/agent/src/runtime_state.rs";
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
-    const vendorAgentPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
+    const vendorAgentPath = "lime-rs/crates/agent-compat/src/agents/agent.rs";
     const vendorReplyPartsPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/reply_parts.rs";
+      "lime-rs/crates/agent-compat/src/agents/reply_parts.rs";
     const currentOwnerSource = readFileSync(
       join(REPO_ROOT, currentOwnerPath),
       "utf8",
@@ -5520,16 +7214,18 @@ describe("aster migration boundary", () => {
     const agentRuntimeStateSupportPath =
       "lime-rs/crates/agent/src/runtime_state_support.rs";
     const agentToolsModPath = "lime-rs/crates/agent/src/tools/mod.rs";
+    const agentCompatLibPath = "lime-rs/crates/agent-compat/src/lib.rs";
+    const agentCompatAgentsModPath =
+      "lime-rs/crates/agent-compat/src/agents/mod.rs";
+    const agentCompatExtensionPath =
+      "lime-rs/crates/agent-compat/src/agents/extension.rs";
     const appServerRuntimeEnablePath =
       "lime-rs/crates/app-server/src/runtime_backend/skill_runtime_enable.rs";
     const vendorSkillsToolPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/skills/tool.rs";
-    const vendorSkillsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/skills/mod.rs";
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+      "lime-rs/crates/agent-compat/src/skills/tool.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
     const vendorToolsRegistryPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/registry.rs";
+      "lime-rs/crates/agent-compat/src/tools/registry.rs";
     const currentOwnerSource = readFileSync(
       join(REPO_ROOT, currentOwnerPath),
       "utf8",
@@ -5575,12 +7271,20 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, agentToolsModPath),
       "utf8",
     );
-    const appServerRuntimeEnableSource = readFileSync(
-      join(REPO_ROOT, appServerRuntimeEnablePath),
+    const agentCompatLibSource = readFileSync(
+      join(REPO_ROOT, agentCompatLibPath),
       "utf8",
     );
-    const vendorSkillsModSource = readFileSync(
-      join(REPO_ROOT, vendorSkillsModPath),
+    const agentCompatAgentsModSource = readFileSync(
+      join(REPO_ROOT, agentCompatAgentsModPath),
+      "utf8",
+    );
+    const agentCompatExtensionSource = readFileSync(
+      join(REPO_ROOT, agentCompatExtensionPath),
+      "utf8",
+    );
+    const appServerRuntimeEnableSource = readFileSync(
+      join(REPO_ROOT, appServerRuntimeEnablePath),
       "utf8",
     );
     const vendorToolsModSource = readFileSync(
@@ -5636,9 +7340,12 @@ describe("aster migration boundary", () => {
       "SkillTool::new",
       'config.allows_tool("Skill")',
     ];
-    const vendorSkillsModForbiddenSnippets = [
-      "pub mod tool;",
-      "pub use tool::*",
+    const agentCompatSkillsSurfaceForbiddenSnippets = [
+      "pub mod skills;",
+      "mod skills;",
+      "skills_extension",
+      "loadSkill",
+      "Legacy skill loader extension",
     ];
     const vendorRegistryForbiddenSnippets = [
       '("Skill", &["SkillTool"])',
@@ -5647,9 +7354,17 @@ describe("aster migration boundary", () => {
     const vendorToolsModLeaks = vendorToolsModForbiddenSnippets
       .filter((snippet) => vendorToolsModProduction.includes(snippet))
       .map((snippet) => `${vendorToolsModPath}: ${snippet}`);
-    const vendorSkillsModLeaks = vendorSkillsModForbiddenSnippets
-      .filter((snippet) => vendorSkillsModSource.includes(snippet))
-      .map((snippet) => `${vendorSkillsModPath}: ${snippet}`);
+    const agentCompatSkillsSurfaceSource = [
+      [agentCompatLibPath, agentCompatLibSource],
+      [agentCompatAgentsModPath, agentCompatAgentsModSource],
+      [agentCompatExtensionPath, agentCompatExtensionSource],
+    ] as const;
+    const agentCompatSkillsSurfaceLeaks =
+      agentCompatSkillsSurfaceForbiddenSnippets.flatMap((snippet) =>
+        agentCompatSkillsSurfaceSource
+          .filter(([, source]) => source.includes(snippet))
+          .map(([path]) => `${path}: ${snippet}`),
+      );
     const vendorRegistryLeaks = vendorRegistryForbiddenSnippets
       .filter((snippet) => vendorToolsRegistryProduction.includes(snippet))
       .map((snippet) => `${vendorToolsRegistryPath}: ${snippet}`);
@@ -5846,6 +7561,9 @@ describe("aster migration boundary", () => {
     for (const deletedPath of DELETED_ASTER_VENDOR_SKILL_TOOL_FILES) {
       expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
     }
+    for (const deletedPath of DELETED_ASTER_VENDOR_SKILLS_PATHS) {
+      expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
+    }
     expect(
       wrapperLeaks,
       "Skill session enable / allowlist / source metadata / execution envelope 必须归属 tool-runtime + lime-skills；lime-agent 只能保留临时 Aster Tool trait 外壳和 provider bridge",
@@ -5855,8 +7573,8 @@ describe("aster migration boundary", () => {
       "Skill current backend 已归属 tool-runtime + lime-skills；vendored Aster 不得恢复 SkillTool public export 或默认注册",
     ).toEqual([]);
     expect(
-      vendorSkillsModLeaks,
-      "vendored Aster skills module 只允许保留迁移期 loader/types/executor 参考面，不得恢复 SkillTool backend module",
+      agentCompatSkillsSurfaceLeaks,
+      "Aster skills registry/loader/executor 和 loadSkill platform extension 已删除；Skill current owner 是 lime-skills + tool-runtime::skill_execute，不得恢复 agent-compat skills surface",
     ).toEqual([]);
     expect(
       vendorRegistryLeaks,
@@ -5865,14 +7583,13 @@ describe("aster migration boundary", () => {
   });
 
   it("vendored Aster Task* 工具族必须保持删除且不得重新注册", () => {
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
-    const vendorAgentPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
+    const vendorAgentPath = "lime-rs/crates/agent-compat/src/agents/agent.rs";
     const vendorHookLoaderPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/hooks/loader.rs";
+      "lime-rs/crates/agent-compat/src/hooks/loader.rs";
     const vendorHookTypesPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/hooks/types.rs";
+      "lime-rs/crates/agent-compat/src/hooks/types.rs";
+    const coreToolCallingPath = "lime-rs/crates/core/src/tool_calling.rs";
     const vendorToolsModSource = readFileSync(
       join(REPO_ROOT, vendorToolsModPath),
       "utf8",
@@ -5885,13 +7602,14 @@ describe("aster migration boundary", () => {
     );
     const vendorAgentProduction =
       vendorAgentSource.split("#[cfg(test)]")[0] ?? vendorAgentSource;
-    const vendorHookLoaderSource = readFileSync(
+    const vendorHookLoaderSource = readTextIfExists(
       join(REPO_ROOT, vendorHookLoaderPath),
-      "utf8",
     );
-    const vendorHookTypesSource = readFileSync(
+    const vendorHookTypesSource = readTextIfExists(
       join(REPO_ROOT, vendorHookTypesPath),
-      "utf8",
+    );
+    const coreToolCallingProduction = rustProductionSource(
+      readFileSync(join(REPO_ROOT, coreToolCallingPath), "utf8"),
     );
     const retiredTaskToolNames = [
       "TaskCreate",
@@ -5923,6 +7641,21 @@ describe("aster migration boundary", () => {
     const agentProductionLeaks = retiredTaskToolNames
       .filter((snippet) => vendorAgentProduction.includes(snippet))
       .map((snippet) => `${vendorAgentPath}: ${snippet}`);
+    const coreToolCallingForbiddenSnippets = [
+      ...retiredTaskToolNames,
+      "TaskCreateTool",
+      "TaskListTool",
+      "TaskGetTool",
+      "TaskUpdateTool",
+      "TaskOutputTool",
+      "TaskStopTool",
+      "AgentOutputTool",
+      "BashOutputTool",
+      "KillShell",
+    ];
+    const coreToolCallingLeaks = coreToolCallingForbiddenSnippets
+      .filter((snippet) => coreToolCallingProduction.includes(snippet))
+      .map((snippet) => `${coreToolCallingPath}: ${snippet}`);
 
     for (const deletedPath of DELETED_ASTER_VENDOR_TASK_TOOL_FILES) {
       expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
@@ -5935,15 +7668,18 @@ describe("aster migration boundary", () => {
       agentProductionLeaks,
       "SubAgent production allowlist 不得再把 Aster Task* 当 current 工具面暴露",
     ).toEqual([]);
+    expect(
+      coreToolCallingLeaks,
+      "Aster Task* 不得作为 Lime tool_search / tool discovery profile 回流",
+    ).toEqual([]);
     expect(vendorHookLoaderSource).not.toContain("TaskCreated");
     expect(vendorHookTypesSource).not.toContain("TaskCreated");
   });
 
   it("vendored Aster ToolSearchTool 必须保持删除且不得重新注册", () => {
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
     const vendorToolsRegistryPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/registry.rs";
+      "lime-rs/crates/agent-compat/src/tools/registry.rs";
     const vendorToolsModSource = readFileSync(
       join(REPO_ROOT, vendorToolsModPath),
       "utf8",
@@ -5998,9 +7734,8 @@ describe("aster migration boundary", () => {
     const bridgePath =
       "lime-rs/crates/agent/src/native_tools/runtime_tool_bridge.rs";
     const vendorUpdatePlanPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/plan_tool.rs";
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+      "lime-rs/crates/agent-compat/src/tools/plan_tool.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
     const currentOwnerSource = readFileSync(
       join(REPO_ROOT, currentOwnerPath),
       "utf8",
@@ -6061,10 +7796,9 @@ describe("aster migration boundary", () => {
   });
 
   it("Aster EnterPlanMode / ExitPlanMode 工具面必须保持删除", () => {
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
     const vendorToolsRegistryPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/registry.rs";
+      "lime-rs/crates/agent-compat/src/tools/registry.rs";
     const runtimeAllowlistPath =
       "lime-rs/crates/tool-runtime/src/native_overlay.rs";
     const agentCatalogPath = "lime-rs/crates/agent/src/agent_tools/catalog.rs";
@@ -6189,6 +7923,238 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
   });
 
+  it("Aster SendUserMessage / BriefTool 工具面必须保持删除", () => {
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
+    const vendorRegistryPath =
+      "lime-rs/crates/agent-compat/src/tools/registry.rs";
+    const agentCatalogPath = "lime-rs/crates/agent/src/agent_tools/catalog.rs";
+    const frontendNormalizationPath = "src/lib/api/agentTextNormalization.ts";
+    const frontendNormalizationTestPath =
+      "src/lib/api/agentTextNormalization.test.ts";
+    const frontendDisplayConfigPath =
+      "src/components/agent/chat/utils/toolDisplayConfig/content.ts";
+    const frontendDisplayInfoTestPath =
+      "src/components/agent/chat/utils/toolDisplayInfo.test.ts";
+    const frontendDisplaySubjectPath =
+      "src/components/agent/chat/utils/toolDisplaySubject.ts";
+    const frontendThreadSummaryPath =
+      "src/components/agent/chat/utils/agentThreadGroupingItemSummary.ts";
+    const frontendProcessSummaryPath =
+      "src/components/agent/chat/utils/toolProcessGenericSummary.ts";
+    const vendorAgentPath = "lime-rs/crates/agent-compat/src/agents/agent.rs";
+
+    const vendorToolsModProduction = rustProductionSource(
+      readFileSync(join(REPO_ROOT, vendorToolsModPath), "utf8"),
+    );
+    const vendorRegistryProduction = rustProductionSource(
+      readFileSync(join(REPO_ROOT, vendorRegistryPath), "utf8"),
+    );
+    const agentCatalogProduction = rustProductionSource(
+      readFileSync(join(REPO_ROOT, agentCatalogPath), "utf8"),
+    );
+    const checkedSources = [
+      [vendorToolsModPath, vendorToolsModProduction],
+      [vendorRegistryPath, vendorRegistryProduction],
+      [agentCatalogPath, agentCatalogProduction],
+      [
+        frontendNormalizationPath,
+        readFileSync(join(REPO_ROOT, frontendNormalizationPath), "utf8"),
+      ],
+      [
+        frontendNormalizationTestPath,
+        readFileSync(join(REPO_ROOT, frontendNormalizationTestPath), "utf8"),
+      ],
+      [
+        frontendDisplayConfigPath,
+        readFileSync(join(REPO_ROOT, frontendDisplayConfigPath), "utf8"),
+      ],
+      [
+        frontendDisplayInfoTestPath,
+        readFileSync(join(REPO_ROOT, frontendDisplayInfoTestPath), "utf8"),
+      ],
+      [
+        frontendDisplaySubjectPath,
+        readFileSync(join(REPO_ROOT, frontendDisplaySubjectPath), "utf8"),
+      ],
+      [
+        frontendThreadSummaryPath,
+        readFileSync(join(REPO_ROOT, frontendThreadSummaryPath), "utf8"),
+      ],
+      [
+        frontendProcessSummaryPath,
+        readFileSync(join(REPO_ROOT, frontendProcessSummaryPath), "utf8"),
+      ],
+      [vendorAgentPath, readFileSync(join(REPO_ROOT, vendorAgentPath), "utf8")],
+    ] as const;
+    const forbiddenSnippets = [
+      "send_user_message_tool",
+      "SendUserMessageTool",
+      "SEND_USER_MESSAGE_TOOL_NAME",
+      "SendUserMessage",
+      "BriefTool",
+      "sendusermessage",
+      "brieftool",
+      "toolCall.processSummary.userMessage",
+    ];
+    const leaks = checkedSources.flatMap(([path, source]) =>
+      forbiddenSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${path}: ${snippet}`),
+    );
+
+    for (const deletedPath of DELETED_ASTER_VENDOR_SEND_USER_MESSAGE_TOOL_FILES) {
+      expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
+    }
+    expect(
+      leaks,
+      "Codex 没有 Aster SendUserMessage/BriefTool 模型可调用工具；Lime current 交互入口是 request_user_input，旧 vendor 实现、catalog alias 和前端正向展示不得恢复",
+    ).toEqual([]);
+  });
+
+  it("Aster AnalyzeImageTool 工具面必须保持删除", () => {
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
+    const vendorAgentPath = "lime-rs/crates/agent-compat/src/agents/agent.rs";
+    const frontendDisplayConfigPath =
+      "src/components/agent/chat/utils/toolDisplayConfig/core.ts";
+    const frontendDisplayCopyPath =
+      "src/components/agent/chat/utils/toolDisplayCopy.ts";
+    const frontendDisplayInfoPath =
+      "src/components/agent/chat/utils/toolDisplayInfo.ts";
+    const frontendDisplaySubjectPath =
+      "src/components/agent/chat/utils/toolDisplaySubject.ts";
+    const frontendProcessSummaryCopyPath =
+      "src/components/agent/chat/utils/toolProcessSummaryCopy.ts";
+    const frontendProcessSummaryTestPath =
+      "src/components/agent/chat/utils/toolProcessSummary.test.ts";
+    const runtimeLocalePaths = [
+      "src/i18n/resources/zh-CN/agentRuntime.json",
+      "src/i18n/resources/zh-TW/agentRuntime.json",
+      "src/i18n/resources/en-US/agentRuntime.json",
+      "src/i18n/resources/ja-JP/agentRuntime.json",
+      "src/i18n/resources/ko-KR/agentRuntime.json",
+    ];
+    const messageLocalePaths = [
+      "src/i18n/resources/zh-CN/agentMessageList.json",
+      "src/i18n/resources/zh-TW/agentMessageList.json",
+      "src/i18n/resources/en-US/agentMessageList.json",
+      "src/i18n/resources/ja-JP/agentMessageList.json",
+      "src/i18n/resources/ko-KR/agentMessageList.json",
+    ];
+    const checkedSources = [
+      [
+        vendorToolsModPath,
+        rustProductionSource(
+          readFileSync(join(REPO_ROOT, vendorToolsModPath), "utf8"),
+        ),
+      ],
+      [vendorAgentPath, readFileSync(join(REPO_ROOT, vendorAgentPath), "utf8")],
+      [
+        frontendDisplayConfigPath,
+        readFileSync(join(REPO_ROOT, frontendDisplayConfigPath), "utf8"),
+      ],
+      [
+        frontendDisplayCopyPath,
+        readFileSync(join(REPO_ROOT, frontendDisplayCopyPath), "utf8"),
+      ],
+      [
+        frontendDisplayInfoPath,
+        readFileSync(join(REPO_ROOT, frontendDisplayInfoPath), "utf8"),
+      ],
+      [
+        frontendDisplaySubjectPath,
+        readFileSync(join(REPO_ROOT, frontendDisplaySubjectPath), "utf8"),
+      ],
+      [
+        frontendProcessSummaryCopyPath,
+        readFileSync(join(REPO_ROOT, frontendProcessSummaryCopyPath), "utf8"),
+      ],
+      [
+        frontendProcessSummaryTestPath,
+        readFileSync(join(REPO_ROOT, frontendProcessSummaryTestPath), "utf8"),
+      ],
+      ...runtimeLocalePaths.map(
+        (path) => [path, readFileSync(join(REPO_ROOT, path), "utf8")] as const,
+      ),
+      ...messageLocalePaths.map(
+        (path) => [path, readFileSync(join(REPO_ROOT, path), "utf8")] as const,
+      ),
+    ] as const;
+    const forbiddenSnippets = [
+      "mod analyze_image",
+      "AnalyzeImageTool",
+      '"analyze_image"',
+      "analyzeimage",
+      "imageAnalyze",
+      "visionAnalyze",
+      "图像分析",
+      "圖片分析",
+      "Image analysis",
+      "画像分析",
+      "이미지 분석",
+    ];
+    const leaks = checkedSources.flatMap(([path, source]) =>
+      forbiddenSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${path}: ${snippet}`),
+    );
+
+    for (const deletedPath of DELETED_ASTER_VENDOR_ANALYZE_IMAGE_TOOL_FILES) {
+      expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
+    }
+    expect(
+      leaks,
+      "Codex 没有 Aster analyze_image 模型可调用工具；Lime current 图片链路是 input image / view_image / analyze_image_input 权限 profile，不得恢复 vendor AnalyzeImageTool 或前端专用展示",
+    ).toEqual([]);
+  });
+
+  it("Aster Write/Edit 文件修改工具必须保持删除", () => {
+    const checkedRustProductionPaths = [
+      "lime-rs/crates/agent-compat/src/tools/file/mod.rs",
+      "lime-rs/crates/agent-compat/src/tools/mod.rs",
+      "lime-rs/crates/agent-compat/src/tools/registry.rs",
+      "lime-rs/crates/agent-compat/src/tools/hooks.rs",
+      "lime-rs/crates/agent-compat/src/agents/agent.rs",
+      "lime-rs/crates/agent-compat/src/agents/reply_parts.rs",
+      "lime-rs/crates/agent/src/agent_tools/catalog.rs",
+      "lime-rs/crates/agent/src/agent_tools/execution/rules.rs",
+      "lime-rs/crates/core/src/tool_calling.rs",
+    ];
+    const forbiddenSnippets = [
+      "pub mod write",
+      "pub mod edit",
+      "mod write",
+      "mod edit",
+      "WriteTool",
+      "EditTool",
+      "FileWriteTool",
+      "FileEditTool",
+      '"Write"',
+      '"Edit"',
+      "write_file",
+      "create_file",
+      "edit_file",
+      "developer__text_editor",
+      "mcp__system__write_file",
+      "mcp__system__edit_file",
+    ];
+    const leaks = checkedRustProductionPaths.flatMap((path) => {
+      const source = rustProductionSource(
+        readFileSync(join(REPO_ROOT, path), "utf8"),
+      );
+      return forbiddenSnippets
+        .filter((snippet) => source.includes(snippet))
+        .map((snippet) => `${path}: ${snippet}`);
+    });
+
+    for (const deletedPath of DELETED_ASTER_VENDOR_FILE_MUTATION_TOOL_FILES) {
+      expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
+    }
+    expect(
+      leaks,
+      "Codex current 文件修改入口是 apply_patch；Aster Write/Edit vendor 实现、注册、alias、reply surface、catalog 和 execution policy 不得恢复",
+    ).toEqual([]);
+  });
+
   it("sleep native tool 必须按 Codex clock.sleep 语义归属 tool-runtime", () => {
     const currentOwnerPath = "lime-rs/crates/tool-runtime/src/sleep.rs";
     const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
@@ -6196,9 +8162,8 @@ describe("aster migration boundary", () => {
     const bridgePath =
       "lime-rs/crates/agent/src/native_tools/runtime_tool_bridge.rs";
     const vendorSleepToolPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/sleep_tool.rs";
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+      "lime-rs/crates/agent-compat/src/tools/sleep_tool.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
     const frontendNormalizationPath = "src/lib/api/agentTextNormalization.ts";
     const frontendSubjectPath =
       "src/components/agent/chat/utils/toolDisplaySubject.ts";
@@ -6280,9 +8245,8 @@ describe("aster migration boundary", () => {
     const bridgePath =
       "lime-rs/crates/agent/src/native_tools/runtime_tool_bridge.rs";
     const vendorViewImagePath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/view_image.rs";
-    const vendorToolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+      "lime-rs/crates/agent-compat/src/tools/view_image.rs";
+    const vendorToolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
     const currentOwnerSource = readFileSync(
       join(REPO_ROOT, currentOwnerPath),
       "utf8",
@@ -7709,24 +9673,19 @@ describe("aster migration boundary", () => {
   });
 
   it("vendored Aster shell permission 只允许内部调用 tool-runtime current owner", () => {
-    const asterCargoPath = "lime-rs/vendor/aster-rust/crates/aster/Cargo.toml";
-    const asterLibPath = "lime-rs/vendor/aster-rust/crates/aster/src/lib.rs";
-    const toolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
-    const bashPath = "lime-rs/vendor/aster-rust/crates/aster/src/tools/bash.rs";
+    const asterCargoPath = "lime-rs/crates/agent-compat/Cargo.toml";
+    const asterLibPath = "lime-rs/crates/agent-compat/src/lib.rs";
+    const toolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
+    const bashPath = "lime-rs/crates/agent-compat/src/tools/bash.rs";
     const powershellPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/powershell_tool.rs";
-    const taskPath = "lime-rs/vendor/aster-rust/crates/aster/src/tools/task.rs";
-    const pathGuardPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/path_guard.rs";
+      "lime-rs/crates/agent-compat/src/tools/powershell_tool.rs";
+    const taskPath = "lime-rs/crates/agent-compat/src/tools/task.rs";
+    const pathGuardPath = "lime-rs/crates/agent-compat/src/tools/path_guard.rs";
     const commandSemanticsPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/command_semantics.rs";
-    const subprocessPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/subprocess.rs";
+      "lime-rs/crates/agent-compat/src/tools/command_semantics.rs";
+    const subprocessPath = "lime-rs/crates/agent-compat/src/subprocess.rs";
     const shellRuntimePath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/shell_runtime.rs";
-    const bashPropertyTestsPath =
-      "lime-rs/vendor/aster-rust/crates/aster/tests/bash_tool_property_tests.rs";
+      "lime-rs/crates/agent-compat/src/tools/shell_runtime.rs";
     const cargoSource = readFileSync(join(REPO_ROOT, asterCargoPath), "utf8");
     const asterLibSource = readFileSync(join(REPO_ROOT, asterLibPath), "utf8");
     const toolsModSource = readFileSync(join(REPO_ROOT, toolsModPath), "utf8");
@@ -7736,10 +9695,6 @@ describe("aster migration boundary", () => {
       "utf8",
     );
     const taskSource = readFileSync(join(REPO_ROOT, taskPath), "utf8");
-    const bashPropertyTestsSource = readFileSync(
-      join(REPO_ROOT, bashPropertyTestsPath),
-      "utf8",
-    );
     const productionSource = [
       `${toolsModPath}\n${toolsModSource.split("#[cfg(test)]")[0] ?? toolsModSource}`,
       `${bashPath}\n${bashSource.split("#[cfg(test)]")[0] ?? bashSource}`,
@@ -7749,7 +9704,7 @@ describe("aster migration boundary", () => {
       `${taskPath}\n${taskSource.split("#[cfg(test)]")[0] ?? taskSource}`,
     ].join("\n");
     const vendorSource = collectTextFiles(
-      join(REPO_ROOT, "lime-rs/vendor/aster-rust/crates/aster/src"),
+      join(REPO_ROOT, "lime-rs/crates/agent-compat/src"),
     )
       .map((file) => {
         const relativePath = repoRelative(file);
@@ -7779,7 +9734,7 @@ describe("aster migration boundary", () => {
       );
 
     expect(cargoSource).toContain(
-      'tool-runtime = { path = "../../../../crates/tool-runtime" }',
+      'tool-runtime = { path = "../tool-runtime" }',
     );
     expect(cargoSource).not.toContain("encoding_rs =");
     expect(asterLibSource).not.toContain("pub mod subprocess;");
@@ -7872,33 +9827,21 @@ describe("aster migration boundary", () => {
       ),
       "进程输出解码、Windows no-window / UTF-8 wrapper 与平台 shell runtime 已迁到 tool-runtime；vendored Aster 只能内部调用 current owner，不得恢复第二份 helper 或依赖 encoding_rs",
     ).toEqual([]);
-    expect(bashPropertyTestsSource).toContain(
-      "Permission rules live in `tool-runtime::shell_permission`",
-    );
     expect(
-      [
-        "prop_permission_check_blocks_dangerous",
-        "prop_permission_check_allows_safe",
-        "prop_permission_check_asks_for_warning",
-        "arb_dangerous_command",
-        "arb_warning_command",
-        "tool.check_permissions(&params, &context).await",
-      ].filter((snippet) => bashPropertyTestsSource.includes(snippet)),
-      "BashTool vendor property tests 不得继续把已迁 shell permission 规则包装成 Aster 行为；permission 行为必须在 tool-runtime current tests 覆盖",
-    ).toEqual([]);
+      existsSync(join(REPO_ROOT, "lime-rs/crates/agent-compat/tests")),
+    ).toBe(false);
   });
 
   it("vendored Aster web tools 必须保持删除，Lime adapter 只能委托 tool-runtime current owner", () => {
-    const toolsModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
-    const webPath = "lime-rs/vendor/aster-rust/crates/aster/src/tools/web.rs";
+    const toolsModPath = "lime-rs/crates/agent-compat/src/tools/mod.rs";
+    const webPath = "lime-rs/crates/agent-compat/src/tools/web.rs";
     const limeAdapterPath =
       "lime-rs/crates/agent/src/native_tools/web_retrieval.rs";
     const bridgePath =
       "lime-rs/crates/agent/src/native_tools/runtime_tool_bridge.rs";
     const overlayPath = "lime-rs/crates/tool-runtime/src/native_overlay.rs";
     const webFetchContentPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/tools/web_fetch_content.rs";
+      "lime-rs/crates/agent-compat/src/tools/web_fetch_content.rs";
     const toolsModSource = readFileSync(join(REPO_ROOT, toolsModPath), "utf8");
     const bridgeSource = readFileSync(join(REPO_ROOT, bridgePath), "utf8");
     const bridgeProductionSource = rustProductionSource(bridgeSource);
@@ -8382,16 +10325,14 @@ describe("aster migration boundary", () => {
   it("Aster SessionStore bulk history methods 必须从 Lime impl 删除", () => {
     const traitPath =
       "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
-    const vendorTraitPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/store.rs";
+    const vendorTraitPath = "lime-rs/crates/agent-compat/src/session/store.rs";
     const vendorManagerPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/session_manager.rs";
-    const vendorAgentPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+      "lime-rs/crates/agent-compat/src/session/session_manager.rs";
+    const vendorAgentPath = "lime-rs/crates/agent-compat/src/agents/agent.rs";
     const deletedVendorPaths = [
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/archive.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/diagnostics.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/export.rs",
+      "lime-rs/crates/agent-compat/src/session/archive.rs",
+      "lime-rs/crates/agent-compat/src/session/diagnostics.rs",
+      "lime-rs/crates/agent-compat/src/session/export.rs",
     ];
     const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
     const vendorTraitSource = readFileSync(
@@ -9110,20 +11051,19 @@ describe("aster migration boundary", () => {
     const currentOwnerPath = "lime-rs/crates/thread-store/src/memory_stub.rs";
     const threadStoreLibPath = "lime-rs/crates/thread-store/src/lib.rs";
     const asterSessionModPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/mod.rs";
+      "lime-rs/crates/agent-compat/src/session/mod.rs";
     const asterSessionStorePath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/store.rs";
+      "lime-rs/crates/agent-compat/src/session/store.rs";
     const asterSessionManagerPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/session_manager.rs";
-    const asterAgentPath =
-      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+      "lime-rs/crates/agent-compat/src/session/session_manager.rs";
+    const asterAgentPath = "lime-rs/crates/agent-compat/src/agents/agent.rs";
     const deletedVendorMemoryPaths = [
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_deduplicator.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_extractor.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_pipeline.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_repository.rs",
-      "lime-rs/vendor/aster-rust/crates/aster/src/session/memory_retriever.rs",
+      "lime-rs/crates/agent-compat/src/session/memory.rs",
+      "lime-rs/crates/agent-compat/src/session/memory_deduplicator.rs",
+      "lime-rs/crates/agent-compat/src/session/memory_extractor.rs",
+      "lime-rs/crates/agent-compat/src/session/memory_pipeline.rs",
+      "lime-rs/crates/agent-compat/src/session/memory_repository.rs",
+      "lime-rs/crates/agent-compat/src/session/memory_retriever.rs",
     ];
     const threadStoreLibSource = readFileSync(
       join(REPO_ROOT, threadStoreLibPath),

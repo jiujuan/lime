@@ -47,16 +47,18 @@ export function ResourceManagerSidebar({
   return (
     <aside
       data-testid="resource-manager-item-list"
-      className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-[#f7f7f7]"
+      className="flex w-[clamp(14rem,28vw,18rem)] shrink-0 flex-col border-r border-slate-200 bg-[#f7f7f7]"
     >
       <div className="border-b border-slate-200 px-4 py-3">
-        <div className="text-xs font-medium text-slate-500">
+        <div className="truncate text-xs font-medium text-slate-500">
           {sourceLabel || "资源会话"}
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 text-sm font-semibold text-slate-900">
-          <span>{items.length} 个资源</span>
+          <span className="shrink-0 whitespace-nowrap">
+            {items.length} 个资源
+          </span>
           {visibleEntries.length !== items.length ? (
-            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500">
+            <span className="shrink-0 whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500">
               匹配 {visibleEntries.length}
             </span>
           ) : null}
@@ -84,7 +86,7 @@ export function ResourceManagerSidebar({
                 onClick={() => onKindFilterChange(kind)}
                 data-testid={`resource-manager-kind-filter-${kind}`}
                 className={cn(
-                  "rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+                  "whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
                   active
                     ? "border-[#13c95b] bg-[#13c95b] text-white"
                     : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800",

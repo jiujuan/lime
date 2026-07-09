@@ -130,33 +130,50 @@ export const InputColumn = styled.div`
   position: relative;
 `;
 
-export const DictationRecordingGlyph = styled.span`
+export const DictationRecordingDot = styled.span`
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+`;
+
+export const DictationRecordingWaveform = styled.span`
+  display: inline-flex;
+  width: 34px;
+  height: 10px;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
+  opacity: 0.76;
 
   &::before {
-    content: "";
-    width: 3px;
-    height: 13px;
-    border-radius: 999px;
-    background: currentColor;
-    box-shadow:
-      -5px 3px 0 currentColor,
-      5px 3px 0 currentColor;
+    content: "••••••";
+    font-size: 13px;
+    line-height: 1;
+    letter-spacing: 1px;
   }
 `;
 
 export const DictationRecordingDuration = styled.span`
+  display: inline-flex;
+  width: 36px;
+  justify-content: flex-start;
   font-size: 13px;
   font-weight: 760;
   line-height: 1;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+`;
+
+export const DictationLiveTranscript = styled.div`
+  margin-top: 4px;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+  opacity: 0.86;
 `;
 
 export const StyledTextarea = styled.textarea`
@@ -621,6 +638,10 @@ export const ActionButtonGroup = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
+  align-self: flex-end;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding-bottom: 2px;
 `;
 
 // --- InputbarTools Styles ---
@@ -734,22 +755,6 @@ export const InputIconButton = styled.button<{
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
   }
 
-  &.is-dictation.is-labeled {
-    width: auto;
-    min-width: 112px;
-    max-width: 168px;
-    gap: 6px;
-    padding: 0 12px 0 10px;
-    font-size: 12px;
-    font-weight: 720;
-    white-space: nowrap;
-  }
-
-  &.is-dictation.is-labeled span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   &.is-dictation:hover:not(:disabled) {
     border-color: rgba(16, 185, 129, 0.48);
     background: rgba(220, 252, 231, 0.98);
@@ -758,19 +763,27 @@ export const InputIconButton = styled.button<{
 
   &.is-recording {
     gap: 6px;
-    width: auto;
-    min-width: 74px;
+    width: 128px;
+    min-width: 128px;
+    max-width: 128px;
     padding: 0 12px 0 11px;
-    border-color: rgba(239, 68, 68, 0.2);
-    background: #ef4444;
-    color: #ffffff;
-    box-shadow: 0 12px 26px -18px rgba(185, 28, 28, 0.64);
+    border-color: rgba(190, 18, 60, 0.2);
+    background: rgba(255, 241, 242, 0.96);
+    color: #be123c;
+    box-shadow:
+      0 12px 26px -20px rgba(190, 18, 60, 0.48),
+      inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    transform: none;
   }
 
   &.is-recording:hover:not(:disabled) {
-    background: #dc2626;
-    color: #ffffff;
-    box-shadow: 0 14px 28px -18px rgba(153, 27, 27, 0.72);
+    border-color: rgba(190, 18, 60, 0.3);
+    background: rgba(255, 228, 230, 0.98);
+    color: #9f1239;
+    transform: none;
+    box-shadow:
+      0 14px 28px -20px rgba(190, 18, 60, 0.54),
+      inset 0 1px 0 rgba(255, 255, 255, 0.92);
   }
 
   &.is-processing {
@@ -805,6 +818,14 @@ export const SendButton = styled(InputIconButton).attrs({
   svg {
     width: 16px;
     height: 16px;
+  }
+
+  &:disabled {
+    border-color: rgba(148, 163, 184, 0.24);
+    background: rgba(226, 232, 240, 0.92);
+    color: #64748b;
+    opacity: 1;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
   }
 `;
 

@@ -1,6 +1,5 @@
 import React from "react";
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
-import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { ChatModelSelector } from "../../ChatModelSelector";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
@@ -32,9 +31,6 @@ export const InputbarModelExtra: React.FC<InputbarModelExtraProps> = ({
   if (isFullscreen) {
     return null;
   }
-  const selectorBackgroundPreload = hasDesktopHostInvokeCapability()
-    ? "immediate"
-    : "disabled";
 
   return (
     <div className="flex items-center flex-wrap gap-2">
@@ -49,7 +45,8 @@ export const InputbarModelExtra: React.FC<InputbarModelExtraProps> = ({
         compactTrigger
         popoverSide="top"
         onManageProviders={onManageProviders}
-        backgroundPreload={selectorBackgroundPreload}
+        backgroundPreload="disabled"
+        preserveUnknownModelSelection
       />
     </div>
   );

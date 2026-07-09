@@ -346,6 +346,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   setInput: ComponentProps<typeof EmptyState>["setInput"];
   onSendMessage: InputbarSendHandler;
   onStopSending?: ComponentProps<typeof EmptyState>["onStop"];
+  emptyStateSendOnPointerDown?: ComponentProps<
+    typeof EmptyState
+  >["sendOnPointerDown"];
   emptyStateIsLoading?: ComponentProps<typeof EmptyState>["isLoading"];
   emptyStateDisabled?: ComponentProps<typeof EmptyState>["disabled"];
   providerType: ComponentProps<typeof EmptyState>["providerType"];
@@ -433,15 +436,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   deferWorkspaceListLoad?: ComponentProps<
     typeof ChatNavbar
   >["deferWorkspaceListLoad"];
-  workspaceHintMessage?: ComponentProps<
-    typeof ChatNavbar
-  >["workspaceHintMessage"];
-  workspaceHintVisible?: ComponentProps<
-    typeof ChatNavbar
-  >["workspaceHintVisible"];
-  onDismissWorkspaceHint?: ComponentProps<
-    typeof ChatNavbar
-  >["onDismissWorkspaceHint"];
   onOpenSettings?: () => void;
   runtimeToolAvailability?: ComponentProps<
     typeof EmptyState
@@ -576,6 +570,7 @@ export function WorkspaceConversationScene({
   setInput,
   onSendMessage,
   onStopSending,
+  emptyStateSendOnPointerDown = false,
   emptyStateIsLoading = false,
   emptyStateDisabled = false,
   providerType,
@@ -626,9 +621,6 @@ export function WorkspaceConversationScene({
   onProjectChange,
   onCloseProject,
   deferWorkspaceListLoad,
-  workspaceHintMessage,
-  workspaceHintVisible,
-  onDismissWorkspaceHint,
   onOpenSettings,
   runtimeToolAvailability,
   pluginSuggestions,
@@ -704,6 +696,7 @@ export function WorkspaceConversationScene({
     setInput,
     onSendMessage,
     onStopSending,
+    sendOnPointerDown: emptyStateSendOnPointerDown,
     isLoading: emptyStateIsLoading,
     disabled: emptyStateDisabled,
     providerType,
@@ -908,9 +901,6 @@ export function WorkspaceConversationScene({
     onProjectChange,
     onCloseProject,
     deferWorkspaceListLoad,
-    workspaceHintMessage,
-    workspaceHintVisible,
-    onDismissWorkspaceHint,
     workspaceType: activeTheme,
     onBackHome,
     showHarnessToggle,

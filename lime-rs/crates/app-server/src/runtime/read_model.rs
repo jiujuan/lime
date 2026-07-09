@@ -93,6 +93,7 @@ pub(super) fn runtime_session_read_detail_with_options(
     items.extend(runtime_warning_items_from_events(stored));
     items.extend(runtime_error_items_from_events(stored));
     sort_read_detail_items(&mut items);
+    let thread_items = items.clone();
     let loaded_count = messages.len();
     let oldest_message_id = messages.first().and_then(messages::message_numeric_id);
     let history_limit = options.history_limit.unwrap_or(messages_count);
@@ -125,6 +126,15 @@ pub(super) fn runtime_session_read_detail_with_options(
         "outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None),
         "thread_read": thread_read,
     });
+    if let Some(thread_read_object) = detail
+        .get_mut("thread_read")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        thread_read_object.insert(
+            "thread_items".to_string(),
+            serde_json::Value::Array(thread_items),
+        );
+    }
     if let Some(article_workspace) = article_workspace {
         if let Some(detail_object) = detail.as_object_mut() {
             detail_object.insert("article_workspace".to_string(), article_workspace.clone());
@@ -1093,5 +1103,113 @@ mod tests {
             thread_read["active_turn_id"],
             "turn_read_model_orphan_running"
         );
+    }
+
+    #[test]
+    fn read_detail_projects_thread_items_into_thread_read() {
+        let session_id = "sess_read_model_thread_items".to_string();
+        let thread_id = "thread_read_model_thread_items".to_string();
+        let turn_id = "turn_read_model_thread_items".to_string();
+        let stored = StoredSession {
+            session: AgentSession {
+                session_id: session_id.clone(),
+                thread_id: thread_id.clone(),
+                app_id: "agent-chat".to_string(),
+                workspace_id: Some("workspace-current".to_string()),
+                business_object_ref: None,
+                status: app_server_protocol::AgentSessionStatus::Completed,
+                created_at: "2026-03-29T00:00:00.000Z".to_string(),
+                updated_at: "2026-03-29T00:00:02.000Z".to_string(),
+            },
+            turns: vec![AgentTurn {
+                turn_id: turn_id.clone(),
+                session_id: session_id.clone(),
+                thread_id: thread_id.clone(),
+                status: AgentTurnStatus::Completed,
+                started_at: Some("2026-03-29T00:00:00.000Z".to_string()),
+                completed_at: Some("2026-03-29T00:00:02.000Z".to_string()),
+            }],
+            turn_inputs: std::collections::HashMap::new(),
+            turn_runtime_options: std::collections::HashMap::new(),
+            events: vec![
+                AgentEvent {
+                    event_id: "evt-read-model-user-message".to_string(),
+                    sequence: 0,
+                    session_id: session_id.clone(),
+                    thread_id: Some(thread_id.clone()),
+                    turn_id: Some(turn_id.clone()),
+                    event_type: "message.created".to_string(),
+                    timestamp: "2026-03-29T00:00:00.500Z".to_string(),
+                    payload: json!({
+                        "role": "user",
+                        "visibility": "user_visible",
+                        "input": {
+                            "text": "恢复历史用户输入",
+                            "attachments": []
+                        },
+                        "content": {
+                            "kind": "inline_text",
+                            "text": "恢复历史用户输入"
+                        },
+                        "textElements": [
+                            {
+                                "type": "text",
+                                "text": "保留富文本输入片段"
+                            }
+                        ],
+                        "text_elements": [
+                            {
+                                "type": "text",
+                                "text": "保留富文本输入片段"
+                            }
+                        ]
+                    }),
+                },
+                AgentEvent {
+                    event_id: "evt-read-model-reasoning-item".to_string(),
+                    sequence: 1,
+                    session_id,
+                    thread_id: Some(thread_id),
+                    turn_id: Some(turn_id),
+                    event_type: "item.started".to_string(),
+                    timestamp: "2026-03-29T00:00:01.000Z".to_string(),
+                    payload: json!({
+                        "item": {
+                            "id": "reasoning-read-model-thread-items",
+                            "thread_id": "thread_read_model_thread_items",
+                            "turn_id": "turn_read_model_thread_items",
+                            "sequence": 1,
+                            "status": "completed",
+                            "type": "reasoning",
+                            "text": "先恢复历史推理项",
+                            "summary": ["先恢复历史推理项"]
+                        }
+                    }),
+                },
+            ],
+            output_blobs: std::collections::HashMap::new(),
+        };
+
+        let detail =
+            runtime_session_read_detail_with_options(&stored, ReadDetailOptions::default(), &[]);
+
+        assert_eq!(detail["items"], detail["thread_read"]["thread_items"]);
+        assert_eq!(
+            detail["thread_read"]["thread_items"][0]["id"],
+            "reasoning-read-model-thread-items"
+        );
+        assert_eq!(
+            detail["messages"][0]["textElements"][0]["text"],
+            "保留富文本输入片段"
+        );
+        assert_eq!(
+            detail["messages"][0]["text_elements"][0]["text"],
+            "保留富文本输入片段"
+        );
+        assert!(detail["messages"][0]["content"]
+            .as_array()
+            .expect("message content")
+            .iter()
+            .any(|part| part["text"] == "保留富文本输入片段"));
     }
 }

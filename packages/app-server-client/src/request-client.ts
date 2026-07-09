@@ -559,6 +559,9 @@ export interface AppServerClient {
   transcribeVoiceAudio(
     params: protocol.VoiceTranscriptionTranscribeAudioParams,
   ): protocol.JsonRpcRequest;
+  polishVoiceText(
+    params: protocol.VoiceTranscriptionPolishTextParams,
+  ): protocol.JsonRpcRequest;
   readUsageStats(
     params: protocol.UsageStatsRangeParams,
   ): protocol.JsonRpcRequest;
@@ -664,9 +667,13 @@ export interface AppServerClient {
     params: protocol.AgentSessionMediaReadParams,
   ): protocol.JsonRpcRequest;
   readWorkflow(params: protocol.WorkflowReadParams): protocol.JsonRpcRequest;
-  cancelWorkflow(params: protocol.WorkflowCancelParams): protocol.JsonRpcRequest;
+  cancelWorkflow(
+    params: protocol.WorkflowCancelParams,
+  ): protocol.JsonRpcRequest;
   retryWorkflow(params: protocol.WorkflowRetryParams): protocol.JsonRpcRequest;
-  respondWorkflow(params: protocol.WorkflowRespondParams): protocol.JsonRpcRequest;
+  respondWorkflow(
+    params: protocol.WorkflowRespondParams,
+  ): protocol.JsonRpcRequest;
   readAgentSessionToolInventory(
     params?: protocol.AgentSessionToolInventoryReadParams,
   ): protocol.JsonRpcRequest;

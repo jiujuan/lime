@@ -98,13 +98,9 @@ const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   "clock.sleep": "sleep",
   clocksleep: "sleep",
   sleep: "sleep",
-  brief: "sendusermessage",
-  brieftool: "sendusermessage",
   mcptool: "mcp",
   mcpauthtool: "mcpauth",
   repltool: "repl",
-  sendusermessage: "sendusermessage",
-  sendusermessagetool: "sendusermessage",
   spawnagent: "agent",
   subagenttask: "agent",
   agenttool: "agent",
@@ -117,10 +113,6 @@ const TOOL_NAME_KEY_ALIASES: Record<string, string> = {
   update_plan_tool: "updateplan",
   filereadtool: "read",
   readfiletool: "read",
-  filewritetool: "write",
-  writefiletool: "write",
-  createfiletool: "write",
-  fileedittool: "edit",
   globtool: "glob",
   greptool: "grep",
   listmcpresourcestool: "listmcpresources",
@@ -271,13 +263,6 @@ export const resolveToolPrimarySubject = (
     );
   }
 
-  if (normalizedName === "sendusermessage" || normalizedName === "brief") {
-    return (
-      resolveToolArgumentPreview(args, ["message"]) ||
-      resolveToolSubjectFallback("user")
-    );
-  }
-
   if (normalizedName === "teamcreate" || normalizedName === "teamdelete") {
     return (
       resolveToolArgumentPreview(args, ["team_name", "teamName"]) ||
@@ -347,7 +332,7 @@ export const resolveToolPrimarySubject = (
     ]);
   }
 
-  if (normalizedName === "analyzeimage" || normalizedName === "viewimage") {
+  if (normalizedName === "viewimage") {
     return resolveVisionImageSubject(args);
   }
 

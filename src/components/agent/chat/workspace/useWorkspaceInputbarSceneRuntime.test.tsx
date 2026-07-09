@@ -292,6 +292,36 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     expect(container.querySelector('[data-testid="inputbar-mock"]')).toBeNull();
   });
 
+  it("Plan 确认态与 pending approval 同时存在时应优先展示 approval", () => {
+    const container = renderHookNode(
+      createDefaultProps({
+        planDecisionAccessory: (
+          <div data-testid="plan-composer-decision-panel">计划确认</div>
+        ),
+        pendingActions: [
+          {
+            requestId: "approval-over-plan-1",
+            actionType: "tool_confirmation",
+            status: "pending",
+            toolName: "functions.exec_command",
+            prompt: "允许执行当前命令？",
+          },
+        ],
+      }),
+    );
+
+    expect(
+      container.querySelector('[data-testid="inputbar-approval-replacement"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-approval-prompt"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="plan-composer-decision-panel"]'),
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="inputbar-mock"]')).toBeNull();
+  });
+
   it("pending approval 应在输入区替换普通输入框并提交 tool_confirmation 响应", async () => {
     const onRespondToAction = vi.fn().mockResolvedValue(undefined);
     const container = renderHookNode(
@@ -413,6 +443,60 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     expect(
       container.querySelector('[data-testid="inputbar-mock"]'),
     ).not.toBeNull();
+  });
+
+  it("approval 提交中释放输入区后应回到 Plan 确认态且不误发 approval response", () => {
+    const onPlanContinue = vi.fn();
+    const onRespondToAction = vi.fn();
+    const container = renderHookNode(
+      createDefaultProps({
+        planDecisionAccessory: (
+          <button
+            type="button"
+            data-testid="plan-composer-continue"
+            onClick={onPlanContinue}
+          >
+            确认计划
+          </button>
+        ),
+        pendingActions: [
+          {
+            requestId: "approval-submitted-plan-1",
+            actionType: "tool_confirmation",
+            status: "pending",
+            toolName: "Bash",
+            prompt: "允许执行当前命令？",
+          },
+        ],
+        submittedActionsInFlight: [
+          {
+            requestId: "approval-submitted-plan-1",
+            actionType: "tool_confirmation",
+            status: "submitted",
+          },
+        ],
+        onRespondToAction,
+      }),
+    );
+
+    expect(
+      container.querySelector('[data-testid="inputbar-approval-prompt"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="plan-decision-inputbar-replacement"]',
+      ),
+    ).not.toBeNull();
+    const continueButton = container.querySelector(
+      '[data-testid="plan-composer-continue"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      continueButton?.click();
+    });
+
+    expect(onPlanContinue).toHaveBeenCalledTimes(1);
+    expect(onRespondToAction).not.toHaveBeenCalled();
   });
 
   it("非 Plan 决策态仍应把附加面板作为输入区 overlay accessory 渲染", () => {

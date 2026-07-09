@@ -68,6 +68,54 @@ describe("ResourceManagerPage", () => {
     expect(toolbar?.textContent).toContain("120%");
   });
 
+  it("顶部工具栏应具备窄窗口自适应收缩边界", () => {
+    const container = renderPage({
+      id: "session-responsive-toolbar",
+      sourceLabel: "很长的项目资料来源名称用于验证资源列表标题截断",
+      initialIndex: 0,
+      createdAt: Date.now(),
+      items: [
+        {
+          id: "heic-1",
+          kind: "image",
+          src: "asset:///tmp/photo.heic",
+          filePath: "/tmp/photo.heic",
+          title: "一张标题很长的系统图片资源 photo.heic",
+          mimeType: "image/heic",
+        },
+      ],
+    });
+
+    const topToolbar = container.querySelector(
+      '[data-testid="resource-manager-top-toolbar"]',
+    );
+    const typeToolbar = container.querySelector(
+      '[data-testid="resource-manager-type-toolbar"]',
+    );
+    const globalActions = container.querySelector(
+      '[data-testid="resource-manager-global-actions"]',
+    );
+    const list = container.querySelector(
+      '[data-testid="resource-manager-item-list"]',
+    );
+    const imageTypeLabel = Array.from(
+      typeToolbar?.querySelectorAll("span") ?? [],
+    ).find((node) => node.textContent === "图片");
+    const openButton = typeToolbar?.querySelector(
+      'button[aria-label="系统打开"]',
+    );
+
+    expect(topToolbar?.className).toContain(
+      "grid-cols-[auto_minmax(0,1fr)_auto]",
+    );
+    expect(typeToolbar?.className).toContain("overflow-x-auto");
+    expect(typeToolbar?.className).toContain("[&::-webkit-scrollbar]:hidden");
+    expect(globalActions?.className).toContain("shrink-0");
+    expect(list?.className).toContain("w-[clamp(14rem,28vw,18rem)]");
+    expect(imageTypeLabel?.className).toContain("whitespace-nowrap");
+    expect(openButton?.className).toContain("whitespace-nowrap");
+  });
+
   it("不同类型应展示不同预览 UI", async () => {
     const container = renderPage({
       id: "session-types",

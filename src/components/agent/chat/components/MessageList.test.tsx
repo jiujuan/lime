@@ -633,20 +633,31 @@ describe("MessageList layout and scrolling", () => {
     expect(messageColumn?.className).not.toContain("justify-end");
   });
 
-  it("默认空会话应展示清晰启动面而不是弱化空白提示", () => {
+  it("空消息列表默认不再渲染旧新对话空态，由工作区首页接管", () => {
     const container = render([]);
-    const emptyState = container.querySelector(
-      '[data-testid="message-list-empty-default"]',
-    );
 
-    expect(emptyState).not.toBeNull();
-    expect(emptyState?.className).toContain("max-w-[560px]");
-    expect(emptyState?.className).not.toContain("opacity-50");
-    expect(container.textContent).toContain("New chat");
-    expect(container.textContent).toContain("Start a new conversation");
-    expect(container.textContent).toContain("The composer is ready");
+    expect(
+      container.querySelector('[data-testid="message-list-empty-default"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-list-empty-task-center"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-list-column"]'),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain("Start a new conversation");
+    expect(container.textContent).not.toContain("The composer is ready");
+  });
+
+  it("任务中心空消息列表仍应显式展示最近对话空态", () => {
+    const container = render([], { emptyStateVariant: "task-center" });
+
+    expect(
+      container.querySelector('[data-testid="message-list-empty-task-center"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("Recent chats");
     expect(container.textContent).toContain(
-      "After sending, it stays in this chat",
+      "Recent chats, sessions to continue, and earlier archives",
     );
   });
 

@@ -1,6 +1,9 @@
 import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+  APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
   APPROVAL_REQUEST_RESUME_PROMPT,
   APPROVAL_REQUEST_RESUME_REQUEST_ID,
   APPROVAL_REQUEST_RESUME_RESULT_TEXT,
@@ -54,6 +57,101 @@ function compactApprovalRecordVisible(snapshot) {
     Array.isArray(shape?.legacyDetailFragmentHits) &&
     shape.legacyDetailFragmentHits.length === 0
   );
+}
+
+function turnStartApprovalPolicy(turnStart) {
+  return (
+    turnStart?.asterChatRequest?.approval_policy ??
+    turnStart?.asterChatRequest?.approvalPolicy ??
+    turnStart?.approvalPolicy ??
+    turnStart?.approval_policy ??
+    null
+  );
+}
+
+function turnStartSandboxPolicy(turnStart) {
+  return (
+    turnStart?.asterChatRequest?.sandbox_policy ??
+    turnStart?.asterChatRequest?.sandboxPolicy ??
+    turnStart?.sandboxPolicy ??
+    turnStart?.sandbox_policy ??
+    null
+  );
+}
+
+export function buildApprovalRequestFullAccessScenarioAssertions({
+  appServerRequestMethods,
+  approvalRequestFullAccessTurnStart,
+  pageText,
+  summary,
+}) {
+  return {
+    approvalRequestFullAccessPromptReachedBackend:
+      approvalRequestFullAccessTurnStart?.inputText ===
+      APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+    approvalRequestFullAccessUsesFullAccessPolicy:
+      turnStartApprovalPolicy(approvalRequestFullAccessTurnStart) === "never" &&
+      turnStartSandboxPolicy(approvalRequestFullAccessTurnStart) ===
+        "danger-full-access",
+    guiApprovalRequestFullAccessInputSubmitted:
+      summary.approvalRequestFullAccessInputSend?.afterFill
+        ?.promptVisibleInTextarea === true &&
+      summary.approvalRequestFullAccessInputSend?.clicked?.clicked === true,
+    guiApprovalRequestFullAccessCompleted:
+      summary.guiApprovalRequestFullAccessCompleted?.hasPrompt === true &&
+      (summary.guiApprovalRequestFullAccessCompleted?.hasAssistantSummary ===
+        true ||
+        summary.guiApprovalRequestFullAccessCompleted?.hasDoneText === true) &&
+      summary.guiApprovalRequestFullAccessCompleted?.textareaVisible === true &&
+      summary.guiApprovalRequestFullAccessCompleted?.textareaDisabled ===
+        false &&
+      summary.guiApprovalRequestFullAccessCompleted?.stopButtonVisible ===
+        false &&
+      pageText.includes(APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT) &&
+      pageText.includes(APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT),
+    guiApprovalRequestFullAccessNoApprovalPrompt:
+      summary.guiApprovalRequestFullAccessNoApproval?.approvalPromptVisible ===
+        false &&
+      summary.guiApprovalRequestFullAccessNoApproval
+        ?.includesRuntimePermissionPrompt === false &&
+      summary.guiApprovalRequestFullAccessNoApproval
+        ?.includesRuntimeApprovalPrompt === false &&
+      summary.guiApprovalRequestFullAccessNoApproval?.textareaVisible ===
+        true &&
+      summary.guiApprovalRequestFullAccessNoApproval?.textareaDisabled ===
+        false,
+    guiApprovalRequestFullAccessNoApprovalRecord:
+      summary.guiApprovalRequestFullAccessCompleted?.approvalRecordShape
+        ?.recordCount === 0 &&
+      summary.guiApprovalRequestFullAccessNoApproval?.approvalRecordCount ===
+        0,
+    readModelApprovalRequestFullAccessCompleted:
+      summary.readModelApprovalRequestFullAccessCompleted?.latestTurnStatus ===
+        "completed" &&
+      summary.readModelApprovalRequestFullAccessCompleted?.includesPrompt ===
+        true &&
+      summary.readModelApprovalRequestFullAccessCompleted
+        ?.includesAssistantSummary === true &&
+      summary.readModelApprovalRequestFullAccessCompleted
+        ?.includesAssistantDone === true,
+    readModelApprovalRequestFullAccessNoApprovalRequest:
+      summary.readModelApprovalRequestFullAccessCompleted
+        ?.pendingRequestCount === 0 &&
+      summary.readModelApprovalRequestFullAccessCompleted
+        ?.includesApprovalRequest === false &&
+      summary.readModelApprovalRequestFullAccessCompleted
+        ?.includesActionRequired === false &&
+      summary.readModelApprovalRequestFullAccessCompleted
+        ?.includesActionResolved === false &&
+      summary.readModelApprovalRequestFullAccessCompleted
+        ?.includesApprovalPrompt === false,
+    approvalRequestFullAccessNoActionRespond:
+      !appServerRequestMethods.includes(
+        APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+      ),
+    approvalRequestFullAccessNoLegacyRuntimeRespond:
+      noLegacyRuntimeRespond(appServerRequestMethods, pageText),
+  };
 }
 
 export function buildApprovalRequestResumeScenarioAssertions({

@@ -541,23 +541,18 @@ export type MessageContentType =
   | "text"
   | "a2ui"
   | "document"
-  | "write_file"
-  | "pending_a2ui"
-  | "pending_write_file";
+  | "pending_a2ui";
 
 /** 解析后的消息内容 */
 export interface ParsedMessageContent {
   type: MessageContentType;
   content: string | A2UIResponse;
-  /** 文件路径（仅 write_file 和 pending_write_file 类型） */
-  filePath?: string;
 }
 
 /** 解析结果 */
 export interface ParseResult {
   parts: ParsedMessageContent[];
   hasA2UI: boolean;
-  hasWriteFile?: boolean;
   hasPending?: boolean;
 }
 

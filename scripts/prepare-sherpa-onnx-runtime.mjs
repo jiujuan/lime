@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 const DEFAULT_RUST_WORKSPACE_DIR = "lime-rs";
 const SHERPA_RELEASE_BASE_URL =
   "https://github.com/k2-fsa/sherpa-onnx/releases/download";
+export const MACOS_EXECUTABLE_RPATH = "@executable_path";
 
 function fail(message) {
   throw new Error(message);
@@ -24,6 +25,151 @@ function runCommand(command, args, options = {}) {
   if (result.status !== 0) {
     fail(`${command} ${args.join(" ")} failed with exit code ${result.status}`);
   }
+}
+
+export function readMachORpaths(
+  binaryPath,
+  { platform = process.platform, runner = spawnSync } = {},
+) {
+  if (platform !== "darwin") {
+    return [];
+  }
+
+  const result = runner("otool", ["-l", binaryPath], {
+    encoding: "utf8",
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    const detail = String(result.stderr || "").trim();
+    fail(
+      `otool -l ${binaryPath} failed with exit code ${result.status}${
+        detail ? `: ${detail}` : ""
+      }`,
+    );
+  }
+
+  const rpaths = [];
+  let inRpathCommand = false;
+  for (const line of String(result.stdout || "").split(/\r?\n/)) {
+    if (/^\s*cmd\s+LC_RPATH\s*$/u.test(line)) {
+      inRpathCommand = true;
+      continue;
+    }
+    if (!inRpathCommand) {
+      continue;
+    }
+    const match = line.match(/^\s*path\s+(.+?)\s+\(offset\s+\d+\)\s*$/u);
+    if (match?.[1]) {
+      rpaths.push(match[1]);
+      inRpathCommand = false;
+    }
+  }
+  return rpaths;
+}
+
+export function ensureMacBinaryRpath(
+  binaryPath,
+  {
+    exists = fs.existsSync,
+    getStats = fs.statSync,
+    platform = process.platform,
+    rpath = MACOS_EXECUTABLE_RPATH,
+    runner = spawnSync,
+  } = {},
+) {
+  if (platform !== "darwin") {
+    return {
+      checked: false,
+      patched: false,
+      reason: "non-darwin",
+      rpaths: [],
+    };
+  }
+  if (!exists(binaryPath)) {
+    return {
+      checked: false,
+      patched: false,
+      reason: "missing-binary",
+      rpaths: [],
+    };
+  }
+  let stats;
+  try {
+    stats = getStats(binaryPath);
+  } catch {
+    return {
+      checked: false,
+      patched: false,
+      reason: "missing-binary",
+      rpaths: [],
+    };
+  }
+  if (typeof stats.isFile === "function" && !stats.isFile()) {
+    return {
+      checked: false,
+      patched: false,
+      reason: "not-file",
+      rpaths: [],
+    };
+  }
+  if (stats.size === 0) {
+    return {
+      checked: false,
+      patched: false,
+      reason: "empty-binary",
+      rpaths: [],
+    };
+  }
+
+  const existingRpaths = readMachORpaths(binaryPath, { platform, runner });
+  if (existingRpaths.includes(rpath)) {
+    return {
+      checked: true,
+      patched: false,
+      reason: "already-present",
+      rpaths: existingRpaths,
+    };
+  }
+
+  const result = runner("install_name_tool", ["-add_rpath", rpath, binaryPath], {
+    stdio: "inherit",
+    shell: false,
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    if (!exists(binaryPath)) {
+      return {
+        checked: false,
+        patched: false,
+        reason: "missing-binary-after-rpath-race",
+        rpaths: existingRpaths,
+      };
+    }
+    const refreshedRpaths = readMachORpaths(binaryPath, { platform, runner });
+    if (refreshedRpaths.includes(rpath)) {
+      return {
+        checked: true,
+        patched: false,
+        reason: "already-present-after-rpath-race",
+        rpaths: refreshedRpaths,
+      };
+    }
+    fail(
+      `install_name_tool -add_rpath ${rpath} ${binaryPath} failed with exit code ${result.status}`,
+    );
+  }
+  return {
+    checked: true,
+    patched: true,
+    reason: "patched",
+    rpaths: [...existingRpaths, rpath],
+  };
 }
 
 export function resolveSherpaOnnxSysVersion(lockText) {
@@ -161,7 +307,7 @@ function findExistingLib(root, libName) {
   return null;
 }
 
-function resolveRuntimeLibrarySource(plan, lib) {
+export function resolveRuntimeLibrarySource(plan, lib) {
   const extractedPath = path.join(plan.libDir, lib);
   if (fs.existsSync(extractedPath)) {
     return extractedPath;
@@ -248,10 +394,38 @@ function copyRuntimeLibraries(plan) {
   }
 }
 
+export function ensureSherpaRuntimeBinaryRpaths(
+  plan,
+  {
+    exists = fs.existsSync,
+    getStats = fs.statSync,
+    platform = process.platform,
+    runner = spawnSync,
+  } = {},
+) {
+  if (platform !== "darwin") {
+    return [];
+  }
+
+  const binaryName = "app-server";
+  return [plan.releaseDir, ...plan.debugDirs]
+    .map((dir) => path.join(dir, binaryName))
+    .map((binaryPath) => ({
+      binaryPath,
+      ...ensureMacBinaryRpath(binaryPath, {
+        exists,
+        getStats,
+        platform,
+        runner,
+      }),
+    }));
+}
+
 export function prepareSherpaOnnxRuntime({
   repoRoot = process.cwd(),
   rustWorkspaceDir = DEFAULT_RUST_WORKSPACE_DIR,
   targetTriple,
+  ensureRuntimeBinaryRpaths = ensureSherpaRuntimeBinaryRpaths,
 } = {}) {
   const lockPath = path.resolve(repoRoot, rustWorkspaceDir, "Cargo.lock");
   const version = resolveSherpaOnnxSysVersion(
@@ -266,6 +440,7 @@ export function prepareSherpaOnnxRuntime({
 
   ensureArchiveExtracted(plan);
   copyRuntimeLibraries(plan);
+  const rpathResults = ensureRuntimeBinaryRpaths(plan);
 
   console.log(`Prepared sherpa-onnx shared libraries for ${plan.targetTriple}`);
   console.log(`Prebuilt lib dir: ${plan.libDir}`);
@@ -275,6 +450,11 @@ export function prepareSherpaOnnxRuntime({
   }
   for (const lib of plan.libs) {
     console.log(` - ${lib}`);
+  }
+  for (const result of rpathResults) {
+    if (result.patched) {
+      console.log(`Patched app-server rpath: ${result.binaryPath}`);
+    }
   }
 
   return plan;
@@ -297,7 +477,7 @@ function parseArgs(argv) {
   return options;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const options = parseArgs(process.argv.slice(2));
     prepareSherpaOnnxRuntime(options);

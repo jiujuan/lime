@@ -92,10 +92,11 @@ export function shouldResumeTaskSession(
 
 export function resolveInitialTaskSessionSwitchOptions(
   topic?:
-    | Pick<Topic, "status" | "statusReason">
+    | Pick<Topic, "status" | "statusReason" | "messagesCount">
     | {
         status?: Topic["status"];
         statusReason?: Topic["statusReason"];
+        messagesCount?: number;
       }
     | null,
 ): {
@@ -103,7 +104,9 @@ export function resolveInitialTaskSessionSwitchOptions(
   forceRefresh?: true;
   resumeSessionStartHooks?: true;
 } {
-  const shouldForceRefresh = topic?.statusReason === "workspace_error";
+  const shouldForceRefresh =
+    topic?.statusReason === "workspace_error" ||
+    (typeof topic?.messagesCount === "number" && topic.messagesCount > 0);
   const shouldResume = shouldResumeTaskSession(topic);
 
   return {

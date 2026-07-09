@@ -35,8 +35,8 @@ export const ResourcePreviewSearchBar = forwardRef<
     : "";
 
   return (
-    <div className="relative flex h-8 min-w-0 items-center gap-1">
-      <div className="relative flex h-8 min-w-0 items-center">
+    <div className="relative flex h-8 shrink-0 items-center gap-1 whitespace-nowrap">
+      <div className="relative flex h-8 shrink-0 items-center">
         <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-slate-400" />
         <input
           ref={ref}
@@ -52,7 +52,7 @@ export const ResourcePreviewSearchBar = forwardRef<
             onNextMatch();
           }}
           data-testid="resource-preview-search-input"
-          className="h-8 w-52 rounded-lg border border-slate-200 bg-white pl-8 pr-16 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#13c95b] focus:ring-2 focus:ring-[#13c95b]/15"
+          className="h-8 w-36 rounded-lg border border-slate-200 bg-white pl-8 pr-16 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#13c95b] focus:ring-2 focus:ring-[#13c95b]/15 md:w-52"
           placeholder={placeholder}
           aria-label={placeholder}
         />

@@ -2,8 +2,12 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Brain, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ModelCapabilities } from "@/lib/types/modelRegistry";
+import type {
+  EnhancedModelMetadata,
+  ModelCapabilities,
+} from "@/lib/types/modelRegistry";
 import {
+  getModelRuntimeFeatures,
   getModelInputModalities,
   getModelTaskFamilies,
 } from "@/lib/model/inferModelCapabilities";
@@ -19,7 +23,8 @@ interface CapabilityBadgeProps {
 
 interface ModelCapabilityBadgesProps {
   capabilities: ModelCapabilities;
-  model?: Parameters<typeof getModelTaskFamilies>[0];
+  model?: Parameters<typeof getModelTaskFamilies>[0] &
+    Pick<EnhancedModelMetadata, "reasoning_policy">;
   className?: string;
   compact?: boolean;
   showNegative?: boolean;
@@ -59,6 +64,12 @@ export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
   const { t } = useTranslation("common");
   const resolvedTaskFamilies = model ? getModelTaskFamilies(model) : [];
   const resolvedInputModalities = model ? getModelInputModalities(model) : [];
+  const resolvedRuntimeFeatures = model ? getModelRuntimeFeatures(model) : [];
+  const reasoningActive =
+    capabilities.reasoning ||
+    Boolean(model?.reasoning_policy?.supports_reasoning_summaries) ||
+    resolvedTaskFamilies.includes("reasoning") ||
+    resolvedRuntimeFeatures.includes("reasoning");
   const visionActive =
     capabilities.vision ||
     resolvedTaskFamilies.includes("vision_understanding") ||
@@ -66,7 +77,7 @@ export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
   const capabilityItems = [
     {
       key: "reasoning",
-      active: capabilities.reasoning,
+      active: reasoningActive,
       icon: <Brain className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />,
       activeLabel: t("common.modelCapabilities.reasoning.active"),
       inactiveLabel: t("common.modelCapabilities.reasoning.inactive"),

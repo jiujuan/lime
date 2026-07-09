@@ -75,7 +75,6 @@ export function installStreamingRendererTestHarness() {
     parseAIResponseMock.mockImplementation((content: string) => ({
       parts: content.trim() ? [{ type: "text", content: content.trim() }] : [],
       hasA2UI: false,
-      hasWriteFile: false,
       hasPending: false,
     }));
   });

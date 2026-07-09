@@ -200,38 +200,6 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         ],
     },
     ToolDiscoveryProfile {
-        canonical_name: "Write",
-        aliases: &[
-            "WriteTool",
-            "FileWriteTool",
-            "write_file",
-            "write file",
-            "create_file",
-            "create file",
-            "mcp__system__write_file",
-        ],
-        intent_terms: &["save file", "new file", "创建文件", "写入文件", "保存文件"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "Edit",
-        aliases: &[
-            "EditTool",
-            "FileEditTool",
-            "edit_file",
-            "edit file",
-            "developer__text_editor",
-            "mcp__system__edit_file",
-        ],
-        intent_terms: &[
-            "modify file",
-            "patch file",
-            "update file",
-            "修改文件",
-            "编辑文件",
-            "补丁",
-        ],
-    },
-    ToolDiscoveryProfile {
         canonical_name: "Glob",
         aliases: &["GlobTool", "find_files", "find files", "mcp__system__glob"],
         intent_terms: &[
@@ -382,54 +350,6 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         canonical_name: "Skill",
         aliases: &["SkillTool"],
         intent_terms: &["run skill", "service skill", "执行技能", "技能"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TaskCreate",
-        aliases: &["TaskCreateTool"],
-        intent_terms: &["create task", "new task", "task board", "创建任务"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TaskList",
-        aliases: &["TaskListTool"],
-        intent_terms: &["list tasks", "task list", "todo list", "任务列表"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TaskGet",
-        aliases: &["TaskGetTool"],
-        intent_terms: &["get task", "task details", "read task", "任务详情"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TaskUpdate",
-        aliases: &["TaskUpdateTool"],
-        intent_terms: &[
-            "update task",
-            "complete task",
-            "mark task",
-            "任务状态",
-            "完成任务",
-        ],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TaskOutput",
-        aliases: &["TaskOutputTool", "AgentOutputTool", "BashOutputTool"],
-        intent_terms: &[
-            "agent output",
-            "bash output",
-            "task output",
-            "task logs",
-            "任务输出",
-        ],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TaskStop",
-        aliases: &["TaskStopTool", "KillShell"],
-        intent_terms: &[
-            "kill shell",
-            "stop task",
-            "cancel task",
-            "terminate task",
-            "停止任务",
-        ],
     },
     ToolDiscoveryProfile {
         canonical_name: "TeamCreate",
@@ -1220,11 +1140,7 @@ mod tests {
             ("Read", "Read file contents", "read_file"),
             ("Bash", "Run shell commands", "run command"),
             ("Bash", "Run shell commands", "shell"),
-            (
-                "TaskOutput",
-                "Read output from a background task",
-                "task logs",
-            ),
+            ("ToolSearch", "Search available tools", "find tool"),
             (
                 "StructuredOutput",
                 "Return the final JSON answer",
@@ -1269,6 +1185,59 @@ mod tests {
             "browser_click"
         ));
         assert!(tool_search_exact_match("Bash", "system"));
+    }
+
+    #[test]
+    fn test_file_mutation_discovery_profiles_stay_deleted() {
+        for deleted_name in [
+            "Write",
+            "WriteTool",
+            "FileWriteTool",
+            "write_file",
+            "create_file",
+            "mcp__system__write_file",
+            "Edit",
+            "EditTool",
+            "FileEditTool",
+            "edit_file",
+            "developer__text_editor",
+            "mcp__system__edit_file",
+        ] {
+            assert!(
+                canonical_tool_discovery_name(deleted_name).is_none(),
+                "Aster Write/Edit alias must not be discoverable: {deleted_name}"
+            );
+            assert!(
+                !tool_search_exact_match("apply_patch", deleted_name),
+                "Aster Write/Edit alias must not collapse into apply_patch: {deleted_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_aster_task_discovery_profiles_stay_deleted() {
+        for deleted_name in [
+            "TaskCreate",
+            "TaskCreateTool",
+            "TaskList",
+            "TaskListTool",
+            "TaskGet",
+            "TaskGetTool",
+            "TaskUpdate",
+            "TaskUpdateTool",
+            "TaskOutput",
+            "TaskOutputTool",
+            "AgentOutputTool",
+            "BashOutputTool",
+            "TaskStop",
+            "TaskStopTool",
+            "KillShell",
+        ] {
+            assert!(
+                canonical_tool_discovery_name(deleted_name).is_none(),
+                "Aster Task* alias must not be discoverable: {deleted_name}"
+            );
+        }
     }
 
     #[test]

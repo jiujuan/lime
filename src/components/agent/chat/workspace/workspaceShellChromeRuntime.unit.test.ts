@@ -92,6 +92,23 @@ describe("resolveWorkspaceShellChromeRuntime", () => {
     expect(runtime.shouldRenderTopBar).toBe(true);
   });
 
+  it("claw 首页首发 pending preview 尚无 session 时应立即显示聊天布局", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        agentEntry: "claw",
+        effectiveShowChatPanel: true,
+        hasDisplayMessages: true,
+        hasHomeConversationActivity: true,
+        isTaskCenterDraftSendPending: true,
+        sessionId: null,
+        shouldUseBrowserWorkspaceHomeChrome: true,
+      }),
+    );
+
+    expect(runtime.showChatLayout).toBe(true);
+    expect(runtime.shouldRenderTopBar).toBe(true);
+  });
+
   it("Subagents runtime 可见时应切换主聊天面板宽度", () => {
     const runtime = resolveWorkspaceShellChromeRuntime(
       baseInput({

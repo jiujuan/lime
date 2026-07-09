@@ -562,6 +562,14 @@ pub fn runtime_native_tool_registration_allowlist() -> &'static [&'static str] {
     RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST
 }
 
+pub fn runtime_native_tool_registration_is_allowed(tool_name: &str) -> bool {
+    let tool_name = tool_name.trim();
+    !tool_name.is_empty()
+        && RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(tool_name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -760,6 +768,18 @@ mod tests {
         assert!(!names.contains(&"SleepTool"));
         assert!(!names.contains(&"Cron"));
         assert!(!names.contains(&"RemoteTrigger"));
+    }
+
+    #[test]
+    fn runtime_native_tool_registration_policy_matches_allowlist() {
+        assert!(runtime_native_tool_registration_is_allowed("memory_list"));
+        assert!(runtime_native_tool_registration_is_allowed(" Memory_List "));
+        assert!(runtime_native_tool_registration_is_allowed("WebSearch"));
+        assert!(!runtime_native_tool_registration_is_allowed(""));
+        assert!(!runtime_native_tool_registration_is_allowed("Write"));
+        assert!(!runtime_native_tool_registration_is_allowed(
+            "RuntimeApprovalResume"
+        ));
     }
 
     #[test]

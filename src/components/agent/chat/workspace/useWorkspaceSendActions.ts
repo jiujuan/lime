@@ -349,7 +349,7 @@ interface WorkspaceResolvedSendState {
   effectiveToolPreferences: ChatToolPreferences;
   effectiveWebSearch?: boolean;
   effectiveSearchMode?: AgentRuntimeWebSearchMode;
-  submissionPreviewKey: string;
+  submissionPreviewKey: string | null;
 }
 
 interface WorkspaceSendPlan extends WorkspaceResolvedSendState {
@@ -750,6 +750,64 @@ export function useWorkspaceSendActions({
         }
         setSubmissionPreview(null);
       };
+      if (sendOptions?.skipWorkspaceCommandRouting === true) {
+        let text: string;
+        try {
+          text = await buildWorkspaceSendText({
+            sourceText: dispatchText,
+            contextWorkspace: effectiveContextWorkspace,
+            mentionedCharacters,
+            sendOptions,
+            preparedActiveContextPrompt,
+          });
+        } catch (error) {
+          clearSubmissionPreview();
+          throw error;
+        }
+        const performanceTrace = extractAgentUiPerformanceTraceMetadata(
+          sendOptions?.requestMetadata,
+        );
+        if (performanceTrace?.sessionId || performanceTrace?.requestId) {
+          recordAgentUiPerformanceMetric("workspaceSend.plan.ready", {
+            durationMs: Date.now() - planStartedAt,
+            hasPendingSessionBinding: false,
+            primedSessionId: null,
+            requestId: performanceTrace.requestId ?? null,
+            sessionId: performanceTrace.sessionId ?? null,
+            skippedWorkspaceCommandRouting: true,
+            source: performanceTrace.source ?? "workspace-send",
+            workspaceId: performanceTrace.workspaceId ?? null,
+          });
+        }
+        logAgentDebug("WorkspaceSend", "plan.ready", {
+          durationMs: Date.now() - planStartedAt,
+          hasPendingSessionBinding: false,
+          skippedWorkspaceCommandRouting: true,
+          sourceTextLength: sourceText.trim().length,
+        });
+        return {
+          kind: "ready",
+          plan: {
+            sourceText,
+            dispatchText,
+            text,
+            images: effectiveImages,
+            hasContextWorkspace: shouldAttachContextWorkspace,
+            sendBoundary,
+            browserRequirementForSend,
+            effectiveToolPreferences,
+            effectiveWebSearch,
+            effectiveSearchMode,
+            submissionPreviewKey: null,
+            sendExecutionStrategy: effectiveSendExecutionStrategy,
+            autoContinuePayload,
+            sendOptions,
+            completedMentionCommandUsage: null,
+            completedMentionUsage: null,
+            completedSlashUsage,
+          },
+        };
+      }
       const resolveCommandSessionEnsureOptions = () => ({
         targetSessionId: sendOptions?.targetSessionId?.trim() || undefined,
         skipSessionRestore: sendOptions?.skipSessionRestore === true,

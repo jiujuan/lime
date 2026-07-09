@@ -63,6 +63,7 @@ async function renderHook(options: UseSessionFilesOptions) {
   document.body.appendChild(container);
   const root = createRoot(container);
   let latestValue: UseSessionFilesReturn | null = null;
+  let latestOptions = options;
 
   function Probe({ value }: { value: UseSessionFilesOptions }) {
     latestValue = useSessionFiles(value);
@@ -83,6 +84,14 @@ async function renderHook(options: UseSessionFilesOptions) {
         throw new Error("useSessionFiles hook 尚未初始化");
       }
       return latestValue;
+    },
+    rerender: async (nextOptions: UseSessionFilesOptions) => {
+      latestOptions = nextOptions;
+      await act(async () => {
+        root.render(<Probe value={latestOptions} />);
+        await Promise.resolve();
+      });
+      await flushEffects();
     },
   };
 }
@@ -139,6 +148,22 @@ afterEach(() => {
 });
 
 describe("useSessionFiles", () => {
+  it("autoInit=false 时不应抢热路径初始化会话文件", async () => {
+    const { getValue } = await renderHook({
+      sessionId: "session-1",
+      theme: "article",
+      creationMode: "draft",
+      autoInit: false,
+    });
+
+    expect(mockGetOrCreateSession).not.toHaveBeenCalled();
+    expect(mockUpdateSessionMeta).not.toHaveBeenCalled();
+    expect(mockListFiles).not.toHaveBeenCalled();
+    expect(getValue().meta).toBeNull();
+    expect(getValue().files).toEqual([]);
+    expect(getValue().isLoading).toBe(false);
+  });
+
   it("自动初始化应走 App Server current 会话文件链并加载文件列表", async () => {
     const { getValue } = await renderHook({
       sessionId: "session-1",
@@ -162,6 +187,27 @@ describe("useSessionFiles", () => {
     ]);
     expect(getValue().isLoading).toBe(false);
     expect(getValue().error).toBeNull();
+  });
+
+  it("会话切换时即使暂停 autoInit 也应清空旧会话文件状态", async () => {
+    const { getValue, rerender } = await renderHook({
+      sessionId: "session-1",
+    });
+
+    expect(getValue().files).toEqual([
+      expect.objectContaining({ name: "existing.md" }),
+    ]);
+
+    await rerender({
+      sessionId: "session-2",
+      autoInit: false,
+    });
+
+    expect(mockGetOrCreateSession).toHaveBeenCalledTimes(1);
+    expect(mockListFiles).toHaveBeenCalledTimes(1);
+    expect(getValue().meta).toBeNull();
+    expect(getValue().files).toEqual([]);
+    expect(getValue().isLoading).toBe(false);
   });
 
   it("保存、读取、删除和刷新应复用 current API 并同步 hook 状态", async () => {

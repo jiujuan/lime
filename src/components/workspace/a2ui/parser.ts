@@ -14,12 +14,6 @@ const A2UI_TAG_REGEX = /<a2ui>([\s\S]*?)<\/a2ui>/g;
 /** 文档标签正则 */
 const DOCUMENT_REGEX = /<document>([\s\S]*?)<\/document>/g;
 
-/** 文件写入标签正则 - 用于实时写入画布，支持 path 属性 */
-const WRITE_FILE_REGEX =
-  /<write_file(?:\s+path=["']([^"']+)["'])?\s*>([\s\S]*?)<\/write_file>/g;
-const WRITE_FILE_PENDING_REGEX =
-  /<write_file(?:\s+path=["']([^"']+)["'])?\s*>([\s\S]*)$/i;
-
 /** 简化表单格式 - 用于 AI 更容易生成 */
 export interface SimpleFormField {
   id: string;
@@ -182,7 +176,6 @@ export function parseAIResponse(
 ): ParseResult {
   const parts: ParsedMessageContent[] = [];
   let hasA2UI = false;
-  let hasWriteFile = false;
   let hasPending = false;
   let lastIndex = 0;
 
@@ -193,11 +186,8 @@ export function parseAIResponse(
     type:
       | "a2ui"
       | "document"
-      | "write_file"
-      | "pending_a2ui"
-      | "pending_write_file";
+      | "pending_a2ui";
     content: string;
-    filePath?: string;
   }[] = [];
 
   // 查找 <a2ui> 标签
@@ -238,42 +228,6 @@ export function parseAIResponse(
     hasPending = true;
   }
 
-  // 查找 <write_file> 标签 - 用于实时写入画布，支持 path 属性
-  const writeFileRegex = new RegExp(WRITE_FILE_REGEX.source, "g");
-  while ((match = writeFileRegex.exec(content)) !== null) {
-    const filePath = match[1] || "文档.md"; // 默认文件名
-    const fileContent = match[2].trim();
-    matches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      type: "write_file",
-      content: fileContent,
-      filePath,
-    });
-    hasWriteFile = true;
-  }
-
-  // 检测未闭合的 <write_file> 标签
-  const pendingWriteMatch = content.match(WRITE_FILE_PENDING_REGEX);
-  if (
-    pendingWriteMatch &&
-    !content.match(
-      /<write_file(?:\s+path=["'][^"']+["'])?\s*>[\s\S]*?<\/write_file>/i,
-    )
-  ) {
-    const startIndex = content.lastIndexOf(pendingWriteMatch[0]);
-    const filePath = pendingWriteMatch[1] || "文档.md";
-    matches.push({
-      start: startIndex,
-      end: content.length,
-      type: "pending_write_file",
-      content: pendingWriteMatch[2] || "",
-      filePath,
-    });
-    hasPending = true;
-    hasWriteFile = true;
-  }
-
   // 查找文档标签（兼容旧格式）
   const docRegex = new RegExp(DOCUMENT_REGEX.source, "g");
   while ((match = docRegex.exec(content)) !== null) {
@@ -311,20 +265,6 @@ export function parseAIResponse(
     } else if (m.type === "pending_a2ui") {
       // 未完成的 A2UI 代码块 - 显示加载状态
       parts.push({ type: "pending_a2ui", content: m.content });
-    } else if (m.type === "write_file") {
-      // 文件写入内容 - 发送到画布，包含文件路径
-      parts.push({
-        type: "write_file",
-        content: m.content,
-        filePath: m.filePath,
-      });
-    } else if (m.type === "pending_write_file") {
-      // 未完成的文件写入 - 显示加载状态，包含文件路径
-      parts.push({
-        type: "pending_write_file",
-        content: m.content,
-        filePath: m.filePath,
-      });
     } else {
       // 文档内容（兼容旧格式）
       parts.push({ type: "document", content: m.content });
@@ -346,7 +286,7 @@ export function parseAIResponse(
     parts.push({ type: "text", content: content.trim() });
   }
 
-  return { parts, hasA2UI, hasWriteFile, hasPending };
+  return { parts, hasA2UI, hasPending };
 }
 
 function parseJsonLines(jsonStr: string): unknown[] | null {

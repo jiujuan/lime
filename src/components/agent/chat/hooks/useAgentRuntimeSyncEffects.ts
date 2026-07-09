@@ -417,6 +417,7 @@ interface UseAgentRuntimeSyncEffectsOptions {
     targetSessionId?: string,
     request?: AgentSessionDetailRefreshRequest,
   ) => Promise<unknown>;
+  refreshSessionReadModel: (targetSessionId?: string) => Promise<unknown>;
   settleActiveRuntimeStream?: (targetSessionId: string) => void;
 }
 
@@ -436,6 +437,7 @@ export function useAgentRuntimeSyncEffects(
     queuedTurnCount,
     threadTurns,
     refreshSessionDetail,
+    refreshSessionReadModel,
     settleActiveRuntimeStream,
   } = options;
   const normalizedParentSessionId = parentSessionId?.trim() || null;
@@ -445,7 +447,9 @@ export function useAgentRuntimeSyncEffects(
   const lastCurrentTurnEventNameRef = useRef(normalizedCurrentTurnEventName);
   const observedActiveRuntimeWorkRef = useRef(false);
   const refreshInFlightSessionRef = useRef<string | null>(null);
+  const readModelRefreshInFlightSessionRef = useRef<string | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
+  const readModelRefreshTimerRef = useRef<number | null>(null);
   const deferredRuntimeRefreshRequestRef =
     useRef<AgentSessionDetailRefreshRequest | null>(null);
   const hasDesktopRuntimeEventListenerCapability =
@@ -508,11 +512,61 @@ export function useAgentRuntimeSyncEffects(
     [refreshSessionDetailOnce],
   );
 
+  const refreshSessionReadModelOnce = useCallback(
+    (targetSessionId: string) => {
+      if (readModelRefreshInFlightSessionRef.current === targetSessionId) {
+        return;
+      }
+
+      readModelRefreshInFlightSessionRef.current = targetSessionId;
+      void refreshSessionReadModel(targetSessionId).finally(() => {
+        if (readModelRefreshInFlightSessionRef.current === targetSessionId) {
+          readModelRefreshInFlightSessionRef.current = null;
+        }
+      });
+    },
+    [refreshSessionReadModel],
+  );
+
+  const scheduleRefreshSessionReadModel = useCallback(
+    (targetSessionId: string) => {
+      if (readModelRefreshInFlightSessionRef.current === targetSessionId) {
+        return;
+      }
+
+      if (readModelRefreshTimerRef.current !== null) {
+        window.clearTimeout(readModelRefreshTimerRef.current);
+      }
+
+      readModelRefreshTimerRef.current = window.setTimeout(() => {
+        readModelRefreshTimerRef.current = null;
+        refreshSessionReadModelOnce(targetSessionId);
+      }, RUNTIME_DETAIL_REFRESH_COALESCE_MS);
+    },
+    [refreshSessionReadModelOnce],
+  );
+
+  const scheduleRuntimeSyncRefresh = useCallback(
+    (targetSessionId: string, request: AgentSessionDetailRefreshRequest) => {
+      if (request.detailMergeMode === "terminal_reconcile") {
+        scheduleRefreshSessionReadModel(targetSessionId);
+        return;
+      }
+
+      scheduleRefreshSessionDetail(targetSessionId, request);
+    },
+    [scheduleRefreshSessionDetail, scheduleRefreshSessionReadModel],
+  );
+
   useEffect(
     () => () => {
       if (refreshTimerRef.current !== null) {
         window.clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;
+      }
+      if (readModelRefreshTimerRef.current !== null) {
+        window.clearTimeout(readModelRefreshTimerRef.current);
+        readModelRefreshTimerRef.current = null;
       }
     },
     [],
@@ -534,14 +588,14 @@ export function useAgentRuntimeSyncEffects(
 
     const deferredRefreshRequest = deferredRuntimeRefreshRequestRef.current;
     deferredRuntimeRefreshRequestRef.current = null;
-    scheduleRefreshSessionDetail(
+    scheduleRuntimeSyncRefresh(
       sessionId,
       deferredRefreshRequest ?? RUNTIME_SYNC_REFRESH_REQUESTS.sendSettled,
     );
   }, [
     isSending,
     normalizedCurrentTurnEventName,
-    scheduleRefreshSessionDetail,
+    scheduleRuntimeSyncRefresh,
     sessionId,
   ]);
 

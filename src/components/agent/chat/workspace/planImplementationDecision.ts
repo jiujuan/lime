@@ -1,4 +1,11 @@
-import type { ActionRequired, AgentThreadItem, Message } from "../types";
+import type { HandleSendOptions } from "../hooks/handleSendTypes";
+import type {
+  ActionRequired,
+  AgentThreadItem,
+  ConfirmResponse,
+  Message,
+} from "../types";
+import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import { splitProposedPlanSegments } from "../utils/proposedPlan";
 
 export interface PlanImplementationStateItem {
@@ -22,6 +29,27 @@ export interface ProposedPlanImplementationDecision {
   planText: string;
 }
 
+export type PlanImplementationSubmitPlan =
+  | {
+      kind: "invalid";
+      reason: "missing_request_id";
+    }
+  | {
+      kind: "dismiss";
+      requestId: string;
+      confirmationKeys: readonly string[];
+    }
+  | {
+      kind: "send";
+      decision: "accepted" | "adjustment";
+      requestId: string;
+      confirmationKeys: readonly string[];
+      textOverride: string;
+      sendOptions: HandleSendOptions & {
+        toolPreferencesOverride: ChatToolPreferences;
+      };
+    };
+
 interface LatestProposedPlanCandidate {
   id: string;
   completedAt: number;
@@ -35,9 +63,11 @@ interface LatestProposedPlanCandidate {
 }
 
 interface SelectProposedPlanImplementationDecisionOptions {
+  dismissedConfirmationKeys?: ReadonlySet<string>;
   dismissedRequestIds?: ReadonlySet<string>;
   messages?: readonly Message[];
   planState?: PlanImplementationState | null;
+  submittedConfirmationKeys?: ReadonlySet<string>;
   submittedRequestIds?: ReadonlySet<string>;
   threadItems?: readonly AgentThreadItem[];
 }
@@ -128,6 +158,20 @@ function stablePlanFingerprint(planText: string): string {
     hash = (hash * 31 + planText.charCodeAt(index)) >>> 0;
   }
   return hash.toString(36);
+}
+
+function uniqueStrings(values: readonly (string | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  values.forEach((value) => {
+    const normalized = value?.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
 }
 
 function dateToEpoch(value: Date | string | undefined): number {
@@ -311,10 +355,92 @@ export function buildPlanImplementationRequestId(
   ].join(":");
 }
 
+function buildPlanTextConfirmationKey(planText: string): string | undefined {
+  const normalizedPlan = normalizePlanText(planText);
+  if (!normalizedPlan) {
+    return undefined;
+  }
+  return [
+    "plan-text",
+    normalizedPlan.length,
+    stablePlanFingerprint(normalizedPlan),
+  ].join(":");
+}
+
+function buildPlanRevisionConfirmationKey(
+  planRevisionId: string | undefined,
+  planText: string,
+): string | undefined {
+  const normalizedRevision = planRevisionId?.trim();
+  const normalizedPlan = normalizePlanText(planText);
+  if (!normalizedRevision || !normalizedPlan) {
+    return undefined;
+  }
+  return [
+    "plan-revision",
+    normalizedRevision,
+    normalizedPlan.length,
+    stablePlanFingerprint(normalizedPlan),
+  ].join(":");
+}
+
+function buildPlanConfirmationKeys(params: {
+  planRevisionId?: string;
+  planText: string;
+}): string[] {
+  return uniqueStrings([
+    buildPlanRevisionConfirmationKey(params.planRevisionId, params.planText),
+    buildPlanTextConfirmationKey(params.planText),
+  ]);
+}
+
+export function readPlanImplementationConfirmationKeys(
+  requestArguments?: unknown,
+): string[] {
+  const args = asRecord(requestArguments);
+  const explicitKeys = [
+    ...(Array.isArray(args?.plan_confirmation_keys)
+      ? args?.plan_confirmation_keys
+      : []),
+    ...(Array.isArray(args?.planConfirmationKeys)
+      ? args?.planConfirmationKeys
+      : []),
+  ].filter((value): value is string => typeof value === "string");
+  const explicitKey = readStringField(
+    args,
+    "plan_confirmation_key",
+    "planConfirmationKey",
+  );
+  const proposedPlan = readStringField(args, "proposed_plan", "proposedPlan");
+  const planRevisionId = readStringField(
+    args,
+    "plan_revision_id",
+    "planRevisionId",
+  );
+
+  return uniqueStrings([
+    explicitKey,
+    ...explicitKeys,
+    ...buildPlanConfirmationKeys({
+      planRevisionId,
+      planText: proposedPlan || "",
+    }),
+  ]);
+}
+
+function hasAnyPlanConfirmationKey(
+  keys: readonly string[],
+  selectedKeys?: ReadonlySet<string>,
+): boolean {
+  return keys.some((key) => selectedKeys?.has(key));
+}
+
 export function selectProposedPlanImplementationDecision({
+  dismissedConfirmationKeys,
   dismissedRequestIds,
   messages,
   planState,
+  submittedConfirmationKeys,
   submittedRequestIds,
   threadItems,
 }: SelectProposedPlanImplementationDecisionOptions): ProposedPlanImplementationDecision | null {
@@ -331,9 +457,15 @@ export function selectProposedPlanImplementationDecision({
     latestCandidate.id,
     latestCandidate.planText,
   );
+  const confirmationKeys = buildPlanConfirmationKeys({
+    planRevisionId: latestCandidate.planRevisionId,
+    planText: latestCandidate.planText,
+  });
   if (
     dismissedRequestIds?.has(requestId) ||
-    submittedRequestIds?.has(requestId)
+    submittedRequestIds?.has(requestId) ||
+    hasAnyPlanConfirmationKey(confirmationKeys, dismissedConfirmationKeys) ||
+    hasAnyPlanConfirmationKey(confirmationKeys, submittedConfirmationKeys)
   ) {
     return null;
   }
@@ -348,6 +480,10 @@ export function selectProposedPlanImplementationDecision({
         proposed_plan: latestCandidate.planText,
         plan_approval_request: true,
         source: latestCandidate.source,
+        plan_confirmation_key: confirmationKeys[0],
+        planConfirmationKey: confirmationKeys[0],
+        plan_confirmation_keys: confirmationKeys,
+        planConfirmationKeys: confirmationKeys,
         plan_revision_id: latestCandidate.planRevisionId,
         planRevisionId: latestCandidate.planRevisionId,
         source_item_id: latestCandidate.sourceItemId,
@@ -375,6 +511,9 @@ export function buildPlanImplementationHarnessMetadata(params: {
   const turnId = readStringField(args, "turn_id", "turnId");
   const source = readStringField(args, "plan_source", "source");
   const proposedPlan = readStringField(args, "proposed_plan", "proposedPlan");
+  const confirmationKeys = readPlanImplementationConfirmationKeys(
+    params.requestArguments,
+  );
   const latestPlanRevision = compactRecord({
     revision_id: planRevisionId,
     source_item_id: sourceItemId,
@@ -391,10 +530,107 @@ export function buildPlanImplementationHarnessMetadata(params: {
       turn_id: turnId,
       source,
       proposed_plan: proposedPlan,
+      plan_confirmation_key: confirmationKeys[0],
     }),
     latest_plan_revision:
       Object.keys(latestPlanRevision).length > 0
         ? latestPlanRevision
         : undefined,
   });
+}
+
+export function buildPlanImplementationSubmitPlan(params: {
+  acceptedLabel: string;
+  effectiveChatToolPreferences: ChatToolPreferences;
+  requestArguments?: unknown;
+  response: ConfirmResponse;
+}): PlanImplementationSubmitPlan {
+  const requestId = params.response.requestId.trim();
+  if (!requestId) {
+    return { kind: "invalid", reason: "missing_request_id" };
+  }
+  if (!params.response.confirmed) {
+    return {
+      kind: "dismiss",
+      requestId,
+      confirmationKeys: readPlanImplementationConfirmationKeys(
+        params.requestArguments,
+      ),
+    };
+  }
+
+  const userData = asRecord(params.response.userData);
+  const adjustment =
+    (typeof userData?.answer === "string" ? userData.answer.trim() : "") ||
+    (typeof params.response.response === "string"
+      ? params.response.response.trim()
+      : "");
+  const isAdjustment = Boolean(
+    adjustment && adjustment !== params.acceptedLabel,
+  );
+  const decision = isAdjustment ? "adjustment" : "accepted";
+  const planImplementationMetadata = buildPlanImplementationHarnessMetadata({
+    requestArguments: params.requestArguments,
+    requestId,
+    decision,
+  });
+
+  if (isAdjustment) {
+    return {
+      kind: "send",
+      decision,
+      requestId,
+      confirmationKeys: readPlanImplementationConfirmationKeys(
+        params.requestArguments,
+      ),
+      textOverride: adjustment,
+      sendOptions: {
+        requestMetadata: {
+          harness: {
+            ...planImplementationMetadata,
+            collaboration_mode: {
+              mode: "plan",
+              source: "plan_implementation_adjustment",
+            },
+            preferences: {
+              task: true,
+              task_mode: true,
+            },
+            task_mode_enabled: true,
+          },
+        },
+        skipSceneCommandRouting: true,
+        toolPreferencesOverride: {
+          ...params.effectiveChatToolPreferences,
+          task: true,
+        },
+      },
+    };
+  }
+
+  return {
+    kind: "send",
+    decision,
+    requestId,
+    confirmationKeys: readPlanImplementationConfirmationKeys(
+      params.requestArguments,
+    ),
+    textOverride: "Implement the plan.",
+    sendOptions: {
+      requestMetadata: {
+        harness: {
+          ...planImplementationMetadata,
+          collaboration_mode: {
+            mode: "implement",
+            source: "plan_implementation_accept",
+          },
+        },
+      },
+      skipSceneCommandRouting: true,
+      toolPreferencesOverride: {
+        ...params.effectiveChatToolPreferences,
+        task: false,
+      },
+    },
+  };
 }

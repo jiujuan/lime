@@ -108,14 +108,16 @@ const NAV_ICON_BUTTON_CLASSNAME =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-600 transition hover:bg-black/5 hover:text-slate-950";
 const NAV_ICON_BUTTON_ACTIVE_CLASSNAME = "bg-black/5 text-slate-950";
 const NAV_TEXT_BUTTON_CLASSNAME =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-slate-600 transition hover:bg-black/5 hover:text-slate-950";
+  "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-slate-600 transition hover:bg-black/5 hover:text-slate-950";
 const NAV_DIVIDER_CLASSNAME = "mx-1 h-5 w-px shrink-0 bg-slate-300";
 const MENU_ITEM_CLASSNAME =
   "flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100";
 const STATUS_PILL_CLASSNAME =
-  "inline-flex h-8 shrink-0 cursor-default items-center gap-1.5 rounded-md border border-dashed border-slate-300 px-2.5 text-xs font-medium text-slate-400";
+  "inline-flex h-8 shrink-0 cursor-default items-center gap-1.5 whitespace-nowrap rounded-md border border-dashed border-slate-300 px-2.5 text-xs font-medium text-slate-400";
 const FORMAT_PILL_CLASSNAME =
-  "inline-flex h-8 shrink-0 cursor-default items-center gap-1.5 rounded-md bg-white/70 px-2.5 text-xs font-medium text-slate-600";
+  "inline-flex h-8 shrink-0 cursor-default items-center gap-1.5 whitespace-nowrap rounded-md bg-white/70 px-2.5 text-xs font-medium text-slate-600";
+const TYPE_LABEL_CLASSNAME =
+  "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium text-slate-600";
 
 function getCopyButtonLabel(item: ResourceManagerItem): string {
   if (item.kind === "image" && getResourcePreviewTarget(item) === "webview") {
@@ -392,7 +394,7 @@ export function ResourceManagerToolbar({
       {activeItem.kind === "markdown" &&
       markdownViewMode === "preview" &&
       previewSearchQuery.trim() ? (
-        <span className="shrink-0 rounded bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
+        <span className="shrink-0 whitespace-nowrap rounded bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
           源码模式可高亮
         </span>
       ) : null}
@@ -403,7 +405,7 @@ export function ResourceManagerToolbar({
       renderImageNavigationTools(activeItem, imageControls)
     ) : activeItem.kind === "image" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <ImageIcon className="h-3.5 w-3.5" />
           图片
         </span>
@@ -418,7 +420,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "pdf" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <FileText className="h-3.5 w-3.5 text-rose-500" />
           PDF
         </span>
@@ -443,7 +445,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "text" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <FileText className="h-3.5 w-3.5" />
           文本
         </span>
@@ -463,7 +465,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "markdown" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <FileText className="h-3.5 w-3.5" />
           Markdown
         </span>
@@ -504,7 +506,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "video" || activeItem.kind === "audio" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           {activeItem.kind === "video" ? (
             <Video className="h-3.5 w-3.5" />
           ) : (
@@ -526,7 +528,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "data" && previewTarget === "data" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <Database className="h-3.5 w-3.5 text-emerald-600" />
           结构化数据预览
         </span>
@@ -563,7 +565,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "data" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <Database className="h-3.5 w-3.5 text-emerald-600" />
           数据文件
         </span>
@@ -578,7 +580,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "office" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           {documentProfile ? (
             <documentProfile.Icon
               className={cn("h-3.5 w-3.5", documentProfile.iconClassName)}
@@ -601,7 +603,7 @@ export function ResourceManagerToolbar({
       </>
     ) : activeItem.kind === "archive" ? (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <FileArchive className="h-3.5 w-3.5 text-amber-600" />
           压缩包
         </span>
@@ -616,7 +618,7 @@ export function ResourceManagerToolbar({
       </>
     ) : (
       <>
-        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600">
+        <span className={TYPE_LABEL_CLASSNAME}>
           <FileQuestion className="h-3.5 w-3.5" />
           未知资源
         </span>
@@ -632,8 +634,11 @@ export function ResourceManagerToolbar({
     );
 
   return (
-    <header className="flex min-h-[42px] items-center justify-between gap-4 border-b border-[#d9d9db] bg-[#ececee] px-3 py-1 shadow-sm shadow-slate-950/5">
-      <div className="flex min-w-0 flex-[1_1_30%] items-center gap-1">
+    <header
+      data-testid="resource-manager-top-toolbar"
+      className="grid min-h-[42px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-[#d9d9db] bg-[#ececee] px-3 py-1 shadow-sm shadow-slate-950/5"
+    >
+      <div className="flex min-w-0 items-center gap-1 overflow-hidden">
         <button
           type="button"
           onClick={onPrevious}
@@ -666,8 +671,8 @@ export function ResourceManagerToolbar({
         >
           <Grid2x2 className="h-4 w-4" />
         </button>
-        <div className="ml-2 hidden min-w-0 items-center gap-2 text-xs text-slate-500 md:flex">
-          <span className="inline-flex items-center gap-1 rounded bg-white/70 px-1.5 py-0.5 text-slate-600">
+        <div className="ml-2 hidden min-w-0 max-w-[min(34vw,24rem)] items-center gap-2 text-xs text-slate-500 lg:flex">
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-white/70 px-1.5 py-0.5 text-slate-600">
             <ActiveIcon className="h-3.5 w-3.5" />
             {getKindLabel(activeItem.kind)}
           </span>
@@ -682,12 +687,15 @@ export function ResourceManagerToolbar({
 
       <div
         data-testid="resource-manager-type-toolbar"
-        className="flex min-w-0 flex-[2_1_auto] items-center justify-center gap-1 overflow-x-auto px-1 [scrollbar-width:none]"
+        className="flex min-w-0 max-w-full items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {typeToolbar}
       </div>
 
-      <div className="flex min-w-0 flex-[1_1_30%] shrink-0 items-center justify-end gap-1">
+      <div
+        data-testid="resource-manager-global-actions"
+        className="flex shrink-0 items-center justify-end gap-1"
+      >
         {activeItem.kind === "image" && previewTarget === "webview" ? (
           <button
             type="button"

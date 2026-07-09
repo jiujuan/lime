@@ -16,7 +16,6 @@ describe("StreamingRenderer structured content", () => {
         { type: "a2ui", content: { type: "form", children: [] } },
       ],
       hasA2UI: true,
-      hasWriteFile: false,
       hasPending: false,
     });
 
@@ -36,7 +35,6 @@ describe("StreamingRenderer structured content", () => {
         { type: "a2ui", content: { type: "form", children: [] } },
       ],
       hasA2UI: true,
-      hasWriteFile: false,
       hasPending: false,
     });
 
@@ -64,7 +62,6 @@ describe("StreamingRenderer structured content", () => {
         },
       ],
       hasA2UI: true,
-      hasWriteFile: false,
       hasPending: false,
     });
 
@@ -106,19 +103,17 @@ describe("StreamingRenderer structured content", () => {
     ).toBeNull();
   });
 
-  it("pending_write_file 应触发流式 onWriteFile 回调", () => {
+  it("旧 write_file 文本标签不再触发流式 onWriteFile 回调", () => {
     const onWriteFile = vi.fn();
     parseAIResponseMock.mockReturnValue({
       parts: [
         {
-          type: "pending_write_file",
-          content: "# 草稿\n正在生成中",
-          filePath: "notes/live.md",
+          type: "text",
+          content: '<write_file path="notes/live.md"># 草稿\n正在生成中',
         },
       ],
       hasA2UI: false,
-      hasWriteFile: true,
-      hasPending: true,
+      hasPending: false,
     });
 
     const { container } = renderHarness({
@@ -129,25 +124,10 @@ describe("StreamingRenderer structured content", () => {
 
     expect(
       container.querySelector('[data-testid="streaming-write-file-card"]'),
-    ).toBeTruthy();
-    expect(container.textContent).toContain("正在生成 live.md");
-    expect(container.textContent).toContain("生成中");
-    expect(container.textContent).toContain("notes/live.md");
-    expect(container.textContent).not.toContain("写入notes/live.md");
-    expect(onWriteFile).toHaveBeenCalledTimes(1);
-    expect(onWriteFile).toHaveBeenCalledWith(
-      "# 草稿\n正在生成中",
-      "notes/live.md",
-      expect.objectContaining({
-        source: "message_content",
-        status: "streaming",
-        metadata: expect.objectContaining({
-          writePhase: "streaming",
-          lastUpdateSource: "message_content",
-          isPartial: true,
-        }),
-      }),
-    );
+    ).toBeNull();
+    expect(container.textContent).toContain('<write_file path="notes/live.md">');
+    expect(container.textContent).toContain("正在生成中");
+    expect(onWriteFile).not.toHaveBeenCalled();
   });
 
   it("应将 proposed_plan 片段渲染为独立计划卡片", () => {

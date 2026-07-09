@@ -20,6 +20,67 @@ import {
   mergeExistingLeadAndFinalParts,
   shouldRenderTimelineAgentMessageAsVisibleText,
 } from "./messageListTimelineContentPartText";
+import {
+  areComparableContentTextsRelated,
+  normalizeComparableContentText,
+  readableContentTextScore,
+} from "./messageListComparableText";
+
+function normalizeTimelineReasoningText(text: string): string {
+  return normalizeComparableContentText(text);
+}
+
+function scoreTimelineReasoningItem(item: AgentThreadItem): number {
+  if (item.type !== "reasoning") {
+    return 0;
+  }
+  let score = 0;
+  if (!item.id.startsWith("streamed-reasoning:")) {
+    score += 4;
+  }
+  if (item.status === "completed") {
+    score += 2;
+  }
+  if (item.status === "in_progress") {
+    score += 1;
+  }
+  score += readableContentTextScore(item.text);
+  return score;
+}
+
+function dedupeTimelineReasoningItems(items: AgentThreadItem[]): AgentThreadItem[] {
+  const nextItems: AgentThreadItem[] = [];
+
+  for (const item of items) {
+    const normalizedText =
+      item.type === "reasoning" ? normalizeTimelineReasoningText(item.text) : "";
+    if (item.type !== "reasoning" || !normalizedText) {
+      nextItems.push(item);
+      continue;
+    }
+
+    const existingIndex = nextItems.findIndex(
+      (candidate) =>
+        candidate.type === "reasoning" &&
+        candidate.turn_id === item.turn_id &&
+        areComparableContentTextsRelated(candidate.text, item.text),
+    );
+    if (existingIndex < 0) {
+      nextItems.push(item);
+      continue;
+    }
+
+    const existingItem = nextItems[existingIndex];
+    if (
+      existingItem &&
+      scoreTimelineReasoningItem(item) >= scoreTimelineReasoningItem(existingItem)
+    ) {
+      nextItems[existingIndex] = item;
+    }
+  }
+
+  return nextItems.length === items.length ? items : nextItems;
+}
 
 function shouldPrependDisplayContentBeforeActiveTimelineProcess(params: {
   processPrefaceContent: string;
@@ -53,7 +114,7 @@ export function buildTimelineInlineContentParts(params: {
   existingContentParts?: Message["contentParts"];
   items?: AgentThreadItem[];
 }): Message["contentParts"] | undefined {
-  const items = params.items || [];
+  const items = dedupeTimelineReasoningItems(params.items || []);
   const sparseMergedParts = mergeSparseTimelineProcessIntoExistingParts({
     items,
     existingContentParts: params.existingContentParts,

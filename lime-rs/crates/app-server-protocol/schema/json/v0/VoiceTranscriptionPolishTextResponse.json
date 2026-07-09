@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "instruction_name": {
+      "type": "string"
+    },
+    "polished": {
+      "default": false,
+      "type": "boolean"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "instruction_name",
+    "text"
+  ],
+  "title": "VoiceTranscriptionPolishTextResponse",
+  "type": "object"
+}

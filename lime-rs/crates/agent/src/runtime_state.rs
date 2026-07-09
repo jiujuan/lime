@@ -526,7 +526,7 @@ mod tests {
                 Message::assistant().with_tool_request(
                     "req-runtime-confirm",
                     Ok(CallToolRequestParam {
-                        name: "RuntimeApprovalResume".into(),
+                        name: RUNTIME_APPROVAL_RESUME_TOOL_NAME.into(),
                         arguments: Some(serde_json::Map::new()),
                     }),
                 ),
@@ -547,10 +547,12 @@ mod tests {
 
     struct RuntimeApprovalResumeTool;
 
+    const RUNTIME_APPROVAL_RESUME_TOOL_NAME: &str = "memory_list";
+
     fn runtime_approval_resume_registration() -> crate::native_tools::NativeRegistration {
         crate::native_tools::NativeRegistration::new(
             tool_runtime::tool_definition::RuntimeToolDefinition::new(
-                "RuntimeApprovalResume",
+                RUNTIME_APPROVAL_RESUME_TOOL_NAME,
                 "runtime approval resume regression tool",
                 serde_json::json!({
                     "type": "object",
@@ -564,7 +566,7 @@ mod tests {
     #[async_trait]
     impl aster::tools::Tool for RuntimeApprovalResumeTool {
         fn name(&self) -> &str {
-            "RuntimeApprovalResume"
+            RUNTIME_APPROVAL_RESUME_TOOL_NAME
         }
 
         fn description(&self) -> &str {
@@ -604,16 +606,18 @@ mod tests {
                 .iter()
                 .filter_map(|request| {
                     let tool_call = request.tool_call.as_ref().ok()?;
-                    (tool_call.name == "RuntimeApprovalResume").then(|| InspectionResult {
-                        tool_request_id: request.id.clone(),
-                        action: InspectionAction::RequireApproval(Some(
-                            "runtime approval resume regression".to_string(),
-                        )),
-                        reason: "Runtime approval resume regression requires manual approval"
-                            .to_string(),
-                        confidence: 1.0,
-                        inspector_name: self.name().to_string(),
-                        finding_id: None,
+                    (tool_call.name == RUNTIME_APPROVAL_RESUME_TOOL_NAME).then(|| {
+                        InspectionResult {
+                            tool_request_id: request.id.clone(),
+                            action: InspectionAction::RequireApproval(Some(
+                                "runtime approval resume regression".to_string(),
+                            )),
+                            reason: "Runtime approval resume regression requires manual approval"
+                                .to_string(),
+                            confidence: 1.0,
+                            inspector_name: self.name().to_string(),
+                            finding_id: None,
+                        }
                     })
                 })
                 .collect())
@@ -668,20 +672,30 @@ mod tests {
             .await
             .iter()
             .any(|definition| definition.name == "update_plan"));
-        assert!(!state.contains_native_tool("RuntimeApprovalResume").await);
+        assert!(
+            !state
+                .contains_native_tool(RUNTIME_APPROVAL_RESUME_TOOL_NAME)
+                .await
+        );
 
         state
             .register_native_tool(runtime_approval_resume_registration())
             .await
             .unwrap();
 
-        assert!(state.contains_native_tool("RuntimeApprovalResume").await);
+        assert!(
+            state
+                .contains_native_tool(RUNTIME_APPROVAL_RESUME_TOOL_NAME)
+                .await
+        );
         assert!(state
             .native_tool_definitions_snapshot()
             .await
             .iter()
-            .any(|definition| definition.name == "RuntimeApprovalResume"
-                && definition.description == "runtime approval resume regression tool"));
+            .any(
+                |definition| definition.name == RUNTIME_APPROVAL_RESUME_TOOL_NAME
+                    && definition.description == "runtime approval resume regression tool"
+            ));
     }
 
     #[tokio::test]

@@ -360,23 +360,33 @@ describe("EmptyStateComposerPanel", () => {
     expect(composer?.className).toContain("floating-composer");
   });
 
-  it("首页空态输入区应在输入框下方显示录音入口", () => {
+  it("首页空态输入区应在右下角显示语音和发送主操作", () => {
     const container = renderPanel({
       isGeneralTheme: true,
     });
 
+    const primaryActions = container.querySelector(
+      '[data-testid="inputbar-primary-actions"]',
+    );
     const dictationButton = container.querySelector(
       '[data-testid="inputbar-dictation-toggle"]',
     ) as HTMLButtonElement | null;
-    const leftMeta = container.querySelector(
-      '[data-testid="inputbar-meta-left"]',
-    );
+    const sendButton = container.querySelector(
+      '[data-testid="send-btn"]',
+    ) as HTMLButtonElement | null;
 
+    expect(primaryActions).toBeTruthy();
     expect(dictationButton).toBeTruthy();
-    expect(dictationButton?.textContent).toContain("开始语音输入");
-    expect(dictationButton?.closest('[data-testid="inputbar-meta-left"]')).toBe(
-      leftMeta,
+    expect(dictationButton?.textContent).toBe("");
+    expect(
+      dictationButton?.closest('[data-testid="inputbar-primary-actions"]'),
+    ).toBe(primaryActions);
+    expect(sendButton?.closest('[data-testid="inputbar-primary-actions"]')).toBe(
+      primaryActions,
     );
+    expect(
+      container.querySelector('[data-testid="inputbar-expand-toggle"]'),
+    ).toBeNull();
   });
 
   it("首页项目栏应连接在同一个输入壳内以继承聚焦态", () => {

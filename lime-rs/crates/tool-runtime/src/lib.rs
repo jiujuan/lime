@@ -1,5 +1,6 @@
 pub mod apply_patch;
 pub mod command_semantics;
+pub mod execution_approval;
 pub mod execution_decision;
 pub mod execution_policy;
 pub mod execution_policy_service;

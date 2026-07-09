@@ -195,7 +195,6 @@ describe("i18n namespace loader", () => {
         "agentChat.decisionPanel.permission.importedReadOnlyDescription",
         "agentChat.messageList.history.windowSummaryRestored",
         "agentChat.messageList.taskCenterEmpty.title",
-        "agentChat.messageList.empty.defaultTitle",
         "agentChat.navbar.appSwitcher.finder",
         "agentChat.navbar.appSwitcher.open",
         "agentChat.navbar.appSwitcher.terminal",

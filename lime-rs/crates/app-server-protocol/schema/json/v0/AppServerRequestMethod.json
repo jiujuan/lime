@@ -263,6 +263,7 @@
     "voiceInstruction/save",
     "voiceModel/default/set",
     "voiceModel/testTranscribeFile",
+    "voiceTranscription/polishText",
     "voiceTranscription/transcribeAudio",
     "wechatChannel/account/remove",
     "wechatChannel/accounts/list",

@@ -264,6 +264,7 @@ export function useAppSidebarSessions({
     recentSidebarReloadCancelRef.current = scheduleMinimumDelayIdleTask(
       () => {
         recentSidebarReloadCancelRef.current = null;
+        recentSidebarReloadPendingRef.current = false;
         void loadRecentSidebarSessionsRef.current();
       },
       {

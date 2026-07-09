@@ -60,6 +60,31 @@ describe("coalesceAdjacentDisplayContentParts", () => {
     ]);
   });
 
+  it("Markdown 强调形态相同的 thinking 不应重复拼接", () => {
+    const parts: ContentPart[] = [
+      { type: "thinking", text: "**Crafting concise cheeky greeting**" },
+      { type: "thinking", text: "Crafting concise cheeky greeting" },
+    ];
+
+    const merged = coalesceAdjacentDisplayContentParts(parts);
+
+    expect(merged).toEqual([
+      { type: "thinking", text: "**Crafting concise cheeky greeting**" },
+    ]);
+  });
+
+  it("相邻最终正文 text 相同但 Markdown 形态不同时只渲染一次", () => {
+    const finalText = "你好。直接说事，我来处理，省得我们俩先拿空气开会。";
+    const parts: ContentPart[] = [
+      { type: "text", text: finalText },
+      { type: "text", text: `**${finalText}**` },
+    ];
+
+    const merged = coalesceAdjacentDisplayContentParts(parts);
+
+    expect(merged).toEqual([{ type: "text", text: finalText }]);
+  });
+
   it("带事件 metadata 的相邻 text part 应保留独立边界", () => {
     const parts: ContentPart[] = [
       {

@@ -67,6 +67,18 @@ export function useSessionFiles(
   // 追踪当前会话 ID，避免竞态条件
   const currentSessionId = useRef<string | null>(null);
 
+  useEffect(() => {
+    if (currentSessionId.current === sessionId) {
+      return;
+    }
+
+    currentSessionId.current = sessionId;
+    setMeta(null);
+    setFiles([]);
+    setError(null);
+    setIsLoading(false);
+  }, [sessionId]);
+
   // 初始化会话
   const initSession = useCallback(async () => {
     if (!sessionId) {
@@ -108,13 +120,6 @@ export function useSessionFiles(
       // 加载文件列表
       const fileList = await sessionFilesApi.listFiles(sessionId);
       setFiles(fileList);
-
-      console.log(
-        "[useSessionFiles] 会话初始化完成:",
-        sessionId,
-        fileList.length,
-        "个文件",
-      );
     } catch (err) {
       console.error("[useSessionFiles] 初始化失败:", err);
       setError(String(err));

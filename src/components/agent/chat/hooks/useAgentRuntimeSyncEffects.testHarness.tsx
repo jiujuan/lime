@@ -350,6 +350,7 @@ export async function mountHook(
     queuedTurnCount: 0,
     threadTurns: [],
     refreshSessionDetail: vi.fn(async () => true),
+    refreshSessionReadModel: vi.fn(async () => true),
   };
 
   function TestComponent(currentProps: HookProps) {

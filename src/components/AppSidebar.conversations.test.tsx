@@ -1655,6 +1655,9 @@ describe("AppSidebar conversations", () => {
   });
 
   it("首页发送热路径期间会话列表变更不应立即抢占 listSessions", async () => {
+    const dateNowSpy = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(1_780_000_000_000);
     const scheduledTasks: Array<{
       task: () => void;
       options?: { minimumDelayMs?: number; idleTimeoutMs?: number };
@@ -1679,54 +1682,71 @@ describe("AppSidebar conversations", () => {
       },
     ]);
 
-    mountSidebarContainer({
-      currentPage: "agent",
-      currentPageParams: {
-        agentEntry: "new-task",
-      } as AgentPageParams,
-    });
-    await flushEffects(2);
-
-    await act(async () => {
-      scheduledTasks.shift()?.task();
-      await Promise.resolve();
-    });
-    await flushEffects(2);
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
-      limit: 11,
-    });
-
-    mockListAgentRuntimeSessions.mockClear();
-    scheduledTasks.splice(0, scheduledTasks.length);
-
-    await act(async () => {
-      emitMockAgentUiPerformanceMetricRecorded({
-        id: 1,
-        phase: "homeInput.submit",
-        sessionId: "task-draft-hot",
-        source: "task-center-empty-state",
+    try {
+      mountSidebarContainer({
+        currentPage: "agent",
+        currentPageParams: {
+          agentEntry: "new-task",
+        } as AgentPageParams,
       });
-      window.dispatchEvent(
-        new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, {
-          detail: {
-            reason: "external",
-            sessionId: "session-created-during-send",
-          },
+      await flushEffects(2);
+
+      await act(async () => {
+        scheduledTasks.shift()?.task();
+        await Promise.resolve();
+      });
+      await flushEffects(2);
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+        limit: 11,
+      });
+
+      mockListAgentRuntimeSessions.mockClear();
+      scheduledTasks.splice(0, scheduledTasks.length);
+
+      await act(async () => {
+        emitMockAgentUiPerformanceMetricRecorded({
+          id: 1,
+          phase: "homeInput.submit",
+          sessionId: "task-draft-hot",
+          source: "task-center-empty-state",
+        });
+        window.dispatchEvent(
+          new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, {
+            detail: {
+              reason: "external",
+              sessionId: "session-created-during-send",
+            },
+          }),
+        );
+        await Promise.resolve();
+      });
+      await flushEffects(1);
+
+      expect(mockListAgentRuntimeSessions).not.toHaveBeenCalled();
+      expect(scheduledTasks).toHaveLength(1);
+      expect(scheduledTasks[0]?.options).toEqual(
+        expect.objectContaining({
+          minimumDelayMs: expect.any(Number),
+          idleTimeoutMs: expect.any(Number),
         }),
       );
-      await Promise.resolve();
-    });
-    await flushEffects(1);
+      expect(scheduledTasks[0]?.options?.minimumDelayMs ?? 0).toBeGreaterThan(
+        0,
+      );
 
-    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalled();
-    expect(scheduledTasks).toHaveLength(1);
-    expect(scheduledTasks[0]?.options).toEqual(
-      expect.objectContaining({
-        minimumDelayMs: expect.any(Number),
-        idleTimeoutMs: expect.any(Number),
-      }),
-    );
-    expect(scheduledTasks[0]?.options?.minimumDelayMs ?? 0).toBeGreaterThan(0);
+      const deferredTask = scheduledTasks.shift()?.task;
+      dateNowSpy.mockReturnValue(1_780_000_031_000);
+      await act(async () => {
+        deferredTask?.();
+        await Promise.resolve();
+      });
+      await flushEffects(2);
+
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
+      expect(scheduledTasks).toHaveLength(0);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 
   it("当前会话 metadata 更新应延迟合并刷新最近对话", async () => {

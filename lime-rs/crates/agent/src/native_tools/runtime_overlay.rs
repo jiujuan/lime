@@ -4,7 +4,8 @@ use aster::tools::{Tool, ToolRegistry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tool_runtime::native_overlay::{
-    runtime_native_tool_definition, runtime_native_tool_install_plan, RuntimeNativeToolInstallStep,
+    runtime_native_tool_definition, runtime_native_tool_install_plan,
+    runtime_native_tool_registration_is_allowed, RuntimeNativeToolInstallStep,
     RuntimeNativeToolRegistrationOwner,
 };
 use tool_runtime::tool_definition::RuntimeToolDefinition;
@@ -19,7 +20,6 @@ impl NativeRegistration {
         Self { definition, tool }
     }
 
-    #[cfg(test)]
     pub(crate) fn name(&self) -> &str {
         &self.definition.name
     }
@@ -60,6 +60,12 @@ pub(crate) async fn register_native_tool_on_agent(
         agent.tool_registry().clone()
     };
     let definition = registration.definition();
+    if !runtime_native_tool_registration_is_allowed(&definition.name) {
+        return Err(format!(
+            "Native tool {} is not allowed by tool-runtime current registration policy",
+            definition.name
+        ));
+    }
     let mut registry = registry.write().await;
     registry.register(registration.into_tool());
     Ok(definition)
@@ -71,6 +77,11 @@ fn register_runtime_native_tool_overlay(
 ) -> RuntimeToolDefinition {
     let registration = create_runtime_native_tool(step);
     let definition = registration.definition();
+    debug_assert!(
+        runtime_native_tool_registration_is_allowed(&definition.name),
+        "{} must be allowed by tool-runtime current registration policy",
+        definition.name
+    );
     registry.register(registration.into_tool());
     definition
 }
@@ -92,6 +103,36 @@ fn create_runtime_native_tool(step: RuntimeNativeToolInstallStep) -> NativeRegis
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use serde_json::json;
+
+    struct BlockedTool;
+
+    #[async_trait]
+    impl Tool for BlockedTool {
+        fn name(&self) -> &str {
+            "Write"
+        }
+
+        fn description(&self) -> &str {
+            "blocked legacy write tool"
+        }
+
+        fn input_schema(&self) -> serde_json::Value {
+            json!({
+                "type": "object",
+                "additionalProperties": false
+            })
+        }
+
+        async fn execute(
+            &self,
+            _params: serde_json::Value,
+            _context: &aster::tools::ToolContext,
+        ) -> Result<aster::tools::ToolResult, aster::tools::ToolError> {
+            Ok(aster::tools::ToolResult::success("blocked"))
+        }
+    }
 
     #[tokio::test]
     async fn overlay_registers_current_view_image_with_lookup_only_aliases() {
@@ -170,5 +211,32 @@ mod tests {
         assert!(definition_names.iter().any(|name| name == "update_plan"));
         assert!(!definition_names.iter().any(|name| name == "UpdatePlan"));
         assert!(!definition_names.iter().any(|name| name == "UpdatePlanTool"));
+    }
+
+    #[tokio::test]
+    async fn register_native_tool_on_agent_rejects_unallowed_aster_tool_name() {
+        let tool_config = crate::runtime_state_support::create_lime_tool_config();
+        let agent_state = Arc::new(RwLock::new(Some(Agent::with_tool_config(tool_config))));
+        let registration = NativeRegistration::new(
+            RuntimeToolDefinition::new(
+                "Write",
+                "blocked legacy write tool",
+                json!({
+                    "type": "object",
+                    "additionalProperties": false
+                }),
+            ),
+            Box::new(BlockedTool),
+        );
+
+        let error = register_native_tool_on_agent(&agent_state, registration)
+            .await
+            .expect_err("legacy Write registration must fail closed");
+
+        assert!(error.contains("not allowed by tool-runtime current registration policy"));
+        let agent_guard = agent_state.read().await;
+        let agent = agent_guard.as_ref().expect("agent");
+        let registry = agent.tool_registry().read().await;
+        assert!(!registry.contains("Write"));
     }
 }

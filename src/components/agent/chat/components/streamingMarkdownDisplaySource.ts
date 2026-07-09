@@ -7,7 +7,7 @@ export interface StreamingMarkdownDisplaySourceOptions {
   deferMarkdownUntilComplete?: boolean;
 }
 
-const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
+const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<document/i;
 
 function hasStructuredContentHint(text: string): boolean {
   return STRUCTURED_CONTENT_HINT_RE.test(text);

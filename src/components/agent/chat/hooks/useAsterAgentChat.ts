@@ -564,6 +564,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     queuedTurnCount: session.queuedTurns.length,
     threadTurns: session.threadTurns,
     refreshSessionDetail: session.refreshSessionDetail,
+    refreshSessionReadModel: session.refreshSessionReadModel,
     settleActiveRuntimeStream,
   });
 

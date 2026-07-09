@@ -446,6 +446,10 @@ export type AppServerVoiceTranscriptionTranscribeAudioParams =
   protocol.VoiceTranscriptionTranscribeAudioParams;
 export type AppServerVoiceTranscriptionTranscribeAudioResponse =
   protocol.VoiceTranscriptionTranscribeAudioResponse;
+export type AppServerVoiceTranscriptionPolishTextParams =
+  protocol.VoiceTranscriptionPolishTextParams;
+export type AppServerVoiceTranscriptionPolishTextResponse =
+  protocol.VoiceTranscriptionPolishTextResponse;
 export type AppServerWorkspaceRightSurfaceRequestParams =
   protocol.WorkspaceRightSurfaceRequestParams;
 export type AppServerWorkspaceRightSurfaceRequestResponse =

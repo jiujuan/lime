@@ -232,7 +232,6 @@ function assertI18nKeyTypes() {
     hidden: "30",
   });
   i18n.t("agentChat.messageList.taskCenterEmpty.title", { ns: "agent" });
-  i18n.t("agentChat.messageList.empty.defaultTitle", { ns: "agent" });
   i18n.t("agentChat.serviceSkills.badge.recent", { ns: "agent" });
   i18n.t("agentChat.serviceSkills.badge.browserAssist", { ns: "agent" });
   i18n.t("agentChat.serviceSkills.badge.readyMade", { ns: "agent" });

@@ -9,7 +9,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "1.96.0"
+version = "1.97.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -50,9 +50,9 @@ app-server-transport = { path = "crates/app-server-transport" }
 patch-apply = { path = "crates/patch-apply" }
 voice-core = { path = "crates/voice-core" }
 document-preview = { path = "crates/document-preview" }
-# Aster runtime - vendor dependency
-# 退出条件：Phase 6 完成后移除（compat adapter 全部删除）
-aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }
+# Agent compat staging - temporary alias for remaining Aster-shaped adapters.
+# 退出条件：Phase 6 完成后删除该 alias 和 crates/agent-compat*。
+aster = { package = "aster-core", path = "crates/agent-compat" }
 
 # 序列化
 serde = { version = "1", features = ["derive"] }
@@ -121,6 +121,7 @@ dashmap = "5"
 notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
 parking_lot = "0.12"
 tiktoken-rs = "0.6"
+webbrowser = "1.0"
 base64 = "0.22"
 bytes = "1"
 rand = "0.8"
@@ -131,6 +132,9 @@ once_cell = "1"
 arboard = "3"
 glob = "0.3.3"
 hex = "0.4.3"
+etcetera = "0.11.0"
+ignore = "0.4.25"
+which = "8.0.0"
 scopeguard = "1"
 sysinfo = "0.32"
 whoami = "1"
@@ -160,6 +164,7 @@ rmcp = { version = "0.12.0", features = ["auth", "client", "transport-io", "tran
 # 测试
 proptest = "1"
 tempfile = "3"
+sacp = "10.0.0"
 
 # Windows 平台依赖
 [workspace.dependencies.windows]
@@ -201,3 +206,9 @@ version = "0.26"
 
 [workspace.dependencies.objc]
 version = "0.2"
+
+[workspace.lints]
+
+[workspace.lints.clippy]
+uninlined_format_args = "allow"
+string_slice = "warn"

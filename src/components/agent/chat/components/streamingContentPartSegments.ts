@@ -3,12 +3,27 @@ import {
   canMergeCoalescibleContentParts,
   mergeIncrementalTextWithOverlap,
 } from "../utils/contentPartTimeline";
+import {
+  areComparableContentTextsEqual,
+  dedupeAdjacentDuplicateParagraphs,
+  isComparableContentTextPrefix,
+} from "./messageListComparableText";
 
 type TextContentPart = Extract<ContentPart, { type: "text" }>;
 type ThinkingContentPart = Extract<ContentPart, { type: "thinking" }>;
 type CoalescibleContentPart = TextContentPart | ThinkingContentPart;
 
 export function mergeIncrementalText(base: string, chunk: string): string {
+  if (areComparableContentTextsEqual(base, chunk)) {
+    return base;
+  }
+  if (isComparableContentTextPrefix(base, chunk)) {
+    return chunk;
+  }
+  if (isComparableContentTextPrefix(chunk, base)) {
+    return base;
+  }
+
   return mergeIncrementalTextWithOverlap(base, chunk);
 }
 
@@ -20,8 +35,10 @@ function mergeCoalescibleContentPart<TPart extends CoalescibleContentPart>(
     ...base,
     text:
       base.type === "text"
-        ? base.text + chunk.text
-        : mergeIncrementalText(base.text, chunk.text),
+        ? mergeIncrementalText(base.text, chunk.text)
+        : dedupeAdjacentDuplicateParagraphs(
+            mergeIncrementalText(base.text, chunk.text),
+          ),
     agentUiEvent: base.agentUiEvent ?? chunk.agentUiEvent,
     metadata: base.metadata ?? chunk.metadata,
   };

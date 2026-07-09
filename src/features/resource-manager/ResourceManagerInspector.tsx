@@ -19,7 +19,7 @@ export function ResourceManagerInspector({
   return (
     <aside
       data-testid="resource-manager-inspector"
-      className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white text-slate-800 shadow-sm shadow-slate-950/5"
+      className="flex w-[clamp(15rem,30vw,20rem)] shrink-0 flex-col border-l border-slate-200 bg-white text-slate-800 shadow-sm shadow-slate-950/5"
     >
       <div className="border-b border-slate-200 px-5 py-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">

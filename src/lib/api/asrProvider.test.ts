@@ -14,6 +14,7 @@ import {
   getVoiceInstructions,
   listAudioDevices,
   outputVoiceText,
+  polishVoiceInputText,
   polishVoiceText,
   saveVoiceInputConfig,
   saveVoiceInstruction,
@@ -36,6 +37,7 @@ const appServerMocks = vi.hoisted(() => ({
   listVoiceInstructions: vi.fn(),
   saveVoiceInstruction: vi.fn(),
   deleteVoiceInstruction: vi.fn(),
+  polishVoiceText: vi.fn(),
   transcribeVoiceAudio: vi.fn(),
 }));
 
@@ -56,6 +58,8 @@ vi.mock("./appServer", () => ({
   APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE: "voiceInstruction/delete",
   APP_SERVER_METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO:
     "voiceTranscription/transcribeAudio",
+  APP_SERVER_METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT:
+    "voiceTranscription/polishText",
   createAppServerClient: () => appServerMocks,
 }));
 
@@ -497,6 +501,36 @@ describe("asrProvider API", () => {
     );
     expect(safeInvoke).not.toHaveBeenCalledWith(
       "delete_voice_instruction",
+      expect.anything(),
+    );
+  });
+
+  it("输入框语音润色应走 App Server current polishText 方法", async () => {
+    appServerMocks.polishVoiceText.mockResolvedValueOnce({
+      result: {
+        text: "请继续整理这段内容。",
+        instruction_name: "默认润色",
+        polished: true,
+      },
+    });
+
+    await expect(
+      polishVoiceInputText({
+        text: "请继续整理这个这个内容",
+        instructionId: "default",
+      }),
+    ).resolves.toEqual({
+      text: "请继续整理这段内容。",
+      instructionName: "默认润色",
+      polished: true,
+    });
+
+    expect(appServerMocks.polishVoiceText).toHaveBeenCalledWith({
+      text: "请继续整理这个这个内容",
+      instruction_id: "default",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "polish_voice_text",
       expect.anything(),
     );
   });

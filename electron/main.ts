@@ -31,6 +31,7 @@ import {
   isNavigationAbortError,
   isWindowLifecycleLoadAbort,
 } from "./mainWindowLoadErrors";
+import { installMainWindowMediaPermissionHandler } from "./mainWindowMediaPermissions";
 import { ElectronUpdateHost } from "./updateHost";
 import { waitForElectronSmokeMemorySettingsReady } from "./smokeMemorySettings";
 import {
@@ -1521,6 +1522,10 @@ if (isWindowsSquirrelStartup) {
   app.whenReady().then(() => {
     configureApplicationIdentity();
     registerLocalAssetProtocol();
+    installMainWindowMediaPermissionHandler({
+      session: session.defaultSession,
+      getMainWindow: () => mainWindow,
+    });
     registerIpcHandlers();
     devHttpBridge = startDevHttpBridge();
     tray = createTray();

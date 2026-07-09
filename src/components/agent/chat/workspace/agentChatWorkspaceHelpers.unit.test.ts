@@ -6,10 +6,12 @@ import {
   resolveDefaultSelectedArtifact,
   resolveRuntimeWorkspaceId,
   resolveTaskCenterHomeSurfaceState,
+  shouldAutoInitWorkspaceSessionFiles,
   shouldBuildFullThreadTimeline,
   shouldAutoRefreshWorkspaceRightSurfacePending,
   shouldSuppressTaskCenterDraftContentForLayout,
   shouldAutoRecoverWorkspacePathMissing,
+  shouldPauseTaskCenterInitialSessionNavigation,
 } from "./agentChatWorkspaceHelpers";
 
 const DOCUMENT_ARTIFACT_TYPE = ("doc" + "ument") as Artifact["type"];
@@ -200,6 +202,32 @@ describe("isTaskCenterDraftSendPendingForLayout", () => {
   });
 });
 
+describe("shouldPauseTaskCenterInitialSessionNavigation", () => {
+  it("任务中心首页首发 pending 时应暂停 initial session hydrate", () => {
+    expect(
+      shouldPauseTaskCenterInitialSessionNavigation({
+        agentEntry: "claw",
+        draftSurfaceActive: false,
+        activeDraftTabId: null,
+        draftTabCount: 0,
+        hasHomeHotpathPending: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("非任务中心入口不应因 pending 标记暂停普通导航", () => {
+    expect(
+      shouldPauseTaskCenterInitialSessionNavigation({
+        agentEntry: "general",
+        draftSurfaceActive: false,
+        activeDraftTabId: null,
+        draftTabCount: 0,
+        hasHomeHotpathPending: true,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("shouldBuildFullThreadTimeline", () => {
   it("普通聊天发送中不应构建完整 timeline", () => {
     expect(
@@ -276,7 +304,7 @@ describe("shouldAutoRefreshWorkspaceRightSurfacePending", () => {
     pluginActivationActive: false,
   };
 
-  it("有 workspace scope 时即使空会话也应刷新 right surface pending", () => {
+  it("有 workspace scope 且会话空闲时应刷新 right surface pending", () => {
     expect(
       shouldAutoRefreshWorkspaceRightSurfacePending({
         ...baseParams,
@@ -291,25 +319,106 @@ describe("shouldAutoRefreshWorkspaceRightSurfacePending", () => {
     ).toBe(true);
   });
 
+  it("发送准备或发送中应暂停 right surface pending 自动刷新", () => {
+    expect(
+      shouldAutoRefreshWorkspaceRightSurfacePending({
+        ...baseParams,
+        sessionId: "session-1",
+        sceneIsPreparingSend: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoRefreshWorkspaceRightSurfacePending({
+        ...baseParams,
+        workspaceId: "workspace-1",
+        sceneIsSending: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("任务中心首页和草稿发送热路径应暂停 right surface pending 自动刷新", () => {
+    expect(
+      shouldAutoRefreshWorkspaceRightSurfacePending({
+        ...baseParams,
+        sessionId: "session-1",
+        taskCenterHomeHotpathActive: true,
+      }),
+    ).toBe(false);
+  });
+
   it("没有 session 和 workspace scope 时默认不刷新", () => {
     expect(shouldAutoRefreshWorkspaceRightSurfacePending(baseParams)).toBe(
       false,
     );
   });
 
-  it("无 scope 但有运行中或手动 surface 信号时仍允许刷新", () => {
-    expect(
-      shouldAutoRefreshWorkspaceRightSurfacePending({
-        ...baseParams,
-        sceneIsPreparingSend: true,
-      }),
-    ).toBe(true);
+  it("无 scope 但有手动 surface 信号时仍允许刷新", () => {
     expect(
       shouldAutoRefreshWorkspaceRightSurfacePending({
         ...baseParams,
         manualRightSurfaceActive: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("shouldAutoInitWorkspaceSessionFiles", () => {
+  it("只有会话空闲时才自动初始化会话文件", () => {
+    expect(
+      shouldAutoInitWorkspaceSessionFiles({
+        sessionId: "session-1",
+        isSending: false,
+        currentTurnId: null,
+        queuedTurnCount: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("发送中、当前 turn 存在或队列存在时不抢首轮热路径", () => {
+    expect(
+      shouldAutoInitWorkspaceSessionFiles({
+        sessionId: "session-1",
+        isSending: true,
+        currentTurnId: null,
+        queuedTurnCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoInitWorkspaceSessionFiles({
+        sessionId: "session-1",
+        isSending: false,
+        currentTurnId: "pending-turn:1",
+        queuedTurnCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoInitWorkspaceSessionFiles({
+        sessionId: "session-1",
+        isSending: false,
+        currentTurnId: null,
+        queuedTurnCount: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoInitWorkspaceSessionFiles({
+        sessionId: "session-1",
+        isSending: false,
+        currentTurnId: null,
+        queuedTurnCount: 0,
+        draftSendInFlight: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("没有会话时不初始化", () => {
+    expect(
+      shouldAutoInitWorkspaceSessionFiles({
+        sessionId: null,
+        isSending: false,
+        currentTurnId: null,
+        queuedTurnCount: 0,
+      }),
+    ).toBe(false);
   });
 });
 

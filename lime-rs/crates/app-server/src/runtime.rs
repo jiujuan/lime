@@ -1,5 +1,6 @@
 mod app_data;
 pub(crate) mod approval_cache;
+mod approval_decision_contract;
 mod article_workspace_action_projection;
 mod article_workspace_artifact_document_projection;
 mod article_workspace_edited_draft;

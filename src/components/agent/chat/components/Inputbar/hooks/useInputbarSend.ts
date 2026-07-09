@@ -86,6 +86,50 @@ export function useInputbarSend({
       return;
     }
 
+    const hasRuntimeMode =
+      Boolean(activeTools["objective_mode"]) ||
+      Boolean(activeTools["task_mode"]) ||
+      Boolean(activeTools["subagent_mode"]);
+    const canUsePlainTextFastPath =
+      submittedInput.trim() &&
+      pendingImages.length === 0 &&
+      pathReferences.length === 0 &&
+      !activeCapability &&
+      !activePluginSelection &&
+      !knowledgePackSelection?.enabled &&
+      !hasRuntimeMode;
+    if (canUsePlainTextFastPath) {
+      recordAgentUiPerformanceMetric("inputbar.send.plainTextFastPath", {
+        elapsedMs: Math.max(0, Date.now() - triggeredAt),
+        inputLength: submittedInput.trim().length,
+        sessionId: sessionId ?? null,
+        source: "inputbar",
+        triggerSource,
+        workspaceId: projectId ?? null,
+      });
+      const result = await onSend({
+        images: undefined,
+        textOverride: submittedInput,
+        sendOptions: undefined,
+        ...(triggerMetadata
+          ? {
+              triggeredAt,
+              triggerSource,
+            }
+          : {}),
+      });
+      if (result === false) {
+        return;
+      }
+      if ((getInputRestoreEpoch?.() ?? sendRestoreEpoch) !== sendRestoreEpoch) {
+        return;
+      }
+      clearPendingImages();
+      clearPathReferences?.();
+      clearActiveCapability();
+      return;
+    }
+
     const capabilityDispatch = resolveInputCapabilityDispatch(
       activeCapability,
       submittedInput,

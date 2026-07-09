@@ -20,6 +20,23 @@ function isReasoningPartForThreadItem(
   return part.type === "thinking" && part.metadata?.threadItemId === itemId;
 }
 
+function normalizeComparableReasoningText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+function areReasoningTextsEquivalent(left: string, right: string): boolean {
+  const normalizedLeft = normalizeComparableReasoningText(left);
+  const normalizedRight = normalizeComparableReasoningText(right);
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.startsWith(normalizedRight) ||
+    normalizedRight.startsWith(normalizedLeft)
+  );
+}
+
 export function isPersistedReasoningContentPart(
   part: MessageContentPart,
 ): boolean {
@@ -69,6 +86,32 @@ function contentPartSequence(
     return isComparableThreadItemSequence(itemSequence) ? itemSequence : null;
   }
   return null;
+}
+
+function isThinkingPartCompatibleWithReasoningItem(
+  part: MessageContentPart,
+  item: AgentThreadItem,
+  text: string,
+): boolean {
+  if (part.type !== "thinking" || !part.text.trim()) {
+    return false;
+  }
+
+  const partThreadItemId = part.metadata?.threadItemId;
+  if (partThreadItemId && partThreadItemId === item.id) {
+    return true;
+  }
+
+  const partTurnId =
+    typeof part.metadata?.turnId === "string"
+      ? part.metadata.turnId.trim()
+      : "";
+  const itemTurnId = item.turn_id.trim();
+  if (partTurnId && itemTurnId && partTurnId !== itemTurnId) {
+    return false;
+  }
+
+  return areReasoningTextsEquivalent(part.text, text);
 }
 
 function upsertToolSequenceIntoContentParts(
@@ -184,21 +227,27 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
       const existingIndex = parts.findIndex((part) =>
         isReasoningPartForThreadItem(part, params.item.id),
       );
+      const compatibleThinkingIndex =
+        existingIndex >= 0
+          ? existingIndex
+          : parts.findIndex((part) =>
+              isThinkingPartCompatibleWithReasoningItem(part, params.item, text),
+            );
       const nextPart: MessageContentPart = {
         type: "thinking",
         text,
         metadata,
       };
 
-      if (existingIndex >= 0) {
-        const existingPart = parts[existingIndex];
+      if (compatibleThinkingIndex >= 0) {
+        const existingPart = parts[compatibleThinkingIndex];
         const remainingParts = [
-          ...parts.slice(0, existingIndex),
-          ...parts.slice(existingIndex + 1),
+          ...parts.slice(0, compatibleThinkingIndex),
+          ...parts.slice(compatibleThinkingIndex + 1),
         ];
         if (!hasComparableContentPartSequence(remainingParts, sequenceByToolId)) {
           const nextParts = [...parts];
-          nextParts[existingIndex] = nextPart;
+          nextParts[compatibleThinkingIndex] = nextPart;
           if (
             existingPart?.type === "thinking" &&
             existingPart.text === text &&

@@ -20,9 +20,23 @@ const TRACE_SUMMARY_METRIC_KEYS = [
   "serverToRendererFirstTextDeltaMs",
   "rendererApplyFirstTextDeltaMs",
   "clientLocalOutputMs",
+  "inputbarTriggerToHomeSubmitMs",
+  "inputbarTriggerToPendingShellMs",
+  "inputbarTriggerToPendingPreviewCommitMs",
+  "inputbarTriggerToPendingPreviewPaintMs",
+  "inputbarTriggerToSendDispatchMs",
+  "inputbarTriggerToSubmitAcceptedMs",
+  "homeInputToPendingShellMs",
+  "homeInputToPendingPreviewCommitMs",
+  "homeInputToPendingPreviewPaintMs",
+  "homeInputToSendDispatchMs",
+  "homeInputMaterializeDurationMs",
+  "homeInputToSubmitAcceptedMs",
   "homeInputToFirstTextDeltaMs",
   "homeInputToFirstTextRenderFlushMs",
   "homeInputToFirstTextPaintMs",
+  "sendDispatchToSubmitAcceptedMs",
+  "streamSubmitDispatchedToAcceptedMs",
   "streamRequestStartToFirstTextPaintMs",
   "submitAcceptedToFirstTextPaintMs",
   "firstEventToFirstTextPaintMs",
@@ -79,11 +93,14 @@ function hasMetric(sessions, key) {
   );
 }
 
-function containsForbiddenTraceEvidenceFragment(value) {
+export function containsForbiddenTraceEvidenceFragment(value) {
   const text = JSON.stringify(value).toLowerCase();
-  return FORBIDDEN_TRACE_EVIDENCE_FRAGMENTS.some((fragment) =>
-    text.includes(fragment.toLowerCase()),
-  );
+  return FORBIDDEN_TRACE_EVIDENCE_FRAGMENTS.some((fragment) => {
+    if (fragment === "sk-") {
+      return /\bsk-[a-z0-9_-]{8,}/iu.test(text);
+    }
+    return text.includes(fragment.toLowerCase());
+  });
 }
 
 function stringArray(value) {
@@ -478,6 +495,9 @@ export async function collectAgentUiPerformanceTraceEvidence(page) {
       sessions: [],
       hasProviderWaitMs: false,
       hasClientLocalOutputMs: false,
+      hasHomeInputToPendingPreviewPaintMs: false,
+      hasInputbarTriggerToPendingPreviewPaintMs: false,
+      hasHomeInputToSendDispatchMs: false,
       hasHomeInputToFirstTextPaintMs: false,
       hasStreamRequestStartToFirstTextPaintMs: false,
       hasSubmitAcceptedToFirstTextPaintMs: false,
@@ -501,6 +521,18 @@ export async function collectAgentUiPerformanceTraceEvidence(page) {
     sessions,
     hasProviderWaitMs: hasMetric(sessions, "providerWaitMs"),
     hasClientLocalOutputMs: hasMetric(sessions, "clientLocalOutputMs"),
+    hasHomeInputToPendingPreviewPaintMs: hasMetric(
+      sessions,
+      "homeInputToPendingPreviewPaintMs",
+    ),
+    hasInputbarTriggerToPendingPreviewPaintMs: hasMetric(
+      sessions,
+      "inputbarTriggerToPendingPreviewPaintMs",
+    ),
+    hasHomeInputToSendDispatchMs: hasMetric(
+      sessions,
+      "homeInputToSendDispatchMs",
+    ),
     hasHomeInputToFirstTextPaintMs: hasMetric(
       sessions,
       "homeInputToFirstTextPaintMs",

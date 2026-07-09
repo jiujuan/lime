@@ -232,6 +232,42 @@ describe("resolveTaskCenterHomeChromeState", () => {
     expect(state.shouldRenderTaskCenterEmbeddedHome).toBe(false);
   });
 
+  it("首页发送请求已创建但 pending preview 尚未派生时应立即退出 embedded home", () => {
+    const state = resolveTaskCenterHomeChromeState({
+      agentEntry: "claw",
+      draftSurfaceActive: true,
+      draftTabActive: false,
+      shouldSuppressDraftContent: false,
+      draftSendRequest: createDraftSendRequest(),
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: false,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      isHomePendingPreviewActive: false,
+      queuedTurnCount: 0,
+      sessionId: "new-session",
+      embeddedHomeSessionIds: new Set(["new-session"]),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+      shouldUseBrowserWorkspaceHomeChrome: true,
+    });
+
+    expect(state.hasCurrentSessionActivity).toBe(true);
+    expect(state.hasHomeConversationActivity).toBe(true);
+    expect(state.taskCenterHomeSurfaceState.shouldRenderEmbeddedHome).toBe(
+      false,
+    );
+    expect(
+      state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(false);
+    expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBe(
+      "new-session",
+    );
+  });
+
   it("new-task 后台恢复时应把旧 running session 留在后台，不作为首页前台会话活动", () => {
     const state = resolveTaskCenterHomeChromeState({
       agentEntry: "new-task",
@@ -331,6 +367,40 @@ describe("resolveTaskCenterHomeChromeState", () => {
     expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBe(
       "materialized-session",
     );
+  });
+
+  it("侧边栏新建任务激活草稿 surface 时应压住 route 空会话页", () => {
+    const state = resolveTaskCenterHomeChromeState({
+      agentEntry: "claw",
+      draftSurfaceActive: true,
+      draftTabActive: false,
+      shouldSuppressDraftContent: true,
+      draftSendRequest: null,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: true,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      isHomePendingPreviewActive: false,
+      queuedTurnCount: 0,
+      sessionId: "session-from-sidebar",
+      embeddedHomeSessionIds: new Set(["session-from-sidebar"]),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+      shouldUseBrowserWorkspaceHomeChrome: true,
+    });
+
+    expect(state.hasCurrentSessionActivity).toBe(false);
+    expect(state.hasHomeConversationActivity).toBe(false);
+    expect(state.taskCenterHomeSurfaceState.shouldRenderEmbeddedHome).toBe(
+      true,
+    );
+    expect(
+      state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(true);
+    expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBeNull();
   });
 
   it("从路由打开历史空会话时不应被任务中心首页覆盖", () => {

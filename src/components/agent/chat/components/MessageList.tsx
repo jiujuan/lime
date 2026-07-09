@@ -10,7 +10,6 @@ import type {
   MessageListRenderGroup,
 } from "./MessageList.types";
 import {
-  DefaultConversationEmptyState,
   HistoryWindow,
   PersistedHistoryWindow,
   RestoringSessionEmptyState,
@@ -33,7 +32,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
   messages,
   leadingContent,
   trailingContent,
-  emptyStateVariant = "default",
+  emptyStateVariant = "none",
   turns = [],
   threadItems = [],
   currentTurnId = null,
@@ -404,9 +403,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
               <RestoringSessionEmptyState />
             ) : isTaskCenterEmptyState ? (
               <TaskCenterEmptyState />
-            ) : (
-              <DefaultConversationEmptyState />
-            ))}
+            ) : null)}
 
           {timelineState.renderGroups.map((group, groupIndex) => {
             const groupRuntimeTurnId =

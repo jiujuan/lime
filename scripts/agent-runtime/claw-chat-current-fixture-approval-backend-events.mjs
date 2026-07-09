@@ -275,6 +275,14 @@ if (input.kind === "actionRespond") {
             error: ${js(APPROVAL_REQUEST_CANCEL_DONE_TEXT)},
             status: "failed"
           }
+        },
+        {
+          type: "turn.canceled",
+          payload: {
+            status: "canceled",
+            reason: "approval_request_cancelled",
+            text: ${js(APPROVAL_REQUEST_CANCEL_DONE_TEXT)}
+          }
         }
       ]
     : approvalAllowed

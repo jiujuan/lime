@@ -29,24 +29,10 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hasPolicyPayload(policy: ModelRequestPolicyMetadata): boolean {
-  return [
-    policy.execution_policy,
-    policy.context_policy,
-    policy.tool_call_policy,
-    policy.reasoning_policy,
-    policy.reasoning_output_policy,
-    policy.input_modality_policy,
-    policy.responses_policy,
-    policy.truncation_policy,
-    policy.native_tool_policy,
-  ].some(Boolean);
-}
-
 export function buildModelRequestPolicyMetadata(
   model: EnhancedModelMetadata,
 ): ModelRequestPolicyMetadata | undefined {
-  const policy: ModelRequestPolicyMetadata = {
+  return {
     source: "model_registry",
     provider_id: model.provider_id,
     model_id: model.id,
@@ -76,8 +62,6 @@ export function buildModelRequestPolicyMetadata(
       ? { native_tool_policy: model.native_tool_policy }
       : {}),
   };
-
-  return hasPolicyPayload(policy) ? policy : undefined;
 }
 
 export function resolveModelRequestPolicyMetadataForSelection(options: {
@@ -95,13 +79,21 @@ export function mergeModelRequestPolicyMetadata(
   requestMetadata: Record<string, unknown> | undefined,
   policy: ModelRequestPolicyMetadata | undefined,
 ): Record<string, unknown> | undefined {
-  if (!policy) {
-    return requestMetadata;
-  }
-
   const existingHarness = isPlainRecord(requestMetadata?.harness)
     ? requestMetadata.harness
     : {};
+
+  if (!policy) {
+    if (!("model_request_policy" in existingHarness)) {
+      return requestMetadata;
+    }
+    const nextHarness = { ...existingHarness };
+    delete nextHarness.model_request_policy;
+    return {
+      ...(requestMetadata || {}),
+      harness: nextHarness,
+    };
+  }
 
   return {
     ...(requestMetadata || {}),

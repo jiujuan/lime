@@ -166,24 +166,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: false,
     },
     ToolCatalogEntry {
-        name: "Write",
-        profiles: CORE_PROFILES,
-        capabilities: WORKSPACE_IO_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::ParameterRestricted,
-        workspace_default_allow: false,
-    },
-    ToolCatalogEntry {
-        name: "Edit",
-        profiles: CORE_PROFILES,
-        capabilities: WORKSPACE_IO_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::ParameterRestricted,
-        workspace_default_allow: false,
-    },
-    ToolCatalogEntry {
         name: APPLY_PATCH_TOOL_NAME,
         profiles: CORE_PROFILES,
         capabilities: WORKSPACE_IO_CAP,
@@ -279,15 +261,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         capabilities: PLAN_CAP,
         lifecycle: ToolLifecycle::Current,
         source: ToolSourceKind::LimeInjected,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "SendUserMessage",
-        profiles: CORE_PROFILES,
-        capabilities: SESSION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
         permission_plane: ToolPermissionPlane::SessionAllowlist,
         workspace_default_allow: true,
     },
@@ -598,7 +571,6 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
     match tool_catalog_reference_lookup_key(tool_name).as_str() {
         "requestuserinput" | "requestuserinputtool" => "request_user_input",
         "clocksleep" | "clock.sleep" | "sleep" => SLEEP_TOOL_NAME,
-        "brief" | "brieftool" | "sendusermessagetool" => "SendUserMessage",
         "spawnagent" | "subagenttask" | "agenttool" => "Agent",
         "sendinput" | "sendmessagetool" => "SendMessage",
         "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
@@ -606,9 +578,6 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "filereadtool" | "readfiletool" | "readfile" | "developerread" | "mcpsystemreadfile" => {
             "Read"
         }
-        "filewritetool" | "writefiletool" | "createfiletool" | "writefile" | "createfile"
-        | "mcpsystemwritefile" => "Write",
-        "fileedittool" | "editfile" | "developertexteditor" | "mcpsystemeditfile" => "Edit",
         "applypatch" | "applypatchtool" => APPLY_PATCH_TOOL_NAME,
         "globtool" | "mcpsystemglob" => "Glob",
         "greptool" | "mcpsystemgrep" => "Grep",
@@ -799,7 +768,6 @@ mod tests {
     fn test_workspace_default_allowed_tool_names_excludes_parameter_restricted_tools() {
         let names = workspace_default_allowed_tool_names(WorkspaceToolSurface::core());
         assert!(names.contains(&"Agent"));
-        assert!(names.contains(&"SendUserMessage"));
         assert!(names.contains(&"TeamCreate"));
         assert!(names.contains(&"TeamDelete"));
         assert!(names.contains(&"WebSearch"));
@@ -821,12 +789,9 @@ mod tests {
                 .name,
             "Agent"
         );
-        assert_eq!(
-            tool_catalog_entry("brief")
-                .expect("legacy brief should normalize")
-                .name,
-            "SendUserMessage"
-        );
+        assert!(tool_catalog_entry("brief").is_none());
+        assert!(tool_catalog_entry("BriefTool").is_none());
+        assert!(tool_catalog_entry("SendUserMessage").is_none());
         assert_eq!(
             tool_catalog_entry("send_input")
                 .expect("legacy send_input should normalize")
@@ -869,21 +834,12 @@ mod tests {
             ("mcp__system__shell", "Bash"),
             ("shell_command", "Bash"),
             ("local_shell_call", "Bash"),
-            ("BriefTool", "SendUserMessage"),
-            ("FileEditTool", "Edit"),
             ("ApplyPatchTool", APPLY_PATCH_TOOL_NAME),
             ("apply_patch", APPLY_PATCH_TOOL_NAME),
             ("FileReadTool", "Read"),
-            ("FileWriteTool", "Write"),
             ("read_file", "Read"),
             ("developer__read", "Read"),
             ("mcp__system__read_file", "Read"),
-            ("write_file", "Write"),
-            ("create_file", "Write"),
-            ("mcp__system__write_file", "Write"),
-            ("edit_file", "Edit"),
-            ("developer__text_editor", "Edit"),
-            ("mcp__system__edit_file", "Edit"),
             ("GlobTool", "Glob"),
             ("mcp__system__glob", "Glob"),
             ("GrepTool", "Grep"),
@@ -943,6 +899,16 @@ mod tests {
             "CronListTool",
             "CronDeleteTool",
             "SleepTool",
+            "Edit",
+            "FileEditTool",
+            "edit_file",
+            "developer__text_editor",
+            "mcp__system__edit_file",
+            "Write",
+            "FileWriteTool",
+            "write_file",
+            "create_file",
+            "mcp__system__write_file",
             "TaskCreateTool",
             "TaskGetTool",
             "TaskListTool",
@@ -1092,7 +1058,6 @@ mod tests {
         assert!(names.contains(&TOOL_SEARCH_TOOL_NAME));
         assert!(names.contains(&LIST_MCP_RESOURCES_TOOL_NAME));
         assert!(names.contains(&READ_MCP_RESOURCE_TOOL_NAME));
-        assert!(names.contains(&"SendUserMessage"));
         assert!(names.contains(&"TeamCreate"));
         assert!(names.contains(&"TeamDelete"));
         assert!(names.contains(&LIME_CREATE_TRANSCRIPTION_TASK_TOOL_NAME));

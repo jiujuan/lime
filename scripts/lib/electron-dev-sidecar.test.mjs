@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   appServerBinaryName,
   buildLocalAppServer,
+  isUsableAppServerBinary,
   localAppServerBinaryPath,
   resolveDevAppServerBackendEnv,
   resolveDevAppServerBinary,
@@ -65,6 +66,7 @@ describe("electron dev sidecar", () => {
 
   it("本地二进制存在时直接返回，不触发 cargo build", () => {
     const builds = [];
+    const prepared = [];
     const resolved = resolveDevAppServerBinary({
       env: {},
       repoRoot: "/repo/lime",
@@ -73,15 +75,25 @@ describe("electron dev sidecar", () => {
       build(call) {
         builds.push(call);
       },
+      prepareBinary: (...args) => prepared.push(args),
     });
 
     expect(resolved).toBe(path.resolve("/repo/lime/lime-rs/target/debug/app-server"));
     expect(builds).toHaveLength(0);
+    expect(prepared).toEqual([
+      [
+        {
+          binaryPath: path.resolve("/repo/lime/lime-rs/target/debug/app-server"),
+          platform: "darwin",
+        },
+      ],
+    ]);
   });
 
   it("本地二进制缺失时先构建再返回二进制路径", () => {
     let existsCalls = 0;
     const builds = [];
+    const prepared = [];
     const resolved = resolveDevAppServerBinary({
       env: {},
       repoRoot: "/repo/lime",
@@ -93,10 +105,19 @@ describe("electron dev sidecar", () => {
       build(call) {
         builds.push(call);
       },
+      prepareBinary: (...args) => prepared.push(args),
     });
 
     expect(resolved).toBe(path.resolve("/repo/lime/lime-rs/target/debug/app-server"));
     expect(builds).toEqual([{ repoRoot: "/repo/lime", platform: "darwin" }]);
+    expect(prepared).toEqual([
+      [
+        {
+          binaryPath: path.resolve("/repo/lime/lime-rs/target/debug/app-server"),
+          platform: "darwin",
+        },
+      ],
+    ]);
   });
 
   it("构建后仍缺失二进制时报错", () => {
@@ -109,6 +130,21 @@ describe("electron dev sidecar", () => {
         build() {},
       }),
     ).toThrow(/app-server binary was not created/);
+  });
+
+  it("空 app-server 文件不算可用二进制", () => {
+    expect(
+      isUsableAppServerBinary("/repo/lime/lime-rs/target/debug/app-server", {
+        exists: () => true,
+        getStats: () => ({ isFile: () => true, size: 0 }),
+      }),
+    ).toBe(false);
+    expect(
+      isUsableAppServerBinary("/repo/lime/lime-rs/target/debug/app-server", {
+        exists: () => true,
+        getStats: () => ({ isFile: () => true, size: 128 }),
+      }),
+    ).toBe(true);
   });
 
   it("watcher 不应被 Cargo target 产物触发重建", () => {
@@ -177,6 +213,7 @@ describe("electron dev sidecar", () => {
 
   it("调用 cargo build 只构建 app-server sidecar", () => {
     const calls = [];
+    const prepared = [];
     buildLocalAppServer({
       repoRoot: "/repo/lime",
       platform: "darwin",
@@ -184,6 +221,7 @@ describe("electron dev sidecar", () => {
         calls.push({ command, args, options });
         return { status: 0 };
       },
+      prepareBinary: (...args) => prepared.push(args),
     });
 
     expect(calls).toEqual([
@@ -204,6 +242,14 @@ describe("electron dev sidecar", () => {
           shell: false,
         },
       },
+    ]);
+    expect(prepared).toEqual([
+      [
+        {
+          binaryPath: path.resolve("/repo/lime/lime-rs/target/debug/app-server"),
+          platform: "darwin",
+        },
+      ],
     ]);
   });
 

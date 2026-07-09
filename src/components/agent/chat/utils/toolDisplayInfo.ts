@@ -2,7 +2,6 @@ import {
   Code2,
   Edit3,
   Eye,
-  FilePlus,
   FileText,
   FolderOpen,
   Globe,
@@ -92,14 +91,7 @@ const getToolIcon = (toolName: string): LucideIcon => {
   if (name.includes("read")) {
     return Eye;
   }
-  if (name.includes("write") || name.includes("create")) {
-    return FilePlus;
-  }
-  if (
-    name.includes("edit") ||
-    name.includes("replace") ||
-    name.includes("patch")
-  ) {
+  if (name.includes("replace") || name.includes("patch")) {
     return Edit3;
   }
   if (name.includes("list") || name.includes("dir")) {
@@ -218,11 +210,7 @@ export const getToolDisplayInfo = (
     return toToolDisplayDescriptor(FALLBACK_TOOL_CONFIGS.workspace, status);
   }
 
-  if (
-    name.includes("patch") ||
-    name.includes("replace") ||
-    name.includes("edit")
-  ) {
+  if (name.includes("patch") || name.includes("replace")) {
     return toToolDisplayDescriptor(FALLBACK_TOOL_CONFIGS.edit, status);
   }
 
@@ -230,7 +218,7 @@ export const getToolDisplayInfo = (
     return toToolDisplayDescriptor(FALLBACK_TOOL_CONFIGS.plan, status);
   }
 
-  if (name.includes("write") || name.includes("create")) {
+  if (name.includes("write")) {
     return toToolDisplayDescriptor(FALLBACK_TOOL_CONFIGS.write, status);
   }
 
@@ -383,9 +371,7 @@ export const buildToolGroupHeadline = (
         `toolCall.group.siteSearch.${statusKey}`,
       );
     }
-    return resolveRequiredAgentChatCopy(
-      `toolCall.group.search.${statusKey}`,
-    );
+    return resolveRequiredAgentChatCopy(`toolCall.group.search.${statusKey}`);
   }
 
   if (["read", "list"].includes(info.family)) {
@@ -394,9 +380,7 @@ export const buildToolGroupHeadline = (
         `toolCall.group.siteBrowse.${statusKey}`,
       );
     }
-    return resolveRequiredAgentChatCopy(
-      `toolCall.group.read.${statusKey}`,
-    );
+    return resolveRequiredAgentChatCopy(`toolCall.group.read.${statusKey}`);
   }
 
   if (info.family === "command") {
@@ -472,7 +456,7 @@ export const buildToolGroupHeadline = (
     }
 
     return resolveRequiredAgentChatCopy(
-      `toolCall.group.visionAnalyze.${statusKey}`,
+      `toolCall.group.generic.${statusKey}`,
       countValues,
     );
   }

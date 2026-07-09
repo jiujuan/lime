@@ -221,6 +221,7 @@ app_server_client_request_definitions! {
     VoiceModelDefaultSet => "voiceModel/default/set",
     VoiceModelTestTranscribeFile => "voiceModel/testTranscribeFile",
     VoiceTranscriptionTranscribeAudio => "voiceTranscription/transcribeAudio",
+    VoiceTranscriptionPolishText => "voiceTranscription/polishText",
     WorkspaceSkillBindingsList => "workspaceSkillBindings/list",
     WorkspaceRegisteredSkillsList => "workspaceRegisteredSkills/list",
     WorkspaceRightSurfaceRequest => "workspaceRightSurface/request",

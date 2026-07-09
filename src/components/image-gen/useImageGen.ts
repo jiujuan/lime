@@ -107,7 +107,11 @@ export function useImageGen(options: UseImageGenOptions = {}) {
   const imageProviderRuntime = useApiKeyProvider({
     autoLoad: providerLoadReady,
   });
-  const { providers, loading: providersLoading } = imageProviderRuntime;
+  const {
+    providers,
+    loading: providersLoading,
+    refresh: refreshImageProviders,
+  } = imageProviderRuntime;
   const preferredProviderId = options.preferredProviderId?.trim() || "";
   const preferredModelId = options.preferredModelId?.trim() || "";
   const allowFallback = options.allowFallback ?? true;
@@ -171,9 +175,10 @@ export function useImageGen(options: UseImageGenOptions = {}) {
     providerLoadReady,
   ]);
 
-  const ensureProvidersLoaded = useCallback(() => {
+  const ensureProvidersLoaded = useCallback(async () => {
     setProviderLoadReady(true);
-  }, []);
+    await refreshImageProviders();
+  }, [refreshImageProviders]);
 
   const availableProviders = useMemo(() => {
     imageGenDebugLog(

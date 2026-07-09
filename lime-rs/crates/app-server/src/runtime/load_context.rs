@@ -27,6 +27,15 @@ impl RuntimeCore {
         params: AgentSessionReadParams,
     ) -> Result<SessionLoadContext, RuntimeCoreError> {
         if let Some(mut context) = self.load_runtime_core_session(&params)? {
+            if should_prefer_projection_history_read(&context, &params) {
+                if let Some(mut projection_context) = self.load_projection_session(&params)? {
+                    self.enrich_session_load_context_with_media_task_results(
+                        &mut projection_context,
+                    )
+                    .await;
+                    return Ok(projection_context);
+                }
+            }
             self.enrich_session_load_context_with_media_task_results(&mut context)
                 .await;
             return Ok(context);
@@ -178,6 +187,24 @@ impl RuntimeCore {
     }
 }
 
+fn should_prefer_projection_history_read(
+    context: &SessionLoadContext,
+    params: &AgentSessionReadParams,
+) -> bool {
+    params.history_limit.is_some()
+        && context.stored.events.is_empty()
+        && context.response.detail.as_ref().is_some_and(|detail| {
+            detail_array_is_empty(detail, "messages") && detail_array_is_empty(detail, "items")
+        })
+}
+
+fn detail_array_is_empty(detail: &Value, key: &str) -> bool {
+    detail
+        .get(key)
+        .and_then(Value::as_array)
+        .map_or(true, Vec::is_empty)
+}
+
 pub(in crate::runtime) fn projection_load_context(
     projection: ProjectionReadSession,
     events: Vec<AgentEvent>,
@@ -255,7 +282,8 @@ fn projection_summary_detail(
     let tool_calls = process_thread_read_array(process_thread_read, "tool_calls");
     let commands = process_thread_read_array(process_thread_read, "commands");
     let tests = process_thread_read_array(process_thread_read, "tests");
-    let active_turn_id = process_thread_read_value(process_thread_read, "active_turn_id");
+    let active_turn_id = process_thread_read_value(process_thread_read, "active_turn_id")
+        .or_else(|| active_turn_id_from_stored_turns(stored));
     let change_summary = process_thread_read_value(process_thread_read, "change_summary");
     let active_command_id = process_thread_read_value(process_thread_read, "active_command_id");
     let active_test_run_id = process_thread_read_value(process_thread_read, "active_test_run_id");
@@ -432,6 +460,15 @@ fn process_thread_read_value(
         .cloned()
 }
 
+fn active_turn_id_from_stored_turns(stored: &StoredSession) -> Option<Value> {
+    stored
+        .turns
+        .iter()
+        .rev()
+        .find(|turn| super::status::agent_turn_is_active(turn.status))
+        .map(|turn| json!(turn.turn_id))
+}
+
 fn merge_process_detail_value(detail: &mut Value, process_detail: Option<&Value>, key: &str) {
     let Some(value) = process_detail.and_then(|detail| detail.get(key)).cloned() else {
         return;
@@ -457,4 +494,56 @@ fn merge_process_thread_read_value(
         return;
     };
     thread_read.insert(key.to_string(), value);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_server_protocol::AgentSession;
+    use app_server_protocol::AgentSessionStatus;
+    use app_server_protocol::AgentTurn;
+    use app_server_protocol::AgentTurnStatus;
+
+    #[test]
+    fn active_turn_id_from_stored_turns_uses_latest_active_turn() {
+        let stored = StoredSession {
+            session: AgentSession {
+                session_id: "sess-active-turn".to_string(),
+                thread_id: "thread-active-turn".to_string(),
+                app_id: "agent-chat".to_string(),
+                workspace_id: Some("workspace-current".to_string()),
+                business_object_ref: None,
+                status: AgentSessionStatus::Running,
+                created_at: "2026-06-08T00:00:00.000Z".to_string(),
+                updated_at: "2026-06-08T00:00:02.000Z".to_string(),
+            },
+            turns: vec![
+                AgentTurn {
+                    turn_id: "turn-completed".to_string(),
+                    session_id: "sess-active-turn".to_string(),
+                    thread_id: "thread-active-turn".to_string(),
+                    status: AgentTurnStatus::Completed,
+                    started_at: Some("2026-06-08T00:00:00.000Z".to_string()),
+                    completed_at: Some("2026-06-08T00:00:01.000Z".to_string()),
+                },
+                AgentTurn {
+                    turn_id: "turn-running".to_string(),
+                    session_id: "sess-active-turn".to_string(),
+                    thread_id: "thread-active-turn".to_string(),
+                    status: AgentTurnStatus::Running,
+                    started_at: Some("2026-06-08T00:00:02.000Z".to_string()),
+                    completed_at: None,
+                },
+            ],
+            turn_inputs: HashMap::new(),
+            turn_runtime_options: HashMap::new(),
+            events: Vec::new(),
+            output_blobs: HashMap::new(),
+        };
+
+        assert_eq!(
+            active_turn_id_from_stored_turns(&stored),
+            Some(json!("turn-running"))
+        );
+    }
 }

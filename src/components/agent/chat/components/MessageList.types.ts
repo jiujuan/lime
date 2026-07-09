@@ -30,7 +30,7 @@ export interface MessageListProps {
   messages: Message[];
   leadingContent?: React.ReactNode;
   trailingContent?: React.ReactNode;
-  emptyStateVariant?: "default" | "task-center";
+  emptyStateVariant?: "none" | "task-center";
   turns?: readonly AgentThreadTurn[];
   threadItems?: readonly AgentThreadItem[];
   currentTurnId?: string | null;

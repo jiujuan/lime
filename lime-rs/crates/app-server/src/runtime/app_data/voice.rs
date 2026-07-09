@@ -61,6 +61,13 @@ pub trait VoiceAppDataSource: Send + Sync {
         Err(unavailable("voiceTranscription/transcribeAudio"))
     }
 
+    async fn polish_voice_text(
+        &self,
+        _params: VoiceTranscriptionPolishTextParams,
+    ) -> Result<VoiceTranscriptionPolishTextResponse, RuntimeCoreError> {
+        Err(unavailable("voiceTranscription/polishText"))
+    }
+
     async fn list_voice_instructions(
         &self,
     ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {

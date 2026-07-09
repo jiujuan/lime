@@ -245,6 +245,8 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "voiceInstruction/delete",
   "voiceModel/default/set",
   "voiceModel/testTranscribeFile",
+  "voiceTranscription/transcribeAudio",
+  "voiceTranscription/polishText",
   "conversationImport/source/scan",
   "conversationImport/thread/preview",
   "conversationImport/thread/commit",

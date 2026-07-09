@@ -139,6 +139,7 @@ export function buildMcpStructuredContentScenarioAssertions({
     guiMcpStructuredContentVisible:
       summary.guiMcpStructuredContentCompleted?.hasPrompt === true &&
       summary.guiMcpStructuredContentCompleted?.hasStructuredAnswer === true &&
+      summary.guiMcpStructuredContentCompleted?.hasReferenceId === true &&
       (summary.guiMcpStructuredContentCompleted?.hasToolName === true ||
         summary.guiMcpStructuredContentCompleted?.expandedDetails
           ?.hasToolName === true) &&

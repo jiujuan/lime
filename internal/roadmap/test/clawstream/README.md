@@ -324,6 +324,6 @@ npm run verify:gui-smoke
 
 当前 P0 已清零，下一刀优先级是：
 
-1. 把已有 Electron scenarios 补 item/projection oracle：`thread-read-page-isomorphic`、`mcp-structured-content`、`skills-runtime`、`multi-agent-team`、`image-command`、`web-tools-rendering`。
+1. 把已有 Electron scenarios 补 item/projection oracle：`mcp-structured-content`、`skills-runtime`、`multi-agent-team`、`image-command`、`web-tools-rendering`；`thread-read-page-isomorphic` 已推进到 App Server + Electron `covered-electron`，后续只回头补 archived read / forked_from / failed idle flag 细节。
 2. 用 guard 禁止无 turnId terminal fallback、legacy `update_plan` UI owner、自然语言 lifecycle owner 回流。
 3. 删除已被 guard 覆盖且没有 current 调用的旧 helper / fallback。

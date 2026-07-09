@@ -17,6 +17,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::time::timeout;
 
+mod approval_decision_contract;
 mod artifacts;
 mod capabilities;
 mod coding_events;
@@ -35,6 +36,7 @@ mod queue_order;
 mod queue_resume_audit;
 mod read_model;
 mod right_surface;
+mod session_hydration_projection;
 mod session_list_projection;
 mod sessions;
 mod support;

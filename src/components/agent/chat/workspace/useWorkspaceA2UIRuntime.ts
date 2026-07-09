@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseAIResponse } from "@/components/workspace/a2ui/parser";
-import type { A2UIFormData, A2UIResponse } from "@/components/workspace/a2ui/types";
+import type {
+  A2UIFormData,
+  A2UIResponse,
+} from "@/components/workspace/a2ui/types";
 import {
   buildActionRequestA2UI,
   isActionRequestA2UICompatible,
@@ -37,6 +40,8 @@ interface UseWorkspaceA2UIRuntimeParams {
   messages: Message[];
   /** 历史消息只允许在正文里只读回显，不再作为当前可提交表单。 */
   readOnlyInteractiveMessageIds?: ReadonlySet<string>;
+  /** approval pending 时输入区归 runtime 授权，不提升 A2UI 表单抢占同一决策区。 */
+  suppressPendingA2UI?: boolean;
 }
 
 interface PendingA2UIProgressState {
@@ -103,6 +108,7 @@ function isReadOnlyInteractiveMessage(
 export function useWorkspaceA2UIRuntime({
   messages,
   readOnlyInteractiveMessageIds,
+  suppressPendingA2UI = false,
 }: UseWorkspaceA2UIRuntimeParams): {
   a2uiSubmissionNotice: A2UISubmissionNotice | null;
   pendingA2UIForm: A2UIResponse | null;
@@ -119,11 +125,21 @@ export function useWorkspaceA2UIRuntime({
   );
 
   const pendingActionRequest = useMemo<ActionRequired | null>(() => {
+    if (suppressPendingA2UI) {
+      return null;
+    }
+
     const latestPendingMessage = [...currentAssistantTail]
       .reverse()
-      .find((message) =>
-        !isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds) &&
-        message.actionRequests?.some((request) => request.status === "pending"),
+      .find(
+        (message) =>
+          !isReadOnlyInteractiveMessage(
+            message,
+            readOnlyInteractiveMessageIds,
+          ) &&
+          message.actionRequests?.some(
+            (request) => request.status === "pending",
+          ),
       );
 
     if (!latestPendingMessage?.actionRequests) {
@@ -136,13 +152,23 @@ export function useWorkspaceA2UIRuntime({
         .find((request) => request.status === "pending") || null;
 
     return pendingRequest ? governActionRequest(pendingRequest) : null;
-  }, [currentAssistantTail, readOnlyInteractiveMessageIds]);
+  }, [
+    currentAssistantTail,
+    readOnlyInteractiveMessageIds,
+    suppressPendingA2UI,
+  ]);
 
   const pendingMessageA2UI = useMemo<PendingA2UIResolution | null>(() => {
+    if (suppressPendingA2UI) {
+      return null;
+    }
+
     for (let i = currentAssistantTail.length - 1; i >= 0; i -= 1) {
       const message = currentAssistantTail[i];
 
-      if (isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds)) {
+      if (
+        isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds)
+      ) {
         continue;
       }
 
@@ -174,11 +200,19 @@ export function useWorkspaceA2UIRuntime({
     }
 
     return null;
-  }, [currentAssistantTail, readOnlyInteractiveMessageIds]);
+  }, [
+    currentAssistantTail,
+    readOnlyInteractiveMessageIds,
+    suppressPendingA2UI,
+  ]);
   const pendingMessageA2UIForm = pendingMessageA2UI?.form ?? null;
 
   const pendingPromotedA2UIActionRequest =
     useMemo<ActionRequired | null>(() => {
+      if (suppressPendingA2UI) {
+        return null;
+      }
+
       if (pendingMessageA2UIForm) {
         return null;
       }
@@ -209,6 +243,7 @@ export function useWorkspaceA2UIRuntime({
       currentAssistantTail,
       pendingMessageA2UIForm,
       readOnlyInteractiveMessageIds,
+      suppressPendingA2UI,
     ]);
 
   const resolvedPendingA2UI = useMemo<PendingA2UIResolution | null>(() => {
@@ -254,6 +289,11 @@ export function useWorkspaceA2UIRuntime({
     useState<PendingA2UIResolution | null>(resolvedPendingA2UI);
 
   useEffect(() => {
+    if (suppressPendingA2UI) {
+      setRetainedPendingA2UI(null);
+      return;
+    }
+
     if (resolvedPendingA2UI) {
       setRetainedPendingA2UI((previous) =>
         isSamePendingA2UIResolution(previous, resolvedPendingA2UI)
@@ -297,6 +337,7 @@ export function useWorkspaceA2UIRuntime({
     hasRecentA2UISubmission,
     readOnlyInteractiveMessageIds,
     resolvedPendingA2UI,
+    suppressPendingA2UI,
   ]);
 
   const visiblePendingA2UI = resolvedPendingA2UI ?? retainedPendingA2UI ?? null;

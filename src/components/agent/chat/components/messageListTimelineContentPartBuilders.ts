@@ -95,11 +95,11 @@ export function buildTimelineToolContentPart(
     if (!toolCall) {
       return null;
     }
-    const metadata = metadataRecord(item.metadata);
+    const metadata = timelineItemMetadata(item, "agent_thread_item");
     return {
       type: "tool_use",
       toolCall,
-      ...(metadata ? { metadata } : {}),
+      metadata,
     };
   }
 

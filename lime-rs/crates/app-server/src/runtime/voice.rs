@@ -67,6 +67,13 @@ impl RuntimeCore {
         self.app_data_source.transcribe_voice_audio(params).await
     }
 
+    pub async fn polish_voice_text(
+        &self,
+        params: VoiceTranscriptionPolishTextParams,
+    ) -> Result<VoiceTranscriptionPolishTextResponse, RuntimeCoreError> {
+        self.app_data_source.polish_voice_text(params).await
+    }
+
     pub async fn list_voice_instructions(
         &self,
     ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {

@@ -1313,6 +1313,35 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
+  it("Task Center 首页 hot path 可跳过工作台命令解析并直发普通对话", async () => {
+    const harness = mountHook();
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, "@配图 画一张封面", "react", undefined, {
+            skipSessionRestore: true,
+            skipSessionStartHooks: true,
+            skipWorkspaceCommandRouting: true,
+          });
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchCommandRequest).not.toHaveBeenCalled();
+      expect(mockListInstalledPlugins).not.toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe("@配图 画一张封面");
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        skipSessionRestore: true,
+        skipSessionStartHooks: true,
+        skipWorkspaceCommandRouting: true,
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("专用服务模型场景应按需补齐延迟加载的 service model 配置", async () => {
     const resolveServiceModelsBeforeSend = vi.fn(async () => ({
       agentResponseLanguage: "en-US",
@@ -2107,11 +2136,19 @@ Extract it into the Agent Skills directory.`,
         await Promise.resolve();
       });
 
-      expect(harness.getValue().displayMessages).toHaveLength(1);
-      expect(harness.getValue().displayMessages[0]).toMatchObject({
-        role: "user",
-        content: "帮我找一下今天的新闻",
-      });
+      expect(harness.getValue().displayMessages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "帮我找一下今天的新闻",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          isThinking: true,
+          runtimeStatus: expect.objectContaining({
+            phase: "preparing",
+          }),
+        }),
+      ]);
 
       await act(async () => {
         deferredSend.resolve();
@@ -2148,11 +2185,19 @@ Extract it into the Agent Skills directory.`,
         await Promise.resolve();
       });
 
-      expect(harness.getValue().displayMessages).toHaveLength(1);
-      expect(harness.getValue().displayMessages[0]).toMatchObject({
-        role: "user",
-        content: "帮我整理一下今天的重要新闻",
-      });
+      expect(harness.getValue().displayMessages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "帮我整理一下今天的重要新闻",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          isThinking: true,
+          runtimeStatus: expect.objectContaining({
+            phase: "preparing",
+          }),
+        }),
+      ]);
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "帮我整理一下今天的重要新闻",
@@ -2243,11 +2288,19 @@ Extract it into the Agent Skills directory.`,
 
       expect(await secondSendPromise).toBe(false);
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
-      expect(harness.getValue().displayMessages).toHaveLength(1);
-      expect(harness.getValue().displayMessages[0]).toMatchObject({
-        role: "user",
-        content: "帮我生成一版首页插图方案",
-      });
+      expect(harness.getValue().displayMessages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "帮我生成一版首页插图方案",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          isThinking: true,
+          runtimeStatus: expect.objectContaining({
+            phase: "preparing",
+          }),
+        }),
+      ]);
 
       await act(async () => {
         deferredSend.resolve();
@@ -3076,7 +3129,19 @@ Extract it into the Agent Skills directory.`,
         await Promise.resolve();
       });
 
-      expect(harness.getValue().displayMessages).toHaveLength(1);
+      expect(harness.getValue().displayMessages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "@配图 生成 一张春日咖啡馆插画",
+        }),
+        expect.objectContaining({
+          role: "assistant",
+          isThinking: true,
+          runtimeStatus: expect.objectContaining({
+            phase: "preparing",
+          }),
+        }),
+      ]);
       expect(harness.getValue().displayMessages[0]).toMatchObject({
         role: "user",
         content: "@配图 生成 一张春日咖啡馆插画",

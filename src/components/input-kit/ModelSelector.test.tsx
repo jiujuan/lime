@@ -181,6 +181,33 @@ describe("ModelSelector", () => {
     );
   });
 
+  it("禁用后台预加载且模型元数据未加载时，不应清空已选 reasoning effort", () => {
+    const setReasoningEffort = vi.fn();
+    mockUseProviderModels.mockReturnValue({
+      modelIds: [],
+      models: [],
+      loading: false,
+      error: null,
+    });
+
+    renderModelSelector({
+      backgroundPreload: "disabled",
+      providerType: "custom-local-cli",
+      model: "gpt-5.3-codex",
+      reasoningEffort: "medium",
+      setReasoningEffort,
+    });
+
+    expect(mockUseProviderModels).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "custom-local-cli" }),
+      expect.objectContaining({
+        returnFullMetadata: true,
+        autoLoad: false,
+      }),
+    );
+    expect(setReasoningEffort).not.toHaveBeenCalled();
+  });
+
   it("Lime Hub 已有声明模型但无凭证时不应强制实时目录", () => {
     mockUseConfiguredProviders.mockReturnValue({
       providers: [
@@ -386,6 +413,43 @@ describe("ModelSelector", () => {
     clickModelSelectorTrigger(container);
 
     expect(setModel).toHaveBeenCalledWith("gpt-5.2-codex");
+  });
+
+  it("当前模型暂未出现在异步模型列表时不应被旧缓存覆盖", async () => {
+    const setModel = vi.fn();
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime Hub",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          apiHost: "https://llm.limeai.run",
+          customModels: ["gpt-5.2-pro"],
+        },
+      ],
+      loading: false,
+    });
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.2-pro"],
+      models: [createReasoningModelMetadata("gpt-5.2-pro")],
+      loading: false,
+      error: null,
+    });
+
+    renderModelSelector({
+      providerType: "lime-hub",
+      model: "gpt-5.4-mini",
+      setModel,
+      preserveUnknownModelSelection: true,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(setModel).not.toHaveBeenCalledWith("gpt-5.2-pro");
   });
 
   it("切换供应商时应同步切换到该供应商的首个已配置模型，避免沿用旧模型", () => {

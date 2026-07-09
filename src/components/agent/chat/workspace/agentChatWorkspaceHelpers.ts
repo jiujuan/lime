@@ -20,14 +20,10 @@ export const SESSION_ENTRY_AUXILIARY_DEFERRED_LOAD_MS = 45_000;
 export const SESSION_RECENT_METADATA_BACKGROUND_SYNC_DELAY_MS = 12_000;
 export const SESSION_RECENT_METADATA_NAVIGATION_DEFER_MS = 45_000;
 export const SESSION_RECENT_METADATA_BACKGROUND_SYNC_IDLE_TIMEOUT_MS = 20_000;
-export const BROWSER_WORKSPACE_HOME_HINT_STORAGE_KEY =
-  "lime.agent.browser-workspace-home-hint-shown";
 
 export const FILE_MANAGER_NAV_COLLAPSE_BREAKPOINT_PX = 1180;
 export const APP_SIDEBAR_COLLAPSE_EVENT = "lime:app-sidebar-collapse";
-export const BROWSER_WORKSPACE_HOME_HINT_MESSAGE = "在这里切换或新建工作区";
-export const BROWSER_WORKSPACE_HOME_HINT_AUTO_HIDE_MS = 5_500;
-export const TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS = 120;
+export const TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS = 1;
 export const NOOP_SET_CHAT_MESSAGES: Dispatch<SetStateAction<Message[]>> = () =>
   undefined;
 
@@ -229,6 +225,7 @@ export function shouldAutoRefreshWorkspaceRightSurfacePending({
   sceneIsSending,
   sceneIsPreparingSend,
   sceneLayoutMode,
+  taskCenterHomeHotpathActive = false,
   manualRightSurfaceActive,
   pluginActivationActive,
 }: {
@@ -238,19 +235,72 @@ export function shouldAutoRefreshWorkspaceRightSurfacePending({
   sceneIsSending: boolean;
   sceneIsPreparingSend: boolean;
   sceneLayoutMode: string;
+  taskCenterHomeHotpathActive?: boolean;
   manualRightSurfaceActive: boolean;
   pluginActivationActive: boolean;
 }): boolean {
   const hasPendingListScope = Boolean(
     sessionId?.trim() || workspaceId?.trim() || workspaceRoot?.trim(),
   );
+  if (taskCenterHomeHotpathActive || sceneIsSending || sceneIsPreparingSend) {
+    return false;
+  }
+
   return (
     hasPendingListScope ||
-    sceneIsSending ||
-    sceneIsPreparingSend ||
     sceneLayoutMode !== "chat" ||
     manualRightSurfaceActive ||
     pluginActivationActive
+  );
+}
+
+export function shouldAutoInitWorkspaceSessionFiles({
+  sessionId,
+  isSending,
+  currentTurnId,
+  queuedTurnCount,
+  draftSendInFlight = false,
+}: {
+  sessionId?: string | null;
+  isSending: boolean;
+  currentTurnId?: string | null;
+  queuedTurnCount: number;
+  draftSendInFlight?: boolean;
+}): boolean {
+  if (!sessionId?.trim()) {
+    return false;
+  }
+
+  return (
+    !draftSendInFlight &&
+    !isSending &&
+    !currentTurnId &&
+    queuedTurnCount === 0
+  );
+}
+
+export function shouldPauseTaskCenterInitialSessionNavigation({
+  agentEntry,
+  draftSurfaceActive,
+  activeDraftTabId,
+  draftTabCount,
+  hasHomeHotpathPending,
+}: {
+  agentEntry?: string | null;
+  draftSurfaceActive: boolean;
+  activeDraftTabId?: string | null;
+  draftTabCount: number;
+  hasHomeHotpathPending: boolean;
+}): boolean {
+  if (agentEntry !== "claw" && agentEntry !== "new-task") {
+    return false;
+  }
+
+  return (
+    draftSurfaceActive ||
+    Boolean(activeDraftTabId) ||
+    draftTabCount > 0 ||
+    hasHomeHotpathPending
   );
 }
 

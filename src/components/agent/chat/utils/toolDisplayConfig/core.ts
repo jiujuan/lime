@@ -140,72 +140,6 @@ export const CORE_EXACT_TOOL_CONFIGS = [
     },
   ],
   [
-    "write",
-    {
-      family: "write",
-      label: "文件写入",
-      verb: "保存",
-      icon: FilePlus,
-      groupTitle: "写入",
-      actionKey: "write",
-    },
-  ],
-  [
-    "writefile",
-    {
-      family: "write",
-      label: "文件写入",
-      verb: "保存",
-      icon: FilePlus,
-      groupTitle: "写入",
-      actionKey: "write",
-    },
-  ],
-  [
-    "createfile",
-    {
-      family: "write",
-      label: "文件创建",
-      verb: "保存",
-      icon: FilePlus,
-      groupTitle: "写入",
-      actionKey: "write",
-    },
-  ],
-  [
-    "edit",
-    {
-      family: "edit",
-      label: "文件编辑",
-      verb: "修改",
-      icon: Edit3,
-      groupTitle: "编辑",
-      actionKey: "edit",
-    },
-  ],
-  [
-    "editfile",
-    {
-      family: "edit",
-      label: "文件编辑",
-      verb: "修改",
-      icon: Edit3,
-      groupTitle: "编辑",
-      actionKey: "edit",
-    },
-  ],
-  [
-    "multiedit",
-    {
-      family: "edit",
-      label: "批量编辑",
-      verb: "批量修改",
-      icon: Edit3,
-      groupTitle: "编辑",
-      actionKey: "edit",
-    },
-  ],
-  [
     "applypatch",
     {
       family: "edit",
@@ -681,17 +615,6 @@ export const CORE_EXACT_TOOL_CONFIGS = [
         completed: "已终止任务",
         running: "终止中",
       },
-    },
-  ],
-  [
-    "analyzeimage",
-    {
-      family: "vision",
-      label: "图像分析",
-      verb: "分析",
-      icon: Eye,
-      groupTitle: "图像",
-      actionKey: "vision",
     },
   ],
   [

@@ -3,6 +3,12 @@ import {
   shouldUseAgentMessageAsFinalText,
 } from "../utils/agentMessagePhase";
 import { isProcessBoundaryContentPart } from "../utils/contentPartTimeline";
+import {
+  areComparableContentTextsEqual,
+  areComparableContentTextsRelated,
+  isComparableContentTextPrefix,
+  normalizeComparableContentText,
+} from "./messageListComparableText";
 import type { AgentThreadItem, Message } from "../types";
 import type {
   MessageContentPart,
@@ -45,6 +51,23 @@ export function appendThinkingContentPart(
 
   const lastPart = parts[parts.length - 1];
   if (lastPart?.type === "thinking") {
+    if (areComparableContentTextsEqual(lastPart.text, normalized)) {
+      return;
+    }
+    if (isComparableContentTextPrefix(lastPart.text, normalized)) {
+      lastPart.text = normalized;
+      if (!lastPart.metadata && metadata) {
+        lastPart.metadata = metadata;
+      }
+      return;
+    }
+    if (isComparableContentTextPrefix(normalized, lastPart.text)) {
+      if (!lastPart.metadata && metadata) {
+        lastPart.metadata = metadata;
+      }
+      return;
+    }
+
     lastPart.text = `${lastPart.text}\n\n${normalized}`;
     if (!lastPart.metadata && metadata) {
       lastPart.metadata = metadata;
@@ -150,16 +173,8 @@ function hasSameFinalTextContentPart(params: {
     if (firstProcessIndex >= 0 && index <= firstProcessIndex) {
       return false;
     }
-    return part.text.trim() === normalizedFinalText;
+    return areComparableContentTextsEqual(part.text, normalizedFinalText);
   });
-}
-
-function collectThinkingText(parts: MessageContentPart[]): string {
-  return parts
-    .filter(isThinkingContentPart)
-    .map((part) => part.text)
-    .join("")
-    .trim();
 }
 
 function collectExistingThinkingTexts(
@@ -168,7 +183,7 @@ function collectExistingThinkingTexts(
   const texts = new Set<string>();
   for (const part of parts || []) {
     if (isThinkingContentPart(part)) {
-      const text = part.text.trim();
+      const text = normalizeComparableContentText(part.text);
       if (text) {
         texts.add(text);
       }
@@ -207,7 +222,9 @@ export function hasOnlyDuplicateReasoningItems(params: {
   }
 
   return reasoningItems.every((item) =>
-    existingThinkingTexts.has(item.text.trim()),
+    Array.from(existingThinkingTexts).some((existingThinking) =>
+      areComparableContentTextsRelated(existingThinking, item.text),
+    ),
   );
 }
 
@@ -215,8 +232,10 @@ function removeTimelineLeadThinkingCoveredByExistingLead(params: {
   timelineParts: MessageContentPart[];
   existingLeadParts: MessageContentPart[];
 }): MessageContentPart[] {
-  const existingLeadThinking = collectThinkingText(params.existingLeadParts);
-  if (!existingLeadThinking) {
+  const existingLeadThinkingTexts = collectExistingThinkingTexts(
+    params.existingLeadParts,
+  );
+  if (existingLeadThinkingTexts.size === 0) {
     return params.timelineParts;
   }
 
@@ -224,9 +243,11 @@ function removeTimelineLeadThinkingCoveredByExistingLead(params: {
   const nextParts: MessageContentPart[] = [];
   for (const part of params.timelineParts) {
     if (
-      !nextParts.length &&
       isThinkingContentPart(part) &&
-      existingLeadThinking.startsWith(part.text.trim())
+      Array.from(existingLeadThinkingTexts).some(
+        (existingThinking) =>
+          areComparableContentTextsRelated(part.text, existingThinking),
+      )
     ) {
       changed = true;
       continue;

@@ -137,11 +137,18 @@ describe("EmptyStateComposerPanel", () => {
       sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(onSend).toHaveBeenCalledWith("帮我快速开一个新对话", {
-      goalEnabled: false,
-      planEnabled: false,
-      subagentEnabled: false,
-    });
+    expect(onSend).toHaveBeenCalledWith(
+      "帮我快速开一个新对话",
+      {
+        goalEnabled: false,
+        planEnabled: false,
+        subagentEnabled: false,
+      },
+      expect.objectContaining({
+        triggerSource: "button",
+        triggeredAt: expect.any(Number),
+      }),
+    );
     expect(
       (container.querySelector("textarea") as HTMLTextAreaElement).value,
     ).toBe("");
@@ -186,11 +193,18 @@ describe("EmptyStateComposerPanel", () => {
       sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(onSend).toHaveBeenCalledWith("@写文章 帮我整理项目资料", {
-      goalEnabled: false,
-      planEnabled: false,
-      subagentEnabled: false,
-    });
+    expect(onSend).toHaveBeenCalledWith(
+      "@写文章 帮我整理项目资料",
+      {
+        goalEnabled: false,
+        planEnabled: false,
+        subagentEnabled: false,
+      },
+      expect.objectContaining({
+        triggerSource: "button",
+        triggeredAt: expect.any(Number),
+      }),
+    );
   });
 
   it("发送准备中应禁用首页发送入口并展示忙碌态", () => {

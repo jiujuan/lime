@@ -39,7 +39,7 @@ lime-mcp.workspace = true
 model-provider.workspace = true
 runtime-core.workspace = true
 lime-skills.workspace = true
-lime-services.workspace = true
+lime-services = { workspace = true, features = ["local-sensevoice"] }
 hex.workspace = true
 jsonschema.workspace = true
 opentelemetry.workspace = true

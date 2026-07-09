@@ -1874,6 +1874,8 @@
       "VoiceModelDefaultSetResponse",
       "VoiceModelTestTranscribeFileParams",
       "VoiceModelTestTranscribeFileResponse",
+      "VoiceTranscriptionPolishTextParams",
+      "VoiceTranscriptionPolishTextResponse",
       "VoiceTranscriptionTranscribeAudioParams",
       "VoiceTranscriptionTranscribeAudioResponse",
       "WechatChannelAccountListResponse",

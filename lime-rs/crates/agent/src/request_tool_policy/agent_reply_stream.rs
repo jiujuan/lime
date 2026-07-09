@@ -17,16 +17,20 @@ use agent_runtime::reply_host::{RuntimeReplyPolicyHost, RuntimeReplyStartRequest
 use agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput;
 use agent_runtime::reply_request::RuntimeReplyRequest;
 use agent_runtime::reply_stream::{
-    RuntimeReplyStreamEvent, RuntimeReplyStreamIdleTimeout, RuntimeReplyStreamState,
+    RuntimeReplyResponseContext, RuntimeReplyResponseEvent, RuntimeReplyResponseMaterializer,
+    RuntimeReplyResponseProjection, RuntimeReplyStreamEvent, RuntimeReplyStreamIdleTimeout,
+    RuntimeReplyStreamState,
 };
 use agent_runtime::session_config::AgentSessionConfig;
 use futures::StreamExt;
 use model_provider::provider_stream::{
-    RuntimeReplyProviderHandle, RuntimeReplyProviderStreamEvent,
+    apply_runtime_provider_metadata, RuntimeReplyProviderStreamEvent,
 };
-use model_provider::ModelProviderProtocol;
+use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
+
+const RESPONSE_RATE_LIMITS_RUNTIME_EVENT_KIND: &str = "provider_rate_limits";
 
 fn build_provider_stream_idle_timeout_error<F>(
     timeout: Duration,
@@ -98,6 +102,8 @@ where
 {
     let started_at = Instant::now();
     let mut stream_state = RuntimeReplyStreamState::new();
+    let mut response_materializer =
+        RuntimeReplyResponseMaterializer::new(runtime_response_context(session_config));
     let mut text_delta_batcher = TextDeltaBatcher::default();
     let mut web_retrieval_process_state = WebRetrievalProcessState::default();
     let session_id = session_config.id.clone();
@@ -201,14 +207,19 @@ where
                             provider_event,
                         )]
                     }
+                    RuntimeReplyStreamEvent::ResponseEvent(response_event) => {
+                        runtime_agent_events_from_response_event(
+                            &mut response_materializer,
+                            response_event,
+                        )
+                    }
                     RuntimeReplyStreamEvent::Event(runtime_event) => vec![runtime_event],
                 };
 
                 for mut runtime_event in runtime_events {
-                    enrich_provider_trace_with_runtime_provider(
-                        &mut runtime_event,
-                        reply_backend.provider_handle(),
-                    );
+                    if let RuntimeAgentEvent::ProviderTrace { event } = &mut runtime_event {
+                        apply_runtime_provider_metadata(event, reply_backend.provider_handle());
+                    }
                     let extra_events = write_artifact_emitter.process_event(&mut runtime_event);
                     for extra_event in &extra_events {
                         emit_text_delta_batch(
@@ -360,6 +371,98 @@ where
     Ok(())
 }
 
+fn runtime_response_context(session_config: &AgentSessionConfig) -> RuntimeReplyResponseContext {
+    RuntimeReplyResponseContext::new(
+        session_config
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| session_config.id.clone()),
+        session_config
+            .turn_id
+            .clone()
+            .unwrap_or_else(|| session_config.id.clone()),
+        chrono::Utc::now().to_rfc3339(),
+    )
+}
+
+fn runtime_agent_events_from_response_event(
+    materializer: &mut RuntimeReplyResponseMaterializer,
+    response_event: RuntimeReplyResponseEvent,
+) -> Vec<RuntimeAgentEvent> {
+    materializer
+        .project_event(response_event)
+        .into_iter()
+        .map(runtime_agent_event_from_response_projection)
+        .collect()
+}
+
+fn runtime_agent_event_from_response_projection(
+    projection: RuntimeReplyResponseProjection,
+) -> RuntimeAgentEvent {
+    match projection {
+        RuntimeReplyResponseProjection::TextDelta { text } => RuntimeAgentEvent::TextDelta { text },
+        RuntimeReplyResponseProjection::ThinkingDelta { text } => {
+            RuntimeAgentEvent::ThinkingDelta { text }
+        }
+        RuntimeReplyResponseProjection::ToolInputDelta {
+            tool_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        } => RuntimeAgentEvent::ToolInputDelta {
+            tool_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        },
+        RuntimeReplyResponseProjection::ItemStarted { item } => RuntimeAgentEvent::ItemStarted {
+            item: crate::protocol_projection::project_item_runtime(item),
+        },
+        RuntimeReplyResponseProjection::ItemUpdated { item } => RuntimeAgentEvent::ItemUpdated {
+            item: crate::protocol_projection::project_item_runtime(item),
+        },
+        RuntimeReplyResponseProjection::ItemCompleted { item } => {
+            RuntimeAgentEvent::ItemCompleted {
+                item: crate::protocol_projection::project_item_runtime(item),
+            }
+        }
+        RuntimeReplyResponseProjection::Done { token_usage, .. } => RuntimeAgentEvent::Done {
+            usage: project_response_token_usage(token_usage.as_ref()),
+        },
+        RuntimeReplyResponseProjection::RateLimits { payload } => {
+            RuntimeAgentEvent::ProviderStreamEvent {
+                runtime_event_kind: RESPONSE_RATE_LIMITS_RUNTIME_EVENT_KIND.to_string(),
+                payload,
+            }
+        }
+    }
+}
+
+fn project_response_token_usage(value: Option<&Value>) -> Option<crate::protocol::AgentTokenUsage> {
+    let value = value?;
+    crate::session_usage_projection::project_token_usage(
+        read_i32_token_usage(value, &["input_tokens", "inputTokens", "prompt_tokens"]),
+        read_i32_token_usage(
+            value,
+            &["output_tokens", "outputTokens", "completion_tokens"],
+        ),
+        read_i32_token_usage(value, &["cached_input_tokens", "cachedInputTokens"]),
+        read_i32_token_usage(
+            value,
+            &["cache_creation_input_tokens", "cacheCreationInputTokens"],
+        ),
+    )
+}
+
+fn read_i32_token_usage(value: &Value, keys: &[&str]) -> Option<i32> {
+    let object = value.as_object()?;
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(|entry| entry.as_i64().and_then(|number| i32::try_from(number).ok()))
+}
+
 fn runtime_agent_event_from_provider_stream_event(
     provider_event: RuntimeReplyProviderStreamEvent,
 ) -> RuntimeAgentEvent {
@@ -369,55 +472,12 @@ fn runtime_agent_event_from_provider_stream_event(
     }
 }
 
-fn enrich_provider_trace_with_runtime_provider(
-    event: &mut RuntimeAgentEvent,
-    provider: Option<&RuntimeReplyProviderHandle>,
-) {
-    let Some(provider) = provider else {
-        return;
-    };
-    let RuntimeAgentEvent::ProviderTrace {
-        provider: trace_provider,
-        model,
-        runtime_provider_backend,
-        runtime_provider_selector,
-        runtime_provider_protocol,
-        runtime_provider_active_model,
-        ..
-    } = event
-    else {
-        return;
-    };
-
-    if trace_provider.trim().is_empty() {
-        *trace_provider = provider.identity.provider_name.clone();
-    }
-    if model.trim().is_empty() {
-        *model = provider.identity.model_name.clone();
-    }
-    *runtime_provider_backend = Some(provider.backend.as_wire_str().to_string());
-    *runtime_provider_selector = provider.identity.provider_selector.clone();
-    *runtime_provider_protocol = provider
-        .identity
-        .protocol
-        .as_ref()
-        .map(provider_protocol_wire_value);
-    *runtime_provider_active_model = provider.capabilities.active_model_name.clone();
-}
-
-fn provider_protocol_wire_value(protocol: &ModelProviderProtocol) -> String {
-    match protocol {
-        ModelProviderProtocol::Responses => "responses".to_string(),
-        ModelProviderProtocol::ChatCompletions => "chat_completions".to_string(),
-        ModelProviderProtocol::Custom(value) => value.clone(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use agent_protocol::turn_context::TurnContextOverride;
     use agent_runtime::reply_input::{RuntimeReplyInput, RuntimeReplyInputImage};
+    use agent_runtime::reply_stream::{RuntimeReplyResponseItem, RuntimeReplyResponseItemPayload};
     use model_provider::safety::{
         ProviderSafetyBufferingRetryModelSource, ProviderSafetyBufferingRuntimeEventPayload,
         SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
@@ -467,6 +527,14 @@ mod tests {
         RuntimeReplyRequest::from_attempt_input("session-image-policy", input.into(), None, None)
     }
 
+    fn response_materializer() -> RuntimeReplyResponseMaterializer {
+        RuntimeReplyResponseMaterializer::new(RuntimeReplyResponseContext::new(
+            "thread-response",
+            "turn-response",
+            "2026-07-09T00:00:00Z",
+        ))
+    }
+
     #[test]
     fn provider_stream_reply_event_projects_agent_event() {
         let event = runtime_agent_event_from_provider_stream_event(
@@ -497,6 +565,160 @@ mod tests {
         assert_eq!(payload["source"], json!("payload_retry_model"));
         assert!(payload.get("retry_model").is_none());
         assert!(payload.get("fasterModel").is_none());
+    }
+
+    #[test]
+    fn response_text_delta_projects_agent_event() {
+        let mut materializer = response_materializer();
+        let events = runtime_agent_events_from_response_event(
+            &mut materializer,
+            RuntimeReplyResponseEvent::TextDelta {
+                text: "hello".to_string(),
+            },
+        );
+
+        assert_eq!(events.len(), 1);
+        let RuntimeAgentEvent::TextDelta { text } = &events[0] else {
+            panic!("expected text delta event");
+        };
+        assert_eq!(text, "hello");
+    }
+
+    #[test]
+    fn response_completed_projects_done_with_usage() {
+        let mut materializer = response_materializer();
+        let events = runtime_agent_events_from_response_event(
+            &mut materializer,
+            RuntimeReplyResponseEvent::Completed {
+                response_id: Some("resp-1".to_string()),
+                end_turn: Some(true),
+                token_usage: Some(json!({
+                    "input_tokens": 12,
+                    "output_tokens": 3,
+                    "cachedInputTokens": 2
+                })),
+            },
+        );
+
+        assert_eq!(events.len(), 1);
+        let RuntimeAgentEvent::Done { usage } = &events[0] else {
+            panic!("expected done event");
+        };
+        assert_eq!(usage.as_ref().map(|usage| usage.input_tokens), Some(12));
+        assert_eq!(usage.as_ref().map(|usage| usage.output_tokens), Some(3));
+        assert_eq!(
+            usage.as_ref().and_then(|usage| usage.cached_input_tokens),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn response_reasoning_delta_projects_thinking_delta_and_item_update() {
+        let mut materializer = response_materializer();
+        let events = runtime_agent_events_from_response_event(
+            &mut materializer,
+            RuntimeReplyResponseEvent::ReasoningDelta {
+                item_id: "reasoning-1".to_string(),
+                delta: "thinking".to_string(),
+            },
+        );
+
+        assert_eq!(events.len(), 2);
+        let RuntimeAgentEvent::ThinkingDelta { text } = &events[0] else {
+            panic!("expected thinking delta event");
+        };
+        assert_eq!(text, "thinking");
+        let RuntimeAgentEvent::ItemUpdated { item } = &events[1] else {
+            panic!("expected reasoning item update");
+        };
+        assert_eq!(item.id, "reasoning-1");
+    }
+
+    #[test]
+    fn response_tool_call_input_delta_projects_tool_input_delta_and_item_update() {
+        let mut materializer = response_materializer();
+        let events = runtime_agent_events_from_response_event(
+            &mut materializer,
+            RuntimeReplyResponseEvent::ToolCallInputDelta {
+                call_id: "call-1".to_string(),
+                tool_name: Some("apply_patch".to_string()),
+                delta: "{\"path\"".to_string(),
+                accumulated_arguments: None,
+                provider: Some("openai".to_string()),
+            },
+        );
+
+        assert_eq!(events.len(), 2);
+        let RuntimeAgentEvent::ToolInputDelta {
+            tool_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        } = &events[0]
+        else {
+            panic!("expected tool input delta event");
+        };
+        assert_eq!(tool_id, "call-1");
+        assert_eq!(tool_name.as_deref(), Some("apply_patch"));
+        assert_eq!(delta, "{\"path\"");
+        assert_eq!(accumulated_arguments.as_deref(), Some("{\"path\""));
+        assert_eq!(provider.as_deref(), Some("openai"));
+        let RuntimeAgentEvent::ItemUpdated { item } = &events[1] else {
+            panic!("expected tool item update");
+        };
+        assert_eq!(item.id, "call-1");
+        let lime_core::database::dao::agent_timeline::AgentThreadItemPayload::ToolCall {
+            tool_name,
+            arguments,
+            ..
+        } = &item.payload
+        else {
+            panic!("expected tool call item payload");
+        };
+        assert_eq!(tool_name, "apply_patch");
+        assert_eq!(arguments, &Some(json!("{\"path\"")));
+    }
+
+    #[test]
+    fn response_output_item_done_projects_timeline_item() {
+        let mut materializer = response_materializer();
+        let events = runtime_agent_events_from_response_event(
+            &mut materializer,
+            RuntimeReplyResponseEvent::OutputItemDone {
+                item: RuntimeReplyResponseItem::new(
+                    "call-1",
+                    "function_call",
+                    RuntimeReplyResponseItemPayload::ToolCall {
+                        tool_name: "apply_patch".to_string(),
+                        arguments: Some(json!({ "patch": "*** Begin Patch" })),
+                        output: None,
+                        success: None,
+                        error: None,
+                        metadata: None,
+                    },
+                ),
+            },
+        );
+
+        assert_eq!(events.len(), 1);
+        let RuntimeAgentEvent::ItemCompleted { item } = &events[0] else {
+            panic!("expected item completed event");
+        };
+        assert_eq!(item.id, "call-1");
+        let lime_core::database::dao::agent_timeline::AgentThreadItemPayload::ToolCall {
+            tool_name,
+            arguments,
+            ..
+        } = &item.payload
+        else {
+            panic!("expected tool call item payload");
+        };
+        assert_eq!(tool_name, "apply_patch");
+        assert_eq!(
+            arguments.as_ref().and_then(|value| value.get("patch")),
+            Some(&json!("*** Begin Patch"))
+        );
     }
 
     #[test]

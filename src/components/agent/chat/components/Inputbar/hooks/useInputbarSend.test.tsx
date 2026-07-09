@@ -9,12 +9,18 @@ import type { InputbarSendHandler } from "../inputbarSendPayload";
 import type { InputbarPluginSelection } from "../pluginInputCapability";
 import { useInputbarSend } from "./useInputbarSend";
 
-const { setAgentRuntimeObjectiveMock } = vi.hoisted(() => ({
-  setAgentRuntimeObjectiveMock: vi.fn(),
-}));
+const { recordAgentUiPerformanceMetricMock, setAgentRuntimeObjectiveMock } =
+  vi.hoisted(() => ({
+    recordAgentUiPerformanceMetricMock: vi.fn(),
+    setAgentRuntimeObjectiveMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/api/agentRuntime", () => ({
   setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
+}));
+
+vi.mock("@/lib/agentUiPerformanceMetrics", () => ({
+  recordAgentUiPerformanceMetric: recordAgentUiPerformanceMetricMock,
 }));
 
 interface MountedHarness {
@@ -36,7 +42,14 @@ interface HarnessProps {
 }
 
 const mountedRoots: MountedHarness[] = [];
-let latestSend: (() => Promise<void>) | null = null;
+let latestSend:
+  | ((
+      metadata?: {
+        triggeredAt?: number;
+        triggerSource?: "button" | "enter" | "ime" | "adapter";
+      },
+    ) => Promise<void>)
+  | null = null;
 let clearPathReferencesMock: ReturnType<typeof vi.fn>;
 let clearActiveCapabilityMock: ReturnType<typeof vi.fn>;
 let clearPendingImagesMock: ReturnType<typeof vi.fn>;
@@ -97,6 +110,16 @@ async function send() {
   expect(latestSend).toBeTypeOf("function");
   await act(async () => {
     await latestSend?.();
+  });
+}
+
+async function sendWithMetadata(metadata: {
+  triggeredAt?: number;
+  triggerSource?: "button" | "enter" | "ime" | "adapter";
+}) {
+  expect(latestSend).toBeTypeOf("function");
+  await act(async () => {
+    await latestSend?.(metadata);
   });
 }
 
@@ -165,6 +188,39 @@ describe("useInputbarSend", () => {
       sendOptions: undefined,
     });
     expect(clearPendingImagesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("纯文本无附件和模式时应走最小发送快路径", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    const triggeredAt = Date.now() - 12;
+    renderHarness({
+      activeTools: {
+        objective_mode: false,
+        subagent_mode: false,
+        task_mode: false,
+      },
+      input: "你好",
+      onSend,
+    });
+
+    await sendWithMetadata({ triggeredAt, triggerSource: "button" });
+
+    expect(onSend).toHaveBeenCalledWith({
+      images: undefined,
+      textOverride: "你好",
+      sendOptions: undefined,
+      triggeredAt,
+      triggerSource: "button",
+    });
+    expect(setAgentRuntimeObjectiveMock).not.toHaveBeenCalled();
+    expect(recordAgentUiPerformanceMetricMock).toHaveBeenCalledWith(
+      "inputbar.send.plainTextFastPath",
+      expect.objectContaining({
+        inputLength: 2,
+        sessionId: null,
+        triggerSource: "button",
+      }),
+    );
   });
 
   it("插件 chip 激活但输入未含触发词时应补齐插件触发词发送", async () => {

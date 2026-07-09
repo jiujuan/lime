@@ -43,6 +43,25 @@ describe("inferModelCapabilities", () => {
     });
   });
 
+  it("应将 GPT-5 系列识别为支持思考的模型", () => {
+    expect(
+      inferModelCapabilities({
+        modelId: "gpt-5.4-mini",
+        providerId: "lime",
+        capabilities: { reasoning: false },
+      }),
+    ).toMatchObject({
+      reasoning: true,
+    });
+    expect(
+      inferModelTaskFamilies({
+        modelId: "gpt-5.4-mini",
+        providerId: "lime",
+        capabilities: { reasoning: false },
+      }),
+    ).toContain("reasoning");
+  });
+
   it("应将 gpt-images-2 识别为图片生成模型而非视觉理解模型", () => {
     expect(
       inferModelTaskFamilies({

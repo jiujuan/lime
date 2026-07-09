@@ -12,6 +12,8 @@ import {
   APP_SERVER_METHOD_SESSION_LIST,
   APPROVAL_REQUEST_CANCEL_SCENARIO,
   APPROVAL_REQUEST_DECLINE_SCENARIO,
+  APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+  APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
   APPROVAL_REQUEST_RESUME_PROMPT,
   APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
@@ -20,6 +22,9 @@ import {
   ELECTRON_RESIZE_REFLOW_SCENARIO,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
+  GREETING_PROMPT,
+  HOME_HOTPATH_GREETING_SCENARIO,
+  HOME_HOTPATH_SCENARIO,
   IMAGE_COMMAND_SCENARIO,
   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
   INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO,
@@ -121,7 +126,8 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | live-tail-commit | electron-resize-reflow | approval-request-resume | approval-request-decline | approval-request-cancel | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --scenario <name>      complete | home-hotpath | home-hotpath-greeting | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | live-tail-commit | electron-resize-reflow | approval-request-resume | approval-request-decline | approval-request-cancel | approval-request-full-access | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --prompt <text>        仅 home-hotpath 场景可用，覆盖默认新闻输入
   --soul-style-profile <id>   soul-style 场景使用的 profile，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID}
   --cdp-port <port>      可选 Electron remote debugging port；传入后通过 CDP renderer 执行 GUI 动作
   --timeout-ms <ms>      总超时，默认 180000
@@ -136,6 +142,7 @@ function parseArgs(argv) {
     ...DEFAULTS,
     cdpPort: null,
     cdpUrl: null,
+    promptOverride: null,
     soulStyleProfileId: DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -162,6 +169,11 @@ function parseArgs(argv) {
     }
     if (arg === "--scenario" && next) {
       options.scenario = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--prompt" && next) {
+      options.promptOverride = next.trim();
       index += 1;
       continue;
     }
@@ -214,6 +226,8 @@ function parseArgs(argv) {
   }
   const allowedScenarios = [
     "complete",
+    HOME_HOTPATH_SCENARIO,
+    HOME_HOTPATH_GREETING_SCENARIO,
     "cancel",
     "cancel-then-continue",
     INPUTBAR_RICH_RESTORE_SCENARIO,
@@ -232,6 +246,7 @@ function parseArgs(argv) {
     APPROVAL_REQUEST_RESUME_SCENARIO,
     APPROVAL_REQUEST_DECLINE_SCENARIO,
     APPROVAL_REQUEST_CANCEL_SCENARIO,
+    APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
     TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
     TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
     TERMINAL_STALE_GUARD_SCENARIO,
@@ -248,6 +263,9 @@ function parseArgs(argv) {
   ];
   if (!allowedScenarios.includes(options.scenario)) {
     throw new Error(`--scenario 只能是 ${allowedScenarios.join("、")}`);
+  }
+  if (options.promptOverride && options.scenario !== HOME_HOTPATH_SCENARIO) {
+    throw new Error("--prompt 仅支持 --scenario home-hotpath");
   }
   createSoulStyleFixtureSelection({
     profileId: options.soulStyleProfileId,
@@ -491,7 +509,8 @@ async function run() {
     scenarioId: "claw-chat-current-fixture",
     scenario: options.scenario,
     prompt:
-      options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO
+      options.promptOverride ||
+      (options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO
         ? INPUTBAR_RICH_RESTORE_PROMPT
         : options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO ||
             options.scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO ||
@@ -506,7 +525,11 @@ async function run() {
                 ? LIVE_TAIL_COMMIT_PROMPT
                 : options.scenario === APPROVAL_REQUEST_RESUME_SCENARIO
                   ? APPROVAL_REQUEST_RESUME_PROMPT
-                  : NEWS_PROMPT,
+                  : options.scenario === APPROVAL_REQUEST_FULL_ACCESS_SCENARIO
+                    ? APPROVAL_REQUEST_FULL_ACCESS_PROMPT
+                    : options.scenario === HOME_HOTPATH_GREETING_SCENARIO
+                      ? GREETING_PROMPT
+                      : NEWS_PROMPT),
     sessionId: SESSION_ID,
     threadId: THREAD_ID,
     workspaceId: null,
@@ -575,6 +598,7 @@ async function run() {
     inputbarPendingSteerPopFrontRichBackendTurnStart: null,
     inputbarPendingSteerPopFrontReadModelAfterResume: null,
     inputbarPendingSteerPopFrontGuiHydrated: null,
+    homeHotpath: null,
     continueInputSend: null,
     guiContinueCompleted: null,
     planModeEnabled: null,
@@ -772,7 +796,7 @@ async function run() {
         LIME_REAL_API_TEST: "0",
         LIME_ELECTRON_E2E: "1",
         LIME_ELECTRON_BRAND_DEV_APP: "0",
-        LIME_ELECTRON_CLEAR_RENDERER_CACHE: "0",
+        LIME_ELECTRON_CLEAR_RENDERER_CACHE: "1",
         LIME_ELECTRON_DEV_HTTP_BRIDGE: "0",
         ...(options.cdpPort
           ? {

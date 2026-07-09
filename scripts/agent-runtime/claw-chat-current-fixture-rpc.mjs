@@ -779,7 +779,11 @@ export async function bindGuiWorkspaceAndModelPreferences(
       const providerKey = `agent_pref_provider_${workspaceId}`;
       const modelKey = `agent_pref_model_${workspaceId}`;
       const migratedKey = `agent_pref_migrated_${workspaceId}`;
+      const globalProviderKey = "agent_pref_provider_global";
+      const globalModelKey = "agent_pref_model_global";
+      const globalMigratedKey = "agent_pref_migrated_global";
       const sessionProviderKey = `agent_topic_model_pref_${workspaceId}_${sessionId}`;
+      const globalSessionProviderKey = `agent_topic_model_pref_global_${sessionId}`;
       const sessionWorkspaceKey = `agent_session_workspace_${sessionId}`;
       const lastProjectKey = "agent_last_project_id";
       const openedProjectIdsKey = "agent_opened_project_ids";
@@ -812,8 +816,15 @@ export async function bindGuiWorkspaceAndModelPreferences(
       window.localStorage.setItem(providerKey, JSON.stringify(provider));
       window.localStorage.setItem(modelKey, JSON.stringify(model));
       window.localStorage.setItem(migratedKey, JSON.stringify(true));
+      window.localStorage.setItem(globalProviderKey, JSON.stringify(provider));
+      window.localStorage.setItem(globalModelKey, JSON.stringify(model));
+      window.localStorage.setItem(globalMigratedKey, JSON.stringify(true));
       window.localStorage.setItem(
         sessionProviderKey,
+        JSON.stringify({ providerType: provider, model }),
+      );
+      window.localStorage.setItem(
+        globalSessionProviderKey,
         JSON.stringify({ providerType: provider, model }),
       );
       window.localStorage.setItem(
@@ -850,7 +861,12 @@ export async function bindGuiWorkspaceAndModelPreferences(
         openedProjects: window.localStorage.getItem(openedProjectIdsKey),
         provider: window.localStorage.getItem(providerKey),
         model: window.localStorage.getItem(modelKey),
+        globalProvider: window.localStorage.getItem(globalProviderKey),
+        globalModel: window.localStorage.getItem(globalModelKey),
         sessionProvider: window.localStorage.getItem(sessionProviderKey),
+        globalSessionProvider: window.localStorage.getItem(
+          globalSessionProviderKey,
+        ),
         sessionWorkspace: window.localStorage.getItem(sessionWorkspaceKey),
       };
     },

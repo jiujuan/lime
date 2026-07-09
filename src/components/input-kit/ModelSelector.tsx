@@ -174,6 +174,7 @@ export interface ModelSelectorProps {
     provider: ConfiguredProvider,
   ) => boolean;
   getFallbackModels?: (provider: ConfiguredProvider) => EnhancedModelMetadata[];
+  preserveUnknownModelSelection?: boolean;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
 }
@@ -201,6 +202,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   providerFilter,
   modelFilter,
   getFallbackModels,
+  preserveUnknownModelSelection = false,
   emptyStateTitle,
   emptyStateDescription,
 }) => {
@@ -431,6 +433,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       ) ?? null,
     [model, modelOptions],
   );
+  const selectedModelKnownOption = useMemo(
+    () => modelOptions.find((item) => item.id === model) ?? null,
+    [model, modelOptions],
+  );
   const selectedReasoningEffortLevels = useMemo(
     () => resolveApiReasoningEffortLevels(selectedModelOption?.metadata),
     [selectedModelOption?.metadata],
@@ -446,6 +452,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   useEffect(() => {
     if (!setReasoningEffort) {
+      return;
+    }
+    if (!shouldLoadModels) {
       return;
     }
 
@@ -472,6 +481,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     selectedModelOption,
     selectedReasoningEffortLevels,
     setReasoningEffort,
+    shouldLoadModels,
   ]);
   useEffect(() => {
     if (hasInitialized.current) return;
@@ -514,9 +524,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     if (allowAutoModel || suppressAutoSelection) return;
 
     const currentModel = modelRef.current;
+    const currentModelKnownButIncompatible = Boolean(
+      currentModel &&
+        selectedModelKnownOption?.id === currentModel &&
+        selectedModelKnownOption.compatibilityIssue,
+    );
+    const currentModelMissingFromOptions = Boolean(
+      currentModel && !selectedModelKnownOption,
+    );
     if (
       currentModels.length > 0 &&
-      (!currentModel || !currentModels.includes(currentModel))
+      (!currentModel ||
+        currentModelKnownButIncompatible ||
+        (currentModelMissingFromOptions && !preserveUnknownModelSelection))
     ) {
       setModel(currentModels[0]);
     }
@@ -524,7 +544,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     allowAutoModel,
     currentModels,
     modelsLoading,
+    preserveUnknownModelSelection,
     selectedProvider,
+    selectedModelKnownOption,
     selectedProviderBlocksModelLoad,
     setModel,
     shouldLoadModels,

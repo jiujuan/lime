@@ -20,6 +20,7 @@ export type StreamingProcessEntry =
       kind: "tool";
       id: string;
       toolCall: ToolCallState;
+      metadata?: Record<string, unknown>;
     }
   | {
       kind: "action";

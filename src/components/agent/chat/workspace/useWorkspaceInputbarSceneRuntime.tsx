@@ -424,6 +424,8 @@ function useWorkspaceInputbarScenePresentationRuntime({
         {soulArtifactVoiceAccessory}
       </InputbarOverlayAccessoryStack>
     ) : undefined;
+  // Runtime permission gates are stricter than plan confirmation: if both
+  // exist, approval owns the input area until the current request is submitted.
   const inputbarNode = inputbarPresentation.approvalAccessory ? (
     <InputbarControlReplacement data-testid="inputbar-approval-replacement">
       {inputbarPresentation.approvalAccessory}

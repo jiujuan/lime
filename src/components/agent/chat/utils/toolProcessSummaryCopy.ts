@@ -42,11 +42,15 @@ export function buildVisionToolSummary(
   normalizedName: string,
   subject: string | null,
 ): string | null {
-  const normalizedSubject = normalizeNarrativeSubject(subject);
-  const key =
-    normalizedName === "viewimage"
-      ? "toolCall.processSummary.vision.view"
-      : "toolCall.processSummary.vision.analyze";
+  if (normalizedName !== "viewimage") {
+    return null;
+  }
 
-  return resolvePhasedProcessSummaryCopy(key, phase, normalizedSubject);
+  const normalizedSubject = normalizeNarrativeSubject(subject);
+
+  return resolvePhasedProcessSummaryCopy(
+    "toolCall.processSummary.vision.view",
+    phase,
+    normalizedSubject,
+  );
 }

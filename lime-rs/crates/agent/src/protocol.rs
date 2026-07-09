@@ -1,4 +1,4 @@
-use agent_protocol::provider_trace::ProviderTraceStage;
+use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceStage};
 use agent_protocol::turn_context::TurnOutputSchemaRuntime;
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadTurn};
 use serde::{Deserialize, Serialize};
@@ -236,6 +236,7 @@ pub enum TextDeltaBatchBoundary {
 }
 
 pub type AgentProviderTraceStage = ProviderTraceStage;
+pub type AgentProviderTraceEvent = ProviderTraceEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -359,35 +360,8 @@ pub enum AgentEvent {
 
     #[serde(rename = "provider_trace")]
     ProviderTrace {
-        stage: AgentProviderTraceStage,
-        provider: String,
-        model: String,
-        attempt: u32,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        elapsed_ms: Option<u64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        text_chars: Option<usize>,
-        status: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        failure_category: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        retryable: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        non_retryable_provider_rejection: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        cancel_reason: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provider_request_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provider_request_id_header: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        runtime_provider_backend: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        runtime_provider_selector: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        runtime_provider_protocol: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        runtime_provider_active_model: Option<String>,
+        #[serde(flatten)]
+        event: AgentProviderTraceEvent,
     },
 
     #[serde(rename = "provider_stream_event")]

@@ -8,7 +8,8 @@ import {
   type MountedRoot,
 } from "./test-utils";
 
-const { mockUseApiKeyProvider } = vi.hoisted(() => ({
+const { mockRefreshProviders, mockUseApiKeyProvider } = vi.hoisted(() => ({
+  mockRefreshProviders: vi.fn(async () => undefined),
   mockUseApiKeyProvider: vi.fn(),
 }));
 
@@ -156,12 +157,13 @@ async function waitForReady(harness: HookHarness, timeout = 40): Promise<void> {
 
 beforeEach(() => {
   setReactActEnvironment();
+  mockRefreshProviders.mockClear();
   const providers = createImageProviders();
   mockUseApiKeyProvider.mockImplementation(
     (options?: { autoLoad?: boolean }) => ({
       providers: options?.autoLoad === false ? [] : providers,
       loading: false,
-      refresh: vi.fn(async () => undefined),
+      refresh: mockRefreshProviders,
     }),
   );
 });
@@ -240,7 +242,7 @@ describe("useImageGen 项目偏好", () => {
       (options?: { autoLoad?: boolean }) => ({
         providers: options?.autoLoad === false ? [] : providers,
         loading: false,
-        refresh: vi.fn(async () => undefined),
+        refresh: mockRefreshProviders,
       }),
     );
     const harness = mountHookWithOptions({});
@@ -287,6 +289,29 @@ describe("useImageGen 项目偏好", () => {
       await flushEffects();
     });
 
+    expect(mockRefreshProviders).toHaveBeenCalledTimes(1);
+    expect(mockUseApiKeyProvider).toHaveBeenLastCalledWith({
+      autoLoad: true,
+    });
+  });
+
+  it("显式请求 Provider 加载时应强制刷新 Provider 列表", async () => {
+    const harness = mountHookWithOptions({
+      providerLoadMode: "deferred",
+    });
+
+    await act(async () => {
+      await flushEffects();
+    });
+
+    expect(mockRefreshProviders).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await harness.getValue().ensureProvidersLoaded();
+      await flushEffects();
+    });
+
+    expect(mockRefreshProviders).toHaveBeenCalledTimes(1);
     expect(mockUseApiKeyProvider).toHaveBeenLastCalledWith({
       autoLoad: true,
     });

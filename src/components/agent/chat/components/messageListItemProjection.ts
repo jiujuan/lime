@@ -633,7 +633,20 @@ export function resolveMessageListItemProjection({
     shouldFlattenHistoricalAssistantContent
       ? undefined
       : runtimeFailureTextContentParts || rendererConversationContentParts;
+  const rendererHasProvenanceThinkingContentPart = Boolean(
+    rendererContentParts?.some(
+      (part) =>
+        part.type === "thinking" &&
+        part.text.trim().length > 0 &&
+        (part.metadata?.source ||
+          part.metadata?.threadItemId ||
+          part.metadata?.turnId ||
+          typeof part.metadata?.sequence === "number"),
+    ),
+  );
   const rendererThinkingContent = shouldCollapseLongHistoricalMessage
+    ? undefined
+    : rendererHasProvenanceThinkingContentPart
     ? undefined
     : conversationThinkingContent;
   const rendererToolCalls =

@@ -258,7 +258,9 @@ export class ElectronAppServerHost {
 
   async #start(): Promise<ConnectedAppServerSidecar> {
     const launchConfig = await resolveLaunchConfig();
-    const sidecarEnv = await resolveAppServerSidecarEnv();
+    const sidecarEnv = await resolveAppServerSidecarEnv(
+      launchConfig.config.binaryPath,
+    );
     const initializeParams: InitializeParams = {
       clientInfo: {
         name: "lime_desktop_electron",
@@ -652,10 +654,13 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
   };
 }
 
-async function resolveAppServerSidecarEnv(): Promise<
+async function resolveAppServerSidecarEnv(
+  binaryPath: string,
+): Promise<
   NodeJS.ProcessEnv | undefined
 > {
-  const env: NodeJS.ProcessEnv = {};
+  const env: NodeJS.ProcessEnv =
+    resolveAppServerRuntimeLibraryEnv(binaryPath);
   const currentNoProxy = APP_SERVER_NO_PROXY_ENV_KEYS.map(
     (key) => process.env[key],
   ).find((value) => Boolean(value?.trim()));
@@ -677,6 +682,72 @@ async function resolveAppServerSidecarEnv(): Promise<
   }
 
   return Object.keys(env).length > 0 ? env : undefined;
+}
+
+function resolveAppServerRuntimeLibraryEnv(
+  binaryPath: string,
+): NodeJS.ProcessEnv {
+  const binaryDir = path.dirname(binaryPath);
+  if (!binaryDir || binaryDir === ".") {
+    return {};
+  }
+
+  if (process.platform === "darwin") {
+    return {
+      DYLD_FALLBACK_LIBRARY_PATH: prependPathEnv(
+        process.env.DYLD_FALLBACK_LIBRARY_PATH,
+        [binaryDir],
+      ),
+      DYLD_LIBRARY_PATH: prependPathEnv(process.env.DYLD_LIBRARY_PATH, [
+        binaryDir,
+      ]),
+    };
+  }
+
+  if (process.platform === "linux") {
+    return {
+      LD_LIBRARY_PATH: prependPathEnv(process.env.LD_LIBRARY_PATH, [
+        binaryDir,
+      ]),
+    };
+  }
+
+  if (process.platform === "win32") {
+    return {
+      PATH: prependPathEnv(process.env.PATH, [binaryDir]),
+    };
+  }
+
+  return {};
+}
+
+function prependPathEnv(
+  currentValue: string | undefined,
+  entries: string[],
+): string {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  const remember = (entry: string | undefined) => {
+    const trimmed = entry?.trim();
+    if (!trimmed) {
+      return;
+    }
+    const key =
+      process.platform === "win32" ? trimmed.toLowerCase() : trimmed;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    result.push(trimmed);
+  };
+
+  for (const entry of entries) {
+    remember(entry);
+  }
+  for (const entry of currentValue?.split(path.delimiter) ?? []) {
+    remember(entry);
+  }
+  return result.join(path.delimiter);
 }
 
 function hasExplicitProxyEnv(env: NodeJS.ProcessEnv): boolean {

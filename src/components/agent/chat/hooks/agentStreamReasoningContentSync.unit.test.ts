@@ -213,4 +213,43 @@ describe("agentStreamReasoningContentSync", () => {
       }),
     ]);
   });
+
+  it("持久化 reasoning 应接管同轮同文本的临时 thinking part", () => {
+    const messages = applyReasoningSync({
+      messages: [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "",
+          timestamp: new Date("2026-06-22T10:00:00.000Z"),
+          runtimeTurnId: "turn-1",
+          thinkingContent: "搜索结果还需要继续筛掉广告软文。",
+          contentParts: [
+            {
+              type: "thinking",
+              text: "搜索结果还需要继续筛掉广告软文。",
+            },
+            { type: "text", text: "最终正文。" },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "thinking",
+        text: "搜索结果还需要继续筛掉广告软文。",
+        metadata: expect.objectContaining({
+          source: "thread_item_reasoning",
+          threadItemId: "reasoning-1",
+          sequence: 3,
+          turnId: "turn-1",
+        }),
+      }),
+      { type: "text", text: "最终正文。" },
+    ]);
+    expect(
+      messages[0]?.contentParts?.filter((part) => part.type === "thinking"),
+    ).toHaveLength(1);
+  });
 });

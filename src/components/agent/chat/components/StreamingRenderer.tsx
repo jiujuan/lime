@@ -5,7 +5,7 @@
  * Requirements: 9.3, 9.4
  */
 
-import React, { memo, useMemo, useEffect, useRef } from "react";
+import React, { memo, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import type { MarkdownRenderMode } from "./MarkdownRenderer";
@@ -48,14 +48,11 @@ import {
 import { orderStreamingContentPartsForDisplay } from "./streamingContentPartOrder";
 import { coalesceAdjacentDisplayContentParts } from "./streamingContentPartSegments";
 import { StreamingCursor, StreamingText } from "./StreamingText";
-import { StreamingWriteFileCard } from "./StreamingWriteFileCard";
 import {
   EMPTY_PARSE_RESULT,
   getCachedStructuredParse,
   hasStructuredContentHint,
-  isWriteFileMessagePart,
   STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS,
-  type WriteFileMessagePart,
 } from "./StreamingStructuredContent";
 import {
   isActiveRuntimeStatus,
@@ -147,7 +144,6 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     a2uiInitialFormData,
     onA2UIFormChange,
     renderA2UIInline = true,
-    onWriteFile,
     onFileClick,
     fileChangesUndoSessionId,
     onOpenSavedSiteContent,
@@ -235,7 +231,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         ? debouncedVisibleText
         : visibleText;
 
-    // 解析 A2UI 和 write_file 内容
+    // 解析 A2UI 内容
     const parsedContent = useMemo(() => {
       if (useInterleavedMode) {
         return EMPTY_PARSE_RESULT;
@@ -261,90 +257,6 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         return getCachedStructuredParse(parseCacheRef, part.text, isStreaming);
       });
     }, [interleavedContentParts, isStreaming, useInterleavedMode]);
-
-    // 处理文件写入 - 使用 ref 追踪同一路径的最新阶段与内容签名
-    const processedWriteFilesRef = useRef<Map<string, string>>(new Map());
-
-    const emitWriteFile = React.useCallback(
-      (part: ParsedMessageContent, signatureKey: string) => {
-        if (
-          !onWriteFile ||
-          (part.type !== "write_file" && part.type !== "pending_write_file") ||
-          !part.filePath
-        ) {
-          return;
-        }
-
-        const contentValue =
-          typeof part.content === "string" ? part.content : "";
-        const signature = `${part.type}:${signatureKey}:${contentValue}`;
-        const previousSignature = processedWriteFilesRef.current.get(
-          part.filePath,
-        );
-        if (previousSignature === signature) {
-          return;
-        }
-
-        processedWriteFilesRef.current.set(part.filePath, signature);
-        const metadata: WriteArtifactContext["metadata"] = {
-          writePhase:
-            part.type === "pending_write_file"
-              ? "streaming"
-              : isStreaming
-                ? "streaming"
-                : "completed",
-          previewText: contentValue.trim()
-            ? contentValue.slice(0, 480).trim()
-            : undefined,
-          latestChunk: contentValue.trim()
-            ? contentValue.slice(-240).trim()
-            : undefined,
-          isPartial: part.type === "pending_write_file" || isStreaming,
-          lastUpdateSource: "message_content",
-        };
-
-        onWriteFile(contentValue, part.filePath, {
-          source: "message_content",
-          status:
-            part.type === "pending_write_file" || isStreaming
-              ? "streaming"
-              : "complete",
-          metadata,
-        });
-      },
-      [isStreaming, onWriteFile],
-    );
-
-    useEffect(() => {
-      if (!onWriteFile) return;
-
-      const writeCandidates = useInterleavedMode
-        ? interleavedParsedContent.flatMap((parsed, index) =>
-            parsed.parts.map((part, partIndex) => ({
-              part,
-              signatureKey: `interleaved:${index}:${partIndex}`,
-            })),
-          )
-        : parsedContent.parts.map((part, index) => ({
-            part,
-            signatureKey: `standard:${index}`,
-          }));
-
-      for (const candidate of writeCandidates) {
-        if (
-          candidate.part.type === "write_file" ||
-          candidate.part.type === "pending_write_file"
-        ) {
-          emitWriteFile(candidate.part, candidate.signatureKey);
-        }
-      }
-    }, [
-      emitWriteFile,
-      interleavedParsedContent,
-      onWriteFile,
-      parsedContent.parts,
-      useInterleavedMode,
-    ]);
 
     // 使用外部提供的思考内容或解析出的内容
     const finalThinking = suppressProcessFlow
@@ -372,18 +284,6 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
 
     // 判断是否显示光标
     const shouldShowCursor = isStreaming && showCursor && !hasRunningTools;
-
-    const renderWriteFileIndicator = React.useCallback(
-      (part: WriteFileMessagePart, key: string) => (
-        <StreamingWriteFileCard
-          key={key}
-          part={part}
-          isStreaming={isStreaming}
-          onFileClick={onFileClick}
-        />
-      ),
-      [isStreaming, onFileClick],
-    );
 
     const renderProcessRun = React.useCallback(
       (
@@ -453,12 +353,6 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               );
             }
 
-            case "write_file":
-            case "pending_write_file":
-              return isWriteFileMessagePart(part)
-                ? renderWriteFileIndicator(part, `${keyPrefix}-write-${index}`)
-                : null;
-
             case "pending_a2ui":
               if (!renderA2UIInline) {
                 return null;
@@ -520,7 +414,6 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         markdownRenderMode,
         renderA2UIInline,
         renderProposedPlanBlocks,
-        renderWriteFileIndicator,
         readOnlyA2UI,
         showContentBlockActions,
         shouldCollapseCodeBlock,
@@ -729,6 +622,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             kind: "tool",
             id: part.toolCall.id,
             toolCall: part.toolCall,
+            metadata: part.metadata,
           };
           const shouldSplitBeforeTool = shouldSplitProcessBeforeEntry(
             processBuffer,
@@ -949,7 +843,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       >
         {fallbackProcessNode}
 
-        {/* 解析后的内容区域（包括 A2UI、write_file、普通文本） */}
+        {/* 解析后的内容区域（包括 A2UI、普通文本） */}
         {shouldRenderRuntimePeerCards ? (
           <RuntimePeerMessageCards text={runtimePeerSourceText} />
         ) : (

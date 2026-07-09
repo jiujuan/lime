@@ -4,7 +4,10 @@ use crate::safety::{
     ProviderSafetyBufferingRetryModelSource, SAFETY_BUFFERING_ENABLED_HEADER,
     SAFETY_BUFFERING_FASTER_MODEL_HEADER,
 };
+use agent_protocol::provider_trace::ProviderTraceEvent;
 use serde_json::json;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
 
 fn runtime_config() -> RuntimeProviderConfig {
     RuntimeProviderConfig {
@@ -41,6 +44,72 @@ fn provider_handle_projects_runtime_config_without_provider_trait() {
         Some(ModelProviderProtocol::Responses)
     );
     assert!(handle.capabilities.supports_streaming);
+}
+
+#[test]
+fn provider_handle_projects_provider_trace_metadata_without_provider_trait() {
+    let handle = RuntimeReplyProviderHandle::from_config(
+        &runtime_config(),
+        RuntimeProviderBackend::AsterCompat,
+    )
+    .with_capabilities(RuntimeReplyProviderCapabilities {
+        supports_streaming: true,
+        supports_embeddings: false,
+        active_model_name: Some("gpt-5.3-codex-active".to_string()),
+    });
+    let mut event = ProviderTraceEvent::request_started("", "", 1);
+
+    apply_runtime_provider_metadata(&mut event, Some(&handle));
+
+    assert_eq!(event.provider, "openai");
+    assert_eq!(event.model, "gpt-5.3-codex");
+    assert_eq!(
+        event.runtime_provider_backend.as_deref(),
+        Some("aster_compat")
+    );
+    assert_eq!(event.runtime_provider_selector.as_deref(), Some("codex"));
+    assert_eq!(
+        event.runtime_provider_protocol.as_deref(),
+        Some("responses")
+    );
+    assert_eq!(
+        event.runtime_provider_active_model.as_deref(),
+        Some("gpt-5.3-codex-active")
+    );
+}
+
+#[test]
+fn provider_trace_metadata_keeps_existing_provider_and_model() {
+    let handle = RuntimeReplyProviderHandle::from_config(
+        &runtime_config(),
+        RuntimeProviderBackend::AsterCompat,
+    );
+    let mut event = ProviderTraceEvent::request_started("anthropic", "claude", 1);
+
+    handle
+        .provider_trace_metadata()
+        .apply_to_provider_trace_event(&mut event);
+
+    assert_eq!(event.provider, "anthropic");
+    assert_eq!(event.model, "claude");
+    assert_eq!(
+        event.runtime_provider_backend.as_deref(),
+        Some("aster_compat")
+    );
+}
+
+#[test]
+fn provider_binding_keeps_handle_with_backend_without_provider_trait_object() {
+    let handle =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current);
+    let binding = RuntimeReplyProviderBinding::new(handle.clone(), "backend-marker".to_string());
+
+    assert_eq!(binding.handle(), &handle);
+    assert_eq!(binding.backend(), "backend-marker");
+
+    let (actual_handle, backend) = binding.into_parts();
+    assert_eq!(actual_handle, handle);
+    assert_eq!(backend, "backend-marker");
 }
 
 #[test]
@@ -136,6 +205,132 @@ fn provider_stream_start_rejects_mismatched_handle() {
     assert!(error.message.contains("Provider stream handle mismatch"));
     assert!(error.message.contains("openai/gpt-5.3-codex"));
     assert!(error.message.contains("anthropic/claude-sonnet-4.5"));
+}
+
+#[derive(Clone)]
+struct RecordingSourceBackend;
+
+struct RecordingExecutionRunner {
+    prefix: String,
+}
+
+impl RuntimeReplyProviderSourceBackend<String> for RecordingSourceBackend {
+    type Stream<'a>
+        = String
+    where
+        Self: 'a,
+        String: 'a;
+    type Error = std::convert::Infallible;
+
+    fn stream_reply<'a>(
+        self,
+        call: RuntimeReplyProviderSourceBackendCall<String>,
+    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
+    where
+        Self: Sized + Send + 'a,
+        String: Send + 'a,
+    {
+        Box::pin(async move { Ok(format!("source:{}", call.into_source_request())) })
+    }
+}
+
+impl RuntimeReplyProviderExecutionRunner<String> for RecordingExecutionRunner {
+    type Stream<'a>
+        = String
+    where
+        Self: 'a;
+    type Error = std::convert::Infallible;
+
+    fn run_execution<'a>(
+        self,
+        request: String,
+    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
+    where
+        Self: Sized + Send + 'a,
+        String: Send + 'a,
+    {
+        Box::pin(async move { Ok(format!("{}:{request}", self.prefix)) })
+    }
+}
+
+struct NoopWaker;
+
+impl Wake for NoopWaker {
+    fn wake(self: Arc<Self>) {}
+}
+
+fn block_on_ready<F: std::future::Future>(future: F) -> F::Output {
+    let waker = Waker::from(Arc::new(NoopWaker));
+    let mut context = Context::from_waker(&waker);
+    let mut future = Box::pin(future);
+    match future.as_mut().poll(&mut context) {
+        Poll::Ready(output) => output,
+        Poll::Pending => panic!("test future should complete without parking"),
+    }
+}
+
+#[test]
+fn provider_source_backend_contract_runs_without_provider_trait_object() {
+    let call = RuntimeReplyProviderSourceBackendCall::new("payload".to_string());
+    assert_eq!(call.source_request(), "payload");
+
+    let output =
+        block_on_ready(RecordingSourceBackend.stream_reply(call)).expect("source backend stream");
+
+    assert_eq!(output, "source:payload");
+}
+
+#[test]
+fn provider_execution_source_wrapper_runs_without_provider_trait_object() {
+    let call = RuntimeReplyProviderSourceBackendCall::new("payload".to_string());
+    let source = RuntimeReplyProviderExecutionSource::new(RecordingExecutionRunner {
+        prefix: "runner".to_string(),
+    });
+
+    let output = block_on_ready(source.stream_reply(call)).expect("execution source output");
+
+    assert_eq!(output, "runner:payload");
+}
+
+#[test]
+fn provider_stream_poll_contract_carries_cancel_wait_rule() {
+    assert_eq!(
+        provider_stream_cancel_poll_interval(true),
+        Some(PROVIDER_STREAM_CANCEL_POLL_INTERVAL)
+    );
+    assert_eq!(provider_stream_cancel_poll_interval(false), None);
+    assert_eq!(
+        provider_stream_timeout_poll(false),
+        ProviderStreamPoll::Pending
+    );
+    assert_eq!(
+        provider_stream_timeout_poll(true),
+        ProviderStreamPoll::Canceled(ProviderStreamCancelReason::WhileWaiting)
+    );
+    assert_eq!(
+        ProviderStreamCancelReason::WhileWaiting.as_str(),
+        PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON
+    );
+}
+
+#[test]
+fn provider_stream_poll_contract_classifies_event_boundary_cancel() {
+    assert_eq!(
+        provider_stream_event_poll::<u8>(None, false),
+        ProviderStreamPoll::End
+    );
+    assert_eq!(
+        provider_stream_event_poll(Some(7_u8), false),
+        ProviderStreamPoll::Item(7)
+    );
+    assert_eq!(
+        provider_stream_event_poll(Some(7_u8), true),
+        ProviderStreamPoll::Canceled(ProviderStreamCancelReason::BeforeEventProcessing)
+    );
+    assert_eq!(
+        ProviderStreamCancelReason::BeforeEventProcessing.as_str(),
+        PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON
+    );
 }
 
 #[test]

@@ -22,6 +22,7 @@ Aster 迁移的判定口径固定为 **Codex 有则迁，Codex 没有则删**：
 - 先对照 `/Users/coso/Documents/dev/rust/codex` 的 current 工具面、runtime crate 分层、Thread / Turn / Item 归属和命名；不要只看 Lime 当前有没有用上，也不要只看 Aster 框架本身有没有价值。
 - Codex 有的能力必须迁入 Lime current owner，并让 App Server、前端 GUI、Evidence / replay / analysis 或运行时主链至少一条真实消费链用起来；只搬 DTO、只留 wrapper、只写计划都不算迁移完成。
 - Codex 没有的 Aster-only 能力默认判为 `dead / deleted / forbidden-to-restore`，同轮清理 vendor 实现、tool catalog、前端 normalization/display/summary、测试正向断言和文档 active checklist；不得因为“以后可能有用”保留 root `aster` dependency 或 compat 壳。
+- `agent-compat` 只能作为待迁出 staging / compat blocker，不是 current owner，也不是迁移完成态；其中任何仍被生产命中的文件都必须继续迁到 Lime current owner，或在 Codex 无对应能力时删除。禁止为了让旧 reply loop、provider、tool、session 或 event source 继续运行而给 `agent-compat` 补新 owner 依赖或新增业务逻辑。`agent-compat` 现存指向 Lime current owner 的依赖只允许作为 burn-down allowlist，退出条件是迁出对应调用并删除依赖，不得扩张成反向承接层。
 - `sleep` 这类同名能力必须按 Codex 语义重建：Codex current 是 `clock.sleep` / `sleep` 风格的 duration tool，不是 Aster `SleepTool` 的旧 proactive / Kairos 语义；实现和文档必须区分。
 - 命名要优雅、短、领域化。优先继承 Codex / Aster 中清晰的领域词，如 `apply_patch`、`web_search`、`tool_search`、`view_image`、`update_plan`；避免把 `lime_*`、`aster_*`、`agent_runtime_*` 或冗长历史词带进 current API。`Tool` / `*Tool` 这类实现后缀只允许作为历史 alias、测试夹具或退场 adapter，不能作为新 current API 命名。Aster 可以作为命名品味参考，不是实现事实源。
 

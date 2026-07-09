@@ -159,7 +159,10 @@ export const INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO =
   "inputbar-pending-steer-multi-queue";
 export const INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO =
   "inputbar-pending-steer-pop-front-resume";
+export const HOME_HOTPATH_SCENARIO = "home-hotpath";
+export const HOME_HOTPATH_GREETING_SCENARIO = "home-hotpath-greeting";
 export const NEWS_PROMPT = "整理今天的国际新闻";
+export const GREETING_PROMPT = "你好";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
 export const GOAL_PROMPT = "本周完成 Goal E2E 修复";
@@ -185,6 +188,8 @@ export const INPUTBAR_RICH_RESTORE_SKILL_NAME = "Capability Report";
 export const WEB_TOOLS_RENDERING_PROMPT = "验证网页搜索渲染";
 export const MCP_STRUCTURED_CONTENT_PROMPT = "验证 MCP structuredContent 展示";
 export const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
+export const GREETING_DONE_TEXT = "CLAW_GREETING_FIXTURE_DONE";
+export const GREETING_SUMMARY_TEXT = "你好，我在，可以继续说需求";
 export const INPUTBAR_RICH_RESTORE_FORBIDDEN_ASSISTANT_TEXT =
   "CLAW_INPUTBAR_RICH_RESTORE_DONE";
 export const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
@@ -237,7 +242,11 @@ export const LIVE_TAIL_COMMIT_DONE_TEXT = "LIVE_TAIL_COMMIT_DONE";
 export const APPROVAL_REQUEST_RESUME_SCENARIO = "approval-request-resume";
 export const APPROVAL_REQUEST_DECLINE_SCENARIO = "approval-request-decline";
 export const APPROVAL_REQUEST_CANCEL_SCENARIO = "approval-request-cancel";
+export const APPROVAL_REQUEST_FULL_ACCESS_SCENARIO =
+  "approval-request-full-access";
 export const APPROVAL_REQUEST_RESUME_PROMPT = "验证审批请求 hydrate 后允许继续";
+export const APPROVAL_REQUEST_FULL_ACCESS_PROMPT =
+  "验证完全授权不会显示审批记录";
 export const APPROVAL_REQUEST_RESUME_SECOND_PROMPT =
   "@浏览器 打开 https://example.com/approval-session-cache 并确认页面标题";
 export const APPROVAL_REQUEST_RESUME_SECOND_PROMPT_MARKER =
@@ -250,6 +259,10 @@ export const APPROVAL_REQUEST_RESUME_APPROVAL_PROMPT =
 export const APPROVAL_REQUEST_RESUME_RESULT_TEXT =
   "approval resume fixture 已经通过 action/respond 继续。";
 export const APPROVAL_REQUEST_RESUME_DONE_TEXT = "APPROVAL_REQUEST_RESUME_DONE";
+export const APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT =
+  "full-access fixture 没有生成任何审批记录。";
+export const APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT =
+  "APPROVAL_REQUEST_FULL_ACCESS_DONE";
 export const APPROVAL_REQUEST_DECLINE_RESULT_TEXT =
   "approval decline fixture 已拒绝当前浏览器动作，并改用无浏览器路径继续。";
 export const APPROVAL_REQUEST_DECLINE_DONE_TEXT =
@@ -513,6 +526,18 @@ export const APPROVAL_REQUEST_DECISION_ASSERTION_KEYS = [
   "guiApprovalRequestCancelCompleted",
   "readModelApprovalRequestCancelCanceled",
   "approvalRequestDecisionNoLegacyRuntimeRespond",
+];
+export const APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS = [
+  "approvalRequestFullAccessPromptReachedBackend",
+  "approvalRequestFullAccessUsesFullAccessPolicy",
+  "guiApprovalRequestFullAccessInputSubmitted",
+  "guiApprovalRequestFullAccessCompleted",
+  "guiApprovalRequestFullAccessNoApprovalPrompt",
+  "guiApprovalRequestFullAccessNoApprovalRecord",
+  "readModelApprovalRequestFullAccessCompleted",
+  "readModelApprovalRequestFullAccessNoApprovalRequest",
+  "approvalRequestFullAccessNoActionRespond",
+  "approvalRequestFullAccessNoLegacyRuntimeRespond",
 ];
 export const TERMINAL_STALE_GUARD_ASSERTION_KEYS = [
   "terminalStaleGuardFirstPromptReachedBackend",

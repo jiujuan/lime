@@ -1,10 +1,13 @@
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use tool_runtime::execution_approval::execution_approval_projection;
 use tool_runtime::execution_process::ExecutionOutputDelta;
 use tool_runtime::tool_batch::{
     PlannedToolExecution, ToolExecutionOutcome, ToolTerminalEventUpdate,
 };
+
+const TOOL_CONFIRMATION_ACTION_TYPE: &str = "tool_confirmation";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolExecutionLifecycleState {
@@ -204,13 +207,24 @@ impl ToolApprovalActionSnapshot {
     }
 
     pub fn into_action_required_event(self) -> RuntimeAgentEvent {
+        let approval = execution_approval_projection(&self.tool_name, &self.metadata);
         RuntimeAgentEvent::ActionRequired {
             request_id: self.request_id,
-            action_type: "tool_confirmation".to_string(),
+            action_type: TOOL_CONFIRMATION_ACTION_TYPE.to_string(),
             data: json!({
                 "toolCallId": self.tool_id,
                 "toolName": self.tool_name,
-                "actionType": "tool_confirmation",
+                "toolFamily": approval.tool_family.clone(),
+                "tool_family": approval.tool_family.clone(),
+                "actionType": TOOL_CONFIRMATION_ACTION_TYPE,
+                "actionKind": approval.action_kind.clone(),
+                "action_kind": approval.action_kind,
+                "availableDecisions": approval.available_decisions,
+                "runtime_contract": approval.runtime_contract.clone(),
+                "contractKey": approval.contract_key.clone(),
+                "contract_key": approval.contract_key,
+                "approvalScope": approval.approval_scope.clone(),
+                "approval_scope": approval.approval_scope,
                 "reasonCode": self.metadata.get("reasonCode").cloned(),
                 "reason": self.metadata.get("reason").cloned(),
                 "command": self.metadata.get("command").cloned(),

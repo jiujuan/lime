@@ -9,6 +9,10 @@ struct IdleThenTextProvider {
     attempts: Arc<AtomicUsize>,
 }
 
+struct IdleTextThenIdleTextProvider {
+    attempts: Arc<AtomicUsize>,
+}
+
 #[async_trait]
 impl Provider for IdleThenTextProvider {
     fn metadata() -> ProviderMetadata
@@ -55,6 +59,64 @@ impl Provider for IdleThenTextProvider {
                     Some(ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default())),
                 );
             }
+        }))
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    fn get_model_config(&self) -> aster::model::ModelConfig {
+        aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+    }
+}
+
+#[async_trait]
+impl Provider for IdleTextThenIdleTextProvider {
+    fn metadata() -> ProviderMetadata
+    where
+        Self: Sized,
+    {
+        ProviderMetadata::empty()
+    }
+
+    fn get_name(&self) -> &str {
+        "idle-text-then-idle-text-provider"
+    }
+
+    async fn complete_with_model(
+        &self,
+        _model_config: &aster::model::ModelConfig,
+        _system: &str,
+        _messages: &[Message],
+        _tools: &[rmcp::model::Tool],
+    ) -> Result<(Message, ProviderUsage), ProviderError> {
+        Ok((
+            Message::assistant().with_text("非流式兜底不应被调用"),
+            ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default()),
+        ))
+    }
+
+    async fn stream(
+        &self,
+        _system: &str,
+        _messages: &[Message],
+        _tools: &[rmcp::model::Tool],
+    ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+        let attempt = self.attempts.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::pin(async_stream::try_stream! {
+            if attempt == 0 {
+                yield (
+                    Some(Message::assistant().with_text("你好，")),
+                    None,
+                );
+            } else {
+                yield (
+                    Some(Message::assistant().with_text("可以的。")),
+                    None,
+                );
+            }
+            std::future::pending::<()>().await;
         }))
     }
 
@@ -157,6 +219,52 @@ async fn stream_message_reply_with_policy_should_retry_provider_stream_idle_afte
 
     assert_eq!(attempts.load(Ordering::SeqCst), 2);
     assert_eq!(reply.text_output, "已完成搜索，最终摘要已补齐。");
+    assert!(runtime_events.iter().any(|event| matches!(
+        event,
+        RuntimeAgentEvent::RuntimeStatus { status }
+            if status.title == "正在恢复模型输出"
+    )));
+}
+
+#[tokio::test]
+async fn stream_message_reply_with_policy_should_complete_plain_text_when_retry_idle_tail() {
+    let (store, session) = create_test_session_store("lime-provider-idle-text-complete");
+    let agent = Agent::new().with_session_store(store.clone());
+    let attempts = Arc::new(AtomicUsize::new(0));
+    agent
+        .update_provider(
+            Arc::new(IdleTextThenIdleTextProvider {
+                attempts: attempts.clone(),
+            }),
+            &session.id,
+        )
+        .await
+        .expect("应配置测试 provider");
+
+    let session_config = test_session_config(&session.id, "turn-provider-idle-text-complete");
+    let policy = resolve_request_tool_policy(Some(false));
+    let mut runtime_events = Vec::new();
+    let reply_host = AsterReplyRuntimeHost::new(&agent);
+
+    let reply = stream_message_reply_with_policy_with_options(
+        &reply_host,
+        ReplyInput::text("你好").into(),
+        None,
+        session_config,
+        None,
+        &policy,
+        |event| runtime_events.push(event.clone()),
+        StreamReplyPolicyExecutionOptions {
+            provider_stream_idle_timeout: Some(PROVIDER_STREAM_IDLE_TIMEOUT),
+            persist_runtime_status: true,
+        },
+    )
+    .await
+    .expect("已有普通文本输出时 retry idle tail 不应把问候标成失败");
+
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    assert_eq!(reply.text_output, "你好，可以的。");
+    assert!(reply.emitted_any);
     assert!(runtime_events.iter().any(|event| matches!(
         event,
         RuntimeAgentEvent::RuntimeStatus { status }

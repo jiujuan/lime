@@ -102,22 +102,11 @@ describe("toolProcessSummary", () => {
         },
       }),
     );
-    const legacyAnalyzeNarrative = resolveToolProcessNarrative(
-      createToolCall({
-        name: "analyze_image",
-        status: "running",
-        arguments: JSON.stringify({
-          image_path: "/workspace/assets/chart.png",
-        }),
-      }),
-    );
-
     expect(runningNarrative.preSummary).toBe("先查看图片 sample.png");
     expect(runningNarrative.summary).toBe("先查看图片 sample.png");
     expect(completedNarrative.postSummary).toBe("已查看图片 sample.png");
     expect(completedNarrative.summary).toBe("已查看图片 sample.png");
     expect(completedNarrative.summary).not.toContain("Viewed image");
-    expect(legacyAnalyzeNarrative.preSummary).toBe("先分析图片 chart.png");
   });
 
   it("图片任务创建结果应显示任务状态文案而不是 raw JSON", () => {

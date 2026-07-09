@@ -842,14 +842,7 @@ fn projected_messages_from_rows(rows: Vec<ProjectedMessageRow>) -> Vec<Value> {
             continue;
         }
         flush_assistant_summaries_before(&mut messages, &mut assistant_by_turn, row.sequence);
-        messages.push(projected_message_value(
-            row.sequence,
-            "user",
-            row.turn_id,
-            projected_message_text(&row.payload),
-            row.created_at,
-            vec![row.event_id],
-        ));
+        messages.push(projected_user_message_value(row));
     }
     flush_all_assistant_summaries(&mut messages, &mut assistant_by_turn);
     messages.sort_by_key(|message| {
@@ -859,6 +852,63 @@ fn projected_messages_from_rows(rows: Vec<ProjectedMessageRow>) -> Vec<Value> {
             .unwrap_or(i64::MAX)
     });
     messages
+}
+
+fn projected_user_message_value(row: ProjectedMessageRow) -> Value {
+    let text = truncate_projection_summary_text(projected_message_text(&row.payload));
+    let source_event_id = row.event_id.clone();
+    let text_elements = projected_message_text_elements(&row.payload);
+    let attachments = projected_message_attachments(&row.payload);
+    let mut content = vec![serde_json::json!({
+        "type": "text",
+        "text": text,
+    })];
+    let mut text_content_values = vec![text.clone()];
+    for element in &text_elements {
+        let Some(element_text) = projected_text_element_text(element) else {
+            continue;
+        };
+        if text_content_values
+            .iter()
+            .any(|existing| existing.trim() == element_text.trim())
+        {
+            continue;
+        }
+        text_content_values.push(element_text.to_string());
+        content.push(element.clone());
+    }
+    for attachment in &attachments {
+        content.push(serde_json::json!({
+            "type": value_string(Some(attachment), &["kind", "type"]).unwrap_or_else(|| "attachment".to_string()),
+            "uri": attachment.get("uri").cloned().unwrap_or(Value::Null),
+            "metadata": attachment.get("metadata").cloned().unwrap_or(Value::Null),
+        }));
+    }
+    let mut message = serde_json::json!({
+        "id": row.sequence,
+        "role": "user",
+        "runtimeTurnId": row.turn_id,
+        "runtime_turn_id": row.turn_id,
+        "content": content,
+        "attachments": attachments,
+        "timestamp": super::timestamp_seconds(Some(row.created_at.as_str())),
+        "metadata": {
+            "source": "projection_summary",
+            "source_event_id": source_event_id,
+            "source_event_count": 1,
+            "truncated": true,
+        },
+    });
+    if !text_elements.is_empty() {
+        if let Some(message_object) = message.as_object_mut() {
+            message_object.insert(
+                "textElements".to_string(),
+                Value::Array(text_elements.clone()),
+            );
+            message_object.insert("text_elements".to_string(), Value::Array(text_elements));
+        }
+    }
+    message
 }
 
 fn flush_assistant_summaries_before(
@@ -973,6 +1023,34 @@ fn truncate_projection_summary_text(text: String) -> String {
         .collect::<String>();
     truncated.push('…');
     truncated
+}
+
+fn projected_message_text_elements(payload: &Value) -> Vec<Value> {
+    payload
+        .get("textElements")
+        .or_else(|| payload.get("text_elements"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn projected_message_attachments(payload: &Value) -> Vec<Value> {
+    payload
+        .get("input")
+        .and_then(|input| input.get("attachments"))
+        .or_else(|| payload.get("attachments"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn projected_text_element_text(element: &Value) -> Option<&str> {
+    element
+        .get("text")
+        .or_else(|| element.get("content"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
 }
 
 fn projected_message_text(payload: &Value) -> String {
@@ -1399,4 +1477,68 @@ fn turn_completed_at(event: &AgentEvent) -> Option<&str> {
         "turn.completed" | "turn.failed" | "turn.canceled"
     )
     .then_some(event.timestamp.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn projected_user_message_preserves_text_elements_and_attachments() {
+        let message = projected_user_message_value(ProjectedMessageRow {
+            event_id: "event-user-rich-input".to_string(),
+            turn_id: Some("turn-rich-input".to_string()),
+            sequence: 7,
+            item_type: "message.created".to_string(),
+            created_at: "2026-06-08T00:00:01.000Z".to_string(),
+            payload: serde_json::json!({
+                "input": {
+                    "text": "分析图片",
+                    "attachments": [
+                        {
+                            "kind": "image",
+                            "uri": "file:///tmp/rich-input.png",
+                            "metadata": {
+                                "mediaType": "image/png"
+                            }
+                        }
+                    ]
+                },
+                "content": {
+                    "kind": "inline_text",
+                    "text": "分析图片"
+                },
+                "textElements": [
+                    {
+                        "type": "text",
+                        "text": "结合图片说明问题"
+                    }
+                ],
+                "text_elements": [
+                    {
+                        "type": "text",
+                        "text": "结合图片说明问题"
+                    }
+                ]
+            }),
+        });
+
+        assert_eq!(message["role"], "user");
+        assert_eq!(
+            message["attachments"][0]["uri"],
+            "file:///tmp/rich-input.png"
+        );
+        assert_eq!(message["textElements"][0]["text"], "结合图片说明问题");
+        assert_eq!(message["text_elements"][0]["text"], "结合图片说明问题");
+        assert!(message["content"]
+            .as_array()
+            .expect("content")
+            .iter()
+            .any(|part| part["text"] == "结合图片说明问题"));
+        assert!(message["content"]
+            .as_array()
+            .expect("content")
+            .iter()
+            .any(|part| part["uri"] == "file:///tmp/rich-input.png"));
+    }
 }

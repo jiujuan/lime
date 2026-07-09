@@ -161,6 +161,7 @@ export function resolveTaskCenterHomeChromeState({
     !draftTabActive &&
     (displayMessageCount > 0 ||
       threadItemCount > 0 ||
+      Boolean(draftSendRequest) ||
       hasForegroundLocalSession ||
       hasPendingA2UIForm ||
       isPreparingSend ||

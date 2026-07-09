@@ -188,6 +188,36 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     ).toEqual(["topic-next"]);
   });
 
+  it("路由会话已匹配但消息投影为空时应强制 hydrate 历史详情", async () => {
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-history",
+      messages: [],
+      turns: [],
+      threadItems: [],
+      topics: [],
+    });
+    const switchTopic = vi.fn(async (topicId: string) => {
+      state.sessionId = topicId;
+    });
+    state.switchTopic = switchTopic;
+    installMockAgentChatUnifiedState(state);
+
+    mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-history",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenCalledWith(
+      "topic-history",
+      expect.objectContaining({
+        allowDetachedSession: true,
+        forceRefresh: true,
+      }),
+    );
+  });
+
   it("打开历史会话时不应先清空当前消息再切换", async () => {
     const setMessages = vi.fn();
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({

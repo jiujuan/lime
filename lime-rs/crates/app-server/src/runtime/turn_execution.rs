@@ -18,6 +18,12 @@ impl CollectingRuntimeEventSink {
         self.events.len()
     }
 
+    fn has_turn_terminal_event(&self) -> bool {
+        self.events
+            .iter()
+            .any(|event| runtime_event_is_turn_terminal(&event.event_type))
+    }
+
     fn into_events(self) -> Vec<RuntimeEvent> {
         self.events
     }
@@ -30,6 +36,13 @@ impl CollectingRuntimeEventSink {
             }),
         ))
     }
+}
+
+fn runtime_event_is_turn_terminal(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "turn.completed" | "turn.failed" | "turn.canceled"
+    )
 }
 
 impl RuntimeEventSink for CollectingRuntimeEventSink {
@@ -883,6 +896,13 @@ impl RuntimeCore {
                 ),
                 None => None,
             };
+            if let Some(decision) = decision {
+                super::approval_decision_contract::validate_tool_confirmation_decision(
+                    stored,
+                    &request_id,
+                    decision,
+                )?;
+            }
             let cancel_denied_permission_action =
                 super::permission_state_projection::should_cancel_denied_permission_action(
                     stored,
@@ -913,6 +933,14 @@ impl RuntimeCore {
                 super::timestamp(),
             )
         };
+        if decision == Some(AgentSessionApprovalDecision::AllowForSession)
+            && session_approval_cache_entry.is_none()
+        {
+            return Err(RuntimeCoreError::Backend(format!(
+                "allow_for_session requires session approval cache owner for tool_confirmation request '{}'",
+                request_id
+            )));
+        }
 
         let mut sink = CollectingRuntimeEventSink::default();
         self.backend
@@ -939,7 +967,7 @@ impl RuntimeCore {
             && turn_snapshot
                 .as_ref()
                 .is_some_and(|turn| agent_turn_is_active(turn.status));
-        if backend_cancel_requested {
+        if backend_cancel_requested && !sink.has_turn_terminal_event() {
             self.backend
                 .cancel_turn(
                     CancelExecutionRequest {

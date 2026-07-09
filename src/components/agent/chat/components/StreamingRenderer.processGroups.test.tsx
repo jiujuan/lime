@@ -133,6 +133,47 @@ describe("StreamingRenderer process groups", () => {
     expect(container.textContent).toContain("已经定位到滚动没有跟随增量输出。");
   });
 
+  it("交错工具应保留 thread item DOM owner 与稳定工具行标识", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "tool_use",
+          metadata: {
+            source: "agent_thread_item",
+            threadItemId: "history-replay-visual-mcp-read-file",
+            turnId: "turn-history-replay",
+            sequence: 4,
+          },
+          toolCall: {
+            id: "history-replay-visual-mcp-read-file",
+            name: "mcp__filesystem__read_file",
+            arguments: JSON.stringify({ path: "README.md" }),
+            status: "running",
+            metadata: {
+              source: "agent_thread_item",
+              threadItemId: "history-replay-visual-mcp-read-file",
+              turnId: "turn-history-replay",
+              sequence: 4,
+            },
+            startTime: new Date("2026-07-09T10:00:04.000Z"),
+          },
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const owner = container.querySelector(
+      '[data-thread-item-id="history-replay-visual-mcp-read-file"]',
+    );
+
+    expect(owner).not.toBeNull();
+    expect(
+      owner?.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).not.toBeNull();
+    expect(owner?.querySelector('[data-testid="tool-call-row"]')).not.toBeNull();
+  });
+
   it("交错内容里相邻多次命令应逐条保留过程记录", () => {
     const { container } = renderHarness({
       content: "",

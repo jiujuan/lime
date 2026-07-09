@@ -43,6 +43,7 @@ import { resolveToolSoulMetadataDomAttributes } from "../utils/toolSoulLifecycle
 import { resolveMemoryToolEvidence } from "../utils/memoryToolEvidence";
 import {
   resolveWorkspaceSkillRuntimeEnableResultDisplay,
+  shouldHideProtocolToolResultEnvelope,
   shouldHideToolResultEnvelope,
 } from "../utils/toolResultEnvelopeDisplay";
 import {
@@ -162,6 +163,31 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     const rawText = toolCall.result?.error || toolCall.result?.output || "";
     return extractLimeToolMetadataBlock(rawText).text.trim();
   }, [toolCall.result?.error, toolCall.result?.output]);
+  const structuredContentValue = useMemo(
+    () => resolveToolResultStructuredContent(toolCall.result),
+    [toolCall.result],
+  );
+  const structuredContentDetail = useMemo(
+    () => resolveStructuredToolContentDetailText(structuredContentValue),
+    [structuredContentValue],
+  );
+  const shouldPreferStructuredProtocolResult = useMemo(
+    () =>
+      toolCall.status !== "failed" &&
+      Boolean(structuredContentDetail) &&
+      shouldHideProtocolToolResultEnvelope({
+        toolName: toolCall.name,
+        rawResultText,
+        structuredContent: structuredContentValue,
+      }),
+    [
+      rawResultText,
+      structuredContentDetail,
+      structuredContentValue,
+      toolCall.name,
+      toolCall.status,
+    ],
+  );
   const shouldHideResultEnvelope = useMemo(
     () =>
       shouldHideToolResultEnvelope({
@@ -234,9 +260,6 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     [toolCall],
   );
   const resultText = useMemo(() => {
-    const structuredContentDetail = resolveStructuredToolContentDetailText(
-      resolveToolResultStructuredContent(toolCall.result),
-    );
     const fallbackSummary =
       processNarrative.postSummary ||
       processNarrative.summary ||
@@ -249,6 +272,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
 
     if (shouldSuppressResultText) {
       return "";
+    }
+
+    if (shouldPreferStructuredProtocolResult) {
+      return structuredContentDetail || "";
     }
 
     if (isUnifiedWebFetchToolName(toolCall.name)) {
@@ -306,7 +333,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     processNarrative.summary,
     rawResultText,
     shouldHideResultEnvelope,
+    shouldPreferStructuredProtocolResult,
     shouldSuppressResultText,
+    structuredContentDetail,
     t,
     toolCall.name,
     toolCall.result,
@@ -474,10 +503,11 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       : null;
     const shouldPreferResultPreview =
       toolCall.status !== "running" &&
-      toolDisplay.family === "command" &&
       Boolean(structuredResultPreview) &&
-      (processNarrative.postSource === "generic" ||
-        processNarrative.postSource === "none");
+      (shouldPreferStructuredProtocolResult ||
+        (toolDisplay.family === "command" &&
+          (processNarrative.postSource === "generic" ||
+            processNarrative.postSource === "none")));
     const preferredSummary = importedSourcePresentation
       ? t("agentChat.toolCall.importedCommandRecord.description")
       : transientSummary
@@ -506,6 +536,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     processNarrative.postSummary,
     processNarrative.preSummary,
     shouldSuppressResultText,
+    shouldPreferStructuredProtocolResult,
     structuredResultPreview,
     t,
     toolCall.progress?.message,
@@ -627,7 +658,11 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       data-grouped={grouped ? "yes" : "no"}
       {...soulLifecycleAttributes}
     >
-      <div className="flex items-start gap-2">
+      <div
+        className="flex items-start gap-2"
+        data-testid="tool-call-row"
+        data-tool-call-id={toolCall.id}
+      >
         {grouped ? (
           <span className="pt-0.5 font-mono text-xs text-slate-400">
             {groupMarker}

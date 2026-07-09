@@ -11,8 +11,10 @@ use crate::reply_session::{attach_reply_disallowed_tools, attach_reply_provider_
 use crate::session_config::AgentSessionConfig;
 use futures::future::BoxFuture;
 use model_provider::provider_stream::{
-    RuntimeReplyProviderHandle, RuntimeReplyProviderStreamStart, RuntimeReplyProviderStreamTrace,
-    RuntimeReplyProviderWireSupportIssue, RuntimeReplyStreamRequest,
+    RuntimeReplyProviderHandle, RuntimeReplyProviderSourceBackend,
+    RuntimeReplyProviderSourceBackendCall, RuntimeReplyProviderStreamStart,
+    RuntimeReplyProviderStreamTrace, RuntimeReplyProviderWireSupportIssue,
+    RuntimeReplyStreamRequest,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -76,6 +78,7 @@ pub struct RuntimeReplyBackendRunOutcome {
 #[derive(Debug)]
 pub struct RuntimeReplyDefaultCall<M, C> {
     message: M,
+    stream_request: RuntimeReplyStreamRequest,
     session_config: C,
     cancel_token: Option<CancellationToken>,
 }
@@ -91,8 +94,38 @@ pub struct RuntimeReplyProviderCall<M, C> {
     cancel_token: Option<CancellationToken>,
 }
 
+#[derive(Debug)]
+pub struct RuntimeReplyProviderSourceRequest<M, C> {
+    message: M,
+    stream_request: RuntimeReplyStreamRequest,
+    session_config: C,
+    cancel_token: Option<CancellationToken>,
+}
+
+pub type RuntimeReplyProviderSourceBackendRequest =
+    RuntimeReplyProviderSourceRequest<RuntimeReplyMessage, AgentSessionConfig>;
+
+pub type RuntimeReplyProviderSourceRunCall =
+    RuntimeReplyProviderSourceBackendCall<RuntimeReplyProviderSourceExecution>;
+
 pub type RuntimeReplyProviderSourceCall =
     RuntimeReplyProviderCall<RuntimeReplyMessage, AgentSessionConfig>;
+
+#[derive(Debug)]
+pub struct RuntimeReplyProviderSourceExecution {
+    request: RuntimeReplyProviderSourceBackendRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeReplyProviderSourceBindingError {
+    message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeReplyProviderSourceRunError<E> {
+    Binding(RuntimeReplyProviderSourceBindingError),
+    Source(E),
+}
 
 #[derive(Debug)]
 pub enum RuntimeReplySourceCall<M, C> {
@@ -142,32 +175,40 @@ impl RuntimeReplyBackendRun {
 impl RuntimeReplyDefaultSourceCall {
     pub fn new(
         message: RuntimeReplyMessage,
+        stream_request: RuntimeReplyStreamRequest,
         session_config: AgentSessionConfig,
         cancel_token: Option<CancellationToken>,
     ) -> Self {
         Self {
             message,
+            stream_request,
             session_config,
             cancel_token,
-        }
-    }
-
-    pub fn map<M, C>(
-        self,
-        map_message: impl FnOnce(RuntimeReplyMessage) -> M,
-        map_session_config: impl FnOnce(AgentSessionConfig) -> C,
-    ) -> RuntimeReplyDefaultCall<M, C> {
-        RuntimeReplyDefaultCall {
-            message: map_message(self.message),
-            session_config: map_session_config(self.session_config),
-            cancel_token: self.cancel_token,
         }
     }
 }
 
 impl<M, C> RuntimeReplyDefaultCall<M, C> {
-    pub fn into_parts(self) -> (M, C, Option<CancellationToken>) {
-        (self.message, self.session_config, self.cancel_token)
+    pub fn stream_request(&self) -> &RuntimeReplyStreamRequest {
+        &self.stream_request
+    }
+
+    pub fn into_parts(self) -> (M, RuntimeReplyStreamRequest, C, Option<CancellationToken>) {
+        (
+            self.message,
+            self.stream_request,
+            self.session_config,
+            self.cancel_token,
+        )
+    }
+
+    pub fn into_source_request(self) -> RuntimeReplyProviderSourceRequest<M, C> {
+        RuntimeReplyProviderSourceRequest {
+            message: self.message,
+            stream_request: self.stream_request,
+            session_config: self.session_config,
+            cancel_token: self.cancel_token,
+        }
     }
 }
 
@@ -185,19 +226,6 @@ impl RuntimeReplyProviderSourceCall {
             cancel_token,
         }
     }
-
-    pub fn map<M, C>(
-        self,
-        map_message: impl FnOnce(RuntimeReplyMessage) -> M,
-        map_session_config: impl FnOnce(AgentSessionConfig) -> C,
-    ) -> RuntimeReplyProviderCall<M, C> {
-        RuntimeReplyProviderCall {
-            provider_start: self.provider_start,
-            message: map_message(self.message),
-            session_config: map_session_config(self.session_config),
-            cancel_token: self.cancel_token,
-        }
-    }
 }
 
 impl<M, C> RuntimeReplyProviderCall<M, C> {
@@ -209,36 +237,111 @@ impl<M, C> RuntimeReplyProviderCall<M, C> {
         self.provider_start.trace()
     }
 
-    pub fn into_parts(
-        self,
-    ) -> (
-        RuntimeReplyProviderStreamStart,
-        M,
-        C,
-        Option<CancellationToken>,
-    ) {
+    pub fn required_provider<'provider, P>(
+        &self,
+        provider: Option<&'provider P>,
+    ) -> Result<&'provider P, RuntimeReplyProviderSourceBindingError> {
+        provider
+            .ok_or_else(|| RuntimeReplyProviderSourceBindingError::missing_provider(self.trace()))
+    }
+
+    pub fn into_source_request(self) -> RuntimeReplyProviderSourceRequest<M, C> {
+        let stream_request = self.provider_start.stream_request().clone();
+        RuntimeReplyProviderSourceRequest {
+            message: self.message,
+            stream_request,
+            session_config: self.session_config,
+            cancel_token: self.cancel_token,
+        }
+    }
+}
+
+impl<M, C> RuntimeReplyProviderSourceRequest<M, C> {
+    pub fn stream_request(&self) -> &RuntimeReplyStreamRequest {
+        &self.stream_request
+    }
+
+    pub fn into_parts(self) -> (M, RuntimeReplyStreamRequest, C, Option<CancellationToken>) {
         (
-            self.provider_start,
             self.message,
+            self.stream_request,
             self.session_config,
             self.cancel_token,
         )
     }
+
+    pub fn into_backend_call(self) -> RuntimeReplyProviderSourceBackendCall<Self> {
+        RuntimeReplyProviderSourceBackendCall::new(self)
+    }
 }
 
-impl RuntimeReplySourceRun {
-    pub fn map<M, C>(
+impl RuntimeReplyProviderSourceBindingError {
+    fn missing_provider(trace: RuntimeReplyProviderStreamTrace<'_>) -> Self {
+        Self {
+            message: format!(
+                "Provider source path requires configured provider for session {}: provider={}/{}",
+                trace.session_id,
+                trace.provider_name.unwrap_or("<missing>"),
+                trace.model_name.unwrap_or("<missing>")
+            ),
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl std::fmt::Display for RuntimeReplyProviderSourceBindingError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for RuntimeReplyProviderSourceBindingError {}
+
+impl RuntimeReplyProviderSourceExecution {
+    pub fn from_source_request(request: RuntimeReplyProviderSourceBackendRequest) -> Self {
+        Self { request }
+    }
+
+    pub fn from_run_call(call: RuntimeReplyProviderSourceRunCall) -> Self {
+        call.into_source_request()
+    }
+
+    pub fn into_backend_call(self) -> RuntimeReplyProviderSourceRunCall {
+        RuntimeReplyProviderSourceBackendCall::new(self)
+    }
+
+    pub fn message(&self) -> &RuntimeReplyMessage {
+        &self.request.message
+    }
+
+    pub fn session_config(&self) -> &AgentSessionConfig {
+        &self.request.session_config
+    }
+
+    pub fn stream_request(&self) -> &RuntimeReplyStreamRequest {
+        &self.request.stream_request
+    }
+
+    pub fn into_parts(
         self,
-        map_message: impl FnOnce(RuntimeReplyMessage) -> M,
-        map_session_config: impl FnOnce(AgentSessionConfig) -> C,
-    ) -> RuntimeReplySourceCall<M, C> {
+    ) -> (
+        RuntimeReplyMessage,
+        RuntimeReplyStreamRequest,
+        AgentSessionConfig,
+        Option<CancellationToken>,
+    ) {
+        self.request.into_parts()
+    }
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for RuntimeReplyProviderSourceRunError<E> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RuntimeReplySourceCall::Default(call) => {
-                RuntimeReplySourceCall::Default(call.map(map_message, map_session_config))
-            }
-            RuntimeReplySourceCall::Provider(call) => {
-                RuntimeReplySourceCall::Provider(call.map(map_message, map_session_config))
-            }
+            Self::Binding(error) => error.fmt(formatter),
+            Self::Source(error) => error.fmt(formatter),
         }
     }
 }
@@ -498,6 +601,57 @@ impl<M, C> RuntimeReplySourceCall<M, C> {
     }
 }
 
+pub fn run_provider_source_backend<'a, P, B, F>(
+    call: RuntimeReplyProviderSourceCall,
+    provider: Option<&'a P>,
+    into_backend: F,
+) -> BoxFuture<'a, Result<B::Stream<'a>, RuntimeReplyProviderSourceRunError<B::Error>>>
+where
+    P: Clone + Send + 'a,
+    F: FnOnce(P) -> B + Send + 'a,
+    B: RuntimeReplyProviderSourceBackend<RuntimeReplyProviderSourceExecution> + Send + 'a,
+    B::Error: 'a,
+{
+    let provider = match call.required_provider(provider) {
+        Ok(provider) => provider.clone(),
+        Err(error) => {
+            return Box::pin(
+                async move { Err(RuntimeReplyProviderSourceRunError::Binding(error)) },
+            );
+        }
+    };
+    let source_execution =
+        RuntimeReplyProviderSourceExecution::from_source_request(call.into_source_request());
+
+    Box::pin(async move {
+        into_backend(provider)
+            .stream_reply(source_execution.into_backend_call())
+            .await
+            .map_err(RuntimeReplyProviderSourceRunError::Source)
+    })
+}
+
+pub fn run_default_provider_source_backend<'a, P, B, F>(
+    call: RuntimeReplyDefaultSourceCall,
+    provider: P,
+    into_backend: F,
+) -> BoxFuture<'a, Result<B::Stream<'a>, B::Error>>
+where
+    P: Send + 'a,
+    F: FnOnce(P) -> B + Send + 'a,
+    B: RuntimeReplyProviderSourceBackend<RuntimeReplyProviderSourceExecution> + Send + 'a,
+    B::Error: 'a,
+{
+    let source_execution =
+        RuntimeReplyProviderSourceExecution::from_source_request(call.into_source_request());
+
+    Box::pin(async move {
+        into_backend(provider)
+            .stream_reply(source_execution.into_backend_call())
+            .await
+    })
+}
+
 pub fn run_reply_source<'a, S>(
     source: S,
     run: RuntimeReplyBackendRun,
@@ -517,9 +671,14 @@ where
         let outcome = run.outcome();
         let (message, path, stream_request, session_config, cancel_token, _) = run.into_parts();
         let call = match path {
-            RuntimeReplyBackendRunPath::Default => RuntimeReplySourceCall::Default(
-                RuntimeReplyDefaultSourceCall::new(message, session_config, cancel_token),
-            ),
+            RuntimeReplyBackendRunPath::Default => {
+                RuntimeReplySourceCall::Default(RuntimeReplyDefaultSourceCall::new(
+                    message,
+                    stream_request.clone(),
+                    session_config,
+                    cancel_token,
+                ))
+            }
             RuntimeReplyBackendRunPath::Provider(provider_start) => {
                 RuntimeReplySourceCall::Provider(RuntimeReplyProviderSourceCall::new(
                     provider_start,

@@ -14,6 +14,13 @@ vi.mock("./InputbarTools", () => ({
   InputbarTools: () => <div data-testid="inputbar-tools">tools</div>,
 }));
 
+const asrProviderMocks = vi.hoisted(() => ({
+  polishVoiceInputText: vi.fn(),
+  transcribeVoiceInputAudio: vi.fn(),
+}));
+
+vi.mock("@/lib/api/asrProvider", () => asrProviderMocks);
+
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
 function translateResource(
@@ -50,6 +57,10 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  Object.values(asrProviderMocks).forEach((mock) => {
+    mock.mockReset();
+  });
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -103,26 +114,258 @@ describe("InputbarCore", () => {
     expect(image?.getAttribute("src")).toBe("file://queued.png");
   });
 
-  it("应在输入框底栏左侧渲染 current 录音按钮", async () => {
+  it("应在输入框右侧主操作区渲染 current 录音按钮", async () => {
     const container = await renderInputbarCore({
       visualVariant: "default",
       toolMode: "default",
     });
 
-    const metaLeft = container.querySelector(
-      '[data-testid="inputbar-meta-left"]',
+    const primaryActions = container.querySelector(
+      '[data-testid="inputbar-primary-actions"]',
     );
     const dictationButton = container.querySelector(
       '[data-testid="inputbar-dictation-toggle"]',
     ) as HTMLButtonElement | null;
+    const sendButton = container.querySelector(
+      '[data-testid="send-btn"]',
+    ) as HTMLButtonElement | null;
 
-    expect(metaLeft).toBeTruthy();
+    expect(primaryActions).toBeTruthy();
     expect(dictationButton).toBeTruthy();
     expect(dictationButton?.getAttribute("aria-label")).toBe("开始语音输入");
-    expect(dictationButton?.closest('[data-testid="inputbar-meta-left"]')).toBe(
-      metaLeft,
-    );
+    expect(
+      dictationButton?.closest('[data-testid="inputbar-primary-actions"]'),
+    ).toBe(primaryActions);
+    expect(
+      sendButton?.closest('[data-testid="inputbar-primary-actions"]'),
+    ).toBe(primaryActions);
     expect(document.querySelector('[aria-live="polite"]')).toBeNull();
+  });
+
+  it("录音中应隐藏发送按钮并阻止 Enter 发送", async () => {
+    const onSend = vi.fn();
+    const originalMediaDevices = navigator.mediaDevices;
+    const stopTrack = vi.fn();
+    const mediaDevices = {
+      getUserMedia: vi.fn(async () => ({
+        getTracks: () => [{ stop: stopTrack }],
+      })),
+    };
+
+    class FakeMediaRecorder {
+      static isTypeSupported() {
+        return true;
+      }
+
+      mimeType = "audio/webm";
+      state: RecordingState = "inactive";
+      private readonly listeners = new Map<string, Set<EventListener>>();
+
+      addEventListener(type: string, listener: EventListener) {
+        const listeners = this.listeners.get(type) ?? new Set<EventListener>();
+        listeners.add(listener);
+        this.listeners.set(type, listeners);
+      }
+
+      removeEventListener(type: string, listener: EventListener) {
+        this.listeners.get(type)?.delete(listener);
+      }
+
+      start() {
+        this.state = "recording";
+      }
+
+      stop() {
+        this.state = "inactive";
+        this.listeners
+          .get("stop")
+          ?.forEach((listener) => listener(new Event("stop")));
+      }
+
+      requestData() {}
+    }
+
+    class FakeAudioContext {
+      close() {
+        return Promise.resolve();
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: mediaDevices,
+    });
+    vi.stubGlobal(
+      "MediaRecorder",
+      FakeMediaRecorder as unknown as typeof MediaRecorder,
+    );
+    vi.stubGlobal(
+      "AudioContext",
+      FakeAudioContext as unknown as typeof AudioContext,
+    );
+
+    const container = await renderInputbarCore({
+      text: "可以发送",
+      onSend,
+    });
+    const textarea = container.querySelector(
+      "textarea",
+    ) as HTMLTextAreaElement | null;
+    const dictationButton = container.querySelector(
+      '[data-testid="inputbar-dictation-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      dictationButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-testid="send-btn"]')).toBeNull();
+    expect(textarea?.disabled).toBe(true);
+
+    act(() => {
+      textarea?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+        }),
+      );
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: originalMediaDevices,
+    });
+  });
+
+  it("录音中应将本地 ASR 的实时识别结果流式写入输入框草稿", async () => {
+    vi.useFakeTimers();
+    const setText = vi.fn();
+    asrProviderMocks.transcribeVoiceInputAudio.mockResolvedValue({
+      text: "实时识别文本",
+      provider: "sensevoice_local",
+      durationSecs: 1.2,
+      sampleRate: 16000,
+      language: "auto",
+    });
+    const mediaDevices = {
+      getUserMedia: vi.fn(async () => ({
+        getTracks: () => [{ stop: vi.fn() }],
+      })),
+    };
+    let processor:
+      | {
+          onaudioprocess: ((event: AudioProcessingEvent) => void) | null;
+        }
+      | null = null;
+
+    class FakeMediaRecorder {
+      static isTypeSupported() {
+        return true;
+      }
+
+      mimeType = "audio/webm";
+      state: RecordingState = "inactive";
+
+      addEventListener() {}
+
+      removeEventListener() {}
+
+      start() {
+        this.state = "recording";
+      }
+
+      requestData() {}
+    }
+
+    class FakeAudioContext {
+      sampleRate = 16000;
+      destination = {};
+
+      createMediaStreamSource() {
+        return {
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+        };
+      }
+
+      createScriptProcessor() {
+        processor = {
+          onaudioprocess: null,
+        };
+        return {
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          get onaudioprocess() {
+            return processor?.onaudioprocess ?? null;
+          },
+          set onaudioprocess(
+            listener: ((event: AudioProcessingEvent) => void) | null,
+          ) {
+            if (processor) {
+              processor.onaudioprocess = listener;
+            }
+          },
+        };
+      }
+
+      resume() {
+        return Promise.resolve();
+      }
+
+      close() {
+        return Promise.resolve();
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: mediaDevices,
+    });
+    vi.stubGlobal(
+      "MediaRecorder",
+      FakeMediaRecorder as unknown as typeof MediaRecorder,
+    );
+    vi.stubGlobal(
+      "AudioContext",
+      FakeAudioContext as unknown as typeof AudioContext,
+    );
+
+    const container = await renderInputbarCore({ setText });
+    const dictationButton = container.querySelector(
+      '[data-testid="inputbar-dictation-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      dictationButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      processor?.onaudioprocess?.({
+        inputBuffer: {
+          length: 12000,
+          numberOfChannels: 1,
+          getChannelData: () => new Float32Array(12000).fill(0.2),
+        },
+      } as unknown as AudioProcessingEvent);
+      vi.advanceTimersByTime(2000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const preview = container.querySelector(
+      '[data-testid="inputbar-dictation-live-transcript"]',
+    );
+    expect(preview?.textContent).toContain("实时识别文本");
+    expect(setText).toHaveBeenCalledWith("实时识别文本");
+    expect(asrProviderMocks.transcribeVoiceInputAudio).toHaveBeenCalledTimes(1);
   });
 
   it("主题工作台空输入时应保持单行紧凑态，聚焦后也不应放大", async () => {
@@ -243,9 +486,7 @@ describe("InputbarCore", () => {
     );
     expect(planModeRow?.getAttribute("role")).toBe("menuitemcheckbox");
     expect(planModeRow?.getAttribute("aria-checked")).toBe("true");
-    expect(
-      planModeRow?.querySelector('[data-state="checked"]'),
-    ).toBeTruthy();
+    expect(planModeRow?.querySelector('[data-state="checked"]')).toBeTruthy();
     expect(subagentModeRow?.getAttribute("role")).toBe("menuitemcheckbox");
     expect(subagentModeRow?.getAttribute("aria-checked")).toBe("false");
     expect(

@@ -25,36 +25,6 @@ const MODE_NAMES: Record<CreationMode, string> = {
   framework: "框架模式",
 };
 
-function getFileWritingInstructions(theme: ThemeType): string {
-  const fileSystemByTheme: Record<ThemeType, string> = {
-    general: `
-| 步骤 | 文件名 | 内容说明 |
-|------|--------|----------|
-| 1. 需求澄清 | brief.md | 目标、约束、验收标准 |
-| 2. 输出草稿 | draft.md | 第一版正文或方案 |
-| 3. 终稿整理 | article.md | 整理后的可交付版本 |`,
-  };
-
-  return `
-## 文件写入格式
-
-当需要输出文档内容时，使用以下标签格式：
-
-<write_file path="文件名.md">
-内容...
-</write_file>
-
-重要规则：
-- 这是回复文本中的标签，不是工具调用
-- 标签前先给一句引导说明，标签后给一句结果说明
-- 同一轮需要多文件时，按步骤分别写入，避免覆盖
-
-## 推荐文件体系
-
-${fileSystemByTheme[theme]}
-`;
-}
-
 function getModeInstructions(mode: CreationMode, theme: ThemeType): string {
   switch (mode) {
     case "fast":
@@ -90,8 +60,6 @@ function buildThemePrompt(theme: ThemeType, mode: CreationMode): string {
 ${THEME_GUIDANCE[theme]}
 
 ${getModeInstructions(mode, theme)}
-
-${getFileWritingInstructions(theme)}
 
 【输出要求】
 - 保持结构化表达，优先使用小标题和清单

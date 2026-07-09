@@ -11,6 +11,8 @@ import type {
 import { isLikelyImageGenerationSearchText } from "@/lib/imageGen/providerMatchers";
 
 const REASONING_TOKEN_PATTERN = /(^|[._/-])(thinking|reasoning)(?=$|[._/-])/i;
+const OPENAI_REASONING_PATTERN =
+  /\b(?:gpt-5(?:[._/-]|\b)|o[134](?:[._/-]|\b)|o4-mini(?:[._/-]|\b))\b/i;
 const VISION_HINT_PATTERN =
   /\b(vision|multimodal|multi-modal|omni|image-input|image understanding)\b/i;
 const NON_VISION_PATTERN =
@@ -169,7 +171,11 @@ function normalizeRuntimeFeatures(
 }
 
 function inferReasoningCapability(modelId: string): boolean {
-  return REASONING_TOKEN_PATTERN.test(modelId.trim().toLowerCase());
+  const normalized = modelId.trim().toLowerCase();
+  return (
+    REASONING_TOKEN_PATTERN.test(normalized) ||
+    OPENAI_REASONING_PATTERN.test(normalized)
+  );
 }
 
 export function inferVisionCapability(params: {
@@ -268,7 +274,14 @@ function inferBaseSignals(params: InferModelTaxonomyParams) {
     explicitOutputModalities.includes("text");
   const hasExplicitVisionInput = hasExplicitImageInput && hasExplicitTextOutput;
   const inferredReasoning =
-    capabilities.reasoning ?? inferReasoningCapability(params.modelId);
+    capabilities.reasoning === true ||
+    inferReasoningCapability(params.modelId) ||
+    (params.providerModelId
+      ? inferReasoningCapability(params.providerModelId)
+      : false) ||
+    (params.canonicalModelId
+      ? inferReasoningCapability(params.canonicalModelId)
+      : false);
   const inferredVisionByName =
     inferVisionCapability({
       modelId: params.modelId,
@@ -621,7 +634,7 @@ export function inferModelCapabilities(
         "embedding",
         "rerank",
       ].some((family) => taskFamilies.includes(family as ModelTaskFamily)),
-    reasoning: params.capabilities?.reasoning ?? supportsReasoningByDefault,
+    reasoning: params.capabilities?.reasoning === true || supportsReasoningByDefault,
   };
 }
 

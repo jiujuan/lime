@@ -3126,6 +3126,11 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
+      method: "voiceTranscription/polishText";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
       method: "workspaceSkillBindings/list";
       params?: unknown;
     }
@@ -4111,6 +4116,7 @@ export type AppServerRequestMethod =
   | "voiceInstruction/save"
   | "voiceModel/default/set"
   | "voiceModel/testTranscribeFile"
+  | "voiceTranscription/polishText"
   | "voiceTranscription/transcribeAudio"
   | "wechatChannel/account/remove"
   | "wechatChannel/accounts/list"
@@ -7557,6 +7563,17 @@ export interface VoiceModelTestTranscribeFileResponse {
   duration_secs: number;
   language?: null | string;
   sample_rate: number;
+  text: string;
+}
+
+export interface VoiceTranscriptionPolishTextParams {
+  instruction_id?: null | string;
+  text: string;
+}
+
+export interface VoiceTranscriptionPolishTextResponse {
+  instruction_name: string;
+  polished?: boolean;
   text: string;
 }
 

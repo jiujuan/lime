@@ -28,6 +28,8 @@ export interface EmptyStateProps extends SkillSelectionSourceProps {
   setInput: (value: string) => void;
   onSend: InputbarSendHandler;
   onStop?: () => void;
+  /** 首页首发按钮在 pointerdown 阶段发送，避免 click 后短暂停留首页空态。 */
+  sendOnPointerDown?: boolean;
   isLoading?: boolean;
   disabled?: boolean;
   /** 创作模式 */

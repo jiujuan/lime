@@ -23,11 +23,12 @@ const CURRENT_VOICE_MODEL_TEST_TRANSCRIBE_METHOD =
   "voiceModel/testTranscribeFile";
 const CURRENT_VOICE_MODEL_TEST_TRANSCRIBE_CLIENT_HELPER =
   "testTranscribeVoiceModelFile";
-const CURRENT_VOICE_TRANSCRIPTION_METHOD =
-  "voiceTranscription/transcribeAudio";
+const CURRENT_VOICE_TRANSCRIPTION_METHOD = "voiceTranscription/transcribeAudio";
 const CURRENT_VOICE_TRANSCRIPTION_CLIENT_HELPER = "transcribeVoiceAudio";
-const CURRENT_VOICE_TRANSCRIPTION_FRONTEND_HELPER =
-  "transcribeVoiceInputAudio";
+const CURRENT_VOICE_TRANSCRIPTION_FRONTEND_HELPER = "transcribeVoiceInputAudio";
+const CURRENT_VOICE_POLISH_METHOD = "voiceTranscription/polishText";
+const CURRENT_VOICE_POLISH_CLIENT_HELPER = "polishVoiceText";
+const CURRENT_VOICE_POLISH_FRONTEND_HELPER = "polishVoiceInputText";
 const CURRENT_ASR_CREDENTIAL_METHODS = [
   "voiceAsrCredential/list",
   "voiceAsrCredential/create",
@@ -269,6 +270,9 @@ function readAppServerAsrCredentialSources(): string {
     ),
     readRepoFile(
       "lime-rs/crates/app-server/src/local_data_source/voice_instructions.rs",
+    ),
+    readRepoFile(
+      "lime-rs/crates/app-server/src/local_data_source/voice_text_processing.rs",
     ),
   ].join("\n");
 }
@@ -663,27 +667,49 @@ describe("ASR / Voice current boundary", () => {
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
     ].join("\n");
 
-    expect(asrProviderSource).toContain(CURRENT_VOICE_TRANSCRIPTION_FRONTEND_HELPER);
+    expect(asrProviderSource).toContain(
+      CURRENT_VOICE_TRANSCRIPTION_FRONTEND_HELPER,
+    );
+    expect(asrProviderSource).toContain(CURRENT_VOICE_POLISH_FRONTEND_HELPER);
     expect(asrProviderSource).toContain("createAppServerClient()");
     expect(asrProviderSource).toContain(
       `.${CURRENT_VOICE_TRANSCRIPTION_CLIENT_HELPER}(`,
     );
-    expect(appServerSources).toContain(`"${CURRENT_VOICE_TRANSCRIPTION_METHOD}"`);
-    expect(appServerSources).toContain(CURRENT_VOICE_TRANSCRIPTION_CLIENT_HELPER);
+    expect(asrProviderSource).toContain(
+      `.${CURRENT_VOICE_POLISH_CLIENT_HELPER}(`,
+    );
+    expect(appServerSources).toContain(
+      `"${CURRENT_VOICE_TRANSCRIPTION_METHOD}"`,
+    );
+    expect(appServerSources).toContain(`"${CURRENT_VOICE_POLISH_METHOD}"`);
+    expect(appServerSources).toContain(
+      CURRENT_VOICE_TRANSCRIPTION_CLIENT_HELPER,
+    );
+    expect(appServerSources).toContain(CURRENT_VOICE_POLISH_CLIENT_HELPER);
     expectStringLiteralsAbsent(
       restrictedSources,
       RETIRED_VOICE_REALTIME_FACADE_COMMANDS,
     );
   });
 
+  it("App Server 应编入默认本地 SenseVoice 转写能力", () => {
+    const appServerCargoToml = readRepoFile(
+      "lime-rs/crates/app-server/Cargo.toml",
+    );
+
+    expect(appServerCargoToml).toMatch(
+      /lime-services\s*=\s*\{[^}]*features\s*=\s*\[[^\]]*"local-sensevoice"/,
+    );
+  });
+
   it("生产 GUI 不应重新 import 实时语音 fail-closed wrapper", () => {
     const violations = [...productionGuiSourceByPath].flatMap(
       ([path, source]) => {
-      const imports = findAsrProviderNamedImports(
-        source,
-        RETIRED_VOICE_REALTIME_FRONTEND_HELPERS,
-      );
-      return imports.map((name) => `${path}: ${name}`);
+        const imports = findAsrProviderNamedImports(
+          source,
+          RETIRED_VOICE_REALTIME_FRONTEND_HELPERS,
+        );
+        return imports.map((name) => `${path}: ${name}`);
       },
     );
 

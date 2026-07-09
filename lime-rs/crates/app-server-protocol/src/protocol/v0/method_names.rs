@@ -155,6 +155,7 @@ pub const METHOD_VOICE_INSTRUCTION_DELETE: &str = "voiceInstruction/delete";
 pub const METHOD_VOICE_MODEL_DEFAULT_SET: &str = "voiceModel/default/set";
 pub const METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE: &str = "voiceModel/testTranscribeFile";
 pub const METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO: &str = "voiceTranscription/transcribeAudio";
+pub const METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT: &str = "voiceTranscription/polishText";
 pub const METHOD_WORKSPACE_SKILL_BINDINGS_LIST: &str = "workspaceSkillBindings/list";
 pub const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST: &str = "workspaceRegisteredSkills/list";
 pub const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST: &str = "workspaceRightSurface/request";

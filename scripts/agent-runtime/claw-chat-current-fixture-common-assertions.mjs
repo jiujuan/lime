@@ -12,6 +12,9 @@ import {
   APPROVAL_REQUEST_CANCEL_DONE_TEXT,
   APPROVAL_REQUEST_DECLINE_DONE_TEXT,
   APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+  APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
   APPROVAL_REQUEST_RESUME_DONE_TEXT,
   APPROVAL_REQUEST_RESUME_PROMPT,
   APPROVAL_REQUEST_RESUME_RESULT_TEXT,
@@ -81,6 +84,7 @@ export function buildCommonAssertions(context) {
     isCancelThenContinueScenario,
     isPlanScenario,
     isGoalScenario,
+    isHomeHotpathScenario,
     isImageCommandScenario,
     isInputbarPendingSteerMultiQueueScenario,
     isInputbarPendingSteerPopFrontResumeScenario,
@@ -107,6 +111,7 @@ export function buildCommonAssertions(context) {
     isApprovalRequestDeclineScenario,
     isApprovalRequestCancelScenario,
     isApprovalRequestDecisionScenario,
+    isApprovalRequestFullAccessScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
     hasCancelPhase,
@@ -130,7 +135,8 @@ export function buildCommonAssertions(context) {
     !isInputbarRichRestoreScenario &&
     !isInputbarPendingSteerScenario &&
     !isApprovalRequestResumeScenario &&
-    !isApprovalRequestDecisionScenario;
+    !isApprovalRequestDecisionScenario &&
+    !isApprovalRequestFullAccessScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
   const approvalRequestDecisionCompleted = isApprovalRequestDeclineScenario
@@ -166,6 +172,35 @@ export function buildCommonAssertions(context) {
     inputbarPendingSteerPopFrontQueuedPanel.textareaVisible === true &&
     inputbarPendingSteerPopFrontQueuedPanel.textareaDisabled === false &&
     inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === true;
+  const homeHotpath = summary.homeHotpath ?? {};
+  const homeHotpathGuiCompleted = homeHotpath.guiCompleted ?? {};
+  const homeHotpathPostSubmitProjection =
+    homeHotpath.postSubmitProjection ?? {};
+  const homeHotpathCompletedProjection = homeHotpath.completedProjection ?? {};
+  const homeHotpathInputAfterClick = homeHotpath.inputSend?.afterClick ?? {};
+  const homeHotpathReadModelCompleted = homeHotpath.readModelCompleted ?? {};
+  const homeHotpathExpectedPrompt =
+    typeof homeHotpath.prompt === "string" && homeHotpath.prompt.trim()
+      ? homeHotpath.prompt
+      : NEWS_PROMPT;
+  const homeHotpathExpectedDoneText =
+    typeof homeHotpath.doneText === "string" && homeHotpath.doneText.trim()
+      ? homeHotpath.doneText
+      : ASSISTANT_DONE_TEXT;
+  const homeHotpathExpectedSummaryText =
+    typeof homeHotpath.summaryText === "string" &&
+    homeHotpath.summaryText.trim()
+      ? homeHotpath.summaryText
+      : "今日国际新闻简要整理";
+  const homeHotpathPageText = [
+    pageText,
+    homeHotpathGuiCompleted.bodyText,
+    homeHotpathGuiCompleted.mainText,
+    homeHotpathCompletedProjection.bodyText,
+    homeHotpathCompletedProjection.mainText,
+  ]
+    .filter((value) => typeof value === "string")
+    .join("\n");
   const commonAssertions = {
     electronPreloadBridge: rendererSnapshot.electron === true,
     appServerJsonRpcUsed:
@@ -266,6 +301,11 @@ export function buildCommonAssertions(context) {
                       ? summary.guiPlanCompleted?.hasPrompt === true
                       : isGoalScenario
                         ? summary.guiGoalCompleted?.hasPrompt === true
+                        : isHomeHotpathScenario
+                          ? homeHotpathGuiCompleted.hasPrompt === true ||
+                            homeHotpathPostSubmitProjection.promptInBody ===
+                              true ||
+                            homeHotpathInputAfterClick.promptInBody === true
                         : isImageCommandScenario
                           ? summary.guiImageCommandCompleted?.hasPrompt === true
                           : isWebToolsRenderingScenario
@@ -282,6 +322,10 @@ export function buildCommonAssertions(context) {
                                 : isApprovalRequestResumeScenario
                                   ? summary.guiApprovalRequestResumeCompleted
                                       ?.hasPrompt === true
+                                  : isApprovalRequestFullAccessScenario
+                                    ? summary
+                                        .guiApprovalRequestFullAccessCompleted
+                                        ?.hasPrompt === true
                                   : isApprovalRequestDecisionScenario
                                     ? approvalRequestDecisionCompleted
                                         ?.hasPrompt === true
@@ -374,6 +418,11 @@ export function buildCommonAssertions(context) {
                         ? summary.guiGoalCompleted?.hasAssistantSummary ===
                             true ||
                           summary.guiGoalCompleted?.hasDoneText === true
+                        : isHomeHotpathScenario
+                          ? homeHotpathGuiCompleted.hasAssistantSummary ===
+                              true ||
+                            homeHotpathGuiCompleted.hasDoneText === true ||
+                            homeHotpathReadModelCompleted.includesDone === true
                         : isImageCommandScenario
                           ? summary.guiImageCommandCompleted
                               ?.hasAssistantSummary === true ||
@@ -404,6 +453,13 @@ export function buildCommonAssertions(context) {
                                       ?.hasAssistantSummary === true ||
                                     summary.guiApprovalRequestResumeCompleted
                                       ?.hasDoneText === true
+                                  : isApprovalRequestFullAccessScenario
+                                    ? summary
+                                        .guiApprovalRequestFullAccessCompleted
+                                        ?.hasAssistantSummary === true ||
+                                      summary
+                                        .guiApprovalRequestFullAccessCompleted
+                                        ?.hasDoneText === true
                                   : isApprovalRequestDecisionScenario
                                     ? isApprovalRequestDeclineScenario
                                       ? approvalRequestDecisionCompleted
@@ -434,7 +490,10 @@ export function buildCommonAssertions(context) {
                                         : isMcpStructuredContentScenario
                                           ? summary
                                               .guiMcpStructuredContentCompleted
-                                              ?.hasStructuredAnswer === true
+                                              ?.hasStructuredAnswer === true &&
+                                            summary
+                                              .guiMcpStructuredContentCompleted
+                                              ?.hasReferenceId === true
                                           : isMediaReferenceScenario
                                             ? summary.guiMediaReferenceSnapshot
                                                 ?.hasCard === true &&
@@ -531,6 +590,9 @@ export function buildCommonAssertions(context) {
                       : isGoalScenario
                         ? summary.guiGoalCompleted?.textareaVisible === true &&
                           summary.guiGoalCompleted?.textareaDisabled === false
+                        : isHomeHotpathScenario
+                          ? homeHotpathGuiCompleted.textareaVisible === true &&
+                            homeHotpathGuiCompleted.textareaDisabled === false
                         : isImageCommandScenario
                           ? summary.guiImageCommandCompleted
                               ?.textareaVisible === true &&
@@ -558,6 +620,13 @@ export function buildCommonAssertions(context) {
                                       ?.textareaVisible === true &&
                                     summary.guiApprovalRequestResumeCompleted
                                       ?.textareaDisabled === false
+                                  : isApprovalRequestFullAccessScenario
+                                    ? summary
+                                        .guiApprovalRequestFullAccessCompleted
+                                        ?.textareaVisible === true &&
+                                      summary
+                                        .guiApprovalRequestFullAccessCompleted
+                                        ?.textareaDisabled === false
                                   : isApprovalRequestDecisionScenario
                                     ? approvalRequestDecisionCompleted
                                         ?.textareaVisible === true &&
@@ -671,9 +740,11 @@ export function buildCommonAssertions(context) {
                     : isPlanScenario
                       ? summary.guiPlanCompleted?.stopButtonVisible === false
                       : isGoalScenario
-                        ? summary.guiGoalCompleted?.stopButtonVisible === false
-                        : isImageCommandScenario
-                          ? summary.guiImageCommandCompleted
+                      ? summary.guiGoalCompleted?.stopButtonVisible === false
+                      : isHomeHotpathScenario
+                        ? homeHotpathGuiCompleted.stopButtonVisible === false
+                      : isImageCommandScenario
+                        ? summary.guiImageCommandCompleted
                               ?.stopButtonVisible === false
                           : isWebToolsRenderingScenario
                             ? summary.guiWebToolsRenderingCompleted
@@ -689,6 +760,10 @@ export function buildCommonAssertions(context) {
                                 : isApprovalRequestResumeScenario
                                   ? summary.guiApprovalRequestResumeCompleted
                                       ?.stopButtonVisible === false
+                                  : isApprovalRequestFullAccessScenario
+                                    ? summary
+                                        .guiApprovalRequestFullAccessCompleted
+                                        ?.stopButtonVisible === false
                                   : isApprovalRequestDecisionScenario
                                     ? approvalRequestDecisionCompleted
                                         ?.stopButtonVisible === false
@@ -807,11 +882,21 @@ export function buildCommonAssertions(context) {
                       ? pageText.includes(PLAN_PROMPT) &&
                         PLAN_STEPS.every((step) => pageText.includes(step.step))
                       : isGoalScenario
-                        ? pageText.includes(GOAL_PROMPT) &&
-                          (pageText.includes("目标已绑定到本轮请求") ||
-                            pageText.includes(GOAL_DONE_TEXT))
-                        : isImageCommandScenario
-                          ? summary.guiImageCommandCompleted?.hasPrompt ===
+                      ? pageText.includes(GOAL_PROMPT) &&
+                        (pageText.includes("目标已绑定到本轮请求") ||
+                          pageText.includes(GOAL_DONE_TEXT))
+                      : isHomeHotpathScenario
+                        ? homeHotpathPageText.includes(
+                            homeHotpathExpectedPrompt,
+                          ) &&
+                          (homeHotpathPageText.includes(
+                            homeHotpathExpectedSummaryText,
+                          ) ||
+                            homeHotpathPageText.includes(
+                              homeHotpathExpectedDoneText,
+                            ))
+                      : isImageCommandScenario
+                        ? summary.guiImageCommandCompleted?.hasPrompt ===
                               true &&
                             (summary.guiImageCommandCompleted
                               ?.imageTaskCardVisible === true ||
@@ -896,6 +981,19 @@ export function buildCommonAssertions(context) {
                                               ?.latestTurnCanceled === true) &&
                                           approvalRequestDecisionCanceledReadModel
                                             ?.includesToolResult === false)
+                                    : isApprovalRequestFullAccessScenario
+                                      ? pageText.includes(
+                                          APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+                                        ) &&
+                                        pageText.includes(
+                                          APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
+                                        ) &&
+                                        pageText.includes(
+                                          APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+                                        ) &&
+                                        !pageText.includes(
+                                          LEGACY_RESPOND_ACTION_METHOD,
+                                        )
                                   : isTerminalCanceledAfterAnswerScenario
                                     ? pageText.includes(
                                         TERMINAL_CANCELED_AFTER_ANSWER_PROMPT,
@@ -939,6 +1037,9 @@ export function buildCommonAssertions(context) {
                                             summary
                                               .guiMcpStructuredContentCompleted
                                               ?.hasStructuredAnswer === true &&
+                                            summary
+                                              .guiMcpStructuredContentCompleted
+                                              ?.hasReferenceId === true &&
                                             summary
                                               .guiMcpStructuredContentCompleted
                                               ?.envelopeVisible === false

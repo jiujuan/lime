@@ -1,7 +1,5 @@
 use super::provider_env::{set_provider_env_vars, should_disable_provider_default_fast_model};
 use super::CredentialBridgeError;
-use agent_runtime::reply_backend::RuntimeReplyProviderCall;
-use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
 use aster::conversation::message::{Message, MessageContent};
 use aster::model::ModelConfig;
 use aster::providers::base::{
@@ -11,9 +9,9 @@ use aster::providers::base::{
 use aster::providers::errors::ProviderError;
 use aster::providers::RetryConfig;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use model_provider::provider_stream::{
-    RuntimeProviderBackend, RuntimeReplyProviderCapabilities, RuntimeReplyProviderHandle,
+    RuntimeProviderBackend, RuntimeReplyProviderBinding, RuntimeReplyProviderCapabilities,
+    RuntimeReplyProviderHandle,
 };
 use model_provider::runtime_provider::RuntimeProviderConfig;
 use model_provider::safety::{
@@ -25,37 +23,20 @@ use std::sync::Arc;
 
 /// 当前回合配置好的 reply provider。
 ///
-/// Aster Provider trait 只在本 adapter 内部暴露；调用方只持有回合级 provider，
-/// 等 current runtime provider stream 接管后替换这里的内部实现。
+/// 本 adapter 只负责创建 provider binding；Aster reply execution 留在
+/// request_tool_policy 的 compat source adapter，等 current provider stream 接管后删除。
 #[derive(Clone)]
 pub(crate) struct ConfiguredReplyProvider {
-    handle: RuntimeReplyProviderHandle,
-    backend: CompatAsterReplyProviderBackend,
+    binding: RuntimeReplyProviderBinding<CompatAsterReplyProviderBackend>,
 }
 
 impl ConfiguredReplyProvider {
     pub(crate) fn runtime_handle(&self) -> &RuntimeReplyProviderHandle {
-        &self.handle
+        self.binding.handle()
     }
 
-    pub(crate) async fn stream_reply_with_agent<'a>(
-        &self,
-        agent: &'a Agent,
-        provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>,
-    ) -> anyhow::Result<BoxStream<'a, anyhow::Result<AsterAgentEvent>>> {
-        let trace = provider_call.trace();
-        tracing::debug!(
-            session_id = %trace.session_id,
-            input_kind = ?trace.input_kind,
-            message_chars = trace.message_chars,
-            provider_backend = ?trace.provider_backend,
-            provider_name = ?trace.provider_name,
-            model_name = ?trace.model_name,
-            "[CredentialBridge] streaming reply with configured runtime provider"
-        );
-        self.backend
-            .stream_reply_with_agent(agent, provider_call)
-            .await
+    pub(crate) fn into_compat_provider(self) -> Arc<dyn Provider> {
+        self.binding.into_backend().into_inner()
     }
 }
 
@@ -68,7 +49,9 @@ pub(crate) async fn create_configured_reply_provider(
         RuntimeReplyProviderHandle::from_config(config, RuntimeProviderBackend::AsterCompat)
             .with_capabilities(capabilities);
 
-    Ok(ConfiguredReplyProvider { handle, backend })
+    Ok(ConfiguredReplyProvider {
+        binding: RuntimeReplyProviderBinding::new(handle, backend),
+    })
 }
 
 /// RuntimeProviderConfig 到 Aster provider trait object 的迁移期 backend。
@@ -114,20 +97,8 @@ impl CompatAsterReplyProviderBackend {
         }
     }
 
-    async fn stream_reply_with_agent<'a>(
-        &self,
-        agent: &'a Agent,
-        provider_call: RuntimeReplyProviderCall<Message, aster::agents::SessionConfig>,
-    ) -> anyhow::Result<BoxStream<'a, anyhow::Result<AsterAgentEvent>>> {
-        let (_, user_message, session_config, cancel_token) = provider_call.into_parts();
-        agent
-            .reply_with_provider(
-                user_message,
-                session_config,
-                cancel_token,
-                self.inner.clone(),
-            )
-            .await
+    fn into_inner(self) -> Arc<dyn Provider> {
+        self.inner
     }
 }
 

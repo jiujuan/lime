@@ -71,9 +71,25 @@ export function contentPartMetadataFromThreadToolItem(
     toolCall.metadata && typeof toolCall.metadata === "object"
       ? { ...(toolCall.metadata as Record<string, unknown>) }
       : {};
+  metadata.source = "agent_thread_item";
+  metadata.threadItemId = item.id;
   metadata.sequence = item.sequence;
   metadata.turnId = item.turn_id;
   return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+export function contentPartMetadataFromThreadReasoningItem(
+  item: AgentThreadReasoningItem,
+): Record<string, unknown> {
+  return {
+    ...(item.metadata && typeof item.metadata === "object"
+      ? (item.metadata as Record<string, unknown>)
+      : {}),
+    source: "thread_item_reasoning",
+    threadItemId: item.id,
+    sequence: item.sequence,
+    turnId: item.turn_id,
+  };
 }
 
 function insertReasoningPartByThreadSequence(

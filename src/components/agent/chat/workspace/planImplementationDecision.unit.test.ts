@@ -3,7 +3,9 @@ import type { AgentThreadItem, Message } from "../types";
 import {
   buildPlanImplementationHarnessMetadata,
   buildPlanImplementationRequestId,
+  buildPlanImplementationSubmitPlan,
   hasProposedPlanImplementationSignals,
+  readPlanImplementationConfirmationKeys,
   selectProposedPlanImplementationDecision,
 } from "./planImplementationDecision";
 
@@ -297,7 +299,7 @@ describe("planImplementationDecision", () => {
           plan_source: "tool",
         },
       }),
-    ).toEqual({
+    ).toMatchObject({
       latest_plan_revision: {
         revision_id: "proposed_plan:3",
         source_item_id: "plan:proposed_plan:3",
@@ -312,8 +314,118 @@ describe("planImplementationDecision", () => {
         turn_id: "turn-3",
         source: "tool",
         proposed_plan: "- 核对计划\n- 复测 E2E",
+        plan_confirmation_key: expect.stringContaining(
+          "plan-revision:proposed_plan:3:",
+        ),
       },
     });
+  });
+
+  it("接受本地计划时应构造普通发送计划而不是 approval response", () => {
+    const plan = buildPlanImplementationSubmitPlan({
+      acceptedLabel: "是，实施此计划",
+      effectiveChatToolPreferences: { task: true, subagent: false },
+      requestArguments: {
+        proposed_plan: "- 核对计划\n- 复测 E2E",
+        plan_revision_id: "proposed_plan:3",
+        source_item_id: "plan:proposed_plan:3",
+        turn_id: "turn-3",
+        plan_source: "tool",
+      },
+      response: {
+        requestId: "local-plan-implementation:1",
+        confirmed: true,
+        response: JSON.stringify({ answer: "是，实施此计划" }),
+        actionType: "ask_user",
+        userData: { answer: "是，实施此计划" },
+      },
+    });
+
+    expect(plan).toMatchObject({
+      kind: "send",
+      decision: "accepted",
+      requestId: "local-plan-implementation:1",
+      confirmationKeys: expect.arrayContaining([
+        expect.stringContaining("plan-revision:proposed_plan:3:"),
+        expect.stringContaining("plan-text:"),
+      ]),
+      textOverride: "Implement the plan.",
+      sendOptions: {
+        skipSceneCommandRouting: true,
+        toolPreferencesOverride: {
+          task: false,
+          subagent: false,
+        },
+        requestMetadata: {
+          harness: {
+            collaboration_mode: {
+              mode: "implement",
+              source: "plan_implementation_accept",
+            },
+            plan_implementation_decision: {
+              decision: "accepted",
+              request_id: "local-plan-implementation:1",
+              plan_revision_id: "proposed_plan:3",
+            },
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(plan)).not.toContain("agentSession/action/respond");
+    expect(JSON.stringify(plan)).not.toContain('"decision":"allow_once"');
+    expect(JSON.stringify(plan)).not.toContain('"decision":"decline"');
+  });
+
+  it("调整本地计划时应保持 Plan mode 继续 steer 而不是 approval response", () => {
+    const plan = buildPlanImplementationSubmitPlan({
+      acceptedLabel: "是，实施此计划",
+      effectiveChatToolPreferences: { task: false, subagent: false },
+      requestArguments: {
+        proposed_plan: "- 先改 UI\n- 再跑测试",
+        source: "message",
+      },
+      response: {
+        requestId: "local-plan-implementation:adjust",
+        confirmed: true,
+        response: JSON.stringify({ answer: "先补 Electron CDP Gate B" }),
+        actionType: "ask_user",
+        userData: { answer: "先补 Electron CDP Gate B" },
+      },
+    });
+
+    expect(plan).toMatchObject({
+      kind: "send",
+      decision: "adjustment",
+      requestId: "local-plan-implementation:adjust",
+      textOverride: "先补 Electron CDP Gate B",
+      sendOptions: {
+        skipSceneCommandRouting: true,
+        toolPreferencesOverride: {
+          task: true,
+          subagent: false,
+        },
+        requestMetadata: {
+          harness: {
+            collaboration_mode: {
+              mode: "plan",
+              source: "plan_implementation_adjustment",
+            },
+            preferences: {
+              task: true,
+              task_mode: true,
+            },
+            task_mode_enabled: true,
+            plan_implementation_decision: {
+              decision: "adjustment",
+              request_id: "local-plan-implementation:adjust",
+            },
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(plan)).not.toContain("agentSession/action/respond");
+    expect(JSON.stringify(plan)).not.toContain('"decision":"allow_once"');
+    expect(JSON.stringify(plan)).not.toContain('"decision":"cancel"');
   });
 
   it("只有计划摘要文本时不应生成实施确认", () => {
@@ -377,5 +489,65 @@ describe("planImplementationDecision", () => {
         ),
       }),
     ).toBeNull();
+  });
+
+  it("已确认的相同计划从消息同步为 thread item 后不应再次打断", () => {
+    const planText = "- 修复抽屉\n- 跑 GUI fixture";
+    const firstDecision = selectProposedPlanImplementationDecision({
+      messages: [
+        createAssistantMessage(
+          "assistant-1",
+          `<proposed_plan>\n${planText}\n</proposed_plan>`,
+        ),
+      ],
+    });
+    const submittedConfirmationKeys = readPlanImplementationConfirmationKeys(
+      firstDecision?.action.arguments,
+    );
+
+    expect(submittedConfirmationKeys).toEqual(
+      expect.arrayContaining([expect.stringContaining("plan-text:")]),
+    );
+    expect(
+      selectProposedPlanImplementationDecision({
+        messages: [createAssistantMessage("assistant-sync", "计划已同步。")],
+        submittedConfirmationKeys: new Set(submittedConfirmationKeys),
+        threadItems: [
+          createPlanThreadItem({
+            id: "plan-item-synced",
+            text: planText,
+            metadata: {
+              revisionId: "proposed_plan:synced",
+              source: "proposed_plan",
+            },
+          }),
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("同一 revision 内容变化时仍应重新进入 Plan 确认", () => {
+    const oldPlanText = "- 修复抽屉\n- 跑 GUI fixture";
+    const oldConfirmationKeys = readPlanImplementationConfirmationKeys({
+      proposed_plan: oldPlanText,
+      plan_revision_id: "proposed_plan:shared",
+    });
+
+    const decision = selectProposedPlanImplementationDecision({
+      submittedConfirmationKeys: new Set(oldConfirmationKeys),
+      threadItems: [
+        createPlanThreadItem({
+          id: "plan-item-revised",
+          text: "- 修复抽屉\n- 增加 Electron CDP Gate B",
+          metadata: {
+            revisionId: "proposed_plan:shared",
+            source: "proposed_plan",
+          },
+        }),
+      ],
+    });
+
+    expect(decision).not.toBeNull();
+    expect(decision?.planText).toContain("Electron CDP Gate B");
   });
 });

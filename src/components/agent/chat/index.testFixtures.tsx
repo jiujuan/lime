@@ -50,6 +50,7 @@ const {
   mockUseSessionRecentMetadataSyncRuntime,
   mockUseWorkspaceKnowledgeRuntime,
   mockUseGlobalMediaGenerationDefaults,
+  mockReadGlobalMediaGenerationDefaults,
   mockUseServiceModelsConfig,
   mockUseSoulArtifactVoiceGenerationBrief,
   mockUseImageGen,
@@ -109,6 +110,7 @@ const {
   mockUseSessionRecentMetadataSyncRuntime: vi.fn(),
   mockUseWorkspaceKnowledgeRuntime: vi.fn(),
   mockUseGlobalMediaGenerationDefaults: vi.fn(),
+  mockReadGlobalMediaGenerationDefaults: vi.fn(),
   mockUseServiceModelsConfig: vi.fn(),
   mockUseSoulArtifactVoiceGenerationBrief: vi.fn(),
   mockUseImageGen: vi.fn(),
@@ -283,6 +285,7 @@ export function getIndexTestMocks() {
     mockUseSessionRecentMetadataSyncRuntime,
     mockUseWorkspaceKnowledgeRuntime,
     mockUseGlobalMediaGenerationDefaults,
+    mockReadGlobalMediaGenerationDefaults,
     mockUseServiceModelsConfig,
     mockUseSoulArtifactVoiceGenerationBrief,
     mockUseImageGen,
@@ -374,6 +377,7 @@ vi.mock("./workspace/knowledge/useWorkspaceKnowledgeRuntime", () => ({
 
 vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
   useGlobalMediaGenerationDefaults: mockUseGlobalMediaGenerationDefaults,
+  readGlobalMediaGenerationDefaults: mockReadGlobalMediaGenerationDefaults,
 }));
 
 vi.mock("@/hooks/useServiceModelsConfig", () => ({
@@ -1605,6 +1609,7 @@ beforeEach(async () => {
     mediaDefaults: {},
     loading: false,
   });
+  mockReadGlobalMediaGenerationDefaults.mockResolvedValue({});
   mockUseServiceModelsConfig.mockReturnValue({
     serviceModels: {},
     agentResponseLanguage: undefined,

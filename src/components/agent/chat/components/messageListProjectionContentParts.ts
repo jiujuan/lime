@@ -1,5 +1,12 @@
 import { sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
 import { isAgentMessageCommentaryPhase } from "../utils/agentMessagePhase";
+import {
+  areComparableContentTextsEqual,
+  areComparableContentTextsRelated,
+  isComparableContentTextPrefix,
+  normalizeComparableContentText,
+  readableContentTextScore,
+} from "./messageListComparableText";
 import type { AgentThreadItem, Message } from "../types";
 
 export type MessageContentPart = NonNullable<Message["contentParts"]>[number];
@@ -372,5 +379,217 @@ export function ensureInlineThinkingContentPart(params: {
 export function normalizeInlineThinkingContentParts(
   parts?: Message["contentParts"],
 ): Message["contentParts"] | undefined {
-  return parts;
+  if (!parts || parts.length < 2) {
+    return parts;
+  }
+
+  let changed = false;
+  const normalized: NonNullable<Message["contentParts"]> = [];
+  const thinkingIndexByIdentity = new Map<string, number>();
+
+  for (const part of parts) {
+    const previous = normalized[normalized.length - 1];
+
+    const thinkingIdentities =
+      part.type === "thinking" ? readThinkingContentPartIdentities(part) : [];
+
+    if (part.type === "thinking") {
+      const existingIndex =
+        findExistingThinkingContentPartIndex({
+          identities: thinkingIdentities,
+          normalized,
+          part,
+          thinkingIndexByIdentity,
+        });
+      if (existingIndex !== undefined) {
+        const existingPart = normalized[existingIndex];
+        if (existingPart?.type === "thinking") {
+          normalized[existingIndex] = mergeDuplicateThinkingContentPart(
+            existingPart,
+            part,
+          );
+        }
+        registerThinkingContentPartIdentities(
+          thinkingIndexByIdentity,
+          thinkingIdentities,
+          existingIndex,
+        );
+        changed = true;
+        continue;
+      }
+      registerThinkingContentPartIdentities(
+        thinkingIndexByIdentity,
+        thinkingIdentities,
+        normalized.length,
+      );
+    }
+
+    if (
+      previous?.type === "thinking" &&
+      part.type === "thinking" &&
+      areComparableContentTextsEqual(previous.text, part.text)
+    ) {
+      changed = true;
+      if (!previous.metadata && part.metadata) {
+        normalized[normalized.length - 1] = part;
+      }
+      registerThinkingContentPartIdentities(
+        thinkingIndexByIdentity,
+        thinkingIdentities,
+        normalized.length - 1,
+      );
+      continue;
+    }
+
+    if (previous?.type === "thinking" && part.type === "thinking") {
+      if (isComparableContentTextPrefix(previous.text, part.text)) {
+        normalized[normalized.length - 1] = part;
+        registerThinkingContentPartIdentities(
+          thinkingIndexByIdentity,
+          thinkingIdentities,
+          normalized.length - 1,
+        );
+        changed = true;
+        continue;
+      }
+      if (isComparableContentTextPrefix(part.text, previous.text)) {
+        changed = true;
+        continue;
+      }
+    }
+
+    if (
+      previous?.type === "text" &&
+      part.type === "text" &&
+      isFinalTextContentPart(previous) &&
+      isFinalTextContentPart(part) &&
+      areComparableContentTextsEqual(previous.text, part.text)
+    ) {
+      changed = true;
+      if (!previous.metadata && part.metadata) {
+        normalized[normalized.length - 1] = part;
+      }
+      continue;
+    }
+
+    normalized.push(part);
+  }
+
+  return changed ? normalized : parts;
+}
+
+function readMetadataString(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataNumber(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): number | null {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readThinkingContentPartIdentities(
+  part: Extract<MessageContentPart, { type: "thinking" }>,
+): string[] {
+  const identities: string[] = [];
+  const metadata = part.metadata;
+  const itemId =
+    readMetadataString(metadata, "threadItemId") ||
+    readMetadataString(metadata, "itemId");
+  if (itemId) {
+    identities.push(`item:${itemId}`);
+  }
+
+  const turnId = readMetadataString(metadata, "turnId");
+  const sequence = readMetadataNumber(metadata, "sequence");
+  if (turnId && sequence !== null) {
+    identities.push(`turn:${turnId}:${sequence}`);
+  }
+
+  const normalizedText = normalizeComparableContentText(part.text);
+  if (normalizedText) {
+    identities.push(`legacy-text:${normalizedText}`);
+  }
+
+  return identities;
+}
+
+function registerThinkingContentPartIdentities(
+  indexByIdentity: Map<string, number>,
+  identities: string[],
+  index: number,
+) {
+  for (const identity of identities) {
+    indexByIdentity.set(identity, index);
+  }
+}
+
+function findExistingThinkingContentPartIndex(params: {
+  identities: string[];
+  normalized: NonNullable<Message["contentParts"]>;
+  part: Extract<MessageContentPart, { type: "thinking" }>;
+  thinkingIndexByIdentity: Map<string, number>;
+}): number | undefined {
+  for (const identity of params.identities) {
+    const existingIndex = params.thinkingIndexByIdentity.get(identity);
+    if (existingIndex !== undefined) {
+      return existingIndex;
+    }
+  }
+
+  const index = params.normalized.findIndex(
+    (candidate) =>
+      candidate.type === "thinking" &&
+      areComparableContentTextsRelated(candidate.text, params.part.text),
+  );
+  return index >= 0 ? index : undefined;
+}
+
+function shouldPreferReadableThinkingText(params: {
+  previousText: string;
+  nextText: string;
+}): boolean {
+  if (isComparableContentTextPrefix(params.previousText, params.nextText)) {
+    return true;
+  }
+
+  if (
+    !areComparableContentTextsRelated(params.previousText, params.nextText)
+  ) {
+    return false;
+  }
+
+  return (
+    readableContentTextScore(params.nextText) >
+    readableContentTextScore(params.previousText) + 2
+  );
+}
+
+function mergeDuplicateThinkingContentPart(
+  previous: Extract<MessageContentPart, { type: "thinking" }>,
+  next: Extract<MessageContentPart, { type: "thinking" }>,
+): Extract<MessageContentPart, { type: "thinking" }> {
+  if (
+    shouldPreferReadableThinkingText({
+      previousText: previous.text,
+      nextText: next.text,
+    })
+  ) {
+    return {
+      ...previous,
+      text: next.text,
+      metadata: previous.metadata ?? next.metadata,
+    };
+  }
+
+  return {
+    ...previous,
+    metadata: previous.metadata ?? next.metadata,
+  };
 }

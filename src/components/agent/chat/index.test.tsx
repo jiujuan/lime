@@ -30,6 +30,7 @@ const {
   mockSkillExecutionGetDetail,
   mockSkillsGetLocal,
   mockUseAgentChatUnified,
+  mockUseSessionFiles,
   mockUseTrayModelShortcuts,
 } = getIndexTestMocks();
 
@@ -454,13 +455,26 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
           title: "当前会话",
           updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
           workspaceId: "workspace-test",
+          messagesCount: 1,
+        },
+      ],
+      messages: [
+        {
+          id: "msg-existing-user",
+          role: "user",
+          content: "上一轮历史消息",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT),
         },
       ],
     });
     const createFreshSession = vi.fn(async () => "new-topic");
-    const clearMessages = vi.fn();
+    const clearMessages = vi.fn(() => {
+      state.messages = [];
+    });
+    const switchTopic = vi.fn(async () => "success");
     state.createFreshSession = createFreshSession;
     state.clearMessages = clearMessages;
+    state.switchTopic = switchTopic;
     installMockAgentChatUnifiedState(state);
 
     const mounted = mountPage({
@@ -484,6 +498,7 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
 
     expect(createFreshSession).not.toHaveBeenCalled();
     expect(clearMessages).toHaveBeenCalledWith({ showToast: false });
+    expect(switchTopic).not.toHaveBeenCalled();
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
     expect(
@@ -503,7 +518,7 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     expect(container.querySelector('[data-testid="message-list"]')).toBeNull();
   });
 
-  it("历史会话 route 收到无项目新建任务事件时不应跳到无项目新建页", async () => {
+  it("历史会话 route 收到无项目新建任务事件时应沿用当前项目打开任务首页", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
@@ -520,22 +535,34 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     state.clearMessages = vi.fn();
     installMockAgentChatUnifiedState(state);
 
-    mountPage({
+    const mounted = mountPage({
       agentEntry: "claw",
       initialSessionId: "topic-project",
       projectId: "workspace-test",
       onNavigate,
     });
+    const { container } = mounted;
     await flushEffects();
 
     expect(
       requestTaskCenterDraftTask({ source: "sidebar", projectId: null }),
     ).toBe(true);
     await flushEffects();
+    mounted.rerender();
+    await flushEffects();
 
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
-    expect(state.clearMessages).not.toHaveBeenCalled();
+    expect(state.clearMessages).toHaveBeenCalledWith({ showToast: false });
+    expect(
+      container.querySelector(
+        '[data-testid="task-center-home-top-toolbar-host"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="empty-state"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="message-list"]')).toBeNull();
   });
 
   it("项目会话收到顶部新建任务事件时应保留当前项目上下文", async () => {
@@ -729,6 +756,10 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
         }),
     );
     state.createFreshSession = createFreshSession;
+    sharedSendMessageMock.mockImplementation(async () => {
+      state.currentTurnId = "pending-turn:test";
+      state.isSending = true;
+    });
     installMockAgentChatUnifiedState(state);
 
     const mounted = mountPage({
@@ -769,7 +800,7 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
         }
       | undefined;
     if (latestDraftMessageListProps) {
-      expect(latestDraftMessageListProps.emptyStateVariant).toBe("default");
+      expect(latestDraftMessageListProps.emptyStateVariant).toBe("none");
       expect(latestDraftMessageListProps.messages).toEqual([]);
       expect(latestDraftMessageListProps.sessionId).toBeNull();
     }
@@ -794,6 +825,14 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
 
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
     expect(getSendMessageCall().content).toBe("你好");
+    mounted.rerender();
+    await flushEffects();
+    expect(mockUseSessionFiles).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: "new-topic",
+        autoInit: false,
+      }),
+    );
     expect(
       (
         getSendMessageCall().options?.requestMetadata as

@@ -1,42 +1,40 @@
-## Lime v1.96.0
+## Lime v1.97.0
 
 ### 新功能
 
-- Agent / Claw 工作区补齐审批 HITL 主链：App Server action replay / respond 协议、approval cache、输入栏审批提示、审批记录卡片、trace attribution 与 GUI fixture 都进入 current 路径。
-- Runtime 工具面新增 Codex-first 的 ToolSearch、MCP resource、Skill 执行、gateway bridge、native overlay 和 live execution process 模块，统一 Rust runtime、App Server backend 与前端工具展示的事实源。
-- Agent runtime projection 扩展多组会话与事件形状，覆盖 context compaction、dynamic tool call、live tail commit、MCP elicitation / inventory / resource read、multi-agent visual snapshot、thread fork / rollback / resume、token usage replay 等场景。
-- 媒体引用预览、resize / reflow、代码活动 evidence、session media refs 和 artifact snapshot 投影继续收敛，使工作台、read model 与发布证据共享同一条 App Server 数据链。
+- Agent Runtime 增加 provider source backend、response event materializer、tool input delta 和 reasoning delta 投影，使 provider streaming 能更直接进入 current timeline / read model。
+- App Server / protocol 新增 `voiceTranscription/polishText` 主链，并接入前端语音输入，支持实时预览转写和最终文本润色。
+- Agent / Claw 工作区补齐任务中心首页热路径、计划确认、审批输入栏优先级、图片工作台发送路由和会话文件自动初始化控制。
+- 新增版本级 benchmark release gate 脚本与 manifest，能生成 context、checklist、P1 dry-run / preflight、summary、baseline 和严格 gate 证据。
 
 ### 修复
 
-- 修复 Agent / Claw terminal read model、tail recovery、停止 / 继续、session hydrate、输入栏场景恢复和 timeline merge 中的边界状态，降低旧事件误停新 stream 或恢复错误 UI 的风险。
-- 修复 App Server event store、read model、turn execution、permission preflight、action response 与 external backend 的协议漂移，补齐 action required / replay 的 schema 和 client 类型。
-- 修复 MCP current smoke、Electron fixture build、workspace plugin runtime fixture 和脚本断言拆分中的路径、构建与状态采集边界。
-- 修复 Soul style profile、设置页、视频工作区提示、tooltip 与 HelpTip 的展示边界，并移除旧声音上下文和默认音效资源依赖。
+- 修复 provider tail idle 后已有纯文本输出仍被判失败的问题，降低长流式回复末尾超时导致空结果的风险。
+- 修复 Electron App Server sidecar 在 macOS / Linux / Windows 下加载同目录运行时库的环境变量传递，并补齐主窗口媒体权限处理。
+- 修复历史会话 hydrate、thread item 投影、reasoning 内容同步、输入框发送、任务中心草稿和 workspace 初始导航中的状态边界。
+- 修复模型选择器在模型未加载或未知模型场景下的自动切换逻辑，避免覆盖用户仍有效的模型选择。
 
 ### 优化与重构
 
-- 删除 Aster vendor / Lime agent 中的 LSP、旧 web retrieval、旧 native tools 和旧 tool search 实现，把可保留能力迁入 current App Server / tool-runtime owner。
-- 拆分 `tool-runtime` 的 extension、executor、IO、skill gate、MCP resource、skill execute / result 和 live execution process，减少中心文件继续膨胀。
-- 拆分 App Server runtime 的 evidence provider、session media reader、permission preflight、runtime backend native tools 与 workflow control，让领域模块承担各自状态和投影。
-- 前端 HarnessStatusPanel、tool inventory、timeline conversion、message projection、workspace trace、task center、media preview 和 inputbar runtime 继续按 view model / helper 分层收敛。
-- 更新五语言 i18n 资源，覆盖 Agent、inputbar、message list 与 settings 新增展示文案。
+- 将 `lime-rs/vendor/aster-rust` 物理删除，迁移剩余 Aster-shaped adapter 到 `crates/agent-compat` 临时 owner，并收敛相关 governance guard。
+- 拆分 provider trace、reply backend、reply loop、tool lifecycle、approval decision contract、projection store 和 voice text processing 等 runtime 领域边界。
+- 清退旧浏览器工作区 home hint、旧 StreamingWriteFileCard、旧 text normalization 和若干旧 tool display copy 分支。
+- 优化输入栏语音采样、实时转写拼接、CJK 语种空格处理、图片生成偏好刷新和资源管理器搜索 / 工具栏展示。
 
 ### 测试与质量
 
-- 新增和更新审批流、tool inventory、ToolSearch、timeline projection、media preview、task center、workspace trace、terminal read model、tail recovery 和 App Server event stream 回归。
-- 新增 Rust 定向测试覆盖 permission preflight、external event sequence、tool lifecycle、objectives、coding evidence snapshot、tool orchestrator cancellation、runtime backend tool inventory 和 Skill runtime enable。
-- 扩展 Claw current fixture 的 approval、resize / reflow、live tail、runtime surface、scenario assertion 与 read model 证据，提升 GUI 主路径发布验证覆盖。
-- 更新 App Server protocol schema、generated TypeScript types、client contract、command catalog、legacy boundary guard、MCP smoke 和 Electron current entrypoint 检查。
+- 新增和更新 provider stream idle、reply source backend、response materializer、approval decision、permission preflight、session hydration projection、voice polish 和 Electron media permission 回归。
+- 扩展 Claw current fixture、session history fixture、code artifact workbench fixture、benchmark runner 和 app-server asset / sidecar 脚本测试。
+- 更新 App Server protocol schema、generated TypeScript types、client methods、command policy guard、Aster migration boundary 和脚本治理检查。
+- 当前 benchmark release gate 仍 fail closed：P1 Terminal-Bench / DeepSWE true-run 依赖 Docker / runner 环境，尚不能作为正式放行依据。
 
 ### 文档
 
-- 新增审批路线图与 HITL decision model 执行计划。
-- 更新 Aster capability intake、refactor v1 impact audit、Clawstream Codex-derived guardrail、Soul style output、MCP modernization、plan runtime 和测试场景 ledger / registry。
-- 更新命令边界、Playwright E2E、脚本治理和执行计划索引，记录 current runtime 与 GUI 验证口径。
+- 新增和更新 Aster Phase 6 provider reply backend、迁移收口、dead code deletion、benchmark release、approval HITL 和 Clawstream guardrail 相关计划与路线图。
+- 更新 Aster migration、governance、执行计划索引、benchmark dataset / progress / version test plan 和测试场景 ledger / registry。
 
 ### 其他
 
-- 版本事实源更新到 `1.96.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/vendor/aster-rust/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.97.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.95.0` -> `v1.96.0`
+**完整变更**: `v1.96.0` -> `v1.97.0`

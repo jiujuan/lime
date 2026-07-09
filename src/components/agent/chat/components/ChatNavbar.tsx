@@ -48,9 +48,6 @@ interface ChatNavbarProps {
   onCloseProject?: (projectId: string) => void;
   workspaceType?: string;
   deferWorkspaceListLoad?: boolean;
-  workspaceHintMessage?: string;
-  workspaceHintVisible?: boolean;
-  onDismissWorkspaceHint?: () => void;
   showHarnessToggle?: boolean;
   harnessPanelVisible?: boolean;
   onToggleHarnessPanel?: () => void;
@@ -156,9 +153,6 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   onCloseProject,
   workspaceType,
   deferWorkspaceListLoad,
-  workspaceHintMessage,
-  workspaceHintVisible = false,
-  onDismissWorkspaceHint,
   showHarnessToggle = false,
   harnessPanelVisible = false,
   onToggleHarnessPanel,
@@ -395,37 +389,12 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
               );
             })}
             <div className="relative ml-2 flex h-9 items-center pb-1">
-              {workspaceHintVisible && workspaceHintMessage ? (
-                <div
-                  className="absolute bottom-full left-1/2 z-40 mb-2 flex w-max max-w-[220px] -translate-x-1/2 items-center gap-2 rounded-2xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-[color:var(--lime-text)] shadow-lg shadow-slate-950/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  data-testid="task-center-workspace-hint"
-                  role="status"
-                >
-                  <span>{workspaceHintMessage}</span>
-                  <button
-                    type="button"
-                    className="rounded-full px-1 text-[color:var(--lime-text-muted)] transition hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text)] dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                    aria-label={navText(
-                      "agentChat.navbar.dismissWorkspaceHint",
-                      "关闭工作区提示",
-                    )}
-                    onClick={onDismissWorkspaceHint}
-                  >
-                    ×
-                  </button>
-                  <span
-                    aria-hidden="true"
-                    className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </div>
-              ) : null}
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-[14px] bg-transparent text-[color:var(--lime-chrome-muted)] shadow-none hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)] dark:text-slate-300 dark:hover:text-white"
                 onClick={() => {
-                  onDismissWorkspaceHint?.();
                   setWorkspaceSelectorOpen((current) => !current);
                 }}
                 aria-label={

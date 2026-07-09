@@ -337,6 +337,8 @@ pub enum AppServerRequestMethod {
     VoiceModelTestTranscribeFile,
     #[serde(rename = "voiceTranscription/transcribeAudio")]
     VoiceTranscriptionTranscribeAudio,
+    #[serde(rename = "voiceTranscription/polishText")]
+    VoiceTranscriptionPolishText,
     #[serde(rename = "workspaceSkillBindings/list")]
     WorkspaceSkillBindingsList,
     #[serde(rename = "workspaceRegisteredSkills/list")]
@@ -780,6 +782,7 @@ impl AppServerRequestMethod {
             Self::VoiceModelDefaultSet => METHOD_VOICE_MODEL_DEFAULT_SET,
             Self::VoiceModelTestTranscribeFile => METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
             Self::VoiceTranscriptionTranscribeAudio => METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
+            Self::VoiceTranscriptionPolishText => METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT,
             Self::WorkspaceSkillBindingsList => METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
             Self::WorkspaceRegisteredSkillsList => METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
             Self::WorkspaceRightSurfaceRequest => METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
@@ -1099,6 +1102,7 @@ impl AppServerRequestMethod {
             METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO => {
                 Some(Self::VoiceTranscriptionTranscribeAudio)
             }
+            METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT => Some(Self::VoiceTranscriptionPolishText),
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => Some(Self::WorkspaceSkillBindingsList),
             METHOD_WORKSPACE_REGISTERED_SKILLS_LIST => Some(Self::WorkspaceRegisteredSkillsList),
             METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST => Some(Self::WorkspaceRightSurfaceRequest),

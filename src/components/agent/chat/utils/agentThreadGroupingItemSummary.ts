@@ -62,7 +62,9 @@ function firstMeaningfulLine(text: string | undefined | null): string | null {
   return normalized || null;
 }
 
-function flattenMeaningfulLines(text: string | undefined | null): string | null {
+function flattenMeaningfulLines(
+  text: string | undefined | null,
+): string | null {
   const normalized = (text || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -326,9 +328,7 @@ function isCommandItem(item: AgentThreadItem): boolean {
   );
 }
 
-export function classifyItemKind(
-  item: AgentThreadItem,
-): AgentThreadGroupKind {
+export function classifyItemKind(item: AgentThreadItem): AgentThreadGroupKind {
   if (item.type === "approval_request" || item.type === "request_user_input") {
     return "approval";
   }
@@ -674,15 +674,6 @@ function summarizeOtherItem(item: AgentThreadItem): string | null {
       );
     }
 
-    if (normalized === "sendusermessage" || normalized === "brief") {
-      return prefixAction(
-        readString(args, ["message"]) ||
-          resolveUserFacingToolDisplayLabel(item.tool_name),
-        "已发送 ",
-        ["已发送 ", "发送了 "],
-      );
-    }
-
     return prefixAction(
       resolveUserFacingToolDisplayLabel(item.tool_name),
       "处理了 ",
@@ -692,9 +683,7 @@ function summarizeOtherItem(item: AgentThreadItem): string | null {
   return null;
 }
 
-export function summarizeThinkingItem(
-  item: AgentThreadItem,
-): string | null {
+export function summarizeThinkingItem(item: AgentThreadItem): string | null {
   if (item.type === "turn_summary") {
     if (shouldHideTurnSummaryFromConversation(item)) {
       return null;
@@ -719,8 +708,7 @@ export function summarizeThinkingItem(
     return (
       extractThinkingPreviewLine(item.summary?.join("；") || item.text, {
         flattenFragments: true,
-      }) ||
-      (item.status === "in_progress" ? "思考中" : "已完成思考")
+      }) || (item.status === "in_progress" ? "思考中" : "已完成思考")
     );
   }
 

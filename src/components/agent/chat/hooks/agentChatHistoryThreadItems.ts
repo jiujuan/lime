@@ -28,11 +28,13 @@ import { mergeAdjacentAssistantMessages } from "./agentChatHistoryAdjacentMerge"
 import {
   appendTextToParts,
   appendThinkingToHistoryParts,
-  asHistoryRecord,
   parseHistoryTimestamp,
   mergeByKey,
 } from "./agentChatHistoryPrimitives";
-import { contentPartMetadataFromThreadToolItem } from "./agentChatHistoryReasoning";
+import {
+  contentPartMetadataFromThreadReasoningItem,
+  contentPartMetadataFromThreadToolItem,
+} from "./agentChatHistoryReasoning";
 import { extractThinkingContentFromParts } from "./agentChatHistoryPrimitives";
 import {
   mergeHydratedToolStateContentParts,
@@ -407,7 +409,7 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       draft.contentParts = appendThinkingToHistoryParts(
         draft.contentParts || [],
         item.text,
-        asHistoryRecord(item.metadata) ?? undefined,
+        contentPartMetadataFromThreadReasoningItem(item),
       );
       draft.timestamp = parseHistoryTimestamp(
         item.completed_at || item.updated_at || item.started_at,

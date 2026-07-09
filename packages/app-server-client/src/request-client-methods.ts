@@ -1268,6 +1268,12 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "required",
     },
     {
+      name: "polishVoiceText",
+      method: protocol.METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT,
+      kind: "request",
+      params: "required",
+    },
+    {
       name: "readUsageStats",
       method: protocol.METHOD_USAGE_STATS_READ,
       kind: "request",

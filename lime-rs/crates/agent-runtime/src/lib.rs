@@ -1,9 +1,11 @@
 pub mod ask;
 pub mod event_stream;
+pub mod provider_trace;
 pub mod reply_backend;
 pub mod reply_execution;
 pub mod reply_host;
 pub mod reply_input;
+pub mod reply_loop;
 pub mod reply_message;
 pub mod reply_request;
 pub mod reply_session;

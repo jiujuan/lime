@@ -293,6 +293,86 @@ export function clickApprovalApproveButton(page, options) {
   return clickApprovalDecisionButton(page, options, "allow_for_session");
 }
 
+export async function waitForGuiApprovalPromptAbsent(
+  page,
+  options,
+  { requiredText = "", runtimePromptText = APPROVAL_REQUEST_RESUME_APPROVAL_PROMPT } = {},
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < Math.min(options.timeoutMs, 30_000)) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ requiredText, runtimePromptText }) => {
+        const bodyText = document.body?.innerText || "";
+        const approvalPrompt = document.querySelector(
+          '[data-testid="inputbar-approval-prompt"]',
+        );
+        const approvalRecordCount = document.querySelectorAll(
+          '[data-testid="timeline-approval-record"]',
+        ).length;
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const textareaRect = textarea?.getBoundingClientRect();
+        const textareaStyle = textarea ? window.getComputedStyle(textarea) : null;
+        const textareaVisible = Boolean(
+          textarea &&
+            textareaRect &&
+            textareaRect.width > 16 &&
+            textareaRect.height > 16 &&
+            textareaStyle?.visibility !== "hidden" &&
+            textareaStyle?.display !== "none",
+        );
+        const buttons = Array.from(document.querySelectorAll("button"));
+        const stopButtonVisible = buttons.some((button) => {
+          const label = [
+            button.textContent || "",
+            button.getAttribute("aria-label") || "",
+          ].join("\n");
+          return (
+            !button.disabled &&
+            (label.includes("停止") ||
+              label.includes("终止") ||
+              /\bStop\b/i.test(label))
+          );
+        });
+        return {
+          approvalPromptVisible: Boolean(approvalPrompt),
+          approvalRecordCount,
+          includesRuntimePermissionPrompt:
+            bodyText.includes("需要确认浏览器控制权限"),
+          includesRuntimeApprovalPrompt: runtimePromptText
+            ? bodyText.includes(runtimePromptText)
+            : false,
+          hasRequiredText: requiredText ? bodyText.includes(requiredText) : true,
+          textareaVisible,
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          stopButtonVisible,
+        };
+      },
+      { requiredText, runtimePromptText },
+    );
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.hasRequiredText === true &&
+      snapshot?.approvalPromptVisible === false &&
+      snapshot?.includesRuntimePermissionPrompt === false &&
+      snapshot?.includesRuntimeApprovalPrompt === false &&
+      snapshot?.textareaVisible === true &&
+      snapshot?.textareaDisabled === false &&
+      snapshot?.stopButtonVisible === false
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `不应出现审批输入区: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
+  );
+}
+
 export async function waitForGuiApprovalPromptAbsentAfterSecondTurn(
   page,
   options,

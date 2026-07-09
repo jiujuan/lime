@@ -11,6 +11,8 @@ import {
   EVENT_READ_PROBE_TOOL_NAME,
   EVENT_READ_PROBE_TURN_ID,
   GOAL_PROMPT,
+  HOME_HOTPATH_GREETING_SCENARIO,
+  HOME_HOTPATH_SCENARIO,
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_PROMPT,
   IMAGE_FIXTURE_MODEL,
@@ -27,6 +29,7 @@ import {
 import { buildContentFactoryArticleWorkspaceScenarioAssertions } from "./claw-chat-current-fixture-content-factory-assertions.mjs";
 import {
   buildApprovalRequestDecisionScenarioAssertions,
+  buildApprovalRequestFullAccessScenarioAssertions,
   buildApprovalRequestResumeScenarioAssertions,
 } from "./claw-chat-current-fixture-approval-assertions.mjs";
 import {
@@ -107,6 +110,150 @@ function streamParserBoundaryBackendObserved(backendLedger) {
   );
 }
 
+function homeHotpathTraceSession(summary) {
+  const sessions = Array.isArray(summary.agentUiPerformanceTrace?.sessions)
+    ? summary.agentUiPerformanceTrace.sessions
+    : [];
+  return (
+    sessions.find(
+      (session) =>
+        typeof session?.metrics?.homeInputToPendingPreviewPaintMs ===
+          "number" ||
+        typeof session?.metrics?.inputbarTriggerToPendingPreviewPaintMs ===
+          "number",
+    ) ?? null
+  );
+}
+
+function metricWithin(traceSession, key, maxMs) {
+  const value = traceSession?.metrics?.[key];
+  return typeof value === "number" && Number.isFinite(value) && value <= maxMs;
+}
+
+const HOME_HOTPATH_PENDING_PREVIEW_PAINT_BUDGET_MS = 750;
+const HOME_HOTPATH_SEND_DISPATCH_BUDGET_MS = 250;
+const HOME_HOTPATH_SUBMIT_ACCEPTED_BUDGET_MS = 1500;
+const HOME_HOTPATH_TEXT_DELTA_TO_PAINT_BUDGET_MS = 250;
+
+function buildHomeHotpathScenarioAssertions({
+  homeHotpathPrompt,
+  homeHotpathTurnStart,
+  summary,
+}) {
+  const hotpath = summary.homeHotpath ?? {};
+  const traceSession = homeHotpathTraceSession(summary);
+  const postSubmitProjection = hotpath.postSubmitProjection ?? {};
+  const completedProjection = hotpath.completedProjection ?? {};
+  const expectedPrompt = hotpath.prompt ?? homeHotpathPrompt ?? NEWS_PROMPT;
+  return {
+    homeHotpathScenarioRegistered:
+      HOME_HOTPATH_SCENARIO === "home-hotpath" &&
+      HOME_HOTPATH_GREETING_SCENARIO === "home-hotpath-greeting",
+    homeHotpathStartedFromEmptyState:
+      hotpath.homeOpened?.after?.hasEmptyStateFirstScreen === true &&
+      hotpath.homeOpened?.after?.hasConnectedComposer === true &&
+      hotpath.homeOpened?.after?.textareaVisible === true &&
+      hotpath.homeOpened?.after?.textareaDisabled === false,
+    homeHotpathPromptReachedBackend:
+      homeHotpathTurnStart?.inputText === expectedPrompt &&
+      typeof hotpath.backendTurnStart?.sessionId === "string" &&
+      hotpath.backendTurnStart.sessionId.length > 0,
+    homeHotpathUserMessageVisibleAfterSubmit:
+      hotpath.inputSend?.afterClick?.promptInBody === true ||
+      postSubmitProjection.promptInBody === true,
+    homeHotpathNoBlankConversationAfterSubmit:
+      postSubmitProjection.hasEmptyConversationText === false &&
+      postSubmitProjection.hasNoAvailableModelText === false,
+    homeHotpathNoTransientFallbackAfterInputFill:
+      hotpath.inputSend?.afterFillStability?.stable === true,
+    homeHotpathNoFlickerBetweenSubmitAndConversation:
+      hotpath.submitToConversationStability?.stable === true,
+    homeHotpathPreTurnTraceWindowAvailable:
+      typeof hotpath.preTurnTrace?.clickAt === "string" &&
+      typeof hotpath.preTurnTrace?.turnStartAt === "string",
+    homeHotpathNoAuxiliaryAppServerBeforeTurnStart:
+      Array.isArray(
+        hotpath.preTurnTrace?.blockedAuxiliaryMethodsBeforeTurnStart,
+      ) &&
+      hotpath.preTurnTrace.blockedAuxiliaryMethodsBeforeTurnStart.length === 0,
+    homeHotpathCompletedInGui:
+      hotpath.guiCompleted?.hasPrompt === true &&
+      (hotpath.guiCompleted?.hasAssistantSummary === true ||
+        hotpath.guiCompleted?.hasDoneText === true) &&
+      hotpath.guiCompleted?.textareaVisible === true &&
+      hotpath.guiCompleted?.textareaDisabled === false &&
+      hotpath.guiCompleted?.stopButtonVisible === false,
+    homeHotpathReadModelCompleted:
+      hotpath.readModelCompleted?.available === true &&
+      hotpath.readModelCompleted?.includesPrompt === true &&
+      hotpath.readModelCompleted?.includesDone === true,
+    homeHotpathNoHomeOrModelFallbackAfterComplete:
+      completedProjection.hasTaskCenterHomeText === false &&
+      completedProjection.hasEmptyConversationText === false &&
+      completedProjection.hasNoAvailableModelText === false,
+    homeHotpathNoTransientHomeOrBlankDuringRun:
+      hotpath.stability?.stable === true,
+    homeHotpathNoPostCompletionRefreshFlicker:
+      hotpath.postCompletionStability?.stable === true,
+    homeHotpathTraceHasPendingPreviewPaint:
+      Boolean(traceSession) &&
+      (typeof traceSession?.metrics?.homeInputToPendingPreviewPaintMs ===
+        "number" ||
+        typeof traceSession?.metrics?.inputbarTriggerToPendingPreviewPaintMs ===
+          "number"),
+    homeHotpathPendingPreviewPaintWithinBudget:
+      metricWithin(
+        traceSession,
+        "homeInputToPendingPreviewPaintMs",
+        HOME_HOTPATH_PENDING_PREVIEW_PAINT_BUDGET_MS,
+      ) ||
+      metricWithin(
+        traceSession,
+        "inputbarTriggerToPendingPreviewPaintMs",
+        HOME_HOTPATH_PENDING_PREVIEW_PAINT_BUDGET_MS,
+      ),
+    homeHotpathTraceHasSendDispatch:
+      typeof traceSession?.metrics?.homeInputToSendDispatchMs === "number" ||
+      typeof traceSession?.metrics?.inputbarTriggerToSendDispatchMs ===
+        "number",
+    homeHotpathSendDispatchWithinBudget:
+      metricWithin(
+        traceSession,
+        "homeInputToSendDispatchMs",
+        HOME_HOTPATH_SEND_DISPATCH_BUDGET_MS,
+      ) ||
+      metricWithin(
+        traceSession,
+        "inputbarTriggerToSendDispatchMs",
+        HOME_HOTPATH_SEND_DISPATCH_BUDGET_MS,
+      ),
+    homeHotpathTraceHasSubmitAccepted:
+      typeof traceSession?.metrics?.homeInputToSubmitAcceptedMs === "number" ||
+      typeof traceSession?.metrics?.inputbarTriggerToSubmitAcceptedMs ===
+        "number",
+    homeHotpathSubmitAcceptedWithinBudget:
+      metricWithin(
+        traceSession,
+        "homeInputToSubmitAcceptedMs",
+        HOME_HOTPATH_SUBMIT_ACCEPTED_BUDGET_MS,
+      ) ||
+      metricWithin(
+        traceSession,
+        "inputbarTriggerToSubmitAcceptedMs",
+        HOME_HOTPATH_SUBMIT_ACCEPTED_BUDGET_MS,
+      ),
+    homeHotpathTraceHasFirstTextPaint:
+      typeof traceSession?.metrics?.homeInputToFirstTextPaintMs === "number" ||
+      typeof traceSession?.metrics?.submitAcceptedToFirstTextPaintMs ===
+        "number",
+    homeHotpathTextDeltaToPaintWithinBudget: metricWithin(
+      traceSession,
+      "firstTextDeltaToFirstTextPaintMs",
+      HOME_HOTPATH_TEXT_DELTA_TO_PAINT_BUDGET_MS,
+    ),
+  };
+}
+
 export function buildScenarioAssertions(context) {
   const {
     appServerRequestMethods,
@@ -123,6 +270,9 @@ export function buildScenarioAssertions(context) {
     goalHarness,
     goalObjectiveText,
     goalTurnStart,
+    homeHotpathPrompt,
+    homeHotpathTurnStart,
+    isHomeHotpathScenario,
     imageCommandHarness,
     imageCommandTurnStart,
     guiTurnStartReachedBackend,
@@ -133,6 +283,7 @@ export function buildScenarioAssertions(context) {
     isApprovalRequestCancelScenario,
     isApprovalRequestDeclineScenario,
     isApprovalRequestDecisionScenario,
+    isApprovalRequestFullAccessScenario,
     isApprovalRequestResumeScenario,
     isCancelThenContinueScenario,
     isContentFactoryArticleWorkspaceScenario,
@@ -167,10 +318,12 @@ export function buildScenarioAssertions(context) {
     mcpStructuredContentTurnStart,
     mediaReferenceTurnStart,
     multiAgentTeamTurnStart,
+    newsTurnStart,
     pageText,
     planImplementationTurnStart,
     planTurnStart,
     approvalRequestResumeTurnStart,
+    approvalRequestFullAccessTurnStart,
     skillsRuntimeTurnStart,
     explicitSkillsRuntimeTurnStart,
     manualEnableSkillsRuntimeTurnStart,
@@ -197,6 +350,12 @@ export function buildScenarioAssertions(context) {
     imageCommandRuntimeContract?.contractKey;
   const scenarioAssertions = isSoulStyleScenario
     ? buildSoulStyleScenarioAssertions({ summary, guiTurnStartReachedBackend })
+    : isHomeHotpathScenario
+      ? buildHomeHotpathScenarioAssertions({
+          homeHotpathPrompt,
+          homeHotpathTurnStart,
+          summary,
+        })
     : isContentFactoryArticleWorkspaceScenario
       ? {
           ...buildContentFactoryArticleWorkspaceScenarioAssertions({
@@ -719,13 +878,20 @@ export function buildScenarioAssertions(context) {
                           liveTailCommitTurnStart,
                           summary,
                         })
-                      : isApprovalRequestResumeScenario
-                        ? buildApprovalRequestResumeScenarioAssertions({
+                      : isApprovalRequestFullAccessScenario
+                        ? buildApprovalRequestFullAccessScenarioAssertions({
                             appServerRequestMethods,
-                            approvalRequestResumeTurnStart,
+                            approvalRequestFullAccessTurnStart,
                             pageText,
                             summary,
                           })
+                        : isApprovalRequestResumeScenario
+                          ? buildApprovalRequestResumeScenarioAssertions({
+                              appServerRequestMethods,
+                              approvalRequestResumeTurnStart,
+                              pageText,
+                              summary,
+                            })
                         : isApprovalRequestDecisionScenario
                           ? buildApprovalRequestDecisionScenarioAssertions({
                               appServerRequestMethods,

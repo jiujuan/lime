@@ -438,19 +438,17 @@ describe("StreamingRenderer", () => {
   });
 
   it("交错内容重复渲染时应复用已缓存解析结果", () => {
-    const structuredText = '<write_file path="demo.md">hello</write_file>';
+    const structuredText = "<document>hello</document>";
     parseAIResponseMock.mockImplementation((content: string) => {
       if (content === structuredText) {
         return {
           parts: [
             {
-              type: "write_file",
+              type: "document",
               content: "hello",
-              filePath: "demo.md",
             },
           ],
           hasA2UI: false,
-          hasWriteFile: true,
           hasPending: false,
         };
       }
@@ -460,7 +458,6 @@ describe("StreamingRenderer", () => {
           ? [{ type: "text", content: content.trim() }]
           : [],
         hasA2UI: false,
-        hasWriteFile: false,
         hasPending: false,
       };
     });

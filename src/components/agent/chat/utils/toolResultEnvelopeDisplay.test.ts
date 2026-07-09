@@ -220,6 +220,47 @@ describe("toolResultEnvelopeDisplay", () => {
     ).toBe(true);
   });
 
+  it("structuredContent 有正文时应隐藏 MCP content 协议包络", () => {
+    const rawResultText = JSON.stringify({
+      request_metadata: {
+        projection: "mcp_tool_result_projection",
+        trace_id: "trace-structured-content",
+      },
+      diagnostics: {
+        elapsed_ms: 12,
+        raw_transport_payload: "doc-hidden-envelope",
+      },
+      content: [
+        {
+          type: "text",
+          text: "control-plane envelope only; user answer is stored in structuredContent",
+        },
+      ],
+    });
+    const structuredContent = {
+      answer: "MCP 结构化答案已进入 Agent Chat GUI",
+      ids: ["doc-structured-1"],
+    };
+
+    expect(
+      shouldHideProtocolToolResultEnvelope({
+        toolName: "mcp__docs__diagnostic_probe",
+        rawResultText,
+        structuredContent,
+      }),
+    ).toBe(true);
+    expect(
+      shouldHideToolResultEnvelope({
+        toolName: "mcp__docs__diagnostic_probe",
+        rawResultText,
+        result: {
+          output: rawResultText,
+          structuredContent,
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("应隐藏 legacy tool event runtime enable payload", () => {
     expect(
       shouldHideToolResultEnvelope({

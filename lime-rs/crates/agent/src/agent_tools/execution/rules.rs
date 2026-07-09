@@ -40,7 +40,7 @@ const SAFE_HTTPS_URL_POLICY: ToolExecutionPolicy = ToolExecutionPolicy {
     ..DEFAULT_POLICY
 };
 
-const WORKSPACE_PATH_TOOLS: &[&str] = &["Read", "Write", "Edit", "view_image"];
+const WORKSPACE_PATH_TOOLS: &[&str] = &["Read", "view_image"];
 const DEFAULT_POLICY_TOOLS: &[&str] = &[APPLY_PATCH_TOOL_NAME];
 const WORKSPACE_PATH_OPTIONAL_TOOLS: &[&str] = &["Glob", "Grep"];
 const WORKSPACE_SHELL_TOOLS: &[&str] = &["Bash", "PowerShell"];

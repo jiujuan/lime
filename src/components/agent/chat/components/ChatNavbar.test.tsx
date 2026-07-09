@@ -427,16 +427,12 @@ describe("ChatNavbar", () => {
     );
   });
 
-  it("任务中心工作区提示应浮在加号上方，并在点击加号时关闭", async () => {
-    const onDismissWorkspaceHint = vi.fn();
+  it("任务中心工作区提示已下线，不应渲染气泡或拦截加号", async () => {
     const container = renderChatNavbar({
       contextVariant: "task-center",
       projectId: "project-1",
       openedProjects: [{ id: "project-1", name: "project-1" }],
       workspaceType: "general",
-      workspaceHintVisible: true,
-      workspaceHintMessage: "在这里切换或新建工作区",
-      onDismissWorkspaceHint,
     });
 
     const hint = container.querySelector(
@@ -446,20 +442,16 @@ describe("ChatNavbar", () => {
       'button[aria-label="展开工作区菜单"]',
     ) as HTMLButtonElement | null;
 
-    expect(hint).not.toBeNull();
-    expect(hint?.textContent).toContain("在这里切换或新建工作区");
-    expect(hint?.className).toContain("bottom-full");
-    expect(hint?.className).toContain(
-      "border-[color:var(--lime-surface-border)]",
-    );
-    expect(hint?.className).not.toContain("sky");
+    expect(hint).toBeNull();
 
     await act(async () => {
       menuTrigger?.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(onDismissWorkspaceHint).toHaveBeenCalledTimes(1);
+    expect(
+      container.querySelector('[data-testid="task-center-workspace-hint"]'),
+    ).toBeNull();
   });
 
   it("任务中心顶栏不应重复渲染 Harness 状态入口，避免覆盖工具栏", () => {

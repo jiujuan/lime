@@ -1,44 +1,42 @@
-## Lime v1.96.0
+## Lime v1.97.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Added the current approval HITL path for the Agent / Claw workspace, including App Server action replay / respond protocol, approval cache, input-bar approval prompts, approval record cards, trace attribution, and GUI fixtures.
-- Added Codex-first ToolSearch, MCP resource, Skill execution, gateway bridge, native overlay, and live execution process modules so Rust runtime, App Server backend, and frontend tool display share the same current owner.
-- Expanded Agent runtime projection coverage for context compaction, dynamic tool calls, live tail commits, MCP elicitation / inventory / resource reads, multi-agent visual snapshots, thread fork / rollback / resume, and token usage replay.
-- Continued converging media reference previews, resize / reflow, coding activity evidence, session media refs, and artifact snapshot projection onto the App Server read-model and evidence chain.
+- Added Agent Runtime provider source backend, response event materialization, tool input delta projection, and reasoning delta projection so provider streaming can feed the current timeline / read model more directly.
+- Added the App Server / protocol `voiceTranscription/polishText` path and connected it to frontend voice input for live transcription preview and final text polishing.
+- Extended the Agent / Claw workspace with task-center home hot paths, plan confirmation, approval input-bar priority, image-workbench send routing, and guarded session-file auto initialization.
+- Added version-level benchmark release gate scripts and manifest support for context, checklist, P1 dry-run / preflight, summary, baseline, and strict-gate evidence.
 
 ### Fixes
 
-- Fixed Agent / Claw terminal read-model, tail recovery, stop / continue, session hydrate, input-bar scene restoration, and timeline merge boundaries so stale events are less likely to stop newer streams or restore incorrect UI state.
-- Fixed App Server event store, read model, turn execution, permission preflight, action response, and external backend protocol drift, including action-required / replay schemas and client types.
-- Fixed MCP current smoke, Electron fixture build, workspace plugin runtime fixture, and split script assertions around path handling, build state, and evidence collection.
-- Fixed Soul style profile, settings, video workspace tips, tooltip, and HelpTip presentation edges, while removing the old sound context and default audio asset dependency.
+- Fixed provider tail idle handling so an existing plain-text output can complete instead of being reported as a failed empty response.
+- Fixed Electron App Server sidecar runtime-library environment propagation on macOS / Linux / Windows and added main-window media permission handling.
+- Fixed history session hydration, thread item projection, reasoning content sync, input-bar send, task-center draft, and workspace initial-navigation state boundaries.
+- Fixed model selector auto-switching when models are not loaded or when the current model is unknown, avoiding unnecessary replacement of still-valid user selections.
 
 ### Improvements and Refactors
 
-- Removed Aster vendor / Lime agent LSP, legacy web retrieval, old native tools, and old tool-search implementations, moving retained capability into current App Server / tool-runtime owners.
-- Split `tool-runtime` extension, executor, IO, skill gate, MCP resource, skill execute / result, and live execution process modules to keep central files from continuing to grow.
-- Split App Server runtime evidence provider, session media reader, permission preflight, runtime backend native tools, and workflow control so domain modules own their state and projection logic.
-- Continued separating frontend HarnessStatusPanel, tool inventory, timeline conversion, message projection, workspace trace, task center, media preview, and input-bar runtime into view-model and helper layers.
-- Updated five-locale i18n resources for new Agent, input-bar, message-list, and settings presentation copy.
+- Physically removed `lime-rs/vendor/aster-rust`, moved the remaining Aster-shaped adapters into the temporary `crates/agent-compat` owner, and tightened the related governance guards.
+- Split provider trace, reply backend, reply loop, tool lifecycle, approval decision contract, projection store, and voice text processing into clearer runtime domain boundaries.
+- Removed the legacy browser workspace home hint, old `StreamingWriteFileCard`, old text normalization helpers, and several legacy tool-display copy branches.
+- Improved voice-input sampling, live transcription merging, CJK spacing, image-generation preference refresh, and resource-manager search / toolbar presentation.
 
 ### Tests and Quality
 
-- Added and updated regressions for approval flow, tool inventory, ToolSearch, timeline projection, media preview, task center, workspace trace, terminal read model, tail recovery, and App Server event streams.
-- Added Rust targeted tests for permission preflight, external event sequence, tool lifecycle, objectives, coding evidence snapshots, tool orchestrator cancellation, runtime backend tool inventory, and Skill runtime enablement.
-- Expanded Claw current fixtures for approval, resize / reflow, live tail, runtime surface, scenario assertions, and read-model evidence to strengthen GUI release coverage.
-- Updated App Server protocol schemas, generated TypeScript types, client contracts, command catalog, legacy boundary guards, MCP smoke, and Electron current entrypoint checks.
+- Added and updated regressions for provider stream idle, reply source backend, response materializer, approval decision, permission preflight, session hydration projection, voice polish, and Electron media permissions.
+- Expanded Claw current fixtures, session history fixture, code artifact workbench fixture, benchmark runner, and app-server asset / sidecar script tests.
+- Updated App Server protocol schemas, generated TypeScript types, client methods, command policy guards, Aster migration boundary tests, and script governance checks.
+- The benchmark release gate still fails closed: P1 Terminal-Bench / DeepSWE true-run depends on Docker / runner availability and is not yet a formal release pass signal.
 
 ### Documentation
 
-- Added the approval roadmap and HITL decision model execution plan.
-- Updated Aster capability intake, refactor v1 impact audit, Clawstream Codex-derived guardrails, Soul style output, MCP modernization, plan runtime, and test scenario ledger / registry materials.
-- Updated command boundary, Playwright E2E, script governance, and execution-plan index materials with current runtime and GUI validation guidance.
+- Added and updated Aster Phase 6 provider reply backend, migration closure, dead-code deletion, benchmark release, approval HITL, and Clawstream guardrail plans.
+- Updated Aster migration, governance, execution-plan indexes, benchmark dataset / progress / version-test-plan materials, and test scenario ledger / registry files.
 
 ### Other
 
-- Bumped version facts to `1.96.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, `lime-rs/vendor/aster-rust/Cargo.lock`, and release notes.
+- Bumped version facts to `1.97.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and release notes.
 
-**Full changes**: `v1.95.0` -> `v1.96.0`
+**Full changes**: `v1.96.0` -> `v1.97.0`

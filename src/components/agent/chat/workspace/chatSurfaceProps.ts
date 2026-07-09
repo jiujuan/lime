@@ -45,6 +45,7 @@ interface BuildWorkspaceEmptyStatePropsParams {
   setInput: ComponentProps<typeof EmptyState>["setInput"];
   onSendMessage: InputbarSendHandler;
   onStopSending?: ComponentProps<typeof EmptyState>["onStop"];
+  sendOnPointerDown?: ComponentProps<typeof EmptyState>["sendOnPointerDown"];
   isLoading: ComponentProps<typeof EmptyState>["isLoading"];
   disabled: ComponentProps<typeof EmptyState>["disabled"];
   providerType: ComponentProps<typeof EmptyState>["providerType"];
@@ -203,6 +204,7 @@ export function buildWorkspaceEmptyStateProps({
   setInput,
   onSendMessage,
   onStopSending,
+  sendOnPointerDown,
   isLoading,
   disabled,
   providerType,
@@ -289,6 +291,7 @@ export function buildWorkspaceEmptyStateProps({
     setInput,
     onSend: handleEmptyStateSend,
     onStop: onStopSending,
+    sendOnPointerDown,
     isLoading,
     disabled,
     providerType,
@@ -394,15 +397,6 @@ interface BuildWorkspaceNavbarPropsParams {
   deferWorkspaceListLoad?: ComponentProps<
     typeof ChatNavbar
   >["deferWorkspaceListLoad"];
-  workspaceHintMessage?: ComponentProps<
-    typeof ChatNavbar
-  >["workspaceHintMessage"];
-  workspaceHintVisible?: ComponentProps<
-    typeof ChatNavbar
-  >["workspaceHintVisible"];
-  onDismissWorkspaceHint?: ComponentProps<
-    typeof ChatNavbar
-  >["onDismissWorkspaceHint"];
   onBackHome?: ComponentProps<typeof ChatNavbar>["onBackHome"];
   showHarnessToggle: boolean;
   harnessPanelVisible: boolean;
@@ -442,9 +436,6 @@ export function buildWorkspaceNavbarProps({
   onCloseProject,
   workspaceType,
   deferWorkspaceListLoad,
-  workspaceHintMessage,
-  workspaceHintVisible,
-  onDismissWorkspaceHint,
   onBackHome,
   showHarnessToggle,
   harnessPanelVisible,
@@ -481,9 +472,6 @@ export function buildWorkspaceNavbarProps({
     onCloseProject,
     workspaceType,
     deferWorkspaceListLoad,
-    workspaceHintMessage,
-    workspaceHintVisible,
-    onDismissWorkspaceHint,
     onBackHome,
     showHarnessToggle,
     harnessPanelVisible,

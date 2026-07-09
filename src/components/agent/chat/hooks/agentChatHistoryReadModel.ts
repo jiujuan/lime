@@ -27,6 +27,7 @@ import {
 import { isAuxiliaryHistoryTurn } from "./agentChatHistoryTimelineBasics";
 import { mergeImageWorkbenchPreview } from "./agentChatHistoryProcess";
 import { resolveSessionDetailTurnUsage } from "./agentChatHistoryUsage";
+import { contentPartMetadataFromThreadToolItem } from "./agentChatHistoryReasoning";
 
 function isImportedHistorySession(detail: AsterSessionDetail): boolean {
   const runtime = detail.execution_runtime;
@@ -337,13 +338,62 @@ function resolveThreadReadToolCallUsage(
   return resolveSessionDetailTurnUsage(detail, runtimeTurnId);
 }
 
+function collectThreadToolItemsById(
+  detail: AsterSessionDetail,
+): Map<string, AgentThreadItem> {
+  const itemsById = new Map<string, AgentThreadItem>();
+  for (const item of [
+    ...(detail.items || []),
+    ...(detail.thread_read?.thread_items || []),
+  ]) {
+    if (
+      item.type !== "tool_call" &&
+      item.type !== "command_execution" &&
+      item.type !== "patch" &&
+      item.type !== "web_search"
+    ) {
+      continue;
+    }
+    if (!itemsById.has(item.id)) {
+      itemsById.set(item.id, item);
+    }
+  }
+  return itemsById;
+}
+
 export function hydrateSessionDetailMessagesFromThreadReadToolCalls(
   detail: AsterSessionDetail,
   topicId: string,
 ): Message[] {
   const rawToolCalls = detail.thread_read?.tool_calls || [];
+  const threadToolItemsById = collectThreadToolItemsById(detail);
   const toolCalls = rawToolCalls
-    .map(historyToolCallFromThreadToolCall)
+    .map((rawToolCall) => {
+      const toolCall = historyToolCallFromThreadToolCall(rawToolCall);
+      if (!toolCall) {
+        return null;
+      }
+      const threadItem = threadToolItemsById.get(toolCall.id);
+      if (!threadItem) {
+        return toolCall;
+      }
+      const metadata = contentPartMetadataFromThreadToolItem(
+        threadItem,
+        toolCall,
+      );
+      const result =
+        toolCall.result && typeof toolCall.result === "object"
+          ? {
+              ...toolCall.result,
+              metadata: metadata || toolCall.result.metadata,
+            }
+          : toolCall.result;
+      return {
+        ...toolCall,
+        ...(metadata ? { metadata } : {}),
+        ...(result ? { result } : {}),
+      };
+    })
     .filter((toolCall): toolCall is HistoryToolCall => toolCall !== null);
   if (toolCalls.length === 0) {
     return [];
@@ -392,6 +442,7 @@ export function hydrateSessionDetailMessagesFromThreadReadToolCalls(
       contentParts: toolCalls.map((toolCall) => ({
         type: "tool_use" as const,
         toolCall,
+        ...(toolCall.metadata ? { metadata: toolCall.metadata } : {}),
       })),
       toolCalls,
       timestamp,

@@ -114,6 +114,7 @@ export async function waitForGuiMcpStructuredContentCompleted(page, options) {
           : await expandAndInspectGuiMcpStructuredContentProcess(page, options);
       if (
         expandedSnapshot.hasStructuredAnswer &&
+        expandedSnapshot.hasReferenceId &&
         expandedSnapshot.envelopeVisible === false
       ) {
         return sanitizeJson({
@@ -153,7 +154,7 @@ export async function expandAndInspectGuiMcpStructuredContentProcess(
           button.getAttribute("aria-label") || "",
           button.textContent || "",
         ].join("\n");
-        return /展开过程详情|查看结果|expand/i.test(label);
+        return /展开(?:过程)?详情|查看结果|expand|details/i.test(label);
       });
       if (detailsButton instanceof HTMLButtonElement) {
         detailsButton.click();

@@ -6,6 +6,7 @@ interface BaseComposerRenderContext {
   hasContent: boolean;
   canSend: boolean;
   isPrimaryDisabled: boolean;
+  onPrimaryActionStart: () => void;
   onPrimaryAction: () => void;
 }
 
@@ -38,6 +39,7 @@ export interface BaseComposerProps {
   autoFocus?: boolean;
   allowSendWhileLoading?: boolean;
   allowEmptySend?: boolean;
+  sendOnPointerDown?: boolean;
   children: (context: BaseComposerRenderContext) => React.ReactNode;
 }
 
@@ -63,12 +65,14 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
   autoFocus = false,
   allowSendWhileLoading = false,
   allowEmptySend = false,
+  sendOnPointerDown = false,
   children,
 }) => {
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef || internalTextareaRef;
   const textareaId = useId();
   const pendingImeSendRef = useRef(false);
+  const pendingPointerSendClickRef = useRef(false);
   const canSendRef = useRef(false);
   const onSendRef = useRef(onSend);
 
@@ -127,7 +131,43 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
     [],
   );
 
+  const dispatchPrimaryAction = useCallback(
+    (triggeredAt: number) => {
+      if (isLoading && !allowSendWhileLoading) {
+        onStop?.();
+        return;
+      }
+
+      if (!canSend) {
+        return;
+      }
+
+      onSend({ triggeredAt, triggerSource: "button" });
+    },
+    [allowSendWhileLoading, canSend, isLoading, onSend, onStop],
+  );
+
+  const onPrimaryActionStart = useCallback(() => {
+    if (!sendOnPointerDown || pendingPointerSendClickRef.current) {
+      return;
+    }
+
+    pendingPointerSendClickRef.current = true;
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        pendingPointerSendClickRef.current = false;
+      }, 1_000);
+    }
+
+    dispatchPrimaryAction(Date.now());
+  }, [dispatchPrimaryAction, sendOnPointerDown]);
+
   const onPrimaryAction = useCallback(() => {
+    if (sendOnPointerDown && pendingPointerSendClickRef.current) {
+      pendingPointerSendClickRef.current = false;
+      return;
+    }
+
     const triggeredAt = Date.now();
     if (isLoading && !allowSendWhileLoading) {
       onStop?.();
@@ -139,7 +179,14 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
     }
 
     onSend({ triggeredAt, triggerSource: "button" });
-  }, [allowSendWhileLoading, canSend, isLoading, onSend, onStop]);
+  }, [
+    allowSendWhileLoading,
+    canSend,
+    isLoading,
+    onSend,
+    onStop,
+    sendOnPointerDown,
+  ]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -229,6 +276,7 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
         hasContent,
         canSend,
         isPrimaryDisabled,
+        onPrimaryActionStart,
         onPrimaryAction,
       })}
     </>

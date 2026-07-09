@@ -73,9 +73,41 @@ describe("agentChatWorkspaceShellViewModel", () => {
     ).toMatchObject({
       hasDisplayMessages: true,
       hasMessages: true,
-      effectiveShowChatPanel: false,
+      effectiveShowChatPanel: true,
       shouldRestoreImageTasksFromWorkspace: true,
     });
+  });
+
+  it("claw 首页首发 pending preview 应立即打开聊天面板", () => {
+    expect(
+      resolve({
+        agentEntry: "claw",
+        isHomePendingPreviewActive: true,
+      }),
+    ).toMatchObject({
+      hasDisplayMessages: true,
+      hasMessages: true,
+      effectiveShowChatPanel: true,
+      shouldRestoreImageTasksFromWorkspace: true,
+    });
+  });
+
+  it("claw 首页发送中但 preview 尚未派生时也应立即打开聊天面板", () => {
+    for (const overrides of [
+      { isBootstrapDispatchPending: true },
+      { isSending: true },
+      { queuedTurnCount: 1 },
+    ] satisfies Array<Partial<AgentChatWorkspaceShellViewModelInput>>) {
+      expect(
+        resolve({
+          agentEntry: "claw",
+          ...overrides,
+        }),
+      ).toMatchObject({
+        effectiveShowChatPanel: true,
+        shouldRestoreImageTasksFromWorkspace: true,
+      });
+    }
   });
 
   it("被任务中心草稿空态压制的消息不应计入展示消息", () => {

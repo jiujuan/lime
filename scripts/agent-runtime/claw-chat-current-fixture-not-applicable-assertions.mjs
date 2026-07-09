@@ -1,5 +1,6 @@
 import {
   APPROVAL_REQUEST_DECISION_ASSERTION_KEYS,
+  APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS,
   APPROVAL_REQUEST_RESUME_ASSERTION_KEYS,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS,
   ELECTRON_RESIZE_REFLOW_ASSERTION_KEYS,
@@ -28,6 +29,7 @@ export function buildNotApplicableAssertions(context) {
   const {
     isAnyExpertSkillsRuntimeScenario,
     isApprovalRequestDecisionScenario,
+    isApprovalRequestFullAccessScenario,
     isApprovalRequestResumeScenario,
     isCancelOnlyScenario,
     isCancelThenContinueScenario,
@@ -95,6 +97,7 @@ export function buildNotApplicableAssertions(context) {
       ...LIVE_TAIL_COMMIT_ASSERTION_KEYS,
       ...APPROVAL_REQUEST_RESUME_ASSERTION_KEYS,
       ...APPROVAL_REQUEST_DECISION_ASSERTION_KEYS,
+      ...APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS,
       ...TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS,
       ...TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS,
       ...TERMINAL_STALE_GUARD_ASSERTION_KEYS,
@@ -737,6 +740,9 @@ export function buildNotApplicableAssertions(context) {
     ...(isApprovalRequestResumeScenario || isApprovalRequestDecisionScenario
       ? []
       : APPROVAL_REQUEST_DECISION_ASSERTION_KEYS),
+    ...(isApprovalRequestFullAccessScenario
+      ? []
+      : APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS),
     ...(isTerminalCanceledAfterAnswerScenario
       ? []
       : TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS),

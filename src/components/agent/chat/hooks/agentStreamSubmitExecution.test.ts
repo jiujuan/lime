@@ -654,6 +654,149 @@ describe("agentStreamSubmitExecution", () => {
     expect(setAgentRuntimeObjectiveMock).not.toHaveBeenCalled();
   });
 
+  it("当前模型只有最小 registry metadata 时也应覆盖旧 model_request_policy", async () => {
+    getModelRegistryMock.mockResolvedValue([
+      modelFixture({
+        id: "gpt-5.2-pro",
+        display_name: "gpt-5.2-pro",
+        provider_id: "lime-hub",
+        provider_name: "Lime Hub",
+        responses_policy: buildModelResponsesPolicy({
+          use_responses_lite: true,
+        }),
+      }),
+      modelFixture({
+        id: "gpt-5.4-mini",
+        display_name: "gpt-5.4-mini",
+        provider_id: "lime-hub",
+        provider_name: "Lime Hub",
+        capabilities: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: false,
+        },
+        input_modalities: ["text", "image"],
+        task_families: ["chat", "vision_understanding"],
+      }),
+    ]);
+
+    const unlisten = vi.fn();
+    const submitOp = vi.fn(async () => {});
+    const runtime = {
+      listenToTurnEvents: vi.fn(async () => unlisten),
+      submitOp,
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await executeAgentStreamSubmit({
+      runtime,
+      ensureSession: vi.fn(async () => "session-target"),
+      attemptSilentTurnRecovery: async () => false,
+      sessionIdRef: { current: "session-target" } as MutableRefObject<
+        string | null
+      >,
+      getWorkspaceIdForSubmit: () => "workspace-1",
+      getSyncedSessionExecutionStrategy: () => "react",
+      getSyncedSessionRecentPreferences: () => ({
+        webSearch: false,
+        thinking: false,
+        task: false,
+        subagent: false,
+      }),
+      effectiveAccessMode: "current",
+      content: "GateB gpt-5.4-mini reasoning dedupe",
+      images: [],
+      skipUserMessage: false,
+      expectingQueue: false,
+      effectiveProviderType: "lime-hub",
+      effectiveModel: "gpt-5.4-mini",
+      effectiveExecutionStrategy: "react",
+      executionRuntime: {
+        session_id: "session-target",
+        source: "runtime_snapshot",
+        provider_selector: "lime-hub",
+        model_name: "gpt-5.2-pro",
+        execution_strategy: "react",
+      },
+      syncedSessionModelPreference: {
+        providerType: "lime-hub",
+        model: "gpt-5.4-mini",
+      },
+      requestMetadata: {
+        source: "prepare",
+        harness: {
+          existing_signal: true,
+          model_request_policy: {
+            source: "model_registry",
+            provider_id: "lime-hub",
+            model_id: "gpt-5.2-pro",
+          },
+        },
+      },
+      eventName: "event-target-model",
+      requestTurnId: "turn-target-model",
+      requestState,
+      assistantMsgId: "assistant-target-model",
+      pendingTurnKey: "pending-turn-target-model",
+      pendingItemKey: "pending-item-target-model",
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => false,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => false,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnsFromProjection: () => {},
+        registerListener: vi.fn(),
+      },
+      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+        parts,
+      setMessages: noopDispatch<Message[]>(),
+      setIsSending: noopDispatch<boolean>(),
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+    });
+
+    expect(submitOp).toHaveBeenCalledTimes(1);
+    expect(submitOp.mock.calls[0]?.[0]).toMatchObject({
+      type: "user_input",
+      preferences: {
+        providerPreference: undefined,
+        modelPreference: undefined,
+      },
+      metadata: {
+        source: "prepare",
+        harness: {
+          existing_signal: true,
+          model_request_policy: {
+            source: "model_registry",
+            provider_id: "lime-hub",
+            model_id: "gpt-5.4-mini",
+          },
+        },
+      },
+    });
+  });
+
   it("追求目标写入失败不应阻断消息提交", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const unlisten = vi.fn();

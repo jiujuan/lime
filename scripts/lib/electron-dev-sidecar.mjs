@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync, watch } from "node:fs";
 import path from "node:path";
+import { ensureMacBinaryRpath } from "../prepare-sherpa-onnx-runtime.mjs";
 
 export const APP_SERVER_WATCH_DEBOUNCE_MS = 800;
 
@@ -114,6 +115,8 @@ export function resolveDevAppServerBinary({
   exists = existsSync,
   build = buildLocalAppServer,
   forceBuild = false,
+  isUsableBinary = isUsableAppServerBinary,
+  prepareBinary = prepareLocalAppServerBinary,
 } = {}) {
   const envBinary = env.APP_SERVER_BIN?.trim();
   if (envBinary) {
@@ -125,15 +128,45 @@ export function resolveDevAppServerBinary({
     platform,
     ...(targetDirectory ? { targetDirectory } : {}),
   });
-  if (forceBuild || !exists(binaryPath)) {
+  const hasUsableBinary = () => isUsableBinary(binaryPath, { exists });
+  if (forceBuild || !hasUsableBinary()) {
     build({ repoRoot, platform });
   }
 
-  if (!exists(binaryPath)) {
+  if (!hasUsableBinary()) {
     throw new Error(`app-server binary was not created: ${binaryPath}`);
   }
 
+  prepareBinary({ binaryPath, platform });
   return binaryPath;
+}
+
+export function isUsableAppServerBinary(
+  binaryPath,
+  { exists = existsSync, getStats = statSync } = {},
+) {
+  if (!exists(binaryPath)) {
+    return false;
+  }
+  try {
+    const stats = getStats(binaryPath);
+    if (typeof stats.isFile === "function" && !stats.isFile()) {
+      return false;
+    }
+    return stats.size > 0;
+  } catch {
+    return exists !== existsSync ? exists(binaryPath) : false;
+  }
+}
+
+export function prepareLocalAppServerBinary({
+  binaryPath,
+  platform = process.platform,
+} = {}) {
+  if (!binaryPath) {
+    return;
+  }
+  ensureMacBinaryRpath(binaryPath, { platform });
 }
 
 export function resolveDevAppServerBackendEnv({
@@ -189,6 +222,7 @@ export function buildLocalAppServer({
   repoRoot = process.cwd(),
   platform = process.platform,
   runner = spawnSync,
+  prepareBinary = prepareLocalAppServerBinary,
 } = {}) {
   console.log("[electron-dev] building local app-server sidecar...");
   const cargoCommand = platform === "win32" ? "cargo.exe" : "cargo";
@@ -208,12 +242,17 @@ export function buildLocalAppServer({
   if (result.status !== 0) {
     throw new Error(`cargo build app-server failed with ${result.status}`);
   }
+  prepareBinary({
+    binaryPath: localAppServerBinaryPath({ repoRoot, platform }),
+    platform,
+  });
 }
 
 export function buildLocalAppServerAsync({
   repoRoot = process.cwd(),
   platform = process.platform,
   runner = spawn,
+  prepareBinary = prepareLocalAppServerBinary,
 } = {}) {
   const cargoCommand = platform === "win32" ? "cargo.exe" : "cargo";
   return new Promise((resolve, reject) => {
@@ -226,6 +265,15 @@ export function buildLocalAppServerAsync({
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) {
+        try {
+          prepareBinary({
+            binaryPath: localAppServerBinaryPath({ repoRoot, platform }),
+            platform,
+          });
+        } catch (error) {
+          reject(error);
+          return;
+        }
         resolve();
         return;
       }

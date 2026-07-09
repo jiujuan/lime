@@ -60,22 +60,6 @@ export const CONTENT_EXACT_TOOL_CONFIGS = [
     },
   ],
   [
-    "sendusermessage",
-    {
-      family: "generic",
-      label: "用户消息",
-      verb: "发送",
-      icon: FileText,
-      groupTitle: "用户消息",
-      actionKey: "generic",
-      actions: {
-        failed: "发送失败",
-        completed: "已发送",
-        running: "发送中",
-      },
-    },
-  ],
-  [
     "structuredoutput",
     {
       family: "generic",
@@ -88,22 +72,6 @@ export const CONTENT_EXACT_TOOL_CONFIGS = [
         failed: "整理失败",
         completed: "已整理最终答复",
         running: "整理最终答复中",
-      },
-    },
-  ],
-  [
-    "brief",
-    {
-      family: "generic",
-      label: "用户消息",
-      verb: "发送",
-      icon: FileText,
-      groupTitle: "用户消息",
-      actionKey: "generic",
-      actions: {
-        failed: "发送失败",
-        completed: "已发送",
-        running: "发送中",
       },
     },
   ],

@@ -50,4 +50,79 @@ describe("agentChatHistoryReadModel", () => {
       cache_creation_input_tokens: undefined,
     });
   });
+
+  it("应让 thread_read tool_call 继承同源 thread item provenance", () => {
+    const detail = {
+      messages: [],
+      turns: [
+        {
+          id: "turn-history-replay",
+          status: "running",
+          started_at: "2026-07-09T10:00:00.000Z",
+          updated_at: "2026-07-09T10:00:01.000Z",
+        },
+      ],
+      items: [],
+      thread_read: {
+        active_turn_id: "turn-history-replay",
+        thread_items: [
+          {
+            id: "history-replay-visual-mcp-read-file",
+            type: "tool_call",
+            thread_id: "thread-history-replay",
+            turn_id: "turn-history-replay",
+            sequence: 4,
+            status: "in_progress",
+            tool_name: "mcp__filesystem__read_file",
+            arguments: { path: "README.md" },
+            started_at: "2026-07-09T10:00:01.000Z",
+            updated_at: "2026-07-09T10:00:01.000Z",
+            metadata: {
+              mcp: {
+                server: "filesystem",
+                tool: "read_file",
+              },
+            },
+          },
+        ],
+        tool_calls: [
+          {
+            tool_call_id: "history-replay-visual-mcp-read-file",
+            turn_id: "turn-history-replay",
+            tool_name: "mcp__filesystem__read_file",
+            status: "running",
+            arguments: { path: "README.md" },
+            timestamp: "2026-07-09T10:00:01.000Z",
+          },
+        ],
+      },
+    } as unknown as AsterSessionDetail;
+
+    const messages = hydrateSessionDetailMessagesFromThreadReadToolCalls(
+      detail,
+      "history-replay",
+    );
+    const toolPart = messages[0]?.contentParts?.find(
+      (part) => part.type === "tool_use",
+    );
+
+    expect(toolPart).toMatchObject({
+      type: "tool_use",
+      metadata: {
+        source: "agent_thread_item",
+        threadItemId: "history-replay-visual-mcp-read-file",
+        turnId: "turn-history-replay",
+        sequence: 4,
+      },
+      toolCall: {
+        id: "history-replay-visual-mcp-read-file",
+        metadata: {
+          source: "agent_thread_item",
+          threadItemId: "history-replay-visual-mcp-read-file",
+          turnId: "turn-history-replay",
+          sequence: 4,
+        },
+      },
+    });
+  });
 });

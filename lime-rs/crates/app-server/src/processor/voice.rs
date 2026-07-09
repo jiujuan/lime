@@ -5,7 +5,7 @@ use app_server_protocol::{
     JsonRpcError, VoiceAsrCredentialCreateParams, VoiceAsrCredentialIdParams,
     VoiceAsrCredentialUpdateParams, VoiceInstructionIdParams, VoiceInstructionSaveParams,
     VoiceModelDefaultSetParams, VoiceModelTestTranscribeFileParams,
-    VoiceTranscriptionTranscribeAudioParams,
+    VoiceTranscriptionPolishTextParams, VoiceTranscriptionTranscribeAudioParams,
 };
 
 impl RequestProcessor {
@@ -168,6 +168,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .transcribe_voice_audio(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_voice_transcription_polish_text_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceTranscriptionPolishTextParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .polish_voice_text(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

@@ -297,6 +297,57 @@ describe("useWorkspaceA2UIRuntime", () => {
     expect(getValue().a2uiSubmissionNotice).toBeNull();
   });
 
+  it("approval pending 抢占输入区时应暂停 ask_user A2UI，释放后恢复", async () => {
+    const pendingMessage: Message = {
+      id: "assistant-action-approval-blocked",
+      role: "assistant",
+      content: "请补充执行偏好。",
+      timestamp: new Date("2026-03-27T10:01:00.000Z"),
+      actionRequests: [
+        {
+          requestId: "req-a2ui-approval-blocked",
+          actionType: "ask_user",
+          prompt: "请选择执行模式",
+          questions: [
+            {
+              question: "你希望如何执行？",
+              header: "执行模式",
+              options: [{ label: "自动执行" }, { label: "手动确认" }],
+            },
+          ],
+          status: "pending",
+        },
+      ],
+    };
+    const { render, getValue } = renderHook({
+      messages: [pendingMessage],
+      suppressPendingA2UI: true,
+    });
+
+    await render({
+      messages: [pendingMessage],
+      suppressPendingA2UI: true,
+    });
+
+    expect(getValue().pendingA2UIForm).toBeNull();
+    expect(getValue().pendingA2UISource).toBeNull();
+    expect(getValue().pendingActionRequest).toBeNull();
+    expect(getValue().pendingPromotedA2UIActionRequest).toBeNull();
+
+    await render({
+      messages: [pendingMessage],
+      suppressPendingA2UI: false,
+    });
+
+    expect(getValue().pendingA2UIForm?.id).toBe(
+      "action-request-req-a2ui-approval-blocked",
+    );
+    expect(getValue().pendingA2UISource).toEqual({
+      kind: "action_request",
+      requestId: "req-a2ui-approval-blocked",
+    });
+  });
+
   it("新一轮用户消息后不应继续提升上一轮未完成 action_required", async () => {
     const stalePendingMessage: Message = {
       id: "assistant-stale-action",

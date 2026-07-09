@@ -913,6 +913,12 @@ declare module "./connection.js" {
     ): Promise<
       AppServerRequestResult<protocol.VoiceTranscriptionTranscribeAudioResponse>
     >;
+    polishVoiceText(
+      params: protocol.VoiceTranscriptionPolishTextParams,
+      options?: AppServerRequestOptions,
+    ): Promise<
+      AppServerRequestResult<protocol.VoiceTranscriptionPolishTextResponse>
+    >;
     readUsageStats(
       params: protocol.UsageStatsRangeParams,
       options?: AppServerRequestOptions,

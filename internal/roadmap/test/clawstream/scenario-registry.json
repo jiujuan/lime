@@ -454,9 +454,9 @@
       "id": "thread-read-page-isomorphic",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "partial+guard",
+      "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "已补 package-side Codex thread read/list/resume page isomorphic projection guard，覆盖 read/list/resume 同 thread、turn/item order、live content part hydrate、pagination duplicate/reorder 与 legacy paginated history fail closed；下一步补 App Server read model facade 与 Electron history hydrate oracle。"
+      "nextDetail": "已补 package-side Codex thread read/list/resume page isomorphic projection guard、App Server read model hydrate regression 与 Electron session history fixture；覆盖 read/list/resume 同 thread、turn/item order、page cursor、history hydrate DOM 同构、禁止 startup note 与 forbidden turn/start。下一步回头补 archived read/forked_from/failed idle flag 细节。"
     },
     {
       "id": "thread-resume-running-stream",
@@ -822,9 +822,9 @@
       "id": "history-replay-visual",
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
-      "status": "partial+guard",
+      "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 App Server read model 与 Electron history hydrate DOM/screenshot oracle。"
+      "nextDetail": "已由 package-side guard + Electron session history fixture 覆盖 App Server current read model 与 GUI history hydrate DOM/screenshot oracle：user textElements、本地/远程图片 refs、reasoning 单次渲染、MCP running owner/tool row 与 forbidden turn/start 均已验证；剩余视觉 baseline diff 统一到 markdown/diff/status snapshot 细节。"
     },
     {
       "id": "status-surface-matrix",

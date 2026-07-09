@@ -20,13 +20,15 @@ import { useTranslation } from "react-i18next";
 import { useAgentChatUnified } from "./hooks";
 import type { InterruptedInputRestoreRequest } from "./hooks/agentStreamInputRestoreTypes";
 import { useFileManagerSidebar } from "./hooks/useFileManagerSidebar";
-import { useBrowserWorkspaceHomeHint } from "./hooks/useBrowserWorkspaceHomeHint";
 import { usePathReferences } from "./hooks/usePathReferences";
 import { useWorkspaceWorkbenchRequests } from "./hooks/useWorkspaceWorkbenchRequests";
 import { useSessionFiles } from "./hooks/useSessionFiles";
 import { useContentSync } from "./hooks/useContentSync";
 import { useDeveloperFeatureFlags } from "@/hooks/useDeveloperFeatureFlags";
-import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
+import {
+  readGlobalMediaGenerationDefaults,
+  useGlobalMediaGenerationDefaults,
+} from "@/hooks/useGlobalMediaGenerationDefaults";
 import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
 import { useSoulInteractionCopy } from "@/hooks/useSoulInteractionCopy";
@@ -61,7 +63,10 @@ import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { type Character } from "@/lib/api/projectMemory";
 import { useImageGen } from "@/components/image-gen/useImageGen";
-import { resolveMediaGenerationPreference } from "@/lib/mediaGeneration";
+import {
+  resolveMediaGenerationPreference,
+  type MediaGenerationDefaults,
+} from "@/lib/mediaGeneration";
 import { readTeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { TaskCenterDraftSendRequest } from "./homePendingPreview";
 import type { HomeRecoverySession } from "./home/homeSurfaceTypes";
@@ -105,10 +110,7 @@ import { useRuntimeTeamFormation } from "./hooks/useRuntimeTeamFormation";
 import { mergeThreadItems } from "./utils/threadTimelineView";
 import { openCanvasForReason } from "./workspace/canvasOpenPolicy";
 import { useWorkbenchStore } from "@/stores/useWorkbenchStore";
-import {
-  asRecord,
-  GENERAL_BROWSER_ASSIST_ARTIFACT_ID,
-} from "./workspace/browserAssistArtifact";
+import { GENERAL_BROWSER_ASSIST_ARTIFACT_ID } from "./workspace/browserAssistArtifact";
 import { SceneAppExecutionSummaryCard } from "./workspace/SceneAppExecutionSummaryCard";
 import { ServiceSkillExecutionCard } from "./workspace/ServiceSkillExecutionCard";
 import { useWorkspaceBrowserAssistRuntime } from "./workspace/useWorkspaceBrowserAssistRuntime";
@@ -153,7 +155,10 @@ import {
 } from "./workspace/useWorkspaceImageWorkbenchActionRuntime";
 import { useWorkspaceImageWorkbenchSessionRuntime } from "./workspace/useWorkspaceImageWorkbenchSessionRuntime";
 import { useWorkspaceImageWorkbenchEventRuntime } from "./workspace/useWorkspaceImageWorkbenchEventRuntime";
-import { buildImageCommandIntentRequestMetadata } from "./workspace/imageCommandIntent";
+import {
+  buildImageCommandIntentRequestMetadata,
+  resolveImageWorkbenchCommandRequest as resolveImageWorkbenchCommandRequestWithSelection,
+} from "./workspace/imageCommandIntent";
 import { buildWorkspaceArticleEditorImageSlotCommand } from "./workspace/workspaceArticleEditorImageSlotDispatch";
 import {
   shouldEnableWorkspaceImageTaskPreviewRuntime,
@@ -161,6 +166,7 @@ import {
 } from "./workspace/useWorkspaceImageTaskPreviewRuntime";
 import { useWorkspaceImageTaskExecutorRuntime } from "./workspace/useWorkspaceImageTaskExecutorRuntime";
 import { ensureImageWorkbenchProviderSelectionCommitted } from "./workspace/imageWorkbenchProviderReadiness";
+import { applyImagePreferenceToSendRouteSelection } from "./workspace/imageWorkbenchSendRoute";
 import { useWorkspaceAudioTaskPreviewRuntime } from "./workspace/useWorkspaceAudioTaskPreviewRuntime";
 import { useWorkspaceTranscriptionTaskPreviewRuntime } from "./workspace/useWorkspaceTranscriptionTaskPreviewRuntime";
 import { useWorkspaceVideoTaskPreviewRuntime } from "./workspace/useWorkspaceVideoTaskPreviewRuntime";
@@ -195,9 +201,11 @@ import {
   filterPlanComposerDecisionFromPendingActions,
   selectLatestPlanComposerDecision,
 } from "./workspace/planComposerDecision";
+import { selectPendingInputbarApprovalAction } from "./workspace/inputbarApprovalAction";
 import {
-  buildPlanImplementationHarnessMetadata,
+  buildPlanImplementationSubmitPlan,
   hasProposedPlanImplementationSignals,
+  readPlanImplementationConfirmationKeys,
   selectProposedPlanImplementationDecision,
 } from "./workspace/planImplementationDecision";
 import { useWorkspaceGeneralWorkbenchSidebarRuntime } from "./workspace/useWorkspaceGeneralWorkbenchSidebarRuntime";
@@ -385,7 +393,6 @@ import {
 import { buildPendingServiceSkillLaunchSignature } from "./workspace/pendingServiceSkillLaunchSignature";
 import { useInitialPendingServiceSkillLaunchRuntime } from "./workspace/useInitialPendingServiceSkillLaunchRuntime";
 import {
-  BROWSER_WORKSPACE_HOME_HINT_MESSAGE,
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
   NOOP_SET_CHAT_MESSAGES,
   isUsableKnowledgeSourceText,
@@ -396,10 +403,16 @@ import {
   resolveRuntimeWorkspaceId,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
+  shouldAutoInitWorkspaceSessionFiles,
   shouldAutoRefreshWorkspaceRightSurfacePending,
   shouldBuildFullThreadTimeline,
+  shouldPauseTaskCenterInitialSessionNavigation,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
+import {
+  clearActiveTaskCenterDraftTab,
+  removeTaskCenterDraftTab,
+} from "./workspace/taskCenterDraftTabs";
 import { SCENEAPP_QUICK_REVIEW_ACTIONS } from "@/lib/agent/legacySceneAppExecutionSummary";
 import { buildArticleWorkspaceForArtifactOpen } from "./workspace/workspaceArticleWorkspaceArtifactOpen";
 
@@ -651,14 +664,6 @@ export function AgentChatWorkspace({
     initialProjectFileOpenTarget,
   });
   const {
-    browserWorkspaceHintVisible,
-    dismissBrowserWorkspaceHint: handleDismissBrowserWorkspaceHint,
-  } = useBrowserWorkspaceHomeHint({
-    enabled: shouldUseBrowserWorkspaceHomeChrome,
-    projectId: projectId ?? null,
-    entryBannerMessage,
-  });
-  const {
     project,
     setProject,
     projectMemory,
@@ -760,6 +765,8 @@ export function AgentChatWorkspace({
     useGlobalMediaGenerationDefaults({
       enabled: !shouldDeferWorkspaceAuxiliaryLoads,
     });
+  const [onDemandMediaDefaults, setOnDemandMediaDefaults] =
+    useState<MediaGenerationDefaults>({});
   const {
     serviceModels,
     agentResponseLanguage,
@@ -782,13 +789,16 @@ export function AgentChatWorkspace({
   });
   const inputCompletionEnabled =
     serviceModels.input_completion?.enabled !== false;
+  const effectiveGlobalImagePreference = shouldDeferWorkspaceAuxiliaryLoads
+    ? (onDemandMediaDefaults.image ?? mediaDefaults.image)
+    : (mediaDefaults.image ?? onDemandMediaDefaults.image);
   const effectiveImageWorkbenchPreference = useMemo(
     () =>
       resolveMediaGenerationPreference(
         project?.settings?.imageGeneration,
-        mediaDefaults.image,
+        effectiveGlobalImagePreference,
       ),
-    [mediaDefaults.image, project?.settings?.imageGeneration],
+    [effectiveGlobalImagePreference, project?.settings?.imageGeneration],
   );
   const imageWorkbenchGenerationRuntime = useImageGen({
     preferredProviderId: effectiveImageWorkbenchPreference.preferredProviderId,
@@ -1801,6 +1811,15 @@ export function AgentChatWorkspace({
       workspaceServiceSkillEntryActions.handleServiceSkillSelect,
   });
 
+  const pendingInputbarApprovalAction = useMemo(
+    () =>
+      selectPendingInputbarApprovalAction(
+        pendingActions,
+        submittedActionsInFlight,
+      ),
+    [pendingActions, submittedActionsInFlight],
+  );
+  const suppressPendingA2UIForApproval = Boolean(pendingInputbarApprovalAction);
   const {
     a2uiSubmissionNotice,
     pendingA2UIForm,
@@ -1811,6 +1830,7 @@ export function AgentChatWorkspace({
   } = useWorkspaceA2UIRuntime({
     messages,
     readOnlyInteractiveMessageIds,
+    suppressPendingA2UI: suppressPendingA2UIForApproval,
   });
   const pendingServiceSkillLaunchForm =
     workspaceServiceSkillEntryActions.pendingServiceSkillLaunchForm;
@@ -1831,12 +1851,16 @@ export function AgentChatWorkspace({
     resumeSceneGate: async (input) =>
       await sceneGateResumeHandlerRef.current(input),
   });
-  const effectivePendingA2UIForm =
-    pendingServiceSkillLaunchForm ?? pendingSceneGateForm ?? pendingA2UIForm;
-  const effectivePendingA2UISource =
-    pendingServiceSkillLaunchSource ??
-    pendingSceneGateSource ??
-    pendingA2UISource;
+  const effectivePendingA2UIForm = suppressPendingA2UIForApproval
+    ? null
+    : (pendingServiceSkillLaunchForm ??
+      pendingSceneGateForm ??
+      pendingA2UIForm);
+  const effectivePendingA2UISource = suppressPendingA2UIForApproval
+    ? null
+    : (pendingServiceSkillLaunchSource ??
+      pendingSceneGateSource ??
+      pendingA2UISource);
   const hasPendingA2UIForm = Boolean(effectivePendingA2UIForm);
   const suppressCanvasAutoOpenForPendingA2UI = hasPendingA2UIForm;
   const clearEntryPendingA2UI = useCallback(() => {
@@ -1960,6 +1984,11 @@ export function AgentChatWorkspace({
     themeWorkbenchRunState,
   });
 
+  const [taskCenterDraftSendRequest, setTaskCenterDraftSendRequest] =
+    useState<TaskCenterDraftSendRequest | null>(null);
+  const [homePendingPreviewRequest, setHomePendingPreviewRequest] =
+    useState<TaskCenterDraftSendRequest | null>(null);
+
   // 会话文件持久化 hook
   const {
     saveFile: saveSessionFile,
@@ -1970,7 +1999,15 @@ export function AgentChatWorkspace({
     sessionId,
     theme: mappedTheme,
     creationMode,
-    autoInit: true,
+    autoInit: shouldAutoInitWorkspaceSessionFiles({
+      sessionId,
+      isSending,
+      currentTurnId,
+      queuedTurnCount: queuedTurns.length,
+      draftSendInFlight: Boolean(
+        taskCenterDraftSendRequest || homePendingPreviewRequest,
+      ),
+    }),
   });
 
   const { syncGeneralArtifactToResource } = useWorkspaceGeneralResourceSync({
@@ -2069,10 +2106,6 @@ export function AgentChatWorkspace({
   const [activeTaskCenterDraftTabId, setActiveTaskCenterDraftTabId] = useState<
     string | null
   >(null);
-  const [taskCenterDraftSendRequest, setTaskCenterDraftSendRequest] =
-    useState<TaskCenterDraftSendRequest | null>(null);
-  const [homePendingPreviewRequest, setHomePendingPreviewRequest] =
-    useState<TaskCenterDraftSendRequest | null>(null);
   const handleBeforeTopicSwitch = useCallback(
     (topicId: string) => {
       taskCenterDraftSurfaceActiveRef.current = false;
@@ -2107,12 +2140,41 @@ export function AgentChatWorkspace({
     },
     [topicById],
   );
+  const initialSessionTopic = normalizedInitialSessionId
+    ? (topicById.get(normalizedInitialSessionId) ?? null)
+    : null;
+  const hasTaskCenterHomeHotpathPending = Boolean(
+    taskCenterDraftSendRequest || homePendingPreviewRequest,
+  );
+  const shouldPauseInitialSessionNavigationForTaskCenterDraft =
+    shouldPauseTaskCenterInitialSessionNavigation({
+      agentEntry,
+      draftSurfaceActive: taskCenterDraftSurfaceActiveRef.current,
+      activeDraftTabId: activeTaskCenterDraftTabId,
+      draftTabCount: taskCenterDraftTabs.length,
+      hasHomeHotpathPending: hasTaskCenterHomeHotpathPending,
+    });
+  const shouldHydrateEmptyMatchedInitialSession =
+    !hasTaskCenterHomeHotpathPending &&
+    Boolean(normalizedInitialSessionId) &&
+    normalizedInitialSessionId === (sessionId?.trim() || null) &&
+    messages.length === 0 &&
+    turns.length === 0 &&
+    threadItems.length === 0 &&
+    (!initialSessionTopic || (initialSessionTopic.messagesCount ?? 0) > 0);
   useWorkspaceInitialSessionNavigation({
     initialSessionId,
     currentSessionId: sessionId,
     resolveInitialSessionSwitch,
+    shouldAllowResolvedForceMatchedHydration:
+      !(agentEntry === "claw" || agentEntry === "new-task") ||
+      (messages.length === 0 && turns.length === 0 && threadItems.length === 0),
+    shouldPauseInitialSessionNavigation:
+      shouldPauseInitialSessionNavigationForTaskCenterDraft,
     shouldHydrateMatchedInitialSession:
-      isAutoRestoringSession || isSessionHydrating,
+      isAutoRestoringSession ||
+      isSessionHydrating ||
+      shouldHydrateEmptyMatchedInitialSession,
     switchTopic,
   });
   const {
@@ -2199,11 +2261,40 @@ export function AgentChatWorkspace({
     setInput,
     updateCurrentImageWorkbenchState,
   });
-  const { handleImageWorkbenchCommand, resolveImageWorkbenchCommandRequest } =
-    imageWorkbenchActionRuntime;
+  const {
+    handleImageWorkbenchCommand,
+    resolveImageWorkbenchCommandRequest:
+      _resolveImageWorkbenchActionCommandRequest,
+  } = imageWorkbenchActionRuntime;
+  const refreshImageWorkbenchSendRoute = useCallback(async () => {
+    try {
+      const latestMediaDefaults = await readGlobalMediaGenerationDefaults({
+        forceRefresh: true,
+      });
+      setOnDemandMediaDefaults(latestMediaDefaults);
+      const latestPreference = resolveMediaGenerationPreference(
+        project?.settings?.imageGeneration,
+        latestMediaDefaults.image,
+      );
+      imageWorkbenchSelectionRef.current =
+        applyImagePreferenceToSendRouteSelection({
+          preference: latestPreference,
+          selection: imageWorkbenchSelectionRef.current,
+        });
+    } catch (error) {
+      logAgentDebug("AgentChatPage", "imageWorkbench.sendRoute.refresh.failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [project?.settings?.imageGeneration]);
   const prepareImageWorkbenchSkillSend = useCallback(async () => {
+    await refreshImageWorkbenchSendRoute();
+    const selectionBeforeProviderLoad = imageWorkbenchSelectionRef.current;
     await ensureImageWorkbenchProviderSelectionCommitted(
-      ensureImageWorkbenchProvidersLoaded,
+      selectionBeforeProviderLoad.requestProviderId &&
+        selectionBeforeProviderLoad.requestModelId
+        ? undefined
+        : ensureImageWorkbenchProvidersLoaded,
       () => {
         const selection = imageWorkbenchSelectionRef.current;
         return Boolean(selection.requestProviderId && selection.requestModelId);
@@ -2226,7 +2317,34 @@ export function AgentChatWorkspace({
       toast.error(t("agentChat.imageWorkbench.selection.missing"));
       return false;
     }
-  }, [ensureImageWorkbenchProvidersLoaded, t]);
+  }, [ensureImageWorkbenchProvidersLoaded, refreshImageWorkbenchSendRoute, t]);
+  const resolveImageWorkbenchSendCommandRequest = useCallback<
+    typeof _resolveImageWorkbenchActionCommandRequest
+  >(
+    (params) =>
+      resolveImageWorkbenchCommandRequestWithSelection({
+        ...params,
+        currentImageWorkbenchState,
+        imageWorkbenchSelectedModelId:
+          imageWorkbenchSelectionRef.current.requestModelId,
+        imageWorkbenchSelectedProviderId:
+          imageWorkbenchSelectionRef.current.requestProviderId,
+        imageWorkbenchSelectedSize,
+        imageWorkbenchSessionKey,
+        projectId: params.projectId ?? projectId,
+        projectRootPath: params.projectRootPath ?? project?.rootPath ?? null,
+        contentId,
+        requireProjectContext: params.applyTarget != null,
+      }),
+    [
+      contentId,
+      currentImageWorkbenchState,
+      imageWorkbenchSelectedSize,
+      imageWorkbenchSessionKey,
+      project?.rootPath,
+      projectId,
+    ],
+  );
   const {
     handleSend,
     handleRecommendationClick,
@@ -2294,7 +2412,7 @@ export function AgentChatWorkspace({
     openRuntimeSceneGate,
     ensureSessionForCommandMetadata: ensureSession,
     prepareImageWorkbenchSkillSend,
-    resolveImageWorkbenchCommandRequest,
+    resolveImageWorkbenchCommandRequest: resolveImageWorkbenchSendCommandRequest,
   });
   useEffect(() => {
     sceneGateResumeHandlerRef.current = async ({ rawText, requestMetadata }) =>
@@ -3975,8 +4093,12 @@ export function AgentChatWorkspace({
     [initialInputCapability, runtimeInitialInputCapability],
   );
   const planComposerDecision = useMemo(
-    () => selectLatestPlanComposerDecision(pendingActions),
-    [pendingActions],
+    () =>
+      selectLatestPlanComposerDecision(
+        pendingActions,
+        submittedActionsInFlight,
+      ),
+    [pendingActions, submittedActionsInFlight],
   );
   const planComposerPendingActions = useMemo(
     () =>
@@ -4024,9 +4146,19 @@ export function AgentChatWorkspace({
     useState<Set<string>>(() => new Set());
   const [submittedLocalPlanRequestIds, setSubmittedLocalPlanRequestIds] =
     useState<Set<string>>(() => new Set());
+  const [
+    dismissedLocalPlanConfirmationKeys,
+    setDismissedLocalPlanConfirmationKeys,
+  ] = useState<Set<string>>(() => new Set());
+  const [
+    submittedLocalPlanConfirmationKeys,
+    setSubmittedLocalPlanConfirmationKeys,
+  ] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     setDismissedLocalPlanRequestIds(new Set());
     setSubmittedLocalPlanRequestIds(new Set());
+    setDismissedLocalPlanConfirmationKeys(new Set());
+    setSubmittedLocalPlanConfirmationKeys(new Set());
   }, [sessionId]);
   const localPlanImplementationDecision = useMemo(
     () =>
@@ -4038,25 +4170,29 @@ export function AgentChatWorkspace({
         threadItems: effectiveThreadItems,
       })
         ? selectProposedPlanImplementationDecision({
+            dismissedConfirmationKeys: dismissedLocalPlanConfirmationKeys,
             dismissedRequestIds: dismissedLocalPlanRequestIds,
             messages: displayMessages,
             planState: harnessShellState.plan,
+            submittedConfirmationKeys: submittedLocalPlanConfirmationKeys,
             submittedRequestIds: submittedLocalPlanRequestIds,
             threadItems: effectiveThreadItems,
           })
         : null,
     [
       harnessShellState.plan,
+      dismissedLocalPlanConfirmationKeys,
       dismissedLocalPlanRequestIds,
       displayMessages,
       effectiveThreadItems,
       isSending,
       planComposerDecision,
+      submittedLocalPlanConfirmationKeys,
       submittedLocalPlanRequestIds,
     ],
   );
   const handleDismissLocalPlanImplementationDecision = useCallback(
-    (requestId: string) => {
+    (requestId: string, requestArguments?: unknown) => {
       setDismissedLocalPlanRequestIds((previous) => {
         if (previous.has(requestId)) {
           return previous;
@@ -4065,100 +4201,67 @@ export function AgentChatWorkspace({
         next.add(requestId);
         return next;
       });
+      const confirmationKeys =
+        readPlanImplementationConfirmationKeys(requestArguments);
+      if (confirmationKeys.length > 0) {
+        setDismissedLocalPlanConfirmationKeys((previous) => {
+          const next = new Set(previous);
+          confirmationKeys.forEach((key) => next.add(key));
+          return next;
+        });
+      }
     },
     [],
   );
   const handleLocalPlanImplementationSubmit = useCallback(
     async (response: ConfirmResponse) => {
-      const requestId = response.requestId.trim();
-      if (!requestId) {
+      const acceptedLabel = t("agentChat.planComposerDecision.option.accept");
+      const submitPlan = buildPlanImplementationSubmitPlan({
+        acceptedLabel,
+        effectiveChatToolPreferences,
+        requestArguments: localPlanImplementationDecision?.action.arguments,
+        response,
+      });
+      if (submitPlan.kind === "invalid") {
         return;
       }
-      if (!response.confirmed) {
-        handleDismissLocalPlanImplementationDecision(requestId);
+      if (submitPlan.kind === "dismiss") {
+        handleDismissLocalPlanImplementationDecision(
+          submitPlan.requestId,
+          localPlanImplementationDecision?.action.arguments,
+        );
         return;
       }
 
-      const userData = asRecord(response.userData);
-      const adjustment =
-        (typeof userData?.answer === "string" ? userData.answer.trim() : "") ||
-        (typeof response.response === "string" ? response.response.trim() : "");
-      const acceptedLabel = t("agentChat.planComposerDecision.option.accept");
-      const isAdjustment = Boolean(adjustment && adjustment !== acceptedLabel);
-      const planImplementationMetadata = buildPlanImplementationHarnessMetadata(
-        {
-          requestArguments: localPlanImplementationDecision?.action.arguments,
-          requestId,
-          decision: isAdjustment ? "adjustment" : "accepted",
-        },
+      const sendResult = await handleSendRef.current(
+        [],
+        undefined,
+        undefined,
+        submitPlan.textOverride,
+        "react",
+        undefined,
+        submitPlan.sendOptions,
       );
-      const sendResult = isAdjustment
-        ? await handleSendRef.current(
-            [],
-            undefined,
-            undefined,
-            adjustment,
-            "react",
-            undefined,
-            {
-              requestMetadata: {
-                harness: {
-                  ...planImplementationMetadata,
-                  collaboration_mode: {
-                    mode: "plan",
-                    source: "plan_implementation_adjustment",
-                  },
-                  preferences: {
-                    task: true,
-                    task_mode: true,
-                  },
-                  task_mode_enabled: true,
-                },
-              },
-              skipSceneCommandRouting: true,
-              toolPreferencesOverride: {
-                ...effectiveChatToolPreferences,
-                task: true,
-              },
-            },
-          )
-        : await handleSendRef.current(
-            [],
-            undefined,
-            undefined,
-            "Implement the plan.",
-            "react",
-            undefined,
-            {
-              requestMetadata: {
-                harness: {
-                  ...planImplementationMetadata,
-                  collaboration_mode: {
-                    mode: "implement",
-                    source: "plan_implementation_accept",
-                  },
-                },
-              },
-              skipSceneCommandRouting: true,
-              toolPreferencesOverride: {
-                ...effectiveChatToolPreferences,
-                task: false,
-              },
-            },
-          );
 
       if (!sendResult) {
         return;
       }
 
       setSubmittedLocalPlanRequestIds((previous) => {
-        if (previous.has(requestId)) {
+        if (previous.has(submitPlan.requestId)) {
           return previous;
         }
         const next = new Set(previous);
-        next.add(requestId);
+        next.add(submitPlan.requestId);
         return next;
       });
+      if (submitPlan.confirmationKeys.length > 0) {
+        setSubmittedLocalPlanConfirmationKeys((previous) => {
+          const next = new Set(previous);
+          submitPlan.confirmationKeys.forEach((key) => next.add(key));
+          return next;
+        });
+      }
     },
     [
       effectiveChatToolPreferences,
@@ -4177,7 +4280,12 @@ export function AgentChatWorkspace({
     <PlanComposerDecisionPanel
       request={localPlanImplementationDecision.action}
       onSubmit={handleLocalPlanImplementationSubmit}
-      onDismiss={handleDismissLocalPlanImplementationDecision}
+      onDismiss={(requestId) =>
+        handleDismissLocalPlanImplementationDecision(
+          requestId,
+          localPlanImplementationDecision.action.arguments,
+        )
+      }
     />
   ) : undefined;
   const isReadModelRunning = hasRunningThreadReadActivity(threadRead);
@@ -4519,11 +4627,23 @@ export function AgentChatWorkspace({
   });
 
   const handleNonMaterializedTaskCenterSessionReady = useCallback(
-    (readySessionId: string) => {
+    (
+      readySessionId: string,
+      options?: { sourceDraftTabId?: string | null },
+    ) => {
       if (typeof newChatAt === "number") {
         markNewChatRequestHandled(String(newChatAt));
       }
       taskCenterDraftSurfaceActiveRef.current = false;
+      const sourceDraftTabId = options?.sourceDraftTabId?.trim() || null;
+      if (sourceDraftTabId) {
+        setTaskCenterDraftTabs((current) =>
+          removeTaskCenterDraftTab(current, sourceDraftTabId),
+        );
+        setActiveTaskCenterDraftTabId((current) =>
+          clearActiveTaskCenterDraftTab(current, sourceDraftTabId),
+        );
+      }
       setTaskCenterTransitionTopicId(null);
       setTaskCenterDetachedTopicId(null);
       upsertTaskCenterOpenTab(readySessionId, taskCenterWorkspaceId);
@@ -4535,7 +4655,9 @@ export function AgentChatWorkspace({
       markTaskCenterLocalSessionOverride,
       newChatAt,
       persistTaskCenterMaterializedSessionNavigation,
+      setActiveTaskCenterDraftTabId,
       setTaskCenterDetachedTopicId,
+      setTaskCenterDraftTabs,
       setTaskCenterTransitionTopicId,
       taskCenterWorkspaceId,
       upsertTaskCenterOpenTab,
@@ -4621,7 +4743,7 @@ export function AgentChatWorkspace({
     !shouldRenderTaskCenterEmbeddedHome &&
     !shouldSuppressTaskCenterDraftContent
       ? "task-center"
-      : "default";
+      : "none";
   const sceneLayoutMode = shouldRenderTaskCenterEmbeddedHome
     ? "chat"
     : layoutMode;
@@ -4677,6 +4799,9 @@ export function AgentChatWorkspace({
       sceneIsSending,
       sceneIsPreparingSend,
       sceneLayoutMode,
+      taskCenterHomeHotpathActive:
+        shouldRenderTaskCenterEmbeddedHome ||
+        Boolean(taskCenterDraftSendRequest || homePendingPreviewRequest),
       manualRightSurfaceActive: manualRightSurface !== null,
       pluginActivationActive: Boolean(activePluginActivationContext),
     });
@@ -6098,12 +6223,6 @@ export function AgentChatWorkspace({
     openedProjects,
     onCloseProject: handleCloseOpenedProject,
     deferWorkspaceListLoad: shouldUseBrowserWorkspaceHomeChrome,
-    workspaceHintMessage: shouldUseBrowserWorkspaceHomeChrome
-      ? BROWSER_WORKSPACE_HOME_HINT_MESSAGE
-      : undefined,
-    workspaceHintVisible:
-      shouldUseBrowserWorkspaceHomeChrome && browserWorkspaceHintVisible,
-    onDismissWorkspaceHint: handleDismissBrowserWorkspaceHint,
     projectRootPath: project?.rootPath || null,
     canvasWorkbenchRootPath,
     projectCharacters: projectMemory?.characters || [],
@@ -6137,6 +6256,7 @@ export function AgentChatWorkspace({
     onPluginSuggestionsNeeded: handlePluginSuggestionsNeeded,
     input,
     setInput,
+    emptyStateSendOnPointerDown: true,
     providerType,
     setProviderType,
     model,

@@ -29,25 +29,16 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["shell_command", "bash"],
   ["exec_command", "bash"],
   ["local_shell_call", "bash"],
-  ["BriefTool", "sendusermessage"],
   ["request_user_input", "requestuserinput"],
   ["RequestUserInputTool", "requestuserinput"],
   ["clock.sleep", "sleep"],
   ["sleep", "sleep"],
   ["update_plan", "updateplan"],
   ["UpdatePlanTool", "updateplan"],
-  ["FileEditTool", "edit"],
   ["FileReadTool", "read"],
-  ["FileWriteTool", "write"],
   ["read_file", "read"],
   ["developer__read", "read"],
   ["mcp__system__read_file", "read"],
-  ["write_file", "write"],
-  ["create_file", "write"],
-  ["mcp__system__write_file", "write"],
-  ["edit_file", "edit"],
-  ["developer__text_editor", "edit"],
-  ["mcp__system__edit_file", "edit"],
   ["GlobTool", "glob"],
   ["mcp__system__glob", "glob"],
   ["GrepTool", "grep"],
@@ -135,7 +126,6 @@ describe("toolDisplayInfo", () => {
 
   it("应为参考 JS 工具目录名解析出当前展示文案", () => {
     expect(resolveToolDisplayLabel("request_user_input")).toBe("用户输入");
-    expect(resolveToolDisplayLabel("BriefTool")).toBe("用户消息");
     expect(resolveToolDisplayLabel("developer__shell")).toBe("命令执行");
     expect(resolveToolDisplayLabel("exec_command")).toBe("命令执行");
     expect(resolveToolDisplayLabel("FileReadTool")).toBe("文件读取");
@@ -214,7 +204,7 @@ describe("toolDisplayInfo", () => {
 
   it("应为用户可见场景提供更自然的工具标签", () => {
     expect(resolveUserFacingToolDisplayLabel("FileReadTool")).toBe("查看文件");
-    expect(resolveUserFacingToolDisplayLabel("write_file")).toBe("保存文件");
+    expect(resolveUserFacingToolDisplayLabel("apply_patch")).toBe("应用补丁");
     expect(resolveUserFacingToolDisplayLabel("PowerShellTool")).toBe(
       "运行命令",
     );

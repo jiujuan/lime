@@ -57,6 +57,20 @@ describe("resolveTaskCenterNewTaskPageRequestPlan", () => {
     });
   });
 
+  it("route session 存在且请求清空项目时应沿用当前路由项目打开草稿", () => {
+    expect(
+      resolveTaskCenterNewTaskPageRequestPlan({
+        agentEntry: "claw",
+        requestedProjectId: null,
+        externalProjectId: "project-a",
+        normalizedInitialSessionId: "session-1",
+      }),
+    ).toEqual({
+      action: "open-draft",
+      projectId: "project-a",
+    });
+  });
+
   it("请求清空项目时应导航到无项目任务首页", () => {
     expect(
       resolveTaskCenterNewTaskPageRequestPlan({

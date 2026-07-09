@@ -7,7 +7,7 @@ use aster::conversation::message::{
     ActionRequired, ActionRequiredData, ActionRequiredScope, Message, MessageContent,
 };
 
-pub(super) fn lower_aster_reply_message(message: RuntimeReplyMessage) -> Message {
+pub(crate) fn lower_aster_reply_message(message: RuntimeReplyMessage) -> Message {
     let mut aster_message = match message.role {
         RuntimeReplyMessageRole::User => Message::user(),
     };

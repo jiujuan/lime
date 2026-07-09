@@ -1,0 +1,206 @@
+{
+  "schemaVersion": "benchmark-release-v1",
+  "datasetVersion": "2026-07-09",
+  "purpose": "Lime 大版本 Agent Benchmark Gate 清单。版本化文件只记录测试集来源、固定 slice、运行门禁和证据要求；真实下载物放在 .lime/benchmark/sources/，不写入 Git。",
+  "localCacheRoot": ".lime/benchmark/sources",
+  "releasePolicy": {
+    "p0Required": true,
+    "p1RequiredAfterAdapterReady": true,
+    "p1RegressionBudget": {
+      "maxAdditionalFailedTasks": 1
+    },
+    "evidenceRoot": ".lime/benchmark/releases/<version>",
+    "releaseVerdictRequires": [
+      "lime-p0-gate",
+      "harness-replay-trend",
+      "agent-qc-p0-manifest",
+      "terminal-bench-release-slice",
+      "deepswe-fixed-ten"
+    ]
+  },
+  "downloadedSources": [
+    {
+      "id": "terminal-bench",
+      "priority": "P1",
+      "sourceUrl": "https://github.com/harbor-framework/terminal-bench.git",
+      "localPath": ".lime/benchmark/sources/terminal-bench",
+      "commit": "1a6ffa9674b571da0ed040c470cb40c4d85f9b9b",
+      "downloadedAt": "2026-07-09",
+      "notes": "当前只下载仓库和任务元数据；未安装 Python 包、未拉 Docker 镜像、未执行外部任务。"
+    },
+    {
+      "id": "deep-swe",
+      "priority": "P1",
+      "sourceUrl": "https://github.com/datacurve-ai/deep-swe.git",
+      "localPath": ".lime/benchmark/sources/deep-swe",
+      "commit": "3cda4081fed96103a6395de39c85e9b20275e307",
+      "downloadedAt": "2026-07-09",
+      "notes": "当前只下载 DeepSWE 任务集；未安装 Pier、未构建 Docker verifier、未调用 live Provider。"
+    },
+    {
+      "id": "webarena",
+      "priority": "P2",
+      "sourceUrl": "https://github.com/web-arena-x/webarena.git",
+      "localPath": ".lime/benchmark/sources/webarena",
+      "commit": "dce04686a56253aefba7b18a4fa0937cf1dc987b",
+      "downloadedAt": "2026-07-09",
+      "notes": "当前只下载 WebArena 源码和任务环境说明；未部署 self-hosted websites，未运行浏览器 benchmark。"
+    },
+    {
+      "id": "browsergym",
+      "priority": "P2",
+      "sourceUrl": "https://github.com/ServiceNow/BrowserGym.git",
+      "localPath": ".lime/benchmark/sources/browsergym",
+      "commit": "9e779f087de9a65668b6974d11f9ce9816026e96",
+      "downloadedAt": "2026-07-09",
+      "notes": "当前只下载 BrowserGym 源码，作为后续 WebArena / WorkArena adapter 参考；未安装 Python 包，未启动浏览器环境。"
+    },
+    {
+      "id": "tau-bench",
+      "priority": "P2",
+      "sourceUrl": "https://github.com/sierra-research/tau-bench.git",
+      "localPath": ".lime/benchmark/sources/tau-bench",
+      "commit": "59a200c6d575d595120f1cb70fea53cef0632f6b",
+      "downloadedAt": "2026-07-09",
+      "notes": "当前只作为 tau 系列历史参考缓存；2026-07-10 WebSearch 复核后，新的 P2 small slice 应优先评估 tau3-bench，而不是把该旧仓库升级为 release radar。"
+    }
+  ],
+  "suites": [
+    {
+      "id": "lime-p0-gate",
+      "priority": "P0",
+      "runner": "npm",
+      "requiredForRelease": true,
+      "commands": [
+        "npm run verify:local",
+        "npm run test:contracts",
+        "npm run smoke:agent-runtime-current-fixture",
+        "npm run verify:gui-smoke",
+        "npm run agent-qc:check"
+      ],
+      "evidenceRequired": [
+        "command logs",
+        "GUI smoke evidence when applicable",
+        "Agent QC scenario manifest report"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "harness-replay-trend",
+      "priority": "P0",
+      "runner": "npm",
+      "requiredForRelease": true,
+      "commands": [
+        "npm run harness:eval",
+        "npm run harness:eval:trend"
+      ],
+      "evidenceRequired": [
+        ".lime/benchmark/runs/<run-id>/harness-eval-summary.json",
+        ".lime/benchmark/runs/<run-id>/harness-eval-trend.json"
+      ],
+      "status": "ready"
+    },
+    {
+      "id": "agent-qc-p0-manifest",
+      "priority": "P0",
+      "runner": "npm",
+      "requiredForRelease": true,
+      "commands": [
+        "npm run agent-qc:check",
+        "npm run agent-qc:benchmark:check",
+        "npm run agent-qc:benchmark-release:check"
+      ],
+      "evidenceRequired": [
+        "Agent QC scenario / GUI flow contract output",
+        "Agent QC benchmark manifest output",
+        "Benchmark release manifest output"
+      ],
+      "status": "ready"
+    },
+    {
+      "id": "terminal-bench-release-slice",
+      "priority": "P1",
+      "runner": "harbor-adapter",
+      "requiredForRelease": true,
+      "sourceRef": "terminal-bench",
+      "taskRoot": ".lime/benchmark/sources/terminal-bench/original-tasks",
+      "taskSet": [
+        "hello-world",
+        "fix-git",
+        "fix-permissions",
+        "csv-to-parquet",
+        "heterogeneous-dates",
+        "simple-web-scraper",
+        "sqlite-db-truncate",
+        "organization-json-generator",
+        "fibonacci-server",
+        "configure-git-webserver"
+      ],
+      "adapterStatus": "dry_run_ready",
+      "evidenceRequired": [
+        "trajectory.json",
+        "tool-timeline.json",
+        "stdout.log",
+        "stderr.log",
+        "verifier-result.json",
+        "evidence-pack"
+      ],
+      "status": "dry_run_ready"
+    },
+    {
+      "id": "deepswe-fixed-ten",
+      "priority": "P1",
+      "runner": "deepswe-adapter",
+      "requiredForRelease": true,
+      "sourceRef": "deep-swe",
+      "taskRoot": ".lime/benchmark/sources/deep-swe/tasks",
+      "taskSet": [
+        "ytt-jsonpath-query-api",
+        "abs-module-cache-flags",
+        "httpx-multipart-response-parsing",
+        "bandit-incremental-cache-control",
+        "ipython-session-bundle-replay",
+        "ofetch-per-origin-circuit-breaker",
+        "obsidian-linter-link-format-conversion",
+        "csstree-shorthand-expansion-compression",
+        "fd-deterministic-multi-key-sorting",
+        "oxvg-structural-selector-preservation"
+      ],
+      "adapterStatus": "dry_run_ready",
+      "evidenceRequired": [
+        "trajectory.json",
+        "patch.diff",
+        "test-stdout.txt",
+        "reward.json",
+        "ctrf.json",
+        "evidence-pack",
+        "replay-case"
+      ],
+      "status": "dry_run_ready"
+    }
+  ],
+  "radarBacklog": [
+    {
+      "id": "webarena-fixed-slice",
+      "priority": "P2",
+      "sourceRef": "webarena",
+      "adapterRef": "browsergym",
+      "status": "downloaded"
+    },
+    {
+      "id": "gaia-level-1-dev-slice",
+      "priority": "P2",
+      "status": "not_downloaded"
+    },
+    {
+      "id": "tau3-bench-small-slice",
+      "priority": "P2",
+      "status": "not_downloaded"
+    },
+    {
+      "id": "osworld-small-slice",
+      "priority": "P2",
+      "status": "not_downloaded"
+    }
+  ]
+}

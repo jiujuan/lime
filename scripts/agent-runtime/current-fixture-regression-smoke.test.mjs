@@ -65,6 +65,41 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain("停止后同会话继续输出 Electron fixture");
   });
 
+  it("runs the real Electron home first-send hotpath fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("Claw 首页首发热路径 Electron fixture");
+    expect(content).toContain(
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("home-hotpath");
+    expect(content).toContain(
+      "claw-chat-current-fixture-home-hotpath-regression",
+    );
+    expect(content).toContain("--timeout-ms");
+    expect(content).toContain("240000");
+    expect(content).toContain(
+      "首页首发热路径用户消息可见/无空对话/无模型回退 Electron fixture",
+    );
+  });
+
+  it("runs the real Electron greeting home first-send hotpath fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("Claw 首页首发短问候热路径 Electron fixture");
+    expect(content).toContain(
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("home-hotpath-greeting");
+    expect(content).toContain(
+      "claw-chat-current-fixture-home-hotpath-greeting-regression",
+    );
+    expect(content).toContain("--timeout-ms");
+    expect(content).toContain("240000");
+  });
+
   it("runs the real Electron approval decision fixtures in the current regression set", () => {
     const content = readSmokeScript();
 
@@ -86,7 +121,14 @@ describe("agent runtime current fixture regression smoke guard", () => {
       "claw-chat-current-fixture-approval-request-cancel-regression",
     );
     expect(content).toContain(
-      "approval allow-for-session resume / decline continue / cancel turn 三类 Electron fixture",
+      "Claw approval full-access no prompt Electron fixture",
+    );
+    expect(content).toContain("approval-request-full-access");
+    expect(content).toContain(
+      "claw-chat-current-fixture-approval-request-full-access-regression",
+    );
+    expect(content).toContain(
+      "approval full-access 不弹 prompt / 不生成 timeline record Electron fixture",
     );
   });
 

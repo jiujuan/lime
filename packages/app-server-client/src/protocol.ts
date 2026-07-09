@@ -31,6 +31,8 @@ export const JSONRPC_VERSION = "2.0";
 export const PROTOCOL_VERSION = "appserver.v0";
 export const SERVER_NAME = "app-server";
 export const METHOD_CANCEL_REQUEST = "$/cancelRequest";
+export const METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT =
+  "voiceTranscription/polishText";
 
 export const CONVERSATION_IMPORT_SOURCE_CLIENTS = [
   "codex",

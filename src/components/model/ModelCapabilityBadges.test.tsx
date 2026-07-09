@@ -116,4 +116,33 @@ describe("ModelCapabilityBadges", () => {
     expect(container.textContent).toContain("支持多模态");
     expect(container.textContent).not.toContain("无多模态");
   });
+
+  it("支持 reasoning summary 但不可调 effort 时不应展示为无思考", () => {
+    const container = renderBadges({
+      model: createModel("provider-reasoning-summary", {
+        reasoning_policy: {
+          supports_reasoning_summaries: true,
+          default_reasoning_level: null,
+          supported_reasoning_levels: [],
+          supported_reasoning_efforts: [],
+          can_set_reasoning_effort: false,
+        },
+      }),
+    });
+
+    expect(container.textContent).toContain("支持思考");
+    expect(container.textContent).not.toContain("无思考");
+  });
+
+  it("gpt-5.4-mini 旧缓存未写入 reasoning 标记时也应展示为支持思考", () => {
+    const container = renderBadges({
+      model: createModel("gpt-5.4-mini", {
+        provider_id: "lime",
+        provider_name: "lime",
+      }),
+    });
+
+    expect(container.textContent).toContain("支持思考");
+    expect(container.textContent).not.toContain("无思考");
+  });
 });

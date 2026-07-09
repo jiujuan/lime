@@ -344,6 +344,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
   it("收到当前 turn 的 App Server runtime event 后应刷新 read model", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
+    const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
       listenToTeamEvents: vi.fn(async () => () => {}),
@@ -362,6 +363,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       currentTurnEventName: "aster_stream_assistant-1",
       isSending: true,
       refreshSessionDetail,
+      refreshSessionReadModel,
     });
 
     try {
@@ -384,6 +386,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
 
       expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(refreshSessionReadModel).not.toHaveBeenCalled();
       await flushCoalescedRefresh();
 
       expect(refreshSessionDetail).not.toHaveBeenCalled();
@@ -470,11 +473,9 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
       await flushCoalescedRefresh();
 
-      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
-        "session-1",
-        terminalRefreshRequest("runtimeSync.event"),
-      );
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(refreshSessionReadModel).toHaveBeenCalledTimes(1);
+      expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
     } finally {
       harness.unmount();
     }
@@ -597,6 +598,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
   it("当前 turn 的 text_delta 不应触发完整 read model 刷新", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
+    const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
       listenToTeamEvents: vi.fn(async () => () => {}),
@@ -615,6 +617,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       currentTurnEventName: "aster_stream_assistant-2",
       isSending: true,
       refreshSessionDetail,
+      refreshSessionReadModel,
     });
 
     try {
@@ -629,13 +632,15 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
 
       expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(refreshSessionReadModel).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
   });
 
-  it("当前 turn 的连续状态事件应合并为一次会话详情刷新", async () => {
+  it("当前 turn 的连续状态事件应合并为一次 read model 刷新", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
+    const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
       listenToTeamEvents: vi.fn(async () => () => {}),
@@ -654,6 +659,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       currentTurnEventName: "aster_stream_assistant-coalesced",
       isSending: true,
       refreshSessionDetail,
+      refreshSessionReadModel,
     });
 
     try {
@@ -704,11 +710,13 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
       await flushCoalescedRefresh();
 
-      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith(
-        "session-1",
-        terminalRefreshRequest("runtimeSync.event"),
-      );
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(terminalRefreshRequest("runtimeSync.event")).toEqual({
+        source: "runtimeSync.event",
+        detailMergeMode: "terminal_reconcile",
+      });
+      expect(refreshSessionReadModel).toHaveBeenCalledTimes(1);
+      expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
     } finally {
       harness.unmount();
     }
@@ -717,6 +725,7 @@ describe("useAgentRuntimeSyncEffects", () => {
   it("App Server turn notification 应通过当前 stream event 触发 read model 刷新", async () => {
     const eventName = "aster_stream_app-server-p3-126";
     const refreshSessionDetail = vi.fn(async () => true);
+    const refreshSessionReadModel = vi.fn(async () => true);
     const appServerClient = createAppServerThreadClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
       id: 1,
@@ -774,6 +783,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       currentTurnEventName: eventName,
       isSending: true,
       refreshSessionDetail,
+      refreshSessionReadModel,
     });
 
     try {
@@ -819,11 +829,9 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
       await flushCoalescedRefresh();
 
-      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith(
-        "session-1",
-        terminalRefreshRequest("runtimeSync.event"),
-      );
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(refreshSessionReadModel).toHaveBeenCalledTimes(1);
+      expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
     } finally {
       harness.unmount();
     }
@@ -831,6 +839,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
   it("收到当前 turn 的取消终态后应刷新 read model", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
+    const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
       listenToTeamEvents: vi.fn(async () => () => {}),
@@ -849,6 +858,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       currentTurnEventName: "aster_stream_assistant-cancel",
       isSending: true,
       refreshSessionDetail,
+      refreshSessionReadModel,
     });
 
     try {
@@ -887,11 +897,9 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
       await flushCoalescedRefresh();
 
-      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith(
-        "session-1",
-        terminalRefreshRequest("runtimeSync.event"),
-      );
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      expect(refreshSessionReadModel).toHaveBeenCalledTimes(1);
+      expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
     } finally {
       harness.unmount();
     }

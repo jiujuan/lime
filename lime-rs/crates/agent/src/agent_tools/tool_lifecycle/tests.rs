@@ -35,6 +35,7 @@ fn builds_action_required_from_policy_metadata() {
                 json!("shell_command_requires_approval"),
             ),
             ("command".to_string(), json!("cargo test")),
+            ("cwd".to_string(), json!("/Users/coso/project")),
             ("approvalPolicy".to_string(), json!("on_request")),
             (
                 "requestedSandboxPolicy".to_string(),
@@ -48,17 +49,72 @@ fn builds_action_required_from_policy_metadata() {
         .expect("action event")
         .into_action_required_event();
 
-    assert!(matches!(
-        event,
-        RuntimeAgentEvent::ActionRequired { request_id, action_type, data, .. }
-            if request_id == "tool-approval"
-                && action_type == "tool_confirmation"
-                && data.get("toolCallId") == Some(&json!("tool-approval"))
-                && data.get("toolName") == Some(&json!("Bash"))
-                && data.get("command") == Some(&json!("cargo test"))
-                && data.get("approvalPolicy") == Some(&json!("on_request"))
-                && data.get("requestedSandboxPolicy") == Some(&json!("workspace-write"))
-    ));
+    let RuntimeAgentEvent::ActionRequired {
+        request_id,
+        action_type,
+        data,
+        ..
+    } = event
+    else {
+        panic!("expected action required event");
+    };
+    assert_eq!(request_id, "tool-approval");
+    assert_eq!(action_type, "tool_confirmation");
+    assert_eq!(data.get("toolCallId"), Some(&json!("tool-approval")));
+    assert_eq!(data.get("toolName"), Some(&json!("Bash")));
+    assert_eq!(data.get("toolFamily"), Some(&json!("shell_command")));
+    assert_eq!(data.get("tool_family"), Some(&json!("shell_command")));
+    assert_eq!(
+        data.get("actionKind"),
+        Some(&json!("tool_execution_policy"))
+    );
+    assert_eq!(
+        data.get("action_kind"),
+        Some(&json!("tool_execution_policy"))
+    );
+    assert_eq!(
+        data.get("availableDecisions"),
+        Some(&json!(["allow_once", "decline", "cancel"]))
+    );
+    assert_eq!(
+        data.get("runtime_contract")
+            .and_then(|value| value.get("contract_key")),
+        Some(&json!("shell_command"))
+    );
+    assert_eq!(data.get("contractKey"), Some(&json!("shell_command")));
+    assert_eq!(data.get("command"), Some(&json!("cargo test")));
+    assert_eq!(data.get("approvalPolicy"), Some(&json!("on_request")));
+    assert_eq!(
+        data.get("requestedSandboxPolicy"),
+        Some(&json!("workspace-write"))
+    );
+    let approval_scope = data
+        .get("approvalScope")
+        .expect("approval scope should be present");
+    assert_eq!(
+        approval_scope.get("contractKey"),
+        Some(&json!("shell_command"))
+    );
+    assert_eq!(
+        approval_scope.get("toolFamily"),
+        Some(&json!("shell_command"))
+    );
+    assert_eq!(
+        approval_scope.get("riskClass"),
+        Some(&json!("shell_command_requires_approval"))
+    );
+    assert!(approval_scope.get("cwd").is_none());
+    assert!(
+        approval_scope
+            .get("workingDirHash")
+            .and_then(|value| value.as_str())
+            .is_some_and(|value| value.starts_with("fnv1a64:")),
+        "approval scope should contain a non-raw working directory hash"
+    );
+    assert!(
+        !approval_scope.to_string().contains("/Users/coso/project"),
+        "approval scope must not leak raw cwd"
+    );
 }
 
 #[test]
@@ -91,6 +147,93 @@ fn builds_action_required_with_distinct_action_and_tool_ids() {
                 && data.get("toolName") == Some(&json!("Bash"))
                 && data.get("command") == Some(&json!("cargo test"))
     ));
+}
+
+#[test]
+fn action_required_preserves_explicit_decision_contract_without_enabling_session_by_default() {
+    let outcome = ToolExecutionOutcome::<RuntimeAgentEvent> {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-explicit-approval".to_string(),
+        success: false,
+        output: String::new(),
+        error: Some("approval required".to_string()),
+        metadata: Some(HashMap::from([
+            ("eventClass".to_string(), json!("action.required")),
+            ("toolFamily".to_string(), json!("shell_command")),
+            ("actionKind".to_string(), json!("tool_execution_policy")),
+            (
+                "availableDecisions".to_string(),
+                json!(["allow_once", "allow_for_session", "decline", "cancel"]),
+            ),
+            (
+                "runtime_contract".to_string(),
+                json!({
+                    "contract_key": "custom_shell_contract",
+                    "tool_family": "shell_command",
+                    "session_cache_supported": true
+                }),
+            ),
+            (
+                "approvalScope".to_string(),
+                json!({
+                    "contractKey": "custom_shell_contract",
+                    "workingDirHash": "sha256:abc",
+                }),
+            ),
+        ])),
+        stream_events: Vec::new(),
+    };
+
+    let event = ToolApprovalActionSnapshot::from_outcome(&outcome)
+        .expect("action event")
+        .into_action_required_event();
+    let RuntimeAgentEvent::ActionRequired { data, .. } = event else {
+        panic!("expected action required event");
+    };
+
+    assert_eq!(
+        data.get("availableDecisions"),
+        Some(&json!([
+            "allow_once",
+            "allow_for_session",
+            "decline",
+            "cancel"
+        ]))
+    );
+    assert_eq!(
+        data.get("runtime_contract")
+            .and_then(|value| value.get("contract_key")),
+        Some(&json!("custom_shell_contract"))
+    );
+    assert_eq!(
+        data.get("approvalScope")
+            .and_then(|value| value.get("workingDirHash")),
+        Some(&json!("sha256:abc"))
+    );
+
+    let default_outcome = ToolExecutionOutcome::<RuntimeAgentEvent> {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-default-approval".to_string(),
+        success: false,
+        output: String::new(),
+        error: Some("approval required".to_string()),
+        metadata: Some(HashMap::from([(
+            "eventClass".to_string(),
+            json!("action.required"),
+        )])),
+        stream_events: Vec::new(),
+    };
+    let default_event = ToolApprovalActionSnapshot::from_outcome(&default_outcome)
+        .expect("action event")
+        .into_action_required_event();
+    let RuntimeAgentEvent::ActionRequired { data, .. } = default_event else {
+        panic!("expected action required event");
+    };
+    assert_eq!(
+        data.get("availableDecisions"),
+        Some(&json!(["allow_once", "decline", "cancel"])),
+        "shell approval must not advertise allow_for_session before a scoped cache owner exists"
+    );
 }
 
 #[test]

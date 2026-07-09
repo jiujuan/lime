@@ -342,6 +342,11 @@ const proxyEnvKeys = [
   "NO_PROXY",
   "no_proxy",
 ] as const;
+const runtimeLibraryEnvKeys = [
+  "DYLD_FALLBACK_LIBRARY_PATH",
+  "DYLD_LIBRARY_PATH",
+  "LD_LIBRARY_PATH",
+] as const;
 
 function setProcessPlatform(platform: NodeJS.Platform): void {
   Object.defineProperty(process, "platform", {
@@ -390,11 +395,17 @@ describe("ElectronAppServerHost", () => {
     for (const key of proxyEnvKeys) {
       delete process.env[key];
     }
+    for (const key of runtimeLibraryEnvKeys) {
+      delete process.env[key];
+    }
   });
 
   afterEach(() => {
     setProcessPlatform(originalPlatform);
     for (const key of proxyEnvKeys) {
+      delete process.env[key];
+    }
+    for (const key of runtimeLibraryEnvKeys) {
       delete process.env[key];
     }
   });
@@ -410,6 +421,29 @@ describe("ElectronAppServerHost", () => {
       dataDir: "/tmp/lime-electron-user-data/app-server",
       productDbMigrationCleanup: "drop-tables",
     });
+  });
+
+  it("macOS 启动 App Server 时应把可执行文件目录放入动态库搜索路径", async () => {
+    setProcessPlatform("darwin");
+    process.env.DYLD_LIBRARY_PATH = "/existing/dyld";
+    process.env.DYLD_FALLBACK_LIBRARY_PATH = "/existing/fallback";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    const binaryDir = lifecycleConfigs[0].binaryPath.replace(
+      /\/app-server$/u,
+      "",
+    );
+    expect(lifecycleOptions).toHaveLength(1);
+    expect(lifecycleOptions[0].env?.DYLD_LIBRARY_PATH?.split(":")).toEqual([
+      binaryDir,
+      "/existing/dyld",
+    ]);
+    expect(
+      lifecycleOptions[0].env?.DYLD_FALLBACK_LIBRARY_PATH?.split(":"),
+    ).toEqual([binaryDir, "/existing/fallback"]);
   });
 
   it("macOS 系统代理存在时应传给 App Server sidecar", async () => {

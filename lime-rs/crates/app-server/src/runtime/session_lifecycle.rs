@@ -634,7 +634,7 @@ impl RuntimeCore {
                 history_before_message_id: None,
             })
             .await?;
-        self.insert_hydrated_session(context.response);
+        self.insert_hydrated_session(context.stored);
         Ok(())
     }
 
@@ -646,16 +646,13 @@ impl RuntimeCore {
         state.sessions.contains_key(session_id)
     }
 
-    fn insert_hydrated_session(&self, response: AgentSessionReadResponse) {
+    fn insert_hydrated_session(&self, stored: StoredSession) {
         let mut state = self
             .state
             .lock()
             .expect("runtime core state mutex poisoned");
-        let session_id = response.session.session_id.clone();
-        state
-            .sessions
-            .entry(session_id)
-            .or_insert_with(|| session_hydration::hydrated_stored_session_from_response(response));
+        let session_id = stored.session.session_id.clone();
+        state.sessions.entry(session_id).or_insert(stored);
     }
 
     pub(in crate::runtime) fn stored_turn(

@@ -2,6 +2,7 @@ import {
   APPROVAL_REQUEST_CANCEL_SCENARIO,
   APPROVAL_REQUEST_DECLINE_SCENARIO,
   ASSISTANT_DONE_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_SCENARIO,
   APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
@@ -12,6 +13,11 @@ import {
   EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
+  GREETING_DONE_TEXT,
+  GREETING_PROMPT,
+  GREETING_SUMMARY_TEXT,
+  HOME_HOTPATH_GREETING_SCENARIO,
+  HOME_HOTPATH_SCENARIO,
   IMAGE_COMMAND_SCENARIO,
   INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO,
   INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO,
@@ -43,12 +49,14 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
   runApprovalRequestDecisionScenario,
+  runApprovalRequestFullAccessScenario,
   runApprovalRequestResumeScenario,
 } from "./claw-chat-current-fixture-approval-resume.mjs";
 import { runContentFactoryArticleWorkspaceScenario } from "./claw-chat-current-fixture-content-factory-article-workspace.mjs";
 import { runContentFactoryInlineImageArticleWorkspaceScenario } from "./claw-chat-current-fixture-inline-image-article-workspace.mjs";
 import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
+import { runHomeHotpathScenario } from "./claw-chat-current-fixture-home-hotpath.mjs";
 import {
   enableGoalModeFromGui,
   enablePlanModeFromGui,
@@ -283,6 +291,9 @@ export async function executeScenarioFlow({
   const isImageIntentScenario =
     options.scenario === IMAGE_COMMAND_SCENARIO ||
     options.scenario === PLAIN_IMAGE_INTENT_SCENARIO;
+  const isHomeHotpathScenario =
+    options.scenario === HOME_HOTPATH_SCENARIO ||
+    options.scenario === HOME_HOTPATH_GREETING_SCENARIO;
   if (options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO) {
     logStage("run-content-factory-article-workspace");
     Object.assign(
@@ -362,6 +373,17 @@ export async function executeScenarioFlow({
         logStage,
       }),
     );
+  } else if (options.scenario === APPROVAL_REQUEST_FULL_ACCESS_SCENARIO) {
+    Object.assign(
+      summary,
+      await runApprovalRequestFullAccessScenario({
+        page,
+        options,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
+      }),
+    );
   } else if (
     options.scenario === APPROVAL_REQUEST_DECLINE_SCENARIO ||
     options.scenario === APPROVAL_REQUEST_CANCEL_SCENARIO
@@ -431,6 +453,28 @@ export async function executeScenarioFlow({
         summary,
         appServerRequests,
         runtimeEnv,
+      }),
+    );
+  } else if (isHomeHotpathScenario) {
+    logStage("run-home-hotpath");
+    summary.homeHotpath = sanitizeJson(
+      await runHomeHotpathScenario({
+        page,
+        options,
+        appServerRequests,
+        runtimeEnv,
+        scenarioConfig:
+          options.scenario === HOME_HOTPATH_GREETING_SCENARIO
+            ? {
+                doneText: GREETING_DONE_TEXT,
+                prompt: GREETING_PROMPT,
+                summaryText: GREETING_SUMMARY_TEXT,
+              }
+            : options.promptOverride
+              ? {
+                  prompt: options.promptOverride,
+                }
+            : undefined,
       }),
     );
   } else if (options.scenario === "plan") {
@@ -918,6 +962,7 @@ export async function executeScenarioFlow({
     options.scenario !== MEDIA_REFERENCE_SCENARIO &&
     options.scenario !== REASONING_FIRST_VISIBLE_SCENARIO &&
     options.scenario !== LIVE_TAIL_COMMIT_SCENARIO &&
+    !isHomeHotpathScenario &&
     options.scenario !== ELECTRON_RESIZE_REFLOW_SCENARIO &&
     options.scenario !== TERMINAL_FAILED_AFTER_ANSWER_SCENARIO &&
     options.scenario !== TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO &&
@@ -925,6 +970,7 @@ export async function executeScenarioFlow({
     options.scenario !== APPROVAL_REQUEST_RESUME_SCENARIO &&
     options.scenario !== APPROVAL_REQUEST_DECLINE_SCENARIO &&
     options.scenario !== APPROVAL_REQUEST_CANCEL_SCENARIO &&
+    options.scenario !== APPROVAL_REQUEST_FULL_ACCESS_SCENARIO &&
     options.scenario !== "web-tools-rendering" &&
     options.scenario !== "mcp-structured-content" &&
     options.scenario !== MULTI_AGENT_TEAM_SCENARIO &&

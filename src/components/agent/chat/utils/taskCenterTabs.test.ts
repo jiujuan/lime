@@ -576,6 +576,19 @@ describe("taskCenterTabs", () => {
     });
   });
 
+  it("初始会话恢复遇到已有历史消息时应强制读取详情", () => {
+    expect(
+      resolveInitialTaskSessionSwitchOptions({
+        status: "done",
+        statusReason: "default",
+        messagesCount: 6,
+      }),
+    ).toEqual({
+      allowDetachedSession: true,
+      forceRefresh: true,
+    });
+  });
+
   it("初始会话恢复遇到工作区错误任务时应强制刷新并恢复启动钩子", () => {
     expect(
       resolveInitialTaskSessionSwitchOptions({

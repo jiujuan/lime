@@ -10,7 +10,62 @@ use crate::safety::{
     SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
 };
 use crate::ModelProviderProtocol;
+use agent_protocol::provider_trace::ProviderTraceEvent;
 use serde::{Deserialize, Serialize};
+use std::future::Future;
+use std::pin::Pin;
+use std::time::Duration;
+
+pub const PROVIDER_STREAM_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
+pub const PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON: &str =
+    "cancelled_while_waiting_provider_stream";
+pub const PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON: &str =
+    "cancelled_before_provider_event_processing";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProviderStreamCancelReason {
+    WhileWaiting,
+    BeforeEventProcessing,
+}
+
+impl ProviderStreamCancelReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::WhileWaiting => PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON,
+            Self::BeforeEventProcessing => PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProviderStreamPoll<T> {
+    Item(T),
+    End,
+    Pending,
+    Canceled(ProviderStreamCancelReason),
+}
+
+pub fn provider_stream_cancel_poll_interval(cancelable: bool) -> Option<Duration> {
+    cancelable.then_some(PROVIDER_STREAM_CANCEL_POLL_INTERVAL)
+}
+
+pub fn provider_stream_timeout_poll(cancelled: bool) -> ProviderStreamPoll<()> {
+    if cancelled {
+        ProviderStreamPoll::Canceled(ProviderStreamCancelReason::WhileWaiting)
+    } else {
+        ProviderStreamPoll::Pending
+    }
+}
+
+pub fn provider_stream_event_poll<T>(next: Option<T>, cancelled: bool) -> ProviderStreamPoll<T> {
+    match (next, cancelled) {
+        (None, _) => ProviderStreamPoll::End,
+        (Some(_), true) => {
+            ProviderStreamPoll::Canceled(ProviderStreamCancelReason::BeforeEventProcessing)
+        }
+        (Some(item), false) => ProviderStreamPoll::Item(item),
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -85,6 +140,22 @@ pub struct RuntimeReplyProviderHandle {
     pub capabilities: RuntimeReplyProviderCapabilities,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeReplyProviderTraceMetadata {
+    pub provider_name: String,
+    pub model_name: String,
+    pub runtime_provider_backend: String,
+    pub runtime_provider_selector: Option<String>,
+    pub runtime_provider_protocol: Option<String>,
+    pub runtime_provider_active_model: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeReplyProviderBinding<B> {
+    handle: RuntimeReplyProviderHandle,
+    backend: B,
+}
+
 impl RuntimeReplyProviderHandle {
     pub fn from_config(config: &RuntimeProviderConfig, backend: RuntimeProviderBackend) -> Self {
         Self {
@@ -105,6 +176,82 @@ impl RuntimeReplyProviderHandle {
 
     pub fn model_name(&self) -> &str {
         &self.identity.model_name
+    }
+
+    pub fn provider_trace_metadata(&self) -> RuntimeReplyProviderTraceMetadata {
+        RuntimeReplyProviderTraceMetadata::from_handle(self)
+    }
+}
+
+impl RuntimeReplyProviderTraceMetadata {
+    pub fn from_handle(provider: &RuntimeReplyProviderHandle) -> Self {
+        Self {
+            provider_name: provider.identity.provider_name.clone(),
+            model_name: provider.identity.model_name.clone(),
+            runtime_provider_backend: provider.backend.as_wire_str().to_string(),
+            runtime_provider_selector: provider.identity.provider_selector.clone(),
+            runtime_provider_protocol: provider
+                .identity
+                .protocol
+                .as_ref()
+                .map(model_provider_protocol_wire_value),
+            runtime_provider_active_model: provider.capabilities.active_model_name.clone(),
+        }
+    }
+
+    pub fn apply_to_provider_trace_event(&self, event: &mut ProviderTraceEvent) {
+        if event.provider.trim().is_empty() {
+            event.provider = self.provider_name.clone();
+        }
+        if event.model.trim().is_empty() {
+            event.model = self.model_name.clone();
+        }
+        event.runtime_provider_backend = Some(self.runtime_provider_backend.clone());
+        event.runtime_provider_selector = self.runtime_provider_selector.clone();
+        event.runtime_provider_protocol = self.runtime_provider_protocol.clone();
+        event.runtime_provider_active_model = self.runtime_provider_active_model.clone();
+    }
+}
+
+pub fn apply_runtime_provider_metadata(
+    event: &mut ProviderTraceEvent,
+    provider: Option<&RuntimeReplyProviderHandle>,
+) {
+    let Some(provider) = provider else {
+        return;
+    };
+    provider
+        .provider_trace_metadata()
+        .apply_to_provider_trace_event(event);
+}
+
+fn model_provider_protocol_wire_value(protocol: &ModelProviderProtocol) -> String {
+    match protocol {
+        ModelProviderProtocol::Responses => "responses".to_string(),
+        ModelProviderProtocol::ChatCompletions => "chat_completions".to_string(),
+        ModelProviderProtocol::Custom(value) => value.clone(),
+    }
+}
+
+impl<B> RuntimeReplyProviderBinding<B> {
+    pub fn new(handle: RuntimeReplyProviderHandle, backend: B) -> Self {
+        Self { handle, backend }
+    }
+
+    pub fn handle(&self) -> &RuntimeReplyProviderHandle {
+        &self.handle
+    }
+
+    pub fn backend(&self) -> &B {
+        &self.backend
+    }
+
+    pub fn into_backend(self) -> B {
+        self.backend
+    }
+
+    pub fn into_parts(self) -> (RuntimeReplyProviderHandle, B) {
+        (self.handle, self.backend)
     }
 }
 
@@ -234,6 +381,109 @@ impl RuntimeReplyProviderStreamStart {
             provider_name: self.stream_request.provider_name(),
             model_name: self.stream_request.model_name(),
         }
+    }
+}
+
+pub type RuntimeReplyProviderSourceFuture<'a, S, E> =
+    Pin<Box<dyn Future<Output = Result<S, E>> + Send + 'a>>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeReplyProviderSourceBackendCall<R> {
+    source_request: R,
+}
+
+#[derive(Debug)]
+pub struct RuntimeReplyProviderExecutionSource<R> {
+    runner: R,
+}
+
+impl<R> RuntimeReplyProviderSourceBackendCall<R> {
+    pub fn new(source_request: R) -> Self {
+        Self { source_request }
+    }
+
+    pub fn source_request(&self) -> &R {
+        &self.source_request
+    }
+
+    pub fn into_source_request(self) -> R {
+        self.source_request
+    }
+}
+
+pub trait RuntimeReplyProviderSourceBackend<R>: Send + Sync {
+    type Stream<'a>
+    where
+        Self: 'a,
+        R: 'a;
+    type Error: std::fmt::Display;
+
+    fn stream_reply<'a>(
+        self,
+        call: RuntimeReplyProviderSourceBackendCall<R>,
+    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
+    where
+        Self: Sized + Send + 'a,
+        R: Send + 'a;
+}
+
+pub trait RuntimeReplyProviderExecutionRunner<R> {
+    type Stream<'a>
+    where
+        Self: 'a,
+        R: 'a;
+    type Error: std::fmt::Display;
+
+    fn run_execution<'a>(
+        self,
+        request: R,
+    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
+    where
+        Self: Sized + Send + 'a,
+        R: Send + 'a;
+}
+
+impl<R> RuntimeReplyProviderExecutionSource<R> {
+    pub fn new(runner: R) -> Self {
+        Self { runner }
+    }
+
+    pub fn into_runner(self) -> R {
+        self.runner
+    }
+}
+
+pub fn run_provider_source_execution<'a, R, X>(
+    call: RuntimeReplyProviderSourceBackendCall<R>,
+    runner: X,
+) -> RuntimeReplyProviderSourceFuture<'a, X::Stream<'a>, X::Error>
+where
+    R: Send + 'a,
+    X: RuntimeReplyProviderExecutionRunner<R> + Send + 'a,
+{
+    runner.run_execution(call.into_source_request())
+}
+
+impl<R, X> RuntimeReplyProviderSourceBackend<R> for RuntimeReplyProviderExecutionSource<X>
+where
+    X: RuntimeReplyProviderExecutionRunner<R> + Send + Sync,
+{
+    type Stream<'a>
+        = X::Stream<'a>
+    where
+        Self: 'a,
+        R: 'a;
+    type Error = X::Error;
+
+    fn stream_reply<'a>(
+        self,
+        call: RuntimeReplyProviderSourceBackendCall<R>,
+    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
+    where
+        Self: Sized + Send + 'a,
+        R: Send + 'a,
+    {
+        run_provider_source_execution(call, self.into_runner())
     }
 }
 

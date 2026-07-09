@@ -70,14 +70,22 @@ export function isPlanComposerDecision(action: ActionRequired): boolean {
 
 export function selectLatestPlanComposerDecision(
   pendingActions: readonly ActionRequired[] | undefined,
+  submittedActionsInFlight: readonly ActionRequired[] | undefined = [],
 ): ActionRequired | null {
   if (!pendingActions?.length) {
     return null;
   }
 
+  const submittedRequestIds = new Set(
+    submittedActionsInFlight.map((action) => action.requestId),
+  );
   for (let index = pendingActions.length - 1; index >= 0; index -= 1) {
     const action = pendingActions[index];
-    if (action && isPlanComposerDecision(action)) {
+    if (
+      action &&
+      !submittedRequestIds.has(action.requestId) &&
+      isPlanComposerDecision(action)
+    ) {
       return action;
     }
   }

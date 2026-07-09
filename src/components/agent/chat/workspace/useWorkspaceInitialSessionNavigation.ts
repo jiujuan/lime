@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { logAgentDebug } from "@/lib/agentDebug";
 
 const INITIAL_SESSION_NAVIGATION_DEDUPE_MS = 2_000;
@@ -26,6 +26,8 @@ interface InitialSessionSwitchResolution extends InitialSessionSwitchOptions {
 interface UseWorkspaceInitialSessionNavigationParams {
   initialSessionId?: string | null;
   currentSessionId?: string | null;
+  shouldAllowResolvedForceMatchedHydration?: boolean;
+  shouldPauseInitialSessionNavigation?: boolean;
   shouldHydrateMatchedInitialSession?: boolean;
   switchTopic: InitialSessionSwitchTopic;
   resolveInitialSessionSwitch?: (
@@ -59,6 +61,8 @@ export function rememberInitialSessionNavigationStart(sessionId: string) {
 export function useWorkspaceInitialSessionNavigation({
   initialSessionId,
   currentSessionId,
+  shouldAllowResolvedForceMatchedHydration = true,
+  shouldPauseInitialSessionNavigation = false,
   shouldHydrateMatchedInitialSession = false,
   switchTopic,
   resolveInitialSessionSwitch,
@@ -69,8 +73,24 @@ export function useWorkspaceInitialSessionNavigation({
   const shouldRunMatchedHydration =
     normalizedCurrentSessionId === normalizedInitialSessionId &&
     shouldHydrateMatchedInitialSession;
+  const resolvedSwitchOptions = useMemo(
+    () =>
+      normalizedInitialSessionId
+        ? (resolveInitialSessionSwitch?.(normalizedInitialSessionId) ?? null)
+        : null,
+    [normalizedInitialSessionId, resolveInitialSessionSwitch],
+  );
+  const shouldForceMatchedHydration =
+    normalizedCurrentSessionId === normalizedInitialSessionId &&
+    shouldAllowResolvedForceMatchedHydration &&
+    resolvedSwitchOptions?.forceRefresh === true;
+  const shouldHydrateMatchedSession =
+    shouldRunMatchedHydration || shouldForceMatchedHydration;
+  const navigationMode = shouldHydrateMatchedSession
+    ? "matched-hydrate"
+    : "navigate";
   const appliedNavigationKey = normalizedInitialSessionId
-    ? `${normalizedInitialSessionId}:${shouldRunMatchedHydration ? "matched-hydrate" : "navigate"}`
+    ? `${normalizedInitialSessionId}:${navigationMode}`
     : null;
 
   useEffect(() => {
@@ -79,11 +99,27 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
+    if (shouldPauseInitialSessionNavigation) {
+      logAgentDebug(
+        "AgentChatPage",
+        "initialSessionNavigation.paused",
+        {
+          currentSessionId: normalizedCurrentSessionId,
+          initialSessionId: normalizedInitialSessionId,
+        },
+        {
+          dedupeKey: `initialSessionNavigation.paused:${normalizedInitialSessionId}`,
+          throttleMs: 1000,
+        },
+      );
+      return;
+    }
+
     if (
       normalizedCurrentSessionId === normalizedInitialSessionId &&
-      !shouldHydrateMatchedInitialSession
+      !shouldHydrateMatchedSession
     ) {
-      appliedInitialSessionIdRef.current = appliedNavigationKey;
+      appliedInitialSessionIdRef.current = `${normalizedInitialSessionId}:matched-current`;
       externalNavigationStartsBySessionId.delete(normalizedInitialSessionId);
       return;
     }
@@ -92,30 +128,6 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
-    const appliedNavigateKey = normalizedInitialSessionId
-      ? `${normalizedInitialSessionId}:navigate`
-      : null;
-    if (
-      shouldRunMatchedHydration &&
-      appliedInitialSessionIdRef.current === appliedNavigateKey
-    ) {
-      logAgentDebug(
-        "AgentChatPage",
-        "initialSessionNavigation.dedupedMatchedHydrate",
-        {
-          currentSessionId: normalizedCurrentSessionId,
-          initialSessionId: normalizedInitialSessionId,
-        },
-        {
-          dedupeKey: `initialSessionNavigation.dedupedMatchedHydrate:${normalizedInitialSessionId}`,
-          throttleMs: INITIAL_SESSION_NAVIGATION_DEDUPE_MS,
-        },
-      );
-      return;
-    }
-
-    const resolvedSwitchOptions =
-      resolveInitialSessionSwitch?.(normalizedInitialSessionId) ?? null;
     if (resolvedSwitchOptions?.waitForResolution) {
       logAgentDebug(
         "AgentChatPage",
@@ -132,8 +144,8 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
-    const dedupeKey = `${normalizedCurrentSessionId ?? ""}->${normalizedInitialSessionId}`;
-    const sessionDedupeKey = `*->${normalizedInitialSessionId}`;
+    const dedupeKey = `${normalizedCurrentSessionId ?? ""}->${normalizedInitialSessionId}:${navigationMode}`;
+    const sessionDedupeKey = `*->${normalizedInitialSessionId}:${navigationMode}`;
     let switchTopicStarts = switchTopicScopedNavigationStarts.get(switchTopic);
     if (!switchTopicStarts) {
       switchTopicStarts = new Map();
@@ -175,9 +187,10 @@ export function useWorkspaceInitialSessionNavigation({
     logAgentDebug("AgentChatPage", "initialSessionNavigation.start", {
       currentSessionId: normalizedCurrentSessionId,
       forceRefresh:
-        shouldRunMatchedHydration || resolvedSwitchOptions?.forceRefresh === true,
+        shouldHydrateMatchedSession ||
+        resolvedSwitchOptions?.forceRefresh === true,
       initialSessionId: normalizedInitialSessionId,
-      matchedHydration: shouldRunMatchedHydration,
+      matchedHydration: shouldHydrateMatchedSession,
       resumeSessionStartHooks:
         resolvedSwitchOptions?.resumeSessionStartHooks === true,
       allowDetachedSession:
@@ -185,7 +198,8 @@ export function useWorkspaceInitialSessionNavigation({
     });
 
     const switchOptions: InitialSessionSwitchOptions = {
-      ...(shouldRunMatchedHydration || resolvedSwitchOptions?.forceRefresh === true
+      ...(shouldHydrateMatchedSession ||
+      resolvedSwitchOptions?.forceRefresh === true
         ? { forceRefresh: true }
         : {}),
       ...(resolvedSwitchOptions?.resumeSessionStartHooks === true
@@ -221,7 +235,12 @@ export function useWorkspaceInitialSessionNavigation({
     normalizedCurrentSessionId,
     normalizedInitialSessionId,
     appliedNavigationKey,
+    navigationMode,
     resolveInitialSessionSwitch,
+    resolvedSwitchOptions,
+    shouldAllowResolvedForceMatchedHydration,
+    shouldPauseInitialSessionNavigation,
+    shouldHydrateMatchedSession,
     shouldHydrateMatchedInitialSession,
     shouldRunMatchedHydration,
     switchTopic,

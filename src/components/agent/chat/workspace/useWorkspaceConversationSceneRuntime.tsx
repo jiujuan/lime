@@ -189,12 +189,13 @@ const EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS: NonNullable<
 > = [];
 
 interface UseWorkspaceConversationSceneRuntimeParams {
-  messageListEmptyStateVariant?: "default" | "task-center";
+  messageListEmptyStateVariant?: "none" | "task-center";
   navbarContextVariant?: "default" | "task-center";
   navigationActions: NavigationActions;
   inputbarScene: InputbarScene;
   canvasScene: CanvasScene;
   handleSendFromEmptyState: InputbarSendHandler;
+  emptyStateSendOnPointerDown?: ConversationScenePresentationParams["scene"]["emptyStateSendOnPointerDown"];
   shellChromeRuntime: ShellChromeRuntime;
   entryBannerVisible: ConversationScenePresentationParams["scene"]["entryBannerVisible"];
   entryBannerMessage: ConversationScenePresentationParams["scene"]["entryBannerMessage"];
@@ -265,9 +266,6 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   openedProjects?: ConversationScenePresentationParams["scene"]["openedProjects"];
   onCloseProject?: ConversationScenePresentationParams["scene"]["onCloseProject"];
   deferWorkspaceListLoad?: ConversationScenePresentationParams["scene"]["deferWorkspaceListLoad"];
-  workspaceHintMessage?: ConversationScenePresentationParams["scene"]["workspaceHintMessage"];
-  workspaceHintVisible?: ConversationScenePresentationParams["scene"]["workspaceHintVisible"];
-  onDismissWorkspaceHint?: ConversationScenePresentationParams["scene"]["onDismissWorkspaceHint"];
   taskCenterTabsNode?: ConversationScenePresentationParams["scene"]["taskCenterTabsNode"];
   suppressNavbarUtilityActions?: boolean;
   topBarChrome: ConversationScenePresentationParams["scene"]["navbarChrome"];
@@ -384,12 +382,13 @@ interface UseWorkspaceConversationSceneRuntimeParams {
 }
 
 export function useWorkspaceConversationSceneRuntime({
-  messageListEmptyStateVariant = "default",
+  messageListEmptyStateVariant = "none",
   navbarContextVariant = "default",
   navigationActions,
   inputbarScene,
   canvasScene,
   handleSendFromEmptyState,
+  emptyStateSendOnPointerDown = false,
   shellChromeRuntime,
   entryBannerVisible,
   entryBannerMessage,
@@ -459,9 +458,6 @@ export function useWorkspaceConversationSceneRuntime({
   openedProjects,
   onCloseProject,
   deferWorkspaceListLoad,
-  workspaceHintMessage,
-  workspaceHintVisible,
-  onDismissWorkspaceHint,
   taskCenterTabsNode,
   suppressNavbarUtilityActions = false,
   topBarChrome,
@@ -759,6 +755,7 @@ export function useWorkspaceConversationSceneRuntime({
       setInput,
       onSendMessage: handleSendFromEmptyState,
       onStopSending: stopSending,
+      emptyStateSendOnPointerDown,
       emptyStateIsLoading: isPreparingSend || isSending,
       emptyStateDisabled: isPreparingSend || isSending,
       providerType,
@@ -833,9 +830,6 @@ export function useWorkspaceConversationSceneRuntime({
       openedProjects,
       projectRootPath,
       deferWorkspaceListLoad,
-      workspaceHintMessage,
-      workspaceHintVisible,
-      onDismissWorkspaceHint,
       sessionId,
       onProjectChange: navigationActions.handleProjectChange,
       onCloseProject,

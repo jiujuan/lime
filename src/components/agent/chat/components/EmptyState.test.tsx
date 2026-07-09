@@ -1130,6 +1130,42 @@ describe("EmptyState", () => {
     expect(payload?.triggeredAt).toEqual(expect.any(Number));
   });
 
+  it("启用 pointerdown 发送时首页发送按钮不应在 click 重复发送", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_780_000_200_000);
+    const onSend = vi.fn();
+    const container = renderEmptyState({
+      activeTheme: "general",
+      input: "你好",
+      onSend,
+      sendOnPointerDown: true,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const sendButton = container.querySelector(
+      '[data-testid="send-btn"]',
+    ) as HTMLButtonElement | null;
+    expect(sendButton).toBeTruthy();
+
+    act(() => {
+      sendButton?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      sendButton?.click();
+    });
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expectEmptyStateSend(onSend, {
+      textOverride: "你好",
+    });
+    const payload = onSend.mock.calls.at(-1)?.[0] as
+      | InputbarSendPayload
+      | undefined;
+    expect(payload?.triggerSource).toBe("button");
+    expect(payload?.triggeredAt).toBe(1_780_000_200_000);
+    nowSpy.mockRestore();
+  });
+
   it("从 Skills 页带回的技能应显示在首页输入框内的 @ 标签", async () => {
     const onSend = vi.fn();
     const skill = {

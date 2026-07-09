@@ -3,7 +3,10 @@ use super::tool_process_metadata::{tool_failure_category, SoulStyleMetadata};
 use super::tool_process_runtime_metadata;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
-use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentProviderTraceStage};
+use agent_protocol::provider_trace::runtime_event_type_for_provider_trace_stage;
+#[cfg(test)]
+use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceStage};
+use lime_agent::AgentEvent as RuntimeAgentEvent;
 use model_provider::safety::SAFETY_BUFFERING_RUNTIME_EVENT_KIND;
 #[cfg(test)]
 use runtime_core::runtime_event_from_llm_event as runtime_core_event_from_llm_event;
@@ -181,21 +184,11 @@ fn update_plan_event_from_tool_end(event: &RuntimeAgentEvent) -> Option<RuntimeE
 
 fn runtime_event_type_for_agent_event(event: &RuntimeAgentEvent, raw_type: &str) -> &'static str {
     match event {
-        RuntimeAgentEvent::ProviderTrace { stage, .. } => {
-            runtime_event_type_for_provider_trace_stage(*stage)
+        RuntimeAgentEvent::ProviderTrace { event } => {
+            runtime_event_type_for_provider_trace_stage(event.stage)
         }
         RuntimeAgentEvent::ToolEnd { result, .. } if !result.success => "tool.failed",
         _ => runtime_event_type_from_raw(raw_type),
-    }
-}
-
-fn runtime_event_type_for_provider_trace_stage(stage: AgentProviderTraceStage) -> &'static str {
-    match stage {
-        AgentProviderTraceStage::RequestStarted => "provider.request.started",
-        AgentProviderTraceStage::FirstEventReceived => "provider.first_event.received",
-        AgentProviderTraceStage::FirstTextDeltaReceived => "provider.first_text_delta.received",
-        AgentProviderTraceStage::Failed => "provider.failed",
-        AgentProviderTraceStage::Canceled => "provider.canceled",
     }
 }
 
@@ -286,23 +279,25 @@ mod tests {
     #[test]
     fn provider_trace_stage_maps_to_provider_runtime_event() {
         let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ProviderTrace {
-            stage: AgentProviderTraceStage::FirstTextDeltaReceived,
-            provider: "openai".to_string(),
-            model: "gpt-4.1".to_string(),
-            attempt: 1,
-            elapsed_ms: Some(1234),
-            text_chars: Some(8),
-            status: "running".to_string(),
-            failure_category: None,
-            retryable: None,
-            non_retryable_provider_rejection: None,
-            cancel_reason: None,
-            provider_request_id: Some("req-provider-1".to_string()),
-            provider_request_id_header: Some("x-request-id".to_string()),
-            runtime_provider_backend: Some("aster_compat".to_string()),
-            runtime_provider_selector: Some("codex".to_string()),
-            runtime_provider_protocol: Some("responses".to_string()),
-            runtime_provider_active_model: Some("gpt-4.1".to_string()),
+            event: ProviderTraceEvent {
+                stage: ProviderTraceStage::FirstTextDeltaReceived,
+                provider: "openai".to_string(),
+                model: "gpt-4.1".to_string(),
+                attempt: 1,
+                elapsed_ms: Some(1234),
+                text_chars: Some(8),
+                status: "running".to_string(),
+                failure_category: None,
+                retryable: None,
+                non_retryable_provider_rejection: None,
+                cancel_reason: None,
+                provider_request_id: Some("req-provider-1".to_string()),
+                provider_request_id_header: Some("x-request-id".to_string()),
+                runtime_provider_backend: Some("aster_compat".to_string()),
+                runtime_provider_selector: Some("codex".to_string()),
+                runtime_provider_protocol: Some("responses".to_string()),
+                runtime_provider_active_model: Some("gpt-4.1".to_string()),
+            },
         })
         .expect("provider trace should emit");
 

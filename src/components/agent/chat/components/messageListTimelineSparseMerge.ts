@@ -8,6 +8,10 @@ import {
   isUnifiedWebSearchToolName,
 } from "../utils/toolNameFamily";
 import type { MessageContentPart } from "./messageListTimelineContentPartTypes";
+import {
+  areComparableContentTextsRelated,
+  normalizeComparableContentText,
+} from "./messageListComparableText";
 import { buildSparseTimelineInlinePart } from "./messageListTimelineContentPartBuilders";
 import {
   appendTextContentPart,
@@ -67,18 +71,57 @@ function isWebRetrievalContentPart(part: MessageContentPart): boolean {
   );
 }
 
-function getSparseProcessPartKey(part: MessageContentPart): string | null {
-  if (isThinkingContentPart(part)) {
-    const text = part.text.trim();
-    return text ? `thinking:${text}` : null;
+function metadataString(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | null {
+  const value = metadata?.[key];
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
   }
-  if (isTextContentPart(part)) {
-    const text = part.text.trim();
-    const phase =
-      typeof part.metadata?.phase === "string" ? part.metadata.phase : "";
-    return text ? `text:${phase}:${text}` : null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
   }
   return null;
+}
+
+function getSparseProcessPartKeys(part: MessageContentPart): string[] {
+  const keys: string[] = [];
+  const metadata = part.metadata;
+  const threadItemId =
+    metadataString(metadata, "threadItemId") ?? metadataString(metadata, "itemId");
+  const turnId = metadataString(metadata, "turnId");
+  const sequence = metadataString(metadata, "sequence");
+
+  if (isThinkingContentPart(part)) {
+    if (threadItemId) {
+      keys.push(`thinking:item:${threadItemId}`);
+    }
+    if (turnId && sequence) {
+      keys.push(`thinking:turn-sequence:${turnId}:${sequence}`);
+    }
+    const text = normalizeComparableContentText(part.text);
+    if (text) {
+      keys.push(`thinking:text:${text}`);
+    }
+    return keys;
+  }
+  if (isTextContentPart(part)) {
+    if (threadItemId) {
+      keys.push(`text:item:${threadItemId}`);
+    }
+    if (turnId && sequence) {
+      keys.push(`text:turn-sequence:${turnId}:${sequence}`);
+    }
+    const text = normalizeComparableContentText(part.text);
+    const phase =
+      typeof part.metadata?.phase === "string" ? part.metadata.phase : "";
+    if (text) {
+      keys.push(`text:${phase}:${text}`);
+    }
+    return keys;
+  }
+  return keys;
 }
 
 function collectSparseProcessPartKeys(
@@ -86,12 +129,35 @@ function collectSparseProcessPartKeys(
 ): Set<string> {
   const keys = new Set<string>();
   for (const part of parts) {
-    const key = getSparseProcessPartKey(part);
-    if (key) {
+    for (const key of getSparseProcessPartKeys(part)) {
       keys.add(key);
     }
   }
   return keys;
+}
+
+function isDuplicateSparseProcessPart(
+  existingPart: MessageContentPart,
+  nextPart: MessageContentPart,
+): boolean {
+  if (isThinkingContentPart(existingPart) && isThinkingContentPart(nextPart)) {
+    return areComparableContentTextsRelated(existingPart.text, nextPart.text);
+  }
+
+  if (isTextContentPart(existingPart) && isTextContentPart(nextPart)) {
+    const existingPhase =
+      typeof existingPart.metadata?.phase === "string"
+        ? existingPart.metadata.phase
+        : "";
+    const nextPhase =
+      typeof nextPart.metadata?.phase === "string" ? nextPart.metadata.phase : "";
+    return (
+      existingPhase === nextPhase &&
+      areComparableContentTextsRelated(existingPart.text, nextPart.text)
+    );
+  }
+
+  return false;
 }
 
 function canMergeSparseTimelineProcessItem(item: AgentThreadItem): boolean {
@@ -165,15 +231,20 @@ export function mergeSparseTimelineProcessIntoExistingParts(params: {
   }
 
   const seenProcessKeys = collectSparseProcessPartKeys(existingParts);
+  const seenProcessParts = [...existingParts];
   const uniquePending: typeof pending = [];
   for (const entry of pending) {
-    const key = getSparseProcessPartKey(entry.part);
-    if (key && seenProcessKeys.has(key)) {
+    const keys = getSparseProcessPartKeys(entry.part);
+    if (
+      keys.some((key) => seenProcessKeys.has(key)) ||
+      seenProcessParts.some((part) => isDuplicateSparseProcessPart(part, entry.part))
+    ) {
       continue;
     }
-    if (key) {
+    for (const key of keys) {
       seenProcessKeys.add(key);
     }
+    seenProcessParts.push(entry.part);
     uniquePending.push(entry);
   }
 

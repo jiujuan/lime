@@ -388,6 +388,10 @@ impl RequestProcessor {
                 self.handle_voice_transcription_transcribe_audio_impl(params)
                     .await
             }
+            METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT => {
+                self.handle_voice_transcription_polish_text_impl(params)
+                    .await
+            }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list_impl(params).await
             }

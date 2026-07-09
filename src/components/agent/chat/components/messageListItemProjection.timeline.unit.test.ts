@@ -251,4 +251,172 @@ describe("messageListItemProjection timeline", () => {
       "我已经看完关键文件，下面是改进建议。",
     );
   });
+
+  it("历史恢复 active turn 的 reasoning 已在 contentParts 中时不应再走外置 thinking 通道", () => {
+    const message: Message = {
+      id: "assistant-history-replay",
+      role: "assistant",
+      content: "我会先保留 reasoning，再等待 MCP 返回后继续。",
+      timestamp: new Date("2026-07-09T10:00:05.000Z"),
+      isThinking: false,
+      thinkingContent: "先确认本地图片和远程参考图都应作为结构化输入恢复。",
+      runtimeTurnId: "turn-history-replay",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "先确认本地图片和远程参考图都应作为结构化输入恢复。",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "history-replay-visual-reasoning",
+            turnId: "turn-history-replay",
+            sequence: 3,
+          },
+        },
+        {
+          type: "tool_use",
+          metadata: {
+            source: "agent_thread_item",
+            threadItemId: "history-replay-visual-mcp-read-file",
+            turnId: "turn-history-replay",
+            sequence: 4,
+          },
+          toolCall: {
+            id: "history-replay-visual-mcp-read-file",
+            name: "mcp__filesystem__read_file",
+            arguments: JSON.stringify({ path: "README.md" }),
+            status: "running",
+            metadata: {
+              source: "agent_thread_item",
+              threadItemId: "history-replay-visual-mcp-read-file",
+              turnId: "turn-history-replay",
+              sequence: 4,
+            },
+            startTime: new Date("2026-07-09T10:00:04.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "我会先保留 reasoning，再等待 MCP 返回后继续。",
+        },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "history-replay-visual-reasoning",
+          type: "reasoning",
+          thread_id: "thread-history-replay",
+          turn_id: "turn-history-replay",
+          sequence: 3,
+          text: "先确认本地图片和远程参考图都应作为结构化输入恢复。",
+          summary: ["先确认本地图片和远程参考图都应作为结构化输入恢复。"],
+          status: "completed",
+          started_at: "2026-07-09T10:00:03.000Z",
+          completed_at: "2026-07-09T10:00:03.000Z",
+          updated_at: "2026-07-09T10:00:03.000Z",
+        },
+        {
+          id: "history-replay-visual-mcp-read-file",
+          type: "tool_call",
+          thread_id: "thread-history-replay",
+          turn_id: "turn-history-replay",
+          sequence: 4,
+          tool_name: "mcp__filesystem__read_file",
+          arguments: { path: "README.md" },
+          status: "in_progress",
+          started_at: "2026-07-09T10:00:04.000Z",
+          updated_at: "2026-07-09T10:00:04.000Z",
+        },
+      ],
+      {
+        turnId: "turn-history-replay",
+        turnStatus: "running",
+        isSending: false,
+      },
+    );
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(projection.rendererThinkingContent).toBeUndefined();
+    expect(projection.rendererContentParts?.[0]).toMatchObject({
+      type: "thinking",
+      metadata: {
+        threadItemId: "history-replay-visual-reasoning",
+      },
+    });
+    expect(projection.rendererContentParts?.[1]).toMatchObject({
+      type: "tool_use",
+      metadata: {
+        threadItemId: "history-replay-visual-mcp-read-file",
+      },
+    });
+    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.trailingTimeline).toBeNull();
+  });
+
+  it("reasoning 已在 contentParts 中且 timeline 只有等价 reasoning 时不应再显示第二个思考卡片", () => {
+    const finalText = "你好。直接说事，我来处理，省得我们俩先拿空气开会。";
+    const message: Message = {
+      id: "assistant-cheeky-greeting-history",
+      role: "assistant",
+      content: finalText,
+      timestamp: new Date("2026-07-09T10:00:05.000Z"),
+      isThinking: false,
+      thinkingContent: "**Crafting concise cheeky greeting**",
+      runtimeTurnId: "turn-cheeky-greeting",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "**Crafting concise cheeky greeting**",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning-cheeky-greeting-inline",
+            turnId: "turn-cheeky-greeting",
+            sequence: 1,
+          },
+        },
+        {
+          type: "text",
+          text: finalText,
+        },
+      ],
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "reasoning-cheeky-greeting-timeline",
+          type: "reasoning",
+          thread_id: "thread-cheeky-greeting",
+          turn_id: "turn-cheeky-greeting",
+          sequence: 1,
+          text: "Crafting concise cheeky greeting",
+          summary: ["Crafting concise cheeky greeting"],
+          status: "completed",
+          started_at: "2026-07-09T10:00:03.000Z",
+          completed_at: "2026-07-09T10:00:03.000Z",
+          updated_at: "2026-07-09T10:00:03.000Z",
+        },
+      ],
+      {
+        turnId: "turn-cheeky-greeting",
+        turnStatus: "completed",
+        isSending: false,
+      },
+    );
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    expect(projection.rendererThinkingContent).toBeUndefined();
+    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.trailingTimeline).toBeNull();
+  });
 });

@@ -1,0 +1,321 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
+
+use anyhow::{anyhow, Result};
+
+use crate::context_mgmt::compact_messages_with_summary;
+use crate::conversation::message::{Message, SystemNotificationType};
+use crate::session::{apply_session_update, save_summary};
+
+use super::Agent;
+
+pub const COMPACT_TRIGGERS: &[&str] =
+    &["/compact", "Please compact this conversation", "/summarize"];
+
+pub struct CommandDef {
+    pub name: &'static str,
+    pub description: &'static str,
+}
+
+static COMMANDS: &[CommandDef] = &[
+    CommandDef {
+        name: "prompts",
+        description: "List available prompts, optionally filtered by extension",
+    },
+    CommandDef {
+        name: "prompt",
+        description: "Execute a prompt or show its info with --info",
+    },
+    CommandDef {
+        name: "compact",
+        description: "Compact the conversation history",
+    },
+    CommandDef {
+        name: "clear",
+        description: "Clear the conversation history",
+    },
+];
+
+pub fn list_commands() -> &'static [CommandDef] {
+    COMMANDS
+}
+
+fn normalize_command_text(message_text: &str) -> Cow<'_, str> {
+    let trimmed = message_text.trim();
+    if COMPACT_TRIGGERS.contains(&trimmed) {
+        Cow::Borrowed(COMPACT_TRIGGERS[0])
+    } else {
+        Cow::Borrowed(trimmed)
+    }
+}
+
+impl Agent {
+    pub async fn execute_command(
+        &self,
+        message_text: &str,
+        session_id: &str,
+    ) -> Result<Option<Message>> {
+        let trimmed = normalize_command_text(message_text);
+
+        if !trimmed.starts_with('/') {
+            return Ok(None);
+        }
+
+        let command_str = trimmed.strip_prefix('/').unwrap_or(trimmed.as_ref());
+        let (command, params_str) = command_str
+            .split_once(' ')
+            .map(|(cmd, p)| (cmd, p.trim()))
+            .unwrap_or((command_str, ""));
+
+        let params: Vec<&str> = if params_str.is_empty() {
+            vec![]
+        } else {
+            params_str.split_whitespace().collect()
+        };
+
+        match command {
+            "prompts" => self.handle_prompts_command(&params, session_id).await,
+            "prompt" => self.handle_prompt_command(&params, session_id).await,
+            "compact" => self.handle_compact_command(session_id).await,
+            "clear" => self.handle_clear_command(session_id).await,
+            _ => Ok(None),
+        }
+    }
+
+    async fn handle_compact_command(&self, session_id: &str) -> Result<Option<Message>> {
+        let session = self.store_get_session(session_id, true).await?;
+        let conversation = session
+            .conversation
+            .ok_or_else(|| anyhow!("Session has no conversation"))?;
+
+        let summarized_turn_count = conversation
+            .messages()
+            .iter()
+            .filter(|message| message.is_agent_visible() && message.role == rmcp::model::Role::User)
+            .count();
+
+        let (compacted_conversation, _usage, summary_text) = compact_messages_with_summary(
+            self.provider().await?.as_ref(),
+            &conversation,
+            true, // is_manual_compact
+        )
+        .await?;
+
+        self.store_replace_conversation(session_id, &compacted_conversation)
+            .await?;
+        if let Err(error) = save_summary(session_id, &summary_text, Some(summarized_turn_count)) {
+            tracing::warn!(
+                session_id = %session_id,
+                ?error,
+                "Failed to persist manual compact summary cache"
+            );
+        }
+
+        Ok(Some(Message::assistant().with_system_notification(
+            SystemNotificationType::InlineMessage,
+            "Compaction complete",
+        )))
+    }
+
+    async fn handle_clear_command(&self, session_id: &str) -> Result<Option<Message>> {
+        use crate::conversation::Conversation;
+
+        self.store_replace_conversation(session_id, &Conversation::default())
+            .await?;
+
+        if let Some(store) = &self.session_store {
+            use crate::session::TokenStatsUpdate;
+            store
+                .update_token_stats(
+                    session_id,
+                    TokenStatsUpdate {
+                        schedule_id: None,
+                        total_tokens: Some(0),
+                        input_tokens: Some(0),
+                        output_tokens: Some(0),
+                        cached_input_tokens: Some(0),
+                        cache_creation_input_tokens: Some(0),
+                        accumulated_total: None,
+                        accumulated_input: None,
+                        accumulated_output: None,
+                    },
+                )
+                .await?;
+        } else {
+            apply_session_update(session_id, |update| {
+                update
+                    .total_tokens(Some(0))
+                    .input_tokens(Some(0))
+                    .output_tokens(Some(0))
+                    .cache_creation_input_tokens(Some(0))
+            })
+            .await?;
+        }
+
+        Ok(Some(Message::assistant().with_system_notification(
+            SystemNotificationType::InlineMessage,
+            "Conversation cleared",
+        )))
+    }
+
+    async fn handle_prompts_command(
+        &self,
+        params: &[&str],
+        _session_id: &str,
+    ) -> Result<Option<Message>> {
+        let extension_filter = params.first().map(|s| s.to_string());
+
+        let prompts = self.list_extension_prompts().await;
+
+        if let Some(filter) = &extension_filter {
+            if !prompts.contains_key(filter) {
+                let error_msg = format!("Extension '{}' not found", filter);
+                return Ok(Some(Message::assistant().with_text(error_msg)));
+            }
+        }
+
+        let filtered_prompts: HashMap<String, Vec<String>> = prompts
+            .into_iter()
+            .filter(|(ext, _)| extension_filter.as_ref().is_none_or(|f| f == ext))
+            .map(|(extension, prompt_list)| {
+                let names = prompt_list.into_iter().map(|p| p.name).collect();
+                (extension, names)
+            })
+            .collect();
+
+        let mut output = String::new();
+        if filtered_prompts.is_empty() {
+            output.push_str("No prompts available.\n");
+        } else {
+            output.push_str("Available prompts:\n\n");
+            for (extension, prompt_names) in filtered_prompts {
+                output.push_str(&format!("**{}**:\n", extension));
+                for name in prompt_names {
+                    output.push_str(&format!("  - {}\n", name));
+                }
+                output.push('\n');
+            }
+        }
+
+        Ok(Some(Message::assistant().with_text(output)))
+    }
+
+    async fn handle_prompt_command(
+        &self,
+        params: &[&str],
+        session_id: &str,
+    ) -> Result<Option<Message>> {
+        if params.is_empty() {
+            return Ok(Some(
+                Message::assistant().with_text("Prompt name argument is required"),
+            ));
+        }
+
+        let prompt_name = params[0].to_string();
+        let is_info = params.get(1).map(|s| *s == "--info").unwrap_or(false);
+
+        if is_info {
+            let prompts = self.list_extension_prompts().await;
+            let mut prompt_info = None;
+
+            for (extension, prompt_list) in prompts {
+                if let Some(prompt) = prompt_list.iter().find(|p| p.name == prompt_name) {
+                    let mut output = format!("**Prompt: {}**\n\n", prompt.name);
+                    if let Some(desc) = &prompt.description {
+                        output.push_str(&format!("Description: {}\n\n", desc));
+                    }
+                    output.push_str(&format!("Extension: {}\n\n", extension));
+
+                    if let Some(args) = &prompt.arguments {
+                        output.push_str("Arguments:\n");
+                        for arg in args {
+                            output.push_str(&format!("  - {}", arg.name));
+                            if let Some(desc) = &arg.description {
+                                output.push_str(&format!(": {}", desc));
+                            }
+                            output.push('\n');
+                        }
+                    }
+
+                    prompt_info = Some(output);
+                    break;
+                }
+            }
+
+            return Ok(Some(Message::assistant().with_text(
+                prompt_info.unwrap_or_else(|| format!("Prompt '{}' not found", prompt_name)),
+            )));
+        }
+
+        let mut arguments = HashMap::new();
+        for param in params.iter().skip(1) {
+            if let Some((key, value)) = param.split_once('=') {
+                let value = value.trim_matches('"');
+                arguments.insert(key.to_string(), value.to_string());
+            }
+        }
+
+        let arguments_value = serde_json::to_value(arguments)
+            .map_err(|e| anyhow!("Failed to serialize arguments: {}", e))?;
+
+        match self.get_prompt(&prompt_name, arguments_value).await {
+            Ok(prompt_result) => {
+                for (i, prompt_message) in prompt_result.messages.into_iter().enumerate() {
+                    let msg = Message::from(prompt_message);
+
+                    let expected_role = if i % 2 == 0 {
+                        rmcp::model::Role::User
+                    } else {
+                        rmcp::model::Role::Assistant
+                    };
+
+                    if msg.role != expected_role {
+                        let error_msg = format!(
+                            "Expected {:?} message at position {}, but found {:?}",
+                            expected_role, i, msg.role
+                        );
+                        return Ok(Some(Message::assistant().with_text(error_msg)));
+                    }
+
+                    self.store_add_message(session_id, &msg).await?;
+                }
+
+                let last_message = self
+                    .store_get_session(session_id, true)
+                    .await?
+                    .conversation
+                    .ok_or_else(|| anyhow!("No conversation found"))?
+                    .messages()
+                    .last()
+                    .cloned()
+                    .ok_or_else(|| anyhow!("No messages in conversation"))?;
+
+                Ok(Some(last_message))
+            }
+            Err(e) => Ok(Some(
+                Message::assistant().with_text(format!("Error getting prompt: {}", e)),
+            )),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_command_text_keeps_plain_text_borrowed() {
+        let normalized = normalize_command_text("  普通 direct answer 问题  ");
+
+        assert!(matches!(normalized, Cow::Borrowed(_)));
+        assert_eq!(normalized.as_ref(), "普通 direct answer 问题");
+    }
+
+    #[test]
+    fn normalize_command_text_maps_compat_compact_trigger() {
+        let normalized = normalize_command_text("Please compact this conversation");
+
+        assert!(matches!(normalized, Cow::Borrowed(_)));
+        assert_eq!(normalized.as_ref(), "/compact");
+    }
+}

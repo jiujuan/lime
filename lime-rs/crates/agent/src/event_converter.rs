@@ -3,7 +3,7 @@
 //! 将 Aster AgentEvent 转换为 runtime event 格式
 //! 用于前端实时显示流式响应
 
-use agent_protocol::provider_trace::ProviderTraceStage;
+use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceStage};
 use aster::agents::{AgentEvent, ProviderTraceStage as AsterProviderTraceStage};
 
 use crate::protocol::{
@@ -182,23 +182,25 @@ pub(crate) fn convert_agent_event_with_turn_context(
             vec![RuntimeAgentEvent::ModelChange { model, mode }]
         }
         AgentEvent::ProviderTrace { event } => vec![RuntimeAgentEvent::ProviderTrace {
-            stage: convert_provider_trace_stage(event.stage),
-            provider: event.provider,
-            model: event.model,
-            attempt: event.attempt,
-            elapsed_ms: event.elapsed_ms,
-            text_chars: event.text_chars,
-            status: event.status.to_string(),
-            failure_category: event.failure_category,
-            retryable: event.retryable,
-            non_retryable_provider_rejection: event.non_retryable_provider_rejection,
-            cancel_reason: event.cancel_reason,
-            provider_request_id: event.provider_request_id,
-            provider_request_id_header: event.provider_request_id_header,
-            runtime_provider_backend: None,
-            runtime_provider_selector: None,
-            runtime_provider_protocol: None,
-            runtime_provider_active_model: None,
+            event: ProviderTraceEvent {
+                stage: convert_provider_trace_stage(event.stage),
+                provider: event.provider,
+                model: event.model,
+                attempt: event.attempt,
+                elapsed_ms: event.elapsed_ms,
+                text_chars: event.text_chars,
+                status: event.status.to_string(),
+                failure_category: event.failure_category,
+                retryable: event.retryable,
+                non_retryable_provider_rejection: event.non_retryable_provider_rejection,
+                cancel_reason: event.cancel_reason,
+                provider_request_id: event.provider_request_id,
+                provider_request_id_header: event.provider_request_id_header,
+                runtime_provider_backend: None,
+                runtime_provider_selector: None,
+                runtime_provider_protocol: None,
+                runtime_provider_active_model: None,
+            },
         }],
         AgentEvent::HistoryReplaced(_conversation) => vec![],
         AgentEvent::ContextTrace { steps } => vec![RuntimeAgentEvent::ContextTrace {

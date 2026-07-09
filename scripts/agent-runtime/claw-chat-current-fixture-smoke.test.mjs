@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import { containsForbiddenTraceEvidenceFragment } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import { registerImageContentAndTeamSmokeGuards } from "./claw-chat-current-fixture-smoke-domain-guards.mjs";
 import { registerSkillsRuntimeSmokeGuards } from "./claw-chat-current-fixture-smoke-skills-runtime-guards.mjs";
@@ -40,6 +41,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-inputbar-rich-restore.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-inputbar-pending-steer.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-home-hotpath.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-pending-steer-gui-actions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-pending-steer-read-model.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-runtime-flow.mjs",
@@ -147,6 +149,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
   it("uses GUI input to submit the news prompt instead of calling turn/start directly", () => {
     const content = readSmokeScript();
     const guiActionsContent = readGuiActionsScript();
+    const regressionContent = readCurrentFixtureRegressionSmokeScript();
 
     expect(guiActionsContent).toContain('textarea[name="agent-chat-message"]');
     expect(content + guiActionsContent).toContain("waitForInputReady");
@@ -194,9 +197,80 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("recordAgentUiPerformanceTraceEvidence");
     expect(content).toContain("agentUiPerformanceTraceLatest");
     expect(content).toContain("traceEvidenceHasProviderAndClient(evidence)");
+    expect(content).toContain("HOME_HOTPATH_SCENARIO");
+    expect(content).toContain('"home-hotpath"');
+    expect(content).toContain("HOME_HOTPATH_GREETING_SCENARIO");
+    expect(content).toContain('"home-hotpath-greeting"');
+    expect(content).toContain("GREETING_PROMPT");
+    expect(content).toContain("GREETING_DONE_TEXT");
+    expect(content).toContain("GREETING_SUMMARY_TEXT");
+    expect(content).toContain("runHomeHotpathScenario");
+    expect(content).toContain("scenarioConfig");
+    expect(content).toContain("allowTaskCenterHomeInput");
+    expect(content).toContain("homeHotpathNoBlankConversationAfterSubmit");
+    expect(content).toContain("collectAfterFillStability");
+    expect(content).toContain("afterFillStability");
+    expect(content).toContain("postCompletionStability");
+    expect(content).toContain("homeHotpathNoTransientFallbackAfterInputFill");
+    expect(content).toContain("homeHotpathNoPostCompletionRefreshFlicker");
+    expect(content).toContain("HOME_HOTPATH_BLOCKED_PRE_TURN_METHODS");
+    expect(content).toContain("blockedAuxiliaryMethodsBeforeTurnStart");
+    expect(content).toContain("homeHotpathPreTurnTraceWindowAvailable");
+    expect(content).toContain("homeHotpathNoAuxiliaryAppServerBeforeTurnStart");
+    expect(content).toContain('"sessionFile/getOrCreate"');
+    expect(content).toContain('"workspaceRightSurface/pending/list"');
+    expect(content).toMatch(
+      /HOME_HOTPATH_BLOCKED_PRE_TURN_METHODS[\s\S]*"modelPreferences\/list"[\s\S]*"modelSyncState\/read"/,
+    );
+    expect(content).toContain("homeHotpathPendingPreviewPaintWithinBudget");
+    expect(content).toContain("HOME_HOTPATH_PENDING_PREVIEW_PAINT_BUDGET_MS");
+    expect(content).toContain("HOME_HOTPATH_SEND_DISPATCH_BUDGET_MS");
+    expect(content).toContain("HOME_HOTPATH_SUBMIT_ACCEPTED_BUDGET_MS");
+    expect(content).toContain("HOME_HOTPATH_TEXT_DELTA_TO_PAINT_BUDGET_MS");
+    expect(content).toContain("homeHotpathSendDispatchWithinBudget");
+    expect(content).toContain("homeHotpathTraceHasSubmitAccepted");
+    expect(content).toContain("homeHotpathSubmitAcceptedWithinBudget");
+    expect(content).toContain("homeHotpathTextDeltaToPaintWithinBudget");
+    expect(content).toContain("inputbarTriggerToPendingPreviewPaintMs");
+    expect(content).toContain("homeInputToPendingPreviewPaintMs");
+    expect(content).toContain("inputbarTriggerToSubmitAcceptedMs");
+    expect(content).toContain("homeInputToSubmitAcceptedMs");
+    expect(content).toContain("sendDispatchToSubmitAcceptedMs");
+    expect(content).toContain("firstTextDeltaToFirstTextPaintMs");
+    expect(content).toContain("isGreetingPrompt");
+    expect(content).toContain("CLAW_GREETING_FIXTURE_DONE");
+    expect(regressionContent).toContain("home-hotpath-greeting");
+    expect(regressionContent).toContain(
+      "claw-chat-current-fixture-home-hotpath-greeting-regression",
+    );
   });
 
-  it("does not run default news completion waits after resize/reflow completes in its scenario flow", () => {
+  it("passes home hotpath text matchers into page.evaluate instead of closing over Node imports", () => {
+    const content = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-home-hotpath.mjs",
+      "utf8",
+    );
+    const snapshotFunction = content.slice(
+      content.indexOf("function readHomeHotpathSnapshot"),
+      content.indexOf("async function waitForHomeHotpathReady"),
+    );
+
+    expect(content).toContain("HOME_HOTPATH_MATCHERS");
+    expect(content).toContain("prompt: NEWS_PROMPT");
+    expect(content).toContain("doneText: ASSISTANT_DONE_TEXT");
+    expect(content).toContain("normalizeHomeHotpathScenarioConfig");
+    expect(content).toContain("config.prompt");
+    expect(content).toContain("config.doneText");
+    expect(content).toContain("config.summaryText");
+    expect(content).toContain("promptInBody: prompt ? bodyText.includes(prompt) : false");
+    expect(content).toContain("doneInBody: doneText ? bodyText.includes(doneText) : false");
+    expect(content).toContain("readHomeHotpathSnapshot");
+    expect(content).toContain("HOME_HOTPATH_MATCHERS");
+    expect(snapshotFunction).not.toContain("NEWS_PROMPT");
+    expect(snapshotFunction).not.toContain("ASSISTANT_DONE_TEXT");
+  });
+
+  it("does not run default news completion waits after scenario-owned flows complete", () => {
     const content = fs.readFileSync(
       "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
       "utf8",
@@ -208,9 +282,36 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "options.scenario !== ELECTRON_RESIZE_REFLOW_SCENARIO",
     );
+    expect(content).toContain("options.scenario === HOME_HOTPATH_SCENARIO");
+    expect(content).toContain(
+      "options.scenario === HOME_HOTPATH_GREETING_SCENARIO",
+    );
+    expect(content).toContain("!isHomeHotpathScenario");
     expect(content.indexOf("runElectronResizeReflowScenario")).toBeLessThan(
       content.indexOf("wait-gui-completed"),
     );
+    expect(content.indexOf("runHomeHotpathScenario")).toBeLessThan(
+      content.indexOf("wait-gui-completed"),
+    );
+  });
+
+  it("does not classify redacted task ids as leaked API keys in trace evidence", () => {
+    expect(
+      containsForbiddenTraceEvidenceFragment({
+        sessionId: "task-[redacted]",
+        source: "task-[redacted]",
+      }),
+    ).toBe(false);
+    expect(
+      containsForbiddenTraceEvidenceFragment({
+        authorization: "Bearer [redacted]",
+      }),
+    ).toBe(true);
+    expect(
+      containsForbiddenTraceEvidenceFragment({
+        token: "sk-1234567890abcdef",
+      }),
+    ).toBe(true);
   });
 
   it("uses a local external fixture backend and current Agent Session methods", () => {
@@ -239,6 +340,13 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('type: "turn.completed"');
     expect(content).toContain('type: "turn.canceled"');
     expect(content).not.toContain('type: "turn.final_done"');
+  });
+
+  it("clears Electron renderer cache for packaged file fixture runs", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain('LIME_ELECTRON_CLEAR_RENDERER_CACHE: "1"');
+    expect(content).not.toContain('LIME_ELECTRON_CLEAR_RENDERER_CACHE: "0"');
   });
 
   it("covers stream parser completed full-text dedupe in the default Electron fixture", () => {
@@ -343,14 +451,50 @@ describe("claw chat current Electron fixture smoke guard", () => {
       approvalCancelBranchEnd,
     );
     expect(approvalCancelCompletionBranch).toContain('type: "tool.failed"');
-    expect(approvalCancelCompletionBranch).not.toContain(
+    expect(approvalCancelCompletionBranch).toContain(
       'type: "turn.canceled"',
+    );
+    expect(approvalCancelCompletionBranch).toContain(
+      'reason: "approval_request_cancelled"',
     );
     expect(content).toContain('!emitTypes.includes("tool.result")');
     expect(content).toContain("approvalRequestDeclineNoToolExecuted");
     expect(content).toContain("approvalRequestCancelNoToolExecuted");
     expect(content).toContain("readModelApprovalRequestCancelCanceled");
     expect(content).toContain("APPROVAL_REQUEST_DECISION_ASSERTION_KEYS");
+  });
+
+  it("keeps full-access approval out of prompts, records, and action/respond", () => {
+    const content = readSmokeScript();
+    const regressionContent = readCurrentFixtureRegressionSmokeScript();
+
+    expect(content).toContain("approval-request-full-access");
+    expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_PROMPT");
+    expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT");
+    expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT");
+    expect(content).toContain("runApprovalRequestFullAccessScenario");
+    expect(content).toContain('setInputbarAccessMode(\n    page,\n    options,\n    "full-access"');
+    expect(content).toContain("waitForGuiApprovalPromptAbsent");
+    expect(content).toContain("approvalPromptVisible");
+    expect(content).toContain("approvalRecordCount");
+    expect(content).toContain("approvalRecordShape");
+    expect(content).toContain("turnStartApprovalPolicy");
+    expect(content).toContain("turnStartSandboxPolicy");
+    expect(content).toContain('"never"');
+    expect(content).toContain('"danger-full-access"');
+    expect(content).toContain("approvalRequestFullAccessNoActionRespond");
+    expect(content).toContain("approvalRequestFullAccessNoLegacyRuntimeRespond");
+    expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS");
+    expect(content).toContain(
+      "!appServerRequestMethods.includes(\n        APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
+    );
+    expect(regressionContent).toContain(
+      "Claw approval full-access no prompt Electron fixture",
+    );
+    expect(regressionContent).toContain("approval-request-full-access");
+    expect(regressionContent).toContain(
+      "claw-chat-current-fixture-approval-request-full-access-regression",
+    );
   });
 
   it("covers the current cancel flow through GUI stop and App Server read model", () => {

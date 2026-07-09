@@ -29,6 +29,30 @@ import {
 } from "../utils/actionRequestA2UI";
 import { toApprovalRecordFromActionRequired } from "./timeline-utils";
 
+function threadItemIdFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): string | null {
+  const threadItemId = metadata?.threadItemId;
+  return typeof threadItemId === "string" && threadItemId.trim()
+    ? threadItemId
+    : null;
+}
+
+function withThreadItemDomOwner(
+  node: React.ReactElement,
+  metadata: Record<string, unknown> | undefined,
+): React.ReactElement {
+  const threadItemId = threadItemIdFromMetadata(metadata);
+  if (!threadItemId) {
+    return node;
+  }
+  return (
+    <div data-thread-item-id={threadItemId} data-thread-item-source="inline">
+      {node}
+    </div>
+  );
+}
+
 interface StreamingProcessRunProps {
   entries: StreamingProcessEntry[];
   forceGroup?: boolean;
@@ -136,7 +160,7 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
             Boolean(entry.isActive ?? isStreaming) &&
             isStreaming &&
             !preserveThinkingSourceText;
-          return (
+          return withThreadItemDomOwner(
             <ThinkingBlock
               key={entry.id}
               content={entry.text}
@@ -148,7 +172,8 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
               preserveSourceText={preserveThinkingSourceText}
               autoCollapseEligible={Boolean(entry.autoCollapseEligible)}
               autoCollapseWhenOverflow={true}
-            />
+            />,
+            entry.metadata,
           );
         }
 
@@ -163,7 +188,7 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
               > => candidate.kind === "tool",
             )
             .map((candidate) => candidate.toolCall);
-          return (
+          return withThreadItemDomOwner(
             <InlineToolProcessStep
               key={entry.id}
               toolCall={entry.toolCall}
@@ -175,7 +200,8 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
               urlPreviewToolCalls={siblingToolCalls}
               grouped={grouped}
               groupMarker={groupMarker}
-            />
+            />,
+            entry.metadata,
           );
         }
 

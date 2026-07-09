@@ -11,7 +11,9 @@ mod aster_reply_message_adapter;
 mod aster_reply_stream_adapter;
 pub(crate) mod auto_compaction_projection;
 mod policy_config;
+mod provider_reply_exit_source;
 mod reply_retry;
+mod response_event_adapter;
 mod runtime_status;
 mod stream_diagnostics;
 mod stream_idle;
@@ -113,6 +115,40 @@ fn build_empty_final_reply_fallback(
     }
 
     build_output_preserved_reply_fallback(diagnostics)
+}
+
+fn complete_plain_text_after_provider_idle_tail(
+    error_message: &str,
+    diagnostics: &StreamEventDiagnostics,
+    attempt_state: &RuntimeReplyAttemptState,
+    web_search_tracker: &WebSearchExecutionTracker,
+    cancel_probe: &Option<CancellationToken>,
+) -> Option<StreamReplyExecution> {
+    let detail = retryable_provider_tail_failure_detail(error_message)?;
+    if !detail.to_ascii_lowercase().contains("stream idle timeout") {
+        return None;
+    }
+    if diagnostics.effective_tool_start_count() > 0
+        || diagnostics.effective_tool_end_count() > 0
+        || diagnostics.saved_site_content_count > 0
+        || diagnostics.persisted_artifact_count > 0
+    {
+        return None;
+    }
+    let text_output = attempt_state.text_output().trim();
+    if text_output.is_empty() {
+        return None;
+    }
+
+    tracing::warn!(
+        "[AgentRuntime][ReplyPolicy] provider idle tail completed with plain text output: text_chars={}",
+        text_output.chars().count()
+    );
+    Some(attempt_state.clone().into_execution_with_text(
+        text_output.to_string(),
+        web_search_tracker.format_attempts(),
+        is_reply_cancelled(cancel_probe),
+    ))
 }
 
 fn merge_system_prompt_with_web_search_synthesis_instruction(
@@ -340,6 +376,15 @@ where
             )
             .await;
             if let Err(retry_error) = retry_attempt {
+                if let Some(execution) = complete_plain_text_after_provider_idle_tail(
+                    &retry_error.message,
+                    &diagnostics,
+                    &attempt_state,
+                    &web_search_tracker,
+                    &cancel_probe,
+                ) {
+                    return Ok(execution);
+                }
                 if should_downgrade_provider_tail_failure(
                     &retry_error.message,
                     &diagnostics,
@@ -418,6 +463,15 @@ where
             )
             .await;
             if let Err(error) = retry_attempt {
+                if let Some(execution) = complete_plain_text_after_provider_idle_tail(
+                    &error.message,
+                    &diagnostics,
+                    &attempt_state,
+                    &web_search_tracker,
+                    &cancel_probe,
+                ) {
+                    return Ok(execution);
+                }
                 if should_downgrade_provider_tail_failure(
                     &error.message,
                     &diagnostics,
@@ -470,6 +524,15 @@ where
             )
             .await;
             if let Err(error) = retry_attempt {
+                if let Some(execution) = complete_plain_text_after_provider_idle_tail(
+                    &error.message,
+                    &diagnostics,
+                    &attempt_state,
+                    &web_search_tracker,
+                    &cancel_probe,
+                ) {
+                    return Ok(execution);
+                }
                 if should_downgrade_provider_tail_failure(
                     &error.message,
                     &diagnostics,
@@ -523,6 +586,15 @@ where
             )
             .await;
             if let Err(error) = retry_attempt {
+                if let Some(execution) = complete_plain_text_after_provider_idle_tail(
+                    &error.message,
+                    &diagnostics,
+                    &attempt_state,
+                    &web_search_tracker,
+                    &cancel_probe,
+                ) {
+                    return Ok(execution);
+                }
                 if should_downgrade_provider_tail_failure(
                     &error.message,
                     &diagnostics,

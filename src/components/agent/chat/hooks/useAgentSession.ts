@@ -114,6 +114,7 @@ import {
   refreshAgentSessionReadModelState,
   type AgentSessionDetailRefreshRequest,
 } from "./agentSessionRefresh";
+import { reuseStableAgentSessionSnapshotReferences } from "./agentSessionSnapshotStability";
 import type { AgentAccessMode } from "./agentChatStorage";
 import {
   hasRecoverableSilentTurnActivity,
@@ -685,24 +686,32 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
   const applySessionSnapshot = useCallback(
     (snapshot: AgentSessionSnapshot) => {
-      sessionIdRef.current = snapshot.sessionId;
-      messagesRef.current = snapshot.messages;
-      threadTurnsRef.current = snapshot.threadTurns;
-      threadItemsRef.current = snapshot.threadItems;
-      executionRuntimeRef.current = snapshot.executionRuntime;
-      sessionWorkingDirRef.current = snapshot.workingDir;
-      setSessionId(snapshot.sessionId);
-      setSessionWorkingDir(snapshot.workingDir);
-      setMessages(snapshot.messages);
-      setThreadTurns(snapshot.threadTurns);
-      setThreadItems(snapshot.threadItems);
-      setCurrentTurnId(snapshot.currentTurnId);
-      setQueuedTurns(snapshot.queuedTurns);
-      setThreadRead(snapshot.threadRead);
-      setExecutionRuntime(snapshot.executionRuntime);
-      setTodoItems(snapshot.todoItems);
-      setChildSubagentSessions(snapshot.childSubagentSessions);
-      setSubagentParentContext(snapshot.subagentParentContext);
+      const stableSnapshot = reuseStableAgentSessionSnapshotReferences(
+        snapshot,
+        {
+          messages: messagesRef.current,
+          threadItems: threadItemsRef.current,
+          threadTurns: threadTurnsRef.current,
+        },
+      );
+      sessionIdRef.current = stableSnapshot.sessionId;
+      messagesRef.current = stableSnapshot.messages;
+      threadTurnsRef.current = stableSnapshot.threadTurns;
+      threadItemsRef.current = stableSnapshot.threadItems;
+      executionRuntimeRef.current = stableSnapshot.executionRuntime;
+      sessionWorkingDirRef.current = stableSnapshot.workingDir;
+      setSessionId(stableSnapshot.sessionId);
+      setSessionWorkingDir(stableSnapshot.workingDir);
+      setMessages(stableSnapshot.messages);
+      setThreadTurns(stableSnapshot.threadTurns);
+      setThreadItems(stableSnapshot.threadItems);
+      setCurrentTurnId(stableSnapshot.currentTurnId);
+      setQueuedTurns(stableSnapshot.queuedTurns);
+      setThreadRead(stableSnapshot.threadRead);
+      setExecutionRuntime(stableSnapshot.executionRuntime);
+      setTodoItems(stableSnapshot.todoItems);
+      setChildSubagentSessions(stableSnapshot.childSubagentSessions);
+      setSubagentParentContext(stableSnapshot.subagentParentContext);
     },
     [sessionIdRef],
   );
@@ -1098,6 +1107,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     workspaceId,
     applySessionSnapshot,
     hasActiveLocalSessionSnapshot,
+    sessionIdRef,
   ]);
 
   useEffect(() => {

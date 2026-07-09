@@ -9,6 +9,27 @@ import electronPath from "electron";
 import { _electron as electron } from "playwright";
 import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-assets.mjs";
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
+import {
+  HISTORY_REPLAY_VISUAL,
+  seedHistoryReplayVisualProjectionSession,
+} from "./lib/session-history-replay-visual-fixture.mjs";
+import {
+  assertHistoryReplayVisualDomOracle,
+  assertHistoryReplayVisualReadModel,
+  runHistoryReplayVisualDomOracle,
+  runHistoryReplayVisualReadPhase,
+} from "./lib/session-history-replay-visual-oracle.mjs";
+import {
+  THREAD_READ_PAGE_ISOMORPHIC,
+  seedThreadReadPageIsomorphicProjectionSession,
+} from "./lib/session-history-thread-read-isomorphic-fixture.mjs";
+import {
+  assertThreadReadPageIsomorphicDomOracle,
+  assertThreadReadPageIsomorphicReadModel,
+  runThreadReadPageIsomorphicDomOracle,
+  runThreadReadPageIsomorphicReadPhase,
+  ThreadReadPageIsomorphicDomError,
+} from "./lib/session-history-thread-read-isomorphic-oracle.mjs";
 
 const DEFAULTS = {
   appUrl: "",
@@ -807,6 +828,42 @@ async function primeSidebarWorkspace(page, workspaceId) {
     },
     {
       workspaceId,
+      lastProjectIdKey: LAST_PROJECT_ID_KEY,
+      openedProjectIdsKey: OPENED_PROJECT_IDS_KEY,
+      sidebarCollapsedStorageKey: APP_SIDEBAR_COLLAPSED_STORAGE_KEY,
+    },
+  );
+}
+
+async function clearSidebarWorkspace(page) {
+  await page.evaluate(
+    ({ lastProjectIdKey, openedProjectIdsKey, sidebarCollapsedStorageKey }) => {
+      window.localStorage.removeItem(lastProjectIdKey);
+      window.localStorage.setItem(openedProjectIdsKey, JSON.stringify([]));
+      window.localStorage.setItem(sidebarCollapsedStorageKey, "false");
+      window.dispatchEvent(
+        new CustomEvent("agent-persisted-project-id-changed", {
+          detail: {
+            key: lastProjectIdKey,
+            projectId: null,
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new CustomEvent("agent-opened-project-ids-changed", {
+          detail: {
+            projectIds: [],
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new CustomEvent("lime:app-sidebar-collapse", {
+          detail: { collapsed: false },
+        }),
+      );
+      window.dispatchEvent(new Event("focus"));
+    },
+    {
       lastProjectIdKey: LAST_PROJECT_ID_KEY,
       openedProjectIdsKey: OPENED_PROJECT_IDS_KEY,
       sidebarCollapsedStorageKey: APP_SIDEBAR_COLLAPSED_STORAGE_KEY,
@@ -1976,6 +2033,10 @@ async function run() {
     persistedUnarchiveSummary: null,
     persistedUnarchiveReopenSummary: null,
     settingsGuiRestoreSummary: null,
+    historyReplayVisualSeed: null,
+    historyReplayVisualSummary: null,
+    threadReadPageIsomorphicSeed: null,
+    threadReadPageIsomorphicSummary: null,
     sidecarRestartReadback: false,
     consoleErrors: [],
     screenshot: null,
@@ -2175,6 +2236,127 @@ async function run() {
     summary.persistedUnarchiveReopenSummary = sanitizeJson(
       persistedUnarchiveReopenSummary,
     );
+
+    await closeElectronFixture(handle);
+    app = null;
+    page = null;
+
+    logStage("seed-thread-read-page-isomorphic");
+    const threadReadPageIsomorphicSeed =
+      seedThreadReadPageIsomorphicProjectionSession({
+        runtimeEnv,
+        runSqlite,
+        sqlLiteral,
+      });
+    summary.threadReadPageIsomorphicSeed = sanitizeJson({
+      ...threadReadPageIsomorphicSeed,
+      sqliteBinary: SQLITE3_BINARY,
+    });
+
+    logStage("launch-electron-thread-read-page-isomorphic");
+    handle = await launchElectronFixture({
+      options,
+      runtimeEnv,
+      appServerEnv,
+      consoleErrors,
+    });
+    app = handle.app;
+    page = handle.page;
+    const threadReadPageIsomorphicReadResult =
+      await runThreadReadPageIsomorphicReadPhase(
+        page,
+        APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+      );
+    rawEvidence.threadReadPageIsomorphicRead = sanitizeJson(
+      threadReadPageIsomorphicReadResult,
+    );
+    const threadReadPageIsomorphicReadSummary =
+      assertThreadReadPageIsomorphicReadModel(
+        threadReadPageIsomorphicReadResult,
+      );
+    await clearInvokeBuffers(page);
+    if (THREAD_READ_PAGE_ISOMORPHIC.workspaceId) {
+      await primeSidebarWorkspace(page, THREAD_READ_PAGE_ISOMORPHIC.workspaceId);
+    } else {
+      await clearSidebarWorkspace(page);
+    }
+    let threadReadPageIsomorphicDomResult;
+    try {
+      threadReadPageIsomorphicDomResult =
+        await runThreadReadPageIsomorphicDomOracle(page, options);
+    } catch (error) {
+      if (error instanceof ThreadReadPageIsomorphicDomError) {
+        rawEvidence.threadReadPageIsomorphicDomFailure = sanitizeJson(
+          error.evidence,
+        );
+        summary.threadReadPageIsomorphicDomFailure = sanitizeJson(
+          error.evidence,
+        );
+      }
+      throw error;
+    }
+    rawEvidence.threadReadPageIsomorphicDom = sanitizeJson(
+      threadReadPageIsomorphicDomResult,
+    );
+    const threadReadPageIsomorphicDomSummary =
+      assertThreadReadPageIsomorphicDomOracle(
+        threadReadPageIsomorphicDomResult,
+      );
+    summary.threadReadPageIsomorphicSummary = sanitizeJson({
+      read: threadReadPageIsomorphicReadSummary,
+      dom: threadReadPageIsomorphicDomSummary,
+    });
+
+    await closeElectronFixture(handle);
+    app = null;
+    page = null;
+
+    logStage("seed-history-replay-visual");
+    const historyReplayVisualSeed = seedHistoryReplayVisualProjectionSession({
+      runtimeEnv,
+      runSqlite,
+      sqlLiteral,
+    });
+    summary.historyReplayVisualSeed = sanitizeJson({
+      ...historyReplayVisualSeed,
+      sqliteBinary: SQLITE3_BINARY,
+    });
+
+    logStage("launch-electron-history-replay-visual");
+    handle = await launchElectronFixture({
+      options,
+      runtimeEnv,
+      appServerEnv,
+      consoleErrors,
+    });
+    app = handle.app;
+    page = handle.page;
+    const historyReplayVisualReadResult = await runHistoryReplayVisualReadPhase(
+      page,
+      APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    );
+    rawEvidence.historyReplayVisualRead = sanitizeJson(
+      historyReplayVisualReadResult,
+    );
+    const historyReplayVisualReadSummary = assertHistoryReplayVisualReadModel(
+      historyReplayVisualReadResult,
+    );
+    await clearInvokeBuffers(page);
+    await primeSidebarWorkspace(page, HISTORY_REPLAY_VISUAL.workspaceId);
+    const historyReplayVisualDomResult = await runHistoryReplayVisualDomOracle(
+      page,
+      options,
+    );
+    rawEvidence.historyReplayVisualDom = sanitizeJson(
+      historyReplayVisualDomResult,
+    );
+    const historyReplayVisualDomSummary = assertHistoryReplayVisualDomOracle(
+      historyReplayVisualDomResult,
+    );
+    summary.historyReplayVisualSummary = sanitizeJson({
+      read: historyReplayVisualReadSummary,
+      dom: historyReplayVisualDomSummary,
+    });
 
     await page.screenshot({ path: screenshotPath, fullPage: true });
     await closeElectronFixture(handle);

@@ -1243,9 +1243,13 @@ async function waitForRendererReady(page, options, onSnapshot) {
 }
 
 async function clearInvokeBuffers(page) {
-  await page.evaluate(() => {
+  return await page.evaluate(() => {
     window.localStorage.removeItem("lime_invoke_error_buffer_v1");
     window.localStorage.removeItem("lime_invoke_trace_buffer_v1");
+    return {
+      cleared: true,
+      clearedAt: new Date().toISOString(),
+    };
   });
 }
 
@@ -2700,6 +2704,10 @@ async function run() {
     logStage("wait-session-opened-from-sidebar");
     summary.guiSessionDirectOpen = sanitizeJson(
       await waitForFixtureSessionOpenedFromSidebar(page, options),
+    );
+
+    summary.invokeBuffersClearedBeforeScenario = sanitizeJson(
+      await clearInvokeBuffers(page),
     );
 
     if (options.scenario === "gui-coding-input") {

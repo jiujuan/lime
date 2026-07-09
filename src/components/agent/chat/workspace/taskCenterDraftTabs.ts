@@ -127,7 +127,7 @@ export function shouldWarmupTaskCenterDraftSession(params: {
   agentEntry: string;
   activeDraftTabId?: string | null;
   draftTabs: TaskCenterDraftTab[];
-  input: string;
+  input?: string;
   isPreparingSend: boolean;
   isSending: boolean;
 }): boolean {
@@ -137,7 +137,7 @@ export function shouldWarmupTaskCenterDraftSession(params: {
         draftTabs: params.draftTabs,
         activeDraftTabId: params.activeDraftTabId,
       }) &&
-      params.input.trim() &&
+      Boolean(params.input?.trim()) &&
       !params.isPreparingSend &&
       !params.isSending,
   );

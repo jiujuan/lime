@@ -364,6 +364,273 @@ describe("messageListItemProjection content parts", () => {
     ).toEqual([{ type: "text", text: finalText }]);
   });
 
+  it("同一最终正文被相邻 text part 双写时只应渲染一次", () => {
+    const finalText = "你好。直接说事，我来处理，省得我们俩先拿空气开会。";
+    const message: Message = {
+      id: "assistant-duplicated-adjacent-final",
+      role: "assistant",
+      content: finalText,
+      timestamp: new Date("2026-07-09T10:00:00.000Z"),
+      isThinking: false,
+      contentParts: [
+        {
+          type: "thinking",
+          text: "**Crafting concise cheeky greeting**",
+        },
+        {
+          type: "text",
+          text: finalText,
+        },
+        {
+          type: "text",
+          text: `**${finalText}**`,
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.actionContent).toBe(finalText);
+    expect(projection.rendererRawContent).toBe(finalText);
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    expect(
+      projection.rendererContentParts?.filter((part) => part.type === "text"),
+    ).toEqual([{ type: "text", text: finalText }]);
+    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.trailingTimeline).toBeNull();
+  });
+
+  it("同一 reasoning item 夹在最终正文前后时只应渲染一个思考卡片", () => {
+    const finalText = "你好。说吧，今天要我帮你把哪件事拎清楚、推进掉。";
+    const message: Message = {
+      id: "assistant-duplicated-reasoning-around-final",
+      role: "assistant",
+      content: finalText,
+      timestamp: new Date("2026-07-09T10:00:00.000Z"),
+      isThinking: false,
+      runtimeTurnId: "turn-cheeky-greeting",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "**Crafting cheeky Chinese greeting**",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning-cheeky-greeting",
+            turnId: "turn-cheeky-greeting",
+            sequence: 1,
+          },
+        },
+        {
+          type: "text",
+          text: finalText,
+        },
+        {
+          type: "thinking",
+          text: "Crafting cheeky Chinese greeting",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning-cheeky-greeting",
+            turnId: "turn-cheeky-greeting",
+            sequence: 1,
+          },
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.actionContent).toBe(finalText);
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    expect(
+      projection.rendererContentParts?.filter((part) => part.type === "thinking"),
+    ).toHaveLength(1);
+    expect(projection.rendererThinkingContent).toBeUndefined();
+    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.trailingTimeline).toBeNull();
+  });
+
+  it("不同 reasoning owner 夹在最终正文前后但文本等价时只应渲染一个思考卡片", () => {
+    const finalText = "你好。说吧，今天要我帮你把哪件事拎清楚、推进掉。";
+    const message: Message = {
+      id: "assistant-duplicated-reasoning-owners-around-final",
+      role: "assistant",
+      content: finalText,
+      timestamp: new Date("2026-07-09T10:00:00.000Z"),
+      isThinking: false,
+      runtimeTurnId: "turn-cheeky-greeting",
+      contentParts: [
+        {
+          type: "thinking",
+          text: "**Crafting cheeky Chinese greeting**\n\n<!-- -->",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning:resp_cheeky_greeting",
+            turnId: "turn-cheeky-greeting",
+            sequence: 2,
+          },
+        },
+        {
+          type: "text",
+          text: finalText,
+        },
+        {
+          type: "thinking",
+          text: "Crafting cheeky Chinese greeting",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning.final:evt_cheeky_greeting",
+            turnId: "turn-cheeky-greeting",
+            sequence: 87,
+          },
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    const thinkingParts =
+      projection.rendererContentParts?.filter((part) => part.type === "thinking") ||
+      [];
+    expect(thinkingParts).toHaveLength(1);
+    expect(thinkingParts[0]).toMatchObject({
+      type: "thinking",
+      text: "Crafting cheeky Chinese greeting",
+      metadata: expect.objectContaining({
+        threadItemId: "reasoning:resp_cheeky_greeting",
+      }),
+    });
+    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.trailingTimeline).toBeNull();
+  });
+
+  it("后续 clean reasoning 应替换前序无空格压缩 reasoning 并复用同一思考卡片", () => {
+    const finalText =
+      "哟，终于想起找我聊天了？我还以为你把我忘了呢。说吧，今天想聊点啥还是搞点啥？我随时待命。";
+    const cleanReasoning =
+      'The user is saying "你好" (hello) in Chinese. This is a simple greeting that I can respond to directly without any tools. According to my style guidelines, I should respond with a cheeky-sassy tone. Let me craft a response that is friendly but has that cheeky personality.';
+    const fusedReasoning = `Theusersaying你好"(hello)inChineseThisissimplegreetingcandirectlywithoutanytoolsAccordingtomystyleguidelines,Ishouldrespondwith-sassytoneLetmecraftaresponse'sfriendlybuthasthatcheekypersonality. ${cleanReasoning}`;
+    const message: Message = {
+      id: "assistant-readable-reasoning-upgrade",
+      role: "assistant",
+      content: finalText,
+      timestamp: new Date("2026-07-09T10:00:00.000Z"),
+      isThinking: false,
+      runtimeTurnId: "turn-readable-reasoning-upgrade",
+      contentParts: [
+        {
+          type: "thinking",
+          text: fusedReasoning,
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning:resp_readable_upgrade",
+            turnId: "turn-readable-reasoning-upgrade",
+            sequence: 2,
+          },
+        },
+        {
+          type: "text",
+          text: finalText,
+        },
+        {
+          type: "thinking",
+          text: cleanReasoning,
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning.final:evt_readable_upgrade",
+            turnId: "turn-readable-reasoning-upgrade",
+            sequence: 87,
+          },
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    const thinkingParts =
+      projection.rendererContentParts?.filter((part) => part.type === "thinking") ||
+      [];
+    expect(thinkingParts).toHaveLength(1);
+    expect(thinkingParts[0]).toMatchObject({
+      type: "thinking",
+      text: cleanReasoning,
+      metadata: expect.objectContaining({
+        threadItemId: "reasoning:resp_readable_upgrade",
+      }),
+    });
+    expect(thinkingParts[0]?.type === "thinking" ? thinkingParts[0].text : "").not.toContain(
+      "Theusersaying",
+    );
+    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.trailingTimeline).toBeNull();
+  });
+
+  it("相邻 thinking 后到 metadata 时后续同 item 仍应合并到首个思考卡片", () => {
+    const message: Message = {
+      id: "assistant-thinking-metadata-arrives-late",
+      role: "assistant",
+      content: "收到。",
+      timestamp: new Date("2026-07-09T10:00:00.000Z"),
+      isThinking: false,
+      contentParts: [
+        {
+          type: "thinking",
+          text: "Crafting",
+        },
+        {
+          type: "thinking",
+          text: "Crafting",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning-late-metadata",
+          },
+        },
+        {
+          type: "text",
+          text: "收到。",
+        },
+        {
+          type: "thinking",
+          text: "Crafting concise reply",
+          metadata: {
+            source: "thread_item_reasoning",
+            threadItemId: "reasoning-late-metadata",
+          },
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+
+    expect(projection.rendererContentParts).toEqual([
+      {
+        type: "thinking",
+        text: "Crafting concise reply",
+        metadata: {
+          source: "thread_item_reasoning",
+          threadItemId: "reasoning-late-metadata",
+        },
+      },
+      {
+        type: "text",
+        text: "收到。",
+      },
+    ]);
+  });
+
   it("历史细节延迟时 content 为空也应从 contentParts 保留最终正文首帧", () => {
     const message: Message = {
       id: "assistant-history-deferred-text-parts",

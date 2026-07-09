@@ -7,6 +7,9 @@ import {
 import { renderBackendToolAndSkillEventScript } from "./claw-chat-current-fixture-backend-tool-skill-events.mjs";
 import {
   APPROVAL_REQUEST_RESUME_PROMPT,
+  APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+  APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
   APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT,
   APPROVAL_REQUEST_RESUME_SECOND_PROMPT,
   APPROVAL_REQUEST_RESUME_SECOND_RESULT_TEXT,
@@ -25,6 +28,9 @@ import {
   FIXTURE_PROVIDER,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
+  GREETING_DONE_TEXT,
+  GREETING_PROMPT,
+  GREETING_SUMMARY_TEXT,
   IMAGE_COMMAND_PRESENTATION_CAPTION,
   IMAGE_COMMAND_PRESENTATION_INTRO,
   INPUTBAR_RICH_RESTORE_PROMPT,
@@ -365,11 +371,13 @@ if (input.kind === "turnStart") {
     serializedInput.includes("image_command_presentation");
   const isEventReadProbe = inputText.includes("agentSession/event");
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
+  const isGreetingPrompt = inputText === "${GREETING_PROMPT}";
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
   const isInputbarRichRestorePrompt = inputText.includes("${INPUTBAR_RICH_RESTORE_PROMPT}");
   const isInputbarPendingSteerActivePrompt = inputText.includes("${INPUTBAR_PENDING_STEER_ACTIVE_PROMPT}");
   const isApprovalRequestResumePrompt = inputText.includes("${APPROVAL_REQUEST_RESUME_PROMPT}");
+  const isApprovalRequestFullAccessPrompt = inputText.includes("${APPROVAL_REQUEST_FULL_ACCESS_PROMPT}");
   const isApprovalRequestResumeSecondPrompt = inputText.includes("${APPROVAL_REQUEST_RESUME_SECOND_PROMPT}");
   const isReasoningFirstVisiblePrompt = inputText.includes("${REASONING_FIRST_VISIBLE_PROMPT}");
   const isLiveTailCommitPrompt = inputText.includes("${LIVE_TAIL_COMMIT_PROMPT}");
@@ -395,6 +403,8 @@ if (input.kind === "turnStart") {
     ? "${EVENT_READ_PROBE_DONE_TEXT}"
     : isContinuePrompt
       ? "${CONTINUE_DONE_TEXT}"
+      : isGreetingPrompt
+        ? "${GREETING_DONE_TEXT}"
       : isPlanPrompt
         ? "${PLAN_DONE_TEXT}"
         : isGoalPrompt
@@ -425,6 +435,8 @@ if (input.kind === "turnStart") {
                           ? "${EXPERT_SKILLS_RUNTIME_DONE_TEXT}"
                           : isExpertPanelSkillsRuntimePrompt
                             ? "${EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT}"
+                            : isApprovalRequestFullAccessPrompt
+                              ? "${APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT}"
                             : isApprovalRequestResumeSecondPrompt
                               ? "${APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT}"
                             : "${ASSISTANT_DONE_TEXT}";
@@ -562,6 +574,8 @@ ${renderApprovalRequestResumeTurnStartScript()}
     ? "事件流 probe 已进入 RuntimeCore：\\n"
     : isContinuePrompt
       ? "继续输出已恢复：\\n"
+      : isGreetingPrompt
+        ? "${GREETING_SUMMARY_TEXT}。\\n"
       : isPlanPrompt
         ? "我先给出计划，不会直接改代码：\\n"
           : isGoalPrompt
@@ -576,6 +590,8 @@ ${renderApprovalRequestResumeTurnStartScript()}
               ? "${TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT}\\n"
             : isTerminalFailedAfterAnswerPrompt
               ? "${TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT}\\n"
+            : isApprovalRequestFullAccessPrompt
+              ? "${APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT}\\n"
             : isTerminalStaleGuardFirstPrompt
               ? "${TERMINAL_STALE_GUARD_FIRST_TEXT}\\n"
             : isTerminalStaleGuardSecondPrompt
@@ -629,6 +645,8 @@ ${renderApprovalRequestResumeTurnStartScript()}
   ];
   const followupText = isContinuePrompt
     ? "停止后的同一会话已经可以继续输出，并由 App Server current 终态收口。\\n"
+    : isGreetingPrompt
+      ? "输入区、会话页和流式回复都已经接上，可以继续发下一句话。\\n"
     : isPlanPrompt
         ? ${JSON.stringify(proposedPlanFixtureText)}
         : isGoalPrompt
@@ -659,6 +677,8 @@ ${renderApprovalRequestResumeTurnStartScript()}
                         ? ${JSON.stringify(EXPERT_SKILLS_RUNTIME_SCENARIO.fixtureText)}
                         : isExpertPanelSkillsRuntimePrompt
                           ? ${JSON.stringify(EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.fixtureText)}
+                          : isApprovalRequestFullAccessPrompt
+                            ? "${APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT}\\n"
                           : isApprovalRequestResumeSecondPrompt
                             ? "${APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT}\\n"
         : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";

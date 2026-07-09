@@ -3,6 +3,9 @@ import {
   APPROVAL_REQUEST_CANCEL_DONE_TEXT,
   APPROVAL_REQUEST_DECLINE_DONE_TEXT,
   APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+  APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+  APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
   APPROVAL_REQUEST_RESUME_DONE_TEXT,
   APPROVAL_REQUEST_RESUME_PROMPT,
   APPROVAL_REQUEST_RESUME_REQUEST_ID,
@@ -19,6 +22,7 @@ import {
 import {
   clickApprovalDecisionButton,
   clickApprovalApproveButton,
+  waitForGuiApprovalPromptAbsent,
   waitForGuiApprovalPending,
   waitForGuiApprovalPromptAbsentAfterSecondTurn,
 } from "./claw-chat-current-fixture-approval-gui.mjs";
@@ -44,6 +48,54 @@ import {
 } from "./claw-chat-current-fixture-read-model-waits.mjs";
 import { sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
+function summarizeFullAccessReadModel(readModel) {
+  const detail = readModel?.detail ?? readModel ?? {};
+  const threadRead = detail?.thread_read ?? detail?.threadRead ?? {};
+  const pendingRequests = [
+    ...(Array.isArray(readModel?.pending_requests)
+      ? readModel.pending_requests
+      : []),
+    ...(Array.isArray(readModel?.pendingRequests)
+      ? readModel.pendingRequests
+      : []),
+    ...(Array.isArray(detail?.pending_requests) ? detail.pending_requests : []),
+    ...(Array.isArray(detail?.pendingRequests) ? detail.pendingRequests : []),
+    ...(Array.isArray(threadRead?.pending_requests)
+      ? threadRead.pending_requests
+      : []),
+    ...(Array.isArray(threadRead?.pendingRequests)
+      ? threadRead.pendingRequests
+      : []),
+  ].filter(Boolean);
+  const serialized = JSON.stringify(readModel || {});
+  return sanitizeJson({
+    pendingRequestCount: pendingRequests.length,
+    latestTurnStatus:
+      threadRead?.runtime_summary?.latestTurnStatus ??
+      threadRead?.runtimeSummary?.latestTurnStatus ??
+      threadRead?.status ??
+      detail?.status ??
+      null,
+    includesPrompt: serialized.includes(APPROVAL_REQUEST_FULL_ACCESS_PROMPT),
+    includesAssistantSummary: serialized.includes(
+      APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
+    ),
+    includesAssistantDone: serialized.includes(
+      APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+    ),
+    includesApprovalRequest: serialized.includes("approval_request"),
+    includesActionRequired:
+      serialized.includes("action.required") ||
+      serialized.includes("action_required"),
+    includesActionResolved:
+      serialized.includes("action.resolved") ||
+      serialized.includes("action_resolved"),
+    includesApprovalPrompt: serialized.includes(
+      "需要确认浏览器控制权限",
+    ),
+  });
+}
+
 function summarizeBackendActionRespond(entry) {
   return {
     sessionId: entry.sessionId ?? null,
@@ -57,6 +109,82 @@ function summarizeBackendActionRespond(entry) {
     response: entry.response ?? null,
     actionScope: entry.actionScope ?? null,
   };
+}
+
+export async function runApprovalRequestFullAccessScenario({
+  page,
+  options,
+  appServerRequests,
+  runtimeEnv,
+  logStage,
+}) {
+  logStage("set-approval-request-full-access-mode");
+  const accessModeSet = await setInputbarAccessMode(
+    page,
+    options,
+    "full-access",
+  );
+
+  logStage("send-approval-request-full-access-prompt-from-gui");
+  const inputSend = sanitizeJson(
+    await sendPromptFromGui(page, options, APPROVAL_REQUEST_FULL_ACCESS_PROMPT),
+  );
+
+  logStage("wait-approval-request-full-access-backend-turn-start");
+  const backendTurnStart = await waitForBackendLedgerTurnStart(
+    runtimeEnv.backendLedgerPath,
+    APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+    options,
+  );
+
+  logStage("wait-gui-approval-request-full-access-completed");
+  const guiCompleted = sanitizeJson(
+    await waitForGuiChatCompleted(page, options, {
+      prompt: APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+      doneText: APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+      summaryText: APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
+    }),
+  );
+
+  logStage("wait-gui-approval-request-full-access-no-prompt");
+  const noApprovalPrompt = await waitForGuiApprovalPromptAbsent(page, options, {
+    requiredText: APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+  });
+
+  logStage("wait-read-model-approval-request-full-access-completed");
+  const completedReadModel = await waitForSessionReadCompleted(
+    page,
+    options,
+    appServerRequests,
+    {
+      prompt: APPROVAL_REQUEST_FULL_ACCESS_PROMPT,
+      doneText: APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT,
+      summaryText: APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT,
+    },
+  );
+
+  return sanitizeJson({
+    approvalRequestFullAccessAccessModeSet: accessModeSet,
+    approvalRequestFullAccessInputSend: inputSend,
+    approvalRequestFullAccessBackendTurnStart: {
+      sessionId: backendTurnStart.entry.sessionId ?? null,
+      threadId: backendTurnStart.entry.threadId ?? null,
+      turnId: backendTurnStart.entry.turnId ?? null,
+      inputText: backendTurnStart.entry.inputText ?? null,
+      approvalPolicy:
+        backendTurnStart.entry.asterChatRequest?.approval_policy ??
+        backendTurnStart.entry.asterChatRequest?.approvalPolicy ??
+        null,
+      sandboxPolicy:
+        backendTurnStart.entry.asterChatRequest?.sandbox_policy ??
+        backendTurnStart.entry.asterChatRequest?.sandboxPolicy ??
+        null,
+    },
+    guiApprovalRequestFullAccessCompleted: guiCompleted,
+    guiApprovalRequestFullAccessNoApproval: noApprovalPrompt,
+    readModelApprovalRequestFullAccessCompleted:
+      summarizeFullAccessReadModel(completedReadModel),
+  });
 }
 
 export async function runApprovalRequestDecisionScenario({

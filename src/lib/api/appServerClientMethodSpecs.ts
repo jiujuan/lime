@@ -1,5 +1,8 @@
 import * as constants from "./appServerConstants";
-export type AppServerClientMethodParamsMode = "none" | "required" | "optional-empty";
+export type AppServerClientMethodParamsMode =
+  | "none"
+  | "required"
+  | "optional-empty";
 
 export type AppServerClientMethodSpec = {
   name: string;
@@ -694,6 +697,11 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   {
     name: "transcribeVoiceAudio",
     method: constants.APP_SERVER_METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
+    params: "required",
+  },
+  {
+    name: "polishVoiceText",
+    method: constants.APP_SERVER_METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT,
     params: "required",
   },
   {

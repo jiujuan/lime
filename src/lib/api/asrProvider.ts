@@ -14,6 +14,7 @@ import {
   APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE,
   APP_SERVER_METHOD_VOICE_INSTRUCTION_LIST,
   APP_SERVER_METHOD_VOICE_INSTRUCTION_SAVE,
+  APP_SERVER_METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT,
   APP_SERVER_METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
   createAppServerClient,
   type AppServerVoiceAsrCredential,
@@ -534,6 +535,17 @@ export interface VoiceInputTranscriptionResult {
   language?: string;
 }
 
+export interface VoiceInputPolishRequest {
+  text: string;
+  instructionId?: string;
+}
+
+export interface VoiceInputPolishResult {
+  text: string;
+  instructionName: string;
+  polished: boolean;
+}
+
 /** 润色结果 */
 export interface PolishResult {
   text: string;
@@ -589,6 +601,36 @@ export async function transcribeVoiceInputAudio({
     durationSecs: typedResult.duration_secs,
     sampleRate: typedResult.sample_rate,
     language: typedResult.language ?? undefined,
+  };
+}
+
+export async function polishVoiceInputText({
+  text,
+  instructionId,
+}: VoiceInputPolishRequest): Promise<VoiceInputPolishResult> {
+  const params: {
+    text: string;
+    instruction_id?: string;
+  } = { text };
+  if (instructionId) {
+    params.instruction_id = instructionId;
+  }
+  const response = await createAppServerClient().polishVoiceText(params);
+  const result = response.result;
+  if (
+    !isRecord(result) ||
+    typeof result.text !== "string" ||
+    typeof result.instruction_name !== "string" ||
+    typeof result.polished !== "boolean"
+  ) {
+    throw new Error(
+      `${APP_SERVER_METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT} did not return a polish result`,
+    );
+  }
+  return {
+    text: result.text,
+    instructionName: result.instruction_name,
+    polished: result.polished,
   };
 }
 

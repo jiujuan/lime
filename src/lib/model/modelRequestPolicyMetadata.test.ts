@@ -56,8 +56,12 @@ function modelFixture(
 }
 
 describe("modelRequestPolicyMetadata", () => {
-  it("没有 registry-facing policy 时不输出 request metadata", () => {
-    expect(buildModelRequestPolicyMetadata(modelFixture())).toBeUndefined();
+  it("没有细分 policy 时也应输出当前 registry model 的最小 request metadata", () => {
+    expect(buildModelRequestPolicyMetadata(modelFixture())).toMatchObject({
+      source: "model_registry",
+      provider_id: "openai",
+      model_id: "gpt-4.1",
+    });
   });
 
   it("只把 selected registry model 的 policy 写入 request metadata", () => {
@@ -145,6 +149,30 @@ describe("modelRequestPolicyMetadata", () => {
             request_mode: "responses_lite",
           },
         },
+      },
+    });
+  });
+
+  it("当前 selection 无 registry policy 时应移除旧 model_request_policy", () => {
+    expect(
+      mergeModelRequestPolicyMetadata(
+        {
+          source: "prepare",
+          harness: {
+            existing_signal: true,
+            model_request_policy: {
+              source: "model_registry",
+              provider_id: "lime-hub",
+              model_id: "gpt-5.2-pro",
+            },
+          },
+        },
+        undefined,
+      ),
+    ).toEqual({
+      source: "prepare",
+      harness: {
+        existing_signal: true,
       },
     });
   });

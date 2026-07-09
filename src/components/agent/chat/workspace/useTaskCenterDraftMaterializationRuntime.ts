@@ -31,7 +31,10 @@ type AgentEntry = "new-task" | "claw";
 
 type CreateFreshSession = (
   sessionName?: string,
-  options?: { preserveCurrentSnapshot?: boolean },
+  options?: {
+    preserveCurrentSnapshot?: boolean;
+    skipSessionStartHooks?: boolean;
+  },
 ) => Promise<string | null>;
 
 type SwitchMaterializedSession = (
@@ -325,6 +328,7 @@ export function useTaskCenterDraftMaterializationRuntime({
       const materializePromise = (async () => {
         const newSessionId = await createFreshSession("新对话", {
           preserveCurrentSnapshot: false,
+          skipSessionStartHooks: true,
         });
         if (!newSessionId) {
           setTaskCenterDraftTabs((current) =>

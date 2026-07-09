@@ -5,7 +5,7 @@ import type {
   ParsedMessageContent,
 } from "@/components/workspace/a2ui/types";
 
-const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<write_file|<document/i;
+const STRUCTURED_CONTENT_HINT_RE = /<a2ui|```\s*a2ui|<document/i;
 const STRUCTURED_PARSE_CACHE_LIMIT = 64;
 
 export const STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS = 48;
@@ -13,12 +13,7 @@ export const STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS = 48;
 export const EMPTY_PARSE_RESULT: ParseResult = {
   parts: [],
   hasA2UI: false,
-  hasWriteFile: false,
   hasPending: false,
-};
-
-export type WriteFileMessagePart = ParsedMessageContent & {
-  type: "write_file" | "pending_write_file";
 };
 
 export function hasStructuredContentHint(text: string): boolean {
@@ -28,12 +23,6 @@ export function hasStructuredContentHint(text: string): boolean {
 function createPlainTextParts(text: string): ParsedMessageContent[] {
   const trimmed = text.trim();
   return trimmed ? [{ type: "text", content: trimmed }] : [];
-}
-
-export function isWriteFileMessagePart(
-  part: ParsedMessageContent,
-): part is WriteFileMessagePart {
-  return part.type === "write_file" || part.type === "pending_write_file";
 }
 
 function parseStructuredContent(
@@ -48,7 +37,6 @@ function parseStructuredContent(
     return {
       parts: createPlainTextParts(text),
       hasA2UI: false,
-      hasWriteFile: false,
       hasPending: false,
     };
   }

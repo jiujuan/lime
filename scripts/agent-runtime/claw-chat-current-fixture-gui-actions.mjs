@@ -360,9 +360,11 @@ async function clickInputbarSendButton(page, options, constraints = {}) {
         beforeClick.textareaSessionId === expectedSessionId),
     `输入栏发送按钮不可用: ${JSON.stringify(sanitizeJson(beforeClick))}`,
   );
+  const clickedAt = new Date().toISOString();
   await sendLocator.click();
   return {
     clicked: true,
+    clickedAt,
     method: "inputbar-send-btn",
     disabledBeforeClick: beforeClick.disabled,
     label: beforeClick.label,
@@ -601,6 +603,10 @@ export async function sendPromptFromGui(
       (!expectedSessionId || afterFill.textareaSessionId === expectedSessionId),
     `输入框未保留用户输入: ${JSON.stringify(sanitizeJson(afterFill))}`,
   );
+  const afterFillStability =
+    typeof constraints.collectAfterFillStability === "function"
+      ? await constraints.collectAfterFillStability({ afterFill })
+      : null;
 
   const sendReady = await waitForSendButtonReady(
     page,
@@ -608,7 +614,18 @@ export async function sendPromptFromGui(
     options,
     constraints,
   );
+  if (typeof constraints.beforeClick === "function") {
+    await constraints.beforeClick({ afterFill, afterFillStability, sendReady });
+  }
   const clicked = await clickInputbarSendButton(page, options, constraints);
+  if (typeof constraints.afterClick === "function") {
+    await constraints.afterClick({
+      afterFill,
+      afterFillStability,
+      clicked,
+      sendReady,
+    });
+  }
   const afterClick = await waitForInputbarSubmitEffect(
     page,
     prompt,
@@ -619,6 +636,7 @@ export async function sendPromptFromGui(
   return {
     before,
     afterFill,
+    afterFillStability,
     sendReady,
     clicked,
     afterClick,

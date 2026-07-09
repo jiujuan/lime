@@ -327,12 +327,6 @@ export function buildKnownPreSummary(params: {
         );
   }
 
-  if (normalizedName === "sendusermessage" || normalizedName === "brief") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.userMessage.syncFirst",
-    );
-  }
-
   if (normalizedName === "structuredoutput") {
     return resolveRequiredAgentChatCopy(
       "toolCall.processSummary.finalAnswer.prepareFirst",

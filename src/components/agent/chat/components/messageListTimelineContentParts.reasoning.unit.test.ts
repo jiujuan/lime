@@ -42,6 +42,185 @@ describe("messageListTimelineContentParts reasoning merge", () => {
     expect(contentParts).toBeUndefined();
   });
 
+  it("已有 Markdown 形态内联思考时不应把等价 timeline reasoning 补成第二张卡", () => {
+    const existingContentParts: NonNullable<Message["contentParts"]> = [
+      {
+        type: "thinking",
+        text: "**Crafting concise cheeky Chinese greeting**",
+        metadata: {
+          source: "thread_item_reasoning",
+          turnId: "turn-cheeky-greeting",
+          sequence: 1,
+        },
+      },
+      {
+        type: "text",
+        text: "你好。说吧，今天要我帮你把哪件事拎清楚、推进掉。",
+      },
+    ];
+
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "你好。说吧，今天要我帮你把哪件事拎清楚、推进掉。",
+      existingContentParts,
+      items: buildThreadItems([
+        {
+          id: "reasoning-cheeky-greeting-official",
+          type: "reasoning",
+          turn_id: "turn-cheeky-greeting",
+          sequence: 1,
+          text: "Crafting concise cheeky Chinese greeting",
+          status: "completed",
+          started_at: "2026-07-09T10:00:00.000Z",
+          completed_at: "2026-07-09T10:00:01.000Z",
+          updated_at: "2026-07-09T10:00:01.000Z",
+        },
+      ]),
+    });
+
+    expect(contentParts).toBeUndefined();
+  });
+
+  it("timeline 内同轮同文本 reasoning 不应合并成重复思考正文", () => {
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "收到，我会直接给出一句话。",
+      items: buildThreadItems([
+        {
+          id: "streamed-reasoning:turn-dedupe-reasoning:local-1",
+          type: "reasoning",
+          turn_id: "turn-dedupe-reasoning",
+          sequence: 1,
+          text: "先构造一句俏皮中文问候。",
+          status: "in_progress",
+          started_at: "2026-06-20T10:00:00.000Z",
+          updated_at: "2026-06-20T10:00:00.500Z",
+        },
+        {
+          id: "reasoning-dedupe-official-1",
+          type: "reasoning",
+          turn_id: "turn-dedupe-reasoning",
+          sequence: 1,
+          text: "先构造一句俏皮中文问候。",
+          status: "completed",
+          started_at: "2026-06-20T10:00:00.000Z",
+          completed_at: "2026-06-20T10:00:01.000Z",
+          updated_at: "2026-06-20T10:00:01.000Z",
+        },
+        {
+          id: "reasoning-dedupe-official-2",
+          type: "reasoning",
+          turn_id: "turn-dedupe-reasoning",
+          sequence: 2,
+          text: " 先构造一句俏皮中文问候。 ",
+          status: "completed",
+          started_at: "2026-06-20T10:00:00.000Z",
+          completed_at: "2026-06-20T10:00:01.000Z",
+          updated_at: "2026-06-20T10:00:01.000Z",
+        },
+      ]),
+    });
+
+    const thinkingParts =
+      contentParts?.filter((part) => part.type === "thinking") || [];
+    expect(thinkingParts).toHaveLength(1);
+    expect(thinkingParts[0]).toMatchObject({
+      type: "thinking",
+      text: "先构造一句俏皮中文问候。",
+      metadata: expect.objectContaining({
+        threadItemId: "reasoning-dedupe-official-2",
+      }),
+    });
+    expect(
+      thinkingParts[0]?.type === "thinking"
+        ? thinkingParts[0].text.split("先构造一句俏皮中文问候。").length - 1
+        : 0,
+    ).toBe(1);
+  });
+
+  it("timeline 内 Markdown 强调形态相同的 reasoning 只应保留一条", () => {
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent: "你好。直接说事，我来处理，省得我们俩先拿空气开会。",
+      items: buildThreadItems([
+        {
+          id: "streamed-reasoning:turn-cheeky-greeting:local-1",
+          type: "reasoning",
+          turn_id: "turn-cheeky-greeting",
+          sequence: 1,
+          text: "**Crafting concise cheeky greeting**",
+          status: "in_progress",
+          started_at: "2026-07-09T10:00:00.000Z",
+          updated_at: "2026-07-09T10:00:00.500Z",
+        },
+        {
+          id: "reasoning-cheeky-greeting-official",
+          type: "reasoning",
+          turn_id: "turn-cheeky-greeting",
+          sequence: 1,
+          text: "Crafting concise cheeky greeting",
+          status: "completed",
+          started_at: "2026-07-09T10:00:00.000Z",
+          completed_at: "2026-07-09T10:00:01.000Z",
+          updated_at: "2026-07-09T10:00:01.000Z",
+        },
+      ]),
+    });
+
+    const thinkingParts =
+      contentParts?.filter((part) => part.type === "thinking") || [];
+    expect(thinkingParts).toHaveLength(1);
+    expect(thinkingParts[0]).toMatchObject({
+      type: "thinking",
+      text: "Crafting concise cheeky greeting",
+      metadata: expect.objectContaining({
+        threadItemId: "reasoning-cheeky-greeting-official",
+      }),
+    });
+  });
+
+  it("timeline 内 clean final reasoning 应替换无空格压缩 reasoning", () => {
+    const cleanReasoning =
+      'The user is saying "你好" (hello) in Chinese. This is a simple greeting that I can respond to directly without any tools. According to my style guidelines, I should respond with a cheeky-sassy tone. Let me craft a response that is friendly but has that cheeky personality.';
+    const fusedReasoning = `Theusersaying你好"(hello)inChineseThisissimplegreetingcandirectlywithoutanytoolsAccordingtomystyleguidelines,Ishouldrespondwith-sassytoneLetmecraftaresponse'sfriendlybuthasthatcheekypersonality. ${cleanReasoning}`;
+    const contentParts = buildTimelineInlineContentParts({
+      displayContent:
+        "哟，终于想起找我聊天了？我还以为你把我忘了呢。说吧，今天想聊点啥还是搞点啥？我随时待命。",
+      items: buildThreadItems([
+        {
+          id: "reasoning:resp_readable_upgrade",
+          type: "reasoning",
+          turn_id: "turn-readable-reasoning-upgrade",
+          sequence: 2,
+          text: fusedReasoning,
+          status: "completed",
+          started_at: "2026-07-09T10:00:00.000Z",
+          completed_at: "2026-07-09T10:00:01.000Z",
+          updated_at: "2026-07-09T10:00:01.000Z",
+        },
+        {
+          id: "reasoning.final:evt_readable_upgrade",
+          type: "reasoning",
+          turn_id: "turn-readable-reasoning-upgrade",
+          sequence: 87,
+          text: cleanReasoning,
+          status: "completed",
+          started_at: "2026-07-09T10:00:00.000Z",
+          completed_at: "2026-07-09T10:00:01.000Z",
+          updated_at: "2026-07-09T10:00:01.000Z",
+        },
+      ]),
+    });
+
+    const thinkingParts =
+      contentParts?.filter((part) => part.type === "thinking") || [];
+    expect(thinkingParts).toHaveLength(1);
+    expect(thinkingParts[0]).toMatchObject({
+      type: "thinking",
+      text: cleanReasoning,
+      metadata: expect.objectContaining({
+        threadItemId: "reasoning.final:evt_readable_upgrade",
+      }),
+    });
+  });
+
   it("已有工具过程时应把唯一稀疏 reasoning 按时间插入同一流程", () => {
     const existingContentParts: NonNullable<Message["contentParts"]> = [
       {

@@ -101,6 +101,7 @@ interface EmptyStateComposerPanelProps {
     triggerMetadata?: BaseComposerSendMetadata,
   ) => void | boolean | Promise<boolean>;
   onStop?: () => void;
+  sendOnPointerDown?: boolean;
   isLoading?: boolean;
   disabled?: boolean;
   activeTheme: string;
@@ -790,6 +791,7 @@ export function EmptyStateComposerPanel({
           visualVariant="floating"
           connectedContextBar
           deferSendOnEnter
+          sendOnPointerDown
           topExtra={topExtra}
           leftExtra={leftExtra}
           trailingMeta={trailingMeta}
@@ -797,7 +799,7 @@ export function EmptyStateComposerPanel({
           onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
           onRemovePathReference={onRemovePathReference}
           showMetaTools={false}
-          dictationButtonVariant="label"
+          showTextareaExpandButton={false}
           plusMenu={plusMenu}
         />
         {projectContextBar}
