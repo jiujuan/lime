@@ -30,6 +30,8 @@ export default defineConfig(({ command, mode }) => {
   const isElectronRenderer =
     process.env.LIME_ELECTRON_RENDERER?.trim() === "1" ||
     process.env.VITE_DEV_SERVER_URL !== undefined;
+  const keepExistingOutDir =
+    process.env.LIME_VITE_EMPTY_OUT_DIR?.trim() === "0";
   const cacheDir = isElectronRenderer
     ? "node_modules/.vite-electron"
     : "node_modules/.vite-web";
@@ -104,6 +106,7 @@ export default defineConfig(({ command, mode }) => {
       force: forceOptimizeDeps,
     },
     build: {
+      emptyOutDir: keepExistingOutDir ? false : undefined,
       chunkSizeWarningLimit: 12000,
       rollupOptions: {
         onwarn(warning, defaultHandler) {

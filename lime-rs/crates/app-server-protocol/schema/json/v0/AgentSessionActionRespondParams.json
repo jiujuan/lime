@@ -30,6 +30,15 @@
         "tool_confirmation"
       ],
       "type": "string"
+    },
+    "AgentSessionApprovalDecision": {
+      "enum": [
+        "allow_for_session",
+        "allow_once",
+        "cancel",
+        "decline"
+      ],
+      "type": "string"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -48,7 +57,20 @@
       "$ref": "#/$defs/AgentSessionActionType"
     },
     "confirmed": {
-      "type": "boolean"
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "decision": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AgentSessionApprovalDecision"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "eventName": {
       "type": [
@@ -73,7 +95,6 @@
   },
   "required": [
     "actionType",
-    "confirmed",
     "requestId",
     "sessionId"
   ],

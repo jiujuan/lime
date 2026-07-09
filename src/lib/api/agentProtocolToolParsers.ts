@@ -1,4 +1,5 @@
 import type { AgentEvent } from "./agentProtocolEventTypes";
+import { normalizeActionArguments } from "./agentActionArguments";
 import type {
   AgentActionRequiredQuestion,
   AgentActionRequiredType,
@@ -9,14 +10,167 @@ import {
   normalizeRecord,
   normalizeToolArguments,
   normalizeToolExecutionResult,
+  pickStringArrayField,
   pickStringField,
 } from "./agentProtocolParserUtils";
+
+function readHookRunSource(
+  event: Record<string, unknown>,
+): Record<string, unknown> {
+  return normalizeRecord(event.run) ?? normalizeRecord(event.payload) ?? event;
+}
+
+function normalizeHookRunStatus(
+  status: string | undefined,
+): "in_progress" | "completed" | "failed" {
+  switch (status) {
+    case "running":
+    case "in_progress":
+      return "in_progress";
+    case "failed":
+    case "blocked":
+    case "stopped":
+      return "failed";
+    default:
+      return "completed";
+  }
+}
+
+function normalizeHookEntries(value: unknown):
+  | Array<{
+      kind: string;
+      text: string;
+    }>
+  | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = value
+    .map((entry) => {
+      const record = normalizeRecord(entry);
+      const kind = record ? pickStringField(record, "kind", "type") : undefined;
+      const text = record
+        ? pickStringField(record, "text", "message", "content")
+        : undefined;
+      return kind && text ? { kind, text } : null;
+    })
+    .filter((entry): entry is { kind: string; text: string } =>
+      Boolean(entry),
+    );
+  return entries.length > 0 ? entries : undefined;
+}
+
+function parseAgentHookLifecycleEvent(
+  type: string,
+  event: Record<string, unknown>,
+): AgentEvent {
+  const run = readHookRunSource(event);
+  const rawStatus =
+    pickStringField(run, "status", "hook_status", "hookStatus") ??
+    (type === "hook.started" ||
+    type === "hook_started" ||
+    type === "hook/started" ||
+    type === "workflow.hook.started"
+      ? "running"
+      : "completed");
+  const entries = normalizeHookEntries(run.entries ?? event.entries);
+  const output =
+    pickStringField(run, "output", "text", "message", "statusMessage") ||
+    entries?.map((entry) => `${entry.kind}: ${entry.text}`).join("\n");
+
+  return {
+    type:
+      rawStatus === "running" || rawStatus === "in_progress"
+        ? "item_started"
+        : "item_completed",
+    item: {
+      id:
+        pickStringField(
+          run,
+          "id",
+          "runId",
+          "run_id",
+          "hookRunId",
+          "hook_run_id",
+        ) || "",
+      thread_id: pickStringField(event, "thread_id", "threadId") || "",
+      turn_id: pickStringField(event, "turn_id", "turnId") || "",
+      sequence:
+        typeof event.sequence === "number" && Number.isFinite(event.sequence)
+          ? event.sequence
+          : 0,
+      type: "hook",
+      status: normalizeHookRunStatus(rawStatus),
+      started_at:
+        pickStringField(run, "started_at", "startedAt") ||
+        pickStringField(event, "timestamp") ||
+        new Date(0).toISOString(),
+      completed_at:
+        rawStatus === "running" || rawStatus === "in_progress"
+          ? undefined
+          : pickStringField(run, "completed_at", "completedAt") ||
+            pickStringField(event, "timestamp"),
+      updated_at:
+        pickStringField(run, "updated_at", "updatedAt") ||
+        pickStringField(event, "timestamp") ||
+        new Date(0).toISOString(),
+      run_id:
+        pickStringField(
+          run,
+          "id",
+          "runId",
+          "run_id",
+          "hookRunId",
+          "hook_run_id",
+        ) || "",
+      event_name: pickStringField(run, "eventName", "event_name", "hookEvent"),
+      handler_type: pickStringField(run, "handlerType", "handler_type"),
+      execution_mode: pickStringField(run, "executionMode", "execution_mode"),
+      scope: pickStringField(run, "scope", "hookScope"),
+      source_path: pickStringField(run, "sourcePath", "source_path"),
+      source: pickStringField(run, "source"),
+      display_order: normalizeOptionalNumber(
+        run.displayOrder ?? run.display_order,
+      ),
+      status_message: pickStringField(
+        run,
+        "statusMessage",
+        "status_message",
+        "message",
+      ),
+      duration_ms: normalizeOptionalNumber(run.durationMs ?? run.duration_ms),
+      entries,
+      output,
+      target_item_id: pickStringField(
+        run,
+        "targetItemId",
+        "target_item_id",
+        "toolCallId",
+        "tool_call_id",
+      ),
+      hook_status: rawStatus,
+      metadata: {
+        eventClass: type,
+        raw: run,
+      },
+    },
+  };
+}
 
 export function parseAgentToolEvent(
   type: string,
   event: Record<string, unknown>,
 ): AgentEvent | null {
   switch (type) {
+    case "hook.started":
+    case "hook_started":
+    case "hook/started":
+    case "hook.completed":
+    case "hook_completed":
+    case "hook/completed":
+    case "workflow.hook.started":
+    case "workflow.hook.completed":
+      return parseAgentHookLifecycleEvent(type, event);
     case "tool_start":
     case "tool_started":
     case "tool.started":
@@ -207,13 +361,21 @@ export function parseAgentToolEvent(
       const actionData =
         (event.data as Record<string, unknown> | undefined) || {};
       const requestId =
+        (event.action_id as string | undefined) ||
+        (event.actionId as string | undefined) ||
+        (event.requestId as string | undefined) ||
+        (actionData.action_id as string | undefined) ||
+        (actionData.actionId as string | undefined) ||
+        (actionData.requestId as string | undefined) ||
+        (actionData.id as string | undefined) ||
         (event.request_id as string | undefined) ||
         (actionData.request_id as string | undefined) ||
-        (actionData.id as string | undefined) ||
         "";
       const actionType =
         (event.action_type as string | undefined) ||
+        (event.actionType as string | undefined) ||
         (actionData.action_type as string | undefined) ||
+        (actionData.actionType as string | undefined) ||
         (actionData.type as string | undefined) ||
         "tool_confirmation";
 
@@ -224,10 +386,10 @@ export function parseAgentToolEvent(
         scope: normalizeActionRequiredScope(event.scope ?? actionData.scope),
         tool_name:
           (event.tool_name as string | undefined) ||
-          (actionData.tool_name as string | undefined),
-        arguments:
-          (event.arguments as Record<string, unknown> | undefined) ||
-          (actionData.arguments as Record<string, unknown> | undefined),
+          (event.toolName as string | undefined) ||
+          (actionData.tool_name as string | undefined) ||
+          (actionData.toolName as string | undefined),
+        arguments: readActionRequiredArguments(event, actionData, actionType),
         prompt:
           (event.prompt as string | undefined) ||
           (actionData.prompt as string | undefined) ||
@@ -238,16 +400,28 @@ export function parseAgentToolEvent(
         requested_schema:
           (event.requested_schema as Record<string, unknown> | undefined) ||
           (actionData.requested_schema as Record<string, unknown> | undefined),
+        available_decisions:
+          pickStringArrayField(event, "availableDecisions", "available_decisions") ??
+          pickStringArrayField(
+            actionData,
+            "availableDecisions",
+            "available_decisions",
+          ),
       };
     }
     case "action_resolved": {
       const actionData =
         (event.data as Record<string, unknown> | undefined) || {};
       const requestId =
-        (event.request_id as string | undefined) ||
-        (actionData.request_id as string | undefined) ||
+        (event.action_id as string | undefined) ||
+        (event.actionId as string | undefined) ||
+        (event.requestId as string | undefined) ||
+        (actionData.action_id as string | undefined) ||
+        (actionData.actionId as string | undefined) ||
         (actionData.requestId as string | undefined) ||
         (actionData.id as string | undefined) ||
+        (event.request_id as string | undefined) ||
+        (actionData.request_id as string | undefined) ||
         "";
       const actionType =
         (event.action_type as string | undefined) ||
@@ -289,4 +463,59 @@ export function parseAgentToolEvent(
     default:
       return null;
   }
+}
+
+const ACTION_ARGUMENT_EVENT_FIELDS = [
+  "additional_permissions",
+  "additionalPermissions",
+  "action",
+  "call_id",
+  "callId",
+  "completed_at_ms",
+  "completedAtMs",
+  "decision_source",
+  "decisionSource",
+  "environment_id",
+  "environmentId",
+  "guardian_review_action",
+  "guardianReviewAction",
+  "item_id",
+  "itemId",
+  "network_approval_context",
+  "networkApprovalContext",
+  "owner_call_id",
+  "ownerCallId",
+  "proposed_network_policy_amendments",
+  "proposedNetworkPolicyAmendments",
+  "review",
+  "review_id",
+  "reviewId",
+  "started_at_ms",
+  "startedAtMs",
+  "target_item_id",
+  "targetItemId",
+  "tool_call_id",
+  "toolCallId",
+] as const;
+
+function readActionRequiredArguments(
+  event: Record<string, unknown>,
+  actionData: Record<string, unknown>,
+  actionType: string,
+): Record<string, unknown> | undefined {
+  const source =
+    normalizeRecord(event.arguments) ??
+    normalizeRecord(actionData.arguments) ??
+    (actionType === "tool_confirmation" ||
+    actionType === "network_approval" ||
+    actionType === "request_permissions"
+      ? actionData
+      : {});
+  const enriched: Record<string, unknown> = {};
+  for (const key of ACTION_ARGUMENT_EVENT_FIELDS) {
+    if (event[key] !== undefined) {
+      enriched[key] = event[key];
+    }
+  }
+  return normalizeActionArguments({ ...enriched, ...source });
 }

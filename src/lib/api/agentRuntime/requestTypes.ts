@@ -142,7 +142,8 @@ export interface AgentRuntimeRespondActionRequest {
   session_id: string;
   request_id: string;
   action_type: "tool_confirmation" | "ask_user" | "elicitation";
-  confirmed: boolean;
+  confirmed?: boolean;
+  decision?: "allow_once" | "allow_for_session" | "decline" | "cancel";
   response?: string;
   user_data?: unknown;
   metadata?: Record<string, unknown>;
@@ -163,6 +164,9 @@ export interface AgentRuntimeReplayedActionRequiredView {
   prompt?: string;
   questions?: unknown;
   requested_schema?: Record<string, unknown>;
+  available_decisions?: Array<
+    "allow_once" | "allow_for_session" | "decline" | "cancel"
+  >;
   scope?: {
     session_id?: string;
     thread_id?: string;

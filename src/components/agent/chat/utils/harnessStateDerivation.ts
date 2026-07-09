@@ -445,7 +445,6 @@ export function deriveHarnessSessionStateFromMessages(
   let latestTodoItems: HarnessTodoItem[] = [];
   let latestTodoSourceToolCallId: string | undefined;
   let latestPlanningTimestamp = 0;
-  let latestExitPlanTimestamp = 0;
   let latestDecisionSummaryText: string | undefined;
   const delegatedTasks: HarnessDelegatedTask[] = [];
   const outputSignals: HarnessOutputSignal[] = [];
@@ -468,19 +467,6 @@ export function deriveHarnessSessionStateFromMessages(
         latestTodoItems = snapshot;
         latestTodoSourceToolCallId = entry.toolCall.id;
       }
-      continue;
-    }
-
-    if (normalizedName === "enterplanmode") {
-      latestPlanningTimestamp = Math.max(latestPlanningTimestamp, timestamp);
-      continue;
-    }
-
-    if (
-      normalizedName === "exitplanmode" &&
-      entry.toolCall.status === "completed"
-    ) {
-      latestExitPlanTimestamp = Math.max(latestExitPlanTimestamp, timestamp);
       continue;
     }
 
@@ -551,19 +537,14 @@ export function deriveHarnessSessionStateFromMessages(
 
   const planPhase: HarnessPlanPhase =
     latestPlanningTimestamp === 0 &&
-    latestExitPlanTimestamp === 0 &&
     latestTodoItems.length === 0 &&
     !latestDecisionSummaryText
       ? "idle"
       : latestTodoItems.length === 0 &&
           latestPlanningTimestamp === 0 &&
-          latestExitPlanTimestamp === 0 &&
           latestDecisionSummaryText
         ? "ready"
-        : latestExitPlanTimestamp > 0 &&
-            latestExitPlanTimestamp >= latestPlanningTimestamp
-          ? "ready"
-          : "planning";
+        : "planning";
 
   const hasSignals =
     runtimeStatus !== null ||

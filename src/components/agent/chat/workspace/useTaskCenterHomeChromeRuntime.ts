@@ -40,6 +40,7 @@ interface UseTaskCenterHomeChromeRuntimeParams {
   isSending: boolean;
   isHomePendingPreviewActive: boolean;
   queuedTurnCount: number;
+  hasLocalSessionOverride: boolean;
   embeddedHomeSessionIds: ReadonlySet<string>;
   isAutoRestoringSession: boolean;
   isSessionHydrating: boolean;
@@ -77,6 +78,7 @@ export function useTaskCenterHomeChromeRuntime({
   isSending,
   isHomePendingPreviewActive,
   queuedTurnCount,
+  hasLocalSessionOverride,
   embeddedHomeSessionIds,
   isAutoRestoringSession,
   isSessionHydrating,
@@ -143,6 +145,7 @@ export function useTaskCenterHomeChromeRuntime({
     isSending,
     isHomePendingPreviewActive,
     queuedTurnCount,
+    hasLocalSessionOverride,
     sessionId,
     embeddedHomeSessionIds,
     isAutoRestoringSession,

@@ -26,10 +26,11 @@ function baseInput(
 }
 
 describe("resolveWorkspaceSceneSessionProjection", () => {
-  it("任务中心首页遮罩当前会话时应清空场景投影", () => {
+  it("任务中心首页遮罩当前会话且没有 pending preview 时应清空场景投影", () => {
     const projection = resolveWorkspaceSceneSessionProjection(
       baseInput({
         shouldHideCurrentSessionContent: true,
+        homePendingPreviewMessages: [],
         isPreparingSend: true,
         isTaskCenterDraftSendPending: true,
       }),
@@ -46,6 +47,30 @@ describe("resolveWorkspaceSceneSessionProjection", () => {
       sceneSubmittedActionsInFlight: [],
       sceneQueuedTurns: [],
       sceneIsPreparingSend: false,
+      sceneIsSending: false,
+    });
+  });
+
+  it("任务中心首页遮罩当前会话时仍应优先展示 pending preview", () => {
+    const projection = resolveWorkspaceSceneSessionProjection(
+      baseInput({
+        shouldHideCurrentSessionContent: true,
+        isTaskCenterDraftSendPending: true,
+        isSending: false,
+      }),
+    );
+
+    expect(projection).toEqual({
+      sceneDisplayMessages: ["preview-1"],
+      sceneTurns: [],
+      sceneThreadItems: [],
+      sceneCurrentTurnId: null,
+      sceneThreadRead: null,
+      sceneExecutionRuntime: null,
+      scenePendingActions: [],
+      sceneSubmittedActionsInFlight: [],
+      sceneQueuedTurns: [],
+      sceneIsPreparingSend: true,
       sceneIsSending: false,
     });
   });

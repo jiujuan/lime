@@ -117,8 +117,6 @@ describe("agentStreamUserInputSubmission", () => {
       setPendingActions: noopDispatch<ActionRequired[]>(),
       setWorkspacePathMissing: noopDispatch<WorkspacePathMissingState | null>(),
       setIsSending: noopDispatch<boolean>(),
-      playToolcallSound: () => {},
-      playTypewriterSound: () => {},
       appendThinkingToParts: (
         parts: NonNullable<Message["contentParts"]>,
         _textDelta: string,

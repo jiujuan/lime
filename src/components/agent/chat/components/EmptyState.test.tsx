@@ -496,11 +496,13 @@ function expectEmptyStateSend(
     "images" | "textOverride" | "sendOptions"
   > = {},
 ) {
-  expect(onSend).toHaveBeenCalledWith({
-    images: payload.images,
-    textOverride: payload.textOverride,
-    sendOptions: payload.sendOptions,
-  });
+  const actual = onSend.mock.calls.at(-1)?.[0] as
+    | InputbarSendPayload
+    | undefined;
+  expect(actual).toBeTruthy();
+  expect(actual?.images).toEqual(payload.images);
+  expect(actual?.textOverride).toEqual(payload.textOverride);
+  expect(actual?.sendOptions).toEqual(payload.sendOptions);
 }
 
 function updateFieldValue(
@@ -1121,6 +1123,11 @@ describe("EmptyState", () => {
         }),
       }),
     });
+    const payload = onSend.mock.calls.at(-1)?.[0] as
+      | InputbarSendPayload
+      | undefined;
+    expect(payload?.triggerSource).toBe("button");
+    expect(payload?.triggeredAt).toEqual(expect.any(Number));
   });
 
   it("从 Skills 页带回的技能应显示在首页输入框内的 @ 标签", async () => {
@@ -2466,11 +2473,14 @@ describe("EmptyState", () => {
     act(() => {
       sendButtonAfterCapabilityCleared?.click();
     });
-    expect(onSend).toHaveBeenNthCalledWith(2, {
-      images: undefined,
+    const secondPayload = onSend.mock.calls[1]?.[0] as
+      | InputbarSendPayload
+      | undefined;
+    expect(secondPayload).toMatchObject({
       textOverride: "帮我设计封面",
-      sendOptions: undefined,
     });
+    expect(secondPayload?.images).toBeUndefined();
+    expect(secondPayload?.sendOptions).toBeUndefined();
   });
 
   it("首页选择 builtin command 后发送应透传结构化 capability route", async () => {

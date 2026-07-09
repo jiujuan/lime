@@ -117,9 +117,9 @@ pub struct ToolInventoryCounts {
     pub default_allowed_total: usize,
     pub runtime_total: usize,
     pub runtime_visible_total: usize,
-    pub registry_total: usize,
-    pub registry_visible_total: usize,
-    pub registry_catalog_unmapped_total: usize,
+    pub native_total: usize,
+    pub native_visible_total: usize,
+    pub native_catalog_unmapped_total: usize,
     pub extension_surface_total: usize,
     pub extension_mcp_bridge_total: usize,
     pub extension_runtime_total: usize,
@@ -148,7 +148,7 @@ pub struct ToolCatalogInventoryEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RuntimeRegistryToolInventoryEntry {
+pub struct NativeToolInventoryEntry {
     pub name: String,
     pub description: String,
     pub catalog_entry_name: Option<String>,
@@ -175,7 +175,6 @@ pub struct RuntimeRegistryToolInventoryEntry {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeToolSourceKind {
-    RegistryNative,
     CurrentSurface,
     RuntimeExtension,
     Mcp,
@@ -269,7 +268,7 @@ pub struct AgentToolInventorySnapshot {
     pub default_allowed_tools: Vec<String>,
     pub counts: ToolInventoryCounts,
     pub catalog_tools: Vec<ToolCatalogInventoryEntry>,
-    pub registry_tools: Vec<RuntimeRegistryToolInventoryEntry>,
+    pub native_tools: Vec<NativeToolInventoryEntry>,
     pub runtime_tools: Vec<RuntimeToolInventoryEntry>,
     pub extension_surfaces: Vec<RuntimeExtensionSurfaceInventoryEntry>,
     pub extension_tools: Vec<RuntimeExtensionToolInventoryEntry>,
@@ -286,9 +285,8 @@ pub(crate) struct AgentToolInventoryBuildInput {
     pub request_metadata: Option<serde_json::Value>,
     pub mcp_server_names: Vec<String>,
     pub mcp_tools: Vec<McpToolDefinition>,
-    pub registry_definitions: Vec<RuntimeToolDefinition>,
+    pub current_tool_definitions: Vec<RuntimeToolDefinition>,
     pub resource_helpers_supported: bool,
-    pub current_surface_tool_names: Vec<String>,
     pub extension_configs: Vec<RuntimeExtensionConfig>,
     pub visible_extension_tools: Vec<ExtensionToolInventorySeed>,
     pub searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
@@ -306,9 +304,8 @@ pub(crate) fn build_tool_inventory(
         request_metadata,
         mcp_server_names,
         mcp_tools,
-        registry_definitions,
+        current_tool_definitions,
         resource_helpers_supported,
-        current_surface_tool_names,
         extension_configs,
         visible_extension_tools,
         searchable_extension_tools,
@@ -369,8 +366,8 @@ pub(crate) fn build_tool_inventory(
         })
         .collect::<Vec<_>>();
 
-    let registry_tools = build_registry_inventory(
-        &registry_definitions,
+    let native_tools = build_native_inventory(
+        &current_tool_definitions,
         &caller,
         execution_policy_input,
         lock_service_skill_launch_to_site_tools,
@@ -391,12 +388,8 @@ pub(crate) fn build_tool_inventory(
         &mcp_extension_lookup,
     );
     let mcp_tools = build_mcp_inventory(&mcp_tools, &caller);
-    let current_surface_tool_names = current_surface_tool_names
-        .into_iter()
-        .collect::<HashSet<_>>();
     let runtime_tools = build_runtime_tool_inventory(
-        &registry_tools,
-        &current_surface_tool_names,
+        &native_tools,
         &extension_tools,
         &mcp_tools,
         &native_tool_policy_gate,
@@ -422,12 +415,12 @@ pub(crate) fn build_tool_inventory(
             .iter()
             .filter(|entry| entry.visible_in_context)
             .count(),
-        registry_total: registry_tools.len(),
-        registry_visible_total: registry_tools
+        native_total: native_tools.len(),
+        native_visible_total: native_tools
             .iter()
             .filter(|entry| entry.visible_in_context)
             .count(),
-        registry_catalog_unmapped_total: registry_tools
+        native_catalog_unmapped_total: native_tools
             .iter()
             .filter(|entry| entry.catalog_entry_name.is_none())
             .count(),
@@ -464,7 +457,7 @@ pub(crate) fn build_tool_inventory(
         default_allowed_tools,
         counts,
         catalog_tools,
-        registry_tools,
+        native_tools,
         runtime_tools,
         extension_surfaces,
         extension_tools,
@@ -472,14 +465,14 @@ pub(crate) fn build_tool_inventory(
     }
 }
 
-fn build_registry_inventory(
+fn build_native_inventory(
     definitions: &[RuntimeToolDefinition],
     caller: &str,
     execution_policy_input: ToolExecutionResolverInput<'_>,
     lock_service_skill_launch_to_site_tools: bool,
     resource_helpers_supported: bool,
     native_tool_policy_gate: &NativeToolPolicyGate,
-) -> Vec<RuntimeRegistryToolInventoryEntry> {
+) -> Vec<NativeToolInventoryEntry> {
     let mut result = definitions
         .iter()
         .filter(|definition| {
@@ -500,7 +493,7 @@ fn build_registry_inventory(
                 resolve_tool_execution_policy_resolution(entry.name, execution_policy_input)
             });
 
-            RuntimeRegistryToolInventoryEntry {
+            NativeToolInventoryEntry {
                 name: definition.name.clone(),
                 description: definition.description.clone(),
                 catalog_entry_name: catalog_entry.map(|entry| entry.name.to_string()),
@@ -665,9 +658,8 @@ fn build_mcp_inventory(tools: &[McpToolDefinition], caller: &str) -> Vec<McpTool
 fn runtime_tool_source_rank(kind: RuntimeToolSourceKind) -> u8 {
     match kind {
         RuntimeToolSourceKind::CurrentSurface => 0,
-        RuntimeToolSourceKind::RegistryNative => 1,
-        RuntimeToolSourceKind::RuntimeExtension => 2,
-        RuntimeToolSourceKind::Mcp => 3,
+        RuntimeToolSourceKind::RuntimeExtension => 1,
+        RuntimeToolSourceKind::Mcp => 2,
     }
 }
 
@@ -686,8 +678,7 @@ fn insert_runtime_tool_entry(
 }
 
 fn build_runtime_tool_inventory(
-    registry_tools: &[RuntimeRegistryToolInventoryEntry],
-    current_surface_tool_names: &HashSet<String>,
+    native_tools: &[NativeToolInventoryEntry],
     extension_tools: &[RuntimeExtensionToolInventoryEntry],
     mcp_tools: &[McpToolInventoryEntry],
     native_tool_policy_gate: &NativeToolPolicyGate,
@@ -699,7 +690,7 @@ fn build_runtime_tool_inventory(
         .map(|entry| entry.name.clone())
         .collect::<HashSet<_>>();
 
-    for entry in registry_tools {
+    for entry in native_tools {
         if !native_tool_policy_gate.allows_tool_name(&entry.name) {
             continue;
         }
@@ -708,11 +699,7 @@ fn build_runtime_tool_inventory(
             RuntimeToolInventoryEntry {
                 name: entry.name.clone(),
                 description: entry.description.clone(),
-                source_kind: if current_surface_tool_names.contains(&entry.name) {
-                    RuntimeToolSourceKind::CurrentSurface
-                } else {
-                    RuntimeToolSourceKind::RegistryNative
-                },
+                source_kind: RuntimeToolSourceKind::CurrentSurface,
                 source_label: None,
                 status: None,
                 catalog_entry_name: entry.catalog_entry_name.clone(),
@@ -906,6 +893,7 @@ mod tests {
     use crate::agent_tools::catalog::{
         APPLY_PATCH_TOOL_NAME, MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME,
         MEMORY_READ_TOOL_NAME, MEMORY_SEARCH_TOOL_NAME, SKILL_SEARCH_TOOL_NAME,
+        TOOL_SEARCH_TOOL_NAME,
     };
     use lime_core::config::{
         ToolExecutionOverrideConfig as ConfigToolExecutionOverrideConfig,
@@ -1033,8 +1021,12 @@ mod tests {
                 false,
                 vec!["assistant"],
             )],
-            registry_definitions: vec![
-                definition("ToolSearch", "search tools", json!({ "type": "object" })),
+            current_tool_definitions: vec![
+                definition(
+                    TOOL_SEARCH_TOOL_NAME,
+                    "search tools",
+                    json!({ "type": "object" }),
+                ),
                 definition(
                     "Read",
                     "read file",
@@ -1061,7 +1053,6 @@ mod tests {
                 ),
             ],
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: vec![builtin_extension(
                 "mcp__docs",
                 vec!["search_docs", "read_docs"],
@@ -1100,9 +1091,9 @@ mod tests {
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Compat)
                 .count()
         );
-        assert_eq!(inventory.counts.registry_total, 4);
-        assert_eq!(inventory.counts.registry_visible_total, 3);
-        assert_eq!(inventory.counts.registry_catalog_unmapped_total, 1);
+        assert_eq!(inventory.counts.native_total, 4);
+        assert_eq!(inventory.counts.native_visible_total, 3);
+        assert_eq!(inventory.counts.native_catalog_unmapped_total, 1);
         assert_eq!(inventory.counts.extension_surface_total, 1);
         assert_eq!(inventory.counts.extension_mcp_bridge_total, 1);
         assert_eq!(inventory.counts.extension_tool_total, 2);
@@ -1111,7 +1102,7 @@ mod tests {
         assert_eq!(inventory.counts.mcp_tool_visible_total, 0);
         assert!(inventory
             .default_allowed_tools
-            .contains(&"ToolSearch".to_string()));
+            .contains(&TOOL_SEARCH_TOOL_NAME.to_string()));
         assert!(inventory
             .default_allowed_tools
             .contains(&SKILL_SEARCH_TOOL_NAME.to_string()));
@@ -1144,7 +1135,7 @@ mod tests {
         );
 
         let admin_tool = inventory
-            .registry_tools
+            .native_tools
             .iter()
             .find(|entry| entry.name == "admin_secret")
             .expect("admin tool should exist");
@@ -1153,7 +1144,7 @@ mod tests {
         assert!(admin_tool.catalog_entry_name.is_none());
 
         let structured_output_tool = inventory
-            .registry_tools
+            .native_tools
             .iter()
             .find(|entry| entry.name == "StructuredOutput")
             .expect("StructuredOutput should exist");
@@ -1224,12 +1215,11 @@ mod tests {
                 false,
                 vec!["assistant"],
             )],
-            registry_definitions: vec![
+            current_tool_definitions: vec![
                 definition("Agent", "delegate work", json!({ "type": "object" })),
                 definition("Bash", "workspace bash", json!({ "type": "object" })),
             ],
             resource_helpers_supported: false,
-            current_surface_tool_names: vec!["Agent".to_string()],
             extension_configs: vec![builtin_extension(
                 "mcp__docs",
                 vec!["search_docs"],
@@ -1260,7 +1250,7 @@ mod tests {
             .iter()
             .find(|entry| entry.name == "Bash")
             .expect("Bash runtime tool should exist");
-        assert_eq!(bash_tool.source_kind, RuntimeToolSourceKind::RegistryNative);
+        assert_eq!(bash_tool.source_kind, RuntimeToolSourceKind::CurrentSurface);
 
         let docs_tool = inventory
             .runtime_tools
@@ -1311,7 +1301,7 @@ mod tests {
             })),
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
-            registry_definitions: vec![
+            current_tool_definitions: vec![
                 definition("Read", "read file", json!({ "type": "object" })),
                 definition("Bash", "workspace bash", json!({ "type": "object" })),
                 definition(
@@ -1326,12 +1316,6 @@ mod tests {
                 ),
             ],
             resource_helpers_supported: false,
-            current_surface_tool_names: vec![
-                "Read".to_string(),
-                "Bash".to_string(),
-                "PowerShell".to_string(),
-                "apply_patch".to_string(),
-            ],
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
             searchable_extension_tools: Vec::new(),
@@ -1347,10 +1331,10 @@ mod tests {
             );
             assert!(
                 !inventory
-                    .registry_tools
+                    .native_tools
                     .iter()
                     .any(|entry| entry.name == blocked_tool_name),
-                "{blocked_tool_name} should be hidden from registry inventory"
+                "{blocked_tool_name} should be hidden from native inventory"
             );
             assert!(
                 !inventory
@@ -1366,7 +1350,7 @@ mod tests {
             .iter()
             .any(|entry| entry.name == "Read"));
         assert!(inventory
-            .registry_tools
+            .native_tools
             .iter()
             .any(|entry| entry.name == "Read"));
         assert!(inventory
@@ -1376,7 +1360,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_tool_inventory_hides_deprecated_catalog_registry_tools() {
+    fn test_build_tool_inventory_hides_deprecated_catalog_native_tools() {
         let inventory = build_tool_inventory(AgentToolInventoryBuildInput {
             surface: WorkspaceToolSurface::workbench(),
             caller: "assistant".to_string(),
@@ -1386,13 +1370,12 @@ mod tests {
             request_metadata: None,
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
-            registry_definitions: vec![definition(
+            current_tool_definitions: vec![definition(
                 "lime_create_video_generation_task",
                 "legacy video task facade",
                 json!({ "type": "object" }),
             )],
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
             searchable_extension_tools: Vec::new(),
@@ -1402,16 +1385,16 @@ mod tests {
             .default_allowed_tools
             .contains(&"lime_create_video_generation_task".to_string()));
 
-        let registry_tool = inventory
-            .registry_tools
+        let native_tool = inventory
+            .native_tools
             .iter()
             .find(|entry| entry.name == "lime_create_video_generation_task")
             .expect("deprecated video tool should stay inventoried for governance");
         assert_eq!(
-            registry_tool.catalog_lifecycle,
+            native_tool.catalog_lifecycle,
             Some(ToolLifecycle::Deprecated)
         );
-        assert!(!registry_tool.visible_in_context);
+        assert!(!native_tool.visible_in_context);
 
         let runtime_tool = inventory
             .runtime_tools
@@ -1439,9 +1422,8 @@ mod tests {
                 mcp_tool("docs", "search_docs", true, true, vec!["assistant"]),
                 mcp_tool("alpha", "read_alpha", false, false, vec![]),
             ],
-            registry_definitions: Vec::new(),
+            current_tool_definitions: Vec::new(),
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
             searchable_extension_tools: Vec::new(),
@@ -1456,7 +1438,7 @@ mod tests {
             inventory.mcp_servers,
             vec!["alpha".to_string(), "docs".to_string()]
         );
-        assert_eq!(inventory.counts.registry_total, 0);
+        assert_eq!(inventory.counts.native_total, 0);
         assert_eq!(inventory.counts.extension_surface_total, 0);
         assert_eq!(inventory.counts.mcp_server_total, 2);
         assert_eq!(inventory.counts.mcp_tool_total, 2);
@@ -1480,9 +1462,8 @@ mod tests {
             request_metadata: None,
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
-            registry_definitions: Vec::new(),
+            current_tool_definitions: Vec::new(),
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
             searchable_extension_tools: Vec::new(),
@@ -1516,13 +1497,13 @@ mod tests {
         );
         assert!(inventory
             .default_allowed_tools
-            .contains(&"ToolSearch".to_string()));
+            .contains(&TOOL_SEARCH_TOOL_NAME.to_string()));
         assert!(inventory
             .default_allowed_tools
-            .contains(&"ListMcpResourcesTool".to_string()));
+            .contains(&LIST_MCP_RESOURCES_TOOL_NAME.to_string()));
         assert!(inventory
             .default_allowed_tools
-            .contains(&"ReadMcpResourceTool".to_string()));
+            .contains(&READ_MCP_RESOURCE_TOOL_NAME.to_string()));
         assert!(inventory
             .default_allowed_tools
             .contains(&"social_generate_cover_image".to_string()));
@@ -1557,7 +1538,7 @@ mod tests {
             })),
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
-            registry_definitions: vec![
+            current_tool_definitions: vec![
                 definition(
                     "mcp__lime-browser__browser_navigate",
                     "browser navigate",
@@ -1570,7 +1551,6 @@ mod tests {
                 ),
             ],
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
             searchable_extension_tools: Vec::new(),
@@ -1581,7 +1561,7 @@ mod tests {
             .iter()
             .any(|entry| entry.name == BROWSER_RUNTIME_TOOL_PREFIX));
         assert!(!inventory
-            .registry_tools
+            .native_tools
             .iter()
             .any(|entry| entry.name.starts_with(BROWSER_RUNTIME_TOOL_PREFIX)));
         assert!(inventory
@@ -1589,7 +1569,7 @@ mod tests {
             .iter()
             .any(|entry| entry.name == "lime_site_run"));
         assert!(inventory
-            .registry_tools
+            .native_tools
             .iter()
             .any(|entry| entry.name == "lime_site_run"));
     }
@@ -1625,7 +1605,7 @@ mod tests {
             })),
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
-            registry_definitions: vec![definition(
+            current_tool_definitions: vec![definition(
                 "Bash",
                 "workspace bash",
                 json!({
@@ -1634,7 +1614,6 @@ mod tests {
                 }),
             )],
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
             searchable_extension_tools: Vec::new(),
@@ -1670,33 +1649,33 @@ mod tests {
             ToolExecutionPolicySource::Runtime
         );
 
-        let bash_registry = inventory
-            .registry_tools
+        let bash_native = inventory
+            .native_tools
             .iter()
             .find(|entry| entry.name == "Bash")
-            .expect("Bash registry entry should exist");
+            .expect("Bash native entry should exist");
         assert_eq!(
-            bash_registry.catalog_execution_warning_policy,
+            bash_native.catalog_execution_warning_policy,
             Some(ToolExecutionWarningPolicy::None)
         );
         assert_eq!(
-            bash_registry.catalog_execution_restriction_profile,
+            bash_native.catalog_execution_restriction_profile,
             Some(ToolExecutionRestrictionProfile::WorkspaceShellCommand)
         );
         assert_eq!(
-            bash_registry.catalog_execution_sandbox_profile,
+            bash_native.catalog_execution_sandbox_profile,
             Some(ToolExecutionSandboxProfile::None)
         );
         assert_eq!(
-            bash_registry.catalog_execution_warning_policy_source,
+            bash_native.catalog_execution_warning_policy_source,
             Some(ToolExecutionPolicySource::Persisted)
         );
         assert_eq!(
-            bash_registry.catalog_execution_restriction_profile_source,
+            bash_native.catalog_execution_restriction_profile_source,
             Some(ToolExecutionPolicySource::Default)
         );
         assert_eq!(
-            bash_registry.catalog_execution_sandbox_profile_source,
+            bash_native.catalog_execution_sandbox_profile_source,
             Some(ToolExecutionPolicySource::Runtime)
         );
     }
@@ -1712,9 +1691,8 @@ mod tests {
             request_metadata: None,
             mcp_server_names: vec!["docs".to_string()],
             mcp_tools: Vec::new(),
-            registry_definitions: Vec::new(),
+            current_tool_definitions: Vec::new(),
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: vec![
                 builtin_extension(
                     "mcp__docs",
@@ -1811,9 +1789,8 @@ mod tests {
             request_metadata: None,
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
-            registry_definitions: Vec::new(),
+            current_tool_definitions: Vec::new(),
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: vec![
                 builtin_extension("mcp__docs", vec!["search"], true, vec![], Some("assistant")),
                 builtin_extension(
@@ -1866,7 +1843,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_tool_inventory_registry_marks_always_visible_deferred_tools_visible() {
+    fn test_build_tool_inventory_native_marks_always_visible_deferred_tools_visible() {
         let inventory = build_tool_inventory(AgentToolInventoryBuildInput {
             surface: WorkspaceToolSurface::core(),
             caller: "assistant".to_string(),
@@ -1876,7 +1853,7 @@ mod tests {
             request_metadata: None,
             mcp_server_names: Vec::new(),
             mcp_tools: Vec::new(),
-            registry_definitions: vec![
+            current_tool_definitions: vec![
                 definition(
                     "Bash",
                     "workspace bash",
@@ -1915,14 +1892,13 @@ mod tests {
                 ),
             ],
             resource_helpers_supported: false,
-            current_surface_tool_names: Vec::new(),
             extension_configs: Vec::new(),
             visible_extension_tools: Vec::new(),
             searchable_extension_tools: Vec::new(),
         });
 
         let review_docs = inventory
-            .registry_tools
+            .native_tools
             .iter()
             .find(|entry| entry.name == "review_docs")
             .expect("review_docs should exist");
@@ -1934,7 +1910,7 @@ mod tests {
         assert!(review_docs.visible_in_context);
 
         let admin_secret = inventory
-            .registry_tools
+            .native_tools
             .iter()
             .find(|entry| entry.name == "admin_secret")
             .expect("admin_secret should exist");
@@ -1942,13 +1918,13 @@ mod tests {
         assert!(!admin_secret.visible_in_context);
         assert_eq!(
             inventory
-                .registry_tools
+                .native_tools
                 .iter()
                 .find(|entry| entry.name == "Bash")
                 .and_then(|entry| entry.catalog_execution_sandbox_profile),
             Some(ToolExecutionSandboxProfile::WorkspaceCommand)
         );
-        assert_eq!(inventory.counts.registry_visible_total, 1);
+        assert_eq!(inventory.counts.native_visible_total, 1);
     }
 
     #[test]
@@ -1963,8 +1939,12 @@ mod tests {
                 request_metadata: None,
                 mcp_server_names: Vec::new(),
                 mcp_tools: Vec::new(),
-                registry_definitions: vec![
-                    definition("ToolSearch", "search tools", json!({ "type": "object" })),
+                current_tool_definitions: vec![
+                    definition(
+                        TOOL_SEARCH_TOOL_NAME,
+                        "search tools",
+                        json!({ "type": "object" }),
+                    ),
                     definition(
                         LIST_MCP_RESOURCES_TOOL_NAME,
                         "list mcp resources",
@@ -1977,7 +1957,6 @@ mod tests {
                     ),
                 ],
                 resource_helpers_supported,
-                current_surface_tool_names: Vec::new(),
                 extension_configs: Vec::new(),
                 visible_extension_tools: Vec::new(),
                 searchable_extension_tools: Vec::new(),
@@ -1986,19 +1965,19 @@ mod tests {
             let tool_search = inventory
                 .runtime_tools
                 .iter()
-                .find(|entry| entry.name == "ToolSearch")
-                .expect("ToolSearch should stay in inventory");
+                .find(|entry| entry.name == TOOL_SEARCH_TOOL_NAME)
+                .expect("tool_search should stay in inventory");
             assert!(tool_search.visible_in_context);
 
             for tool_name in [LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME] {
-                let registry_tool = inventory
-                    .registry_tools
+                let native_tool = inventory
+                    .native_tools
                     .iter()
                     .find(|entry| entry.name == tool_name)
-                    .expect("resource helper should stay listed in registry inventory");
+                    .expect("resource helper should stay listed in native inventory");
                 assert_eq!(
-                    registry_tool.visible_in_context, expected_visible,
-                    "{tool_name} registry visibility should follow resource support"
+                    native_tool.visible_in_context, expected_visible,
+                    "{tool_name} native visibility should follow resource support"
                 );
 
                 let runtime_tool = inventory

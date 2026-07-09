@@ -65,7 +65,7 @@ describe("threadItemProjection", () => {
           id: "tool-plan",
           type: "tool_call",
           status: "completed",
-          tool_name: "ExitPlanMode",
+          tool_name: "request_user_input",
           success: true,
           output: "已提交计划审批",
           metadata: {
@@ -93,7 +93,7 @@ describe("threadItemProjection", () => {
       surface: "tool_ui",
       persistence: "archive",
       payload: {
-        toolName: "ExitPlanMode",
+        toolName: "request_user_input",
         outputPreview: "已提交计划审批",
       },
     });

@@ -544,6 +544,7 @@ impl RuntimeCore {
                 .state
                 .lock()
                 .expect("runtime core state mutex poisoned");
+            super::approval_cache::remove_session(&mut state.session_approval_cache, &session_id);
             state.sessions.remove(&session_id).is_some()
         };
 

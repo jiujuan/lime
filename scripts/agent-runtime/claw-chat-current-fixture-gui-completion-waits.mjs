@@ -137,6 +137,102 @@ export async function waitForGuiChatCompleted(
               /\bStop\b/i.test(label))
           );
         });
+        const approvalRecords = Array.from(
+          document.querySelectorAll('[data-testid="timeline-approval-record"]'),
+        ).map((record) => ({
+          text: record.textContent || "",
+          lineBreaks: ((record.textContent || "").match(/\n/gu) || []).length,
+          innerTextLineBreaks: ((record.innerText || "").match(/\n/gu) || [])
+            .length,
+        }));
+        const approvalRecordText = approvalRecords
+          .map((record) => record.text)
+          .join("\n");
+        const readVisiblePlanOwner = ({ kind, selector, itemSelector }) => {
+          const root = document.querySelector(selector);
+          const ownerRect = root?.getBoundingClientRect();
+          const ownerStyle = root ? window.getComputedStyle(root) : null;
+          const visible = Boolean(
+            root &&
+            ownerRect &&
+            ownerRect.width > 16 &&
+            ownerRect.height > 8 &&
+            ownerStyle?.visibility !== "hidden" &&
+            ownerStyle?.display !== "none",
+          );
+          return {
+            kind,
+            visible,
+            text: root?.textContent || "",
+            itemCount: itemSelector
+              ? root?.querySelectorAll(itemSelector).length || 0
+              : 0,
+          };
+        };
+        const planOwners = [
+          readVisiblePlanOwner({
+            kind: "run-control-plan",
+            selector: '[data-testid="task-center-run-control-plan"]',
+            itemSelector: '[data-testid="task-center-run-control-plan-item"]',
+          }),
+          readVisiblePlanOwner({
+            kind: "task-rail-plan",
+            selector: '[data-testid="task-center-task-rail-plan"]',
+            itemSelector: '[data-testid="task-center-task-rail-plan-item"]',
+          }),
+          readVisiblePlanOwner({
+            kind: "message-plan-block",
+            selector: '[data-testid="agent-plan-block"]',
+            itemSelector: null,
+          }),
+        ].filter((owner) => owner.visible);
+        const planOwnerText = planOwners.map((owner) => owner.text).join("\n");
+        const planDecisionPanel = document.querySelector(
+          '[data-testid="plan-composer-decision-panel"]',
+        );
+        const planDecisionRect = planDecisionPanel?.getBoundingClientRect();
+        const planDecisionStyle = planDecisionPanel
+          ? window.getComputedStyle(planDecisionPanel)
+          : null;
+        const planDecisionVisible = Boolean(
+          planDecisionPanel &&
+          planDecisionRect &&
+          planDecisionRect.width > 320 &&
+          planDecisionRect.height > 48 &&
+          planDecisionStyle?.visibility !== "hidden" &&
+          planDecisionStyle?.display !== "none",
+        );
+        const legacyUpdatePlanVisibleHits = [
+          "UpdatePlanTool",
+          "update_plan",
+        ].filter((label) =>
+          [mainText, planOwnerText].some((textValue) =>
+            textValue.includes(label),
+          ),
+        );
+        const approvalLegacyFragments = [
+          prompt,
+          "历史记录只读",
+          "歷史記錄只讀",
+          "History records are read-only",
+          "履歴記録は読み取り専用",
+          "히스토리 기록은 읽기 전용",
+          "请求",
+          "請求",
+          "Request",
+          "リクエスト",
+          "요청",
+          "范围",
+          "範圍",
+          "範囲",
+          "범위",
+          "Scope",
+          "ソース",
+          "来源",
+          "來源",
+          "Source",
+          "출처",
+        ];
         return {
           url: window.location.href,
           hasPrompt: scopedText.includes(prompt),
@@ -196,6 +292,35 @@ export async function waitForGuiChatCompleted(
             document.querySelector('[data-testid="message-list"]') ||
             document.querySelector('[data-testid="message-list-frame"]'),
           ),
+          approvalRecordShape: {
+            recordCount: approvalRecords.length,
+            maxLineBreaks: Math.max(
+              0,
+              ...approvalRecords.map((record) => record.lineBreaks),
+            ),
+            promptInRecord: approvalRecordText.includes(prompt),
+            legacyDetailFragmentHits: approvalLegacyFragments.filter(
+              (fragment) =>
+                typeof fragment === "string" &&
+                fragment.trim() &&
+                approvalRecordText.includes(fragment),
+            ),
+            texts: approvalRecords.map((record) => record.text),
+          },
+          planUiAbsentWithoutProposedPlan:
+            planOwners.length === 0 &&
+            planDecisionVisible === false &&
+            legacyUpdatePlanVisibleHits.length === 0,
+          planUiAbsence: {
+            planOwnerCount: planOwners.length,
+            planOwnerKinds: planOwners.map((owner) => owner.kind),
+            planOwnerItemCounts: planOwners.map((owner) => ({
+              kind: owner.kind,
+              itemCount: owner.itemCount,
+            })),
+            planDecisionVisible,
+            legacyUpdatePlanVisibleHits,
+          },
           bodyText: text,
           mainText,
         };
@@ -287,16 +412,18 @@ function reasoningFirstVisibleSnapshotFromDom({
     testId: node.getAttribute("data-testid") || "",
     text: node.textContent || "",
   }));
-  const textarea = document.querySelector('textarea[name="agent-chat-message"]');
+  const textarea = document.querySelector(
+    'textarea[name="agent-chat-message"]',
+  );
   const rect = textarea?.getBoundingClientRect();
   const style = textarea ? window.getComputedStyle(textarea) : null;
   const textareaVisible = Boolean(
     textarea &&
-      rect &&
-      rect.width > 16 &&
-      rect.height > 16 &&
-      style?.visibility !== "hidden" &&
-      style?.display !== "none",
+    rect &&
+    rect.width > 16 &&
+    rect.height > 16 &&
+    style?.visibility !== "hidden" &&
+    style?.display !== "none",
   );
   const buttons = Array.from(document.querySelectorAll("button")).map(
     (button) => ({
@@ -356,18 +483,22 @@ function reasoningFirstVisibleSnapshotFromDom({
     stopButtonVisible,
     hasMessageList: Boolean(
       document.querySelector('[data-testid="message-list"]') ||
-        document.querySelector('[data-testid="message-list-frame"]'),
+      document.querySelector('[data-testid="message-list-frame"]'),
     ),
   };
 }
 
 async function evaluateReasoningFirstVisibleSnapshot(page) {
-  return await evaluatePageSnapshot(page, reasoningFirstVisibleSnapshotFromDom, {
-    prompt: REASONING_FIRST_VISIBLE_PROMPT,
-    reasoningText: REASONING_FIRST_VISIBLE_TEXT,
-    finalText: REASONING_FIRST_VISIBLE_FINAL_TEXT,
-    doneText: REASONING_FIRST_VISIBLE_DONE_TEXT,
-  });
+  return await evaluatePageSnapshot(
+    page,
+    reasoningFirstVisibleSnapshotFromDom,
+    {
+      prompt: REASONING_FIRST_VISIBLE_PROMPT,
+      reasoningText: REASONING_FIRST_VISIBLE_TEXT,
+      finalText: REASONING_FIRST_VISIBLE_FINAL_TEXT,
+      doneText: REASONING_FIRST_VISIBLE_DONE_TEXT,
+    },
+  );
 }
 
 export async function waitForGuiReasoningFirstVisibleBeforeAnswer(
@@ -475,13 +606,73 @@ export async function waitForGuiPlanCompleted(page, options) {
               /\bStop\b/i.test(label))
           );
         });
-        const taskRailText =
-          document.querySelector(
-            '[data-testid="task-center-run-control-surface"]',
-          )?.textContent ||
-          document.querySelector('[data-testid="task-center-task-rail"]')
-            ?.textContent ||
-          text;
+        const readVisiblePlanOwner = ({
+          kind,
+          selector,
+          itemSelector,
+          revisionSelector,
+        }) => {
+          const root = document.querySelector(selector);
+          const rect = root?.getBoundingClientRect();
+          const ownerStyle = root ? window.getComputedStyle(root) : null;
+          const visible = Boolean(
+            root &&
+            rect &&
+            rect.width > 16 &&
+            rect.height > 8 &&
+            ownerStyle?.visibility !== "hidden" &&
+            ownerStyle?.display !== "none",
+          );
+          const revision = revisionSelector
+            ? root?.querySelector(revisionSelector)
+            : null;
+          return {
+            kind,
+            visible,
+            text: root?.textContent || "",
+            itemCount: itemSelector
+              ? root?.querySelectorAll(itemSelector).length || 0
+              : 0,
+            revisionId: revision?.getAttribute("data-plan-revision-id") || null,
+            revisionSource: revision?.getAttribute("data-plan-source") || null,
+            revisionTurnId: revision?.getAttribute("data-plan-turn-id") || null,
+          };
+        };
+        const planOwners = [
+          readVisiblePlanOwner({
+            kind: "run-control-plan",
+            selector: '[data-testid="task-center-run-control-plan"]',
+            itemSelector: '[data-testid="task-center-run-control-plan-item"]',
+            revisionSelector:
+              '[data-testid="task-center-run-control-plan-revision"]',
+          }),
+          readVisiblePlanOwner({
+            kind: "task-rail-plan",
+            selector: '[data-testid="task-center-task-rail-plan"]',
+            itemSelector: '[data-testid="task-center-task-rail-plan-item"]',
+            revisionSelector:
+              '[data-testid="task-center-task-rail-plan-revision"]',
+          }),
+          readVisiblePlanOwner({
+            kind: "message-plan-block",
+            selector: '[data-testid="agent-plan-block"]',
+            itemSelector: null,
+            revisionSelector: null,
+          }),
+        ].filter((owner) => owner.visible);
+        const planOwnerText = planOwners.map((owner) => owner.text).join("\n");
+        const planOwnerStepHits = planSteps.map((step) => ({
+          step: step.step,
+          visible: planOwnerText.includes(step.step),
+          owners: planOwners
+            .filter((owner) => owner.text.includes(step.step))
+            .map((owner) => owner.kind),
+        }));
+        const planOwnerKindsWithAllSteps = planOwners
+          .filter((owner) =>
+            planSteps.every((step) => owner.text.includes(step.step)),
+          )
+          .map((owner) => owner.kind);
         const planDecisionPanel = document.querySelector(
           '[data-testid="plan-composer-decision-panel"][data-layout="composer-drawer"]',
         );
@@ -498,22 +689,30 @@ export async function waitForGuiPlanCompleted(page, options) {
           planDecisionStyle?.visibility !== "hidden" &&
           planDecisionStyle?.display !== "none",
         );
+        const planDecisionRevision = planDecisionPanel?.querySelector(
+          '[data-testid="plan-composer-revision-status"]',
+        );
+        const planDecisionRevisionId =
+          planDecisionRevision?.getAttribute("data-plan-revision-id") || null;
         return {
           url: window.location.href,
           hasPrompt: text.includes(prompt),
           hasPlanIntro: text.includes("我先给出计划"),
           hasDoneText: text.includes(doneText),
-          hasPlanSection: taskRailText.includes("计划"),
-          hasAllPlanSteps: planSteps.every((step) =>
-            taskRailText.includes(step.step),
-          ),
-          planStepHits: planSteps.map((step) => ({
-            step: step.step,
-            visible: taskRailText.includes(step.step),
-          })),
-          proposedPlanVisible: planSteps.every((step) =>
-            taskRailText.includes(step.step),
-          ),
+          hasPlanSection: planOwners.length > 0,
+          hasAllPlanSteps: planOwnerStepHits.every((hit) => hit.visible),
+          planStepHits: planOwnerStepHits,
+          proposedPlanVisible: planOwnerStepHits.every((hit) => hit.visible),
+          planOwnerHasAllSteps: planOwnerStepHits.every((hit) => hit.visible),
+          planOwnerKinds: planOwners.map((owner) => owner.kind),
+          planOwnerKindsWithAllSteps,
+          planOwnerRevisionIds: planOwners
+            .map((owner) => owner.revisionId)
+            .filter(Boolean),
+          planOwnerRevisionSources: planOwners
+            .map((owner) => owner.revisionSource)
+            .filter(Boolean),
+          planOwners,
           textareaVisible,
           textareaDisabled:
             textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
@@ -531,8 +730,14 @@ export async function waitForGuiPlanCompleted(page, options) {
             ),
           ),
           planDecisionHasEscHint: planDecisionText.includes("ESC"),
+          planDecisionRevisionBound: Boolean(planDecisionRevisionId),
+          planDecisionRevisionId,
+          planDecisionRevisionSource:
+            planDecisionRevision?.getAttribute("data-plan-source") || null,
+          planDecisionRevisionTurnId:
+            planDecisionRevision?.getAttribute("data-plan-turn-id") || null,
           bodyText: text,
-          taskRailText,
+          taskRailText: planOwnerText,
         };
       },
       { prompt: PLAN_PROMPT, doneText: PLAN_DONE_TEXT, planSteps: PLAN_STEPS },
@@ -544,11 +749,12 @@ export async function waitForGuiPlanCompleted(page, options) {
     lastSnapshot = snapshot;
     if (
       snapshot.hasPrompt &&
-      snapshot.hasAllPlanSteps &&
+      snapshot.planOwnerHasAllSteps &&
       snapshot.planDecisionVisible &&
       snapshot.planDecisionHasTitle &&
       snapshot.planDecisionHasAcceptOption &&
       snapshot.planDecisionHasAdjustInput &&
+      snapshot.planDecisionRevisionBound &&
       snapshot.textareaVisible === false &&
       snapshot.stopButtonVisible === false
     ) {
@@ -757,6 +963,40 @@ export async function waitForGuiChatCanceled(
               /\bStop\b/i.test(label))
           );
         });
+        const approvalRecords = Array.from(
+          document.querySelectorAll('[data-testid="timeline-approval-record"]'),
+        ).map((record) => ({
+          text: record.textContent || "",
+          lineBreaks: ((record.textContent || "").match(/\n/gu) || []).length,
+          innerTextLineBreaks: ((record.innerText || "").match(/\n/gu) || [])
+            .length,
+        }));
+        const approvalRecordText = approvalRecords
+          .map((record) => record.text)
+          .join("\n");
+        const approvalLegacyFragments = [
+          prompt,
+          "历史记录只读",
+          "歷史記錄只讀",
+          "History records are read-only",
+          "履歴記録は読み取り専用",
+          "히스토리 기록은 읽기 전용",
+          "请求",
+          "請求",
+          "Request",
+          "リクエスト",
+          "요청",
+          "范围",
+          "範圍",
+          "範囲",
+          "범위",
+          "Scope",
+          "ソース",
+          "来源",
+          "來源",
+          "Source",
+          "출처",
+        ];
         return {
           url: window.location.href,
           hasPrompt: text.includes(prompt),
@@ -773,6 +1013,21 @@ export async function waitForGuiChatCanceled(
           textareaValue:
             textarea instanceof HTMLTextAreaElement ? textarea.value : null,
           stopButtonVisible,
+          approvalRecordShape: {
+            recordCount: approvalRecords.length,
+            maxLineBreaks: Math.max(
+              0,
+              ...approvalRecords.map((record) => record.lineBreaks),
+            ),
+            promptInRecord: approvalRecordText.includes(prompt),
+            legacyDetailFragmentHits: approvalLegacyFragments.filter(
+              (fragment) =>
+                typeof fragment === "string" &&
+                fragment.trim() &&
+                approvalRecordText.includes(fragment),
+            ),
+            texts: approvalRecords.map((record) => record.text),
+          },
           bodyText: text,
         };
       },

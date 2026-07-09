@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Artifact } from "@/lib/artifact/types";
 import {
   isTaskCenterDraftSendPendingForLayout,
+  resolveHarnessRuntimeVisible,
   resolveDefaultSelectedArtifact,
   resolveRuntimeWorkspaceId,
   resolveTaskCenterHomeSurfaceState,
@@ -229,6 +230,35 @@ describe("shouldBuildFullThreadTimeline", () => {
       shouldBuildFullThreadTimeline({
         harnessPanelVisible: false,
         layoutMode: "chat",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("resolveHarnessRuntimeVisible", () => {
+  it("旧 Harness 面板打开时应视为 runtime 可见", () => {
+    expect(
+      resolveHarnessRuntimeVisible({
+        harnessPanelVisible: true,
+        rightSurfaceActive: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("右侧 Harness surface 激活时也应视为 runtime 可见", () => {
+    expect(
+      resolveHarnessRuntimeVisible({
+        harnessPanelVisible: false,
+        rightSurfaceActive: "harness",
+      }),
+    ).toBe(true);
+  });
+
+  it("其他右侧 surface 激活时不应触发 Harness runtime", () => {
+    expect(
+      resolveHarnessRuntimeVisible({
+        harnessPanelVisible: false,
+        rightSurfaceActive: "trace",
       }),
     ).toBe(false);
   });

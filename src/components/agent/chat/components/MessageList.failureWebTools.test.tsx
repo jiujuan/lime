@@ -11,6 +11,63 @@ import type {
 } from "./MessageList.testHarness";
 
 describe("MessageList failure and web tools", () => {
+  it("provider 失败混入已输出正文时应隐藏内部错误并去重正文", async () => {
+    const visibleText =
+      "我先把今天的国际新闻证据抓回来，省得我们俩对着昨天的旧闻开会。";
+    const detail =
+      'execution backend error: Agent provider execution failed: Request failed: Resource not found (404): ***NotFoundError: NotFoundError: OpenAIException - {"detail":"Not Found"}';
+    const messages: Message[] = [
+      {
+        id: "msg-user-news-not-found",
+        role: "user",
+        content: "帮我整理一下今天的国际新闻",
+        timestamp: new Date("2026-07-09T08:20:00.000Z"),
+      },
+      {
+        id: "msg-assistant-news-not-found",
+        role: "assistant",
+        content: [
+          `${visibleText}执行失败： ${detail}`,
+          visibleText,
+          visibleText,
+        ].join("\n\n"),
+        contentParts: [
+          {
+            type: "text",
+            text: [
+              `${visibleText}执行失败： ${detail}`,
+              visibleText,
+              visibleText,
+            ].join("\n\n"),
+          },
+        ],
+        timestamp: new Date("2026-07-09T08:20:12.000Z"),
+        runtimeStatus: {
+          phase: "failed",
+          title: "当前处理失败",
+          detail,
+          checkpoints: [],
+        },
+      },
+    ];
+
+    const container = await renderZh(messages);
+
+    const assistantRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    const visibleMatches = (assistantRenderer?.textContent || "").match(
+      new RegExp(visibleText, "g"),
+    );
+
+    expect(assistantRenderer?.textContent).toContain(visibleText);
+    expect(visibleMatches).toHaveLength(1);
+    expect(container.textContent).toContain("当前处理失败");
+    expect(container.textContent).not.toContain("执行失败");
+    expect(container.textContent).not.toContain("OpenAIException");
+    expect(container.textContent).not.toContain("NotFoundError");
+  });
+
   it("失败回复已有时间线错误卡时不应在正文和底部重复长错误", async () => {
     const detail =
       "当前模型通道返回了计费或额度类错误，请检查该 Provider/模型通道的计费、配额或授权状态，或切换到其他可用模型后重试。";

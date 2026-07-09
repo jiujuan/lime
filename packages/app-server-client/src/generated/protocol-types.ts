@@ -335,6 +335,8 @@ export const METHOD_VOICE_INSTRUCTION_SAVE = "voiceInstruction/save";
 export const METHOD_VOICE_MODEL_DEFAULT_SET = "voiceModel/default/set";
 export const METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE =
   "voiceModel/testTranscribeFile";
+export const METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO =
+  "voiceTranscription/transcribeAudio";
 export const METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE =
   "wechatChannel/account/remove";
 export const METHOD_WECHAT_CHANNEL_ACCOUNT_LIST = "wechatChannel/accounts/list";
@@ -1438,6 +1440,10 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
+    method: "voiceTranscription/transcribeAudio",
+  },
+  {
+    kind: "request",
     method: "wechatChannel/account/remove",
   },
   {
@@ -1705,7 +1711,8 @@ export interface AgentSessionActionReplayResponse {
 export interface AgentSessionActionRespondParams {
   actionScope?: AgentSessionActionScope | null;
   actionType: AgentSessionActionType;
-  confirmed: boolean;
+  confirmed?: boolean | null;
+  decision?: AgentSessionApprovalDecision | null;
   eventName?: null | string;
   metadata?: unknown;
   requestId: string;
@@ -2125,6 +2132,7 @@ export interface AgentSessionReplayCaseExportResponse {
 export interface AgentSessionReplayedActionRequired {
   actionType: AgentSessionActionType;
   arguments?: unknown;
+  availableDecisions?: AgentSessionApprovalDecision[] | null;
   prompt?: null | string;
   questions?: unknown;
   requestId: string;
@@ -3109,6 +3117,11 @@ export type AppServerClientRequest =
   | {
       id: number | string;
       method: "voiceModel/testTranscribeFile";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "voiceTranscription/transcribeAudio";
       params?: unknown;
     }
   | {
@@ -4098,6 +4111,7 @@ export type AppServerRequestMethod =
   | "voiceInstruction/save"
   | "voiceModel/default/set"
   | "voiceModel/testTranscribeFile"
+  | "voiceTranscription/transcribeAudio"
   | "wechatChannel/account/remove"
   | "wechatChannel/accounts/list"
   | "wechatChannel/login/start"
@@ -7546,6 +7560,20 @@ export interface VoiceModelTestTranscribeFileResponse {
   text: string;
 }
 
+export interface VoiceTranscriptionTranscribeAudioParams {
+  audio_base64: string;
+  credential_id?: null | string;
+  mime_type: string;
+}
+
+export interface VoiceTranscriptionTranscribeAudioResponse {
+  duration_secs: number;
+  language?: null | string;
+  provider: VoiceAsrProviderType;
+  sample_rate: number;
+  text: string;
+}
+
 export interface WechatChannelAccountListResponse {
   accounts?: WechatConfiguredAccount[];
 }
@@ -7895,6 +7923,12 @@ export interface jsonRpcResponse {
 }
 
 export type requestId = number | string;
+
+export type AgentSessionApprovalDecision =
+  | "allow_for_session"
+  | "allow_once"
+  | "cancel"
+  | "decline";
 
 export type AgentSessionCwdFilter = string | string[];
 

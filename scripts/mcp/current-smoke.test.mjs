@@ -20,10 +20,7 @@ function readCurrentSmokeFixture() {
 }
 
 function readCurrentSmokeTransport() {
-  return fs.readFileSync(
-    "scripts/mcp/lib/current-smoke-transport.mjs",
-    "utf8",
-  );
+  return fs.readFileSync("scripts/mcp/lib/current-smoke-transport.mjs", "utf8");
 }
 
 function readCurrentSmokeSurface() {
@@ -47,9 +44,8 @@ describe("mcp current smoke guard", () => {
   it("keeps MCP smoke on App Server current JSON-RPC and rejects legacy facade", () => {
     const content = readCurrentSmokeSurface();
 
-    expect(content).toContain(
-      'APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
-    );
+    expect(content).toContain("APP_SERVER_HANDLE_JSON_LINES_COMMAND");
+    expect(content).toContain('"app_server_handle_json_lines"');
     expect(content).toContain('"mcpServer/oauth/login"');
     expect(content).toContain('"mcpTool/call"');
     expect(content).toContain('"mcpResource/read"');
@@ -79,6 +75,23 @@ describe("mcp current smoke guard", () => {
     expect(oauthFixture).toContain('scopes: ["fixture.read"]');
     expect(oauthFixture).toContain("tokenRequestCount");
     expect(oauthFixture).not.toContain("window.open");
+  });
+
+  it("keeps plugin runtime MCP proof behind the current smoke entry", () => {
+    const content = readCurrentSmokeSurface();
+
+    expect(content).toContain("--allow-plugin-runtime-fixture");
+    expect(content).toContain("runPluginRuntimeFixtureChecks");
+    expect(content).toContain("summary.pluginRuntimeFixture");
+    expect(content).toContain('"agentSession/toolInventory/read"');
+    expect(content).toContain("plugin_runtime_capabilities");
+    expect(content).toContain("plugin_mcp_targets");
+    expect(content).toContain('"mcpTool/listForContext"');
+    expect(content).toContain('"mcpTool/callWithCaller"');
+    expect(content).toContain("defaultProofDidNotCallTool");
+    expect(content).toContain("allowed_callers");
+    expect(content).not.toContain("defaultMocks");
+    expect(content).not.toContain("mockPriorityCommands");
   });
 
   it("keeps real provider evidence live-gated behind explicit environment", () => {
@@ -128,8 +141,7 @@ describe("mcp current smoke guard", () => {
     expect(() =>
       readLiveProviderConfig({
         LIME_MCP_LIVE_SERVER_URL: "https://example.com/mcp",
-        LIME_MCP_LIVE_ENV_HTTP_HEADERS_JSON:
-          '{"X-Api-Key":"sk-inline-token"}',
+        LIME_MCP_LIVE_ENV_HTTP_HEADERS_JSON: '{"X-Api-Key":"sk-inline-token"}',
       }),
     ).toThrow(/inline secret/);
 
@@ -218,8 +230,7 @@ describe("mcp current smoke guard", () => {
       LIME_MCP_LIVE_SERVER_URL: process.env.LIME_MCP_LIVE_SERVER_URL,
       LIME_MCP_LIVE_SERVER_NAME: process.env.LIME_MCP_LIVE_SERVER_NAME,
       LIME_MCP_LIVE_TOOL_NAME: process.env.LIME_MCP_LIVE_TOOL_NAME,
-      LIME_MCP_LIVE_TOOL_ARGS_JSON:
-        process.env.LIME_MCP_LIVE_TOOL_ARGS_JSON,
+      LIME_MCP_LIVE_TOOL_ARGS_JSON: process.env.LIME_MCP_LIVE_TOOL_ARGS_JSON,
     };
     process.env.LIME_MCP_LIVE_SERVER_URL = "https://example.com/mcp";
     process.env.LIME_MCP_LIVE_SERVER_NAME = "Example Provider";

@@ -26,6 +26,11 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildContentFactoryArticleWorkspaceScenarioAssertions } from "./claw-chat-current-fixture-content-factory-assertions.mjs";
 import {
+  buildApprovalRequestDecisionScenarioAssertions,
+  buildApprovalRequestResumeScenarioAssertions,
+} from "./claw-chat-current-fixture-approval-assertions.mjs";
+import {
+  buildLiveTailCommitScenarioAssertions,
   buildMcpStructuredContentScenarioAssertions,
   buildMediaReferenceScenarioAssertions,
   buildMultiAgentTeamScenarioAssertions,
@@ -36,6 +41,7 @@ import {
   buildSkillsRuntimeScenarioAssertions,
 } from "./claw-chat-current-fixture-skills-runtime-assertions.mjs";
 import { buildPendingSteerPopFrontResumeScenarioAssertions } from "./claw-chat-current-fixture-pending-steer-assertions.mjs";
+import { buildElectronResizeReflowScenarioAssertions } from "./claw-chat-current-fixture-resize-reflow-assertions.mjs";
 import { buildTerminalScenarioAssertions } from "./claw-chat-current-fixture-terminal-assertions.mjs";
 import { buildWebToolsRenderingScenarioAssertions } from "./claw-chat-current-fixture-web-tools-assertions.mjs";
 import { buildSoulStyleScenarioAssertions } from "./claw-chat-current-fixture-soul-style.mjs";
@@ -50,6 +56,54 @@ function readImageCommandTaskFromHarness(harness) {
     requestContext?.image_task ??
     requestContext?.imageTask ??
     null
+  );
+}
+
+function flattenBackendEmitTypesForPrompt(backendLedger, prompt) {
+  const startIndex = backendLedger.findIndex(
+    (entry) => entry?.kind === "turnStart" && entry?.inputText === prompt,
+  );
+  if (startIndex < 0) {
+    return [];
+  }
+  const emitTypes = [];
+  for (const entry of backendLedger.slice(startIndex + 1)) {
+    if (entry?.kind === "turnStart") {
+      break;
+    }
+    if (entry?.kind !== "backendEmit" || !Array.isArray(entry.eventTypes)) {
+      continue;
+    }
+    emitTypes.push(...entry.eventTypes.filter(Boolean));
+  }
+  return emitTypes;
+}
+
+function includesOrderedEventTypes(eventTypes, expectedTypes) {
+  let cursor = 0;
+  for (const eventType of eventTypes) {
+    if (eventType === expectedTypes[cursor]) {
+      cursor += 1;
+    }
+    if (cursor >= expectedTypes.length) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function streamParserBoundaryBackendObserved(backendLedger) {
+  const emitTypes = flattenBackendEmitTypesForPrompt(
+    backendLedger,
+    NEWS_PROMPT,
+  );
+  return (
+    emitTypes.includes("message.completed") &&
+    includesOrderedEventTypes(emitTypes, [
+      "message.delta",
+      "message.completed",
+      "turn.completed",
+    ])
   );
 }
 
@@ -76,13 +130,19 @@ export function buildScenarioAssertions(context) {
     inputbarPendingSteerActiveTurnStart,
     inputbarRichRestoreTurnStart,
     isAnyExpertSkillsRuntimeScenario,
+    isApprovalRequestCancelScenario,
+    isApprovalRequestDeclineScenario,
+    isApprovalRequestDecisionScenario,
+    isApprovalRequestResumeScenario,
     isCancelThenContinueScenario,
     isContentFactoryArticleWorkspaceScenario,
     isContentFactoryInlineImageArticleWorkspaceScenario,
     isExpertPanelSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
+    isElectronResizeReflowScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isLiveTailCommitScenario,
     isInputbarPendingSteerMultiQueueScenario,
     isInputbarPendingSteerPopFrontResumeScenario,
     isInputbarPendingSteerRichRestoreScenario,
@@ -100,6 +160,8 @@ export function buildScenarioAssertions(context) {
     isTerminalStaleGuardScenario,
     isWebToolsRenderingScenario,
     latestTurnCancel,
+    electronResizeReflowTurnStart,
+    liveTailCommitTurnStart,
     manualEnableRuntimeBinding,
     manualEnableRuntimeMetadata,
     mcpStructuredContentTurnStart,
@@ -108,6 +170,7 @@ export function buildScenarioAssertions(context) {
     pageText,
     planImplementationTurnStart,
     planTurnStart,
+    approvalRequestResumeTurnStart,
     skillsRuntimeTurnStart,
     explicitSkillsRuntimeTurnStart,
     manualEnableSkillsRuntimeTurnStart,
@@ -311,16 +374,27 @@ export function buildScenarioAssertions(context) {
                 planTurnStart?.inputText === PLAN_PROMPT,
               planCollaborationModeReachedBackend: collaborationMode === "plan",
               guiPlanRailVisible:
-                summary.guiPlanCompleted?.hasPlanSection === true ||
-                summary.guiPlanCompleted?.hasAllPlanSteps === true,
+                summary.guiPlanCompleted?.hasPlanSection === true &&
+                summary.guiPlanCompleted?.planOwnerHasAllSteps === true &&
+                Array.isArray(
+                  summary.guiPlanCompleted?.planOwnerKindsWithAllSteps,
+                ) &&
+                summary.guiPlanCompleted.planOwnerKindsWithAllSteps.length > 0,
               guiPlanStepsVisible:
-                summary.guiPlanCompleted?.hasAllPlanSteps === true,
+                summary.guiPlanCompleted?.planOwnerHasAllSteps === true &&
+                (summary.guiPlanCompleted?.planStepHits ?? []).every(
+                  (hit) =>
+                    hit.visible === true &&
+                    Array.isArray(hit.owners) &&
+                    hit.owners.length > 0,
+                ),
               guiPlanDecisionDrawerVisible:
                 summary.guiPlanCompleted?.planDecisionVisible === true &&
                 summary.guiPlanCompleted?.planDecisionHasTitle === true &&
                 summary.guiPlanCompleted?.planDecisionHasAcceptOption ===
                   true &&
-                summary.guiPlanCompleted?.planDecisionHasAdjustInput === true,
+                summary.guiPlanCompleted?.planDecisionHasAdjustInput === true &&
+                summary.guiPlanCompleted?.planDecisionRevisionBound === true,
               guiPlanDidNotAutoImplement: !planImplementationTurnStart,
               readModelPlanCompleted:
                 summary.readModelPlanCompleted?.includesPrompt === true &&
@@ -337,14 +411,22 @@ export function buildScenarioAssertions(context) {
                 summary.readModelPlanThreadItem?.includesAllPlanSteps === true,
               guiPlanHistoryHydrateCompleted:
                 summary.guiPlanHistoryHydrateCompleted?.hasPrompt === true &&
-                summary.guiPlanHistoryHydrateCompleted?.hasAllPlanSteps ===
+                summary.guiPlanHistoryHydrateCompleted?.planOwnerHasAllSteps ===
                   true &&
+                summary.guiPlanHistoryHydrateCompleted?.planDecisionVisible ===
+                  true &&
+                summary.guiPlanHistoryHydrateCompleted?.planDecisionHasTitle ===
+                  true &&
+                summary.guiPlanHistoryHydrateCompleted
+                  ?.planDecisionRevisionBound === true &&
                 summary.guiPlanHistoryHydrateCompleted
                   ?.legacyUpdatePlanToolVisible === false,
               readModelPlanHistoryHydratePreserved:
                 summary.readModelPlanHistoryHydrate
                   ?.hasCompletedPlanThreadItem === true &&
                 summary.readModelPlanHistoryHydrate?.hasRevisionId === true &&
+                summary.readModelPlanHistoryHydrate?.source ===
+                  "proposed_plan" &&
                 summary.readModelPlanHistoryHydrate?.includesAllPlanSteps ===
                   true,
               legacyUpdatePlanToolHidden:
@@ -353,8 +435,9 @@ export function buildScenarioAssertions(context) {
                 summary.readModelPlanThreadItem
                   ?.legacyUpdatePlanToolItemCount === 0,
               proposedPlanVisible:
-                pageText.includes("计划") &&
-                PLAN_STEPS.every((step) => pageText.includes(step.step)),
+                summary.guiPlanCompleted?.planOwnerHasAllSteps === true &&
+                summary.guiPlanHistoryHydrateCompleted?.planOwnerHasAllSteps ===
+                  true,
             }
           : isGoalScenario
             ? {
@@ -626,351 +709,560 @@ export function buildScenarioAssertions(context) {
                       reasoningFirstVisibleTurnStart,
                       summary,
                     })
-                  : isTerminalStaleGuardScenario ||
-                      isTerminalCanceledAfterAnswerScenario ||
-                      isTerminalFailedAfterAnswerScenario
-                    ? buildTerminalScenarioAssertions({
-                        isTerminalCanceledAfterAnswerScenario,
-                        isTerminalFailedAfterAnswerScenario,
-                        isTerminalStaleGuardScenario,
-                        summary,
-                        terminalCanceledAfterAnswerTurnStart,
-                        terminalFailedAfterAnswerTurnStart,
-                        terminalStaleGuardFirstTurnStart,
-                        terminalStaleGuardSecondTurnStart,
-                      })
-                  : isMcpStructuredContentScenario
-                  ? buildMcpStructuredContentScenarioAssertions({
-                      mcpStructuredContentTurnStart,
-                      summary,
-                    })
-                  : isMediaReferenceScenario
-                    ? buildMediaReferenceScenarioAssertions({
-                        mediaReferenceTurnStart,
-                        pageText,
+                  : isElectronResizeReflowScenario
+                    ? buildElectronResizeReflowScenarioAssertions({
+                        electronResizeReflowTurnStart,
                         summary,
                       })
-                  : isMultiAgentTeamScenario
-                    ? buildMultiAgentTeamScenarioAssertions({
-                        multiAgentTeamTurnStart,
-                        pageText,
-                        summary,
-                      })
-                    : isSkillsRuntimeScenario
-                      ? buildSkillsRuntimeScenarioAssertions({
-                          explicitSkillsRuntimeTurnStart,
-                          manualEnableRuntimeBinding,
-                          manualEnableRuntimeMetadata,
-                          manualEnableSkillsRuntimeTurnStart,
-                          skillsRuntimeTurnStart,
+                    : isLiveTailCommitScenario
+                      ? buildLiveTailCommitScenarioAssertions({
+                          liveTailCommitTurnStart,
                           summary,
-                          workspace,
                         })
-                      : isAnyExpertSkillsRuntimeScenario
-                        ? buildExpertSkillsRuntimeScenarioAssertions({
-                            expectedExpertHarnessSkillRef,
-                            expertHarnessMetadata,
-                            expertHarnessSkillRefs,
-                            expertPanelSkillsRuntimeTurnStart,
-                            expertRuntimeMetadata,
-                            expertSkillsRuntimeTurnStart,
-                            isExpertPanelSkillsRuntimeScenario,
-                            isExpertPlazaSkillsRuntimeScenario,
+                      : isApprovalRequestResumeScenario
+                        ? buildApprovalRequestResumeScenarioAssertions({
+                            appServerRequestMethods,
+                            approvalRequestResumeTurnStart,
+                            pageText,
                             summary,
                           })
-                        : hasCancelPhase
-                          ? {
-                              usedCurrentTurnCancel:
-                                appServerRequestMethods.includes(
-                                  APP_SERVER_METHOD_SESSION_TURN_CANCEL,
-                                ),
-                              externalFixtureCancelUsed: backendLedger.some(
-                                (entry) => entry.kind === "turnCancel",
-                              ),
-                              fixtureCancelReachedBackend:
-                                latestTurnCancel?.sessionId === SESSION_ID &&
-                                typeof latestTurnCancel?.turnId === "string" &&
-                                latestTurnCancel.turnId.trim().length > 0,
-                              guiStopClicked:
-                                summary.stopClick?.clicked?.clicked === true,
-                              readModelCanceled:
-                                summary.readModelCanceled?.includesPrompt ===
-                                  true &&
-                                summary.readModelCanceled?.includesCanceled ===
-                                  true,
-                              ...(isCancelThenContinueScenario
-                                ? {
-                                    continuePromptReachedBackend:
-                                      continueTurnStart?.inputText ===
-                                      CONTINUE_PROMPT,
-                                    guiContinueInputSubmitted:
-                                      summary.continueInputSend?.afterFill
-                                        ?.promptVisibleInTextarea === true &&
-                                      summary.continueInputSend?.clicked
-                                        ?.clicked === true,
-                                    guiContinueCompleted:
-                                      summary.guiContinueCompleted
-                                        ?.hasPrompt === true &&
-                                      (summary.guiContinueCompleted
-                                        ?.hasAssistantSummary === true ||
-                                        summary.guiContinueCompleted
-                                          ?.hasDoneText === true) &&
-                                      summary.guiContinueCompleted
-                                        ?.textareaVisible === true &&
-                                      summary.guiContinueCompleted
-                                        ?.textareaDisabled === false &&
-                                      summary.guiContinueCompleted
-                                        ?.stopButtonVisible === false,
-                                    readModelContinueCompleted:
-                                      summary.readModelContinueCompleted
-                                        ?.includesPrompt === true &&
-                                      (summary.readModelContinueCompleted
-                                        ?.includesAssistantDone === true ||
-                                        summary.readModelContinueCompleted
-                                          ?.includesAssistantSummary === true),
-                                    backendRecordedCancelThenContinue:
-                                      backendLedger.filter(
-                                        (entry) => entry.kind === "turnStart",
-                                      ).length >= 2 &&
-                                      backendLedger.some(
-                                        (entry) => entry.kind === "turnCancel",
-                                      ),
-                                  }
-                                : {}),
-                            }
-                          : isInputbarRichRestoreScenario
-                            ? {
-                                inputbarRichRestorePromptReachedBackend:
-                                  String(
-                                    inputbarRichRestoreTurnStart?.inputText ||
-                                      "",
-                                  ).includes(INPUTBAR_RICH_RESTORE_PROMPT),
-                                inputbarRichRestoreDraftPrepared:
-                                  summary.inputbarRichRestoreDraftPrepared
-                                    ?.prepared?.imageRestored === true &&
-                                  summary.inputbarRichRestoreDraftPrepared
-                                    ?.prepared?.pathRestored === true &&
-                                  summary.inputbarRichRestoreDraftPrepared
-                                    ?.prepared?.skillRestored === true,
-                                inputbarRichRestoreInputSubmitted:
-                                  summary.inputbarRichRestoreInputSend
-                                    ?.afterFill?.promptVisibleInTextarea ===
-                                    true &&
-                                  summary.inputbarRichRestoreInputSend?.clicked
-                                    ?.clicked === true,
-                                inputbarRichRestoreBackendInputSummaryReached:
-                                  summary.inputbarRichRestoreBackendTurnStart
-                                    ?.inputSummary?.imageAttachmentCount >= 1 &&
-                                  summary.inputbarRichRestoreBackendTurnStart
-                                    ?.inputSummary?.fileReferenceCount >= 1 &&
-                                  summary.inputbarRichRestoreBackendTurnStart
-                                    ?.inputSummary?.fileReferenceNames?.includes(
-                                      INPUTBAR_RICH_RESTORE_PATH_NAME,
-                                    ) === true,
-                                inputbarRichRestoreUsedCurrentTurnCancel:
-                                  appServerRequestMethods.includes(
-                                    APP_SERVER_METHOD_SESSION_TURN_CANCEL,
-                                  ),
-                                inputbarRichRestoreBackendCanceled:
-                                  latestTurnCancel?.sessionId ===
-                                    inputbarRichRestoreTurnStart?.sessionId &&
-                                  latestTurnCancel?.turnId ===
-                                    inputbarRichRestoreTurnStart?.turnId &&
-                                  typeof latestTurnCancel?.turnId ===
-                                    "string" &&
-                                  latestTurnCancel.turnId.trim().length > 0,
-                                inputbarRichRestoreGuiCanceled:
-                                  summary.inputbarRichRestoreGuiCanceled
-                                    ?.stopButtonVisible === false &&
-                                  summary.inputbarRichRestoreGuiCanceled
-                                    ?.textareaDisabled === false,
-                                inputbarRichRestoreTextRestored:
-                                  summary.inputbarRichRestoreGuiCanceled
-                                    ?.textareaValue ===
-                                  INPUTBAR_RICH_RESTORE_PROMPT,
-                                inputbarRichRestoreImageRestored:
-                                  summary.inputbarRichRestoreGuiCanceled
-                                    ?.imageRestored === true,
-                                inputbarRichRestorePathRestored:
-                                  summary.inputbarRichRestoreGuiCanceled
-                                    ?.pathRestored === true,
-                                inputbarRichRestoreSkillRestored:
-                                  summary.inputbarRichRestoreGuiCanceled
-                                    ?.skillRestored === true,
-                                inputbarRichRestoreNoVisibleAssistantOutput:
-                                  summary.inputbarRichRestoreGuiCanceled
-                                    ?.noVisibleAssistantOutput === true,
-                                inputbarRichRestoreReadModelCanceled:
-                                  summary.inputbarRichRestoreReadModelCanceled
-                                    ?.includesPrompt === true &&
-                                  summary.inputbarRichRestoreReadModelCanceled
-                                    ?.includesCanceled === true &&
-                                  summary.inputbarRichRestoreReadModelCanceled
-                                    ?.forbiddenAssistantOutput === false,
-                              }
-                            : isInputbarPendingSteerPopFrontResumeScenario
-                              ? buildPendingSteerPopFrontResumeScenarioAssertions(
-                                  context,
-                                )
-                            : isInputbarPendingSteerMultiQueueScenario
-                              ? {
-                                  inputbarPendingSteerActivePromptReachedBackend:
-                                    inputbarPendingSteerActiveTurnStart
-                                      ?.inputText ===
-                                    INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
-                                  inputbarPendingSteerActiveOutputVisible:
-                                    summary.inputbarPendingSteerActiveStreaming
-                                      ?.stopButtonVisible === true &&
-                                    summary.inputbarPendingSteerActiveStreaming
-                                      ?.bodyText?.includes(
-                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
-                                      ) === true,
-                                  inputbarPendingSteerRichInputDeferred:
-                                    summary.inputbarPendingSteerInputDefer
-                                      ?.afterFill?.promptVisibleInTextarea ===
-                                      true &&
-                                    summary.inputbarPendingSteerInputDefer
-                                      ?.clicked?.clicked === true,
-                                  inputbarPendingSteerMultipleQueued:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.queue?.multipleQueued === true,
-                                  inputbarPendingSteerQueueOrderPreserved:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.queue?.orderPreserved === true,
-                                  inputbarPendingSteerSecondTextQueued:
-                                    summary.inputbarPendingSteerSecondInputDefer
-                                      ?.clicked?.clicked === true &&
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.queue?.secondTextQueued === true,
-                                  inputbarPendingSteerRichPromptNotStartedBeforeCancel:
-                                    summary.inputbarPendingSteerBackendBeforeCancel
-                                      ?.richPromptStarted === false &&
-                                    summary.inputbarPendingSteerBackendBeforeCancel
-                                      ?.secondPromptStarted === false,
-                                }
-                            : isInputbarPendingSteerRichRestoreScenario
-                              ? {
-                                  inputbarPendingSteerActivePromptReachedBackend:
-                                    inputbarPendingSteerActiveTurnStart
-                                      ?.inputText ===
-                                    INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
-                                  inputbarPendingSteerActiveOutputVisible:
-                                    summary.inputbarPendingSteerActiveStreaming
-                                      ?.stopButtonVisible === true &&
-                                    summary.inputbarPendingSteerActiveStreaming
-                                      ?.bodyText?.includes(
-                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
-                                      ) === true,
-                                  inputbarPendingSteerRichDraftPrepared:
-                                    summary.inputbarPendingSteerDraftPrepared
-                                      ?.prepared?.imageRestored === true &&
-                                    summary.inputbarPendingSteerDraftPrepared
-                                      ?.prepared?.pathRestored === true &&
-                                    summary.inputbarPendingSteerDraftPrepared
-                                      ?.prepared?.skillRestored === true &&
-                                    summary.inputbarPendingSteerDraftPrepared
-                                      ?.prepared?.deferButtonExists === true,
-                                  inputbarPendingSteerRichInputDeferred:
-                                    summary.inputbarPendingSteerInputDefer
-                                      ?.afterFill?.promptVisibleInTextarea ===
-                                      true &&
-                                    summary.inputbarPendingSteerInputDefer
-                                      ?.clicked?.clicked === true,
-                                  inputbarPendingSteerReadModelQueued:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.queuedTurnFound === true,
-                                  inputbarPendingSteerQueuedRichTextPreserved:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.includesPrompt === true &&
-                                    (summary.inputbarPendingSteerQueuedReadModel
-                                      ?.text === INPUTBAR_RICH_RESTORE_PROMPT ||
-                                      summary.inputbarPendingSteerQueuedReadModel
-                                        ?.textElementTexts?.includes(
-                                          INPUTBAR_RICH_RESTORE_PROMPT,
-                                        ) === true),
-                                  inputbarPendingSteerQueuedRichImagePreserved:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.imagePreserved === true,
-                                  inputbarPendingSteerQueuedRichPathPreserved:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.pathPreserved === true,
-                                  inputbarPendingSteerQueuedRichTextElementsPreserved:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.textElementsPreserved === true,
-                                  inputbarPendingSteerQueuedRichSkillPreserved:
-                                    summary.inputbarPendingSteerQueuedReadModel
-                                      ?.skillPreserved === true,
-                                  inputbarPendingSteerRichPromptNotStartedBeforeCancel:
-                                    summary.inputbarPendingSteerBackendBeforeCancel
-                                      ?.richPromptStarted === false,
-                                  inputbarPendingSteerQueuedRestoreClicked:
-                                    summary.inputbarPendingSteerStopClick
-                                      ?.clicked?.clicked === true,
-                                  inputbarPendingSteerGuiCanceled:
-                                    summary.inputbarPendingSteerGuiCanceled
-                                      ?.stopButtonVisible === true &&
-                                    summary.inputbarPendingSteerGuiCanceled
-                                      ?.textareaDisabled === false,
-                                  inputbarPendingSteerTextRestored:
-                                    summary.inputbarPendingSteerGuiCanceled
-                                      ?.textareaValue ===
-                                    INPUTBAR_RICH_RESTORE_PROMPT,
-                                  inputbarPendingSteerImageRestored:
-                                    summary.inputbarPendingSteerGuiCanceled
-                                      ?.imageRestored === true,
-                                  inputbarPendingSteerPathRestored:
-                                    summary.inputbarPendingSteerGuiCanceled
-                                      ?.pathRestored === true,
-                                  inputbarPendingSteerSkillRestored:
-                                    summary.inputbarPendingSteerGuiCanceled
-                                      ?.skillRestored === true,
-                                  inputbarPendingSteerActiveAssistantOutputKept:
-                                    summary.inputbarPendingSteerGuiCanceled
-                                      ?.bodyText?.includes(
-                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
-                                      ) === true,
-                                }
-                          : {
-                              noEpochFallbackTitle:
-                                summary.guiCompleted?.hasEpochFallbackTitle ===
-                                false,
-                              readModelCompleted:
-                                summary.readModelCompleted?.includesPrompt ===
-                                  true &&
-                                (summary.readModelCompleted
-                                  ?.includesAssistantDone === true ||
-                                  summary.readModelCompleted
-                                    ?.includesAssistantSummary === true),
-                              eventReadProbeObserved:
-                                summary.eventReadProbe?.events?.hasTextDelta ===
-                                  true &&
-                                summary.eventReadProbe?.events
-                                  ?.hasToolStarted === true &&
-                                summary.eventReadProbe?.events
-                                  ?.hasToolResult === true &&
-                                summary.eventReadProbe?.events?.hasTerminal ===
-                                  true &&
-                                summary.eventReadProbe?.events?.eventTurnIds
-                                  ?.length === 1 &&
-                                summary.eventReadProbe?.events
-                                  ?.eventTurnIds?.[0] ===
-                                  EVENT_READ_PROBE_TURN_ID,
-                              readModelEventReadAligned:
-                                summary.eventReadProbe?.readModel
-                                  ?.containsTurnId === true &&
-                                summary.eventReadProbe?.readModel
-                                  ?.containsReadText === true,
-                              readModelToolCallAligned:
-                                summary.eventReadProbe?.readModel
-                                  ?.containsToolCall === true &&
-                                summary.eventReadProbe?.readModel?.toolName ===
-                                  EVENT_READ_PROBE_TOOL_NAME &&
-                                summary.eventReadProbe?.readModel
-                                  ?.toolStatus === "completed" &&
-                                summary.eventReadProbe?.readModel
-                                  ?.containsToolOutput === true &&
-                                summary.eventReadProbe?.readModel
-                                  ?.toolTurnId === EVENT_READ_PROBE_TURN_ID,
-                            };
+                        : isApprovalRequestDecisionScenario
+                          ? buildApprovalRequestDecisionScenarioAssertions({
+                              appServerRequestMethods,
+                              approvalRequestResumeTurnStart,
+                              backendLedger,
+                              isApprovalRequestCancelScenario,
+                              isApprovalRequestDeclineScenario,
+                              pageText,
+                              summary,
+                            })
+                          : isTerminalStaleGuardScenario ||
+                              isTerminalCanceledAfterAnswerScenario ||
+                              isTerminalFailedAfterAnswerScenario
+                            ? buildTerminalScenarioAssertions({
+                                isTerminalCanceledAfterAnswerScenario,
+                                isTerminalFailedAfterAnswerScenario,
+                                isTerminalStaleGuardScenario,
+                                summary,
+                                terminalCanceledAfterAnswerTurnStart,
+                                terminalFailedAfterAnswerTurnStart,
+                                terminalStaleGuardFirstTurnStart,
+                                terminalStaleGuardSecondTurnStart,
+                              })
+                            : isMcpStructuredContentScenario
+                              ? buildMcpStructuredContentScenarioAssertions({
+                                  mcpStructuredContentTurnStart,
+                                  summary,
+                                })
+                              : isMediaReferenceScenario
+                                ? buildMediaReferenceScenarioAssertions({
+                                    mediaReferenceTurnStart,
+                                    pageText,
+                                    summary,
+                                  })
+                                : isMultiAgentTeamScenario
+                                  ? buildMultiAgentTeamScenarioAssertions({
+                                      multiAgentTeamTurnStart,
+                                      pageText,
+                                      summary,
+                                    })
+                                  : isSkillsRuntimeScenario
+                                    ? buildSkillsRuntimeScenarioAssertions({
+                                        explicitSkillsRuntimeTurnStart,
+                                        manualEnableRuntimeBinding,
+                                        manualEnableRuntimeMetadata,
+                                        manualEnableSkillsRuntimeTurnStart,
+                                        skillsRuntimeTurnStart,
+                                        summary,
+                                        workspace,
+                                      })
+                                    : isAnyExpertSkillsRuntimeScenario
+                                      ? buildExpertSkillsRuntimeScenarioAssertions(
+                                          {
+                                            expectedExpertHarnessSkillRef,
+                                            expertHarnessMetadata,
+                                            expertHarnessSkillRefs,
+                                            expertPanelSkillsRuntimeTurnStart,
+                                            expertRuntimeMetadata,
+                                            expertSkillsRuntimeTurnStart,
+                                            isExpertPanelSkillsRuntimeScenario,
+                                            isExpertPlazaSkillsRuntimeScenario,
+                                            summary,
+                                          },
+                                        )
+                                      : hasCancelPhase
+                                        ? {
+                                            usedCurrentTurnCancel:
+                                              appServerRequestMethods.includes(
+                                                APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+                                              ),
+                                            externalFixtureCancelUsed:
+                                              backendLedger.some(
+                                                (entry) =>
+                                                  entry.kind === "turnCancel",
+                                              ),
+                                            fixtureCancelReachedBackend:
+                                              latestTurnCancel?.sessionId ===
+                                                SESSION_ID &&
+                                              typeof latestTurnCancel?.turnId ===
+                                                "string" &&
+                                              latestTurnCancel.turnId.trim()
+                                                .length > 0,
+                                            guiStopClicked:
+                                              summary.stopClick?.clicked
+                                                ?.clicked === true,
+                                            readModelCanceled:
+                                              summary.readModelCanceled
+                                                ?.includesPrompt === true &&
+                                              summary.readModelCanceled
+                                                ?.includesCanceled === true,
+                                            ...(isCancelThenContinueScenario
+                                              ? {
+                                                  continuePromptReachedBackend:
+                                                    continueTurnStart?.inputText ===
+                                                    CONTINUE_PROMPT,
+                                                  guiContinueInputSubmitted:
+                                                    summary.continueInputSend
+                                                      ?.afterFill
+                                                      ?.promptVisibleInTextarea ===
+                                                      true &&
+                                                    summary.continueInputSend
+                                                      ?.clicked?.clicked ===
+                                                      true,
+                                                  guiContinueCompleted:
+                                                    summary.guiContinueCompleted
+                                                      ?.hasPrompt === true &&
+                                                    (summary
+                                                      .guiContinueCompleted
+                                                      ?.hasAssistantSummary ===
+                                                      true ||
+                                                      summary
+                                                        .guiContinueCompleted
+                                                        ?.hasDoneText ===
+                                                        true) &&
+                                                    summary.guiContinueCompleted
+                                                      ?.textareaVisible ===
+                                                      true &&
+                                                    summary.guiContinueCompleted
+                                                      ?.textareaDisabled ===
+                                                      false &&
+                                                    summary.guiContinueCompleted
+                                                      ?.stopButtonVisible ===
+                                                      false,
+                                                  readModelContinueCompleted:
+                                                    summary
+                                                      .readModelContinueCompleted
+                                                      ?.includesPrompt ===
+                                                      true &&
+                                                    (summary
+                                                      .readModelContinueCompleted
+                                                      ?.includesAssistantDone ===
+                                                      true ||
+                                                      summary
+                                                        .readModelContinueCompleted
+                                                        ?.includesAssistantSummary ===
+                                                        true),
+                                                  backendRecordedCancelThenContinue:
+                                                    backendLedger.filter(
+                                                      (entry) =>
+                                                        entry.kind ===
+                                                        "turnStart",
+                                                    ).length >= 2 &&
+                                                    backendLedger.some(
+                                                      (entry) =>
+                                                        entry.kind ===
+                                                        "turnCancel",
+                                                    ),
+                                                }
+                                              : {}),
+                                          }
+                                        : isInputbarRichRestoreScenario
+                                          ? {
+                                              inputbarRichRestorePromptReachedBackend:
+                                                String(
+                                                  inputbarRichRestoreTurnStart?.inputText ||
+                                                    "",
+                                                ).includes(
+                                                  INPUTBAR_RICH_RESTORE_PROMPT,
+                                                ),
+                                              inputbarRichRestoreDraftPrepared:
+                                                summary
+                                                  .inputbarRichRestoreDraftPrepared
+                                                  ?.prepared?.imageRestored ===
+                                                  true &&
+                                                summary
+                                                  .inputbarRichRestoreDraftPrepared
+                                                  ?.prepared?.pathRestored ===
+                                                  true &&
+                                                summary
+                                                  .inputbarRichRestoreDraftPrepared
+                                                  ?.prepared?.skillRestored ===
+                                                  true,
+                                              inputbarRichRestoreInputSubmitted:
+                                                summary
+                                                  .inputbarRichRestoreInputSend
+                                                  ?.afterFill
+                                                  ?.promptVisibleInTextarea ===
+                                                  true &&
+                                                summary
+                                                  .inputbarRichRestoreInputSend
+                                                  ?.clicked?.clicked === true,
+                                              inputbarRichRestoreBackendInputSummaryReached:
+                                                summary
+                                                  .inputbarRichRestoreBackendTurnStart
+                                                  ?.inputSummary
+                                                  ?.imageAttachmentCount >= 1 &&
+                                                summary
+                                                  .inputbarRichRestoreBackendTurnStart
+                                                  ?.inputSummary
+                                                  ?.fileReferenceCount >= 1 &&
+                                                summary.inputbarRichRestoreBackendTurnStart?.inputSummary?.fileReferenceNames?.includes(
+                                                  INPUTBAR_RICH_RESTORE_PATH_NAME,
+                                                ) === true,
+                                              inputbarRichRestoreUsedCurrentTurnCancel:
+                                                appServerRequestMethods.includes(
+                                                  APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+                                                ),
+                                              inputbarRichRestoreBackendCanceled:
+                                                latestTurnCancel?.sessionId ===
+                                                  inputbarRichRestoreTurnStart?.sessionId &&
+                                                latestTurnCancel?.turnId ===
+                                                  inputbarRichRestoreTurnStart?.turnId &&
+                                                typeof latestTurnCancel?.turnId ===
+                                                  "string" &&
+                                                latestTurnCancel.turnId.trim()
+                                                  .length > 0,
+                                              inputbarRichRestoreGuiCanceled:
+                                                summary
+                                                  .inputbarRichRestoreGuiCanceled
+                                                  ?.stopButtonVisible ===
+                                                  false &&
+                                                summary
+                                                  .inputbarRichRestoreGuiCanceled
+                                                  ?.textareaDisabled === false,
+                                              inputbarRichRestoreTextRestored:
+                                                summary
+                                                  .inputbarRichRestoreGuiCanceled
+                                                  ?.textareaValue ===
+                                                INPUTBAR_RICH_RESTORE_PROMPT,
+                                              inputbarRichRestoreImageRestored:
+                                                summary
+                                                  .inputbarRichRestoreGuiCanceled
+                                                  ?.imageRestored === true,
+                                              inputbarRichRestorePathRestored:
+                                                summary
+                                                  .inputbarRichRestoreGuiCanceled
+                                                  ?.pathRestored === true,
+                                              inputbarRichRestoreSkillRestored:
+                                                summary
+                                                  .inputbarRichRestoreGuiCanceled
+                                                  ?.skillRestored === true,
+                                              inputbarRichRestoreNoVisibleAssistantOutput:
+                                                summary
+                                                  .inputbarRichRestoreGuiCanceled
+                                                  ?.noVisibleAssistantOutput ===
+                                                true,
+                                              inputbarRichRestoreReadModelCanceled:
+                                                summary
+                                                  .inputbarRichRestoreReadModelCanceled
+                                                  ?.includesPrompt === true &&
+                                                summary
+                                                  .inputbarRichRestoreReadModelCanceled
+                                                  ?.includesCanceled === true &&
+                                                summary
+                                                  .inputbarRichRestoreReadModelCanceled
+                                                  ?.forbiddenAssistantOutput ===
+                                                  false,
+                                            }
+                                          : isInputbarPendingSteerPopFrontResumeScenario
+                                            ? buildPendingSteerPopFrontResumeScenarioAssertions(
+                                                context,
+                                              )
+                                            : isInputbarPendingSteerMultiQueueScenario
+                                              ? {
+                                                  inputbarPendingSteerActivePromptReachedBackend:
+                                                    inputbarPendingSteerActiveTurnStart?.inputText ===
+                                                    INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+                                                  inputbarPendingSteerActiveOutputVisible:
+                                                    summary
+                                                      .inputbarPendingSteerActiveStreaming
+                                                      ?.stopButtonVisible ===
+                                                      true &&
+                                                    summary.inputbarPendingSteerActiveStreaming?.bodyText?.includes(
+                                                      INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+                                                    ) === true,
+                                                  inputbarPendingSteerRichInputDeferred:
+                                                    summary
+                                                      .inputbarPendingSteerInputDefer
+                                                      ?.afterFill
+                                                      ?.promptVisibleInTextarea ===
+                                                      true &&
+                                                    summary
+                                                      .inputbarPendingSteerInputDefer
+                                                      ?.clicked?.clicked ===
+                                                      true,
+                                                  inputbarPendingSteerMultipleQueued:
+                                                    summary
+                                                      .inputbarPendingSteerQueuedReadModel
+                                                      ?.queue
+                                                      ?.multipleQueued === true,
+                                                  inputbarPendingSteerQueueOrderPreserved:
+                                                    summary
+                                                      .inputbarPendingSteerQueuedReadModel
+                                                      ?.queue
+                                                      ?.orderPreserved === true,
+                                                  inputbarPendingSteerSecondTextQueued:
+                                                    summary
+                                                      .inputbarPendingSteerSecondInputDefer
+                                                      ?.clicked?.clicked ===
+                                                      true &&
+                                                    summary
+                                                      .inputbarPendingSteerQueuedReadModel
+                                                      ?.queue
+                                                      ?.secondTextQueued ===
+                                                      true,
+                                                  inputbarPendingSteerRichPromptNotStartedBeforeCancel:
+                                                    summary
+                                                      .inputbarPendingSteerBackendBeforeCancel
+                                                      ?.richPromptStarted ===
+                                                      false &&
+                                                    summary
+                                                      .inputbarPendingSteerBackendBeforeCancel
+                                                      ?.secondPromptStarted ===
+                                                      false,
+                                                }
+                                              : isInputbarPendingSteerRichRestoreScenario
+                                                ? {
+                                                    inputbarPendingSteerActivePromptReachedBackend:
+                                                      inputbarPendingSteerActiveTurnStart?.inputText ===
+                                                      INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
+                                                    inputbarPendingSteerActiveOutputVisible:
+                                                      summary
+                                                        .inputbarPendingSteerActiveStreaming
+                                                        ?.stopButtonVisible ===
+                                                        true &&
+                                                      summary.inputbarPendingSteerActiveStreaming?.bodyText?.includes(
+                                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+                                                      ) === true,
+                                                    inputbarPendingSteerRichDraftPrepared:
+                                                      summary
+                                                        .inputbarPendingSteerDraftPrepared
+                                                        ?.prepared
+                                                        ?.imageRestored ===
+                                                        true &&
+                                                      summary
+                                                        .inputbarPendingSteerDraftPrepared
+                                                        ?.prepared
+                                                        ?.pathRestored ===
+                                                        true &&
+                                                      summary
+                                                        .inputbarPendingSteerDraftPrepared
+                                                        ?.prepared
+                                                        ?.skillRestored ===
+                                                        true &&
+                                                      summary
+                                                        .inputbarPendingSteerDraftPrepared
+                                                        ?.prepared
+                                                        ?.deferButtonExists ===
+                                                        true,
+                                                    inputbarPendingSteerRichInputDeferred:
+                                                      summary
+                                                        .inputbarPendingSteerInputDefer
+                                                        ?.afterFill
+                                                        ?.promptVisibleInTextarea ===
+                                                        true &&
+                                                      summary
+                                                        .inputbarPendingSteerInputDefer
+                                                        ?.clicked?.clicked ===
+                                                        true,
+                                                    inputbarPendingSteerReadModelQueued:
+                                                      summary
+                                                        .inputbarPendingSteerQueuedReadModel
+                                                        ?.queuedTurnFound ===
+                                                      true,
+                                                    inputbarPendingSteerQueuedRichTextPreserved:
+                                                      summary
+                                                        .inputbarPendingSteerQueuedReadModel
+                                                        ?.includesPrompt ===
+                                                        true &&
+                                                      (summary
+                                                        .inputbarPendingSteerQueuedReadModel
+                                                        ?.text ===
+                                                        INPUTBAR_RICH_RESTORE_PROMPT ||
+                                                        summary.inputbarPendingSteerQueuedReadModel?.textElementTexts?.includes(
+                                                          INPUTBAR_RICH_RESTORE_PROMPT,
+                                                        ) === true),
+                                                    inputbarPendingSteerQueuedRichImagePreserved:
+                                                      summary
+                                                        .inputbarPendingSteerQueuedReadModel
+                                                        ?.imagePreserved ===
+                                                      true,
+                                                    inputbarPendingSteerQueuedRichPathPreserved:
+                                                      summary
+                                                        .inputbarPendingSteerQueuedReadModel
+                                                        ?.pathPreserved ===
+                                                      true,
+                                                    inputbarPendingSteerQueuedRichTextElementsPreserved:
+                                                      summary
+                                                        .inputbarPendingSteerQueuedReadModel
+                                                        ?.textElementsPreserved ===
+                                                      true,
+                                                    inputbarPendingSteerQueuedRichSkillPreserved:
+                                                      summary
+                                                        .inputbarPendingSteerQueuedReadModel
+                                                        ?.skillPreserved ===
+                                                      true,
+                                                    inputbarPendingSteerRichPromptNotStartedBeforeCancel:
+                                                      summary
+                                                        .inputbarPendingSteerBackendBeforeCancel
+                                                        ?.richPromptStarted ===
+                                                      false,
+                                                    inputbarPendingSteerQueuedRestoreClicked:
+                                                      summary
+                                                        .inputbarPendingSteerStopClick
+                                                        ?.clicked?.clicked ===
+                                                      true,
+                                                    inputbarPendingSteerGuiCanceled:
+                                                      summary
+                                                        .inputbarPendingSteerGuiCanceled
+                                                        ?.stopButtonVisible ===
+                                                        true &&
+                                                      summary
+                                                        .inputbarPendingSteerGuiCanceled
+                                                        ?.textareaDisabled ===
+                                                        false,
+                                                    inputbarPendingSteerTextRestored:
+                                                      summary
+                                                        .inputbarPendingSteerGuiCanceled
+                                                        ?.textareaValue ===
+                                                      INPUTBAR_RICH_RESTORE_PROMPT,
+                                                    inputbarPendingSteerImageRestored:
+                                                      summary
+                                                        .inputbarPendingSteerGuiCanceled
+                                                        ?.imageRestored ===
+                                                      true,
+                                                    inputbarPendingSteerPathRestored:
+                                                      summary
+                                                        .inputbarPendingSteerGuiCanceled
+                                                        ?.pathRestored === true,
+                                                    inputbarPendingSteerSkillRestored:
+                                                      summary
+                                                        .inputbarPendingSteerGuiCanceled
+                                                        ?.skillRestored ===
+                                                      true,
+                                                    inputbarPendingSteerActiveAssistantOutputKept:
+                                                      summary.inputbarPendingSteerGuiCanceled?.bodyText?.includes(
+                                                        INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT,
+                                                      ) === true,
+                                                  }
+                                                : {
+                                                    noEpochFallbackTitle:
+                                                      summary.guiCompleted
+                                                        ?.hasEpochFallbackTitle ===
+                                                      false,
+                                                    readModelCompleted:
+                                                      summary.readModelCompleted
+                                                        ?.includesPrompt ===
+                                                        true &&
+                                                      (summary
+                                                        .readModelCompleted
+                                                        ?.includesAssistantDone ===
+                                                        true ||
+                                                        summary
+                                                          .readModelCompleted
+                                                          ?.includesAssistantSummary ===
+                                                          true),
+                                                    eventReadProbeObserved:
+                                                      summary.eventReadProbe
+                                                        ?.events
+                                                        ?.hasTextDelta ===
+                                                        true &&
+                                                      summary.eventReadProbe
+                                                        ?.events
+                                                        ?.hasToolStarted ===
+                                                        true &&
+                                                      summary.eventReadProbe
+                                                        ?.events
+                                                        ?.hasToolResult ===
+                                                        true &&
+                                                      summary.eventReadProbe
+                                                        ?.events
+                                                        ?.hasTerminal ===
+                                                        true &&
+                                                      summary.eventReadProbe
+                                                        ?.events?.eventTurnIds
+                                                        ?.length === 1 &&
+                                                      summary.eventReadProbe
+                                                        ?.events
+                                                        ?.eventTurnIds?.[0] ===
+                                                        EVENT_READ_PROBE_TURN_ID,
+                                                    readModelEventReadAligned:
+                                                      summary.eventReadProbe
+                                                        ?.readModel
+                                                        ?.containsTurnId ===
+                                                        true &&
+                                                      summary.eventReadProbe
+                                                        ?.readModel
+                                                        ?.containsReadText ===
+                                                        true,
+                                                    readModelToolCallAligned:
+                                                      summary.eventReadProbe
+                                                        ?.readModel
+                                                        ?.containsToolCall ===
+                                                        true &&
+                                                      summary.eventReadProbe
+                                                        ?.readModel
+                                                        ?.toolName ===
+                                                        EVENT_READ_PROBE_TOOL_NAME &&
+                                                      summary.eventReadProbe
+                                                        ?.readModel
+                                                        ?.toolStatus ===
+                                                        "completed" &&
+                                                      summary.eventReadProbe
+                                                        ?.readModel
+                                                        ?.containsToolOutput ===
+                                                        true &&
+                                                      summary.eventReadProbe
+                                                        ?.readModel
+                                                        ?.toolTurnId ===
+                                                        EVENT_READ_PROBE_TURN_ID,
+                                                    guiNoPlanUiWithoutProposedPlan:
+                                                      summary.guiCompleted
+                                                        ?.planUiAbsentWithoutProposedPlan ===
+                                                        true &&
+                                                      summary.guiCompleted
+                                                        ?.planUiAbsence
+                                                        ?.planOwnerCount ===
+                                                        0 &&
+                                                      summary.guiCompleted
+                                                        ?.planUiAbsence
+                                                        ?.planDecisionVisible ===
+                                                        false &&
+                                                      (summary.guiCompleted
+                                                        ?.planUiAbsence
+                                                        ?.legacyUpdatePlanVisibleHits
+                                                        ?.length ?? 0) === 0,
+                                                    streamParserCompletedFullTextObserved:
+                                                      streamParserBoundaryBackendObserved(
+                                                        backendLedger,
+                                                      ),
+                                                    guiStreamParserNoDuplicateFinalText:
+                                                      summary.guiCompleted
+                                                        ?.assistantScopeSummaryOccurrences ===
+                                                        1 &&
+                                                      (
+                                                        summary.guiCompleted
+                                                          ?.assistantScopeDedupeGuardHits ??
+                                                        []
+                                                      ).every(
+                                                        (hit) =>
+                                                          hit.occurrences === 1,
+                                                      ),
+                                                    readModelStreamParserNoDuplicateFinalText:
+                                                      summary.readModelCompleted
+                                                        ?.streamParserBoundary
+                                                        ?.noDuplicateFinalText ===
+                                                      true,
+                                                  };
   return scenarioAssertions;
 }

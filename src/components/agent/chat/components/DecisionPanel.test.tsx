@@ -527,7 +527,7 @@ describe("DecisionPanel copywriting", () => {
     expect(container.textContent).not.toContain("Claude");
   });
 
-  it("tool_confirmation 应展示待确认动作、工具名和参数摘要，并继续提交允许响应", () => {
+  it("tool_confirmation 应展示只读确认摘要，并提示从输入区完成授权", () => {
     const request: ActionRequired = {
       requestId: "req-tool-confirm-summary",
       actionType: "tool_confirmation",
@@ -581,16 +581,20 @@ describe("DecisionPanel copywriting", () => {
         '[data-testid="decision-panel-tool-confirmation-argument"]',
       ).length,
     ).toBeGreaterThanOrEqual(3);
-
-    clickButton(findButtonByText(container, "允许"));
-
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith({
-      requestId: "req-tool-confirm-summary",
-      confirmed: true,
-      response: "允许",
-      actionType: "tool_confirmation",
-    });
+    expect(
+      container.querySelector(
+        '[data-testid="decision-panel-tool-confirmation-readonly"]',
+      ),
+    ).toBeTruthy();
+    expect(container.textContent).toContain(
+      "请在输入区完成本次授权；消息流只保留只读记录。",
+    );
+    expect(
+      Array.from(container.querySelectorAll("button")).some((button) =>
+        ["允许", "拒绝"].some((label) => button.textContent?.includes(label)),
+      ),
+    ).toBe(false);
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("tool_confirmation 应对高影响命令展示高风险判断", () => {
@@ -653,38 +657,22 @@ describe("DecisionPanel copywriting", () => {
     expect(impact?.textContent).not.toContain("/workspace/lime");
   });
 
-  it("tool_confirmation 提交中时，应展示处理中并禁用按钮", async () => {
+  it("tool_confirmation 待确认态不应在消息流展示提交按钮", () => {
     const request: ActionRequired = {
       requestId: "req-tool-confirm-loading",
       actionType: "tool_confirmation",
       toolName: "exec_command",
       arguments: { cmd: "ls" },
     };
-    let resolveSubmit: (() => void) | null = null;
     const { container, onSubmit } = renderDecisionPanel(request);
-    onSubmit.mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveSubmit = resolve;
-        }),
-    );
 
-    const allowButton = findButtonByText(container, "允许");
-    const denyButton = findButtonByText(container, "拒绝");
-
-    await act(async () => {
-      allowButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(allowButton.textContent).toContain("处理中");
-    expect(allowButton.disabled).toBe(true);
-    expect(denyButton.disabled).toBe(true);
-
-    await act(async () => {
-      resolveSubmit?.();
-      await Promise.resolve();
-    });
+    expect(
+      container.querySelector(
+        '[data-testid="decision-panel-tool-confirmation-readonly"]',
+      ),
+    ).toBeTruthy();
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector("svg.animate-spin")).toBeNull();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

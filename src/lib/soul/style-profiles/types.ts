@@ -1,7 +1,5 @@
 export type SoulStyleProfileId = string;
 
-export type SoulStyleIntensity = "low" | "medium" | "high";
-
 export type SoulStyleTone = string;
 
 export type SoulStyleProfileScope =
@@ -41,7 +39,6 @@ export interface SoulStyleProfile {
   nameKey: string;
   descriptionKey: string;
   tone: SoulStyleTone;
-  intensity: SoulStyleIntensity;
   scopes: SoulStyleProfileScope[];
   responseContract: string[];
   voicePrimitives: string[];
@@ -74,7 +71,6 @@ export interface SoulStylePackManifest {
 
 export interface SoulStyleProfileContext {
   styleProfileId?: string | null;
-  styleIntensity?: string | null;
   highRisk?: boolean;
   dangerousOperation?: boolean;
   formalArtifact?: boolean;
@@ -95,7 +91,6 @@ export interface SoulStyleBoundaryResult {
 export interface ResolvedSoulStyleProfile {
   requestedProfileId?: SoulStyleProfileId;
   profile: SoulStyleProfile;
-  intensity: SoulStyleIntensity;
   reason: SoulStyleBoundaryReason;
   bypassInteractionStyle: boolean;
 }
@@ -104,7 +99,6 @@ export interface SoulStyleDirectives {
   profileId: SoulStyleProfileId;
   packId: string;
   tone: SoulStyleTone;
-  intensity: SoulStyleIntensity;
   scopes: SoulStyleProfileScope[];
   responseContract: string[];
   voicePrimitives: string[];

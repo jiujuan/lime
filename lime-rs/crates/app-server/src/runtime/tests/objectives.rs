@@ -517,6 +517,66 @@ async fn action_replay_rebuilds_current_pending_action_from_runtime_events() {
 }
 
 #[tokio::test]
+async fn action_replay_treats_canceled_and_expired_actions_as_terminal() {
+    let core = RuntimeCore::default();
+
+    for terminal_event in ["action.canceled", "action.cancelled", "action.expired"] {
+        let suffix = terminal_event.replace('.', "_");
+        let session_id = format!("sess_action_replay_{suffix}");
+        let thread_id = format!("thread_action_replay_{suffix}");
+        let request_id = format!("req-replay-{suffix}");
+        core.start_session(AgentSessionStartParams {
+            session_id: Some(session_id.clone()),
+            thread_id: Some(thread_id.clone()),
+            app_id: "agent-runtime".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+        core.append_external_runtime_events(
+            &session_id,
+            None,
+            vec![
+                RuntimeEvent::new(
+                    "action.required",
+                    json!({
+                        "requestId": request_id.clone(),
+                        "actionType": "tool_confirmation",
+                        "prompt": "允许执行命令吗？",
+                        "scope": {
+                            "sessionId": session_id.clone(),
+                            "threadId": thread_id.clone(),
+                            "turnId": format!("turn_action_replay_{suffix}")
+                        }
+                    }),
+                ),
+                RuntimeEvent::new(
+                    terminal_event,
+                    json!({
+                        "requestId": request_id.clone(),
+                        "actionType": "tool_confirmation"
+                    }),
+                ),
+            ],
+        )
+        .expect("append terminal action events");
+
+        let replayed = core
+            .replay_action(AgentSessionActionReplayParams {
+                session_id,
+                request_id,
+            })
+            .await
+            .expect("replay terminal action");
+        assert!(
+            replayed.response.action.is_none(),
+            "{terminal_event} should not replay a stale pending action"
+        );
+    }
+}
+
+#[tokio::test]
 async fn managed_objective_auto_continuation_submits_and_budget_limits_on_current_path() {
     let session_id = "sess_auto_objective";
     let mut objective = managed_objective(session_id);

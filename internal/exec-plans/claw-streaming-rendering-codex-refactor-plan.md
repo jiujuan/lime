@@ -130,7 +130,7 @@
   - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-web-tools-rendering-s3-live-summary.json`
   - live running capture：`latestAssistantRendererContentPartTypes="text|tool:WebSearch:completed#3|thinking#3|tool:WebFetch:completed#7"`，`latestAssistantTextAfterProcessPart=false`，`runningProcessHasLegacyTextAfterProcess=false`，`processGroupExcludesFinalMarkdown=true`。
   - completed capture：`hasFinalTextAfterProcess=true`，展开态 `hasTimelineOrderPreserved=true`，Markdown heading / strong / table 均已渲染。
-- 聚合 current fixture 通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 history/cache hydration、final_done 工具收尾、Claw GUI current fixture、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills / Plaza / Panel runtime；`liveProviderUsed=false`。
+- 聚合 current fixture 通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、Claw GUI current fixture、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills / Plaza / Panel runtime；`liveProviderUsed=false`。
 - 2026-06-24 17:06 复核：
   - 定向 runtime / projection / guard 集合通过：`npx vitest run "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/components/messageListItemProjection.timeline.unit.test.ts" "src/components/agent/chat/components/messageListTimelineContentParts.unit.test.ts" "src/components/agent/chat/components/messageListInlineProcess.test.ts" "src/components/agent/chat/components/streamingContentPartSegments.unit.test.ts" "src/components/agent/chat/components/streamingContentPartOrder.unit.test.ts" "src/components/agent/chat/components/streamingProjectionGuard.unit.test.ts"`，7 个文件、65 个用例通过。
   - history / projection / completion / WebSearch 宽集合通过：`npx vitest run "src/components/agent/chat/hooks/agentChatHistoryProcess.test.ts" "src/components/agent/chat/hooks/agentChatHistory.localMerge.test.ts" "src/components/agent/chat/hooks/agentStreamCompletionController.test.ts" "src/components/agent/chat/hooks/agentStreamTurnEventBinding.test.ts" "src/components/agent/chat/components/messageListItemProjection.webRetrieval.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx" "src/components/agent/chat/utils/contentPartTimeline.unit.test.ts"`，7 个文件、78 个用例通过。
@@ -149,7 +149,7 @@
     - 真实 Claw Plan history hydrate Electron fixture 通过：`npm run smoke:claw-chat-current-fixture -- --scenario plan --prefix claw-chat-current-fixture-plan-history-session-refresh-fix-2 --timeout-ms 180000`。
       - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-plan-history-session-refresh-fix-2-summary.json`
       - 关键断言：`guiPlanHistoryHydrateCompleted=true`、`readModelPlanHistoryHydratePreserved=true`、`legacyUpdatePlanToolHidden=true`、`noConsoleErrors=true`、`liveProviderNotUsed=true`。
-    - 聚合 current fixture 通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 history/cache hydration、final_done 工具收尾、Claw GUI current fixture、真实 GUI coding 输入到 Coding Workbench、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills / Plaza / Panel runtime；`liveProviderUsed=false`。
+    - 聚合 current fixture 通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、Claw GUI current fixture、真实 GUI coding 输入到 Coding Workbench、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills / Plaza / Panel runtime；`liveProviderUsed=false`。
   - 2026-06-24 18:43 复核：
     - `agentStreamTextDeltaLifecycle.ts` 继续收口 legacy fallback：process boundary 后无 phase delta 不再按 `sequence` 分叉，带 `itemId` 或完全无 provenance 的 legacy 文本都不得进入 final overlay；只有显式 `phase=final_answer` 能跨 process boundary 作为最终正文。
     - 旧纯文本 provider 仍保留 compat：整轮没有 process boundary 时，`item_scoped_legacy` / `legacy_unphased` 仍可作为 final fallback。
@@ -345,7 +345,7 @@
   - 已复跑 `npm run electron:build:smoke`，通过；新增 suffix guard 后再次复跑仍通过。
   - 已复跑 `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario web-tools-rendering --prefix claw-chat-current-fixture-web-tools-rendering-regression --timeout-ms 180000`，通过；新增 suffix guard 后再次复跑仍通过。
   - 通过证据：summary 中 `guiWebToolsRenderingCompleted.hasIntroText=true`、`hasIntroBeforeProcess=true`；展开态 `expandedDetails.hasSearchSourceSection=true`、`hasFetchPageSection=true`、`hasMidThinkingText=true`、`hasTimelineOrderPreserved=true`；read model `latestTurnStatus=completed` 且包含 WebSearch / WebFetch / reasoning item。
-  - 已复跑 `npm run smoke:agent-runtime-current-fixture`，通过；summary 覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench、cancel-then-continue、Plan revisioned history hydrate、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza 与 ExpertInfoPanel skills runtime 闭环；`liveProviderUsed=false`。
+  - 已复跑 `npm run smoke:agent-runtime-current-fixture`，通过；summary 覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench、cancel-then-continue、Plan revisioned history hydrate、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza 与 ExpertInfoPanel skills runtime 闭环；`liveProviderUsed=false`。
 
 - S4 live provider running 阻塞定位与修复：
   - 失败证据：真实会话 `sess_f0291b4b77ae4866b57d773e155d09d6` / turn `60bb0e45-5f17-434b-a6ec-f2d27aa04ebb` 长时间停在 `running`，read model 已有 `web_search:completed=3`、`reasoning:in_progress=128`，最后事件停在 `reasoning.delta`，没有 `turn.completed / turn.failed / turn.canceled`。
@@ -375,7 +375,7 @@
     - 复跑 `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent stream_message_reply_with_policy_should -- --nocapture`，7 个用例通过，覆盖取消、tail failure retry、empty reply retry、inline provider error、provider idle retry 与首事件前 idle fail-closed。
   - GUI/current fixture 验证：
     - 复跑 `npm run smoke:agent-runtime-current-fixture`，通过。
-    - 覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Coding Workbench Electron GUI 输入、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills / Plaza / Panel runtime；`liveProviderUsed=false`。
+    - 覆盖 history/cache hydration、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、failed read model、Claw 终态 UI、Coding Workbench Electron GUI 输入、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills / Plaza / Panel runtime；`liveProviderUsed=false`。
 
 - S4.3 text delta batcher 拆分：
   - 问题：`TextDeltaBatcher` 决定 provider / newline / backlog / final boundary 的可见 text flush，和“阶段性输出被分割 / 继续追加错位”问题直接相关；继续留在中心执行器会让 streaming 文本策略与 retry / diagnostics / preflight 混在同一巨型文件中。
@@ -605,3 +605,29 @@
 3. 如果继续扩 `@配图` 到 inline 配图、封面位、retry/cancel 或外部 worker 回写，先拆 `claw-chat-current-fixture-image-command.mjs` 子职责，并复用 App Server current `mediaTaskArtifact/image/complete`；不要继续堆前端直建 task 或 fixture-only 回写。
 4. 对 Browser action runtime 复用同一 live running capture 口径：process 后不得有无 phase text part。
 5. 不新增展示文案正则；新增 phase 必须先进入 App Server stream event / thread item protocol，再映射到 `ContentPart.metadata` 和定向 fixture。
+
+## 7. 2026-07-08 停止后继续输出 / 空白残留收口
+
+- 问题：`cancel-then-continue` 中第一轮停止后，同一会话第二轮正文已经由 backend ledger 发出 `message.delta` 与 `turn.completed`，GUI 也能看到正文，但 assistant bubble 残留“正在输出”且停止按钮仍显示；日志里第二轮 `submitAccepted` 后 `isSending` 在首事件附近被旧 read model 拉回 `false`，导致 terminal recovery poll 被清掉，后续终态丢失时无法兜底收口。
+- 核心症结：前端 runtime sync 把旧 `completed / failed / canceled` thread read 当成当前 active stream 的权威终态；在新一轮 stream 尚未绑定真实 turnId，或绑定到当前 turnId 但 read model 的 `active_turn_id / turns[]` 仍指向上一轮时，会误 detach 当前 listener / active stream。后端不是主因，fixture backend 已证明第二轮完整发出 `turn.completed`。
+- current 修复：
+  - `useAgentRuntimeSyncEffects` 解析 `thread_read.active_turn_id`、`turns[]` 与 diagnostics terminal 信息，区分“任意终态”和“当前 stream turn 的权威终态”。
+  - 当本地仍有 running turn 且当前 stream turnId 尚未绑定时，旧 `completed / done / failed / canceled / cancelled` read model 不再收起当前 stream。
+  - 当 current stream 已绑定 turnId 后，只有 `thread_read.active_turn_id` 或 `turns[]` 明确命中当前 turn 的终态才允许 `settleActiveRuntimeStream`；旧 turn 的 terminal timeline 继续保留 listener 与 recovery。
+  - 当前 turn 的 `failed / canceled / cancelled` 仍可正常收口，避免把真实失败/停止拖成无限 running。
+- 回归测试：
+  - `useAgentRuntimeSyncEffects.terminalReadModel.test.tsx` 新增旧 `canceled` 与未绑定 turnId 的旧 `failed` 不误收口当前 stream；保留当前 turn terminal 应收口断言。
+  - `useAgentRuntimeSyncEffects.test.tsx` 把 `failed / canceled / cancelled` 正向收口用例改为明确 `currentStreamTurnId` 与 `thread_read.active_turn_id` 命中当前 turn，避免测试继续鼓励旧终态误停新请求。
+- 验证：
+  - `npx prettier --check "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.test.tsx" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.terminalReadModel.test.tsx"` 通过。
+  - `npx eslint "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.test.tsx" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.terminalReadModel.test.tsx"` 通过。
+  - `npx vitest run "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.terminalReadModel.test.tsx" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.test.tsx"` 2 files / 35 tests 通过。
+  - `npx vitest run "src/components/agent/chat/hooks/agentStreamTurnEventBinding.tailRecovery.test.ts" "src/components/agent/chat/hooks/agentStreamTurnEventBinding.test.ts"` 2 files / 16 tests 通过。
+  - `npx vitest run "src/components/agent/chat/hooks/useAgentStreamController.test.tsx"` 1 file / 6 tests 通过。
+  - `npm run smoke:claw-chat-current-fixture -- --scenario cancel-then-continue` 通过，session `claw-chat-current-1783524679659-22661`。
+  - `npm run smoke:agent-runtime-current-fixture` 完整通过，覆盖 Claw current、cancel-then-continue、Inputbar queue/restore、Plan history hydrate、Skills Runtime、Multi-Agent、MCP structuredContent、media reference、Expert Skills Runtime、Content Factory Article Editor 等 current Electron fixture；`liveProviderUsed=false`。
+  - 正常对话 CDP Gate B：`LIME_ELECTRON_FIXTURE_BUILD_READY=1 npm run smoke:claw-chat-current-fixture -- --scenario complete --timeout-ms 240000 --cdp-port 9271 --prefix claw-chat-current-fixture-complete-cdp-runtime-sync-fix --evidence-dir ".lime/qc/gui-evidence/claw-chat-current-fixture"` 通过，session `claw-chat-current-1783525297014-68293`。性能指标：`providerWaitMs=90ms`、`streamRequestStartToFirstTextPaintMs=451ms`、`submitAcceptedToFirstTextPaintMs=212ms`、`firstTextDeltaToFirstTextPaintMs=31ms`、`clientLocalOutputMs=69ms`。
+  - 停止后继续输出 CDP Gate B 最终复跑：`npm run smoke:claw-chat-current-fixture -- --scenario cancel-then-continue --timeout-ms 240000 --cdp-port 9273 --prefix claw-chat-current-fixture-cancel-then-continue-cdp-runtime-sync-fix-final --evidence-dir ".lime/qc/gui-evidence/claw-chat-current-fixture"` 通过，且该次重新构建 packaged renderer / Electron host / App Server assets；summary 为 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-cancel-then-continue-cdp-runtime-sync-fix-final-summary.json`，session `claw-chat-current-1783525500519-82477`，proofLevel=`Gate B CDP controlled fixture`，`stopButtonVisible=false`，`textareaDisabled=false`，`readModelContinueCompleted.latestTurnStatus=completed`，`noInvokeErrors=true`，`noConsoleErrors=true`。
+- 剩余边界：
+  - 本轮证明的是 external controlled fixture 下真实 Electron / preload IPC / App Server JSON-RPC / read model / GUI 投影闭环，不声明 live Provider 网络质量或第三方模型首 token SLA。
+  - 正常对话首字慢的当前分解显示 provider 等待 90ms、renderer 本地首字绘制约 31ms，主要瓶颈不在本次修复后的前端首字绘制；后续若 live Provider 首字仍慢，应继续用同一 trace 口径区分 `providerWaitMs`、`serverToRendererFirstTextDeltaMs` 与 `clientLocalOutputMs`。

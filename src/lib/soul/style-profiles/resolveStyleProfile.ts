@@ -6,16 +6,9 @@ import {
 } from "./registry";
 import type {
   ResolvedSoulStyleProfile,
-  SoulStyleIntensity,
   SoulStyleProfileContext,
   SoulStyleProfileId,
 } from "./types";
-
-const STYLE_INTENSITIES: ReadonlySet<string> = new Set([
-  "low",
-  "medium",
-  "high",
-]);
 
 const STYLE_PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,127}$/u;
 
@@ -33,14 +26,6 @@ export function normalizeSoulStyleProfileId(
   }
   const normalized = value.trim();
   return isSoulStyleProfileId(normalized) ? normalized : undefined;
-}
-
-export function normalizeSoulStyleIntensity(
-  value: unknown,
-): SoulStyleIntensity | undefined {
-  return typeof value === "string" && STYLE_INTENSITIES.has(value)
-    ? (value as SoulStyleIntensity)
-    : undefined;
 }
 
 export function resolveSoulStyleProfile(
@@ -61,8 +46,6 @@ export function resolveSoulStyleProfile(
   return {
     requestedProfileId,
     profile,
-    intensity:
-      normalizeSoulStyleIntensity(context.styleIntensity) ?? profile.intensity,
     reason: boundary.reason,
     bypassInteractionStyle: boundary.bypassInteractionStyle,
   };

@@ -3,6 +3,7 @@ import {
   type AppServerAgentEvent,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
+import { normalizeActionArguments } from "@/lib/api/agentActionArguments";
 import {
   isLegacyTurnTerminalAppServerEventType,
   normalizeRecord,
@@ -32,6 +33,7 @@ import {
   readArtifactSnapshotSignalFromPayload,
   readCommandExecutionItemFromPayload,
   readFileReadItemFromPayload,
+  readHookItemFromPayload,
   readPatchItemFromPayload,
   readPluginWorkerHookItemFromPayload,
   readPluginWorkerRetryItemFromPayload,
@@ -503,6 +505,22 @@ export function projectAppServerAgentEventPayload(
         type: "artifact_snapshot",
         artifact: readArtifactSnapshotSignalFromPayload(payload, event),
       };
+    case "hook.started":
+    case "hook/started":
+    case "workflow.hook.started":
+      return {
+        ...basePayload,
+        type: "item_started",
+        item: readHookItemFromPayload(payload, event),
+      };
+    case "hook.completed":
+    case "hook/completed":
+    case "workflow.hook.completed":
+      return {
+        ...basePayload,
+        type: "item_completed",
+        item: readHookItemFromPayload(payload, event),
+      };
     case "plugin_worker.hook":
       return {
         ...basePayload,
@@ -522,8 +540,6 @@ export function projectAppServerAgentEventPayload(
     case "workflow.tool.started":
     case "workflow.connector.requested":
     case "workflow.connector.completed":
-    case "workflow.hook.started":
-    case "workflow.hook.completed":
     case "workflow.artifact.delta":
     case "workflow.step.progress":
     case "workflow.step.completed":
@@ -542,16 +558,20 @@ export function projectAppServerAgentEventPayload(
       return {
         ...basePayload,
         type: "action_required",
-        request_id: readString(payload, "request_id", "requestId", "id") ?? "",
+        request_id: readActionRequestId(payload),
         action_type:
           readString(payload, "action_type", "actionType", "type") ??
           "tool_confirmation",
         scope: readActionScope(payload, event),
         tool_name: readToolName(payload),
-        arguments:
-          normalizeRecord(payload.arguments) ?? normalizeRecord(payload.data),
+        arguments: readActionArguments(payload),
         prompt: readString(payload, "prompt", "message", "reason"),
         questions: readActionQuestions(payload),
+        available_decisions: readStringArray(
+          payload,
+          "availableDecisions",
+          "available_decisions",
+        ),
         requested_schema:
           normalizeRecord(payload.requested_schema) ??
           normalizeRecord(payload.requestedSchema) ??
@@ -561,7 +581,7 @@ export function projectAppServerAgentEventPayload(
       return {
         ...basePayload,
         type: "action_resolved",
-        request_id: readString(payload, "request_id", "requestId", "id") ?? "",
+        request_id: readActionRequestId(payload),
         action_type:
           readString(payload, "action_type", "actionType", "type") ??
           "tool_confirmation",
@@ -643,6 +663,61 @@ export function projectAppServerAgentEventPayload(
         type: event.type.split(".").join("_"),
       };
   }
+}
+
+function readActionRequestId(payload: Record<string, unknown>): string {
+  return (
+    readString(payload, "action_id", "actionId", "requestId", "id") ??
+    readString(payload, "request_id") ??
+    ""
+  );
+}
+
+const ACTION_ARGUMENT_PAYLOAD_FIELDS = [
+  "additional_permissions",
+  "additionalPermissions",
+  "action",
+  "call_id",
+  "callId",
+  "completed_at_ms",
+  "completedAtMs",
+  "decision_source",
+  "decisionSource",
+  "environment_id",
+  "environmentId",
+  "guardian_review_action",
+  "guardianReviewAction",
+  "item_id",
+  "itemId",
+  "network_approval_context",
+  "networkApprovalContext",
+  "owner_call_id",
+  "ownerCallId",
+  "proposed_network_policy_amendments",
+  "proposedNetworkPolicyAmendments",
+  "review",
+  "review_id",
+  "reviewId",
+  "started_at_ms",
+  "startedAtMs",
+  "target_item_id",
+  "targetItemId",
+  "tool_call_id",
+  "toolCallId",
+] as const;
+
+function readActionArguments(
+  payload: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const source =
+    normalizeRecord(payload.arguments) ?? normalizeRecord(payload.data) ?? {};
+  const enriched: Record<string, unknown> = {};
+  for (const key of ACTION_ARGUMENT_PAYLOAD_FIELDS) {
+    if (payload[key] !== undefined) {
+      enriched[key] = payload[key];
+    }
+  }
+  return normalizeActionArguments({ ...enriched, ...source });
 }
 
 function projectWorkflowReadModelRefreshPayload(

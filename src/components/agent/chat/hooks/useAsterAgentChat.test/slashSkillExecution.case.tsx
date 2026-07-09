@@ -660,6 +660,40 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
     }
   });
 
+  it("新建任务后 ensureSession(targetSessionId) 应复用已确认会话", async () => {
+    const workspaceId = "ws-created-session-target-fast-path";
+    const createdSessionId = "session-created-target-fast-path";
+    mockCreateAgentRuntimeSession.mockResolvedValue(createdSessionId);
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        const newSessionId = await harness
+          .getValue()
+          .createFreshSession("新对话");
+        expect(newSessionId).toBe(createdSessionId);
+      });
+
+      mockGetAgentRuntimeSession.mockClear();
+
+      await act(async () => {
+        const ensuredSessionId = await harness.getValue().ensureSession({
+          targetSessionId: createdSessionId,
+          skipSessionRestore: true,
+          skipSessionStartHooks: true,
+        });
+        expect(ensuredSessionId).toBe(createdSessionId);
+      });
+
+      expect(mockGetAgentRuntimeSession).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("新建任务失败后应释放创建锁，允许恢复桥接后再次新建", async () => {
     const workspaceId = "ws-create-fresh-retry-after-bridge-error";
     const recoveredSessionId = "session-after-create-retry";

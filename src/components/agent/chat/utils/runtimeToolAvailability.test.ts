@@ -31,7 +31,7 @@ describe("runtime tool surface 派生", () => {
           { name: "ListPeers" },
           { name: "update_plan" },
         ],
-        registry_tools: [],
+        native_tools: [],
       }),
     );
 
@@ -68,7 +68,7 @@ describe("runtime tool surface 派生", () => {
       asToolInventory({
         agent_initialized: true,
         runtime_tools: [{ name: "WebSearch" }],
-        registry_tools: [],
+        native_tools: [],
       }),
     );
 

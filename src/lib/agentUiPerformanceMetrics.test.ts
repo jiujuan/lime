@@ -188,19 +188,29 @@ describe("agentUiPerformanceMetrics", () => {
     recordAgentUiPerformanceMetric("homeInput.submit", {
       requestId: "request-a",
       sessionId: "draft-a",
+      triggerToHomeSubmitMs: 7,
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
+      durationMs: 11,
+      requestId: "request-a",
+      sessionId: "draft-a",
+      workspaceId: "workspace-a",
+    });
+    recordAgentUiPerformanceMetric("homeInput.pendingPreviewCommitted", {
+      durationMs: 14,
       requestId: "request-a",
       sessionId: "draft-a",
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("homeInput.pendingPreviewPaint", {
+      durationMs: 19,
       requestId: "request-a",
       sessionId: "draft-a",
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
+      elapsedMs: 31,
       requestId: "request-a",
       sessionId: "draft-a",
       workspaceId: "workspace-a",
@@ -238,6 +248,7 @@ describe("agentUiPerformanceMetrics", () => {
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("agentStream.submitAccepted", {
+      homeSubmittedDeltaMs: 80,
       requestId: "request-a",
       sessionId: "draft-a",
       submitInvokeMs: 18.4,
@@ -254,6 +265,7 @@ describe("agentUiPerformanceMetrics", () => {
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("agentStream.firstTextDelta", {
+      homeSubmittedDeltaMs: 120,
       providerWaitMs: 320.4,
       requestId: "request-a",
       rendererEventReceivedDeltaMs: 8.6,
@@ -268,6 +280,7 @@ describe("agentUiPerformanceMetrics", () => {
     });
     recordAgentUiPerformanceMetric("agentStream.firstTextPaint", {
       clientLocalOutputDeltaMs: 16.8,
+      homeSubmittedDeltaMs: 150,
       requestId: "request-a",
       sessionId: "draft-a",
       workspaceId: "workspace-a",
@@ -283,6 +296,14 @@ describe("agentUiPerformanceMetrics", () => {
     expect(summary.sessions).toEqual([
       expect.objectContaining({
         homeInputMaterializeDurationMs: 89,
+        inputbarTriggerToHomeSubmitMs: 7,
+        inputbarTriggerToPendingPreviewCommitMs: 14,
+        inputbarTriggerToPendingPreviewPaintMs: 19,
+        inputbarTriggerToPendingShellMs: 11,
+        inputbarTriggerToSendDispatchMs: 31,
+        inputbarTriggerToSubmitAcceptedMs: 80,
+        inputbarTriggerToFirstTextDeltaMs: 120,
+        inputbarTriggerToFirstTextPaintMs: 150,
         streamEnsureSessionDurationMs: 42,
         streamSubmitInvokeDurationMs: 18,
         sessionId: "draft-a",
@@ -294,6 +315,9 @@ describe("agentUiPerformanceMetrics", () => {
     ).toBeGreaterThanOrEqual(0);
     expect(
       summary.sessions[0]?.homeInputToPendingPreviewPaintMs,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      summary.sessions[0]?.homeInputToPendingPreviewCommitMs,
     ).toBeGreaterThanOrEqual(0);
     expect(
       summary.sessions[0]?.homeInputToSendDispatchMs,
@@ -356,5 +380,84 @@ describe("agentUiPerformanceMetrics", () => {
     expect(summary.sessions[0]?.serverToRendererFirstTextDeltaMs).toBe(42);
     expect(summary.sessions[0]?.rendererApplyFirstTextDeltaMs).toBe(9);
     expect(summary.sessions[0]?.clientLocalOutputMs).toBe(17);
+  });
+
+  it("应按 requestId 把首页 pending preview 合并到 materialized 真实会话摘要", () => {
+    recordAgentUiPerformanceMetric("homeInput.submit", {
+      requestId: "request-merge",
+      sessionId: "draft-merge",
+      triggerToHomeSubmitMs: 6,
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
+      durationMs: 12,
+      requestId: "request-merge",
+      sessionId: "draft-merge",
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("homeInput.pendingPreviewCommitted", {
+      durationMs: 15,
+      requestId: "request-merge",
+      sessionId: "draft-merge",
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("homeInput.pendingPreviewPaint", {
+      durationMs: 18,
+      requestId: "request-merge",
+      sessionId: "draft-merge",
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("taskCenter.draftMaterialize.success", {
+      durationMs: 41,
+      materializedSessionId: "session-merge",
+      requestId: "request-merge",
+      sessionId: "draft-merge",
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
+      elapsedMs: 52,
+      requestId: "request-merge",
+      sessionId: "session-merge",
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("agentStream.submitAccepted", {
+      homeSubmittedDeltaMs: 90,
+      requestId: "request-merge",
+      sessionId: "session-merge",
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("agentStream.firstTextDelta", {
+      homeSubmittedDeltaMs: 130,
+      providerWaitMs: 80,
+      requestId: "request-merge",
+      sessionId: "session-merge",
+      workspaceId: "workspace-merge",
+    });
+    recordAgentUiPerformanceMetric("agentStream.firstTextPaint", {
+      clientLocalOutputDeltaMs: 14,
+      homeSubmittedDeltaMs: 160,
+      requestId: "request-merge",
+      sessionId: "session-merge",
+      workspaceId: "workspace-merge",
+    });
+
+    const summary = summarizeAgentUiPerformanceMetrics();
+    const materializedSession = summary.sessions.find(
+      (session) => session.sessionId === "session-merge",
+    );
+
+    expect(materializedSession).toMatchObject({
+      homeInputMaterializeDurationMs: 41,
+      inputbarTriggerToHomeSubmitMs: 6,
+      inputbarTriggerToPendingPreviewCommitMs: 15,
+      inputbarTriggerToPendingPreviewPaintMs: 18,
+      inputbarTriggerToPendingShellMs: 12,
+      inputbarTriggerToSendDispatchMs: 52,
+      inputbarTriggerToSubmitAcceptedMs: 90,
+      inputbarTriggerToFirstTextDeltaMs: 130,
+      inputbarTriggerToFirstTextPaintMs: 160,
+      sessionId: "session-merge",
+      workspaceId: "workspace-merge",
+    });
   });
 });

@@ -1,4 +1,5 @@
 mod app_data;
+pub(crate) mod approval_cache;
 mod article_workspace_action_projection;
 mod article_workspace_artifact_document_projection;
 mod article_workspace_edited_draft;
@@ -73,6 +74,7 @@ mod session_hydration;
 mod session_lifecycle;
 pub(crate) mod session_list_scope;
 mod session_media_reader;
+mod session_media_refs;
 pub(crate) mod session_title;
 pub(crate) mod sidecar_store;
 mod skills;
@@ -158,6 +160,7 @@ use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
+use app_server_protocol::AgentSessionApprovalDecision;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::ArtifactSummary;
 use app_server_protocol::ClientInfo;
@@ -342,6 +345,7 @@ pub struct ActionRespondRequest {
     pub turn: Option<AgentTurn>,
     pub request_id: String,
     pub action_type: AgentSessionActionType,
+    pub decision: Option<AgentSessionApprovalDecision>,
     pub confirmed: bool,
     pub response: Option<String>,
     pub user_data: Option<serde_json::Value>,
@@ -445,6 +449,7 @@ pub struct RuntimeCoreEventAppender {
 #[derive(Debug, Default)]
 pub(in crate::runtime) struct RuntimeCoreState {
     pub(in crate::runtime) sessions: HashMap<String, StoredSession>,
+    pub(in crate::runtime) session_approval_cache: approval_cache::SessionApprovalCache,
     pub(in crate::runtime) right_surface_pending:
         Vec<app_server_protocol::WorkspaceRightSurfacePendingRequest>,
     pub(in crate::runtime) browser_profile_scopes: Vec<BrowserProfileScope>,

@@ -20,7 +20,6 @@ fn session_config_appends_soul_context_from_config_metadata() {
                     "id": "warm_supportive_companion",
                     "packId": "com.lime.soul.warm-supportive-companion",
                     "tone": "warm_supportive",
-                    "intensity": "low",
                     "allowedMoves": ["Use patient wording."],
                     "forbiddenMoves": ["Do not over-comfort."],
                     "seriousModeFallback": "calm_professional_partner"
@@ -96,7 +95,6 @@ fn session_config_appends_persona_context_from_request_metadata_to_soul_prompt()
                     "id": "cheeky_sassy_executor",
                     "packId": "com.lime.soul.cheeky-sassy-executor",
                     "tone": "cheeky_sassy",
-                    "intensity": "low",
                     "allowedMoves": ["Use light playful phrasing."],
                     "forbiddenMoves": ["Do not invent tool results."],
                     "seriousModeFallback": "calm_professional_partner"

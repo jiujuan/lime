@@ -1,4 +1,5 @@
 mod browser;
+mod coding;
 mod context;
 mod observability;
 
@@ -6,6 +7,7 @@ use self::browser::browser_action_index_summary;
 use self::browser::browser_evidence_artifacts;
 use self::browser::browser_file_evidence_artifacts;
 use self::browser::browser_file_evidence_summary;
+use self::coding::coding_evidence_summary;
 use self::context::context_evidence_summary;
 use self::observability::mcp_resource_reads_summary;
 use self::observability::mcp_tool_results_summary;
@@ -543,209 +545,10 @@ fn workflow_audit_redacted_value_count(value: &Value) -> usize {
     }
 }
 
-#[derive(Debug, Default)]
-struct CodingEvidenceSummary {
-    file_change_count: usize,
-    patch_count: usize,
-    failed_patch_count: usize,
-    command_count: usize,
-    failed_command_count: usize,
-    test_count: usize,
-    failed_test_count: usize,
-    action_required_count: usize,
-    action_resolved_count: usize,
-    recovery_request_count: usize,
-    output_refs: Vec<String>,
-    diff_refs: Vec<String>,
-    checkpoint_refs: Vec<String>,
-    artifact_refs: Vec<String>,
-    evidence_refs: Vec<String>,
-    action_request_ids: Vec<String>,
-    action_tool_call_ids: Vec<String>,
-    source_event_ids: Vec<String>,
-}
-
-fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
-    let mut summary = CodingEvidenceSummary::default();
-    for event in events {
-        collect_common_coding_refs(&mut summary, event);
-        match event.event_type.as_str() {
-            "file.changed" => {
-                summary.file_change_count += 1;
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "patch.started" => {
-                summary.patch_count += 1;
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "patch.applied" | "patch.failed" => {
-                if event.event_type == "patch.failed" {
-                    summary.failed_patch_count += 1;
-                }
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "command.started" => {
-                summary.command_count += 1;
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "command.exited" => {
-                if event
-                    .payload
-                    .get("exitCode")
-                    .or_else(|| event.payload.get("exit_code"))
-                    .and_then(Value::as_i64)
-                    .is_some_and(|exit_code| exit_code != 0)
-                {
-                    summary.failed_command_count += 1;
-                }
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "test.completed" => {
-                summary.test_count += 1;
-                let failed_count = event
-                    .payload
-                    .get("failed")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0);
-                let failed_result = event
-                    .payload
-                    .get("result")
-                    .and_then(Value::as_str)
-                    .is_some_and(|result| result.eq_ignore_ascii_case("failed"));
-                if failed_count > 0 || failed_result {
-                    summary.failed_test_count += 1;
-                }
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "action.required" => {
-                summary.action_required_count += 1;
-                collect_action_correlation(&mut summary, event);
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "action.resolved" => {
-                summary.action_resolved_count += 1;
-                collect_action_correlation(&mut summary, event);
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            _ => {}
-        }
-        if nested_metadata_value(Some(&event.payload), "harness", "coding_workbench_recovery")
-            .is_some()
-        {
-            summary.recovery_request_count += 1;
-            push_unique(&mut summary.source_event_ids, event.event_id.clone());
-        }
-    }
-
-    json!({
-        "schemaVersion": "coding-evidence-summary.v1",
-        "fileChangeCount": summary.file_change_count,
-        "patchCount": summary.patch_count,
-        "failedPatchCount": summary.failed_patch_count,
-        "commandCount": summary.command_count,
-        "failedCommandCount": summary.failed_command_count,
-        "testCount": summary.test_count,
-        "failedTestCount": summary.failed_test_count,
-        "actionRequiredCount": summary.action_required_count,
-        "actionResolvedCount": summary.action_resolved_count,
-        "recoveryRequestCount": summary.recovery_request_count,
-        "outputRefs": summary.output_refs,
-        "diffRefs": summary.diff_refs,
-        "checkpointRefs": summary.checkpoint_refs,
-        "artifactRefs": summary.artifact_refs,
-        "evidenceRefs": summary.evidence_refs,
-        "actionRequestIds": summary.action_request_ids,
-        "actionToolCallIds": summary.action_tool_call_ids,
-        "sourceEventIds": summary.source_event_ids,
-    })
-}
-
-fn collect_action_correlation(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {
-    if let Some(request_id) = payload_or_data_string(
-        &event.payload,
-        &["requestId", "request_id", "actionId", "action_id", "id"],
-    ) {
-        push_unique(&mut summary.action_request_ids, request_id);
-    }
-    if let Some(tool_call_id) = payload_or_data_string(
-        &event.payload,
-        &["toolCallId", "tool_call_id", "toolId", "tool_id"],
-    ) {
-        push_unique(&mut summary.action_tool_call_ids, tool_call_id);
-    }
-}
-
-fn payload_or_data_string(value: &Value, keys: &[&str]) -> Option<String> {
-    metadata_string(Some(value), keys).or_else(|| nested_metadata_string(Some(value), "data", keys))
-}
-
-fn collect_common_coding_refs(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {
-    collect_coding_ref_fields(summary, &event.payload);
-    for parent in ["change", "file_change", "metadata", "harness"] {
-        if let Some(child) = event.payload.get(parent) {
-            collect_coding_ref_fields(summary, child);
-            if let Some(recovery) = child.get("coding_workbench_recovery") {
-                collect_coding_ref_fields(summary, recovery);
-            }
-        }
-    }
-}
-
-fn collect_coding_ref_fields(summary: &mut CodingEvidenceSummary, value: &Value) {
-    push_value_strings(
-        &mut summary.output_refs,
-        value,
-        &["outputRef", "output_ref"],
-    );
-    push_value_string_arrays(
-        &mut summary.output_refs,
-        value,
-        &["outputRefs", "output_refs", "refIds", "ref_ids"],
-    );
-    push_value_strings(&mut summary.diff_refs, value, &["diffRef", "diff_ref"]);
-    push_value_strings(
-        &mut summary.artifact_refs,
-        value,
-        &["artifactId", "artifact_id", "artifactRef", "artifact_ref"],
-    );
-    push_value_string_arrays(
-        &mut summary.artifact_refs,
-        value,
-        &["artifactRefs", "artifact_refs"],
-    );
-    push_value_strings(
-        &mut summary.checkpoint_refs,
-        value,
-        &[
-            "checkpointRef",
-            "checkpoint_ref",
-            "checkpointId",
-            "checkpoint_id",
-        ],
-    );
-    push_value_string_arrays(
-        &mut summary.evidence_refs,
-        value,
-        &["evidenceRefs", "evidence_refs"],
-    );
-}
-
 fn push_value_strings(target: &mut Vec<String>, value: &Value, keys: &[&str]) {
     for key in keys {
         if let Some(text) = value.get(*key).and_then(value_string) {
             push_unique(target, text);
-        }
-    }
-}
-
-fn push_value_string_arrays(target: &mut Vec<String>, value: &Value, keys: &[&str]) {
-    for key in keys {
-        if let Some(values) = value.get(*key).and_then(Value::as_array) {
-            for item in values {
-                if let Some(text) = value_string(item) {
-                    push_unique(target, text);
-                }
-            }
         }
     }
 }

@@ -50,8 +50,6 @@ describe("createAgentStreamPreparedSendEnv", () => {
       setPendingActions: noopDispatch<ActionRequired[]>(),
       setWorkspacePathMissing: noopDispatch<WorkspacePathMissingState | null>(),
       setIsSending: noopDispatch<boolean>(),
-      playToolcallSound: () => undefined,
-      playTypewriterSound: () => undefined,
       appendThinkingToParts: (parts) => parts,
     });
 

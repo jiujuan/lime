@@ -75,10 +75,6 @@ describe("agentStreamTurnEventBinding", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
       },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
-      },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),
       setPendingActions: noopDispatch<ActionRequired[]>(),
@@ -181,10 +177,6 @@ describe("agentStreamTurnEventBinding", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
       },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
-      },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
       setPendingActions: noopDispatch<ActionRequired[]>(),
@@ -276,10 +268,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -377,10 +365,6 @@ describe("agentStreamTurnEventBinding", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
       },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
-      },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
       setPendingActions: noopDispatch<ActionRequired[]>(),
@@ -472,10 +456,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),
@@ -585,10 +565,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: noopDispatch<Message[]>(),
@@ -714,10 +690,6 @@ describe("agentStreamTurnEventBinding", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
       },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
-      },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
       setPendingActions: noopDispatch<ActionRequired[]>(),
@@ -830,10 +802,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -962,10 +930,6 @@ describe("agentStreamTurnEventBinding", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
       },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
-      },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
       setPendingActions: noopDispatch<ActionRequired[]>(),
@@ -1022,10 +986,14 @@ describe("agentStreamTurnEventBinding", () => {
     ];
     let streamActivated = false;
     let streamHandler: ((event: { payload: unknown }) => void) | null = null;
-    const attemptSilentTurnRecovery = vi
-      .fn()
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+    const attemptSilentTurnRecovery = vi.fn(
+      async (
+        _sessionId: string,
+        _requestStartedAt: number,
+        _promptText: string,
+        options?: { requireTerminal?: boolean },
+      ) => options?.requireTerminal !== true,
+    );
     const setMessages = vi.fn(
       (value: Message[] | ((prev: Message[]) => Message[])) => {
         messages = typeof value === "function" ? value(messages) : value;
@@ -1088,10 +1056,6 @@ describe("agentStreamTurnEventBinding", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
       },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
-      },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
       setPendingActions: noopDispatch<ActionRequired[]>(),
@@ -1133,9 +1097,7 @@ describe("agentStreamTurnEventBinding", () => {
     expect(streamActivated).toBe(true);
     expect(messages[0]?.content).not.toContain("执行失败");
     expect(messages[0]?.isThinking).toBe(true);
-    expect(attemptSilentTurnRecovery).toHaveBeenCalledTimes(2);
-    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
-      1,
+    expect(attemptSilentTurnRecovery).toHaveBeenCalledWith(
       "session-running-read-model",
       expect.any(Number),
       "继续输出未完成内容",
@@ -1144,8 +1106,7 @@ describe("agentStreamTurnEventBinding", () => {
         turnId: "turn-running-read-model",
       },
     );
-    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
-      2,
+    expect(attemptSilentTurnRecovery).toHaveBeenCalledWith(
       "session-running-read-model",
       expect.any(Number),
       "继续输出未完成内容",
@@ -1231,10 +1192,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -1363,10 +1320,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,
@@ -1533,10 +1486,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts, textDelta) => [
         ...parts,
@@ -1795,10 +1744,6 @@ describe("agentStreamTurnEventBinding", () => {
         clearActiveStreamIfMatch,
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts) => parts,
       setMessages: setMessages as never,

@@ -298,7 +298,7 @@ describe("actionRequestA2UI", () => {
     });
   });
 
-  it("运行时权限确认应保留为可点击确认卡，不提升为输入区 A2UI", () => {
+  it("运行时权限确认不应提升为 A2UI", () => {
     const request: ActionRequired = {
       requestId: "runtime_permission_confirmation:turn-1",
       actionType: "elicitation",
@@ -310,6 +310,22 @@ describe("actionRequestA2UI", () => {
         },
       ],
       status: "pending",
+    };
+
+    expect(isActionRequestA2UICompatible(request)).toBe(false);
+    expect(buildActionRequestA2UI(request)).toBeNull();
+  });
+
+  it("tool_confirmation approval 不应进入 A2UI 表单通道", () => {
+    const request: ActionRequired = {
+      requestId: "approval-tool-1",
+      actionType: "tool_confirmation",
+      status: "pending",
+      toolName: "functions.exec_command",
+      prompt: "允许执行命令？",
+      arguments: {
+        command: "npm test",
+      },
     };
 
     expect(isActionRequestA2UICompatible(request)).toBe(false);

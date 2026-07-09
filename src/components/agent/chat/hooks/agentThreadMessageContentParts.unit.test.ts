@@ -38,6 +38,7 @@ describe("messageContentPartsFromAgentThreadItem", () => {
             caption: "结果图",
             reference: {
               uri: "sidecar://media/image-1",
+              ref_id: "media-ref-image-1",
               mime_type: "image/png",
               title: "image-1.png",
               source_uri: "sidecar://media/image-1",
@@ -68,6 +69,7 @@ describe("messageContentPartsFromAgentThreadItem", () => {
         reference: {
           kind: "image",
           uri: "sidecar://media/image-1",
+          refId: "media-ref-image-1",
           mimeType: "image/png",
           title: "image-1.png",
           caption: "结果图",
@@ -86,6 +88,7 @@ describe("messageContentPartsFromAgentThreadItem", () => {
           contentPartIndex: 1,
           referenceUri: "sidecar://media/image-1",
           mediaKind: "image",
+          refId: "media-ref-image-1",
           mimeType: "image/png",
           sourceUri: "sidecar://media/image-1",
           sourcePath: "/tmp/lime-media/image-1.png",

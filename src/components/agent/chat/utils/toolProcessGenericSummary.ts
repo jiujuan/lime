@@ -61,16 +61,6 @@ export function buildGenericPostSummary(params: {
   const displayFamily = params.displayFamily || display.family;
   const normalizedSubject = normalizeNarrativeSubject(subject);
 
-  if (normalizedName === "enterplanmode") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.planMode.entered",
-    );
-  }
-  if (normalizedName === "exitplanmode") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.planMode.exited",
-    );
-  }
   if (normalizedName === "structuredoutput") {
     return resolveRequiredAgentChatCopy(
       "toolCall.processSummary.finalAnswer.completed",
@@ -340,18 +330,6 @@ export function buildKnownPreSummary(params: {
   if (normalizedName === "sendusermessage" || normalizedName === "brief") {
     return resolveRequiredAgentChatCopy(
       "toolCall.processSummary.userMessage.syncFirst",
-    );
-  }
-
-  if (normalizedName === "enterplanmode") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.planMode.enterFirst",
-    );
-  }
-
-  if (normalizedName === "exitplanmode") {
-    return resolveRequiredAgentChatCopy(
-      "toolCall.processSummary.planMode.exitFirst",
     );
   }
 

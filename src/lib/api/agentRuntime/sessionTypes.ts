@@ -35,9 +35,9 @@ export interface ImageInput {
 }
 
 /**
- * Aster Agent 状态
+ * Agent runtime 初始化状态
  */
-export interface AsterAgentStatus {
+export interface AgentRuntimeInitStatus {
   initialized: boolean;
   provider_configured: boolean;
   provider_name?: string;

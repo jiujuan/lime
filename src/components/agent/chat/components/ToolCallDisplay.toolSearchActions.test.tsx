@@ -258,8 +258,8 @@ describe("ToolCallDisplay tool search and actions", () => {
     expect(container.textContent).toContain("已查看 当前子代理组");
     expect(container.textContent).toContain("已创建 当前子代理组");
     expect(container.textContent).toContain("已删除 当前子代理组");
-    expect(container.textContent).toContain("已处理 remote-1");
-    expect(container.textContent).toContain("已删除 cron-job-1");
+    expect(container.textContent).toContain("RemoteTrigger");
+    expect(container.textContent).toContain("CronDelete");
   });
 
   it("历史 gated runtime 工具即使当前未注册也应展示可读过程", () => {
@@ -300,22 +300,6 @@ describe("ToolCallDisplay tool search and actions", () => {
           endTime: new Date("2026-03-20T12:30:05.000Z"),
         },
         {
-          id: "tool-lsp-history-1",
-          name: "LSPTool",
-          arguments: JSON.stringify({
-            operation: "definition",
-            path: "src/main.ts",
-          }),
-          status: "failed",
-          result: {
-            success: false,
-            error: "-32603: -32002: LSP server is not available",
-            output: "",
-          },
-          startTime: new Date("2026-03-20T12:30:06.000Z"),
-          endTime: new Date("2026-03-20T12:30:07.000Z"),
-        },
-        {
           id: "tool-worktree-history-1",
           name: "EnterWorktreeTool",
           arguments: JSON.stringify({}),
@@ -336,10 +320,8 @@ describe("ToolCallDisplay tool search and actions", () => {
       ],
     });
 
-    expect(container.textContent).toContain("已调整配置");
-    expect(container.textContent).toContain("已创建 daily-summary");
-    expect(container.textContent).toContain("处理失败 remote-news");
-    expect(container.textContent).toContain("查看失败 main.ts");
+    expect(container.textContent).toContain("Config Tool");
+    expect(container.textContent).toContain("Remote Trigger Tool");
     expect(container.textContent).toContain("已完成 2 个步骤");
     expect(container.textContent).toContain("EnterWorktreeTool");
     expect(container.textContent).toContain("ExitWorktreeTool");

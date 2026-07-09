@@ -1343,3 +1343,34 @@ export function buildSubmissionPreviewMessages(
     },
   ];
 }
+
+export function buildInitialDispatchPreviewMessages(
+  snapshot: InitialDispatchPreviewSnapshot,
+): Message[] {
+  const timestamp = new Date();
+  const normalizedPrompt = snapshot.prompt?.trim() || "";
+
+  return [
+    {
+      id: `initial-dispatch-preview:${snapshot.key}:user`,
+      role: "user",
+      content: normalizedPrompt,
+      images: snapshot.images.length > 0 ? snapshot.images : undefined,
+      timestamp,
+    },
+    {
+      id: `initial-dispatch-preview:${snapshot.key}:assistant`,
+      role: "assistant",
+      content: "任务已进入处理队列…",
+      timestamp: new Date(timestamp.getTime() + 1),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: {
+        phase: "preparing",
+        title: "正在准备回复",
+        detail: "已收到请求，正在等待会话接管。",
+        checkpoints: ["请求已接收", "等待会话就绪", "准备开始输出"],
+      },
+    },
+  ];
+}

@@ -474,30 +474,9 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         ],
     },
     ToolDiscoveryProfile {
-        canonical_name: "LSP",
-        aliases: &["LSPTool"],
-        intent_terms: &[
-            "language server",
-            "symbol",
-            "diagnostics",
-            "代码符号",
-            "诊断",
-        ],
-    },
-    ToolDiscoveryProfile {
         canonical_name: "PowerShell",
         aliases: &["PowerShellTool"],
         intent_terms: &["powershell", "windows shell", "windows 命令"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "EnterPlanMode",
-        aliases: &["EnterPlanModeTool"],
-        intent_terms: &["plan mode", "enter plan", "进入计划模式"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "ExitPlanMode",
-        aliases: &["ExitPlanModeTool"],
-        intent_terms: &["exit plan", "leave plan mode", "退出计划模式"],
     },
 ];
 

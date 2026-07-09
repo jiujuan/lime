@@ -26,8 +26,7 @@ pub struct AgentToolInventoryReadInput {
 struct AgentToolInventoryRuntimeSnapshot {
     agent_initialized: bool,
     warnings: Vec<String>,
-    registry_definitions: Vec<RuntimeToolDefinition>,
-    current_surface_tool_names: Vec<String>,
+    current_tool_definitions: Vec<RuntimeToolDefinition>,
     extension_configs: Vec<RuntimeExtensionConfig>,
     visible_extension_tools: Vec<ExtensionToolInventorySeed>,
     searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
@@ -60,9 +59,8 @@ pub async fn read_agent_tool_inventory(
         request_metadata,
         mcp_server_names,
         mcp_tools,
-        registry_definitions: runtime_snapshot.registry_definitions,
+        current_tool_definitions: runtime_snapshot.current_tool_definitions,
         resource_helpers_supported,
-        current_surface_tool_names: runtime_snapshot.current_surface_tool_names,
         extension_configs: runtime_snapshot.extension_configs,
         visible_extension_tools: runtime_snapshot.visible_extension_tools,
         searchable_extension_tools: runtime_snapshot.searchable_extension_tools,
@@ -85,9 +83,8 @@ async fn read_agent_tool_inventory_runtime_snapshot(
         );
         return AgentToolInventoryRuntimeSnapshot {
             agent_initialized: false,
-            warnings: vec!["Aster agent is not initialized".to_string()],
-            registry_definitions: Vec::new(),
-            current_surface_tool_names: Vec::new(),
+            warnings: vec!["Agent runtime is not initialized".to_string()],
+            current_tool_definitions: Vec::new(),
             extension_configs,
             visible_extension_tools,
             searchable_extension_tools,
@@ -103,8 +100,7 @@ async fn read_agent_tool_inventory_runtime_snapshot(
     AgentToolInventoryRuntimeSnapshot {
         agent_initialized: true,
         warnings: Vec::new(),
-        registry_definitions: seed.registry_definitions,
-        current_surface_tool_names: seed.current_surface_tool_names,
+        current_tool_definitions: seed.current_tool_definitions,
         extension_configs: seed.extension_configs,
         visible_extension_tools: seed.visible_extension_tools,
         searchable_extension_tools: seed.searchable_extension_tools,
@@ -160,15 +156,8 @@ fn merge_mcp_extension_projection(
         if !surface.has_tools() {
             continue;
         }
-        let bridge_name = surface.extension_name.clone();
-        extension_configs.push(RuntimeExtensionConfig::new(
-            bridge_name.clone(),
-            surface.description,
-            surface.available_tools,
-            surface.deferred_loading,
-            surface.always_expose_tools,
-            surface.allowed_caller,
-        ));
+        let bridge_name = surface.name.clone();
+        extension_configs.push(surface);
         existing_extensions.insert(bridge_name);
     }
 

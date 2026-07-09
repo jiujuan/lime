@@ -1,5 +1,5 @@
 use crate::ExecutionRequest;
-use lime_agent::register_lime_project_skill_from_directory;
+use lime_agent::register_project_skill_from_directory;
 use serde_json::{Map, Value};
 use std::path::{Component, Path, PathBuf};
 use tool_runtime::skill_gate::{
@@ -43,7 +43,7 @@ pub(super) fn apply_workspace_skill_runtime_enable(
 
 fn register_workspace_skill_runtime_sources(sources: &[SkillToolSessionSkillSource]) {
     for source in sources {
-        if let Err(error) = register_lime_project_skill_from_directory(
+        if let Err(error) = register_project_skill_from_directory(
             &source.directory,
             Path::new(&source.registered_skill_directory),
         ) {
@@ -291,7 +291,7 @@ fn read_string_array(value: Option<&Value>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_agent::is_lime_skill_registered;
+    use lime_agent::is_skill_registered;
     use serde_json::json;
     use tempfile::TempDir;
     use tool_runtime::skill_gate::is_skill_tool_session_skill_allowed;
@@ -457,7 +457,7 @@ mod tests {
             session_id,
             &format!("project:{skill_name}")
         ));
-        assert!(is_lime_skill_registered(&format!("project:{skill_name}")));
+        assert!(is_skill_registered(&format!("project:{skill_name}")));
 
         drop(guard);
 

@@ -160,8 +160,6 @@ export function handleTurnStreamEvent({
     clearOptimisticTurn,
     upsertQueuedTurn,
     removeQueuedTurnsFromProjection,
-    playToolcallSound,
-    playTypewriterSound,
     appendThinkingToParts,
   } = callbacks;
   const preservedAssistantContent = preserveAssistantContent?.trim() || null;
@@ -1054,7 +1052,6 @@ export function handleTurnStreamEvent({
           visibleTextDelta,
           requestState.accumulatedContent,
         );
-        playTypewriterSound();
       }
       scheduleTextRenderFlush();
       break;
@@ -1066,7 +1063,6 @@ export function handleTurnStreamEvent({
       commitRenderedTextBeforeProcessPart();
       noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       upsertFallbackTextOverlayIfSilent("tool_start_fallback");
-      playToolcallSound();
       {
         const shouldUpdateMessageLayer =
           shouldUpdateLegacyToolMessageLayer(data);

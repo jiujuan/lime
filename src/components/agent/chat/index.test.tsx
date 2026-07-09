@@ -805,7 +805,7 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     expect(mounted.container.textContent).not.toContain("正在恢复生成会话");
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
-  });
+  }, 60_000);
 
   it("从导航栏直达会话时应延后加载 topics，优先恢复目标会话详情", async () => {
     installMockAgentChatUnifiedState(

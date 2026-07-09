@@ -19,8 +19,6 @@ export const PLANNING_TOOL_KEYS = new Set([
   "tasklist",
   "taskget",
   "taskupdate",
-  "enterplanmode",
-  "exitplanmode",
   "sleep",
 ]);
 

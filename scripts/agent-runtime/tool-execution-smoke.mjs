@@ -55,7 +55,6 @@ const WRITE_RELATIVE_PATH = `${FIXTURE_ROOT}/files/write-target.txt`;
 const GREP_RELATIVE_PATH = `${FIXTURE_ROOT}/files/search-target.txt`;
 const IMAGE_RELATIVE_PATH = `${FIXTURE_ROOT}/images/tiny.png`;
 const NOTEBOOK_RELATIVE_PATH = `${FIXTURE_ROOT}/notebooks/sample.ipynb`;
-const LSP_RELATIVE_PATH = `${FIXTURE_ROOT}/code/lsp-target.ts`;
 const AUDIO_RELATIVE_PATH = `${FIXTURE_ROOT}/media/sample-audio.txt`;
 const DEFAULT_BATCH_ID = "safe-core-tools";
 const CONTEXT7_LIVE_URL = "https://mcp.context7.com/mcp";
@@ -81,7 +80,7 @@ const PLAN_WORKTREE_TOOLS = [
   "EnterWorktree",
   "ExitWorktree",
 ];
-const ASK_LSP_TOOLS = ["request_user_input", "LSP"];
+const ASK_TOOLS = ["request_user_input"];
 const CREATION_TASK_TOOLS = [
   "lime_create_audio_generation_task",
   "lime_create_broadcast_generation_task",
@@ -104,7 +103,7 @@ const BATCH_TARGET_TOOLS = {
   "web-tools": WEB_TOOLS,
   "agent-control-tools": AGENT_CONTROL_TOOLS,
   "plan-worktree-tools": PLAN_WORKTREE_TOOLS,
-  "ask-lsp-tools": ASK_LSP_TOOLS,
+  "ask-tools": ASK_TOOLS,
   "creation-task-tools": CREATION_TASK_TOOLS,
   "mcp-resource-tools": MCP_RESOURCE_TOOLS,
   "skill-tools": SKILL_TOOLS,
@@ -305,16 +304,6 @@ function prepareFixtureFiles(workspaceRoot) {
     NOTEBOOK_RELATIVE_PATH,
     buildNotebookFixture(),
   );
-  const lspPath = writeTextFile(
-    workspaceRoot,
-    LSP_RELATIVE_PATH,
-    [
-      "export function limeToolExecutionSmoke(value: string): string {",
-      "  return `LIME_LSP_TOOL_EXECUTION_${value}`;",
-      "}",
-      "",
-    ].join("\n"),
-  );
   const audioPath = writeTextFile(
     workspaceRoot,
     AUDIO_RELATIVE_PATH,
@@ -326,7 +315,6 @@ function prepareFixtureFiles(workspaceRoot) {
     writePath,
     imagePath,
     notebookPath,
-    lspPath,
     audioPath,
   };
 }
@@ -599,18 +587,18 @@ function buildPlanWorktreeFixtureResponses() {
   ];
 }
 
-function buildAskLspFixtureResponses() {
+function buildAskFixtureResponses() {
   return [
     toolCall("request_user_input", "call-tool-exec-request-user-input", {
       questions: [
         {
-          id: "continue_lsp_validation",
+          id: "continue_ask_validation",
           question: "Continue Lime runtime tool smoke?",
           header: "Runtime",
           options: [
             {
               label: "Continue",
-              description: "Proceed with LSP tool validation.",
+              description: "Proceed with request_user_input validation.",
             },
             {
               label: "Stop",
@@ -620,13 +608,9 @@ function buildAskLspFixtureResponses() {
         },
       ],
     }),
-    toolCall("LSP", "call-tool-exec-lsp", {
-      operation: "document_symbol",
-      path: LSP_RELATIVE_PATH,
-    }),
     {
       type: "text",
-      content: "AGENT_RUNTIME_ASK_LSP_TOOLS_DONE",
+      content: "AGENT_RUNTIME_ASK_TOOLS_DONE",
     },
   ];
 }
@@ -1145,27 +1129,22 @@ function buildBatchScenario(batchId, fixtureFiles) {
     };
   }
 
-  if (batchId === "ask-lsp-tools") {
+  if (batchId === "ask-tools") {
     return {
-      id: "ask-lsp-tools",
+      id: "ask-tools",
       prompt:
-        "请从普通输入框自然语言触发 request_user_input 和 LSP 工具验收：先向用户询问是否继续，然后读取 fixture TypeScript 文件的 document_symbol。不要使用命令入口。",
-      promptNeedle: "request_user_input 和 LSP 工具验收",
-      targetTools: ASK_LSP_TOOLS,
-      scriptedResponses: buildAskLspFixtureResponses(),
+        "请从普通输入框自然语言触发 request_user_input 工具验收：向用户询问是否继续。不要使用命令入口。",
+      promptNeedle: "request_user_input 工具验收",
+      targetTools: ASK_TOOLS,
+      scriptedResponses: buildAskFixtureResponses(),
       buildAssertions({ evidencePackText, toolOutputText }) {
         return {
           askUserQuestionResolved:
             toolOutputText.includes("User has answered your questions") ||
             toolOutputText.includes("Continue"),
-          lspReturnedSymbols:
-            toolOutputText.includes("limeToolExecutionSmoke") ||
-            toolOutputText.includes("document_symbol") ||
-            toolOutputText.includes("LSP"),
-          evidencePackMentionsAskLsp:
+          evidencePackMentionsAsk:
             evidencePackText.includes("request_user_input") ||
-            evidencePackText.includes("document_symbol") ||
-            evidencePackText.includes("ask-lsp-tools"),
+            evidencePackText.includes("ask-tools"),
           evidencePackDoesNotMentionAskUserQuestion:
             !evidencePackText.includes("AskUserQuestion"),
         };
@@ -2138,7 +2117,6 @@ async function runSmoke(options) {
         grepPath: GREP_RELATIVE_PATH,
         imagePath: IMAGE_RELATIVE_PATH,
         notebookPath: NOTEBOOK_RELATIVE_PATH,
-        lspPath: LSP_RELATIVE_PATH,
         audioPath: AUDIO_RELATIVE_PATH,
       },
       evidencePack: summarizeEvidencePack(evidencePack),

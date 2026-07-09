@@ -1072,6 +1072,10 @@
     },
     {
       "kind": "request",
+      "method": "voiceTranscription/transcribeAudio"
+    },
+    {
+      "kind": "request",
       "method": "wechatChannel/account/remove"
     },
     {
@@ -1870,6 +1874,8 @@
       "VoiceModelDefaultSetResponse",
       "VoiceModelTestTranscribeFileParams",
       "VoiceModelTestTranscribeFileResponse",
+      "VoiceTranscriptionTranscribeAudioParams",
+      "VoiceTranscriptionTranscribeAudioResponse",
       "WechatChannelAccountListResponse",
       "WechatChannelAccountRemoveParams",
       "WechatChannelAccountRemoveResponse",

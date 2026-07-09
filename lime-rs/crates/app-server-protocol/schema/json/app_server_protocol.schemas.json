@@ -245,12 +245,30 @@
           ],
           "type": "string"
         },
+        "AgentSessionApprovalDecision": {
+          "enum": [
+            "allow_for_session",
+            "allow_once",
+            "cancel",
+            "decline"
+          ],
+          "type": "string"
+        },
         "AgentSessionReplayedActionRequired": {
           "properties": {
             "actionType": {
               "$ref": "#/$defs/AgentSessionActionType"
             },
             "arguments": true,
+            "availableDecisions": {
+              "items": {
+                "$ref": "#/$defs/AgentSessionApprovalDecision"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "prompt": {
               "type": [
                 "null",
@@ -338,6 +356,15 @@
             "tool_confirmation"
           ],
           "type": "string"
+        },
+        "AgentSessionApprovalDecision": {
+          "enum": [
+            "allow_for_session",
+            "allow_once",
+            "cancel",
+            "decline"
+          ],
+          "type": "string"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -356,7 +383,20 @@
           "$ref": "#/$defs/AgentSessionActionType"
         },
         "confirmed": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSessionApprovalDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "eventName": {
           "type": [
@@ -381,7 +421,6 @@
       },
       "required": [
         "actionType",
-        "confirmed",
         "requestId",
         "sessionId"
       ],
@@ -4357,6 +4396,15 @@
             "tool_confirmation"
           ],
           "type": "string"
+        },
+        "AgentSessionApprovalDecision": {
+          "enum": [
+            "allow_for_session",
+            "allow_once",
+            "cancel",
+            "decline"
+          ],
+          "type": "string"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -4365,6 +4413,15 @@
           "$ref": "#/$defs/AgentSessionActionType"
         },
         "arguments": true,
+        "availableDecisions": {
+          "items": {
+            "$ref": "#/$defs/AgentSessionApprovalDecision"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "prompt": {
           "type": [
             "null",
@@ -9246,6 +9303,25 @@
               "$ref": "#/$defs/RequestId"
             },
             "method": {
+              "const": "voiceTranscription/transcribeAudio",
+              "type": "string"
+            },
+            "params": {
+              "default": null
+            }
+          },
+          "required": [
+            "id",
+            "method"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "method": {
               "const": "workspaceSkillBindings/list",
               "type": "string"
             },
@@ -12252,6 +12328,7 @@
         "voiceInstruction/save",
         "voiceModel/default/set",
         "voiceModel/testTranscribeFile",
+        "voiceTranscription/transcribeAudio",
         "wechatChannel/account/remove",
         "wechatChannel/accounts/list",
         "wechatChannel/login/start",
@@ -38060,6 +38137,75 @@
       "title": "VoiceModelTestTranscribeFileResponse",
       "type": "object"
     },
+    "VoiceTranscriptionTranscribeAudioParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "audio_base64": {
+          "type": "string"
+        },
+        "credential_id": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "audio_base64",
+        "mime_type"
+      ],
+      "title": "VoiceTranscriptionTranscribeAudioParams",
+      "type": "object"
+    },
+    "VoiceTranscriptionTranscribeAudioResponse": {
+      "$defs": {
+        "VoiceAsrProviderType": {
+          "enum": [
+            "baidu",
+            "openai",
+            "sense_voice_local",
+            "whisper_local",
+            "xunfei"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "duration_secs": {
+          "format": "float",
+          "type": "number"
+        },
+        "language": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceAsrProviderType"
+        },
+        "sample_rate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration_secs",
+        "provider",
+        "sample_rate",
+        "text"
+      ],
+      "title": "VoiceTranscriptionTranscribeAudioResponse",
+      "type": "object"
+    },
     "WechatChannelAccountListResponse": {
       "$defs": {
         "WechatConfiguredAccount": {
@@ -40041,6 +40187,7 @@
               "voiceInstruction/save",
               "voiceModel/default/set",
               "voiceModel/testTranscribeFile",
+              "voiceTranscription/transcribeAudio",
               "wechatChannel/account/remove",
               "wechatChannel/accounts/list",
               "wechatChannel/login/start",

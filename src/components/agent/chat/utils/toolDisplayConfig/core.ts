@@ -1,5 +1,4 @@
 import {
-  Code2,
   Clock,
   Edit3,
   Eye,
@@ -519,17 +518,6 @@ export const CORE_EXACT_TOOL_CONFIGS = [
     },
   ],
   [
-    "lsp",
-    {
-      family: "read",
-      label: "代码分析",
-      verb: "分析",
-      icon: Code2,
-      groupTitle: "探索",
-      actionKey: "read",
-    },
-  ],
-  [
     "powershell",
     {
       family: "command",
@@ -693,28 +681,6 @@ export const CORE_EXACT_TOOL_CONFIGS = [
         completed: "已终止任务",
         running: "终止中",
       },
-    },
-  ],
-  [
-    "enterplanmode",
-    {
-      family: "plan",
-      label: "进入计划模式",
-      verb: "进入",
-      icon: FileText,
-      groupTitle: "计划",
-      actionKey: "plan",
-    },
-  ],
-  [
-    "exitplanmode",
-    {
-      family: "plan",
-      label: "退出计划模式",
-      verb: "退出",
-      icon: FileText,
-      groupTitle: "计划",
-      actionKey: "plan",
     },
   ],
   [

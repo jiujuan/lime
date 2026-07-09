@@ -152,6 +152,7 @@ export function useWorkspaceInitialSessionNavigation({
       externalLastStartedAt,
     );
     if (startedAt - lastStartedAt < INITIAL_SESSION_NAVIGATION_DEDUPE_MS) {
+      appliedInitialSessionIdRef.current = appliedNavigationKey;
       logAgentDebug(
         "AgentChatPage",
         "initialSessionNavigation.deduped",

@@ -52,8 +52,8 @@ const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &[
 ];
 const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "ToolSearch",
-    "ListMcpResourcesTool",
-    "ReadMcpResourceTool",
+    "list_mcp_resources",
+    "read_mcp_resource",
     "extensionmanager__search_available_extensions",
     "extensionmanager__manage_extensions",
     "Read",
@@ -2630,7 +2630,6 @@ mod tests {
         assert!(!names.is_empty());
         assert!(names.len() <= COMPACT_TOOL_SURFACE_TOOL_NAMES.len());
         assert!(names.iter().all(|name| is_compact_tool_surface_tool(name)));
-        assert!(names.iter().any(|name| name == "ToolSearch"));
         assert!(names.iter().any(|name| name == "WebSearch"));
         assert!(names.iter().any(|name| name == "Read"));
         assert!(!names.iter().any(|name| name == "TeamCreate"));
@@ -2762,13 +2761,13 @@ mod tests {
 
         let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
         assert!(names.iter().all(|name| is_compact_tool_surface_tool(name)));
-        assert!(names.iter().any(|name| name == "ListMcpResourcesTool"));
-        assert!(names.iter().any(|name| name == "ReadMcpResourceTool"));
+        assert!(names.iter().any(|name| name == "list_mcp_resources"));
+        assert!(names.iter().any(|name| name == "read_mcp_resource"));
         assert!(!names
             .iter()
             .any(|name| name == "mcp__latency_probe__heavy_tool"));
         assert!(system_prompt.contains(MCP_CONTEXT_SENTINEL));
-        assert!(system_prompt.contains("ListMcpResourcesTool"));
+        assert!(system_prompt.contains("list_mcp_resources"));
         assert!(!system_prompt.contains("【当前回合执行约束】"));
 
         Ok(())
@@ -2885,7 +2884,7 @@ mod tests {
         turn_context.metadata.insert(
             "subagent".to_string(),
             json!({
-                "allowed_tools": ["Read", "Grep", "ListMcpResourcesTool"],
+                "allowed_tools": ["Read", "Grep", "list_mcp_resources"],
                 "disallowed_tools": ["Grep"],
             }),
         );

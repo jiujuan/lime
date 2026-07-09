@@ -662,6 +662,11 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerVoiceModelTestTranscribeFileResponse>
     >;
+    transcribeVoiceAudio(
+      params: appServer.AppServerVoiceTranscriptionTranscribeAudioParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerVoiceTranscriptionTranscribeAudioResponse>
+    >;
     readUsageStats(
       params: appServer.AppServerUsageStatsRangeParams,
     ): Promise<

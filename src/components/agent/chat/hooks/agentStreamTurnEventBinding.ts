@@ -197,10 +197,6 @@ interface RegisterAgentStreamTurnEventBindingOptions {
     upsertQueuedTurn: (queuedTurn: QueuedTurnSnapshot) => void;
     removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
   };
-  sounds: {
-    playToolcallSound: () => void;
-    playTypewriterSound: () => void;
-  };
   appendThinkingToParts: (
     parts: MessageParts,
     textDelta: string,
@@ -252,7 +248,6 @@ export async function registerAgentStreamTurnEventBinding(
     observer,
     onWriteFile,
     callbacks,
-    sounds,
     appendThinkingToParts,
     setMessages,
     setPendingActions,
@@ -328,21 +323,58 @@ export async function registerAgentStreamTurnEventBinding(
       deferredRecoveryPollId = null;
     }
   };
+  const readRecoveryTurnId = () =>
+    requestState.activeTextSegmentTurnId ??
+    requestState.currentTurnId ??
+    null;
   function scheduleDeferredRecoveryPoll() {
     clearDeferredRecoveryPoll();
     if (requestState.requestFinished) {
       return;
     }
+    logAgentDebug(
+      "AgentStream",
+      "terminalRecoveryPoll.scheduled",
+      {
+        eventName,
+        requireTerminal: terminalRecoveryPollStarted,
+        sessionId: activeSessionId,
+        turnId: readRecoveryTurnId(),
+      },
+      {
+        dedupeKey: `${eventName}:terminalRecoveryPoll.scheduled`,
+        throttleMs: 1000,
+      },
+    );
     deferredRecoveryPollId = globalThis.setTimeout(() => {
       deferredRecoveryPollId = null;
       if (requestState.requestFinished) {
         return;
       }
       void (async () => {
+        logAgentDebug(
+          "AgentStream",
+          "terminalRecoveryPoll.attempt",
+          {
+            eventName,
+            requireTerminal: terminalRecoveryPollStarted,
+            sessionId: activeSessionId,
+            turnId: readRecoveryTurnId(),
+          },
+          {
+            dedupeKey: `${eventName}:terminalRecoveryPoll.attempt`,
+            throttleMs: 1000,
+          },
+        );
         const recovered = await tryRecoverSilentTurn({
           requireTerminal: terminalRecoveryPollStarted,
         });
         if (recovered) {
+          logAgentDebug("AgentStream", "terminalRecoveryPoll.recovered", {
+            eventName,
+            sessionId: activeSessionId,
+            turnId: readRecoveryTurnId(),
+          });
           console.warn(
             buildAgentStreamFirstEventSilentRecoveryWarning({ eventName }),
           );
@@ -354,7 +386,7 @@ export async function registerAgentStreamTurnEventBinding(
     }, STREAM_DEFERRED_RECOVERY_POLL_MS);
   }
   const startTerminalRecoveryPoll = () => {
-    if (terminalRecoveryPollStarted || requestState.requestFinished) {
+    if (requestState.requestFinished) {
       return;
     }
     terminalRecoveryPollStarted = true;
@@ -464,7 +496,7 @@ export async function registerAgentStreamTurnEventBinding(
       content,
       {
         requireTerminal: recoveryOptions?.requireTerminal === true,
-        turnId: requestState.currentTurnId ?? null,
+        turnId: readRecoveryTurnId(),
       },
     );
   };
@@ -487,8 +519,6 @@ export async function registerAgentStreamTurnEventBinding(
         clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
         upsertQueuedTurn: callbacks.upsertQueuedTurn,
         removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
-        playToolcallSound: sounds.playToolcallSound,
-        playTypewriterSound: sounds.playTypewriterSound,
         appendThinkingToParts,
       },
       observer,
@@ -770,8 +800,6 @@ export async function registerAgentStreamTurnEventBinding(
           clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
           upsertQueuedTurn: callbacks.upsertQueuedTurn,
           removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
-          playToolcallSound: sounds.playToolcallSound,
-          playTypewriterSound: sounds.playTypewriterSound,
           appendThinkingToParts,
         },
         observer,
@@ -804,6 +832,9 @@ export async function registerAgentStreamTurnEventBinding(
         setIsSending,
         soulCopy,
       });
+      if (data.type === "text_delta" || data.type === "text_delta_batch") {
+        startTerminalRecoveryPoll();
+      }
       scheduleInactivityWatchdog();
     },
   );

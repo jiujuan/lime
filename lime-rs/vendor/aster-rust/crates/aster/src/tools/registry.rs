@@ -73,18 +73,10 @@ pub(crate) const DEFAULT_NATIVE_ALIAS_PAIRS: &[(&str, &[&str])] = &[
             "mcp__system__write_file",
         ],
     ),
-    ("EnterPlanMode", &["EnterPlanModeTool"]),
-    ("ExitPlanMode", &["ExitPlanModeTool"]),
     ("Glob", &["GlobTool", "mcp__system__glob"]),
     ("Grep", &["GrepTool", "mcp__system__grep"]),
-    ("LSP", &["LSPTool"]),
     ("PowerShell", &["PowerShellTool"]),
     ("SendUserMessage", &["BriefTool"]),
-    ("Skill", &["SkillTool"]),
-    (
-        "ToolSearch",
-        &["ToolSearchTool", "tool_search", "mcp__system__tool_search"],
-    ),
     (
         "update_plan",
         &["UpdatePlan", "UpdatePlanTool", "update_plan_tool"],
@@ -1068,6 +1060,7 @@ mod tests {
             "TaskUpdate",
             "TaskOutput",
             "TaskStop",
+            "SkillTool",
         ] {
             assert!(
                 DEFAULT_NATIVE_ALIAS_PAIRS

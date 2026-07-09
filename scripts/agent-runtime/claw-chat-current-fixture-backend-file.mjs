@@ -30,7 +30,6 @@ function writeFixtureConfig(configPath, overrides = {}) {
   const imageProviderId = String(overrides.imageProviderId ?? "").trim();
   const imageModelId = String(overrides.imageModelId ?? "").trim();
   const soulStyleProfileId = String(overrides.soulStyleProfileId ?? "").trim();
-  const soulStyleIntensity = String(overrides.soulStyleIntensity ?? "").trim();
   const imageDefaults = ["      allowFallback: false"];
   if (imageProviderId) {
     imageDefaults.push(`      preferredProviderId: ${imageProviderId}`);
@@ -57,7 +56,6 @@ function writeFixtureConfig(configPath, overrides = {}) {
             "  soul:",
             "    enabled: true",
             `    style_profile_id: ${soulStyleProfileId}`,
-            `    style_intensity: ${soulStyleIntensity || "low"}`,
             "    imported_from: manual",
           ]
         : []),

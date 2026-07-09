@@ -10,6 +10,8 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::task::JoinHandle;
 
+pub mod live;
+
 const DEFAULT_OUTPUT_RETAIN_BYTES: usize = 128 * 1024;
 const PROCESS_OUTPUT_CHUNK_BYTES: usize = 8 * 1024;
 

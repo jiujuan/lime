@@ -11,8 +11,6 @@ type SlashSkillPreflightEnv = Pick<
   | "setIsSending"
   | "setActiveStream"
   | "clearActiveStreamIfMatch"
-  | "playTypewriterSound"
-  | "playToolcallSound"
   | "onWriteFile"
   | "getWorkspaceIdForSubmit"
 >;

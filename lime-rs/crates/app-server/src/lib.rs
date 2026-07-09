@@ -42,6 +42,7 @@ pub use app_server_protocol::AgentSessionActionScope;
 pub use app_server_protocol::AgentSessionActionType;
 pub use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
 pub use app_server_protocol::AgentSessionAnalysisHandoffExportResponse;
+pub use app_server_protocol::AgentSessionApprovalDecision;
 pub use app_server_protocol::AgentSessionHandoffArtifact;
 pub use app_server_protocol::AgentSessionHandoffBundleExportParams;
 pub use app_server_protocol::AgentSessionHandoffBundleExportResponse;
@@ -572,6 +573,7 @@ mod tests {
     use app_server_protocol::AgentSessionActionRespondParams;
     use app_server_protocol::AgentSessionActionScope;
     use app_server_protocol::AgentSessionActionType;
+    use app_server_protocol::AgentSessionApprovalDecision;
     use app_server_protocol::AgentSessionTurnStartParams;
     use app_server_protocol::ArtifactReadParams;
     use app_server_protocol::ClientCapabilities;
@@ -1528,7 +1530,8 @@ mod tests {
                         session_id: "sess_flow".to_string(),
                         request_id: "req_confirm_1".to_string(),
                         action_type: AgentSessionActionType::ToolConfirmation,
-                        confirmed: true,
+                        decision: Some(AgentSessionApprovalDecision::AllowOnce),
+                        confirmed: None,
                         response: Some("approved".to_string()),
                         user_data: Some(json!({ "source": "smoke" })),
                         metadata: Some(json!({ "mode": "json-rpc" })),

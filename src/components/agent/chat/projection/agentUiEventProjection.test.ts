@@ -1915,7 +1915,7 @@ describe("agentUiEventProjection", () => {
           id: "tool-plan",
           type: "tool_call",
           status: "completed",
-          tool_name: "ExitPlanMode",
+          tool_name: "request_user_input",
           success: true,
           output: "已提交计划审批",
           metadata: {

@@ -22,10 +22,13 @@ fn default_image_generate_skill_uses_current_native_image_task_tool() {
         "image_generate must only expose the current native image task tool"
     );
     assert!(
-        !manifest.metadata.allowed_tools.iter().any(
-            |tool| tool.eq_ignore_ascii_case("Bash") || tool.eq_ignore_ascii_case("ToolSearch")
-        ),
-        "image_generate must not expose Bash or ToolSearch in allowed-tools"
+        !manifest
+            .metadata
+            .allowed_tools
+            .iter()
+            .any(|tool| tool.eq_ignore_ascii_case("Bash")
+                || tool.eq_ignore_ascii_case("tool_search")),
+        "image_generate must not expose Bash or tool_search in allowed-tools"
     );
 
     let (_frontmatter, body) =
@@ -37,8 +40,8 @@ fn default_image_generate_skill_uses_current_native_image_task_tool() {
         "image_generate prompt must route through the current native task tool"
     );
     assert!(
-        body.contains("不要先调用 `ToolSearch`") && body.contains("不要通过 `Bash`"),
-        "image_generate prompt must forbid ToolSearch/Bash task-creation detours"
+        body.contains("不要先调用 `tool_search`") && body.contains("不要通过 `Bash`"),
+        "image_generate prompt must forbid tool_search/Bash task-creation detours"
     );
 }
 

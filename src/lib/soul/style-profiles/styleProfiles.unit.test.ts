@@ -120,6 +120,7 @@ describe("soul style profiles", () => {
     expect(
       builtInProfiles.every(
         (profile) =>
+          !("intensity" in profile) &&
           profile.responseContract.length > 0 &&
           profile.voicePrimitives.length > 0 &&
           Object.keys(profile.surfaceContracts).length > 0 &&
@@ -147,7 +148,6 @@ describe("soul style profiles", () => {
 
     const resolved = resolveSoulStyleProfile();
     expect(resolved.profile.id).toBe("cheeky_sassy_executor");
-    expect(resolved.intensity).toBe("low");
     expect(resolved.reason).toBe("default");
   });
 
@@ -265,14 +265,12 @@ describe("soul style profiles", () => {
   it("应把 profile 组合为稳定 prompt directives", () => {
     const directives = composeStyleDirectives({
       styleProfileId: "warm_supportive_companion",
-      styleIntensity: "medium",
     });
 
     expect(directives).toMatchObject({
       profileId: "warm_supportive_companion",
       packId: requireBuiltInPackId("warm_supportive_companion"),
       tone: "warm_supportive",
-      intensity: "medium",
       seriousModeFallback: "calm_professional_partner",
     });
     expect(directives?.promptLines.join("\n")).toContain("Forbidden moves:");
@@ -338,7 +336,6 @@ describe("soul style profiles", () => {
     for (const profile of builtInProfiles) {
       const directives = composeStyleDirectives({
         styleProfileId: profile.id,
-        styleIntensity: "high",
       });
       const prompt = directives?.promptLines.join("\n") ?? "";
 
@@ -350,28 +347,56 @@ describe("soul style profiles", () => {
       }
       expect(prompt).toContain("Anti-repetition rules:");
       expect(prompt).toContain("Risk fallback:");
+      expect(prompt).not.toContain("Intensity:");
     }
   });
 
-  it("贱兮兮风格不能退回固定口头禅或每轮强制 cue", () => {
+  it("贱兮兮风格必须在普通对话关键面持续可感知但不能退回固定口头禅", () => {
     const directives = composeStyleDirectives({
       styleProfileId: "cheeky_sassy_executor",
-      styleIntensity: "low",
     });
     const prompt = directives?.promptLines.join("\n") ?? "";
 
-    expect(prompt).toContain("instead of a fixed prefix");
     expect(prompt).toContain(
-      "Do not force a visible style cue into every reply",
+      "Every normal chat, tool narrative, body transition, and closing suggestion must carry a clearly recognizable cheeky-sassy voice",
     );
+    expect(prompt).toContain(
+      "Do not flatten a normal-risk turn into the default assistant tone",
+    );
+    expect(prompt).toContain("Use varied wording instead of one fixed opener");
+    expect(prompt).toContain("Do not mock, shame, or belittle the user");
     expect(prompt).toContain("Do not repeat catchphrases");
-    expect(prompt).not.toContain("Every normal chat reply must show");
+    expect(prompt).not.toContain("Do not force a visible style cue into every reply");
+    expect(prompt).not.toContain("For low intensity");
+  });
+
+  it("温柔陪伴风格必须持续可感知但不能变成鸡汤或拖慢执行", () => {
+    const directives = composeStyleDirectives({
+      styleProfileId: "warm_supportive_companion",
+    });
+    const prompt = directives?.promptLines.join("\n") ?? "";
+
+    expect(directives).toMatchObject({
+      profileId: "warm_supportive_companion",
+      packId: requireBuiltInPackId("warm_supportive_companion"),
+      tone: "warm_supportive",
+      seriousModeFallback: "calm_professional_partner",
+    });
+    expect(prompt).toContain(
+      "Every normal chat, tool narrative, body transition, and closing suggestion must carry a clearly recognizable warm-supportive voice",
+    );
+    expect(prompt).toContain(
+      "Make warmth visible through steady pacing, low-pressure next steps, and calm uncertainty handling",
+    );
+    expect(prompt).toContain("Do not over-comfort or add generic encouragement");
+    expect(prompt).toContain(
+      "Do not flatten normal-risk turns into the default assistant tone",
+    );
   });
 
   it("拽酷风格应保持短句推进但禁止轻蔑和装腔", () => {
     const directives = composeStyleDirectives({
       styleProfileId: "cool_confident_operator",
-      styleIntensity: "medium",
     });
     const prompt = directives?.promptLines.join("\n") ?? "";
 
@@ -379,11 +404,41 @@ describe("soul style profiles", () => {
       profileId: "cool_confident_operator",
       packId: requireBuiltInPackId("cool_confident_operator"),
       tone: "cool_confident",
-      intensity: "medium",
       seriousModeFallback: "calm_professional_partner",
     });
+    expect(prompt).toContain(
+      "Every normal chat, tool narrative, body transition, and closing suggestion must carry a crisp, composed, action-oriented voice",
+    );
+    expect(prompt).toContain(
+      "Keep the cool-confident operator voice visible in normal-risk turns",
+    );
     expect(prompt).toContain("short sentences");
     expect(prompt).toContain("Do not command, intimidate");
     expect(prompt).toContain("Do not reduce useful detail");
+    expect(prompt).toContain(
+      "Do not flatten normal-risk turns into the default assistant tone",
+    );
+  });
+
+  it("冷静专业风格必须通过结构和风险框架持续可感知", () => {
+    const directives = composeStyleDirectives({
+      styleProfileId: "calm_professional_partner",
+    });
+    const prompt = directives?.promptLines.join("\n") ?? "";
+
+    expect(directives).toMatchObject({
+      profileId: "calm_professional_partner",
+      packId: requireBuiltInPackId("calm_professional_partner"),
+      tone: "calm_professional",
+      seriousModeFallback: "calm_professional_partner",
+    });
+    expect(prompt).toContain(
+      "Every normal chat, tool narrative, body transition, and closing suggestion must carry a calm-professional voice",
+    );
+    expect(prompt).toContain(
+      "Make professionalism visible through fact-assumption separation, stable wording, and audit-friendly transitions",
+    );
+    expect(prompt).toContain("Separate facts, assumptions, risks, and recommendations");
+    expect(prompt).toContain("Do not use teasing, cute phrasing, or performative familiarity");
   });
 });

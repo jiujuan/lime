@@ -10,6 +10,7 @@ use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
+use app_server_protocol::AgentSessionApprovalDecision;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::RuntimeOptions;
 use async_trait::async_trait;
@@ -87,6 +88,7 @@ pub struct RuntimeBackendActionRespondRequest {
     pub turn: Option<AgentTurn>,
     pub request_id: String,
     pub action_type: AgentSessionActionType,
+    pub decision: Option<AgentSessionApprovalDecision>,
     pub confirmed: bool,
     pub response: Option<String>,
     pub user_data: Option<serde_json::Value>,
@@ -225,6 +227,7 @@ impl ExecutionBackend for RuntimeBackendAdapter {
                 turn: request.turn,
                 request_id: request.request_id,
                 action_type: request.action_type,
+                decision: request.decision,
                 confirmed: request.confirmed,
                 response: request.response,
                 user_data: request.user_data,
@@ -539,7 +542,8 @@ mod tests {
                     session_id: session.session_id.clone(),
                     request_id: "req_confirm_1".to_string(),
                     action_type: AgentSessionActionType::ToolConfirmation,
-                    confirmed: true,
+                    decision: Some(AgentSessionApprovalDecision::AllowOnce),
+                    confirmed: None,
                     response: Some("allow".to_string()),
                     user_data: None,
                     metadata: None,

@@ -1,6 +1,6 @@
 {
   "runtimeGatewayCommands": [
-    "aster_agent_init",
+    "agent_init",
     "app_server_handle_json_lines",
     "app_server_drain_events",
     "plugin_start_ui_runtime",
@@ -57,6 +57,7 @@
     "agent_get_session_messages": "agentSession/read",
     "agent_delete_session": "agentSession/update",
     "agent_rename_session": "agentSession/update",
+    "aster_agent_init": "agent_init",
     "aster_agent_chat_stream": "agentSession/turn/start",
     "aster_agent_stop": "agentSession/turn/cancel",
     "aster_agent_confirm": "agentSession/action/respond",

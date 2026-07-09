@@ -98,6 +98,22 @@ export function pickStringField(
   return undefined;
 }
 
+export function pickStringArrayField(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      const values = value.filter(
+        (item): item is string => typeof item === "string",
+      );
+      return values.length ? values : undefined;
+    }
+  }
+  return undefined;
+}
+
 export function normalizeToolArguments(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -165,6 +181,10 @@ export function withAgentEventEnvelope<TEvent extends AgentEvent>(
   source: Record<string, unknown>,
   event: TEvent,
 ): TEvent {
+  const preserveActionRequestId =
+    (event.type === "action_required" || event.type === "action_resolved") &&
+    typeof event.request_id === "string" &&
+    event.request_id.length > 0;
   return {
     ...event,
     event_id:
@@ -181,8 +201,9 @@ export function withAgentEventEnvelope<TEvent extends AgentEvent>(
             Number.isFinite(source.rendererEventReceivedAt)
           ? source.rendererEventReceivedAt
           : event.renderer_event_received_at,
-    request_id:
-      typeof source.request_id === "string"
+    request_id: preserveActionRequestId
+      ? event.request_id
+      : typeof source.request_id === "string"
         ? source.request_id
         : typeof source.requestId === "string"
           ? source.requestId

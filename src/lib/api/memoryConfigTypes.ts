@@ -20,14 +20,11 @@ export interface MemorySoulArtifactVoiceConfig {
 
 export type MemorySoulStyleProfileId = string;
 
-export type MemorySoulStyleIntensity = "low" | "medium" | "high";
-
 export interface MemorySoulConfig {
   enabled?: boolean;
   name?: string | null;
   summary?: string | null;
   style_profile_id?: MemorySoulStyleProfileId | null;
-  style_intensity?: MemorySoulStyleIntensity | null;
   tone?: string[];
   communication_style?: string[];
   explanation_depth?: string | null;

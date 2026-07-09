@@ -663,6 +663,12 @@ export type AgentSessionActionType =
   | "ask_user"
   | "elicitation";
 
+export type AgentSessionApprovalDecision =
+  | "allow_once"
+  | "allow_for_session"
+  | "decline"
+  | "cancel";
+
 export type AgentSessionActionScope = {
   sessionId?: string;
   threadId?: string;
@@ -683,6 +689,7 @@ export type AgentSessionReplayedActionRequired = {
   prompt?: string;
   questions?: unknown;
   requestedSchema?: unknown;
+  availableDecisions?: AgentSessionApprovalDecision[];
   scope?: AgentSessionActionScope;
 };
 
@@ -694,7 +701,8 @@ export type AgentSessionActionRespondParams = {
   sessionId: string;
   requestId: string;
   actionType: AgentSessionActionType;
-  confirmed: boolean;
+  decision?: AgentSessionApprovalDecision;
+  confirmed?: boolean;
   response?: string;
   userData?: unknown;
   metadata?: unknown;

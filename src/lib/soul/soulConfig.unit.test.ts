@@ -16,7 +16,6 @@ describe("soulConfig", () => {
       enabled: true,
       summary: "  直接、少客套  ",
       style_profile_id: "warm_supportive_companion",
-      style_intensity: "medium",
       communication_style: ["先给结论", "先给结论", "  "],
       avoid: ["不要空泛鼓励", "不要空泛鼓励"],
     });
@@ -25,7 +24,6 @@ describe("soulConfig", () => {
       enabled: true,
       summary: "直接、少客套",
       style_profile_id: "warm_supportive_companion",
-      style_intensity: "medium",
       communication_style: ["先给结论"],
       avoid: ["不要空泛鼓励"],
     });
@@ -36,11 +34,9 @@ describe("soulConfig", () => {
     const result = normalizeSoulConfig({
       enabled: true,
       style_profile_id: "unknown_profile",
-      style_intensity: "extreme" as never,
     });
 
     expect(result.style_profile_id).toBe("unknown_profile");
-    expect(result.style_intensity).toBeUndefined();
     expect(hasSoulContent(result)).toBe(true);
 
     const invalid = normalizeSoulConfig({
@@ -186,7 +182,6 @@ describe("soulConfig", () => {
       enabled: true,
       summary: "先给结论，再补关键证据",
       style_profile_id: "calm_professional_partner",
-      style_intensity: "low",
       communication_style: ["直接指出弱假设"],
       avoid: ["不要编造能力"],
       artifact_voice: {
@@ -201,7 +196,7 @@ describe("soulConfig", () => {
     expect(markdown).toContain("## Communication Style");
     expect(markdown).toContain("## Interaction Style Profile");
     expect(markdown).toContain("Style profile: calm_professional_partner");
-    expect(markdown).toContain("Style intensity: low");
+    expect(markdown).not.toContain("Style intensity:");
     expect(markdown).toContain("## Creator / Brand Voice");
     expect(markdown).toContain("Brand voice ID: brand-1");
     expect(markdown).toContain("先给结论，再补关键证据");

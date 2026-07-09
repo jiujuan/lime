@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getAgentRuntimeToolInventory,
   type AgentRuntimeToolInventory,
+  type AgentRuntimeToolInventoryPluginMcpTarget,
 } from "@/lib/api/agentRuntime";
 import {
   mcpApi,
@@ -34,13 +35,6 @@ interface UseWorkspaceHarnessInventoryRuntimeParams {
   harnessPendingCount: number;
 }
 
-interface PluginMcpTargetProjection {
-  expectedToolName?: unknown;
-  callProofRequest?: unknown;
-  prepareRequests?: unknown;
-  toolListRequest?: unknown;
-}
-
 interface PluginMcpPrepareTarget {
   expectedToolName: string | null;
   callProofRequests: McpCallProofRequest[];
@@ -53,20 +47,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function getPluginMcpTargets(
   inventory: AgentRuntimeToolInventory | null,
-): PluginMcpTargetProjection[] {
-  if (!inventory || !isRecord(inventory)) {
-    return [];
-  }
-
-  const targets = inventory.plugin_mcp_targets;
-  return Array.isArray(targets)
-    ? targets.filter(isRecord).map((target) => ({
-        expectedToolName: target.expectedToolName,
-        callProofRequest: target.callProofRequest,
-        prepareRequests: target.prepareRequests,
-        toolListRequest: target.toolListRequest,
-      }))
-    : [];
+): AgentRuntimeToolInventoryPluginMcpTarget[] {
+  return inventory?.plugin_mcp_targets ?? [];
 }
 
 function isCandidateMcpCallProofRequest(
@@ -83,12 +65,10 @@ function getCandidateMcpPrepareTargets(
   inventory: AgentRuntimeToolInventory | null,
 ): PluginMcpPrepareTarget[] {
   return getPluginMcpTargets(inventory).flatMap((target) => {
-    const prepareRequests = Array.isArray(target.prepareRequests)
-      ? target.prepareRequests.filter(
-          (request): request is McpPrepareRequest =>
-            isRecord(request) && request.status === "candidate",
-        )
-      : [];
+    const prepareRequests = target.prepareRequests.filter(
+      (request): request is McpPrepareRequest =>
+        isRecord(request) && request.status === "candidate",
+    );
     const callProofRequests = isCandidateMcpCallProofRequest(
       target.callProofRequest,
     )
@@ -97,7 +77,7 @@ function getCandidateMcpPrepareTargets(
     if (
       prepareRequests.length === 0 &&
       callProofRequests.length === 0 &&
-      isRecord(target.toolListRequest)
+      target.toolListRequest
     ) {
       prepareRequests.push({
         method: "mcpTool/listForContext",

@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import styled, { keyframes } from "styled-components";
-import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import {
   EMPTY_STATE_CARD_SURFACE_CLASSNAME,
   EMPTY_STATE_ICON_TONE_CLASSNAMES,
@@ -335,13 +334,6 @@ const HeroCard = styled.article.attrs({
   }
 `;
 
-const CardTitleRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-`;
-
 const CardValueText = styled.div`
   margin-top: 0.2rem;
   font-size: 11.5px;
@@ -463,24 +455,9 @@ export function EmptyStateHero({
                 </div>
 
                 <div className="card-content mt-2.5">
-                  <CardTitleRow>
-                    <div className="card-title text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                      {card.title}
-                    </div>
-                    <WorkbenchInfoTip
-                      ariaLabel={`${card.title}说明`}
-                      variant="icon"
-                      tone={card.tone === "emerald" ? "mint" : "slate"}
-                      side="top"
-                      align="end"
-                      content={
-                        <div style={{ width: "220px" }} className="space-y-1">
-                          <p className="m-0">{card.value}</p>
-                          <p className="m-0">{card.description}</p>
-                        </div>
-                      }
-                    />
-                  </CardTitleRow>
+                  <div className="card-title text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                    {card.title}
+                  </div>
                   <CardValueText>{card.value}</CardValueText>
                 </div>
 

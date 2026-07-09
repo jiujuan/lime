@@ -58,6 +58,14 @@ pub(super) fn runtime_events_from_agent_event_with_soul_style(
     if let Some(payload_object) = payload.as_object_mut() {
         payload_object.insert("backend".to_string(), Value::String("runtime".to_string()));
         payload_object.insert("runtimeEvent".to_string(), runtime_event);
+        if let RuntimeAgentEvent::ActionRequired { action_type, .. } = event {
+            if action_type == "tool_confirmation" {
+                payload_object.insert(
+                    "availableDecisions".to_string(),
+                    json!(["allow_once", "decline", "cancel"]),
+                );
+            }
+        }
         enrich_tool_terminal_payload(event, payload_object);
         tool_process_runtime_metadata::enrich_runtime_tool_process_payload(
             event,

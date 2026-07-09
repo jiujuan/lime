@@ -29,7 +29,14 @@ const currentCompatibilityAdapter: AgentRuntimeEventAdapter = ({
     ? readString(payload, "tool_id", "tool_call_id", "toolId", "toolCallId")
     : undefined;
   const actionId = payload
-    ? readString(payload, "request_id", "requestId", "action_id", "actionId")
+    ? readString(
+        payload,
+        "action_id",
+        "actionId",
+        "requestId",
+        "id",
+        "request_id",
+      )
     : undefined;
   if (!toolCallId && !actionId) {
     return;

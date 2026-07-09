@@ -305,6 +305,8 @@ use app_server_protocol::VoiceModelDefaultSetParams;
 use app_server_protocol::VoiceModelDefaultSetResponse;
 use app_server_protocol::VoiceModelTestTranscribeFileParams;
 use app_server_protocol::VoiceModelTestTranscribeFileResponse;
+use app_server_protocol::VoiceTranscriptionTranscribeAudioParams;
+use app_server_protocol::VoiceTranscriptionTranscribeAudioResponse;
 use app_server_protocol::WechatChannelAccountListResponse;
 use app_server_protocol::WechatChannelAccountRemoveParams;
 use app_server_protocol::WechatChannelAccountRemoveResponse;

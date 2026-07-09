@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  rememberInitialSessionNavigationStart,
   resetInitialSessionNavigationDeduplicationForTests,
   useWorkspaceInitialSessionNavigation,
 } from "./useWorkspaceInitialSessionNavigation";
@@ -257,6 +258,48 @@ describe("useWorkspaceInitialSessionNavigation", () => {
 
     expect(switchTopic).toHaveBeenCalledTimes(1);
     expect(switchTopic).toHaveBeenCalledWith("session-dedupe", undefined);
+  });
+
+  it("外部发送路径已登记导航时不应立即触发初始会话切换", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+
+    rememberInitialSessionNavigationStart("session-materialized-send");
+    renderHook({
+      initialSessionId: "session-materialized-send",
+      currentSessionId: null,
+      switchTopic,
+    });
+    await flushEffects();
+
+    expect(switchTopic).not.toHaveBeenCalled();
+  });
+
+  it("外部发送路径已登记导航后不应在去重窗口后补发初始会话切换", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValue(10_000);
+
+    rememberInitialSessionNavigationStart("session-materialized-send");
+    const mounted = renderHook({
+      initialSessionId: "session-materialized-send",
+      currentSessionId: null,
+      switchTopic,
+    });
+    await flushEffects();
+    expect(switchTopic).not.toHaveBeenCalled();
+
+    nowSpy.mockReturnValue(13_000);
+    mounted.rerender({
+      initialSessionId: "session-materialized-send",
+      currentSessionId: "previous-session",
+      switchTopic,
+      resolveInitialSessionSwitch: () => ({
+        allowDetachedSession: true,
+      }),
+    });
+    await flushEffects();
+
+    expect(switchTopic).not.toHaveBeenCalled();
   });
 
   it("不同工作区实例恢复同一初始会话时不应互相去重", async () => {

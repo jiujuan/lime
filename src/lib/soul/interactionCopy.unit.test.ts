@@ -99,7 +99,6 @@ describe("resolveSoulInteractionCopy", () => {
       soul: {
         enabled: true,
         style_profile_id: "cheeky_sassy_executor",
-        style_intensity: "low",
       },
     });
 
@@ -124,7 +123,6 @@ describe("resolveSoulInteractionCopy", () => {
       soul: {
         enabled: true,
         style_profile_id: "cheeky_sassy_executor",
-        style_intensity: "high",
       },
     });
 
@@ -149,7 +147,6 @@ describe("resolveSoulInteractionCopy", () => {
       soul: {
         enabled: true,
         style_profile_id: "cool_confident_operator",
-        style_intensity: "low",
       },
     });
 
@@ -183,7 +180,6 @@ describe("resolveSoulInteractionCopy", () => {
       soul: {
         enabled: true,
         style_profile_id: "warm_supportive_companion",
-        style_intensity: "medium",
       },
     });
 

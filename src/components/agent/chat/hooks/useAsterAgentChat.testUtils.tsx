@@ -5,7 +5,7 @@ import type { WriteArtifactContext } from "../types";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 
 const {
-  mockInitAsterAgent,
+  mockInitAgentRuntime,
   mockSubmitAgentRuntimeTurn,
   mockCreateAgentRuntimeSession,
   mockListAgentRuntimeSessions,
@@ -29,7 +29,7 @@ const {
   mockResolveClawWorkspaceProviderSelection,
   mockScheduleMinimumDelayIdleTask,
 } = vi.hoisted(() => ({
-  mockInitAsterAgent: vi.fn(),
+  mockInitAgentRuntime: vi.fn(),
   mockSubmitAgentRuntimeTurn: vi.fn(),
   mockCreateAgentRuntimeSession: vi.fn(),
   mockListAgentRuntimeSessions: vi.fn(),
@@ -63,7 +63,7 @@ const {
 }));
 
 export {
-  mockInitAsterAgent,
+  mockInitAgentRuntime,
   mockSubmitAgentRuntimeTurn,
   mockCreateAgentRuntimeSession,
   mockListAgentRuntimeSessions,
@@ -90,7 +90,7 @@ export {
 
 vi.mock("@/lib/api/agentRuntime", () => ({
   createAgentRuntimeClient: () => ({
-    initAsterAgent: mockInitAsterAgent,
+    initAgentRuntime: mockInitAgentRuntime,
     submitAgentRuntimeTurn: mockSubmitAgentRuntimeTurn,
     createAgentRuntimeSession: mockCreateAgentRuntimeSession,
     listAgentRuntimeSessions: mockListAgentRuntimeSessions,
@@ -107,7 +107,7 @@ vi.mock("@/lib/api/agentRuntime", () => ({
     removeAgentRuntimeQueuedTurn: mockRemoveAgentRuntimeQueuedTurn,
     respondAgentRuntimeAction: mockRespondAgentRuntimeAction,
   }),
-  initAsterAgent: mockInitAsterAgent,
+  initAgentRuntime: mockInitAgentRuntime,
   submitAgentRuntimeTurn: mockSubmitAgentRuntimeTurn,
   createAgentRuntimeSession: mockCreateAgentRuntimeSession,
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
@@ -436,7 +436,7 @@ beforeEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
   await changeLimeLocale("zh-CN");
 
-  mockInitAsterAgent.mockReset();
+  mockInitAgentRuntime.mockReset();
   mockSubmitAgentRuntimeTurn.mockReset();
   mockCreateAgentRuntimeSession.mockReset();
   mockListAgentRuntimeSessions.mockReset();
@@ -469,7 +469,7 @@ beforeEach(async () => {
   localStorage.clear();
   sessionStorage.clear();
 
-  mockInitAsterAgent.mockResolvedValue(undefined);
+  mockInitAgentRuntime.mockResolvedValue(undefined);
   mockSubmitAgentRuntimeTurn.mockResolvedValue(undefined);
   mockCreateAgentRuntimeSession.mockResolvedValue("created-session");
   mockListAgentRuntimeSessions.mockResolvedValue([]);
@@ -500,7 +500,6 @@ afterEach(() => {
   localStorage.clear();
   sessionStorage.clear();
 });
-
 
 export function getAgentStreamTextOverlay(
   messageId: string | null | undefined,

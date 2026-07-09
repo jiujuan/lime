@@ -16,6 +16,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-file.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-script.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-approval-backend-events.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-tool-skill-events.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-backend-ledger.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
@@ -28,6 +29,11 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-gui-input-modes.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-tool-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-web-tools-waits.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-approval-resume.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-approval-gui.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-approval-read-model.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-approval-trace.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-approval-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-media-reference.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs",
@@ -39,6 +45,8 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-skills-runtime-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-terminal-after-answer.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-terminal-stale-guard.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-live-tail.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-resize-reflow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-web-tools-rendering.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
@@ -51,6 +59,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-pending-steer-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-resize-reflow-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-runtime-surface-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-runtime-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-terminal-assertions.mjs",
@@ -117,7 +126,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("LIME_ELECTRON_REMOTE_DEBUGGING_PORT");
     expect(content).toContain("ensureElectronFixtureBuild");
     expect(content).toContain("../lib/electron-fixture-build.mjs");
-    expect(content).toContain("rebuilding packaged fixture assets");
+    expect(content).toContain("rebuilding stale packaged fixture assets");
+    expect(content).toContain("buildStaleElectronFixtureSegments");
     expect(content).toContain("waitForAppUrlReady");
     expect(content).toContain('logStage("wait-app-url")');
     expect(content).toContain('"--use-mock-keychain"');
@@ -186,6 +196,23 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("traceEvidenceHasProviderAndClient(evidence)");
   });
 
+  it("does not run default news completion waits after resize/reflow completes in its scenario flow", () => {
+    const content = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
+      "utf8",
+    );
+
+    expect(content).toContain(
+      "options.scenario === ELECTRON_RESIZE_REFLOW_SCENARIO",
+    );
+    expect(content).toContain(
+      "options.scenario !== ELECTRON_RESIZE_REFLOW_SCENARIO",
+    );
+    expect(content.indexOf("runElectronResizeReflowScenario")).toBeLessThan(
+      content.indexOf("wait-gui-completed"),
+    );
+  });
+
   it("uses a local external fixture backend and current Agent Session methods", () => {
     const content = readSmokeScript();
 
@@ -208,9 +235,22 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('kind === "turnStart"');
     expect(content).toContain('kind === "turnCancel"');
     expect(content).toContain('type: "message.delta"');
+    expect(content).toContain('type: "message.completed"');
     expect(content).toContain('type: "turn.completed"');
     expect(content).toContain('type: "turn.canceled"');
     expect(content).not.toContain('type: "turn.final_done"');
+  });
+
+  it("covers stream parser completed full-text dedupe in the default Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("streamParserCompletedFullTextObserved");
+    expect(content).toContain("guiStreamParserNoDuplicateFinalText");
+    expect(content).toContain("readModelStreamParserNoDuplicateFinalText");
+    expect(content).toContain("STREAM_PARSER_BOUNDARY_DEDUPE_GUARDS");
+    expect(content).toContain("message.completed");
+    expect(content).toContain("flattenBackendEmitTypesForPrompt");
+    expect(content).toContain("includesOrderedEventTypes");
   });
 
   it("uses a local image provider stub for @配图 fixture execution", () => {
@@ -273,6 +313,44 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("hasCancelPhase");
     expect(content).toContain("continuePromptReachedBackend");
     expect(content).toContain("backendRecordedCancelThenContinue");
+  });
+
+  it("covers approval decline and cancel decision semantics through current action/respond", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("approval-request-resume");
+    expect(content).toContain("approval-request-decline");
+    expect(content).toContain("approval-request-cancel");
+    expect(content).toContain("runApprovalRequestDecisionScenario");
+    expect(content).toContain("clickApprovalDecisionButton");
+    expect(content).toContain('decision === "cancel"');
+    expect(content).toContain('decision === "decline"');
+    const approvalBackendEvents = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-approval-backend-events.mjs",
+      "utf8",
+    );
+    const approvalCancelBranchStart = approvalBackendEvents.indexOf(
+      "const completionEvents = approvalCanceled",
+    );
+    const approvalCancelBranchEnd = approvalBackendEvents.indexOf(
+      "\n    : approvalAllowed",
+      approvalCancelBranchStart,
+    );
+    expect(approvalCancelBranchStart).toBeGreaterThanOrEqual(0);
+    expect(approvalCancelBranchEnd).toBeGreaterThan(approvalCancelBranchStart);
+    const approvalCancelCompletionBranch = approvalBackendEvents.slice(
+      approvalCancelBranchStart,
+      approvalCancelBranchEnd,
+    );
+    expect(approvalCancelCompletionBranch).toContain('type: "tool.failed"');
+    expect(approvalCancelCompletionBranch).not.toContain(
+      'type: "turn.canceled"',
+    );
+    expect(content).toContain('!emitTypes.includes("tool.result")');
+    expect(content).toContain("approvalRequestDeclineNoToolExecuted");
+    expect(content).toContain("approvalRequestCancelNoToolExecuted");
+    expect(content).toContain("readModelApprovalRequestCancelCanceled");
+    expect(content).toContain("APPROVAL_REQUEST_DECISION_ASSERTION_KEYS");
   });
 
   it("covers the current cancel flow through GUI stop and App Server read model", () => {
@@ -362,7 +440,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('["/models", "/v1/models"]');
     expect(content).toContain('input_modalities: ["text", "image"]');
     expect(content).toContain("fixtureModelInputModalities");
-    expect(content).toContain("options.scenario !== INPUTBAR_RICH_RESTORE_SCENARIO");
+    expect(content).toContain(
+      "options.scenario !== INPUTBAR_RICH_RESTORE_SCENARIO",
+    );
     expect(regressionContent).toContain(
       "Claw Inputbar rich draft restore output-free cancel Electron fixture",
     );
@@ -406,11 +486,15 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("inputbarPendingSteerQueuedReadModel");
     expect(content).toContain("inputbarPendingSteerSecondInputDefer");
     expect(content).toContain("inputbarPendingSteerBackendBeforeCancel");
-    expect(content).toContain("inputbarPendingSteerRichPromptNotStartedBeforeCancel");
+    expect(content).toContain(
+      "inputbarPendingSteerRichPromptNotStartedBeforeCancel",
+    );
     expect(content).toContain("inputbarPendingSteerQueuedRestoreClicked");
     expect(content).toContain("inputbarPendingSteerQueuedRichImagePreserved");
     expect(content).toContain("inputbarPendingSteerQueuedRichPathPreserved");
-    expect(content).toContain("inputbarPendingSteerQueuedRichTextElementsPreserved");
+    expect(content).toContain(
+      "inputbarPendingSteerQueuedRichTextElementsPreserved",
+    );
     expect(content).toContain("inputbarPendingSteerQueuedRichSkillPreserved");
     expect(content).toContain("inputbarPendingSteerMultipleQueued");
     expect(content).toContain("inputbarPendingSteerQueueOrderPreserved");
@@ -424,15 +508,17 @@ describe("claw chat current Electron fixture smoke guard", () => {
       /summary\.inputbarPendingSteerPopFrontQueueResume\s*=\s*await resumeQueuedTurnForPromptIfNeeded/u,
     );
     expect(content).toContain("inputbarPendingSteerPopFrontSecondReindexed");
-    expect(content).toContain("inputbarPendingSteerPopFrontGuiHydratedSecondQueue");
+    expect(content).toContain(
+      "inputbarPendingSteerPopFrontGuiHydratedSecondQueue",
+    );
     expect(content).toContain(
       "inputbarPendingSteerPopFrontHydratedResumeReady",
     );
     expect(content).toContain(
       "inputbarPendingSteerPopFrontQueuedPanel.stopButtonVisible === true",
     );
-    expect(content).toContain(
-      "isInputbarPendingSteerPopFrontResumeScenario\n          ? inputbarPendingSteerPopFrontHydratedResumeReady",
+    expect(content).toMatch(
+      /isInputbarPendingSteerPopFrontResumeScenario\s*\?\s*inputbarPendingSteerPopFrontHydratedResumeReady/u,
     );
     expect(content).toContain(
       "INPUTBAR_PENDING_STEER_MULTI_QUEUE_ASSERTION_KEYS",
@@ -458,9 +544,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(regressionContent).toContain(
       "Claw Inputbar pending steer multi queue order Electron fixture",
     );
-    expect(regressionContent).toContain(
-      '"inputbar-pending-steer-multi-queue"',
-    );
+    expect(regressionContent).toContain('"inputbar-pending-steer-multi-queue"');
     expect(regressionContent).toContain(
       "claw-chat-current-fixture-inputbar-pending-steer-multi-queue-regression",
     );
@@ -496,11 +580,16 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "summary.guiPlanCompleted?.hasPlanSection === true",
     );
     expect(content).toContain(
-      "summary.guiPlanCompleted?.hasAllPlanSteps === true",
+      "summary.guiPlanCompleted?.planOwnerHasAllSteps === true",
     );
+    expect(content).toContain("planOwnerKindsWithAllSteps");
+    expect(content).toContain("planDecisionRevisionBound");
+    expect(content).toContain("planOwnerRevisionIds");
     expect(content).toContain("readModelPlanThreadItemRevisioned");
     expect(content).toContain("readModelPlanHistoryHydratePreserved");
     expect(content).toContain("legacyUpdatePlanToolHidden");
+    expect(content).toContain("planUiAbsentWithoutProposedPlan");
+    expect(content).toContain("guiNoPlanUiWithoutProposedPlan");
     expect(content).toContain("revisionId");
     expect(content).toContain("proposed_plan");
     expect(content).toContain("UpdatePlanTool");
@@ -523,7 +612,6 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("soul-style");
     expect(content).toContain("SOUL_STYLE_SCENARIO");
     expect(content).toContain("--soul-style-profile");
-    expect(content).toContain("--soul-style-intensity");
     expect(content).toContain("SOUL_STYLE_FIXTURE_PROFILES");
     expect(content).toContain("createSoulStyleFixtureSelection");
     expect(content).toContain("buildSoulStyleFixtureAssistantText");
@@ -542,7 +630,6 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("hasMemorySoulSchema");
     expect(content).toContain("hasProfileId");
     expect(content).toContain("hasStylePack");
-    expect(content).toContain("hasIntensity");
     expect(content).toContain("hasToolLifecycleSurfaceContracts");
     expect(content).toContain("closing_suggestion:");
     expect(content).toContain("buildSoulStyleScenarioAssertions");
@@ -590,9 +677,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
       expect(check.textCount, `${check.surface} text count`).toBe(4);
       expect(check.uniqueTextCount, `${check.surface} style collapse`).toBe(4);
       expect(check.factSignatureCount, `${check.surface} fact drift`).toBe(1);
-      expect(check.missingFactsByProfile, `${check.surface} missing facts`).toEqual(
-        {},
-      );
+      expect(
+        check.missingFactsByProfile,
+        `${check.surface} missing facts`,
+      ).toEqual({});
     }
   });
 
@@ -654,6 +742,64 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
   });
 
+  it("covers live-tail commit in a dedicated real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("live-tail-commit");
+    expect(content).toContain("LIVE_TAIL_COMMIT_PROMPT");
+    expect(content).toContain("LIVE_TAIL_COMMIT_FIRST_TEXT");
+    expect(content).toContain("LIVE_TAIL_COMMIT_OVERFLOW_MARKER");
+    expect(content).toContain("LIVE_TAIL_COMMIT_TABLE_HEADER");
+    expect(content).toContain("LIVE_TAIL_COMMIT_TABLE_TAIL");
+    expect(content).toContain("LIVE_TAIL_COMMIT_DONE_TEXT");
+    expect(content).toContain("runLiveTailCommitScenario");
+    expect(content).toContain("wait-gui-live-tail-first-visible-before-commit");
+    expect(content).toContain("guiLiveTailFirstVisibleBeforeCommit");
+    expect(content).toContain("runningStatusVisible");
+    expect(content).toContain("startupNoteVisible");
+    expect(content).toContain("overflowCommitted");
+    expect(content).toContain("scrollAnchorStable");
+    expect(content).toContain("markdownTableRendered");
+    expect(content).toContain("readModelLiveTailCommitCompleted");
+    expect(content).toContain("liveTailCommitCompleted");
+    expect(content).toContain("LIVE_TAIL_COMMIT_ASSERTION_KEYS");
+    expect(content).toContain('eventType: "turn.completed"');
+    expect(content).toContain('type: "turn.completed"');
+    expect(content).toContain("options.scenario !== LIVE_TAIL_COMMIT_SCENARIO");
+    expect(content).not.toContain('type: "turn.final_done"');
+    expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("covers Electron resize/reflow in a dedicated real Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("electron-resize-reflow");
+    expect(content).toContain("ELECTRON_RESIZE_REFLOW_SCENARIO");
+    expect(content).toContain("runElectronResizeReflowScenario");
+    expect(content).toContain(
+      "APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST",
+    );
+    expect(content).toContain("request-electron-resize-reflow-files-surface");
+    expect(content).toContain("wait-electron-resize-reflow-backend-turn-start");
+    expect(content).toContain("capture-electron-resize-reflow-${label}");
+    expect(content).toContain("wide: { width: 1440, height: 1000 }");
+    expect(content).toContain("compact: { width: 1240, height: 760 }");
+    expect(content).toContain("restored: { width: 1440, height: 1000 }");
+    expect(content).toContain("captureResizeScreenshot");
+    expect(content).toContain("screenshotCount");
+    expect(content).toContain("workspace-files-surface");
+    expect(content).toContain("task-center-files-toggle");
+    expect(content).toContain("textRangeRect");
+    expect(content).toContain("noTailInputOverlap");
+    expect(content).toContain("noMessageRightOverlap");
+    expect(content).toContain("guiElectronResizeReflowNoOverlap");
+    expect(content).toContain("ELECTRON_RESIZE_REFLOW_ASSERTION_KEYS");
+    expect(content).toContain('eventType: "turn.completed"');
+    expect(content).toContain('type: "turn.completed"');
+    expect(content).not.toContain('type: "turn.final_done"');
+    expect(content).not.toContain("agent_runtime_");
+  });
+
   it("covers stale terminal guard in a dedicated real Electron fixture", () => {
     const content = readSmokeScript();
 
@@ -692,9 +838,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("waitForSessionReadFailedAfterAnswer");
     expect(content).toContain("readModelTerminalFailedAfterAnswerFailed");
     expect(content).toContain("backendTerminalFailedAfterAnswerRecorded");
-    expect(content).toContain(
-      "TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS",
-    );
+    expect(content).toContain("TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS");
     expect(content).toContain(
       "options.scenario !== TERMINAL_FAILED_AFTER_ANSWER_SCENARIO",
     );
@@ -709,9 +853,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("terminal-canceled-after-answer");
     expect(content).toContain("TERMINAL_CANCELED_AFTER_ANSWER_PROMPT");
     expect(content).toContain("TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT");
-    expect(content).toContain(
-      "TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT",
-    );
+    expect(content).toContain("TERMINAL_CANCELED_AFTER_ANSWER_CANCELED_TEXT");
     expect(content).toContain("terminalCanceledAfterAnswerTurnCanceled");
     expect(content).toContain(
       "click-stop-after-terminal-canceled-partial-from-gui",
@@ -722,9 +864,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("waitForSessionReadCanceled");
     expect(content).toContain("readModelTerminalCanceledAfterAnswerCanceled");
     expect(content).toContain("backendTerminalCanceledAfterAnswerRecorded");
-    expect(content).toContain(
-      "TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS",
-    );
+    expect(content).toContain("TERMINAL_CANCELED_AFTER_ANSWER_ASSERTION_KEYS");
     expect(content).toContain(
       "options.scenario !== TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO",
     );
@@ -913,6 +1053,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0"');
     expect(content).toContain('LIME_REAL_API_TEST: "0"');
     expect(content).toContain("liveProviderNotUsed");
+    expect(content).toContain("invokeErrorBufferClearedBeforeScenario");
+    expect(content).toContain('removeItem("lime_invoke_error_buffer_v1")');
     expect(content).not.toContain("--allow-live-provider");
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "mock"');
     expect(content).not.toContain('backendMode: "mock"');
@@ -923,5 +1065,4 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("safeInvoke(");
     expect(content).not.toContain("agent_runtime_");
   });
-
 });

@@ -28,15 +28,11 @@ mod analyze_image;
 pub mod ask;
 pub mod bash;
 pub mod file;
-pub mod lsp;
-pub mod mcp_resource_tools;
 mod peer_address_surface;
-pub mod plan_mode_tool;
 pub mod powershell_tool;
 pub mod search;
 pub mod send_user_message_tool;
 pub mod team_tools;
-pub mod tool_search_tool;
 
 // Skills integration
 
@@ -89,21 +85,7 @@ pub use agent_control::{
 };
 pub use ask::{AskCallback, AskOption, AskResult, AskTool, DEFAULT_ASK_TIMEOUT_SECS};
 
-// LSP tool
-pub use lsp::{
-    CompletionItem, CompletionItemKind, Diagnostic, DiagnosticSeverity, HoverInfo, Location,
-    LspCallback, LspOperation, LspResult, LspTool, Position, Range,
-};
-pub use mcp_resource_tools::{
-    register_extension_resource_tools, ListMcpResourcesTool, ReadMcpResourceTool,
-};
-pub use tool_search_tool::{register_tool_search_tool, ToolSearchTool};
-
-// Skill tool
-pub use crate::skills::SkillTool;
-
 // Task tools
-pub use plan_mode_tool::{EnterPlanModeTool, ExitPlanModeTool, PlanModeState, SavedPlan};
 pub use powershell_tool::PowerShellTool;
 pub use send_user_message_tool::{SendUserMessageTool, SEND_USER_MESSAGE_TOOL_NAME};
 pub use team_tools::{ListPeersTool, TeamCreateTool, TeamDeleteTool};
@@ -161,8 +143,6 @@ pub(crate) fn should_register_current_surface_tool(
 pub struct ToolRegistrationConfig {
     /// Callback for request_user_input user interaction
     pub ask_callback: Option<AskCallback>,
-    /// Callback for LSPTool operations
-    pub lsp_callback: Option<LspCallback>,
     /// Whether to enable PDF reading in ReadTool
     pub pdf_enabled: bool,
     /// Whether to enable hook system
@@ -183,10 +163,6 @@ impl std::fmt::Debug for ToolRegistrationConfig {
                 "ask_callback",
                 &self.ask_callback.as_ref().map(|_| "<callback>"),
             )
-            .field(
-                "lsp_callback",
-                &self.lsp_callback.as_ref().map(|_| "<callback>"),
-            )
             .field("pdf_enabled", &self.pdf_enabled)
             .field("hooks_enabled", &self.hooks_enabled)
             .field(
@@ -206,7 +182,6 @@ impl Clone for ToolRegistrationConfig {
     fn clone(&self) -> Self {
         Self {
             ask_callback: self.ask_callback.clone(),
-            lsp_callback: self.lsp_callback.clone(),
             pdf_enabled: self.pdf_enabled,
             hooks_enabled: self.hooks_enabled,
             extension_manager: self.extension_manager.clone(),
@@ -228,12 +203,6 @@ impl ToolRegistrationConfig {
         self
     }
 
-    /// Set the LSPTool callback
-    pub fn with_lsp_callback(mut self, callback: LspCallback) -> Self {
-        self.lsp_callback = Some(callback);
-        self
-    }
-
     /// Enable PDF reading
     pub fn with_pdf_enabled(mut self, enabled: bool) -> Self {
         self.pdf_enabled = enabled;
@@ -246,8 +215,8 @@ impl ToolRegistrationConfig {
         self
     }
 
-    /// Attach the extension manager so current MCP resource and ToolSearch surfaces
-    /// are registered from the same tool entrypoint as the rest of the tool pool.
+    /// Attach the extension manager so current MCP resource surfaces are registered
+    /// from the same tool entrypoint as the rest of the tool pool.
     pub fn with_extension_manager(mut self, extension_manager: Weak<ExtensionManager>) -> Self {
         self.extension_manager = Some(extension_manager);
         self
@@ -296,8 +265,8 @@ impl ToolRegistrationConfig {
 /// - GlobTool: File search with glob patterns
 /// - GrepTool: Content search with regex
 /// - request_user_input: User interaction (if callback provided)
-/// - LSPTool: Code intelligence (if callback provided)
-/// - SkillTool: Skill execution and management
+/// - Skill execution is owned by Lime `tool-runtime` and is not registered by
+///   vendored Aster defaults.
 ///
 /// # Arguments
 /// * `registry` - The ToolRegistry to register tools with
@@ -377,33 +346,6 @@ pub fn register_all_tools(
         }
     }
 
-    // Register LSPTool if callback is provided
-    if config.allows_tool("LSP") {
-        if let Some(callback) = config.lsp_callback.clone() {
-            let lsp_tool = LspTool::new().with_callback(callback);
-            registry.register(Box::new(lsp_tool));
-        }
-    }
-
-    if config.allows_tool("Skill") {
-        registry.register(Box::new(SkillTool::new()));
-    }
-
-    if config.allows_tool("EnterPlanMode") {
-        registry.register(Box::new(EnterPlanModeTool::new()));
-    }
-    if config.allows_tool("ExitPlanMode") {
-        let mut exit_plan_mode_tool = ExitPlanModeTool::new();
-        if let Some(send_input_callback) = config
-            .agent_control_tools
-            .as_ref()
-            .and_then(|agent_control_tools| agent_control_tools.send_input.clone())
-        {
-            exit_plan_mode_tool = exit_plan_mode_tool.with_send_input_callback(send_input_callback);
-        }
-        registry.register(Box::new(exit_plan_mode_tool));
-    }
-
     if let Some(agent_control_tools) = config.agent_control_tools.as_ref() {
         if config.allows_any_tool(&["Agent", "SendMessage"]) {
             register_agent_control_tools(registry, agent_control_tools);
@@ -421,22 +363,13 @@ pub fn register_all_tools(
         }
     }
 
-    if let Some(extension_manager) = config.extension_manager.clone() {
-        if config.allows_any_tool(&["ListMcpResources", "ReadMcpResource"]) {
-            register_extension_resource_tools(registry, extension_manager.clone());
-        }
-        if config.allows_tool("ToolSearch") {
-            register_tool_search_tool(registry, extension_manager);
-        }
-    }
-
     (shared_history, hook_manager)
 }
 
 /// Register all native tools with default configuration
 ///
 /// This is a convenience function that registers all tools with default settings.
-/// request_user_input and LSPTool are not registered since they require callbacks.
+/// request_user_input is not registered since it requires a callback.
 ///
 /// # Arguments
 /// * `registry` - The ToolRegistry to register tools with
@@ -455,7 +388,6 @@ pub fn register_default_tools(
 mod tests {
     use super::*;
     use serial_test::serial;
-    use std::path::PathBuf;
 
     #[test]
     #[serial]
@@ -496,8 +428,8 @@ mod tests {
                 should_register_current_surface_tool("PowerShell", tool_gates)
                     && PowerShellTool::is_runtime_available()
             );
-            assert!(registry.contains("Skill"));
-            assert!(registry.contains("SkillTool"));
+            assert!(!registry.contains("Skill"));
+            assert!(!registry.contains("SkillTool"));
             assert!(!registry.contains("Workflow"));
             assert!(!registry.contains("WorkflowTool"));
             assert!(!registry.contains("TaskCreate"));
@@ -529,10 +461,10 @@ mod tests {
             assert!(!registry.contains("EnterWorktreeTool"));
             assert!(!registry.contains("ExitWorktree"));
             assert!(!registry.contains("ExitWorktreeTool"));
-            assert!(registry.contains("EnterPlanMode"));
-            assert!(registry.contains("EnterPlanModeTool"));
-            assert!(registry.contains("ExitPlanMode"));
-            assert!(registry.contains("ExitPlanModeTool"));
+            assert!(!registry.contains("EnterPlanMode"));
+            assert!(!registry.contains("EnterPlanModeTool"));
+            assert!(!registry.contains("ExitPlanMode"));
+            assert!(!registry.contains("ExitPlanModeTool"));
             assert!(!registry.contains("WebFetch"));
             assert!(!registry.contains("WebFetchTool"));
             assert!(!registry.contains("WebSearch"));
@@ -547,9 +479,10 @@ mod tests {
             assert!(!registry.contains("TeamCreate"));
             assert!(!registry.contains("TeamDelete"));
             assert!(!registry.contains("ListPeers"));
-            // request_user_input and LSPTool should not be registered without callbacks
+            // request_user_input should not be registered without callbacks
             assert!(!registry.contains("request_user_input"));
             assert!(!registry.contains("LSP"));
+            assert!(!registry.contains("LSPTool"));
         });
     }
 
@@ -578,14 +511,8 @@ mod tests {
                 })
             });
 
-            let lsp_callback: LspCallback = Arc::new(|_operation, _path: PathBuf, _position| {
-                Box::pin(async { Ok(LspResult::Definition { locations: vec![] }) })
-                    as Pin<Box<dyn Future<Output = Result<LspResult, String>> + Send>>
-            });
-
             let config = ToolRegistrationConfig::new()
                 .with_ask_callback(ask_callback)
-                .with_lsp_callback(lsp_callback)
                 .with_pdf_enabled(true)
                 .with_agent_control_tools(
                     AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
@@ -628,10 +555,10 @@ mod tests {
             assert!(registry.contains("request_user_input"));
             assert!(!registry.contains("AskUserQuestion"));
             assert!(!registry.contains("AskUserQuestionTool"));
-            assert!(registry.contains("LSP"));
-            assert!(registry.contains("LSPTool"));
-            assert!(registry.contains("Skill"));
-            assert!(registry.contains("SkillTool"));
+            assert!(!registry.contains("LSP"));
+            assert!(!registry.contains("LSPTool"));
+            assert!(!registry.contains("Skill"));
+            assert!(!registry.contains("SkillTool"));
             assert!(!registry.contains("Workflow"));
             assert!(!registry.contains("WorkflowTool"));
             assert!(!registry.contains("TaskCreate"));
@@ -654,10 +581,10 @@ mod tests {
             assert!(!registry.contains("EnterWorktreeTool"));
             assert!(!registry.contains("ExitWorktree"));
             assert!(!registry.contains("ExitWorktreeTool"));
-            assert!(registry.contains("EnterPlanMode"));
-            assert!(registry.contains("EnterPlanModeTool"));
-            assert!(registry.contains("ExitPlanMode"));
-            assert!(registry.contains("ExitPlanModeTool"));
+            assert!(!registry.contains("EnterPlanMode"));
+            assert!(!registry.contains("EnterPlanModeTool"));
+            assert!(!registry.contains("ExitPlanMode"));
+            assert!(!registry.contains("ExitPlanModeTool"));
             assert!(!registry.contains("WebFetch"));
             assert!(!registry.contains("WebFetchTool"));
             assert!(!registry.contains("WebSearch"));
@@ -714,6 +641,8 @@ mod tests {
             "ConfigTool",
             "Sleep",
             "SleepTool",
+            "Skill",
+            "SkillTool",
             "Workflow",
             "WorkflowTool",
             "NotebookEdit",
@@ -832,14 +761,13 @@ mod tests {
 
         assert!(config.pdf_enabled);
         assert!(config.ask_callback.is_none());
-        assert!(config.lsp_callback.is_none());
         assert!(config.extension_manager.is_none());
         assert!(config.agent_control_tools.is_none());
         assert!(config.allowed_tool_names.is_none());
     }
 
     #[test]
-    fn test_register_all_tools_with_extension_manager_registers_current_extension_tools() {
+    fn test_register_all_tools_with_extension_manager_does_not_register_current_extension_tools() {
         let extension_manager = Arc::new(ExtensionManager::default());
         let mut registry = ToolRegistry::new();
         let config = ToolRegistrationConfig::new()
@@ -847,9 +775,26 @@ mod tests {
 
         let (_history, _hook_manager) = register_all_tools(&mut registry, config);
 
-        assert!(registry.contains("ListMcpResourcesTool"));
-        assert!(registry.contains("ReadMcpResourceTool"));
-        assert!(registry.contains("ToolSearch"));
+        assert!(
+            !registry.contains("list_mcp_resources"),
+            "list_mcp_resources is registered by Lime tool-runtime gateway, not Aster vendor defaults"
+        );
+        assert!(
+            !registry.contains("read_mcp_resource"),
+            "read_mcp_resource is registered by Lime tool-runtime gateway, not Aster vendor defaults"
+        );
+        assert!(
+            !registry.contains("ListMcpResourcesTool"),
+            "legacy MCP resource alias is lookup-only in Lime current adapter"
+        );
+        assert!(
+            !registry.contains("ReadMcpResourceTool"),
+            "legacy MCP resource alias is lookup-only in Lime current adapter"
+        );
+        assert!(
+            !registry.contains("ToolSearch"),
+            "ToolSearch is registered by Lime tool-runtime gateway, not Aster vendor defaults"
+        );
     }
 
     #[test]

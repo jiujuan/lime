@@ -207,6 +207,48 @@ function main() {
   );
 
   runElectronFixtureSmoke(
+    "Claw approval allow-for-session resume Electron fixture",
+    [
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+      "--scenario",
+      "approval-request-resume",
+      "--prefix",
+      "claw-chat-current-fixture-approval-request-resume-regression",
+      "--timeout-ms",
+      "240000",
+    ],
+    options,
+  );
+
+  runElectronFixtureSmoke(
+    "Claw approval decline-continue Electron fixture",
+    [
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+      "--scenario",
+      "approval-request-decline",
+      "--prefix",
+      "claw-chat-current-fixture-approval-request-decline-regression",
+      "--timeout-ms",
+      "240000",
+    ],
+    options,
+  );
+
+  runElectronFixtureSmoke(
+    "Claw approval cancel-turn Electron fixture",
+    [
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+      "--scenario",
+      "approval-request-cancel",
+      "--prefix",
+      "claw-chat-current-fixture-approval-request-cancel-regression",
+      "--timeout-ms",
+      "240000",
+    ],
+    options,
+  );
+
+  runElectronFixtureSmoke(
     "Claw Inputbar rich draft restore output-free cancel Electron fixture",
     [
       "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -389,7 +431,7 @@ function main() {
   );
 
   console.log(
-    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、turn_completed 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、真实 GUI 图片命令到 Claw Chat Electron fixture、普通自然语言画图意图到同一图片 task 主链 Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Inputbar rich draft 在 output-free cancel 后恢复 text/image/path/skill Electron fixture、Inputbar pending steer rich draft 进入 queue 并在停止 active turn 后恢复 text/image/path/skill Electron fixture、Inputbar pending steer 多 queued turn 按 FIFO/position 保序 Electron fixture、Plan revisioned thread item + history hydrate Electron fixture、Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture、Multi-Agent Team parent Thread Evidence Pack Electron fixture、MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture、media contentParts 引用到 Agent Chat 卡片与 Workbench source 预览 Electron fixture、Expert Skills Runtime declared + selected + invoked Electron fixture、Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture、ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture、内容工厂文章 Article Editor / articleDraft 右侧产物闭环 Electron fixture；liveProviderUsed=false`,
+    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、turn_completed 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、真实 GUI 图片命令到 Claw Chat Electron fixture、普通自然语言画图意图到同一图片 task 主链 Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、approval allow-for-session resume / decline continue / cancel turn 三类 Electron fixture、Inputbar rich draft 在 output-free cancel 后恢复 text/image/path/skill Electron fixture、Inputbar pending steer rich draft 进入 queue 并在停止 active turn 后恢复 text/image/path/skill Electron fixture、Inputbar pending steer 多 queued turn 按 FIFO/position 保序 Electron fixture、Plan revisioned thread item + history hydrate Electron fixture、Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture、Multi-Agent Team parent Thread Evidence Pack Electron fixture、MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture、media contentParts 引用到 Agent Chat 卡片与 Workbench source 预览 Electron fixture、Expert Skills Runtime declared + selected + invoked Electron fixture、Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture、ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture、内容工厂文章 Article Editor / articleDraft 右侧产物闭环 Electron fixture；liveProviderUsed=false`,
   );
   console.log(`\n[${LOG_PREFIX}] 通过`);
 }

@@ -690,8 +690,8 @@ async function main() {
         if (invokes.some((item) => item.cmd === "workspace_ensure_ready")) {
           return "invoke:workspace_ensure_ready";
         }
-        if (invokes.some((item) => item.cmd === "aster_agent_init")) {
-          return "invoke:aster_agent_init";
+        if (invokes.some((item) => item.cmd === "agent_init")) {
+          return "invoke:agent_init";
         }
         if (await isComposerReady(page)) {
           return "composer-ready";

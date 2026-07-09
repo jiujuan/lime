@@ -6,47 +6,29 @@
 #[cfg(test)]
 use agent_runtime::session_config::SessionConfigBuilder;
 use aster::agents::AgentIdentity;
-use aster::skills::{
-    global_registry, load_skill_from_file, load_skills_from_directory, SkillSource,
-};
 use aster::tools::ToolRegistrationConfig;
 use lime_core::app_paths;
+use lime_skills::{
+    is_registered_skill, load_skills_from_directory, register_project_skill_directory,
+    register_skill_directory,
+};
 use std::path::{Path, PathBuf};
 use tool_runtime::native_overlay::runtime_native_tool_registration_allowlist;
 
 /// 重新加载 Lime Skills
-pub fn reload_lime_skills() {
-    load_lime_skills();
+pub fn reload_skills() {
+    load_skills();
 }
 
-pub fn register_lime_project_skill_from_directory(
+pub fn register_project_skill_from_directory(
     directory: &str,
     skill_dir: &Path,
 ) -> Result<String, String> {
-    let directory = directory.trim();
-    if directory.is_empty() {
-        return Err("workspace skill directory is required".to_string());
-    }
-
-    let skill_file = skill_dir.join("SKILL.md");
-    let skill_name = format!("project:{directory}");
-    let skill = load_skill_from_file(&skill_name, &skill_file, SkillSource::Project)?;
-    let registry = global_registry();
-    let mut registry_guard = registry.write().map_err(|error| error.to_string())?;
-    registry_guard.register(skill);
-    Ok(skill_name)
+    register_project_skill_directory(directory, skill_dir)
 }
 
-pub fn is_lime_skill_registered(skill_name: &str) -> bool {
-    let skill_name = skill_name.trim();
-    if skill_name.is_empty() {
-        return false;
-    }
-    let registry = global_registry();
-    registry
-        .read()
-        .map(|registry_guard| registry_guard.find(skill_name).is_some())
-        .unwrap_or(false)
+pub fn is_skill_registered(skill_name: &str) -> bool {
+    is_registered_skill(skill_name)
 }
 
 /// 创建 Lime 专属的 Agent 身份配置
@@ -59,17 +41,16 @@ pub(crate) fn create_lime_identity() -> AgentIdentity {
 
 /// 创建 Lime 的工具注册配置
 ///
-/// 启用 Ask/LSP 回调，确保 ask/lsp 工具在 Agent 初始化时可用。
+/// 启用 Ask 回调，确保 request_user_input 工具在 Agent 初始化时可用。
 pub(crate) fn create_lime_tool_config() -> ToolRegistrationConfig {
     ToolRegistrationConfig::new()
         .with_allowed_tool_names(runtime_native_tool_registration_allowlist().iter().copied())
         .with_ask_callback(crate::ask_bridge::create_ask_callback())
-        .with_lsp_callback(crate::lsp_bridge::create_lsp_callback())
 }
 
-/// 加载 Lime Skills 到 aster-rust 的 global_registry
-fn load_lime_skills() {
-    let roots = match resolve_lime_skill_root_sources() {
+/// 加载 Lime Skills 到 `lime-skills` current registry。
+fn load_skills() {
+    let roots = match resolve_skill_root_sources() {
         Ok(roots) => roots,
         Err(error) => {
             tracing::warn!(
@@ -82,29 +63,35 @@ fn load_lime_skills() {
 
     let skill_count = roots
         .iter()
-        .flat_map(|(skills_dir, source)| register_lime_skills_from_dir(skills_dir, *source))
+        .flat_map(|(skills_dir, source)| register_skills_from_dir(skills_dir, *source))
         .count();
 
     if skill_count == 0 {
         tracing::info!("[AgentRuntime] Lime Skills 根目录为空，无 Skills 可加载");
     } else {
         tracing::info!(
-            "[AgentRuntime] 成功加载 {} 个 Lime Skills 到 global_registry",
+            "[AgentRuntime] 成功加载 {} 个 Skills 到 current registry",
             skill_count
         );
     }
 }
 
-fn resolve_lime_skill_root_sources() -> Result<Vec<(PathBuf, SkillSource)>, String> {
-    let project_roots = app_paths::resolve_lime_project_skill_roots();
-    app_paths::resolve_lime_skill_roots()
-        .map(|roots| assign_lime_skill_root_sources(roots, &project_roots))
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkillRootSource {
+    User,
+    Project,
 }
 
-fn assign_lime_skill_root_sources(
+fn resolve_skill_root_sources() -> Result<Vec<(PathBuf, SkillRootSource)>, String> {
+    let project_roots = app_paths::resolve_lime_project_skill_roots();
+    app_paths::resolve_lime_skill_roots()
+        .map(|roots| assign_skill_root_sources(roots, &project_roots))
+}
+
+fn assign_skill_root_sources(
     roots: Vec<PathBuf>,
     project_roots: &[PathBuf],
-) -> Vec<(PathBuf, SkillSource)> {
+) -> Vec<(PathBuf, SkillRootSource)> {
     roots
         .into_iter()
         .map(|root| {
@@ -112,17 +99,17 @@ fn assign_lime_skill_root_sources(
                 .iter()
                 .any(|project_root| project_root == &root)
             {
-                SkillSource::Project
+                SkillRootSource::Project
             } else {
-                SkillSource::User
+                SkillRootSource::User
             };
             (root, source)
         })
         .collect()
 }
 
-fn register_lime_skills_from_dir(skills_dir: &Path, source: SkillSource) -> Vec<String> {
-    let skills = load_skills_from_directory(skills_dir, source);
+fn register_skills_from_dir(skills_dir: &Path, source: SkillRootSource) -> Vec<String> {
+    let skills = load_skills_from_directory(skills_dir);
     let skill_count = skills.len();
 
     if skill_count == 0 {
@@ -130,16 +117,37 @@ fn register_lime_skills_from_dir(skills_dir: &Path, source: SkillSource) -> Vec<
     }
 
     let mut registered_names = Vec::with_capacity(skill_count);
-    let registry = global_registry();
-    if let Ok(mut registry_guard) = registry.write() {
-        for skill in skills {
-            let skill_name = skill.skill_name.clone();
-            registry_guard.register(skill);
-            tracing::debug!("[AgentRuntime] 已注册 Skill: {}", skill_name);
-            registered_names.push(skill_name);
+    for skill in skills {
+        let skill_name = skill.skill_name.clone();
+        match register_skill_directory(&skill_name, &skill.local_directory_path) {
+            Ok(registered) => {
+                tracing::debug!("[AgentRuntime] 已注册 Skill: {}", registered);
+                registered_names.push(registered);
+            }
+            Err(error) => {
+                tracing::warn!(
+                    skill = %skill_name,
+                    "[AgentRuntime] Skill 注册失败: {}",
+                    error
+                );
+            }
         }
-    } else {
-        tracing::error!("[AgentRuntime] 无法获取 global_registry 写锁，Skills 加载失败");
+
+        if source == SkillRootSource::Project {
+            match register_project_skill_directory(&skill_name, &skill.local_directory_path) {
+                Ok(registered) => {
+                    tracing::debug!("[AgentRuntime] 已注册 project Skill: {}", registered);
+                    registered_names.push(registered);
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        skill = %skill_name,
+                        "[AgentRuntime] project Skill 注册失败: {}",
+                        error
+                    );
+                }
+            }
+        }
     }
     registered_names
 }
@@ -147,20 +155,20 @@ fn register_lime_skills_from_dir(skills_dir: &Path, source: SkillSource) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::{
-        assign_lime_skill_root_sources, is_lime_skill_registered,
-        register_lime_project_skill_from_directory,
+        assign_skill_root_sources, is_skill_registered, register_project_skill_from_directory,
+        SkillRootSource,
     };
-    use aster::skills::{parse_allowed_tools, SkillSource};
+    use lime_skills::parse_allowed_tools;
     use std::path::Path;
     use tempfile::TempDir;
 
     #[test]
-    fn assign_lime_skill_root_sources_should_mark_project_root() {
+    fn assign_skill_root_sources_should_mark_project_root() {
         let project_root = Path::new("/tmp/project/.agents/skills").to_path_buf();
         let user_root = Path::new("/tmp/home/.agents/skills").to_path_buf();
         let app_root = Path::new("/tmp/app/skills").to_path_buf();
 
-        let roots = assign_lime_skill_root_sources(
+        let roots = assign_skill_root_sources(
             vec![project_root.clone(), user_root.clone(), app_root.clone()],
             std::slice::from_ref(&project_root),
         );
@@ -168,20 +176,20 @@ mod tests {
         assert_eq!(
             roots,
             vec![
-                (project_root, SkillSource::Project),
-                (user_root, SkillSource::User),
-                (app_root, SkillSource::User),
+                (project_root, SkillRootSource::Project),
+                (user_root, SkillRootSource::User),
+                (app_root, SkillRootSource::User),
             ]
         );
     }
 
     #[test]
-    fn assign_lime_skill_root_sources_should_mark_cross_provider_project_roots() {
+    fn assign_skill_root_sources_should_mark_cross_provider_project_roots() {
         let project_agents_root = Path::new("/tmp/project/.agents/skills").to_path_buf();
         let project_claude_root = Path::new("/tmp/project/.claude/skills").to_path_buf();
         let user_claude_root = Path::new("/tmp/home/.claude/skills").to_path_buf();
 
-        let roots = assign_lime_skill_root_sources(
+        let roots = assign_skill_root_sources(
             vec![
                 project_agents_root.clone(),
                 project_claude_root.clone(),
@@ -193,15 +201,15 @@ mod tests {
         assert_eq!(
             roots,
             vec![
-                (project_agents_root, SkillSource::Project),
-                (project_claude_root, SkillSource::Project),
-                (user_claude_root, SkillSource::User),
+                (project_agents_root, SkillRootSource::Project),
+                (project_claude_root, SkillRootSource::Project),
+                (user_claude_root, SkillRootSource::User),
             ]
         );
     }
 
     #[test]
-    fn register_lime_project_skill_from_directory_registers_project_namespace() {
+    fn register_project_skill_from_directory_registers_project_namespace() {
         let workspace = TempDir::new().expect("workspace");
         let skill_dir = workspace
             .path()
@@ -216,11 +224,11 @@ mod tests {
         .expect("skill file");
 
         let skill_name =
-            register_lime_project_skill_from_directory("runtime-enable-fixture", &skill_dir)
+            register_project_skill_from_directory("runtime-enable-fixture", &skill_dir)
                 .expect("register skill");
 
         assert_eq!(skill_name, "project:runtime-enable-fixture");
-        assert!(is_lime_skill_registered("project:runtime-enable-fixture"));
+        assert!(is_skill_registered("project:runtime-enable-fixture"));
     }
 
     #[test]

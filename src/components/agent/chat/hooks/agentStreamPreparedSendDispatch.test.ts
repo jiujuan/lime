@@ -98,8 +98,6 @@ describe("agentStreamPreparedSendDispatch", () => {
       setPendingActions: noopDispatch<ActionRequired[]>(),
       setWorkspacePathMissing: noopDispatch<WorkspacePathMissingState | null>(),
       setIsSending: noopDispatch<boolean>(),
-      playToolcallSound: () => {},
-      playTypewriterSound: () => {},
       appendThinkingToParts: (parts) => parts,
     };
   }

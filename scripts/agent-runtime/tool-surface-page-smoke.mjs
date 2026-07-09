@@ -1644,7 +1644,7 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
       });
       return;
     }
-    if (command === "aster_agent_init") {
+    if (command === "agent_init") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -3120,9 +3120,8 @@ async function main() {
           const hasForbiddenWarning =
             value?.hasLegacyWebSearchWarning || value?.hasLegacySubagentWarning;
           const diagnostics = fixtureRuntime.getDiagnostics();
-          const hasRuntimeToolInventory = hasRuntimeToolInventoryRead(
-            diagnostics,
-          );
+          const hasRuntimeToolInventory =
+            hasRuntimeToolInventoryRead(diagnostics);
           return {
             ok:
               hasAllRequired &&

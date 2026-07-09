@@ -292,6 +292,129 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     expect(container.querySelector('[data-testid="inputbar-mock"]')).toBeNull();
   });
 
+  it("pending approval 应在输入区替换普通输入框并提交 tool_confirmation 响应", async () => {
+    const onRespondToAction = vi.fn().mockResolvedValue(undefined);
+    const container = renderHookNode(
+      createDefaultProps({
+        pendingActions: [
+          {
+            requestId: "approval-inputbar-1",
+            actionType: "tool_confirmation",
+            status: "pending",
+            toolName: "functions.exec_command",
+            prompt: "允许执行当前命令？",
+            arguments: {
+              command: "npm test -- --runInBand",
+              cwd: "/tmp/project-1",
+            },
+          },
+        ],
+        onRespondToAction,
+      }),
+    );
+
+    expect(
+      container.querySelector('[data-testid="inputbar-approval-replacement"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-approval-prompt"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="inputbar-mock"]')).toBeNull();
+    expect(container.textContent).toContain("允许执行当前命令？");
+    expect(container.textContent).toContain("functions.exec_command");
+
+    const allowButton = container.querySelector(
+      'button[data-decision="allow_once"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      allowButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onRespondToAction).toHaveBeenCalledWith({
+      requestId: "approval-inputbar-1",
+      decision: "allow_once",
+      response: "允许本次工具操作",
+      actionType: "tool_confirmation",
+    });
+  });
+
+  it("pending approval 应只展示后端声明可用的 decision 动作", async () => {
+    const onRespondToAction = vi.fn().mockResolvedValue(undefined);
+    const container = renderHookNode(
+      createDefaultProps({
+        pendingActions: [
+          {
+            requestId: "approval-cancel-only-1",
+            actionType: "tool_confirmation",
+            status: "pending",
+            toolName: "functions.exec_command",
+            prompt: "允许执行高风险命令？",
+            availableDecisions: ["decline", "cancel"],
+          },
+        ],
+        onRespondToAction,
+      }),
+    );
+
+    expect(
+      container.querySelector('button[data-decision="allow_once"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('button[data-decision="allow_for_session"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('button[data-decision="decline"]'),
+    ).not.toBeNull();
+    const cancelButton = container.querySelector(
+      'button[data-decision="cancel"]',
+    ) as HTMLButtonElement | null;
+    expect(cancelButton).not.toBeNull();
+
+    await act(async () => {
+      cancelButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onRespondToAction).toHaveBeenCalledWith({
+      requestId: "approval-cancel-only-1",
+      decision: "cancel",
+      response: "用户取消了当前任务",
+      actionType: "tool_confirmation",
+    });
+  });
+
+  it("已提交中的 approval 不应继续占用输入区替换槽", () => {
+    const container = renderHookNode(
+      createDefaultProps({
+        pendingActions: [
+          {
+            requestId: "approval-submitted-1",
+            actionType: "tool_confirmation",
+            status: "pending",
+            toolName: "Bash",
+            prompt: "允许执行当前命令？",
+          },
+        ],
+        submittedActionsInFlight: [
+          {
+            requestId: "approval-submitted-1",
+            actionType: "tool_confirmation",
+            status: "submitted",
+          },
+        ],
+      }),
+    );
+
+    expect(
+      container.querySelector('[data-testid="inputbar-approval-prompt"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-mock"]'),
+    ).not.toBeNull();
+  });
+
   it("非 Plan 决策态仍应把附加面板作为输入区 overlay accessory 渲染", () => {
     const container = renderHookNode(
       createDefaultProps({

@@ -10,6 +10,7 @@ import {
   resolveMissingSessionFromTopicsAction,
   resolveRestorableTopicSessionId,
   shouldDeferSessionDetailHydration,
+  shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization,
   shouldSkipAlreadyHydratedSession,
 } from "./agentSessionState";
 
@@ -73,6 +74,52 @@ describe("agentSessionState", () => {
     expect(snapshot.messages).toEqual([]);
     expect(snapshot.threadTurns).toEqual([]);
     expect(snapshot.executionRuntime).toBe(runtime);
+  });
+
+  it("后台恢复初始化不应覆盖首发后正在运行的本地会话", () => {
+    expect(
+      shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization({
+        activeStreamingTimeline: false,
+        messagesCount: 2,
+        sessionId: "session-active-local",
+        shouldRestoreSessionInForeground: false,
+        threadItemsCount: 0,
+        threadTurnsCount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization({
+        activeStreamingTimeline: true,
+        messagesCount: 0,
+        sessionId: "session-active-stream",
+        shouldRestoreSessionInForeground: false,
+        threadItemsCount: 0,
+        threadTurnsCount: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("前台恢复或没有本地 session 时不启用后台首发保护", () => {
+    expect(
+      shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization({
+        activeStreamingTimeline: true,
+        messagesCount: 2,
+        sessionId: "session-foreground",
+        shouldRestoreSessionInForeground: true,
+        threadItemsCount: 1,
+        threadTurnsCount: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization({
+        activeStreamingTimeline: true,
+        messagesCount: 2,
+        sessionId: null,
+        shouldRestoreSessionInForeground: false,
+        threadItemsCount: 1,
+        threadTurnsCount: 1,
+      }),
+    ).toBe(false);
   });
 
   it("应在 restore 目标失效时回退到最新有效话题", () => {

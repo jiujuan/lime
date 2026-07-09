@@ -9,6 +9,7 @@ import {
   buildMockConversationImportPreview,
   cleanupAppSidebarTest,
   clickConversationMenuItem,
+  emitMockAgentUiPerformanceMetricRecorded,
   flushEffects,
   mockDeleteAgentRuntimeSession,
   mockDeleteProject,
@@ -1651,6 +1652,81 @@ describe("AppSidebar conversations", () => {
       limit: 11,
     });
     expect(container.textContent).toContain("外部创建的会话");
+  });
+
+  it("首页发送热路径期间会话列表变更不应立即抢占 listSessions", async () => {
+    const scheduledTasks: Array<{
+      task: () => void;
+      options?: { minimumDelayMs?: number; idleTimeoutMs?: number };
+    }> = [];
+    mockScheduleMinimumDelayIdleTask.mockImplementation(
+      (
+        task: () => void,
+        options?: { minimumDelayMs?: number; idleTimeoutMs?: number },
+      ) => {
+        scheduledTasks.push({ task, options });
+        return () => undefined;
+      },
+    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-hot-path",
+        name: "热路径前已有会话",
+        created_at: 1714000000,
+        updated_at: 1714000600,
+        archived_at: null,
+        workspace_id: null,
+      },
+    ]);
+
+    mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      scheduledTasks.shift()?.task();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
+
+    mockListAgentRuntimeSessions.mockClear();
+    scheduledTasks.splice(0, scheduledTasks.length);
+
+    await act(async () => {
+      emitMockAgentUiPerformanceMetricRecorded({
+        id: 1,
+        phase: "homeInput.submit",
+        sessionId: "task-draft-hot",
+        source: "task-center-empty-state",
+      });
+      window.dispatchEvent(
+        new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, {
+          detail: {
+            reason: "external",
+            sessionId: "session-created-during-send",
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+    await flushEffects(1);
+
+    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalled();
+    expect(scheduledTasks).toHaveLength(1);
+    expect(scheduledTasks[0]?.options).toEqual(
+      expect.objectContaining({
+        minimumDelayMs: expect.any(Number),
+        idleTimeoutMs: expect.any(Number),
+      }),
+    );
+    expect(scheduledTasks[0]?.options?.minimumDelayMs ?? 0).toBeGreaterThan(0);
   });
 
   it("当前会话 metadata 更新应延迟合并刷新最近对话", async () => {

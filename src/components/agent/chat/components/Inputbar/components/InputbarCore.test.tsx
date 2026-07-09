@@ -103,18 +103,25 @@ describe("InputbarCore", () => {
     expect(image?.getAttribute("src")).toBe("file://queued.png");
   });
 
-  it("挂载时不应渲染或触发 retired 实时语音入口", async () => {
-    await renderInputbarCore({
+  it("应在输入框底栏左侧渲染 current 录音按钮", async () => {
+    const container = await renderInputbarCore({
       visualVariant: "default",
       toolMode: "default",
     });
 
-    expect(
-      document.querySelector('button[aria-label="开始语音输入"]'),
-    ).toBeNull();
-    expect(
-      document.querySelector('button[aria-label="Start voice input"]'),
-    ).toBeNull();
+    const metaLeft = container.querySelector(
+      '[data-testid="inputbar-meta-left"]',
+    );
+    const dictationButton = container.querySelector(
+      '[data-testid="inputbar-dictation-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    expect(metaLeft).toBeTruthy();
+    expect(dictationButton).toBeTruthy();
+    expect(dictationButton?.getAttribute("aria-label")).toBe("开始语音输入");
+    expect(dictationButton?.closest('[data-testid="inputbar-meta-left"]')).toBe(
+      metaLeft,
+    );
     expect(document.querySelector('[aria-live="polite"]')).toBeNull();
   });
 

@@ -1,6 +1,15 @@
 import fs from "node:fs";
+import {
+  renderApprovalRequestResumeActionRespondScript,
+  renderApprovalRequestResumeHelpersScript,
+  renderApprovalRequestResumeTurnStartScript,
+} from "./claw-chat-current-fixture-approval-backend-events.mjs";
 import { renderBackendToolAndSkillEventScript } from "./claw-chat-current-fixture-backend-tool-skill-events.mjs";
 import {
+  APPROVAL_REQUEST_RESUME_PROMPT,
+  APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT,
+  APPROVAL_REQUEST_RESUME_SECOND_PROMPT,
+  APPROVAL_REQUEST_RESUME_SECOND_RESULT_TEXT,
   ASSISTANT_DONE_TEXT,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
@@ -25,6 +34,12 @@ import {
   INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO,
   INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO,
   INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
+  LIVE_TAIL_COMMIT_DONE_TEXT,
+  LIVE_TAIL_COMMIT_FIRST_TEXT,
+  LIVE_TAIL_COMMIT_OVERFLOW_MARKER,
+  LIVE_TAIL_COMMIT_PROMPT,
+  LIVE_TAIL_COMMIT_TABLE_HEADER,
+  LIVE_TAIL_COMMIT_TABLE_TAIL,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MULTI_AGENT_TEAM_DONE_TEXT,
@@ -89,6 +104,50 @@ export function writeFixtureBackend(backendPath, options = {}) {
     (step) => `- ${step.step}`,
   ).join("\n");
   const webToolsRenderingFixtureText = `网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。\n${WEB_TOOLS_BROKEN_MARKDOWN_TEXT}\n`;
+  const liveTailCommitFixtureText = [
+    `${LIVE_TAIL_COMMIT_OVERFLOW_MARKER}: 长输出已经从 live tail commit 到消息历史。`,
+    "live tail 长输出第 01 行：首字已经可见，后续追加不能重写前段。",
+    "live tail 长输出第 02 行：滚动容器需要保持接近底部。",
+    "live tail 长输出第 03 行：assistant bubble 不能挪到全局 overlay。",
+    "live tail 长输出第 04 行：history item 与 live tail 同源。",
+    "live tail 长输出第 05 行：commit 后 sequence 仍稳定。",
+    "live tail 长输出第 06 行：completion 只关闭 running 状态。",
+    "live tail 长输出第 07 行：table render 不能遮挡输入框。",
+    "live tail 长输出第 08 行：read model 需要包含同一轮内容。",
+    "live tail 长输出第 09 行：Electron IPC trace 仍归属 current method。",
+    "live tail 长输出第 10 行：provider wait 与 client local output 分开记录。",
+    "live tail 长输出第 11 行：首字 paint 不能等待最终 done。",
+    "live tail 长输出第 12 行：长输出 commit 不丢任何中间文本。",
+    "下面的表格用于证明 live table tail reflow 不会丢失：",
+    `${LIVE_TAIL_COMMIT_TABLE_HEADER}`,
+    "| --- | --- | --- |",
+    "| 01 | first token before commit | stable |",
+    "| 02 | live tail separated from history item | stable |",
+    "| 03 | scroll anchor retained | stable |",
+    "| 04 | overflow commit sequence | stable |",
+    "| 05 | markdown table header | stable |",
+    "| 06 | markdown table body | stable |",
+    "| 07 | renderer projection | stable |",
+    "| 08 | App Server read model | stable |",
+    "| 09 | Electron IPC trace | stable |",
+    "| 10 | no overlay global buffer | stable |",
+    "| 11 | completion does not rewrite earlier text | stable |",
+    "| 12 | table tail pending | stable |",
+    "| 13 | row reflow after overflow | stable |",
+    "| 14 | status surface during stream | stable |",
+    "| 15 | inputbar remains below transcript | stable |",
+    "| 16 | no startup note flash | stable |",
+    "| 17 | first paint before done | stable |",
+    "| 18 | renderer list item retained | stable |",
+    "| 19 | markdown pipe row parsed | stable |",
+    "| 20 | table body visible | stable |",
+    "| 21 | tail row survives completion | stable |",
+    "| 22 | bottom anchor retained | stable |",
+    "| 23 | current terminal closes stream | stable |",
+    `${LIVE_TAIL_COMMIT_TABLE_TAIL}`,
+    `${LIVE_TAIL_COMMIT_DONE_TEXT}`,
+    "",
+  ].join("\\n");
   const skillsRuntimeBackendEvents = renderSkillsRuntimeBackendEvents(
     SKILLS_RUNTIME_SCENARIO,
   );
@@ -114,6 +173,7 @@ export function writeFixtureBackend(backendPath, options = {}) {
   fs.writeFileSync(
     backendPath,
     `#!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 
 const ledgerPath = process.argv[2];
@@ -121,6 +181,8 @@ const cancelSignalPath = process.argv[3];
 const mediaReferenceSourcePath = ${JSON.stringify(mediaReferenceSourcePath)};
 const input = JSON.parse(readFileSync(0, "utf8"));
 const asterChatRequest = input.request?.runtimeOptions?.hostOptions?.asterChatRequest;
+
+${renderApprovalRequestResumeHelpersScript()}
 
 export function appendLedgerEntry(entry) {
   if (!ledgerPath) {
@@ -218,6 +280,35 @@ export function summarizeRequestInput(request) {
   };
 }
 
+export function summarizeActionRespondRequest(request) {
+  const actionScope = request?.actionScope || request?.action_scope || {};
+  return {
+    requestId:
+      request?.requestId ||
+      request?.request_id ||
+      request?.actionId ||
+      request?.action_id,
+    actionType: request?.actionType || request?.action_type,
+    decision: request?.decision,
+    decisionScope: request?.decisionScope || request?.decision_scope,
+    confirmed: request?.confirmed,
+    requestKeys: Object.keys(request || {}).sort(),
+    actionScope: {
+      sessionId: actionScope.sessionId || actionScope.session_id,
+      session_id: actionScope.sessionId || actionScope.session_id,
+      threadId: actionScope.threadId || actionScope.thread_id,
+      thread_id: actionScope.threadId || actionScope.thread_id,
+      turnId: actionScope.turnId || actionScope.turn_id,
+      turn_id: actionScope.turnId || actionScope.turn_id
+    }
+  };
+}
+
+const actionRespondSummary =
+  input.kind === "actionRespond"
+    ? summarizeActionRespondRequest(input.request)
+    : {};
+
 appendLedgerEntry({
     kind: input.kind,
     sessionId: input.request?.session?.sessionId,
@@ -227,7 +318,8 @@ appendLedgerEntry({
     providerPreference: input.request?.providerPreference,
     modelPreference: input.request?.modelPreference,
     runtimeOptions: input.request?.runtimeOptions,
-    asterChatRequest
+    asterChatRequest,
+    ...actionRespondSummary
 });
 
 if (input.kind === "turnCancel") {
@@ -260,6 +352,8 @@ if (input.kind === "turnCancel") {
   process.exit(0);
 }
 
+${renderApprovalRequestResumeActionRespondScript()}
+
 if (input.kind === "turnStart") {
   const inputText = input.request?.input?.text || "";
   const serializedInput = JSON.stringify(input);
@@ -275,7 +369,10 @@ if (input.kind === "turnStart") {
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
   const isInputbarRichRestorePrompt = inputText.includes("${INPUTBAR_RICH_RESTORE_PROMPT}");
   const isInputbarPendingSteerActivePrompt = inputText.includes("${INPUTBAR_PENDING_STEER_ACTIVE_PROMPT}");
+  const isApprovalRequestResumePrompt = inputText.includes("${APPROVAL_REQUEST_RESUME_PROMPT}");
+  const isApprovalRequestResumeSecondPrompt = inputText.includes("${APPROVAL_REQUEST_RESUME_SECOND_PROMPT}");
   const isReasoningFirstVisiblePrompt = inputText.includes("${REASONING_FIRST_VISIBLE_PROMPT}");
+  const isLiveTailCommitPrompt = inputText.includes("${LIVE_TAIL_COMMIT_PROMPT}");
   const isTerminalCanceledAfterAnswerPrompt = inputText.includes("${TERMINAL_CANCELED_AFTER_ANSWER_PROMPT}");
   const isTerminalFailedAfterAnswerPrompt = inputText.includes("${TERMINAL_FAILED_AFTER_ANSWER_PROMPT}");
   const isTerminalStaleGuardFirstPrompt = inputText.includes("${TERMINAL_STALE_GUARD_FIRST_PROMPT}");
@@ -304,6 +401,8 @@ if (input.kind === "turnStart") {
           ? "${GOAL_DONE_TEXT}"
           : isReasoningFirstVisiblePrompt
             ? "${REASONING_FIRST_VISIBLE_DONE_TEXT}"
+          : isLiveTailCommitPrompt
+            ? "${LIVE_TAIL_COMMIT_DONE_TEXT}"
           : isTerminalStaleGuardFirstPrompt
             ? "${TERMINAL_STALE_GUARD_FIRST_DONE_TEXT}"
           : isTerminalStaleGuardSecondPrompt
@@ -326,6 +425,8 @@ if (input.kind === "turnStart") {
                           ? "${EXPERT_SKILLS_RUNTIME_DONE_TEXT}"
                           : isExpertPanelSkillsRuntimePrompt
                             ? "${EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT}"
+                            : isApprovalRequestResumeSecondPrompt
+                              ? "${APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT}"
                             : "${ASSISTANT_DONE_TEXT}";
   const hasProcessPrelude =
     isEventReadProbe ||
@@ -367,6 +468,75 @@ if (input.kind === "turnStart") {
       ...extra
     };
   }
+  function approvalSessionCacheFromRequest() {
+    const runtimeHarness = input.request?.runtimeOptions?.metadata?.harness ?? {};
+    const hostHarness =
+      asterChatRequest?.turn_config?.metadata?.harness ??
+      asterChatRequest?.turnConfig?.metadata?.harness ??
+      asterChatRequest?.metadata?.harness ??
+      {};
+    return (
+      runtimeHarness.approval_session_cache ??
+      runtimeHarness.approvalSessionCache ??
+      hostHarness.approval_session_cache ??
+      hostHarness.approvalSessionCache ??
+      null
+    );
+  }
+  function approvalSessionCacheEvents() {
+    const cache = approvalSessionCacheFromRequest();
+    if (!cache) {
+      return [];
+    }
+    const turnId = currentTurnId() || "turn";
+    const threadId = currentThreadId();
+    const requestId = "permission-" + turnId;
+    const sourceRequestId = cache.sourceRequestId ?? cache.source_request_id;
+    const key = cache.key ?? {};
+    const scope = {
+      sessionId: input.request?.session?.sessionId,
+      session_id: input.request?.session?.sessionId,
+      threadId,
+      thread_id: threadId,
+      turnId,
+      turn_id: turnId
+    };
+    const cachePayload = {
+      backend: "runtime_core",
+      requestId,
+      request_id: requestId,
+      actionId: requestId,
+      action_id: requestId,
+      actionType: "tool_confirmation",
+      action_type: "tool_confirmation",
+      actionKind: "permission_preflight",
+      action_kind: "permission_preflight",
+      toolName: "browser_control",
+      tool_name: "browser_control",
+      decision: cache.decision ?? "allow_for_session",
+      decisionScope: cache.decisionScope ?? cache.decision_scope ?? "session",
+      decision_scope: cache.decisionScope ?? cache.decision_scope ?? "session",
+      sourceRequestId,
+      source_request_id: sourceRequestId,
+      key,
+      cache,
+      scope
+    };
+    return [
+      {
+        type: "approval.session_cache.hit",
+        payload: cachePayload
+      },
+      {
+        type: "action.resolved",
+        payload: {
+          ...cachePayload,
+          source: "approval_session_cache",
+          confirmed: true
+        }
+      }
+    ];
+  }
   if (isImageTaskPresentationPrompt) {
     const presentationText = JSON.stringify({
       assistant_intro: ${JSON.stringify(IMAGE_COMMAND_PRESENTATION_INTRO)},
@@ -387,6 +557,7 @@ if (input.kind === "turnStart") {
     ]);
     process.exit(0);
   }
+${renderApprovalRequestResumeTurnStartScript()}
   const initialMessageText = isEventReadProbe
     ? "事件流 probe 已进入 RuntimeCore：\\n"
     : isContinuePrompt
@@ -399,6 +570,8 @@ if (input.kind === "turnStart") {
               ? "${INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT}\\n"
             : isReasoningFirstVisiblePrompt
               ? ""
+            : isLiveTailCommitPrompt
+              ? "${LIVE_TAIL_COMMIT_FIRST_TEXT}\\n"
             : isTerminalCanceledAfterAnswerPrompt
               ? "${TERMINAL_CANCELED_AFTER_ANSWER_PARTIAL_TEXT}\\n"
             : isTerminalFailedAfterAnswerPrompt
@@ -407,6 +580,8 @@ if (input.kind === "turnStart") {
               ? "${TERMINAL_STALE_GUARD_FIRST_TEXT}\\n"
             : isTerminalStaleGuardSecondPrompt
               ? "第二轮已经开始，旧 terminal 到达时不能打断当前输出。\\n"
+            : isApprovalRequestResumeSecondPrompt
+              ? "${APPROVAL_REQUEST_RESUME_SECOND_RESULT_TEXT}\\n"
           : isWebToolsRenderingPrompt
             ? "我先联网核实目标页面来源。\\n"
             : isMcpStructuredContentPrompt
@@ -427,6 +602,7 @@ if (input.kind === "turnStart") {
                             ? "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\\n"
                             : "以下是今日国际新闻简要整理：\\n";
   const initialEvents = [
+    ...approvalSessionCacheEvents(),
     {
       type: "provider.request.started",
       payload: providerTracePayload("request_started", 0, "running")
@@ -459,6 +635,8 @@ if (input.kind === "turnStart") {
           ? "目标已绑定到本轮请求，后续会围绕 ${GOAL_PROMPT} 收口。\\n"
         : isReasoningFirstVisiblePrompt
           ? "${REASONING_FIRST_VISIBLE_FINAL_TEXT}\\n"
+        : isLiveTailCommitPrompt
+          ? ${JSON.stringify(liveTailCommitFixtureText)}
         : isTerminalStaleGuardFirstPrompt
           ? "${TERMINAL_STALE_GUARD_FIRST_DONE_TEXT}\\n"
         : isTerminalStaleGuardSecondPrompt
@@ -481,6 +659,8 @@ if (input.kind === "turnStart") {
                         ? ${JSON.stringify(EXPERT_SKILLS_RUNTIME_SCENARIO.fixtureText)}
                         : isExpertPanelSkillsRuntimePrompt
                           ? ${JSON.stringify(EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.fixtureText)}
+                          : isApprovalRequestResumeSecondPrompt
+                            ? "${APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT}\\n"
         : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";
   const shouldWaitForCancel =
     ((process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
@@ -669,6 +849,33 @@ if (input.kind === "turnStart") {
     ]);
     process.exit(0);
   }
+  if (isLiveTailCommitPrompt) {
+    await sleep(1400);
+    appendLedgerEntry({
+      kind: "liveTailCommitCompleted",
+      sessionId: input.request?.session?.sessionId,
+      turnId: currentTurnId(),
+      firstText: "${LIVE_TAIL_COMMIT_FIRST_TEXT}",
+      overflowMarker: "${LIVE_TAIL_COMMIT_OVERFLOW_MARKER}",
+      tableHeader: "${LIVE_TAIL_COMMIT_TABLE_HEADER}",
+      tableTail: "${LIVE_TAIL_COMMIT_TABLE_TAIL}",
+      eventType: "turn.completed"
+    });
+    emitEvents([
+      {
+        type: "message.delta",
+        payload: messageDeltaPayload(followupText, "final_answer", finalAnswerItemId)
+      },
+      {
+        type: "turn.completed",
+        payload: {
+          status: "completed",
+          text: "${LIVE_TAIL_COMMIT_DONE_TEXT}"
+        }
+      }
+    ]);
+    process.exit(0);
+  }
   if (isMediaReferencePrompt) {
     emitEvents([
       {
@@ -733,6 +940,26 @@ if (input.kind === "turnStart") {
       payload: messageDeltaPayload(followupText, "final_answer", finalAnswerItemId)
     }
   ]);
+  if (
+    process.env.CLAW_CHAT_FIXTURE_SCENARIO === "complete" &&
+    !isEventReadProbe
+  ) {
+    await sleep(80);
+    emitEvents([
+      {
+        type: "message.completed",
+        payload: {
+          ...messageDeltaPayload(
+            initialMessageText + followupText,
+            "final_answer",
+            finalAnswerItemId
+          ),
+          role: "assistant",
+          status: "completed"
+        }
+      }
+    ]);
+  }
   await sleep(120);
   if (isPlanPrompt) {
     emitEvents([

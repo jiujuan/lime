@@ -121,18 +121,16 @@ describe("expert skills live runner", () => {
       "deepseek",
       "--model-preference",
       "deepseek-v4-flash",
-      "--completion-grace-ms",
+      "--settled-grace-ms",
       "45000",
     ]);
 
     expect(options.allowLiveProvider).toBe(true);
     expect(options.executeLiveRuntime).toBe(true);
-    expect(options.liveWorkspaceRoot).toContain(
-      ".lime/qc/live-test-workspace",
-    );
+    expect(options.liveWorkspaceRoot).toContain(".lime/qc/live-test-workspace");
     expect(options.providerPreference).toBe("deepseek");
     expect(options.modelPreference).toBe("deepseek-v4-flash");
-    expect(options.completionGraceMs).toBe(45000);
+    expect(options.settledGraceMs).toBe(45000);
   });
 
   it("live runtime 执行前应准备 workspace-local skill 和 runtime enable metadata", () =>
@@ -156,8 +154,7 @@ describe("expert skills live runner", () => {
             skill: "project:capability-report",
             registered_skill_directory: workspaceSkill.skillDirectory,
             source_draft_id: "capdraft-live-capability-report",
-            source_verification_report_id:
-              "capver-live-capability-report",
+            source_verification_report_id: "capver-live-capability-report",
           },
         ],
       });
@@ -280,7 +277,10 @@ describe("expert skills live runner", () => {
       });
 
       expect(() =>
-        normalizeLiveSummaryFromSource(JSON.parse(fs.readFileSync(fixture, "utf8")), fixture),
+        normalizeLiveSummaryFromSource(
+          JSON.parse(fs.readFileSync(fixture, "utf8")),
+          fixture,
+        ),
       ).toThrow("fixture provider/model");
     }));
 

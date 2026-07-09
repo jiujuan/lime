@@ -2,8 +2,8 @@ use super::*;
 use crate::execution_process::ExecutionProcessServer;
 use crate::runtime::RuntimeHostContext;
 use app_server_protocol::{
-    AgentInput, AgentSession, AgentSessionActionType, AgentSessionStatus, AgentTurn,
-    AgentTurnStatus, RuntimeOptions,
+    AgentInput, AgentSession, AgentSessionActionType, AgentSessionApprovalDecision,
+    AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
 };
 use lime_core::database::schema::create_tables;
 use rusqlite::Connection;
@@ -189,6 +189,7 @@ async fn respond_action_initializes_agent_before_runtime_resume() {
             turn: None,
             request_id: "ask-respond-init".to_string(),
             action_type: AgentSessionActionType::AskUser,
+            decision: None,
             confirmed: false,
             response: None,
             user_data: None,
@@ -281,6 +282,7 @@ async fn respond_action_tool_confirmation_resumes_pending_aster_tool_future() {
             turn: None,
             request_id: request_id.clone(),
             action_type: AgentSessionActionType::ToolConfirmation,
+            decision: Some(AgentSessionApprovalDecision::AllowOnce),
             confirmed: true,
             response: None,
             user_data: None,

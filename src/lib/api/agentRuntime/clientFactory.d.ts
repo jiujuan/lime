@@ -136,6 +136,6 @@ export declare function createAgentRuntimeClient({
     sessionId: string,
     previewText?: string,
   ) => Promise<string>;
-  initAsterAgent: () => Promise<import("./types").AsterAgentStatus>;
+  initAgentRuntime: () => Promise<import("./types").AgentRuntimeInitStatus>;
 };
 export type AgentRuntimeClient = ReturnType<typeof createAgentRuntimeClient>;

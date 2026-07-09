@@ -59,7 +59,6 @@ fn normalize_permission_tool_name(tool_name: &str) -> String {
         "Edit" | "edit" | "edit_file" => "edit_file".to_string(),
         "Glob" | "glob" => "glob".to_string(),
         "Grep" | "grep" => "grep".to_string(),
-        "LSP" | "lsp" | "lsp_query" => "lsp_query".to_string(),
         "Bash" | "bash" | "PowerShell" | "powershell" | "shell" | "execute_command" => {
             "bash".to_string()
         }
@@ -203,7 +202,6 @@ impl ToolPermissionChecker {
             ("grep", "搜索文件内容"),
             ("glob", "按模式查找文件"),
             ("list_directory", "列出目录内容"),
-            ("lsp_query", "LSP 查询"),
         ];
         let reversible = &[
             ("write_file", "写入文件"),

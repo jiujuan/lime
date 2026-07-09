@@ -489,6 +489,7 @@ function projectActionRequired(
     prompt: event.prompt,
     tool_name: event.tool_name,
     arguments: event.arguments,
+    available_decisions: event.available_decisions,
     response:
       existing?.type === "approval_request" ? existing.response : undefined,
   };
@@ -550,6 +551,10 @@ function projectActionResolved(
       existing?.type === "approval_request" ? existing.tool_name : undefined,
     arguments:
       existing?.type === "approval_request" ? existing.arguments : undefined,
+    available_decisions:
+      existing?.type === "approval_request"
+        ? existing.available_decisions
+        : undefined,
     response,
   };
 }

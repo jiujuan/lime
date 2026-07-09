@@ -63,7 +63,9 @@ describe("i18n namespace loader", () => {
     for (const locale of SUPPORTED_LOCALES) {
       for (const [namespace, entries] of Object.entries(resources[locale])) {
         for (const [key, value] of Object.entries(entries)) {
-          if (allowedValueFragments.some((fragment) => value.includes(fragment))) {
+          if (
+            allowedValueFragments.some((fragment) => value.includes(fragment))
+          ) {
             continue;
           }
 
@@ -167,6 +169,7 @@ describe("i18n namespace loader", () => {
         "agentChat.decisionPanel.permissionRequestTitle",
         "agentChat.decisionPanel.assistantWantsUse",
         "agentChat.decisionPanel.unknownTool",
+        "agentChat.decisionPanel.permission.inputbarOnlyHint",
         "agentChat.decisionPanel.action.submitting",
         "agentChat.decisionPanel.action.submit",
         "agentChat.decisionPanel.action.cancelling",

@@ -1,4 +1,5 @@
 export * from "./itemConverters";
+export * from "./approvalRecord";
 export * from "./displayTextResolvers";
 export * from "./blockResolvers";
 export * from "./textFormatting";

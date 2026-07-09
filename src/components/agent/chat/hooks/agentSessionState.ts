@@ -135,6 +135,30 @@ export function hasSessionHydrationActivity(options: {
   );
 }
 
+export function shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization(options: {
+  activeStreamingTimeline: boolean;
+  messagesCount: number;
+  sessionId: string | null | undefined;
+  shouldRestoreSessionInForeground: boolean;
+  threadItemsCount: number;
+  threadTurnsCount: number;
+}): boolean {
+  if (options.shouldRestoreSessionInForeground) {
+    return false;
+  }
+
+  if (!options.sessionId?.trim()) {
+    return false;
+  }
+
+  return (
+    options.messagesCount > 0 ||
+    options.threadTurnsCount > 0 ||
+    options.threadItemsCount > 0 ||
+    options.activeStreamingTimeline
+  );
+}
+
 export function hasActiveRuntimeTurn(options: {
   currentTurnId?: string | null;
   queuedTurnsCount: number;

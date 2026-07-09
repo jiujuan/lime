@@ -1,6 +1,6 @@
 import type {
   AgentRuntimeGeneratedTitleResult,
-  AsterAgentStatus,
+  AgentRuntimeInitStatus,
 } from "./types";
 import {
   invokeAgentRuntimeBridge,
@@ -27,7 +27,9 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
-function isAsterAgentStatus(value: unknown): value is AsterAgentStatus {
+function isAgentRuntimeInitStatus(
+  value: unknown,
+): value is AgentRuntimeInitStatus {
   return (
     isRecord(value) &&
     typeof value.initialized === "boolean" &&
@@ -38,12 +40,12 @@ function isAsterAgentStatus(value: unknown): value is AsterAgentStatus {
   );
 }
 
-function assertAsterAgentStatus(
+function assertAgentRuntimeInitStatus(
   command: string,
   value: unknown,
-): asserts value is AsterAgentStatus {
-  if (!isAsterAgentStatus(value)) {
-    throw new Error(`${command} did not return Aster agent status`);
+): asserts value is AgentRuntimeInitStatus {
+  if (!isAgentRuntimeInitStatus(value)) {
+    throw new Error(`${command} did not return agent runtime init status`);
   }
 }
 
@@ -75,9 +77,7 @@ function truncateLocalTitle(text: string): string {
   return chars.slice(0, LOCAL_TITLE_MAX_LENGTH).join("").trim();
 }
 
-function buildLocalGeneratedTitle(
-  previewText: string | undefined,
-): string {
+function buildLocalGeneratedTitle(previewText: string | undefined): string {
   const lines =
     previewText
       ?.split(/\r?\n/)
@@ -127,10 +127,10 @@ export function createAgentClient({
     });
   }
 
-  async function initAsterAgent(): Promise<AsterAgentStatus> {
-    const command = "aster_agent_init";
+  async function initAgentRuntime(): Promise<AgentRuntimeInitStatus> {
+    const command = "agent_init";
     const result = await bridgeInvoke<unknown>(command);
-    assertAsterAgentStatus(command, result);
+    assertAgentRuntimeInitStatus(command, result);
     return result;
   }
 
@@ -138,7 +138,7 @@ export function createAgentClient({
     generateAgentRuntimeTitleResult,
     generateAgentRuntimeTitle,
     generateAgentRuntimeSessionTitle,
-    initAsterAgent,
+    initAgentRuntime,
   };
 }
 
@@ -146,5 +146,5 @@ export const {
   generateAgentRuntimeTitleResult,
   generateAgentRuntimeTitle,
   generateAgentRuntimeSessionTitle,
-  initAsterAgent,
+  initAgentRuntime,
 } = createAgentClient();

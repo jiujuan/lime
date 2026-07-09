@@ -1,13 +1,9 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   flushEffects,
   mockGetDefaultProvider,
-  mockInitAsterAgent,
+  mockInitAgentRuntime,
   mockResolveClawWorkspaceProviderSelection,
   mockScheduleMinimumDelayIdleTask,
   mockSubmitAgentRuntimeTurn,
@@ -137,7 +133,7 @@ describe("useAsterAgentChat 兼容接口 - guide / provider", () => {
       scheduledTasks.push(task);
       return () => undefined;
     });
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: false,
     });
@@ -155,13 +151,13 @@ describe("useAsterAgentChat 兼容接口 - guide / provider", () => {
     try {
       await flushEffects();
       expect(scheduledTasks).toHaveLength(1);
-      expect(mockInitAsterAgent).not.toHaveBeenCalled();
+      expect(mockInitAgentRuntime).not.toHaveBeenCalled();
 
       await act(async () => {
         await harness.getValue().triggerAIGuide("分析这个文件夹");
       });
 
-      expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+      expect(mockInitAgentRuntime).toHaveBeenCalledTimes(1);
       expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
         currentProviderType: selectedProvider,
         currentModel: selectedModel,
@@ -182,7 +178,7 @@ describe("useAsterAgentChat 兼容接口 - guide / provider", () => {
         await Promise.resolve();
       });
 
-      expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+      expect(mockInitAgentRuntime).toHaveBeenCalledTimes(1);
     } finally {
       harness.unmount();
     }
@@ -198,7 +194,7 @@ describe("useAsterAgentChat 兼容接口 - guide / provider", () => {
       `agent_pref_model_${workspaceId}`,
       JSON.stringify("glm-5.1"),
     );
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: false,
     });

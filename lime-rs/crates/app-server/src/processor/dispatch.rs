@@ -384,6 +384,10 @@ impl RequestProcessor {
                 self.handle_voice_model_test_transcribe_file_impl(params)
                     .await
             }
+            METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO => {
+                self.handle_voice_transcription_transcribe_audio_impl(params)
+                    .await
+            }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list_impl(params).await
             }

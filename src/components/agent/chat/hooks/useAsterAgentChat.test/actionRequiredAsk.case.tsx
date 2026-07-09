@@ -1,13 +1,10 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   captureTurnStream,
   flushEffects,
   mockRespondAgentRuntimeAction,
+  mockResolveClawWorkspaceProviderSelection,
   mountHook,
   seedSession,
 } from "../useAsterAgentChat.testUtils";
@@ -320,6 +317,83 @@ describe("useAsterAgentChat action_required 渲染链路 - ask / elicitation", (
           turnId: "turn-action-required-scope",
         },
       });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("tool_confirmation 提交时应透传 action_scope 以恢复原 turn", async () => {
+    const workspaceId = "ws-tool-confirmation-scope";
+    seedSession(workspaceId, "session-tool-confirmation-scope");
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "openai",
+      model: "gpt-5.4-mini",
+    });
+    const harness = mountHook(workspaceId);
+    const stream = captureTurnStream();
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("请继续", [], false, false, false, "react");
+      });
+
+      act(() => {
+        stream.emit({
+          type: "action_required",
+          request_id: "req-tool-confirm-scope-1",
+          action_type: "tool_confirmation",
+          prompt: "允许执行测试命令？",
+          tool_name: "Shell",
+          arguments: {
+            command: "echo approval-resume",
+          },
+          scope: {
+            session_id: "session-tool-confirmation-scope",
+            thread_id: "thread-tool-confirmation-scope",
+            turn_id: "turn-tool-confirmation-scope",
+          },
+        });
+      });
+
+      const sourceEventName = stream.getEventName();
+      const assistantMessage = [...harness.getValue().messages]
+        .reverse()
+        .find((msg) => msg.role === "assistant");
+
+      expect(assistantMessage?.actionRequests?.[0]?.scope).toEqual({
+        sessionId: "session-tool-confirmation-scope",
+        threadId: "thread-tool-confirmation-scope",
+        turnId: "turn-tool-confirmation-scope",
+      });
+
+      await act(async () => {
+        await harness.getValue().confirmAction({
+          requestId: "req-tool-confirm-scope-1",
+          confirmed: true,
+          actionType: "tool_confirmation",
+          response: "允许",
+        });
+      });
+
+      expect(mockRespondAgentRuntimeAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: "session-tool-confirmation-scope",
+          request_id: "req-tool-confirm-scope-1",
+          action_type: "tool_confirmation",
+          confirmed: true,
+          response: "允许",
+          event_name: sourceEventName,
+          action_scope: {
+            session_id: "session-tool-confirmation-scope",
+            thread_id: "thread-tool-confirmation-scope",
+            turn_id: "turn-tool-confirmation-scope",
+          },
+        }),
+      );
     } finally {
       harness.unmount();
     }

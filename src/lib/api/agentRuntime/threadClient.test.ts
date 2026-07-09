@@ -2356,6 +2356,126 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server 真实 turnId 与本地请求 turnId 不同时仍应投递完整当前事件", async () => {
+    const appServerClient = appServerClientMock();
+    let resolveStartTurn:
+      | ((
+          value: Awaited<ReturnType<AgentRuntimeAppServerClient["startTurn"]>>,
+        ) => void)
+      | undefined;
+    vi.mocked(appServerClient.startTurn).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStartTurn = resolve;
+      }),
+    );
+    vi.mocked(appServerClient.drainEvents)
+      .mockResolvedValueOnce([
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-real-turn-delta-1",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-real",
+              type: "message.delta",
+              timestamp: "2026-06-06T00:00:00.000Z",
+              payload: {
+                text: "继续输出已恢复",
+              },
+            },
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-real-turn-completed",
+              sequence: 2,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-real",
+              type: "turn.completed",
+              timestamp: "2026-06-06T00:00:01.000Z",
+              payload: {},
+            },
+          },
+        },
+      ]);
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+      enableAppServerEventDrain: true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_real_turn",
+      listener,
+    );
+    const submitPromise = client.submitAgentRuntimeTurn({
+      message: "继续输出",
+      session_id: "session-1",
+      turn_id: "pending-turn-local",
+      event_name: "aster_stream_real_turn",
+    });
+
+    await vi.waitFor(() => {
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "text_delta",
+          text: "继续输出已恢复",
+          event_id: "evt-real-turn-delta-1",
+          session_id: "session-1",
+          turn_id: "turn-real",
+        }),
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(appServerClient.drainEvents).toHaveBeenCalledWith(50);
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "turn_completed",
+          event_id: "evt-real-turn-completed",
+          session_id: "session-1",
+          turn_id: "turn-real",
+        }),
+      });
+    });
+
+    resolveStartTurn?.({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-real",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "completed",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-real",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "completed",
+          },
+        },
+      },
+      messages: [],
+      notifications: [],
+    });
+    await submitPromise;
+    unlisten();
+  });
+
   it("App Server drain 应在首事件前快速轮询，投递首事件后按活跃间隔追连续输出", async () => {
     vi.useFakeTimers();
     try {
@@ -3253,13 +3373,13 @@ describe("agentRuntime threadClient", () => {
         session_id: "session-1",
         request_id: "req-1",
         action_type: "tool_confirmation",
-        confirmed: false,
+        decision: "cancel",
       }),
     ).toEqual({
       sessionId: "session-1",
       requestId: "req-1",
       actionType: "tool_confirmation",
-      confirmed: false,
+      decision: "cancel",
     });
   });
 
@@ -4504,7 +4624,9 @@ describe("agentRuntime threadClient", () => {
           type: "action.required",
           timestamp: "2026-06-06T00:00:15.000Z",
           payload: {
+            request_id: "claw_request_turn_1",
             requestId: "approval-1",
+            actionId: "approval-1",
             actionType: "tool_confirmation",
             toolName: "exec_command",
             arguments: {
@@ -4557,7 +4679,9 @@ describe("agentRuntime threadClient", () => {
           type: "action.resolved",
           timestamp: "2026-06-06T00:00:16.000Z",
           payload: {
+            request_id: "claw_request_turn_1",
             requestId: "approval-1",
+            actionId: "approval-1",
             actionType: "tool_confirmation",
             approved: true,
             feedback: "继续",

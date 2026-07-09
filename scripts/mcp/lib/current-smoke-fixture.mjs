@@ -56,6 +56,15 @@ rl.on("line", (line) => {
           description: "Echo a message for current MCP tests",
           inputSchema: {
             type: "object",
+            "x-lime": {
+              deferred_loading: true,
+              always_visible: true,
+              allowed_callers: [
+                "assistant",
+                "tool_search",
+                "plugin:mcp-current-plugin"
+              ],
+            },
             properties: {
               message: { type: "string" },
             },

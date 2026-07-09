@@ -97,7 +97,6 @@ describe("agentStreamRuntimeStatusController", () => {
       soul: {
         enabled: true,
         style_profile_id: "cheeky_sassy_executor",
-        style_intensity: "low",
       },
     });
     const plan = buildAgentStreamProviderTraceRuntimeStatusApplyPlan({

@@ -19,7 +19,6 @@ import {
   Palette,
   Sparkles,
   Sun,
-  Volume2,
   Shuffle,
   type LucideIcon,
 } from "lucide-react";
@@ -35,7 +34,6 @@ import {
   toLegacyPatchLanguage,
   type LocalePreference,
 } from "@/i18n/locales";
-import { useSoundContext } from "@/contexts/useSoundContext";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "react-i18next";
 import {
@@ -106,9 +104,6 @@ const HEADER_INFO_PILL_CLASS =
 
 const HEADER_SUCCESS_PILL_CLASS =
   "rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-brand-soft)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--lime-brand-strong)]";
-
-const HEADER_NEUTRAL_PILL_CLASS =
-  "rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--lime-text-muted)]";
 
 const CURRENT_INFO_PILL_CLASS =
   "rounded-full border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-3 py-1 text-xs font-medium text-[color:var(--lime-info)]";
@@ -194,8 +189,6 @@ export function AppearanceSettings() {
   const [error, setError] = useState<string | null>(null);
 
   const { setLanguage: setI18nLanguage } = useI18nPatch();
-  const { soundEnabled, setSoundEnabled, playToolcallSound } =
-    useSoundContext();
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -324,16 +317,12 @@ export function AppearanceSettings() {
         agentResponseLanguage,
         t,
       ),
-      soundsLabel: soundEnabled
-        ? t("settings.appearance.status.enabled", "已开启")
-        : t("settings.appearance.status.disabled", "已关闭"),
     }),
     [
       agentResponseLanguage,
       currentColorSchemeLabel,
       currentThemeLabel,
       language,
-      soundEnabled,
       t,
     ],
   );
@@ -466,16 +455,6 @@ export function AppearanceSettings() {
     [agentResponseLanguage, config, t],
   );
 
-  const handleSoundToggle = useCallback(
-    (checked: boolean) => {
-      setSoundEnabled(checked);
-      if (checked) {
-        playToolcallSound();
-      }
-    },
-    [playToolcallSound, setSoundEnabled],
-  );
-
   const handleRecommendationSelectionToggle = useCallback(
     async (checked: boolean) => {
       if (!config) {
@@ -547,7 +526,7 @@ export function AppearanceSettings() {
                 )}
                 content={t(
                   "settings.appearance.hero.tip",
-                  "管理主题、界面语言、回复语言、提示音效，以及推荐问题的上下文带入方式。",
+                  "管理主题、界面语言、回复语言，以及推荐问题的上下文带入方式。",
                 )}
                 tone="mint"
               />
@@ -555,7 +534,7 @@ export function AppearanceSettings() {
             <p className="text-[13px] text-slate-500">
               {t(
                 "settings.appearance.hero.description",
-                "管理主题、界面语言、回复语言、提示音效和推荐行为。",
+                "管理主题、界面语言、回复语言和推荐行为。",
               )}
             </p>
           </div>
@@ -585,18 +564,6 @@ export function AppearanceSettings() {
                 defaultValue: "回复：{{language}}",
               })}
             </span>
-            <span
-              className={
-                soundEnabled
-                  ? HEADER_SUCCESS_PILL_CLASS
-                  : HEADER_NEUTRAL_PILL_CLASS
-              }
-            >
-              {t("settings.appearance.summary.sounds", {
-                status: workspaceSummary.soundsLabel,
-                defaultValue: "提示音效：{{status}}",
-              })}
-            </span>
           </div>
         </div>
       </section>
@@ -608,7 +575,7 @@ export function AppearanceSettings() {
           title={t("settings.appearance.base.title", "基础外观")}
           description={t(
             "settings.appearance.base.description",
-            "先确定全局主题、语言和声音反馈，再统一工作区里的视觉节奏。",
+            "先确定全局主题、界面语言和回复语言，再统一工作区里的视觉节奏。",
           )}
           tipAriaLabel={t("settings.appearance.base.tipAria", "基础外观说明")}
         >
@@ -924,39 +891,6 @@ export function AppearanceSettings() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-[24px] border border-slate-200/80 bg-slate-50/60 px-4 py-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
-                  <Volume2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-slate-900">
-                      {t("settings.appearance.sounds.title", "提示音效")}
-                    </p>
-                    <WorkbenchInfoTip
-                      ariaLabel={t(
-                        "settings.appearance.sounds.tipAria",
-                        "提示音效说明",
-                      )}
-                      content={t(
-                        "settings.appearance.sounds.tip",
-                        "在工具调用和消息生成时播放提示音，提升状态感知。",
-                      )}
-                      tone="slate"
-                    />
-                  </div>
-                </div>
-              </div>
-              <Switch
-                checked={soundEnabled}
-                onCheckedChange={handleSoundToggle}
-                aria-label={t(
-                  "settings.appearance.sounds.toggleAria",
-                  "切换提示音效",
-                )}
-              />
-            </div>
           </div>
         </SurfacePanel>
       </section>

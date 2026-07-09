@@ -230,9 +230,9 @@ export function createToolInventory(): AgentRuntimeToolInventory {
       default_allowed_total: 2,
       runtime_total: 4,
       runtime_visible_total: 3,
-      registry_total: 2,
-      registry_visible_total: 1,
-      registry_catalog_unmapped_total: 0,
+      native_total: 2,
+      native_visible_total: 1,
+      native_catalog_unmapped_total: 0,
       extension_surface_total: 1,
       extension_mcp_bridge_total: 1,
       extension_runtime_total: 0,
@@ -289,7 +289,7 @@ export function createToolInventory(): AgentRuntimeToolInventory {
         execution_sandbox_profile_source: "default",
       },
     ],
-    registry_tools: [
+    native_tools: [
       {
         name: "bash",
         description: "执行工作区命令",
@@ -359,7 +359,7 @@ export function createToolInventory(): AgentRuntimeToolInventory {
       {
         name: "bash",
         description: "执行工作区命令",
-        source_kind: "registry_native",
+        source_kind: "current_surface",
         catalog_entry_name: "bash",
         catalog_source: "aster_builtin",
         catalog_lifecycle: "current",
@@ -392,7 +392,7 @@ export function createToolInventory(): AgentRuntimeToolInventory {
       {
         name: "ToolSearch",
         description: "搜索工具目录",
-        source_kind: "registry_native",
+        source_kind: "current_surface",
         catalog_entry_name: "ToolSearch",
         catalog_source: "lime_injected",
         catalog_lifecycle: "current",

@@ -88,7 +88,8 @@ export function buildTimelineToolContentPart(
   if (
     item.type === "tool_call" ||
     item.type === "command_execution" ||
-    item.type === "web_search"
+    item.type === "web_search" ||
+    item.type === "hook"
   ) {
     const toolCall = toToolCallState(item);
     if (!toolCall) {
@@ -131,6 +132,7 @@ export function isTimelineProcessItem(item: AgentThreadItem): boolean {
     item.type === "command_execution" ||
     item.type === "patch" ||
     item.type === "web_search" ||
+    item.type === "hook" ||
     item.type === "subagent_activity" ||
     item.type === "context_compaction" ||
     item.type === "approval_request" ||
@@ -171,15 +173,20 @@ export function buildTimelinePatchContentPart(
     return null;
   }
 
+  const metadata = timelineItemMetadata(item, "thread_item_patch");
   const aggregate = aggregateFileChanges([buildTimelinePatchToolCall(item)]);
   if (aggregate.fileCount === 0) {
     const fallbackAggregate = buildTimelinePatchFallbackAggregate(item);
     return fallbackAggregate
-      ? { type: "file_changes_batch", aggregate: fallbackAggregate }
+      ? {
+          type: "file_changes_batch",
+          aggregate: fallbackAggregate,
+          metadata,
+        }
       : null;
   }
 
-  return { type: "file_changes_batch", aggregate };
+  return { type: "file_changes_batch", aggregate, metadata };
 }
 
 function buildTimelinePatchToolCall(

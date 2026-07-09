@@ -13,7 +13,6 @@ import {
 import {
   createSoulStyleProfileRegistry,
   normalizeSoulStyleProfileId,
-  type SoulStyleIntensity,
   type SoulStyleProfileId,
 } from "@/lib/soul/style-profiles";
 import {
@@ -24,11 +23,7 @@ import {
 
 interface StyleProfileSectionProps {
   value?: string | null;
-  intensity?: string | null;
-  onChange: (
-    profileId: SoulStyleProfileId,
-    intensity: SoulStyleIntensity,
-  ) => void;
+  onChange: (profileId: SoulStyleProfileId) => void;
   setMessage: (message: string | null) => void;
   t: TFunction<"settings">;
 }
@@ -47,7 +42,6 @@ function sectionT(
 
 export function StyleProfileSection({
   value,
-  intensity,
   onChange,
   setMessage,
   t,
@@ -98,7 +92,7 @@ export function StyleProfileSection({
       return;
     }
     const fallback = registry.getFallbackProfile();
-    onChange(fallback.id, fallback.intensity);
+    onChange(fallback.id);
     setMessage(
       translate("settings.memory.soul.styleProfile.missing.fallbackApplied"),
     );
@@ -175,7 +169,6 @@ export function StyleProfileSection({
   return (
     <StyleProfileSelector
       value={value}
-      intensity={intensity}
       registry={registry}
       installedPacks={packs}
       loadingPacks={loading}

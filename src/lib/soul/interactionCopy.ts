@@ -147,7 +147,6 @@ function resolveInteractionStyleMetadata(
 
   const resolved = resolveSoulStyleProfile({
     styleProfileId: soul.style_profile_id,
-    styleIntensity: soul.style_intensity,
     highRisk: options.highRisk,
     dangerousOperation: options.dangerousOperation,
     formalArtifact: options.formalArtifact,

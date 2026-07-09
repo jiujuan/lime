@@ -53,9 +53,9 @@ pub(super) fn permission_state_from_events(stored: &StoredSession) -> Option<Val
 pub(super) fn should_cancel_denied_permission_action(
     stored: &StoredSession,
     request_id: &str,
-    confirmed: bool,
+    cancel_requested: bool,
 ) -> bool {
-    if confirmed {
+    if !cancel_requested {
         return false;
     }
     latest_permission_request(stored)
@@ -93,7 +93,7 @@ fn confirmation_status_from_resolution(event: &AgentEvent) -> &'static str {
         return "denied";
     }
     match string_field(&event.payload, &["decision"]).as_deref() {
-        Some("deny") => "denied",
+        Some("deny" | "decline" | "cancel") => "denied",
         _ if event
             .payload
             .get("confirmed")

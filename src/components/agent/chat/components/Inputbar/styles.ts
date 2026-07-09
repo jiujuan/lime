@@ -727,6 +727,35 @@ export const InputIconButton = styled.button<{
     color: var(--lime-brand-strong, #166534);
   }
 
+  &.is-dictation {
+    border-color: rgba(16, 185, 129, 0.34);
+    background: rgba(236, 253, 245, 0.94);
+    color: var(--lime-brand-strong, #166534);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  }
+
+  &.is-dictation.is-labeled {
+    width: auto;
+    min-width: 112px;
+    max-width: 168px;
+    gap: 6px;
+    padding: 0 12px 0 10px;
+    font-size: 12px;
+    font-weight: 720;
+    white-space: nowrap;
+  }
+
+  &.is-dictation.is-labeled span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &.is-dictation:hover:not(:disabled) {
+    border-color: rgba(16, 185, 129, 0.48);
+    background: rgba(220, 252, 231, 0.98);
+    color: #14532d;
+  }
+
   &.is-recording {
     gap: 6px;
     width: auto;
@@ -750,11 +779,21 @@ export const InputIconButton = styled.button<{
     color: var(--lime-brand-strong, #166534);
   }
 
+  &.is-processing svg {
+    animation: lime-inputbar-spin 0.9s linear infinite;
+  }
+
   &:disabled {
     cursor: default;
     color: hsl(var(--muted-foreground));
     opacity: 0.5;
     transform: none;
+  }
+
+  @keyframes lime-inputbar-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 `;
 

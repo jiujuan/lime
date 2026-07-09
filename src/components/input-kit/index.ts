@@ -1,4 +1,8 @@
 export { BaseComposer } from "./BaseComposer";
+export type {
+  BaseComposerSendMetadata,
+  BaseComposerSendTriggerSource,
+} from "./BaseComposer";
 export { ModelSelector } from "./ModelSelector";
 export type { ModelSelectorProps } from "./ModelSelector";
 export type {

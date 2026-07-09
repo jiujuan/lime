@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import process from "node:process";
 import { describe, expect, it } from "vitest";
 
@@ -8,11 +8,40 @@ function readProductionHookSources() {
   return readdirSync(hooksDir, { withFileTypes: true })
     .filter((entry) => entry.isFile())
     .filter((entry) => /\.(ts|tsx)$/.test(entry.name))
-    .filter((entry) => !/\.test\.|\.unit\.test\.|\.component\.test\./.test(entry.name))
+    .filter(
+      (entry) =>
+        !/\.test\.|\.unit\.test\.|\.component\.test\./.test(entry.name),
+    )
     .map((entry) => ({
       name: entry.name,
       source: readFileSync(join(hooksDir, entry.name), "utf8"),
     }));
+}
+
+function readProductionAgentChatSources() {
+  const root = join(process.cwd(), "src/components/agent/chat");
+  const files: Array<{ relativePath: string; source: string }> = [];
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolutePath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolutePath);
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(entry.name)) {
+        continue;
+      }
+      if (/\.test\.|\.unit\.test\.|\.component\.test\./.test(entry.name)) {
+        continue;
+      }
+      files.push({
+        relativePath: relative(process.cwd(), absolutePath),
+        source: readFileSync(absolutePath, "utf8"),
+      });
+    }
+  };
+  visit(root);
+  return files;
 }
 
 function readSource(relativePath: string) {
@@ -20,6 +49,71 @@ function readSource(relativePath: string) {
 }
 
 describe("agentStreamFlowControl current runtime boundary", () => {
+  it("queue / steer / draft 生产写入口必须停留在 current owner inventory", () => {
+    const ownerInventory = new Map<string, Set<string>>([
+      [
+        "inputRestoreDraft",
+        new Set([
+          "src/components/agent/chat/components/EmptyState.tsx",
+          "src/components/agent/chat/components/Inputbar/hooks/useInputbarSend.ts",
+          "src/components/agent/chat/hooks/agentChatShared.ts",
+          "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.ts",
+          "src/components/agent/chat/hooks/handleSendTypes.ts",
+          "src/components/agent/chat/hooks/useAgentStream.ts",
+        ]),
+      ],
+      [
+        "resolveQueuedTurnsForRestore",
+        new Set([
+          "src/components/agent/chat/hooks/agentStreamFlowControl.ts",
+          "src/components/agent/chat/hooks/agentStreamInputRestorePlan.ts",
+        ]),
+      ],
+      [
+        "resolveInterruptedInputRestorePlan",
+        new Set([
+          "src/components/agent/chat/hooks/agentStreamFlowControl.ts",
+          "src/components/agent/chat/hooks/agentStreamInputRestorePlan.ts",
+        ]),
+      ],
+      [
+        "setQueuedTurns(",
+        new Set([
+          "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
+          "src/components/agent/chat/hooks/agentStreamSubmissionLifecycle.ts",
+          "src/components/agent/chat/hooks/useAgentSession.ts",
+        ]),
+      ],
+      [
+        "upsertQueuedTurnSnapshot",
+        new Set([
+          "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",
+          "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
+          "src/components/agent/chat/hooks/agentStreamSubmissionLifecycle.ts",
+        ]),
+      ],
+      [
+        "removeQueuedTurnSnapshots",
+        new Set([
+          "src/components/agent/chat/hooks/agentQueuedTurnProjection.ts",
+          "src/components/agent/chat/hooks/agentStreamResumeBinding.ts",
+          "src/components/agent/chat/hooks/agentStreamSubmissionLifecycle.ts",
+        ]),
+      ],
+    ]);
+
+    const offenders: string[] = [];
+    for (const { relativePath, source } of readProductionAgentChatSources()) {
+      for (const [pattern, allowedFiles] of ownerInventory) {
+        if (source.includes(pattern) && !allowedFiles.has(relativePath)) {
+          offenders.push(`${pattern}: ${relativePath}`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("停止恢复 queued draft 必须走 current read model 能力，不允许 optional runtime fallback", () => {
     const source = readFileSync(
       join(
@@ -39,7 +133,7 @@ describe("agentStreamFlowControl current runtime boundary", () => {
     expect(source).toContain("resolveQueuedTurnsForRestore({");
     expect(restorePlanSource).toContain("runtime.getSessionReadModel");
     expect(source).not.toContain("typeof runtime.getSessionReadModel");
-    expect(source).not.toContain("getSessionReadModel === \"function\"");
+    expect(source).not.toContain('getSessionReadModel === "function"');
     expect(source).not.toContain("setQueuedTurns");
     expect(source).not.toContain("removeQueuedTurnFromState");
     expect(source).not.toContain(
@@ -98,9 +192,9 @@ describe("agentStreamFlowControl current runtime boundary", () => {
       "utf8",
     );
 
-    expect(lifecycleEventsSource).toContain("case \"queue_removed\"");
-    expect(lifecycleEventsSource).toContain("case \"queue_started\"");
-    expect(lifecycleEventsSource).toContain("case \"queue_cleared\"");
+    expect(lifecycleEventsSource).toContain('case "queue_removed"');
+    expect(lifecycleEventsSource).toContain('case "queue_started"');
+    expect(lifecycleEventsSource).toContain('case "queue_cleared"');
     expect(lifecycleEventsSource).toContain("removeQueuedTurnsFromProjection");
     for (const { name, source } of readProductionHookSources()) {
       expect(source, name).not.toContain("removeQueuedTurnState");
@@ -119,9 +213,7 @@ describe("agentStreamFlowControl current runtime boundary", () => {
     expect(resumeBindingSource).toContain("removeQueuedTurnSnapshots");
     expect(submissionLifecycleSource).not.toContain(".sort((left, right)");
     expect(resumeBindingSource).not.toContain(".sort((left, right)");
-    expect(submissionLifecycleSource).not.toContain(
-      "new Set(queuedTurnIds)",
-    );
+    expect(submissionLifecycleSource).not.toContain("new Set(queuedTurnIds)");
     expect(resumeBindingSource).not.toContain("new Set(queuedTurnIds)");
     expect(submissionLifecycleSource).not.toContain("position: index + 1");
     expect(resumeBindingSource).not.toContain("position: index + 1");
@@ -152,8 +244,11 @@ describe("agentStreamFlowControl current runtime boundary", () => {
 
     const offenders: string[] = [];
     for (const { name, source } of readProductionHookSources()) {
-      const allowedPatterns = allowedSetQueuedTurnsPatterns.get(name) ?? new Set();
-      for (const match of source.matchAll(/setQueuedTurns\([^;\n]+(?:\n\s*[^;\n]+)*;/g)) {
+      const allowedPatterns =
+        allowedSetQueuedTurnsPatterns.get(name) ?? new Set();
+      for (const match of source.matchAll(
+        /setQueuedTurns\([^;\n]+(?:\n\s*[^;\n]+)*;/g,
+      )) {
         const statement = match[0].replace(/\s+/g, " ").trim();
         const isAllowed = [...allowedPatterns].some(
           (pattern) => pattern.replace(/\s+/g, " ").trim() === statement,
@@ -224,12 +319,8 @@ describe("agentStreamFlowControl current runtime boundary", () => {
     expect(restorePlanSource).toContain(
       "export function resolveInterruptedInputRestorePlan",
     );
-    expect(policyTestSource).toContain(
-      'from "./agentStreamInputRestorePlan"',
-    );
-    expect(flowControlSource).toContain(
-      'from "./agentStreamInputRestorePlan"',
-    );
+    expect(policyTestSource).toContain('from "./agentStreamInputRestorePlan"');
+    expect(flowControlSource).toContain('from "./agentStreamInputRestorePlan"');
     expect(flowControlSource).not.toContain(
       "function normalizeQueuedTurnImage",
     );

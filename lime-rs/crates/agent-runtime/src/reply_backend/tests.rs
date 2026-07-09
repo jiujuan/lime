@@ -5,6 +5,9 @@ struct FailingReplyBackend;
 #[derive(Default)]
 struct RecordingReplySource;
 
+#[derive(Default)]
+struct RecordingReplySourceExecutor;
+
 impl RuntimeReplySource for RecordingReplySource {
     type Stream<'a> = &'static str;
     type Error = anyhow::Error;
@@ -21,6 +24,42 @@ impl RuntimeReplySource for RecordingReplySource {
                 RuntimeReplySourceCall::Default(_) => Ok("default"),
                 RuntimeReplySourceCall::Provider(_) => Ok("provider"),
             }
+        })
+    }
+}
+
+impl RuntimeReplySourceExecutor<String, String> for RecordingReplySourceExecutor {
+    type Stream<'a> = String;
+    type Error = anyhow::Error;
+
+    fn run_default<'a>(
+        self,
+        call: RuntimeReplyDefaultCall<String, String>,
+    ) -> BoxFuture<'a, Result<Self::Stream<'a>, Self::Error>>
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            let (message, session_id, cancel_token) = call.into_parts();
+            assert!(cancel_token.is_none());
+            Ok(format!("default:{message}:{session_id}"))
+        })
+    }
+
+    fn run_provider<'a>(
+        self,
+        call: RuntimeReplyProviderCall<String, String>,
+    ) -> BoxFuture<'a, Result<Self::Stream<'a>, Self::Error>>
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            let (provider_start, message, session_id, cancel_token) = call.into_parts();
+            assert!(cancel_token.is_none());
+            Ok(format!(
+                "provider:{}:{message}:{session_id}",
+                provider_start.trace().provider_name.unwrap_or("<missing>")
+            ))
         })
     }
 }
@@ -621,6 +660,65 @@ fn source_call_maps_current_payload_for_compat_boundary() {
         }
         RuntimeReplySourceCall::Provider(_) => panic!("expected default source call"),
     }
+}
+
+#[test]
+fn source_call_run_with_dispatches_default_path_from_current_owner() {
+    let call = RuntimeReplySourceCall::Default(RuntimeReplyDefaultCall {
+        message: "hello".to_string(),
+        session_config: "session-default".to_string(),
+        cancel_token: None,
+    });
+
+    let result = futures::executor::block_on(call.run_with(RecordingReplySourceExecutor))
+        .expect("default result");
+
+    assert_eq!(result, "default:hello:session-default");
+}
+
+#[test]
+fn source_call_run_with_dispatches_provider_path_from_current_owner() {
+    use model_provider::provider_stream::{
+        RuntimeProviderBackend, RuntimeReplyInputKind, RuntimeReplyProviderCapabilities,
+        RuntimeReplyProviderHandle, RuntimeReplyProviderIdentity, RuntimeReplyStreamRequest,
+    };
+    use model_provider::ModelProviderProtocol;
+
+    let provider = RuntimeReplyProviderHandle {
+        identity: RuntimeReplyProviderIdentity {
+            provider_name: "openai".to_string(),
+            provider_selector: None,
+            model_name: "gpt-5.3-codex".to_string(),
+            credential_uuid: "credential-1".to_string(),
+            protocol: Some(ModelProviderProtocol::Responses),
+            reasoning_effort: None,
+            toolshim: false,
+            toolshim_model: None,
+        },
+        backend: RuntimeProviderBackend::Current,
+        capabilities: RuntimeReplyProviderCapabilities::default(),
+    };
+    let provider_start = RuntimeReplyProviderStreamStart::new(
+        RuntimeReplyStreamRequest::new(
+            "session-provider",
+            RuntimeReplyInputKind::UserMessage,
+            5,
+            Some(provider.clone()),
+        ),
+        &provider,
+    )
+    .expect("provider start");
+    let call = RuntimeReplySourceCall::Provider(RuntimeReplyProviderCall {
+        provider_start,
+        message: "hello".to_string(),
+        session_config: "session-provider".to_string(),
+        cancel_token: None,
+    });
+
+    let result = futures::executor::block_on(call.run_with(RecordingReplySourceExecutor))
+        .expect("provider result");
+
+    assert_eq!(result, "provider:openai:hello:session-provider");
 }
 
 #[test]

@@ -8,6 +8,7 @@ mod image_tools;
 pub(crate) mod knowledge_builder_runtime;
 mod live_execution_process;
 mod mcp_bridges;
+mod mcp_resource_tools;
 mod memory_tools;
 mod model_capability;
 mod model_registry_metadata;
@@ -31,6 +32,7 @@ mod tool_process_kind_metadata;
 pub(crate) mod tool_process_metadata;
 mod tool_process_risk_metadata;
 mod tool_process_runtime_metadata;
+mod tool_search_tools;
 mod workspace_patch_host_execution;
 mod workspace_patch_host_tools;
 
@@ -185,8 +187,15 @@ impl RuntimeBackend {
             host_request.as_ref(),
             &session_scope,
         ) {
-            sink.emit(event)?;
-            return Ok(());
+            match event {
+                permission_preflight::PermissionPreflightOutcome::Required(event) => {
+                    sink.emit(event)?;
+                    return Ok(());
+                }
+                permission_preflight::PermissionPreflightOutcome::Cached(event) => {
+                    sink.emit(event)?;
+                }
+            }
         }
         let db = initialize_runtime_database(self.db.as_ref())?;
         let requested_selection = resolve_runtime_model_selection(&request)?;

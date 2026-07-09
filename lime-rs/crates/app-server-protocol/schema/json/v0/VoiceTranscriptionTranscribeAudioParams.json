@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "audio_base64": {
+      "type": "string"
+    },
+    "credential_id": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "mime_type": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "audio_base64",
+    "mime_type"
+  ],
+  "title": "VoiceTranscriptionTranscribeAudioParams",
+  "type": "object"
+}

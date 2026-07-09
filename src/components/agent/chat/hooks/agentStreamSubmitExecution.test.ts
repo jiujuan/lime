@@ -152,10 +152,6 @@ describe("agentStreamSubmitExecution", () => {
           removeQueuedTurnsFromProjection: () => {},
           registerListener: vi.fn(),
         },
-        sounds: {
-          playToolcallSound: () => {},
-          playTypewriterSound: () => {},
-        },
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
         setMessages: noopDispatch<Message[]>(),
@@ -255,10 +251,6 @@ describe("agentStreamSubmitExecution", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
         registerListener,
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
@@ -367,10 +359,6 @@ describe("agentStreamSubmitExecution", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
         registerListener,
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
@@ -486,10 +474,6 @@ describe("agentStreamSubmitExecution", () => {
           upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
           removeQueuedTurnsFromProjection: () => {},
           registerListener,
-        },
-        sounds: {
-          playToolcallSound: () => {},
-          playTypewriterSound: () => {},
         },
         appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
           parts,
@@ -615,10 +599,6 @@ describe("agentStreamSubmitExecution", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
         registerListener,
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,
@@ -752,10 +732,6 @@ describe("agentStreamSubmitExecution", () => {
         upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
         removeQueuedTurnsFromProjection: () => {},
         registerListener,
-      },
-      sounds: {
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
       },
       appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
         parts,

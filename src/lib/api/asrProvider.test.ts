@@ -22,6 +22,7 @@ import {
   stopRecording,
   testAsrCredential,
   transcribeAudio,
+  transcribeVoiceInputAudio,
   updateAsrCredential,
 } from "./asrProvider";
 
@@ -35,6 +36,7 @@ const appServerMocks = vi.hoisted(() => ({
   listVoiceInstructions: vi.fn(),
   saveVoiceInstruction: vi.fn(),
   deleteVoiceInstruction: vi.fn(),
+  transcribeVoiceAudio: vi.fn(),
 }));
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -52,6 +54,8 @@ vi.mock("./appServer", () => ({
   APP_SERVER_METHOD_VOICE_INSTRUCTION_LIST: "voiceInstruction/list",
   APP_SERVER_METHOD_VOICE_INSTRUCTION_SAVE: "voiceInstruction/save",
   APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE: "voiceInstruction/delete",
+  APP_SERVER_METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO:
+    "voiceTranscription/transcribeAudio",
   createAppServerClient: () => appServerMocks,
 }));
 
@@ -231,9 +235,9 @@ describe("asrProvider API", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("转写、输出与录音控制未接 current 前应本地 fail closed，不再调用旧命令", async () => {
+  it("旧转写、输出与录音控制入口应本地 fail closed，不再调用旧命令", async () => {
     const currentBlockedMessage =
-      "语音转写、润色、输出与录音控制尚未接入 App Server / Electron current 通道，旧 Tauri in-process command 已退役。";
+      "旧实时语音转写、润色、输出与录音控制入口已退役，请使用 App Server current 语音转写通道，旧 Tauri in-process command 已退役。";
 
     await expect(
       transcribeAudio(new Uint8Array([1, 2, 3]), 16000, "cred-1"),
@@ -272,6 +276,42 @@ describe("asrProvider API", () => {
       expect(safeInvoke).not.toHaveBeenCalledWith(command, expect.anything());
       expect(safeInvoke).not.toHaveBeenCalledWith(command);
     }
+  });
+
+  it("输入框语音转写应走 App Server current transcribeAudio 方法", async () => {
+    appServerMocks.transcribeVoiceAudio.mockResolvedValueOnce({
+      result: {
+        text: "你好，继续整理。",
+        provider: "sense_voice_local",
+        duration_secs: 1.25,
+        sample_rate: 16000,
+        language: "auto",
+      },
+    });
+
+    await expect(
+      transcribeVoiceInputAudio({
+        audioBase64: "UklGRg==",
+        mimeType: "audio/wav",
+        credentialId: "cred-1",
+      }),
+    ).resolves.toEqual({
+      text: "你好，继续整理。",
+      provider: "sensevoice_local",
+      durationSecs: 1.25,
+      sampleRate: 16000,
+      language: "auto",
+    });
+
+    expect(appServerMocks.transcribeVoiceAudio).toHaveBeenCalledWith({
+      audio_base64: "UklGRg==",
+      mime_type: "audio/wav",
+      credential_id: "cred-1",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "transcribe_audio",
+      expect.anything(),
+    );
   });
 
   it("ASR 凭证 App Server 返回错误形态时不应吞成成功", async () => {

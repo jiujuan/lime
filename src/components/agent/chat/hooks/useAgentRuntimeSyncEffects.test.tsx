@@ -193,8 +193,17 @@ describe("useAgentRuntimeSyncEffects", () => {
     const settleActiveRuntimeStream = vi.fn();
     const harness = await mountHook({
       isSending: true,
+      currentStreamTurnId: "turn-current",
       threadReadStatus: "failed",
-      threadTurns: [createThreadTurn({ status: "running" })],
+      threadRead: {
+        thread_id: "thread-1",
+        status: "failed",
+        active_turn_id: "turn-current",
+        turns: [],
+      },
+      threadTurns: [
+        createThreadTurn({ id: "turn-current", status: "running" }),
+      ],
       settleActiveRuntimeStream,
     });
 
@@ -209,8 +218,17 @@ describe("useAgentRuntimeSyncEffects", () => {
     const settleActiveRuntimeStream = vi.fn();
     const harness = await mountHook({
       isSending: true,
+      currentStreamTurnId: "turn-current",
       threadReadStatus: "canceled",
-      threadTurns: [createThreadTurn({ status: "running" })],
+      threadRead: {
+        thread_id: "thread-1",
+        status: "canceled",
+        active_turn_id: "turn-current",
+        turns: [],
+      },
+      threadTurns: [
+        createThreadTurn({ id: "turn-current", status: "running" }),
+      ],
       settleActiveRuntimeStream,
     });
 
@@ -225,8 +243,17 @@ describe("useAgentRuntimeSyncEffects", () => {
     const settleActiveRuntimeStream = vi.fn();
     const harness = await mountHook({
       isSending: true,
+      currentStreamTurnId: "turn-current",
       threadReadStatus: "cancelled",
-      threadTurns: [createThreadTurn({ status: "running" })],
+      threadRead: {
+        thread_id: "thread-1",
+        status: "cancelled",
+        active_turn_id: "turn-current",
+        turns: [],
+      },
+      threadTurns: [
+        createThreadTurn({ id: "turn-current", status: "running" }),
+      ],
       settleActiveRuntimeStream,
     });
 
@@ -902,6 +929,47 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
 
       expect(refreshSessionDetail).toHaveBeenCalledTimes(3);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("fallback poll 启动后拿到当前 turn event 时应停止轮询刷新", async () => {
+    mockIsAppServerBridgeAvailable.mockReturnValue(true);
+    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
+    mockHasDevBridgeEventListenerCapability.mockReturnValue(false);
+
+    const refreshSessionDetail = vi.fn(async () => true);
+    const harness = await mountHook({
+      isSending: true,
+      refreshSessionDetail,
+    });
+
+    try {
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
+        "session-1",
+        runtimeSyncRefreshRequest("runtimeSync.poll"),
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(2);
+
+      await harness.render({
+        currentTurnEventName: "aster_stream_late-bound",
+        isSending: true,
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(2);
     } finally {
       harness.unmount();
     }

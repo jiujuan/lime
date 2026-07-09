@@ -1,13 +1,11 @@
 use super::inventory::ExtensionToolInventorySeed;
 use crate::AgentRuntimeState;
 use aster::agents::extension::ExtensionConfig as AsterExtensionConfig;
-use tool_runtime::native_overlay::runtime_native_tool_overlay_tool_names;
 use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_extension::RuntimeExtensionConfig;
 
 pub(super) struct AgentToolInventoryRuntimeSeed {
-    pub(super) registry_definitions: Vec<RuntimeToolDefinition>,
-    pub(super) current_surface_tool_names: Vec<String>,
+    pub(super) current_tool_definitions: Vec<RuntimeToolDefinition>,
     pub(super) extension_configs: Vec<RuntimeExtensionConfig>,
     pub(super) visible_extension_tools: Vec<ExtensionToolInventorySeed>,
     pub(super) searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
@@ -19,30 +17,7 @@ pub(super) async fn read_agent_tool_inventory_runtime_seed(
     let agent_arc = agent_state.get_agent_arc();
     let guard = agent_arc.read().await;
     let agent = guard.as_ref()?;
-
-    let registry_definitions = {
-        let registry = agent.tool_registry().read().await;
-        registry
-            .get_definitions()
-            .into_iter()
-            .map(|definition| {
-                RuntimeToolDefinition::new(
-                    definition.name,
-                    definition.description,
-                    definition.input_schema,
-                )
-            })
-            .collect::<Vec<_>>()
-    };
-    let current_surface_tool_names = registry_definitions
-        .iter()
-        .filter(|definition| {
-            runtime_native_tool_overlay_tool_names()
-                .iter()
-                .any(|name| definition.name.as_str() == *name)
-        })
-        .map(|definition| definition.name.clone())
-        .collect::<Vec<_>>();
+    let current_tool_definitions = agent_state.native_tool_definitions_snapshot().await;
     let extension_configs = agent
         .get_extension_configs()
         .await
@@ -65,8 +40,7 @@ pub(super) async fn read_agent_tool_inventory_runtime_seed(
     let searchable_extension_tools = visible_extension_tools.clone();
 
     Some(AgentToolInventoryRuntimeSeed {
-        registry_definitions,
-        current_surface_tool_names,
+        current_tool_definitions,
         extension_configs,
         visible_extension_tools,
         searchable_extension_tools,

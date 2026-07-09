@@ -81,8 +81,6 @@ export interface AgentStreamPreparedSendEnv {
     SetStateAction<WorkspacePathMissingState | null>
   >;
   setIsSending: Dispatch<SetStateAction<boolean>>;
-  playToolcallSound: () => void;
-  playTypewriterSound: () => void;
   appendThinkingToParts: AppendThinkingToPartsFn;
 }
 

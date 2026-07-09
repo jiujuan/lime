@@ -54,6 +54,7 @@ function buildMediaReference(params: {
   caption: string | null;
   title: string | null;
   uri: string;
+  refId: string | null;
   mimeType: string | null;
   mediaKind: string | null;
   sidecarRef?: unknown;
@@ -66,6 +67,7 @@ function buildMediaReference(params: {
   return {
     uri: params.uri,
     ...(params.mediaKind ? { kind: params.mediaKind } : {}),
+    ...(params.refId ? { refId: params.refId } : {}),
     ...(params.mimeType ? { mimeType: params.mimeType } : {}),
     ...(params.title ? { title: params.title } : {}),
     ...(params.caption ? { caption: params.caption } : {}),
@@ -131,6 +133,11 @@ function buildMediaReferenceContentPart(
     sourceReference?.sidecar_ref !== undefined
       ? sourceReference.sidecar_ref
       : sourceReference?.sidecarRef;
+  const sidecarRefRecord = isRecord(sidecarRef) ? sidecarRef : null;
+  const refId =
+    normalizeString(sourceReference?.ref_id) ??
+    normalizeString(sourceReference?.refId) ??
+    normalizeString(sidecarRefRecord?.ref);
   const sha256 = normalizeString(sourceReference?.sha256);
   const byteSize =
     typeof sourceReference?.byte_size === "number" &&
@@ -146,6 +153,7 @@ function buildMediaReferenceContentPart(
     caption,
     title,
     uri,
+    refId,
     mimeType,
     mediaKind,
     sidecarRef,
@@ -167,6 +175,7 @@ function buildMediaReferenceContentPart(
       source: "agent_media_reference",
       referenceUri: uri,
       ...(mediaKind ? { mediaKind } : {}),
+      ...(refId ? { refId } : {}),
       ...(mimeType ? { mimeType } : {}),
       ...(title ? { title } : {}),
       ...(caption ? { caption } : {}),

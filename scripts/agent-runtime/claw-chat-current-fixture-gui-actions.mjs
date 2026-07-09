@@ -86,83 +86,87 @@ export async function waitForInputReady(page, options, constraints = {}) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, (sessionId) => {
-      const candidates = Array.from(
-        document.querySelectorAll('textarea[name="agent-chat-message"]'),
-      ).filter(
-        (node) =>
-          node instanceof HTMLTextAreaElement &&
-          (!sessionId || node.dataset.sessionId === sessionId),
-      );
-      const textarea =
-        candidates.find((node) => {
-          const rect = node.getBoundingClientRect();
-          const style = window.getComputedStyle(node);
-          return Boolean(
-            rect &&
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      (sessionId) => {
+        const candidates = Array.from(
+          document.querySelectorAll('textarea[name="agent-chat-message"]'),
+        ).filter(
+          (node) =>
+            node instanceof HTMLTextAreaElement &&
+            (!sessionId || node.dataset.sessionId === sessionId),
+        );
+        const textarea =
+          candidates.find((node) => {
+            const rect = node.getBoundingClientRect();
+            const style = window.getComputedStyle(node);
+            return Boolean(
+              rect &&
               rect.width > 16 &&
               rect.height > 16 &&
               style.visibility !== "hidden" &&
               style.display !== "none",
-          );
-        }) ??
-        candidates[0] ??
-        null;
-      const rect = textarea?.getBoundingClientRect();
-      const style = textarea ? window.getComputedStyle(textarea) : null;
-      const visible = Boolean(
-        textarea &&
+            );
+          }) ??
+          candidates[0] ??
+          null;
+        const rect = textarea?.getBoundingClientRect();
+        const style = textarea ? window.getComputedStyle(textarea) : null;
+        const visible = Boolean(
+          textarea &&
           rect &&
           rect.width > 16 &&
           rect.height > 16 &&
           style?.visibility !== "hidden" &&
           style?.display !== "none",
-      );
-      const container = textarea?.closest(
-        '[data-testid="inputbar-core-container"]',
-      );
-      const mainArea = document.querySelector(
-        '[data-testid="workspace-main-area"]',
-      );
-      const floatingOverlay = document.querySelector(
-        '[data-testid="general-workbench-input-overlay"]',
-      );
-      return {
-        url: window.location.href,
-        expectedSessionId: sessionId,
-        hasTextarea: Boolean(textarea),
-        textareaCount: candidates.length,
-        textareaSessionId:
-          textarea instanceof HTMLTextAreaElement
-            ? textarea.dataset.sessionId || null
-            : null,
-        textareaVisible: visible,
-        textareaDisabled:
-          textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
-        textareaValue:
-          textarea instanceof HTMLTextAreaElement ? textarea.value : null,
-        hasInputbarCore: Boolean(container),
-        sendButtonVisible: Boolean(
-          container?.querySelector('[data-testid="send-btn"]'),
-        ),
-        workspaceMainAreaPresent: Boolean(mainArea),
-        workspaceLayoutMode:
-          mainArea instanceof HTMLElement
-            ? mainArea.dataset.layoutMode || null
-            : null,
-        workspaceHasRightSurface:
-          mainArea instanceof HTMLElement
-            ? mainArea.dataset.hasRightSurface || null
-            : null,
-        workspaceFloatingInputOverlay:
-          mainArea instanceof HTMLElement
-            ? mainArea.dataset.floatingInputOverlay || null
-            : null,
-        floatingOverlayPresent: Boolean(floatingOverlay),
-        bodyText: document.body?.innerText || "",
-        mainText: document.querySelector("main")?.textContent || "",
-      };
-    }, expectedSessionId);
+        );
+        const container = textarea?.closest(
+          '[data-testid="inputbar-core-container"]',
+        );
+        const mainArea = document.querySelector(
+          '[data-testid="workspace-main-area"]',
+        );
+        const floatingOverlay = document.querySelector(
+          '[data-testid="general-workbench-input-overlay"]',
+        );
+        return {
+          url: window.location.href,
+          expectedSessionId: sessionId,
+          hasTextarea: Boolean(textarea),
+          textareaCount: candidates.length,
+          textareaSessionId:
+            textarea instanceof HTMLTextAreaElement
+              ? textarea.dataset.sessionId || null
+              : null,
+          textareaVisible: visible,
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          textareaValue:
+            textarea instanceof HTMLTextAreaElement ? textarea.value : null,
+          hasInputbarCore: Boolean(container),
+          sendButtonVisible: Boolean(
+            container?.querySelector('[data-testid="send-btn"]'),
+          ),
+          workspaceMainAreaPresent: Boolean(mainArea),
+          workspaceLayoutMode:
+            mainArea instanceof HTMLElement
+              ? mainArea.dataset.layoutMode || null
+              : null,
+          workspaceHasRightSurface:
+            mainArea instanceof HTMLElement
+              ? mainArea.dataset.hasRightSurface || null
+              : null,
+          workspaceFloatingInputOverlay:
+            mainArea instanceof HTMLElement
+              ? mainArea.dataset.floatingInputOverlay || null
+              : null,
+          floatingOverlayPresent: Boolean(floatingOverlay),
+          bodyText: document.body?.innerText || "",
+          mainText: document.querySelector("main")?.textContent || "",
+        };
+      },
+      expectedSessionId,
+    );
     if (!snapshot) {
       await sleep(options.intervalMs);
       continue;
@@ -173,7 +177,8 @@ export async function waitForInputReady(page, options, constraints = {}) {
       snapshot.hasInputbarCore &&
       snapshot.textareaVisible &&
       snapshot.textareaDisabled === false &&
-      (!expectedSessionId || snapshot.textareaSessionId === expectedSessionId) &&
+      (!expectedSessionId ||
+        snapshot.textareaSessionId === expectedSessionId) &&
       !snapshot.mainText.includes("最近对话") &&
       !snapshot.mainText.includes("正在恢复生成会话") &&
       (allowTaskCenterHomeInput ||
@@ -206,7 +211,9 @@ async function waitForControlledInputValue(
           node instanceof HTMLTextAreaElement &&
           (!sessionId || node.dataset.sessionId === sessionId),
       );
-      return input instanceof HTMLTextAreaElement && input.value === expectedPrompt;
+      return (
+        input instanceof HTMLTextAreaElement && input.value === expectedPrompt
+      );
     },
     { expectedPrompt: prompt, sessionId: expectedSessionId },
     { timeout: Math.min(timeoutMs, 10_000) },
@@ -221,12 +228,7 @@ async function waitForControlledInputValue(
   );
 }
 
-async function waitForSendButtonReady(
-  page,
-  prompt,
-  options,
-  constraints = {},
-) {
+async function waitForSendButtonReady(page, prompt, options, constraints = {}) {
   const expectedSessionId = constraints.expectedSessionId ?? null;
   const selector =
     '[data-testid="inputbar-core-container"] [data-testid="send-btn"]';
@@ -297,9 +299,7 @@ async function waitForSendButtonReady(
   throw new Error(
     `输入栏发送按钮未进入可发送状态${describeExpectedSession(
       expectedSessionId,
-    )}: ${JSON.stringify(
-      sanitizeJson(lastSnapshot),
-    )}`,
+    )}: ${JSON.stringify(sanitizeJson(lastSnapshot))}`,
   );
 }
 
@@ -318,36 +318,41 @@ async function clickInputbarSendButton(page, options, constraints = {}) {
     state: "visible",
     timeout: Math.min(options.timeoutMs, 10_000),
   });
-  const beforeClick = await page.evaluate(({ sendSelector, sessionId }) => {
-    const input = Array.from(
-      document.querySelectorAll('textarea[name="agent-chat-message"]'),
-    ).find(
-      (node) =>
-        node instanceof HTMLTextAreaElement &&
-        (!sessionId || node.dataset.sessionId === sessionId),
-    );
-    const container = input?.closest('[data-testid="inputbar-core-container"]');
-    const sendButton = sessionId
-      ? container?.querySelector('[data-testid="send-btn"]')
-      : document.querySelector(sendSelector);
-    return {
-      expectedSessionId: sessionId,
-      textareaSessionId:
-        input instanceof HTMLTextAreaElement
-          ? input.dataset.sessionId || null
-          : null,
-      exists: Boolean(sendButton),
-      disabled:
-        sendButton instanceof HTMLButtonElement ? sendButton.disabled : null,
-      label:
-        sendButton instanceof HTMLElement
-          ? sendButton.getAttribute("aria-label") ||
-            sendButton.getAttribute("title") ||
-            sendButton.textContent ||
-            "send"
-          : null,
-    };
-  }, { sendSelector: selector, sessionId: expectedSessionId });
+  const beforeClick = await page.evaluate(
+    ({ sendSelector, sessionId }) => {
+      const input = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).find(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      const container = input?.closest(
+        '[data-testid="inputbar-core-container"]',
+      );
+      const sendButton = sessionId
+        ? container?.querySelector('[data-testid="send-btn"]')
+        : document.querySelector(sendSelector);
+      return {
+        expectedSessionId: sessionId,
+        textareaSessionId:
+          input instanceof HTMLTextAreaElement
+            ? input.dataset.sessionId || null
+            : null,
+        exists: Boolean(sendButton),
+        disabled:
+          sendButton instanceof HTMLButtonElement ? sendButton.disabled : null,
+        label:
+          sendButton instanceof HTMLElement
+            ? sendButton.getAttribute("aria-label") ||
+              sendButton.getAttribute("title") ||
+              sendButton.textContent ||
+              "send"
+            : null,
+      };
+    },
+    { sendSelector: selector, sessionId: expectedSessionId },
+  );
   assert(
     beforeClick.exists &&
       beforeClick.disabled === false &&
@@ -365,7 +370,11 @@ async function clickInputbarSendButton(page, options, constraints = {}) {
   };
 }
 
-async function sampleInputbarSubmitState(page, prompt, expectedSessionId = null) {
+async function sampleInputbarSubmitState(
+  page,
+  prompt,
+  expectedSessionId = null,
+) {
   return await evaluatePageSnapshot(
     page,
     ({ expectedPrompt, sessionId }) => {
@@ -408,7 +417,9 @@ async function sampleInputbarSubmitState(page, prompt, expectedSessionId = null)
             error: entry?.error || null,
             methods: messages.map((message) => message?.method).filter(Boolean),
             turnStarts: messages
-              .filter((message) => message?.method === "agentSession/turn/start")
+              .filter(
+                (message) => message?.method === "agentSession/turn/start",
+              )
               .map((message) => ({
                 id: message?.id || null,
                 sessionId: message?.params?.sessionId || null,
@@ -441,7 +452,8 @@ async function sampleInputbarSubmitState(page, prompt, expectedSessionId = null)
       const matchingTurnStartTrace = appServerTurnStartTrace.find(
         (entry) =>
           (!sessionId || entry.sessionId === sessionId) &&
-          (!expectedPrompt || String(entry.text || "").includes(expectedPrompt)),
+          (!expectedPrompt ||
+            String(entry.text || "").includes(expectedPrompt)),
       );
       const inputs = Array.from(
         document.querySelectorAll('textarea[name="agent-chat-message"]'),
@@ -534,9 +546,7 @@ async function waitForInputbarSubmitEffect(
     ) {
       firstSubmitEffectSnapshot = snapshot;
     }
-    if (
-      snapshot.matchingTurnStartTrace
-    ) {
+    if (snapshot.matchingTurnStartTrace) {
       return snapshot;
     }
     await sleep(options.intervalMs);
@@ -544,7 +554,12 @@ async function waitForInputbarSubmitEffect(
   return lastSnapshot ?? firstSubmitEffectSnapshot;
 }
 
-export async function sendPromptFromGui(page, options, prompt, constraints = {}) {
+export async function sendPromptFromGui(
+  page,
+  options,
+  prompt,
+  constraints = {},
+) {
   const expectedSessionId = constraints.expectedSessionId ?? null;
   const before = await waitForInputReady(page, options, constraints);
   const textarea = expectedSessionId
@@ -557,31 +572,33 @@ export async function sendPromptFromGui(page, options, prompt, constraints = {})
     options.timeoutMs,
     expectedSessionId,
   );
-  const afterFill = await page.evaluate(({ expectedPrompt, sessionId }) => {
-    const input = Array.from(
-      document.querySelectorAll('textarea[name="agent-chat-message"]'),
-    ).find(
-      (node) =>
-        node instanceof HTMLTextAreaElement &&
-        (!sessionId || node.dataset.sessionId === sessionId),
-    );
-    return {
-      expectedSessionId: sessionId,
-      textareaSessionId:
-        input instanceof HTMLTextAreaElement
-          ? input.dataset.sessionId || null
-          : null,
-      value: input instanceof HTMLTextAreaElement ? input.value : null,
-      promptVisibleInTextarea:
-        input instanceof HTMLTextAreaElement
-          ? input.value === expectedPrompt
-          : false,
-    };
-  }, { expectedPrompt: prompt, sessionId: expectedSessionId });
+  const afterFill = await page.evaluate(
+    ({ expectedPrompt, sessionId }) => {
+      const input = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).find(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      return {
+        expectedSessionId: sessionId,
+        textareaSessionId:
+          input instanceof HTMLTextAreaElement
+            ? input.dataset.sessionId || null
+            : null,
+        value: input instanceof HTMLTextAreaElement ? input.value : null,
+        promptVisibleInTextarea:
+          input instanceof HTMLTextAreaElement
+            ? input.value === expectedPrompt
+            : false,
+      };
+    },
+    { expectedPrompt: prompt, sessionId: expectedSessionId },
+  );
   assert(
     afterFill.promptVisibleInTextarea &&
-      (!expectedSessionId ||
-        afterFill.textareaSessionId === expectedSessionId),
+      (!expectedSessionId || afterFill.textareaSessionId === expectedSessionId),
     `输入框未保留用户输入: ${JSON.stringify(sanitizeJson(afterFill))}`,
   );
 
@@ -606,4 +623,136 @@ export async function sendPromptFromGui(page, options, prompt, constraints = {})
     clicked,
     afterClick,
   };
+}
+
+export async function setInputbarAccessMode(
+  page,
+  options,
+  accessMode,
+  constraints = {},
+) {
+  const expectedSessionId = constraints.expectedSessionId ?? null;
+  const selectLocator = expectedSessionId
+    ? page
+        .locator(buildInputSelector(expectedSessionId))
+        .locator(
+          'xpath=ancestor::*[@data-testid="inputbar-core-container"][1]//*[@data-testid="inputbar-access-mode-select"]',
+        )
+    : page.locator('[data-testid="inputbar-access-mode-select"]').first();
+
+  await waitForInputReady(page, options, constraints);
+  await selectLocator.waitFor({
+    state: "visible",
+    timeout: Math.min(options.timeoutMs, 10_000),
+  });
+
+  const before = await evaluatePageSnapshot(
+    page,
+    ({ sessionId }) => {
+      const input = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).find(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      const container = input?.closest(
+        '[data-testid="inputbar-core-container"]',
+      );
+      const select =
+        container?.querySelector(
+          '[data-testid="inputbar-access-mode-select"]',
+        ) ??
+        document.querySelector('[data-testid="inputbar-access-mode-select"]');
+      return {
+        expectedSessionId: sessionId,
+        textareaSessionId:
+          input instanceof HTMLTextAreaElement
+            ? input.dataset.sessionId || null
+            : null,
+        selectExists: Boolean(select),
+        value: select instanceof HTMLSelectElement ? select.value : null,
+        options:
+          select instanceof HTMLSelectElement
+            ? Array.from(select.options).map((option) => option.value)
+            : [],
+      };
+    },
+    { sessionId: expectedSessionId },
+  );
+
+  await selectLocator.selectOption(accessMode);
+  await page.waitForFunction(
+    ({ expectedAccessMode, sessionId }) => {
+      const input = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).find(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      const container = input?.closest(
+        '[data-testid="inputbar-core-container"]',
+      );
+      const select =
+        container?.querySelector(
+          '[data-testid="inputbar-access-mode-select"]',
+        ) ??
+        document.querySelector('[data-testid="inputbar-access-mode-select"]');
+      return (
+        select instanceof HTMLSelectElement &&
+        select.value === expectedAccessMode
+      );
+    },
+    { expectedAccessMode: accessMode, sessionId: expectedSessionId },
+    { timeout: Math.min(options.timeoutMs, 10_000) },
+  );
+
+  const after = await evaluatePageSnapshot(
+    page,
+    ({ expectedAccessMode, sessionId }) => {
+      const input = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).find(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      const container = input?.closest(
+        '[data-testid="inputbar-core-container"]',
+      );
+      const select =
+        container?.querySelector(
+          '[data-testid="inputbar-access-mode-select"]',
+        ) ??
+        document.querySelector('[data-testid="inputbar-access-mode-select"]');
+      return {
+        expectedSessionId: sessionId,
+        expectedAccessMode,
+        textareaSessionId:
+          input instanceof HTMLTextAreaElement
+            ? input.dataset.sessionId || null
+            : null,
+        selectExists: Boolean(select),
+        value: select instanceof HTMLSelectElement ? select.value : null,
+        matched:
+          select instanceof HTMLSelectElement
+            ? select.value === expectedAccessMode
+            : false,
+      };
+    },
+    { expectedAccessMode: accessMode, sessionId: expectedSessionId },
+  );
+
+  assert(
+    after?.matched === true,
+    `输入栏权限模式未切换: ${JSON.stringify(
+      sanitizeJson({ before, after, accessMode }),
+    )}`,
+  );
+
+  return sanitizeJson({
+    before,
+    after,
+  });
 }

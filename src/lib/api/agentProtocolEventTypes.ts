@@ -253,6 +253,7 @@ export interface AgentEventActionRequired {
   prompt?: string;
   questions?: AgentActionRequiredQuestion[];
   requested_schema?: Record<string, unknown>;
+  available_decisions?: string[];
 }
 
 export interface AgentEventActionResolved {

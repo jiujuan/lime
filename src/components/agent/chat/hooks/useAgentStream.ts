@@ -22,7 +22,6 @@ import {
 import type { ActionRequired, Message, MessageImage } from "../types";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { AgentAccessMode } from "./agentChatStorage";
-import { playToolcallSound, playTypewriterSound } from "./agentChatStorage";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import type {
   SendMessageOptions,
@@ -223,6 +222,8 @@ export function useAgentStream(options: UseAgentStreamOptions) {
 
   const {
     isSending,
+    activeStreamEventName,
+    activeStreamTurnId,
     setIsSending,
     listenerMapRef,
     activeStreamRef,
@@ -287,8 +288,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         setPendingActions,
         setWorkspacePathMissing,
         setIsSending,
-        playToolcallSound,
-        playTypewriterSound,
         appendThinkingToParts,
       }),
     [
@@ -386,8 +385,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       getThreadItems: () => getThreadItemsRef.current?.() ?? [],
       listenerMapRef,
       onWriteFile,
-      playToolcallSound,
-      playTypewriterSound,
       refreshSessionReadModel,
       runtime,
       setActiveStream,
@@ -653,6 +650,8 @@ export function useAgentStream(options: UseAgentStreamOptions) {
 
   return {
     isSending,
+    activeStreamEventName,
+    activeStreamTurnId,
     sendMessage,
     compactSession,
     stopSending,

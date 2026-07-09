@@ -335,6 +335,8 @@ pub enum AppServerRequestMethod {
     VoiceModelDefaultSet,
     #[serde(rename = "voiceModel/testTranscribeFile")]
     VoiceModelTestTranscribeFile,
+    #[serde(rename = "voiceTranscription/transcribeAudio")]
+    VoiceTranscriptionTranscribeAudio,
     #[serde(rename = "workspaceSkillBindings/list")]
     WorkspaceSkillBindingsList,
     #[serde(rename = "workspaceRegisteredSkills/list")]
@@ -777,6 +779,7 @@ impl AppServerRequestMethod {
             Self::VoiceInstructionDelete => METHOD_VOICE_INSTRUCTION_DELETE,
             Self::VoiceModelDefaultSet => METHOD_VOICE_MODEL_DEFAULT_SET,
             Self::VoiceModelTestTranscribeFile => METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
+            Self::VoiceTranscriptionTranscribeAudio => METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
             Self::WorkspaceSkillBindingsList => METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
             Self::WorkspaceRegisteredSkillsList => METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
             Self::WorkspaceRightSurfaceRequest => METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
@@ -1093,6 +1096,9 @@ impl AppServerRequestMethod {
             METHOD_VOICE_INSTRUCTION_DELETE => Some(Self::VoiceInstructionDelete),
             METHOD_VOICE_MODEL_DEFAULT_SET => Some(Self::VoiceModelDefaultSet),
             METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE => Some(Self::VoiceModelTestTranscribeFile),
+            METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO => {
+                Some(Self::VoiceTranscriptionTranscribeAudio)
+            }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => Some(Self::WorkspaceSkillBindingsList),
             METHOD_WORKSPACE_REGISTERED_SKILLS_LIST => Some(Self::WorkspaceRegisteredSkillsList),
             METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST => Some(Self::WorkspaceRightSurfaceRequest),
@@ -1888,6 +1894,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {

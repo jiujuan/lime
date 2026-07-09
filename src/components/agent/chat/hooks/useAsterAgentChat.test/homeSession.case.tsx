@@ -7,7 +7,7 @@ import {
   mockCreateAgentRuntimeSession,
   mockGetAgentRuntimeSession,
   mockGetDefaultProvider,
-  mockInitAsterAgent,
+  mockInitAgentRuntime,
   mockListAgentRuntimeSessions,
   mockResolveClawWorkspaceProviderSelection,
   mockScheduleMinimumDelayIdleTask,
@@ -24,7 +24,7 @@ describe("useAsterAgentChat 首页新会话", () => {
     try {
       await flushEffects();
 
-      expect(mockInitAsterAgent).not.toHaveBeenCalled();
+      expect(mockInitAgentRuntime).not.toHaveBeenCalled();
       expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
         limit: 21,
       });
@@ -238,7 +238,7 @@ describe("useAsterAgentChat 首页新会话", () => {
   });
 
   it("无工作区显式发送时应预热全局模型但不写入 workspace_id", async () => {
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: false,
     });
@@ -253,7 +253,7 @@ describe("useAsterAgentChat 首页新会话", () => {
     try {
       await flushEffects();
 
-      expect(mockInitAsterAgent).not.toHaveBeenCalled();
+      expect(mockInitAgentRuntime).not.toHaveBeenCalled();
 
       await act(async () => {
         await harness
@@ -261,7 +261,7 @@ describe("useAsterAgentChat 首页新会话", () => {
           .sendMessage("参考图生成一张小红书封面", [], false, false, false);
       });
 
-      expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+      expect(mockInitAgentRuntime).toHaveBeenCalledTimes(1);
       expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
         currentProviderType: "deepseek",
         currentModel: null,
@@ -288,8 +288,54 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("后台恢复模式下首页首发后同 scope 重渲染不应清空本地执行会话", async () => {
+    const sessionId = "session-home-background-first-send";
+    mockCreateAgentRuntimeSession.mockResolvedValue(sessionId);
+    mockInitAgentRuntime.mockResolvedValue({
+      initialized: true,
+      provider_configured: false,
+    });
+    mockGetDefaultProvider.mockResolvedValue("deepseek");
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "deepseek",
+      model: "deepseek-v4-flash",
+    });
+
+    const harness = mountHook("", {
+      sessionRestorePresentation: "background",
+    });
+
+    try {
+      await flushEffects();
+
+      expect(harness.getValue().sessionId).toBeNull();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("你好", [], false, false, false, "react");
+      });
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(harness.getValue().sessionId).toBe(sessionId);
+      expect(harness.getValue().messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "user",
+            content: "你好",
+          }),
+        ]),
+      );
+      expect(harness.getValue().isAutoRestoringSession).toBe(false);
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("无工作区显式发送读取默认 Provider 失败时仍应从已配置 Provider 解析模型", async () => {
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: false,
     });
@@ -460,7 +506,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       await flushEffects();
       await flushEffects();
 
-      expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+      expect(mockInitAgentRuntime).toHaveBeenCalledTimes(1);
       expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
       expect(mockListAgentRuntimeSessions).toHaveBeenNthCalledWith(1, {
         workspaceId,
@@ -477,7 +523,7 @@ describe("useAsterAgentChat 首页新会话", () => {
 
   it("Agent 初始化返回真实 provider/model 时应回填当前工作区选择", async () => {
     const workspaceId = "ws-init-runtime-model";
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: true,
       provider_name: "openai",
@@ -519,7 +565,7 @@ describe("useAsterAgentChat 首页新会话", () => {
 
   it("Agent 初始化返回不可执行 provider/model 时应回退解析真实工作区模型", async () => {
     const workspaceId = "ws-init-runtime-login-required-provider";
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: true,
       provider_name: "Lime Hub",
@@ -573,7 +619,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       `agent_pref_model_${workspaceId}`,
       JSON.stringify("fixture-model"),
     );
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: true,
       provider_selector: "custom-image-provider",
@@ -615,7 +661,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       `agent_pref_model_${workspaceId}`,
       JSON.stringify("gpt-4o"),
     );
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: true,
       provider_name: "openai",
@@ -657,7 +703,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       `agent_pref_model_${workspaceId}`,
       JSON.stringify(selectedModel),
     );
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: true,
       provider_name: "openai",
@@ -715,7 +761,7 @@ describe("useAsterAgentChat 首页新会话", () => {
     });
     await flushEffects();
 
-    expect(mockInitAsterAgent).not.toHaveBeenCalled();
+    expect(mockInitAgentRuntime).not.toHaveBeenCalled();
     expect(mockScheduleMinimumDelayIdleTask).toHaveBeenCalled();
 
     await act(async () => {
@@ -723,7 +769,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       await Promise.resolve();
     });
 
-    expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+    expect(mockInitAgentRuntime).toHaveBeenCalledTimes(1);
   });
 
   it("最近对话可立即加载时仍可单独延后 Agent 预热", async () => {
@@ -741,7 +787,7 @@ describe("useAsterAgentChat 首页新会话", () => {
     await flushEffects();
 
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
-    expect(mockInitAsterAgent).not.toHaveBeenCalled();
+    expect(mockInitAgentRuntime).not.toHaveBeenCalled();
     expect(mockScheduleMinimumDelayIdleTask).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -749,12 +795,12 @@ describe("useAsterAgentChat 首页新会话", () => {
       await Promise.resolve();
     });
 
-    expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+    expect(mockInitAgentRuntime).toHaveBeenCalledTimes(1);
   });
 
   it("Agent 初始化返回 provider_selector 时应优先回填真实 provider 标识", async () => {
     const workspaceId = "ws-init-runtime-provider-selector";
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: true,
       provider_name: "anthropic",
@@ -792,7 +838,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       `agent_pref_model_${workspaceId}`,
       JSON.stringify("deepseek-v4-pro"),
     );
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: true,
       provider_name: "Lime Hub",
@@ -830,9 +876,54 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("Agent 初始化只返回 provider 时应解析声明模型并用于首轮发送", async () => {
+    const workspaceId = "ws-init-provider-only-resolves-model";
+    mockInitAgentRuntime.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_name: "Lime Hub",
+      provider_selector: "lime-hub",
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "lime-hub",
+      model: "agnes-2.0-flash",
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: "lime-hub",
+        currentModel: null,
+        theme: "general",
+      });
+      expect(harness.getValue().providerType).toBe("lime-hub");
+      expect(harness.getValue().model).toBe("agnes-2.0-flash");
+
+      await act(async () => {
+        await harness.getValue().triggerAIGuide("你好");
+      });
+
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.provider_preference,
+      ).toBe("lime-hub");
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.model_preference,
+      ).toBe("agnes-2.0-flash");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("Agent 初始化未返回模型时应回退到后端默认 provider 解析真实工作区模型", async () => {
     const workspaceId = "ws-init-fallback-runtime-model";
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: false,
     });
@@ -881,7 +972,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       `agent_pref_model_${workspaceId}`,
       JSON.stringify("gemini-2.5-pro"),
     );
-    mockInitAsterAgent.mockResolvedValue({
+    mockInitAgentRuntime.mockResolvedValue({
       initialized: true,
       provider_configured: false,
     });

@@ -170,7 +170,7 @@ export class ElectronHostCommands {
         return await this.#fileShellHost.getFileIconDataUrl(args);
       case "start_oem_cloud_oauth_callback_bridge":
         return await this.#startOemCloudOAuthCallbackBridge();
-      case "aster_agent_init":
+      case "agent_init":
         return await this.#initAgentRuntime();
       case "get_default_provider":
         return await this.#getDefaultProvider();

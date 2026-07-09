@@ -126,6 +126,44 @@ export function useMessageListScrollController() {
     });
   }, []);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let animationFrame: number | null = null;
+    const scheduleResizeFollow = () => {
+      if (!shouldAutoScrollRef.current) {
+        return;
+      }
+      if (animationFrame !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      const run = () => {
+        animationFrame = null;
+        if (shouldAutoScrollRef.current) {
+          scrollToTail("auto");
+        }
+      };
+      if (typeof window !== "undefined" && window.requestAnimationFrame) {
+        animationFrame = window.requestAnimationFrame(run);
+        return;
+      }
+      run();
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleResizeFollow);
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      if (animationFrame !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [scrollToTail]);
+
   const handleStreamingOverlayUpdate = useCallback(() => {
     if (!scrollRef.current) {
       return;

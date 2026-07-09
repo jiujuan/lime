@@ -95,6 +95,7 @@ export function resolveWorkspaceShellChromeRuntime({
   const shouldTreatCurrentSessionAsBackground =
     agentEntry === "new-task" &&
     shouldUseBrowserWorkspaceHomeChrome &&
+    Boolean(sessionId) &&
     !hasHomeConversationActivity &&
     !normalizedInitialSessionId;
 
@@ -120,7 +121,6 @@ export function resolveWorkspaceShellChromeRuntime({
           ? 0
           : queuedTurnCount,
       });
-
   const shouldHideGeneralWorkbenchInputForTheme =
     shouldUseCompactGeneralWorkbench;
   const shouldKeepConversationInputOverlay =

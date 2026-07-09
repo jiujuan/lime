@@ -22,7 +22,6 @@ function renderSelector(
     root.render(
       <StyleProfileSelector
         value={value}
-        intensity="low"
         onChange={vi.fn()}
         {...props}
       />,

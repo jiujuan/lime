@@ -208,6 +208,7 @@ export function useTaskCenterChromeNavigationRuntime({
     isSending,
     isHomePendingPreviewActive,
     queuedTurnCount: queuedTurnsLength,
+    hasLocalSessionOverride,
     embeddedHomeSessionIds,
     isAutoRestoringSession,
     isSessionHydrating,

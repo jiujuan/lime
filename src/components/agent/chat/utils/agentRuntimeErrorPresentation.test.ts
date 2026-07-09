@@ -71,12 +71,42 @@ describe("agentRuntimeErrorPresentation", () => {
     });
   });
 
+  it("Provider 404 NotFound 应转换为模型通道暂不可用提示", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        'execution backend error: Agent provider execution failed: Request failed: Resource not found (404): ***.NotFoundError: NotFoundError: OpenAIException - {"detail":"Not Found"}',
+      ),
+    ).toEqual({
+      displayMessage:
+        "当前模型通道暂时不可用，请稍后重试；如果持续失败，请检查 Provider 状态或切换到其他可用模型。",
+      toastMessage:
+        "当前模型通道暂时不可用，请稍后重试；如果持续失败，请检查 Provider 状态或切换到其他可用模型。",
+    });
+  });
+
   it("JSON-RPC 内部错误应转换为短提示", async () => {
     await changeLimeLocale("zh-CN");
 
     expect(
       resolveAgentRuntimeErrorPresentation(
         "-32603: -32002: runtime error\n\nTroubleshooting: inspect provider logs",
+      ),
+    ).toEqual({
+      displayMessage:
+        "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
+      toastMessage:
+        "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
+    });
+  });
+
+  it("运行时工具生命周期诊断应转换为短提示", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        "execution backend error: agent runtime tool lifecycle validation failed: tool_args_without_start event_id=evt_1 tool_call_id=call_1",
       ),
     ).toEqual({
       displayMessage:

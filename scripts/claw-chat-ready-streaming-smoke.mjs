@@ -1311,7 +1311,7 @@ function isBenignConsoleError(item) {
   const text = String(item?.text || "");
   return (
     text.includes("[AsterChat] 初始化失败") &&
-    text.includes('命令 "aster_agent_init"') &&
+    text.includes('命令 "agent_init"') &&
     text.includes("Failed to fetch (timeout after 30000ms)")
   );
 }
@@ -1890,7 +1890,7 @@ async function main() {
   const workspaceId = defaultProject?.id || "default";
   const agentStatus = await invoke(
     options,
-    "aster_agent_init",
+    "agent_init",
     undefined,
     45_000,
   ).catch((error) => {
@@ -1898,7 +1898,7 @@ async function main() {
       throw error;
     }
     console.warn(
-      `[smoke:claw-chat-ready-streaming] aster_agent_init 超时/失败，但已显式传入 provider/model，继续执行: ${
+      `[smoke:claw-chat-ready-streaming] agent_init 超时/失败，但已显式传入 provider/model，继续执行: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );

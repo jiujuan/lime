@@ -19,6 +19,9 @@ use app_server_protocol::VoiceModelDefaultSetParams;
 use app_server_protocol::VoiceModelDefaultSetResponse;
 use app_server_protocol::VoiceModelTestTranscribeFileParams;
 use app_server_protocol::VoiceModelTestTranscribeFileResponse;
+use app_server_protocol::VoiceTranscriptionTranscribeAudioParams;
+use app_server_protocol::VoiceTranscriptionTranscribeAudioResponse;
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use lime_core::config::AsrCredentialEntry as CoreAsrCredentialEntry;
 use lime_core::config::AsrProviderType as CoreAsrProviderType;
 use lime_core::config::BaiduConfig as CoreBaiduConfig;
@@ -189,6 +192,76 @@ pub(crate) async fn test_transcribe_voice_model_file(
         sample_rate: audio.sample_rate,
         language: Some("auto".to_string()),
     })
+}
+
+pub(crate) async fn transcribe_voice_audio(
+    params: VoiceTranscriptionTranscribeAudioParams,
+) -> Result<VoiceTranscriptionTranscribeAudioResponse, RuntimeCoreError> {
+    let mime_type = params.mime_type.trim();
+    if !is_supported_voice_transcription_mime(mime_type) {
+        return Err(data_error(format!(
+            "当前录音转写仅支持 16-bit PCM WAV，收到的音频类型为: {}",
+            if mime_type.is_empty() {
+                "空"
+            } else {
+                mime_type
+            }
+        )));
+    }
+
+    let audio_bytes = BASE64_STANDARD
+        .decode(params.audio_base64.trim())
+        .map_err(|error| data_error(format!("解析录音音频失败: {error}")))?;
+    if audio_bytes.is_empty() {
+        return Err(data_error("录音音频为空，请确认麦克风权限和输入设备"));
+    }
+
+    let audio = parse_pcm16_wav_bytes(&audio_bytes).map_err(data_error)?;
+    let credential = resolve_voice_transcription_credential(params.credential_id.as_deref())?;
+    let text = AsrService::transcribe(&credential, &audio.pcm16le, audio.sample_rate)
+        .await
+        .map_err(data_error)?;
+
+    Ok(VoiceTranscriptionTranscribeAudioResponse {
+        text,
+        duration_secs: audio.duration_secs,
+        sample_rate: audio.sample_rate,
+        language: Some(credential.language.clone()),
+        provider: protocol_voice_asr_provider_from_core(credential.provider),
+    })
+}
+
+fn is_supported_voice_transcription_mime(mime_type: &str) -> bool {
+    let normalized = mime_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "audio/wav" | "audio/wave" | "audio/x-wav" | "audio/vnd.wave"
+    )
+}
+
+fn resolve_voice_transcription_credential(
+    credential_id: Option<&str>,
+) -> Result<CoreAsrCredentialEntry, RuntimeCoreError> {
+    if let Some(id) = credential_id.map(str::trim).filter(|id| !id.is_empty()) {
+        let credential = voice_config_service::get_asr_credential(id)
+            .map_err(data_error)?
+            .ok_or_else(|| data_error(format!("ASR 凭证不存在: {id}")))?;
+        if credential.disabled {
+            return Err(data_error(format!("ASR 凭证已禁用: {id}")));
+        }
+        return Ok(credential);
+    }
+
+    voice_config_service::get_default_asr_credential()
+        .map_err(data_error)?
+        .ok_or_else(|| {
+            data_error("未配置默认语音识别服务，请先在设置 > Agent > 语音中添加并启用 ASR 凭证")
+        })
 }
 
 fn required_sensevoice_files(install_dir: &Path) -> Vec<String> {

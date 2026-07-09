@@ -44,7 +44,7 @@ in your tool specification.
 {% for extension in extensions %}
 ## {{extension.name}}
 {% if extension.has_resources %}
-{{extension.name}} supports resources. Use ListMcpResourcesTool to enumerate MCP resources and ReadMcpResourceTool to read a specific resource from this extension by server name and resource URI.
+{{extension.name}} supports resources. Use list_mcp_resources to enumerate MCP resources and read_mcp_resource to read a specific resource from this extension by server name and resource URI.
 {% endif %}
 {% if extension.instructions %}### Instructions
 {{extension.instructions}}{% endif %}

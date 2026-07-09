@@ -54,6 +54,16 @@ function readRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function readArray(record: Record<string, unknown>, keys: string[]): unknown[] {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return [];
+}
+
 function readString(
   record: Record<string, unknown>,
   keys: string[],
@@ -67,24 +77,169 @@ function readString(
   return null;
 }
 
+function readNestedRecord(
+  record: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = readRecord(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function normalizeRuntimeStatus(value: unknown): string | null {
   return typeof value === "string"
-    ? value.trim().toLowerCase().replace(/[\s-]+/g, "_") || null
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_") || null
     : null;
 }
 
+function isTerminalStatusLike(status: unknown): boolean {
+  const normalizedStatus = normalizeRuntimeStatus(status);
+  return (
+    normalizedStatus === "done" ||
+    isExplicitTerminalRuntimeStatus(normalizedStatus)
+  );
+}
+
+function hasTerminalStatusInRecord(
+  record: Record<string, unknown>,
+  keys: string[],
+): boolean {
+  return keys.some((key) => isTerminalStatusLike(record[key]));
+}
+
+function readTurnIdFromRecord(record: Record<string, unknown>): string | null {
+  return readString(record, ["turn_id", "turnId", "id"]);
+}
+
+function isTerminalTurnRecord(turn: unknown): boolean {
+  const record = readRecord(turn);
+  if (!record) {
+    return false;
+  }
+  return hasTerminalStatusInRecord(record, [
+    "status",
+    "profile_status",
+    "profileStatus",
+    "native_status",
+    "nativeStatus",
+  ]);
+}
+
+interface ThreadReadTerminalInfo {
+  activeTurnId: string | null;
+  activeTurnMatchesCurrent: boolean;
+  hasAuthoritativeTerminal: boolean;
+  hasCurrentTurnTerminal: boolean;
+  hasTerminal: boolean;
+}
+
+function readThreadReadTerminalInfo(
+  threadRead: unknown,
+  currentTurnId?: string | null,
+): ThreadReadTerminalInfo {
+  const record = readRecord(threadRead);
+  if (!record) {
+    return {
+      activeTurnId: null,
+      activeTurnMatchesCurrent: false,
+      hasAuthoritativeTerminal: false,
+      hasCurrentTurnTerminal: false,
+      hasTerminal: false,
+    };
+  }
+
+  const normalizedCurrentTurnId = currentTurnId?.trim() || null;
+  const threadStatuses = [
+    normalizeRuntimeStatus(record.status),
+    normalizeRuntimeStatus(record.profile_status),
+    normalizeRuntimeStatus(record.profileStatus),
+  ].filter((status): status is string => Boolean(status));
+  const hasTerminalThreadStatus = threadStatuses.some(isTerminalStatusLike);
+  const turns = readArray(record, ["turns"]);
+  const activeTurnId = readString(record, ["active_turn_id", "activeTurnId"]);
+  const activeTurn = activeTurnId
+    ? turns
+        .map(readRecord)
+        .find((turn) => turn && readTurnIdFromRecord(turn) === activeTurnId)
+    : null;
+  const activeTurnMatchesCurrent = normalizedCurrentTurnId
+    ? activeTurnId === normalizedCurrentTurnId
+    : Boolean(activeTurnId);
+  const hasTerminalActiveTurn = Boolean(
+    activeTurn && activeTurnMatchesCurrent && isTerminalTurnRecord(activeTurn),
+  );
+  const hasCurrentTurnTerminal = Boolean(
+    normalizedCurrentTurnId &&
+    turns.some((turn) => {
+      const turnRecord = readRecord(turn);
+      return (
+        turnRecord &&
+        readTurnIdFromRecord(turnRecord) === normalizedCurrentTurnId &&
+        isTerminalTurnRecord(turnRecord)
+      );
+    }),
+  );
+  const diagnostics = readNestedRecord(record, ["diagnostics"]);
+  const hasTerminalLatestTurnStatus =
+    hasTerminalStatusInRecord(record, [
+      "latest_turn_status",
+      "latestTurnStatus",
+    ]) ||
+    (diagnostics
+      ? hasTerminalStatusInRecord(diagnostics, [
+          "latest_turn_status",
+          "latestTurnStatus",
+        ])
+      : false);
+  const hasTerminalTurn = turns.some(isTerminalTurnRecord);
+  const hasAuthoritativeThreadStatus = threadStatuses.some((status) => {
+    if (!isTerminalStatusLike(status)) {
+      return false;
+    }
+    return !normalizedCurrentTurnId || activeTurnId === normalizedCurrentTurnId;
+  });
+  const hasAuthoritativeTerminal =
+    hasAuthoritativeThreadStatus ||
+    hasTerminalActiveTurn ||
+    hasCurrentTurnTerminal;
+
+  return {
+    activeTurnId,
+    activeTurnMatchesCurrent,
+    hasAuthoritativeTerminal,
+    hasCurrentTurnTerminal,
+    hasTerminal:
+      hasAuthoritativeTerminal ||
+      hasTerminalThreadStatus ||
+      hasTerminalLatestTurnStatus ||
+      hasTerminalTurn,
+  };
+}
+
 function hasRunningThreadReadForRuntimeSync(threadRead: unknown): boolean {
+  const record = readRecord(threadRead);
+  if (!record) {
+    return false;
+  }
+
+  const terminalInfo = readThreadReadTerminalInfo(record);
+  if (terminalInfo.hasTerminal) {
+    return false;
+  }
+
   if (
     hasRunningThreadReadActivity(threadRead, {
       allowThreadStatusWithoutTurn: true,
     })
   ) {
     return true;
-  }
-
-  const record = readRecord(threadRead);
-  if (!record) {
-    return false;
   }
 
   const status =
@@ -209,12 +364,38 @@ function shouldForceSettleStaleRunningTurn(status?: string | null): boolean {
   return isExplicitTerminalRuntimeStatus(status);
 }
 
+function isThreadStatusAuthoritativeForCurrentStream(params: {
+  status?: string | null;
+  currentTurnId?: string | null;
+  threadReadTerminalInfo: ThreadReadTerminalInfo;
+}): boolean {
+  if (!isExplicitTerminalRuntimeStatus(params.status)) {
+    return false;
+  }
+  if (!params.currentTurnId?.trim()) {
+    return true;
+  }
+  return (
+    params.threadReadTerminalInfo.hasCurrentTurnTerminal ||
+    params.threadReadTerminalInfo.activeTurnMatchesCurrent
+  );
+}
+
 function hasRunningTurn(threadTurns: AgentThreadTurn[]): boolean {
   return threadTurns.some((turn) => turn.status === "running");
 }
 
-function hasTerminalTurn(threadTurns: AgentThreadTurn[]): boolean {
-  return threadTurns.some((turn) => isTerminalRuntimeStatus(turn.status));
+function hasTerminalTurn(
+  threadTurns: AgentThreadTurn[],
+  currentTurnId?: string | null,
+): boolean {
+  const normalizedCurrentTurnId = currentTurnId?.trim() || null;
+  return threadTurns.some((turn) => {
+    if (!isTerminalRuntimeStatus(turn.status)) {
+      return false;
+    }
+    return !normalizedCurrentTurnId || turn.id === normalizedCurrentTurnId;
+  });
 }
 
 interface UseAgentRuntimeSyncEffectsOptions {
@@ -226,6 +407,7 @@ interface UseAgentRuntimeSyncEffectsOptions {
   sessionId: string | null;
   parentSessionId?: string | null;
   currentTurnEventName?: string | null;
+  currentStreamTurnId?: string | null;
   isSending: boolean;
   threadRead?: unknown;
   threadReadStatus?: string | null;
@@ -247,6 +429,7 @@ export function useAgentRuntimeSyncEffects(
     sessionId,
     parentSessionId,
     currentTurnEventName,
+    currentStreamTurnId,
     isSending,
     threadRead,
     threadReadStatus,
@@ -257,6 +440,7 @@ export function useAgentRuntimeSyncEffects(
   } = options;
   const normalizedParentSessionId = parentSessionId?.trim() || null;
   const normalizedCurrentTurnEventName = currentTurnEventName?.trim() || null;
+  const normalizedCurrentStreamTurnId = currentStreamTurnId?.trim() || null;
   const lastIsSendingRef = useRef(isSending);
   const lastCurrentTurnEventNameRef = useRef(normalizedCurrentTurnEventName);
   const observedActiveRuntimeWorkRef = useRef(false);
@@ -376,19 +560,56 @@ export function useAgentRuntimeSyncEffects(
     if (!sessionId || !isSending || !settleActiveRuntimeStream) {
       return;
     }
-    const hasTerminalTurnInReadModel = hasTerminalTurn(threadTurns);
+    const hasTerminalTurnInReadModel = hasTerminalTurn(
+      threadTurns,
+      normalizedCurrentStreamTurnId,
+    );
+    const threadReadTerminalInfo = readThreadReadTerminalInfo(
+      threadRead,
+      normalizedCurrentStreamTurnId,
+    );
+    const hasAuthoritativeThreadReadStatus =
+      isThreadStatusAuthoritativeForCurrentStream({
+        status: threadReadStatus,
+        currentTurnId: normalizedCurrentStreamTurnId,
+        threadReadTerminalInfo,
+      });
+    const hasTerminalThreadReadModel = normalizedCurrentStreamTurnId
+      ? threadReadTerminalInfo.hasAuthoritativeTerminal ||
+        hasAuthoritativeThreadReadStatus
+      : threadReadTerminalInfo.hasTerminal;
     const hasTerminalReadModel =
-      isExplicitTerminalRuntimeStatus(threadReadStatus) ||
+      hasAuthoritativeThreadReadStatus ||
+      hasTerminalThreadReadModel ||
       hasTerminalTurnInReadModel;
     if (!observedActiveRuntimeWorkRef.current && !hasTerminalReadModel) {
       return;
     }
+    const hasRunningLocalTurn = hasRunningTurn(threadTurns);
+    const normalizedThreadReadStatus = normalizeRuntimeStatus(threadReadStatus);
+    if (
+      hasRunningLocalTurn &&
+      !normalizedCurrentStreamTurnId &&
+      isExplicitTerminalRuntimeStatus(threadReadStatus)
+    ) {
+      return;
+    }
+    const shouldForceSettleByThreadStatus =
+      shouldForceSettleStaleRunningTurn(threadReadStatus) &&
+      isThreadStatusAuthoritativeForCurrentStream({
+        status: normalizedThreadReadStatus,
+        currentTurnId: normalizedCurrentStreamTurnId,
+        threadReadTerminalInfo,
+      });
     if (
       queuedTurnCount > 0 ||
       hasRunningThreadReadForRuntimeSync(threadRead) ||
-      (!threadRead && hasRunningTurn(threadTurns))
+      hasRunningLocalTurn
     ) {
-      if (shouldForceSettleStaleRunningTurn(threadReadStatus)) {
+      if (
+        shouldForceSettleByThreadStatus ||
+        threadReadTerminalInfo.hasAuthoritativeTerminal
+      ) {
         observedActiveRuntimeWorkRef.current = false;
         settleActiveRuntimeStream(sessionId);
       }
@@ -396,6 +617,7 @@ export function useAgentRuntimeSyncEffects(
     }
     if (
       !hasTerminalTurnInReadModel &&
+      !hasTerminalThreadReadModel &&
       !isTerminalRuntimeStatus(threadReadStatus)
     ) {
       return;
@@ -411,6 +633,7 @@ export function useAgentRuntimeSyncEffects(
     threadRead,
     threadReadStatus,
     threadTurns,
+    normalizedCurrentStreamTurnId,
   ]);
 
   useEffect(() => {

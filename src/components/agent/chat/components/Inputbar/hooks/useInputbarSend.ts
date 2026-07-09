@@ -18,6 +18,8 @@ import {
   buildInputbarToolPreferencesOverride,
 } from "../utils/inputbarModeRequestMetadata";
 import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime";
+import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
+import type { BaseComposerSendMetadata } from "@/components/input-kit";
 
 interface UseInputbarSendParams {
   input: string;
@@ -52,7 +54,25 @@ export function useInputbarSend({
   clearActiveCapability,
   getInputRestoreEpoch,
 }: UseInputbarSendParams) {
-  return useCallback(async () => {
+  return useCallback(async (triggerMetadata?: BaseComposerSendMetadata) => {
+    const handlerEnteredAt = Date.now();
+    const triggeredAt =
+      typeof triggerMetadata?.triggeredAt === "number" &&
+      Number.isFinite(triggerMetadata.triggeredAt)
+        ? triggerMetadata.triggeredAt
+        : handlerEnteredAt;
+    const triggerSource = triggerMetadata?.triggerSource ?? "adapter";
+    recordAgentUiPerformanceMetric("inputbar.send.enter", {
+      durationMs: Math.max(0, handlerEnteredAt - triggeredAt),
+      hasTriggerMetadata: Boolean(triggerMetadata),
+      imageCount: pendingImages.length,
+      inputLength: input.trim().length,
+      pathReferenceCount: pathReferences.length,
+      sessionId: sessionId ?? null,
+      source: "inputbar",
+      triggerSource,
+      workspaceId: projectId ?? null,
+    });
     const sendRestoreEpoch = getInputRestoreEpoch?.() ?? 0;
     const submittedInput = resolveInputbarPluginSubmissionText({
       input,
@@ -144,17 +164,37 @@ export function useInputbarSend({
         sessionId?.trim() &&
         submittedInput.trim()
       ) {
+        recordAgentUiPerformanceMetric("inputbar.objectivePersist.start", {
+          elapsedMs: Math.max(0, Date.now() - triggeredAt),
+          sessionId: sessionId.trim(),
+          source: "inputbar",
+          triggerSource,
+          workspaceId: projectId ?? null,
+        });
         await setAgentRuntimeObjective({
           sessionId: sessionId.trim(),
           workspaceId: projectId ?? undefined,
           objectiveText: submittedInput.trim(),
           successCriteria: [],
         });
+        recordAgentUiPerformanceMetric("inputbar.objectivePersist.done", {
+          elapsedMs: Math.max(0, Date.now() - triggeredAt),
+          sessionId: sessionId.trim(),
+          source: "inputbar",
+          triggerSource,
+          workspaceId: projectId ?? null,
+        });
       }
       const result = await onSend({
         images: pendingImages.length > 0 ? pendingImages : undefined,
         textOverride,
         sendOptions,
+        ...(triggerMetadata
+          ? {
+              triggeredAt,
+              triggerSource,
+            }
+          : {}),
       });
       if (result === false) {
         return;

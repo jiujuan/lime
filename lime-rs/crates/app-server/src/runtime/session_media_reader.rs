@@ -1,13 +1,13 @@
-use super::sidecar_store::{
-    normalize_sidecar_relative_path, session_scoped_relative_path, SidecarReadBytesChunk,
-    SidecarReadBytesResult,
+use super::session_media_refs::{
+    known_media_sidecar_refs, session_scoped_media_relative_path, KnownMediaSidecarRef,
+    RequestedMediaSidecar,
 };
+use super::sidecar_store::{SidecarReadBytesChunk, SidecarReadBytesResult};
 use super::timestamp;
-use super::{RuntimeCore, RuntimeCoreError, StoredSession};
+use super::{RuntimeCore, RuntimeCoreError};
 use app_server_protocol::{AgentEvent, AgentSessionMediaReadParams, AgentSessionMediaReadResponse};
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{json, Value};
-use std::collections::HashSet;
 
 const DEFAULT_MAX_MEDIA_SIDECAR_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_MEDIA_SIDECAR_BYTES: u64 = 32 * 1024 * 1024;
@@ -347,214 +347,12 @@ fn sidecar_read_error(error: String) -> RuntimeCoreError {
     }
 }
 
-#[derive(Debug, Clone)]
-struct RequestedMediaSidecar {
-    keys: HashSet<String>,
-    relative_path: Option<String>,
-}
-
-impl RequestedMediaSidecar {
-    fn from_params(params: &AgentSessionMediaReadParams) -> Result<Self, RuntimeCoreError> {
-        let mut keys = HashSet::new();
-        push_key(&mut keys, params.uri.as_deref());
-        push_key(&mut keys, params.ref_id.as_deref());
-        if let Some(sidecar_ref) = params.sidecar_ref.as_ref() {
-            push_key(&mut keys, string_value(sidecar_ref, &["ref"]).as_deref());
-            push_key(&mut keys, string_value(sidecar_ref, &["uri"]).as_deref());
-        }
-        let relative_path = params
-            .sidecar_ref
-            .as_ref()
-            .and_then(|sidecar_ref| string_value(sidecar_ref, &["relativePath", "relative_path"]))
-            .and_then(|path| normalize_sidecar_relative_path(path.as_str()).ok());
-
-        if keys.is_empty() && relative_path.is_none() {
-            return Err(RuntimeCoreError::Backend(
-                "agentSession/media/read requires uri, ref, or sidecarRef".to_string(),
-            ));
-        }
-        Ok(Self {
-            keys,
-            relative_path,
-        })
-    }
-
-    fn display_uri(&self) -> String {
-        self.keys
-            .iter()
-            .next()
-            .cloned()
-            .or_else(|| self.relative_path.clone())
-            .unwrap_or_else(|| "sidecar://media/unknown".to_string())
-    }
-}
-
-#[derive(Debug, Clone)]
-struct KnownMediaSidecarRef {
-    ref_id: Option<String>,
-    uri: Option<String>,
-    relative_path: String,
-    sha256: Option<String>,
-    bytes: Option<u64>,
-    mime_type: Option<String>,
-    sidecar_ref: Value,
-}
-
-impl KnownMediaSidecarRef {
-    fn matches(&self, requested: &RequestedMediaSidecar) -> bool {
-        self.ref_id
-            .as_deref()
-            .is_some_and(|value| requested.keys.contains(value))
-            || self
-                .uri
-                .as_deref()
-                .is_some_and(|value| requested.keys.contains(value))
-            || requested
-                .relative_path
-                .as_deref()
-                .is_some_and(|value| value == self.relative_path)
-    }
-
-    fn display_uri(&self, requested: &RequestedMediaSidecar) -> String {
-        self.uri
-            .clone()
-            .or_else(|| self.ref_id.clone())
-            .unwrap_or_else(|| requested.display_uri())
-    }
-}
-
-fn known_media_sidecar_refs(stored: &StoredSession) -> Vec<KnownMediaSidecarRef> {
-    let mut refs = Vec::new();
-    for event in &stored.events {
-        collect_media_sidecar_refs_from_value(&event.payload, &mut refs);
-    }
-    for input in stored.turn_inputs.values() {
-        for attachment in &input.attachments {
-            if let Some(metadata) = attachment.metadata.as_ref() {
-                collect_media_sidecar_refs_from_value(metadata, &mut refs);
-            }
-        }
-    }
-    refs
-}
-
-fn collect_media_sidecar_refs_from_value(value: &Value, refs: &mut Vec<KnownMediaSidecarRef>) {
-    match value {
-        Value::Object(object) => {
-            for key in ["sidecarRef", "sidecar_ref"] {
-                if let Some(sidecar_ref) = object.get(key) {
-                    if let Some(known_ref) = known_media_sidecar_ref(sidecar_ref, value) {
-                        refs.push(known_ref);
-                    }
-                }
-            }
-            for child in object.values() {
-                collect_media_sidecar_refs_from_value(child, refs);
-            }
-        }
-        Value::Array(items) => {
-            for item in items {
-                collect_media_sidecar_refs_from_value(item, refs);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn known_media_sidecar_ref(sidecar_ref: &Value, context: &Value) -> Option<KnownMediaSidecarRef> {
-    if !looks_like_media_sidecar_ref(sidecar_ref, context) {
-        return None;
-    }
-    let relative_path = string_value(sidecar_ref, &["relativePath", "relative_path"])
-        .and_then(|path| normalize_sidecar_relative_path(path.as_str()).ok())?;
-    Some(KnownMediaSidecarRef {
-        ref_id: string_value(sidecar_ref, &["ref"]),
-        uri: string_value(sidecar_ref, &["uri"]).or_else(|| string_value(context, &["uri"])),
-        relative_path,
-        sha256: string_value(sidecar_ref, &["sha256", "sha"])
-            .or_else(|| string_value(context, &["sha256", "sha"])),
-        bytes: u64_value(sidecar_ref, &["bytes", "byteSize", "byte_size"])
-            .or_else(|| u64_value(context, &["bytes", "byteSize", "byte_size"])),
-        mime_type: string_value(
-            sidecar_ref,
-            &["mimeType", "mime_type", "mediaType", "media_type"],
-        )
-        .or_else(|| {
-            string_value(
-                context,
-                &["mimeType", "mime_type", "mediaType", "media_type"],
-            )
-        }),
-        sidecar_ref: sidecar_ref.clone(),
-    })
-}
-
-fn looks_like_media_sidecar_ref(sidecar_ref: &Value, context: &Value) -> bool {
-    string_value(sidecar_ref, &["kind"])
-        .or_else(|| string_value(context, &["kind", "type"]))
-        .is_some_and(|value| value.to_ascii_lowercase().contains("media"))
-        || string_value(sidecar_ref, &["ref", "uri"])
-            .or_else(|| string_value(context, &["uri", "sourceUri", "source_uri"]))
-            .is_some_and(|value| media_sidecar_uri(value.as_str()))
-}
-
-fn media_sidecar_uri(value: &str) -> bool {
-    let normalized = value.trim().to_ascii_lowercase();
-    normalized.starts_with("sidecar://media/") || normalized.contains("/media/")
-}
-
-fn session_scoped_media_relative_path(
-    session_id: &str,
-    relative_path: &str,
-) -> Result<String, RuntimeCoreError> {
-    let relative_path =
-        normalize_sidecar_relative_path(relative_path).map_err(RuntimeCoreError::Backend)?;
-    let session_prefix = session_scoped_relative_path(session_id, "");
-    if !relative_path.starts_with(session_prefix.as_str()) {
-        return Err(RuntimeCoreError::Backend(
-            "agent session media sidecar path is outside the requested session".to_string(),
-        ));
-    }
-    Ok(relative_path)
-}
-
 fn format_content_range(offset: u64, length: u64, total_bytes: u64) -> String {
     if length == 0 {
         return format!("bytes */{total_bytes}");
     }
     let end = offset.saturating_add(length).saturating_sub(1);
     format!("bytes {offset}-{end}/{total_bytes}")
-}
-
-fn push_key(keys: &mut HashSet<String>, value: Option<&str>) {
-    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return;
-    };
-    keys.insert(value.to_string());
-}
-
-fn string_value(value: &Value, keys: &[&str]) -> Option<String> {
-    let object = value.as_object()?;
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn u64_value(value: &Value, keys: &[&str]) -> Option<u64> {
-    let object = value.as_object()?;
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(|value| {
-            value.as_u64().or_else(|| {
-                value
-                    .as_i64()
-                    .filter(|value| *value >= 0)
-                    .and_then(|value| u64::try_from(value).ok())
-            })
-        })
 }
 
 #[cfg(test)]
@@ -615,6 +413,55 @@ mod tests {
         )
         .expect("append media event");
         (core, temp, ref_id)
+    }
+
+    fn prepared_core_with_artifact_sidecar(
+        artifact_kind: &str,
+        mime_type: &str,
+        content: Vec<u8>,
+    ) -> (RuntimeCore, tempfile::TempDir) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let sidecar_store = Arc::new(SidecarStore::new(temp.path()).expect("sidecar store"));
+        let core = RuntimeCore::default().with_sidecar_store(sidecar_store.clone());
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess-artifact-media-read".to_string()),
+            thread_id: Some("thread-artifact-media-read".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+        let sidecar_ref = sidecar_store
+            .write_bytes(&SidecarBytesWriteRequest {
+                session_id: "sess-artifact-media-read".to_string(),
+                kind: "artifact_snapshot".to_string(),
+                logical_id: "artifact-image-1".to_string(),
+                relative_path:
+                    "sessions/sess-artifact-media-read/runtime-artifacts/artifact-image-1.bin"
+                        .to_string(),
+                content,
+            })
+            .expect("write artifact sidecar");
+        core.append_runtime_events(
+            "sess-artifact-media-read",
+            "thread-artifact-media-read",
+            Some("turn-artifact-media-read"),
+            vec![RuntimeEvent::new(
+                "artifact.snapshot",
+                json!({
+                    "artifact": {
+                        "artifactId": "artifact://message/image-1",
+                        "path": ".lime/artifacts/image-1.bin",
+                        "kind": artifact_kind,
+                        "mimeType": mime_type,
+                        "sidecarRef": sidecar_ref,
+                    }
+                }),
+            )],
+        )
+        .expect("append artifact event");
+        (core, temp)
     }
 
     #[test]
@@ -715,6 +562,62 @@ mod tests {
         assert_eq!(events[1].payload["done"], true);
         assert_eq!(events[1].payload["chunkCount"], 1);
         assert_eq!(events[1].payload["media"]["sha256"], response.sha256);
+    }
+
+    #[test]
+    fn reads_media_artifact_sidecar_by_artifact_uri_alias() {
+        let (core, _temp) =
+            prepared_core_with_artifact_sidecar("image", "image/png", vec![0x89, b'P', b'N', b'G']);
+
+        let response = core
+            .read_agent_session_media(AgentSessionMediaReadParams {
+                session_id: "sess-artifact-media-read".to_string(),
+                uri: Some("artifact://message/image-1".to_string()),
+                ref_id: None,
+                sidecar_ref: None,
+                max_bytes: Some(1024),
+                offset: None,
+                length: None,
+                stream: false,
+            })
+            .expect("read media artifact");
+
+        assert_eq!(response.session_id, "sess-artifact-media-read");
+        assert_eq!(response.mime_type.as_deref(), Some("image/png"));
+        assert_eq!(response.bytes, 4);
+        assert_eq!(response.content_base64, "iVBORw==");
+        assert_eq!(
+            response
+                .sidecar_ref
+                .as_ref()
+                .and_then(|sidecar_ref| sidecar_ref.get("kind"))
+                .and_then(Value::as_str),
+            Some("artifact_snapshot")
+        );
+    }
+
+    #[test]
+    fn rejects_non_media_artifact_sidecar_alias() {
+        let (core, _temp) = prepared_core_with_artifact_sidecar(
+            "markdown_report",
+            "text/markdown",
+            b"# Report".to_vec(),
+        );
+
+        let error = core
+            .read_agent_session_media(AgentSessionMediaReadParams {
+                session_id: "sess-artifact-media-read".to_string(),
+                uri: Some("artifact://message/image-1".to_string()),
+                ref_id: None,
+                sidecar_ref: None,
+                max_bytes: Some(1024),
+                offset: None,
+                length: None,
+                stream: false,
+            })
+            .expect_err("non-media artifact must not be readable as media");
+
+        assert!(error.to_string().contains("reference is not available"));
     }
 
     #[test]

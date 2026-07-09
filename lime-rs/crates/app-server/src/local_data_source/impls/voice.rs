@@ -51,6 +51,13 @@ impl VoiceAppDataSource for LocalAppDataSource {
         voice_asr_credentials::test_transcribe_voice_model_file(params).await
     }
 
+    async fn transcribe_voice_audio(
+        &self,
+        params: VoiceTranscriptionTranscribeAudioParams,
+    ) -> Result<VoiceTranscriptionTranscribeAudioResponse, RuntimeCoreError> {
+        voice_asr_credentials::transcribe_voice_audio(params).await
+    }
+
     async fn list_voice_instructions(
         &self,
     ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {

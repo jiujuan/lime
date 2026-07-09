@@ -191,7 +191,6 @@ type SoulStyleProfile = {
     | "warm_supportive"
     | "cool_confident"
     | "calm_professional";
-  intensity: "low" | "medium" | "high";
   scope: "chat_interaction" | "tool_narrative" | "companion" | "artifact_voice";
   voicePrimitives: string[];
   surfaceContracts: Partial<
@@ -225,7 +224,7 @@ type SoulStyleProfile = {
 
 首版推荐固定：
 
-1. `intensity=low` 作为默认值。
+1. 不提供 `low / medium / high` 风格强度选项；每个 Style Pack 自己承担完整表达合同，不能靠低档位打折。
 2. `artifact_voice` 不对 Product Soul 默认开放。
 3. `voicePrimitives` 和 `surfaceContracts` 是风格合同，必须进入 prompt context；它们不能被 UI 当固定句子渲染。
 4. `fewShotAnchors` 是少量风格锚点，帮助模型理解节奏；验收必须防止模型把示例变成固定开场白。
@@ -335,7 +334,7 @@ lime-rs/crates/app-server/src/runtime/memory_prompt.rs
 
 Runtime 边界：
 
-1. `MemorySoulConfig` 仍是配置事实源；新增字段只能表达 `style_profile_id`、强度或会话覆盖，不新增 `personal_style_*` 表、命令或 Runtime。
+1. `MemorySoulConfig` 仍是配置事实源；当前只表达 `style_profile_id` 与明确的会话覆盖，不新增 `style_intensity`、`personal_style_*` 表、命令或 Runtime。
 2. `memory_prompt.rs` 只保留 dispatch / append 入口，Style Profile 解析与 prompt context 构造进入 `runtime/soul/` 子模块。
 3. App Server 只输出结构化 `memory_soul_prompt_context`；前端 UI 不直接拼系统 prompt。
 4. Installed pack 只通过 `<app-data>/soul/style-packs/registry.json` + manifest + locale read model 进入 resolver；只有 `status: "enabled"` 可读，缺 `status`、旧 `enabled: true`、顶层 `digest` 或缺五语言 locale 都 fail closed。
@@ -450,7 +449,7 @@ sequenceDiagram
   R->>P: 读取 built-in / installed style pack manifest
   P-->>R: 返回可用 profile 列表与稳定 metadata
   R->>S: 请求当前 Soul Style Profile
-  S-->>R: 返回风格、强度、禁忌、降级策略
+  S-->>R: 返回风格合同、禁忌、降级策略
   R->>C: 生成结构化风格约束
   C->>G: 提交风格约束 + 工具事实引用
   G-->>R: 通过或降级到专业口吻

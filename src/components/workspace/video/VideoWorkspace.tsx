@@ -451,13 +451,6 @@ const StageFooter = styled.div`
   flex-wrap: wrap;
 `;
 
-const StageFooterTips = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-`;
-
 const FocusedTaskPanel = styled.div`
   position: relative;
   z-index: 1;
@@ -2075,34 +2068,8 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                     )}
                   </StageFrame>
 
-                  <StageFooter>
-                    <StageFooterTips>
-                      <WorkbenchInfoTip
-                        ariaLabel={t(
-                          "workspace.video.workspace.session.preview.tipAria",
-                          {
-                            defaultValue: "主预览说明",
-                          },
-                        )}
-                        label={t(
-                          "workspace.video.workspace.session.preview.tipLabel",
-                          {
-                            defaultValue: "同步规则",
-                          },
-                        )}
-                        variant="pill"
-                        tone="sky"
-                        align="start"
-                        content={t(
-                          "workspace.video.workspace.session.preview.tipContent",
-                          {
-                            defaultValue:
-                              "成功结果会自动同步到项目资料；切换历史任务预览不会覆盖你当前输入的提示词。",
-                          },
-                        )}
-                      />
-                    </StageFooterTips>
-                    {focusedTask ? (
+                  {focusedTask ? (
+                    <StageFooter>
                       <TaskCounter>
                         {t(
                           "workspace.video.workspace.session.preview.updatedAt",
@@ -2115,8 +2082,8 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                           },
                         )}
                       </TaskCounter>
-                    ) : null}
-                  </StageFooter>
+                    </StageFooter>
+                  ) : null}
 
                   {focusedTaskSummary ? (
                     <FocusedTaskPanel data-testid="video-focused-task-panel">

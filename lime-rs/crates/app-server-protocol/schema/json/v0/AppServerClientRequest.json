@@ -2813,6 +2813,25 @@
           "$ref": "#/$defs/RequestId"
         },
         "method": {
+          "const": "voiceTranscription/transcribeAudio",
+          "type": "string"
+        },
+        "params": {
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "method"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
           "const": "workspaceSkillBindings/list",
           "type": "string"
         },

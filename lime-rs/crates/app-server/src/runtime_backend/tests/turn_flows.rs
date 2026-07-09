@@ -119,6 +119,7 @@ async fn respond_action_emits_resolved_fact_with_action_identity() {
             turn: Some(request.turn),
             request_id: "ask-1".to_string(),
             action_type: AgentSessionActionType::AskUser,
+            decision: None,
             confirmed: false,
             response: None,
             user_data: None,
@@ -142,7 +143,7 @@ async fn respond_action_emits_resolved_fact_with_action_identity() {
     assert_eq!(event.payload["actionId"].as_str(), Some("ask-1"));
     assert_eq!(event.payload["actionType"].as_str(), Some("ask_user"));
     assert_eq!(event.payload["confirmed"].as_bool(), Some(false));
-    assert_eq!(event.payload["decision"].as_str(), Some("deny"));
+    assert!(event.payload.get("decision").is_none());
     assert_eq!(event.payload["scope"]["turnId"].as_str(), Some("turn-1"));
 }
 
@@ -212,7 +213,7 @@ async fn runtime_backend_mcp_autostart_failure_does_not_block_turn_preflight() {
 }
 
 #[tokio::test]
-async fn runtime_backend_registers_memory_tools_in_agent_registry() {
+async fn runtime_backend_registers_current_gateway_tools_in_agent_registry() {
     let db: lime_core::database::DbConnection = std::sync::Arc::new(std::sync::Mutex::new(
         rusqlite::Connection::open_in_memory().expect("db"),
     ));
@@ -233,7 +234,7 @@ async fn runtime_backend_registers_memory_tools_in_agent_registry() {
     backend
         .register_current_native_tools_if_available()
         .await
-        .expect("memory tools should register");
+        .expect("current gateway tools should register");
 
     for tool_name in [
         MEMORY_LIST_TOOL_NAME,
@@ -246,6 +247,13 @@ async fn runtime_backend_registers_memory_tools_in_agent_registry() {
             "{tool_name} should be registered as a native memory tool"
         );
     }
+    assert!(
+        backend
+            .agent_state
+            .contains_native_tool(TOOL_SEARCH_TOOL_NAME)
+            .await,
+        "{TOOL_SEARCH_TOOL_NAME} should be registered as the current deferred tool search native tool"
+    );
 }
 
 #[tokio::test]

@@ -89,6 +89,7 @@ describe("useAgentStreamController", () => {
           assistantMsgId: "assistant-1",
           eventName: "stream-1",
           sessionId: "session-1",
+          turnId: "turn-1",
         });
       });
 
@@ -96,8 +97,11 @@ describe("useAgentStreamController", () => {
         assistantMsgId: "assistant-1",
         eventName: "stream-1",
         sessionId: "session-1",
+        turnId: "turn-1",
       });
       expect(harness.getValue().isSending).toBe(true);
+      expect(harness.getValue().activeStreamEventName).toBe("stream-1");
+      expect(harness.getValue().activeStreamTurnId).toBe("turn-1");
       expect(harness.getRefs()).toEqual({
         assistantMsgId: "assistant-1",
         eventName: "stream-1",
@@ -110,11 +114,43 @@ describe("useAgentStreamController", () => {
 
       expect(harness.getValue().activeStreamRef.current).toBeNull();
       expect(harness.getValue().isSending).toBe(false);
+      expect(harness.getValue().activeStreamEventName).toBeNull();
+      expect(harness.getValue().activeStreamTurnId).toBeNull();
       expect(harness.getRefs()).toEqual({
         assistantMsgId: null,
         eventName: null,
         sessionId: null,
       });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("发送态已激活后绑定 eventName 仍应更新可观察状态", () => {
+    const harness = mountHook();
+
+    try {
+      act(() => {
+        harness.getValue().setIsSending(true);
+      });
+      expect(harness.getValue().isSending).toBe(true);
+      expect(harness.getValue().activeStreamEventName).toBeNull();
+
+      act(() => {
+        harness.getValue().setActiveStream({
+          assistantMsgId: "assistant-late-event",
+          eventName: "stream-late-event",
+          sessionId: "session-late-event",
+          turnId: "turn-late-event",
+        });
+      });
+
+      expect(harness.getValue().isSending).toBe(true);
+      expect(harness.getValue().activeStreamEventName).toBe(
+        "stream-late-event",
+      );
+      expect(harness.getValue().activeStreamTurnId).toBe("turn-late-event");
+      expect(harness.getRefs().eventName).toBe("stream-late-event");
     } finally {
       harness.unmount();
     }

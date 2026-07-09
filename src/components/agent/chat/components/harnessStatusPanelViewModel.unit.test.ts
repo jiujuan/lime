@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type {
   AgentRuntimeToolInventoryCatalogEntry,
-  AgentRuntimeToolInventoryRegistryEntry,
+  AgentRuntimeToolInventoryNativeEntry,
   AgentRuntimeToolInventoryRuntimeEntry,
   AsterSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
@@ -29,7 +29,7 @@ import {
   buildRuntimeToolCapabilityGaps,
   buildToolInventorySourceStats,
   collectCatalogExecutionSources,
-  collectRegistryExecutionSources,
+  collectNativeExecutionSources,
   countFileChangeStatuses,
   countCatalogToolsByInventoryFilter,
   describeApproval,
@@ -163,9 +163,9 @@ function buildCatalogTool(
   };
 }
 
-function buildRegistryTool(
-  overrides: Partial<AgentRuntimeToolInventoryRegistryEntry> = {},
-): AgentRuntimeToolInventoryRegistryEntry {
+function buildNativeTool(
+  overrides: Partial<AgentRuntimeToolInventoryNativeEntry> = {},
+): AgentRuntimeToolInventoryNativeEntry {
   return {
     name: "ReadFile",
     description: "读取文件",
@@ -187,7 +187,7 @@ function buildRuntimeTool(
   return {
     name: "ReadFile",
     description: "读取文件",
-    source_kind: "registry_native",
+    source_kind: "current_surface",
     deferred_loading: false,
     always_visible: false,
     allowed_callers: [],
@@ -858,8 +858,8 @@ describe("harnessStatusPanelViewModel", () => {
     expect(formatRuntimeToolSourceKindLabel("current_surface")).toBe(
       "当前工具面",
     );
-    expect(formatRuntimeToolAvailabilitySourceLabel("registry_tools")).toBe(
-      "registry_tools",
+    expect(formatRuntimeToolAvailabilitySourceLabel("native_tools")).toBe(
+      "native_tools",
     );
     expect(formatRuntimeToolAvailabilitySourceLabel("none")).toBe("未就绪");
   });
@@ -905,8 +905,8 @@ describe("harnessStatusPanelViewModel", () => {
     });
 
     expect(
-      collectRegistryExecutionSources(
-        buildRegistryTool({
+      collectNativeExecutionSources(
+        buildNativeTool({
           catalog_execution_warning_policy_source: "runtime",
           catalog_execution_sandbox_profile_source: "persisted",
         }),

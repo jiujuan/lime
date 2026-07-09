@@ -66,6 +66,26 @@ export function sanitizeBackendLedgerForEvidence(backendLedger) {
         recordedAt: entry.recordedAt,
       });
     }
+    if (
+      entry?.kind === "actionRespond" ||
+      entry?.kind === "approvalRequestResumeActionRespond" ||
+      entry?.kind === "approvalRequestResumeActionRespondIgnored"
+    ) {
+      return sanitizeJson({
+        kind: entry.kind,
+        sessionId: entry.sessionId,
+        threadId: entry.threadId,
+        turnId: entry.turnId,
+        requestId: entry.requestId,
+        actionType: entry.actionType,
+        decision: entry.decision,
+        decisionScope: entry.decisionScope,
+        confirmed: entry.confirmed,
+        requestKeys: Array.isArray(entry.requestKeys) ? entry.requestKeys : [],
+        actionScope: entry.actionScope,
+        recordedAt: entry.recordedAt,
+      });
+    }
     return sanitizeJson({
       kind: entry?.kind ?? null,
       sessionId: entry?.sessionId ?? null,
@@ -89,12 +109,16 @@ export async function waitForBackendLedgerEntry(filePath, predicate, options) {
   }
   throw new Error(
     `external backend ledger 未记录预期事件: ${JSON.stringify(
-      sanitizeJson(lastLedger),
+      sanitizeBackendLedgerForEvidence(lastLedger),
     )}`,
   );
 }
 
-export async function waitForBackendLedgerTurnStart(filePath, inputText, options) {
+export async function waitForBackendLedgerTurnStart(
+  filePath,
+  inputText,
+  options,
+) {
   return waitForBackendLedgerEntry(
     filePath,
     (entry) => entry.kind === "turnStart" && entry.inputText === inputText,

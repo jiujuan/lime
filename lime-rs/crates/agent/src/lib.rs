@@ -26,7 +26,6 @@ mod host_managed_generation;
 mod knowledge_builder_skill;
 pub mod lime_session_repository;
 mod live_execution_process;
-mod lsp_bridge;
 mod mcp_bridge;
 mod message_content_adapter;
 mod model_request_policy;
@@ -153,7 +152,7 @@ pub use runtime_queue::{
 };
 pub use runtime_state::{AgentRuntimeState, QueuedTurnTask};
 pub use runtime_state_support::{
-    is_lime_skill_registered, register_lime_project_skill_from_directory, reload_lime_skills,
+    is_skill_registered, register_project_skill_from_directory, reload_skills,
 };
 pub use runtime_support::initialize_agent_runtime;
 pub use session_configuration::{
@@ -193,7 +192,6 @@ pub use team_runtime_governor::{
     release_team_runtime_permit, resolve_team_runtime_provider_parallel_budget,
     snapshot_team_runtime_session, TeamRuntimeGovernorSnapshot, TeamRuntimePermit,
 };
-pub use tools::{BrowserAction, BrowserTool, BrowserToolError, BrowserToolResult};
 pub use turn_context_configuration::{
     agent_turn_approval_policy, agent_turn_context_metadata, agent_turn_sandbox_policy,
     build_agent_turn_context, insert_agent_turn_metadata, set_agent_turn_output_schema,

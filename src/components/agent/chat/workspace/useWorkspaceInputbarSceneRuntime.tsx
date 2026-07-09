@@ -17,10 +17,11 @@ import type {
   AgentInitialKnowledgePackSelectionParams,
 } from "@/types/page";
 import { Inputbar } from "../components/Inputbar";
+import { InputbarApprovalPrompt } from "../components/Inputbar/components/InputbarApprovalPrompt";
 import type { TaskFile } from "../components/TaskFiles";
 import { CONVERSATION_CONTENT_MAX_WIDTH } from "../styles/conversationLayoutTokens";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
-import type { Message } from "../types";
+import type { ConfirmResponse, Message } from "../types";
 import {
   DEFAULT_CHAT_TOOL_PREFERENCES,
   type ChatToolPreferences,
@@ -38,6 +39,7 @@ import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSel
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import { isRenderableTaskFile } from "./generalWorkbenchHelpers";
 import { useWorkspaceKnowledgeRuntime } from "./knowledge/useWorkspaceKnowledgeRuntime";
+import { selectPendingInputbarApprovalAction } from "./inputbarApprovalAction";
 
 interface GeneralWorkbenchEntryPromptAccessoryProps {
   prompt: GeneralWorkbenchEntryPromptState;
@@ -64,7 +66,7 @@ const InputbarOverlayAccessoryStack = styled.div`
   gap: 8px;
 `;
 
-const PlanDecisionInputbarReplacement = styled.div`
+const InputbarControlReplacement = styled.div`
   width: min(100%, ${CONVERSATION_CONTENT_MAX_WIDTH});
   max-width: 100%;
 `;
@@ -294,6 +296,7 @@ interface UseWorkspaceInputbarScenePresentationRuntimeParams {
     onRestartGeneralWorkbenchEntryPrompt: () => void;
     onContinueGeneralWorkbenchEntryPrompt: () => Promise<void> | void;
     planDecisionAccessory?: ReactNode;
+    approvalAccessory?: ReactNode;
     soulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
     soulArtifactVoiceEnabledForTurn: boolean;
     onSoulArtifactVoiceEnabledForTurnChange: (enabled: boolean) => void;
@@ -421,10 +424,14 @@ function useWorkspaceInputbarScenePresentationRuntime({
         {soulArtifactVoiceAccessory}
       </InputbarOverlayAccessoryStack>
     ) : undefined;
-  const inputbarNode = inputbarPresentation.planDecisionAccessory ? (
-    <PlanDecisionInputbarReplacement data-testid="plan-decision-inputbar-replacement">
+  const inputbarNode = inputbarPresentation.approvalAccessory ? (
+    <InputbarControlReplacement data-testid="inputbar-approval-replacement">
+      {inputbarPresentation.approvalAccessory}
+    </InputbarControlReplacement>
+  ) : inputbarPresentation.planDecisionAccessory ? (
+    <InputbarControlReplacement data-testid="plan-decision-inputbar-replacement">
       {inputbarPresentation.planDecisionAccessory}
-    </PlanDecisionInputbarReplacement>
+    </InputbarControlReplacement>
   ) : (
     <Inputbar {...workspaceInputbarProps} overlayAccessory={overlayAccessory} />
   );
@@ -686,6 +693,14 @@ export function useWorkspaceInputbarSceneRuntime({
   });
   const resolvedChatToolPreferences =
     chatToolPreferences ?? DEFAULT_CHAT_TOOL_PREFERENCES;
+  const inputbarApprovalAction = useMemo(
+    () =>
+      selectPendingInputbarApprovalAction(
+        pendingActions,
+        submittedActionsInFlight,
+      ),
+    [pendingActions, submittedActionsInFlight],
+  );
   const runtimeToolAvailability = useMemo(
     () => deriveRuntimeToolAvailability(toolInventory),
     [toolInventory],
@@ -756,6 +771,16 @@ export function useWorkspaceInputbarSceneRuntime({
       ?.prompt_text?.trim() ||
     resolvedTurns[resolvedTurns.length - 1]?.prompt_text?.trim() ||
     "";
+  const approvalAccessory = inputbarApprovalAction ? (
+    <InputbarApprovalPrompt
+      request={inputbarApprovalAction}
+      onSubmit={
+        onRespondToAction as
+          | ((response: ConfirmResponse) => void | Promise<void>)
+          | undefined
+      }
+    />
+  ) : null;
 
   const presentationRuntime = useWorkspaceInputbarScenePresentationRuntime({
     setMentionedCharacters,
@@ -846,6 +871,7 @@ export function useWorkspaceInputbarSceneRuntime({
         handleRestartGeneralWorkbenchEntryPrompt,
       onContinueGeneralWorkbenchEntryPrompt:
         handleContinueGeneralWorkbenchEntryPrompt,
+      approvalAccessory,
       planDecisionAccessory,
       soulArtifactVoiceGenerationBrief,
       soulArtifactVoiceEnabledForTurn,

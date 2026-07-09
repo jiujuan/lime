@@ -26,8 +26,9 @@ export async function verifyPlanHistoryHydrate({
   requestLog,
   readModelPlanCompleted,
 }) {
-  const readModelPlanThreadItem =
-    summarizeReadModelPlanThreadItem(readModelPlanCompleted);
+  const readModelPlanThreadItem = summarizeReadModelPlanThreadItem(
+    readModelPlanCompleted,
+  );
 
   const planHistoryHydrateReload = await reloadRendererDocument(page, options);
   const planHistoryHydrateRendererReady = await waitForRendererReady(
@@ -102,8 +103,12 @@ export function summarizeReadModelPlanThreadItem(readModel) {
     legacyUpdatePlanToolNames: legacyUpdatePlanToolItems
       .map((item) => readString(item, "toolName", "tool_name", "name"))
       .filter(Boolean),
-    textPreview: readString(latestPlanItem, "text", "summary", "content")
-      ?.slice(0, 240),
+    textPreview: readString(
+      latestPlanItem,
+      "text",
+      "summary",
+      "content",
+    )?.slice(0, 240),
   };
 }
 
@@ -121,41 +126,130 @@ async function waitForGuiPlanHistoryHydrateCompleted(page, options) {
           document.querySelector('[data-testid="message-list-frame"]')
             ?.textContent ||
           "";
-        const taskRailText =
-          document
-            .querySelector('[data-testid="task-center-run-control-surface"]')
-            ?.textContent ||
-          document
-            .querySelector('[data-testid="task-center-task-rail"]')
-            ?.textContent ||
-          "";
-        const planCarrierText = [mainText, messageListText, taskRailText].join(
-          "\n",
-        );
+        const readVisiblePlanOwner = ({
+          kind,
+          selector,
+          itemSelector,
+          revisionSelector,
+        }) => {
+          const root = document.querySelector(selector);
+          const rect = root?.getBoundingClientRect();
+          const style = root ? window.getComputedStyle(root) : null;
+          const visible = Boolean(
+            root &&
+            rect &&
+            rect.width > 16 &&
+            rect.height > 8 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
+          );
+          const revision = revisionSelector
+            ? root?.querySelector(revisionSelector)
+            : null;
+          return {
+            kind,
+            visible,
+            text: root?.textContent || "",
+            itemCount: itemSelector
+              ? root?.querySelectorAll(itemSelector).length || 0
+              : 0,
+            revisionId: revision?.getAttribute("data-plan-revision-id") || null,
+            revisionSource: revision?.getAttribute("data-plan-source") || null,
+            revisionTurnId: revision?.getAttribute("data-plan-turn-id") || null,
+          };
+        };
+        const planOwners = [
+          readVisiblePlanOwner({
+            kind: "run-control-plan",
+            selector: '[data-testid="task-center-run-control-plan"]',
+            itemSelector: '[data-testid="task-center-run-control-plan-item"]',
+            revisionSelector:
+              '[data-testid="task-center-run-control-plan-revision"]',
+          }),
+          readVisiblePlanOwner({
+            kind: "task-rail-plan",
+            selector: '[data-testid="task-center-task-rail-plan"]',
+            itemSelector: '[data-testid="task-center-task-rail-plan-item"]',
+            revisionSelector:
+              '[data-testid="task-center-task-rail-plan-revision"]',
+          }),
+          readVisiblePlanOwner({
+            kind: "message-plan-block",
+            selector: '[data-testid="agent-plan-block"]',
+            itemSelector: null,
+            revisionSelector: null,
+          }),
+        ].filter((owner) => owner.visible);
+        const planCarrierText = planOwners
+          .map((owner) => owner.text)
+          .join("\n");
         const legacyVisibleHits = legacyLabels.filter((label) =>
-          planCarrierText.includes(label),
+          [mainText, messageListText, planCarrierText].some((textValue) =>
+            textValue.includes(label),
+          ),
         );
         const planDecisionPanel = document.querySelector(
           '[data-testid="plan-composer-decision-panel"]',
         );
         const planDecisionText = planDecisionPanel?.textContent || "";
+        const planDecisionRect = planDecisionPanel?.getBoundingClientRect();
+        const planDecisionStyle = planDecisionPanel
+          ? window.getComputedStyle(planDecisionPanel)
+          : null;
+        const planDecisionVisible = Boolean(
+          planDecisionPanel &&
+          planDecisionRect &&
+          planDecisionRect.width > 320 &&
+          planDecisionRect.height > 48 &&
+          planDecisionStyle?.visibility !== "hidden" &&
+          planDecisionStyle?.display !== "none",
+        );
+        const planDecisionRevision = planDecisionPanel?.querySelector(
+          '[data-testid="plan-composer-revision-status"]',
+        );
+        const planDecisionRevisionId =
+          planDecisionRevision?.getAttribute("data-plan-revision-id") || null;
+        const planOwnerStepHits = planSteps.map((step) => ({
+          step: step.step,
+          visible: planCarrierText.includes(step.step),
+          owners: planOwners
+            .filter((owner) => owner.text.includes(step.step))
+            .map((owner) => owner.kind),
+        }));
         return {
           url: window.location.href,
-          hasPrompt: planCarrierText.includes(prompt),
-          hasAllPlanSteps: planSteps.every((step) =>
-            planCarrierText.includes(step.step),
+          hasPrompt: [mainText, messageListText, planCarrierText].some(
+            (textValue) => textValue.includes(prompt),
           ),
-          planStepHits: planSteps.map((step) => ({
-            step: step.step,
-            visible: planCarrierText.includes(step.step),
-          })),
+          hasAllPlanSteps: planOwnerStepHits.every((hit) => hit.visible),
+          planStepHits: planOwnerStepHits,
+          planOwnerHasAllSteps: planOwnerStepHits.every((hit) => hit.visible),
+          planOwnerKinds: planOwners.map((owner) => owner.kind),
+          planOwnerKindsWithAllSteps: planOwners
+            .filter((owner) =>
+              planSteps.every((step) => owner.text.includes(step.step)),
+            )
+            .map((owner) => owner.kind),
+          planOwnerRevisionIds: planOwners
+            .map((owner) => owner.revisionId)
+            .filter(Boolean),
+          planOwnerRevisionSources: planOwners
+            .map((owner) => owner.revisionSource)
+            .filter(Boolean),
+          planOwners,
           legacyVisibleHits,
           legacyUpdatePlanToolVisible: legacyVisibleHits.length > 0,
-          planDecisionVisible: Boolean(planDecisionPanel),
+          planDecisionVisible,
           planDecisionHasTitle: planDecisionText.includes("实施此计划"),
+          planDecisionRevisionBound: Boolean(planDecisionRevisionId),
+          planDecisionRevisionId,
+          planDecisionRevisionSource:
+            planDecisionRevision?.getAttribute("data-plan-source") || null,
+          planDecisionRevisionTurnId:
+            planDecisionRevision?.getAttribute("data-plan-turn-id") || null,
           mainText,
           messageListText,
-          taskRailText,
+          taskRailText: planCarrierText,
         };
       },
       {
@@ -171,7 +265,10 @@ async function waitForGuiPlanHistoryHydrateCompleted(page, options) {
     lastSnapshot = snapshot;
     if (
       snapshot.hasPrompt &&
-      snapshot.hasAllPlanSteps &&
+      snapshot.planOwnerHasAllSteps &&
+      snapshot.planDecisionVisible &&
+      snapshot.planDecisionHasTitle &&
+      snapshot.planDecisionRevisionBound &&
       snapshot.legacyUpdatePlanToolVisible === false
     ) {
       return sanitizeJson(snapshot);

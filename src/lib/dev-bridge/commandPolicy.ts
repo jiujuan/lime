@@ -28,7 +28,7 @@ export type DevBridgeCommandTimeoutProfile =
  * 测试夹具只能通过 invokeMockOnly，不能由生产 invoke 自动回退 mock。
  */
 const bridgeTruthCommands = new Set<string>([
-  "aster_agent_init",
+  "agent_init",
   "open_external_url",
   "open_update_window",
   "start_oem_cloud_oauth_callback_bridge",
@@ -107,7 +107,7 @@ const devBridgeReadRetryCommands = new Set<string>([
 ]);
 
 const devBridgeStartupTruthCommands = new Set([
-  "aster_agent_init",
+  "agent_init",
   "workspace_ensure_ready",
   "workspace_ensure_default_ready",
 ]);
@@ -478,9 +478,10 @@ function isAppServerPluginPackageInspectCommand(
   if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
     return false;
   }
-  return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasMethod(line, "pluginLocalPackage/inspect") ||
-    jsonRpcLineHasMethod(line, "pluginLocalPackage/export"),
+  return extractAppServerJsonLines(args).some(
+    (line) =>
+      jsonRpcLineHasMethod(line, "pluginLocalPackage/inspect") ||
+      jsonRpcLineHasMethod(line, "pluginLocalPackage/export"),
   );
 }
 

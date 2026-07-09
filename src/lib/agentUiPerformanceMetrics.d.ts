@@ -16,7 +16,16 @@ export interface AgentUiPerformanceEntry {
 export interface AgentUiPerformanceSessionSummary {
   sessionId: string;
   workspaceId?: string | null;
+  inputbarTriggerToHomeSubmitMs?: number;
+  inputbarTriggerToPendingShellMs?: number;
+  inputbarTriggerToPendingPreviewCommitMs?: number;
+  inputbarTriggerToPendingPreviewPaintMs?: number;
+  inputbarTriggerToSendDispatchMs?: number;
+  inputbarTriggerToSubmitAcceptedMs?: number;
+  inputbarTriggerToFirstTextDeltaMs?: number;
+  inputbarTriggerToFirstTextPaintMs?: number;
   homeInputToPendingShellMs?: number;
+  homeInputToPendingPreviewCommitMs?: number;
   homeInputToPendingPreviewPaintMs?: number;
   homeInputToSendDispatchMs?: number;
   homeInputToSendPlanReadyMs?: number;

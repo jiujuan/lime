@@ -34,8 +34,10 @@ import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
 import { ToolCallItem } from "./ToolCallDisplay";
 import { DecisionPanel } from "./DecisionPanel";
 import { AgentThreadTimelineArtifactCard } from "./AgentThreadTimelineArtifactCard";
+import { ApprovalRecordCard } from "./ApprovalRecordCard";
 import {
   toActionRequired,
+  toApprovalRecordFromThreadItem,
   toToolCallState,
   resolveStatusBadgeVariant,
   resolveItemStatusLabel,
@@ -368,7 +370,24 @@ function renderGroupItemDetails(
   const actionRequest = toActionRequired(item);
   const timestamp = formatTimestamp(item.completed_at || item.updated_at);
 
+  if (item.type === "approval_request") {
+    if (item.status !== "completed" && item.status !== "failed") {
+      return null;
+    }
+    const approvalRecord = toApprovalRecordFromThreadItem(item);
+    return approvalRecord ? (
+      <ApprovalRecordCard record={approvalRecord} />
+    ) : null;
+  }
+
   if (actionRequest) {
+    if (
+      actionRequest.actionType === "tool_confirmation" &&
+      actionRequest.status !== "submitted"
+    ) {
+      return null;
+    }
+
     if (isActionRequestA2UICompatible(actionRequest)) {
       return (
         <ActionRequestA2UIPreviewCard

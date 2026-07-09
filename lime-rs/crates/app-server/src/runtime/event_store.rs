@@ -10,7 +10,8 @@ use crate::runtime_backend::{
     current_agent_runtime_config_metadata, tool_process_external_metadata,
 };
 use app_server_protocol::*;
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 impl RuntimeCoreEventAppender {
@@ -155,6 +156,8 @@ fn append_runtime_events_to_stored_session(
         return Ok(Vec::new());
     }
     let runtime_events = runtime_events_with_turn_input(stored, turn_id, runtime_events);
+    let runtime_events =
+        runtime_events_with_synthetic_llm_tool_starts(stored, turn_id, runtime_events);
     if runtime_events.is_empty() {
         return Ok(Vec::new());
     }
@@ -284,7 +287,7 @@ fn append_runtime_events_to_stored_session(
         }
         attach_session_projection_metadata(&mut event, stored);
         agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?;
-        if needs_sequence_context {
+        if needs_sequence_context && !is_approval_session_cache_auto_resolved(&event) {
             let validation_events = validation_events
                 .as_ref()
                 .expect("sequence event validation context should be built");
@@ -375,6 +378,133 @@ fn runtime_events_with_turn_input(
     events.push(input_event);
     events.extend(runtime_events);
     events
+}
+
+fn runtime_events_with_synthetic_llm_tool_starts(
+    stored: &StoredSession,
+    turn_id: Option<&str>,
+    runtime_events: Vec<RuntimeEvent>,
+) -> Vec<RuntimeEvent> {
+    if runtime_events.is_empty() {
+        return runtime_events;
+    }
+
+    let mut active_tool_call_ids = active_tool_call_ids_for_turn(stored, turn_id);
+    let mut events = Vec::with_capacity(runtime_events.len());
+
+    for event in runtime_events {
+        let event_class = normalized_runtime_event_class(&event.event_type);
+        if let Some((tool_call_id, tool_name)) =
+            synthetic_llm_tool_start_candidate(event_class, &event.payload, &active_tool_call_ids)
+        {
+            events.push(RuntimeEvent::new(
+                "tool.started",
+                synthetic_llm_tool_start_payload(&event.payload, &tool_call_id, &tool_name),
+            ));
+            active_tool_call_ids.insert(tool_call_id);
+        }
+
+        update_active_tool_call_ids_from_runtime_event(
+            &mut active_tool_call_ids,
+            event_class,
+            &event.payload,
+        );
+        events.push(event);
+    }
+
+    events
+}
+
+fn active_tool_call_ids_for_turn(stored: &StoredSession, turn_id: Option<&str>) -> HashSet<String> {
+    let mut active_tool_call_ids = HashSet::new();
+    for event in stored
+        .events
+        .iter()
+        .filter(|event| event.turn_id.as_deref() == turn_id)
+    {
+        update_active_tool_call_ids_from_agent_event(
+            &mut active_tool_call_ids,
+            normalized_runtime_event_class(event.event_type.as_str()),
+            &event.payload,
+        );
+    }
+    active_tool_call_ids
+}
+
+fn synthetic_llm_tool_start_candidate(
+    event_class: &str,
+    payload: &Value,
+    active_tool_call_ids: &HashSet<String>,
+) -> Option<(String, String)> {
+    if event_class != "tool.args.delta" {
+        return None;
+    }
+    if payload_string(payload, &["source"]).as_deref() != Some("llm_protocol")
+        || payload_string(payload, &["backend"]).as_deref() != Some("llm_protocol")
+    {
+        return None;
+    }
+
+    let tool_call_id = payload_string(
+        payload,
+        &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
+    )?;
+    if active_tool_call_ids.contains(&tool_call_id) {
+        return None;
+    }
+    let tool_name = payload_string(payload, &["toolName", "tool_name", "name"])?;
+    Some((tool_call_id, tool_name))
+}
+
+fn synthetic_llm_tool_start_payload(
+    source_payload: &Value,
+    tool_call_id: &str,
+    tool_name: &str,
+) -> Value {
+    let mut payload = json!({
+        "toolCallId": tool_call_id,
+        "toolName": tool_name,
+        "source": "llm_protocol_tool_delta",
+        "backend": "llm_protocol"
+    });
+    if let Some(runtime_event) = source_payload.get("runtimeEvent").cloned() {
+        payload["runtimeEvent"] = runtime_event;
+    }
+    payload
+}
+
+fn update_active_tool_call_ids_from_runtime_event(
+    active_tool_call_ids: &mut HashSet<String>,
+    event_class: &str,
+    payload: &Value,
+) {
+    match event_class {
+        "tool.started" => {
+            if let Some(tool_call_id) = payload_string(
+                payload,
+                &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
+            ) {
+                active_tool_call_ids.insert(tool_call_id);
+            }
+        }
+        "tool.result" | "tool.failed" => {
+            if let Some(tool_call_id) = payload_string(
+                payload,
+                &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
+            ) {
+                active_tool_call_ids.remove(&tool_call_id);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn update_active_tool_call_ids_from_agent_event(
+    active_tool_call_ids: &mut HashSet<String>,
+    event_class: &str,
+    payload: &Value,
+) {
+    update_active_tool_call_ids_from_runtime_event(active_tool_call_ids, event_class, payload);
 }
 
 fn attach_session_projection_metadata(event: &mut AgentEvent, stored: &StoredSession) {
@@ -533,6 +663,16 @@ fn should_include_in_validation_context(event_type: &str) -> bool {
         || is_turn_terminal_event_class(event_class)
 }
 
+fn is_approval_session_cache_auto_resolved(event: &AgentEvent) -> bool {
+    normalized_runtime_event_class(&event.event_type) == "action.resolved"
+        && payload_string(&event.payload, &["source"]).as_deref() == Some("approval_session_cache")
+        && payload_string(&event.payload, &["actionType", "action_type"]).as_deref()
+            == Some("tool_confirmation")
+        && payload_string(&event.payload, &["decision"]).as_deref() == Some("allow_for_session")
+        && payload_string(&event.payload, &["decisionScope", "decision_scope"]).as_deref()
+            == Some("session")
+}
+
 fn should_normalize_policy_event_payload_class(event_class: &str) -> bool {
     matches!(
         event_class,
@@ -585,6 +725,16 @@ fn should_enrich_tool_policy_event_payload_class(event_class: &str) -> bool {
         event_class,
         "action.required" | "permission.denied" | "sandbox.blocked"
     )
+}
+
+fn payload_string(value: &Value, keys: &[&str]) -> Option<String> {
+    let object = value.as_object()?;
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn normalized_runtime_event_class(event_type: &str) -> &str {

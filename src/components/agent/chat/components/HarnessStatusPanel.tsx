@@ -9,7 +9,6 @@ import {
 } from "../projection/agentUiProjectionSummary";
 import type { AgentUiProjectionScopeFilter } from "../projection/conversationProjectionStore";
 import { useAgentUiProjectionEvents } from "../projection/useConversationProjectionStore";
-import type { ActionRequired } from "../types";
 import {
   buildThreadReliabilitySummary,
   buildThreadReliabilityView,
@@ -242,25 +241,6 @@ export function HarnessStatusPanel({
       turns,
     ],
   );
-  const submittedActionIds = useMemo(
-    () => new Set(submittedActionsInFlight.map((item) => item.requestId)),
-    [submittedActionsInFlight],
-  );
-  const handleApprovalResponse = useCallback(
-    (item: ActionRequired, confirmed: boolean) => {
-      if (!onRespondToAction || item.actionType !== "tool_confirmation") {
-        return;
-      }
-
-      void onRespondToAction({
-        requestId: item.requestId,
-        actionType: item.actionType,
-        confirmed,
-        response: confirmed ? "approved" : "rejected",
-      });
-    },
-    [onRespondToAction],
-  );
   const runtimeFactSummary = useMemo(
     () => buildRuntimeFactSummary(threadRead),
     [threadRead],
@@ -413,7 +393,6 @@ export function HarnessStatusPanel({
             diagnosticRuntimeContext,
             environment,
             fileReviewState,
-            handleApprovalResponse,
             handleOpenExternalLink,
             evidencePackExport,
             hasAgentUiProjectionSection,
@@ -446,7 +425,6 @@ export function HarnessStatusPanel({
             selectedTeamLabel,
             selectedTeamRoles,
             selectedTeamSummary,
-            submittedActionIds,
             submittedActionsInFlight,
             t,
             threadItems,
@@ -471,7 +449,6 @@ export function HarnessStatusPanel({
       diagnosticRuntimeContext,
       environment,
       fileReviewState,
-      handleApprovalResponse,
       handleOpenExternalLink,
       evidencePackExport,
       hasAgentUiProjectionSection,
@@ -505,7 +482,6 @@ export function HarnessStatusPanel({
       selectedTeamLabel,
       selectedTeamRoles,
       selectedTeamSummary,
-      submittedActionIds,
       submittedActionsInFlight,
       t,
       threadItems,

@@ -11,10 +11,17 @@ pub(super) async fn handle_action_response(
     request: &ActionRespondRequest,
 ) -> Result<(), RuntimeCoreError> {
     match request.action_type {
-        AgentSessionActionType::ToolConfirmation => agent_state
-            .confirm_tool_action(&request.request_id, request.confirmed)
-            .await
-            .map_err(backend_error),
+        AgentSessionActionType::ToolConfirmation => {
+            let decision = request.decision.ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "tool_confirmation action/respond requires decision".to_string(),
+                )
+            })?;
+            agent_state
+                .confirm_tool_action(&request.request_id, decision.confirmed())
+                .await
+                .map_err(backend_error)
+        }
         AgentSessionActionType::AskUser | AgentSessionActionType::Elicitation => {
             if !request.confirmed {
                 return Ok(());
@@ -37,20 +44,23 @@ pub(super) async fn handle_action_response(
 }
 
 pub(super) fn action_resolved_event(request: &ActionRespondRequest) -> RuntimeEvent {
-    RuntimeEvent::new(
-        "action.resolved",
-        json!({
+    let mut payload = json!({
             "backend": "runtime",
             "requestId": request.request_id,
             "actionId": request.request_id,
             "actionType": request.action_type,
             "confirmed": request.confirmed,
-            "decision": if request.confirmed { "approve" } else { "deny" },
             "response": request.response,
             "userData": request.user_data,
             "scope": request.action_scope,
-        }),
-    )
+    });
+    if let Some(decision) = request.decision {
+        if let Some(object) = payload.as_object_mut() {
+            object.insert("decision".to_string(), json!(decision.as_str()));
+            object.insert("decisionScope".to_string(), json!(decision.scope()));
+        }
+    }
+    RuntimeEvent::new("action.resolved", payload)
 }
 
 fn action_response_user_data(request: &ActionRespondRequest) -> Value {

@@ -442,6 +442,10 @@ export type AppServerVoiceModelTestTranscribeFileParams =
   protocol.VoiceModelTestTranscribeFileParams;
 export type AppServerVoiceModelTestTranscribeFileResponse =
   protocol.VoiceModelTestTranscribeFileResponse;
+export type AppServerVoiceTranscriptionTranscribeAudioParams =
+  protocol.VoiceTranscriptionTranscribeAudioParams;
+export type AppServerVoiceTranscriptionTranscribeAudioResponse =
+  protocol.VoiceTranscriptionTranscribeAudioResponse;
 export type AppServerWorkspaceRightSurfaceRequestParams =
   protocol.WorkspaceRightSurfaceRequestParams;
 export type AppServerWorkspaceRightSurfaceRequestResponse =

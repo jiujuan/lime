@@ -4,142 +4,52 @@
 //! - 避免通用对话默认向模型暴露全部本地 Skills
 //! - 保留显式工作流对 Skill 工具的按会话放行能力
 
-use aster::tools::{PermissionCheckResult, SkillTool, Tool, ToolContext, ToolError, ToolResult};
+use aster::conversation::message::Message;
+use aster::model::ModelConfig;
+use aster::providers::base::Provider;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use lime_skills::{LlmProvider, SkillError};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tool_runtime::skill_execute::{
+    run_skill_execution, RuntimeSkillDefinitionBackend, RuntimeSkillExecutionError,
+    RuntimeSkillExecutionRequest, RuntimeSkillExecutionResult,
+};
 use tool_runtime::skill_gate::{
-    is_skill_allowed_for_session, is_skill_tool_enabled_for_session,
-    normalize_skill_invocation_params, skill_tool_disabled_message, skill_tool_input_schema,
-    skill_tool_not_allowed_message, workspace_skill_source_for_session_skill,
-    SkillToolSessionSkillSource, SKILL_TOOL_DESCRIPTION, SKILL_TOOL_NAME,
-};
-use tool_runtime::skill_runtime_contract::{
-    build_skill_runtime_contract_metadata, SkillRuntimeContractMetadata,
-    SkillRuntimeContractPreflightError,
+    check_skill_tool_access, skill_tool_input_schema, SKILL_TOOL_DESCRIPTION, SKILL_TOOL_NAME,
 };
 
-fn build_runtime_preflight_error_result(error: SkillRuntimeContractPreflightError) -> ToolResult {
-    let code = error.code();
-    let result_payload = error.result_payload();
-    let metadata = error.metadata;
-    let metadata_value = metadata.metadata_value();
-    let runtime_contract = metadata.runtime_contract.clone();
-    let skill_name = error.skill_name;
-    let message = error.message;
-
-    ToolResult::error(message)
-        .with_metadata("tool_family", json!("skill"))
-        .with_metadata("skill_name", json!(skill_name))
-        .with_metadata("runtime_preflight", json!(true))
-        .with_metadata("preflight_check", json!(code))
-        .with_metadata(
-            "last_error",
-            json!({
-                "code": code,
-                "message": result_payload
-                    .pointer("/error/message")
-                    .and_then(Value::as_str),
-                "stage": "runtime_preflight",
-                "retryable": false,
-            }),
-        )
-        .with_metadata("normalized_status", json!("failed"))
-        .with_metadata("result", result_payload)
-        .with_metadata(
-            "modality_contract_key",
-            json!(metadata.contract_key.as_str()),
-        )
-        .with_metadata("modality", json!(metadata.modality.as_str()))
-        .with_metadata(
-            "required_capabilities",
-            json!(&metadata.required_capabilities),
-        )
-        .with_metadata("routing_slot", json!(metadata.routing_slot.as_str()))
-        .with_metadata("runtime_contract", runtime_contract)
-        .with_metadata("modality_runtime_contract", metadata_value)
-}
-
-fn attach_skill_runtime_contract_metadata(
-    mut tool_result: ToolResult,
-    metadata: Option<&SkillRuntimeContractMetadata>,
-) -> ToolResult {
-    let Some(metadata) = metadata else {
-        return tool_result;
-    };
-
-    tool_result = tool_result
-        .with_metadata("modality_contract_key", json!(metadata.contract_key))
-        .with_metadata("modality", json!(metadata.modality))
-        .with_metadata(
-            "required_capabilities",
-            json!(metadata.required_capabilities),
-        )
-        .with_metadata("routing_slot", json!(metadata.routing_slot))
-        .with_metadata("runtime_contract", metadata.runtime_contract.clone())
-        .with_metadata("modality_runtime_contract", metadata.metadata_value());
-    if let Some(entry_source) = metadata.entry_source.as_ref() {
-        tool_result = tool_result.with_metadata("entry_source", json!(entry_source));
+fn attach_metadata(mut tool_result: ToolResult, metadata: HashMap<String, Value>) -> ToolResult {
+    for (key, value) in metadata {
+        tool_result = tool_result.with_metadata(key, value);
     }
     tool_result
 }
 
-fn workspace_skill_source_metadata_value(source: &SkillToolSessionSkillSource) -> Value {
-    json!({
-        "workspaceRoot": source.workspace_root.as_str(),
-        "source": source.source.as_str(),
-        "approval": source.approval.as_str(),
-        "authorizationScope": "session",
-        "directory": source.directory.as_str(),
-        "registeredSkillDirectory": source.registered_skill_directory.as_str(),
-        "skillName": source.skill_name.as_str(),
-        "sourceDraftId": source.source_draft_id.as_str(),
-        "sourceVerificationReportId": source.source_verification_report_id.as_str(),
-        "permissionSummary": &source.permission_summary,
-    })
-}
-
-fn attach_workspace_skill_source_metadata(
-    mut tool_result: ToolResult,
-    source: Option<&SkillToolSessionSkillSource>,
-) -> ToolResult {
-    let Some(source) = source else {
-        return tool_result;
+fn tool_result_from_runtime(result: RuntimeSkillExecutionResult) -> ToolResult {
+    let RuntimeSkillExecutionResult {
+        success,
+        output,
+        error,
+        metadata,
+    } = result;
+    let tool_result = if success {
+        output
+            .map(ToolResult::success)
+            .unwrap_or_else(ToolResult::success_empty)
+    } else {
+        ToolResult::error(error.or(output).unwrap_or_default())
     };
-
-    tool_result = tool_result
-        .with_metadata("tool_family", json!("skill"))
-        .with_metadata("skill_name", json!(source.skill_name.as_str()))
-        .with_metadata(
-            "workspace_skill_source",
-            workspace_skill_source_metadata_value(source),
-        )
-        .with_metadata(
-            "workspace_skill_runtime_enable",
-            json!({
-                "source": source.source.as_str(),
-                "approval": source.approval.as_str(),
-                "authorization_scope": "session",
-                "workspace_root": source.workspace_root.as_str(),
-                "directory": source.directory.as_str(),
-                "skill": source.skill_name.as_str(),
-                "registered_skill_directory": source.registered_skill_directory.as_str(),
-                "source_draft_id": source.source_draft_id.as_str(),
-                "source_verification_report_id": source.source_verification_report_id.as_str(),
-                "permission_summary": &source.permission_summary,
-            }),
-        );
-    tool_result
+    attach_metadata(tool_result, metadata)
 }
 
-pub struct LimeSkillTool {
-    inner: SkillTool,
-}
+pub struct LimeSkillTool;
 
 impl LimeSkillTool {
     pub fn new() -> Self {
-        Self {
-            inner: SkillTool::new(),
-        }
+        Self
     }
 }
 
@@ -164,45 +74,20 @@ impl Tool for LimeSkillTool {
     }
 
     async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if !is_skill_tool_enabled_for_session(&context.session_id) {
-            return Err(ToolError::execution_failed(skill_tool_disabled_message()));
-        }
-        if let Some(skill_name) = params.get("skill").and_then(Value::as_str) {
-            if !is_skill_allowed_for_session(&context.session_id, skill_name) {
-                return Err(ToolError::execution_failed(skill_tool_not_allowed_message(
-                    skill_name,
-                )));
-            }
+        if let Err(error) = check_skill_tool_access(&context.session_id, &params) {
+            return Err(ToolError::execution_failed(error.message()));
         }
 
-        let workspace_skill_source =
-            params
-                .get("skill")
-                .and_then(Value::as_str)
-                .and_then(|skill_name| {
-                    workspace_skill_source_for_session_skill(&context.session_id, skill_name)
-                });
-        let runtime_contract_metadata = match build_skill_runtime_contract_metadata(&params) {
-            Ok(metadata) => metadata,
-            Err(error) => {
-                let tool_result = build_runtime_preflight_error_result(error);
-                return Ok(attach_workspace_skill_source_metadata(
-                    tool_result,
-                    workspace_skill_source.as_ref(),
-                ));
-            }
-        };
-        let params = normalize_skill_invocation_params(params);
-        self.inner
-            .execute(params, context)
-            .await
-            .map(|tool_result| {
-                let tool_result = attach_skill_runtime_contract_metadata(
-                    tool_result,
-                    runtime_contract_metadata.as_ref(),
-                );
-                attach_workspace_skill_source_metadata(tool_result, workspace_skill_source.as_ref())
-            })
+        let provider = CurrentSessionSkillProvider::from_context(context)
+            .map_err(|error| ToolError::execution_failed(error.message().to_string()))?;
+        let backend = RuntimeSkillDefinitionBackend::new(provider);
+        run_skill_execution(
+            &backend,
+            RuntimeSkillExecutionRequest::new(context.session_id.clone(), params),
+        )
+        .await
+        .map(tool_result_from_runtime)
+        .map_err(|error| ToolError::execution_failed(error.message().to_string()))
     }
 
     async fn check_permissions(
@@ -210,16 +95,72 @@ impl Tool for LimeSkillTool {
         params: &Value,
         context: &ToolContext,
     ) -> PermissionCheckResult {
-        if !is_skill_tool_enabled_for_session(&context.session_id) {
-            return PermissionCheckResult::deny(skill_tool_disabled_message());
-        }
-        if let Some(skill_name) = params.get("skill").and_then(Value::as_str) {
-            if !is_skill_allowed_for_session(&context.session_id, skill_name) {
-                return PermissionCheckResult::deny(skill_tool_not_allowed_message(skill_name));
-            }
+        if let Err(error) = check_skill_tool_access(&context.session_id, params) {
+            return PermissionCheckResult::deny(error.message());
         }
 
-        self.inner.check_permissions(params, context).await
+        PermissionCheckResult::allow()
+    }
+}
+
+#[derive(Clone)]
+struct CurrentSessionSkillProvider {
+    provider: Arc<dyn Provider>,
+}
+
+impl CurrentSessionSkillProvider {
+    fn from_context(context: &ToolContext) -> Result<Self, RuntimeSkillExecutionError> {
+        let provider = context.provider.clone().ok_or_else(|| {
+            RuntimeSkillExecutionError::new(
+                "当前 turn 没有关联可用 provider，无法执行 Skill；请在带 provider 的会话中重试",
+            )
+        })?;
+        Ok(Self { provider })
+    }
+
+    fn resolve_model_config(&self, model: Option<&str>) -> Result<Option<ModelConfig>, SkillError> {
+        let requested_model = model.map(str::trim).filter(|value| !value.is_empty());
+        let Some(requested_model) = requested_model else {
+            return Ok(None);
+        };
+
+        let model_config = self.provider.get_model_config();
+        if model_config.model_name == requested_model {
+            return Ok(Some(model_config));
+        }
+
+        model_config
+            .rebuild_with_model_name(requested_model)
+            .map(Some)
+            .map_err(|error| {
+                SkillError::ConfigError(format!(
+                    "无效 skill model '{}': {}",
+                    requested_model, error
+                ))
+            })
+    }
+}
+
+#[async_trait]
+impl LlmProvider for CurrentSessionSkillProvider {
+    async fn chat(
+        &self,
+        system_prompt: &str,
+        user_message: &str,
+        model: Option<&str>,
+    ) -> Result<String, SkillError> {
+        let messages = vec![Message::user().with_text(user_message)];
+        let response = if let Some(model_config) = self.resolve_model_config(model)? {
+            self.provider
+                .complete_with_model(&model_config, system_prompt, &messages, &[])
+                .await
+        } else {
+            self.provider.complete(system_prompt, &messages, &[]).await
+        };
+
+        let (message, _usage) =
+            response.map_err(|error| SkillError::ProviderError(error.to_string()))?;
+        Ok(message.as_concat_text())
     }
 }
 
@@ -227,12 +168,15 @@ impl Tool for LimeSkillTool {
 mod tests {
     use super::*;
     use aster::tools::PermissionBehavior;
+    use serde_json::json;
     use tool_runtime::skill_gate::{
         add_skill_tool_session_allowed_capabilities, clear_skill_tool_session_access,
-        set_skill_tool_session_access, set_skill_tool_session_allowed_skill_sources,
-        set_skill_tool_session_allowed_skills, IMAGE_GENERATE_SKILL_NAME,
-        IMAGE_GENERATION_CONTRACT_KEY,
+        normalize_skill_invocation_params, set_skill_tool_session_access,
+        set_skill_tool_session_allowed_skill_sources, set_skill_tool_session_allowed_skills,
+        skill_tool_disabled_message, workspace_skill_source_for_invocation_params,
+        SkillToolSessionSkillSource, IMAGE_GENERATE_SKILL_NAME, IMAGE_GENERATION_CONTRACT_KEY,
     };
+    use tool_runtime::skill_result::workspace_skill_source_metadata_map;
 
     fn create_context(session_id: &str) -> ToolContext {
         ToolContext::default().with_session_id(session_id)
@@ -360,30 +304,26 @@ mod tests {
                 &create_context(session_id),
             )
             .await;
-        let restored =
-            workspace_skill_source_for_session_skill(session_id, "project:capability-report")
-                .expect("source should be available for allowlisted skill");
-        let tool_result =
-            attach_workspace_skill_source_metadata(ToolResult::success("ok"), Some(&restored));
+        let restored = workspace_skill_source_for_invocation_params(
+            session_id,
+            &serde_json::json!({ "skill": "project:capability-report" }),
+        )
+        .expect("source should be available for allowlisted skill");
+        let metadata = workspace_skill_source_metadata_map(&restored);
 
         clear_skill_tool_session_access(session_id);
 
         assert_eq!(allowed.behavior, PermissionBehavior::Allow);
         assert_eq!(restored, source);
+        assert_eq!(metadata.get("tool_family"), Some(&json!("skill")));
         assert_eq!(
-            tool_result.metadata.get("tool_family"),
-            Some(&json!("skill"))
-        );
-        assert_eq!(
-            tool_result
-                .metadata
+            metadata
                 .get("workspace_skill_source")
                 .and_then(|value| value.get("sourceDraftId")),
             Some(&json!("capdraft-1"))
         );
         assert_eq!(
-            tool_result
-                .metadata
+            metadata
                 .get("workspace_skill_runtime_enable")
                 .and_then(|value| value.get("source_verification_report_id")),
             Some(&json!("capver-1"))
@@ -391,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn skill_tool_params_should_use_current_normalization_for_inner_skill_tool() {
+    fn skill_tool_params_should_use_current_normalization_for_current_backend() {
         let params = normalize_skill_invocation_params(serde_json::json!({
             "skill": "content-reviewer",
             "args": {

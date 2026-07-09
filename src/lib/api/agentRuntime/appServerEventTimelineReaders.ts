@@ -89,6 +89,114 @@ function normalizePluginWorkerTimelineStatus(
   return status === "failed" || status === "error" ? "failed" : "completed";
 }
 
+function normalizeHookTimelineStatus(
+  status: string | undefined,
+): "in_progress" | "completed" | "failed" {
+  switch (status) {
+    case "running":
+    case "in_progress":
+      return "in_progress";
+    case "failed":
+    case "blocked":
+    case "stopped":
+      return "failed";
+    default:
+      return "completed";
+  }
+}
+
+function readHookRunPayload(payload: Record<string, unknown>) {
+  return normalizeRecord(payload.run) ?? payload;
+}
+
+function readHookOutputEntries(value: unknown):
+  | Array<{
+      kind: string;
+      text: string;
+    }>
+  | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = value
+    .map((entry) => {
+      const record = normalizeRecord(entry);
+      if (!record) {
+        return null;
+      }
+      const kind = readString(record, "kind", "type");
+      const text = readString(record, "text", "message", "content");
+      return kind && text ? { kind, text } : null;
+    })
+    .filter((entry): entry is { kind: string; text: string } =>
+      Boolean(entry),
+    );
+  return entries.length > 0 ? entries : undefined;
+}
+
+export function readHookItemFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+): Record<string, unknown> {
+  const run = readHookRunPayload(payload);
+  const rawStatus =
+    readString(run, "status", "hookStatus", "hook_status") ??
+    (event.type.endsWith(".started") || event.type.endsWith("/started")
+      ? "running"
+      : "completed");
+  const status = normalizeHookTimelineStatus(rawStatus);
+  const runId =
+    readString(run, "id", "runId", "run_id", "hookRunId", "hook_run_id") ??
+    event.eventId;
+  const entries = readHookOutputEntries(run.entries ?? payload.entries);
+  const output =
+    readString(run, "output", "text", "message", "statusMessage") ??
+    entries?.map((entry) => `${entry.kind}: ${entry.text}`).join("\n");
+  const metadata =
+    normalizeRecord(run.metadata) ?? normalizeRecord(payload.metadata);
+
+  return {
+    ...readAgentThreadItemBase(run, event, status),
+    id: runId,
+    type: "hook",
+    status,
+    completed_at:
+      status === "in_progress"
+        ? undefined
+        : readString(run, "completedAt", "completed_at") ?? event.timestamp,
+    run_id: runId,
+    event_name: readString(run, "eventName", "event_name", "hookEvent"),
+    handler_type: readString(run, "handlerType", "handler_type"),
+    execution_mode: readString(run, "executionMode", "execution_mode"),
+    scope: readString(run, "scope", "hookScope"),
+    source_path: readString(run, "sourcePath", "source_path"),
+    source: readString(run, "source"),
+    display_order: readFiniteNumber(run, "displayOrder", "display_order"),
+    status_message: readString(
+      run,
+      "statusMessage",
+      "status_message",
+      "message",
+    ),
+    duration_ms: readFiniteNumber(run, "durationMs", "duration_ms"),
+    entries,
+    output,
+    target_item_id: readString(
+      run,
+      "targetItemId",
+      "target_item_id",
+      "toolCallId",
+      "tool_call_id",
+    ),
+    hook_status: rawStatus,
+    metadata: {
+      ...(metadata ?? {}),
+      eventClass: event.type,
+      raw: run,
+    },
+  };
+}
+
 export function readPluginWorkerHookItemFromPayload(
   payload: Record<string, unknown>,
   event: AppServerAgentEvent,

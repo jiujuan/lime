@@ -54,6 +54,13 @@ pub trait VoiceAppDataSource: Send + Sync {
         Err(unavailable("voiceModel/testTranscribeFile"))
     }
 
+    async fn transcribe_voice_audio(
+        &self,
+        _params: VoiceTranscriptionTranscribeAudioParams,
+    ) -> Result<VoiceTranscriptionTranscribeAudioResponse, RuntimeCoreError> {
+        Err(unavailable("voiceTranscription/transcribeAudio"))
+    }
+
     async fn list_voice_instructions(
         &self,
     ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {

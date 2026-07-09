@@ -10,9 +10,9 @@ use super::status::WorkflowStatus;
 use crate::{RuntimeCore, RuntimeCoreError, RuntimeEvent, RuntimeHostContext};
 use app_server_protocol::{
     AgentSessionActionRespondParams, AgentSessionActionScope, AgentSessionActionType,
-    AgentSessionReadParams, AgentSessionTurnStartParams, RuntimeOptions, WorkflowCancelParams,
-    WorkflowCancelResponse, WorkflowRespondParams, WorkflowRespondResponse, WorkflowRetryParams,
-    WorkflowRetryResponse,
+    AgentSessionApprovalDecision, AgentSessionReadParams, AgentSessionTurnStartParams,
+    RuntimeOptions, WorkflowCancelParams, WorkflowCancelResponse, WorkflowRespondParams,
+    WorkflowRespondResponse, WorkflowRetryParams, WorkflowRetryResponse,
 };
 use serde_json::{json, Map, Value};
 
@@ -267,6 +267,16 @@ impl RuntimeCore {
         let action_scope = replayed_action
             .and_then(|action| action.scope)
             .or_else(|| workflow_action_scope(&context.stored.session.thread_id, &run, &target));
+        let decision = match action_type {
+            AgentSessionActionType::ToolConfirmation => {
+                if target.confirmed {
+                    Some(AgentSessionApprovalDecision::AllowOnce)
+                } else {
+                    Some(AgentSessionApprovalDecision::Decline)
+                }
+            }
+            AgentSessionActionType::AskUser | AgentSessionActionType::Elicitation => None,
+        };
 
         let Some(event_log_writer) = self.event_log_writer.as_deref() else {
             return Err(RuntimeCoreError::Backend(
@@ -279,7 +289,8 @@ impl RuntimeCore {
                 session_id: context.stored.session.session_id.clone(),
                 request_id: request_id.clone(),
                 action_type,
-                confirmed: target.confirmed,
+                decision,
+                confirmed: Some(target.confirmed),
                 response: target.response_text(),
                 user_data: target.response_user_data(),
                 metadata: Some(json!({

@@ -68,6 +68,7 @@ import {
   isRuntimeFailureOnlyAssistantText,
   resolveMessageInteractiveProjectionState,
   resolveTimelineOwnedVisibleText,
+  sanitizeRuntimeFailureAssistantText,
   sanitizeProjectedMessageText,
   shouldUseFirstTokenRuntimeStatus,
 } from "./messageListItemProjectionHelpers";
@@ -535,12 +536,15 @@ export function resolveMessageListItemProjection({
     message,
     rawActionContent,
   );
+  const runtimeFailureSanitizedActionContent =
+    sanitizeRuntimeFailureAssistantText(message, sanitizedRawActionContent);
   const shouldSuppressDuplicatedFailureText =
-    Boolean(timeline) &&
     isRuntimeFailureOnlyAssistantText(message, sanitizedRawActionContent);
+  const shouldUseRuntimeFailureSanitizedText =
+    runtimeFailureSanitizedActionContent !== sanitizedRawActionContent;
   const actionContent = shouldSuppressDuplicatedFailureText
     ? ""
-    : sanitizedRawActionContent;
+    : runtimeFailureSanitizedActionContent;
   const installedSkillMessageLabel =
     message.role === "user" ? resolveInstalledSkillMessageLabel(message) : null;
   const isUserCommandMessage =
@@ -604,6 +608,8 @@ export function resolveMessageListItemProjection({
     : actionContent;
   const rawRendererRawContent = shouldSuppressDuplicatedFailureText
     ? ""
+    : shouldUseRuntimeFailureSanitizedText
+      ? actionContent
     : shouldCollapseLongHistoricalMessage ||
         shouldFlattenHistoricalAssistantContent
       ? rendererContent
@@ -615,12 +621,18 @@ export function resolveMessageListItemProjection({
     message,
     rawRendererRawContent,
   );
+  const runtimeFailureTextContentParts =
+    shouldUseRuntimeFailureSanitizedText && actionContent
+      ? ([{ type: "text" as const, text: actionContent }] satisfies NonNullable<
+          typeof rendererConversationContentParts
+        >)
+      : undefined;
   const rendererContentParts =
     shouldSuppressDuplicatedFailureText ||
     shouldCollapseLongHistoricalMessage ||
     shouldFlattenHistoricalAssistantContent
       ? undefined
-      : rendererConversationContentParts;
+      : runtimeFailureTextContentParts || rendererConversationContentParts;
   const rendererThinkingContent = shouldCollapseLongHistoricalMessage
     ? undefined
     : conversationThinkingContent;

@@ -13,6 +13,7 @@ mod agent_snapshot;
 mod execution_callback;
 mod lime_llm_provider;
 mod llm_provider;
+mod run;
 mod skill_loader;
 mod skill_matcher;
 mod skill_summary;
@@ -50,11 +51,15 @@ pub use execution_callback::{
 };
 pub use lime_llm_provider::LimeLlmProvider;
 pub use llm_provider::{LlmProvider, SkillError};
+pub use run::{
+    interpolate_variables, requires_turn_runtime, SkillRunResult, SkillRunner, SkillStepResult,
+};
 pub use skill_loader::{
     find_skill_by_name, get_lime_skills_dir, get_project_skills_dir, get_skill_roots,
-    load_skill_from_file, load_skills_from_directory, parse_allowed_tools, parse_boolean,
-    parse_skill_frontmatter, parse_workflow_steps, LoadedSkillDefinition, SkillFrontmatter,
-    SkillTriggerConfig, WorkflowStep,
+    is_registered_skill, load_skill_from_file, load_skills_from_directory, parse_allowed_tools,
+    parse_boolean, parse_skill_frontmatter, parse_workflow_steps, register_project_skill_directory,
+    register_skill_directory, LoadedSkillDefinition, SkillFrontmatter, SkillTriggerConfig,
+    WorkflowStep,
 };
 pub use skill_matcher::{SkillMatch, SkillMatcher};
 pub use skill_summary::{

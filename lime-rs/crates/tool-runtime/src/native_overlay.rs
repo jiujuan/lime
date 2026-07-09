@@ -1,11 +1,30 @@
-use crate::apply_patch::apply_patch_tool_definition;
-use crate::skill_search::skill_search_tool_definition;
-use crate::sleep::{sleep_tool_definition, CLOCK_SLEEP_TOOL_NAME};
+use crate::apply_patch::{apply_patch_tool_definition, check_runtime_apply_patch_permissions};
+use crate::image_task::{check_runtime_image_task_permissions, IMAGE_TASK_TOOL_NAME};
+use crate::mcp_resource::{
+    check_runtime_mcp_resource_permissions, LIST_MCP_RESOURCES_TOOL_NAME,
+    READ_MCP_RESOURCE_TOOL_NAME,
+};
+use crate::memory_store::{
+    check_runtime_memory_store_permissions, MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME,
+    MEMORY_READ_TOOL_NAME, MEMORY_SEARCH_TOOL_NAME,
+};
+use crate::skill_gate::skill_tool_definition;
+use crate::skill_search::{check_runtime_skill_search_permissions, skill_search_tool_definition};
+use crate::sleep::{check_runtime_sleep_permissions, sleep_tool_definition, CLOCK_SLEEP_TOOL_NAME};
 use crate::tool_definition::RuntimeToolDefinition;
-use crate::update_plan::{update_plan_definition, UPDATE_PLAN_LEGACY_ALIASES};
-use crate::view_image::{view_image_tool_definition, VIEW_IMAGE_LEGACY_ALIASES};
-use crate::web_fetch::web_fetch_tool_definition;
+use crate::tool_executor::{RuntimeToolExecutionError, RuntimeToolTurnContext};
+use crate::tool_search::{check_runtime_tool_search_permissions, TOOL_SEARCH_TOOL_NAME};
+use crate::update_plan::{
+    check_plan_update_permissions, update_plan_definition, UPDATE_PLAN_LEGACY_ALIASES,
+};
+use crate::view_image::{
+    check_runtime_view_image_permissions, view_image_tool_definition, VIEW_IMAGE_LEGACY_ALIASES,
+};
+use crate::web_fetch::{is_preapproved_web_fetch_host, web_fetch_tool_definition, WebFetchInput};
 use crate::web_search::web_search_tool_definition;
+use serde_json::Value;
+use std::path::Path;
+use url::Url;
 
 /// Lime-owned native tool overlay installed on top of the temporary Aster registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,10 +61,17 @@ pub enum RuntimeNativeToolRegistrationOwner {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RuntimeNativeToolTurnContextSource {
+    None,
+    AgentTurn,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RuntimeNativeToolRegistration {
     tool: RuntimeNativeToolOverlay,
     name: &'static str,
     owner: RuntimeNativeToolRegistrationOwner,
+    turn_context_source: RuntimeNativeToolTurnContextSource,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -60,12 +86,46 @@ pub struct RuntimeNativeToolSurface {
     max_retries: Option<u32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeNativePermissionDecision {
+    Allow,
+    Deny(String),
+    Ask(String),
+}
+
+impl RuntimeNativePermissionDecision {
+    pub fn allow() -> Self {
+        Self::Allow
+    }
+
+    pub fn deny(message: impl Into<String>) -> Self {
+        Self::Deny(message.into())
+    }
+
+    pub fn ask(message: impl Into<String>) -> Self {
+        Self::Ask(message.into())
+    }
+
+    pub fn is_allowed(&self) -> bool {
+        matches!(self, Self::Allow)
+    }
+
+    pub fn is_denied(&self) -> bool {
+        matches!(self, Self::Deny(_))
+    }
+
+    pub fn is_ask(&self) -> bool {
+        matches!(self, Self::Ask(_))
+    }
+}
+
 impl RuntimeNativeToolRegistration {
     pub const fn new(tool: RuntimeNativeToolOverlay) -> Self {
         Self {
             tool,
             name: tool.name(),
             owner: tool.registration_owner(),
+            turn_context_source: tool.turn_context_source(),
         }
     }
 
@@ -79,6 +139,10 @@ impl RuntimeNativeToolRegistration {
 
     pub const fn owner(self) -> RuntimeNativeToolRegistrationOwner {
         self.owner
+    }
+
+    pub const fn turn_context_source(self) -> RuntimeNativeToolTurnContextSource {
+        self.turn_context_source
     }
 }
 
@@ -101,6 +165,10 @@ impl RuntimeNativeToolInstallStep {
 
     pub const fn owner(self) -> RuntimeNativeToolRegistrationOwner {
         self.registration.owner()
+    }
+
+    pub const fn turn_context_source(self) -> RuntimeNativeToolTurnContextSource {
+        self.registration.turn_context_source()
     }
 }
 
@@ -129,6 +197,10 @@ impl RuntimeNativeToolSurface {
         self.definition.input_schema.clone()
     }
 
+    pub fn definition(&self) -> RuntimeToolDefinition {
+        self.definition.clone()
+    }
+
     pub fn aliases(&self) -> &'static [&'static str] {
         self.aliases
     }
@@ -149,6 +221,17 @@ impl RuntimeNativeToolOverlay {
             | Self::UpdatePlan
             | Self::WebFetch
             | Self::WebSearch => RuntimeNativeToolRegistrationOwner::NativeDispatch,
+        }
+    }
+
+    pub const fn turn_context_source(self) -> RuntimeNativeToolTurnContextSource {
+        match self {
+            Self::SkillSearch | Self::UpdatePlan | Self::WebFetch | Self::WebSearch => {
+                RuntimeNativeToolTurnContextSource::AgentTurn
+            }
+            Self::ViewImage | Self::ApplyPatch | Self::Skill | Self::Sleep => {
+                RuntimeNativeToolTurnContextSource::None
+            }
         }
     }
 }
@@ -234,6 +317,31 @@ pub fn runtime_native_tool_overlay_tool_names() -> &'static [&'static str] {
     RUNTIME_NATIVE_TOOL_OVERLAY_NAMES
 }
 
+pub fn runtime_native_tool_definition(tool: RuntimeNativeToolOverlay) -> RuntimeToolDefinition {
+    match runtime_native_tool_surface(tool) {
+        Some(surface) => surface.definition(),
+        None => match tool {
+            RuntimeNativeToolOverlay::Skill => skill_tool_definition(),
+            RuntimeNativeToolOverlay::ViewImage
+            | RuntimeNativeToolOverlay::ApplyPatch
+            | RuntimeNativeToolOverlay::SkillSearch
+            | RuntimeNativeToolOverlay::Sleep
+            | RuntimeNativeToolOverlay::UpdatePlan
+            | RuntimeNativeToolOverlay::WebFetch
+            | RuntimeNativeToolOverlay::WebSearch => {
+                unreachable!("native dispatch tool should expose runtime surface")
+            }
+        },
+    }
+}
+
+pub fn runtime_native_tool_install_definitions() -> Vec<RuntimeToolDefinition> {
+    runtime_native_tool_install_plan()
+        .iter()
+        .map(|step| runtime_native_tool_definition(step.tool()))
+        .collect()
+}
+
 pub fn runtime_native_tool_surface(
     tool: RuntimeNativeToolOverlay,
 ) -> Option<RuntimeNativeToolSurface> {
@@ -277,6 +385,146 @@ pub fn runtime_native_tool_surface(
     }
 }
 
+pub fn check_runtime_native_tool_permissions(
+    tool: RuntimeNativeToolOverlay,
+    params: &Value,
+    working_directory: &Path,
+    turn_context: Option<&RuntimeToolTurnContext>,
+) -> RuntimeNativePermissionDecision {
+    match tool {
+        RuntimeNativeToolOverlay::ViewImage => permission_from_runtime_result(
+            check_runtime_view_image_permissions(params, working_directory),
+        ),
+        RuntimeNativeToolOverlay::ApplyPatch => permission_from_runtime_result(
+            check_runtime_apply_patch_permissions(params, working_directory),
+        ),
+        RuntimeNativeToolOverlay::SkillSearch => {
+            permission_from_runtime_result(check_runtime_skill_search_permissions(params))
+        }
+        RuntimeNativeToolOverlay::Sleep => {
+            permission_from_runtime_result(check_runtime_sleep_permissions(params))
+        }
+        RuntimeNativeToolOverlay::UpdatePlan => {
+            permission_from_runtime_result(check_plan_update_permissions(params))
+        }
+        RuntimeNativeToolOverlay::WebFetch => {
+            check_runtime_web_fetch_permissions(params, turn_context)
+        }
+        RuntimeNativeToolOverlay::WebSearch => check_runtime_web_search_permissions(turn_context),
+        RuntimeNativeToolOverlay::Skill => RuntimeNativePermissionDecision::deny(
+            "Skill gate permission is handled by the Skill runtime adapter",
+        ),
+    }
+}
+
+pub fn check_runtime_gateway_tool_permissions(
+    tool_name: &str,
+    params: &Value,
+    working_directory: &Path,
+    session_id: &str,
+    turn_context: Option<&RuntimeToolTurnContext>,
+) -> RuntimeNativePermissionDecision {
+    match tool_name {
+        MEMORY_LIST_TOOL_NAME
+        | MEMORY_READ_TOOL_NAME
+        | MEMORY_SEARCH_TOOL_NAME
+        | MEMORY_ADD_NOTE_TOOL_NAME => permission_from_runtime_result(
+            check_runtime_memory_store_permissions(tool_name, params, working_directory),
+        ),
+        IMAGE_TASK_TOOL_NAME => {
+            permission_from_runtime_result(check_runtime_image_task_permissions(
+                params,
+                working_directory,
+                session_id,
+                turn_context,
+            ))
+        }
+        TOOL_SEARCH_TOOL_NAME => {
+            permission_from_runtime_result(check_runtime_tool_search_permissions())
+        }
+        LIST_MCP_RESOURCES_TOOL_NAME | READ_MCP_RESOURCE_TOOL_NAME => {
+            permission_from_runtime_result(check_runtime_mcp_resource_permissions())
+        }
+        _ => RuntimeNativePermissionDecision::deny(format!(
+            "unsupported gateway native tool: {tool_name}"
+        )),
+    }
+}
+
+fn permission_from_runtime_result(
+    result: Result<(), RuntimeToolExecutionError>,
+) -> RuntimeNativePermissionDecision {
+    match result {
+        Ok(()) => RuntimeNativePermissionDecision::allow(),
+        Err(error) => RuntimeNativePermissionDecision::deny(error.message().to_string()),
+    }
+}
+
+fn check_runtime_web_fetch_permissions(
+    params: &Value,
+    turn_context: Option<&RuntimeToolTurnContext>,
+) -> RuntimeNativePermissionDecision {
+    if turn_context_allows_web_tools_without_confirmation(turn_context) {
+        return RuntimeNativePermissionDecision::allow();
+    }
+
+    let parsed_url = serde_json::from_value::<WebFetchInput>(params.clone())
+        .ok()
+        .and_then(|input| Url::parse(&input.url).ok());
+
+    if let Some(url) = parsed_url.as_ref() {
+        if let Some(hostname) = url.host_str() {
+            if is_preapproved_web_fetch_host(hostname, url.path()) {
+                return RuntimeNativePermissionDecision::allow();
+            }
+        }
+    }
+
+    match parsed_url.and_then(|url| url.host_str().map(str::to_string)) {
+        Some(hostname) => RuntimeNativePermissionDecision::ask(format!(
+            "WebFetch 将访问远程站点 {hostname}，请确认后继续。"
+        )),
+        None => RuntimeNativePermissionDecision::ask("WebFetch 将访问远程 URL，请确认后继续。"),
+    }
+}
+
+fn check_runtime_web_search_permissions(
+    turn_context: Option<&RuntimeToolTurnContext>,
+) -> RuntimeNativePermissionDecision {
+    if turn_context_allows_web_tools_without_confirmation(turn_context) {
+        return RuntimeNativePermissionDecision::allow();
+    }
+
+    RuntimeNativePermissionDecision::ask("WebSearch 将联网搜索最新信息，请确认后继续。")
+}
+
+fn turn_context_metadata_bool(
+    turn_context: Option<&RuntimeToolTurnContext>,
+    keys: &[&str],
+) -> bool {
+    turn_context
+        .and_then(|context| {
+            keys.iter()
+                .find_map(|key| context.metadata.get(*key))
+                .and_then(serde_json::Value::as_bool)
+        })
+        .unwrap_or(false)
+}
+
+fn turn_context_approval_policy_is_never(turn_context: Option<&RuntimeToolTurnContext>) -> bool {
+    turn_context
+        .and_then(|context| context.approval_policy.as_deref())
+        .map(str::trim)
+        .is_some_and(|policy| policy.eq_ignore_ascii_case("never"))
+}
+
+fn turn_context_allows_web_tools_without_confirmation(
+    turn_context: Option<&RuntimeToolTurnContext>,
+) -> bool {
+    turn_context_metadata_bool(turn_context, &["web_search_enabled", "webSearchEnabled"])
+        || turn_context_approval_policy_is_never(turn_context)
+}
+
 /// Temporary allowlist for tools that may still be registered through the Aster registry.
 ///
 /// The list is owned here so App Server / GUI inventory and the migration guard have
@@ -289,7 +537,6 @@ const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
     "Glob",
     "Grep",
     "Ask",
-    "LSP",
     "Skill",
     "apply_patch",
     "skill_search",
@@ -302,11 +549,8 @@ const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
     "memory_search",
     "memory_add_note",
     "lime_create_image_generation_task",
-    "EnterPlanMode",
-    "ExitPlanMode",
-    "ListMcpResources",
-    "ReadMcpResource",
-    "ToolSearch",
+    "list_mcp_resources",
+    "read_mcp_resource",
     "Agent",
     "SendMessage",
     "TeamCreate",
@@ -321,7 +565,9 @@ pub fn runtime_native_tool_registration_allowlist() -> &'static [&'static str] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use serde_json::json;
+    use std::collections::{HashMap, HashSet};
+    use tempfile::tempdir;
 
     #[test]
     fn runtime_native_tool_overlay_names_are_current_contract() {
@@ -383,6 +629,24 @@ mod tests {
 
         assert_eq!(plan_registrations, registrations);
         assert_eq!(plan_names, runtime_native_tool_overlay_tool_names());
+        assert_eq!(
+            runtime_native_tool_install_plan()
+                .iter()
+                .filter(|step| matches!(
+                    step.turn_context_source(),
+                    RuntimeNativeToolTurnContextSource::AgentTurn
+                ))
+                .map(|step| step.name())
+                .collect::<Vec<_>>(),
+            vec!["skill_search", "update_plan", "WebFetch", "WebSearch"]
+        );
+        assert_eq!(
+            runtime_native_tool_install_definitions()
+                .into_iter()
+                .map(|definition| definition.name)
+                .collect::<Vec<_>>(),
+            plan_names
+        );
     }
 
     #[test]
@@ -472,6 +736,8 @@ mod tests {
         assert!(names.contains(&"apply_patch"));
         assert!(names.contains(&"sleep"));
         assert!(names.contains(&"update_plan"));
+        assert!(!names.contains(&"LSP"));
+        assert!(!names.contains(&"LSPTool"));
         assert!(!names.contains(&"Write"));
         assert!(!names.contains(&"Edit"));
         assert!(!names.contains(&"TaskCreate"));
@@ -480,8 +746,12 @@ mod tests {
         assert!(!names.contains(&"TaskUpdate"));
         assert!(!names.contains(&"TaskOutput"));
         assert!(!names.contains(&"TaskStop"));
+        assert!(!names.contains(&"ToolSearch"));
+        assert!(!names.contains(&"ToolSearchTool"));
         assert!(!names.contains(&"UpdatePlan"));
         assert!(!names.contains(&"ViewImage"));
+        assert!(!names.contains(&"EnterPlanMode"));
+        assert!(!names.contains(&"ExitPlanMode"));
         assert!(!names.contains(&"NotebookEdit"));
         assert!(!names.contains(&"EnterWorktree"));
         assert!(!names.contains(&"Workflow"));
@@ -490,5 +760,105 @@ mod tests {
         assert!(!names.contains(&"SleepTool"));
         assert!(!names.contains(&"Cron"));
         assert!(!names.contains(&"RemoteTrigger"));
+    }
+
+    #[test]
+    fn runtime_native_permissions_validate_stateless_current_rules() {
+        let dir = tempdir().expect("tempdir");
+        let denied_patch = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::ApplyPatch,
+            &json!({
+                "patch": "*** Begin Patch\n*** Add File: ../outside.md\n+blocked\n*** End Patch"
+            }),
+            dir.path(),
+            None,
+        );
+        let allowed_patch = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::ApplyPatch,
+            &json!({
+                "patch": "*** Begin Patch\n*** Add File: notes/current.md\n+ok\n*** End Patch"
+            }),
+            dir.path(),
+            None,
+        );
+        let invalid_sleep = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::Sleep,
+            &json!({ "seconds": 1 }),
+            dir.path(),
+            None,
+        );
+        let invalid_plan = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::UpdatePlan,
+            &json!({
+                "plan": [
+                    { "step": "第一步", "status": "in_progress" },
+                    { "step": "第二步", "status": "in_progress" }
+                ]
+            }),
+            dir.path(),
+            None,
+        );
+
+        assert!(denied_patch.is_denied());
+        assert!(allowed_patch.is_allowed());
+        assert!(invalid_sleep.is_denied());
+        assert!(invalid_plan.is_denied());
+    }
+
+    #[test]
+    fn runtime_native_permissions_own_web_confirmation_policy() {
+        let dir = tempdir().expect("tempdir");
+        let ask_fetch = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::WebFetch,
+            &json!({
+                "url": "https://example.com/docs",
+                "prompt": "总结内容"
+            }),
+            dir.path(),
+            None,
+        );
+        let allowed_fetch = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::WebFetch,
+            &json!({
+                "url": "https://react.dev/reference/react/useEffect",
+                "prompt": "总结内容"
+            }),
+            dir.path(),
+            None,
+        );
+        let never_policy = RuntimeToolTurnContext {
+            approval_policy: Some("never".to_string()),
+            ..RuntimeToolTurnContext::default()
+        };
+        let metadata_policy = RuntimeToolTurnContext {
+            metadata: HashMap::from([("web_search_enabled".to_string(), json!(true))]),
+            ..RuntimeToolTurnContext::default()
+        };
+        let allowed_search_by_policy = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::WebSearch,
+            &json!({ "query": "latest ai news" }),
+            dir.path(),
+            Some(&never_policy),
+        );
+        let allowed_fetch_by_metadata = check_runtime_native_tool_permissions(
+            RuntimeNativeToolOverlay::WebFetch,
+            &json!({
+                "url": "https://example.com/docs",
+                "prompt": "总结内容"
+            }),
+            dir.path(),
+            Some(&metadata_policy),
+        );
+
+        assert!(ask_fetch.is_ask());
+        assert_eq!(
+            ask_fetch,
+            RuntimeNativePermissionDecision::Ask(
+                "WebFetch 将访问远程站点 example.com，请确认后继续。".to_string()
+            )
+        );
+        assert!(allowed_fetch.is_allowed());
+        assert!(allowed_search_by_policy.is_allowed());
+        assert!(allowed_fetch_by_metadata.is_allowed());
     }
 }

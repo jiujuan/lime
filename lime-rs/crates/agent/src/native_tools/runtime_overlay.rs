@@ -1,67 +1,92 @@
+use crate::native_tools::runtime_tool_bridge::create_runtime_native_tool_adapter;
 use aster::agents::Agent;
 use aster::tools::{Tool, ToolRegistry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tool_runtime::native_overlay::{
-    runtime_native_tool_install_plan, RuntimeNativeToolInstallStep, RuntimeNativeToolOverlay,
+    runtime_native_tool_definition, runtime_native_tool_install_plan, RuntimeNativeToolInstallStep,
+    RuntimeNativeToolRegistrationOwner,
 };
+use tool_runtime::tool_definition::RuntimeToolDefinition;
 
-pub(crate) struct RuntimeNativeToolRegistry {
-    registry: Arc<RwLock<ToolRegistry>>,
+pub(crate) struct NativeRegistration {
+    definition: RuntimeToolDefinition,
+    tool: Box<dyn Tool>,
 }
 
-impl RuntimeNativeToolRegistry {
-    pub(crate) async fn contains_native(&self, tool_name: &str) -> bool {
-        let registry = self.registry.read().await;
-        registry.contains_native(tool_name)
+impl NativeRegistration {
+    pub(crate) fn new(definition: RuntimeToolDefinition, tool: Box<dyn Tool>) -> Self {
+        Self { definition, tool }
     }
 
-    pub(crate) async fn register(&self, tool: Box<dyn Tool>) -> String {
-        let tool_name = tool.name().to_string();
-        let mut registry = self.registry.write().await;
-        registry.register(tool);
-        tool_name
+    #[cfg(test)]
+    pub(crate) fn name(&self) -> &str {
+        &self.definition.name
+    }
+
+    pub(crate) fn definition(&self) -> RuntimeToolDefinition {
+        self.definition.clone()
+    }
+
+    pub(crate) fn into_tool(self) -> Box<dyn Tool> {
+        self.tool
     }
 }
 
-pub(crate) fn runtime_native_tool_registry(agent: &Agent) -> RuntimeNativeToolRegistry {
-    RuntimeNativeToolRegistry {
-        registry: agent.tool_registry().clone(),
-    }
-}
-
-pub(crate) async fn configure_lime_native_tool_overlay(agent: &mut Agent) {
+pub(crate) async fn configure_lime_native_tool_overlay(
+    agent: &mut Agent,
+) -> Vec<RuntimeToolDefinition> {
     agent.add_tool_inspector(Box::new(
         crate::agent_tools::tool_policy_inspector::WorkspaceToolPolicyInspector::new(),
     ));
     // Aster 默认工具池由 Agent::with_tool_config -> register_all_tools 注册。
     // 这里只覆盖 Lime 需要改变策略或收口事实源的工具，不重复接管 Aster 默认工具。
-    let registry_handle = runtime_native_tool_registry(agent);
-    let mut registry = registry_handle.registry.write().await;
+    let registry = agent.tool_registry().clone();
+    let mut registry = registry.write().await;
+    let mut definitions = Vec::new();
     for step in runtime_native_tool_install_plan() {
-        register_runtime_native_tool_overlay(&mut registry, *step);
+        definitions.push(register_runtime_native_tool_overlay(&mut registry, *step));
     }
+    definitions
+}
+
+pub(crate) async fn register_native_tool_on_agent(
+    agent_state: &Arc<RwLock<Option<Agent>>>,
+    registration: NativeRegistration,
+) -> Result<RuntimeToolDefinition, String> {
+    let registry = {
+        let agent_guard = agent_state.read().await;
+        let agent = agent_guard.as_ref().ok_or("Agent not initialized")?;
+        agent.tool_registry().clone()
+    };
+    let definition = registration.definition();
+    let mut registry = registry.write().await;
+    registry.register(registration.into_tool());
+    Ok(definition)
 }
 
 fn register_runtime_native_tool_overlay(
     registry: &mut ToolRegistry,
     step: RuntimeNativeToolInstallStep,
-) {
-    registry.register(create_runtime_native_tool(step));
+) -> RuntimeToolDefinition {
+    let registration = create_runtime_native_tool(step);
+    let definition = registration.definition();
+    registry.register(registration.into_tool());
+    definition
 }
 
-fn create_runtime_native_tool(step: RuntimeNativeToolInstallStep) -> Box<dyn Tool> {
-    match step.tool() {
-        RuntimeNativeToolOverlay::ViewImage => crate::native_tools::create_view_image_tool(),
-        RuntimeNativeToolOverlay::ApplyPatch => crate::tools::create_apply_patch_tool(),
-        RuntimeNativeToolOverlay::SkillSearch => crate::tools::create_skill_search_tool(),
+fn create_runtime_native_tool(step: RuntimeNativeToolInstallStep) -> NativeRegistration {
+    let definition = runtime_native_tool_definition(step.tool());
+    let tool = match step.owner() {
+        RuntimeNativeToolRegistrationOwner::NativeDispatch => {
+            create_runtime_native_tool_adapter(step.tool())
+        }
         // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
-        RuntimeNativeToolOverlay::Skill => Box::new(crate::tools::LimeSkillTool::new()),
-        RuntimeNativeToolOverlay::Sleep => crate::native_tools::create_sleep_tool(),
-        RuntimeNativeToolOverlay::UpdatePlan => crate::native_tools::create_update_plan_tool(),
-        RuntimeNativeToolOverlay::WebFetch => crate::native_tools::create_web_fetch_tool(),
-        RuntimeNativeToolOverlay::WebSearch => crate::native_tools::create_web_search_tool(),
-    }
+        RuntimeNativeToolRegistrationOwner::SkillGate => {
+            Box::new(crate::tools::LimeSkillTool::new())
+        }
+    };
+    NativeRegistration::new(definition, tool)
 }
 
 #[cfg(test)]

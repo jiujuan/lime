@@ -7032,7 +7032,7 @@ const checks = [
     snippets: [
       'logStage("wait-health")',
       'logStage("prepare-runtime")',
-      '"aster_agent_init"',
+      '"agent_init"',
       '"modelProvider/list"',
       '"modelProvider/testChat"',
       "LIVE_WEB_TOOL_PROMPT",

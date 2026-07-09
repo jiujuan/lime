@@ -42,7 +42,7 @@ use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::RuntimeOptions;
 use lime_agent::agent_tools::catalog::{
     MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
-    MEMORY_SEARCH_TOOL_NAME,
+    MEMORY_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_NAME,
 };
 use lime_agent::{
     AgentEvent as RuntimeAgentEvent, AgentToolResult, RequestToolPolicyMode, SessionProviderConfig,

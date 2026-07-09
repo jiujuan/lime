@@ -1,6 +1,7 @@
 import {
   AppServerRpcError,
   type AppServerAgentEvent,
+  type AppServerDrainEventsRequest,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
 import {
@@ -20,7 +21,9 @@ export const APP_SERVER_EVENT_DRAIN_INTERVAL_MS = 96;
 const APP_SERVER_EVENT_ROUTE_TTL_MS = 30 * 60 * 1000;
 
 type AppServerEventDrainClient = {
-  drainEvents: (limit?: number) => Promise<unknown[]> | unknown[];
+  drainEvents: (
+    request?: number | AppServerDrainEventsRequest,
+  ) => Promise<unknown[]> | unknown[];
 };
 type AppServerEventBusLike = Pick<AppServerEventBus, "subscribe">;
 
@@ -34,6 +37,8 @@ type AppServerAgentSessionEventRoute = {
   eventName: string;
   expiresAt: number;
   hasPublishedEvent: boolean;
+  registrationKey: string;
+  requestedTurnId?: string;
   seenEventIds: Set<string>;
   sessionId: string;
   turnId?: string;
@@ -63,17 +68,22 @@ export class AppServerAgentSessionEventDrainRouter {
       return null;
     }
 
-    const route: AppServerAgentSessionEventRoute = {
+    const route = {
       eventName,
       sessionId,
+      requestedTurnId: params.turnId?.trim() || undefined,
       turnId: params.turnId?.trim() || undefined,
       seenEventIds: new Set(),
       expiresAt: Date.now() + APP_SERVER_EVENT_ROUTE_TTL_MS,
       hasPublishedEvent: false,
-    };
+    } as Omit<AppServerAgentSessionEventRoute, "registrationKey">;
     const key = routeKey(route);
+    const registeredRoute: AppServerAgentSessionEventRoute = {
+      ...route,
+      registrationKey: key,
+    };
     this.#closedRouteKeys.delete(key);
-    this.#routes.set(key, route);
+    this.#routes.set(key, registeredRoute);
     this.#ensureEventBusSubscription();
 
     return {
@@ -161,9 +171,17 @@ export class AppServerAgentSessionEventDrainRouter {
         notification,
       ]);
       if (isTerminalAppServerAgentEvent(event)) {
-        const key = routeKey(route);
-        this.#closedRouteKeys.add(key);
-        this.#routes.delete(key);
+        this.#closedRouteKeys.add(routeKey(route));
+        if (route.requestedTurnId) {
+          this.#closedRouteKeys.add(
+            routeKey({
+              eventName: route.eventName,
+              sessionId: route.sessionId,
+              turnId: route.requestedTurnId,
+            }),
+          );
+        }
+        this.#routes.delete(route.registrationKey);
       }
     }
   }
@@ -207,11 +225,39 @@ export class AppServerAgentSessionEventDrainRouter {
         continue;
       }
       if (route.turnId && event.turnId && route.turnId !== event.turnId) {
-        continue;
+        if (
+          route.hasPublishedEvent ||
+          this.#isClosedRouteForEvent(route, event)
+        ) {
+          continue;
+        }
+        route.turnId = event.turnId;
       }
       routes.push(route);
     }
     return routes;
+  }
+
+  #isClosedRouteForEvent(
+    route: AppServerAgentSessionEventRoute,
+    event: AppServerAgentEvent,
+  ): boolean {
+    return (
+      this.#closedRouteKeys.has(
+        routeKey({
+          eventName: route.eventName,
+          sessionId: route.sessionId,
+          turnId: event.turnId,
+        }),
+      ) ||
+      this.#closedRouteKeys.has(
+        routeKey({
+          eventName: route.eventName,
+          sessionId: route.sessionId,
+          turnId: route.requestedTurnId,
+        }),
+      )
+    );
   }
 
   #pruneExpiredRoutes(): void {

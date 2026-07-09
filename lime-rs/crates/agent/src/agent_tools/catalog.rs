@@ -1,11 +1,12 @@
 use crate::mcp::McpToolDefinition;
 use serde::{Deserialize, Serialize};
+use tool_runtime::tool_extension::{RuntimeExtensionConfig, RuntimeExtensionToolSurface};
 
-pub const TOOL_SEARCH_TOOL_NAME: &str = "ToolSearch";
+pub const TOOL_SEARCH_TOOL_NAME: &str = "tool_search";
 pub const SKILL_SEARCH_TOOL_NAME: &str = "skill_search";
 pub const UPDATE_PLAN_TOOL_NAME: &str = "update_plan";
-pub const LIST_MCP_RESOURCES_TOOL_NAME: &str = "ListMcpResourcesTool";
-pub const READ_MCP_RESOURCE_TOOL_NAME: &str = "ReadMcpResourceTool";
+pub const LIST_MCP_RESOURCES_TOOL_NAME: &str = "list_mcp_resources";
+pub const READ_MCP_RESOURCE_TOOL_NAME: &str = "read_mcp_resource";
 pub const SOCIAL_IMAGE_TOOL_NAME: &str = "social_generate_cover_image";
 pub const LIME_CREATE_VIDEO_TASK_TOOL_NAME: &str = "lime_create_video_generation_task";
 pub const LIME_CREATE_AUDIO_TASK_TOOL_NAME: &str = "lime_create_audio_generation_task";
@@ -219,15 +220,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: false,
     },
     ToolCatalogEntry {
-        name: "LSP",
-        profiles: CORE_PROFILES,
-        capabilities: WORKSPACE_IO_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::ParameterRestricted,
-        workspace_default_allow: false,
-    },
-    ToolCatalogEntry {
         name: "Skill",
         profiles: CORE_PROFILES,
         capabilities: SKILL_CAP,
@@ -253,24 +245,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         source: ToolSourceKind::RuntimeBuiltin,
         permission_plane: ToolPermissionPlane::ParameterRestricted,
         workspace_default_allow: false,
-    },
-    ToolCatalogEntry {
-        name: "EnterPlanMode",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "ExitPlanMode",
-        profiles: CORE_PROFILES,
-        capabilities: PLAN_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
     },
     ToolCatalogEntry {
         name: "WebFetch",
@@ -629,8 +603,6 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "sendinput" | "sendmessagetool" => "SendMessage",
         "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
         | "localshellcall" => "Bash",
-        "enterplanmodetool" => "EnterPlanMode",
-        "exitplanmodetool" => "ExitPlanMode",
         "filereadtool" | "readfiletool" | "readfile" | "developerread" | "mcpsystemreadfile" => {
             "Read"
         }
@@ -640,9 +612,8 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "applypatch" | "applypatchtool" => APPLY_PATCH_TOOL_NAME,
         "globtool" | "mcpsystemglob" => "Glob",
         "greptool" | "mcpsystemgrep" => "Grep",
-        "lsptool" => "LSP",
-        "listmcpresourcestool" => "ListMcpResourcesTool",
-        "readmcpresourcetool" => "ReadMcpResourceTool",
+        "listmcpresources" | "listmcpresourcestool" => LIST_MCP_RESOURCES_TOOL_NAME,
+        "readmcpresource" | "readmcpresourcetool" => READ_MCP_RESOURCE_TOOL_NAME,
         "memorylist" | "memorylisttool" => MEMORY_LIST_TOOL_NAME,
         "memoryread" | "memoryreadtool" => MEMORY_READ_TOOL_NAME,
         "memorysearch" | "memorysearchtool" => MEMORY_SEARCH_TOOL_NAME,
@@ -653,7 +624,7 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "teamcreatetool" => "TeamCreate",
         "teamdeletetool" => "TeamDelete",
         "listpeerstool" => "ListPeers",
-        "toolsearchtool" | "toolsearch" | "mcpsystemtoolsearch" => "ToolSearch",
+        "toolsearchtool" | "toolsearch" | "mcpsystemtoolsearch" => TOOL_SEARCH_TOOL_NAME,
         "skillsearchtool" | "skillsearch" | "skillssearch" => SKILL_SEARCH_TOOL_NAME,
         "updateplan" | "updateplantool" | "updateplan_tool" | "update_plan" => {
             UPDATE_PLAN_TOOL_NAME
@@ -766,79 +737,24 @@ fn mcp_extension_inner_tool_name<'a>(extension_name: &str, tool_name: &'a str) -
         .unwrap_or(tool_name)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct McpExtensionSurface {
-    pub extension_name: String,
-    pub description: String,
-    pub available_tools: Vec<String>,
-    pub always_expose_tools: Vec<String>,
-    pub deferred_loading: bool,
-    pub allowed_caller: Option<String>,
-}
-
-impl McpExtensionSurface {
-    pub fn has_tools(&self) -> bool {
-        !self.available_tools.is_empty()
-    }
-}
-
 pub fn build_mcp_extension_surface(
     extension_name: &str,
     description: impl Into<String>,
     tools: &[McpToolDefinition],
-) -> McpExtensionSurface {
-    let mut available_tools = tools
+) -> RuntimeExtensionConfig {
+    let tool_surfaces = tools
         .iter()
-        .map(|tool| mcp_extension_inner_tool_name(extension_name, &tool.name).to_string())
-        .collect::<Vec<_>>();
-    available_tools.sort();
-    available_tools.dedup();
-
-    let mut always_expose_tools = tools
-        .iter()
-        .filter(|tool| {
-            tool.always_visible.unwrap_or(false) || !tool.deferred_loading.unwrap_or(false)
+        .map(|tool| {
+            RuntimeExtensionToolSurface::new(
+                mcp_extension_inner_tool_name(extension_name, &tool.name),
+                tool.deferred_loading,
+                tool.always_visible,
+                tool.allowed_callers.clone(),
+            )
         })
-        .map(|tool| mcp_extension_inner_tool_name(extension_name, &tool.name).to_string())
         .collect::<Vec<_>>();
-    always_expose_tools.sort();
-    always_expose_tools.dedup();
 
-    let deferred_loading = tools
-        .iter()
-        .any(|tool| tool.deferred_loading.unwrap_or(false));
-    let allowed_caller = collapse_extension_allowed_caller(tools);
-
-    McpExtensionSurface {
-        extension_name: extension_name.to_string(),
-        description: description.into(),
-        available_tools,
-        always_expose_tools,
-        deferred_loading,
-        allowed_caller,
-    }
-}
-
-fn collapse_extension_allowed_caller(tools: &[McpToolDefinition]) -> Option<String> {
-    let mut collapsed: Option<String> = None;
-
-    for tool in tools {
-        let allowed = tool.allowed_callers.as_ref()?;
-        if allowed.len() != 1 {
-            return None;
-        }
-        let caller = allowed[0].trim();
-        if caller.is_empty() {
-            return None;
-        }
-        match collapsed.as_deref() {
-            Some(existing) if existing != caller => return None,
-            Some(_) => {}
-            None => collapsed = Some(caller.to_string()),
-        }
-    }
-
-    collapsed
+    RuntimeExtensionConfig::from_tool_surfaces(extension_name, description, &tool_surfaces)
 }
 
 #[cfg(test)]
@@ -954,8 +870,6 @@ mod tests {
             ("shell_command", "Bash"),
             ("local_shell_call", "Bash"),
             ("BriefTool", "SendUserMessage"),
-            ("EnterPlanModeTool", "EnterPlanMode"),
-            ("ExitPlanModeTool", "ExitPlanMode"),
             ("FileEditTool", "Edit"),
             ("ApplyPatchTool", APPLY_PATCH_TOOL_NAME),
             ("apply_patch", APPLY_PATCH_TOOL_NAME),
@@ -974,8 +888,7 @@ mod tests {
             ("mcp__system__glob", "Glob"),
             ("GrepTool", "Grep"),
             ("mcp__system__grep", "Grep"),
-            ("LSPTool", "LSP"),
-            ("ListMcpResourcesTool", "ListMcpResourcesTool"),
+            ("ListMcpResourcesTool", LIST_MCP_RESOURCES_TOOL_NAME),
             ("MemoryListTool", MEMORY_LIST_TOOL_NAME),
             ("memory_list", MEMORY_LIST_TOOL_NAME),
             ("MemoryReadTool", MEMORY_READ_TOOL_NAME),
@@ -985,7 +898,7 @@ mod tests {
             ("MemoryAddNoteTool", MEMORY_ADD_NOTE_TOOL_NAME),
             ("memory_add_note", MEMORY_ADD_NOTE_TOOL_NAME),
             ("PowerShellTool", "PowerShell"),
-            ("ReadMcpResourceTool", "ReadMcpResourceTool"),
+            ("ReadMcpResourceTool", READ_MCP_RESOURCE_TOOL_NAME),
             ("SendMessageTool", "SendMessage"),
             ("SkillTool", "Skill"),
             ("SyntheticOutputTool", "StructuredOutput"),
@@ -995,9 +908,9 @@ mod tests {
             ("TeamCreateTool", "TeamCreate"),
             ("TeamDeleteTool", "TeamDelete"),
             ("ListPeersTool", "ListPeers"),
-            ("ToolSearchTool", "ToolSearch"),
-            ("tool_search", "ToolSearch"),
-            ("mcp__system__tool_search", "ToolSearch"),
+            ("ToolSearch", TOOL_SEARCH_TOOL_NAME),
+            ("ToolSearchTool", TOOL_SEARCH_TOOL_NAME),
+            ("mcp__system__tool_search", TOOL_SEARCH_TOOL_NAME),
             ("WebFetchTool", "WebFetch"),
             ("web_fetch", "WebFetch"),
             ("mcp__system__web_fetch", "WebFetch"),

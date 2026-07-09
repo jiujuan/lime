@@ -1,4 +1,3 @@
-use lime_core::config::MemorySoulStyleIntensity;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
 
@@ -6,7 +5,6 @@ use super::style_pack_registry::load_installed_style_profile_seeds;
 
 pub(crate) const DEFAULT_STYLE_PROFILE_ID: &str = "cheeky_sassy_executor";
 pub(crate) const SERIOUS_STYLE_PROFILE_ID: &str = "calm_professional_partner";
-const DEFAULT_STYLE_INTENSITY: &str = "low";
 
 const BUILT_IN_STYLE_PACK_SOURCES: [&str; 4] = [
     include_str!("../../../../../../src/lib/soul/style-profiles/packs/cheeky-sassy-executor.json"),
@@ -44,7 +42,6 @@ pub(crate) struct ResolvedStyleProfile {
     pub(crate) id: String,
     pub(crate) pack_id: String,
     pub(crate) tone: String,
-    pub(crate) intensity: String,
     pub(crate) scopes: Vec<String>,
     pub(crate) response_contract: Vec<String>,
     pub(crate) voice_primitives: Vec<String>,
@@ -59,10 +56,7 @@ pub(crate) struct ResolvedStyleProfile {
     pub(crate) serious_mode_fallback: String,
 }
 
-pub(crate) fn resolve_style_profile(
-    profile_id: Option<&str>,
-    intensity: Option<&MemorySoulStyleIntensity>,
-) -> ResolvedStyleProfile {
+pub(crate) fn resolve_style_profile(profile_id: Option<&str>) -> ResolvedStyleProfile {
     let requested_profile_id = profile_id
         .map(str::trim)
         .filter(|id| !id.is_empty())
@@ -75,7 +69,6 @@ pub(crate) fn resolve_style_profile(
         id: seed.id.clone(),
         pack_id: seed.pack_id.clone(),
         tone: seed.tone.clone(),
-        intensity: resolve_intensity(intensity),
         scopes: seed.scopes.clone(),
         response_contract: seed.response_contract.clone(),
         voice_primitives: seed.voice_primitives.clone(),
@@ -88,14 +81,6 @@ pub(crate) fn resolve_style_profile(
         risk_fallback_profile_id: seed.risk_fallback_profile_id.clone(),
         risk_fallback_triggers: seed.risk_fallback_triggers.clone(),
         serious_mode_fallback: seed.serious_mode_fallback.clone(),
-    }
-}
-
-fn resolve_intensity(intensity: Option<&MemorySoulStyleIntensity>) -> String {
-    match intensity {
-        Some(MemorySoulStyleIntensity::Medium) => "medium".to_string(),
-        Some(MemorySoulStyleIntensity::High) => "high".to_string(),
-        _ => DEFAULT_STYLE_INTENSITY.to_string(),
     }
 }
 
@@ -341,7 +326,6 @@ impl ResolvedStyleProfile {
             "id": self.id,
             "packId": self.pack_id,
             "tone": self.tone,
-            "intensity": self.intensity,
             "scopes": self.scopes,
             "responseContract": self.response_contract,
             "voicePrimitives": self.voice_primitives,
@@ -405,7 +389,7 @@ mod tests {
         let profiles = built_in_style_profile_seeds();
 
         for profile_seed in profiles {
-            let profile = resolve_style_profile(Some(profile_seed.id.as_str()), None);
+            let profile = resolve_style_profile(Some(profile_seed.id.as_str()));
             for surface in TRANSCRIPT_STYLE_SURFACES {
                 assert!(
                     profile
@@ -429,7 +413,7 @@ mod tests {
         let profiles = built_in_style_profile_seeds();
 
         for profile_seed in profiles {
-            let profile = resolve_style_profile(Some(profile_seed.id.as_str()), None);
+            let profile = resolve_style_profile(Some(profile_seed.id.as_str()));
             for prefix in TRANSCRIPT_STYLE_ANCHOR_PREFIXES {
                 assert!(
                     profile
@@ -445,7 +429,7 @@ mod tests {
         for prefix in TRANSCRIPT_STYLE_ANCHOR_PREFIXES {
             let mut examples = BTreeSet::new();
             for profile_seed in profiles {
-                let profile = resolve_style_profile(Some(profile_seed.id.as_str()), None);
+                let profile = resolve_style_profile(Some(profile_seed.id.as_str()));
                 let anchor = profile
                     .few_shot_anchors
                     .iter()
@@ -463,10 +447,7 @@ mod tests {
 
     #[test]
     fn style_profile_context_contains_complete_transcript_surface_contract() {
-        let profile = resolve_style_profile(
-            Some("cool_confident_operator"),
-            Some(&MemorySoulStyleIntensity::High),
-        );
+        let profile = resolve_style_profile(Some("cool_confident_operator"));
         let context = profile.as_context_value();
         let serialized = serde_json::to_string(&context).expect("serialize style profile");
 
@@ -485,7 +466,7 @@ mod tests {
 
     #[test]
     fn unresolved_profile_id_falls_back_to_default_without_alias_mapping() {
-        let profile = resolve_style_profile(Some("sassy_cute_executor"), None);
+        let profile = resolve_style_profile(Some("sassy_cute_executor"));
 
         assert_eq!(profile.id, DEFAULT_STYLE_PROFILE_ID);
         assert_ne!(profile.id, "sassy_cute_executor");

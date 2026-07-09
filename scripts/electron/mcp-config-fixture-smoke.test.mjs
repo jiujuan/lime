@@ -29,7 +29,8 @@ describe("MCP config Electron fixture smoke guard", () => {
   it("creates Context7 through the GUI and verifies current MCP methods", () => {
     const content = readSmokeScript();
 
-    expect(content).toContain('APP_SERVER_BACKEND_MODE: "unavailable"');
+    expect(content).toContain('backendMode = "unavailable"');
+    expect(content).toContain("APP_SERVER_BACKEND_MODE: backendMode");
     expect(content).toContain('"mcpServer/create"');
     expect(content).toContain('"mcpServer/list"');
     expect(content).toContain("mcp-config-preset-context7");

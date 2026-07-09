@@ -82,7 +82,6 @@ describe("agentStreamSubmitContext", () => {
       soul: {
         enabled: true,
         style_profile_id: "cheeky_sassy_executor",
-        style_intensity: "low",
       },
     });
     const result = await resolveAgentStreamSubmitContext({

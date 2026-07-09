@@ -248,7 +248,6 @@ type SoulStylePackManifest = {
       | "cool_confident"
       | "calm_professional"
       | string;
-    intensity: "low" | "medium" | "high";
     scopes: Array<
       "chat_interaction" | "tool_narrative" | "companion" | "artifact_voice"
     >;
@@ -285,7 +284,7 @@ Manifest 约束：
 4. `voicePrimitives` / `surfaceContracts` / `allowedMoves` / `forbiddenMoves` / `antiRepetitionRules` 是行为规则，不是可执行 prompt 模板；不允许包含工具调用权限、系统指令覆盖、用户资料要求。
 5. `fewShotAnchors` 只能作为风格锚点，不得被 UI / i18n / tool renderer 当成固定终稿句子。
 6. 五语言 locale 必须齐全；缺失任何 current locale 时安装失败。
-7. `high` intensity 默认不向普通用户开放，除非评测明确通过。
+7. `intensity` / `style_intensity` 属于已删除设计；manifest validator 必须拒绝该字段，风格差异只能来自完整 Style Pack 合同。
 
 ## 7. 安装状态机
 

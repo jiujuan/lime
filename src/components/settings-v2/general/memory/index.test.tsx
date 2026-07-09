@@ -661,7 +661,6 @@ describe("MemorySettings", () => {
           soul: expect.objectContaining({
             enabled: true,
             style_profile_id: "warm_supportive_companion",
-            style_intensity: "low",
             imported_from: "manual",
             updated_at: expect.any(String),
           }),
@@ -724,7 +723,6 @@ describe("MemorySettings", () => {
             imported_from: "soul_md",
             name: "Engineering Soul",
             style_profile_id: "warm_supportive_companion",
-            style_intensity: "low",
             summary: expect.stringContaining("Style: direct and pragmatic"),
             communication_style: expect.arrayContaining([
               "Style: direct and pragmatic",

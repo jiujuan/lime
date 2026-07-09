@@ -152,6 +152,41 @@ pub enum AgentSessionActionType {
     Elicitation,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSessionApprovalDecision {
+    AllowOnce,
+    AllowForSession,
+    Decline,
+    Cancel,
+}
+
+impl AgentSessionApprovalDecision {
+    pub fn confirmed(self) -> bool {
+        matches!(self, Self::AllowOnce | Self::AllowForSession)
+    }
+
+    pub fn is_cancel(self) -> bool {
+        matches!(self, Self::Cancel)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AllowOnce => "allow_once",
+            Self::AllowForSession => "allow_for_session",
+            Self::Decline => "decline",
+            Self::Cancel => "cancel",
+        }
+    }
+
+    pub fn scope(self) -> &'static str {
+        match self {
+            Self::AllowForSession => "session",
+            _ => "once",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionActionScope {
@@ -188,6 +223,8 @@ pub struct AgentSessionReplayedActionRequired {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_schema: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available_decisions: Option<Vec<AgentSessionApprovalDecision>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<AgentSessionActionScope>,
 }
 
@@ -204,7 +241,10 @@ pub struct AgentSessionActionRespondParams {
     pub session_id: String,
     pub request_id: String,
     pub action_type: AgentSessionActionType,
-    pub confirmed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<AgentSessionApprovalDecision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmed: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -130,6 +130,57 @@ describe("messageListItemProjection basic state", () => {
     expect(projection.shouldReadOnlyInteractiveContent).toBe(false);
   });
 
+  it("failed runtimeStatus 应剥离执行失败诊断并去重已输出正文", () => {
+    const visibleText =
+      "我先把今天的国际新闻证据抓回来，省得我们俩对着昨天的旧闻开会。";
+    const rawError =
+      "execution backend error: Agent provider execution failed: Request failed: Resource not found (404): ***NotFoundError: NotFoundError: OpenAIException - {\"detail\":\"Not Found\"}";
+    const message: Message = {
+      id: "assistant-news-provider-not-found",
+      role: "assistant",
+      content: [
+        `${visibleText}执行失败： ${rawError}`,
+        visibleText,
+        visibleText,
+      ].join("\n\n"),
+      timestamp: new Date("2026-06-07T10:00:04.000Z"),
+      isThinking: true,
+      contentParts: [
+        {
+          type: "text",
+          text: [
+            `${visibleText}执行失败： ${rawError}`,
+            visibleText,
+            visibleText,
+          ].join("\n\n"),
+        },
+      ],
+      runtimeStatus: {
+        phase: "failed",
+        title: "当前处理失败",
+        detail: rawError,
+      },
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: false,
+      hasActiveInteractiveRuntime: false,
+      lastAssistantMessageId: message.id,
+    });
+
+    expect(projection.actionContent).toBe(visibleText);
+    expect(projection.rendererContent).toBe(visibleText);
+    expect(projection.rendererRawContent).toBe(visibleText);
+    expect(projection.rendererContentParts).toEqual([
+      {
+        type: "text",
+        text: visibleText,
+      },
+    ]);
+    expect(projection.actionContent).not.toContain("执行失败");
+    expect(projection.actionContent).not.toContain("OpenAIException");
+  });
+
   it("completed read model 清运行态时不应丢弃 reasoning/tool/text 结构", () => {
     const finalText = "综合检索与项目文件，结论已经整理完成。";
     const toolCall = {

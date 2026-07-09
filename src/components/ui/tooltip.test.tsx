@@ -62,7 +62,7 @@ describe("Tooltip", () => {
     vi.unstubAllGlobals();
   });
 
-  it("应通过 portal 渲染 tooltip 内容，避免被局部容器裁切", async () => {
+  it("不应再渲染 hover tooltip 内容", async () => {
     const container = mountTooltip();
     const trigger = container.querySelector("button");
     expect(trigger).not.toBeNull();
@@ -73,9 +73,9 @@ describe("Tooltip", () => {
       await Promise.resolve();
     });
 
-    expect(document.body.querySelector('[role="tooltip"]')).not.toBeNull();
+    expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
     expect(container.textContent).not.toContain("展开导航栏");
-    expect(document.body.textContent).toContain("展开导航栏");
+    expect(document.body.textContent).not.toContain("展开导航栏");
 
     await act(async () => {
       trigger?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));

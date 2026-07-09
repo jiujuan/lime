@@ -349,12 +349,16 @@ fn cancel_turn_request_value(request: CancelExecutionRequest) -> serde_json::Val
 }
 
 fn action_respond_request_value(request: ActionRespondRequest) -> serde_json::Value {
+    let decision = request.decision.map(|decision| decision.as_str());
+    let decision_scope = request.decision.map(|decision| decision.scope());
     json!({
         "host": host_value(request.host),
         "session": request.session,
         "turn": request.turn,
         "requestId": request.request_id,
         "actionType": request.action_type,
+        "decision": decision,
+        "decisionScope": decision_scope,
         "confirmed": request.confirmed,
         "response": request.response,
         "userData": request.user_data,

@@ -280,13 +280,32 @@ async fn execute_live_shell_process(
         &planned.tool_id,
         start_metadata,
     ));
-    while let Some(delta) = handle.recv_output().await {
-        if let Some(registry) = live_process_registry.as_ref() {
-            if let Err(error) = registry.record_live_process_output(delta.clone()) {
-                record_live_process_registry_error(metadata, "record_output", error);
+    let mut cancellation_requested = false;
+    loop {
+        let next_delta = match input.cancel_token.as_ref() {
+            Some(cancel_token) if !cancellation_requested => {
+                tokio::select! {
+                    _ = cancel_token.cancelled() => {
+                        cancellation_requested = true;
+                        metadata.insert("executionProcessCancellation".to_string(), json!("turn_cancel"));
+                        metadata.insert("execution_process_cancellation".to_string(), json!("turn_cancel"));
+                        let _ = handle.terminate();
+                        continue;
+                    }
+                    delta = handle.recv_output() => delta,
+                }
             }
-        }
-        stream_events.push(tool_output_delta_event_from_process_delta(delta));
+            _ => handle.recv_output().await,
+        };
+        let Some(delta) = next_delta else {
+            break;
+        };
+        record_live_process_output_delta(
+            &live_process_registry,
+            metadata,
+            &mut stream_events,
+            delta,
+        );
     }
 
     let final_snapshot = match handle.wait().await {
@@ -341,20 +360,51 @@ async fn execute_live_shell_process(
     let output =
         model_formatted_tool_output(&final_snapshot.retained_output, input.turn_context.as_ref());
     let exit_code = final_snapshot.exit_code.unwrap_or(-1);
-    let success = exit_code == 0 && matches!(final_snapshot.status, ExecutionProcessStatus::Exited);
+    let success = !cancellation_requested
+        && exit_code == 0
+        && matches!(final_snapshot.status, ExecutionProcessStatus::Exited);
+    let error =
+        live_process_error_for_snapshot(final_snapshot.status, exit_code, cancellation_requested);
 
     ToolExecutionOutcome {
         tool_name: planned.tool_name,
         tool_id: planned.tool_id,
         success,
         output: output.clone(),
-        error: if success {
-            None
-        } else {
-            Some(format!("process exited with code {exit_code}"))
-        },
+        error,
         metadata: Some(metadata.clone()),
         stream_events,
+    }
+}
+
+fn record_live_process_output_delta(
+    live_process_registry: &Option<Arc<dyn LiveExecutionProcessRegistry>>,
+    metadata: &mut HashMap<String, Value>,
+    stream_events: &mut Vec<RuntimeAgentEvent>,
+    delta: tool_runtime::execution_process::ExecutionOutputDelta,
+) {
+    if let Some(registry) = live_process_registry.as_ref() {
+        if let Err(error) = registry.record_live_process_output(delta.clone()) {
+            record_live_process_registry_error(metadata, "record_output", error);
+        }
+    }
+    stream_events.push(tool_output_delta_event_from_process_delta(delta));
+}
+
+fn live_process_error_for_snapshot(
+    status: ExecutionProcessStatus,
+    exit_code: i32,
+    cancellation_requested: bool,
+) -> Option<String> {
+    if cancellation_requested {
+        return Some("process terminated by turn cancellation".to_string());
+    }
+    if status == ExecutionProcessStatus::Exited && exit_code == 0 {
+        None
+    } else if status == ExecutionProcessStatus::Exited {
+        Some(format!("process exited with code {exit_code}"))
+    } else {
+        Some(format!("process ended with status {}", status.label()))
     }
 }
 
@@ -644,6 +694,8 @@ fn model_formatted_tool_output(output: &str, turn_context: Option<&AgentTurnCont
     format_tool_output_for_model(output, policy)
 }
 
+#[cfg(test)]
+mod cancellation_tests;
 #[cfg(test)]
 mod lifecycle_gate_tests;
 #[cfg(test)]

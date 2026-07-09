@@ -762,7 +762,12 @@ mod tests {
         assert!(prompt.contains("memory_soul_prompt_context.v2"));
         assert!(prompt.contains("Style profile: calm_professional_partner"));
         assert!(prompt.contains("Style pack: com.lime.soul.calm-professional-partner"));
-        assert!(prompt.contains("Every reply should remain concise, explicit, and operational."));
+        assert!(prompt.contains(
+            "Every normal chat, tool narrative, body transition, and closing suggestion must carry a calm-professional voice"
+        ));
+        assert!(prompt.contains(
+            "Make professionalism visible through fact-assumption separation, stable wording, and audit-friendly transitions"
+        ));
         assert!(prompt.contains("Surface contracts"));
         assert!(prompt.contains("Anti-repetition rules"));
         assert!(prompt.contains("Risk fallback profile: calm_professional_partner"));
@@ -820,14 +825,19 @@ mod tests {
 
         assert!(prompt.contains("Style profile: cheeky_sassy_executor"));
         assert!(prompt.contains("Style pack: com.lime.soul.cheeky-sassy-executor"));
-        assert!(prompt.contains("Do not force a visible style cue into every reply"));
+        assert!(prompt.contains(
+            "Every normal chat, tool narrative, body transition, and closing suggestion must carry a clearly recognizable"
+        ));
+        assert!(
+            prompt.contains("Do not flatten a normal-risk turn into the default assistant tone")
+        );
         assert!(prompt.contains("Surface contracts"));
         assert!(prompt.contains("before_tool: Name the tool purpose"));
         assert!(prompt.contains("tool_running: Report the current checkpoint"));
         assert!(prompt.contains("after_tool_partial_failure: Separate the completed part"));
         assert!(prompt.contains("after_tool_failure: Explain the failure"));
         assert!(prompt.contains("Few-shot anchors"));
-        assert!(prompt.contains("never as a required prefix"));
+        assert!(prompt.contains("Use varied wording instead of one fixed opener"));
         assert!(prompt.contains("Do not turn any example wording into a required template"));
         assert!(!prompt.contains("Every normal chat reply must show"));
         assert!(prompt.contains("Formal artifact voice source: generation_brief_only"));

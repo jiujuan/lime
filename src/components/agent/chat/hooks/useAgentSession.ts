@@ -70,6 +70,7 @@ import {
   createEmptyAgentSessionSnapshot,
   resolveMissingSessionFromTopicsAction,
   resolveRestorableTopicSessionId,
+  shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization,
   shouldSkipAlreadyHydratedSession,
   shouldDeferSessionDetailHydration,
   hasSessionHydrationActivity,
@@ -118,6 +119,7 @@ import {
   hasRecoverableSilentTurnActivity,
   hasRecoverableTerminalTurnActivity,
 } from "./agentSilentTurnRecovery";
+import { shouldSkipStaleEmptyMessagesRefSync } from "./agentSessionTimelineMergePolicy";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { useTranslation } from "react-i18next";
@@ -486,6 +488,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     useState<string | null>(null);
 
   const restoredWorkspaceRef = useRef<string | null>(null);
+  const restoreInitializationScopeRef = useRef<string | null>(null);
   const hydratedSessionRef = useRef<string | null>(null);
   const skipAutoRestoreRef = useRef(false);
   const sessionSwitchRequestVersionRef = useRef(0);
@@ -733,6 +736,22 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
   const activeStreamingTimeline = hasActiveStreamingTimelineNow();
   activeStreamingTimelineRef.current = activeStreamingTimeline;
+  const hasActiveLocalSessionSnapshot = useCallback(
+    () =>
+      shouldPreserveActiveLocalSessionDuringBackgroundRestoreInitialization({
+        activeStreamingTimeline: hasActiveStreamingTimelineNow(),
+        messagesCount: messagesRef.current.length,
+        sessionId: sessionIdRef.current,
+        shouldRestoreSessionInForeground,
+        threadItemsCount: threadItemsRef.current.length,
+        threadTurnsCount: threadTurnsRef.current.length,
+      }),
+    [
+      hasActiveStreamingTimelineNow,
+      sessionIdRef,
+      shouldRestoreSessionInForeground,
+    ],
+  );
 
   const deferTopicsLoadForActiveStream = useCallback(
     (source: "initial" | "manual") => {
@@ -773,8 +792,26 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   useEffect(() => {
+    if (
+      shouldSkipStaleEmptyMessagesRefSync({
+        currentRefMessages: messagesRef.current,
+        nextMessages: messages,
+      })
+    ) {
+      logAgentDebug(
+        "useAgentSession",
+        "messagesRefSync.skipStaleEmpty",
+        {
+          currentMessagesCount: messagesRef.current.length,
+          sessionId,
+          workspaceId,
+        },
+        { throttleMs: 1000 },
+      );
+      return;
+    }
     messagesRef.current = messages;
-  }, [messages]);
+  }, [messages, sessionId, workspaceId]);
 
   useEffect(() => {
     sessionHistoryWindowRef.current = sessionHistoryWindow;
@@ -948,6 +985,18 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   ]);
 
   useEffect(() => {
+    const resolvedWorkspaceId = workspaceId.trim();
+    const restoreInitializationScope = [
+      disableSessionRestore ? "disabled" : "enabled",
+      resolvedWorkspaceId,
+      normalizedWorkingDir ?? "",
+      shouldRestoreSessionInForeground ? "foreground" : "background",
+    ].join(":");
+    if (restoreInitializationScopeRef.current === restoreInitializationScope) {
+      return;
+    }
+    restoreInitializationScopeRef.current = restoreInitializationScope;
+
     if (disableSessionRestore) {
       sessionStateWorkspaceRef.current = null;
       appServerConfirmedSessionIdsRef.current.clear();
@@ -965,8 +1014,22 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       return;
     }
 
-    const resolvedWorkspaceId = workspaceId.trim();
     sessionStateWorkspaceRef.current = resolvedWorkspaceId;
+    if (
+      !shouldRestoreSessionInForeground &&
+      hasActiveLocalSessionSnapshot()
+    ) {
+      setIsAutoRestoringSession(false);
+      setIsSessionHydrating(false);
+      logAgentDebug("useAgentSession", "restoreInitialization.skipActiveLocal", {
+        messagesCount: messagesRef.current.length,
+        sessionId: sessionIdRef.current,
+        threadItemsCount: threadItemsRef.current.length,
+        threadTurnsCount: threadTurnsRef.current.length,
+        workspaceId: resolvedWorkspaceId,
+      });
+      return;
+    }
     appServerConfirmedSessionIdsRef.current.clear();
     const scopedSessionCandidate = loadScopedSessionRestoreCandidate();
     setIsAutoRestoringSession(Boolean(scopedSessionCandidate));
@@ -1030,9 +1093,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     resetPendingActions,
     resetStreamingRefs,
     scopedKeys,
+    normalizedWorkingDir,
     shouldRestoreSessionInForeground,
     workspaceId,
     applySessionSnapshot,
+    hasActiveLocalSessionSnapshot,
   ]);
 
   useEffect(() => {
@@ -2481,6 +2546,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }): Promise<string | null> => {
       const targetSessionId = options?.targetSessionId?.trim();
       if (targetSessionId) {
+        if (appServerConfirmedSessionIdsRef.current.has(targetSessionId)) {
+          return targetSessionId;
+        }
+
         try {
           const detail = await runtime.getSession(
             targetSessionId,
@@ -2796,6 +2865,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     if (!topicsReady) return;
     if (skipAutoRestoreRef.current) return;
     if (sessionId) return;
+    if (sessionIdRef.current || hasActiveLocalSessionSnapshot()) return;
     if (restoredWorkspaceRef.current === resolvedWorkspaceId) return;
 
     const scopedCandidate = restoreCandidateSessionIdRef.current;
@@ -2890,6 +2960,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     persistSessionRestoreCandidate,
     recoverSessionInBackground,
     sessionId,
+    sessionIdRef,
+    hasActiveLocalSessionSnapshot,
     shouldRecoverSessionInBackground,
     switchTopic,
     topics,

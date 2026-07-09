@@ -1,10 +1,15 @@
 import {
+  APPROVAL_REQUEST_CANCEL_SCENARIO,
+  APPROVAL_REQUEST_DECLINE_SCENARIO,
+  APPROVAL_REQUEST_RESUME_PROMPT,
+  APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTINUE_PROMPT,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
   EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
+  ELECTRON_RESIZE_REFLOW_SCENARIO,
   GOAL_PROMPT,
   IMAGE_COMMAND_PROMPT,
   IMAGE_COMMAND_SCENARIO,
@@ -14,6 +19,8 @@ import {
   INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_PROMPT,
   INPUTBAR_RICH_RESTORE_SCENARIO,
+  LIVE_TAIL_COMMIT_PROMPT,
+  LIVE_TAIL_COMMIT_SCENARIO,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MULTI_AGENT_TEAM_PROMPT,
   MULTI_AGENT_TEAM_SCENARIO,
@@ -141,6 +148,16 @@ export function buildAssertionContext({
       entry.kind === "turnStart" &&
       entry.inputText === REASONING_FIRST_VISIBLE_PROMPT,
   );
+  const liveTailCommitTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" && entry.inputText === LIVE_TAIL_COMMIT_PROMPT,
+  );
+  const electronResizeReflowTurnStart = liveTailCommitTurnStart;
+  const approvalRequestResumeTurnStart = backendLedger.find(
+    (entry) =>
+      entry.kind === "turnStart" &&
+      entry.inputText === APPROVAL_REQUEST_RESUME_PROMPT,
+  );
   const terminalCanceledAfterAnswerTurnStart = backendLedger.find(
     (entry) =>
       entry.kind === "turnStart" &&
@@ -229,6 +246,18 @@ export function buildAssertionContext({
     options.scenario === "web-tools-rendering";
   const isReasoningFirstVisibleScenario =
     options.scenario === REASONING_FIRST_VISIBLE_SCENARIO;
+  const isLiveTailCommitScenario =
+    options.scenario === LIVE_TAIL_COMMIT_SCENARIO;
+  const isElectronResizeReflowScenario =
+    options.scenario === ELECTRON_RESIZE_REFLOW_SCENARIO;
+  const isApprovalRequestResumeScenario =
+    options.scenario === APPROVAL_REQUEST_RESUME_SCENARIO;
+  const isApprovalRequestDeclineScenario =
+    options.scenario === APPROVAL_REQUEST_DECLINE_SCENARIO;
+  const isApprovalRequestCancelScenario =
+    options.scenario === APPROVAL_REQUEST_CANCEL_SCENARIO;
+  const isApprovalRequestDecisionScenario =
+    isApprovalRequestDeclineScenario || isApprovalRequestCancelScenario;
   const isTerminalCanceledAfterAnswerScenario =
     options.scenario === TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO;
   const isTerminalFailedAfterAnswerScenario =
@@ -275,27 +304,35 @@ export function buildAssertionContext({
             ? inputbarRichRestoreTurnStart?.asterChatRequest
             : isInputbarPendingSteerScenario
               ? inputbarPendingSteerActiveTurnStart?.asterChatRequest
-            : isWebToolsRenderingScenario
-              ? webToolsRenderingTurnStart?.asterChatRequest
-            : isReasoningFirstVisibleScenario
-              ? reasoningFirstVisibleTurnStart?.asterChatRequest
-            : isTerminalCanceledAfterAnswerScenario
-              ? terminalCanceledAfterAnswerTurnStart?.asterChatRequest
-            : isTerminalFailedAfterAnswerScenario
-              ? terminalFailedAfterAnswerTurnStart?.asterChatRequest
-                : isMcpStructuredContentScenario
-                  ? mcpStructuredContentTurnStart?.asterChatRequest
-                  : isMediaReferenceScenario
-                    ? mediaReferenceTurnStart?.asterChatRequest
-                    : isMultiAgentTeamScenario
-                      ? multiAgentTeamTurnStart?.asterChatRequest
-                      : isSkillsRuntimeScenario
-                        ? skillsRuntimeTurnStart?.asterChatRequest
-                        : isAnyExpertSkillsRuntimeScenario
-                          ? expertRuntimeTurnStartForAssertions?.asterChatRequest
-                          : isContentFactoryArticleWorkspaceScenario
-                            ? {}
-                            : newsTurnStart?.asterChatRequest) ?? {};
+              : isWebToolsRenderingScenario
+                ? webToolsRenderingTurnStart?.asterChatRequest
+                : isReasoningFirstVisibleScenario
+                  ? reasoningFirstVisibleTurnStart?.asterChatRequest
+                  : isLiveTailCommitScenario
+                    ? liveTailCommitTurnStart?.asterChatRequest
+                    : isElectronResizeReflowScenario
+                      ? electronResizeReflowTurnStart?.asterChatRequest
+                      : isApprovalRequestResumeScenario ||
+                          isApprovalRequestDecisionScenario
+                        ? approvalRequestResumeTurnStart?.asterChatRequest
+                        : isTerminalCanceledAfterAnswerScenario
+                          ? terminalCanceledAfterAnswerTurnStart?.asterChatRequest
+                          : isTerminalFailedAfterAnswerScenario
+                            ? terminalFailedAfterAnswerTurnStart?.asterChatRequest
+                            : isMcpStructuredContentScenario
+                              ? mcpStructuredContentTurnStart?.asterChatRequest
+                              : isMediaReferenceScenario
+                                ? mediaReferenceTurnStart?.asterChatRequest
+                                : isMultiAgentTeamScenario
+                                  ? multiAgentTeamTurnStart?.asterChatRequest
+                                  : isSkillsRuntimeScenario
+                                    ? skillsRuntimeTurnStart?.asterChatRequest
+                                    : isAnyExpertSkillsRuntimeScenario
+                                      ? expertRuntimeTurnStartForAssertions?.asterChatRequest
+                                      : isContentFactoryArticleWorkspaceScenario
+                                        ? {}
+                                        : newsTurnStart?.asterChatRequest) ??
+    {};
   const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
   const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
   const goalObjectiveText = readObjectiveTextFromHarness(goalHarness);
@@ -348,60 +385,72 @@ export function buildAssertionContext({
     ? planTurnStart?.inputText === PLAN_PROMPT
     : isGoalScenario
       ? goalTurnStart?.inputText === GOAL_PROMPT
-        : isImageCommandScenario
-          ? imageCommandTurnStart?.inputText === expectedImageIntentRoutedPrompt
-          : isInputbarRichRestoreScenario
-            ? String(inputbarRichRestoreTurnStart?.inputText || "").includes(
-                INPUTBAR_RICH_RESTORE_PROMPT,
-              )
-            : isInputbarPendingSteerScenario
-              ? inputbarPendingSteerActiveTurnStart?.inputText ===
-                INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
+      : isImageCommandScenario
+        ? imageCommandTurnStart?.inputText === expectedImageIntentRoutedPrompt
+        : isInputbarRichRestoreScenario
+          ? String(inputbarRichRestoreTurnStart?.inputText || "").includes(
+              INPUTBAR_RICH_RESTORE_PROMPT,
+            )
+          : isInputbarPendingSteerScenario
+            ? inputbarPendingSteerActiveTurnStart?.inputText ===
+              INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
             : isWebToolsRenderingScenario
               ? webToolsRenderingTurnStart?.inputText ===
                 WEB_TOOLS_RENDERING_PROMPT
-            : isReasoningFirstVisibleScenario
-              ? reasoningFirstVisibleTurnStart?.inputText ===
-                REASONING_FIRST_VISIBLE_PROMPT
-              : isTerminalCanceledAfterAnswerScenario
-                ? terminalCanceledAfterAnswerTurnStart?.inputText ===
-                  TERMINAL_CANCELED_AFTER_ANSWER_PROMPT
-              : isTerminalFailedAfterAnswerScenario
-                ? terminalFailedAfterAnswerTurnStart?.inputText ===
-                  TERMINAL_FAILED_AFTER_ANSWER_PROMPT
-              : isTerminalStaleGuardScenario
-                ? terminalStaleGuardFirstTurnStart?.inputText ===
-                    TERMINAL_STALE_GUARD_FIRST_PROMPT &&
-                  terminalStaleGuardSecondTurnStart?.inputText ===
-                    TERMINAL_STALE_GUARD_SECOND_PROMPT
-              : isMcpStructuredContentScenario
-                ? mcpStructuredContentTurnStart?.inputText ===
-                  MCP_STRUCTURED_CONTENT_PROMPT
-                : isMediaReferenceScenario
-                  ? mediaReferenceTurnStart?.inputText ===
-                    MEDIA_REFERENCE_PROMPT
-                  : isMultiAgentTeamScenario
-                    ? multiAgentTeamTurnStart?.inputText ===
-                      MULTI_AGENT_TEAM_PROMPT
-                    : isSkillsRuntimeScenario
-                      ? skillsRuntimeTurnStart?.inputText ===
-                          SKILLS_RUNTIME_PROMPT &&
-                        explicitSkillsRuntimeTurnStart?.inputText ===
-                          SKILLS_RUNTIME_EXPLICIT_PROMPT &&
-                        manualEnableSkillsRuntimeTurnStart?.inputText ===
-                          SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT
-                      : isAnyExpertSkillsRuntimeScenario
-                        ? isExpertPanelSkillsRuntimeScenario
-                          ? expertPanelSkillsRuntimeTurnStart?.inputText ===
-                            EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
-                          : expertSkillsRuntimeTurnStart?.inputText?.includes(
-                              EXPERT_SKILLS_RUNTIME_PROMPT,
-                            ) === true
-                        : isContentFactoryArticleWorkspaceScenario
-                          ? true
-                          : isSoulStyleScenario
-                            ? newsTraceTurnStart?.inputText === NEWS_PROMPT
-                            : newsTurnStart?.inputText === NEWS_PROMPT;
+              : isReasoningFirstVisibleScenario
+                ? reasoningFirstVisibleTurnStart?.inputText ===
+                  REASONING_FIRST_VISIBLE_PROMPT
+                : isLiveTailCommitScenario
+                  ? liveTailCommitTurnStart?.inputText ===
+                    LIVE_TAIL_COMMIT_PROMPT
+                  : isElectronResizeReflowScenario
+                    ? electronResizeReflowTurnStart?.inputText ===
+                      LIVE_TAIL_COMMIT_PROMPT
+                    : isApprovalRequestResumeScenario ||
+                        isApprovalRequestDecisionScenario
+                      ? approvalRequestResumeTurnStart?.inputText ===
+                        APPROVAL_REQUEST_RESUME_PROMPT
+                      : isTerminalCanceledAfterAnswerScenario
+                        ? terminalCanceledAfterAnswerTurnStart?.inputText ===
+                          TERMINAL_CANCELED_AFTER_ANSWER_PROMPT
+                        : isTerminalFailedAfterAnswerScenario
+                          ? terminalFailedAfterAnswerTurnStart?.inputText ===
+                            TERMINAL_FAILED_AFTER_ANSWER_PROMPT
+                          : isTerminalStaleGuardScenario
+                            ? terminalStaleGuardFirstTurnStart?.inputText ===
+                                TERMINAL_STALE_GUARD_FIRST_PROMPT &&
+                              terminalStaleGuardSecondTurnStart?.inputText ===
+                                TERMINAL_STALE_GUARD_SECOND_PROMPT
+                            : isMcpStructuredContentScenario
+                              ? mcpStructuredContentTurnStart?.inputText ===
+                                MCP_STRUCTURED_CONTENT_PROMPT
+                              : isMediaReferenceScenario
+                                ? mediaReferenceTurnStart?.inputText ===
+                                  MEDIA_REFERENCE_PROMPT
+                                : isMultiAgentTeamScenario
+                                  ? multiAgentTeamTurnStart?.inputText ===
+                                    MULTI_AGENT_TEAM_PROMPT
+                                  : isSkillsRuntimeScenario
+                                    ? skillsRuntimeTurnStart?.inputText ===
+                                        SKILLS_RUNTIME_PROMPT &&
+                                      explicitSkillsRuntimeTurnStart?.inputText ===
+                                        SKILLS_RUNTIME_EXPLICIT_PROMPT &&
+                                      manualEnableSkillsRuntimeTurnStart?.inputText ===
+                                        SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT
+                                    : isAnyExpertSkillsRuntimeScenario
+                                      ? isExpertPanelSkillsRuntimeScenario
+                                        ? expertPanelSkillsRuntimeTurnStart?.inputText ===
+                                          EXPERT_SKILLS_RUNTIME_PANEL_PROMPT
+                                        : expertSkillsRuntimeTurnStart?.inputText?.includes(
+                                            EXPERT_SKILLS_RUNTIME_PROMPT,
+                                          ) === true
+                                      : isContentFactoryArticleWorkspaceScenario
+                                        ? true
+                                        : isSoulStyleScenario
+                                          ? newsTraceTurnStart?.inputText ===
+                                            NEWS_PROMPT
+                                          : newsTurnStart?.inputText ===
+                                            NEWS_PROMPT;
   return {
     backendLedger,
     traceMessages,
@@ -427,6 +476,9 @@ export function buildAssertionContext({
     expectedImageIntentRoutedPrompt,
     webToolsRenderingTurnStart,
     reasoningFirstVisibleTurnStart,
+    liveTailCommitTurnStart,
+    electronResizeReflowTurnStart,
+    approvalRequestResumeTurnStart,
     terminalCanceledAfterAnswerTurnStart,
     terminalFailedAfterAnswerTurnStart,
     terminalStaleGuardFirstTurnStart,
@@ -453,6 +505,12 @@ export function buildAssertionContext({
     isInputbarPendingSteerScenario,
     isWebToolsRenderingScenario,
     isReasoningFirstVisibleScenario,
+    isLiveTailCommitScenario,
+    isElectronResizeReflowScenario,
+    isApprovalRequestResumeScenario,
+    isApprovalRequestDeclineScenario,
+    isApprovalRequestCancelScenario,
+    isApprovalRequestDecisionScenario,
     isTerminalCanceledAfterAnswerScenario,
     isTerminalFailedAfterAnswerScenario,
     isTerminalStaleGuardScenario,

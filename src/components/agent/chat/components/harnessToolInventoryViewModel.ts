@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeExtensionSourceKind,
   AgentRuntimeToolInventoryCatalogEntry,
-  AgentRuntimeToolInventoryRegistryEntry,
+  AgentRuntimeToolInventoryNativeEntry,
   AgentRuntimeToolInventoryRuntimeEntry,
   AgentRuntimeToolInventoryRuntimeSourceKind,
   AgentToolExecutionPolicySource,
@@ -158,8 +158,6 @@ export function formatRuntimeToolSourceKindLabel(
   value: AgentRuntimeToolInventoryRuntimeSourceKind | string,
 ): string {
   switch (value) {
-    case "registry_native":
-      return "Registry";
     case "current_surface":
       return "当前工具面";
     case "runtime_extension":
@@ -177,8 +175,8 @@ export function formatRuntimeToolAvailabilitySourceLabel(
   switch (value) {
     case "runtime_tools":
       return "runtime_tools";
-    case "registry_tools":
-      return "registry_tools";
+    case "native_tools":
+      return "native_tools";
     case "none":
     default:
       return "未就绪";
@@ -195,8 +193,8 @@ export function collectCatalogExecutionSources(
   ];
 }
 
-export function collectRegistryExecutionSources(
-  entry: AgentRuntimeToolInventoryRegistryEntry,
+export function collectNativeExecutionSources(
+  entry: AgentRuntimeToolInventoryNativeEntry,
 ): AgentToolExecutionPolicySource[] {
   return [
     entry.catalog_execution_warning_policy_source,

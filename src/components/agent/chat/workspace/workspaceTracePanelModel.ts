@@ -15,6 +15,7 @@ import {
 } from "@/lib/trace/clawTraceBaseline";
 import {
   projectClawTraceRegressionReport,
+  type ClawTraceRegressionOwner,
   type ClawTraceRegressionReport,
   type ClawTraceRegressionSegment,
 } from "@/lib/trace/clawTraceRegressionReport";
@@ -29,6 +30,27 @@ export interface TraceSegmentModel {
   id: TraceSegmentId;
   owner: "client" | "server" | "bridge";
   valueMs: number | null;
+}
+
+export type TraceCurrentAttributionReason =
+  | "provider_wait_dominant"
+  | "app_server_dominant"
+  | "lime_client_dominant"
+  | "balanced"
+  | "insufficient";
+
+export type TraceCurrentAttributionSeverity = "ok" | "slow" | "unknown";
+
+export interface TraceCurrentAttributionModel {
+  clientActionableMs: number | null;
+  owner: ClawTraceRegressionOwner | null;
+  ownerShare: number | null;
+  ownerTotalMs: number | null;
+  primarySegmentId: TraceSegmentId | null;
+  primarySegmentValueMs: number | null;
+  reason: TraceCurrentAttributionReason;
+  severity: TraceCurrentAttributionSeverity;
+  totalFirstTextPaintMs: number | null;
 }
 
 export type TraceHistoryRestoreMetricId =
@@ -70,6 +92,7 @@ export type TraceSessionKind = "claw_turn" | "history_restore" | "unknown";
 export interface WorkspaceTracePanelModel {
   baselineComparison: ClawTraceBaselineComparison;
   clientActionableMs: number | null;
+  currentAttribution: TraceCurrentAttributionModel;
   enabled: boolean;
   entryCount: number;
   missingPhaseIds: string[];
@@ -96,6 +119,9 @@ interface BuildWorkspaceTracePanelModelOptions {
 }
 
 const CLIENT_METRIC_THRESHOLD_MS = 80;
+const CURRENT_ATTRIBUTION_DOMINANT_SHARE = 0.5;
+const CURRENT_ATTRIBUTION_SLOW_OWNER_MS = 2000;
+const CURRENT_ATTRIBUTION_SLOW_TOTAL_MS = 2500;
 
 const DEFAULT_RETENTION: AgentUiPerformanceTraceHistoryRetentionPolicy = {
   max_age_days: AGENT_UI_PERFORMANCE_TRACE_HISTORY_MAX_AGE_DAYS,
@@ -157,6 +183,108 @@ function sumMs(values: Array<number | null>): number | null {
     return null;
   }
   return numbers.reduce((total, value) => total + value, 0);
+}
+
+function ownerForSegment(segment: TraceSegmentModel): ClawTraceRegressionOwner {
+  switch (segment.id) {
+    case "server_wait":
+      return "provider_api";
+    case "server_to_renderer":
+      return "app_server";
+    case "input_to_accepted":
+    case "renderer_to_paint":
+      return "lime_client";
+  }
+}
+
+function dominantReasonForOwner(
+  owner: ClawTraceRegressionOwner,
+): TraceCurrentAttributionReason {
+  switch (owner) {
+    case "provider_api":
+      return "provider_wait_dominant";
+    case "app_server":
+      return "app_server_dominant";
+    case "lime_client":
+      return "lime_client_dominant";
+  }
+}
+
+function buildCurrentAttribution(
+  segments: TraceSegmentModel[],
+  totalFirstTextPaintMs: number | null,
+  clientActionableMs: number | null,
+): TraceCurrentAttributionModel {
+  const measuredSegments = segments.filter(
+    (segment): segment is TraceSegmentModel & { valueMs: number } =>
+      segment.valueMs !== null,
+  );
+  if (measuredSegments.length === 0) {
+    return {
+      clientActionableMs,
+      owner: null,
+      ownerShare: null,
+      ownerTotalMs: null,
+      primarySegmentId: null,
+      primarySegmentValueMs: null,
+      reason: "insufficient",
+      severity: "unknown",
+      totalFirstTextPaintMs,
+    };
+  }
+
+  const ownerTotals = new Map<ClawTraceRegressionOwner, number>();
+  for (const segment of measuredSegments) {
+    const owner = ownerForSegment(segment);
+    ownerTotals.set(owner, (ownerTotals.get(owner) ?? 0) + segment.valueMs);
+  }
+
+  const [primaryOwner, ownerTotalMs] = [...ownerTotals.entries()].sort(
+    (left, right) => {
+      const byTotal = right[1] - left[1];
+      if (byTotal !== 0) {
+        return byTotal;
+      }
+      return left[0].localeCompare(right[0]);
+    },
+  )[0] ?? [null, null];
+  const ownerSegments = primaryOwner
+    ? measuredSegments.filter(
+        (segment) => ownerForSegment(segment) === primaryOwner,
+      )
+    : [];
+  const primarySegment = [...ownerSegments].sort(
+    (left, right) => right.valueMs - left.valueMs,
+  )[0];
+  const totalForShare =
+    totalFirstTextPaintMs ??
+    sumMs(measuredSegments.map((segment) => segment.valueMs));
+  const ownerShare =
+    ownerTotalMs !== null && totalForShare && totalForShare > 0
+      ? Math.min(1, ownerTotalMs / totalForShare)
+      : null;
+  const isDominant =
+    ownerShare !== null && ownerShare >= CURRENT_ATTRIBUTION_DOMINANT_SHARE;
+  const severity =
+    (totalFirstTextPaintMs ?? 0) >= CURRENT_ATTRIBUTION_SLOW_TOTAL_MS ||
+    (ownerTotalMs ?? 0) >= CURRENT_ATTRIBUTION_SLOW_OWNER_MS
+      ? "slow"
+      : "ok";
+
+  return {
+    clientActionableMs,
+    owner: primaryOwner,
+    ownerShare,
+    ownerTotalMs,
+    primarySegmentId: primarySegment?.id ?? null,
+    primarySegmentValueMs: primarySegment?.valueMs ?? null,
+    reason:
+      primaryOwner && isDominant
+        ? dominantReasonForOwner(primaryOwner)
+        : "balanced",
+    severity,
+    totalFirstTextPaintMs,
+  };
 }
 
 function latestSessionId(snapshot: AgentUiPerformanceSnapshot): string | null {
@@ -475,7 +603,10 @@ export function buildWorkspaceTracePanelModel(
   const baselineComparison = includeComparisons
     ? projectClawTraceBaselineComparison({
         baselineRecords: options.baselineRecords ?? [],
-        currentSummary: buildSelectedSessionDiagnosticSummary(snapshot, session),
+        currentSummary: buildSelectedSessionDiagnosticSummary(
+          snapshot,
+          session,
+        ),
         retention: options.retention ?? DEFAULT_RETENTION,
       })
     : {
@@ -493,10 +624,18 @@ export function buildWorkspaceTracePanelModel(
       .filter((segment) => segment.owner === "client")
       .map((segment) => segment.valueMs),
   );
+  const totalFirstTextPaintMs = normalizeMs(
+    session?.homeInputToFirstTextPaintMs,
+  );
 
   return {
     baselineComparison,
     clientActionableMs,
+    currentAttribution: buildCurrentAttribution(
+      segments,
+      totalFirstTextPaintMs,
+      clientActionableMs,
+    ),
     enabled: options.enabled,
     entryCount: snapshot.entries.length,
     missingPhaseIds: buildMissingPhaseIds(session, selectedSessionKind),
@@ -516,7 +655,7 @@ export function buildWorkspaceTracePanelModel(
       )
       .sort((left, right) => (right.valueMs ?? 0) - (left.valueMs ?? 0))
       .slice(0, 3),
-    totalFirstTextPaintMs: normalizeMs(session?.homeInputToFirstTextPaintMs),
+    totalFirstTextPaintMs,
     healthMetrics: [
       {
         id: "long_task_count",

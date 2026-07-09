@@ -536,6 +536,36 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).toBe(true);
   });
 
+  it("处理工作台调试信息开关开启时右侧 Harness surface 应触发工具库存读取", async () => {
+    const container = renderPage({
+      theme: "general",
+      lockTheme: true,
+    });
+    await flushEffects();
+
+    const toolbar = container.querySelector(
+      '[data-testid="task-center-utility-toolbar"]',
+    ) as HTMLDivElement | null;
+    expect(toolbar?.dataset.showHarnessToggle).toBe("true");
+    expect(toolbar?.dataset.harnessPanelVisible).toBe("false");
+    expect(
+      container.querySelector('[data-testid="task-center-harness-toggle"]'),
+    ).not.toBeNull();
+    expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
+
+    clickButton(container, "task-center-harness-toggle");
+    await flushEffects();
+
+    expect(toolbar?.dataset.harnessPanelVisible).toBe("true");
+    expect(mockGetAgentRuntimeToolInventory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        browserAssist: true,
+        caller: "assistant",
+        workbench: false,
+      }),
+    );
+  });
+
   it("处理工作台调试信息开关关闭时仍应保留入口，但不触发工具库存读取", async () => {
     mockUseDeveloperFeatureFlags.mockReturnValue({
       clawTraceEnabled: false,

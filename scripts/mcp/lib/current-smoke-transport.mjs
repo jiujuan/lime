@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
-export const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+export const APP_SERVER_HANDLE_JSON_LINES_COMMAND =
+  "app_server_handle_json_lines";
 
 export const LEGACY_MCP_COMMANDS = [
   "get_mcp_servers",
@@ -266,7 +267,12 @@ export async function invokeAppServerMethod(options, method, params, entries) {
 
 export function summarizeInvokeEntries(
   entries,
-  { requiredReadMethods, fixtureMethods, oauthFixtureMethods },
+  {
+    requiredReadMethods,
+    fixtureMethods,
+    oauthFixtureMethods,
+    pluginRuntimeFixtureMethods = [],
+  },
 ) {
   const appServerRequests = entries.flatMap((entry) => entry.appServerRequests);
   const appServerMethodsSeen = Array.from(
@@ -307,6 +313,9 @@ export function summarizeInvokeEntries(
       (method) => !appServerMethodsSeen.includes(method),
     ),
     missingOAuthFixtureMethods: oauthFixtureMethods.filter(
+      (method) => !appServerMethodsSeen.includes(method),
+    ),
+    missingPluginRuntimeFixtureMethods: pluginRuntimeFixtureMethods.filter(
       (method) => !appServerMethodsSeen.includes(method),
     ),
     mcpCounts: {

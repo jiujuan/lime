@@ -212,6 +212,16 @@ export function shouldBuildFullThreadTimeline({
   return layoutMode !== "chat" || harnessPanelVisible;
 }
 
+export function resolveHarnessRuntimeVisible({
+  harnessPanelVisible,
+  rightSurfaceActive,
+}: {
+  harnessPanelVisible: boolean;
+  rightSurfaceActive?: string | null;
+}): boolean {
+  return harnessPanelVisible || rightSurfaceActive === "harness";
+}
+
 export function shouldAutoRefreshWorkspaceRightSurfacePending({
   sessionId,
   workspaceId,
@@ -320,15 +330,15 @@ export function scheduleAfterNextPaint(callback: () => void): () => void {
     return () => window.clearTimeout(timeoutId);
   }
 
-  let secondFrameId: number | null = null;
+  let timeoutId: number | null = null;
   const firstFrameId = window.requestAnimationFrame(() => {
-    secondFrameId = window.requestAnimationFrame(callback);
+    timeoutId = window.setTimeout(callback, 0);
   });
 
   return () => {
     window.cancelAnimationFrame(firstFrameId);
-    if (secondFrameId !== null) {
-      window.cancelAnimationFrame(secondFrameId);
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
     }
   };
 }

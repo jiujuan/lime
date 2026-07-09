@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{OnceLock, RwLock};
 
 use lime_core::app_paths;
 use lime_core::models::{
@@ -101,6 +102,12 @@ pub struct LoadedSkillDefinition {
 struct WorkflowDocument {
     #[serde(default)]
     steps: Vec<WorkflowStep>,
+}
+
+static REGISTERED_SKILL_DIRECTORIES: OnceLock<RwLock<HashMap<String, PathBuf>>> = OnceLock::new();
+
+fn registered_skill_directories() -> &'static RwLock<HashMap<String, PathBuf>> {
+    REGISTERED_SKILL_DIRECTORIES.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
 pub fn parse_skill_frontmatter(content: &str) -> (SkillFrontmatter, String) {
@@ -433,7 +440,76 @@ pub fn load_skills_from_directory(dir_path: &Path) -> Vec<LoadedSkillDefinition>
     results
 }
 
+pub fn register_skill_directory(skill_name: &str, skill_dir: &Path) -> Result<String, String> {
+    let skill_name = skill_name.trim();
+    if skill_name.is_empty() {
+        return Err("Skill name is required".to_string());
+    }
+
+    let skill_file = skill_dir.join("SKILL.md");
+    if !skill_file.exists() {
+        return Err(format!(
+            "Skill 文件不存在: {}",
+            skill_file.to_string_lossy()
+        ));
+    }
+
+    load_skill_from_file(skill_name, &skill_file)?;
+    let canonical_dir = skill_dir
+        .canonicalize()
+        .unwrap_or_else(|_| skill_dir.to_path_buf());
+    registered_skill_directories()
+        .write()
+        .map_err(|error| error.to_string())?
+        .insert(skill_name.to_string(), canonical_dir);
+    Ok(skill_name.to_string())
+}
+
+pub fn register_project_skill_directory(
+    directory: &str,
+    skill_dir: &Path,
+) -> Result<String, String> {
+    let directory = directory.trim();
+    if directory.is_empty() {
+        return Err("workspace skill directory is required".to_string());
+    }
+    register_skill_directory(&format!("project:{directory}"), skill_dir)
+}
+
+pub fn is_registered_skill(skill_name: &str) -> bool {
+    let skill_name = skill_name.trim();
+    if skill_name.is_empty() {
+        return false;
+    }
+
+    registered_skill_directories()
+        .read()
+        .map(|registry| registry.contains_key(skill_name))
+        .unwrap_or(false)
+        || get_skill_roots()
+            .into_iter()
+            .any(|root| root.join(skill_name).join("SKILL.md").exists())
+}
+
+fn registered_skill_file(skill_name: &str) -> Option<PathBuf> {
+    registered_skill_directories()
+        .read()
+        .ok()
+        .and_then(|registry| registry.get(skill_name).cloned())
+        .map(|directory| directory.join("SKILL.md"))
+        .filter(|skill_file| skill_file.exists())
+}
+
 pub fn find_skill_by_name(skill_name: &str) -> Result<LoadedSkillDefinition, String> {
+    let skill_name = skill_name.trim();
+    if skill_name.is_empty() {
+        return Err("Skill name is required".to_string());
+    }
+
+    if let Some(skill_file) = registered_skill_file(skill_name) {
+        return load_skill_from_file(skill_name, &skill_file);
+    }
+
     for skills_dir in get_skill_roots() {
         let skill_file = skills_dir.join(skill_name).join("SKILL.md");
         if !skill_file.exists() {
@@ -447,7 +523,10 @@ pub fn find_skill_by_name(skill_name: &str) -> Result<LoadedSkillDefinition, Str
 
 #[cfg(test)]
 mod tests {
-    use super::{load_skill_from_file, load_skills_from_directory, parse_allowed_tools};
+    use super::{
+        find_skill_by_name, is_registered_skill, load_skill_from_file, load_skills_from_directory,
+        parse_allowed_tools, register_project_skill_directory, register_skill_directory,
+    };
     use tempfile::TempDir;
 
     #[test]
@@ -535,5 +614,55 @@ Invalid content
 
         assert_eq!(skills.len(), 1);
         assert_eq!(skills[0].skill_name, "skill-valid");
+    }
+
+    #[test]
+    fn registered_skill_directory_should_resolve_project_namespace() {
+        let temp_dir = TempDir::new().unwrap();
+        let skill_dir = temp_dir.path().join("runtime-enable-fixture");
+        std::fs::create_dir(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: runtime-enable-fixture
+description: Runtime enable fixture
+---
+
+# Runtime Enable Fixture
+"#,
+        )
+        .unwrap();
+
+        let skill_name =
+            register_project_skill_directory("runtime-enable-fixture", &skill_dir).unwrap();
+        let skill = find_skill_by_name(&skill_name).unwrap();
+
+        assert_eq!(skill_name, "project:runtime-enable-fixture");
+        assert_eq!(skill.skill_name, "project:runtime-enable-fixture");
+        assert!(is_registered_skill("project:runtime-enable-fixture"));
+    }
+
+    #[test]
+    fn registered_skill_directory_should_resolve_plain_skill_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let skill_dir = temp_dir.path().join("plain-skill");
+        std::fs::create_dir(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: plain-skill
+description: Plain fixture
+---
+
+# Plain
+"#,
+        )
+        .unwrap();
+
+        register_skill_directory("plain-skill", &skill_dir).unwrap();
+        let skill = find_skill_by_name("plain-skill").unwrap();
+
+        assert_eq!(skill.skill_name, "plain-skill");
+        assert!(is_registered_skill("plain-skill"));
     }
 }

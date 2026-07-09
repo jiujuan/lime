@@ -23,6 +23,11 @@ const CURRENT_VOICE_MODEL_TEST_TRANSCRIBE_METHOD =
   "voiceModel/testTranscribeFile";
 const CURRENT_VOICE_MODEL_TEST_TRANSCRIBE_CLIENT_HELPER =
   "testTranscribeVoiceModelFile";
+const CURRENT_VOICE_TRANSCRIPTION_METHOD =
+  "voiceTranscription/transcribeAudio";
+const CURRENT_VOICE_TRANSCRIPTION_CLIENT_HELPER = "transcribeVoiceAudio";
+const CURRENT_VOICE_TRANSCRIPTION_FRONTEND_HELPER =
+  "transcribeVoiceInputAudio";
 const CURRENT_ASR_CREDENTIAL_METHODS = [
   "voiceAsrCredential/list",
   "voiceAsrCredential/create",
@@ -635,7 +640,7 @@ describe("ASR / Voice current boundary", () => {
 
     expect(asrProviderSource).toContain("failClosedRetiredVoiceInputCommand");
     expect(asrProviderSource).toContain(
-      "语音转写、润色、输出与录音控制尚未接入 App Server / Electron current 通道",
+      "旧实时语音转写、润色、输出与录音控制入口已退役",
     );
     expectStringLiteralsAbsent(
       restrictedSources,
@@ -644,6 +649,31 @@ describe("ASR / Voice current boundary", () => {
     expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
     expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
     expectLegacyRustFileDeleted("lime-rs/src/voice/commands.rs");
+  });
+
+  it("输入框语音转写应固定走 App Server voiceTranscription current 主链", () => {
+    const asrProviderSource = readRepoFile("src/lib/api/asrProvider.ts");
+    const appServerSources = readAppServerAsrCredentialSources();
+    const restrictedSources = [
+      readElectronSources(),
+      readDevBridgeAndMockSources(),
+      readRepoFileIfExists("lime-rs/src/app/runner.rs"),
+      readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher/voice.rs"),
+      readRepoFile("src/lib/governance/agentCommandCatalog.json"),
+    ].join("\n");
+
+    expect(asrProviderSource).toContain(CURRENT_VOICE_TRANSCRIPTION_FRONTEND_HELPER);
+    expect(asrProviderSource).toContain("createAppServerClient()");
+    expect(asrProviderSource).toContain(
+      `.${CURRENT_VOICE_TRANSCRIPTION_CLIENT_HELPER}(`,
+    );
+    expect(appServerSources).toContain(`"${CURRENT_VOICE_TRANSCRIPTION_METHOD}"`);
+    expect(appServerSources).toContain(CURRENT_VOICE_TRANSCRIPTION_CLIENT_HELPER);
+    expectStringLiteralsAbsent(
+      restrictedSources,
+      RETIRED_VOICE_REALTIME_FACADE_COMMANDS,
+    );
   });
 
   it("生产 GUI 不应重新 import 实时语音 fail-closed wrapper", () => {

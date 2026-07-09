@@ -461,6 +461,43 @@ pub trait RuntimeReplySource {
         Self: 'a;
 }
 
+pub trait RuntimeReplySourceExecutor<M, C> {
+    type Stream<'a>
+    where
+        Self: 'a;
+    type Error: std::fmt::Display;
+
+    fn run_default<'a>(
+        self,
+        call: RuntimeReplyDefaultCall<M, C>,
+    ) -> BoxFuture<'a, Result<Self::Stream<'a>, Self::Error>>
+    where
+        Self: 'a;
+
+    fn run_provider<'a>(
+        self,
+        call: RuntimeReplyProviderCall<M, C>,
+    ) -> BoxFuture<'a, Result<Self::Stream<'a>, Self::Error>>
+    where
+        Self: 'a;
+}
+
+impl<M, C> RuntimeReplySourceCall<M, C> {
+    pub fn run_with<'a, X>(self, executor: X) -> BoxFuture<'a, Result<X::Stream<'a>, X::Error>>
+    where
+        X: RuntimeReplySourceExecutor<M, C> + Send + 'a,
+        M: Send + 'a,
+        C: Send + 'a,
+    {
+        Box::pin(async move {
+            match self {
+                RuntimeReplySourceCall::Default(call) => executor.run_default(call).await,
+                RuntimeReplySourceCall::Provider(call) => executor.run_provider(call).await,
+            }
+        })
+    }
+}
+
 pub fn run_reply_source<'a, S>(
     source: S,
     run: RuntimeReplyBackendRun,

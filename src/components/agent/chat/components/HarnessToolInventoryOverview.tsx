@@ -183,10 +183,10 @@ export function HarnessToolInventoryOverview({
             <InventoryStatCard
               title={agentText(
                 "agentChat.harness.generated.1fd6a805da",
-                "Registry",
+                "Native Tools",
               )}
-              value={`${toolInventory.counts.registry_visible_total}`}
-              hint={`可见 / 总数 ${toolInventory.counts.registry_visible_total} / ${toolInventory.counts.registry_total}`}
+              value={`${toolInventory.counts.native_visible_total}`}
+              hint={`可见 / 总数 ${toolInventory.counts.native_visible_total} / ${toolInventory.counts.native_total}`}
             />
             <InventoryStatCard
               title={agentText(

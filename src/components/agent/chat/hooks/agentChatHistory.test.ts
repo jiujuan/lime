@@ -476,12 +476,9 @@ describe("agentChatHistory core hydrate", () => {
       "user",
       "assistant",
     ]);
-    expect(messages[0]?.content).toBe(
-      "先给我一个修复计划，不要直接改代码",
-    );
+    expect(messages[0]?.content).toBe("先给我一个修复计划，不要直接改代码");
     const planTextPart = messages[1]?.contentParts?.find(
-      (part) =>
-        part.type === "text" && part.text.includes("<proposed_plan>"),
+      (part) => part.type === "text" && part.text.includes("<proposed_plan>"),
     );
     expect(planTextPart).toMatchObject({
       type: "text",
@@ -688,11 +685,9 @@ describe("agentChatHistory core hydrate", () => {
           prompt: "从花城汇看广州塔的春天照片",
           model: "fal-ai/nano-banana-pro",
           presentation: {
-            assistant_intro:
-              "我先按花城汇视角构图，保留春花、广场和广州塔。",
+            assistant_intro: "我先按花城汇视角构图，保留春花、广场和广州塔。",
             result_captions: {
-              complete:
-                "完成了，花城汇望向广州塔的春日画面已经生成。",
+              complete: "完成了，花城汇望向广州塔的春日画面已经生成。",
             },
           },
         },
@@ -1055,7 +1050,7 @@ describe("agentChatHistory core hydrate", () => {
           status: "completed",
           result: {
             success: true,
-            output: "Exit code: 0\nOutput:\nok",
+            output: "ok",
             metadata: {
               imported: true,
               source_client: "codex",
@@ -1104,5 +1099,11 @@ describe("agentChatHistory core hydrate", () => {
         },
       },
     });
+    expect(messages[1]?.toolCalls?.[0]?.result?.output).not.toContain(
+      "Exit code:",
+    );
+    expect(messages[1]?.toolCalls?.[0]?.result?.output).not.toContain(
+      "Output:",
+    );
   });
 });

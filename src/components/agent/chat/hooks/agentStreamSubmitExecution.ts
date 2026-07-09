@@ -121,10 +121,6 @@ interface ExecuteAgentStreamSubmitOptions {
     removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
     registerListener: (unlisten: () => void) => void;
   };
-  sounds: {
-    playToolcallSound: () => void;
-    playTypewriterSound: () => void;
-  };
   appendThinkingToParts: (
     parts: MessageParts,
     textDelta: string,
@@ -228,7 +224,6 @@ export async function executeAgentStreamSubmit(
     observer,
     onWriteFile,
     callbacks,
-    sounds,
     appendThinkingToParts,
     setMessages,
     setIsSending,
@@ -345,7 +340,6 @@ export async function executeAgentStreamSubmit(
       upsertQueuedTurn: callbacks.upsertQueuedTurn,
       removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
     },
-    sounds,
     appendThinkingToParts,
     setMessages,
     setPendingActions,

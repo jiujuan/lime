@@ -168,6 +168,7 @@ import { useWorkspaceVideoTaskActionRuntime } from "./workspace/useWorkspaceVide
 import { useWorkspaceSessionRestore } from "./workspace/useWorkspaceSessionRestore";
 import { useWorkspaceResetRuntime } from "./workspace/useWorkspaceResetRuntime";
 import { useWorkspaceSendActions } from "./workspace/useWorkspaceSendActions";
+import { buildInitialDispatchPreviewMessages } from "./workspace/workspaceSendHelpers";
 import { useWorkspacePluginRuntimeContext } from "./workspace/useWorkspacePluginRuntimeContext";
 import { buildWorkspacePluginInputSuggestions } from "./workspace/workspacePluginInputSuggestions";
 import {
@@ -391,6 +392,7 @@ import {
   normalizeVideoAspectRatio,
   normalizeVideoResolution,
   resolveDefaultSelectedArtifact,
+  resolveHarnessRuntimeVisible,
   resolveRuntimeWorkspaceId,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
@@ -1690,6 +1692,8 @@ export function AgentChatWorkspace({
     projectMemory,
     harnessState: harnessShellState,
   });
+  const [manualRightSurface, setManualRightSurface] =
+    useState<WorkspaceRightSurfaceKind | null>(null);
   const {
     contextWorkspace,
     isThemeWorkbench,
@@ -1700,8 +1704,12 @@ export function AgentChatWorkspace({
     harnessAttentionLevel,
     harnessToggleLabel,
   } = contextHarnessRuntime;
-  const needsFullThreadTimeline = shouldBuildFullThreadTimeline({
+  const harnessRuntimeVisible = resolveHarnessRuntimeVisible({
     harnessPanelVisible,
+    rightSurfaceActive: manualRightSurface,
+  });
+  const needsFullThreadTimeline = shouldBuildFullThreadTimeline({
+    harnessPanelVisible: harnessRuntimeVisible,
     layoutMode,
   });
   const realSubagentTimelineItems = useMemo(
@@ -1910,7 +1918,7 @@ export function AgentChatWorkspace({
   );
 
   const harnessRequestMetadata = useWorkspaceHarnessRequestMetadataRuntime({
-    enabled: workspaceHarnessEnabled && harnessPanelVisible,
+    enabled: workspaceHarnessEnabled && harnessRuntimeVisible,
     agentResponseLanguage,
     browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
     browserAssistPreferredBackend: browserAssistRequestPreferredBackend,
@@ -1933,7 +1941,7 @@ export function AgentChatWorkspace({
     enabled: workspaceHarnessEnabled,
     chatMode,
     mappedTheme,
-    harnessPanelVisible,
+    harnessPanelVisible: harnessRuntimeVisible,
     harnessRequestMetadata,
     isThemeWorkbench,
     themeWorkbenchRunState,
@@ -2475,6 +2483,7 @@ export function AgentChatWorkspace({
     draftSendRequest: taskCenterDraftSendRequest,
     displayMessageCount: displayMessages.length,
     threadItemCount: effectiveThreadItems.length,
+    hasLocalSessionOverride: taskCenterLocalSessionOverride !== null,
     hasPendingA2UIForm,
     isPreparingSend,
     isSending,
@@ -2483,12 +2492,18 @@ export function AgentChatWorkspace({
   const { homePendingPreviewMessages, isHomePendingPreviewActive } =
     useTaskCenterHomePendingPreviewRuntime({
       homePendingPreviewRequest,
-      shouldSuppressTaskCenterDraftContent,
       displayMessagesLength: displayMessages.length,
       executionStrategy,
       workspaceId: taskCenterWorkspaceId,
       soulCopy: soulInteractionCopy,
     });
+  const bootstrapPendingPreviewMessages = useMemo(
+    () =>
+      bootstrapDispatchPreview && displayMessages.length === 0
+        ? buildInitialDispatchPreviewMessages(bootstrapDispatchPreview)
+        : [],
+    [bootstrapDispatchPreview, displayMessages.length],
+  );
   const persistTaskCenterMaterializedSessionNavigation = useCallback(
     (sessionId: string) => {
       const normalizedSessionId = sessionId.trim();
@@ -2598,6 +2613,7 @@ export function AgentChatWorkspace({
     materializeTaskCenterDraftTab,
     openTaskCenterDraftTab,
     taskCenterDraftMaterializedSessionIdsRef,
+    taskCenterDraftWarmupSessionIdsRef,
     taskCenterDraftTabsRef,
   } = useTaskCenterDraftMaterializationRuntime({
     activeTaskCenterDraftTabId,
@@ -3047,8 +3063,6 @@ export function AgentChatWorkspace({
     ) => Promise<void>;
     refreshRightSurfacePendingRequests?: () => Promise<void>;
   }>({});
-  const [manualRightSurface, setManualRightSurface] =
-    useState<WorkspaceRightSurfaceKind | null>(null);
   const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
     useState<WorkspaceFilesSurfaceTarget | null>(null);
   const [
@@ -4504,24 +4518,6 @@ export function AgentChatWorkspace({
     preferContentReviewInRightRail,
   });
 
-  const handleSendFromEmptyState = useTaskCenterEmptyStateSendRuntime({
-    agentEntry,
-    input,
-    setInput,
-    activeDraftTabIdRef: activeTaskCenterDraftTabIdRef,
-    clearMessages,
-    displayMessagesLength: displayMessages.length,
-    turnsLength: turns.length,
-    threadItemsLength: effectiveThreadItems.length,
-    hasDisplayMessages,
-    handleSend,
-    sessionId,
-    taskCenterWorkspaceId,
-    setTaskCenterDraftTabs,
-    setTaskCenterDraftSendRequest,
-    taskCenterDraftSendRequest,
-    setHomePendingPreviewRequest,
-  });
   const handleNonMaterializedTaskCenterSessionReady = useCallback(
     (readySessionId: string) => {
       if (typeof newChatAt === "number") {
@@ -4546,6 +4542,27 @@ export function AgentChatWorkspace({
     ],
   );
 
+  const handleSendFromEmptyState = useTaskCenterEmptyStateSendRuntime({
+    agentEntry,
+    input,
+    setInput,
+    activeSessionIdRef,
+    activeDraftTabIdRef: activeTaskCenterDraftTabIdRef,
+    clearMessages,
+    displayMessagesLength: displayMessages.length,
+    turnsLength: turns.length,
+    threadItemsLength: effectiveThreadItems.length,
+    hasDisplayMessages,
+    handleSend,
+    sessionId,
+    taskCenterWorkspaceId,
+    setTaskCenterDraftTabs,
+    setTaskCenterDraftSendRequest,
+    taskCenterDraftSendRequest,
+    setHomePendingPreviewRequest,
+    onNonMaterializedSessionReady: handleNonMaterializedTaskCenterSessionReady,
+  });
+
   useTaskCenterDraftSendDispatchRuntime({
     taskCenterDraftSendRequest,
     setTaskCenterDraftSendRequest,
@@ -4554,6 +4571,7 @@ export function AgentChatWorkspace({
     displayMessagesLength: displayMessages.length,
     currentSessionId: sessionId,
     materializedSessionIdsRef: taskCenterDraftMaterializedSessionIdsRef,
+    prewarmedDraftSessionIdsRef: taskCenterDraftWarmupSessionIdsRef,
     materializeDraftTab: materializeTaskCenterDraftTab,
     commitMaterializedDraftTab: commitMaterializedTaskCenterDraftTab,
     onNonMaterializedSessionReady: handleNonMaterializedTaskCenterSessionReady,
@@ -4580,7 +4598,10 @@ export function AgentChatWorkspace({
   } = resolveWorkspaceSceneSessionProjection({
     shouldHideCurrentSessionContent,
     displayMessages,
-    homePendingPreviewMessages,
+    homePendingPreviewMessages:
+      homePendingPreviewMessages.length > 0
+        ? homePendingPreviewMessages
+        : bootstrapPendingPreviewMessages,
     turns,
     effectiveThreadItems,
     currentTurnId,

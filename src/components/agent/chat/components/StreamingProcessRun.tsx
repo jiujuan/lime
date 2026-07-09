@@ -1,5 +1,6 @@
 import React, { memo, useCallback } from "react";
 import { ActionRequestA2UIPreviewCard } from "./ActionRequestA2UIPreviewCard";
+import { ApprovalRecordCard } from "./ApprovalRecordCard";
 import { DecisionPanel } from "./DecisionPanel";
 import { InlineToolProcessStep } from "./InlineToolProcessStep";
 import {
@@ -26,6 +27,7 @@ import {
   buildActionRequestSubmissionPayload,
   isActionRequestA2UICompatible,
 } from "../utils/actionRequestA2UI";
+import { toApprovalRecordFromActionRequired } from "./timeline-utils";
 
 interface StreamingProcessRunProps {
   entries: StreamingProcessEntry[];
@@ -57,6 +59,16 @@ export const StreamingProcessRun: React.FC<StreamingProcessRunProps> = memo(
   }) => {
     const renderActionRequestNode = useCallback(
       (request: ActionRequired) => {
+        if (request.actionType === "tool_confirmation") {
+          if (request.status !== "submitted") {
+            return null;
+          }
+          const approvalRecord = toApprovalRecordFromActionRequired(request);
+          return approvalRecord ? (
+            <ApprovalRecordCard record={approvalRecord} />
+          ) : null;
+        }
+
         const shouldRenderA2UICard =
           isActionRequestA2UICompatible(request) &&
           (readOnlyActionRequests ||

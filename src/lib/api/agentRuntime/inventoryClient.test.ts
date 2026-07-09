@@ -19,9 +19,9 @@ const emptyToolInventory = {
     catalog_compat_total: 0,
     catalog_deprecated_total: 0,
     default_allowed_total: 0,
-    registry_total: 0,
-    registry_visible_total: 0,
-    registry_catalog_unmapped_total: 0,
+    native_total: 0,
+    native_visible_total: 0,
+    native_catalog_unmapped_total: 0,
     extension_surface_total: 0,
     extension_mcp_bridge_total: 0,
     extension_runtime_total: 0,
@@ -32,7 +32,7 @@ const emptyToolInventory = {
     mcp_tool_visible_total: 0,
   },
   catalog_tools: [],
-  registry_tools: [],
+  native_tools: [],
   extension_surfaces: [],
   extension_tools: [],
   mcp_tools: [],
@@ -124,7 +124,7 @@ describe("agentRuntime inventoryClient", () => {
     ).resolves.toMatchObject({
       counts: {
         catalog_total: 0,
-        registry_total: 0,
+        native_total: 0,
       },
     });
 
@@ -162,7 +162,7 @@ describe("agentRuntime inventoryClient", () => {
           execution_sandbox_profile_source: "catalog",
         },
       ],
-      registry_tools: [
+      native_tools: [
         {
           name: "site_run_adapter",
           description: "Run site adapter",
@@ -245,6 +245,94 @@ describe("agentRuntime inventoryClient", () => {
     );
   });
 
+  it("tool inventory 应接受 plugin MCP target contract", async () => {
+    const inventory = {
+      ...emptyToolInventory,
+      plugin_mcp_targets: [
+        {
+          pluginId: "docs-plugin",
+          serverId: "context7",
+          toolKey: "context7/resolve-library-id",
+          provider: "mcp",
+          required: true,
+          caller: "plugin:docs-plugin",
+          expectedToolName: "mcp__context7__resolve-library-id",
+          runtimeStatus: "server_stopped",
+          prepareStatus: "start_required",
+          serverAvailable: true,
+          serverRunning: false,
+          toolAvailable: false,
+          resolvedToolName: null,
+          toolListRequest: {
+            caller: "plugin:docs-plugin",
+            includeDeferred: true,
+          },
+          callProofRequest: null,
+          prepareRequests: [
+            {
+              method: "mcpServer/start",
+              params: {
+                name: "context7",
+              },
+              reason: "server_stopped",
+              status: "candidate",
+            },
+          ],
+        },
+      ],
+    };
+    const appServerClient = {
+      request: vi.fn().mockResolvedValueOnce({
+        result: {
+          inventory,
+        },
+      }),
+    };
+    const client = createInventoryClient({ appServerClient });
+
+    await expect(client.getAgentRuntimeToolInventory()).resolves.toEqual(
+      inventory,
+    );
+  });
+
+  it("tool inventory 收到 malformed plugin MCP target 时应 fail closed", async () => {
+    const appServerClient = {
+      request: vi.fn().mockResolvedValueOnce({
+        result: {
+          inventory: {
+            ...emptyToolInventory,
+            plugin_mcp_targets: [
+              {
+                pluginId: "docs-plugin",
+                serverId: "context7",
+                toolKey: "context7/resolve-library-id",
+                provider: "mcp",
+                caller: "plugin:docs-plugin",
+                expectedToolName: "mcp__context7__resolve-library-id",
+                runtimeStatus: "server_stopped",
+                prepareStatus: "start_required",
+                serverAvailable: true,
+                serverRunning: false,
+                toolAvailable: false,
+                toolListRequest: {
+                  caller: "plugin:docs-plugin",
+                  includeDeferred: true,
+                },
+                callProofRequest: null,
+                prepareRequests: [],
+              },
+            ],
+          },
+        },
+      }),
+    };
+    const client = createInventoryClient({ appServerClient });
+
+    await expect(client.getAgentRuntimeToolInventory()).rejects.toThrow(
+      "App Server agentSession/toolInventory/read did not return tool inventory",
+    );
+  });
+
   it("tool inventory 收到错误返回形态时应 fail closed", async () => {
     const appServerClient = {
       request: vi
@@ -262,7 +350,7 @@ describe("agentRuntime inventoryClient", () => {
           result: {
             inventory: {
               ...emptyToolInventory,
-              registry_tools: [{ name: "site_run_adapter" }],
+              native_tools: [{ name: "site_run_adapter" }],
             },
           },
         })

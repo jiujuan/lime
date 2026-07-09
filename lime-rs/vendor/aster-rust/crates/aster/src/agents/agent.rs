@@ -119,7 +119,7 @@ const DEFAULT_MAX_TURNS: u32 = 1000;
 const COMPACTION_THINKING_TEXT: &str = "aster is compacting the conversation...";
 const CONTEXT_COMPACTION_WARNING_TEXT: &str =
     "长对话和多次上下文压缩会降低模型准确性；如果后续结果开始漂移，建议新开会话。";
-const RESOURCE_GATED_TOOL_NAMES: [&str; 2] = ["ListMcpResourcesTool", "ReadMcpResourceTool"];
+const RESOURCE_GATED_TOOL_NAMES: [&str; 2] = ["list_mcp_resources", "read_mcp_resource"];
 const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: [&str; 9] = [
     "Bash",
     "PowerShell",
@@ -254,14 +254,8 @@ fn is_concurrency_safe_tool_request(request: &ToolRequest) -> bool {
     };
 
     match tool_call.name.as_ref() {
-        "Read"
-        | "Glob"
-        | "Grep"
-        | "LSP"
-        | "WebFetch"
-        | "WebSearch"
-        | "ListMcpResourcesTool"
-        | "ReadMcpResourceTool" => true,
+        "Read" | "Glob" | "Grep" | "WebFetch" | "WebSearch" | "list_mcp_resources"
+        | "read_mcp_resource" => true,
         "Bash" => tool_call
             .arguments
             .as_ref()
@@ -397,7 +391,7 @@ fn should_expose_tool_for_session(
         resources_supported,
         current_surface_tool_gates(),
         false,
-        crate::tools::plan_mode_tool::current_plan_mode_active(),
+        false,
     )
 }
 
@@ -407,7 +401,7 @@ fn should_expose_tool_for_session_with_gates(
     resources_supported: bool,
     tool_gates: CurrentSurfaceToolGates,
     subagent_teammate_tools_enabled: bool,
-    plan_mode_active: bool,
+    _plan_mode_active: bool,
 ) -> bool {
     if !should_expose_registered_tool_with_gates(name, resources_supported, tool_gates) {
         return false;
@@ -418,10 +412,6 @@ fn should_expose_tool_for_session_with_gates(
     }
 
     if is_extension_prefixed_tool(name) {
-        return true;
-    }
-
-    if name == "ExitPlanMode" && plan_mode_active {
         return true;
     }
 
@@ -3522,7 +3512,7 @@ impl Agent {
                 prefixed_tools.push(create_subagent_tool(&sub_recipes_vec));
             }
 
-            // 添加 tool_registry 中的原生工具（包括 SkillTool）
+            // 添加 tool_registry 中的原生工具；Skill 由 Lime current overlay 注入。
             let mut listed_tool_names: std::collections::HashSet<String> = prefixed_tools
                 .iter()
                 .map(|tool| tool.name.as_ref().to_string())
@@ -3563,10 +3553,7 @@ impl Agent {
                 current_session
                     .as_ref()
                     .map(session_plan_mode_active)
-                    .unwrap_or_else(|| {
-                        turn_context_plan_mode_active()
-                            || crate::tools::plan_mode_tool::current_plan_mode_active()
-                    }),
+                    .unwrap_or_else(turn_context_plan_mode_active),
             )
         });
 
@@ -7116,16 +7103,16 @@ mod tests {
             "Grep tool should be registered"
         );
         assert!(
-            registry_guard.contains("ListMcpResourcesTool"),
-            "ListMcpResourcesTool should be registered"
+            !registry_guard.contains("list_mcp_resources"),
+            "list_mcp_resources is registered by Lime tool-runtime gateway, not Aster default tools"
         );
         assert!(
-            registry_guard.contains("ReadMcpResourceTool"),
-            "ReadMcpResourceTool should be registered"
+            !registry_guard.contains("read_mcp_resource"),
+            "read_mcp_resource is registered by Lime tool-runtime gateway, not Aster default tools"
         );
         assert!(
-            registry_guard.contains("ToolSearch"),
-            "ToolSearch should be registered"
+            !registry_guard.contains("ToolSearch"),
+            "ToolSearch is registered by Lime tool-runtime gateway, not Aster default tools"
         );
         assert!(
             registry_guard.contains("request_user_input"),
@@ -7243,16 +7230,16 @@ mod tests {
             "view_image is registered by Lime's tool-runtime overlay, not Aster default tools"
         );
         assert!(
-            registry_guard.contains("ListMcpResourcesTool"),
-            "ListMcpResourcesTool should be registered"
+            !registry_guard.contains("list_mcp_resources"),
+            "list_mcp_resources is registered by Lime tool-runtime gateway, not Aster default tools"
         );
         assert!(
-            registry_guard.contains("ReadMcpResourceTool"),
-            "ReadMcpResourceTool should be registered"
+            !registry_guard.contains("read_mcp_resource"),
+            "read_mcp_resource is registered by Lime tool-runtime gateway, not Aster default tools"
         );
         assert!(
-            registry_guard.contains("ToolSearch"),
-            "ToolSearch should be registered"
+            !registry_guard.contains("ToolSearch"),
+            "ToolSearch is registered by Lime tool-runtime gateway, not Aster default tools"
         );
         assert!(
             registry_guard.contains("request_user_input"),
@@ -7468,13 +7455,10 @@ mod tests {
 
     #[test]
     fn test_current_surface_resource_helpers_are_visibility_gated() {
-        assert!(!should_expose_registered_tool(
-            "ListMcpResourcesTool",
-            false
-        ));
-        assert!(!should_expose_registered_tool("ReadMcpResourceTool", false));
-        assert!(should_expose_registered_tool("ListMcpResourcesTool", true));
-        assert!(should_expose_registered_tool("ReadMcpResourceTool", true));
+        assert!(!should_expose_registered_tool("list_mcp_resources", false));
+        assert!(!should_expose_registered_tool("read_mcp_resource", false));
+        assert!(should_expose_registered_tool("list_mcp_resources", true));
+        assert!(should_expose_registered_tool("read_mcp_resource", true));
         assert!(should_expose_registered_tool("ToolSearch", false));
     }
 
@@ -7599,7 +7583,7 @@ mod tests {
             false
         ));
         assert!(!should_expose_tool_for_session(
-            "ListMcpResourcesTool",
+            "list_mcp_resources",
             Some(SessionType::SubAgent),
             false
         ));
@@ -7611,10 +7595,10 @@ mod tests {
     }
 
     #[test]
-    fn test_current_surface_subagent_plan_mode_keeps_exit_plan_mode_visible() {
+    fn test_current_surface_subagent_plan_mode_hides_aster_plan_tools() {
         let tool_gates = CurrentSurfaceToolGates { powershell: false };
 
-        assert!(should_expose_tool_for_session_with_gates(
+        assert!(!should_expose_tool_for_session_with_gates(
             "ExitPlanMode",
             Some(SessionType::SubAgent),
             false,
@@ -7664,15 +7648,15 @@ mod tests {
         let tools = agent.list_tools(None).await;
 
         assert!(
-            tools.iter().any(|tool| tool.name == "ToolSearch"),
-            "ToolSearch should stay visible on the current surface"
+            !tools.iter().any(|tool| tool.name == "ToolSearch"),
+            "ToolSearch is registered by Lime tool-runtime gateway, not Aster default tools"
         );
         assert!(
-            !tools.iter().any(|tool| tool.name == "ListMcpResourcesTool"),
+            !tools.iter().any(|tool| tool.name == "list_mcp_resources"),
             "resource helper should stay hidden until a resource-capable extension is active"
         );
         assert!(
-            !tools.iter().any(|tool| tool.name == "ReadMcpResourceTool"),
+            !tools.iter().any(|tool| tool.name == "read_mcp_resource"),
             "resource helper should stay hidden until a resource-capable extension is active"
         );
 
@@ -7854,14 +7838,7 @@ mod tests {
 
         let tools = agent.list_tools(None).await;
 
-        for visible_name in [
-            "Bash",
-            "Read",
-            "Edit",
-            "Write",
-            "ToolSearch",
-            FINAL_OUTPUT_TOOL_NAME,
-        ] {
+        for visible_name in ["Bash", "Read", "Edit", "Write", FINAL_OUTPUT_TOOL_NAME] {
             assert!(
                 tools.iter().any(|tool| tool.name == visible_name),
                 "subagent current surface should keep: {visible_name}"

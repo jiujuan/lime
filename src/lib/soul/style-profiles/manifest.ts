@@ -98,14 +98,8 @@ function assertProfile(
   assertString(profile.nameKey, `${profilePath}.nameKey`);
   assertString(profile.descriptionKey, `${profilePath}.descriptionKey`);
   assertString(profile.tone, `${profilePath}.tone`);
-  if (
-    profile.intensity !== "low" &&
-    profile.intensity !== "medium" &&
-    profile.intensity !== "high"
-  ) {
-    throw new Error(
-      `Invalid Soul style pack manifest: ${profilePath}.intensity`,
-    );
+  if ("intensity" in profile) {
+    throw new Error(`Invalid Soul style pack manifest: ${profilePath}.intensity`);
   }
   assertStringArray(profile.scopes, `${profilePath}.scopes`);
   assertStringArray(

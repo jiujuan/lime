@@ -66,6 +66,8 @@ const {
   mockToastError,
   mockToastInfo,
   mockRecordAgentUiPerformanceMetric,
+  mockSubscribeAgentUiPerformanceMetricRecorded,
+  mockAgentUiPerformanceMetricListeners,
   mockCheckForUpdates,
   mockGetUpdateInstallSession,
   mockListenUpdateInstallSession,
@@ -110,6 +112,16 @@ const {
   mockToastError: vi.fn(),
   mockToastInfo: vi.fn(),
   mockRecordAgentUiPerformanceMetric: vi.fn(),
+  mockSubscribeAgentUiPerformanceMetricRecorded: vi.fn(),
+  mockAgentUiPerformanceMetricListeners: [] as Array<
+    (detail: {
+      id: number;
+      phase: string;
+      sessionId?: string | null;
+      source?: string | null;
+      workspaceId?: string | null;
+    }) => void
+  >,
   mockCheckForUpdates: vi.fn(),
   mockGetUpdateInstallSession: vi.fn(),
   mockListenUpdateInstallSession: vi.fn(),
@@ -147,6 +159,7 @@ export {
   mockOpenUpdateWindow,
   mockRecordUpdateNotificationAction,
   mockRecordAgentUiPerformanceMetric,
+  mockSubscribeAgentUiPerformanceMetricRecorded,
   mockRemindUpdateLater,
   mockSaveConfig,
   mockScheduleMinimumDelayIdleTask,
@@ -263,8 +276,36 @@ vi.mock("@/lib/utils/scheduleMinimumDelayIdleTask", () => ({
   scheduleMinimumDelayIdleTask: mockScheduleMinimumDelayIdleTask,
 }));
 
+type MockAgentUiPerformanceMetricDetail = {
+  id: number;
+  phase: string;
+  sessionId?: string | null;
+  source?: string | null;
+  workspaceId?: string | null;
+};
+
+export function emitMockAgentUiPerformanceMetricRecorded(
+  detail: MockAgentUiPerformanceMetricDetail,
+) {
+  for (const listener of [...mockAgentUiPerformanceMetricListeners]) {
+    listener(detail);
+  }
+}
+
 vi.mock("@/lib/agentUiPerformanceMetrics", () => ({
   recordAgentUiPerformanceMetric: mockRecordAgentUiPerformanceMetric,
+  subscribeAgentUiPerformanceMetricRecorded:
+    mockSubscribeAgentUiPerformanceMetricRecorded.mockImplementation(
+      (listener: (detail: MockAgentUiPerformanceMetricDetail) => void) => {
+        mockAgentUiPerformanceMetricListeners.push(listener);
+        return () => {
+          const index = mockAgentUiPerformanceMetricListeners.indexOf(listener);
+          if (index >= 0) {
+            mockAgentUiPerformanceMetricListeners.splice(index, 1);
+          }
+        };
+      },
+    ),
 }));
 
 interface MountedSidebar {
@@ -603,6 +644,10 @@ export function buildMockConversationImportPreview(
 export async function resetAppSidebarTest() {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await changeLimeLocale("zh-CN");
+  mockAgentUiPerformanceMetricListeners.splice(
+    0,
+    mockAgentUiPerformanceMetricListeners.length,
+  );
   localStorage.clear();
   delete window.__LIME_BOOTSTRAP__;
   delete window.__LIME_OEM_CLOUD__;
@@ -850,6 +895,10 @@ export function cleanupAppSidebarTest() {
   }
 
   vi.clearAllMocks();
+  mockAgentUiPerformanceMetricListeners.splice(
+    0,
+    mockAgentUiPerformanceMetricListeners.length,
+  );
   vi.unstubAllGlobals();
   delete window.__LIME_BOOTSTRAP__;
   delete window.__LIME_OEM_CLOUD__;

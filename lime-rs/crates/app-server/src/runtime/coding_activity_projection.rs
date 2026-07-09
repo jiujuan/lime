@@ -80,6 +80,7 @@ struct PendingActionState {
     request_type: String,
     status: String,
     title: Option<String>,
+    available_decisions: Option<Vec<String>>,
     payload: Value,
     scope: Value,
     created_at: Option<String>,
@@ -377,6 +378,7 @@ fn pending_action_from_event(
         request_type,
         status: "pending".to_string(),
         title,
+        available_decisions: available_decisions_from_payload(data, &event.payload),
         payload: event.payload.clone(),
         scope,
         created_at: Some(event.timestamp.clone()),
@@ -499,6 +501,7 @@ fn pending_action_value(action: PendingActionState) -> Value {
         "request_type": action.request_type,
         "status": action.status,
         "title": action.title,
+        "availableDecisions": action.available_decisions,
         "payload": action.payload,
         "scope": action.scope,
         "created_at": action.created_at,
@@ -581,6 +584,25 @@ fn action_id(event: &AgentEvent) -> Option<String> {
         &event.payload,
         &["requestId", "request_id", "actionId", "action_id", "id"],
     )
+}
+
+fn available_decisions_from_payload(data: &Value, payload: &Value) -> Option<Vec<String>> {
+    let values = data
+        .get("availableDecisions")
+        .or_else(|| data.get("available_decisions"))
+        .or_else(|| payload.get("availableDecisions"))
+        .or_else(|| payload.get("available_decisions"))?;
+    let mut decisions = Vec::new();
+    for decision in values.as_array()?.iter().filter_map(Value::as_str) {
+        if matches!(
+            decision,
+            "allow_once" | "allow_for_session" | "decline" | "cancel"
+        ) && !decisions.iter().any(|existing| existing == decision)
+        {
+            decisions.push(decision.to_string());
+        }
+    }
+    (!decisions.is_empty()).then_some(decisions)
 }
 
 fn output_refs_from_payload(payload: &Value) -> Vec<String> {

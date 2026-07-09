@@ -79,9 +79,9 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("plugin_runtime_start_task")).toBe(true);
     expect(isElectronHostCommand("plugin_runtime_cancel_task")).toBe(true);
     expect(isElectronHostCommand("plugin_runtime_get_task")).toBe(true);
-    expect(
-      isElectronHostCommand("plugin_runtime_submit_host_response"),
-    ).toBe(true);
+    expect(isElectronHostCommand("plugin_runtime_submit_host_response")).toBe(
+      true,
+    );
     expect(isElectronHostCommand("get_usage_stats")).toBe(false);
     expect(isElectronHostCommand("get_model_usage_ranking")).toBe(false);
     expect(isElectronHostCommand("get_daily_usage_trends")).toBe(false);
@@ -206,7 +206,7 @@ describe("electron/ipcChannels", () => {
 
   it("App Server truth bridge 命令由 Desktop Host 投影，不走原始 JSONL 通道", () => {
     expect([...ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS].sort()).toEqual([
-      "aster_agent_init",
+      "agent_init",
       "get_default_provider",
       "get_local_skills_for_app",
       "plugin_get_ui_runtime_status",

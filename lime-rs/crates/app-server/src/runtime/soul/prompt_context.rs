@@ -28,10 +28,7 @@ pub(crate) fn memory_soul_prompt_context_from_config(
     let challenge_style =
         normalize_text(soul.challenge_style.as_deref(), SOUL_SHORT_TEXT_MAX_CHARS);
     let avoid = normalize_list(&soul.avoid);
-    let style_profile = resolve_style_profile(
-        soul.style_profile_id.as_deref(),
-        soul.style_intensity.as_ref(),
-    );
+    let style_profile = resolve_style_profile(soul.style_profile_id.as_deref());
     let boundary = default_prompt_boundary();
 
     if name.is_none()
@@ -265,9 +262,6 @@ fn append_style_profile_lines(style_profile: Option<&Value>, lines: &mut Vec<Str
     }
     if let Some(tone) = non_empty_str(style_profile.get("tone").and_then(Value::as_str)) {
         lines.push(format!("- Style tone: {tone}"));
-    }
-    if let Some(intensity) = non_empty_str(style_profile.get("intensity").and_then(Value::as_str)) {
-        lines.push(format!("- Style intensity: {intensity}"));
     }
     append_named_list(
         lines,

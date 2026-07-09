@@ -221,7 +221,7 @@ describe("useWorkspaceHarnessInventoryRuntime", () => {
         { name: "ListPeers" },
         { name: "update_plan" },
       ],
-      registry_tools: [],
+      native_tools: [],
     });
 
     const harness = mountHook({
@@ -245,7 +245,7 @@ describe("useWorkspaceHarnessInventoryRuntime", () => {
     mockGetAgentRuntimeToolInventory.mockResolvedValueOnce({
       agent_initialized: true,
       runtime_tools: [{ name: "WebSearch" }],
-      registry_tools: [],
+      native_tools: [],
     });
 
     const harness = mountHook({

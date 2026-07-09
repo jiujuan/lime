@@ -2,6 +2,11 @@ use crate::apply_patch::{apply_patch_tool_definition, runtime_apply_patch_execut
 use crate::image_task::{
     image_task_tool_definition, runtime_image_task_executor_handle, ImageTaskGateway,
 };
+use crate::mcp_resource::{
+    list_mcp_resources_tool_definition, read_mcp_resource_tool_definition,
+    runtime_mcp_resource_executor_handle, McpResourceGateway, LIST_MCP_RESOURCES_LOOKUP_ALIASES,
+    READ_MCP_RESOURCE_LOOKUP_ALIASES,
+};
 use crate::memory_store::{
     memory_store_tool_definitions, runtime_memory_store_executor_handle, MemoryStoreGateway,
 };
@@ -11,6 +16,9 @@ use crate::tool_definition::RuntimeToolDefinition;
 use crate::tool_executor::{
     RuntimeToolExecutionError, RuntimeToolExecutionFuture, RuntimeToolExecutionRequest,
     RuntimeToolExecutor, RuntimeToolExecutorHandle, RuntimeToolPolicyErrorKind,
+};
+use crate::tool_search::{
+    runtime_tool_search_executor_handle, tool_search_definition, ToolSearchGateway,
 };
 use crate::update_plan::{
     runtime_plan_update_executor_handle, update_plan_definition, UPDATE_PLAN_LEGACY_ALIASES,
@@ -23,6 +31,9 @@ use crate::web_search::{runtime_web_search_executor_handle, web_search_tool_defi
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
+pub const TOOL_SEARCH_LOOKUP_ALIASES: &[&str] =
+    &["ToolSearch", "ToolSearchTool", "mcp__system__tool_search"];
+
 #[derive(Clone)]
 pub struct NativeDispatch {
     entries: Arc<Vec<NativeDispatchEntry>>,
@@ -33,12 +44,36 @@ pub struct NativeDispatch {
 struct NativeDispatchEntry {
     definition: RuntimeToolDefinition,
     executor: RuntimeToolExecutorHandle,
+    aliases: &'static [&'static str],
 }
 
 #[derive(Default)]
 pub struct NativeDispatchBuilder {
     entries: Vec<NativeDispatchEntry>,
     lookup: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeNativeDispatchSurface {
+    definition: RuntimeToolDefinition,
+    aliases: &'static [&'static str],
+}
+
+impl RuntimeNativeDispatchSurface {
+    pub fn new(definition: RuntimeToolDefinition, aliases: &'static [&'static str]) -> Self {
+        Self {
+            definition,
+            aliases,
+        }
+    }
+
+    pub fn definition(&self) -> RuntimeToolDefinition {
+        self.definition.clone()
+    }
+
+    pub fn aliases(&self) -> &'static [&'static str] {
+        self.aliases
+    }
 }
 
 impl NativeDispatchBuilder {
@@ -97,11 +132,33 @@ impl NativeDispatchBuilder {
         )
     }
 
+    pub fn with_tool_search_gateway(self, gateway: Arc<dyn ToolSearchGateway>) -> Self {
+        self.register(
+            tool_search_definition(),
+            runtime_tool_search_executor_handle(gateway),
+            TOOL_SEARCH_LOOKUP_ALIASES,
+        )
+    }
+
+    pub fn with_mcp_resource_gateway(self, gateway: Arc<dyn McpResourceGateway>) -> Self {
+        let executor = runtime_mcp_resource_executor_handle(gateway);
+        self.register(
+            list_mcp_resources_tool_definition(),
+            executor.clone(),
+            LIST_MCP_RESOURCES_LOOKUP_ALIASES,
+        )
+        .register(
+            read_mcp_resource_tool_definition(),
+            executor,
+            READ_MCP_RESOURCE_LOOKUP_ALIASES,
+        )
+    }
+
     pub fn register(
         mut self,
         definition: RuntimeToolDefinition,
         executor: RuntimeToolExecutorHandle,
-        aliases: &[&str],
+        aliases: &'static [&'static str],
     ) -> Self {
         let index = self.entries.len();
         register_lookup_name(&mut self.lookup, &definition.name, index);
@@ -111,6 +168,7 @@ impl NativeDispatchBuilder {
         self.entries.push(NativeDispatchEntry {
             definition,
             executor,
+            aliases,
         });
         self
     }
@@ -141,6 +199,13 @@ impl NativeDispatch {
         self.entries
             .iter()
             .map(|entry| entry.definition.clone())
+            .collect()
+    }
+
+    pub fn surfaces(&self) -> Vec<RuntimeNativeDispatchSurface> {
+        self.entries
+            .iter()
+            .map(|entry| RuntimeNativeDispatchSurface::new(entry.definition.clone(), entry.aliases))
             .collect()
     }
 
@@ -226,10 +291,11 @@ mod tests {
     use crate::web_fetch::WEB_FETCH_TOOL_NAME;
     use crate::web_search::WEB_SEARCH_TOOL_NAME;
     use app_server_protocol::{
-        MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse, MemoryStoreAddNoteParams,
-        MemoryStoreAddNoteResponse, MemoryStoreCitation, MemoryStoreListParams,
-        MemoryStoreListResponse, MemoryStoreReadParams, MemoryStoreReadResponse,
-        MemoryStoreSearchParams, MemoryStoreSearchResponse,
+        McpResourceListResponse, McpResourceReadParams, McpResourceReadResponse,
+        McpToolListResponse, McpToolSearchParams, MediaTaskArtifactImageCreateParams,
+        MediaTaskArtifactResponse, MemoryStoreAddNoteParams, MemoryStoreAddNoteResponse,
+        MemoryStoreCitation, MemoryStoreListParams, MemoryStoreListResponse, MemoryStoreReadParams,
+        MemoryStoreReadResponse, MemoryStoreSearchParams, MemoryStoreSearchResponse,
     };
     use async_trait::async_trait;
     use serde_json::json;
@@ -335,6 +401,41 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct DefinitionOnlyToolSearchGateway;
+
+    #[async_trait]
+    impl ToolSearchGateway for DefinitionOnlyToolSearchGateway {
+        async fn search_tools(
+            &self,
+            _params: McpToolSearchParams,
+        ) -> Result<McpToolListResponse, String> {
+            Ok(McpToolListResponse { tools: Vec::new() })
+        }
+    }
+
+    #[derive(Default)]
+    struct DefinitionOnlyMcpResourceGateway;
+
+    #[async_trait]
+    impl McpResourceGateway for DefinitionOnlyMcpResourceGateway {
+        async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, String> {
+            Ok(McpResourceListResponse::default())
+        }
+
+        async fn read_mcp_resource(
+            &self,
+            params: McpResourceReadParams,
+        ) -> Result<McpResourceReadResponse, String> {
+            Ok(McpResourceReadResponse {
+                uri: params.uri,
+                mime_type: None,
+                text: Some("resource".to_string()),
+                blob: None,
+            })
+        }
+    }
+
     #[test]
     fn runtime_native_dispatch_lists_current_stateless_tools() {
         let names = runtime_native_dispatch_tool_names();
@@ -372,6 +473,8 @@ mod tests {
         let dispatch = NativeDispatch::builder()
             .with_memory_store_gateway(Arc::new(DefinitionOnlyMemoryGateway))
             .with_image_task_gateway(Arc::new(DefinitionOnlyImageGateway))
+            .with_tool_search_gateway(Arc::new(DefinitionOnlyToolSearchGateway))
+            .with_mcp_resource_gateway(Arc::new(DefinitionOnlyMcpResourceGateway))
             .build();
 
         assert_eq!(
@@ -386,6 +489,9 @@ mod tests {
                 crate::memory_store::MEMORY_SEARCH_TOOL_NAME,
                 crate::memory_store::MEMORY_ADD_NOTE_TOOL_NAME,
                 crate::image_task::IMAGE_TASK_TOOL_NAME,
+                crate::tool_search::TOOL_SEARCH_TOOL_NAME,
+                crate::mcp_resource::LIST_MCP_RESOURCES_TOOL_NAME,
+                crate::mcp_resource::READ_MCP_RESOURCE_TOOL_NAME,
             ]
         );
         assert_eq!(
@@ -395,6 +501,65 @@ mod tests {
         assert_eq!(
             dispatch.canonical_name(crate::image_task::IMAGE_TASK_TOOL_NAME),
             Some(crate::image_task::IMAGE_TASK_TOOL_NAME)
+        );
+        assert_eq!(
+            dispatch.canonical_name("ToolSearch"),
+            Some(crate::tool_search::TOOL_SEARCH_TOOL_NAME)
+        );
+        assert_eq!(
+            dispatch.canonical_name("ToolSearchTool"),
+            Some(crate::tool_search::TOOL_SEARCH_TOOL_NAME)
+        );
+        assert_eq!(
+            dispatch.canonical_name("ListMcpResourcesTool"),
+            Some(crate::mcp_resource::LIST_MCP_RESOURCES_TOOL_NAME)
+        );
+        assert_eq!(
+            dispatch.canonical_name("ReadMcpResourceTool"),
+            Some(crate::mcp_resource::READ_MCP_RESOURCE_TOOL_NAME)
+        );
+        assert_eq!(
+            dispatch
+                .surfaces()
+                .into_iter()
+                .map(|surface| {
+                    (
+                        surface.definition().name,
+                        surface.aliases().iter().copied().collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    crate::memory_store::MEMORY_LIST_TOOL_NAME.to_string(),
+                    vec![]
+                ),
+                (
+                    crate::memory_store::MEMORY_READ_TOOL_NAME.to_string(),
+                    vec![]
+                ),
+                (
+                    crate::memory_store::MEMORY_SEARCH_TOOL_NAME.to_string(),
+                    vec![]
+                ),
+                (
+                    crate::memory_store::MEMORY_ADD_NOTE_TOOL_NAME.to_string(),
+                    vec![]
+                ),
+                (crate::image_task::IMAGE_TASK_TOOL_NAME.to_string(), vec![]),
+                (
+                    crate::tool_search::TOOL_SEARCH_TOOL_NAME.to_string(),
+                    TOOL_SEARCH_LOOKUP_ALIASES.to_vec()
+                ),
+                (
+                    crate::mcp_resource::LIST_MCP_RESOURCES_TOOL_NAME.to_string(),
+                    crate::mcp_resource::LIST_MCP_RESOURCES_LOOKUP_ALIASES.to_vec()
+                ),
+                (
+                    crate::mcp_resource::READ_MCP_RESOURCE_TOOL_NAME.to_string(),
+                    crate::mcp_resource::READ_MCP_RESOURCE_LOOKUP_ALIASES.to_vec()
+                ),
+            ]
         );
     }
 

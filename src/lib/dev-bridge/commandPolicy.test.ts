@@ -300,7 +300,7 @@ describe("commandPolicy", () => {
   });
 
   it("集中声明 DevBridge 超时、冷却绕过和读命令重试策略", () => {
-    expect(resolveDevBridgeCommandTimeoutProfile("aster_agent_init")).toBe(
+    expect(resolveDevBridgeCommandTimeoutProfile("agent_init")).toBe(
       "startup-truth",
     );
     expect(

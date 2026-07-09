@@ -182,6 +182,9 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.decisionPanel.permissionRequestTitle", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.assistantWantsUse", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.unknownTool", { ns: "agent" });
+  i18n.t("agentChat.decisionPanel.permission.inputbarOnlyHint", {
+    ns: "agent",
+  });
   i18n.t("agentChat.decisionPanel.action.submitting", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.action.submit", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.action.cancelling", { ns: "agent" });

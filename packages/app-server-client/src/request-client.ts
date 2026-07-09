@@ -556,6 +556,9 @@ export interface AppServerClient {
   testTranscribeVoiceModelFile(
     params: protocol.VoiceModelTestTranscribeFileParams,
   ): protocol.JsonRpcRequest;
+  transcribeVoiceAudio(
+    params: protocol.VoiceTranscriptionTranscribeAudioParams,
+  ): protocol.JsonRpcRequest;
   readUsageStats(
     params: protocol.UsageStatsRangeParams,
   ): protocol.JsonRpcRequest;

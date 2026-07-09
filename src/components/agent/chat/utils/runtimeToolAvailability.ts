@@ -11,7 +11,7 @@ const PLAN_TOOL_NAMES = ["update_plan"] as const;
 
 type RuntimeToolAvailabilitySource =
   | "runtime_tools"
-  | "registry_tools"
+  | "native_tools"
   | "none";
 
 export const RUNTIME_TOOL_AVAILABILITY_OVERRIDE_STORAGE_KEY =
@@ -36,7 +36,7 @@ function isRuntimeToolAvailabilitySource(
   value: unknown,
 ): value is RuntimeToolAvailabilitySource {
   return (
-    value === "runtime_tools" || value === "registry_tools" || value === "none"
+    value === "runtime_tools" || value === "native_tools" || value === "none"
   );
 }
 
@@ -166,12 +166,12 @@ function collectRuntimeToolNames(
     };
   }
 
-  const registryTools = toolInventory?.registry_tools || [];
-  if (registryTools.length > 0) {
+  const nativeTools = toolInventory?.native_tools || [];
+  if (nativeTools.length > 0) {
     return {
-      source: "registry_tools",
+      source: "native_tools",
       toolNames: new Set(
-        registryTools.map((entry) => normalizeToolName(entry.name)),
+        nativeTools.map((entry) => normalizeToolName(entry.name)),
       ),
     };
   }

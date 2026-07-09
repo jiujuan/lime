@@ -16,6 +16,7 @@ interface ResolveTaskCenterDraftSurfaceStateParams {
   draftSendRequest: TaskCenterDraftSendRequest | null;
   displayMessageCount: number;
   threadItemCount: number;
+  hasLocalSessionOverride?: boolean;
   hasPendingA2UIForm: boolean;
   isPreparingSend: boolean;
   isSending: boolean;
@@ -47,6 +48,7 @@ interface ResolveTaskCenterHomeChromeStateParams {
   isSending: boolean;
   isHomePendingPreviewActive: boolean;
   queuedTurnCount: number;
+  hasLocalSessionOverride?: boolean;
   sessionId?: string | null;
   embeddedHomeSessionIds: ReadonlySet<string>;
   isAutoRestoringSession: boolean;
@@ -72,6 +74,7 @@ export function resolveTaskCenterDraftSurfaceState({
   draftSendRequest,
   displayMessageCount,
   threadItemCount,
+  hasLocalSessionOverride = false,
   hasPendingA2UIForm,
   isPreparingSend,
   isSending,
@@ -97,6 +100,8 @@ export function resolveTaskCenterDraftSurfaceState({
     !isTaskCenterDraftTabActive &&
     (displayMessageCount > 0 ||
       threadItemCount > 0 ||
+      Boolean(draftSendRequest) ||
+      hasLocalSessionOverride ||
       hasPendingA2UIForm ||
       isPreparingSend ||
       isSending ||
@@ -134,19 +139,29 @@ export function resolveTaskCenterHomeChromeState({
   isSending,
   isHomePendingPreviewActive,
   queuedTurnCount,
+  hasLocalSessionOverride = false,
   sessionId,
   embeddedHomeSessionIds,
   isAutoRestoringSession,
   isSessionHydrating,
   shouldUseBrowserWorkspaceHomeChrome,
 }: ResolveTaskCenterHomeChromeStateParams): TaskCenterHomeChromeState {
+  const hasForegroundLocalSession =
+    hasLocalSessionOverride &&
+    Boolean(sessionId) &&
+    !draftSurfaceActive &&
+    !draftTabActive &&
+    !shouldSuppressDraftContent;
   const shouldTreatCurrentSessionAsBackground =
-    isHomeSessionBackgroundRecovery && !hasInitialSessionRoute;
+    isHomeSessionBackgroundRecovery &&
+    !hasInitialSessionRoute &&
+    !hasForegroundLocalSession;
   const hasCurrentSessionActivity =
     !shouldTreatCurrentSessionAsBackground &&
     !draftTabActive &&
     (displayMessageCount > 0 ||
       threadItemCount > 0 ||
+      hasForegroundLocalSession ||
       hasPendingA2UIForm ||
       isPreparingSend ||
       isSending ||
@@ -164,11 +179,11 @@ export function resolveTaskCenterHomeChromeState({
     hasInitialSessionRoute,
     hasConversationActivity: hasHomeConversationActivity,
     hasCurrentSessionActivity,
-    isHomeSessionBackgroundRecovery,
     sessionId,
     embeddedHomeSessionIds,
     isAutoRestoringSession,
     isSessionHydrating,
+    isHomeSessionBackgroundRecovery: shouldTreatCurrentSessionAsBackground,
   });
   const isTaskCenterDraftSendPending = isTaskCenterDraftSendPendingForLayout({
     hasDraftSendRequest: Boolean(draftSendRequest),
@@ -178,6 +193,16 @@ export function resolveTaskCenterHomeChromeState({
   });
   const shouldRenderTaskCenterEmbeddedHome =
     taskCenterHomeSurfaceState.shouldRenderEmbeddedHome;
+  const hasNavbarUtilityActivity =
+    hasHomeConversationActivity ||
+    displayMessageCount > 0 ||
+    threadItemCount > 0 ||
+    Boolean(draftSendRequest) ||
+    hasPendingA2UIForm ||
+    isPreparingSend ||
+    isSending ||
+    isHomePendingPreviewActive ||
+    queuedTurnCount > 0;
 
   return {
     hasCurrentSessionActivity,
@@ -186,7 +211,7 @@ export function resolveTaskCenterHomeChromeState({
     isTaskCenterDraftSendPending,
     shouldRenderTaskCenterEmbeddedHome,
     suppressHomeNavbarUtilityActions:
-      (shouldUseBrowserWorkspaceHomeChrome && !hasHomeConversationActivity) ||
+      (shouldUseBrowserWorkspaceHomeChrome && !hasNavbarUtilityActivity) ||
       shouldRenderTaskCenterEmbeddedHome,
   };
 }

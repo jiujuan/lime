@@ -233,6 +233,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
             requestId: effectiveRequestId,
             actionType,
             confirmed: response.confirmed,
+            decision: response.decision,
             response: response.response,
             userData,
             metadata: submissionContext?.requestMetadata,
@@ -240,7 +241,9 @@ export function useAgentTools(options: UseAgentToolsOptions) {
             actionScope: metadataAction?.scope,
           });
         } else {
-          refreshSessionId = sessionIdRef.current;
+          const activeSessionId =
+            currentStreamingSessionIdRef.current || sessionIdRef.current;
+          refreshSessionId = activeSessionId;
           setSubmittedActionsInFlight((prev) =>
             upsertSubmittedAction(prev, {
               ...(metadataAction ||
@@ -255,12 +258,22 @@ export function useAgentTools(options: UseAgentToolsOptions) {
               submittedUserData,
             }),
           );
+          const activeEventName =
+            currentStreamingSessionIdRef.current === activeSessionId
+              ? currentStreamingEventNameRef.current
+              : null;
+          const submissionEventName =
+            activeEventName || metadataAction?.eventName;
           await runtime.respondToAction({
             sessionId: refreshSessionId || "",
             requestId: effectiveRequestId,
             actionType,
             confirmed: response.confirmed,
+            decision: response.decision,
             response: response.response,
+            userData: response.userData,
+            eventName: submissionEventName || undefined,
+            actionScope: metadataAction?.scope,
           });
         }
 

@@ -314,6 +314,7 @@ const {
   METHOD_VOICE_INSTRUCTION_SAVE,
   METHOD_VOICE_MODEL_DEFAULT_SET,
   METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
+  METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
   METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
   METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
   METHOD_WECHAT_CHANNEL_LOGIN_START,
@@ -1387,6 +1388,11 @@ test("builds app data surface requests with current methods", () => {
     model_id: "sensevoice-small-int8-2024-07-17",
     file_path: "/tmp/interview.wav",
   });
+  const transcribedVoiceAudio = client.transcribeVoiceAudio({
+    audio_base64: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=",
+    mime_type: "audio/wav",
+    credential_id: "cred-1",
+  });
 
   assert.equal(installed.method, METHOD_PLUGIN_INSTALLED_LIST);
   assert.deepEqual(installed.params, {});
@@ -1930,6 +1936,15 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(testedVoiceModelFile.params, {
     model_id: "sensevoice-small-int8-2024-07-17",
     file_path: "/tmp/interview.wav",
+  });
+  assert.equal(
+    transcribedVoiceAudio.method,
+    METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
+  );
+  assert.deepEqual(transcribedVoiceAudio.params, {
+    audio_base64: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=",
+    mime_type: "audio/wav",
+    credential_id: "cred-1",
   });
   for (const legacyMethod of [
     "get_automation_scheduler_config",
@@ -2552,7 +2567,7 @@ test("builds action respond requests for host action resolution", () => {
     sessionId: "sess_external",
     requestId: "req_confirm_1",
     actionType: "tool_confirmation",
-    confirmed: true,
+    decision: "allow_once",
     response: "allow",
     userData: {
       reason: "approved",
@@ -2574,7 +2589,7 @@ test("builds action respond requests for host action resolution", () => {
     sessionId: "sess_external",
     requestId: "req_confirm_1",
     actionType: "tool_confirmation",
-    confirmed: true,
+    decision: "allow_once",
     response: "allow",
     userData: {
       reason: "approved",

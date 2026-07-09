@@ -1,6 +1,7 @@
 import type {
   AppServerAgentSessionMediaReadParams,
   AppServerAgentSessionMediaReadResponse,
+  AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
 import { isAbsoluteLocalFilePath } from "@/lib/api/fileSystem";
 import { createPreviewArtifact } from "@/lib/artifact/previewArtifact";
@@ -14,17 +15,24 @@ import {
   type MediaReferencePreviewBudgetFacts,
   type MediaReferencePreviewPolicy,
 } from "./mediaReferencePreviewPolicy";
+import {
+  emitStreamingMediaReadProgress,
+  type MediaReferencePreviewProgress,
+} from "./mediaReferencePreviewStreamingProgress";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
-export interface MediaReferencePreviewProgress {
-  contentRange?: string;
-  hasMore: boolean;
-  loadedBytes: number;
-  mimeType?: string;
-  sha256?: string;
-  totalBytes: number;
-}
+export { emitStreamingMediaReadProgress };
+export type { MediaReferencePreviewProgress };
+
+type MediaReferencePreviewReadEnvelope = {
+  media: AppServerAgentSessionMediaReadResponse;
+  notifications?: readonly AppServerJsonRpcNotification[];
+};
+
+type MediaReferencePreviewReadResult =
+  | AppServerAgentSessionMediaReadResponse
+  | MediaReferencePreviewReadEnvelope;
 
 type MediaReferencePreviewSource =
   | {
@@ -38,6 +46,10 @@ type MediaReferencePreviewSource =
 
 function isDirectPreviewMediaUri(uri: string): boolean {
   return /^(https?|file|asset):/iu.test(uri) || uri.startsWith("//");
+}
+
+function isSidecarMediaReadUri(uri?: string | null): boolean {
+  return Boolean(uri?.trim().toLowerCase().startsWith("sidecar://"));
 }
 
 function isInlineMediaPayloadUri(uri?: string | null): boolean {
@@ -126,6 +138,23 @@ function resolveMediaReferencePreviewSource(
   return null;
 }
 
+function resolveMediaReferenceReadOwner(
+  reference: Extract<
+    MessagePreviewTarget,
+    { kind: "media_reference" }
+  >["reference"],
+): Pick<AppServerAgentSessionMediaReadParams, "refId" | "sidecarRef" | "uri"> {
+  const sidecarRef = reference.sidecarRef;
+  const refId = reference.refId?.trim();
+  const uriCandidates = [reference.sourceUri, reference.uri];
+  const uri = uriCandidates.find(isSidecarMediaReadUri)?.trim();
+  return {
+    ...(refId ? { refId } : {}),
+    ...(sidecarRef !== undefined ? { sidecarRef } : {}),
+    ...(uri ? { uri } : {}),
+  };
+}
+
 export function buildAgentSessionMediaReadParams(params: {
   sessionId?: string | null;
   target: Extract<MessagePreviewTarget, { kind: "media_reference" }>;
@@ -146,9 +175,12 @@ export function buildAgentSessionMediaReadParams(params: {
     return null;
   }
 
-  const uri = reference.uri.trim();
-  const hasSidecarUri = uri.startsWith("sidecar://");
-  if (!hasSidecarUri && reference.sidecarRef === undefined) {
+  const readOwner = resolveMediaReferenceReadOwner(reference);
+  if (
+    !readOwner.uri &&
+    !readOwner.refId &&
+    readOwner.sidecarRef === undefined
+  ) {
     return null;
   }
 
@@ -158,13 +190,8 @@ export function buildAgentSessionMediaReadParams(params: {
     offset: params.offset ?? 0,
     length:
       params.length ?? params.maxBytes ?? MEDIA_REFERENCE_PREVIEW_MAX_BYTES,
+    ...readOwner,
   };
-  if (uri) {
-    request.uri = uri;
-  }
-  if (reference.sidecarRef !== undefined) {
-    request.sidecarRef = reference.sidecarRef;
-  }
   return request;
 }
 
@@ -196,6 +223,27 @@ function formatMediaReadContentRange(totalBytes: number): string {
     return "bytes */0";
   }
   return `bytes 0-${totalBytes - 1}/${totalBytes}`;
+}
+
+function normalizeMediaPreviewReadResult(
+  result: MediaReferencePreviewReadResult,
+): {
+  media: AppServerAgentSessionMediaReadResponse;
+  notifications: readonly AppServerJsonRpcNotification[];
+} {
+  if (isMediaReferencePreviewReadEnvelope(result)) {
+    return {
+      media: result.media,
+      notifications: result.notifications ?? [],
+    };
+  }
+  return { media: result, notifications: [] };
+}
+
+function isMediaReferencePreviewReadEnvelope(
+  result: MediaReferencePreviewReadResult,
+): result is MediaReferencePreviewReadEnvelope {
+  return "media" in result;
 }
 
 function buildMediaReferenceFallbackMarkdown(params: {
@@ -342,6 +390,7 @@ export function createMediaReferencePreviewArtifact(params: {
       contentPartIndex: target.index,
       mediaKind: reference.kind,
       mediaUri: reference.uri,
+      mediaRefId: reference.refId,
       mediaSourceUri: isInlineMediaPayloadUri(reference.sourceUri)
         ? undefined
         : reference.sourceUri,
@@ -434,6 +483,7 @@ export function createMediaReferenceBinaryPreviewArtifact(params: {
       contentPartIndex: target.index,
       mediaKind: reference.kind,
       mediaUri: reference.uri,
+      mediaRefId: reference.refId,
       mediaReadUri: media.uri,
       mediaPreviewSource: params.previewSource ?? "sidecar_read",
       mediaPreviewObjectUrl:
@@ -521,7 +571,7 @@ export async function createMediaReferenceChunkedObjectUrlPreviewArtifact(params
   t: Translate;
   readMedia: (
     request: AppServerAgentSessionMediaReadParams,
-  ) => Promise<AppServerAgentSessionMediaReadResponse>;
+  ) => Promise<MediaReferencePreviewReadResult>;
   createObjectUrl?: (blob: Blob) => string;
   maxBytes?: number;
   chunkBytes?: number;
@@ -554,7 +604,15 @@ export async function createMediaReferenceChunkedObjectUrlPreviewArtifact(params
   if (!canContinue()) {
     return null;
   }
-  const first = await params.readMedia(firstRequest);
+  const firstResult = normalizeMediaPreviewReadResult(
+    await params.readMedia({ ...firstRequest, stream: true }),
+  );
+  let didEmitStreamingProgress = emitStreamingMediaReadProgress({
+    notifications: firstResult.notifications,
+    onProgress: params.onProgress,
+    sessionId: firstRequest.sessionId,
+  }).emitted;
+  const first = firstResult.media;
   if (!canContinue()) {
     return null;
   }
@@ -613,7 +671,7 @@ export async function createMediaReferenceChunkedObjectUrlPreviewArtifact(params
     if (expectedOffset > totalBytes) {
       return null;
     }
-    if (expectedOffset < totalBytes) {
+    if (expectedOffset < totalBytes && !didEmitStreamingProgress) {
       params.onProgress?.({
         contentRange: latest.contentRange,
         hasMore: latest.hasMore === true,
@@ -647,7 +705,15 @@ export async function createMediaReferenceChunkedObjectUrlPreviewArtifact(params
     if (!canContinue()) {
       return null;
     }
-    latest = await params.readMedia(nextRequest);
+    const latestResult = normalizeMediaPreviewReadResult(
+      await params.readMedia({ ...nextRequest, stream: true }),
+    );
+    didEmitStreamingProgress = emitStreamingMediaReadProgress({
+      notifications: latestResult.notifications,
+      onProgress: params.onProgress,
+      sessionId: nextRequest.sessionId,
+    }).emitted;
+    latest = latestResult.media;
     if (!canContinue()) {
       return null;
     }

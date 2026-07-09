@@ -165,7 +165,7 @@ describe("StreamingRenderer structured content", () => {
     expect(container.textContent).toContain("然后开始执行");
   });
 
-  it("提升为对话内 A2UI 的待处理问答应渲染为可提交卡片", () => {
+  it("提升为对话内 A2UI 的待处理问答应渲染为可提交卡片，approval 不走消息流提交", () => {
     const { container } = renderHarness({
       content: "",
       actionRequests: [
@@ -189,7 +189,7 @@ describe("StreamingRenderer structured content", () => {
 
     expect(
       container.querySelectorAll('[data-testid="decision-panel"]'),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(
       container.querySelectorAll('[data-testid="a2ui-card"]'),
     ).toHaveLength(1);
@@ -272,11 +272,11 @@ describe("StreamingRenderer structured content", () => {
         {
           type: "action_required",
           actionRequired: {
-            requestId: "approval-inline-order",
-            actionType: "tool_confirmation",
+            requestId: "ask-inline-order",
+            actionType: "ask_user",
             status: "pending",
-            toolName: "Bash",
-            prompt: "允许执行命令吗？",
+            prompt: "请选择执行方式。",
+            questions: [{ question: "请选择执行方式。" }],
           },
         },
         {
@@ -306,5 +306,97 @@ describe("StreamingRenderer structured content", () => {
       (decisionPanel as Node).compareDocumentPosition(markdownNodes[1]) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("pending tool_confirmation 不应在消息流渲染 DecisionPanel", () => {
+    const { container } = renderHarness({
+      content: "",
+      contentParts: [
+        {
+          type: "action_required",
+          actionRequired: {
+            requestId: "approval-inline-hidden",
+            actionType: "tool_confirmation",
+            status: "pending",
+            toolName: "Bash",
+            prompt: "允许执行命令吗？",
+          },
+        },
+      ],
+      onPermissionResponse: vi.fn(),
+    });
+
+    expect(
+      container.querySelector('[data-testid="decision-panel"]'),
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="a2ui-card"]')).toBeNull();
+  });
+
+  it("submitted tool_confirmation 应渲染只读 approval record", () => {
+    const { container } = renderHarness({
+      content: "",
+      actionRequests: [
+        {
+          requestId: "approval-inline-submitted",
+          actionType: "tool_confirmation",
+          status: "submitted",
+          toolName: "browser_control",
+          prompt: "允许浏览器访问 example.com 吗？",
+          submittedUserData: {
+            decision: "decline",
+            decision_scope: "turn",
+            source: "runtime",
+          },
+        },
+      ],
+      onPermissionResponse: vi.fn(),
+    });
+
+    expect(
+      container.querySelector('[data-testid="timeline-approval-record"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="decision-panel"]'),
+    ).toBeNull();
+    const record = container.querySelector<HTMLElement>(
+      '[data-testid="timeline-approval-record"]',
+    );
+    expect(record?.textContent).toContain("browser_control");
+    expect(record?.textContent).toContain(
+      "agentChat.threadTimeline.approval.record.status.declined",
+    );
+    expect(record?.textContent).not.toContain(
+      "允许浏览器访问 example.com 吗？",
+    );
+    expect(record?.textContent).not.toContain("来源");
+    expect(record?.textContent).not.toContain("范围");
+  });
+
+  it("submitted tool_confirmation 在 full-access 策略下不渲染 approval record", () => {
+    const { container } = renderHarness({
+      content: "",
+      actionRequests: [
+        {
+          requestId: "approval-inline-full-access",
+          actionType: "tool_confirmation",
+          status: "submitted",
+          toolName: "browser_control",
+          prompt: "允许浏览器访问 example.com 吗？",
+          submittedUserData: {
+            decision: "allow_for_session",
+            approval_policy: "never",
+            sandbox_policy: "danger-full-access",
+          },
+        },
+      ],
+      onPermissionResponse: vi.fn(),
+    });
+
+    expect(
+      container.querySelector('[data-testid="timeline-approval-record"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="decision-panel"]'),
+    ).toBeNull();
   });
 });

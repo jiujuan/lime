@@ -65,6 +65,31 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain("停止后同会话继续输出 Electron fixture");
   });
 
+  it("runs the real Electron approval decision fixtures in the current regression set", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain(
+      "Claw approval allow-for-session resume Electron fixture",
+    );
+    expect(content).toContain("approval-request-resume");
+    expect(content).toContain(
+      "claw-chat-current-fixture-approval-request-resume-regression",
+    );
+    expect(content).toContain("Claw approval decline-continue Electron fixture");
+    expect(content).toContain("approval-request-decline");
+    expect(content).toContain(
+      "claw-chat-current-fixture-approval-request-decline-regression",
+    );
+    expect(content).toContain("Claw approval cancel-turn Electron fixture");
+    expect(content).toContain("approval-request-cancel");
+    expect(content).toContain(
+      "claw-chat-current-fixture-approval-request-cancel-regression",
+    );
+    expect(content).toContain(
+      "approval allow-for-session resume / decline continue / cancel turn 三类 Electron fixture",
+    );
+  });
+
   it("runs the real Electron Plan history hydrate Claw fixture", () => {
     const content = readSmokeScript();
 
@@ -202,11 +227,11 @@ describe("agent runtime current fixture regression smoke guard", () => {
       'path.join(rootDir, "dist-electron", "app-server.release.json")',
     );
     expect(content).toContain("electronAppServerBinaryDestination");
-    expect(content).toContain('"electron:build:smoke"');
+    expect(content).toContain('"build:renderer:electron:smoke"');
     expect(content).toContain("reusing fresh packaged fixture assets");
     expect(content).toContain("fresh-artifacts");
     expect(content).toContain("stale-source");
-    expect(content).toContain("rebuilding packaged fixture assets");
+    expect(content).toContain("rebuilding stale packaged fixture assets");
     expect(content).toContain("ensureElectronFixtureBuild(options)");
     expect(content).toContain("LIME_ELECTRON_FIXTURE_BUILD_READY");
     expect(content.indexOf("ensureElectronFixtureBuild(options)")).toBeLessThan(

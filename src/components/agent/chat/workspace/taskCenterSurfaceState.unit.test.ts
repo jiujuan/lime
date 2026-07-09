@@ -123,6 +123,50 @@ describe("resolveTaskCenterDraftSurfaceState", () => {
     expect(state.hasVisibleSessionActivityForDraftSurface).toBe(true);
     expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
   });
+
+  it("草稿 surface 标志滞留但已有本地物化会话时不应压制内容", () => {
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "claw",
+      isTaskCenterEntry: true,
+      activeDraftTabId: null,
+      draftTabs: [],
+      draftSurfaceActive: true,
+      draftSendRequest: null,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasLocalSessionOverride: true,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.hasVisibleSessionActivityForDraftSurface).toBe(true);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
+  });
+
+  it("首页发送请求已创建时应展示 pending preview 而不是继续压制内容", () => {
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "new-task",
+      isTaskCenterEntry: true,
+      activeDraftTabId: null,
+      draftTabs: [],
+      draftSurfaceActive: true,
+      draftSendRequest: createDraftSendRequest({
+        materializeDraft: false,
+        source: "empty-state",
+      }),
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.hasVisibleSessionActivityForDraftSurface).toBe(true);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
+  });
 });
 
 describe("resolveTaskCenterHomeChromeState", () => {
@@ -218,6 +262,75 @@ describe("resolveTaskCenterHomeChromeState", () => {
       state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
     ).toBe(true);
     expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBeNull();
+  });
+
+  it("new-task 后台执行态应隐藏旧会话内容但保留顶栏工具入口", () => {
+    const state = resolveTaskCenterHomeChromeState({
+      agentEntry: "new-task",
+      draftSurfaceActive: false,
+      draftTabActive: false,
+      shouldSuppressDraftContent: false,
+      draftSendRequest: null,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: false,
+      isHomeSessionBackgroundRecovery: true,
+      displayMessageCount: 1,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: true,
+      isHomePendingPreviewActive: false,
+      queuedTurnCount: 0,
+      sessionId: "running-session",
+      embeddedHomeSessionIds: new Set(),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+      shouldUseBrowserWorkspaceHomeChrome: true,
+    });
+
+    expect(state.hasHomeConversationActivity).toBe(false);
+    expect(
+      state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(true);
+    expect(state.suppressHomeNavbarUtilityActions).toBe(false);
+  });
+
+  it("本地物化会话应优先作为前台会话，不被后台恢复卡片覆盖", () => {
+    const state = resolveTaskCenterHomeChromeState({
+      agentEntry: "claw",
+      draftSurfaceActive: false,
+      draftTabActive: false,
+      shouldSuppressDraftContent: false,
+      draftSendRequest: null,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: false,
+      isHomeSessionBackgroundRecovery: true,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      isHomePendingPreviewActive: false,
+      queuedTurnCount: 0,
+      hasLocalSessionOverride: true,
+      sessionId: "materialized-session",
+      embeddedHomeSessionIds: new Set(["materialized-session"]),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+      shouldUseBrowserWorkspaceHomeChrome: true,
+    });
+
+    expect(state.hasCurrentSessionActivity).toBe(true);
+    expect(state.hasHomeConversationActivity).toBe(true);
+    expect(state.taskCenterHomeSurfaceState.shouldRenderEmbeddedHome).toBe(
+      false,
+    );
+    expect(
+      state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(false);
+    expect(state.taskCenterHomeSurfaceState.sceneSessionId).toBe(
+      "materialized-session",
+    );
   });
 
   it("从路由打开历史空会话时不应被任务中心首页覆盖", () => {

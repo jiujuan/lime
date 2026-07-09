@@ -930,19 +930,13 @@ describe("ElectronHostCommands local file shell facade", () => {
       host.invoke("plugin_stop_ui_runtime", runtimeArgs),
     ).resolves.toMatchObject({ status: "stopped" });
 
-    expect(pluginShellHostSelectDirectoryMock).toHaveBeenCalledWith(
-      selectArgs,
-    );
+    expect(pluginShellHostSelectDirectoryMock).toHaveBeenCalledWith(selectArgs);
     expect(pluginShellHostLaunchShellMock).toHaveBeenCalledWith(launchArgs);
-    expect(pluginShellHostStartUiRuntimeMock).toHaveBeenCalledWith(
-      runtimeArgs,
-    );
+    expect(pluginShellHostStartUiRuntimeMock).toHaveBeenCalledWith(runtimeArgs);
     expect(pluginShellHostGetUiRuntimeStatusMock).toHaveBeenCalledWith(
       runtimeArgs,
     );
-    expect(pluginShellHostStopUiRuntimeMock).toHaveBeenCalledWith(
-      runtimeArgs,
-    );
+    expect(pluginShellHostStopUiRuntimeMock).toHaveBeenCalledWith(runtimeArgs);
   });
 
   it("get_local_skills_for_app 应透传 App Server skill/list 的本地目录路径", async () => {
@@ -1393,7 +1387,7 @@ describe("ElectronHostCommands model provider current source", () => {
     expect(request).toHaveBeenCalledWith("modelProvider/list", {});
   });
 
-  it("aster_agent_init 不应把其他 Provider 的模型拼给当前 Provider", async () => {
+  it("agent_init 不应把其他 Provider 的模型拼给当前 Provider", async () => {
     const userDataDir = await createTempUserDataDir();
     await createHost(userDataDir).invoke("save_config", {
       config: { default_provider: "retired-provider" },
@@ -1431,7 +1425,7 @@ describe("ElectronHostCommands model provider current source", () => {
     });
     const host = createHost(userDataDir, () => undefined, request);
 
-    await expect(host.invoke("aster_agent_init")).resolves.toEqual({
+    await expect(host.invoke("agent_init")).resolves.toEqual({
       initialized: true,
       provider_configured: true,
       provider_name: "Lime Hub",
@@ -1476,9 +1470,7 @@ describe("ElectronHostCommands Plugin runtime dispatcher", () => {
       host.invoke("plugin_runtime_submit_host_response", responseArgs),
     ).resolves.toEqual({ status: "submitted" });
 
-    expect(pluginRuntimeTaskHostStartTaskMock).toHaveBeenCalledWith(
-      startArgs,
-    );
+    expect(pluginRuntimeTaskHostStartTaskMock).toHaveBeenCalledWith(startArgs);
     expect(pluginRuntimeTaskHostGetTaskMock).toHaveBeenCalledWith(getArgs);
     expect(pluginRuntimeTaskHostCancelTaskMock).toHaveBeenCalledWith(
       cancelArgs,

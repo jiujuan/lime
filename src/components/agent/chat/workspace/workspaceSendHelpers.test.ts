@@ -765,7 +765,6 @@ describe("workspaceSendHelpers runtime team preview", () => {
       soul: {
         enabled: true,
         style_profile_id: "cheeky_sassy_executor",
-        style_intensity: "low",
       },
     });
     const messages = buildRuntimeTeamDispatchPreviewMessages(

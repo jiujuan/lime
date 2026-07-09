@@ -403,12 +403,15 @@ describe("Electron current package entrypoints", () => {
     expect(buildRenderer).toContain("rendererBuildEnv");
     expect(buildRenderer).toContain("startRendererBuildHeartbeat");
     expect(smokeBuildRenderer).toContain("LIME_ELECTRON_RENDERER");
+    expect(smokeBuildRenderer).toContain("LIME_VITE_EMPTY_OUT_DIR");
     expect(smokeBuildRenderer).toContain("rendererBuildEnv");
     expect(smokeBuildRenderer).toContain("startRendererBuildHeartbeat");
     expect(rendererBuildEnv).toContain("--max-old-space-size=8192");
     expect(rendererBuildEnv).toContain("NODE_OPTIONS");
     expect(rendererBuildEnv).toContain("still running after");
     expect(viteConfig).toContain("base:");
+    expect(viteConfig).toContain("emptyOutDir:");
+    expect(viteConfig).toContain("keepExistingOutDir ? false : undefined");
     expect(viteConfig).toContain('isElectronRenderer ? "./" : undefined');
     expect(viteConfig).toContain('find: "@limecloud/app-server-client"');
     expect(viteConfig).toContain("./packages/app-server-client/src/index.ts");

@@ -53,7 +53,6 @@ describe("handleAgentStreamSubmitFailure", () => {
       soul: {
         enabled: true,
         style_profile_id: "cheeky_sassy_executor",
-        style_intensity: "low",
         tone: [],
         communication_style: [],
         avoid: [],

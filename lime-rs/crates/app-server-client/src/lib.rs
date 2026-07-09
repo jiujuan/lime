@@ -4114,7 +4114,8 @@ mod tests {
                 session_id: "sess_1".to_string(),
                 request_id: "req_confirm_1".to_string(),
                 action_type: AgentSessionActionType::ToolConfirmation,
-                confirmed: true,
+                decision: Some(app_server_protocol::AgentSessionApprovalDecision::AllowOnce),
+                confirmed: None,
                 response: Some("allow".to_string()),
                 user_data: Some(json!({ "reason": "approved" })),
                 metadata: Some(json!({ "source": "content-studio" })),
@@ -4135,7 +4136,7 @@ mod tests {
                 "sessionId": "sess_1",
                 "requestId": "req_confirm_1",
                 "actionType": "tool_confirmation",
-                "confirmed": true,
+                "decision": "allow_once",
                 "response": "allow",
                 "userData": {
                     "reason": "approved",

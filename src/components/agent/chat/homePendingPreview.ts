@@ -19,6 +19,7 @@ export interface TaskCenterDraftSendRequest {
   dispatchState?: "queued" | "dispatched";
   sessionReady?: boolean;
   source: "task-center-empty-state" | "empty-state";
+  triggerSource?: string | null;
 }
 
 export function buildHomePendingPreviewMessages(

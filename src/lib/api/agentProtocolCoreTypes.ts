@@ -226,6 +226,30 @@ export interface AgentThreadWebSearchItem extends AgentThreadItemBase {
   output?: string;
 }
 
+export interface AgentThreadHookOutputEntry {
+  kind: string;
+  text: string;
+}
+
+export interface AgentThreadHookItem extends AgentThreadItemBase {
+  type: "hook";
+  run_id: string;
+  event_name?: string;
+  handler_type?: string;
+  execution_mode?: string;
+  scope?: string;
+  source_path?: string;
+  source?: string;
+  display_order?: number;
+  status_message?: string;
+  duration_ms?: number;
+  entries?: AgentThreadHookOutputEntry[];
+  output?: string;
+  target_item_id?: string;
+  hook_status?: string;
+  metadata?: unknown;
+}
+
 export interface AgentThreadApprovalRequestItem extends AgentThreadItemBase {
   type: "approval_request";
   request_id: string;
@@ -233,6 +257,7 @@ export interface AgentThreadApprovalRequestItem extends AgentThreadItemBase {
   prompt?: string;
   tool_name?: string;
   arguments?: unknown;
+  available_decisions?: string[];
   response?: unknown;
 }
 
@@ -311,6 +336,7 @@ export type AgentThreadItem =
   | AgentThreadCommandExecutionItem
   | AgentThreadPatchItem
   | AgentThreadWebSearchItem
+  | AgentThreadHookItem
   | AgentThreadApprovalRequestItem
   | AgentThreadRequestUserInputItem
   | AgentThreadFileArtifactItem

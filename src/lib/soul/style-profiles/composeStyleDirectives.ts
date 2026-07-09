@@ -30,12 +30,11 @@ export function composeStyleDirectives(
     return null;
   }
 
-  const { profile, intensity } = resolved;
+  const { profile } = resolved;
   return {
     profileId: profile.id,
     packId: profile.packId,
     tone: profile.tone,
-    intensity,
     scopes: profile.scopes,
     responseContract: profile.responseContract,
     voicePrimitives: profile.voicePrimitives,
@@ -51,7 +50,6 @@ export function composeStyleDirectives(
       `Style pack: ${profile.packId}`,
       `Style profile: ${profile.id}`,
       `Tone: ${profile.tone}`,
-      `Intensity: ${intensity}`,
       `Response contract: ${profile.responseContract.join(" | ")}`,
       `Voice primitives: ${profile.voicePrimitives.join(" | ")}`,
       `Surface contracts: ${surfaceContractLines(profile.surfaceContracts).join(" | ")}`,

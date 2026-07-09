@@ -5,10 +5,10 @@ use app_server_protocol::{
     ExecutionProcessStatusResponse,
 };
 use async_trait::async_trait;
-use lime_agent::LiveExecutionProcessGateway;
+use tool_runtime::execution_process::live::RuntimeLiveExecutionGateway;
 
 #[async_trait]
-impl LiveExecutionProcessGateway for ExecutionProcessServer {
+impl RuntimeLiveExecutionGateway for ExecutionProcessServer {
     async fn start_process(
         &self,
         params: ExecutionProcessStartParams,

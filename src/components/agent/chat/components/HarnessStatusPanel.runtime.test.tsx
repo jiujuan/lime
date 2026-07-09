@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   createHarnessState,
-  findButtonByText,
   renderExpandedPanel as renderPanel,
   getHarnessPanelTestMocks,
 } from "./HarnessStatusPanel.testFixtures";
@@ -275,6 +274,10 @@ describe("HarnessStatusPanel runtime", () => {
     expect(approvalsSection?.textContent).toContain(
       "请求标识：approval-code-write",
     );
+    expect(approvalsSection?.textContent).toContain(
+      "请在对话输入区完成这类请求。",
+    );
+    expect(approvalsSection?.textContent).toContain("允许会继续当前编程运行");
     expect(fileReviewSection?.textContent).toContain("确认本轮文件应用状态");
     expect(fileReviewSection?.textContent).toContain("待处理 1");
     expect(fileReviewSection?.textContent).toContain("ImageCard.test.tsx");
@@ -283,30 +286,12 @@ describe("HarnessStatusPanel runtime", () => {
     );
     expect(filesSection?.textContent).toContain("ImageCard.test.tsx");
     expect(filesSection?.textContent).toContain("新增图片卡片历史切换回归测试");
-
-    const approveButton = findButtonByText("允许并继续");
-    expect(approveButton).not.toBeNull();
-    act(() => {
-      approveButton?.click();
-    });
-    expect(onRespondToAction).toHaveBeenCalledWith({
-      requestId: "approval-code-write",
-      actionType: "tool_confirmation",
-      confirmed: true,
-      response: "approved",
-    });
-
-    const rejectButton = findButtonByText("拒绝");
-    expect(rejectButton).not.toBeNull();
-    act(() => {
-      rejectButton?.click();
-    });
-    expect(onRespondToAction).toHaveBeenCalledWith({
-      requestId: "approval-code-write",
-      actionType: "tool_confirmation",
-      confirmed: false,
-      response: "rejected",
-    });
+    expect(
+      Array.from(approvalsSection?.querySelectorAll("button") ?? []).map(
+        (button) => button.textContent?.trim(),
+      ),
+    ).toEqual([]);
+    expect(onRespondToAction).not.toHaveBeenCalled();
   });
 
   it("运行时面板应将 patch/diff 输出渲染为代码变更概览", () => {

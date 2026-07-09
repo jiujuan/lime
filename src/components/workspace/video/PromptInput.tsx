@@ -140,15 +140,8 @@ const StyledTextarea = styled.textarea`
 const FooterRow = styled.div`
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
-  flex-wrap: wrap;
-`;
-
-const FooterTips = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex-wrap: wrap;
 `;
 
@@ -285,16 +278,6 @@ export const PromptInput: React.FC<PromptInputProps> = memo(
           </TextareaSurface>
 
           <FooterRow>
-            <FooterTips>
-              <WorkbenchInfoTip
-                ariaLabel={t("workspace.video.promptInput.shortcut.aria")}
-                label={t("workspace.video.promptInput.shortcut.label")}
-                variant="pill"
-                tone="sky"
-                align="start"
-                content={t("workspace.video.promptInput.shortcut.content")}
-              />
-            </FooterTips>
             <GenerateButton
               disabled={!state.prompt.trim() || state.status === "generating"}
               $generating={state.status === "generating"}

@@ -1,8 +1,6 @@
 import type { ActionRequired, AgentThreadItem, Message } from "../types";
 import { splitProposedPlanSegments } from "../utils/proposedPlan";
 
-const PROPOSED_PLAN_OPEN_TAG = "<proposed_plan>";
-
 export interface PlanImplementationStateItem {
   id?: string;
   content: string;
@@ -89,6 +87,41 @@ function readPlanRevisionId(metadata: unknown): string | undefined {
   return readStringField(record, "revisionId", "revision_id");
 }
 
+function readPlanSource(metadata: unknown): string | undefined {
+  const record = asRecord(metadata);
+  return readStringField(record, "source", "planSource", "plan_source");
+}
+
+function isLegacyUpdatePlanValue(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized === "update_plan" ||
+    normalized === "updateplantool" ||
+    normalized.startsWith("update_plan:") ||
+    normalized.startsWith("updateplan:") ||
+    normalized.startsWith("plan:update_plan:")
+  );
+}
+
+function isCurrentStructuredPlanCandidate(
+  candidate: LatestProposedPlanCandidate,
+): boolean {
+  if (candidate.source === "message") {
+    return true;
+  }
+  if (!candidate.planRevisionId?.trim()) {
+    return false;
+  }
+  return ![
+    candidate.planRevisionId,
+    candidate.planSource,
+    candidate.sourceItemId,
+  ].some(isLegacyUpdatePlanValue);
+}
+
 function stablePlanFingerprint(planText: string): string {
   let hash = 0;
   for (let index = 0; index < planText.length; index += 1) {
@@ -158,26 +191,6 @@ function collectMessagePlanCandidates(
   return candidates;
 }
 
-function messageContainsProposedPlanTag(message: Message): boolean {
-  if (message.role !== "assistant") {
-    return false;
-  }
-
-  if (
-    typeof message.content === "string" &&
-    message.content.includes(PROPOSED_PLAN_OPEN_TAG)
-  ) {
-    return true;
-  }
-
-  return (message.contentParts || []).some(
-    (part) =>
-      part.type === "text" &&
-      typeof part.text === "string" &&
-      part.text.includes(PROPOSED_PLAN_OPEN_TAG),
-  );
-}
-
 function collectThreadItemPlanCandidates(
   threadItems: readonly AgentThreadItem[] | undefined,
 ): LatestProposedPlanCandidate[] {
@@ -194,6 +207,7 @@ function collectThreadItemPlanCandidates(
     )
     .map((item) => {
       const planText = normalizePlanText(item.text);
+      const planRevisionId = readPlanRevisionId(item.metadata);
       return {
         id: [
           "thread",
@@ -205,12 +219,13 @@ function collectThreadItemPlanCandidates(
         planText,
         sequence: item.sequence,
         source: "thread_item" as const,
-        planRevisionId: readPlanRevisionId(item.metadata),
+        planRevisionId,
         sourceItemId: item.id,
         turnId: item.turn_id,
-        planSource: "thread_item",
+        planSource: readPlanSource(item.metadata) || "thread_item",
       };
-    });
+    })
+    .filter(isCurrentStructuredPlanCandidate);
 }
 
 function collectPlanStateCandidates(
@@ -232,24 +247,24 @@ function collectPlanStateCandidates(
     return [];
   }
 
-  return [
-    {
-      id: [
-        "plan-state",
-        planState.revisionId || planState.sourceToolCallId || "ready",
-        itemLines.length,
-        stablePlanFingerprint(planText),
-      ].join(":"),
-      completedAt: 0,
-      planText,
-      sequence: Number.MAX_SAFE_INTEGER,
-      source: "plan_state",
-      planRevisionId: planState.revisionId,
-      sourceItemId: planState.sourceToolCallId,
-      turnId: planState.turnId,
-      planSource: planState.source,
-    },
-  ];
+  const candidate: LatestProposedPlanCandidate = {
+    id: [
+      "plan-state",
+      planState.revisionId || planState.sourceToolCallId || "ready",
+      itemLines.length,
+      stablePlanFingerprint(planText),
+    ].join(":"),
+    completedAt: 0,
+    planText,
+    sequence: Number.MAX_SAFE_INTEGER,
+    source: "plan_state",
+    planRevisionId: planState.revisionId,
+    sourceItemId: planState.sourceToolCallId,
+    turnId: planState.turnId,
+    planSource: planState.source,
+  };
+
+  return isCurrentStructuredPlanCandidate(candidate) ? [candidate] : [];
 }
 
 export function hasProposedPlanImplementationSignals({
@@ -257,25 +272,13 @@ export function hasProposedPlanImplementationSignals({
   planState,
   threadItems,
 }: HasProposedPlanImplementationSignalsOptions): boolean {
-  if (
-    planState?.phase === "ready" &&
-    planState.items.some((item) => normalizePlanText(item.content).length > 0)
-  ) {
-    return true;
-  }
-
-  if (
-    threadItems?.some(
-      (item) =>
-        item.type === "plan" &&
-        item.status === "completed" &&
-        normalizePlanText(item.text).length > 0,
-    )
-  ) {
-    return true;
-  }
-
-  return messages?.some(messageContainsProposedPlanTag) ?? false;
+  return (
+    collectMessagePlanCandidates(messages).some(
+      isCurrentStructuredPlanCandidate,
+    ) ||
+    collectThreadItemPlanCandidates(threadItems).length > 0 ||
+    collectPlanStateCandidates(planState).length > 0
+  );
 }
 
 function selectLatestCandidate(

@@ -145,10 +145,6 @@ export async function submitAgentStreamUserInput(
         removeQueuedTurnsFromProjection,
         registerListener,
       },
-      sounds: {
-        playToolcallSound: env.playToolcallSound,
-        playTypewriterSound: env.playTypewriterSound,
-      },
       appendThinkingToParts: env.appendThinkingToParts,
       setMessages: env.setMessages,
       setIsSending: env.setIsSending,

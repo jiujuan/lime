@@ -20,8 +20,6 @@ export const PLANNING_TOOL_NAMES = new Set([
   "tasklist",
   "taskget",
   "taskupdate",
-  "enterplanmode",
-  "exitplanmode",
 ]);
 export const TODO_SNAPSHOT_TOOL_NAMES = new Set([
   "taskcreate",

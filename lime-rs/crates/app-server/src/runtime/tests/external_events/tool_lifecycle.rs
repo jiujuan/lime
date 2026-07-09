@@ -133,6 +133,53 @@ async fn append_external_runtime_events_rejects_tool_args_without_started_tool()
 }
 
 #[tokio::test]
+async fn append_external_runtime_events_synthesizes_tool_start_for_first_llm_tool_delta() {
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_llm_tool_delta_start",
+        "thread_llm_tool_delta_start",
+        "turn_llm_tool_delta_start",
+    )
+    .await;
+
+    let appended = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "tool.args.delta",
+                json!({
+                    "toolCallId": "call_llm_first_delta",
+                    "toolName": "read_file",
+                    "delta": "{\"path\":\"README.md\"",
+                    "rawArgs": "{\"path\":\"README.md\"",
+                    "source": "llm_protocol",
+                    "backend": "llm_protocol",
+                    "runtimeEvent": {
+                        "type": "tool_call_delta",
+                        "call_id": "call_llm_first_delta",
+                        "name": "read_file",
+                        "arguments_delta": "{\"path\":\"README.md\""
+                    }
+                }),
+            )],
+        )
+        .expect("first LLM tool delta should synthesize tool.started");
+
+    assert_eq!(appended.len(), 2);
+    assert_eq!(appended[0].event_type, "tool.started");
+    assert_eq!(
+        appended[0].payload["toolCallId"].as_str(),
+        Some("call_llm_first_delta")
+    );
+    assert_eq!(appended[0].payload["toolName"].as_str(), Some("read_file"));
+    assert_eq!(
+        appended[0].payload["source"].as_str(),
+        Some("llm_protocol_tool_delta")
+    );
+    assert_eq!(appended[1].event_type, "tool.args.delta");
+}
+
+#[tokio::test]
 async fn append_external_runtime_events_rejects_tool_output_delta_without_started_tool() {
     let (core, session_id, turn_id) = runtime_with_active_turn(
         "sess_tool_output_lifecycle",

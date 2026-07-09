@@ -28,9 +28,7 @@ import {
 } from "./agentChatShared";
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { useAgentTopicSnapshot } from "./useAgentTopicSnapshot";
-import {
-  hasRunningThreadReadActivity,
-} from "../projection/threadReadActivity";
+import { hasRunningThreadReadActivity } from "../projection/threadReadActivity";
 import { resolveClawWorkspaceProviderSelection } from "../utils/clawWorkspaceProviderSelection";
 import {
   applyGeneratedAutoTitleToTopics,
@@ -185,6 +183,9 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         ? runtimeProviderType
         : "";
       const usableRuntimeModel = runtimeTextModelCandidate ? runtimeModel : "";
+      const hasIncompleteRuntimeSelection = Boolean(
+        usableRuntimeProviderType && !usableRuntimeModel,
+      );
       const currentProviderMatchesRuntime =
         Boolean(usableRuntimeProviderType) &&
         normalizeProviderSelection(currentProviderType) ===
@@ -219,7 +220,8 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         }
       }
 
-      let runtimeSelectionRejected = false;
+      let runtimeSelectionRejected =
+        hasIncompleteRuntimeSelection && !hasPersistedWorkspacePreference;
       if (
         usableRuntimeProviderType &&
         usableRuntimeModel &&
@@ -555,6 +557,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     sessionId: session.sessionId,
     parentSessionId: session.subagentParentContext?.parent_session_id,
     currentTurnEventName: currentStreamingEventNameRef.current,
+    currentStreamTurnId: stream.activeStreamTurnId,
     isSending: stream.isSending,
     threadRead: session.threadRead,
     threadReadStatus: session.threadRead?.status,

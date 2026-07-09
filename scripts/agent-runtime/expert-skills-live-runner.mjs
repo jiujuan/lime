@@ -29,9 +29,7 @@ import {
   updateAgentSessionRuntimeCurrent,
   waitForHealth,
 } from "../lib/managed-objective-continuation-smoke-core.mjs";
-import {
-  workspaceIdFromDefaultProject,
-} from "../lib/managed-objective-automation-smoke-support.mjs";
+import { workspaceIdFromDefaultProject } from "../lib/managed-objective-automation-smoke-support.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,7 +49,7 @@ const DEFAULT_HEALTH_URL = "http://127.0.0.1:3030/health";
 const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 1_000;
-const DEFAULT_COMPLETION_GRACE_MS = 30_000;
+const DEFAULT_SETTLED_GRACE_MS = 30_000;
 const LOG_PREFIX = "[smoke:expert-skills-live-runner]";
 const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 const LIVE_SKILL_DIRECTORY = "capability-report";
@@ -166,9 +164,7 @@ function assertLiveSummarySource(summary, sourcePath) {
     );
   }
   if (!sourceProvider(summary) || !sourceModel(summary)) {
-    throw new Error(
-      `live summary 缺少真实 provider/model 字段: ${sourcePath}`,
-    );
+    throw new Error(`live summary 缺少真实 provider/model 字段: ${sourcePath}`);
   }
 }
 
@@ -290,10 +286,7 @@ function collectStructuredToolMarkers(...sources) {
       const payload = toolRecordPayload(record);
       const metadata = toolRecordMetadata(record);
       const toolName = toolRecordName(record);
-      const toolFamily = pickString(metadata, [
-        "tool_family",
-        "toolFamily",
-      ]);
+      const toolFamily = pickString(metadata, ["tool_family", "toolFamily"]);
       const payloadText = jsonText(payload);
       if (toolName === "skill_search" || toolFamily === "skill_search") {
         markers.push({ kind: "skill_search" });
@@ -330,12 +323,12 @@ function threadCompleted(threadRead) {
     return true;
   }
   const turnStatuses = Array.isArray(threadRead?.turns)
-    ? threadRead.turns.map((turn) =>
-        String(turn?.status || "").toLowerCase(),
-      )
+    ? threadRead.turns.map((turn) => String(turn?.status || "").toLowerCase())
     : [];
   return turnStatuses.length > 0
-    ? turnStatuses.every((status) => status === "completed" || status === "succeeded")
+    ? turnStatuses.every(
+        (status) => status === "completed" || status === "succeeded",
+      )
     : false;
 }
 
@@ -357,7 +350,10 @@ function providerFailureMessage(threadRead) {
   );
 }
 
-async function exportAgentSessionEvidenceCurrent(options, { sessionId, turnId }) {
+async function exportAgentSessionEvidenceCurrent(
+  options,
+  { sessionId, turnId },
+) {
   return invokeAppServerMethod(options, APP_SERVER_METHOD_EVIDENCE_EXPORT, {
     sessionId,
     turnId,
@@ -609,7 +605,7 @@ async function waitForRuntimeCompletion(options, sessionId) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   const deadline = startedAt + options.timeoutMs;
-  const graceDeadline = deadline + options.completionGraceMs;
+  const graceDeadline = deadline + options.settledGraceMs;
   while (Date.now() < graceDeadline) {
     const threadRead = await readAgentRuntimeThreadCurrent(options, sessionId, {
       historyLimit: 80,
@@ -618,16 +614,17 @@ async function waitForRuntimeCompletion(options, sessionId) {
     if (threadSettled(threadRead)) {
       return threadRead;
     }
-    const remainingMs = Date.now() < deadline
-      ? deadline - Date.now()
-      : graceDeadline - Date.now();
+    const remainingMs =
+      Date.now() < deadline
+        ? deadline - Date.now()
+        : graceDeadline - Date.now();
     if (remainingMs <= 0) {
       break;
     }
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `${LOG_PREFIX} live runtime timeout; timeoutMs=${options.timeoutMs} completionGraceMs=${options.completionGraceMs} last=${JSON.stringify(lastSnapshot)}`,
+    `${LOG_PREFIX} live runtime timeout; timeoutMs=${options.timeoutMs} settledGraceMs=${options.settledGraceMs} last=${JSON.stringify(lastSnapshot)}`,
   );
 }
 
@@ -729,7 +726,7 @@ Expert Skills Live Runner
   --live-workspace-root <path>
                               live smoke 专用 workspace root，默认 ${DEFAULT_LIVE_WORKSPACE_ROOT}
   --timeout-ms <ms>           live runtime 等待超时，默认 ${DEFAULT_TIMEOUT_MS}
-  --completion-grace-ms <ms>  timeout 后继续短暂读取完成态，默认 ${DEFAULT_COMPLETION_GRACE_MS}
+  --settled-grace-ms <ms>     timeout 后继续短暂轮询稳定 read model，默认 ${DEFAULT_SETTLED_GRACE_MS}
   --interval-ms <ms>          轮询间隔，默认 ${DEFAULT_INTERVAL_MS}
   --provider-preference <id>  live runtime provider 偏好
   --model-preference <name>   live runtime model 偏好
@@ -749,7 +746,7 @@ export function parseArgs(argv) {
     invokeUrl: DEFAULT_INVOKE_URL,
     liveWorkspaceRoot: DEFAULT_LIVE_WORKSPACE_ROOT,
     timeoutMs: DEFAULT_TIMEOUT_MS,
-    completionGraceMs: DEFAULT_COMPLETION_GRACE_MS,
+    settledGraceMs: DEFAULT_SETTLED_GRACE_MS,
     intervalMs: DEFAULT_INTERVAL_MS,
     providerPreference:
       process.env.LIME_AGENT_QC_PROVIDER ||
@@ -816,8 +813,8 @@ export function parseArgs(argv) {
       index += 1;
       continue;
     }
-    if (arg === "--completion-grace-ms" && next) {
-      options.completionGraceMs = Number(next);
+    if (arg === "--settled-grace-ms" && next) {
+      options.settledGraceMs = Number(next);
       index += 1;
       continue;
     }
@@ -852,11 +849,8 @@ export function parseArgs(argv) {
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 30_000) {
     throw new Error("--timeout-ms 必须是 >= 30000 的数字");
   }
-  if (
-    !Number.isFinite(options.completionGraceMs) ||
-    options.completionGraceMs < 0
-  ) {
-    throw new Error("--completion-grace-ms 必须是 >= 0 的数字");
+  if (!Number.isFinite(options.settledGraceMs) || options.settledGraceMs < 0) {
+    throw new Error("--settled-grace-ms 必须是 >= 0 的数字");
   }
   if (!Number.isFinite(options.intervalMs) || options.intervalMs < 100) {
     throw new Error("--interval-ms 必须是 >= 100 的数字");

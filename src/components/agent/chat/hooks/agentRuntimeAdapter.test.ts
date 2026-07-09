@@ -13,7 +13,7 @@ const { mockCreateAgentRuntimeClient, mockRuntimeClient } = vi.hoisted(() => {
     generateAgentRuntimeSessionTitle: vi.fn(),
     getAgentRuntimeSession: vi.fn(),
     getAgentRuntimeThreadRead: vi.fn(),
-    initAsterAgent: vi.fn(),
+    initAgentRuntime: vi.fn(),
     interruptAgentRuntimeTurn: vi.fn(),
     listAgentRuntimeSessions: vi.fn(),
     promoteAgentRuntimeQueuedTurn: vi.fn(),

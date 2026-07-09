@@ -4,7 +4,6 @@ import {
 } from "./claw-chat-current-fixture-soul-style-transcript-golden.mjs";
 
 export const DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID = "cheeky_sassy_executor";
-export const DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY = "high";
 
 export const SOUL_STYLE_FIXTURE_PROFILES = SOUL_STYLE_TRANSCRIPT_GOLDENS.map(
   ({ profileId, packId, tone }) => ({
@@ -17,15 +16,12 @@ export const SOUL_STYLE_FIXTURE_PROFILES = SOUL_STYLE_TRANSCRIPT_GOLDENS.map(
 export const SOUL_STYLE_FIXTURE_PROFILE_IDS =
   SOUL_STYLE_FIXTURE_PROFILES.map((profile) => profile.profileId);
 
-export const SOUL_STYLE_FIXTURE_INTENSITIES = ["low", "medium", "high"];
-
 const SOUL_STYLE_PROMPT_REQUIRED_MARKER_KEYS = [
   "hasInteractionSoul",
   "hasMemorySoulSchema",
   "hasSavedConfigSource",
   "hasProfileId",
   "hasStylePack",
-  "hasIntensity",
   "hasResponseContract",
   "hasToolLifecycleSurfaceContracts",
   "hasAllowedStyleMoves",
@@ -47,26 +43,12 @@ export function resolveSoulStyleFixtureProfile(profileId) {
   return profile;
 }
 
-export function resolveSoulStyleFixtureIntensity(intensity) {
-  const normalizedIntensity = String(
-    intensity || DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
-  ).trim();
-  if (!SOUL_STYLE_FIXTURE_INTENSITIES.includes(normalizedIntensity)) {
-    throw new Error(
-      `--soul-style-intensity 只能是 ${SOUL_STYLE_FIXTURE_INTENSITIES.join("、")}`,
-    );
-  }
-  return normalizedIntensity;
-}
-
 export function createSoulStyleFixtureSelection({
   profileId = DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
-  intensity = DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
 } = {}) {
   const profile = resolveSoulStyleFixtureProfile(profileId);
   return {
     ...profile,
-    intensity: resolveSoulStyleFixtureIntensity(intensity),
     source: "soul-style-transcript-golden",
   };
 }
@@ -77,7 +59,6 @@ export function createSoulStyleFixtureOverrides(selection) {
   }
   return {
     soulStyleProfileId: selection.profileId,
-    soulStyleIntensity: selection.intensity,
   };
 }
 
@@ -133,7 +114,6 @@ export function summarizeSoulPromptMarkers(serialized, expectedSoulStyle) {
   return {
     expectedProfileId: expected?.profileId ?? null,
     expectedPackId: expected?.packId ?? null,
-    expectedIntensity: expected?.intensity ?? null,
     hasInteractionSoul: text.includes("## Interaction Soul"),
     hasMemorySoulSchema: text.includes("memory_soul_prompt_context.v2"),
     hasSavedConfigSource: text.includes("saved app config `memory.soul`"),
@@ -143,9 +123,6 @@ export function summarizeSoulPromptMarkers(serialized, expectedSoulStyle) {
     hasStylePack: expected
       ? text.includes(`Style pack: ${expected.packId}`)
       : /Style pack:\s*\S/u.test(text),
-    hasIntensity: expected
-      ? text.includes(`Style intensity: ${expected.intensity}`)
-      : /Style intensity:\s*\S/u.test(text),
     hasResponseContract: text.includes("Response contract"),
     hasToolLifecycleSurfaceContracts: SOUL_STYLE_TRANSCRIPT_SURFACES.every(
       (surface) => text.includes(`${surface}:`),
@@ -190,8 +167,7 @@ export function buildSoulStyleScenarioAssertions({
   return {
     soulStyleConfigEnabled:
       summary.soulStyleConfig?.enabled === true &&
-      summary.soulStyleConfig?.style_profile_id === expected.profileId &&
-      summary.soulStyleConfig?.style_intensity === expected.intensity,
+      summary.soulStyleConfig?.style_profile_id === expected.profileId,
     soulStylePromptReachedBackend: guiTurnStartReachedBackend === true,
     soulStyleRuntimeProviderReached:
       summary.textProviderFixtureServer?.requestCount >= 1,
@@ -199,7 +175,6 @@ export function buildSoulStyleScenarioAssertions({
       summary.soulStylePromptContextCoveredByRuntime === true &&
       markers.expectedProfileId === expected.profileId &&
       markers.expectedPackId === expected.packId &&
-      markers.expectedIntensity === expected.intensity &&
       isSoulStylePromptContextCoveredByRuntime(markers),
     soulStyleReadModelCompleted:
       summary.readModelCompleted?.includesPrompt === true &&

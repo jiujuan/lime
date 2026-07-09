@@ -5,7 +5,11 @@ import type {
   AgentEventContextTrace,
 } from "@/lib/api/agentProtocol";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
-import type { ActionRequired, WriteArtifactContext } from "../types";
+import type {
+  ActionRequired,
+  ApprovalDecision,
+  WriteArtifactContext,
+} from "../types";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import {
   extractQuestionsFromRequestedSchema,
@@ -16,6 +20,7 @@ import { upsertAssistantActionRequest } from "./agentChatActionState";
 import { governActionRequest } from "../utils/actionRequestGovernance";
 import { buildArtifactFromWrite } from "../utils/messageArtifacts";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
+import { normalizeActionRequiredScope } from "@/lib/api/agentProtocolParserUtils";
 import { buildContextRuntimeStatus } from "../utils/agentRuntimeStatus";
 import {
   buildWriteMetadata,
@@ -25,6 +30,45 @@ import {
   type ArtifactWriteOptions,
   type BaseProcessorContext,
 } from "./agentStreamEventProcessorArtifacts";
+
+function normalizeRuntimeActionScope(
+  data: AgentEventActionRequired,
+): ActionRequired["scope"] {
+  const rawData = data as AgentEventActionRequired & {
+    action_scope?: unknown;
+    actionScope?: unknown;
+  };
+  const scope = normalizeActionRequiredScope(
+    rawData.scope ?? rawData.action_scope ?? rawData.actionScope,
+  );
+  if (!scope) {
+    return undefined;
+  }
+  return {
+    sessionId: scope.session_id,
+    threadId: scope.thread_id,
+    turnId: scope.turn_id,
+  };
+}
+
+function isApprovalDecision(value: string): value is ApprovalDecision {
+  return (
+    value === "allow_once" ||
+    value === "allow_for_session" ||
+    value === "decline" ||
+    value === "cancel"
+  );
+}
+
+function normalizeApprovalDecisions(
+  value: string[] | undefined,
+): ApprovalDecision[] | undefined {
+  if (!value?.length) {
+    return undefined;
+  }
+  const decisions = value.filter(isApprovalDecision);
+  return decisions.length > 0 ? Array.from(new Set(decisions)) : undefined;
+}
 
 export function handleArtifactSnapshotEvent({
   data,
@@ -130,13 +174,8 @@ export function handleActionRequiredEvent({
       extractQuestionsFromRequestedSchema(data.requested_schema) ||
       normalizeActionQuestions(undefined, data.prompt),
     requestedSchema: data.requested_schema,
-    scope: data.scope
-      ? {
-          sessionId: data.scope.session_id,
-          threadId: data.scope.thread_id,
-          turnId: data.scope.turn_id,
-        }
-      : undefined,
+    availableDecisions: normalizeApprovalDecisions(data.available_decisions),
+    scope: normalizeRuntimeActionScope(data),
     eventName,
     isFallback: false,
   });

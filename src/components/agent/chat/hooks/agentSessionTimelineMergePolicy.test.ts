@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
+  hasAssistantActivitySnapshot,
   mergeRuntimeSyncThreadItems,
   resolveAgentSessionTimelineMergeDecision,
+  shouldSkipStaleEmptyMessagesRefSync,
 } from "./agentSessionTimelineMergePolicy";
 
 function createMessage(overrides: Partial<Message> = {}): Message {
@@ -50,6 +52,83 @@ function createAgentMessageItem(
 }
 
 describe("agentSessionTimelineMergePolicy", () => {
+  it("应把首轮 preparing assistant 识别为本地活动快照", () => {
+    expect(
+      hasAssistantActivitySnapshot([
+        createMessage({
+          id: "user-1",
+          role: "user",
+          content: "你好",
+        }),
+        createMessage({
+          id: "assistant-preparing",
+          role: "assistant",
+          content: "",
+          isThinking: true,
+          runtimeStatus: {
+            phase: "preparing",
+            title: "正在准备回复",
+            detail: "正在建立运行时上下文",
+          },
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("纯文本历史 assistant 不应被识别为本地活动快照", () => {
+    expect(
+      hasAssistantActivitySnapshot([
+        createMessage({
+          id: "assistant-history",
+          role: "assistant",
+          content: "历史回复",
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("旧空 state 不应覆盖已经写入 ref 的活跃本地发送预览", () => {
+    const activePreview = [
+      createMessage({
+        id: "user-1",
+        role: "user",
+        content: "你好",
+      }),
+      createMessage({
+        id: "assistant-preparing",
+        role: "assistant",
+        content: "",
+        runtimeStatus: {
+          phase: "preparing",
+          title: "正在准备回复",
+          detail: "正在建立运行时上下文",
+        },
+      }),
+    ];
+
+    expect(
+      shouldSkipStaleEmptyMessagesRefSync({
+        nextMessages: [],
+        currentRefMessages: activePreview,
+      }),
+    ).toBe(true);
+  });
+
+  it("没有本地活动 assistant 时，空 state 仍可同步到 ref", () => {
+    expect(
+      shouldSkipStaleEmptyMessagesRefSync({
+        nextMessages: [],
+        currentRefMessages: [
+          createMessage({
+            id: "assistant-history",
+            role: "assistant",
+            content: "历史回复",
+          }),
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("history_hydrate 兼容同一会话时应允许保留本地 timeline 状态", () => {
     const decision = resolveAgentSessionTimelineMergeDecision({
       mode: "history_hydrate",
@@ -177,6 +256,82 @@ describe("agentSessionTimelineMergePolicy", () => {
       shouldPreserveByRuntimeSync: false,
       shouldPreserveBySession: false,
       shouldIgnoreIncompatibleHydratedMessages: false,
+    });
+  });
+
+  it("runtime_sync 应把 thread_read.turns 里的终态视为 terminal timeline", () => {
+    const decision = resolveAgentSessionTimelineMergeDecision({
+      mode: "runtime_sync",
+      mayPreserveExistingTimelineBySession: true,
+      localMessages: [
+        createMessage({
+          role: "user",
+          content: "pending 壳临时问题",
+        }),
+      ],
+      hydratedMessagesForCompatibility: [
+        createMessage({
+          role: "user",
+          content: "最终用户问题",
+        }),
+      ],
+      threadRead: {
+        thread_id: "thread-1",
+        status: "idle",
+        turns: [
+          {
+            turn_id: "turn-1",
+            status: "completed",
+          },
+        ],
+      },
+      incomingTurns: [],
+    });
+
+    expect(decision).toMatchObject({
+      mode: "runtime_sync",
+      hasIncomingTerminalTimeline: true,
+      shouldPreserveByRuntimeSync: false,
+      shouldIgnoreIncompatibleHydratedMessages: false,
+    });
+  });
+
+  it("runtime_sync 不应仅凭 diagnostics 最新 turn 终态接管 pending 壳", () => {
+    const decision = resolveAgentSessionTimelineMergeDecision({
+      mode: "runtime_sync",
+      mayPreserveExistingTimelineBySession: true,
+      localMessages: [
+        createMessage({
+          role: "user",
+          content: "pending 壳临时问题",
+        }),
+      ],
+      hydratedMessagesForCompatibility: [
+        createMessage({
+          role: "user",
+          content: "最终用户问题",
+        }),
+      ],
+      threadRead: {
+        thread_id: "thread-1",
+        status: "running",
+        diagnostics: {
+          latest_turn_status: "completed",
+          warning_count: 0,
+          context_compaction_count: 0,
+          failed_tool_call_count: 0,
+          failed_command_count: 0,
+          pending_request_count: 0,
+        },
+      },
+      incomingTurns: [],
+    });
+
+    expect(decision).toMatchObject({
+      mode: "runtime_sync",
+      hasIncomingTerminalTimeline: false,
+      shouldPreserveByRuntimeSync: true,
+      shouldIgnoreIncompatibleHydratedMessages: true,
     });
   });
 

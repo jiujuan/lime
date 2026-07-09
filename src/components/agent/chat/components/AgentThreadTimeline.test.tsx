@@ -86,7 +86,8 @@ describe("AgentThreadTimeline", () => {
     ).toBeNull();
     expect(container.textContent).toContain("已完成页面检查");
     expect(container.textContent).toContain("打开了 https://mp.weixin.qq.com");
-    expect(container.textContent).toContain("请确认是否发布文章");
+    expect(container.textContent).toContain("browser_click");
+    expect(container.textContent).not.toContain("请确认是否发布文章");
   });
   it("file_artifact 命中多个 block 时应提供精确跳转按钮", async () => {
     const onOpenArtifactFromTimeline = vi.fn();
@@ -519,11 +520,13 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).not.toContain("已搜索 可用工具");
     expect(mockToolCallItem).not.toHaveBeenCalled();
   });
-  it("审批项与技术项都应直接落在消息流中", () => {
+  it("审批项与技术项都应保留在执行轨迹中，但 pending approval 不渲染提交面板", () => {
     const items: AgentThreadItem[] = [
       {
         ...createBaseItem("approval-1", 1),
         type: "approval_request",
+        status: "pending",
+        completed_at: undefined,
         request_id: "req-1",
         action_type: "tool_confirmation",
         prompt: "请确认是否继续",
@@ -546,7 +549,78 @@ describe("AgentThreadTimeline", () => {
 
     expect(approvalGroup).not.toBeNull();
     expect(otherGroup).not.toBeNull();
-    expect(container.textContent).toContain("请确认是否继续");
+    expect(
+      container.querySelector('[data-testid="decision-panel"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("workspace_sync");
+  });
+
+  it("历史 approval 应渲染单行只读记录而不是提交面板", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("approval-session", 1),
+        type: "approval_request",
+        status: "completed",
+        request_id: "req-session-approval",
+        action_type: "tool_confirmation",
+        prompt: "允许浏览器访问 example.com 吗？",
+        tool_name: "browser_control",
+        response: {
+          decision: "allow_for_session",
+          decision_scope: "session",
+          source: "approval_session_cache",
+          auto_resolved: true,
+        },
+      },
+    ];
+
+    const container = renderTimeline(items);
+
+    expect(
+      container.querySelector('[data-testid="timeline-approval-record"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="decision-panel"]'),
+    ).toBeNull();
+    const record = container.querySelector<HTMLElement>(
+      '[data-testid="timeline-approval-record"]',
+    );
+    expect(record?.textContent).toContain("browser_control");
+    expect(record?.textContent).toContain("本会话允许");
+    expect(record?.textContent).not.toContain(
+      "允许浏览器访问 example.com 吗？",
+    );
+    expect(record?.textContent).not.toContain("请求");
+    expect(record?.textContent).not.toContain("范围");
+    expect(record?.textContent).not.toContain("来源");
+    expect(record?.textContent).not.toContain("历史记录只读");
+  });
+
+  it("完全授权策略下不渲染历史 approval 记录", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("approval-full-access", 1),
+        type: "approval_request",
+        status: "completed",
+        request_id: "req-full-access-approval",
+        action_type: "tool_confirmation",
+        prompt: "允许浏览器访问 example.com 吗？",
+        tool_name: "browser_control",
+        response: {
+          decision: "allow_for_session",
+          approval_policy: "never",
+          sandbox_policy: "danger-full-access",
+        },
+      },
+    ];
+
+    const container = renderTimeline(items);
+
+    expect(
+      container.querySelector('[data-testid="timeline-approval-record"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="decision-panel"]'),
+    ).toBeNull();
   });
 });

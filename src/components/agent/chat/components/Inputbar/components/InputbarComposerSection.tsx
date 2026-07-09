@@ -54,6 +54,7 @@ import type {
   InputbarPluginSelectionOptions,
   InputbarPluginSkillCapability,
 } from "../pluginInputCapability";
+import type { BaseComposerSendMetadata } from "@/components/input-kit";
 
 interface InputbarComposerSectionProps {
   renderWorkflowGeneratingPanel: boolean;
@@ -96,7 +97,7 @@ interface InputbarComposerSectionProps {
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
-  onSend: () => void;
+  onSend: (metadata?: BaseComposerSendMetadata) => void;
   onToolClick: (tool: string) => void;
   activeTools: Record<string, boolean>;
   pendingImages: MessageImage[];

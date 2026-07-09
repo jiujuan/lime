@@ -303,6 +303,7 @@ interface AgentUiProjectionContentPartMeta {
 export interface MessageMediaReference {
   kind?: string;
   uri: string;
+  refId?: string;
   mimeType?: string;
   title?: string;
   caption?: string;
@@ -373,6 +374,12 @@ export type PendingA2UISource =
 
 // ============ 权限确认相关类型 ============
 
+export type ApprovalDecision =
+  | "allow_once"
+  | "allow_for_session"
+  | "decline"
+  | "cancel";
+
 export interface ActionRequiredScope {
   sessionId?: string;
   threadId?: string;
@@ -424,6 +431,8 @@ export interface ActionRequired {
   submittedUserData?: unknown;
   /** 附加说明 */
   detail?: string;
+  /** 后端声明可用的授权动作；未声明时前端只展示一次允许/拒绝 */
+  availableDecisions?: ApprovalDecision[];
   /** 单轮澄清治理元数据 */
   governance?: ActionRequestGovernanceMeta;
 }
@@ -446,8 +455,10 @@ export interface QuestionOption {
 export interface ConfirmResponse {
   /** 请求 ID */
   requestId: string;
-  /** 是否确认 */
-  confirmed: boolean;
+  /** 非 approval 业务确认布尔；tool_confirmation 必须使用 decision */
+  confirmed?: boolean;
+  /** 授权决策语义 */
+  decision?: ApprovalDecision;
   /** 响应内容（用户输入或选择的答案） */
   response?: string;
   /** 操作类型（用于前端分流） */

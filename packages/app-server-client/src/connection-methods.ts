@@ -907,6 +907,12 @@ declare module "./connection.js" {
     ): Promise<
       AppServerRequestResult<protocol.VoiceModelTestTranscribeFileResponse>
     >;
+    transcribeVoiceAudio(
+      params: protocol.VoiceTranscriptionTranscribeAudioParams,
+      options?: AppServerRequestOptions,
+    ): Promise<
+      AppServerRequestResult<protocol.VoiceTranscriptionTranscribeAudioResponse>
+    >;
     readUsageStats(
       params: protocol.UsageStatsRangeParams,
       options?: AppServerRequestOptions,

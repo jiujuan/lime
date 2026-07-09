@@ -13,7 +13,6 @@ export {
 } from "./registry";
 export {
   isSoulStyleProfileId,
-  normalizeSoulStyleIntensity,
   normalizeSoulStyleProfileId,
   resolveSoulStyleProfile,
 } from "./resolveStyleProfile";
@@ -23,7 +22,6 @@ export type {
   SoulStyleBoundaryResult,
   SoulStyleDirectives,
   SoulStyleFewShotAnchor,
-  SoulStyleIntensity,
   SoulStylePackManifest,
   SoulStylePackSource,
   SoulStyleProfile,

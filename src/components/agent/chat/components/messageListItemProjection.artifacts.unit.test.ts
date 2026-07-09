@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { changeLimeLocale } from "@/i18n/createI18n";
-import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
+import {
+  buildProjection,
+  type Message,
+} from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection artifacts and failures", () => {
   it("provider 失败正文已有错误卡承载时不应重复作为 assistant 正文", async () => {
@@ -172,5 +175,127 @@ describe("messageListItemProjection artifacts and failures", () => {
       "text",
       "file_changes_batch",
     ]);
+  });
+
+  it("apply_patch timeline item 应以结构化 FileChange 投影驱动 diff 和 artifact 去重", () => {
+    const message: Message = {
+      id: "assistant-apply-patch-file-change",
+      role: "assistant",
+      content: "补丁已应用。",
+      timestamp: new Date("2026-06-02T10:01:00.000Z"),
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "patch-apply-src-app",
+          type: "patch",
+          turn_id: "turn-apply-patch-filechange",
+          sequence: 1,
+          text: "Applied patch to src/components/App.tsx",
+          paths: ["src/components/App.tsx"],
+          success: true,
+          metadata: {
+            source_client: "codex",
+            environmentId: "env-main",
+            approvalId: "approval-apply-src-app",
+            approvalState: "approved",
+            file_change: {
+              path: "src/components/App.tsx",
+              kind: "update",
+              lines_added: 2,
+              lines_removed: 1,
+              diff: [
+                { kind: "context", value: "export function App() {" },
+                { kind: "remove", value: '  return "Old";' },
+                { kind: "add", value: '  return "New";' },
+                { kind: "add", value: '  return "Ready";' },
+              ],
+              truncated: false,
+            },
+          },
+          status: "completed",
+          started_at: "2026-06-02T10:01:01.000Z",
+          completed_at: "2026-06-02T10:01:02.000Z",
+          updated_at: "2026-06-02T10:01:02.000Z",
+        },
+        {
+          id: "artifact-src-app-after",
+          type: "file_artifact",
+          turn_id: "turn-apply-patch-filechange",
+          sequence: 2,
+          path: "src/components/App.tsx",
+          source: "artifact_snapshot",
+          content: 'export function App() {\n  return "Ready";\n}',
+          status: "completed",
+          started_at: "2026-06-02T10:01:02.000Z",
+          completed_at: "2026-06-02T10:01:03.000Z",
+          updated_at: "2026-06-02T10:01:03.000Z",
+        },
+        {
+          id: "assistant-apply-patch-final",
+          type: "agent_message",
+          turn_id: "turn-apply-patch-filechange",
+          sequence: 3,
+          phase: "final_answer",
+          text: "补丁已应用。",
+          status: "completed",
+          started_at: "2026-06-02T10:01:04.000Z",
+          completed_at: "2026-06-02T10:01:05.000Z",
+          updated_at: "2026-06-02T10:01:05.000Z",
+        },
+      ] as never,
+      {
+        isSending: false,
+        turnId: "turn-apply-patch-filechange",
+        turnStatus: "completed",
+      },
+    );
+
+    const fileChangePart = projection.rendererContentParts?.find(
+      (part) => part.type === "file_changes_batch",
+    );
+
+    expect(fileChangePart).toMatchObject({
+      type: "file_changes_batch",
+      metadata: {
+        source: "thread_item_patch",
+        threadItemId: "patch-apply-src-app",
+        turnId: "turn-apply-patch-filechange",
+        sequence: 1,
+        environmentId: "env-main",
+        approvalId: "approval-apply-src-app",
+        approvalState: "approved",
+      },
+      aggregate: {
+        fileCount: 1,
+        totalAdded: 2,
+        totalRemoved: 1,
+        files: [
+          {
+            path: "src/components/App.tsx",
+            kind: "update",
+            linesAdded: 2,
+            linesRemoved: 1,
+            source: "backend",
+            status: "completed",
+            truncated: false,
+            diff: [
+              { kind: "context", value: "export function App() {" },
+              { kind: "remove", value: '  return "Old";' },
+              { kind: "add", value: '  return "New";' },
+              { kind: "add", value: '  return "Ready";' },
+            ],
+          },
+        ],
+      },
+    });
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "file_changes_batch",
+      "text",
+    ]);
+    expect(projection.trailingTimeline).toBeNull();
+    expect(projection.visibleAssistantArtifacts).toHaveLength(0);
   });
 });

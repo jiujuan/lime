@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "status": "current",
   "owner": "internal/roadmap/test/clawstream/scenario-ledger.md",
-  "updatedAt": "2026-07-08",
+  "updatedAt": "2026-07-09",
   "layerDefinitions": {
     "event-item": "规范化 Runtime Event / Thread / Turn / Item 事件项",
     "projection-oracle": "Projection / ReadModel / ContentPart / render snapshot oracle",
@@ -128,6 +128,8 @@
       ],
       "verificationCommands": [
         "npx vitest run \"internal/roadmap/test/clawstream/scenario-registry.test.mjs\"",
+        "npm --prefix \"packages/agent-runtime-projection\" run build && node --test \"packages/agent-runtime-projection/tests/threadReadPageIsomorphic.test.mjs\"",
+        "npm --prefix \"packages/agent-runtime-projection\" run build && node --test \"packages/agent-runtime-projection/tests/goalLifecycleHydrate.test.mjs\"",
         "npm run test:related -- \"src/components/agent/chat/projection\" \"src/components/agent/chat/hooks/sessionHistoryMergeController.test.ts\" \"src/components/agent/chat/hooks/sessionHydrationController.test.ts\"",
         "npm run test:rust:related -- \"lime-rs/crates/app-server/src/runtime\" \"lime-rs/crates/thread-store/src\"",
         "npm run smoke:agent-runtime-current-fixture"
@@ -259,6 +261,8 @@
       ],
       "verificationCommands": [
         "npx vitest run \"internal/roadmap/test/clawstream/scenario-registry.test.mjs\"",
+        "npm --prefix \"packages/agent-runtime-projection\" run build && node --test \"packages/agent-runtime-projection/tests/multiAgentItemTaxonomy.test.mjs\"",
+        "npm --prefix \"packages/agent-runtime-projection\" run build && node --test \"packages/agent-runtime-projection/tests/multiAgentToolSchema.test.mjs\"",
         "npm run test:related -- \"src/components/agent/chat/team-workspace-runtime\" \"src/components/agent/chat/projection/subagentStatusProjection.test.ts\" \"src/components/agent/chat/projection/agentUiSubagentsViewModel.test.ts\"",
         "npm run test:rust:related -- \"lime-rs/crates/app-server/src/runtime/tests/evidence_exports/team_facts.rs\" \"lime-rs/crates/thread-store/src/subagent_tree.rs\"",
         "npm run smoke:claw-chat-current-fixture -- --scenario multi-agent-team --timeout-ms 180000"
@@ -358,17 +362,22 @@
       "id": "stream-parser-boundary",
       "priority": "P0",
       "family": "首字、reasoning、terminal、输入恢复",
-      "status": "partial+guard",
-      "requiredLayers": ["event-item", "projection-oracle", "governance-guard"],
-      "nextDetail": "补 GUI / Electron 边界 fixture，证明 added/delta/completed 不重复。"
+      "status": "covered-electron",
+      "requiredLayers": [
+        "event-item",
+        "projection-oracle",
+        "gui-electron",
+        "governance-guard"
+      ],
+      "nextDetail": "已由 default complete Electron fixture 覆盖 message.delta + message.completed full snapshot + turn.completed 顺序、GUI assistant scope 去重和 read model 去重；后续细节并入 live tail / process boundary richer fixture。"
     },
     {
       "id": "plan-parser-boundary",
       "priority": "P0",
       "family": "首字、reasoning、terminal、输入恢复",
-      "status": "partial+guard",
+      "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 Plan rail、decision drawer 和 history hydrate DOM 同构。"
+      "nextDetail": "Projection oracle、Plan owner / decision drawer / history hydrate Electron 正向 oracle，以及无 proposed_plan 不生成 Plan UI 的 Electron 负向 owner oracle 均已覆盖；local decision guard 已阻止无 revision / legacy update_plan revision 生成实施确认。"
     },
     {
       "id": "terminal-contract-after-answer",
@@ -387,17 +396,17 @@
       "id": "inputbar-restore-matrix",
       "priority": "P0",
       "family": "首字、reasoning、terminal、输入恢复",
-      "status": "partial+guard",
+      "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "packaged rich restore、multi queue、pop-front resume hydrate 与 GUI 一键 product promote/cancel/resume 已补；inputbar-pending-steer fixture 已拆成 scenario facade、GUI action helper 与 read-model helper；EmptyStateComposerPanel text-only restore fallback、AgentChatWorkspace 父级 text/path-only 预恢复 fallback、stop restore 的 getSessionReadModel optional runtime fallback、stop restore queued draft 本地队列裁剪、explicit remove/promote 本地队列裁剪、submit failure 与 terminal side-effect 本地队列删除、queue event 本地 position 重排、Hook 内联 queued turn projection helper 已删除并加 source guard；下一步补 queue / steer / draft 并行状态 inventory。"
+      "nextDetail": "packaged rich restore、multi queue、pop-front resume hydrate 与 GUI 一键 product promote/cancel/resume 已补；inputbar-pending-steer fixture 已拆成 scenario facade、GUI action helper 与 read-model helper；EmptyStateComposerPanel text-only restore fallback、AgentChatWorkspace 父级 text/path-only 预恢复 fallback、stop restore 的 getSessionReadModel optional runtime fallback、stop restore queued draft 本地队列裁剪、explicit remove/promote 本地队列裁剪、submit failure 与 terminal side-effect 本地队列删除、queue event 本地 position 重排、Hook 内联 queued turn projection helper 已删除并加 source guard；queue / steer / draft 生产写入口 inventory 已由 current owner 白名单守住。"
     },
     {
       "id": "pending-steer-queue",
       "priority": "P0",
       "family": "首字、reasoning、terminal、输入恢复",
-      "status": "partial+guard",
+      "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "inputbar-pending-steer-pop-front-resume packaged Gate B 与 product-current GUI 一键 promote/cancel/resume 已通过；fixture 已拆成 scenario facade、GUI action helper 与 read-model helper；stop restore 的 getSessionReadModel optional runtime fallback、stop restore queued draft 本地队列裁剪、explicit remove/promote 本地队列裁剪、submit failure 与 terminal side-effect 本地队列删除、queue event 本地 position 重排、Hook 内联 queued turn projection helper 已删除并加 source guard；下一步继续清理 queue / steer / draft 旧 fallback inventory。"
+      "nextDetail": "inputbar-pending-steer-pop-front-resume packaged Gate B 与 product-current GUI 一键 promote/cancel/resume 已通过；fixture 已拆成 scenario facade、GUI action helper 与 read-model helper；stop restore 的 getSessionReadModel optional runtime fallback、stop restore queued draft 本地队列裁剪、explicit remove/promote 本地队列裁剪、submit failure 与 terminal side-effect 本地队列删除、queue event 本地 position 重排、Hook 内联 queued turn projection helper 已删除并加 source guard；后续 queue / steer / draft 旧 fallback inventory 并入 inputbar-restore-matrix 细节清理。"
     },
     {
       "id": "cancel-then-continue",
@@ -432,153 +441,158 @@
       "id": "no-natural-language-lifecycle-regex",
       "priority": "P0",
       "family": "首字、reasoning、terminal、输入恢复",
-      "status": "partial+guard",
-      "requiredLayers": ["projection-oracle", "governance-guard"],
-      "nextDetail": "扩大扫描面到剩余 Claw lifecycle owner，并补删除旧 helper 的准入证据。"
+      "status": "covered-electron",
+      "requiredLayers": [
+        "event-item",
+        "projection-oracle",
+        "governance-guard",
+        "gui-electron"
+      ],
+      "nextDetail": "P0 已收口：lifecycle/projection/parser current owner 已扩面扫描，文本派生 status source 只能停留在负向检测 owner；后续新增 lifecycle owner 必须同步进入 guard。"
     },
     {
       "id": "thread-read-page-isomorphic",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "partial",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 read/list/resume page shape 同构和分页不重排 oracle。"
+      "nextDetail": "已补 package-side Codex thread read/list/resume page isomorphic projection guard，覆盖 read/list/resume 同 thread、turn/item order、live content part hydrate、pagination duplicate/reorder 与 legacy paginated history fail closed；下一步补 App Server read model facade 与 Electron history hydrate oracle。"
     },
     {
       "id": "thread-resume-running-stream",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 running thread resume active turn 和 live stream binding 骨架。"
+      "nextDetail": "已补 package-side Codex running resume projection guard，覆盖 active turn/live stream binding、NotLoaded fail closed、history override fail closed、override model/cwd 不污染 running thread、shadow session fail closed；下一步补 App Server resume/read model 与 Electron running stream oracle。"
     },
     {
       "id": "thread-inject-items",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 external injected item insertion order 与 hydrate oracle。"
+      "nextDetail": "已补 package-side Codex thread/inject_items projection guard，覆盖 raw response item insertion order、turn linkage、metadata preservation、previous/next model input boundary、remote image URL fail closed、hydrate 不得变成 user input 或 assistant final tail；下一步补 App Server read model item 与 Electron hydrate oracle。"
     },
     {
       "id": "thread-status-runtime-update",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 thread status runtime notification 与 transcript 解耦 oracle。"
+      "nextDetail": "已补 package-side Codex thread/status/changed runtime projection guard，覆盖 Active -> Idle/SystemError/NotLoaded runtime update、optOutNotificationMethods、waiting active flags、transcript/read-model item leak fail closed、status surface thread scope 与 DOM text inference fail closed；下一步补 App Server read model/status surface 与 Electron header/sidebar oracle。"
     },
     {
       "id": "thread-fork-lineage",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 fork parent lineage 在 sidebar/history/evidence 的同源 oracle。"
+      "nextDetail": "已补 package-side Codex thread/fork lineage projection guard，覆盖 forkedFromId、lastTurnId terminal prefix、parent item ids、thread/read 同构、sidebar/history/evidence lineage、source rollout unchanged、parentThreadId 误用与 plain thread render fail closed；下一步补 App Server lineage read model 与 Electron sidebar/history/evidence oracle。"
     },
     {
       "id": "thread-rollback-projection",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 rollback marker、read model 和 token/context 同步回滚 oracle。"
+      "nextDetail": "已补 package-side Codex thread rollback projection guard，覆盖 ThreadRolledBack marker、removed turn 不再投影、resume/read model/history window 清理、累计 marker replay、settings/reference context/token usage 重算、turn in progress/numTurns=0/UI-only hide fail closed；下一步补 App Server rollback read model 与 Electron history oracle。"
     },
     {
       "id": "thread-archive-delete-hydrate",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 archive/unarchive/delete metadata state 的 hydrate oracle。"
+      "nextDetail": "已补 package-side Codex archive/unarchive/delete hydrate projection guard，覆盖 archive notification、archived read by id、active/archived list consistency、unarchive restore、delete descendant notifications、deleted read/resume fail closed、item fingerprint stable、path state consistency、sidebar-only archive fail closed；下一步补 App Server metadata/read model 与 Electron sidebar/list/read/restore oracle。"
     },
     {
       "id": "thread-settings-live-update",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 settings/model/cwd/environment update 不污染 transcript 的 oracle。"
+      "nextDetail": "已补 package-side Codex thread/settings/updated live projection guard，覆盖 settings-only update 不启动模型请求、active turn settings 不被污染、future turn 使用 updated model/serviceTier/cwd、ack 不直接改 cached session、notification 才更新 cache、transcript/read-model item leak、service tier clear、sandboxPolicy+permissions fail closed 与 turn/start override notification；下一步补 App Server read model/settings surface 与 Electron model/cwd/header/sidebar oracle。"
     },
     {
       "id": "token-usage-replay",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 token usage / context window resume metadata oracle。"
+      "nextDetail": "已补 package-side Codex token usage replay projection guard，覆盖 resume/fork restored thread/tokenUsage/updated、excludeTurns skip、replay before next turn、turn attribution、rebuilt turn position/stale interrupted tail fail closed、connection-scoped replay、total/last/modelContextWindow、context-window surface update 与 transcript/read-model item leak fail closed；下一步补 App Server resume/fork read model 与 Electron status line/header/context-window oracle。"
     },
     {
       "id": "context-compaction-item",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 compaction started/completed item 与 replacement history oracle。"
+      "nextDetail": "已补 package-side Codex contextCompaction item projection guard，覆盖 item/started + item/completed 同 id lifecycle、deprecated thread/compacted 不能替代 current item、replacement history verbatim、old item fingerprint stable、read model / follow-up model input 保留 compaction item、thread/compact/start empty ack；下一步补 App Server compaction read model 与 Electron history hydrate/status oracle。"
     },
     {
       "id": "goal-lifecycle-hydrate",
       "priority": "P1",
       "family": "Thread / Turn / History / Compaction",
-      "status": "partial",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 goal status/budget/usage hydrate 和 footer/header DOM oracle。"
+      "nextDetail": "已补 package-side Codex goal lifecycle hydrate projection guard，覆盖 goal status/budget/usage hydrate、blocked/usageLimited wire status 映射、objective edit 不重置 usage、clear 后 read=null、header/footer/goal surface 结构化 owner、analytics 不泄漏 objective/token_budget，以及 transcript/read-model item leak fail closed；下一步补 App Server objective/read model facade 与 Electron footer/header/status DOM oracle。"
     },
     {
       "id": "command-execution-item",
       "priority": "P1",
       "family": "Tool / Approval / Patch / Sandbox",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 CommandExecution item working/completed/failed 与 shell wrapper 隐藏 oracle。"
+      "nextDetail": "已补 CommandExecution -> exec_command 转换层 shell wrapper 隐藏 guard；下一步补 working/completed/failed hydrate 与 Electron command lifecycle oracle。"
     },
     {
       "id": "apply-patch-filechange",
       "priority": "P1",
       "family": "Tool / Approval / Patch / Sandbox",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 FileChange item、diff snapshot 和 artifact/approval 共用 oracle。"
+      "nextDetail": "已补 patch timeline item -> file_changes_batch projection guard，保留 diff/provenance 并压掉同路径 artifact；下一步建立独立 FileChange event item 与 Electron artifact/approval oracle。"
     },
     {
       "id": "approval-request-and-resume",
       "priority": "P1",
       "family": "Tool / Approval / Patch / Sandbox",
-      "status": "partial",
+      "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 pending approval hydrate 后可操作和 resolve 继续 turn 的 Electron oracle。"
+      "nextDetail": "已补 Electron current fixture：pending approval hydrate 后 GUI 可操作，点击允许走 agentSession/action/respond，同一 turn 继续 action.resolved -> tool.result -> message.delta -> turn.completed；下一步细分 network approval、sandbox denial 与 patch approval oracle。"
     },
     {
       "id": "request-permissions-turn-scoped",
       "priority": "P1",
       "family": "Tool / Approval / Patch / Sandbox",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 turn-scoped permission grants 与 environment 隔离 oracle。"
+      "nextDetail": "已补 action.required live parser、App Server event projection 与 history approval_request hydrate 的 permission_facts + thread/turn scope guard；下一步补真实 request permission grant / environment 隔离与 Electron approval oracle。"
     },
     {
       "id": "network-approval-item",
       "priority": "P1",
       "family": "Tool / Approval / Patch / Sandbox",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 host/protocol/port/environment 网络批准 item oracle。"
+      "nextDetail": "已补 action.required live parser、App Server event projection 与 history approval_request hydrate 的 network_approval host/protocol/port/environment/owner/proposed-amendment guard；下一步补真实 Electron allow once/session/deny lifecycle oracle。"
     },
     {
       "id": "guardian-review-status",
       "priority": "P1",
       "family": "Tool / Approval / Patch / Sandbox",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 guardian review started/approved/denied/timedOut 状态 oracle。"
+      "nextDetail": "已补 action.required live parser、App Server event projection 与 history approval_request hydrate 的 guardian_review review/status/action guard；下一步补独立 guardian lifecycle item、parallel aggregate status 与 Electron denied/timedOut oracle。"
     },
     {
       "id": "hook-lifecycle-events",
       "priority": "P1",
       "family": "Tool / Approval / Patch / Sandbox",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 pre/post tool hook live/history cell 同构 oracle。"
+      "nextDetail": "已补 Codex hook.started/completed 与 workflow.hook.started/completed 到独立 hook item 的 live parser、App Server event projection 与 history converter guard；下一步补 parallel quiet hooks collapse、completed output before assistant message DOM 与 Electron lifecycle oracle。"
     },
     {
       "id": "mcp-structured-content",
@@ -592,41 +606,41 @@
       "id": "mcp-resource-read",
       "priority": "P1",
       "family": "MCP / Resources / Elicitation",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 MCP resource read content/truncation/thread scope oracle。"
+      "nextDetail": "已补 package-side Codex MCP resource tool contract 与 read snapshot projection guard，保留 server/uri/mime/content preview/truncation/thread scope/evidence refs，并禁止 string-only ordinary tool output；下一步补 App Server read model surface 与 Electron resource/evidence panel oracle。"
     },
     {
       "id": "mcp-elicitation-resume",
       "priority": "P1",
       "family": "MCP / Resources / Elicitation",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 elicitation form request/resolution 和 resume 后继续 tool call oracle。"
+      "nextDetail": "已补 package-side Codex MCP elicitation request/resolution projection guard，绑定 requestId/server/thread/turn/form schema/client OpenAI form capability，并让 unsupported capability / accept-without-content fail closed；下一步补 App Server serverRequest/read model 与 Electron 表单提交后继续 tool call oracle。"
     },
     {
       "id": "mcp-inventory-status",
       "priority": "P1",
       "family": "MCP / Resources / Elicitation",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 raw/sanitized server-tool name collision 和 auth-only inventory oracle。"
+      "nextDetail": "已补 package-side Codex mcpServerStatus/list projection guard，保留 raw server/tool name、sanitized collision group、thread scope、auth-only detail，并禁止 naked server__tool 与 toolsAndAuthOnly 加载 resources；下一步补 App Server inventory read model 与 Electron inventory/status panel oracle。"
     },
     {
       "id": "mcp-thread-scope",
       "priority": "P1",
       "family": "MCP / Resources / Elicitation",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 executor/plugin MCP thread/environment scope oracle。"
+      "nextDetail": "已补 package-side Codex selected executor/plugin MCP thread scope projection guard，保留 selected root、plugin server owner、thread inventory、tool call 和 OAuth notification scope，并让全局/跨 thread 泄漏 fail closed；下一步补 App Server inventory read model 与 Electron thread 切换 oracle。"
     },
     {
       "id": "mcp-startup-status",
       "priority": "P1",
       "family": "MCP / Resources / Elicitation",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 startup status 与 running task/header 共存和 stale update fail-closed oracle。"
+      "nextDetail": "已补 package-side Codex MCP startup status projection guard，保留 mcp_startup_update/complete 的 thread scope、server/status/error/failureReason、runtime header、active turn running 共存、other-thread ignore、stale update fail-closed 和禁止 assistant item；下一步补 App Server notification/read model 与 Electron header/warning oracle。"
     },
     {
       "id": "skills-runtime-search-read-gate",
@@ -640,33 +654,33 @@
       "id": "skills-catalog-scope",
       "priority": "P1",
       "family": "Skills / Plugins / Capability Stack",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 cwd roots、cache generation 和 workspace scope oracle。"
+      "nextDetail": "已补 package-side Codex skills catalog scope projection guard，覆盖环境关闭跳过 cwd roots、requested cwd 顺序、extra roots 与 runtime request roots 同步、cache generation 和全局 cache 污染 fail-closed；下一步补 App Server skills list/read model 与 Electron workspace/cwd 切换 oracle。"
     },
     {
       "id": "skill-mention-input-restore",
       "priority": "P1",
       "family": "Skills / Plugins / Capability Stack",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 structured skill mentions 在 blocked/queued/cancel restore 后不降级 oracle。"
+      "nextDetail": "已补 package-side Codex skill mention input restore projection guard，覆盖 duplicate skill selected path、blocked image restore 保留 mention binding/textElement/local image、plugin binding 提交为 structured Mention，并让 binding 降级成纯文本 fail closed；下一步补 App Server/GUI 的 blocked/queued/cancel restore 同构 oracle。"
     },
     {
       "id": "selected-capability-stack",
       "priority": "P1",
       "family": "Skills / Plugins / Capability Stack",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 capability availability/resume state 与 next turn/resume oracle。"
+      "nextDetail": "已补 package-side Codex selected capability stack projection guard，覆盖 environment availability generation、resume unavailable 清空 selected skill/MCP/plugin tool 注入、reattach 新 generation 恢复能力、同一 turn 中途可用后重新 sample、历史 sample 不被改写；下一步补 App Server request/read model 与 Electron capability/status oracle。"
     },
     {
       "id": "plugin-capability-runtime",
       "priority": "P1",
       "family": "Skills / Plugins / Capability Stack",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 plugin read/install/update 进入 skill/MCP catalog 的 runtime oracle。"
+      "nextDetail": "已补 package-side Codex plugin capability runtime projection guard，覆盖 plugin list interface 资源绝对路径、remote skill read SKILL.md contents、plugin install 不写全局 MCP config、install 后 capability catalog generation/provenance/cache refresh、followup turn/start 看到 installed skill/MCP/app tools 且过滤 stale request_plugin_install；下一步补 App Server plugin read/list/install read model 与 Electron plugin/capability oracle。"
     },
     {
       "id": "expert-skills-hint-only",
@@ -680,9 +694,9 @@
       "id": "multi-agent-item-taxonomy",
       "priority": "P1",
       "family": "Multi-Agent / Review / Subagent Lineage",
-      "status": "partial",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 spawn/send/followup/wait/list/interrupt item taxonomy oracle。"
+      "nextDetail": "已补 package-side Codex multi-agent item taxonomy projection guard，覆盖 spawn/send/followup/wait/list/interrupt 结构化 item、visual alias 到 Codex v2 tool name 的映射、running/completed/interrupted 状态、parent thread / turn / child thread lineage、Team transcript / worker card / review lane item id 绑定，以及 legacy text summary / orphan agent history fail closed；下一步补 App Server read model item 与 Electron Team DOM oracle。"
     },
     {
       "id": "multi-agent-resume-lineage",
@@ -696,33 +710,33 @@
       "id": "multi-agent-tool-schema",
       "priority": "P1",
       "family": "Multi-Agent / Review / Subagent Lineage",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 v2 Team tool schema、legacy field reject 和 interrupted status oracle。"
+      "nextDetail": "已建立 Codex v2 Team tool schema / legacy field reject / interrupted status projection guard；下一步迁 Rust runtime surface 并补 Electron schema error UI oracle。"
     },
     {
       "id": "multi-agent-visual-snapshot",
       "priority": "P1",
       "family": "Multi-Agent / Review / Subagent Lineage",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 Team transcript screenshot / DOM snapshot baseline。"
+      "nextDetail": "已建立 collabToolCall item-derived Team transcript / roster / delegation graph / worker notification snapshot guard；下一步补 App Server read model 与 Electron DOM/截图 oracle。"
     },
     {
       "id": "review-start-item",
       "priority": "P1",
       "family": "Multi-Agent / Review / Subagent Lineage",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 review prompt/code review/approval item 同 turn 绑定 oracle。"
+      "nextDetail": "已建立 review/start entered/exitedReviewMode、inline/detached thread、approval item id 和 prompt/final transcript leak guard；下一步补 App Server read model 与 Electron review lane oracle。"
     },
     {
       "id": "local-remote-image-input",
       "priority": "P2",
       "family": "Image / Web / Dynamic Tools / Structured Output / Realtime",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 local/remote image refs、detail 和 placeholder map restore oracle。"
+      "nextDetail": "已建立 local detail default high/custom original、HTTP remote rejection、data URL accepted、restore/hydrate image refs 与 placeholder map guard；下一步补 App Server read model 与 Electron image restore/hydrate oracle。"
     },
     {
       "id": "image-generation-item",
@@ -744,81 +758,81 @@
       "id": "dynamic-tool-call-item",
       "priority": "P2",
       "family": "Image / Web / Dynamic Tools / Structured Output / Realtime",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 dynamic/extension tool namespace、arguments 和 result oracle。"
+      "nextDetail": "已有 package-side guard 覆盖 dynamic/extension tool namespace、deferred inventory、arguments、structured content item、remote image failure 与裸工具名 fail-closed；仍缺 App Server read model 与 Electron tool UI oracle。"
     },
     {
       "id": "structured-output-message",
       "priority": "P2",
       "family": "Image / Web / Dynamic Tools / Structured Output / Realtime",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 structured answer/tool output typed payload 不降级 oracle。"
+      "nextDetail": "已有 package-side guard 覆盖 output_schema request format/per-turn scope、assistant typed payload、copy/export 结构保留、function/custom output 类型、content_items 与 structuredContent 不文本化；仍缺 App Server read model 与 Electron JSON/table/card renderer oracle。"
     },
     {
       "id": "realtime-conversation-item",
       "priority": "P2",
       "family": "Image / Web / Dynamic Tools / Structured Output / Realtime",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "governance-guard"],
-      "nextDetail": "若仍非 current，先补 not-current guard；启用时接 Thread/Turn/Item。"
+      "nextDetail": "已有 package-side not-current/current contract guard：未声明 current owner 时 realtime event 不得进入 transcript/tool；启用时必须证明 thread-scoped started/closed、item/transcript/audio 投影、append-only text input 与 sideband audio non-blocking。仍缺 App Server/Electron current oracle。"
     },
     {
       "id": "markdown-render-snapshot",
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": [
         "projection-oracle",
         "gui-electron",
         "governance-guard"
       ],
-      "nextDetail": "建立 markdown headings/table/file link/code block/CJK wrap snapshot。"
+      "nextDetail": "已有 package-side renderer snapshot guard：assistant final text、tool output、artifact preview 必须声明同一 markdown renderer owner，并覆盖 heading/table/file link/code fence/CJK/mixed-width wrap、rich block snapshot、file link path/line metadata；pageText-only、raw markdown table/fence 和 renderer owner 分叉 fail closed。仍缺 Electron screenshot/DOM oracle。"
     },
     {
       "id": "diff-artifact-snapshot",
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 diff artifact add/delete/update/rename/multiple files snapshot。"
+      "nextDetail": "已有 package-side diff artifact guard：artifact/workbench/review 必须共享 structured diff item，fileChanges 覆盖 add/delete/update/rename/multiple files，并保留 line numbers、gutter signs、long-line wrap；raw patch string 与 fake artifact card fail closed。仍缺 Electron diff screenshot/DOM oracle。"
     },
     {
       "id": "electron-resize-reflow",
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
-      "status": "missing",
+      "status": "covered-electron",
       "requiredLayers": [
         "projection-oracle",
         "gui-electron",
         "governance-guard"
       ],
-      "nextDetail": "建立 resize 后 MessageList/Inputbar/right surface 锚定 snapshot。"
+      "nextDetail": "已有 package-side resize/reflow guard，并新增 Electron current fixture：复用 live-tail 长输出 current turn，完成后打开 files right surface，采集 wide/compact/restored 三组 viewport DOM 与截图，断言 MessageList tail range anchor、Inputbar bottom row、right surface owner/files root、no-overlap、read model completed 与 backend `turn.completed` 对齐；layout state 写回 item 和 pageText-only layout oracle 继续 fail closed。剩余细节是沉淀更稳定的视觉 baseline diff，并与 markdown/diff/status screenshot oracle 统一。"
     },
     {
       "id": "live-tail-commit",
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
-      "status": "missing",
+      "status": "covered-electron",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 long output live tail commit、scroll 和 table reflow oracle。"
+      "nextDetail": "已有 package-side live tail commit guard，并新增 Electron current fixture：GUI 先捕获 completion 前首字/首 token 与 running 状态，随后验证 overflow commit、长输出、scroll anchor、table tail reflow、read model completed 与 backend ledger current turn.completed。剩余细节是沉淀稳定 screenshot baseline，并与 electron-resize-reflow 合并做 viewport 变化 oracle。"
     },
     {
       "id": "history-replay-visual",
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
-      "status": "partial",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "补 user/image/reasoning/MCP active hydrate visual 同构。"
+      "nextDetail": "补 App Server read model 与 Electron history hydrate DOM/screenshot oracle。"
     },
     {
       "id": "status-surface-matrix",
       "priority": "P2",
       "family": "Visual Snapshot / Layout / Status Surface",
-      "status": "missing",
+      "status": "partial+guard",
       "requiredLayers": ["event-item", "projection-oracle", "gui-electron"],
-      "nextDetail": "建立 footer/header/title/rate limit/model/reasoning/goal/status preview matrix。"
+      "nextDetail": "已有 package-side status surface matrix guard：footer/header/title/rate limit/model/reasoning/goal/status preview 必须覆盖并绑定同一 session/thread、共享 presentation owner，model/reasoning/goal/title/runtime/rate limit 都带结构化 facts；自然语言状态推断和组件本地重复命名 fail closed。仍缺 Electron header/footer/title/status screenshot/DOM oracle。"
     },
     {
       "id": "right-surface-screenshot-baseline",

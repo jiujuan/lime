@@ -35,8 +35,14 @@ function parseLedgerRows(content) {
     if (cells.length !== 6) {
       continue;
     }
-    const [scenarioId, codexSource, eventItem, projectionOracle, cleanupTarget, status] =
-      cells;
+    const [
+      scenarioId,
+      codexSource,
+      eventItem,
+      projectionOracle,
+      cleanupTarget,
+      status,
+    ] = cells;
     const id = scenarioId.match(/^`([^`]+)`$/)?.[1];
     const normalizedStatus = status.match(/^`([^`]+)`$/)?.[1];
     if (!id || !normalizedStatus) {
@@ -184,10 +190,10 @@ describe("clawstream scenario registry", () => {
     const statusCounts = countBy(registry.scenarios, "status");
 
     expect(priorityCounts).toMatchObject({ P0: 11, P1: 35, P2: 13 });
-    expect(statusCounts["missing"]).toBe(36);
-    expect(statusCounts["covered-electron"]).toBe(13);
-    expect(statusCounts["partial"]).toBe(5);
-    expect(statusCounts["partial+guard"]).toBe(5);
+    expect(statusCounts["missing"] ?? 0).toBe(0);
+    expect(statusCounts["covered-electron"]).toBe(21);
+    expect(statusCounts["partial"] ?? 0).toBe(0);
+    expect(statusCounts["partial+guard"]).toBe(38);
     expect(statusCounts["guard-needed"] ?? 0).toBe(0);
   });
 
@@ -245,7 +251,9 @@ describe("clawstream scenario registry", () => {
     }
 
     expect(new Set(seenScenarioIds).size).toBe(seenScenarioIds.length);
-    expect(seenScenarioIds).toEqual(registry.scenarios.map((scenario) => scenario.id));
+    expect(seenScenarioIds).toEqual(
+      registry.scenarios.map((scenario) => scenario.id),
+    );
     expect(new Set(seenDetailIds).size).toBe(seenDetailIds.length);
     expect(seenDetailIds).toEqual(
       expect.arrayContaining(registry.scenarios.map((scenario) => scenario.id)),

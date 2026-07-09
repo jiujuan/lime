@@ -1,5 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { ActionRequired, ConfirmResponse, Message } from "../types";
+import type {
+  ActionRequired,
+  ApprovalDecision,
+  ConfirmResponse,
+  Message,
+} from "../types";
 import {
   appendActionRequiredToParts,
   normalizeActionQuestions,
@@ -325,6 +330,26 @@ export function markQueuedFallbackActionInPendingActions(
   );
 }
 
+function isApprovalDecision(value: string): value is ApprovalDecision {
+  return (
+    value === "allow_once" ||
+    value === "allow_for_session" ||
+    value === "decline" ||
+    value === "cancel"
+  );
+}
+
+function normalizeApprovalDecisions(value: unknown): ApprovalDecision[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const decisions = value.filter(
+    (item): item is ApprovalDecision =>
+      typeof item === "string" && isApprovalDecision(item),
+  );
+  return decisions.length > 0 ? Array.from(new Set(decisions)) : undefined;
+}
+
 export function mapReplayedActionRequiredToAction(
   replayedAction: AgentRuntimeReplayedActionRequiredView,
 ): ActionRequired {
@@ -344,6 +369,9 @@ export function mapReplayedActionRequiredToAction(
       replayedAction.prompt,
     ),
     requestedSchema: replayedAction.requested_schema,
+    availableDecisions: normalizeApprovalDecisions(
+      replayedAction.available_decisions,
+    ),
     scope: replayedAction.scope
       ? {
           sessionId: replayedAction.scope.session_id,

@@ -187,18 +187,6 @@ describe("toolProcessSummary", () => {
         status: "completed",
       }),
     );
-    const enterPlanNarrative = resolveToolProcessNarrative(
-      createToolCall({
-        name: "EnterPlanModeTool",
-        status: "running",
-      }),
-    );
-    const exitPlanNarrative = resolveToolProcessNarrative(
-      createToolCall({
-        name: "ExitPlanModeTool",
-        status: "completed",
-      }),
-    );
     const finalNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "SyntheticOutputTool",
@@ -209,8 +197,6 @@ describe("toolProcessSummary", () => {
     expect(updatePlanNarrative.preSummary).toBe("已更新计划");
     expect(updatePlanNarrative.postSummary).toBe("已更新计划");
     expect(updatePlanNarrative.summary).toBe("已更新计划");
-    expect(enterPlanNarrative.preSummary).toBe("先进入计划模式拆解方案");
-    expect(exitPlanNarrative.postSummary).toBe("已退出计划模式");
     expect(finalNarrative.preSummary).toBe("先整理最终答复");
     expect(finalNarrative.postSummary).toBe("已整理最终答复");
     expect(finalNarrative.summary).toBe("已整理最终答复");
@@ -283,22 +269,6 @@ describe("toolProcessSummary", () => {
         },
       }),
     );
-    const lspNarrative = resolveToolProcessNarrative(
-      createToolCall({
-        name: "LSPTool",
-        status: "failed",
-        arguments: JSON.stringify({
-          operation: "definition",
-          path: "src/main.ts",
-        }),
-        result: {
-          success: false,
-          error: "-32603: -32002: LSP server is not available",
-          output: "",
-        },
-      }),
-    );
-
     expect(cronCreateNarrative.preSummary).not.toBe(
       "先创建定时触发器 morning-news",
     );
@@ -312,8 +282,6 @@ describe("toolProcessSummary", () => {
       "执行失败：remote trigger runtime is not configured",
     );
     expect(remoteTriggerNarrative.summary).not.toContain("-32603");
-    expect(lspNarrative.summary).toBe("执行失败：LSP server is not available");
-    expect(lspNarrative.summary).not.toContain("-32002");
   });
 
   it("应为外部信息与结构化数据工具生成可读过程文案", () => {

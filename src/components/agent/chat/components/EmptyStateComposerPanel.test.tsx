@@ -360,6 +360,25 @@ describe("EmptyStateComposerPanel", () => {
     expect(composer?.className).toContain("floating-composer");
   });
 
+  it("首页空态输入区应在输入框下方显示录音入口", () => {
+    const container = renderPanel({
+      isGeneralTheme: true,
+    });
+
+    const dictationButton = container.querySelector(
+      '[data-testid="inputbar-dictation-toggle"]',
+    ) as HTMLButtonElement | null;
+    const leftMeta = container.querySelector(
+      '[data-testid="inputbar-meta-left"]',
+    );
+
+    expect(dictationButton).toBeTruthy();
+    expect(dictationButton?.textContent).toContain("开始语音输入");
+    expect(dictationButton?.closest('[data-testid="inputbar-meta-left"]')).toBe(
+      leftMeta,
+    );
+  });
+
   it("首页项目栏应连接在同一个输入壳内以继承聚焦态", () => {
     const container = renderPanel({
       isGeneralTheme: true,

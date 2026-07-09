@@ -1,7 +1,5 @@
-import { CheckCircle2, Loader2, ShieldAlert, XCircle } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import type { ActionRequired } from "../types";
 import type { HarnessSessionState } from "../utils/harnessState";
 import type { TranslationFunction } from "./HarnessActivityTypes";
 import { InteractiveText, PathTextLink } from "./HarnessStatusPanelPrimitives";
@@ -28,12 +26,6 @@ interface HarnessApprovalsSectionProps {
   t: TranslationFunction;
   handleOpenExternalLink: (url: string) => void | Promise<void>;
   handleOpenPathValue: (path: string) => void | Promise<void>;
-  handleApprovalResponse: (
-    item: ActionRequired,
-    accepted: boolean,
-  ) => void | Promise<void>;
-  submittedActionIds: ReadonlySet<string>;
-  canRespondToActions: boolean;
 }
 
 export function HarnessApprovalsSection({
@@ -42,9 +34,6 @@ export function HarnessApprovalsSection({
   t,
   handleOpenExternalLink,
   handleOpenPathValue,
-  handleApprovalResponse,
-  submittedActionIds,
-  canRespondToActions,
 }: HarnessApprovalsSectionProps) {
   if (pendingApprovals.length === 0) {
     return null;
@@ -63,13 +52,6 @@ export function HarnessApprovalsSection({
           const approvalCommand = pickCommandFromArguments(item.arguments);
           const approvalSummary = describeApproval(item);
           const riskKind = resolveApprovalRiskKind(item);
-          const approvalTarget =
-            approvalSummary || item.toolName || item.requestId;
-          const canInlineRespond =
-            item.actionType === "tool_confirmation" && canRespondToActions;
-          const approvalSubmitting =
-            submittedActionIds.has(item.requestId) ||
-            item.status === "submitted";
           const approvalOutcomeHint = (
             <div
               className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2 text-xs leading-5 text-amber-800"
@@ -167,63 +149,12 @@ export function HarnessApprovalsSection({
                   ),
                 )}
               </div>
-              {canInlineRespond ? (
-                <div className="mt-3 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={approvalSubmitting}
-                      aria-label={String(
-                        t(
-                          "agentChat.harness.approvals.approveAria" as never,
-                          { target: approvalTarget } as never,
-                        ),
-                      )}
-                      onClick={() => handleApprovalResponse(item, true)}
-                    >
-                      {approvalSubmitting ? (
-                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="mr-1 h-4 w-4" />
-                      )}
-                      {String(
-                        t(
-                          approvalSubmitting
-                            ? ("agentChat.harness.approvals.submitting" as never)
-                            : ("agentChat.harness.approvals.approve" as never),
-                        ),
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={approvalSubmitting}
-                      aria-label={String(
-                        t(
-                          "agentChat.harness.approvals.rejectAria" as never,
-                          { target: approvalTarget } as never,
-                        ),
-                      )}
-                      onClick={() => handleApprovalResponse(item, false)}
-                    >
-                      <XCircle className="mr-1 h-4 w-4" />
-                      {String(t("agentChat.harness.approvals.reject" as never))}
-                    </Button>
-                  </div>
-                  {approvalOutcomeHint}
+              <div className="mt-3 space-y-2">
+                <div className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2 text-xs text-amber-800">
+                  {String(t("agentChat.harness.approvals.responseHint" as never))}
                 </div>
-              ) : (
-                <div className="mt-3 space-y-2">
-                  <div className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2 text-xs text-amber-800">
-                    {String(
-                      t("agentChat.harness.approvals.responseHint" as never),
-                    )}
-                  </div>
-                  {approvalOutcomeHint}
-                </div>
-              )}
+                {approvalOutcomeHint}
+              </div>
             </div>
           );
         })}

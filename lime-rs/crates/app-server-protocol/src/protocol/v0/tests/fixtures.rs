@@ -625,7 +625,8 @@ fn agent_session_action_respond_request_matches_protocol_fixture_shape() {
                 session_id: "sess_1".to_string(),
                 request_id: "req_confirm_1".to_string(),
                 action_type: AgentSessionActionType::ToolConfirmation,
-                confirmed: true,
+                decision: Some(AgentSessionApprovalDecision::AllowOnce),
+                confirmed: None,
                 response: Some("allow".to_string()),
                 user_data: Some(json!({ "choice": "allow" })),
                 metadata: Some(json!({ "source": "content-studio" })),
@@ -650,7 +651,7 @@ fn agent_session_action_respond_request_matches_protocol_fixture_shape() {
                 "sessionId": "sess_1",
                 "requestId": "req_confirm_1",
                 "actionType": "tool_confirmation",
-                "confirmed": true,
+                "decision": "allow_once",
                 "response": "allow",
                 "userData": {
                     "choice": "allow"

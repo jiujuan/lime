@@ -34,98 +34,98 @@ submit turn
 
 ## 2. 测试分层
 
-| 层级 | 目的 | 推荐入口 |
-| --- | --- | --- |
-| Rust unit | 验证事件转换、item lifecycle、策略收口 | affected crate tests |
-| App Server projection | 验证 event log/read model 聚合 | runtime_backend / runtime tests |
-| Contract | 验证 App Server、前端 gateway、bridge 同步 | `npm run test:contracts` |
-| Frontend unit | 验证 projection store 和 MessageList | targeted `*.test.ts(x)` |
-| Fixture smoke | 验证 current agent runtime 主链 | `npm run smoke:agent-runtime-current-fixture` |
-| GUI smoke | 验证桌面 GUI 可交付 | `npm run verify:gui-smoke` |
-| Live E2E | 验证真实联网和 provider stream | Playwright / Electron live run |
+| 层级                  | 目的                                       | 推荐入口                                      |
+| --------------------- | ------------------------------------------ | --------------------------------------------- |
+| Rust unit             | 验证事件转换、item lifecycle、策略收口     | affected crate tests                          |
+| App Server projection | 验证 event log/read model 聚合             | runtime_backend / runtime tests               |
+| Contract              | 验证 App Server、前端 gateway、bridge 同步 | `npm run test:contracts`                      |
+| Frontend unit         | 验证 projection store 和 MessageList       | targeted `*.test.ts(x)`                       |
+| Fixture smoke         | 验证 current agent runtime 主链            | `npm run smoke:agent-runtime-current-fixture` |
+| GUI smoke             | 验证桌面 GUI 可交付                        | `npm run verify:gui-smoke`                    |
+| Live E2E              | 验证真实联网和 provider stream             | Playwright / Electron live run                |
 
 ## 3. Rust unit 用例
 
-| ID | 用例 | 输入 | 断言 |
-| --- | --- | --- | --- |
-| TURN-RUST-001 | ToolRequest 生成 tool item | provider message 含 `ToolRequest(id=tool-1)` | 输出 `ItemStarted(tool_call tool-1)` |
-| TURN-RUST-002 | ToolResponse 完成同一 item | provider message 含 `ToolResponse(id=tool-1)` | 输出 `ItemCompleted(tool_call tool-1)`，不生成第二个 id |
-| TURN-RUST-003 | item 与 legacy tool 混合不重复 | 同一工具同时有 item 和 `ToolStart/ToolEnd` | canonical event 数量为 1，legacy 标记 compat |
-| TURN-RUST-004 | tool input delta 绑定工具 | `ToolInputDelta(tool-1)` | 不改变 item terminal status |
-| TURN-RUST-005 | tool output delta 绑定工具 | `ToolOutputDelta(tool-1)` | 只追加 transient output |
-| TURN-RUST-006 | failed tool terminal | `ToolResponse` error | `ItemCompleted(status=failed,error)` |
-| TURN-RUST-007 | WebSearch tracker 不驱动 UI 分组 | WebSearch + WebFetch 成功 | tracker 只返回策略状态，不生成 UI 分组字段 |
-| TURN-RUST-008 | provider 尾段失败保留工具结果 | tool completed 后 stream error | completed tool item 保持 completed |
-| TURN-RUST-009 | WebFetch 默认回灌按相关片段裁剪 | HTML / 文本正文含大量无关段落，prompt 指向局部主题 | 默认返回相关片段，避免把整页内容塞回模型 |
-| TURN-RUST-010 | WebFetch HTML 清洗去除样式脚本 | HTML 含 `head/style/script/meta` 与正文 | 输出只保留正文文本，不包含 CSS / JS 噪音 |
-| TURN-RUST-011 | 连续普通 user turn 不合并 | 两条连续 `Role::User`，第一条为恢复指令，第二条为 `@搜索` 联网指令 | 输出仍为两个独立 user message，避免跨 turn 串话 |
-| TURN-RUST-012 | MOIM 注入不污染用户原文 | 注入 `<info-msg>` 时前后存在普通 user / assistant | MOIM 为 `agent_only()` 独立消息，不依赖 user merge，不显示给用户 |
-| TURN-RUST-013 | WebFetch HTML 清洗去除内联属性噪音 | HTML 含 `style=mask-image...`、`class=wp-block`、`data:*`、`aria-label` 与正文 | 输出保留正文，不包含 `mask-image/wp-block/data:image/aria-label` |
-| TURN-RUST-014 | legacy ToolEnd 强制标记 compat | `MessageContent::ToolResponse` 派生 legacy `ToolEnd`，工具 metadata 自带 `source/canonical` | `ToolEnd.result.metadata.source=legacy_message_tool_response`、`compat=true`、`canonical=false`，同时保留工具自有 `exit_code` |
-| TURN-RUST-015 | 失败 legacy ToolEnd 也标记 compat | `MessageContent::ToolResponse` error | `ToolEnd.success=false`，metadata 仍有 `source=legacy_message_tool_response`、`compat=true`、`canonical=false` |
+| ID            | 用例                               | 输入                                                                                        | 断言                                                                                                                          |
+| ------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| TURN-RUST-001 | ToolRequest 生成 tool item         | provider message 含 `ToolRequest(id=tool-1)`                                                | 输出 `ItemStarted(tool_call tool-1)`                                                                                          |
+| TURN-RUST-002 | ToolResponse 完成同一 item         | provider message 含 `ToolResponse(id=tool-1)`                                               | 输出 `ItemCompleted(tool_call tool-1)`，不生成第二个 id                                                                       |
+| TURN-RUST-003 | item 与 legacy tool 混合不重复     | 同一工具同时有 item 和 `ToolStart/ToolEnd`                                                  | canonical event 数量为 1，legacy 标记 compat                                                                                  |
+| TURN-RUST-004 | tool input delta 绑定工具          | `ToolInputDelta(tool-1)`                                                                    | 不改变 item terminal status                                                                                                   |
+| TURN-RUST-005 | tool output delta 绑定工具         | `ToolOutputDelta(tool-1)`                                                                   | 只追加 transient output                                                                                                       |
+| TURN-RUST-006 | failed tool terminal               | `ToolResponse` error                                                                        | `ItemCompleted(status=failed,error)`                                                                                          |
+| TURN-RUST-007 | WebSearch tracker 不驱动 UI 分组   | WebSearch + WebFetch 成功                                                                   | tracker 只返回策略状态，不生成 UI 分组字段                                                                                    |
+| TURN-RUST-008 | provider 尾段失败保留工具结果      | tool completed 后 stream error                                                              | completed tool item 保持 completed                                                                                            |
+| TURN-RUST-009 | WebFetch 默认回灌按相关片段裁剪    | HTML / 文本正文含大量无关段落，prompt 指向局部主题                                          | 默认返回相关片段，避免把整页内容塞回模型                                                                                      |
+| TURN-RUST-010 | WebFetch HTML 清洗去除样式脚本     | HTML 含 `head/style/script/meta` 与正文                                                     | 输出只保留正文文本，不包含 CSS / JS 噪音                                                                                      |
+| TURN-RUST-011 | 连续普通 user turn 不合并          | 两条连续 `Role::User`，第一条为恢复指令，第二条为 `@搜索` 联网指令                          | 输出仍为两个独立 user message，避免跨 turn 串话                                                                               |
+| TURN-RUST-012 | MOIM 注入不污染用户原文            | 注入 `<info-msg>` 时前后存在普通 user / assistant                                           | MOIM 为 `agent_only()` 独立消息，不依赖 user merge，不显示给用户                                                              |
+| TURN-RUST-013 | WebFetch HTML 清洗去除内联属性噪音 | HTML 含 `style=mask-image...`、`class=wp-block`、`data:*`、`aria-label` 与正文              | 输出保留正文，不包含 `mask-image/wp-block/data:image/aria-label`                                                              |
+| TURN-RUST-014 | legacy ToolEnd 强制标记 compat     | `MessageContent::ToolResponse` 派生 legacy `ToolEnd`，工具 metadata 自带 `source/canonical` | `ToolEnd.result.metadata.source=legacy_message_tool_response`、`compat=true`、`canonical=false`，同时保留工具自有 `exit_code` |
+| TURN-RUST-015 | 失败 legacy ToolEnd 也标记 compat  | `MessageContent::ToolResponse` error                                                        | `ToolEnd.success=false`，metadata 仍有 `source=legacy_message_tool_response`、`compat=true`、`canonical=false`                |
 
 ## 4. App Server / read model 用例
 
-| ID | 用例 | 输入事件 | 断言 |
-| --- | --- | --- | --- |
-| TURN-RM-001 | item started 创建 read item | `item.started(tool-1)` | `ThreadReadModel.items[tool-1].status=in_progress` |
-| TURN-RM-002 | item completed 更新同一 read item | `item.started -> item.completed` | item 数量为 1，status completed |
-| TURN-RM-003 | legacy tool result 不覆盖 item | `item.completed(success=true) -> tool.failed(tool-1)` | status 仍 completed，记录 conflict diagnostics |
-| TURN-RM-004 | legacy-only 合成 synthetic item | 只有 `tool.started -> tool.result` | 生成 item，metadata.source=`legacy_tool_event` |
-| TURN-RM-005 | completed item 不降级 | `item.completed -> item.updated(in_progress)` | terminal state 不被降级 |
-| TURN-RM-006 | sequence 稳定排序 | 多 item out-of-order 到达 | read model 按 sequence 排序 |
-| TURN-RM-007 | turn failed 保留 completed tools | tool completed 后 turn failed | completed tool 仍可见，turn status failed |
-| TURN-RM-008 | history + live 去重 | history completed item + live duplicate | 只保留一个 item |
+| ID          | 用例                              | 输入事件                                              | 断言                                               |
+| ----------- | --------------------------------- | ----------------------------------------------------- | -------------------------------------------------- |
+| TURN-RM-001 | item started 创建 read item       | `item.started(tool-1)`                                | `ThreadReadModel.items[tool-1].status=in_progress` |
+| TURN-RM-002 | item completed 更新同一 read item | `item.started -> item.completed`                      | item 数量为 1，status completed                    |
+| TURN-RM-003 | legacy tool result 不覆盖 item    | `item.completed(success=true) -> tool.failed(tool-1)` | status 仍 completed，记录 conflict diagnostics     |
+| TURN-RM-004 | legacy-only 合成 synthetic item   | 只有 `tool.started -> tool.result`                    | 生成 item，metadata.source=`legacy_tool_event`     |
+| TURN-RM-005 | completed item 不降级             | `item.completed -> item.updated(in_progress)`         | terminal state 不被降级                            |
+| TURN-RM-006 | sequence 稳定排序                 | 多 item out-of-order 到达                             | read model 按 sequence 排序                        |
+| TURN-RM-007 | turn failed 保留 completed tools  | tool completed 后 turn failed                         | completed tool 仍可见，turn status failed          |
+| TURN-RM-008 | history + live 去重               | history completed item + live duplicate               | 只保留一个 item                                    |
 
 ## 5. Frontend projection 用例
 
-| ID | 用例 | 输入 | 断言 |
-| --- | --- | --- | --- |
-| TURN-FE-001 | item-first 工具卡 | `item_started(tool_call)` | projection 生成一张工具卡 |
-| TURN-FE-002 | legacy tool_start 不重复 | `item_started(tool-1) + tool_start(tool-1)` | 工具卡数量为 1 |
-| TURN-FE-003 | tool_output_delta 补充详情 | existing `tool-1` + output delta | delta 出现在同一工具详情 |
-| TURN-FE-004 | 无法归属的 tool delta 进 diagnostics | `tool_output_delta` 无 active turn / item | 不渲染工具卡 |
-| TURN-FE-005 | final answer 不接工具输出 | tool output 后 text delta | text delta 出现在 assistant buffer |
-| TURN-FE-006 | 第二轮不截断第一轮 | turn-1 completed 后 turn-2 stream | turn-1 final text 完整 |
-| TURN-FE-007 | history hydrate 不覆盖 live terminal | live partial + history completed | terminal item 优先 |
-| TURN-FE-008 | WebSearch / WebFetch 分开展示 | 两个 tool item | 两张独立工具卡 |
-| TURN-FE-009 | item terminal 同步 legacy message 工具卡 | 已存在 `message.toolCalls/tool_use` running，再收到 `item_completed(tool_call)` | 已有 message 层工具卡变 completed，不新建重复卡 |
-| TURN-FE-010 | item terminal 后 late legacy 不覆盖 | `item_completed(tool_call)` 后再到同 turn/tool 的 `tool_end/tool_progress` | message 层保持 item terminal，不降级、不串线 |
-| TURN-FE-011 | 运行中的 WebSearch / WebFetch 用进行态摘要 | `web_search` / `WebFetch` status=`running` 或 `in_progress` | 摘要显示“正在搜索网页”，展开态显示进度，不伪装成完成态 |
-| TURN-FE-012 | timeline 已有工具 item 时不再渲染 legacy fallback | 同一 assistant message 同时有 timeline `tool_call` 和 legacy `message.toolCalls` | `rendererContentParts` 只保留 timeline 生成的 `tool_use`，`rendererToolCalls` 为空 |
-| TURN-FE-013 | Codex 导入 timeline 共用 live 过程渲染语义 | imported metadata 的 reasoning / command / final answer | 渲染为 `thinking -> tool_use -> text`，只读但不走独立导入 UI |
-| TURN-FE-014 | running 工具后的 commentary 不作为最终正文 | `commentary -> web_search completed -> web_search in_progress -> commentary` | `rendererContentParts` 为 `thinking/tool_use/tool_use/thinking`，`actionContent` 与 `rendererRawContent` 为空 |
-| TURN-FE-015 | 用户上拉后流式追加不抢滚动 | scroll container 已离底部并收到 overlay 更新 | 不调用 `scrollIntoView`，保留用户阅读位置 |
-| TURN-FE-016 | 第二轮 overlay 不覆盖第一轮完整回复 | turn-1 completed 后 turn-2 assistant overlay | turn-1 的 text 与 `tool_use` 保留，turn-2 只显示自己的 overlay |
-| TURN-FE-017 | running 搜索后的临时正文不得越序显示 | `web_search in_progress` 后 overlay、`message.content` 或 commentary 已有正文 | `rendererContentParts` 只保留工具与 thinking/commentary，`actionContent / rendererRawContent` 为空 |
-| TURN-FE-018 | completed read model 清理“正在输出”残留 | thread read status=`completed` 且 assistant 有最终正文，本地 `runtimeStatus` 仍 running | 不渲染 `assistant-streaming-inline-indicator`，`StreamingRenderer.isStreaming=false` |
-| TURN-FE-019 | WebFetch 在混合搜索批次中显式可见 | `web_search completed + WebFetch completed/failed` | 批次标题和 `countLabel` 同时显示搜索次数与读取次数，展开态保留 URL / 快照，不暴露原始 payload |
-| TURN-FE-020 | plan item 内联渲染 | timeline 中存在 `type=plan` | `rendererContentParts` 含 `<proposed_plan>` text，`StreamingRenderer.renderProposedPlanBlocks=true`，外置 timeline 不重复展示 |
-| TURN-FE-021 | turn_summary 不屏蔽 legacy fallback | timeline 只有 `turn_summary`，旧消息有 `message.toolCalls` | legacy `message.toolCalls` 仍可作为 compat 过程源 |
-| TURN-FE-022 | process timeline 禁用 legacy fallback | timeline 有 `tool_call / web_search / reasoning / plan / context_compaction` 等 process item，旧消息也有 `message.toolCalls` | 只渲染 timeline 过程，不再渲染第二套 legacy 工具卡 |
-| TURN-FE-023 | item lifecycle 存在时 legacy delta 不新建 message 工具卡 | `threadItems` 已有非 legacy `tool_call`，随后收到 `tool_input_delta/tool_progress/tool_output_delta` | `threadItems` 与 Agent UI projection detail 更新，`message.toolCalls/contentParts.tool_use` 不新增 |
-| TURN-FE-024 | item lifecycle 存在时 legacy failed 不改 message 主状态 | `threadItems` 已有非 legacy `tool_call`，随后收到 `tool.failed` | read item 进入 failed，旧 message 层工具卡不被 legacy terminal 改写 |
-| TURN-FE-025 | history hydrate 禁用 thread_read 工具摘要重复注入 | `detail.items` 已有 process timeline item，同时 `thread_read.tool_calls` 也包含同一工具 | hydrate 后 assistant 只保留 timeline 生成的一份 `tool_use/toolCalls`，`thread_read.tool_calls` 不覆盖输出 |
-| TURN-FE-026 | history hydrate 保留 thread_read 兼容兜底 | 无 `detail.items` process timeline，但 `thread_read.tool_calls` 有工具摘要 | hydrate 后旧历史仍显示 `tool_use/toolCalls`，确保 legacy-only / read-model-only 会话可恢复 |
-| TURN-FE-027 | WebSearch / WebFetch 展开态分组 | 同一搜索批次含 WebSearch 结果和多个 WebFetch 读取 URL | 展开态显示 `搜索来源` 与 `读取页面` 两组；来源仍可点击预览，读取页面不暴露原始 payload / 失败诊断 |
-| TURN-FE-028 | final_answer 不被滞后的 running 搜索吞掉 | timeline 已有 `phase=final_answer`，但同 turn WebSearch / WebFetch 仍滞后为 running | 最终正文继续显示在搜索过程之后，避免 UI 卡在“正在整理最终答复” |
-| TURN-FE-029 | 搜索完成但最终正文未到时不提前折叠 | WebSearch/WebFetch 已 completed，assistant 正文为空，`runtimeStatus.phase=synthesizing` | 搜索过程保持展开并显示来源 / 读取页面；最终正文出现后才恢复默认轻量折叠 |
-| TURN-FE-030 | 流式 Markdown 不提前解析半行 | 流式正文包含未完成表格 / 标题 / 代码行 | 只把最后一个换行前的完整源码交给 Markdown renderer，未完成尾行按纯文本展示，完成后恢复完整 Markdown |
-| TURN-FE-031 | 搜索开始不更新前一个思考卡片 | `thinking -> web_search running` 连续到达 | 渲染为两张过程卡：第一张仍显示思考状态，第二张显示搜索进度；搜索 running 不改写上方思考摘要 |
+| ID          | 用例                                                     | 输入                                                                                                                         | 断言                                                                                                                          |
+| ----------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| TURN-FE-001 | item-first 工具卡                                        | `item_started(tool_call)`                                                                                                    | projection 生成一张工具卡                                                                                                     |
+| TURN-FE-002 | legacy tool_start 不重复                                 | `item_started(tool-1) + tool_start(tool-1)`                                                                                  | 工具卡数量为 1                                                                                                                |
+| TURN-FE-003 | tool_output_delta 补充详情                               | existing `tool-1` + output delta                                                                                             | delta 出现在同一工具详情                                                                                                      |
+| TURN-FE-004 | 无法归属的 tool delta 进 diagnostics                     | `tool_output_delta` 无 active turn / item                                                                                    | 不渲染工具卡                                                                                                                  |
+| TURN-FE-005 | final answer 不接工具输出                                | tool output 后 text delta                                                                                                    | text delta 出现在 assistant buffer                                                                                            |
+| TURN-FE-006 | 第二轮不截断第一轮                                       | turn-1 completed 后 turn-2 stream                                                                                            | turn-1 final text 完整                                                                                                        |
+| TURN-FE-007 | history hydrate 不覆盖 live terminal                     | live partial + history completed                                                                                             | terminal item 优先                                                                                                            |
+| TURN-FE-008 | WebSearch / WebFetch 分开展示                            | 两个 tool item                                                                                                               | 两张独立工具卡                                                                                                                |
+| TURN-FE-009 | item terminal 同步 legacy message 工具卡                 | 已存在 `message.toolCalls/tool_use` running，再收到 `item_completed(tool_call)`                                              | 已有 message 层工具卡变 completed，不新建重复卡                                                                               |
+| TURN-FE-010 | item terminal 后 late legacy 不覆盖                      | `item_completed(tool_call)` 后再到同 turn/tool 的 `tool_end/tool_progress`                                                   | message 层保持 item terminal，不降级、不串线                                                                                  |
+| TURN-FE-011 | 运行中的 WebSearch / WebFetch 用进行态摘要               | `web_search` / `WebFetch` status=`running` 或 `in_progress`                                                                  | 摘要显示“正在搜索网页”，展开态显示进度，不伪装成完成态                                                                        |
+| TURN-FE-012 | timeline 已有工具 item 时不再渲染 legacy fallback        | 同一 assistant message 同时有 timeline `tool_call` 和 legacy `message.toolCalls`                                             | `rendererContentParts` 只保留 timeline 生成的 `tool_use`，`rendererToolCalls` 为空                                            |
+| TURN-FE-013 | Codex 导入 timeline 共用 live 过程渲染语义               | imported metadata 的 reasoning / command / final answer                                                                      | 渲染为 `thinking -> tool_use -> text`，只读但不走独立导入 UI                                                                  |
+| TURN-FE-014 | running 工具后的 commentary 不作为最终正文               | `commentary -> web_search completed -> web_search in_progress -> commentary`                                                 | `rendererContentParts` 为 `thinking/tool_use/tool_use/thinking`，`actionContent` 与 `rendererRawContent` 为空                 |
+| TURN-FE-015 | 用户上拉后流式追加不抢滚动                               | scroll container 已离底部并收到 overlay 更新                                                                                 | 不调用 `scrollIntoView`，保留用户阅读位置                                                                                     |
+| TURN-FE-016 | 第二轮 overlay 不覆盖第一轮完整回复                      | turn-1 completed 后 turn-2 assistant overlay                                                                                 | turn-1 的 text 与 `tool_use` 保留，turn-2 只显示自己的 overlay                                                                |
+| TURN-FE-017 | running 搜索后的临时正文不得越序显示                     | `web_search in_progress` 后 overlay、`message.content` 或 commentary 已有正文                                                | `rendererContentParts` 只保留工具与 thinking/commentary，`actionContent / rendererRawContent` 为空                            |
+| TURN-FE-018 | completed read model 清理“正在输出”残留                  | thread read status=`completed` 且 assistant 有最终正文，本地 `runtimeStatus` 仍 running                                      | 不渲染 `assistant-streaming-inline-indicator`，`StreamingRenderer.isStreaming=false`                                          |
+| TURN-FE-019 | WebFetch 在混合搜索批次中显式可见                        | `web_search completed + WebFetch completed/failed`                                                                           | 批次标题和 `countLabel` 同时显示搜索次数与读取次数，展开态保留 URL / 快照，不暴露原始 payload                                 |
+| TURN-FE-020 | plan item 内联渲染                                       | timeline 中存在 `type=plan`                                                                                                  | `rendererContentParts` 含 `<proposed_plan>` text，`StreamingRenderer.renderProposedPlanBlocks=true`，外置 timeline 不重复展示 |
+| TURN-FE-021 | turn_summary 不屏蔽 legacy fallback                      | timeline 只有 `turn_summary`，旧消息有 `message.toolCalls`                                                                   | legacy `message.toolCalls` 仍可作为 compat 过程源                                                                             |
+| TURN-FE-022 | process timeline 禁用 legacy fallback                    | timeline 有 `tool_call / web_search / reasoning / plan / context_compaction` 等 process item，旧消息也有 `message.toolCalls` | 只渲染 timeline 过程，不再渲染第二套 legacy 工具卡                                                                            |
+| TURN-FE-023 | item lifecycle 存在时 legacy delta 不新建 message 工具卡 | `threadItems` 已有非 legacy `tool_call`，随后收到 `tool_input_delta/tool_progress/tool_output_delta`                         | `threadItems` 与 Agent UI projection detail 更新，`message.toolCalls/contentParts.tool_use` 不新增                            |
+| TURN-FE-024 | item lifecycle 存在时 legacy failed 不改 message 主状态  | `threadItems` 已有非 legacy `tool_call`，随后收到 `tool.failed`                                                              | read item 进入 failed，旧 message 层工具卡不被 legacy terminal 改写                                                           |
+| TURN-FE-025 | history hydrate 禁用 thread_read 工具摘要重复注入        | `detail.items` 已有 process timeline item，同时 `thread_read.tool_calls` 也包含同一工具                                      | hydrate 后 assistant 只保留 timeline 生成的一份 `tool_use/toolCalls`，`thread_read.tool_calls` 不覆盖输出                     |
+| TURN-FE-026 | history hydrate 保留 thread_read 兼容兜底                | 无 `detail.items` process timeline，但 `thread_read.tool_calls` 有工具摘要                                                   | hydrate 后旧历史仍显示 `tool_use/toolCalls`，确保 legacy-only / read-model-only 会话可恢复                                    |
+| TURN-FE-027 | WebSearch / WebFetch 展开态分组                          | 同一搜索批次含 WebSearch 结果和多个 WebFetch 读取 URL                                                                        | 展开态显示 `搜索来源` 与 `读取页面` 两组；来源仍可点击预览，读取页面不暴露原始 payload / 失败诊断                             |
+| TURN-FE-028 | final_answer 不被滞后的 running 搜索吞掉                 | timeline 已有 `phase=final_answer`，但同 turn WebSearch / WebFetch 仍滞后为 running                                          | 最终正文继续显示在搜索过程之后，避免 UI 卡在“正在整理最终答复”                                                                |
+| TURN-FE-029 | 搜索完成但最终正文未到时不提前折叠                       | WebSearch/WebFetch 已 completed，assistant 正文为空，`runtimeStatus.phase=synthesizing`                                      | 搜索过程保持展开并显示来源 / 读取页面；最终正文出现后才恢复默认轻量折叠                                                       |
+| TURN-FE-030 | 流式 Markdown 不提前解析半行                             | 流式正文包含未完成表格 / 标题 / 代码行                                                                                       | 只把最后一个换行前的完整源码交给 Markdown renderer，未完成尾行按纯文本展示，完成后恢复完整 Markdown                           |
+| TURN-FE-031 | 搜索开始不更新前一个思考卡片                             | `thinking -> web_search running` 连续到达                                                                                    | 渲染为两张过程卡：第一张仍显示思考状态，第二张显示搜索进度；搜索 running 不改写上方思考摘要                                   |
 
 ## 6. Contract 用例
 
-| ID | 用例 | 检查对象 | 断言 |
-| --- | --- | --- | --- |
-| TURN-CONTRACT-001 | App Server event 类型同步 | protocol / frontend parser | `item_started/item_updated/item_completed` 可解析 |
-| TURN-CONTRACT-002 | tool delta 字段同步 | App Server / TS 类型 | `tool_id/delta/output_kind/metadata` 形状一致 |
-| TURN-CONTRACT-003 | mock 不成为生产 fallback | bridge / mocks catalog | 生产 submit 不依赖 mock |
-| TURN-CONTRACT-004 | legacy tool current 引用受控 | governance catalog | legacy tool stream 只标 compat |
-| TURN-CONTRACT-005 | history API 返回 items | session get/list | turn items 字段完整 |
-| TURN-CONTRACT-006 | 前端 stream handler 保持 item-first | `agentStreamRuntimeHandler.ts` | 存在 `shouldLetLegacyToolEventUpdateMessageLayer`、`syncExistingMessageToolCallFromThreadItem`、`getThreadItems` |
-| TURN-CONTRACT-007 | 前端单测锁住 item terminal 同步 | `agentStreamRuntimeHandler.unit.test.ts` | 覆盖 `item_completed 应把已有 legacy 工具卡同步为完成态` |
-| TURN-CONTRACT-008 | MessageList 禁止 legacy 工具过程回流为主渲染 | `messageListItemProjection.ts` / `messageListItemProjection.unit.test.ts` | `message.toolCalls` 只在没有真实 process timeline item 时作为 compat fallback；timeline 已有过程项时关闭第二套 legacy 渲染 |
-| TURN-CONTRACT-009 | legacy message ToolEnd 不可冒充 canonical | `lime-rs/crates/agent/src/event_converter.rs` | 存在 `legacy_message_tool_response_metadata` 和成功 / 失败 ToolResponse compat 测试，contract 阻止无标记 legacy `ToolEnd` 回流 |
+| ID                | 用例                                         | 检查对象                                                                  | 断言                                                                                                                           |
+| ----------------- | -------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| TURN-CONTRACT-001 | App Server event 类型同步                    | protocol / frontend parser                                                | `item_started/item_updated/item_completed` 可解析                                                                              |
+| TURN-CONTRACT-002 | tool delta 字段同步                          | App Server / TS 类型                                                      | `tool_id/delta/output_kind/metadata` 形状一致                                                                                  |
+| TURN-CONTRACT-003 | mock 不成为生产 fallback                     | bridge / mocks catalog                                                    | 生产 submit 不依赖 mock                                                                                                        |
+| TURN-CONTRACT-004 | legacy tool current 引用受控                 | governance catalog                                                        | legacy tool stream 只标 compat                                                                                                 |
+| TURN-CONTRACT-005 | history API 返回 items                       | session get/list                                                          | turn items 字段完整                                                                                                            |
+| TURN-CONTRACT-006 | 前端 stream handler 保持 item-first          | `agentStreamRuntimeHandler.ts`                                            | 存在 `shouldLetLegacyToolEventUpdateMessageLayer`、`syncExistingMessageToolCallFromThreadItem`、`getThreadItems`               |
+| TURN-CONTRACT-007 | 前端单测锁住 item terminal 同步              | `agentStreamRuntimeHandler.unit.test.ts`                                  | 覆盖 `item_completed 应把已有 legacy 工具卡同步为完成态`                                                                       |
+| TURN-CONTRACT-008 | MessageList 禁止 legacy 工具过程回流为主渲染 | `messageListItemProjection.ts` / `messageListItemProjection.unit.test.ts` | `message.toolCalls` 只在没有真实 process timeline item 时作为 compat fallback；timeline 已有过程项时关闭第二套 legacy 渲染     |
+| TURN-CONTRACT-009 | legacy message ToolEnd 不可冒充 canonical    | `lime-rs/crates/agent/src/event_converter.rs`                             | 存在 `legacy_message_tool_response_metadata` 和成功 / 失败 ToolResponse compat 测试，contract 阻止无标记 legacy `ToolEnd` 回流 |
 
 最低入口：
 
@@ -135,29 +135,29 @@ npm run test:contracts
 
 ## 7. Fixture smoke 用例
 
-| ID | 用例 | 操作 | 断言 |
-| --- | --- | --- | --- |
-| TURN-FIXTURE-001 | current fixture 普通 turn | `npm run smoke:agent-runtime-current-fixture` | 出现 `turn_completed`，items 完整 |
-| TURN-FIXTURE-002 | Claw fixture stream | `npm run smoke:claw-chat-current-fixture` | `message.delta + turn.completed` 正常 |
-| TURN-FIXTURE-003 | fixture tool lifecycle | fixture 后端返回工具事件 | UI / read model 只有一个工具 item |
-| TURN-FIXTURE-004 | fixture second turn | 连续 submit 两轮 | 第一轮不截断 |
+| ID               | 用例                      | 操作                                          | 断言                                  |
+| ---------------- | ------------------------- | --------------------------------------------- | ------------------------------------- |
+| TURN-FIXTURE-001 | current fixture 普通 turn | `npm run smoke:agent-runtime-current-fixture` | 出现 `turn_completed`，items 完整     |
+| TURN-FIXTURE-002 | Claw fixture stream       | `npm run smoke:claw-chat-current-fixture`     | `message.delta + turn.completed` 正常 |
+| TURN-FIXTURE-003 | fixture tool lifecycle    | fixture 后端返回工具事件                      | UI / read model 只有一个工具 item     |
+| TURN-FIXTURE-004 | fixture second turn       | 连续 submit 两轮                              | 第一轮不截断                          |
 
 ## 8. GUI smoke 用例
 
-| ID | 用例 | 用户操作 | 期望 GUI |
-| --- | --- | --- | --- |
-| TURN-GUI-001 | submit 后立即可见状态 | 输入普通问题 | 出现 running / preparing 状态 |
-| TURN-GUI-002 | 工具开始可见 | 触发工具调用 | 工具卡出现，状态 running |
-| TURN-GUI-003 | 工具完成可见 | 工具返回结果 | 同一工具卡变 completed |
-| TURN-GUI-004 | 多工具不串线 | 触发 WebSearch + WebFetch | 两个工具分别显示 |
-| TURN-GUI-005 | final answer 与工具分离 | 工具后模型总结 | 总结在 assistant 正文区域 |
-| TURN-GUI-006 | 第二轮保持历史 | 再发送一条消息 | 上一轮完整保留 |
-| TURN-GUI-007 | 用户上拉阅读不中断 | 输出中向上滚动 | 新 token 到达时页面不抢回底部 |
-| TURN-GUI-008 | 搜索仍运行时不提前显示最终正文 | WebSearch 仍 running 后出现 commentary | commentary 只显示为过程，最终正文区不越序出现答案 |
-| TURN-GUI-009 | 搜索工具完成后才显示最终答复 | WebSearch/WebFetch 真实完成并收到 final answer | 工具卡为完成态，最终答复显示在工具过程之后，不再显示“正在输出”残留 |
-| TURN-GUI-010 | 搜索过程默认轻量折叠 | WebSearch/WebFetch 完成且 final answer 已出现 | 默认只显示 `已搜索网页 N 次，读取网页 M 次` 摘要；点击展开后显示来源和读取页面 |
+| ID           | 用例                           | 用户操作                                                                | 期望 GUI                                                                         |
+| ------------ | ------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| TURN-GUI-001 | submit 后立即可见状态          | 输入普通问题                                                            | 出现 running / preparing 状态                                                    |
+| TURN-GUI-002 | 工具开始可见                   | 触发工具调用                                                            | 工具卡出现，状态 running                                                         |
+| TURN-GUI-003 | 工具完成可见                   | 工具返回结果                                                            | 同一工具卡变 completed                                                           |
+| TURN-GUI-004 | 多工具不串线                   | 触发 WebSearch + WebFetch                                               | 两个工具分别显示                                                                 |
+| TURN-GUI-005 | final answer 与工具分离        | 工具后模型总结                                                          | 总结在 assistant 正文区域                                                        |
+| TURN-GUI-006 | 第二轮保持历史                 | 再发送一条消息                                                          | 上一轮完整保留                                                                   |
+| TURN-GUI-007 | 用户上拉阅读不中断             | 输出中向上滚动                                                          | 新 token 到达时页面不抢回底部                                                    |
+| TURN-GUI-008 | 搜索仍运行时不提前显示最终正文 | WebSearch 仍 running 后出现 commentary                                  | commentary 只显示为过程，最终正文区不越序出现答案                                |
+| TURN-GUI-009 | 搜索工具完成后才显示最终答复   | WebSearch/WebFetch 真实完成并收到 final answer                          | 工具卡为完成态，最终答复显示在工具过程之后，不再显示“正在输出”残留               |
+| TURN-GUI-010 | 搜索过程默认轻量折叠           | WebSearch/WebFetch 完成且 final answer 已出现                           | 默认只显示 `已搜索网页 N 次，读取网页 M 次` 摘要；点击展开后显示来源和读取页面   |
 | TURN-GUI-011 | 整理最终答复中保持搜索过程展开 | WebSearch/WebFetch 完成后，最终正文尚未出现，页面显示“正在整理最终答复” | 过程组 `aria-expanded=true`，显示来源和读取页面；不能只剩折叠摘要加 loading 文案 |
-| TURN-GUI-012 | Codex 流式 Markdown 不抖动 | Codex 导入或 live stream 正在输出表格 / 标题 | 未完成行不被提前渲染成破碎 Markdown；页面持续吐字，不出现长时间空白或 JSON 原文 |
+| TURN-GUI-012 | Codex 流式 Markdown 不抖动     | Codex 导入或 live stream 正在输出表格 / 标题                            | 未完成行不被提前渲染成破碎 Markdown；页面持续吐字，不出现长时间空白或 JSON 原文  |
 
 最低入口：
 
@@ -167,18 +167,18 @@ npm run verify:gui-smoke
 
 ## 9. 真实联网 E2E 用例
 
-| ID | 用例 | 操作 | 断言 |
-| --- | --- | --- | --- |
-| TURN-LIVE-001 | 真实联网首屏反馈 | 发起需要最新信息的问题 | submit 后短时间内有 turn/item/status 可见 |
-| TURN-LIVE-002 | WebSearch 独立 item | provider 调 WebSearch | WebSearch 工具事件与 item 可复核 |
-| TURN-LIVE-003 | WebFetch 独立 item | provider 调 WebFetch | WebFetch 工具事件与 item 可复核 |
-| TURN-LIVE-004 | 不重复工具卡 | live event 同时含 legacy tool | 每个 toolCallId 只一张卡 |
-| TURN-LIVE-005 | 最终答复可见 | 等待 turn completed | assistant 正文完整 |
-| TURN-LIVE-006 | 第二轮不截断 | 第一轮完成后发第二轮 | 第一轮文本和工具卡保持 |
-| TURN-LIVE-007 | event log 可复核 | 读取 session jsonl | event sequence 与 UI 一致 |
-| TURN-LIVE-008 | WebFetch 读取次数可见 | 真实 WebSearch 后触发 WebFetch | 最终截图中搜索过程摘要显示 `读取网页 N 次`，且最终答复在工具完成态之后 |
-| TURN-LIVE-009 | 连续 user turn 不串话 | 停止 / 恢复后再发送 `@搜索` live turn | provider request 的 `last_user_preview` 只包含当前 `@搜索` 指令，不拼接上一轮恢复指令 |
-| TURN-LIVE-010 | WebFetch 工具回灌为干净正文 | live WebFetch 抓取公开新闻页面 | tool result preview 为正文片段，不含 CSS / HTML 属性噪音，最终 turn completed |
+| ID            | 用例                        | 操作                                  | 断言                                                                                  |
+| ------------- | --------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------- |
+| TURN-LIVE-001 | 真实联网首屏反馈            | 发起需要最新信息的问题                | submit 后短时间内有 turn/item/status 可见                                             |
+| TURN-LIVE-002 | WebSearch 独立 item         | provider 调 WebSearch                 | WebSearch 工具事件与 item 可复核                                                      |
+| TURN-LIVE-003 | WebFetch 独立 item          | provider 调 WebFetch                  | WebFetch 工具事件与 item 可复核                                                       |
+| TURN-LIVE-004 | 不重复工具卡                | live event 同时含 legacy tool         | 每个 toolCallId 只一张卡                                                              |
+| TURN-LIVE-005 | 最终答复可见                | 等待 turn completed                   | assistant 正文完整                                                                    |
+| TURN-LIVE-006 | 第二轮不截断                | 第一轮完成后发第二轮                  | 第一轮文本和工具卡保持                                                                |
+| TURN-LIVE-007 | event log 可复核            | 读取 session jsonl                    | event sequence 与 UI 一致                                                             |
+| TURN-LIVE-008 | WebFetch 读取次数可见       | 真实 WebSearch 后触发 WebFetch        | 最终截图中搜索过程摘要显示 `读取网页 N 次`，且最终答复在工具完成态之后                |
+| TURN-LIVE-009 | 连续 user turn 不串话       | 停止 / 恢复后再发送 `@搜索` live turn | provider request 的 `last_user_preview` 只包含当前 `@搜索` 指令，不拼接上一轮恢复指令 |
+| TURN-LIVE-010 | WebFetch 工具回灌为干净正文 | live WebFetch 抓取公开新闻页面        | tool result preview 为正文片段，不含 CSS / HTML 属性噪音，最终 turn completed         |
 
 建议执行：
 
@@ -195,14 +195,14 @@ npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 
 ## 10. Governance guard 用例
 
-| ID | 用例 | 检查 | 断言 |
-| --- | --- | --- | --- |
-| TURN-GOV-001 | 禁止关键词联网策略回流 | 搜索 `message_requires_fresh_web_search` | 不允许 current 引用 |
-| TURN-GOV-002 | 禁止默认 allowed 回流 | 搜索 `mode_default=true` / 等价配置 | 普通 Claw 不默认 allowed |
-| TURN-GOV-003 | 禁止 tool stream current truth | 搜索新增 projection | `tool_start/tool_end` 不作为主工具卡 owner |
-| TURN-GOV-004 | 禁止 mock fallback | 检查 bridge/runtime | 生产路径不走 mock backend |
-| TURN-GOV-005 | 禁止 timeout 合成完成态 | 搜索 grace/final timeout | 不用固定 timeout 伪造 `turn_completed` |
-| TURN-GOV-006 | smoke 不用重复文案计数误判恢复 | 停止后恢复结果只显示一次 | GUI 可见一次恢复结果或 read model 已持久化即判定恢复闭环，不要求重复出现 |
+| ID           | 用例                           | 检查                                     | 断言                                                                     |
+| ------------ | ------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------ |
+| TURN-GOV-001 | 禁止关键词联网策略回流         | 搜索 `message_requires_fresh_web_search` | 不允许 current 引用                                                      |
+| TURN-GOV-002 | 禁止默认 allowed 回流          | 搜索 `mode_default=true` / 等价配置      | 普通 Claw 不默认 allowed                                                 |
+| TURN-GOV-003 | 禁止 tool stream current truth | 搜索新增 projection                      | `tool_start/tool_end` 不作为主工具卡 owner                               |
+| TURN-GOV-004 | 禁止 mock fallback             | 检查 bridge/runtime                      | 生产路径不走 mock backend                                                |
+| TURN-GOV-005 | 禁止 timeout 合成完成态        | 搜索 grace/final timeout                 | 不用固定 timeout 伪造 `turn_completed`                                   |
+| TURN-GOV-006 | smoke 不用重复文案计数误判恢复 | 停止后恢复结果只显示一次                 | GUI 可见一次恢复结果或 read model 已持久化即判定恢复闭环，不要求重复出现 |
 
 ## 11. 完成门槛
 
@@ -315,7 +315,7 @@ npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 - `StreamingRenderer.test.tsx` 定向：`25 passed, 37 skipped`。
 - ESLint：上述 7 个相关文件通过。
 - `npm run smoke:claw-chat-current-fixture`：通过，session `claw-chat-current-1781814724823-45881`。
-- `npm run smoke:agent-runtime-current-fixture`：通过，覆盖 history/cache、final_done、failed read model、Claw 终态 UI、code artifact workbench、cancel-then-continue Electron fixture；`liveProviderUsed=false`。
+- `npm run smoke:agent-runtime-current-fixture`：通过，覆盖 history/cache、`turn.completed` 工具收尾（legacy `final_done` 仅负向 guard）、failed read model、Claw 终态 UI、code artifact workbench、cancel-then-continue Electron fixture；`liveProviderUsed=false`。
 - `npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000`：通过，真实 provider `custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3 / gpt-5.5`，session `sess_c0a24b00f5e54626b36a428f06de2c2e`，live web turn `eeb72c03-efa5-408b-a907-4e874a0e70c8`；`liveWebSearchCompleted=true`、`liveWebFetchCompleted=true`、`liveWebRequiredToolsCompleted=true`、`liveWebRequiredToolEventOrderValid=true`、`noRuntimeMockFallbackSeen=true`、`noBlockingConsoleErrors=true`。
 - live E2E evidence：`.lime/qc/gui-evidence/claw-chat-ready-streaming/claw-chat-ready-streaming-summary.json` 与 `.lime/qc/gui-evidence/claw-chat-ready-streaming/claw-chat-ready-streaming-05-live-web-tools-final.png`。
 

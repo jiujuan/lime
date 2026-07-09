@@ -137,7 +137,7 @@ describe("useWorkspaceProjectSelection", () => {
     }
   });
 
-  it("首页新会话请求存在同标签当前会话时应允许恢复运行态", () => {
+  it("首页新会话请求存在同标签当前会话时也不应自动恢复旧会话", () => {
     sessionStorage.setItem(
       "aster_curr_sessionId_global",
       JSON.stringify("session-running"),
@@ -150,13 +150,13 @@ describe("useWorkspaceProjectSelection", () => {
     try {
       expect(harness.getValue().projectId).toBeUndefined();
       expect(harness.getValue().projectSelectionSource).toBe("none");
-      expect(harness.getValue().shouldDisableSessionRestore).toBe(false);
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
     } finally {
       harness.unmount();
     }
   });
 
-  it("首页新会话请求存在项目选择但当前会话只在 global scope 时也应允许恢复运行态", () => {
+  it("首页新会话请求存在项目选择但当前会话只在 global scope 时也不应自动恢复旧会话", () => {
     sessionStorage.setItem(
       "aster_curr_sessionId_global",
       JSON.stringify("session-running"),
@@ -170,7 +170,7 @@ describe("useWorkspaceProjectSelection", () => {
     try {
       expect(harness.getValue().projectId).toBe("project-current");
       expect(harness.getValue().projectSelectionSource).toBe("external");
-      expect(harness.getValue().shouldDisableSessionRestore).toBe(false);
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
     } finally {
       harness.unmount();
     }

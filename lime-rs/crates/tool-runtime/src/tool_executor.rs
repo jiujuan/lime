@@ -119,6 +119,13 @@ impl RuntimeToolExecutorHandle {
     }
 }
 
+pub async fn run_runtime_tool_execution(
+    executor: &RuntimeToolExecutorHandle,
+    request: RuntimeToolExecutionRequest<'_>,
+) -> RuntimeToolExecutionOutcome {
+    RuntimeToolExecutionOutcome::from_execution_result(executor.execute(request).await)
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeToolExecutionResult {
     pub success: bool,
@@ -139,6 +146,23 @@ impl RuntimeToolExecutionResult {
             output,
             error,
             metadata,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RuntimeToolExecutionOutcome {
+    Result(RuntimeToolExecutionResult),
+    Error(RuntimeToolExecutionFailure),
+}
+
+impl RuntimeToolExecutionOutcome {
+    pub fn from_execution_result(
+        result: Result<RuntimeToolExecutionResult, RuntimeToolExecutionError>,
+    ) -> Self {
+        match result {
+            Ok(result) => Self::Result(result),
+            Err(error) => Self::Error(RuntimeToolExecutionFailure::from_error(error)),
         }
     }
 }
@@ -167,6 +191,48 @@ impl RuntimeToolExecutionError {
     pub fn policy_kind(&self) -> Option<&RuntimeToolPolicyErrorKind> {
         self.policy_kind.as_ref()
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeToolExecutionFailure {
+    message: String,
+    kind: RuntimeToolExecutionFailureKind,
+}
+
+impl RuntimeToolExecutionFailure {
+    pub fn from_error(error: RuntimeToolExecutionError) -> Self {
+        let kind = match error.policy_kind() {
+            Some(RuntimeToolPolicyErrorKind::PermissionDenied(_)) => {
+                RuntimeToolExecutionFailureKind::PermissionDenied
+            }
+            Some(RuntimeToolPolicyErrorKind::SafetyCheckFailed(_)) => {
+                RuntimeToolExecutionFailureKind::SafetyCheckFailed
+            }
+            Some(RuntimeToolPolicyErrorKind::ExecutionFailed(_)) | None => {
+                RuntimeToolExecutionFailureKind::ExecutionFailed
+            }
+        };
+
+        Self {
+            message: error.message().to_string(),
+            kind,
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub fn kind(&self) -> RuntimeToolExecutionFailureKind {
+        self.kind
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeToolExecutionFailureKind {
+    PermissionDenied,
+    SafetyCheckFailed,
+    ExecutionFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -313,6 +379,95 @@ mod tests {
 
         assert!(result.success);
         assert_eq!(result.output, "session-2:Echo");
+    }
+
+    #[tokio::test]
+    async fn runtime_tool_runner_materializes_current_result_outcome() {
+        let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
+            working_directory: PathBuf::from("/tmp/workspace"),
+            session_id: "session-3".to_string(),
+            cancel_token: None,
+            workspace_sandbox: None,
+        });
+        let params = json!({});
+        let executor = RuntimeToolExecutorHandle::new(Arc::new(EchoExecutor));
+
+        let outcome = run_runtime_tool_execution(
+            &executor,
+            RuntimeToolExecutionRequest {
+                tool_name: "Echo",
+                params: &params,
+                context: &context,
+                turn_context: None,
+            },
+        )
+        .await;
+
+        match outcome {
+            RuntimeToolExecutionOutcome::Result(result) => {
+                assert!(result.success);
+                assert_eq!(result.output, "session-3:Echo");
+            }
+            RuntimeToolExecutionOutcome::Error(error) => {
+                panic!("runtime runner should not fail: {error:?}");
+            }
+        }
+    }
+
+    struct FailingExecutor {
+        error: RuntimeToolExecutionError,
+    }
+
+    impl RuntimeToolExecutor for FailingExecutor {
+        fn execute<'a>(
+            &'a self,
+            _request: RuntimeToolExecutionRequest<'a>,
+        ) -> RuntimeToolExecutionFuture<'a> {
+            Box::pin(async move { Err(self.error.clone()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_tool_runner_materializes_policy_failure_outcome() {
+        let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
+            working_directory: PathBuf::from("/tmp/workspace"),
+            session_id: "session-4".to_string(),
+            cancel_token: None,
+            workspace_sandbox: None,
+        });
+        let params = json!({});
+        let executor = RuntimeToolExecutorHandle::new(Arc::new(FailingExecutor {
+            error: RuntimeToolExecutionError::new(
+                "blocked by policy",
+                Some(RuntimeToolPolicyErrorKind::PermissionDenied(
+                    "permission_denied".to_string(),
+                )),
+            ),
+        }));
+
+        let outcome = run_runtime_tool_execution(
+            &executor,
+            RuntimeToolExecutionRequest {
+                tool_name: "Echo",
+                params: &params,
+                context: &context,
+                turn_context: None,
+            },
+        )
+        .await;
+
+        match outcome {
+            RuntimeToolExecutionOutcome::Result(result) => {
+                panic!("runtime runner should fail, got {result:?}");
+            }
+            RuntimeToolExecutionOutcome::Error(error) => {
+                assert_eq!(error.message(), "blocked by policy");
+                assert_eq!(
+                    error.kind(),
+                    RuntimeToolExecutionFailureKind::PermissionDenied
+                );
+            }
+        }
     }
 
     #[test]

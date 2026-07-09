@@ -2434,19 +2434,6 @@ pub enum MemorySoulArtifactVoiceSource {
 /// 具体风格由 Style Pack Registry 解析，配置层只保存稳定 ID，不枚举内置 seed。
 pub type MemorySoulStyleProfileId = String;
 
-/// 全局交互口吻强度
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum MemorySoulStyleIntensity {
-    /// 低强度，默认只做轻量表达约束
-    #[default]
-    Low,
-    /// 中强度，保留更明显的节奏偏好
-    Medium,
-    /// 高强度，后续只允许在评测稳定后开放
-    High,
-}
-
 /// 正式产物创作声线配置
 ///
 /// 该配置只作为 Generation Brief 的显式输入，默认不影响正式产物。
@@ -2490,9 +2477,6 @@ pub struct MemorySoulConfig {
     /// 交互口吻预设
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style_profile_id: Option<MemorySoulStyleProfileId>,
-    /// 交互口吻强度
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub style_intensity: Option<MemorySoulStyleIntensity>,
     /// 语气标签
     #[serde(default)]
     pub tone: Vec<String>,

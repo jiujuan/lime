@@ -59,6 +59,7 @@ export interface StreamRequestState {
   pendingTextRenderTimerId?: ReturnType<typeof setTimeout> | null;
   renderedContent?: string;
   preservedAssistantContentInitialized?: boolean;
+  activeTextSegmentTurnId?: string | null;
   activeTextSegmentSequence?: number | null;
   latestAssistantTextEventSequence?: number | null;
   maxProcessEventSequence?: number | null;
@@ -187,6 +188,7 @@ export function createAgentStreamSubmissionLifecycle(
     queuedDraftCleanupTimerId: null,
     pendingTextRenderTimerId: null,
     renderedContent: "",
+    activeTextSegmentTurnId: null,
     activeTextSegmentSequence: null,
     latestAssistantTextEventSequence: null,
     maxProcessEventSequence: null,

@@ -83,7 +83,14 @@ describe("planImplementationDecision", () => {
     ).toBe(true);
     expect(
       hasProposedPlanImplementationSignals({
-        threadItems: [createPlanThreadItem()],
+        threadItems: [
+          createPlanThreadItem({
+            metadata: {
+              revisionId: "proposed_plan:thread-1",
+              source: "proposed_plan",
+            },
+          }),
+        ],
       }),
     ).toBe(true);
     expect(
@@ -91,6 +98,7 @@ describe("planImplementationDecision", () => {
         planState: {
           phase: "ready",
           items: [{ content: "补计划实施确认", status: "completed" }],
+          revisionId: "proposed_plan:state-1",
         },
       }),
     ).toBe(true);
@@ -142,7 +150,7 @@ describe("planImplementationDecision", () => {
     expect(decision).toBeNull();
   });
 
-  it("缺少消息 plan tag 时应从已完成 thread plan item 兜底生成确认", () => {
+  it("缺少消息 plan tag 时应从 current thread plan item 兜底生成确认", () => {
     const decision = selectProposedPlanImplementationDecision({
       messages: [createAssistantMessage("assistant-1", "计划已经整理完。")],
       threadItems: [
@@ -152,7 +160,8 @@ describe("planImplementationDecision", () => {
           sequence: 3,
           text: "- 读取 Codex 参考\n- 复刻确认抽屉",
           metadata: {
-            revisionId: "update_plan:tool-2",
+            revisionId: "proposed_plan:thread-2",
+            source: "proposed_plan",
           },
         }),
       ],
@@ -163,16 +172,72 @@ describe("planImplementationDecision", () => {
       action: {
         arguments: {
           source: "thread_item",
-          plan_revision_id: "update_plan:tool-2",
+          plan_revision_id: "proposed_plan:thread-2",
           source_item_id: "plan-item-2",
           turn_id: "turn-2",
-          plan_source: "thread_item",
+          plan_source: "proposed_plan",
         },
       },
     });
     expect(decision?.action.requestId).toContain(
       "local-plan-implementation:thread:turn-2:plan-item-2",
     );
+  });
+
+  it("legacy update_plan revision 不应生成本地计划实施确认", () => {
+    expect(
+      hasProposedPlanImplementationSignals({
+        threadItems: [
+          createPlanThreadItem({
+            metadata: {
+              revisionId: "update_plan:tool-2",
+              source: "update_plan",
+            },
+          }),
+        ],
+      }),
+    ).toBe(false);
+
+    const decision = selectProposedPlanImplementationDecision({
+      messages: [createAssistantMessage("assistant-1", "计划已经整理完。")],
+      threadItems: [
+        createPlanThreadItem({
+          id: "plan-item-legacy-update-plan",
+          turn_id: "turn-legacy",
+          sequence: 3,
+          text: "- 读取 Codex 参考\n- 复刻确认抽屉",
+          metadata: {
+            revisionId: "update_plan:tool-2",
+            source: "update_plan",
+            tool_call_id: "tool-2",
+          },
+        }),
+      ],
+      planState: {
+        phase: "ready",
+        items: [{ content: "旧 update_plan 状态", status: "completed" }],
+        sourceToolCallId: "plan:update_plan:tool-2",
+        revisionId: "update_plan:tool-2",
+        turnId: "turn-legacy",
+        source: "update_plan",
+      },
+    });
+
+    expect(decision).toBeNull();
+  });
+
+  it("无 revision 的历史 plan item 不应生成本地计划实施确认", () => {
+    expect(
+      hasProposedPlanImplementationSignals({
+        threadItems: [createPlanThreadItem()],
+      }),
+    ).toBe(false);
+    expect(
+      selectProposedPlanImplementationDecision({
+        messages: [createAssistantMessage("assistant-1", "计划已经整理完。")],
+        threadItems: [createPlanThreadItem()],
+      }),
+    ).toBeNull();
   });
 
   it("计划轨已就绪但消息不含 proposed_plan 时也应生成确认", () => {

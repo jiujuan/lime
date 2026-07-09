@@ -17,6 +17,8 @@ interface HarnessProps {
   displayMessageCount?: number;
   threadItemCount?: number;
   draftSendRequest?: TaskCenterDraftSendRequest | null;
+  hasLocalSessionOverride?: boolean;
+  isHomeSessionBackgroundRecovery?: boolean;
   embeddedHomeSessionIds?: ReadonlySet<string>;
   shouldUseBrowserWorkspaceHomeChrome?: boolean;
   harnessPanelVisible?: boolean;
@@ -58,6 +60,8 @@ function Harness({
   displayMessageCount = 0,
   threadItemCount = 0,
   draftSendRequest = null,
+  hasLocalSessionOverride = false,
+  isHomeSessionBackgroundRecovery = false,
   embeddedHomeSessionIds = new Set(),
   shouldUseBrowserWorkspaceHomeChrome = false,
   harnessPanelVisible = false,
@@ -82,6 +86,7 @@ function Harness({
     shouldSuppressDraftContent: false,
     draftSendRequest,
     normalizedInitialSessionId: null,
+    isHomeSessionBackgroundRecovery,
     displayMessageCount,
     threadItemCount,
     hasPendingA2UIForm: false,
@@ -89,6 +94,7 @@ function Harness({
     isSending: false,
     isHomePendingPreviewActive: false,
     queuedTurnCount: 0,
+    hasLocalSessionOverride,
     embeddedHomeSessionIds,
     isAutoRestoringSession: false,
     isSessionHydrating: false,
@@ -168,6 +174,25 @@ describe("useTaskCenterHomeChromeRuntime", () => {
       clearEmbeddedHomeSession,
     });
 
+    expect(clearEmbeddedHomeSession).toHaveBeenCalledWith("topic-a");
+  });
+
+  it("本地物化会话应保留为首页 chrome 的前台会话活动", () => {
+    const clearEmbeddedHomeSession = vi.fn();
+    const runtime = renderHarness({
+      sessionId: "topic-a",
+      hasLocalSessionOverride: true,
+      isHomeSessionBackgroundRecovery: true,
+      embeddedHomeSessionIds: new Set(["topic-a"]),
+      clearEmbeddedHomeSession,
+    });
+
+    expect(runtime.hasHomeConversationActivity).toBe(true);
+    expect(runtime.shouldRenderTaskCenterEmbeddedHome).toBe(false);
+    expect(
+      runtime.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(false);
+    expect(runtime.taskCenterHomeSurfaceState.sceneSessionId).toBe("topic-a");
     expect(clearEmbeddedHomeSession).toHaveBeenCalledWith("topic-a");
   });
 

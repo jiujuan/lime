@@ -1,14 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import {
-  Check,
-  ChevronDown,
-  Dices,
-  ImagePlus,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown, Dices, ImagePlus, X } from "lucide-react";
 import { VideoAspectRatio, VideoCanvasState, VideoResolution } from "./types";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { formatNumber } from "@/i18n/format";
@@ -699,36 +692,6 @@ const ToggleDot = styled.span`
   height: 20px;
   border-radius: 999px;
   background: hsl(var(--background));
-`;
-
-const HelperCard = styled.div`
-  border-radius: 22px;
-  border: 1px solid hsl(203 72% 88%);
-  background: linear-gradient(
-    180deg,
-    hsl(204 100% 98%),
-    hsl(var(--background))
-  );
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const HelperTitle = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: hsl(var(--foreground));
-`;
-
-const HelperTipsRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
 `;
 
 const RATIOS: { label: string; value: VideoAspectRatio }[] = [
@@ -1786,51 +1749,6 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
             </ToggleSwitch>
           </ToggleRow>
         </Section>
-
-        <HelperCard>
-          <HelperTitle>
-            <Sparkles size={14} />
-            {t("workspace.video.sidebar.helper.title", {
-              defaultValue: "创作 Tips",
-            })}
-          </HelperTitle>
-          <HelperTipsRow>
-            <WorkbenchInfoTip
-              ariaLabel={t("workspace.video.sidebar.helper.prompt.aria", {
-                defaultValue: "提示词建议",
-              })}
-              label={t("workspace.video.sidebar.helper.prompt.label", {
-                defaultValue: "提示词",
-              })}
-              variant="pill"
-              tone="mint"
-              content={t("workspace.video.sidebar.helper.prompt.content", {
-                defaultValue:
-                  "提示词优先写清主体、场景、镜头运动和光线。生成成功后，视频会自动同步到项目资料，便于后续复用。",
-              })}
-            />
-            <WorkbenchInfoTip
-              ariaLabel={t(
-                "workspace.video.sidebar.helper.parameterPace.aria",
-                {
-                  defaultValue: "参数节奏建议",
-                },
-              )}
-              label={t("workspace.video.sidebar.helper.parameterPace.label", {
-                defaultValue: "参数节奏",
-              })}
-              variant="pill"
-              tone="mint"
-              content={t(
-                "workspace.video.sidebar.helper.parameterPace.content",
-                {
-                  defaultValue:
-                    "推荐先锁模型与比例，再逐步增加参考图和固定镜头等约束，避免一次加入太多变量导致结果难以判断。",
-                },
-              )}
-            />
-          </HelperTipsRow>
-        </HelperCard>
       </SidebarWrapper>
     );
   },

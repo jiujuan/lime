@@ -67,6 +67,7 @@ import {
 } from "./Inputbar/pluginInputCapability";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+import type { BaseComposerSendMetadata } from "@/components/input-kit";
 
 const ConnectedComposerShell = styled.div`
   width: 100%;
@@ -97,6 +98,7 @@ interface EmptyStateComposerPanelProps {
       planEnabled?: boolean;
       subagentEnabled?: boolean;
     },
+    triggerMetadata?: BaseComposerSendMetadata,
   ) => void | boolean | Promise<boolean>;
   onStop?: () => void;
   isLoading?: boolean;
@@ -347,16 +349,20 @@ export function EmptyStateComposerPanel({
     setActivePluginSelection(null);
   }, [activePluginSelection, draftInput]);
 
-  const handleSendDraft = () => {
+  const handleSendDraft = (triggerMetadata?: BaseComposerSendMetadata) => {
     const submittedInput = resolveInputbarPluginSubmissionText({
       input: draftInput,
       selection: activePluginSelection,
     });
-    const result = onSend(submittedInput, {
-      goalEnabled: objectiveEnabled,
-      planEnabled: taskEnabled,
-      subagentEnabled,
-    });
+    const result = onSend(
+      submittedInput,
+      {
+        goalEnabled: objectiveEnabled,
+        planEnabled: taskEnabled,
+        subagentEnabled,
+      },
+      triggerMetadata,
+    );
     if (result === false) {
       return;
     }
@@ -791,6 +797,7 @@ export function EmptyStateComposerPanel({
           onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
           onRemovePathReference={onRemovePathReference}
           showMetaTools={false}
+          dictationButtonVariant="label"
           plusMenu={plusMenu}
         />
         {projectContextBar}

@@ -280,6 +280,8 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "VoiceModelDefaultSetResponse",
     "VoiceModelTestTranscribeFileParams",
     "VoiceModelTestTranscribeFileResponse",
+    "VoiceTranscriptionTranscribeAudioParams",
+    "VoiceTranscriptionTranscribeAudioResponse",
     "WorkspaceSkillBindingsListParams",
     "WorkspaceSkillBindingsListResponse",
     "WorkspaceRegisteredSkillsListParams",

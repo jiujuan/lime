@@ -148,15 +148,19 @@ MCP current 使用链路 smoke 位于 `scripts/mcp/`。对外继续使用 `packa
 ```bash
 npm run smoke:mcp-current
 npm run smoke:mcp-current -- --allow-write-fixture
+npm run smoke:mcp-current -- --allow-plugin-runtime-fixture
 npm run smoke:mcp-current -- --allow-oauth-fixture
 npm run smoke:mcp-config-electron-fixture
+npm run smoke:mcp-workspace-plugin-runtime-electron-fixture
 npm run smoke:mcp-context7-live-electron-fixture
 ```
 
-默认入口只通过 `app_server_handle_json_lines -> App Server JSON-RPC` 验证 `mcpServer/list`、`mcpServerStatus/list`、`mcpTool/list|listForContext|search`、`mcpPrompt/list`、`mcpResource/list` 读链，并禁止旧 `mcp_*` / `get_mcp_servers` Tauri facade 作为成功证据。`--allow-write-fixture` 会创建临时 stdio MCP server，覆盖 `mcpServer/create|start|stop|delete`、`mcpTool/call` 与 `mcpResource/read`，并断言工具 `outputSchema` 暴露 `structuredContent`、调用结果保留 `structuredContent`，用于复验迁移后 MCP 获取和使用流程。
+默认入口只通过 `app_server_handle_json_lines -> App Server JSON-RPC` 验证 `mcpServer/list`、`mcpServerStatus/list`、`mcpTool/list|listForContext|search`、`mcpPrompt/list`、`mcpResource/list` 读链，并禁止旧 `mcp_*` / `get_mcp_servers` Tauri facade 作为成功证据。`--allow-write-fixture` 会创建临时 stdio MCP server，覆盖 `mcpServer/create|start|stop|delete`、`mcpTool/call` 与 `mcpResource/read`，并断言工具 `outputSchema` 暴露 `structuredContent`、调用结果保留 `structuredContent`，用于复验迁移后 MCP 获取和使用流程。`--allow-plugin-runtime-fixture` 会复用临时 stdio MCP server，覆盖 `agentSession/toolInventory/read` 中 `plugin_runtime_capabilities.mcpBindings` 到 `plugin_mcp_targets` 的投影、caller-scoped `mcpTool/listForContext` proof、显式 `mcpTool/callWithCaller` proof，并断言无显式 `callProof` 时默认 list proof 不会调用工具。
 `--allow-oauth-fixture` 会创建本地 OAuth provider，覆盖 `mcpServer/oauth/login`、Electron `open_external_url` 系统浏览器网关、callback token exchange 与 `runtime_status.auth_status` 授权回流，用于复验动态 OAuth current 链路；该模式不依赖真实外部账号或 live Provider。
 
 `npm run smoke:mcp-config-electron-fixture` 是真实 Electron 设置页配置闭环 fixture：从桌面壳侧栏进入设置页，切到 MCP 配置管理，选择 Context7 preset，编辑 streamable HTTP URL 与 `env_http_headers` 环境变量名并保存，再通过 preload `app_server_handle_json_lines -> mcpServer/list` 验证 App Server current read model。该入口不启动 Context7、不调用真实 provider、不读取或写入真实 key，不走 App Server mock backend、renderer mock fallback 或旧 `mcp_*` Desktop facade。
+
+`npm run smoke:mcp-workspace-plugin-runtime-electron-fixture` 是真实 Electron + Workspace Harness 点击骨架 fixture：创建临时 stdio MCP server，在页面内注入最小 `harness-status-panel` 点击面板，点击“准备 MCP”后经 preload `app_server_handle_json_lines` 执行 `agentSession/toolInventory/read`、candidate `mcpServer/start`、caller-scoped `mcpTool/listForContext`、显式 `mcpTool/callWithCaller`，并断言默认 list proof 不自动调用工具。该入口使用 `APP_SERVER_BACKEND_MODE=runtime` 读取 current tool inventory，但不调用正式模型后端或 live Provider；它证明 Electron / preload / App Server / MCP current JSON-RPC 与点击触发骨架可闭环，不声称完整插件安装、插件选择或生产 React Workspace UX 已验收。
 
 `npm run smoke:mcp-context7-live-electron-fixture` 是真实 Electron + 远程 Context7 live fixture：复用设置页 GUI 创建 Context7 配置，经 `app_server_handle_json_lines` 启动 server、通过 `mcpTool/search` 找到 `resolve-library-id` / `query-docs`，再调用 `mcpTool/call` 查询 “AI Agent 是什么”。该入口会访问远程 Context7；summary 只记录 host、工具名、header 名、env var 名、content 类型 / 数量和 `isError`，不记录 key、header value 或工具正文。
 

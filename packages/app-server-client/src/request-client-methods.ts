@@ -1262,6 +1262,12 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "required",
     },
     {
+      name: "transcribeVoiceAudio",
+      method: protocol.METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
+      kind: "request",
+      params: "required",
+    },
+    {
       name: "readUsageStats",
       method: protocol.METHOD_USAGE_STATS_READ,
       kind: "request",

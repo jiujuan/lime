@@ -95,6 +95,22 @@ export function resolveWorkspaceSceneSessionProjection<
   TQueuedTurn
 > {
   if (shouldHideCurrentSessionContent) {
+    if (homePendingPreviewMessages.length > 0) {
+      return {
+        sceneDisplayMessages: homePendingPreviewMessages,
+        sceneTurns: [],
+        sceneThreadItems: [],
+        sceneCurrentTurnId: null,
+        sceneThreadRead: null,
+        sceneExecutionRuntime: null,
+        scenePendingActions: [],
+        sceneSubmittedActionsInFlight: [],
+        sceneQueuedTurns: [],
+        sceneIsPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
+        sceneIsSending: isSending,
+      };
+    }
+
     return {
       sceneDisplayMessages: [],
       sceneTurns: [],

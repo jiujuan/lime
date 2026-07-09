@@ -43,7 +43,8 @@ export function isToolExecutionTimelineItem(item: AgentThreadItem): boolean {
     item.type === "tool_call" ||
     item.type === "command_execution" ||
     item.type === "patch" ||
-    item.type === "web_search"
+    item.type === "web_search" ||
+    item.type === "hook"
   );
 }
 

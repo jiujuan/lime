@@ -32,7 +32,12 @@ interface ProbeProps {
     commitMaterializedTaskCenterDraftTab: (
       draftTabId: string,
       newSessionId: string,
-      options?: { preserveInput?: boolean; syncRoute?: boolean },
+      options?: {
+        embedHomeSession?: boolean;
+        hydrateSession?: boolean;
+        preserveInput?: boolean;
+        syncRoute?: boolean;
+      },
     ) => void;
     materializeTaskCenterDraftTab: (
       draftTabId: string,
@@ -43,6 +48,8 @@ interface ProbeProps {
     }) => string;
   }) => void;
   onSnapshot: (snapshot: ProbeSnapshot) => void;
+  markTaskCenterEmbeddedHomeSession?: ReturnType<typeof vi.fn>;
+  markTaskCenterLocalSessionOverride?: ReturnType<typeof vi.fn>;
   persistMaterializedSessionNavigation?: ReturnType<typeof vi.fn>;
   switchMaterializedSession?: ReturnType<typeof vi.fn>;
   upsertTaskCenterOpenTab: ReturnType<typeof vi.fn>;
@@ -51,6 +58,8 @@ interface ProbeProps {
 function Probe({
   createFreshSession,
   initialPendingRequest = null,
+  markTaskCenterEmbeddedHomeSession = vi.fn(),
+  markTaskCenterLocalSessionOverride = vi.fn(),
   onRuntime,
   onSnapshot,
   persistMaterializedSessionNavigation = vi.fn(),
@@ -82,8 +91,8 @@ function Probe({
     input,
     isPreparingSend: false,
     isSending: false,
-    markTaskCenterEmbeddedHomeSession: vi.fn(),
-    markTaskCenterLocalSessionOverride: vi.fn(),
+    markTaskCenterEmbeddedHomeSession,
+    markTaskCenterLocalSessionOverride,
     resetLocalImageWorkbenchSessionScope: vi.fn(),
     resetTopicLocalState: vi.fn(),
     setActiveTaskCenterDraftTabId,
@@ -251,7 +260,12 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
       commitMaterializedTaskCenterDraftTab: (
         draftTabId: string,
         newSessionId: string,
-        options?: { preserveInput?: boolean; syncRoute?: boolean },
+        options?: {
+          embedHomeSession?: boolean;
+          hydrateSession?: boolean;
+          preserveInput?: boolean;
+          syncRoute?: boolean;
+        },
       ) => void;
       materializeTaskCenterDraftTab: (
         draftTabId: string,
@@ -355,6 +369,83 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
     );
   });
 
+  it("首页首发发送 commit materialized 草稿时可只同步路由不拉详情", async () => {
+    const createFreshSession = vi.fn(async () => "session-navigation-only");
+    const markTaskCenterEmbeddedHomeSession = vi.fn();
+    const markTaskCenterLocalSessionOverride = vi.fn();
+    const persistMaterializedSessionNavigation = vi.fn();
+    const switchMaterializedSession = vi.fn(async () => "success");
+    const upsertTaskCenterOpenTab = vi.fn();
+    let runtime: {
+      commitMaterializedTaskCenterDraftTab: (
+        draftTabId: string,
+        newSessionId: string,
+        options?: {
+          embedHomeSession?: boolean;
+          hydrateSession?: boolean;
+          preserveInput?: boolean;
+          syncRoute?: boolean;
+        },
+      ) => void;
+      openTaskCenterDraftTab: (options?: {
+        preservePendingSendRequest?: boolean;
+      }) => string;
+    } | null = null;
+
+    await act(async () => {
+      root.render(
+        <Probe
+          createFreshSession={createFreshSession}
+          markTaskCenterEmbeddedHomeSession={
+            markTaskCenterEmbeddedHomeSession
+          }
+          markTaskCenterLocalSessionOverride={
+            markTaskCenterLocalSessionOverride
+          }
+          onRuntime={(nextRuntime) => {
+            runtime = nextRuntime;
+          }}
+          onSnapshot={() => undefined}
+          persistMaterializedSessionNavigation={
+            persistMaterializedSessionNavigation
+          }
+          switchMaterializedSession={switchMaterializedSession}
+          upsertTaskCenterOpenTab={upsertTaskCenterOpenTab}
+        />,
+      );
+    });
+
+    await act(async () => {
+      const draftTabId =
+        runtime?.openTaskCenterDraftTab({
+          preservePendingSendRequest: true,
+        }) ?? "";
+      runtime?.commitMaterializedTaskCenterDraftTab(
+        draftTabId,
+        "session-navigation-only",
+        {
+          embedHomeSession: false,
+          hydrateSession: false,
+          preserveInput: false,
+        },
+      );
+      await Promise.resolve();
+    });
+
+    expect(upsertTaskCenterOpenTab).toHaveBeenCalledWith(
+      "session-navigation-only",
+      "workspace-test",
+    );
+    expect(persistMaterializedSessionNavigation).toHaveBeenCalledWith(
+      "session-navigation-only",
+    );
+    expect(switchMaterializedSession).not.toHaveBeenCalled();
+    expect(markTaskCenterEmbeddedHomeSession).not.toHaveBeenCalled();
+    expect(markTaskCenterLocalSessionOverride).toHaveBeenCalledWith(
+      "session-navigation-only",
+    );
+  });
+
   it("内部发送 commit materialized 草稿时不应写路由或触发历史切换", async () => {
     const createFreshSession = vi.fn(async () => "session-internal-send");
     const persistMaterializedSessionNavigation = vi.fn();
@@ -364,7 +455,12 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
       commitMaterializedTaskCenterDraftTab: (
         draftTabId: string,
         newSessionId: string,
-        options?: { preserveInput?: boolean; syncRoute?: boolean },
+        options?: {
+          embedHomeSession?: boolean;
+          hydrateSession?: boolean;
+          preserveInput?: boolean;
+          syncRoute?: boolean;
+        },
       ) => void;
       openTaskCenterDraftTab: (options?: {
         preservePendingSendRequest?: boolean;

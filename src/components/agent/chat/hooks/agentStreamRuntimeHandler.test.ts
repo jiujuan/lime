@@ -68,8 +68,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection: () => {},
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -198,8 +196,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection: () => {},
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -355,8 +351,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection: () => {},
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -581,8 +575,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection: () => {},
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -824,8 +816,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection: () => {},
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -1035,8 +1025,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection: () => {},
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,
@@ -1311,8 +1299,6 @@ describe("agentStreamRuntimeHandler storage", () => {
         clearActiveStreamIfMatch: () => true,
         upsertQueuedTurn: () => {},
         removeQueuedTurnsFromProjection: () => {},
-        playToolcallSound: () => {},
-        playTypewriterSound: () => {},
         appendThinkingToParts: (
           parts: NonNullable<Message["contentParts"]>,
           textDelta: string,

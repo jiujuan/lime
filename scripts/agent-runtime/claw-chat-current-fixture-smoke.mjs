@@ -10,9 +10,14 @@ import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import { ensureElectronFixtureBuild } from "../lib/electron-fixture-build.mjs";
 import {
   APP_SERVER_METHOD_SESSION_LIST,
+  APPROVAL_REQUEST_CANCEL_SCENARIO,
+  APPROVAL_REQUEST_DECLINE_SCENARIO,
+  APPROVAL_REQUEST_RESUME_PROMPT,
+  APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   DEFAULTS,
+  ELECTRON_RESIZE_REFLOW_SCENARIO,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
   IMAGE_COMMAND_SCENARIO,
@@ -22,6 +27,8 @@ import {
   INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_PROMPT,
   INPUTBAR_RICH_RESTORE_SCENARIO,
+  LIVE_TAIL_COMMIT_PROMPT,
+  LIVE_TAIL_COMMIT_SCENARIO,
   LOG_PREFIX,
   MULTI_AGENT_TEAM_SCENARIO,
   NEWS_PROMPT,
@@ -70,7 +77,6 @@ import {
   MEDIA_REFERENCE_SCENARIO,
 } from "./claw-chat-current-fixture-media-reference.mjs";
 import {
-  DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
   DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
   createSoulStyleFixtureOverrides,
   createSoulStyleFixtureSelection,
@@ -115,9 +121,8 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | inputbar-pending-steer-rich-restore | inputbar-pending-steer-multi-queue | inputbar-pending-steer-pop-front-resume | plan | goal | soul-style | image-command | plain-image-intent | media-reference | reasoning-first-visible | live-tail-commit | electron-resize-reflow | approval-request-resume | approval-request-decline | approval-request-cancel | terminal-failed-after-answer | terminal-canceled-after-answer | terminal-stale-guard | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
   --soul-style-profile <id>   soul-style 场景使用的 profile，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID}
-  --soul-style-intensity <v>  soul-style 场景使用的强度，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY}
   --cdp-port <port>      可选 Electron remote debugging port；传入后通过 CDP renderer 执行 GUI 动作
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
@@ -132,7 +137,6 @@ function parseArgs(argv) {
     cdpPort: null,
     cdpUrl: null,
     soulStyleProfileId: DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
-    soulStyleIntensity: DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -163,11 +167,6 @@ function parseArgs(argv) {
     }
     if (arg === "--soul-style-profile" && next) {
       options.soulStyleProfileId = next.trim();
-      index += 1;
-      continue;
-    }
-    if (arg === "--soul-style-intensity" && next) {
-      options.soulStyleIntensity = next.trim();
       index += 1;
       continue;
     }
@@ -228,6 +227,11 @@ function parseArgs(argv) {
     PLAIN_IMAGE_INTENT_SCENARIO,
     MEDIA_REFERENCE_SCENARIO,
     REASONING_FIRST_VISIBLE_SCENARIO,
+    LIVE_TAIL_COMMIT_SCENARIO,
+    ELECTRON_RESIZE_REFLOW_SCENARIO,
+    APPROVAL_REQUEST_RESUME_SCENARIO,
+    APPROVAL_REQUEST_DECLINE_SCENARIO,
+    APPROVAL_REQUEST_CANCEL_SCENARIO,
     TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO,
     TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
     TERMINAL_STALE_GUARD_SCENARIO,
@@ -247,7 +251,6 @@ function parseArgs(argv) {
   }
   createSoulStyleFixtureSelection({
     profileId: options.soulStyleProfileId,
-    intensity: options.soulStyleIntensity,
   });
   return options;
 }
@@ -320,7 +323,9 @@ function resolveScenarioBackendEnv(options, runtimeEnv) {
     };
   }
 
-  const backendTimeoutMs = scenarioWaitsForExternalBackendCancel(options.scenario)
+  const backendTimeoutMs = scenarioWaitsForExternalBackendCancel(
+    options.scenario,
+  )
     ? String(Math.max(options.timeoutMs, 130_000))
     : "10000";
 
@@ -447,7 +452,6 @@ async function run() {
     options.scenario === SOUL_STYLE_SCENARIO
       ? createSoulStyleFixtureSelection({
           profileId: options.soulStyleProfileId,
-          intensity: options.soulStyleIntensity,
         })
       : null;
   fs.mkdirSync(options.evidenceDir, { recursive: true });
@@ -491,13 +495,18 @@ async function run() {
         ? INPUTBAR_RICH_RESTORE_PROMPT
         : options.scenario === INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO ||
             options.scenario === INPUTBAR_PENDING_STEER_MULTI_QUEUE_SCENARIO ||
-            options.scenario === INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO
+            options.scenario ===
+              INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO
           ? INPUTBAR_PENDING_STEER_ACTIVE_PROMPT
           : options.scenario === MEDIA_REFERENCE_SCENARIO
             ? MEDIA_REFERENCE_PROMPT
             : options.scenario === REASONING_FIRST_VISIBLE_SCENARIO
               ? REASONING_FIRST_VISIBLE_PROMPT
-          : NEWS_PROMPT,
+              : options.scenario === LIVE_TAIL_COMMIT_SCENARIO
+                ? LIVE_TAIL_COMMIT_PROMPT
+                : options.scenario === APPROVAL_REQUEST_RESUME_SCENARIO
+                  ? APPROVAL_REQUEST_RESUME_PROMPT
+                  : NEWS_PROMPT,
     sessionId: SESSION_ID,
     threadId: THREAD_ID,
     workspaceId: null,
@@ -506,7 +515,9 @@ async function run() {
     model: FIXTURE_MODEL,
     backendMode: scenarioBackendEnv.APP_SERVER_BACKEND_MODE,
     appUrl: options.appUrl || null,
-    proofLevel: options.cdpPort ? "Gate B CDP controlled fixture" : "Gate B controlled fixture",
+    proofLevel: options.cdpPort
+      ? "Gate B CDP controlled fixture"
+      : "Gate B controlled fixture",
     cdpUrl: options.cdpUrl,
     cdpEndpoint: null,
     cdpPage: null,
@@ -575,6 +586,21 @@ async function run() {
     reasoningFirstVisibleInputSend: null,
     guiReasoningFirstVisibleBeforeAnswer: null,
     guiReasoningFirstVisibleCompleted: null,
+    approvalRequestResumeInputSend: null,
+    approvalRequestResumeBackendTurnStart: null,
+    approvalRequestResumePendingGui: null,
+    approvalRequestResumePendingReadModel: null,
+    approvalRequestResumeApproveClick: null,
+    approvalRequestResumeRespondActionRequest: null,
+    approvalRequestResumeBackendActionRespond: null,
+    guiApprovalRequestResumeCompleted: null,
+    readModelApprovalRequestResumeCompleted: null,
+    approvalRequestResumeSecondAccessModeSet: null,
+    approvalRequestResumeSecondInputSend: null,
+    approvalRequestResumeSecondBackendTurnStart: null,
+    guiApprovalRequestResumeSecondCompleted: null,
+    guiApprovalRequestResumeSecondNoApprovalPrompt: null,
+    readModelApprovalRequestResumeSecondCompleted: null,
     webToolsRenderingInputSend: null,
     guiWebToolsRenderingCompleted: null,
     skillsRuntimeInputSend: null,
@@ -850,7 +876,7 @@ async function run() {
       runtimeEnv.writeFixtureConfig(fixtureConfigSoulOverrides);
       summary.soulStyleConfig = sanitizeJson(
         await page.evaluate(
-          async ({ profileId, intensity }) => {
+          async ({ profileId }) => {
             const currentConfig = await window.electronAPI.invoke("get_config");
             const nextConfig = {
               ...(currentConfig || {}),
@@ -861,7 +887,6 @@ async function run() {
                   ...(currentConfig?.memory?.soul || {}),
                   enabled: true,
                   style_profile_id: profileId,
-                  style_intensity: intensity,
                   imported_from: "manual",
                 },
               },
@@ -878,7 +903,6 @@ async function run() {
           },
           {
             profileId: soulStyleSelection.profileId,
-            intensity: soulStyleSelection.intensity,
           },
         ),
       );
@@ -992,6 +1016,16 @@ async function run() {
     );
     summary.guiSessionOpened = sanitizeJson(
       await openFixtureSessionFromSidebar(page, options, appServerRequests),
+    );
+
+    summary.invokeErrorBufferClearedBeforeScenario = sanitizeJson(
+      await page.evaluate(() => {
+        window.localStorage.removeItem("lime_invoke_error_buffer_v1");
+        return {
+          cleared: true,
+          clearedAt: new Date().toISOString(),
+        };
+      }),
     );
 
     await executeScenarioFlow({

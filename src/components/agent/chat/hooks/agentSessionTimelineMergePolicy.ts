@@ -77,14 +77,27 @@ export function isLocalTimelineCompatibleWithHydratedMessages(params: {
   return true;
 }
 
-function hasAssistantProcessSnapshot(messages: Message[]): boolean {
+export function hasAssistantActivitySnapshot(messages: Message[]): boolean {
   return messages.some(
     (message) =>
       message.role === "assistant" &&
-      (Boolean(message.thinkingContent?.trim()) ||
+      (message.isThinking === true ||
+        Boolean(message.runtimeStatus) ||
+        Boolean(message.thinkingContent?.trim()) ||
         Boolean(message.contentParts?.some((part) => part.type !== "text")) ||
         Boolean(message.runtimeTurnId?.trim().startsWith("skill-exec-")) ||
         message.inlineProcessRetention === "skill"),
+  );
+}
+
+export function shouldSkipStaleEmptyMessagesRefSync(params: {
+  nextMessages: Message[];
+  currentRefMessages: Message[];
+}): boolean {
+  return (
+    params.nextMessages.length === 0 &&
+    params.currentRefMessages.length > 0 &&
+    hasAssistantActivitySnapshot(params.currentRefMessages)
   );
 }
 
@@ -95,7 +108,7 @@ export function shouldPreserveDetachedLocalSnapshot(params: {
 }): boolean {
   if (
     params.sessionId !== null ||
-    !hasAssistantProcessSnapshot(params.localMessages)
+    !hasAssistantActivitySnapshot(params.localMessages)
   ) {
     return false;
   }
@@ -139,31 +152,90 @@ export function mergeRuntimeSyncThreadItems(
   });
 }
 
-export function hasTerminalDetailTimeline(detail: {
-  thread_read?: AgentRuntimeThreadReadModel | null;
-  turns?: AgentThreadTurn[];
-}): boolean {
-  const activeStatuses = new Set([
-    "idle",
-    "queued",
-    "running",
-    "waiting_request",
-  ]);
-  const normalizedThreadReadStatus = (detail.thread_read?.status || "")
-    .trim()
-    .toLowerCase();
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readArray(record: Record<string, unknown>, keys: string[]): unknown[] {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return [];
+}
+
+function normalizeStatus(value: unknown): string {
+  return typeof value === "string"
+    ? value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+    : "";
+}
+
+function isTerminalTimelineStatus(status: unknown): boolean {
+  const normalizedStatus = normalizeStatus(status);
+  return Boolean(normalizedStatus) && !ACTIVE_TIMELINE_STATUSES.has(normalizedStatus);
+}
+
+function hasTerminalStatusInRecord(
+  record: Record<string, unknown>,
+  keys: string[],
+): boolean {
+  return keys.some((key) => isTerminalTimelineStatus(record[key]));
+}
+
+function hasTerminalThreadReadTimeline(
+  threadRead?: AgentRuntimeThreadReadModel | null,
+): boolean {
+  if (!threadRead) {
+    return false;
+  }
+  const record = threadRead as unknown as Record<string, unknown>;
   if (
-    normalizedThreadReadStatus &&
-    !activeStatuses.has(normalizedThreadReadStatus)
+    hasTerminalStatusInRecord(record, [
+      "status",
+      "profile_status",
+      "profileStatus",
+      "latest_turn_status",
+      "latestTurnStatus",
+    ])
   ) {
     return true;
   }
 
+  return readArray(record, ["turns"]).some((turn) => {
+    const turnRecord = readRecord(turn);
+    return turnRecord
+      ? hasTerminalStatusInRecord(turnRecord, [
+          "status",
+          "profile_status",
+          "profileStatus",
+          "native_status",
+          "nativeStatus",
+        ])
+      : false;
+  });
+}
+
+const ACTIVE_TIMELINE_STATUSES = new Set([
+  "idle",
+  "queued",
+  "running",
+  "waiting_request",
+]);
+
+export function hasTerminalDetailTimeline(detail: {
+  thread_read?: AgentRuntimeThreadReadModel | null;
+  turns?: AgentThreadTurn[];
+}): boolean {
+  if (hasTerminalThreadReadTimeline(detail.thread_read)) {
+    return true;
+  }
+
   return (detail.turns || []).some((turn) => {
-    const normalizedTurnStatus = (turn.status || "").trim().toLowerCase();
-    return (
-      Boolean(normalizedTurnStatus) && !activeStatuses.has(normalizedTurnStatus)
-    );
+    return isTerminalTimelineStatus(turn.status);
   });
 }
 

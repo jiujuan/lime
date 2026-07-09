@@ -19,6 +19,7 @@ import {
   resolveCuratedTaskTemplateLaunchPrefill,
 } from "../../utils/curatedTaskTemplates";
 import type { InputbarSendPayload } from "./inputbarSendPayload";
+import type { BaseComposerSendMetadata } from "@/components/input-kit";
 import type {
   InputbarPluginCapability,
   InputbarPluginSelectionOptions,
@@ -88,7 +89,7 @@ interface MockInputbarCoreProps {
   setText?: (value: string) => void;
   onToolClick?: (tool: string) => void;
   activeTools?: Record<string, boolean>;
-  onSend?: () => void;
+  onSend?: (metadata?: BaseComposerSendMetadata) => void;
   pendingImages?: Array<{
     data: string;
     mediaType: string;
@@ -236,7 +237,12 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
       <button
         type="button"
         data-testid="send-btn"
-        onClick={() => props.onSend?.()}
+        onClick={() =>
+          props.onSend?.({
+            triggeredAt: Date.now(),
+            triggerSource: "button",
+          })
+        }
       >
         发送
       </button>

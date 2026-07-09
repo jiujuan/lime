@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 
+use crate::tool_definition::RuntimeToolDefinition;
 use serde_json::{json, Value};
 
 pub const IMAGE_GENERATION_CONTRACT_KEY: &str = "image_generation";
@@ -25,6 +26,14 @@ pub fn skill_tool_input_schema() -> Value {
     })
 }
 
+pub fn skill_tool_definition() -> RuntimeToolDefinition {
+    RuntimeToolDefinition::new(
+        SKILL_TOOL_NAME,
+        SKILL_TOOL_DESCRIPTION,
+        skill_tool_input_schema(),
+    )
+}
+
 pub fn normalize_skill_invocation_params(mut params: Value) -> Value {
     if let Some(object) = params.as_object_mut() {
         let should_stringify_args = object
@@ -42,6 +51,23 @@ pub fn normalize_skill_invocation_params(mut params: Value) -> Value {
         }
     }
     params
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkillToolAccessError {
+    Disabled,
+    NotAllowed { skill_name: String },
+}
+
+impl SkillToolAccessError {
+    pub fn message(&self) -> String {
+        match self {
+            SkillToolAccessError::Disabled => skill_tool_disabled_message().to_string(),
+            SkillToolAccessError::NotAllowed { skill_name } => {
+                skill_tool_not_allowed_message(skill_name)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -213,6 +239,24 @@ pub fn is_skill_tool_session_skill_allowed(session_id: &str, skill_name: &str) -
     is_skill_allowed_for_session(session_id, skill_name)
 }
 
+pub fn check_skill_tool_access(
+    session_id: &str,
+    params: &Value,
+) -> Result<(), SkillToolAccessError> {
+    if !is_skill_tool_enabled_for_session(session_id) {
+        return Err(SkillToolAccessError::Disabled);
+    }
+    if let Some(skill_name) = params.get("skill").and_then(Value::as_str) {
+        if !is_skill_allowed_for_session(session_id, skill_name) {
+            return Err(SkillToolAccessError::NotAllowed {
+                skill_name: skill_name.to_string(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
 pub fn is_skill_tool_enabled_for_session(session_id: &str) -> bool {
     let session_id = session_id.trim();
     if session_id.is_empty() {
@@ -338,6 +382,16 @@ pub fn workspace_skill_source_for_session_skill(
         .find_map(|alias| access.skill_sources.get(alias).cloned())
 }
 
+pub fn workspace_skill_source_for_invocation_params(
+    session_id: &str,
+    params: &Value,
+) -> Option<SkillToolSessionSkillSource> {
+    params
+        .get("skill")
+        .and_then(Value::as_str)
+        .and_then(|skill_name| workspace_skill_source_for_session_skill(session_id, skill_name))
+}
+
 pub fn skill_tool_not_allowed_message(skill_name: &str) -> String {
     format!(
         "当前会话未授权执行 Skill({})；请先通过 workspace skill runtime enable gate 显式启用该能力。",
@@ -382,11 +436,76 @@ mod tests {
     }
 
     #[test]
+    fn skill_tool_access_check_materializes_disabled_and_allowlist_errors() {
+        let session_id = "skill-gate-access-session";
+        clear_skill_tool_session_access(session_id);
+
+        let disabled = check_skill_tool_access(
+            session_id,
+            &serde_json::json!({ "skill": "project:capability-report" }),
+        )
+        .expect_err("disabled session should fail");
+        assert_eq!(disabled, SkillToolAccessError::Disabled);
+        assert!(disabled.message().contains("未启用技能自动调用"));
+
+        set_skill_tool_session_allowed_skills(session_id, ["project:capability-report"]);
+        assert!(check_skill_tool_access(
+            session_id,
+            &serde_json::json!({ "skill": "capability-report" }),
+        )
+        .is_ok());
+        let denied =
+            check_skill_tool_access(session_id, &serde_json::json!({ "skill": "other-skill" }))
+                .expect_err("unlisted skill should fail");
+        assert_eq!(
+            denied,
+            SkillToolAccessError::NotAllowed {
+                skill_name: "other-skill".to_string()
+            }
+        );
+        assert!(denied.message().contains("未授权执行 Skill"));
+
+        clear_skill_tool_session_access(session_id);
+    }
+
+    #[test]
+    fn workspace_skill_source_can_be_resolved_from_invocation_params() {
+        let session_id = "skill-gate-source-params-session";
+        let source = SkillToolSessionSkillSource {
+            workspace_root: "/tmp/workspace".to_string(),
+            source: "manual_session_enable".to_string(),
+            approval: "manual".to_string(),
+            directory: "capability-report".to_string(),
+            registered_skill_directory: "/tmp/workspace/.agents/skills/capability-report"
+                .to_string(),
+            skill_name: "project:capability-report".to_string(),
+            source_draft_id: "capdraft-1".to_string(),
+            source_verification_report_id: "capver-1".to_string(),
+            permission_summary: vec!["Level 0 只读发现".to_string()],
+        };
+        set_skill_tool_session_allowed_skill_sources(session_id, [source.clone()]);
+
+        let restored = workspace_skill_source_for_invocation_params(
+            session_id,
+            &serde_json::json!({ "skill": "capability-report" }),
+        )
+        .expect("source should resolve from short skill name");
+
+        clear_skill_tool_session_access(session_id);
+
+        assert_eq!(restored, source);
+    }
+
+    #[test]
     fn skill_tool_surface_matches_current_contract() {
+        let definition = skill_tool_definition();
         let schema = skill_tool_input_schema();
 
         assert_eq!(SKILL_TOOL_NAME, "Skill");
         assert!(SKILL_TOOL_DESCRIPTION.contains("skill_search"));
+        assert_eq!(definition.name, SKILL_TOOL_NAME);
+        assert_eq!(definition.description, SKILL_TOOL_DESCRIPTION);
+        assert_eq!(definition.input_schema, schema);
         assert_eq!(schema.get("type"), Some(&serde_json::json!("object")));
         assert_eq!(
             schema.pointer("/properties/skill/type"),

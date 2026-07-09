@@ -66,6 +66,8 @@ import { useHomeSkillSurface } from "./useHomeSkillSurface";
 import { useCuratedTaskLauncherState } from "./useCuratedTaskLauncherState";
 import { useEmptyStateHomeActions } from "./useEmptyStateHomeActions";
 import type { AgentI18nKey, EmptyStateProps } from "./EmptyState.types";
+import type { BaseComposerSendMetadata } from "@/components/input-kit";
+import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 
 const CREATION_THEMES: string[] = [];
 
@@ -485,7 +487,26 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       planEnabled?: boolean;
       subagentEnabled?: boolean;
     },
+    triggerMetadata?: BaseComposerSendMetadata,
   ) => {
+    const handlerEnteredAt = Date.now();
+    const triggeredAt =
+      typeof triggerMetadata?.triggeredAt === "number" &&
+      Number.isFinite(triggerMetadata.triggeredAt)
+        ? triggerMetadata.triggeredAt
+        : handlerEnteredAt;
+    const triggerSource = triggerMetadata?.triggerSource ?? "adapter";
+    recordAgentUiPerformanceMetric("inputbar.send.enter", {
+      durationMs: Math.max(0, handlerEnteredAt - triggeredAt),
+      hasTriggerMetadata: Boolean(triggerMetadata),
+      imageCount: pendingImages.length,
+      inputLength: inputOverride.trim().length,
+      pathReferenceCount: pathReferences.length,
+      sessionId: sessionId ?? null,
+      source: "empty-state",
+      triggerSource,
+      workspaceId: projectId ?? null,
+    });
     const sendRestoreEpoch = inputRestoreEpochRef.current;
     const hasPathReferences = pathReferences.length > 0;
     if (
@@ -568,6 +589,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       images: imagesToSend,
       textOverride: effectiveInput,
       sendOptions,
+      ...(triggerMetadata
+        ? {
+            triggeredAt: triggerMetadata.triggeredAt,
+            triggerSource: triggerMetadata.triggerSource,
+          }
+        : {}),
     });
     const clearAcceptedSubmissionState = () => {
       if (inputRestoreEpochRef.current !== sendRestoreEpoch) {

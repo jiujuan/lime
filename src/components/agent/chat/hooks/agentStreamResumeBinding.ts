@@ -71,8 +71,6 @@ interface BindRecoveredAgentStreamThreadOptions {
     fileName: string,
     context?: import("../types").WriteArtifactContext,
   ) => void;
-  playToolcallSound: () => void;
-  playTypewriterSound: () => void;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   runtime: Pick<AgentRuntimeAdapter, "listenToTurnEvents" | "resumeThread">;
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
@@ -489,8 +487,6 @@ export async function bindRecoveredAgentStreamThread(
     getThreadItems,
     listenerMapRef,
     onWriteFile,
-    playToolcallSound,
-    playTypewriterSound,
     refreshSessionReadModel,
     runtime,
     setActiveStream,
@@ -623,8 +619,6 @@ export async function bindRecoveredAgentStreamThread(
           clearActiveStreamIfMatch,
           upsertQueuedTurn,
           removeQueuedTurnsFromProjection,
-          playToolcallSound,
-          playTypewriterSound,
           appendThinkingToParts,
         },
         eventName: target.eventName,

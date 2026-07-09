@@ -2,12 +2,14 @@ import React, { useState } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BaseComposer } from "./BaseComposer";
+import { BaseComposer, type BaseComposerSendMetadata } from "./BaseComposer";
 
 interface RenderResult {
   container: HTMLDivElement;
   root: Root;
-  onSend: ReturnType<typeof vi.fn<() => void>>;
+  onSend: ReturnType<
+    typeof vi.fn<(metadata?: BaseComposerSendMetadata) => void>
+  >;
   onStop: ReturnType<typeof vi.fn<() => void>>;
 }
 
@@ -40,7 +42,7 @@ interface HarnessProps {
   disabled?: boolean;
   hasAdditionalContent?: boolean;
   deferSendOnEnter?: boolean;
-  onSend: () => void;
+  onSend: (metadata?: BaseComposerSendMetadata) => void;
   onStop: () => void;
 }
 
@@ -91,7 +93,7 @@ const renderHarness = (props: Partial<HarnessProps> = {}): RenderResult => {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  const onSend = vi.fn<() => void>();
+  const onSend = vi.fn<(metadata?: BaseComposerSendMetadata) => void>();
   const onStop = vi.fn<() => void>();
 
   act(() => {
@@ -144,9 +146,16 @@ describe("BaseComposer", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        triggerSource: "enter",
+        triggeredAt: expect.any(Number),
+      }),
+    );
   });
 
   it("启用延迟发送时按 Enter 应在下一帧发送消息", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_780_000_000_123);
     const rafCallbacks: Array<(timestamp: number) => void> = [];
     vi.stubGlobal(
       "requestAnimationFrame",
@@ -172,6 +181,27 @@ describe("BaseComposer", () => {
       rafCallbacks.splice(0).forEach((callback) => callback(0));
     });
     expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith({
+      triggeredAt: 1_780_000_000_123,
+      triggerSource: "enter",
+    });
+    nowSpy.mockRestore();
+  });
+
+  it("点击主按钮应携带 button 触发时间", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_780_000_100_000);
+    const { container, onSend } = renderHarness({ initialText: "hello" });
+    const button = getPrimaryButton(container);
+
+    act(() => {
+      button.click();
+    });
+
+    expect(onSend).toHaveBeenCalledWith({
+      triggeredAt: 1_780_000_100_000,
+      triggerSource: "button",
+    });
+    nowSpy.mockRestore();
   });
 
   it("生成中按 Enter 不应触发发送", () => {
@@ -244,6 +274,12 @@ describe("BaseComposer", () => {
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        triggerSource: "ime",
+        triggeredAt: expect.any(Number),
+      }),
+    );
   });
 
   it("生成中点击主按钮应触发停止", () => {

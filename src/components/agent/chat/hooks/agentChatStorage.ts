@@ -24,49 +24,7 @@ export const GLOBAL_PROVIDER_PREF_KEY = "agent_pref_provider_global";
 export const GLOBAL_MODEL_PREF_KEY = "agent_pref_model_global";
 export const GLOBAL_MIGRATED_PREF_KEY = "agent_pref_migrated_global";
 
-let toolcallAudio: HTMLAudioElement | null = null;
-let typewriterAudio: HTMLAudioElement | null = null;
-let lastTypewriterTime = 0;
-const TYPEWRITER_INTERVAL = 120;
 const MAX_AGENT_STATE_RESTORE_BYTES = 1_500_000;
-
-const initAudio = () => {
-  if (!toolcallAudio) {
-    toolcallAudio = new Audio("/sounds/tool-call.mp3");
-    toolcallAudio.volume = 1;
-    toolcallAudio.load();
-  }
-  if (!typewriterAudio) {
-    typewriterAudio = new Audio("/sounds/typing.mp3");
-    typewriterAudio.volume = 0.6;
-    typewriterAudio.load();
-  }
-};
-
-const getSoundEnabled = (): boolean => {
-  return localStorage.getItem("lime_sound_enabled") === "true";
-};
-
-export const playToolcallSound = () => {
-  if (!getSoundEnabled()) return;
-  initAudio();
-  if (toolcallAudio) {
-    toolcallAudio.currentTime = 0;
-    toolcallAudio.play().catch(console.error);
-  }
-};
-
-export const playTypewriterSound = () => {
-  if (!getSoundEnabled()) return;
-  const now = Date.now();
-  if (now - lastTypewriterTime < TYPEWRITER_INTERVAL) return;
-  initAudio();
-  if (typewriterAudio) {
-    typewriterAudio.currentTime = 0;
-    typewriterAudio.play().catch(console.error);
-    lastTypewriterTime = now;
-  }
-};
 
 export const loadPersisted = <T>(key: string, defaultValue: T): T => {
   try {

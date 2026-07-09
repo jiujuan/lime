@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "agent-protocol"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -189,7 +189,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "app-server-protocol"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "schemars",
  "serde",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "document-preview"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "flate2",
  "zip",
@@ -3909,7 +3909,7 @@ dependencies = [
 
 [[package]]
 name = "lime-core"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "agent-protocol",
  "async-trait",
@@ -3948,7 +3948,7 @@ dependencies = [
 
 [[package]]
 name = "lime-providers"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -3980,7 +3980,7 @@ dependencies = [
 
 [[package]]
 name = "lime-server-utils"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "axum 0.7.9",
  "futures",
@@ -3993,7 +3993,7 @@ dependencies = [
 
 [[package]]
 name = "lime-services"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4035,7 +4035,7 @@ dependencies = [
 
 [[package]]
 name = "lime-skills"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -4280,7 +4280,7 @@ dependencies = [
 
 [[package]]
 name = "model-provider"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "agent-protocol",
  "anyhow",
@@ -4973,7 +4973,7 @@ checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
 
 [[package]]
 name = "patch-apply"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "thiserror 1.0.69",
 ]
@@ -7481,7 +7481,7 @@ dependencies = [
 
 [[package]]
 name = "tool-runtime"
-version = "1.95.0"
+version = "1.96.0"
 dependencies = [
  "agent-protocol",
  "app-server-protocol",

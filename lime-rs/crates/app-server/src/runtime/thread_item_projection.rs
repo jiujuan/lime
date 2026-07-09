@@ -411,8 +411,12 @@ fn upsert_approval_item(
             compact_json(json!({
                 "decision": string_field(&event.payload, &["decision", "status"])
                     .unwrap_or_else(|| if status == "completed" { "approved" } else { "failed" }.to_string()),
-                "source": string_field(&event.payload, &["sourceClient", "source_client"])
+                "decision_scope": string_field(&event.payload, &["decisionScope", "decision_scope"]),
+                "source": string_field(&event.payload, &["sourceClient", "source_client", "source"])
                     .unwrap_or_else(|| "runtime".to_string()),
+                "cache": event.payload.get("cache").cloned(),
+                "auto_resolved": string_field(&event.payload, &["source"])
+                    .is_some_and(|source| source == "approval_session_cache"),
                 "imported_read_only": event.payload.get("importedReadOnly")
                     .and_then(Value::as_bool),
             })),

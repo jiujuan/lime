@@ -2,8 +2,15 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createAppServerClient } from "@/lib/api/appServer";
-import type { AppServerAgentSessionMediaReadResponse } from "@/lib/api/appServer";
+import {
+  createAppServerClient,
+  subscribeAppServerNotifications,
+} from "@/lib/api/appServer";
+import type {
+  AppServerAgentSessionMediaReadResponse,
+  AppServerEventBusSubscription,
+  AppServerJsonRpcNotification,
+} from "@/lib/api/appServer";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Artifact } from "@/lib/artifact/types";
 import type { Message, MessagePreviewTarget } from "../types";
@@ -15,6 +22,7 @@ import {
 
 vi.mock("@/lib/api/appServer", () => ({
   createAppServerClient: vi.fn(),
+  subscribeAppServerNotifications: vi.fn(),
 }));
 
 vi.mock("@/lib/agentDebug", () => ({
@@ -129,6 +137,52 @@ function createMediaReadResponse(
   };
 }
 
+function createMediaReadChunkNotification(params: {
+  bytes: number;
+  contentBase64: string;
+  contentRange: string;
+  eventId?: string;
+  hasMore: boolean;
+  offset: number;
+  sessionId?: string;
+  streamId?: string;
+  totalBytes: number;
+  uri?: string;
+}): AppServerJsonRpcNotification {
+  const sessionId = params.sessionId ?? "session-media";
+  const uri = params.uri ?? "sidecar://media/image-1";
+  return {
+    method: "agentSession/event",
+    params: {
+      event: {
+        eventId: params.eventId ?? "evt-media-live-chunk-1",
+        sequence: 1,
+        sessionId,
+        threadId: "thread-media",
+        type: "media.read.chunk",
+        timestamp: "2026-07-07T00:00:00.000Z",
+        payload: {
+          streamId: params.streamId ?? "media-read-stream-live",
+          chunkIndex: 1,
+          done: false,
+          chunk: {
+            sessionId,
+            uri,
+            mimeType: "image/png",
+            bytes: params.bytes,
+            totalBytes: params.totalBytes,
+            offset: params.offset,
+            length: params.bytes,
+            contentRange: params.contentRange,
+            hasMore: params.hasMore,
+            contentBase64: params.contentBase64,
+          },
+        },
+      },
+    },
+  };
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -233,6 +287,10 @@ beforeEach(() => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   vi.mocked(createAppServerClient).mockReset();
+  vi.mocked(subscribeAppServerNotifications).mockReset();
+  vi.mocked(subscribeAppServerNotifications).mockImplementation(() => {
+    return () => undefined;
+  });
 });
 
 afterEach(() => {
@@ -436,6 +494,100 @@ describe("useWorkspaceMediaReferencePreviewRuntime", () => {
     expect(requestCanvasWorkbenchPreviewOpen).toHaveBeenCalledTimes(2);
   });
 
+  it("pending media read 应通过 live drain notification 写入 progress artifact", async () => {
+    const upsertGeneralArtifact = vi.fn();
+    const handleWorkspaceArtifactClick = vi.fn();
+    const requestCanvasWorkbenchPreviewOpen = vi.fn();
+    const unsubscribeProgress = vi.fn();
+    const subscriptions: AppServerEventBusSubscription[] = [];
+    vi.mocked(subscribeAppServerNotifications).mockImplementation(
+      (subscription) => {
+        subscriptions.push(subscription);
+        return unsubscribeProgress;
+      },
+    );
+    const pendingRead = createDeferred<{
+      result: AppServerAgentSessionMediaReadResponse;
+    }>();
+    const readAgentSessionMedia = vi.fn().mockReturnValue(pendingRead.promise);
+    vi.mocked(createAppServerClient).mockReturnValue({
+      readAgentSessionMedia,
+    } as ReturnType<typeof createAppServerClient>);
+    const { createObjectUrl } = installObjectUrlMocks();
+    const { render, getValue } = renderHook({
+      handleWorkspaceArtifactClick,
+      requestCanvasWorkbenchPreviewOpen,
+      upsertGeneralArtifact,
+    });
+
+    await render();
+    const preview = getValue().openMediaReferencePreview(
+      createSidecarMediaTarget(),
+      createMessage("assistant-sidecar-media-live-progress"),
+    );
+    await Promise.resolve();
+
+    expect(subscribeAppServerNotifications).toHaveBeenCalledTimes(1);
+    expect(subscriptions[0]?.getDrainOptions?.()).toMatchObject({
+      includeRecent: true,
+      limit: 20,
+    });
+    expect(subscriptions[0]?.shouldDrain?.()).toBe(true);
+
+    await act(async () => {
+      subscriptions[0]?.onNotifications([
+        createMediaReadChunkNotification({
+          bytes: 1,
+          contentBase64: globalThis.btoa("a"),
+          contentRange: "bytes 0-0/3",
+          eventId: "evt-media-live-progress-1",
+          hasMore: true,
+          offset: 0,
+          totalBytes: 3,
+        }),
+      ]);
+    });
+
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    const progressArtifact = upsertGeneralArtifact.mock
+      .calls[0]?.[0] as Artifact;
+    expect(progressArtifact.content).toContain("正在读取媒体预览");
+    expect(progressArtifact.meta).toMatchObject({
+      mediaPreviewPolicy: "sidecar_progress",
+      mediaPreviewSource: "sidecar_progress",
+      mediaPreviewStatus: "loading",
+      mediaReadContentRange: "bytes 0-0/3",
+      mediaReadLength: 1,
+      mediaReadTotalBytes: 3,
+    });
+
+    await act(async () => {
+      subscriptions[0]?.onNotifications([
+        createMediaReadChunkNotification({
+          bytes: 1,
+          contentBase64: globalThis.btoa("a"),
+          contentRange: "bytes 0-0/3",
+          eventId: "evt-media-live-progress-1",
+          hasMore: true,
+          offset: 0,
+          totalBytes: 3,
+        }),
+      ]);
+    });
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pendingRead.resolve({ result: createMediaReadResponse() });
+      await preview;
+    });
+
+    expect(unsubscribeProgress).toHaveBeenCalledTimes(1);
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(2);
+    const finalArtifact = upsertGeneralArtifact.mock.calls[1]?.[0] as Artifact;
+    expect(finalArtifact.content).toBe("blob:media-1");
+  });
+
   it("超过前端预览预算的大媒体应打开带分页策略的 fallback artifact", async () => {
     const upsertGeneralArtifact = vi.fn();
     const handleWorkspaceArtifactClick = vi.fn();
@@ -575,6 +727,13 @@ describe("useWorkspaceMediaReferencePreviewRuntime", () => {
     const upsertGeneralArtifact = vi.fn();
     const handleWorkspaceArtifactClick = vi.fn();
     const requestCanvasWorkbenchPreviewOpen = vi.fn();
+    const subscriptions: AppServerEventBusSubscription[] = [];
+    vi.mocked(subscribeAppServerNotifications).mockImplementation(
+      (subscription) => {
+        subscriptions.push(subscription);
+        return vi.fn();
+      },
+    );
     const firstRead = createDeferred<{
       result: AppServerAgentSessionMediaReadResponse;
     }>();
@@ -635,6 +794,21 @@ describe("useWorkspaceMediaReferencePreviewRuntime", () => {
     );
     expect(secondReadOptions?.signal).toBeInstanceOf(AbortSignal);
     expect(secondReadOptions?.signal?.aborted).toBe(false);
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    expect(subscriptions[0]?.shouldDrain?.()).toBe(false);
+    await act(async () => {
+      subscriptions[0]?.onNotifications([
+        createMediaReadChunkNotification({
+          bytes: 1,
+          contentBase64: globalThis.btoa("a"),
+          contentRange: "bytes 0-0/3",
+          eventId: "evt-media-stale-live-progress",
+          hasMore: true,
+          offset: 0,
+          totalBytes: 3,
+        }),
+      ]);
+    });
     expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
     const visibleArtifact = upsertGeneralArtifact.mock
       .calls[0]?.[0] as Artifact;

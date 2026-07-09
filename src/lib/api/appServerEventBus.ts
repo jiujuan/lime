@@ -1,16 +1,22 @@
 import { AppServerClient } from "./appServerClient";
 import { isAppServerJsonRpcNotification } from "./appServerResponse";
-import type { AppServerJsonRpcNotification } from "./appServerTypes";
+import type {
+  AppServerDrainEventsRequest,
+  AppServerJsonRpcNotification,
+} from "./appServerTypes";
 
 const DEFAULT_APP_SERVER_EVENT_DRAIN_LIMIT = 50;
 const DEFAULT_APP_SERVER_EVENT_DRAIN_INTERVAL_MS = 250;
 
 type AppServerEventDrainClient = {
-  drainEvents: (limit?: number) => Promise<unknown[]> | unknown[];
+  drainEvents: (
+    request?: number | AppServerDrainEventsRequest,
+  ) => Promise<unknown[]> | unknown[];
 };
 
 export interface AppServerEventBusDrainOptions {
   activeIntervalMs?: number;
+  includeRecent?: boolean;
   intervalMs?: number;
   limit?: number;
 }
@@ -68,8 +74,15 @@ export class AppServerEventBus {
         const drainOptions = resolveDrainOptions(activeSubscriptions);
         let hasDrainedNotifications = false;
         try {
+          const drainRequest =
+            drainOptions.includeRecent === true
+              ? {
+                  includeRecent: true,
+                  limit: drainOptions.limit,
+                }
+              : drainOptions.limit;
           const drainedMessages = await Promise.resolve(
-            this.#appServerClient.drainEvents(drainOptions.limit),
+            this.#appServerClient.drainEvents(drainRequest),
           );
           const notifications = readNotifications(drainedMessages);
           hasDrainedNotifications = notifications.length > 0;
@@ -154,14 +167,20 @@ export function resetDefaultAppServerEventBusForTests(): void {
 
 function resolveDrainOptions(
   subscriptions: AppServerEventBusSubscription[],
-): AppServerEventBusDrainOptions & { intervalMs: number; limit: number } {
+): AppServerEventBusDrainOptions & {
+  includeRecent: boolean;
+  intervalMs: number;
+  limit: number;
+} {
   let hasFastFirstLimit = false;
+  let includeRecent = false;
   let activeIntervalMs: number | undefined;
   let intervalMs = DEFAULT_APP_SERVER_EVENT_DRAIN_INTERVAL_MS;
   let limit: number | undefined;
 
   for (const subscription of subscriptions) {
     const options = subscription.getDrainOptions?.();
+    includeRecent = includeRecent || options?.includeRecent === true;
     const nextLimit = normalizePositiveInteger(options?.limit);
     if (nextLimit !== undefined) {
       if (nextLimit <= 1) {
@@ -189,10 +208,12 @@ function resolveDrainOptions(
 
   return {
     activeIntervalMs,
+    includeRecent,
     intervalMs,
-    limit: hasFastFirstLimit
-      ? 1
-      : (limit ?? DEFAULT_APP_SERVER_EVENT_DRAIN_LIMIT),
+    limit:
+      hasFastFirstLimit && !includeRecent
+        ? 1
+        : (limit ?? DEFAULT_APP_SERVER_EVENT_DRAIN_LIMIT),
   };
 }
 

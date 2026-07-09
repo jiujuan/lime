@@ -220,6 +220,7 @@ app_server_client_request_definitions! {
     VoiceInstructionDelete => "voiceInstruction/delete",
     VoiceModelDefaultSet => "voiceModel/default/set",
     VoiceModelTestTranscribeFile => "voiceModel/testTranscribeFile",
+    VoiceTranscriptionTranscribeAudio => "voiceTranscription/transcribeAudio",
     WorkspaceSkillBindingsList => "workspaceSkillBindings/list",
     WorkspaceRegisteredSkillsList => "workspaceRegisteredSkills/list",
     WorkspaceRightSurfaceRequest => "workspaceRightSurface/request",

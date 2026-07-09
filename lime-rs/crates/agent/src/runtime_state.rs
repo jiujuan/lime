@@ -18,14 +18,15 @@
 //! ## Skills 集成
 //!
 //! Agent 初始化时会自动加载 Lime 当前应用数据目录中的 Skills 到
-//! aster-rust 的 global_registry，使 AI 能够自动发现和调用这些 Skills。
+//! `lime-skills` current registry，使 AI 能够自动发现和调用这些 Skills。
 //!
 //! 参考文档：`internal/prd/chat-architecture-redesign.md`
 
 use aster::agents::Agent;
 #[cfg(test)]
-use aster::skills::{global_registry, load_skills_from_directory, SkillSource};
-use aster::tools::Tool;
+use lime_skills::{
+    find_skill_by_name, is_registered_skill, load_skills_from_directory, register_skill_directory,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -83,6 +84,12 @@ pub struct AgentRuntimeState {
     credential_bridge: CredentialBridge,
     /// Agent 初始化状态缓存（避免每次都获取锁）
     initialized_cache: Arc<AtomicBool>,
+    /// Lime current native tool definitions，不再从 Aster ToolRegistry 反推 current surface。
+    native_tool_definitions: Arc<
+        RwLock<
+            std::collections::HashMap<String, tool_runtime::tool_definition::RuntimeToolDefinition>,
+        >,
+    >,
     /// MCP bridge 运行时注册边界。
     mcp_bridge_registry: Arc<crate::mcp_bridge::McpBridgeRuntimeRegistry>,
 }
@@ -94,6 +101,7 @@ impl Clone for AgentRuntimeState {
             cancel_tokens: self.cancel_tokens.clone(),
             credential_bridge: CredentialBridge::new(),
             initialized_cache: self.initialized_cache.clone(),
+            native_tool_definitions: self.native_tool_definitions.clone(),
             mcp_bridge_registry: self.mcp_bridge_registry.clone(),
         }
     }
@@ -113,6 +121,7 @@ impl AgentRuntimeState {
             cancel_tokens: Arc::new(RwLock::new(std::collections::HashMap::new())),
             credential_bridge: CredentialBridge::new(),
             initialized_cache: Arc::new(AtomicBool::new(false)),
+            native_tool_definitions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             mcp_bridge_registry: Arc::new(crate::mcp_bridge::McpBridgeRuntimeRegistry::new()),
         }
     }
@@ -121,7 +130,7 @@ impl AgentRuntimeState {
     ///
     /// 创建 Agent 并注入 LimeSessionStore，确保消息存储到 Lime 数据库。
     /// 同时设置 Lime 专属的 Agent 身份（名称、语言、描述）。
-    /// 自动加载 Lime 当前应用数据目录中的 Skills 到 aster-rust 的 global_registry。
+    /// 自动加载 Lime 当前应用数据目录中的 Skills 到 `lime-skills` current registry。
     ///
     /// 这是 Lime 当前唯一支持的 Agent 初始化入口。
     ///
@@ -145,7 +154,7 @@ impl AgentRuntimeState {
             let session_store = Arc::new(LimeSessionStore::new(db.clone()));
             tracing::info!("[AgentRuntime] 创建 LimeSessionStore 成功");
 
-            // 创建 Agent（启用 Ask/LSP 回调）并注入 SessionStore
+            // 创建 Agent（启用 Ask 回调）并注入 SessionStore
             let tool_config = crate::runtime_state_support::create_lime_tool_config();
             let runtime_store = crate::runtime_support::require_runtime_store()?;
             let mut agent = Agent::with_tool_config(tool_config)
@@ -162,10 +171,13 @@ impl AgentRuntimeState {
             // 使用异步方法设置 Lime 专属身份
             let identity = crate::runtime_state_support::create_lime_identity();
             agent.set_identity(identity).await;
-            crate::native_tools::configure_lime_native_tool_overlay(&mut agent).await;
+            let native_tool_definitions =
+                crate::native_tools::configure_lime_native_tool_overlay(&mut agent).await;
+            self.reset_native_tool_definitions(native_tool_definitions)
+                .await;
 
-            // 加载 Lime Skills 到 aster-rust 的 global_registry
-            crate::runtime_state_support::reload_lime_skills();
+            // 加载 Skills 到 `lime-skills` current registry。
+            crate::runtime_state_support::reload_skills();
 
             *agent_guard = Some(agent);
 
@@ -194,24 +206,49 @@ impl AgentRuntimeState {
         &self.credential_bridge
     }
 
-    pub async fn contains_native_tool(&self, tool_name: &str) -> bool {
-        let registry = {
-            let agent_guard = self.agent.read().await;
-            let Some(agent) = agent_guard.as_ref() else {
-                return false;
-            };
-            crate::native_tools::runtime_native_tool_registry(agent)
-        };
-        registry.contains_native(tool_name).await
+    async fn reset_native_tool_definitions(
+        &self,
+        definitions: Vec<tool_runtime::tool_definition::RuntimeToolDefinition>,
+    ) {
+        let mut native_tool_definitions = self.native_tool_definitions.write().await;
+        native_tool_definitions.clear();
+        for definition in definitions {
+            native_tool_definitions.insert(definition.name.clone(), definition);
+        }
     }
 
-    pub(crate) async fn register_native_tool(&self, tool: Box<dyn Tool>) -> Result<(), String> {
-        let registry = {
-            let agent_guard = self.agent.read().await;
-            let agent = agent_guard.as_ref().ok_or("Agent not initialized")?;
-            crate::native_tools::runtime_native_tool_registry(agent)
-        };
-        let tool_name = registry.register(tool).await;
+    pub async fn contains_native_tool(&self, tool_name: &str) -> bool {
+        self.native_tool_definitions
+            .read()
+            .await
+            .contains_key(tool_name)
+    }
+
+    pub(crate) async fn native_tool_definitions_snapshot(
+        &self,
+    ) -> Vec<tool_runtime::tool_definition::RuntimeToolDefinition> {
+        let mut definitions = self
+            .native_tool_definitions
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        definitions.sort_by(|left, right| left.name.cmp(&right.name));
+        definitions
+    }
+
+    pub(crate) async fn register_native_tool(
+        &self,
+        registration: crate::native_tools::NativeRegistration,
+    ) -> Result<(), String> {
+        let definition =
+            crate::native_tools::register_native_tool_on_agent(&self.agent, registration).await?;
+        let tool_name = definition.name.clone();
+        self.native_tool_definitions
+            .write()
+            .await
+            .insert(tool_name.clone(), definition);
         tracing::info!("[AgentRuntime] Native tool registered: {}", tool_name);
         Ok(())
     }
@@ -233,6 +270,28 @@ impl AgentRuntimeState {
         gateway: Arc<dyn tool_runtime::image_task::ImageTaskGateway>,
     ) -> Result<(), String> {
         for tool in crate::native_tools::create_image_tools(gateway.clone()) {
+            self.register_native_tool(tool).await?;
+        }
+        Ok(())
+    }
+
+    /// 注册 App Server current 主链提供的 deferred tool search native tool。
+    pub async fn register_tool_search_tools(
+        &self,
+        gateway: Arc<dyn tool_runtime::tool_search::ToolSearchGateway>,
+    ) -> Result<(), String> {
+        for tool in crate::native_tools::create_tool_search_tools(gateway.clone()) {
+            self.register_native_tool(tool).await?;
+        }
+        Ok(())
+    }
+
+    /// 注册 App Server current 主链提供的 MCP resource native tools。
+    pub async fn register_mcp_resource_tools(
+        &self,
+        gateway: Arc<dyn tool_runtime::mcp_resource::McpResourceGateway>,
+    ) -> Result<(), String> {
+        for tool in crate::native_tools::create_mcp_resource_tools(gateway.clone()) {
             self.register_native_tool(tool).await?;
         }
         Ok(())
@@ -488,6 +547,20 @@ mod tests {
 
     struct RuntimeApprovalResumeTool;
 
+    fn runtime_approval_resume_registration() -> crate::native_tools::NativeRegistration {
+        crate::native_tools::NativeRegistration::new(
+            tool_runtime::tool_definition::RuntimeToolDefinition::new(
+                "RuntimeApprovalResume",
+                "runtime approval resume regression tool",
+                serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false
+                }),
+            ),
+            Box::new(RuntimeApprovalResumeTool),
+        )
+    }
+
     #[async_trait]
     impl aster::tools::Tool for RuntimeApprovalResumeTool {
         fn name(&self) -> &str {
@@ -569,13 +642,46 @@ mod tests {
 
         state.init_agent_with_db(&db).await.unwrap();
         assert!(state.is_initialized().await);
+        assert!(state.contains_native_tool("WebFetch").await);
+        assert!(state.contains_native_tool("WebSearch").await);
+        assert!(state.contains_native_tool("update_plan").await);
+        assert!(!state.contains_native_tool("TaskCreate").await);
+    }
 
-        let agent_arc = state.get_agent_arc();
-        let agent_guard = agent_arc.read().await;
-        let agent = agent_guard.as_ref().expect("agent should exist");
-        let registry = agent.tool_registry().read().await;
-        assert!(registry.contains_native("WebFetch"));
-        assert!(registry.contains_native("WebSearch"));
+    #[tokio::test]
+    async fn native_tool_availability_tracks_current_registration_names() {
+        let state = AgentRuntimeState::new();
+        let runtime_dir = TempDir::new().unwrap();
+        crate::runtime_support::ensure_runtime_dirs_with_root(runtime_dir.path().to_path_buf())
+            .unwrap();
+
+        let db: DbConnection =
+            Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
+        {
+            let conn = db.lock().unwrap();
+            lime_core::database::schema::create_tables(&conn).unwrap();
+        }
+
+        state.init_agent_with_db(&db).await.unwrap();
+        assert!(state
+            .native_tool_definitions_snapshot()
+            .await
+            .iter()
+            .any(|definition| definition.name == "update_plan"));
+        assert!(!state.contains_native_tool("RuntimeApprovalResume").await);
+
+        state
+            .register_native_tool(runtime_approval_resume_registration())
+            .await
+            .unwrap();
+
+        assert!(state.contains_native_tool("RuntimeApprovalResume").await);
+        assert!(state
+            .native_tool_definitions_snapshot()
+            .await
+            .iter()
+            .any(|definition| definition.name == "RuntimeApprovalResume"
+                && definition.description == "runtime approval resume regression tool"));
     }
 
     #[tokio::test]
@@ -622,21 +728,24 @@ mod tests {
                 )
                 .await
                 .expect("create session");
-            agent
-                .tool_registry()
-                .write()
-                .await
-                .register(Box::new(RuntimeApprovalResumeTool));
-            drop(agent_guard);
+            session.id
+        };
+
+        state
+            .register_native_tool(runtime_approval_resume_registration())
+            .await
+            .expect("register approval resume tool");
+
+        {
+            let agent_arc = state.get_agent_arc();
             let mut agent_guard = agent_arc.write().await;
             let agent = agent_guard.as_mut().expect("agent should exist");
             agent.add_tool_inspector(Box::new(RuntimeApprovalResumeInspector));
             agent
-                .update_provider(Arc::new(RuntimeApprovalResumeProvider::new()), &session.id)
+                .update_provider(Arc::new(RuntimeApprovalResumeProvider::new()), &session_id)
                 .await
                 .expect("update provider");
-            session.id
-        };
+        }
 
         let events: Arc<Mutex<Vec<crate::protocol::AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
         let (approval_tx, mut approval_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -803,7 +912,7 @@ description: {}
         create_test_skill(skills_dir, "test-skill-2", "第二个测试技能");
 
         // 加载 Skills
-        let skills = load_skills_from_directory(skills_dir, SkillSource::User);
+        let skills = load_skills_from_directory(skills_dir);
 
         // 验证
         assert_eq!(skills.len(), 2);
@@ -816,7 +925,7 @@ description: {}
     #[test]
     fn test_load_skills_empty_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let skills = load_skills_from_directory(temp_dir.path(), SkillSource::User);
+        let skills = load_skills_from_directory(temp_dir.path());
         assert!(skills.is_empty());
     }
 
@@ -824,34 +933,29 @@ description: {}
     #[test]
     fn test_load_skills_nonexistent_directory() {
         let nonexistent = std::path::Path::new("/nonexistent/path/to/skills");
-        let skills = load_skills_from_directory(nonexistent, SkillSource::User);
+        let skills = load_skills_from_directory(nonexistent);
         assert!(skills.is_empty());
     }
 
-    /// 测试：global_registry 能正确注册和查找 Skills
+    /// 测试：`lime-skills` current registry 能正确注册和查找 Skills
     #[test]
-    fn test_global_registry_register_and_find() {
+    fn test_current_skill_registry_register_and_find() {
         let temp_dir = TempDir::new().unwrap();
         let skills_dir = temp_dir.path();
 
         // 创建测试 Skill
         create_test_skill(skills_dir, "registry-test-skill", "注册表测试技能");
 
-        // 加载并注册到 global_registry
-        let skills = load_skills_from_directory(skills_dir, SkillSource::User);
-        let registry = global_registry();
-
-        if let Ok(mut registry_guard) = registry.write() {
-            for skill in skills {
-                registry_guard.register(skill);
-            }
+        // 加载并注册到 current registry
+        let skills = load_skills_from_directory(skills_dir);
+        for skill in skills {
+            register_skill_directory(&skill.skill_name, &skill.local_directory_path)
+                .expect("register skill");
         }
 
         // 验证能找到注册的 Skill
-        if let Ok(registry_guard) = registry.read() {
-            let found = registry_guard.find("registry-test-skill");
-            assert!(found.is_some());
-            assert_eq!(found.unwrap().display_name, "registry-test-skill");
-        }
+        assert!(is_registered_skill("registry-test-skill"));
+        let found = find_skill_by_name("registry-test-skill").expect("find skill");
+        assert_eq!(found.display_name, "registry-test-skill");
     }
 }

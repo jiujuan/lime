@@ -2678,6 +2678,62 @@ describe("App Server API", () => {
     });
   });
 
+  it("drainEvents 应透传 includeRecent 读取最近镜像 notification", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-recent-1",
+              sequence: 4,
+              sessionId: "session-1",
+              type: "media.read.chunk",
+              timestamp: "2026-06-04T00:00:02Z",
+              payload: {
+                streamId: "media-read-stream-1",
+                chunkIndex: 1,
+                done: false,
+                chunk: {
+                  sessionId: "session-1",
+                  uri: "sidecar://media/image-1",
+                  bytes: 1,
+                  totalBytes: 3,
+                  offset: 0,
+                  length: 1,
+                  contentRange: "bytes 0-0/3",
+                  hasMore: true,
+                  contentBase64: "YQ==",
+                },
+              },
+            },
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient();
+    const messages = await client.drainEvents({
+      includeRecent: true,
+      limit: 20,
+    });
+
+    expect(messages).toEqual([
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: expect.objectContaining({
+            eventId: "evt-recent-1",
+            type: "media.read.chunk",
+          }),
+        },
+      },
+    ]);
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_drain_events", {
+      request: { includeRecent: true, limit: 20 },
+    });
+  });
+
   it("drainEvents 应兼容 Electron safeInvoke result 包络", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       result: {

@@ -4,7 +4,6 @@ import type {
   AgentUiProjectionTranslation,
 } from "../projection/agentUiProjectionSummary";
 import type { buildThreadReliabilityView } from "../utils/threadReliabilityView";
-import type { ActionRequired } from "../types";
 import type { TranslationFunction } from "./HarnessActivityTypes";
 import type { HarnessStatusPanelProps } from "./HarnessStatusPanelTypes";
 import type { AgentTranslation } from "./HarnessStatusPanelPrimitives";
@@ -39,10 +38,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   diagnosticRuntimeContext: HarnessStatusPanelProps["diagnosticRuntimeContext"];
   environment: HarnessStatusPanelProps["environment"];
   fileReviewState: FileReviewState;
-  handleApprovalResponse: (
-    item: ActionRequired,
-    confirmed: boolean,
-  ) => void | Promise<void>;
   handleOpenExternalLink: (url: string) => void | Promise<void>;
   evidencePackExport: EvidencePackExport;
   hasAgentUiProjectionSection: boolean;
@@ -75,7 +70,6 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   selectedTeamLabel: HarnessStatusPanelProps["selectedTeamLabel"];
   selectedTeamRoles: HarnessStatusPanelProps["selectedTeamRoles"];
   selectedTeamSummary: HarnessStatusPanelProps["selectedTeamSummary"];
-  submittedActionIds: ReadonlySet<string>;
   submittedActionsInFlight: NonNullable<
     HarnessStatusPanelProps["submittedActionsInFlight"]
   >;
@@ -102,7 +96,6 @@ export function buildHarnessStatusPanelSectionModels({
   diagnosticRuntimeContext,
   environment,
   fileReviewState,
-  handleApprovalResponse,
   handleOpenExternalLink,
   evidencePackExport,
   hasAgentUiProjectionSection,
@@ -135,7 +128,6 @@ export function buildHarnessStatusPanelSectionModels({
   selectedTeamLabel,
   selectedTeamRoles,
   selectedTeamSummary,
-  submittedActionIds,
   submittedActionsInFlight,
   t,
   threadItems,
@@ -187,7 +179,8 @@ export function buildHarnessStatusPanelSectionModels({
     toolInventoryExtensionTools,
     toolInventoryFilter,
     toolInventoryMcpTools,
-    toolInventoryRegistryTools,
+    toolInventoryPluginMcpTargets,
+    toolInventoryNativeTools,
     toolInventoryRuntimeTools,
     toolInventorySourceStats,
     toolInventoryWarnings,
@@ -384,10 +377,11 @@ export function buildHarnessStatusPanelSectionModels({
       filteredCatalogTools,
       toolInventoryFilter,
       setToolInventoryFilter,
-      toolInventoryRegistryTools,
+      toolInventoryNativeTools,
       toolInventoryExtensionSurfaces,
       toolInventoryExtensionTools,
       toolInventoryMcpTools,
+      toolInventoryPluginMcpTargets,
     },
     activitySectionsProps: {
       harnessState,
@@ -395,9 +389,6 @@ export function buildHarnessStatusPanelSectionModels({
       t,
       handleOpenExternalLink,
       handleOpenPathValue,
-      handleApprovalResponse,
-      submittedActionIds,
-      canRespondToActions: Boolean(onRespondToAction),
       fileFilterOptions,
       fileFilter,
       setFileFilter,

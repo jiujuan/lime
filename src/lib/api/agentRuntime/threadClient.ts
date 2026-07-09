@@ -1012,6 +1012,7 @@ export function appServerActionRespondParamsFromRequest(
     sessionId: request.session_id,
     requestId: request.request_id,
     actionType: request.action_type,
+    decision: request.decision,
     confirmed: request.confirmed,
     response: request.response,
     userData: request.user_data,
@@ -1047,6 +1048,7 @@ function agentRuntimeReplayedActionFromAppServer(
     requested_schema: isRecord(action.requestedSchema)
       ? action.requestedSchema
       : undefined,
+    available_decisions: action.availableDecisions,
     scope: action.scope
       ? omitUndefined({
           session_id: action.scope.sessionId,

@@ -692,6 +692,11 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
     params: "required",
   },
   {
+    name: "transcribeVoiceAudio",
+    method: constants.APP_SERVER_METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
+    params: "required",
+  },
+  {
     name: "readUsageStats",
     method: constants.APP_SERVER_METHOD_USAGE_STATS_READ,
     params: "required",

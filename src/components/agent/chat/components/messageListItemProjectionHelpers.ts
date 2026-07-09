@@ -8,6 +8,73 @@ function normalizeFailureContentForCompare(value?: string | null): string {
   return (value || "").trim().replace(/\s+/g, " ");
 }
 
+function stripRuntimeFailureDiagnosticSegments(value: string): string {
+  const diagnosticMarkers = [
+    "执行失败：",
+    "执行失败:",
+    "Execution failed:",
+    "execution failed:",
+  ];
+
+  return value
+    .split(/\r?\n+/)
+    .map((line) => {
+      const markerIndex = diagnosticMarkers.reduce<number | null>(
+        (earliest, marker) => {
+          const index = line.indexOf(marker);
+          if (index < 0) {
+            return earliest;
+          }
+          return earliest === null ? index : Math.min(earliest, index);
+        },
+        null,
+      );
+
+      return (markerIndex === null ? line : line.slice(0, markerIndex)).trim();
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function dedupeAdjacentFailureParagraphs(value: string): string {
+  const paragraphs = value
+    .split(/\r?\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const deduped: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    const previous = deduped[deduped.length - 1];
+    if (
+      previous &&
+      normalizeFailureContentForCompare(previous) ===
+        normalizeFailureContentForCompare(paragraph)
+    ) {
+      continue;
+    }
+    deduped.push(paragraph);
+  }
+
+  return deduped.join("\n\n");
+}
+
+export function sanitizeRuntimeFailureAssistantText(
+  message: Message,
+  actionContent: string,
+): string {
+  if (
+    message.role !== "assistant" ||
+    message.runtimeStatus?.phase !== "failed" ||
+    !actionContent.trim()
+  ) {
+    return actionContent;
+  }
+
+  return dedupeAdjacentFailureParagraphs(
+    stripRuntimeFailureDiagnosticSegments(actionContent),
+  );
+}
+
 export function isRuntimeFailureOnlyAssistantText(
   message: Message,
   actionContent: string,
@@ -40,6 +107,7 @@ export function isRuntimeFailureOnlyAssistantText(
   return (
     contentText === detailText ||
     contentText === `执行失败：${detailText}` ||
+    contentText === `执行失败: ${detailText}` ||
     contentText === `当前处理失败 ${detailText}`
   );
 }

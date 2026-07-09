@@ -29,10 +29,7 @@ import {
   type SoulImportResult,
   type SoulImportWarningCode,
 } from "@/lib/soul/soulConfig";
-import type {
-  SoulStyleIntensity,
-  SoulStyleProfileId,
-} from "@/lib/soul/style-profiles";
+import type { SoulStyleProfileId } from "@/lib/soul/style-profiles";
 import { MemoryStoreStatusPanel } from "./MemoryStoreStatusPanel";
 import { StyleProfileSection } from "./soul/StyleProfileSection";
 
@@ -462,16 +459,12 @@ export function MemorySettings() {
     window.setTimeout(() => setMessage(null), 2500);
   };
 
-  const handleSoulStyleProfileChange = (
-    styleProfileId: SoulStyleProfileId,
-    styleIntensity: SoulStyleIntensity,
-  ) => {
+  const handleSoulStyleProfileChange = (styleProfileId: SoulStyleProfileId) => {
     setDraft((previous) => ({
       ...previous,
       soul: buildSoulDraftPatch(previous.soul, {
         enabled: true,
         style_profile_id: styleProfileId,
-        style_intensity: styleIntensity,
       }),
     }));
     setMessage(memoryT(t, "settings.memory.soul.message.styleProfileUpdated"));
@@ -488,7 +481,6 @@ export function MemorySettings() {
           name: undefined,
           summary: undefined,
           style_profile_id: undefined,
-          style_intensity: undefined,
           tone: [],
           communication_style: [],
           explanation_depth: undefined,
@@ -532,7 +524,6 @@ export function MemorySettings() {
           ...soulImportPreview.draft,
           artifact_voice: previousSoul.artifact_voice,
           style_profile_id: previousSoul.style_profile_id,
-          style_intensity: previousSoul.style_intensity,
         }),
       };
     });
@@ -757,7 +748,6 @@ export function MemorySettings() {
           </div>
           <StyleProfileSection
             value={soul.style_profile_id}
-            intensity={soul.style_intensity}
             onChange={handleSoulStyleProfileChange}
             setMessage={setMessage}
             t={t}

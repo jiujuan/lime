@@ -308,7 +308,7 @@ export function buildHarnessSummaryCards({
       hint: toolInventoryError
         ? toolInventoryError
         : toolInventory
-          ? `runtime ${runtimeToolVisibleTotal}/${runtimeToolTotal} · registry ${toolInventory.counts.registry_visible_total}`
+          ? `runtime ${runtimeToolVisibleTotal}/${runtimeToolTotal} · native ${toolInventory.counts.native_visible_total}`
           : "等待拉取运行时库存",
       icon: Wrench,
     });

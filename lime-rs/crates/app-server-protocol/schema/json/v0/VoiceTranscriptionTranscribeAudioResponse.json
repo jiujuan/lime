@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "VoiceAsrProviderType": {
+      "enum": [
+        "baidu",
+        "openai",
+        "sense_voice_local",
+        "whisper_local",
+        "xunfei"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "duration_secs": {
+      "format": "float",
+      "type": "number"
+    },
+    "language": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "provider": {
+      "$ref": "#/$defs/VoiceAsrProviderType"
+    },
+    "sample_rate": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "duration_secs",
+    "provider",
+    "sample_rate",
+    "text"
+  ],
+  "title": "VoiceTranscriptionTranscribeAudioResponse",
+  "type": "object"
+}

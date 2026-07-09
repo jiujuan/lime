@@ -132,6 +132,54 @@ function buildBaselineRecord(): AgentUiPerformanceTraceHistoryRecord {
   };
 }
 
+function buildProviderSlowSnapshot(): AgentUiPerformanceSnapshot {
+  const snapshot = buildSnapshot();
+  return {
+    entries: snapshot.entries,
+    sessions: [
+      {
+        ...snapshot.sessions[0],
+        clientLocalOutputMs: 95,
+        homeInputToFirstTextPaintMs: 5080,
+        providerWaitMs: 4960,
+        serverToRendererFirstTextDeltaMs: 42,
+      },
+    ],
+  };
+}
+
+function buildProviderFastBaselineRecord(): AgentUiPerformanceTraceHistoryRecord {
+  return {
+    ...buildBaselineRecord(),
+    id: "baseline-fast-provider",
+    label: "retained-fast-provider",
+    summary: {
+      entry_count: 1,
+      session_count: 1,
+      sessions: [
+        {
+          sessionId: "session-1",
+          workspaceId: "workspace-1",
+          phase_count: 5,
+          phases: [
+            "homeInput.submit",
+            "agentStream.submitAccepted",
+            "agentStream.providerTrace",
+            "agentStream.firstTextDelta",
+            "agentStream.firstTextPaint",
+          ],
+          metrics: {
+            clientLocalOutputMs: 90,
+            providerWaitMs: 1200,
+            serverToRendererFirstTextDeltaMs: 40,
+          },
+        },
+      ],
+      truncated_session_count: 0,
+    },
+  };
+}
+
 function buildSnapshotWithLatestHistoryRestore(): AgentUiPerformanceSnapshot {
   const snapshot = buildSnapshot();
   return {
@@ -332,6 +380,76 @@ describe("WorkspaceTraceTab", () => {
     });
   });
 
+  it("provider 等待主导首字时应归因到 provider_api，而不是 Lime 客户端", () => {
+    const model = buildWorkspaceTracePanelModel(buildProviderSlowSnapshot(), {
+      baselineRecords: [buildProviderFastBaselineRecord()],
+      enabled: true,
+      sessionId: "session-1",
+      workspaceId: "workspace-1",
+    });
+
+    expect(model.totalFirstTextPaintMs).toBe(5080);
+    expect(model.clientActionableMs).toBe(150);
+    expect(model.slowSegments[0]).toMatchObject({
+      id: "server_wait",
+      owner: "server",
+      valueMs: 4960,
+    });
+    expect(model.baselineComparison.verdict).toBe("regressed");
+    expect(model.regressionReport.primary_owner).toBe("provider_api");
+    expect(model.primaryRegressionSegment).toMatchObject({
+      baseline_ms: 1200,
+      current_ms: 4960,
+      delta_ms: 3760,
+      key: "providerWaitMs",
+      owner: "provider_api",
+    });
+    expect(model.currentAttribution).toMatchObject({
+      owner: "provider_api",
+      ownerTotalMs: 4960,
+      primarySegmentId: "server_wait",
+      primarySegmentValueMs: 4960,
+      reason: "provider_wait_dominant",
+      severity: "slow",
+    });
+  });
+
+  it("没有 baseline 时也应基于当前分段给出首字主因", () => {
+    const snapshot = buildProviderSlowSnapshot();
+    const model = buildWorkspaceTracePanelModel(snapshot, {
+      enabled: true,
+      sessionId: "session-1",
+      workspaceId: "workspace-1",
+    });
+
+    expect(model.baselineComparison.verdict).toBe("no_baseline");
+    expect(model.regressionReport.primary_owner).toBeNull();
+    expect(model.currentAttribution).toMatchObject({
+      owner: "provider_api",
+      ownerTotalMs: 4960,
+      primarySegmentId: "server_wait",
+      reason: "provider_wait_dominant",
+      severity: "slow",
+    });
+
+    const container = mount(
+      <WorkspaceTraceTab
+        enabled
+        snapshot={snapshot}
+        workspaceId="workspace-1"
+      />,
+    );
+
+    expect(container.textContent).toContain(
+      "agentChat.tracePanel.currentAttribution.title",
+    );
+    expect(container.textContent).toContain(
+      "agentChat.tracePanel.currentAttribution.message.provider_wait_dominant",
+    );
+    expect(container.textContent).toContain("4960 ms");
+    expect(container.textContent).toContain("98%");
+  });
+
   it("禁用 comparison 时应保留当前会话指标但跳过 baseline 与 regression 重计算", () => {
     const model = buildWorkspaceTracePanelModel(buildSnapshot(), {
       baselineRecords: [buildBaselineRecord()],
@@ -456,6 +574,11 @@ describe("WorkspaceTraceTab", () => {
     expect(payload.regression_report).toMatchObject({
       primary_owner: "lime_client",
       verdict: "regressed",
+    });
+    expect(payload.current_attribution).toMatchObject({
+      owner: "provider_api",
+      primarySegmentId: "server_wait",
+      reason: "provider_wait_dominant",
     });
     expect(copiedText).not.toContain(SECRET_PROMPT);
     expect(copiedText).not.toContain(SECRET_PROVIDER_PAYLOAD);

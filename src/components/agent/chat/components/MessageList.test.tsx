@@ -340,6 +340,70 @@ describe("MessageList layout and scrolling", () => {
     }
   });
 
+  it("窗口 resize/reflow 时若仍在底部跟随，应重新贴到底部锚点", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    mountedRoots.push({ container: host, root });
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const originalResizeObserver = globalThis.ResizeObserver;
+    const scrollIntoViewMock = vi.fn();
+    let resizeCallback: ResizeObserverCallback | null = null;
+
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+
+      observe = vi.fn();
+      disconnect = vi.fn();
+    }
+
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    window.requestAnimationFrame = ((callback: (timestamp: number) => void) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = vi.fn() as typeof window.cancelAnimationFrame;
+    globalThis.ResizeObserver =
+      MockResizeObserver as unknown as typeof ResizeObserver;
+
+    try {
+      act(() => {
+        root.render(
+          <MessageList messages={createConversationMessages(8)} isSending />,
+        );
+      });
+      scrollIntoViewMock.mockClear();
+
+      const scrollContainer = host.querySelector<HTMLElement>(
+        '[data-testid="message-list-scroll-container"]',
+      );
+      expect(scrollContainer).not.toBeNull();
+      setScrollMetrics(scrollContainer as HTMLElement, {
+        scrollTop: 600,
+        scrollHeight: 1000,
+        clientHeight: 400,
+      });
+
+      act(() => {
+        resizeCallback?.([], {} as ResizeObserver);
+      });
+
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        behavior: "auto",
+        block: "end",
+      });
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+      window.cancelAnimationFrame = originalCancelAnimationFrame;
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
   it("用户上拉阅读时流式追加不应强制滚回底部", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);

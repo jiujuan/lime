@@ -480,6 +480,58 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).not.toContain("Payment Required");
     expect(container.textContent).not.toContain("Insufficient Balance");
   });
+  it("Provider 404 失败不应在普通时间线暴露原始错误", () => {
+    const rawProviderError =
+      'execution backend error: Agent provider execution failed: Request failed: Resource not found (404): ***.NotFoundError: NotFoundError: OpenAIException - {"detail":"Not Found"}';
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("provider-error-404", 1),
+        type: "error",
+        message: rawProviderError,
+      },
+    ];
+
+    const container = renderTimeline(items, {
+      turn: {
+        status: "failed",
+        error_message: rawProviderError,
+      },
+    });
+
+    expect(container.textContent).toContain("碰到错误");
+    expect(container.textContent).toContain("当前模型通道暂时不可用");
+    expect(container.textContent).not.toContain(
+      "Agent provider execution failed",
+    );
+    expect(container.textContent).not.toContain("OpenAIException");
+    expect(container.textContent).not.toContain("NotFoundError");
+  });
+  it("运行时工具生命周期错误不应在普通时间线暴露内部字段", () => {
+    const rawRuntimeError =
+      "execution backend error: agent runtime tool lifecycle validation failed: tool_args_without_start event_id=evt_1 tool_call_id=call_1";
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("runtime-lifecycle-error-1", 1),
+        type: "error",
+        message: rawRuntimeError,
+      },
+    ];
+
+    const container = renderTimeline(items, {
+      turn: {
+        status: "failed",
+        error_message: rawRuntimeError,
+      },
+    });
+
+    expect(container.textContent).toContain("碰到错误");
+    expect(container.textContent).toContain("运行时返回内部错误");
+    expect(container.textContent).not.toContain(
+      "agent runtime tool lifecycle validation failed",
+    );
+    expect(container.textContent).not.toContain("tool_args_without_start");
+    expect(container.textContent).not.toContain("tool_call_id");
+  });
   it("普通 aborted 回合应显示已暂停提示", () => {
     const items: AgentThreadItem[] = [
       {

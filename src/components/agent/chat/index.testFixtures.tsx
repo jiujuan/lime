@@ -6,6 +6,7 @@ import {
   agentEnUSResource,
   agentZhCNResource,
 } from "@/i18n/agentResources";
+import type { WorkspaceRightSurfaceLauncherProjection } from "./workspace/right-surface/rightSurfaceToolbarProjection";
 import { resetInitialSessionNavigationDeduplicationForTests } from "./workspace/useWorkspaceInitialSessionNavigation";
 
 export const WORKSPACE_HARNESS_TITLE_CANDIDATES = [
@@ -647,6 +648,7 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
     showExpertInfoToggle,
     expertInfoPanelVisible,
     onToggleExpertInfoPanel,
+    rightSurfaceLaunchers,
   }: {
     showCanvasToggle?: boolean;
     isCanvasOpen?: boolean;
@@ -658,13 +660,21 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
     showExpertInfoToggle?: boolean;
     expertInfoPanelVisible?: boolean;
     onToggleExpertInfoPanel?: () => void;
+    rightSurfaceLaunchers?: readonly WorkspaceRightSurfaceLauncherProjection[];
   }) => (
     <div
       data-testid="task-center-utility-toolbar"
       data-show-canvas-toggle={showCanvasToggle ? "true" : "false"}
       data-canvas-open={isCanvasOpen ? "true" : "false"}
       data-show-harness-toggle={showHarnessToggle ? "true" : "false"}
-      data-harness-panel-visible={harnessPanelVisible ? "true" : "false"}
+      data-harness-panel-visible={
+        harnessPanelVisible ||
+        rightSurfaceLaunchers?.some(
+          (launcher) => launcher.kind === "harness" && launcher.active,
+        )
+          ? "true"
+          : "false"
+      }
       data-harness-toggle-label={harnessToggleLabel || "Harness"}
       data-show-expert-info-toggle={showExpertInfoToggle ? "true" : "false"}
       data-expert-info-panel-visible={expertInfoPanelVisible ? "true" : "false"}
@@ -689,6 +699,22 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
           }}
         >
           切换 {harnessToggleLabel || "Harness"}
+        </button>
+      ) : null}
+      {rightSurfaceLaunchers?.some((launcher) => launcher.kind === "harness") ? (
+        <button
+          type="button"
+          data-testid="task-center-harness-toggle"
+          disabled={
+            rightSurfaceLaunchers.find(
+              (launcher) => launcher.kind === "harness",
+            )?.disabled
+          }
+          onClick={() => {
+            onToggleHarnessPanel?.();
+          }}
+        >
+          右侧 {harnessToggleLabel || "Harness"}
         </button>
       ) : null}
       {showExpertInfoToggle ? (
@@ -1430,7 +1456,7 @@ beforeEach(async () => {
       catalog_total: 0,
       catalog_current_total: 0,
       catalog_compat_total: 0,
-      registry_total: 0,
+      native_total: 0,
       extension_surface_total: 0,
       extension_tool_total: 0,
       mcp_total: 0,

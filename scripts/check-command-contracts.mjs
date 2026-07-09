@@ -198,9 +198,7 @@ const retiredVoiceRealtimeFacadeCommands = new Set([
   "cancel_recording",
   "get_recording_status",
 ]);
-const currentPluginShellDesktopHostCommands = new Set([
-  "plugin_launch_shell",
-]);
+const currentPluginShellDesktopHostCommands = new Set(["plugin_launch_shell"]);
 const currentPluginRuntimeDesktopHostCommands = new Set([
   "plugin_runtime_start_task",
   "plugin_runtime_cancel_task",
@@ -741,7 +739,7 @@ const currentElectronHostRequiredCommands = new Set([
   ...currentSkillDesktopHostShellCommands,
   ...currentLayeredDesignDesktopHostShellCommands,
   ...currentFileBrowserDesktopHostShellCommands,
-  "aster_agent_init",
+  "agent_init",
   "plugin_launch_shell",
   "plugin_select_directory",
   "plugin_get_ui_runtime_status",
@@ -1717,8 +1715,7 @@ function collectProductionBridgeGuardFailures() {
       },
       {
         substring: "const mockSdkEnabled = isTestEnvironment()",
-        message:
-          "Plugin mockSdkEnabled 不能由生产 env/localStorage 直接打开",
+        message: "Plugin mockSdkEnabled 不能由生产 env/localStorage 直接打开",
       },
     ],
   );
@@ -2491,8 +2488,7 @@ function collectCurrentPluginRuntimeDesktopHostSourceFailures() {
 
   for (const source of restrictedSources) {
     const sourceCode = readProductionSourceForGuard(source.path);
-    const commands =
-      source.commands ?? currentPluginRuntimeDesktopHostCommands;
+    const commands = source.commands ?? currentPluginRuntimeDesktopHostCommands;
     for (const command of commands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
         failures.push({
@@ -5022,16 +5018,14 @@ function main() {
     ),
   );
   const retiredAgentRuntimeProcessAsterSurfaceLeaks = new Set(
-    [...retiredAgentRuntimeProcessAsterRustCommands]
-      .filter((command) => command !== "aster_agent_init")
-      .filter(
-        (command) =>
-          registeredCommands.has(command) ||
-          bridgeTruthCommands.has(command) ||
-          mockPriorityCommands.has(command) ||
-          runtimeGatewayCommands.has(command) ||
-          capabilityDraftCommands.has(command),
-      ),
+    [...retiredAgentRuntimeProcessAsterRustCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
   );
   const retiredAgentRuntimeDeleteSessionSurfaceLeaks = new Set(
     ["agent_runtime_delete_session"].filter(

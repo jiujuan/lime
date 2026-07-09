@@ -298,19 +298,25 @@ async fn runtime_backend_tool_inventory_reads_current_mcp_snapshot() {
                 && entry["status"] == "visible"
                 && entry["visible_in_context"] == true
         }));
-    assert!(inventory["registry_tools"]
+    let runtime_tools = inventory["runtime_tools"]
         .as_array()
-        .expect("registry tools")
+        .expect("runtime tools");
+    assert!(runtime_tools.iter().any(|entry| {
+        entry["name"] == "list_mcp_resources"
+            && entry["source_kind"] == "current_surface"
+            && entry["visible_in_context"] == true
+    }));
+    assert!(runtime_tools.iter().any(|entry| {
+        entry["name"] == "read_mcp_resource"
+            && entry["source_kind"] == "current_surface"
+            && entry["visible_in_context"] == true
+    }));
+    assert!(!inventory["native_tools"]
+        .as_array()
+        .expect("native tools")
         .iter()
         .any(|entry| {
-            entry["name"] == "ListMcpResourcesTool" && entry["visible_in_context"] == true
-        }));
-    assert!(inventory["registry_tools"]
-        .as_array()
-        .expect("registry tools")
-        .iter()
-        .any(|entry| {
-            entry["name"] == "ReadMcpResourceTool" && entry["visible_in_context"] == true
+            entry["name"] == "ListMcpResourcesTool" || entry["name"] == "ReadMcpResourceTool"
         }));
 }
 
@@ -585,7 +591,7 @@ async fn runtime_backend_tool_inventory_projects_mcp_bridge_before_agent_initial
         .as_array()
         .expect("warnings")
         .iter()
-        .any(|warning| warning == "Aster agent is not initialized"));
+        .any(|warning| warning == "Agent runtime is not initialized"));
     assert_eq!(inventory["mcp_servers"], json!(["context7"]));
     assert_eq!(inventory["counts"]["mcp_tool_total"], json!(2));
     assert_eq!(inventory["counts"]["extension_mcp_bridge_total"], json!(1));

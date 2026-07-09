@@ -20,7 +20,6 @@ import {
   normalizeSoulStyleProfileId,
   resolveSoulStyleProfile,
   type SoulStyleProfileRegistry,
-  type SoulStyleIntensity,
   type SoulStyleProfileId,
 } from "@/lib/soul/style-profiles";
 import { cn } from "@/lib/utils";
@@ -39,16 +38,12 @@ function settingsT(
 
 interface StyleProfileSelectorProps {
   value?: string | null;
-  intensity?: string | null;
   registry?: SoulStyleProfileRegistry;
   installedPacks?: readonly SoulStylePackListEntry[];
   loadingPacks?: boolean;
   packsError?: string | null;
   packBusyId?: string | null;
-  onChange: (
-    profileId: SoulStyleProfileId,
-    intensity: SoulStyleIntensity,
-  ) => void;
+  onChange: (profileId: SoulStyleProfileId) => void;
   onInstallPack?: (draft: StylePackInstallDraft) => Promise<void> | void;
   onSetPackStatus?: (
     packId: string,
@@ -75,7 +70,6 @@ export interface StylePackInstallDraft {
 
 export function StyleProfileSelector({
   value,
-  intensity,
   registry = DEFAULT_SOUL_STYLE_PROFILE_REGISTRY,
   installedPacks = [],
   loadingPacks = false,
@@ -95,11 +89,10 @@ export function StyleProfileSelector({
       resolveSoulStyleProfile(
         {
           styleProfileId: value,
-          styleIntensity: intensity,
         },
         registry,
       ),
-    [intensity, registry, value],
+    [registry, value],
   );
   const requestedProfileId = useMemo(
     () => normalizeSoulStyleProfileId(value),
@@ -196,7 +189,7 @@ export function StyleProfileSelector({
               type="button"
               aria-pressed={selected}
               data-testid={`settings-memory-soul-style-profile-${profile.id}`}
-              onClick={() => onChange(profile.id, profile.intensity)}
+              onClick={() => onChange(profile.id)}
               className={cn(
                 "flex min-h-[132px] flex-col rounded-md border bg-white p-3 text-left transition",
                 selected

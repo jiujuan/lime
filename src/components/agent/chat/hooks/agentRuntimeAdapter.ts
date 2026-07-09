@@ -15,19 +15,20 @@ import {
   type AgentRuntimeListSessionsOptions,
   type AgentRuntimeReplayedActionRequiredView,
   type AgentRuntimeClient,
-  type AsterAgentStatus,
+  type AgentRuntimeInitStatus,
   type AsterExecutionStrategy,
   type AsterSessionDetail,
   type AsterSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { AgentAccessMode } from "./agentChatStorage";
-import type { ActionRequiredScope } from "../types";
+import type { ActionRequiredScope, ApprovalDecision } from "../types";
 
 export interface AgentRuntimeActionResponse {
   sessionId: string;
   requestId: string;
   actionType: "tool_confirmation" | "ask_user" | "elicitation";
-  confirmed: boolean;
+  confirmed?: boolean;
+  decision?: ApprovalDecision;
   response?: string;
   userData?: unknown;
   metadata?: Record<string, unknown>;
@@ -43,7 +44,7 @@ export interface AgentSessionMetadataPatch {
 }
 
 export interface AgentRuntimeAdapter {
-  init(): Promise<AsterAgentStatus>;
+  init(): Promise<AgentRuntimeInitStatus>;
   createSession(
     workspaceId?: string,
     name?: string,
@@ -117,7 +118,7 @@ export interface AgentRuntimeAdapterDeps {
     | "generateAgentRuntimeSessionTitle"
     | "getAgentRuntimeSession"
     | "getAgentRuntimeThreadRead"
-    | "initAsterAgent"
+    | "initAgentRuntime"
     | "interruptAgentRuntimeTurn"
     | "listAgentRuntimeSessions"
     | "promoteAgentRuntimeQueuedTurn"
@@ -152,7 +153,7 @@ export function createAgentRuntimeAdapter({
 
   return {
     async init() {
-      return client.initAsterAgent();
+      return client.initAgentRuntime();
     },
     async createSession(workspaceId, name, executionStrategy, options) {
       return client.createAgentRuntimeSession(
@@ -290,6 +291,7 @@ export function createAgentRuntimeAdapter({
         request_id: request.requestId,
         action_type: request.actionType,
         confirmed: request.confirmed,
+        decision: request.decision,
         response: request.response,
         user_data: request.userData,
         metadata: request.metadata,

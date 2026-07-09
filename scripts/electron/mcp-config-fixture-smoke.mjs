@@ -252,6 +252,7 @@ export async function launchElectronFixture({
   runtimeEnv,
   appServerEnv,
   consoleErrors,
+  backendMode = "unavailable",
 }) {
   const app = await electron.launch({
     executablePath: electronPath,
@@ -260,7 +261,7 @@ export async function launchElectronFixture({
     env: {
       ...runtimeEnv.env,
       ...appServerEnv,
-      APP_SERVER_BACKEND_MODE: "unavailable",
+      APP_SERVER_BACKEND_MODE: backendMode,
       ELECTRON_E2E_USER_DATA_DIR: runtimeEnv.electronUserDataDir,
       LIME_ELECTRON_E2E: "1",
       LIME_ELECTRON_BRAND_DEV_APP: "0",
@@ -451,6 +452,7 @@ export async function appServerCallFromPage(page, method, params = {}) {
         throw new Error(`${method} did not return a JSON-RPC result`);
       }
       return {
+        appServerCommand: command,
         method,
         result: result.result,
         decoded,

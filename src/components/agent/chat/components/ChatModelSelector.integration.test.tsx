@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
-  mockInitAsterAgent,
+  mockInitAgentRuntime,
   mockCreateAgentRuntimeSession,
   mockListAgentRuntimeSessions,
   mockGetAgentRuntimeSession,
@@ -22,7 +22,7 @@ const {
   mockEmitProviderDataChanged,
   mockWechatChannelSetRuntimeModel,
 } = vi.hoisted(() => ({
-  mockInitAsterAgent: vi.fn(),
+  mockInitAgentRuntime: vi.fn(),
   mockCreateAgentRuntimeSession: vi.fn(),
   mockListAgentRuntimeSessions: vi.fn(),
   mockGetAgentRuntimeSession: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock("@/lib/api/agentRuntime", async () => {
 
   return {
     ...actual,
-    initAsterAgent: mockInitAsterAgent,
+    initAgentRuntime: mockInitAgentRuntime,
     createAgentRuntimeSession: mockCreateAgentRuntimeSession,
     listAgentRuntimeSessions: mockListAgentRuntimeSessions,
     getAgentRuntimeSession: mockGetAgentRuntimeSession,
@@ -127,10 +127,9 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
 }));
 
 vi.mock("@/lib/api/appConfig", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/api/appConfig")>(
-      "@/lib/api/appConfig",
-    );
+  const actual = await vi.importActual<typeof import("@/lib/api/appConfig")>(
+    "@/lib/api/appConfig",
+  );
   return {
     ...actual,
     getDefaultProvider: mockGetDefaultProvider,
@@ -236,7 +235,7 @@ function createRuntimeAdapterFixture(): AgentRuntimeAdapter {
   };
 
   return {
-    init: () => mockInitAsterAgent(),
+    init: () => mockInitAgentRuntime(),
     createSession: (workspaceId, name, executionStrategy, options) =>
       mockCreateAgentRuntimeSession(
         workspaceId,
@@ -400,7 +399,7 @@ beforeEach(async () => {
   localStorage.clear();
   sessionStorage.clear();
 
-  mockInitAsterAgent.mockResolvedValue(undefined);
+  mockInitAgentRuntime.mockResolvedValue(undefined);
   mockCreateAgentRuntimeSession.mockResolvedValue("created-session");
   mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
   mockSafeListen.mockResolvedValue(() => {});

@@ -9,10 +9,17 @@ interface BaseComposerRenderContext {
   onPrimaryAction: () => void;
 }
 
+export type BaseComposerSendTriggerSource = "button" | "enter" | "ime";
+
+export interface BaseComposerSendMetadata {
+  triggeredAt: number;
+  triggerSource: BaseComposerSendTriggerSource;
+}
+
 export interface BaseComposerProps {
   text: string;
   setText: (value: string) => void;
-  onSend: () => void;
+  onSend: (metadata?: BaseComposerSendMetadata) => void;
   onStop?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -121,6 +128,7 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
   );
 
   const onPrimaryAction = useCallback(() => {
+    const triggeredAt = Date.now();
     if (isLoading && !allowSendWhileLoading) {
       onStop?.();
       return;
@@ -130,7 +138,7 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
       return;
     }
 
-    onSend();
+    onSend({ triggeredAt, triggerSource: "button" });
   }, [allowSendWhileLoading, canSend, isLoading, onSend, onStop]);
 
   const handleKeyDown = useCallback(
@@ -149,16 +157,17 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
       }
 
       if (event.key === "Enter" && sendOnEnter && !event.shiftKey) {
+        const triggeredAt = Date.now();
         event.preventDefault();
         if (canSend) {
           if (deferSendOnEnter && typeof window !== "undefined") {
             window.requestAnimationFrame(() => {
               if (canSendRef.current) {
-                onSendRef.current();
+                onSendRef.current({ triggeredAt, triggerSource: "enter" });
               }
             });
           } else {
-            onSend();
+            onSend({ triggeredAt, triggerSource: "enter" });
           }
         }
         return;
@@ -190,9 +199,10 @@ export const BaseComposer: React.FC<BaseComposerProps> = ({
       return;
     }
 
+    const triggeredAt = Date.now();
     window.requestAnimationFrame(() => {
       if (canSendRef.current) {
-        onSendRef.current();
+        onSendRef.current({ triggeredAt, triggerSource: "ime" });
       }
     });
   }, [sendOnEnter]);

@@ -36,8 +36,6 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["sleep", "sleep"],
   ["update_plan", "updateplan"],
   ["UpdatePlanTool", "updateplan"],
-  ["EnterPlanModeTool", "enterplanmode"],
-  ["ExitPlanModeTool", "exitplanmode"],
   ["FileEditTool", "edit"],
   ["FileReadTool", "read"],
   ["FileWriteTool", "write"],
@@ -54,7 +52,6 @@ const REFERENCE_JS_TOOL_NAME_MAPPINGS = [
   ["mcp__system__glob", "glob"],
   ["GrepTool", "grep"],
   ["mcp__system__grep", "grep"],
-  ["LSPTool", "lsp"],
   ["ListMcpResourcesTool", "listmcpresources"],
   ["MCPTool", "mcp"],
   ["McpAuthTool", "mcpauth"],
@@ -218,7 +215,6 @@ describe("toolDisplayInfo", () => {
   it("应为用户可见场景提供更自然的工具标签", () => {
     expect(resolveUserFacingToolDisplayLabel("FileReadTool")).toBe("查看文件");
     expect(resolveUserFacingToolDisplayLabel("write_file")).toBe("保存文件");
-    expect(resolveUserFacingToolDisplayLabel("LSPTool")).toBe("分析代码");
     expect(resolveUserFacingToolDisplayLabel("PowerShellTool")).toBe(
       "运行命令",
     );

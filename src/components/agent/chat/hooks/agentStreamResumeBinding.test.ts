@@ -264,8 +264,6 @@ describe("agentStreamResumeBinding", () => {
       getMessages: () => messages.current,
       getThreadItems: () => threadItems.current,
       listenerMapRef,
-      playToolcallSound: () => undefined,
-      playTypewriterSound: () => undefined,
       refreshSessionReadModel: vi.fn(async () => true),
       runtime,
       setActiveStream: (nextActive) => {
@@ -343,8 +341,6 @@ describe("agentStreamResumeBinding", () => {
       getMessages: () => messages.current,
       getThreadItems: () => threadItems.current,
       listenerMapRef,
-      playToolcallSound: () => undefined,
-      playTypewriterSound: () => undefined,
       refreshSessionReadModel: vi.fn(async () => true),
       runtime,
       setActiveStream: (nextActive) => {
@@ -419,8 +415,6 @@ describe("agentStreamResumeBinding", () => {
       getMessages: () => messages.current,
       getThreadItems: () => threadItems.current,
       listenerMapRef,
-      playToolcallSound: () => undefined,
-      playTypewriterSound: () => undefined,
       refreshSessionReadModel: vi.fn(async () => true),
       runtime,
       setActiveStream: (nextActive) => {
@@ -504,8 +498,6 @@ describe("agentStreamResumeBinding", () => {
       getMessages: () => messages.current,
       getThreadItems: () => threadItems.current,
       listenerMapRef,
-      playToolcallSound: () => undefined,
-      playTypewriterSound: () => undefined,
       refreshSessionReadModel: vi.fn(async () => true),
       runtime,
       setActiveStream,

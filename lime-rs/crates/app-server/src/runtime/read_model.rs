@@ -23,6 +23,7 @@ use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
+use app_server_protocol::AgentSessionApprovalDecision;
 use app_server_protocol::AgentSessionReadParams;
 use app_server_protocol::AgentSessionReplayedActionRequired;
 use app_server_protocol::AgentTurn;
@@ -830,7 +831,7 @@ pub(super) fn replayed_action_required_from_stored_session(
             continue;
         }
         match event.event_type.as_str() {
-            "action.resolved" => {
+            "action.resolved" | "action.canceled" | "action.cancelled" | "action.expired" => {
                 resolved = true;
             }
             "action.required" if !resolved => {
@@ -872,8 +873,33 @@ fn replayed_action_required_from_event(
             .or_else(|| data.get("requested_schema").cloned())
             .or_else(|| event.payload.get("requestedSchema").cloned())
             .or_else(|| event.payload.get("requested_schema").cloned()),
+        available_decisions: replayed_action_available_decisions(data, &event.payload),
         scope: replayed_action_scope(stored, event),
     })
+}
+
+fn replayed_action_available_decisions(
+    data: &serde_json::Value,
+    payload: &serde_json::Value,
+) -> Option<Vec<AgentSessionApprovalDecision>> {
+    let values = data
+        .get("availableDecisions")
+        .or_else(|| data.get("available_decisions"))
+        .or_else(|| payload.get("availableDecisions"))
+        .or_else(|| payload.get("available_decisions"))?;
+    let decisions = values
+        .as_array()?
+        .iter()
+        .filter_map(|value| value.as_str())
+        .filter_map(|value| match value {
+            "allow_once" => Some(AgentSessionApprovalDecision::AllowOnce),
+            "allow_for_session" => Some(AgentSessionApprovalDecision::AllowForSession),
+            "decline" => Some(AgentSessionApprovalDecision::Decline),
+            "cancel" => Some(AgentSessionApprovalDecision::Cancel),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    (!decisions.is_empty()).then_some(decisions)
 }
 
 fn replayed_action_scope(

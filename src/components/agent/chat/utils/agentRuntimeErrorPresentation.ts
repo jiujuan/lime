@@ -37,7 +37,7 @@ function normalizeRuntimeErrorMessage(errorMessage: string): string {
 
 function looksLikeHttpStatus(
   message: string,
-  status: "401" | "402" | "403" | "503",
+  status: "401" | "402" | "403" | "404" | "503",
 ): boolean {
   return new RegExp(`(^|\\D)${status}(\\D|$)`).test(message);
 }
@@ -140,9 +140,30 @@ function isLikelyProviderUnavailableError(message: string): boolean {
   );
 }
 
+function isLikelyProviderNotFoundError(message: string): boolean {
+  return (
+    message.includes("agent provider execution failed") &&
+    (looksLikeHttpStatus(message, "404") ||
+      includesAny(message, [
+        "resource not found",
+        "notfounderror",
+        '"detail":"not found"',
+        '"detail": "not found"',
+      ]))
+  );
+}
+
 function isLikelyInternalRuntimeTransportError(message: string): boolean {
   return (
-    includesAny(message, ["-32603", "-32002", "troubleshooting"]) ||
+    includesAny(message, [
+      "-32603",
+      "-32002",
+      "troubleshooting",
+      "agent runtime tool lifecycle validation failed",
+      "runtime tool lifecycle validation failed",
+      "tool_args_without_start",
+      "tool_result_without_start",
+    ]) ||
     ((message.includes("json-rpc") || message.includes("jsonrpc")) &&
       includesAny(message, [
         "internal error",
@@ -210,7 +231,10 @@ export function resolveAgentRuntimeErrorPresentation(errorMessage: string): {
     };
   }
 
-  if (isLikelyProviderUnavailableError(lowerMessage)) {
+  if (
+    isLikelyProviderUnavailableError(lowerMessage) ||
+    isLikelyProviderNotFoundError(lowerMessage)
+  ) {
     const message = readAgentRuntimeCopy(
       "agentChat.runtimeError.providerUnavailable",
       PROVIDER_UNAVAILABLE_ERROR_MESSAGE,

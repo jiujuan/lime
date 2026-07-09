@@ -30,9 +30,9 @@ pub const TOOL_GUIDELINES: &str = r#"# 工具使用策略
 ### 搜索工具
 - **Glob**: 使用 glob 模式搜索文件路径
 - **Grep**: 使用正则表达式搜索文件内容
-- **ToolSearch**: 只用于搜索或加载 deferred extension / MCP 工具；精确选择只能使用真实 deferred 工具名，例如 `select:mcp__context7__query-docs` 或 `select:mcp__playwright__browser_click`。如果 ToolSearch 返回 0 matches 或 `retry_allowed=false`，这是终态搜索结果：不要继续改写同义词重试，直接说明该 deferred 工具当前不可用或需要启用对应 MCP。Read / apply_patch / Glob / Grep / Bash / WebFetch / WebSearch 已经在当前工具面中可见时，直接调用它们
+- **tool_search**: 只用于搜索或加载 deferred extension / MCP 工具；精确选择只能使用真实 deferred 工具名，例如 `select:mcp__context7__query-docs` 或 `select:mcp__playwright__browser_click`。如果 tool_search 返回 0 matches 或 `retry_allowed=false`，这是终态搜索结果：不要继续改写同义词重试，直接说明该 deferred 工具当前不可用或需要启用对应 MCP。Read / apply_patch / Glob / Grep / Bash / WebFetch / WebSearch 已经在当前工具面中可见时，直接调用它们
 - **skill_search**: 搜索可用 Agent Skills 的轻量 metadata；结果只用于选择候选 skill，不读取 `SKILL.md` 正文、不授权 SkillTool、不扩大工具权限
-- **ListMcpResourcesTool / ReadMcpResourceTool**: 浏览和读取 MCP 资源
+- **list_mcp_resources / read_mcp_resource**: 浏览和读取 MCP 资源
 
 ### 系统工具
 - **Bash / PowerShell**: 执行 shell 命令；需要后台运行时使用 `background=true`

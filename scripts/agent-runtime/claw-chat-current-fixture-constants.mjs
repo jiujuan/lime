@@ -108,6 +108,8 @@ export const APP_SERVER_METHOD_SESSION_START = "agentSession/start";
 export const APP_SERVER_METHOD_SESSION_UPDATE = "agentSession/update";
 export const APP_SERVER_METHOD_SESSION_TURN_START = "agentSession/turn/start";
 export const APP_SERVER_METHOD_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
+export const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
+  "agentSession/action/respond";
 export const APP_SERVER_METHOD_SESSION_READ = "agentSession/read";
 export const APP_SERVER_METHOD_SESSION_THREAD_RESUME =
   "agentSession/thread/resume";
@@ -215,14 +217,49 @@ export const WEB_TOOLS_SEARCH_SNIPPET =
 export const WEB_TOOLS_MID_THINKING_TEXT =
   "搜索结果还需要继续筛掉广告软文，我先读取有效来源。";
 export const REASONING_FIRST_VISIBLE_SCENARIO = "reasoning-first-visible";
-export const REASONING_FIRST_VISIBLE_PROMPT =
-  "验证 reasoning 先于最终回答可见";
+export const REASONING_FIRST_VISIBLE_PROMPT = "验证 reasoning 先于最终回答可见";
 export const REASONING_FIRST_VISIBLE_TEXT =
   "先确认用户要验证的是展示时序，再给出最终回答。";
 export const REASONING_FIRST_VISIBLE_FINAL_TEXT =
   "最终回答：reasoning 已经先于正文出现在当前回合。";
-export const REASONING_FIRST_VISIBLE_DONE_TEXT =
-  "REASONING_FIRST_VISIBLE_DONE";
+export const REASONING_FIRST_VISIBLE_DONE_TEXT = "REASONING_FIRST_VISIBLE_DONE";
+export const LIVE_TAIL_COMMIT_SCENARIO = "live-tail-commit";
+export const ELECTRON_RESIZE_REFLOW_SCENARIO = "electron-resize-reflow";
+export const LIVE_TAIL_COMMIT_PROMPT = "验证 live tail 长输出和表格滚动锚点";
+export const LIVE_TAIL_COMMIT_FIRST_TEXT =
+  "LIVE_TAIL_FIRST_VISIBLE_TOKEN: 第一段长输出已经在完成前可见。";
+export const LIVE_TAIL_COMMIT_OVERFLOW_MARKER =
+  "LIVE_TAIL_OVERFLOW_COMMIT_MARKER";
+export const LIVE_TAIL_COMMIT_TABLE_HEADER = "| 序号 | 校验点 | 状态 |";
+export const LIVE_TAIL_COMMIT_TABLE_TAIL =
+  "| 24 | table tail reflow | stable |";
+export const LIVE_TAIL_COMMIT_DONE_TEXT = "LIVE_TAIL_COMMIT_DONE";
+export const APPROVAL_REQUEST_RESUME_SCENARIO = "approval-request-resume";
+export const APPROVAL_REQUEST_DECLINE_SCENARIO = "approval-request-decline";
+export const APPROVAL_REQUEST_CANCEL_SCENARIO = "approval-request-cancel";
+export const APPROVAL_REQUEST_RESUME_PROMPT = "验证审批请求 hydrate 后允许继续";
+export const APPROVAL_REQUEST_RESUME_SECOND_PROMPT =
+  "@浏览器 打开 https://example.com/approval-session-cache 并确认页面标题";
+export const APPROVAL_REQUEST_RESUME_SECOND_PROMPT_MARKER =
+  "approval-session-cache";
+export const APPROVAL_REQUEST_RESUME_TOOL_NAME = "browser_control";
+export const APPROVAL_REQUEST_RESUME_COMMAND =
+  "open https://example.com/approval-resume";
+export const APPROVAL_REQUEST_RESUME_APPROVAL_PROMPT =
+  "允许执行 approval resume fixture？";
+export const APPROVAL_REQUEST_RESUME_RESULT_TEXT =
+  "approval resume fixture 已经通过 action/respond 继续。";
+export const APPROVAL_REQUEST_RESUME_DONE_TEXT = "APPROVAL_REQUEST_RESUME_DONE";
+export const APPROVAL_REQUEST_DECLINE_RESULT_TEXT =
+  "approval decline fixture 已拒绝当前浏览器动作，并改用无浏览器路径继续。";
+export const APPROVAL_REQUEST_DECLINE_DONE_TEXT =
+  "APPROVAL_REQUEST_DECLINE_DONE";
+export const APPROVAL_REQUEST_CANCEL_DONE_TEXT =
+  "APPROVAL_REQUEST_CANCEL_DONE";
+export const APPROVAL_REQUEST_RESUME_SECOND_RESULT_TEXT =
+  "approval session cache second request 已经自动通过。";
+export const APPROVAL_REQUEST_RESUME_SECOND_DONE_TEXT =
+  "APPROVAL_REQUEST_RESUME_SECOND_DONE";
 export const TERMINAL_STALE_GUARD_SCENARIO = "terminal-stale-guard";
 export const TERMINAL_STALE_GUARD_FIRST_PROMPT =
   "验证旧 terminal 不影响下一轮：第一轮";
@@ -234,8 +271,7 @@ export const TERMINAL_STALE_GUARD_SECOND_TEXT =
   "第二轮在旧 terminal 干扰后继续完成。";
 export const TERMINAL_STALE_GUARD_FIRST_DONE_TEXT =
   "TERMINAL_STALE_GUARD_FIRST_DONE";
-export const TERMINAL_STALE_GUARD_DONE_TEXT =
-  "TERMINAL_STALE_GUARD_DONE";
+export const TERMINAL_STALE_GUARD_DONE_TEXT = "TERMINAL_STALE_GUARD_DONE";
 export const TERMINAL_STALE_GUARD_STALE_DONE_TEXT =
   "TERMINAL_STALE_GUARD_STALE_DONE";
 export const TERMINAL_FAILED_AFTER_ANSWER_SCENARIO =
@@ -288,6 +324,8 @@ export const IMAGE_FIXTURE_PROVIDER_NAME = "Fixture Image Provider";
 export const IMAGE_FIXTURE_MODEL = "fal-ai/nano-banana-pro";
 export const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
 export const THREAD_ID = `${SESSION_ID}-thread`;
+export const APPROVAL_REQUEST_RESUME_REQUEST_ID = `${SESSION_ID}:approval:resume`;
+export const APPROVAL_REQUEST_RESUME_TOOL_CALL_ID = `${SESSION_ID}:tool:approval-resume`;
 export const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID = `${SESSION_ID}-content-factory-article-workspace`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}-thread`;
@@ -412,6 +450,69 @@ export const REASONING_FIRST_VISIBLE_ASSERTION_KEYS = [
   "guiReasoningFirstVisibleCompleted",
   "readModelReasoningFirstVisibleCompleted",
   "readModelReasoningFirstVisibleItemObserved",
+];
+export const LIVE_TAIL_COMMIT_ASSERTION_KEYS = [
+  "liveTailCommitPromptReachedBackend",
+  "guiLiveTailCommitInputSubmitted",
+  "guiLiveTailFirstVisibleBeforeCommit",
+  "guiLiveTailRunningStatusPreserved",
+  "guiLiveTailNoStartupNote",
+  "guiLiveTailOverflowCommitted",
+  "guiLiveTailTableTailVisible",
+  "guiLiveTailScrollAnchorStable",
+  "guiLiveTailCompleted",
+  "readModelLiveTailCommitCompleted",
+  "backendLiveTailCommitRecorded",
+];
+export const ELECTRON_RESIZE_REFLOW_ASSERTION_KEYS = [
+  "electronResizeReflowPromptReachedBackend",
+  "guiElectronResizeReflowInputSubmitted",
+  "guiElectronResizeReflowCompleted",
+  "guiElectronResizeReflowFilesSurfaceOpened",
+  "guiElectronResizeReflowViewportSnapshotsCaptured",
+  "guiElectronResizeReflowMessageAnchorStable",
+  "guiElectronResizeReflowInputbarAnchored",
+  "guiElectronResizeReflowRightSurfaceStable",
+  "guiElectronResizeReflowNoOverlap",
+  "readModelElectronResizeReflowCompleted",
+  "backendElectronResizeReflowRecorded",
+];
+export const APPROVAL_REQUEST_RESUME_ASSERTION_KEYS = [
+  "approvalRequestResumePromptReachedBackend",
+  "guiApprovalRequestResumeInputSubmitted",
+  "guiApprovalRequestResumePendingVisible",
+  "readModelApprovalRequestResumePending",
+  "approvalRequestResumeUsedCurrentActionRespond",
+  "approvalRequestResumeRespondPayloadScoped",
+  "approvalRequestResumeBackendActionRespondObserved",
+  "approvalRequestResumePendingCleared",
+  "guiApprovalRequestResumeCompleted",
+  "readModelApprovalRequestResumeCompleted",
+  "approvalRequestResumeSecondPromptReachedBackend",
+  "approvalRequestResumeSecondUsesBrowserControlContract",
+  "approvalRequestResumeSessionCacheHitInjected",
+  "approvalRequestResumeSecondNoPendingApproval",
+  "approvalRequestResumeSecondReadModelAutoResolved",
+  "guiApprovalRequestResumeSecondCompleted",
+  "readModelApprovalRequestResumeSecondCompleted",
+  "approvalRequestResumeNoLegacyRuntimeRespond",
+];
+export const APPROVAL_REQUEST_DECISION_ASSERTION_KEYS = [
+  "approvalRequestDecisionPromptReachedBackend",
+  "guiApprovalRequestDecisionInputSubmitted",
+  "guiApprovalRequestDecisionPendingVisible",
+  "readModelApprovalRequestDecisionPending",
+  "approvalRequestDecisionUsedCurrentActionRespond",
+  "approvalRequestDecisionRespondPayloadScoped",
+  "approvalRequestDecisionBackendActionRespondObserved",
+  "approvalRequestDecisionPendingCleared",
+  "approvalRequestDeclineNoToolExecuted",
+  "guiApprovalRequestDeclineCompleted",
+  "readModelApprovalRequestDeclineCompleted",
+  "approvalRequestCancelNoToolExecuted",
+  "guiApprovalRequestCancelCompleted",
+  "readModelApprovalRequestCancelCanceled",
+  "approvalRequestDecisionNoLegacyRuntimeRespond",
 ];
 export const TERMINAL_STALE_GUARD_ASSERTION_KEYS = [
   "terminalStaleGuardFirstPromptReachedBackend",

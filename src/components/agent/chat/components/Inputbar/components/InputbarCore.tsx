@@ -2,6 +2,8 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   ActionButtonGroup,
   Container,
+  DictationRecordingDuration,
+  DictationRecordingGlyph,
   InputBarContainer,
   InputColumn,
   InputIconButton,
@@ -35,11 +37,16 @@ import {
   FileText,
   Folder,
   ImagePlus,
+  Loader2,
+  Mic,
   Plus,
   Square,
   X,
 } from "lucide-react";
-import { BaseComposer } from "@/components/input-kit";
+import {
+  BaseComposer,
+  type BaseComposerSendMetadata,
+} from "@/components/input-kit";
 import { isKnowledgeTextSourceCandidate } from "@/features/knowledge/import/knowledgeSourceSupport";
 import type { MessageImage, MessagePathReference } from "../../../types";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
@@ -49,6 +56,7 @@ import {
   InputbarPlusMenu,
   type InputbarPlusMenuConfig,
 } from "./InputbarPlusMenu";
+import { useInputbarDictation } from "../hooks/useInputbarDictation";
 
 const INTERACTIVE_TARGET_SELECTOR =
   "button, a, input, textarea, select, option, [role='button'], [contenteditable=''], [contenteditable='true'], [contenteditable='plaintext-only']";
@@ -71,11 +79,18 @@ function resolvePendingImagePreviewSrc(image: MessageImage): string {
   return image.sourceUri?.trim() || image.sourcePath?.trim() || "";
 }
 
+function formatRecordingDuration(durationSecs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(durationSecs));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = `${totalSeconds % 60}`.padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
 interface InputbarCoreProps {
   uiCopy: InputbarCoreCopy;
   text: string;
   setText: (text: string) => void;
-  onSend: () => void;
+  onSend: (metadata?: BaseComposerSendMetadata) => void;
   /** 停止生成回调 */
   onStop?: () => void;
   isLoading?: boolean;
@@ -118,6 +133,7 @@ interface InputbarCoreProps {
   onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   onRemoveQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   showMetaTools?: boolean;
+  dictationButtonVariant?: "icon" | "label";
   plusMenu?: InputbarPlusMenuConfig;
 }
 
@@ -156,12 +172,26 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   onPromoteQueuedTurn,
   onRemoveQueuedTurn,
   showMetaTools = true,
+  dictationButtonVariant = "icon",
   plusMenu,
 }) => {
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const inputBarContainerRef = useRef<HTMLDivElement | null>(null);
   const fallbackTextareaRef = useRef<HTMLTextAreaElement>(null);
   const resolvedTextareaRef = externalTextareaRef ?? fallbackTextareaRef;
+  const {
+    dictationEnabled,
+    dictationState,
+    recordingStatus,
+    isDictationBusy,
+    isDictationProcessing,
+    handleDictationToggle,
+  } = useInputbarDictation({
+    text,
+    setText,
+    textareaRef: resolvedTextareaRef,
+    disabled: disabled || isLoading,
+  });
   const isFloatingVariant = visualVariant === "floating";
   const hasInlineComposerContent =
     text.trim().length > 0 ||
@@ -214,7 +244,8 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
     : "";
   const shouldRenderMetaBar =
     !shouldUseCompactFloatingComposer &&
-    (Boolean(plusMenu) ||
+    (dictationEnabled ||
+      Boolean(plusMenu) ||
       Boolean(leftExtra) ||
       Boolean(trailingMeta) ||
       (showMetaTools &&
@@ -305,6 +336,23 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
         const loadingSecondaryActionLabel = isPrimaryDisabled
           ? uiCopy.action.running
           : uiCopy.action.defer;
+        const recordingLabel = uiCopy.dictation.recording(
+          formatRecordingDuration(recordingStatus?.duration ?? 0),
+        );
+        const dictationButtonLabel =
+          dictationState === "listening"
+            ? uiCopy.dictation.stopRecording(recordingLabel)
+            : isDictationProcessing
+              ? uiCopy.dictation.transcribing
+              : uiCopy.dictation.start;
+        const dictationButtonClassName = [
+          "is-dictation",
+          dictationButtonVariant === "label" ? "is-labeled" : "",
+          dictationState === "listening" ? "is-recording" : "",
+          isDictationProcessing ? "is-processing" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         const handleContainerMouseDownCapture = (
           event: React.MouseEvent<HTMLDivElement>,
         ) => {
@@ -501,6 +549,52 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                     className={leftSectionClassName}
                     data-testid="inputbar-meta-left"
                   >
+                    {dictationEnabled ? (
+                      <InputIconButton
+                        type="button"
+                        data-testid="inputbar-dictation-toggle"
+                        onClick={() => {
+                          void handleDictationToggle();
+                        }}
+                        disabled={
+                          disabled ||
+                          isLoading ||
+                          (isDictationBusy && dictationState !== "listening")
+                        }
+                        className={dictationButtonClassName}
+                        aria-label={dictationButtonLabel}
+                        aria-pressed={dictationState === "listening"}
+                        title={dictationButtonLabel}
+                      >
+                        {dictationState === "listening" ? (
+                          <>
+                            <DictationRecordingGlyph aria-hidden />
+                            {dictationButtonVariant === "label" ? (
+                              <span>{uiCopy.dictation.recordingLabel}</span>
+                            ) : null}
+                            <DictationRecordingDuration>
+                              {formatRecordingDuration(
+                                recordingStatus?.duration ?? 0,
+                              )}
+                            </DictationRecordingDuration>
+                          </>
+                        ) : isDictationProcessing ? (
+                          <>
+                            <Loader2 size={14} aria-hidden />
+                            {dictationButtonVariant === "label" ? (
+                              <span>{uiCopy.dictation.transcribing}</span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <>
+                            <Mic size={14} aria-hidden />
+                            {dictationButtonVariant === "label" ? (
+                              <span>{uiCopy.dictation.start}</span>
+                            ) : null}
+                          </>
+                        )}
+                      </InputIconButton>
+                    ) : null}
                     {plusMenu ? (
                       <InputbarPlusMenu config={plusMenu} disabled={disabled}>
                         <InputIconButton

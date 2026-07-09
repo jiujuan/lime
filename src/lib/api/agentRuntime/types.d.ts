@@ -64,9 +64,9 @@ export interface ImageInput {
   media_type: string;
 }
 /**
- * Aster Agent 状态
+ * Agent runtime 初始化状态
  */
-export interface AsterAgentStatus {
+export interface AgentRuntimeInitStatus {
   initialized: boolean;
   provider_configured: boolean;
   provider_name?: string;
@@ -1308,7 +1308,8 @@ export interface AgentRuntimeRespondActionRequest {
   session_id: string;
   request_id: string;
   action_type: "tool_confirmation" | "ask_user" | "elicitation";
-  confirmed: boolean;
+  confirmed?: boolean;
+  decision?: "allow_once" | "allow_for_session" | "decline" | "cancel";
   response?: string;
   user_data?: unknown;
   metadata?: Record<string, unknown>;
@@ -1328,6 +1329,9 @@ export interface AgentRuntimeReplayedActionRequiredView {
   prompt?: string;
   questions?: unknown;
   requested_schema?: Record<string, unknown>;
+  available_decisions?: Array<
+    "allow_once" | "allow_for_session" | "decline" | "cancel"
+  >;
   scope?: {
     session_id?: string;
     thread_id?: string;
@@ -1853,7 +1857,6 @@ export type AgentRuntimeExtensionSourceKind =
   | "mcp_bridge"
   | "runtime_extension";
 export type AgentRuntimeToolInventoryRuntimeSourceKind =
-  | "registry_native"
   | "current_surface"
   | "runtime_extension"
   | "mcp";
@@ -1965,7 +1968,7 @@ export interface AgentRuntimeToolInventoryCatalogEntry {
   execution_sandbox_profile: AgentToolExecutionSandboxProfile;
   execution_sandbox_profile_source: AgentToolExecutionPolicySource;
 }
-export interface AgentRuntimeToolInventoryRegistryEntry {
+export interface AgentRuntimeToolInventoryNativeEntry {
   name: string;
   description: string;
   catalog_entry_name?: string;
@@ -2043,6 +2046,50 @@ export interface AgentRuntimeToolInventoryMcpEntry {
   caller_allowed: boolean;
   visible_in_context: boolean;
 }
+export type AgentRuntimeToolInventoryPluginMcpRuntimeStatus =
+  | "available"
+  | "server_missing"
+  | "server_stopped"
+  | "server_available_tool_missing"
+  | string;
+export type AgentRuntimeToolInventoryPluginMcpPrepareStatus =
+  | "ready"
+  | "import_required"
+  | "configure_required"
+  | "start_required"
+  | "tool_missing"
+  | "unknown"
+  | string;
+export interface AgentRuntimeMcpPrepareRequest {
+  method: string;
+  params?: Record<string, unknown>;
+  reason?: string;
+  status?: string;
+}
+export interface AgentRuntimeMcpCallProofRequest {
+  method: string;
+  params?: Record<string, unknown>;
+  reason?: string;
+  status?: string;
+}
+export interface AgentRuntimeToolInventoryPluginMcpTarget {
+  pluginId: string;
+  serverId: string;
+  toolKey: string;
+  provider: string;
+  required: boolean;
+  caller: string;
+  expectedToolName: string;
+  runtimeStatus: AgentRuntimeToolInventoryPluginMcpRuntimeStatus;
+  prepareStatus: AgentRuntimeToolInventoryPluginMcpPrepareStatus;
+  serverAvailable: boolean;
+  serverRunning: boolean;
+  toolAvailable: boolean;
+  resolvedToolName?: string | null;
+  toolListRequest: Record<string, unknown>;
+  callProofRequest: AgentRuntimeMcpCallProofRequest | null;
+  prepareRequests: AgentRuntimeMcpPrepareRequest[];
+}
 export interface AgentRuntimeToolInventoryCounts {
   catalog_total: number;
   catalog_current_total: number;
@@ -2051,9 +2098,9 @@ export interface AgentRuntimeToolInventoryCounts {
   default_allowed_total: number;
   runtime_total?: number;
   runtime_visible_total?: number;
-  registry_total: number;
-  registry_visible_total: number;
-  registry_catalog_unmapped_total: number;
+  native_total: number;
+  native_visible_total: number;
+  native_catalog_unmapped_total: number;
   extension_surface_total: number;
   extension_mcp_bridge_total: number;
   extension_runtime_total: number;
@@ -2074,9 +2121,10 @@ export interface AgentRuntimeToolInventory {
   default_allowed_tools: string[];
   counts: AgentRuntimeToolInventoryCounts;
   catalog_tools: AgentRuntimeToolInventoryCatalogEntry[];
-  registry_tools: AgentRuntimeToolInventoryRegistryEntry[];
+  native_tools: AgentRuntimeToolInventoryNativeEntry[];
   runtime_tools?: AgentRuntimeToolInventoryRuntimeEntry[];
   extension_surfaces: AgentRuntimeToolInventoryExtensionSurfaceEntry[];
   extension_tools: AgentRuntimeToolInventoryExtensionToolEntry[];
   mcp_tools: AgentRuntimeToolInventoryMcpEntry[];
+  plugin_mcp_targets?: AgentRuntimeToolInventoryPluginMcpTarget[];
 }

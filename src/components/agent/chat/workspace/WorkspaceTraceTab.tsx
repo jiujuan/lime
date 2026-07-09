@@ -37,6 +37,7 @@ import {
   type TraceHistoryRestoreMetricModel,
   type TraceSegmentModel,
 } from "./workspaceTracePanelModel";
+import { WorkspaceTraceCurrentAttribution } from "./WorkspaceTraceCurrentAttribution";
 
 export interface WorkspaceTraceTabProps {
   baselineRecords?: AgentUiPerformanceTraceHistoryRecord[];
@@ -358,6 +359,7 @@ export function WorkspaceTraceTab({
       source: "workspace_trace_tab",
       copied_at: new Date().toISOString(),
       selected_session_id: model.session?.sessionId ?? null,
+      current_attribution: model.currentAttribution,
       baseline_comparison: model.baselineComparison,
       regression_report: model.regressionReport,
       summary,
@@ -553,6 +555,10 @@ export function WorkspaceTraceTab({
             />
           </div>
         </section>
+
+        <WorkspaceTraceCurrentAttribution
+          attribution={model.currentAttribution}
+        />
 
         <section className="space-y-2">
           <SectionTitle

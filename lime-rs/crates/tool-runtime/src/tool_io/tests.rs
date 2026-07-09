@@ -225,3 +225,37 @@ fn build_tool_io_history_eviction_plan_should_skip_when_under_trigger() {
     assert_eq!(plan.projected_tokens, 260);
     assert!(plan.selections.is_empty());
 }
+
+#[test]
+fn token_policy_formats_large_output_with_codex_style_warning() {
+    let output = "alpha beta gamma delta epsilon zeta eta theta iota kappa";
+    let formatted = format_tool_output_for_model(output, ToolOutputTruncationPolicy::Tokens(4));
+
+    assert!(formatted.starts_with("Warning: truncated output (original token count:"));
+    assert!(formatted.contains("Total output lines: 1"));
+    assert!(formatted.contains("tokens truncated"));
+    assert!(formatted.contains("alpha"));
+    assert!(formatted.contains("kappa"));
+}
+
+#[test]
+fn token_policy_keeps_small_output_unchanged() {
+    let output = "small output";
+
+    assert_eq!(
+        format_tool_output_for_model(output, ToolOutputTruncationPolicy::Tokens(64)),
+        output
+    );
+}
+
+#[test]
+fn byte_policy_preserves_utf8_boundaries() {
+    let formatted = format_tool_output_for_model(
+        "你好，世界。hello world",
+        ToolOutputTruncationPolicy::Bytes(18),
+    );
+
+    assert!(formatted.contains("chars truncated"));
+    assert!(formatted.contains("你好"));
+    assert!(formatted.contains("world"));
+}

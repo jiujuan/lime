@@ -23,6 +23,12 @@ export function useAgentStreamController(
     currentStreamingEventNameRef,
   } = options;
   const [isSending, setIsSending] = useState(false);
+  const [activeStreamEventName, setActiveStreamEventName] = useState<
+    string | null
+  >(null);
+  const [activeStreamTurnId, setActiveStreamTurnId] = useState<string | null>(
+    null,
+  );
   const listenerMapRef = useRef(new Map<string, () => void>());
   const activeStreamRef = useRef<ActiveStreamState | null>(null);
 
@@ -33,6 +39,8 @@ export function useAgentStreamController(
       currentAssistantMsgIdRef.current = nextActive?.assistantMsgId ?? null;
       currentStreamingSessionIdRef.current = nextActive?.sessionId ?? null;
       currentStreamingEventNameRef.current = nextActive?.eventName ?? null;
+      setActiveStreamEventName(nextActive?.eventName ?? null);
+      setActiveStreamTurnId(nextActive?.turnId ?? null);
       setIsSending(Boolean(nextActive));
     },
     [
@@ -97,6 +105,8 @@ export function useAgentStreamController(
 
   return {
     isSending,
+    activeStreamEventName,
+    activeStreamTurnId,
     setIsSending,
     listenerMapRef,
     activeStreamRef,

@@ -21,7 +21,16 @@ export interface AgentUiPerformanceEntry {
 export interface AgentUiPerformanceSessionSummary {
   sessionId: string;
   workspaceId?: string | null;
+  inputbarTriggerToHomeSubmitMs?: number;
+  inputbarTriggerToPendingShellMs?: number;
+  inputbarTriggerToPendingPreviewCommitMs?: number;
+  inputbarTriggerToPendingPreviewPaintMs?: number;
+  inputbarTriggerToSendDispatchMs?: number;
+  inputbarTriggerToSubmitAcceptedMs?: number;
+  inputbarTriggerToFirstTextDeltaMs?: number;
+  inputbarTriggerToFirstTextPaintMs?: number;
   homeInputToPendingShellMs?: number;
+  homeInputToPendingPreviewCommitMs?: number;
   homeInputToPendingPreviewPaintMs?: number;
   homeInputToSendDispatchMs?: number;
   homeInputToSendPlanReadyMs?: number;
@@ -279,6 +288,16 @@ function deltaMs(
   return Math.max(0, Math.round(end.at - start.at));
 }
 
+function addMs(
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined {
+  if (left === undefined || right === undefined) {
+    return undefined;
+  }
+  return Math.max(0, Math.round(left + right));
+}
+
 function metricNumber(
   entry: AgentUiPerformanceEntry | null,
   key: string,
@@ -335,6 +354,39 @@ function countMetricTrue(
   );
 }
 
+function metricRequestId(entry: AgentUiPerformanceEntry): string | null {
+  return normalizeString(entry.metrics.requestId);
+}
+
+function mergeSessionEntriesWithRequestEntries(
+  sessionEntries: AgentUiPerformanceEntry[],
+  entriesByRequestId: Map<string, AgentUiPerformanceEntry[]>,
+): AgentUiPerformanceEntry[] {
+  const requestIds = new Set<string>();
+  for (const entry of sessionEntries) {
+    const requestId = metricRequestId(entry);
+    if (requestId) {
+      requestIds.add(requestId);
+    }
+  }
+
+  if (requestIds.size === 0) {
+    return sessionEntries;
+  }
+
+  const merged = new Map<number, AgentUiPerformanceEntry>();
+  for (const entry of sessionEntries) {
+    merged.set(entry.id, entry);
+  }
+  for (const requestId of requestIds) {
+    for (const entry of entriesByRequestId.get(requestId) ?? []) {
+      merged.set(entry.id, entry);
+    }
+  }
+
+  return Array.from(merged.values()).sort((left, right) => left.id - right.id);
+}
+
 function installLongTaskObserver(): void {
   if (
     typeof window === "undefined" ||
@@ -384,7 +436,15 @@ function installLongTaskObserver(): void {
 
 export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot {
   const grouped = new Map<string, AgentUiPerformanceEntry[]>();
+  const entriesByRequestId = new Map<string, AgentUiPerformanceEntry[]>();
   for (const entry of entries) {
+    const requestId = metricRequestId(entry);
+    if (requestId) {
+      const requestEntries = entriesByRequestId.get(requestId) ?? [];
+      requestEntries.push(entry);
+      entriesByRequestId.set(requestId, requestEntries);
+    }
+
     const sessionId = entry.sessionId?.trim();
     if (!sessionId) {
       continue;
@@ -396,7 +456,11 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
 
   const sessions: AgentUiPerformanceSessionSummary[] = Array.from(
     grouped.entries(),
-  ).map(([sessionId, sessionEntries]) => {
+  ).map(([sessionId, rawSessionEntries]) => {
+    const sessionEntries = mergeSessionEntriesWithRequestEntries(
+      rawSessionEntries,
+      entriesByRequestId,
+    );
     const click = firstEntry(sessionEntries, "sidebar.conversation.click");
     const switchStart = firstEntry(sessionEntries, "session.switch.start");
     const cachedSnapshot = firstEntry(
@@ -424,6 +488,10 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
     const homeInputPendingShell = firstEntry(
       sessionEntries,
       "homeInput.pendingShellApplied",
+    );
+    const homeInputPendingPreviewCommitted = firstEntry(
+      sessionEntries,
+      "homeInput.pendingPreviewCommitted",
     );
     const homeInputPendingPreviewPaint = firstEntry(
       sessionEntries,
@@ -501,23 +569,69 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
     const messageListPaint = lastEntry(sessionEntries, "messageList.paint");
     const finalMessageList =
       messageListPaint ?? lastEntry(sessionEntries, "messageList.commit");
+    const inputbarTriggerToHomeSubmit = metricNumber(
+      homeInputSubmit,
+      "triggerToHomeSubmitMs",
+    );
+    const homeInputToPendingShell = deltaMs(
+      homeInputSubmit,
+      homeInputPendingShell,
+    );
+    const homeInputToPendingPreviewCommit = deltaMs(
+      homeInputSubmit,
+      homeInputPendingPreviewCommitted,
+    );
+    const homeInputToPendingPreviewPaint = deltaMs(
+      homeInputSubmit,
+      homeInputPendingPreviewPaint,
+    );
+    const homeInputToSendDispatch = deltaMs(
+      homeInputSubmit,
+      homeInputSendDispatch,
+    );
+    const homeInputToSubmitAccepted = deltaMs(
+      homeInputSubmit,
+      streamSubmitAccepted,
+    );
+    const homeInputToFirstTextDelta = deltaMs(
+      homeInputSubmit,
+      streamFirstTextDelta,
+    );
+    const homeInputToFirstTextPaint = deltaMs(
+      homeInputSubmit,
+      streamFirstTextPaint,
+    );
 
     return {
       sessionId,
       workspaceId:
         sessionEntries.find((entry) => entry.workspaceId)?.workspaceId ?? null,
-      homeInputToPendingShellMs: deltaMs(
-        homeInputSubmit,
-        homeInputPendingShell,
-      ),
-      homeInputToPendingPreviewPaintMs: deltaMs(
-        homeInputSubmit,
-        homeInputPendingPreviewPaint,
-      ),
-      homeInputToSendDispatchMs: deltaMs(
-        homeInputSubmit,
-        homeInputSendDispatch,
-      ),
+      inputbarTriggerToHomeSubmitMs: inputbarTriggerToHomeSubmit,
+      inputbarTriggerToPendingShellMs:
+        metricNumber(homeInputPendingShell, "durationMs") ??
+        addMs(inputbarTriggerToHomeSubmit, homeInputToPendingShell),
+      inputbarTriggerToPendingPreviewCommitMs:
+        metricNumber(homeInputPendingPreviewCommitted, "durationMs") ??
+        addMs(inputbarTriggerToHomeSubmit, homeInputToPendingPreviewCommit),
+      inputbarTriggerToPendingPreviewPaintMs:
+        metricNumber(homeInputPendingPreviewPaint, "durationMs") ??
+        addMs(inputbarTriggerToHomeSubmit, homeInputToPendingPreviewPaint),
+      inputbarTriggerToSendDispatchMs:
+        metricNumber(homeInputSendDispatch, "elapsedMs") ??
+        addMs(inputbarTriggerToHomeSubmit, homeInputToSendDispatch),
+      inputbarTriggerToSubmitAcceptedMs:
+        metricNumber(streamSubmitAccepted, "homeSubmittedDeltaMs") ??
+        addMs(inputbarTriggerToHomeSubmit, homeInputToSubmitAccepted),
+      inputbarTriggerToFirstTextDeltaMs:
+        metricNumber(streamFirstTextDelta, "homeSubmittedDeltaMs") ??
+        addMs(inputbarTriggerToHomeSubmit, homeInputToFirstTextDelta),
+      inputbarTriggerToFirstTextPaintMs:
+        metricNumber(streamFirstTextPaint, "homeSubmittedDeltaMs") ??
+        addMs(inputbarTriggerToHomeSubmit, homeInputToFirstTextPaint),
+      homeInputToPendingShellMs: homeInputToPendingShell,
+      homeInputToPendingPreviewCommitMs: homeInputToPendingPreviewCommit,
+      homeInputToPendingPreviewPaintMs: homeInputToPendingPreviewPaint,
+      homeInputToSendDispatchMs: homeInputToSendDispatch,
       homeInputToSendPlanReadyMs: deltaMs(
         homeInputSubmit,
         homeInputSendPlanReady,
@@ -534,10 +648,7 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
         homeInputSubmit,
         streamRequestStart,
       ),
-      homeInputToSubmitAcceptedMs: deltaMs(
-        homeInputSubmit,
-        streamSubmitAccepted,
-      ),
+      homeInputToSubmitAcceptedMs: homeInputToSubmitAccepted,
       homeInputToFirstEventMs: deltaMs(homeInputSubmit, streamFirstEvent),
       homeInputToFirstRuntimeStatusMs: deltaMs(
         homeInputSubmit,
@@ -547,18 +658,12 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
         homeInputSubmit,
         streamFirstThinkingDelta,
       ),
-      homeInputToFirstTextDeltaMs: deltaMs(
-        homeInputSubmit,
-        streamFirstTextDelta,
-      ),
+      homeInputToFirstTextDeltaMs: homeInputToFirstTextDelta,
       homeInputToFirstTextRenderFlushMs: deltaMs(
         homeInputSubmit,
         streamFirstTextRenderFlush,
       ),
-      homeInputToFirstTextPaintMs: deltaMs(
-        homeInputSubmit,
-        streamFirstTextPaint,
-      ),
+      homeInputToFirstTextPaintMs: homeInputToFirstTextPaint,
       streamRequestStartToFirstTextPaintMs: deltaMs(
         streamRequestStart,
         streamFirstTextPaint,

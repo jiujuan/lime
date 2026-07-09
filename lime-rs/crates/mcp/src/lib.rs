@@ -4,6 +4,7 @@
 //! 使用 DynEmitter 进行事件发射，与具体桌面宿主解耦。
 
 pub mod auth_status;
+pub mod bridge_client;
 pub mod client;
 pub mod events;
 pub mod manager;
@@ -16,6 +17,7 @@ pub mod tool_policy;
 pub mod types;
 
 pub use auth_status::{McpServerAuthActionPlan, McpServerAuthStatus};
+pub use bridge_client::McpBridgeClient;
 pub use client::{LimeMcpClient, McpClientWrapper};
 pub use events::{
     McpOAuthCompletedPayload, McpResourceUpdatedPayload, McpResourcesUpdatedPayload,

@@ -41,6 +41,7 @@
 - Soul Style 输出面收敛计划：`internal/exec-plans/soul-style-output-surface-convergence-plan.md`
 - Browser Runtime / Right Surface 骨架实施计划：`internal/exec-plans/browser-runtime-right-surface-plan.md`
 - Lime 多模态运行合同实施计划：`internal/exec-plans/multimodal-runtime-contract-plan.md`
+- Approval HITL Decision Model 执行计划：`internal/exec-plans/approval-hitl-decision-model-plan.md`
 - 云端套餐与支付边界收口计划：`internal/exec-plans/cloud-commerce-user-center-boundary.md`
 - `@` 命令本地执行纠偏计划：`internal/exec-plans/at-command-local-execution-alignment-plan.md`
 - Agent QC 运营级测试体系执行计划：`internal/exec-plans/agent-qc-ops-testing-plan.md`

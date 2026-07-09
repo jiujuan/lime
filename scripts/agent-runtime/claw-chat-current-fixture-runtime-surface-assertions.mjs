@@ -1,4 +1,5 @@
 import {
+  LIVE_TAIL_COMMIT_PROMPT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MULTI_AGENT_TEAM_DONE_TEXT,
   MULTI_AGENT_TEAM_PROMPT,
@@ -46,7 +47,8 @@ export function buildReasoningFirstVisibleScenarioAssertions({
       summary.guiReasoningFirstVisibleCompleted?.textareaDisabled === false &&
       summary.guiReasoningFirstVisibleCompleted?.stopButtonVisible === false,
     readModelReasoningFirstVisibleCompleted:
-      summary.readModelReasoningFirstVisibleCompleted?.includesPrompt === true &&
+      summary.readModelReasoningFirstVisibleCompleted?.includesPrompt ===
+        true &&
       summary.readModelReasoningFirstVisibleCompleted?.latestTurnStatus ===
         "completed" &&
       summary.readModelReasoningFirstVisibleCompleted?.includesFinalText ===
@@ -56,9 +58,69 @@ export function buildReasoningFirstVisibleScenarioAssertions({
     readModelReasoningFirstVisibleItemObserved:
       summary.readModelReasoningFirstVisibleCompleted?.includesReasoningItem ===
         true &&
-      summary.readModelReasoningFirstVisibleCompleted?.reasoningItemCount >= 1 &&
+      summary.readModelReasoningFirstVisibleCompleted?.reasoningItemCount >=
+        1 &&
       summary.readModelReasoningFirstVisibleCompleted
         ?.reasoningSequenceBeforeFinal === true,
+  };
+}
+
+export function buildLiveTailCommitScenarioAssertions({
+  liveTailCommitTurnStart,
+  summary,
+}) {
+  return {
+    liveTailCommitPromptReachedBackend:
+      liveTailCommitTurnStart?.inputText === LIVE_TAIL_COMMIT_PROMPT,
+    guiLiveTailCommitInputSubmitted:
+      summary.liveTailCommitInputSend?.afterFill?.promptVisibleInTextarea ===
+        true && summary.liveTailCommitInputSend?.clicked?.clicked === true,
+    guiLiveTailFirstVisibleBeforeCommit:
+      summary.guiLiveTailFirstVisibleBeforeCommit?.hasPrompt === true &&
+      summary.guiLiveTailFirstVisibleBeforeCommit?.hasFirstText === true &&
+      summary.guiLiveTailFirstVisibleBeforeCommit?.hasDoneText === false &&
+      summary.guiLiveTailFirstVisibleBeforeCommit?.hasOverflowMarker ===
+        false &&
+      summary.guiLiveTailFirstVisibleBeforeCommit?.hasTableTail === false,
+    guiLiveTailRunningStatusPreserved:
+      summary.guiLiveTailFirstVisibleBeforeCommit?.runningStatusVisible ===
+        true &&
+      summary.guiLiveTailFirstVisibleBeforeCommit?.stopButtonVisible === true,
+    guiLiveTailNoStartupNote:
+      summary.guiLiveTailFirstVisibleBeforeCommit?.startupNoteVisible ===
+        false && summary.guiLiveTailVisualOracle?.startupNoteVisible === false,
+    guiLiveTailOverflowCommitted:
+      summary.guiLiveTailVisualOracle?.hasOverflowMarker === true &&
+      summary.guiLiveTailVisualOracle?.overflowCommitted === true &&
+      summary.guiLiveTailVisualOracle?.firstTextBeforeOverflow === true,
+    guiLiveTailTableTailVisible:
+      summary.guiLiveTailVisualOracle?.hasTableHeader === true &&
+      summary.guiLiveTailVisualOracle?.hasTableTail === true &&
+      summary.guiLiveTailVisualOracle?.markdownTableRendered === true &&
+      summary.guiLiveTailVisualOracle?.firstTextBeforeTableTail === true,
+    guiLiveTailScrollAnchorStable:
+      summary.guiLiveTailVisualOracle?.scrollAnchorStable === true,
+    guiLiveTailCompleted:
+      summary.guiLiveTailCompleted?.hasPrompt === true &&
+      (summary.guiLiveTailCompleted?.hasAssistantSummary === true ||
+        summary.guiLiveTailCompleted?.hasDoneText === true) &&
+      summary.guiLiveTailCompleted?.textareaVisible === true &&
+      summary.guiLiveTailCompleted?.textareaDisabled === false &&
+      summary.guiLiveTailCompleted?.stopButtonVisible === false,
+    readModelLiveTailCommitCompleted:
+      summary.readModelLiveTailCommitCompleted?.includesPrompt === true &&
+      summary.readModelLiveTailCommitCompleted?.latestTurnStatus ===
+        "completed" &&
+      summary.readModelLiveTailCommitCompleted?.includesFirstText === true &&
+      summary.readModelLiveTailCommitCompleted?.includesOverflowMarker ===
+        true &&
+      summary.readModelLiveTailCommitCompleted?.includesTableHeader === true &&
+      summary.readModelLiveTailCommitCompleted?.includesTableTail === true &&
+      summary.readModelLiveTailCommitCompleted?.includesAssistantDone === true,
+    backendLiveTailCommitRecorded:
+      summary.liveTailCommitBackendCompleted?.eventType === "turn.completed" &&
+      summary.liveTailCommitBackendCompleted?.turnId ===
+        liveTailCommitTurnStart?.turnId,
   };
 }
 
@@ -132,8 +194,8 @@ export function buildMediaReferenceScenarioAssertions({
       summary.guiMediaReferencePreview?.preview?.previewImageVisible === true &&
       summary.guiMediaReferencePreview?.preview
         ?.previewTextIncludesSidecarSource === false &&
-      summary.guiMediaReferencePreview?.preview?.bodyTextIncludesInlinePayload ===
-        false,
+      summary.guiMediaReferencePreview?.preview
+        ?.bodyTextIncludesInlinePayload === false,
     readModelMediaReferenceCompleted:
       summary.readModelMediaReferenceCompleted?.includesPrompt === true &&
       (summary.readModelMediaReferenceCompleted?.includesAssistantDone ===

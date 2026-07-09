@@ -3,52 +3,83 @@
 //! 将 aster 的 AskTool 回调桥接到 ActionRequiredManager，
 //! 通过 elicitation 事件把问题发送到前端并等待用户输入。
 
+use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
 use agent_runtime::ask::{
-    build_requested_schema, extract_response as extract_current_ask_response,
-    resolve_request_prompt, AskOption as CurrentAskOption, AskQuestion as CurrentAskQuestion,
-    AskRequest as CurrentAskRequest,
+    run_request_user_input, AskOption as CurrentAskOption, AskQuestion as CurrentAskQuestion,
+    AskRequest as CurrentAskRequest, RequestUserInputAction, RequestUserInputGateway,
+    RequestUserInputRunRequest,
 };
 use aster::action_required_manager::ActionRequiredManager;
-use aster::conversation::message::ActionRequiredScope;
+use aster::conversation::message::ActionRequiredScope as AsterActionRequiredScope;
 use aster::session_context::{current_action_scope, current_session_id};
 use aster::tools::ask::AskRequest;
 use aster::tools::AskCallback;
-#[cfg(test)]
-use serde_json::Value;
+use futures::future::BoxFuture;
 use std::time::Duration;
 
 const DEFAULT_ASK_TIMEOUT_SECS: u64 = 300;
+
+struct AsterActionRequiredGateway;
+
+impl RequestUserInputGateway for AsterActionRequiredGateway {
+    fn request_user_input<'a>(
+        &'a self,
+        action: RequestUserInputAction,
+    ) -> BoxFuture<'a, anyhow::Result<serde_json::Value>> {
+        Box::pin(async move {
+            ActionRequiredManager::global()
+                .request_and_wait_scoped(
+                    to_aster_action_scope(action.scope),
+                    action.prompt,
+                    action.requested_schema,
+                    action.timeout,
+                )
+                .await
+        })
+    }
+}
 
 /// 创建 AskTool 回调
 pub(crate) fn create_ask_callback() -> AskCallback {
     std::sync::Arc::new(|request: AskRequest| {
         Box::pin(async move {
             let current_request = project_ask_request(&request);
-            let prompt = resolve_request_prompt(&current_request);
-            let requested_schema = build_requested_schema(&current_request);
-            let scope = resolve_action_scope();
+            let run_request = RequestUserInputRunRequest::new(
+                current_request,
+                resolve_action_scope(),
+                Duration::from_secs(DEFAULT_ASK_TIMEOUT_SECS),
+            );
+            let gateway = AsterActionRequiredGateway;
 
-            match ActionRequiredManager::global()
-                .request_and_wait_scoped(
-                    scope,
-                    prompt.clone(),
-                    requested_schema,
-                    Duration::from_secs(DEFAULT_ASK_TIMEOUT_SECS),
-                )
-                .await
-            {
-                Ok(user_data) => extract_current_ask_response(&current_request, &user_data),
+            match run_request_user_input(&gateway, run_request).await {
+                Ok(response) => response,
                 Err(err) => {
                     tracing::warn!(
                         "[AgentRuntime][AskBridge] 用户输入等待失败: prompt='{}', err={}",
-                        prompt,
-                        err
+                        err.prompt(),
+                        err.message()
                     );
                     None
                 }
             }
         })
     })
+}
+
+fn to_aster_action_scope(scope: Option<RuntimeActionRequiredScope>) -> AsterActionRequiredScope {
+    scope
+        .map(|scope| AsterActionRequiredScope {
+            session_id: scope.session_id,
+            thread_id: scope.thread_id,
+            turn_id: scope.turn_id,
+        })
+        .unwrap_or_default()
+}
+
+fn project_aster_action_scope(
+    scope: AsterActionRequiredScope,
+) -> Option<RuntimeActionRequiredScope> {
+    RuntimeActionRequiredScope::from_parts(scope.session_id, scope.thread_id, scope.turn_id)
 }
 
 fn project_ask_request(request: &AskRequest) -> CurrentAskRequest {
@@ -76,40 +107,39 @@ fn project_ask_request(request: &AskRequest) -> CurrentAskRequest {
     }
 }
 
-fn resolve_action_scope() -> ActionRequiredScope {
-    current_action_scope().unwrap_or_else(|| {
-        let session_id = current_session_id();
-        ActionRequiredScope {
-            session_id: session_id.clone(),
-            thread_id: session_id,
-            turn_id: None,
-        }
-    })
-}
-
-/// 从前端回传的 user_data 中提取 AskTool 可消费的结构化答案。
-#[cfg(test)]
-fn extract_response(request: &AskRequest, user_data: &Value) -> Option<Value> {
-    extract_current_ask_response(&project_ask_request(request), user_data)
+fn resolve_action_scope() -> Option<RuntimeActionRequiredScope> {
+    current_action_scope()
+        .and_then(project_aster_action_scope)
+        .or_else(|| {
+            let session_id = current_session_id();
+            RuntimeActionRequiredScope::from_parts(session_id.clone(), session_id, None)
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use aster::session_context::{with_action_scope, with_session_id};
-    use aster::tools::ask::AskQuestion;
+    use aster::tools::ask::{AskOption, AskQuestion};
 
     #[tokio::test]
     async fn resolve_action_scope_prefers_runtime_scope() {
-        let scope = ActionRequiredScope {
+        let scope = AsterActionRequiredScope {
             session_id: Some("session-1".to_string()),
             thread_id: Some("thread-1".to_string()),
             turn_id: Some("turn-1".to_string()),
         };
 
-        let resolved = with_action_scope(scope.clone(), async { resolve_action_scope() }).await;
+        let resolved = with_action_scope(scope, async { resolve_action_scope() }).await;
 
-        assert_eq!(resolved, scope);
+        assert_eq!(
+            resolved,
+            Some(RuntimeActionRequiredScope {
+                session_id: Some("session-1".to_string()),
+                thread_id: Some("thread-1".to_string()),
+                turn_id: Some("turn-1".to_string()),
+            })
+        );
     }
 
     #[tokio::test]
@@ -121,16 +151,16 @@ mod tests {
 
         assert_eq!(
             resolved,
-            ActionRequiredScope {
+            Some(RuntimeActionRequiredScope {
                 session_id: Some("session-2".to_string()),
                 thread_id: Some("session-2".to_string()),
                 turn_id: None,
-            }
+            })
         );
     }
 
     #[test]
-    fn extract_response_projects_aster_request_to_current_ask_response() {
+    fn project_ask_request_preserves_aster_questions_for_current_runner() {
         let request = AskRequest {
             questions: vec![
                 AskQuestion::new("第一问"),
@@ -139,31 +169,25 @@ mod tests {
                     question: "第二问".to_string(),
                     header: Some("mode".to_string()),
                     options: vec![
-                        aster::tools::AskOption::with_label("auto", "自动执行"),
-                        aster::tools::AskOption::with_label("confirm", "确认后执行"),
+                        AskOption::with_label("auto", "自动执行"),
+                        AskOption::with_label("confirm", "确认后执行"),
                     ],
                     multi_select: false,
                 },
             ],
         };
 
-        let response = extract_response(
-            &request,
-            &serde_json::json!({
-                "question_1": "先看结构",
-                "mode": "确认后执行"
-            }),
-        )
-        .expect("expected normalized response");
+        let current = project_ask_request(&request);
 
+        assert_eq!(current.questions.len(), 2);
+        assert_eq!(current.questions[0].question, "第一问");
+        assert_eq!(current.questions[1].id.as_deref(), Some("mode"));
+        assert_eq!(current.questions[1].header.as_deref(), Some("mode"));
+        assert_eq!(current.questions[1].options[0].value, "auto");
         assert_eq!(
-            response,
-            serde_json::json!({
-                "answers": {
-                    "第一问": "先看结构",
-                    "第二问": "confirm"
-                }
-            })
+            current.questions[1].options[0].label.as_deref(),
+            Some("自动执行")
         );
+        assert!(!current.questions[1].multi_select);
     }
 }

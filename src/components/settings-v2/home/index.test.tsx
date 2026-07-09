@@ -50,27 +50,6 @@ function getBodyText() {
   return document.body.textContent ?? "";
 }
 
-async function hoverTip(ariaLabel: string) {
-  const trigger = document.body.querySelector(
-    `button[aria-label='${ariaLabel}']`,
-  );
-  expect(trigger).toBeInstanceOf(HTMLButtonElement);
-
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    await Promise.resolve();
-  });
-
-  return trigger as HTMLButtonElement;
-}
-
-async function leaveTip(trigger: HTMLButtonElement | null) {
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
-    await Promise.resolve();
-  });
-}
-
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -165,12 +144,12 @@ describe("SettingsHomePage", () => {
     expect(text).not.toContain("settings.home");
   });
 
-  it("应使用 settings namespace 生成分组说明 aria", () => {
+  it("不再渲染分组说明 tip aria", () => {
     const { container } = renderPage();
 
     expect(
       container.querySelector("button[aria-label='General help']"),
-    ).toBeInstanceOf(HTMLButtonElement);
+    ).toBeNull();
     expect(
       container.querySelector("button[aria-label='General说明']"),
     ).toBeNull();
@@ -248,21 +227,20 @@ describe("SettingsHomePage", () => {
     expect(onNavigate).toHaveBeenCalledWith("resources");
   });
 
-  it("应把首页说明和常用入口说明收进 tips", async () => {
+  it("不再把首页说明和常用入口说明收进 tips", () => {
     renderPage();
 
     expect(getBodyText()).not.toContain(
       "Quickly open common settings and review each group without digging through nested menus.",
     );
-
-    const heroTip = await hoverTip("Settings home help");
-    expect(getBodyText()).toContain(
-      "Quickly open common settings and review each group without digging through nested menus.",
+    expect(
+      document.body.querySelector("button[aria-label='Settings home help']"),
+    ).toBeNull();
+    expect(
+      document.body.querySelector("button[aria-label='Appearance help']"),
+    ).toBeNull();
+    expect(getBodyText()).not.toContain(
+      "Theme, interface language, and reply language",
     );
-    await leaveTip(heroTip);
-
-    const cardTip = await hoverTip("Appearance help");
-    expect(getBodyText()).toContain("Theme, interface language, and sound cues");
-    await leaveTip(cardTip);
   });
 });

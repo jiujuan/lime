@@ -60,6 +60,13 @@ impl RuntimeCore {
             .await
     }
 
+    pub async fn transcribe_voice_audio(
+        &self,
+        params: VoiceTranscriptionTranscribeAudioParams,
+    ) -> Result<VoiceTranscriptionTranscribeAudioResponse, RuntimeCoreError> {
+        self.app_data_source.transcribe_voice_audio(params).await
+    }
+
     pub async fn list_voice_instructions(
         &self,
     ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {

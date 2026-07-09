@@ -5,8 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetConfig = vi.fn();
 const mockSaveConfig = vi.fn();
 const mockSetLanguage = vi.fn();
-const mockSetSoundEnabled = vi.fn();
-const mockPlayToolcallSound = vi.fn();
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: () => mockGetConfig(),
@@ -16,14 +14,6 @@ vi.mock("@/lib/api/appConfig", () => ({
 vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
   useI18nPatch: () => ({
     setLanguage: mockSetLanguage,
-  }),
-}));
-
-vi.mock("@/contexts/useSoundContext", () => ({
-  useSoundContext: () => ({
-    soundEnabled: true,
-    setSoundEnabled: mockSetSoundEnabled,
-    playToolcallSound: mockPlayToolcallSound,
   }),
 }));
 
@@ -82,27 +72,6 @@ function getBodyText() {
   return document.body.textContent ?? "";
 }
 
-async function hoverTip(ariaLabel: string) {
-  const trigger = document.body.querySelector(
-    `button[aria-label='${ariaLabel}']`,
-  );
-  expect(trigger).toBeInstanceOf(HTMLButtonElement);
-
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    await Promise.resolve();
-  });
-
-  return trigger as HTMLButtonElement;
-}
-
-async function leaveTip(trigger: HTMLButtonElement | null) {
-  await act(async () => {
-    trigger?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
-    await Promise.resolve();
-  });
-}
-
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -139,8 +108,6 @@ afterEach(() => {
   mockGetConfig.mockReset();
   mockSaveConfig.mockReset();
   mockSetLanguage.mockReset();
-  mockSetSoundEnabled.mockReset();
-  mockPlayToolcallSound.mockReset();
 
   while (mounted.length > 0) {
     const target = mounted.pop();
@@ -173,13 +140,13 @@ describe("AppearanceSettings", () => {
 
     expect(text).toContain("外观");
     expect(text).toContain(
-      "管理主题、界面语言、回复语言、提示音效和推荐行为。",
+      "管理主题、界面语言、回复语言和推荐行为。",
     );
     expect(text).toContain("主题：跟随系统");
     expect(text).toContain("配色：墨绿");
     expect(text).toContain("界面：简体中文");
     expect(text).toContain("回复：自动判断");
-    expect(text).toContain("提示音效：已开启");
+    expect(text).not.toContain("提示音效");
     expect(text).toContain("基础外观");
     expect(text).toContain("主题模式");
     expect(text).toContain("色彩方案");
@@ -223,7 +190,7 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("Palette: Graphite Green");
     expect(text).toContain("UI: English");
     expect(text).toContain("Reply: Auto");
-    expect(text).toContain("Sound cues: On");
+    expect(text).not.toContain("Sound cues");
     expect(text).toContain("Base Appearance");
     expect(text).toContain("Theme Mode");
     expect(text).toContain("Color Palette");
@@ -404,38 +371,26 @@ describe("AppearanceSettings", () => {
     expect(container.textContent ?? "").toContain("主题：深色");
   });
 
-  it("应把首屏和基础外观说明收进 tips", async () => {
+  it("不再把首屏和基础外观说明收进 tips", async () => {
     await renderPage();
 
     expect(getBodyText()).not.toContain(
-      "管理主题、界面语言、回复语言、提示音效，以及推荐问题的上下文带入方式。",
+      "管理主题、界面语言、回复语言，以及推荐问题的上下文带入方式。",
     );
     expect(getBodyText()).not.toContain(
-      "先确定全局主题、界面语言和声音反馈，再统一工作区里的视觉节奏。",
+      "先确定全局主题、界面语言和回复语言，再统一工作区里的视觉节奏。",
     );
-
-    const heroTip = await hoverTip("外观设置总览说明");
-    expect(getBodyText()).toContain(
-      "管理主题、界面语言、回复语言、提示音效，以及推荐问题的上下文带入方式。",
-    );
-    await leaveTip(heroTip);
-
-    const sectionTip = await hoverTip("基础外观说明");
-    expect(getBodyText()).toContain(
-      "先确定全局主题、界面语言和声音反馈，再统一工作区里的视觉节奏。",
-    );
-    await leaveTip(sectionTip);
-
-    const languageTip = await hoverTip("界面语言说明");
-    expect(getBodyText()).toContain(
-      "只切换界面显示语言；不影响回复语言、浏览器站点语言或内容产物目标语言。",
-    );
-    await leaveTip(languageTip);
-
-    const responseLanguageTip = await hoverTip("回复语言说明");
-    expect(getBodyText()).toContain(
-      "控制对话默认回复语言；不影响界面语言、浏览器站点语言或内容产物目标语言。",
-    );
-    await leaveTip(responseLanguageTip);
+    expect(
+      document.body.querySelector("button[aria-label='外观设置总览说明']"),
+    ).toBeNull();
+    expect(
+      document.body.querySelector("button[aria-label='基础外观说明']"),
+    ).toBeNull();
+    expect(
+      document.body.querySelector("button[aria-label='界面语言说明']"),
+    ).toBeNull();
+    expect(
+      document.body.querySelector("button[aria-label='回复语言说明']"),
+    ).toBeNull();
   });
 });

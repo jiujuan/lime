@@ -303,7 +303,8 @@ async fn action_response_writes_workflow_resume_audit_with_worker_lifecycle_meta
             session_id: "sess_action_resume_lifecycle".to_string(),
             request_id: "article-draft-review".to_string(),
             action_type: AgentSessionActionType::AskUser,
-            confirmed: true,
+            decision: None,
+            confirmed: Some(true),
             response: Some("decision text must stay out of workflow audit".to_string()),
             user_data: Some(json!({
                 "notes": "private reviewer details"

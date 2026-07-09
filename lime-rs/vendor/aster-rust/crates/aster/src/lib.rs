@@ -21,7 +21,6 @@ pub mod media;
 pub mod model;
 pub mod network;
 pub mod oauth;
-pub mod parser;
 pub mod permission;
 pub mod plan;
 pub mod posthog;

@@ -41,6 +41,8 @@ impl RuntimeEventSink for CollectingRuntimeEventSink {
 
 fn workflow_resume_audit_events_from_action_response(
     params: &AgentSessionActionRespondParams,
+    decision: Option<AgentSessionApprovalDecision>,
+    confirmed: bool,
 ) -> Vec<RuntimeEvent> {
     let Some(metadata) = params.metadata.as_ref() else {
         return Vec::new();
@@ -48,17 +50,19 @@ fn workflow_resume_audit_events_from_action_response(
     let Some(binding) = workflow_resume_binding_from_action_metadata(metadata) else {
         return Vec::new();
     };
-    let decision = if params.confirmed {
-        "approved"
-    } else {
-        "rejected"
-    };
+    let decision_text = decision
+        .map(|decision| decision.as_str())
+        .unwrap_or_else(|| if confirmed { "approved" } else { "rejected" });
+    let decision_scope = decision.map(|decision| decision.scope()).unwrap_or("once");
+    let status_decision = if confirmed { "approved" } else { "rejected" };
     let base_payload = json!({
         "workflowRunId": binding.workflow_run_id,
         "workflowKey": binding.workflow_key,
         "stepId": binding.step_id,
         "actionId": params.request_id,
-        "decision": decision,
+        "decision": decision_text,
+        "decisionScope": decision_scope,
+        "statusDecision": status_decision,
         "status": "resuming",
         "source": "agentSession/action/respond",
     });
@@ -307,6 +311,16 @@ impl RuntimeCore {
         self.prepare_memory_prompt_context(&mut params).await;
         self.prepare_session_compaction_prompt_context(&mut params);
         self.prepare_media_prompt_context(&mut params);
+        let session_approval_cache_entry = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            super::approval_cache::apply_hint_to_turn_start(
+                &state.session_approval_cache,
+                &mut params,
+            )
+        };
 
         if let Some(capability_id) = params
             .runtime_options
@@ -519,6 +533,18 @@ impl RuntimeCore {
             ) {
                 sink.emit(event)?;
             }
+            if let Some(entry) = session_approval_cache_entry.as_ref() {
+                sink.emit(RuntimeEvent::new(
+                    "approval.session_cache.hit",
+                    json!({
+                        "backend": "runtime_core",
+                        "decision": entry.decision.as_str(),
+                        "decisionScope": entry.decision.scope(),
+                        "sourceRequestId": &entry.request_id,
+                        "key": super::approval_cache::entry_key_metadata(entry),
+                    }),
+                ))?;
+            }
             let materialize_plugin_activation =
                 self.should_materialize_plugin_activation_turn(&request);
             let mut deferred_turn_completed = Vec::new();
@@ -573,6 +599,18 @@ impl RuntimeCore {
                 request.metadata.as_ref(),
             ) {
                 sink.emit(event)?;
+            }
+            if let Some(entry) = session_approval_cache_entry.as_ref() {
+                sink.emit(RuntimeEvent::new(
+                    "approval.session_cache.hit",
+                    json!({
+                        "backend": "runtime_core",
+                        "decision": entry.decision.as_str(),
+                        "decisionScope": entry.decision.scope(),
+                        "sourceRequestId": &entry.request_id,
+                        "key": super::approval_cache::entry_key_metadata(entry),
+                    }),
+                ))?;
             }
             let materialize_plugin_activation =
                 self.should_materialize_plugin_activation_turn(&request);
@@ -719,6 +757,16 @@ impl RuntimeCore {
                 }),
             )],
         )?;
+        {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            super::approval_cache::remove_session(
+                &mut state.session_approval_cache,
+                &session.session_id,
+            );
+        }
         if !events.is_empty() {
             if let Some(event_log_writer) = self.event_log_writer.as_deref() {
                 let workflow_audit_records = event_log_writer
@@ -789,8 +837,27 @@ impl RuntimeCore {
         params: AgentSessionActionRespondParams,
         host: RuntimeHostContext,
     ) -> Result<RuntimeCoreOutput<AgentSessionActionRespondResponse>, RuntimeCoreError> {
+        let decision = match params.action_type {
+            AgentSessionActionType::ToolConfirmation => Some(params.decision.ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "tool_confirmation action/respond requires decision".to_string(),
+                )
+            })?),
+            AgentSessionActionType::AskUser | AgentSessionActionType::Elicitation => {
+                if params.decision.is_some() {
+                    return Err(RuntimeCoreError::Backend(
+                        "approval decision is only valid for tool_confirmation action/respond"
+                            .to_string(),
+                    ));
+                }
+                None
+            }
+        };
+        let confirmed = decision
+            .map(AgentSessionApprovalDecision::confirmed)
+            .unwrap_or_else(|| params.confirmed.unwrap_or(false));
         let workflow_resume_audit_events =
-            workflow_resume_audit_events_from_action_response(&params);
+            workflow_resume_audit_events_from_action_response(&params, decision, confirmed);
         let action_turn_id = params
             .action_scope
             .as_ref()
@@ -820,7 +887,7 @@ impl RuntimeCore {
                 super::permission_state_projection::should_cancel_denied_permission_action(
                     stored,
                     &request_id,
-                    params.confirmed,
+                    decision.is_some_and(AgentSessionApprovalDecision::is_cancel),
                 );
             (
                 stored.session.clone(),
@@ -829,16 +896,35 @@ impl RuntimeCore {
             )
         };
 
+        let session_approval_cache_entry = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get(&params.session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
+            super::approval_cache::entry_from_action_response(
+                stored,
+                &request_id,
+                decision,
+                params.action_scope.clone(),
+                super::timestamp(),
+            )
+        };
+
         let mut sink = CollectingRuntimeEventSink::default();
         self.backend
             .respond_action(
                 ActionRespondRequest {
-                    host,
+                    host: host.clone(),
                     session: session.clone(),
                     turn: turn_snapshot.clone(),
                     request_id: request_id.clone(),
                     action_type: params.action_type,
-                    confirmed: params.confirmed,
+                    decision,
+                    confirmed,
                     response: params.response,
                     user_data: params.user_data,
                     metadata: params.metadata,
@@ -848,7 +934,26 @@ impl RuntimeCore {
                 &mut sink,
             )
             .await?;
-        if cancel_denied_permission_action {
+        let backend_cancel_requested = decision
+            .is_some_and(AgentSessionApprovalDecision::is_cancel)
+            && turn_snapshot
+                .as_ref()
+                .is_some_and(|turn| agent_turn_is_active(turn.status));
+        if backend_cancel_requested {
+            self.backend
+                .cancel_turn(
+                    CancelExecutionRequest {
+                        host,
+                        session: session.clone(),
+                        turn: turn_snapshot
+                            .clone()
+                            .expect("active turn snapshot must exist for approval cancel"),
+                    },
+                    &mut sink,
+                )
+                .await?;
+        }
+        if cancel_denied_permission_action && !backend_cancel_requested {
             sink.emit(RuntimeEvent::new(
                 "turn.canceled",
                 json!({
@@ -871,6 +976,27 @@ impl RuntimeCore {
             turn_snapshot.as_ref().map(|turn| turn.turn_id.as_str()),
             workflow_resume_audit_events,
         )?;
+        if let Some(entry) = session_approval_cache_entry {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            super::approval_cache::insert_entry(
+                &mut state.session_approval_cache,
+                &params.session_id,
+                entry,
+            );
+        }
+        if decision.is_some_and(AgentSessionApprovalDecision::is_cancel) {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            super::approval_cache::remove_session(
+                &mut state.session_approval_cache,
+                &params.session_id,
+            );
+        }
 
         Ok(RuntimeCoreOutput {
             response: AgentSessionActionRespondResponse {},

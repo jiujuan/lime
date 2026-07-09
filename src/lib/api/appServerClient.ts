@@ -19,6 +19,7 @@ import {
   handleAppServerJsonLines,
 } from "./appServerTransport";
 import type {
+  AppServerDrainEventsRequest,
   AppServerInitializeParams,
   AppServerInitializeResponse,
   AppServerJsonRpcMessage,
@@ -123,8 +124,12 @@ export class AppServerClient {
     return decodeAppServerMessages(response.lines);
   }
 
-  async drainEvents(limit?: number): Promise<AppServerJsonRpcMessage[]> {
-    const response = await drainAppServerEvents({ limit });
+  async drainEvents(
+    request?: number | AppServerDrainEventsRequest,
+  ): Promise<AppServerJsonRpcMessage[]> {
+    const drainRequest =
+      typeof request === "number" ? { limit: request } : (request ?? {});
+    const response = await drainAppServerEvents(drainRequest);
     return decodeAppServerMessages(response.lines);
   }
 }

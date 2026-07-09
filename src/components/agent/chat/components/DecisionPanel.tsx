@@ -227,7 +227,10 @@ function normalizeToolConfirmationRisk(
 function normalizeToolConfirmationRiskReason(
   value?: string,
 ): ToolConfirmationRiskReason | undefined {
-  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   if (!normalized) return undefined;
   if (
     normalized === "destructive" ||
@@ -268,7 +271,10 @@ function normalizeToolConfirmationRiskReason(
 function normalizeToolConfirmationScopeKind(
   value?: string,
 ): ToolConfirmationScopeKind | undefined {
-  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   if (!normalized) return undefined;
   if (
     normalized === "path" ||
@@ -362,8 +368,12 @@ function readStructuredToolConfirmationImpactSummary(
   }
 
   const riskReasonRaw =
-    readStringFact(facts, ["risk_reason", "riskReason", "reason", "category"]) ||
-    readStringFact(args, ["risk_reason", "riskReason"]);
+    readStringFact(facts, [
+      "risk_reason",
+      "riskReason",
+      "reason",
+      "category",
+    ]) || readStringFact(args, ["risk_reason", "riskReason"]);
   const riskReason = normalizeToolConfirmationRiskReason(riskReasonRaw);
   const riskReasonText = readStringFact(facts, [
     "risk_reason_label",
@@ -440,7 +450,11 @@ function resolveToolConfirmationArgumentRows(
   };
 
   pushKnown("command", labels.command, ["command", "cmd", "script", "code"]);
-  pushKnown("cwd", labels.cwd, ["cwd", "working_directory", "workingDirectory"]);
+  pushKnown("cwd", labels.cwd, [
+    "cwd",
+    "working_directory",
+    "workingDirectory",
+  ]);
   pushKnown("path", labels.path, [
     "path",
     "file",
@@ -523,7 +537,12 @@ function resolveToolConfirmationImpactSummary(
     };
   }
 
-  const command = readArgumentPreview(args, ["command", "cmd", "script", "code"]);
+  const command = readArgumentPreview(args, [
+    "command",
+    "cmd",
+    "script",
+    "code",
+  ]);
   const cwd = readArgumentPreview(args, [
     "cwd",
     "working_directory",
@@ -895,7 +914,10 @@ function isDeniedSubmittedAnswer(value: string | undefined): boolean {
 }
 
 function isReadOnlyImportedDecision(value: string | undefined): boolean {
-  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   return normalized === "imported_read_only";
 }
 
@@ -1150,10 +1172,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
         confirmed: false,
         response: "用户拒绝了请求",
         actionType: request.actionType,
-        userData:
-          request.actionType === "tool_confirmation"
-            ? undefined
-            : ("" as const),
+        userData: "" as const,
       },
       { key: "deny", kind: "deny" },
     );
@@ -1165,19 +1184,19 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
       : isRuntimeActionConfirmation
         ? t("agentChat.decisionPanel.runtimePermission.submittedTitle")
         : isImportedReadOnlyToolConfirmation
-        ? t("agentChat.decisionPanel.permission.importedReadOnlyTitle")
-        : request.actionType === "tool_confirmation"
-        ? t("agentChat.decisionPanel.permissionHandledTitle")
-        : t("agentChat.decisionPanel.submittedTitle");
+          ? t("agentChat.decisionPanel.permission.importedReadOnlyTitle")
+          : request.actionType === "tool_confirmation"
+            ? t("agentChat.decisionPanel.permissionHandledTitle")
+            : t("agentChat.decisionPanel.submittedTitle");
     const submittedClassName = isQueued
       ? "border-sky-200 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/20"
       : isImportedReadOnlyToolConfirmation
         ? "border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/20"
-      : request.actionType === "tool_confirmation"
-        ? "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
-        : request.actionType === "elicitation"
-          ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20"
-          : "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20";
+        : request.actionType === "tool_confirmation"
+          ? "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
+          : request.actionType === "elicitation"
+            ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20"
+            : "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20";
 
     return (
       <Card className={submittedClassName} {...requestAnchorProps}>
@@ -1194,15 +1213,17 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
             </p>
           )}
 
-          {request.questions && request.questions.length > 0 && !isToolConfirmation && (
-            <div className="space-y-1">
-              {request.questions.map((question, index) => (
-                <p key={index} className="text-sm text-foreground">
-                  {question.question}
-                </p>
-              ))}
-            </div>
-          )}
+          {request.questions &&
+            request.questions.length > 0 &&
+            !isToolConfirmation && (
+              <div className="space-y-1">
+                {request.questions.map((question, index) => (
+                  <p key={index} className="text-sm text-foreground">
+                    {question.question}
+                  </p>
+                ))}
+              </div>
+            )}
 
           {isImportedReadOnlyToolConfirmation ? (
             <div className="space-y-2 rounded-md border bg-background/80 px-3 py-2 text-sm">
@@ -1262,7 +1283,9 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
                 </div>
                 <div className="rounded-lg border border-border bg-background px-3 py-2">
                   <div className="text-xs font-medium text-muted-foreground">
-                    {t("agentChat.decisionPanel.permission.authorization.label")}
+                    {t(
+                      "agentChat.decisionPanel.permission.authorization.label",
+                    )}
                   </div>
                   <p className="mt-1 text-xs leading-5 text-foreground">
                     {toolConfirmationImpactSummary.authorizationText ??
@@ -1299,7 +1322,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
                   ? t(
                       "agentChat.decisionPanel.permission.importedReadOnlyDescription",
                     )
-                : t("agentChat.decisionPanel.submittedDescription")}
+                  : t("agentChat.decisionPanel.submittedDescription")}
           </p>
         </CardContent>
       </Card>
@@ -1589,7 +1612,7 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
     );
   }
 
-  // 渲染工具确认面板
+  // pending tool_confirmation 的提交入口只允许在输入区 approval prompt。
   return (
     <Card
       className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
@@ -1741,38 +1764,11 @@ export function DecisionPanel({ request, onSubmit }: DecisionPanelProps) {
           </details>
         )}
 
-        {/* 操作按钮 */}
-        <div className="flex gap-2 pt-2">
-          <Button
-            size="sm"
-            onClick={handleAllow}
-            className="border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] text-white shadow-sm shadow-emerald-950/15 hover:opacity-95"
-            disabled={isSubmitting}
-          >
-            {submissionState?.key === "allow" ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle className="mr-1 h-4 w-4" />
-            )}
-            {submissionState?.key === "allow"
-              ? t("agentChat.decisionPanel.action.processing")
-              : t("agentChat.decisionPanel.action.allow")}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDeny}
-            disabled={isSubmitting}
-          >
-            {submissionState?.key === "deny" ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : (
-              <XCircle className="mr-1 h-4 w-4" />
-            )}
-            {submissionState?.key === "deny"
-              ? t("agentChat.decisionPanel.action.processing")
-              : t("agentChat.decisionPanel.action.deny")}
-          </Button>
+        <div
+          className="rounded-lg border border-amber-100 bg-amber-100/60 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"
+          data-testid="decision-panel-tool-confirmation-readonly"
+        >
+          {t("agentChat.decisionPanel.permission.inputbarOnlyHint")}
         </div>
       </CardContent>
     </Card>

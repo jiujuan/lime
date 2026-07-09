@@ -1,9 +1,13 @@
 import {
+  APPROVAL_REQUEST_CANCEL_SCENARIO,
+  APPROVAL_REQUEST_DECLINE_SCENARIO,
   ASSISTANT_DONE_TEXT,
+  APPROVAL_REQUEST_RESUME_SCENARIO,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
+  ELECTRON_RESIZE_REFLOW_SCENARIO,
   EXPERT_SKILLS_RUNTIME_SESSION_ID,
   EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
   GOAL_DONE_TEXT,
@@ -13,6 +17,7 @@ import {
   INPUTBAR_PENDING_STEER_POP_FRONT_RESUME_SCENARIO,
   INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO,
   INPUTBAR_RICH_RESTORE_SCENARIO,
+  LIVE_TAIL_COMMIT_SCENARIO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MULTI_AGENT_TEAM_DONE_TEXT,
@@ -36,6 +41,10 @@ import {
   TERMINAL_FAILED_AFTER_ANSWER_SCENARIO,
   TERMINAL_STALE_GUARD_SCENARIO,
 } from "./claw-chat-current-fixture-constants.mjs";
+import {
+  runApprovalRequestDecisionScenario,
+  runApprovalRequestResumeScenario,
+} from "./claw-chat-current-fixture-approval-resume.mjs";
 import { runContentFactoryArticleWorkspaceScenario } from "./claw-chat-current-fixture-content-factory-article-workspace.mjs";
 import { runContentFactoryInlineImageArticleWorkspaceScenario } from "./claw-chat-current-fixture-inline-image-article-workspace.mjs";
 import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
@@ -44,15 +53,16 @@ import {
   enableGoalModeFromGui,
   enablePlanModeFromGui,
 } from "./claw-chat-current-fixture-gui-input-modes.mjs";
-import {
-  runInputbarRichRestoreScenario,
-} from "./claw-chat-current-fixture-inputbar-rich-restore.mjs";
+import { runInputbarRichRestoreScenario } from "./claw-chat-current-fixture-inputbar-rich-restore.mjs";
 import {
   runInputbarPendingSteerMultiQueueScenario,
   runInputbarPendingSteerPopFrontResumeScenario,
   runInputbarPendingSteerRichRestoreScenario,
 } from "./claw-chat-current-fixture-inputbar-pending-steer.mjs";
+import { runLiveTailCommitScenario } from "./claw-chat-current-fixture-live-tail.mjs";
+import { runElectronResizeReflowScenario } from "./claw-chat-current-fixture-resize-reflow.mjs";
 import {
+  countTextOccurrences,
   waitForGuiChatCanceled,
   waitForGuiChatCompleted,
   waitForGuiPlanCompleted,
@@ -109,6 +119,87 @@ function collectReadModelThreadItems(readModel) {
     ? readModel.detail.thread_read.thread_items
     : [];
   return [...detailItems, ...threadReadItems].filter(Boolean);
+}
+
+const STREAM_PARSER_BOUNDARY_DEDUPE_GUARDS = [
+  "今日国际新闻简要整理",
+  "全球市场继续关注能源",
+  "国际组织呼吁",
+];
+
+function readContentPartsText(value) {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+  return value
+    .map((part) => {
+      if (typeof part === "string") {
+        return part;
+      }
+      if (typeof part?.text === "string") {
+        return part.text;
+      }
+      if (typeof part?.content === "string") {
+        return part.content;
+      }
+      return "";
+    })
+    .join("");
+}
+
+function collectReadModelAssistantTexts(readModel) {
+  const items = collectReadModelThreadItems(readModel);
+  const itemTexts = items
+    .filter((item) => item?.type === "agent_message")
+    .map((item) => {
+      const directText =
+        typeof item?.text === "string"
+          ? item.text
+          : typeof item?.content === "string"
+            ? item.content
+            : "";
+      const contentPartsText =
+        readContentPartsText(item?.contentParts) ||
+        readContentPartsText(item?.content_parts);
+      return directText || contentPartsText;
+    });
+  const messageGroups = [
+    readModel?.detail?.messages,
+    readModel?.detail?.thread_read?.messages,
+    readModel?.detail?.threadRead?.messages,
+  ].filter(Array.isArray);
+  const messageTexts = messageGroups.flatMap((messages) =>
+    messages
+      .filter((message) => message?.role === "assistant")
+      .map(
+        (message) =>
+          readContentPartsText(message?.content) ||
+          readContentPartsText(message?.contentParts) ||
+          readContentPartsText(message?.content_parts) ||
+          (typeof message?.text === "string" ? message.text : ""),
+      ),
+  );
+  return [...itemTexts, ...messageTexts].filter((text) => text.trim());
+}
+
+function summarizeStreamParserBoundaryReadModel(readModel) {
+  const assistantTexts = collectReadModelAssistantTexts(readModel);
+  const longestAssistantText = assistantTexts.reduce(
+    (current, next) => (next.length > current.length ? next : current),
+    "",
+  );
+  const guardHits = STREAM_PARSER_BOUNDARY_DEDUPE_GUARDS.map((text) => ({
+    text,
+    occurrences: countTextOccurrences(longestAssistantText, text),
+  }));
+  return {
+    assistantTextCandidateCount: assistantTexts.length,
+    longestAssistantTextLength: longestAssistantText.length,
+    guardHits,
+    noDuplicateFinalText:
+      longestAssistantText.length > 0 &&
+      guardHits.every((hit) => hit.occurrences === 1),
+  };
 }
 
 function summarizeReasoningFirstVisibleReadModel(readModel) {
@@ -257,6 +348,37 @@ export async function executeScenarioFlow({
         workspace,
         appServerRequests,
         sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+      }),
+    );
+  } else if (options.scenario === APPROVAL_REQUEST_RESUME_SCENARIO) {
+    Object.assign(
+      summary,
+      await runApprovalRequestResumeScenario({
+        page,
+        options,
+        workspace,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
+      }),
+    );
+  } else if (
+    options.scenario === APPROVAL_REQUEST_DECLINE_SCENARIO ||
+    options.scenario === APPROVAL_REQUEST_CANCEL_SCENARIO
+  ) {
+    Object.assign(
+      summary,
+      await runApprovalRequestDecisionScenario({
+        page,
+        options,
+        workspace,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
+        decision:
+          options.scenario === APPROVAL_REQUEST_CANCEL_SCENARIO
+            ? "cancel"
+            : "decline",
       }),
     );
   } else if (options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO) {
@@ -484,6 +606,31 @@ export async function executeScenarioFlow({
       ),
     );
 
+    await recordAgentUiPerformanceTraceEvidence(summary, page);
+  } else if (options.scenario === LIVE_TAIL_COMMIT_SCENARIO) {
+    Object.assign(
+      summary,
+      await runLiveTailCommitScenario({
+        page,
+        options,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
+      }),
+    );
+    await recordAgentUiPerformanceTraceEvidence(summary, page);
+  } else if (options.scenario === ELECTRON_RESIZE_REFLOW_SCENARIO) {
+    Object.assign(
+      summary,
+      await runElectronResizeReflowScenario({
+        page,
+        options,
+        workspace,
+        appServerRequests,
+        runtimeEnv,
+        logStage,
+      }),
+    );
     await recordAgentUiPerformanceTraceEvidence(summary, page);
   } else if (options.scenario === TERMINAL_FAILED_AFTER_ANSWER_SCENARIO) {
     Object.assign(
@@ -770,9 +917,14 @@ export async function executeScenarioFlow({
     !isImageIntentScenario &&
     options.scenario !== MEDIA_REFERENCE_SCENARIO &&
     options.scenario !== REASONING_FIRST_VISIBLE_SCENARIO &&
+    options.scenario !== LIVE_TAIL_COMMIT_SCENARIO &&
+    options.scenario !== ELECTRON_RESIZE_REFLOW_SCENARIO &&
     options.scenario !== TERMINAL_FAILED_AFTER_ANSWER_SCENARIO &&
     options.scenario !== TERMINAL_CANCELED_AFTER_ANSWER_SCENARIO &&
     options.scenario !== TERMINAL_STALE_GUARD_SCENARIO &&
+    options.scenario !== APPROVAL_REQUEST_RESUME_SCENARIO &&
+    options.scenario !== APPROVAL_REQUEST_DECLINE_SCENARIO &&
+    options.scenario !== APPROVAL_REQUEST_CANCEL_SCENARIO &&
     options.scenario !== "web-tools-rendering" &&
     options.scenario !== "mcp-structured-content" &&
     options.scenario !== MULTI_AGENT_TEAM_SCENARIO &&
@@ -795,13 +947,14 @@ export async function executeScenarioFlow({
     const defaultSummaryText = "今日国际新闻简要整理";
     const summaryText =
       soulStyleExpectedTexts?.summaryText ?? defaultSummaryText;
+    const completionWaitOptions =
+      soulStyleExpectedTexts ??
+      (options.scenario === "complete"
+        ? { dedupeGuardTexts: STREAM_PARSER_BOUNDARY_DEDUPE_GUARDS }
+        : undefined);
     logStage("wait-gui-completed");
     summary.guiCompleted = sanitizeJson(
-      await waitForGuiChatCompleted(
-        page,
-        options,
-        soulStyleExpectedTexts ?? undefined,
-      ),
+      await waitForGuiChatCompleted(page, options, completionWaitOptions),
     );
 
     logStage("wait-read-model-completed");
@@ -832,6 +985,12 @@ export async function executeScenarioFlow({
       includesAssistantSummary: JSON.stringify(
         readModelCompleted || {},
       ).includes(summaryText),
+      ...(options.scenario === "complete"
+        ? {
+            streamParserBoundary:
+              summarizeStreamParserBoundaryReadModel(readModelCompleted),
+          }
+        : {}),
     });
 
     if (options.scenario !== SOUL_STYLE_SCENARIO) {
