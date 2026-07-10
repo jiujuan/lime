@@ -4,6 +4,7 @@ import {
   filterConversationThreadItems,
   mergeThreadItems,
 } from "../utils/threadTimelineView";
+import { messageHasInterruptedPlaceholder } from "./agentInterruptedMessageContent";
 
 export type AgentSessionDetailMergeMode =
   | "history_hydrate"
@@ -85,6 +86,7 @@ export function hasAssistantActivitySnapshot(messages: Message[]): boolean {
         Boolean(message.runtimeStatus) ||
         Boolean(message.thinkingContent?.trim()) ||
         Boolean(message.contentParts?.some((part) => part.type !== "text")) ||
+        messageHasInterruptedPlaceholder(message) ||
         Boolean(message.runtimeTurnId?.trim().startsWith("skill-exec-")) ||
         message.inlineProcessRetention === "skill"),
   );
@@ -170,13 +172,18 @@ function readArray(record: Record<string, unknown>, keys: string[]): unknown[] {
 
 function normalizeStatus(value: unknown): string {
   return typeof value === "string"
-    ? value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_")
     : "";
 }
 
 function isTerminalTimelineStatus(status: unknown): boolean {
   const normalizedStatus = normalizeStatus(status);
-  return Boolean(normalizedStatus) && !ACTIVE_TIMELINE_STATUSES.has(normalizedStatus);
+  return (
+    Boolean(normalizedStatus) && !ACTIVE_TIMELINE_STATUSES.has(normalizedStatus)
+  );
 }
 
 function hasTerminalStatusInRecord(

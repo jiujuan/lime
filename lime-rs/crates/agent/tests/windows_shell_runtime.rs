@@ -3,8 +3,7 @@
 use std::ffi::OsString;
 use std::sync::{Mutex, MutexGuard};
 
-use aster::tools::{BashTool, Tool, ToolContext};
-use serde_json::json;
+use tool_runtime::shell_runtime::build_platform_shell_command;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -49,33 +48,27 @@ async fn bash_tool_runs_nested_powershell_when_path_omits_shell() {
     let temp_dir = tempfile::tempdir().expect("temp dir should be created");
     let target_dir = temp_dir.path().join("UCpin");
     let target_dir_ps = target_dir.to_string_lossy().replace('\'', "''");
-    let context = ToolContext::new(temp_dir.path().to_path_buf());
-    let result = BashTool::new()
-        .execute(
-            json!({
-                "command": format!(
-                    r#"powershell -Command "mkdir -p '{}'; Write-Output lime-shell-runtime-ci""#,
-                    target_dir_ps
-                ),
-                "timeout": 10
-            }),
-            &context,
-        )
+    let mut command = build_platform_shell_command(&format!(
+        r#"powershell -Command "mkdir -p '{}'; Write-Output lime-shell-runtime-ci""#,
+        target_dir_ps
+    ));
+    let output = command
+        .current_dir(temp_dir.path())
+        .output()
         .await
-        .expect("BashTool should execute through Windows PowerShell fallback");
+        .expect("platform shell should execute through Windows PowerShell fallback");
 
     assert!(
-        result.is_success(),
-        "expected shell command to succeed, got: {:?}",
-        result
+        output.status.success(),
+        "expected shell command to succeed, status: {:?}, stdout: {}, stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        result
-            .message()
-            .unwrap_or("")
-            .contains("lime-shell-runtime-ci"),
-        "expected command output in result, got: {:?}",
-        result
+        stdout.contains("lime-shell-runtime-ci"),
+        "expected command output in stdout, got: {stdout}"
     );
     assert!(
         target_dir.is_dir(),

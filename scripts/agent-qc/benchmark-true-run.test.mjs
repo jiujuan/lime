@@ -127,6 +127,56 @@ function makeDeepSweManifest(rootDir, taskId = "ytt-jsonpath-query-api") {
   };
 }
 
+function makeCurrentChainEvidence({
+  suiteId = "terminal-bench-release-slice",
+  taskId = "hello-world",
+} = {}) {
+  return {
+    schemaVersion: "benchmark-current-chain-evidence-v1",
+    suiteId,
+    taskId,
+    appServer: {
+      method: "agentSession/turn/start",
+      invoked: true,
+      sessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    },
+    evidenceExport: {
+      method: "evidence/export",
+      invoked: true,
+      pack: {
+        session_id: "session-1",
+        thread_id: "thread-1",
+        workspace_root: "/tmp/lime-workspace",
+        pack_relative_root: ".lime/harness/sessions/session-1/evidence",
+        pack_absolute_root: "/tmp/lime-workspace/.lime/harness/sessions/session-1/evidence",
+        exported_at: "2026-07-09T00:00:00.000Z",
+        thread_status: "completed",
+        latest_turn_status: "completed",
+        turn_count: 1,
+        item_count: 2,
+        pending_request_count: 0,
+        queued_turn_count: 0,
+        recent_artifact_count: 1,
+        known_gaps: [],
+        observability_summary: {
+          schemaVersion: "runtime-evidence-pack.v1",
+          source: "app-server-current",
+          sessionId: "session-1",
+          threadId: "thread-1",
+        },
+        artifacts: [],
+      },
+    },
+    externalVerifier: {
+      invoked: true,
+      verdict: "pass",
+      reward: 1,
+    },
+  };
+}
+
 function makeRunner(results) {
   return (command, args, options = {}) => {
     const key = `${command} ${args.join(" ")}`;
@@ -158,6 +208,10 @@ describe("benchmark true-run", () => {
       manifest,
       suite: manifest.suites[0],
       taskId: "hello-world",
+      currentChainEvidence: {
+        schemaVersion: "benchmark-current-chain-evidence-load-error-v1",
+        loadError: "missing fixture",
+      },
       commandRunner: makeRunner({
         "uv --version": { status: 0, stdout: "uv 0.9.8\n" },
         "docker --version": { status: 1, error: "ENOENT" },
@@ -175,9 +229,20 @@ describe("benchmark true-run", () => {
       providerInvoked: false,
       verifierInvoked: false,
       trueRunInvoked: false,
+      currentChain: {
+        target: "lime_app_server_current",
+        appServerMethod: "agentSession/turn/start",
+        evidenceExportMethod: "evidence/export",
+        externalVerifier: true,
+        invoked: false,
+        evidenceExportInvoked: false,
+      },
     });
     expect(report.blockers.map((blocker) => blocker.id)).toEqual(
       expect.arrayContaining(["docker_cli", "terminal_bench_runner_entry"]),
+    );
+    expect(report.blockers.map((blocker) => blocker.id)).not.toContain(
+      "lime_current_chain_evidence",
     );
     expect(report.checks).toEqual(
       expect.arrayContaining([
@@ -234,6 +299,90 @@ describe("benchmark true-run", () => {
         phase: "adapter",
       }),
     ]);
+  });
+
+  it("preflight ready 但 current-chain evidence 无效时生成 blocked evidence", () => {
+    const root = makeTempDir();
+    const sourceRoot = path.join(root, "sources", "terminal-bench");
+    writeGitHead(sourceRoot);
+    writeTerminalBenchTask(sourceRoot);
+    const manifest = makeTerminalManifest(root);
+
+    const report = buildTrueRunReport({
+      manifest,
+      suite: manifest.suites[0],
+      taskId: "hello-world",
+      currentChainEvidence: {
+        schemaVersion: "benchmark-current-chain-evidence-load-error-v1",
+        loadError: "missing current-chain evidence",
+      },
+      commandRunner: makeRunner({
+        "uv --version": { status: 0, stdout: "uv 0.9.8\n" },
+        "docker --version": { status: 0, stdout: "Docker version test\n" },
+        "docker info --format {{json .ServerVersion}}": {
+          status: 0,
+          stdout: "\"27.0.0\"\n",
+        },
+        "tb --help": { status: 0, stdout: "tb help\n" },
+      }),
+    });
+
+    expect(report.verdict).toBe("blocked");
+    expect(report.blockers).toEqual([
+      expect.objectContaining({
+        id: "lime_current_chain_evidence",
+        phase: "adapter",
+        reason: expect.stringContaining("current_chain_evidence_invalid"),
+      }),
+    ]);
+  });
+
+  it("preflight ready 且导入 current-chain evidence 时生成 ready true-run evidence", () => {
+    const root = makeTempDir();
+    const sourceRoot = path.join(root, "sources", "terminal-bench");
+    const outputDir = path.join(root, "runs", "hello-world");
+    writeGitHead(sourceRoot);
+    writeTerminalBenchTask(sourceRoot);
+    const manifest = makeTerminalManifest(root);
+
+    const report = buildTrueRunReport({
+      manifest,
+      suite: manifest.suites[0],
+      taskId: "hello-world",
+      currentChainEvidence: makeCurrentChainEvidence(),
+      commandRunner: makeRunner({
+        "uv --version": { status: 0, stdout: "uv 0.9.8\n" },
+        "docker --version": { status: 0, stdout: "Docker version test\n" },
+        "docker info --format {{json .ServerVersion}}": {
+          status: 0,
+          stdout: "\"27.0.0\"\n",
+        },
+        "tb --help": { status: 0, stdout: "tb help\n" },
+      }),
+    });
+    writeTrueRunArtifacts(report, outputDir);
+    const verifier = JSON.parse(
+      fs.readFileSync(path.join(outputDir, "verifier-result.json"), "utf8"),
+    );
+
+    expect(report.verdict).toBe("ready");
+    expect(report.blockers).toEqual([]);
+    expect(report.execution).toMatchObject({
+      currentChainInvoked: true,
+      trueRunInvoked: true,
+      verifierInvoked: true,
+      currentChain: {
+        appServerMethod: "agentSession/turn/start",
+        evidenceExportMethod: "evidence/export",
+        evidenceExportInvoked: true,
+        sessionId: "session-1",
+        turnId: "turn-1",
+      },
+    });
+    expect(verifier).toMatchObject({
+      verifierInvoked: true,
+      verdict: "ready",
+    });
   });
 
   it("DeepSWE blocked true-run 生成 patch / reward / ctrf / replay 占位证据，但不伪造 pass", () => {

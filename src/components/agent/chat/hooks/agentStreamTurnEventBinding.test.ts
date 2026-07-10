@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   type AppServerJsonRpcNotification,
@@ -21,9 +22,14 @@ function noopDispatch<T>() {
 }
 
 describe("agentStreamTurnEventBinding", () => {
-  afterEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
+  afterEach(async () => {
     vi.useRealTimers();
     activityLogger.clear();
+    await changeLimeLocale("zh-CN");
   });
 
   it("应登记 request start 日志并返回 turn listener", async () => {

@@ -180,6 +180,217 @@ async fn append_external_runtime_events_synthesizes_tool_start_for_first_llm_too
 }
 
 #[tokio::test]
+async fn append_external_runtime_events_synthesizes_tool_start_for_first_runtime_tool_input_delta()
+{
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_runtime_tool_input_delta_start",
+        "thread_runtime_tool_input_delta_start",
+        "turn_runtime_tool_input_delta_start",
+    )
+    .await;
+
+    let appended = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "tool.input.delta",
+                json!({
+                    "type": "tool_input_delta",
+                    "tool_id": "call_runtime_first_delta",
+                    "tool_name": "Read",
+                    "delta": "{\"file_path\":\"README.md\"",
+                    "accumulated_arguments": "{\"file_path\":\"README.md\"",
+                    "provider": "openai",
+                    "backend": "runtime",
+                    "runtimeEvent": {
+                        "type": "tool_input_delta",
+                        "tool_id": "call_runtime_first_delta",
+                        "tool_name": "Read",
+                        "delta": "{\"file_path\":\"README.md\"",
+                        "accumulated_arguments": "{\"file_path\":\"README.md\"",
+                        "provider": "openai"
+                    }
+                }),
+            )],
+        )
+        .expect("first runtime tool input delta should synthesize tool.started");
+
+    assert_eq!(appended.len(), 2);
+    assert_eq!(appended[0].event_type, "tool.started");
+    assert_eq!(
+        appended[0].payload["toolCallId"].as_str(),
+        Some("call_runtime_first_delta")
+    );
+    assert_eq!(appended[0].payload["toolName"].as_str(), Some("Read"));
+    assert_eq!(
+        appended[0].payload["source"].as_str(),
+        Some("runtime_tool_input_delta")
+    );
+    assert_eq!(appended[0].payload["backend"].as_str(), Some("runtime"));
+    assert_eq!(appended[1].event_type, "tool.input.delta");
+}
+
+#[tokio::test]
+async fn append_external_runtime_events_skips_runtime_tool_start_after_synthetic_input_delta_start()
+{
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_runtime_tool_input_delta_duplicate_start",
+        "thread_runtime_tool_input_delta_duplicate_start",
+        "turn_runtime_tool_input_delta_duplicate_start",
+    )
+    .await;
+
+    core.append_external_runtime_events(
+        &session_id,
+        Some(&turn_id),
+        vec![RuntimeEvent::new(
+            "tool.input.delta",
+            json!({
+                "type": "tool_input_delta",
+                "tool_id": "call_runtime_duplicate_start",
+                "tool_name": "Read",
+                "delta": "{\"path\":\"README.md\"}",
+                "accumulated_arguments": "{\"path\":\"README.md\"}",
+                "provider": "openai_compatible",
+                "backend": "runtime",
+                "runtimeEvent": {
+                    "type": "tool_input_delta",
+                    "tool_id": "call_runtime_duplicate_start",
+                    "tool_name": "Read",
+                    "delta": "{\"path\":\"README.md\"}",
+                    "accumulated_arguments": "{\"path\":\"README.md\"}",
+                    "provider": "openai_compatible"
+                }
+            }),
+        )],
+    )
+    .expect("runtime tool input delta should synthesize tool.started");
+
+    let appended = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![
+                RuntimeEvent::new(
+                    "tool.started",
+                    json!({
+                        "type": "tool_start",
+                        "tool_id": "call_runtime_duplicate_start",
+                        "tool_name": "Read",
+                        "arguments": "{\"path\":\"README.md\"}",
+                        "backend": "runtime",
+                        "runtimeEvent": {
+                            "type": "tool_start",
+                            "tool_id": "call_runtime_duplicate_start",
+                            "tool_name": "Read",
+                            "arguments": "{\"path\":\"README.md\"}"
+                        }
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "tool.args",
+                    json!({
+                        "toolCallId": "call_runtime_duplicate_start",
+                        "toolName": "Read",
+                        "args": { "path": "README.md" },
+                        "source": "runtime_tool_start"
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "tool.result",
+                    json!({
+                        "toolCallId": "call_runtime_duplicate_start",
+                        "toolName": "Read",
+                        "output": "ok"
+                    }),
+                ),
+            ],
+        )
+        .expect("runtime duplicate tool.started after synthetic start should be idempotent");
+
+    assert_eq!(
+        appended
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["tool.args", "tool.result"]
+    );
+}
+
+#[tokio::test]
+async fn append_external_runtime_events_rejects_duplicate_runtime_tool_start_without_synthetic_start(
+) {
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_runtime_tool_start_duplicate_without_synthetic",
+        "thread_runtime_tool_start_duplicate_without_synthetic",
+        "turn_runtime_tool_start_duplicate_without_synthetic",
+    )
+    .await;
+
+    core.append_external_runtime_events(
+        &session_id,
+        Some(&turn_id),
+        vec![RuntimeEvent::new(
+            "tool.started",
+            json!({
+                "toolCallId": "call_runtime_duplicate_without_synthetic",
+                "toolName": "Read",
+                "backend": "runtime",
+                "runtimeEvent": {
+                    "type": "tool_start",
+                    "tool_id": "call_runtime_duplicate_without_synthetic",
+                    "tool_name": "Read"
+                }
+            }),
+        )],
+    )
+    .expect("first runtime tool.started should append");
+    let before = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read before duplicate start");
+    let before_event_count = core
+        .events_for_session(&session_id)
+        .expect("events before duplicate start")
+        .len();
+
+    let error = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "call_runtime_duplicate_without_synthetic",
+                    "toolName": "Read",
+                    "backend": "runtime",
+                    "runtimeEvent": {
+                        "type": "tool_start",
+                        "tool_id": "call_runtime_duplicate_without_synthetic",
+                        "tool_name": "Read"
+                    }
+                }),
+            )],
+        )
+        .expect_err("duplicate runtime tool.started without synthetic start must fail closed");
+
+    match error {
+        RuntimeCoreError::Backend(message) => {
+            assert!(message.contains("agent runtime event sequence validation failed"));
+            assert!(message.contains("tool_started_already_active"));
+        }
+        other => panic!("expected backend sequence validation error, got {other:?}"),
+    }
+
+    assert_runtime_state_unchanged(&core, &session_id, &before, before_event_count);
+}
+
+#[tokio::test]
 async fn append_external_runtime_events_rejects_tool_output_delta_without_started_tool() {
     let (core, session_id, turn_id) = runtime_with_active_turn(
         "sess_tool_output_lifecycle",

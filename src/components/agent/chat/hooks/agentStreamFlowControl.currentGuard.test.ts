@@ -238,7 +238,10 @@ describe("agentStreamFlowControl current runtime boundary", () => {
       ],
       [
         "useAgentSession.ts",
-        new Set(["setQueuedTurns(snapshot.queuedTurns);"]),
+        new Set([
+          "setQueuedTurns(stableSnapshot.queuedTurns);",
+          "setQueuedTurns(snapshot.queuedTurns);",
+        ]),
       ],
     ]);
 

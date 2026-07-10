@@ -1,8 +1,7 @@
 use crate::conversation::message::ActionRequiredScope;
-use crate::mcp_utils::ToolResult;
 use crate::providers::base::Provider;
 use crate::session::TurnContextOverride;
-use rmcp::model::{CallToolResult, Tool};
+use rmcp::model::{CallToolResult, ErrorData, Tool};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::future::Future;
@@ -13,6 +12,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Type alias for the tool result channel receiver
+pub type ToolResult<T> = Result<T, ErrorData>;
 pub type ToolResultReceiver = Arc<Mutex<mpsc::Receiver<(String, ToolResult<CallToolResult>)>>>;
 
 // We use double Arc here to allow easy provider swaps while sharing concurrent access

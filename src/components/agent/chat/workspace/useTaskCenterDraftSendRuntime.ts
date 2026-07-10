@@ -124,6 +124,8 @@ interface UseTaskCenterEmptyStateSendRuntimeParams {
   setHomePendingPreviewRequest: Dispatch<
     SetStateAction<TaskCenterDraftSendRequest | null>
   >;
+  materializedSessionIdsRef?: MutableRefObject<Map<string, string>>;
+  prewarmedDraftSessionIdsRef?: MutableRefObject<Set<string>>;
   onNonMaterializedSessionReady?: (
     sessionId: string,
     options?: { sourceDraftTabId?: string | null },
@@ -236,6 +238,8 @@ export function useTaskCenterEmptyStateSendRuntime({
   setTaskCenterDraftSendRequest,
   taskCenterDraftSendRequest,
   setHomePendingPreviewRequest,
+  materializedSessionIdsRef,
+  prewarmedDraftSessionIdsRef,
   onNonMaterializedSessionReady,
 }: UseTaskCenterEmptyStateSendRuntimeParams): InputbarSendHandler {
   const homeSendInFlightRef = useRef(false);
@@ -295,6 +299,10 @@ export function useTaskCenterEmptyStateSendRuntime({
             },
           ),
         };
+        const shouldUseMaterializedDraftDispatch =
+          materializedSessionIdsRef?.current.has(activeDraftTabId) ||
+          prewarmedDraftSessionIdsRef?.current.has(activeDraftTabId) ||
+          false;
         recordAgentUiPerformanceMetric("homeInput.submit", {
           hasDraftTab: true,
           inputbarHandlerToHomeSubmitMs: Math.max(
@@ -311,13 +319,17 @@ export function useTaskCenterEmptyStateSendRuntime({
         });
         const request: TaskCenterDraftSendRequest = {
           id: requestId,
-          draftTabId: requestId,
+          draftTabId: shouldUseMaterializedDraftDispatch
+            ? activeDraftTabId
+            : requestId,
           text,
           images,
           sendOptions: tracedSendOptions,
           submittedAt,
-          materializeDraft: false,
-          dispatchState: "dispatched",
+          materializeDraft: shouldUseMaterializedDraftDispatch,
+          dispatchState: shouldUseMaterializedDraftDispatch
+            ? undefined
+            : "dispatched",
           source: "task-center-empty-state",
           triggerSource,
         };
@@ -338,6 +350,17 @@ export function useTaskCenterEmptyStateSendRuntime({
           setHomePendingPreviewRequest(request);
         });
         pendingShell.refresh();
+        if (request.materializeDraft) {
+          recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
+            durationMs: Date.now() - submittedAt,
+            requestId,
+            sessionId: activeDraftTabId,
+            source: "task-center-empty-state",
+            workspaceId: taskCenterWorkspaceId,
+          });
+          return;
+        }
+
         scheduleAfterNextPaint(() => {
           setTaskCenterDraftTabs((current) =>
             markTaskCenterDraftTabRunning({
@@ -742,8 +765,10 @@ export function useTaskCenterEmptyStateSendRuntime({
       handleSend,
       hasDisplayMessages,
       input,
+      materializedSessionIdsRef,
       sessionId,
       onNonMaterializedSessionReady,
+      prewarmedDraftSessionIdsRef,
       setHomePendingPreviewRequest,
       setInput,
       setTaskCenterDraftSendRequest,

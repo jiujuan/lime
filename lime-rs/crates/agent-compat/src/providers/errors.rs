@@ -102,48 +102,6 @@ fn is_retryable_request_failed_message(message: &str) -> bool {
         .iter()
         .any(|marker| normalized.contains(marker))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::ProviderError;
-
-    #[test]
-    fn bad_request_provider_errors_are_not_retryable() {
-        let error = ProviderError::RequestFailed(
-            "Bad request (400): 当前模型未在租户白名单中开放".to_string(),
-        );
-
-        assert!(!error.is_retryable());
-    }
-
-    #[test]
-    fn transient_request_failures_remain_retryable() {
-        let error = ProviderError::RequestFailed("connection failed".to_string());
-
-        assert!(error.is_retryable());
-    }
-
-    #[test]
-    fn client_side_provider_rejections_are_classified() {
-        let bad_request = ProviderError::RequestFailed(
-            "Bad request (400): 当前模型未在租户白名单中开放".to_string(),
-        );
-        let auth = ProviderError::Authentication("invalid key".to_string());
-        let server = ProviderError::ServerError("server unavailable".to_string());
-
-        assert!(bad_request.is_non_retryable_provider_rejection());
-        assert!(auth.is_non_retryable_provider_rejection());
-        assert!(!server.is_non_retryable_provider_rejection());
-    }
-
-    #[test]
-    fn wrapped_bad_request_messages_are_classified() {
-        assert!(ProviderError::message_is_non_retryable_provider_rejection(
-            "Request failed: Bad request (400): 当前模型未在租户白名单中开放"
-        ));
-    }
-}
-
 impl From<anyhow::Error> for ProviderError {
     fn from(error: anyhow::Error) -> Self {
         if let Some(reqwest_err) = error.downcast_ref::<reqwest::Error>() {

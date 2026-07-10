@@ -15,19 +15,14 @@
       "title": "快速卫生与确定性单测",
       "objective": "用最快入口发现 lint、type、unit、Rust 定向测试中的确定性错误。",
       "gatePolicy": "普通代码改动默认执行；docs-only 可跳过。",
-      "defaultCommands": [
-        "npm run verify:local"
-      ]
+      "defaultCommands": ["npm run verify:local"]
     },
     {
       "id": "L1-contract-bridge",
       "title": "契约、Bridge 与治理护栏",
       "objective": "验证前端调用、Rust 注册、DevBridge、mock、治理目录册和 harness 合同保持一致。",
       "gatePolicy": "命令、Bridge、runtime gateway、mock 或 QC manifest/schema 改动必须执行。",
-      "defaultCommands": [
-        "npm run test:contracts",
-        "npm run test:bridge"
-      ]
+      "defaultCommands": ["npm run test:contracts", "npm run test:bridge"]
     },
     {
       "id": "L2-agent-runtime",
@@ -54,10 +49,7 @@
       "title": "Agent 行为评测与回归样本",
       "objective": "用 replay、grader、语义评测和趋势报告发现 Agent 行为退化。",
       "gatePolicy": "Agent 行为、prompt、Skill、工具选择策略或长期运营回归默认进入 nightly；高风险改动需本地抽跑。",
-      "defaultCommands": [
-        "npm run harness:eval",
-        "npm run harness:eval:trend"
-      ]
+      "defaultCommands": ["npm run harness:eval", "npm run harness:eval:trend"]
     },
     {
       "id": "L5-release-ops",
@@ -76,12 +68,8 @@
       "title": "命令桥接四侧一致",
       "risk": "P0",
       "executor": "npm_command",
-      "lanes": [
-        "L1-contract-bridge"
-      ],
-      "commands": [
-        "npm run test:contracts"
-      ],
+      "lanes": ["L1-contract-bridge"],
+      "commands": ["npm run test:contracts"],
       "goal": "验证 safeInvoke/invoke、Electron host、App Server JSON-RPC、legacy adapter、agentCommandCatalog、mockPriorityCommands/defaultMocks 不漂移。",
       "verifier": "test:contracts 成功；失败时能指出具体缺失侧；不得出现新增 compat/dead 回流；若本轮没有命令面变更，checked surface counts + contract diff empty 可满足 surface evidence。",
       "evidenceRequired": [
@@ -89,9 +77,7 @@
         "checked command surfaces summary or changed command surfaces",
         "failure side summary or no-failure side summary"
       ],
-      "evidenceLayers": [
-        "deterministic-smoke"
-      ],
+      "evidenceLayers": ["deterministic-smoke"],
       "failureModes": [
         "frontend-only command",
         "missing rust handler",
@@ -105,13 +91,8 @@
       "title": "Claw 首屏、聊天、流式与中断",
       "risk": "P0",
       "executor": "mixed",
-      "lanes": [
-        "L2-agent-runtime",
-        "L3-product-surface"
-      ],
-      "commands": [
-        "npm run verify:gui-smoke"
-      ],
+      "lanes": ["L2-agent-runtime", "L3-product-surface"],
+      "commands": ["npm run verify:gui-smoke"],
       "goal": "启动 Lime 后验证 workspace ready、发起一次聊天、看到流式增量、可中断并能继续下一轮。",
       "verifier": "GUI 状态、DevBridge、runtime transcript、console/network 都有证据；不能只以截图或单测通过判定。",
       "evidenceRequired": [
@@ -139,10 +120,7 @@
       "title": "工具调用、Approval 与 Sandbox 边界",
       "risk": "P0",
       "executor": "runtime_harness",
-      "lanes": [
-        "L2-agent-runtime",
-        "L4-behavior-eval"
-      ],
+      "lanes": ["L2-agent-runtime", "L4-behavior-eval"],
       "commands": [
         "npm run smoke:agent-runtime-tool-surface",
         "npm run smoke:agent-runtime-approval-sandbox"
@@ -155,10 +133,7 @@
         "sandbox policy",
         "error recovery transcript"
       ],
-      "evidenceLayers": [
-        "deterministic-smoke",
-        "runtime-transcript"
-      ],
+      "evidenceLayers": ["deterministic-smoke", "runtime-transcript"],
       "failureModes": [
         "approval bypass",
         "tool result missing",
@@ -167,15 +142,57 @@
       ]
     },
     {
-      "id": "skill-forge-register-bind-enable",
-      "title": "Skill Forge 生成、校验、注册、绑定与显式启用",
+      "id": "coding-workflow-current-chain",
+      "title": "Coding 工作流 current 主链",
       "risk": "P0",
       "executor": "mixed",
       "lanes": [
         "L1-contract-bridge",
         "L2-agent-runtime",
+        "L3-product-surface",
         "L4-behavior-eval"
       ],
+      "commands": [
+        "npm run smoke:agent-runtime-tool-execution -- --batch coding-current-tools",
+        "npm run smoke:agent-runtime-current-fixture",
+        "npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs"
+      ],
+      "goal": "验证 Lime coding 能力走 Codex-first Thread/Turn/Item、App Server JSON-RPC、tool lifecycle、workspace diff、Evidence Pack 和 replay/regression 主链，而不是依赖 DeepSWE 或 Aster compat 工具面。",
+      "verifier": "必须看到 agentSession/turn/start、Read/apply_patch/Glob/Grep/Bash provider request、真实工具执行结果、patch/file 产物、command output、coding event projection、Evidence Pack 导出和失败晋升 replay/regression 的证据；deterministic fixture 必须声明 liveProviderUsed=false，不能伪装成外部 benchmark pass。",
+      "evidenceRequired": [
+        "provider tool request includes Read/apply_patch/Glob/Grep/Bash",
+        "runtime transcript with tool request/result/error recovery",
+        "patch/file artifact, command output, and workspace diff or file checkpoint diff",
+        "coding lifecycle events for command/apply_patch/file_changed/test output",
+        "App Server Evidence Pack from evidence/export",
+        "replay/regression promotion record for any fixed coding failure",
+        "GUI session owner / isolation statement",
+        "liveProviderUsed=false statement for deterministic fixture"
+      ],
+      "evidenceLayers": [
+        "deterministic-smoke",
+        "gui-trace",
+        "runtime-transcript",
+        "release-artifact"
+      ],
+      "failureModes": [
+        "provider request missing coding tools",
+        "tool result missing",
+        "patch/file artifact missing",
+        "workspace diff or checkpoint diff missing",
+        "App Server Evidence Pack missing",
+        "mock fallback mistaken as real path",
+        "tool_search current registration policy regression",
+        "Aster compat tool surface mistaken as current owner",
+        "test failure not promoted to replay/regression"
+      ]
+    },
+    {
+      "id": "skill-forge-register-bind-enable",
+      "title": "Skill Forge 生成、校验、注册、绑定与显式启用",
+      "risk": "P0",
+      "executor": "mixed",
+      "lanes": ["L1-contract-bridge", "L2-agent-runtime", "L4-behavior-eval"],
       "commands": [
         "npm run test:contracts",
         "npm run smoke:agent-service-skill-entry"
@@ -188,10 +205,7 @@
         "runtime binding projection",
         "SkillTool gate transcript request/decision/result/source metadata"
       ],
-      "evidenceLayers": [
-        "deterministic-smoke",
-        "runtime-transcript"
-      ],
+      "evidenceLayers": ["deterministic-smoke", "runtime-transcript"],
       "failureModes": [
         "registered equals executable",
         "metadata auto-enables skill",
@@ -204,11 +218,7 @@
       "title": "专家 Skills Runtime 与 Evidence Pack 复盘",
       "risk": "P1",
       "executor": "mixed",
-      "lanes": [
-        "L2-agent-runtime",
-        "L3-product-surface",
-        "L4-behavior-eval"
-      ],
+      "lanes": ["L2-agent-runtime", "L3-product-surface", "L4-behavior-eval"],
       "commands": [
         "node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario expert-panel-skills-runtime --prefix claw-chat-current-fixture-expert-panel-skills-runtime-agent-qc --timeout-ms 180000"
       ],
@@ -247,10 +257,7 @@
       "title": "浏览器运行时与站点适配器",
       "risk": "P0",
       "executor": "mixed",
-      "lanes": [
-        "L2-agent-runtime",
-        "L3-product-surface"
-      ],
+      "lanes": ["L2-agent-runtime", "L3-product-surface"],
       "commands": [
         "npm run smoke:browser-runtime",
         "npm run smoke:site-adapters"
@@ -265,10 +272,7 @@
         "cleanup warning classified",
         "GUI session owner / isolation statement"
       ],
-      "evidenceLayers": [
-        "deterministic-smoke",
-        "gui-trace"
-      ],
+      "evidenceLayers": ["deterministic-smoke", "gui-trace"],
       "failureModes": [
         "session leak",
         "adapter catalog drift",
@@ -283,10 +287,7 @@
       "title": "Knowledge 导入、检索与引用总结",
       "risk": "P1",
       "executor": "mixed",
-      "lanes": [
-        "L3-product-surface",
-        "L4-behavior-eval"
-      ],
+      "lanes": ["L3-product-surface", "L4-behavior-eval"],
       "commands": [
         "npm run smoke:knowledge-gui",
         "npm run knowledge:product-e2e"
@@ -310,13 +311,8 @@
       "title": "Workspace ready 与会话恢复",
       "risk": "P0",
       "executor": "npm_command",
-      "lanes": [
-        "L3-product-surface"
-      ],
-      "commands": [
-        "npm run smoke:workspace-ready",
-        "npm run verify:gui-smoke"
-      ],
+      "lanes": ["L3-product-surface"],
+      "commands": ["npm run smoke:workspace-ready", "npm run verify:gui-smoke"],
       "goal": "验证默认 workspace 准备态、会话恢复、关键面板基础可用。",
       "verifier": "workspace-ready smoke 和 GUI smoke 都通过；失败时能定位到 Bridge、文件系统、状态恢复或 UI 层。",
       "evidenceRequired": [
@@ -326,10 +322,7 @@
         "design canvas project roundtrip save/open evidence",
         "GUI session owner / isolation statement"
       ],
-      "evidenceLayers": [
-        "deterministic-smoke",
-        "gui-trace"
-      ],
+      "evidenceLayers": ["deterministic-smoke", "gui-trace"],
       "failureModes": [
         "workspace init failed",
         "session restore stale",
@@ -344,10 +337,7 @@
       "title": "Team Runtime 创建、通信与清理",
       "risk": "P1",
       "executor": "runtime_harness",
-      "lanes": [
-        "L1-contract-bridge",
-        "L2-agent-runtime"
-      ],
+      "lanes": ["L1-contract-bridge", "L2-agent-runtime"],
       "commands": [
         "npm run test:contracts",
         "npm run smoke:agent-runtime-tool-surface-page"
@@ -372,13 +362,8 @@
       "title": "自动化任务触发、重试、取消与状态回放",
       "risk": "P1",
       "executor": "mixed",
-      "lanes": [
-        "L2-agent-runtime",
-        "L4-behavior-eval"
-      ],
-      "commands": [
-        "npm run verify:local"
-      ],
+      "lanes": ["L2-agent-runtime", "L4-behavior-eval"],
+      "commands": ["npm run verify:local"],
       "goal": "验证调度任务不会静默失败，连续失败、冷却恢复、取消和状态回放都有证据。",
       "verifier": "必须看到任务状态机、失败计数、重试/取消动作和用户可见状态；不能只看后台日志。",
       "evidenceRequired": [
@@ -399,13 +384,8 @@
       "title": "Harness Replay 样本与趋势回归",
       "risk": "P0",
       "executor": "npm_command",
-      "lanes": [
-        "L4-behavior-eval"
-      ],
-      "commands": [
-        "npm run harness:eval",
-        "npm run harness:eval:trend"
-      ],
+      "lanes": ["L4-behavior-eval"],
+      "commands": ["npm run harness:eval", "npm run harness:eval:trend"],
       "goal": "验证固定 replay 样本、工作区发现、grader 合同和 trend 摘要不退化。",
       "verifier": "summary/trend 产物存在且 current/degraded observability gap 角色清晰。",
       "evidenceRequired": [
@@ -414,10 +394,7 @@
         "invalid case list",
         "observability outcome summary"
       ],
-      "evidenceLayers": [
-        "deterministic-smoke",
-        "runtime-transcript"
-      ],
+      "evidenceLayers": ["deterministic-smoke", "runtime-transcript"],
       "failureModes": [
         "fixture invalid",
         "grader contract drift",
@@ -430,10 +407,7 @@
       "title": "qcloop 批量执行、独立质检与返修闭环",
       "risk": "P1",
       "executor": "qcloop",
-      "lanes": [
-        "L4-behavior-eval",
-        "L5-release-ops"
-      ],
+      "lanes": ["L4-behavior-eval", "L5-release-ops"],
       "commands": [
         "npm run agent-qc:report",
         "npm run agent-qc:export-evidence -- --job-json ./tmp/qcloop-job.json --items-json ./tmp/qcloop-items.json --check"
@@ -479,14 +453,8 @@
       "title": "发布包安装、启动与首屏冒烟",
       "risk": "P0",
       "executor": "release_workflow",
-      "lanes": [
-        "L3-product-surface",
-        "L5-release-ops"
-      ],
-      "commands": [
-        "npm run verify:app-version",
-        "npm run verify:gui-smoke"
-      ],
+      "lanes": ["L3-product-surface", "L5-release-ops"],
+      "commands": ["npm run verify:app-version", "npm run verify:gui-smoke"],
       "goal": "发布前验证版本一致、启动冒烟、首屏 ready、Bridge health 和发布阻断条件可被 release gate 复核。",
       "verifier": "verify:app-version 与 GUI startup smoke 成功；如无真实安装包 artifact，应明确记录为 source-tree startup smoke，不能把它伪装成 installer 验证；在明确声明 source-tree startup scope 且未伪装 installer 时，artifact missing 应判 excluded；release Evidence Pack 覆盖由 release-summary gate 单独强制。",
       "evidenceRequired": [
@@ -497,10 +465,7 @@
         "GUI smoke natural exit and design canvas roundtrip result",
         "GUI session owner / isolation statement"
       ],
-      "evidenceLayers": [
-        "deterministic-smoke",
-        "release-artifact"
-      ],
+      "evidenceLayers": ["deterministic-smoke", "release-artifact"],
       "failureModes": [
         "version mismatch",
         "artifact missing",

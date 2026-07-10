@@ -71,7 +71,7 @@ describe("Materials current App Server boundary", () => {
   it("App Server protocol / client 应声明 projectMaterial current 方法", () => {
     const appServerSources = [
       readAppServerApiSources(),
-      readRepoFile("packages/app-server-client/src/protocol.ts"),
+      readRepoFile("packages/app-server-client/src/generated/protocol-types.ts"),
       readRepoFile("packages/app-server-client/src/index.ts"),
       readRepoFile(
         "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",

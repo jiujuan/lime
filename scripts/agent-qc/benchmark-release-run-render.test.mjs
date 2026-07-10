@@ -33,11 +33,13 @@ describe("benchmark release run render", () => {
   it("renderConsoleSummary 输出适合 CI 和人工审计的短摘要", () => {
     const summary = renderConsoleSummary(makeReport(), {
       outputPath: ".lime/benchmark/releases/1.97.0/benchmark-release-run.json",
+      auditReportPath: ".lime/benchmark/releases/1.97.0/benchmark-release-report.md",
     });
 
     expect(summary).toContain("Benchmark Release Run Summary");
     expect(summary).toContain("version=1.97.0");
     expect(summary).toContain("report=.lime/benchmark/releases/1.97.0/benchmark-release-run.json");
+    expect(summary).toContain("auditReport=.lime/benchmark/releases/1.97.0/benchmark-release-report.md");
     expect(summary).toContain("steps=2 passed / 1 failed / 1 skipped");
     expect(summary).toContain("- failed: summary (command_failed)");
     expect(summary).not.toContain("stdoutTail");

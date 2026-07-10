@@ -14,8 +14,6 @@ use crate::agents::subagent_handler::run_complete_subagent_task;
 use crate::agents::subagent_task_config::TaskConfig;
 use crate::agents::tool_execution::ToolCallResult;
 use crate::providers;
-use crate::recipe::build_recipe::build_recipe_from_template;
-use crate::recipe::local_recipes::load_local_recipe_file;
 use crate::recipe::{Recipe, SubRecipe};
 use crate::session::{
     create_subagent_session, persist_session_extension_data, SubagentSessionMetadata,
@@ -116,8 +114,8 @@ struct AgentToolOutput {
     prompt: String,
 }
 
-pub fn create_subagent_tool(sub_recipes: &[SubRecipe]) -> Tool {
-    let description = build_tool_description(sub_recipes);
+pub fn create_subagent_tool(_sub_recipes: &[SubRecipe]) -> Tool {
+    let description = build_tool_description();
 
     let schema = json!({
         "type": "object",
@@ -197,73 +195,15 @@ pub fn create_subagent_tool(sub_recipes: &[SubRecipe]) -> Tool {
     )
 }
 
-fn build_tool_description(sub_recipes: &[SubRecipe]) -> String {
-    let mut desc = String::from(
+fn build_tool_description() -> String {
+    String::from(
         "Launch a new agent to handle complex multi-step tasks autonomously.\n\n\
          Provide a short `description` plus a detailed `prompt`.\n\
-         `subagent_type` is optional: when it matches a local subrecipe, the runtime uses that specialized flow; otherwise it becomes a role hint for a general delegated agent.\n\n\
+         `subagent_type` is optional and becomes a role hint for a general delegated agent.\n\n\
          Without a callback-backed agent runtime, delegated agents execute only in the foreground. `run_in_background`, `team_name`, `mode`, and `isolation` are rejected, while `cwd` must be an absolute existing directory.\n\
          When callback-backed agent control is available, top-level sessions can launch async named or team-routed agents, forward `mode` / `isolation` to the host runtime, and honor `cwd` overrides.\n\
          Team subagents keep only the current synchronous nested-agent surface: they may call `Agent`, but must omit `run_in_background`, `name`, and `team_name`.",
-    );
-
-    if !sub_recipes.is_empty() {
-        desc.push_str("\n\nAvailable specialized agent types:");
-        for sr in sub_recipes {
-            let params_info = get_subrecipe_params_description(sr);
-            let sequential_hint = if sr.sequential_when_repeated {
-                " [run sequentially, not in parallel]"
-            } else {
-                ""
-            };
-            desc.push_str(&format!(
-                "\n• {}{} - {}{}",
-                sr.name,
-                sequential_hint,
-                sr.description.as_deref().unwrap_or("No description"),
-                if params_info.is_empty() {
-                    String::new()
-                } else {
-                    format!(" (params: {})", params_info)
-                }
-            ));
-        }
-    }
-
-    desc
-}
-
-fn get_subrecipe_params_description(sub_recipe: &SubRecipe) -> String {
-    match load_local_recipe_file(&sub_recipe.path) {
-        Ok(recipe_file) => match Recipe::from_content(&recipe_file.content) {
-            Ok(recipe) => {
-                if let Some(params) = recipe.parameters {
-                    params
-                        .iter()
-                        .filter(|p| {
-                            sub_recipe
-                                .values
-                                .as_ref()
-                                .map(|v| !v.contains_key(&p.key))
-                                .unwrap_or(true)
-                        })
-                        .map(|p| {
-                            let req = match p.requirement {
-                                crate::recipe::RecipeParameterRequirement::Required => "[required]",
-                                _ => "[optional]",
-                            };
-                            format!("{} {}", p.key, req)
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                } else {
-                    String::new()
-                }
-            }
-            Err(_) => String::new(),
-        },
-        Err(_) => String::new(),
-    }
+    )
 }
 
 /// Note: SubRecipe.sequential_when_repeated is surfaced as a hint in the tool description
@@ -309,7 +249,7 @@ pub fn handle_subagent_tool(
             }
         };
 
-    let recipe = match build_recipe(&parsed_params, &sub_recipes) {
+    let recipe = match build_recipe(&parsed_params) {
         Ok(r) => r,
         Err(e) => {
             return ToolCallResult::from(Err(ErrorData {
@@ -373,7 +313,7 @@ fn resolve_agent_cwd(value: Option<String>) -> Result<Option<PathBuf>> {
 
 fn map_agent_tool_params(
     params: AgentToolParams,
-    sub_recipes: &HashMap<String, SubRecipe>,
+    _sub_recipes: &HashMap<String, SubRecipe>,
 ) -> Result<(SubagentParams, Option<String>, String)> {
     let AgentToolParams {
         description,
@@ -419,17 +359,9 @@ fn map_agent_tool_params(
     let description = normalize_required_text(description, "description")?;
     let prompt = normalize_required_text(prompt, "prompt")?;
     let requested_agent_type = normalize_optional_text(subagent_type);
-    let matched_subrecipe = requested_agent_type
-        .as_ref()
-        .filter(|agent_type| sub_recipes.contains_key(agent_type.as_str()))
-        .cloned();
 
     let instructions = if let Some(agent_type) = requested_agent_type.as_ref() {
-        if matched_subrecipe.is_some() {
-            prompt.clone()
-        } else {
-            format!("Specialized agent hint: {agent_type}\n\n{prompt}")
-        }
+        format!("Specialized agent hint: {agent_type}\n\n{prompt}")
     } else {
         prompt.clone()
     };
@@ -437,7 +369,7 @@ fn map_agent_tool_params(
     Ok((
         SubagentParams {
             instructions: Some(instructions),
-            subrecipe: matched_subrecipe,
+            subrecipe: None,
             role_hint: normalize_optional_text(name).or(Some(description)),
             parameters: None,
             extensions: None,
@@ -664,74 +596,12 @@ async fn persist_subagent_session_metadata(
     persist_session_extension_data(session_id, extension_data).await
 }
 
-fn build_recipe(
-    params: &SubagentParams,
-    sub_recipes: &HashMap<String, SubRecipe>,
-) -> Result<Recipe> {
-    let mut recipe = if let Some(subrecipe_name) = &params.subrecipe {
-        build_subrecipe(subrecipe_name, params, sub_recipes)?
-    } else {
-        build_adhoc_recipe(params)?
-    };
+fn build_recipe(params: &SubagentParams) -> Result<Recipe> {
+    let mut recipe = build_adhoc_recipe(params)?;
 
     if params.summary {
         let current = recipe.instructions.unwrap_or_default();
         recipe.instructions = Some(format!("{}\n{}", current, SUMMARY_INSTRUCTIONS));
-    }
-
-    Ok(recipe)
-}
-
-fn build_subrecipe(
-    subrecipe_name: &str,
-    params: &SubagentParams,
-    sub_recipes: &HashMap<String, SubRecipe>,
-) -> Result<Recipe> {
-    let sub_recipe = sub_recipes.get(subrecipe_name).ok_or_else(|| {
-        let available: Vec<_> = sub_recipes.keys().cloned().collect();
-        anyhow!(
-            "Unknown subrecipe '{}'. Available: {}",
-            subrecipe_name,
-            available.join(", ")
-        )
-    })?;
-
-    let recipe_file = load_local_recipe_file(&sub_recipe.path)
-        .map_err(|e| anyhow!("Failed to load subrecipe '{}': {}", subrecipe_name, e))?;
-
-    let mut param_values: Vec<(String, String)> = Vec::new();
-
-    if let Some(values) = &sub_recipe.values {
-        for (k, v) in values {
-            param_values.push((k.clone(), v.clone()));
-        }
-    }
-
-    if let Some(provided_params) = &params.parameters {
-        for (k, v) in provided_params {
-            let value_str = match v {
-                Value::String(s) => s.clone(),
-                other => other.to_string(),
-            };
-            param_values.push((k.clone(), value_str));
-        }
-    }
-
-    let mut recipe = build_recipe_from_template(
-        recipe_file.content,
-        &recipe_file.parent_dir,
-        param_values,
-        None::<fn(&str, &str) -> Result<String, anyhow::Error>>,
-    )
-    .map_err(|e| anyhow!("Failed to build subrecipe: {}", e))?;
-
-    if let Some(extra) = &params.instructions {
-        let mut current = recipe.instructions.take().unwrap_or_default();
-        if !current.is_empty() {
-            current.push_str("\n\n");
-        }
-        current.push_str(extra);
-        recipe.instructions = Some(current);
     }
 
     Ok(recipe)
@@ -838,532 +708,4 @@ async fn apply_settings_overrides(
     }
 
     Ok(task_config)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::declarative_providers::{DeclarativeProviderConfig, ProviderEngine};
-    use crate::conversation::message::ActionRequiredScope;
-    use crate::providers::base::{ModelInfo, Provider};
-    use crate::session::TurnContextOverride;
-    use std::sync::Arc;
-
-    #[test]
-    fn test_tool_name() {
-        assert_eq!(AGENT_TOOL_NAME, "Agent");
-    }
-
-    #[test]
-    fn test_create_tool_without_subrecipes() {
-        let tool = create_subagent_tool(&[]);
-        assert_eq!(tool.name, "Agent");
-        assert!(tool
-            .description
-            .as_ref()
-            .unwrap()
-            .contains("Launch a new agent"));
-        assert!(!tool
-            .description
-            .as_ref()
-            .unwrap()
-            .contains("Available specialized agent types"));
-    }
-
-    #[test]
-    fn test_create_tool_with_subrecipes() {
-        let sub_recipes = vec![SubRecipe {
-            name: "test_recipe".to_string(),
-            path: "test.yaml".to_string(),
-            values: None,
-            sequential_when_repeated: false,
-            description: Some("A test recipe".to_string()),
-        }];
-
-        let tool = create_subagent_tool(&sub_recipes);
-        assert!(tool
-            .description
-            .as_ref()
-            .unwrap()
-            .contains("Available specialized agent types"));
-        assert!(tool.description.as_ref().unwrap().contains("test_recipe"));
-        assert!(tool
-            .description
-            .as_ref()
-            .unwrap()
-            .contains("`run_in_background`, `team_name`, `mode`, and `isolation` are rejected"));
-        assert!(tool
-            .description
-            .as_ref()
-            .unwrap()
-            .contains("forward `mode` / `isolation` to the host runtime"));
-        assert!(tool
-            .description
-            .as_ref()
-            .unwrap()
-            .contains("Team subagents keep only the current synchronous nested-agent surface"));
-
-        assert_eq!(
-            tool.input_schema["properties"]["run_in_background"]["description"].as_str(),
-            Some(
-                "Whether to launch the agent in the background. Requires a callback-backed agent runtime. In the current foreground-only runtime, true is rejected."
-            )
-        );
-        assert_eq!(
-            tool.input_schema["properties"]["team_name"]["description"].as_str(),
-            Some(
-                "Optional team name for teammate spawning. Requires `name` plus a callback-backed agent runtime with an existing team context. Team subagents must omit it."
-            )
-        );
-        assert_eq!(
-            tool.input_schema["properties"]["mode"]["description"].as_str(),
-            Some(
-                "Optional teammate permission mode. Callback-backed runtimes forward it to the host runtime, which decides which values are supported."
-            )
-        );
-        assert_eq!(
-            tool.input_schema["properties"]["isolation"]["description"].as_str(),
-            Some(
-                "Optional isolation mode. Callback-backed runtimes forward it to the host runtime, which decides which values are supported."
-            )
-        );
-    }
-
-    #[test]
-    fn test_resolve_agent_cwd_accepts_absolute_directory() {
-        let cwd = tempfile::tempdir().unwrap();
-        let resolved =
-            resolve_agent_cwd(Some(cwd.path().display().to_string())).expect("cwd should parse");
-        assert_eq!(resolved.as_deref(), Some(cwd.path()));
-    }
-
-    #[test]
-    fn test_resolve_agent_cwd_rejects_relative_path() {
-        let error = resolve_agent_cwd(Some("./relative".to_string())).expect_err("should fail");
-        assert!(error.to_string().contains("absolute path"));
-    }
-
-    #[test]
-    fn test_map_agent_tool_params_uses_matching_subrecipe() {
-        let sub_recipes = HashMap::from([(
-            "planner".to_string(),
-            SubRecipe {
-                name: "planner".to_string(),
-                path: "planner.yaml".to_string(),
-                values: None,
-                sequential_when_repeated: false,
-                description: Some("Planner".to_string()),
-            },
-        )]);
-
-        let (params, requested_agent_type, prompt) = map_agent_tool_params(
-            AgentToolParams {
-                description: "Plan migration".to_string(),
-                prompt: "Review the migration plan".to_string(),
-                subagent_type: Some("planner".to_string()),
-                model: Some("gpt-5.4".to_string()),
-                run_in_background: false,
-                name: Some("migration-review".to_string()),
-                team_name: None,
-                mode: None,
-                isolation: None,
-                cwd: None,
-                allowed_tools: Vec::new(),
-                disallowed_tools: Vec::new(),
-                images: None,
-            },
-            &sub_recipes,
-        )
-        .unwrap();
-
-        assert_eq!(requested_agent_type.as_deref(), Some("planner"));
-        assert_eq!(prompt, "Review the migration plan");
-        assert_eq!(params.subrecipe.as_deref(), Some("planner"));
-        assert_eq!(params.role_hint.as_deref(), Some("migration-review"));
-        assert_eq!(
-            params
-                .settings
-                .as_ref()
-                .and_then(|settings| settings.model.as_deref()),
-            Some("gpt-5.4")
-        );
-    }
-
-    #[test]
-    fn test_map_agent_tool_params_converts_unknown_agent_type_to_hint() {
-        let (params, requested_agent_type, _) = map_agent_tool_params(
-            AgentToolParams {
-                description: "Investigate failure".to_string(),
-                prompt: "Find the root cause".to_string(),
-                subagent_type: Some("debugger".to_string()),
-                model: None,
-                run_in_background: false,
-                name: None,
-                team_name: None,
-                mode: None,
-                isolation: None,
-                cwd: None,
-                allowed_tools: Vec::new(),
-                disallowed_tools: Vec::new(),
-                images: None,
-            },
-            &HashMap::new(),
-        )
-        .unwrap();
-
-        assert_eq!(requested_agent_type.as_deref(), Some("debugger"));
-        assert_eq!(params.subrecipe, None);
-        assert!(params
-            .instructions
-            .as_deref()
-            .unwrap()
-            .contains("Specialized agent hint: debugger"));
-        assert_eq!(params.role_hint.as_deref(), Some("Investigate failure"));
-    }
-
-    #[test]
-    fn test_map_agent_tool_params_preserves_images() {
-        let images = vec![ImageData {
-            data: "ZmFrZQ==".to_string(),
-            mime_type: "image/png".to_string(),
-        }];
-
-        let (params, _, _) = map_agent_tool_params(
-            AgentToolParams {
-                description: "Inspect screenshot".to_string(),
-                prompt: "Find the failing UI state".to_string(),
-                subagent_type: None,
-                model: None,
-                run_in_background: false,
-                name: None,
-                team_name: None,
-                mode: None,
-                isolation: None,
-                cwd: None,
-                allowed_tools: Vec::new(),
-                disallowed_tools: Vec::new(),
-                images: Some(images.clone()),
-            },
-            &HashMap::new(),
-        )
-        .unwrap();
-
-        assert_eq!(params.images.as_ref().map(Vec::len), Some(1));
-        assert_eq!(params.images.unwrap()[0].data, images[0].data);
-    }
-
-    #[test]
-    fn test_sequential_hint_in_description() {
-        let sub_recipes = vec![
-            SubRecipe {
-                name: "parallel_ok".to_string(),
-                path: "test.yaml".to_string(),
-                values: None,
-                sequential_when_repeated: false,
-                description: Some("Can run in parallel".to_string()),
-            },
-            SubRecipe {
-                name: "sequential_only".to_string(),
-                path: "test.yaml".to_string(),
-                values: None,
-                sequential_when_repeated: true,
-                description: Some("Must run sequentially".to_string()),
-            },
-        ];
-
-        let tool = create_subagent_tool(&sub_recipes);
-        let desc = tool.description.as_ref().unwrap();
-
-        assert!(desc.contains("parallel_ok"));
-        assert!(!desc.contains("parallel_ok [run sequentially"));
-
-        assert!(desc.contains("sequential_only [run sequentially, not in parallel]"));
-    }
-
-    #[test]
-    fn test_params_deserialization_full() {
-        let params: SubagentParams = serde_json::from_value(json!({
-            "instructions": "Extra context",
-            "subrecipe": "my_recipe",
-            "role_hint": "Image #1",
-            "parameters": {"key": "value"},
-            "extensions": ["developer"],
-            "settings": {"model": "gpt-4"},
-            "summary": false
-        }))
-        .unwrap();
-
-        assert_eq!(params.instructions, Some("Extra context".to_string()));
-        assert_eq!(params.subrecipe, Some("my_recipe".to_string()));
-        assert_eq!(params.role_hint, Some("Image #1".to_string()));
-        assert!(params.parameters.is_some());
-        assert_eq!(params.extensions, Some(vec!["developer".to_string()]));
-        assert!(!params.summary);
-    }
-
-    #[test]
-    fn test_build_subagent_task_summary_prefers_subrecipe_and_instruction_preview() {
-        let params = SubagentParams {
-            instructions: Some("Investigate   the    failing \n integration test".to_string()),
-            subrecipe: Some("debug_failure".to_string()),
-            role_hint: None,
-            parameters: None,
-            extensions: None,
-            settings: None,
-            summary: true,
-            images: None,
-        };
-
-        let recipe = Recipe::builder()
-            .version("1.0.0")
-            .title("Fallback title")
-            .description("Fallback description")
-            .instructions("Unused")
-            .build()
-            .unwrap();
-
-        assert_eq!(
-            build_subagent_task_summary(&params, &recipe),
-            Some(
-                "Run subrecipe `debug_failure`: Investigate the failing integration test"
-                    .to_string()
-            )
-        );
-    }
-
-    #[test]
-    fn test_build_subagent_task_summary_falls_back_to_recipe_title() {
-        let params = SubagentParams {
-            instructions: None,
-            subrecipe: None,
-            role_hint: None,
-            parameters: None,
-            extensions: None,
-            settings: None,
-            summary: true,
-            images: None,
-        };
-
-        let recipe = Recipe::builder()
-            .version("1.0.0")
-            .title("Subagent Task")
-            .description("Ad-hoc task")
-            .instructions("Inspect the repository")
-            .build()
-            .unwrap();
-
-        assert_eq!(
-            build_subagent_task_summary(&params, &recipe),
-            Some("Subagent Task".to_string())
-        );
-    }
-
-    #[test]
-    fn test_build_subagent_role_hint_prefers_explicit_role_hint() {
-        let params = SubagentParams {
-            instructions: None,
-            subrecipe: Some("planner_recipe".to_string()),
-            role_hint: Some("Image #1".to_string()),
-            parameters: None,
-            extensions: None,
-            settings: None,
-            summary: true,
-            images: None,
-        };
-
-        assert_eq!(
-            build_subagent_role_hint(&params),
-            Some("Image #1".to_string())
-        );
-    }
-
-    #[test]
-    fn test_build_subagent_session_name_prefers_role_hint() {
-        let params = SubagentParams {
-            instructions: Some("处理图片风格统一".to_string()),
-            subrecipe: Some("image_pipeline".to_string()),
-            role_hint: Some("Image #1".to_string()),
-            parameters: None,
-            extensions: None,
-            settings: None,
-            summary: true,
-            images: None,
-        };
-
-        let recipe = Recipe::builder()
-            .version("1.0.0")
-            .title("Fallback title")
-            .description("Fallback description")
-            .instructions("Unused")
-            .build()
-            .unwrap();
-
-        assert_eq!(build_subagent_session_name(&params, &recipe), "Image #1");
-    }
-
-    #[tokio::test]
-    async fn test_build_subagent_session_metadata_uses_current_parent_turn_id() {
-        let params = SubagentParams {
-            instructions: Some("处理图片风格统一".to_string()),
-            subrecipe: Some("image_pipeline".to_string()),
-            role_hint: Some("Image #1".to_string()),
-            parameters: None,
-            extensions: None,
-            settings: None,
-            summary: true,
-            images: None,
-        };
-        let recipe = Recipe::builder()
-            .version("1.0.0")
-            .title("Fallback title")
-            .description("Fallback description")
-            .instructions("Unused")
-            .build()
-            .unwrap();
-        let task_config = TaskConfig {
-            provider: std::sync::Arc::new(
-                crate::providers::testprovider::TestProvider::new_replaying(
-                    "/tmp/aster-subagent-tool-metadata.json",
-                )
-                .expect("provider"),
-            ),
-            parent_session_id: "parent-session-1".to_string(),
-            parent_working_dir: PathBuf::from("/tmp/workspace-parent"),
-            extensions: Vec::new(),
-            max_turns: Some(3),
-            turn_context: None,
-        };
-        let scope = ActionRequiredScope {
-            session_id: Some("parent-session-1".to_string()),
-            thread_id: Some("thread-1".to_string()),
-            turn_id: Some("turn-1".to_string()),
-        };
-
-        let metadata = crate::session_context::with_action_scope(scope, async move {
-            build_subagent_session_metadata(&task_config, &params, &recipe)
-        })
-        .await;
-
-        assert_eq!(metadata.created_from_turn_id.as_deref(), Some("turn-1"));
-    }
-
-    fn build_test_ollama_provider(model: &str) -> Arc<dyn Provider> {
-        Arc::new(
-            crate::providers::ollama::OllamaProvider::from_custom_config(
-                crate::model::ModelConfig::new_or_fail(model),
-                DeclarativeProviderConfig {
-                    name: "ollama".to_string(),
-                    engine: ProviderEngine::Ollama,
-                    display_name: "Test Ollama".to_string(),
-                    description: Some("Test-only Ollama provider".to_string()),
-                    api_key_env: "IGNORED".to_string(),
-                    base_url: "http://localhost:11434".to_string(),
-                    models: vec![ModelInfo::new(model, 128_000)],
-                    headers: None,
-                    timeout_seconds: Some(1),
-                    supports_streaming: Some(true),
-                },
-            )
-            .expect("provider"),
-        )
-    }
-
-    #[tokio::test]
-    async fn test_apply_settings_overrides_syncs_explicit_model_into_turn_context() {
-        let task_config = TaskConfig {
-            provider: build_test_ollama_provider("qwen3"),
-            parent_session_id: "parent-session-1".to_string(),
-            parent_working_dir: PathBuf::from("/tmp/workspace-parent"),
-            extensions: Vec::new(),
-            max_turns: Some(3),
-            turn_context: Some(TurnContextOverride {
-                model: Some("parent-model".to_string()),
-                effort: Some("high".to_string()),
-                ..TurnContextOverride::default()
-            }),
-        };
-        let params = SubagentParams {
-            instructions: Some("分析仓库结构".to_string()),
-            subrecipe: None,
-            role_hint: None,
-            parameters: None,
-            extensions: None,
-            settings: Some(SubagentSettings {
-                provider: None,
-                model: Some("qwen3-coder:30b".to_string()),
-                temperature: Some(0.2),
-            }),
-            summary: true,
-            images: None,
-        };
-
-        let updated = apply_settings_overrides(task_config, &params)
-            .await
-            .expect("settings should apply");
-
-        assert_eq!(
-            updated.provider.get_model_config().model_name,
-            "qwen3-coder:30b"
-        );
-        assert_eq!(updated.provider.get_model_config().temperature, Some(0.2));
-        assert_eq!(
-            updated
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.model.as_deref()),
-            Some("qwen3-coder:30b")
-        );
-        assert_eq!(
-            updated
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.effort.as_deref()),
-            Some("high")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_apply_settings_overrides_provider_override_resets_to_provider_default_model() {
-        let task_config = TaskConfig {
-            provider: build_test_ollama_provider("qwen3-coder:30b"),
-            parent_session_id: "parent-session-1".to_string(),
-            parent_working_dir: PathBuf::from("/tmp/workspace-parent"),
-            extensions: Vec::new(),
-            max_turns: Some(3),
-            turn_context: Some(TurnContextOverride {
-                model: Some("qwen3-coder:30b".to_string()),
-                ..TurnContextOverride::default()
-            }),
-        };
-        let params = SubagentParams {
-            instructions: Some("分析仓库结构".to_string()),
-            subrecipe: None,
-            role_hint: None,
-            parameters: None,
-            extensions: None,
-            settings: Some(SubagentSettings {
-                provider: Some("ollama".to_string()),
-                model: None,
-                temperature: None,
-            }),
-            summary: true,
-            images: None,
-        };
-
-        let updated = apply_settings_overrides(task_config, &params)
-            .await
-            .expect("provider override should apply");
-
-        assert_eq!(
-            updated.provider.get_model_config().model_name,
-            crate::providers::ollama::OLLAMA_DEFAULT_MODEL
-        );
-        assert_eq!(
-            updated
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.model.as_deref()),
-            Some(crate::providers::ollama::OLLAMA_DEFAULT_MODEL)
-        );
-    }
 }

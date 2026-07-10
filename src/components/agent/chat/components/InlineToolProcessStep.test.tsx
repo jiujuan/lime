@@ -325,6 +325,30 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("mcp_tool_result_projection");
   });
 
+  it("MCP structuredContent 应在折叠摘要中优先于通用完成文案", () => {
+    const { container } = renderTool({
+      id: "tool-mcp-structured-summary-1",
+      name: "mcp__docs__diagnostic_probe",
+      arguments: JSON.stringify({ query: "structured content" }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "已完成这一步",
+        structuredContent: {
+          answer: "MCP 结构化答案已进入 Agent Chat GUI",
+          ids: ["doc-structured-1"],
+        },
+      },
+      startTime: new Date("2026-06-21T13:10:00.000Z"),
+      endTime: new Date("2026-06-21T13:10:01.000Z"),
+    });
+
+    expect(container.textContent).toContain(
+      "MCP 结构化答案已进入 Agent Chat GUI",
+    );
+    expect(container.textContent).toContain("doc-structured-1");
+  });
+
   it("超长工具结果在流式阶段应默认收起原始详情", () => {
     const { container } = renderTool(
       {

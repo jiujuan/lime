@@ -254,7 +254,7 @@ describe("VideoWorkspace 任务聚焦", () => {
     expect(mounted.container.textContent).toContain("Model route");
     expect(mounted.container.textContent).toContain("Generation spec");
     expect(mounted.container.textContent).toContain("9:16 · 1080p · 12 sec");
-    expect(mounted.container.textContent).toContain("Sync rules");
+    expect(mounted.container.textContent).toContain("Result sync");
     expect(mounted.container.textContent).toContain("Completed");
     expect(mounted.container.textContent).toContain(
       "Result generated, syncing to Project Knowledge",

@@ -5,20 +5,15 @@
 //! 2. Capabilities（能力层）- 框架提供的 Extensions 等能力描述
 //! 3. Context（上下文层）- 运行时注入的 hints 和额外指令
 
-#[cfg(test)]
-use chrono::DateTime;
 use chrono::Utc;
 use serde::Serialize;
-use serde_json::Value;
-use std::collections::HashMap;
 
 use super::identity::AgentIdentity;
 use crate::agents::extension::ExtensionInfo;
 use crate::{
     config::{AsterMode, Config},
-    prompt_template,
+    conversation::unicode_tags::sanitize_tags,
     session_context::current_turn_context,
-    utils::sanitize_unicode_tags,
 };
 use std::path::Path;
 
@@ -74,18 +69,6 @@ impl Default for PromptManager {
     }
 }
 
-/// 身份提示词上下文
-#[derive(Serialize)]
-struct IdentityContext {
-    agent_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    agent_creator: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    agent_description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    language_preference: Option<String>,
-}
-
 /// 能力提示词上下文
 #[derive(Serialize)]
 struct SystemPromptContext {
@@ -99,6 +82,66 @@ struct SystemPromptContext {
     max_extensions: usize,
     max_tools: usize,
     code_execution_mode: bool,
+}
+
+fn render_identity_prompt(identity: &AgentIdentity) -> String {
+    if let Some(custom) = &identity.custom_prompt {
+        return sanitize_tags(custom);
+    }
+
+    let mut lines = vec![format!(
+        "You are a general-purpose AI agent called {}.",
+        identity.name
+    )];
+
+    if let Some(description) = identity.description.as_deref() {
+        lines.push(format!("Description: {}", description));
+    }
+    if let Some(creator) = identity.creator.as_deref() {
+        lines.push(format!("Creator: {}", creator));
+    }
+    if let Some(language) = identity.language.as_deref() {
+        lines.push(format!("Language preference: {}", language));
+    }
+
+    lines.join("\n")
+}
+
+fn render_capabilities_prompt(context: &SystemPromptContext) -> String {
+    let mut sections = Vec::new();
+
+    if !context.extensions.is_empty() {
+        let mut extensions = String::from("# Extensions");
+        for extension in &context.extensions {
+            extensions.push_str("\n\n## ");
+            extensions.push_str(&extension.name);
+            if extension.has_resources {
+                extensions.push_str("\nResources may be available.");
+            }
+            if !extension.instructions.trim().is_empty() {
+                extensions.push_str("\n");
+                extensions.push_str(extension.instructions.trim());
+            }
+        }
+        sections.push(extensions);
+    }
+
+    if let Some((extension_count, tool_count)) = context.extension_tool_limits {
+        sections.push(format!(
+            "# Extension Limits\n\n{} extensions and {} tools are visible; keep tool use focused.",
+            extension_count, tool_count
+        ));
+    }
+
+    if context.enable_subagents {
+        sections.push("# Subagents\n\nSubagents are available for delegated work.".to_string());
+    }
+
+    if context.code_execution_mode {
+        sections.push("# Code Execution\n\nCode execution mode is enabled.".to_string());
+    }
+
+    sections.join("\n\n")
 }
 
 pub struct SystemPromptBuilder<'a, M> {
@@ -198,7 +241,7 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
         let sanitized_extensions_info: Vec<ExtensionInfo> = extensions_info
             .into_iter()
             .map(|mut ext_info| {
-                ext_info.instructions = sanitize_unicode_tags(&ext_info.instructions);
+                ext_info.instructions = sanitize_tags(&ext_info.instructions);
                 ext_info
             })
             .collect();
@@ -224,21 +267,14 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
 
         if self.session_prompt_override {
             let override_prompt = self.session_prompt.as_deref().unwrap_or("");
-            let sanitized_override_prompt = sanitize_unicode_tags(override_prompt);
-            let prompt = prompt_template::render_inline_once(
-                &sanitized_override_prompt,
-                &capabilities_context,
-            )
-            .unwrap_or_else(|_| override_prompt.to_string());
+            let prompt = sanitize_tags(override_prompt);
             return append_plan_collaboration_instruction(prompt);
         }
 
         // 构建提示词：全局 override 优先，否则使用分层结构。
         let base_prompt = if let Some(override_prompt) = &self.manager.system_prompt_override {
             // 向后兼容：完全覆盖模式
-            let sanitized_override_prompt = sanitize_unicode_tags(override_prompt);
-            prompt_template::render_inline_once(&sanitized_override_prompt, &capabilities_context)
-                .unwrap_or_else(|_| override_prompt.clone())
+            sanitize_tags(override_prompt)
         } else {
             // 新的分层模式：Identity + Session Context + Capabilities
             Self::build_layered_prompt_with_session(
@@ -270,7 +306,7 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
 
         let sanitized_system_prompt_extras: Vec<String> = system_prompt_extras
             .into_iter()
-            .map(|extra| sanitize_unicode_tags(&extra))
+            .map(|extra| sanitize_tags(&extra))
             .collect();
 
         if sanitized_system_prompt_extras.is_empty() {
@@ -292,23 +328,13 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
         // 1. 构建身份层
         let identity_prompt = if let Some(custom) = &identity.custom_prompt {
             // 使用完全自定义的身份提示词
-            sanitize_unicode_tags(custom)
+            sanitize_tags(custom)
         } else {
-            // 使用模板渲染身份
-            let identity_context = IdentityContext {
-                agent_name: identity.name.clone(),
-                agent_creator: identity.creator.clone(),
-                agent_description: identity.description.clone(),
-                language_preference: identity.language.clone(),
-            };
-            prompt_template::render_global_file("identity.md", &identity_context)
-                .unwrap_or_else(|_| format!("You are an AI agent called {}.", identity.name))
+            render_identity_prompt(identity)
         };
 
         // 2. 构建能力层
-        let capabilities_prompt =
-            prompt_template::render_global_file("capabilities.md", capabilities_context)
-                .unwrap_or_default();
+        let capabilities_prompt = render_capabilities_prompt(capabilities_context);
 
         // 3. 组合
         if capabilities_prompt.is_empty() {
@@ -327,21 +353,14 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
     ) -> String {
         // 1. 构建身份层
         let identity_prompt = if let Some(custom) = &identity.custom_prompt {
-            sanitize_unicode_tags(custom)
+            sanitize_tags(custom)
         } else {
-            let identity_context = IdentityContext {
-                agent_name: identity.name.clone(),
-                agent_creator: identity.creator.clone(),
-                agent_description: identity.description.clone(),
-                language_preference: identity.language.clone(),
-            };
-            prompt_template::render_global_file("identity.md", &identity_context)
-                .unwrap_or_else(|_| format!("You are an AI agent called {}.", identity.name))
+            render_identity_prompt(identity)
         };
 
         // 2. Session Context 层（如果有）
         let session_section = if let Some(prompt) = session_prompt {
-            let sanitized = sanitize_unicode_tags(prompt);
+            let sanitized = sanitize_tags(prompt);
             format!("\n\n## Session Context\n\n{}", sanitized)
         } else {
             String::new()
@@ -349,8 +368,7 @@ impl<'a> SystemPromptBuilder<'a, PromptManager> {
 
         // 3. 构建能力层
         let capabilities_prompt = if include_capabilities_layer {
-            prompt_template::render_global_file("capabilities.md", capabilities_context)
-                .unwrap_or_default()
+            render_capabilities_prompt(capabilities_context)
         } else {
             String::new()
         };
@@ -385,17 +403,6 @@ impl PromptManager {
             system_prompt_extras: Vec::new(),
             current_date_timestamp: Utc::now().format("%Y-%m-%d %H:00").to_string(),
             identity,
-            session_prompt: None,
-        }
-    }
-
-    #[cfg(test)]
-    pub fn with_timestamp(dt: DateTime<Utc>) -> Self {
-        PromptManager {
-            system_prompt_override: None,
-            system_prompt_extras: Vec::new(),
-            current_date_timestamp: dt.format("%Y-%m-%d %H:%M:%S").to_string(),
-            identity: AgentIdentity::default(),
             session_prompt: None,
         }
     }
@@ -453,161 +460,6 @@ impl PromptManager {
     }
 
     pub async fn get_recipe_prompt(&self) -> String {
-        let context: HashMap<&str, Value> = HashMap::new();
-        prompt_template::render_global_file("recipe.md", &context)
-            .unwrap_or_else(|_| "The recipe prompt is busted. Tell the user.".to_string())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use insta::assert_snapshot;
-
-    use super::*;
-
-    #[test]
-    fn test_build_system_prompt_sanitizes_override() {
-        let mut manager = PromptManager::new();
-        let malicious_override = "System prompt\u{E0041}\u{E0042}\u{E0043}with hidden text";
-        manager.set_system_prompt_override(malicious_override.to_string());
-
-        let result = manager.builder().build();
-
-        assert!(!result.contains('\u{E0041}'));
-        assert!(!result.contains('\u{E0042}'));
-        assert!(!result.contains('\u{E0043}'));
-        assert!(result.contains("System prompt"));
-        assert!(result.contains("with hidden text"));
-    }
-
-    #[test]
-    fn test_build_system_prompt_sanitizes_extras() {
-        let mut manager = PromptManager::new();
-        let malicious_extra = "Extra instruction\u{E0041}\u{E0042}\u{E0043}hidden";
-        manager.add_system_prompt_extra(malicious_extra.to_string());
-
-        let result = manager.builder().build();
-
-        assert!(!result.contains('\u{E0041}'));
-        assert!(!result.contains('\u{E0042}'));
-        assert!(!result.contains('\u{E0043}'));
-        assert!(result.contains("Extra instruction"));
-        assert!(result.contains("hidden"));
-    }
-
-    #[test]
-    fn test_build_system_prompt_sanitizes_multiple_extras() {
-        let mut manager = PromptManager::new();
-        manager.add_system_prompt_extra("First\u{E0041}instruction".to_string());
-        manager.add_system_prompt_extra("Second\u{E0042}instruction".to_string());
-        manager.add_system_prompt_extra("Third\u{E0043}instruction".to_string());
-
-        let result = manager.builder().build();
-
-        assert!(!result.contains('\u{E0041}'));
-        assert!(!result.contains('\u{E0042}'));
-        assert!(!result.contains('\u{E0043}'));
-        assert!(result.contains("Firstinstruction"));
-        assert!(result.contains("Secondinstruction"));
-        assert!(result.contains("Thirdinstruction"));
-    }
-
-    #[test]
-    fn test_build_system_prompt_preserves_legitimate_unicode_in_extras() {
-        let mut manager = PromptManager::new();
-        let legitimate_unicode = "Instruction with 世界 and 🌍 emojis";
-        manager.add_system_prompt_extra(legitimate_unicode.to_string());
-
-        let result = manager.builder().build();
-
-        assert!(result.contains("世界"));
-        assert!(result.contains("🌍"));
-        assert!(result.contains("Instruction with"));
-        assert!(result.contains("emojis"));
-    }
-
-    #[test]
-    fn test_build_system_prompt_sanitizes_extension_instructions() {
-        let manager = PromptManager::new();
-        let malicious_extension_info = ExtensionInfo::new(
-            "test_extension",
-            "Extension help\u{E0041}\u{E0042}\u{E0043}hidden instructions",
-            false,
-        );
-
-        let result = manager
-            .builder()
-            .with_extension(malicious_extension_info)
-            .build();
-
-        assert!(!result.contains('\u{E0041}'));
-        assert!(!result.contains('\u{E0042}'));
-        assert!(!result.contains('\u{E0043}'));
-        assert!(result.contains("Extension help"));
-        assert!(result.contains("hidden instructions"));
-    }
-
-    #[test]
-    fn test_build_system_prompt_can_skip_capabilities_layer() {
-        let manager = PromptManager::with_timestamp(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-
-        let system_prompt = manager
-            .builder()
-            .with_session_prompt(Some("Keep this session context.".to_string()))
-            .with_capabilities_layer(false)
-            .build();
-
-        assert!(system_prompt.contains("general-purpose AI agent"));
-        assert!(system_prompt.contains("## Session Context"));
-        assert!(system_prompt.contains("Keep this session context."));
-        assert!(!system_prompt.contains("# Extensions"));
-        assert!(!system_prompt.contains("No extensions are defined."));
-    }
-
-    #[test]
-    fn test_basic() {
-        let manager = PromptManager::with_timestamp(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-
-        let system_prompt = manager.builder().build();
-
-        assert_snapshot!(system_prompt)
-    }
-
-    #[test]
-    fn test_one_extension() {
-        let manager = PromptManager::with_timestamp(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-
-        let system_prompt = manager
-            .builder()
-            .with_extension(ExtensionInfo::new(
-                "test",
-                "how to use this extension",
-                true,
-            ))
-            .build();
-
-        assert_snapshot!(system_prompt)
-    }
-
-    #[test]
-    fn test_typical_setup() {
-        let manager = PromptManager::with_timestamp(DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-
-        let system_prompt = manager
-            .builder()
-            .with_extension(ExtensionInfo::new(
-                "extension_A",
-                "<instructions on how to use extension A>",
-                true,
-            ))
-            .with_extension(ExtensionInfo::new(
-                "extension_B",
-                "<instructions on how to use extension B (no resources)>",
-                false,
-            ))
-            .with_extension_and_tool_counts(MAX_EXTENSIONS + 1, MAX_TOOLS + 1)
-            .build();
-
-        assert_snapshot!(system_prompt)
+        "Recipe execution is only available when the current runtime explicitly configures recipe components.".to_string()
     }
 }

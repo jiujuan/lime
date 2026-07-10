@@ -2,7 +2,7 @@
 
 use super::session_store_types::{SessionTodoItem, SessionTodoStatus};
 use crate::aster_session_store::LimeSessionStore;
-use aster::session::{resolve_task_board_state, TaskBoardItem, TaskBoardItemStatus};
+use aster::{resolve_task_board_state, TaskBoardItem, TaskBoardItemStatus};
 use thread_store::task_board::{
     project_session_todo_records, SessionTodoItemRecord, SessionTodoStatusRecord,
     TaskBoardItemRecord, TaskBoardStatusRecord,

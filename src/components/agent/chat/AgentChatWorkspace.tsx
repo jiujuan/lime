@@ -35,7 +35,6 @@ import { useSoulInteractionCopy } from "@/hooks/useSoulInteractionCopy";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { SettingsTabs } from "@/types/settings";
 import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
-import { TaskCenterShellPanel } from "./components/TaskCenterShellPanel";
 import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
 import { createInitialVideoState } from "@/components/workspace/canvas/canvasUtils";
@@ -59,7 +58,6 @@ import {
   createImageGenerationTaskArtifact,
   getMediaTaskArtifact,
 } from "@/lib/api/mediaTasks";
-import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { type Character } from "@/lib/api/projectMemory";
 import { useImageGen } from "@/components/image-gen/useImageGen";
@@ -69,7 +67,6 @@ import {
 } from "@/lib/mediaGeneration";
 import { readTeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { TaskCenterDraftSendRequest } from "./homePendingPreview";
-import type { HomeRecoverySession } from "./home/homeSurfaceTypes";
 
 import type {
   ConfirmResponse,
@@ -103,15 +100,12 @@ import {
 import { useSelectedTeamPreference } from "./hooks/useSelectedTeamPreference";
 import { useTeamMemoryShadowSync } from "./hooks/useTeamMemoryShadowSync";
 import { useThemeScopedChatToolPreferences } from "./hooks/useThemeScopedChatToolPreferences";
-import { useLimeSkills } from "./hooks/useLimeSkills";
-import { useServiceSkills } from "./service-skills/useServiceSkills";
 import { useWorkspaceProjectSelection } from "./hooks/useWorkspaceProjectSelection";
 import { useRuntimeTeamFormation } from "./hooks/useRuntimeTeamFormation";
 import { mergeThreadItems } from "./utils/threadTimelineView";
 import { openCanvasForReason } from "./workspace/canvasOpenPolicy";
 import { useWorkbenchStore } from "@/stores/useWorkbenchStore";
 import { GENERAL_BROWSER_ASSIST_ARTIFACT_ID } from "./workspace/browserAssistArtifact";
-import { SceneAppExecutionSummaryCard } from "./workspace/SceneAppExecutionSummaryCard";
 import { ServiceSkillExecutionCard } from "./workspace/ServiceSkillExecutionCard";
 import { useWorkspaceBrowserAssistRuntime } from "./workspace/useWorkspaceBrowserAssistRuntime";
 import { useWorkspaceA2UISubmitActions } from "./workspace/useWorkspaceA2UISubmitActions";
@@ -133,22 +127,14 @@ import { useWorkspaceMediaReferencePreviewRuntime } from "./workspace/useWorkspa
 import { MediaReferencePreviewPaginationActions } from "./workspace/mediaReferencePreviewToolbarActions";
 import { resolveMediaReferencePreviewPageRequest } from "./workspace/mediaReferencePreviewToolbarState";
 import { useTaskCenterTabSessionRuntime } from "./workspace/useTaskCenterTabSessionRuntime";
-import {
-  useTaskCenterDraftSendDispatchRuntime,
-  useTaskCenterEmptyStateSendRuntime,
-  useTaskCenterHomePendingPreviewRuntime,
-} from "./workspace/useTaskCenterDraftSendRuntime";
+import { useTaskCenterHomePendingPreviewRuntime } from "./workspace/useTaskCenterDraftSendRuntime";
 import { useTaskCenterChromeNavigationRuntime } from "./workspace/useTaskCenterChromeNavigationRuntime";
 import { useTaskCenterDraftMaterializationRuntime } from "./workspace/useTaskCenterDraftMaterializationRuntime";
 import { useTaskCenterTopicNavigationRuntime } from "./workspace/useTaskCenterTopicNavigationRuntime";
+import { useWorkspaceTaskCenterSendRuntime } from "./workspace/useWorkspaceTaskCenterSendRuntime";
 import { useWorkspaceCanvasTaskFileSync } from "./workspace/useWorkspaceCanvasTaskFileSync";
 import { useWorkspaceGeneralResourceSync } from "./workspace/useWorkspaceGeneralResourceSync";
 import { useWorkspaceArtifactWorkbenchActions } from "./workspace/useWorkspaceArtifactWorkbenchActions";
-import { useSceneAppExecutionSummaryRuntime } from "./workspace/useSceneAppExecutionSummaryRuntime";
-import {
-  buildSceneAppExecutionContentPostEntries,
-  type SceneAppExecutionContentPostEntry,
-} from "./workspace/sceneAppExecutionContentPosts";
 import {
   useWorkspaceImageWorkbenchActionRuntime,
   type SubmitImageWorkbenchAgentCommandParams,
@@ -159,12 +145,6 @@ import {
   buildImageCommandIntentRequestMetadata,
   resolveImageWorkbenchCommandRequest as resolveImageWorkbenchCommandRequestWithSelection,
 } from "./workspace/imageCommandIntent";
-import { buildWorkspaceArticleEditorImageSlotCommand } from "./workspace/workspaceArticleEditorImageSlotDispatch";
-import {
-  shouldEnableWorkspaceImageTaskPreviewRuntime,
-  useWorkspaceImageTaskPreviewRuntime,
-} from "./workspace/useWorkspaceImageTaskPreviewRuntime";
-import { useWorkspaceImageTaskExecutorRuntime } from "./workspace/useWorkspaceImageTaskExecutorRuntime";
 import { ensureImageWorkbenchProviderSelectionCommitted } from "./workspace/imageWorkbenchProviderReadiness";
 import { applyImagePreferenceToSendRouteSelection } from "./workspace/imageWorkbenchSendRoute";
 import { useWorkspaceAudioTaskPreviewRuntime } from "./workspace/useWorkspaceAudioTaskPreviewRuntime";
@@ -215,82 +195,22 @@ import { useWorkspaceGeneralWorkbenchDocumentPersistenceRuntime } from "./worksp
 import { useWorkspaceServiceSkillEntryActions } from "./workspace/useWorkspaceServiceSkillEntryActions";
 import { useWorkspaceArtifactViewModeControl } from "./workspace/useWorkspaceArtifactViewModeControl";
 import { useWorkspaceInitialSessionNavigation } from "./workspace/useWorkspaceInitialSessionNavigation";
-import { useSceneAppReviewDecisionRuntime } from "./workspace/useSceneAppReviewDecisionRuntime";
 import { resolveImageWorkbenchPreferenceViewModel } from "./workspace/imageWorkbenchPreference";
 import { useWorkspaceOpenedProjectsRuntime } from "./workspace/useWorkspaceOpenedProjectsRuntime";
 import { useWorkspaceProjectContentRuntime } from "./workspace/useWorkspaceProjectContentRuntime";
 import { useWorkspaceHealthRuntime } from "./workspace/useWorkspaceHealthRuntime";
 import { useWorkspaceDefaultProjectAliasRuntime } from "./workspace/useWorkspaceDefaultProjectAliasRuntime";
-import { WorkspaceGeneralWorkbenchSidebar } from "./workspace/WorkspaceGeneralWorkbenchSidebar";
+import { renderWorkspaceGeneralWorkbenchSidebarRuntime } from "./workspace/WorkspaceGeneralWorkbenchSidebarRuntime";
 import { GeneralWorkbenchHarnessSurfaceSection } from "./workspace/WorkspaceHarnessDialogs";
-import { WorkspaceTraceTab } from "./workspace/WorkspaceTraceTab";
-import {
-  WorkspaceFilesSurface,
-  type WorkspaceFilesSurfaceTarget,
-} from "./workspace/WorkspaceFilesSurface";
-import { WorkspacePluginSurface } from "./workspace/WorkspacePluginSurface";
-import {
-  closeWorkspacePluginSurfaceDescriptor,
-  mergeWorkspacePluginSurfaceDescriptors,
-  resolveWorkspacePluginSurfaceActiveContainerId,
-  selectWorkspacePluginSurfaceDescriptor,
-  type WorkspacePluginSurfaceDescriptor,
-} from "./workspace/workspacePluginSurfaceModel";
-import { WorkspaceObjectCanvasSurface } from "./workspace/WorkspaceObjectCanvasSurface";
-import type { WorkspaceObjectCanvasCandidate } from "./workspace/workspaceObjectCanvasModel";
-import { WorkspaceArticleEditorRightSurface } from "./workspace/WorkspaceArticleEditorRightSurface";
-import { submitWorkspaceArticleEditorActionIntent } from "./workspace/workspaceArticleEditorActionDispatch";
-import {
-  buildWorkspaceArticleWorkspaceFromThreadRead,
-  hasWorkspaceArticleFinalDocument,
-  hasWorkspaceArticleWorkspaceThreadReadMetadata,
-  type WorkspaceArticleWorkspaceActionIntent,
-  type WorkspaceArticleWorkspaceImageSlotIntent,
-  type WorkspaceArticleWorkspace,
-} from "./workspace/workspaceArticleWorkspaceModel";
-import {
-  attachWorkspaceArticleWorkspacePreviewArtifactToMessages,
-  buildWorkspaceArticleWorkspaceFromMessageArtifacts,
-  hasWorkspaceArticleWorkspaceMessageArtifactSignals,
-} from "./workspace/workspaceArticleWorkspaceMessageArtifacts";
-import {
-  buildWorkspaceArticleWorkspaceSelectionUpdateRequest,
-  type WorkspaceArticleWorkspaceSelectionChange,
-} from "./workspace/workspaceArticleWorkspaceSelectionWriteback";
-import {
-  applyWorkspaceArticleEditedDraft,
-  buildWorkspaceArticleEditedDraftFromChange,
-  buildWorkspaceArticleEditedDraftUpdateRequest,
-  readWorkspaceArticleObjectMarkdown,
-  shouldRejectWorkspaceArticleEditedDraftChange,
-  type WorkspaceArticleEditedDraft,
-  type WorkspaceArticleMarkdownChange,
-} from "./workspace/workspaceArticleWorkspaceEditedDraft";
-import {
-  applyWorkspaceArticleInlineImageTaskSyncResult,
-  buildWorkspaceArticleInlineImageTaskSync,
-  collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns,
-  collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages,
-  selectWorkspaceArticleInlineImageTaskIds,
-  suppressWorkspaceArticleInlineImageTaskPreviewMessages,
-} from "./workspace/workspaceArticleInlineImageTaskSync";
-import {
-  applyWorkspaceArticleInlineHostCommandSyncResult,
-  buildWorkspaceArticleInlineHostCommandSync,
-} from "./workspace/workspaceArticleInlineHostCommandSync";
+import { useWorkspaceArticleEditorRightSurfaceRuntime } from "./workspace/useWorkspaceArticleEditorRightSurfaceRuntime";
+import { useWorkspaceArticleEditorImageSlotRuntime } from "./workspace/useWorkspaceArticleEditorImageSlotRuntime";
 import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
 import {
-  buildWorkspaceRightSurfaceDefinitions,
-  RightSurfaceHost,
   resolveExpertInfoPanelCollapsedAfterLayoutChange,
-  resolveWorkspaceRightSurfaceState,
-  type WorkspaceRightSurfaceKind,
 } from "./workspace/right-surface";
-import { RightSurfaceBrowserPanel } from "./workspace/right-surface/browser/RightSurfaceBrowserPanel";
-import { ExpertInfoPanel } from "./experts/ExpertInfoPanel";
-import { FileManagerSidebar } from "./components/FileManager/FileManagerSidebar";
+import { useWorkspaceRightSurfaceHostRuntime } from "./workspace/useWorkspaceRightSurfaceHostRuntime";
+import { renderWorkspaceFileManagerSidebarRuntime } from "./workspace/WorkspaceFileManagerSidebarRuntime";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
-import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
 import { hasNamedGeneralCanvasFilePreview } from "./workspace/generalCanvasPreviewState";
 import {
   hasPreferredServiceSkillResultFileTargetSignals,
@@ -330,22 +250,13 @@ import {
   resolveEffectiveInitialInputCapability,
 } from "./utils/inputCapabilityBootstrap";
 import { buildKnowledgeSavePageParams } from "./workspace/knowledge/knowledgeSaveNavigation";
-import {
-  buildDefaultCuratedTaskReferenceSelection,
-  buildSceneAppExecutionCuratedTaskFollowUpAction,
-  buildCuratedTaskReferenceEntryFromSceneAppExecution,
-  buildSceneAppExecutionReviewFollowUpAction,
-} from "./utils/sceneAppCuratedTaskReference";
 import { buildSkillsPageParamsFromMessage } from "./utils/skillScaffoldDraft";
 import { resolveAgentChatWorkspaceShellViewModel } from "./agentChatWorkspaceShellViewModel";
 import { resolveTaskCenterDraftSurfaceState } from "./workspace/taskCenterSurfaceState";
 import { AutomationJobDialog } from "@/components/settings-v2/system/automation/AutomationJobDialog";
 import { resolveWorkspaceShellChromeRuntime } from "./workspace/workspaceShellChromeRuntime";
 import { resolveWorkspaceEntryLoadDeferral } from "./workspace/workspaceEntryLoadDeferral";
-import {
-  hasRunningThreadReadActivity,
-  resolveWorkspaceSceneSessionProjection,
-} from "./workspace/workspaceSceneSessionProjection";
+import { hasRunningThreadReadActivity } from "./workspace/workspaceSceneSessionProjection";
 import { resolveWorkspaceBrowserAssistRequest } from "./workspace/workspaceBrowserAssistRequest";
 import {
   resolveBrowserRuntimeNavigationFromBrowserAssist,
@@ -357,22 +268,26 @@ import {
   resolveWorkspaceRequestMetadataWithExpertSkills,
   shouldAllowDetachedInitialAutoSend,
 } from "./workspace/workspaceExpertMetadata";
-import {
-  buildWorkspaceRightSurfaceRuntimeLaunchers,
-  buildWorkspaceRightSurfaceRuntimePendingIntents,
-  hasWorkspaceRightSurfaceRuntimePendingSignals,
-} from "./workspace/workspaceRightSurfaceRuntimeProjection";
-import { useWorkspaceRightSurfacePendingRuntime } from "./workspace/useWorkspaceRightSurfacePendingRuntime";
-import type { WorkspaceRightSurfaceBrowserIntent } from "./workspace/workspaceRightSurfaceBrowserIntent";
+import { useWorkspaceRightSurfaceLocalStateRuntime } from "./workspace/useWorkspaceRightSurfaceLocalStateRuntime";
+import { useWorkspaceRightSurfaceArtifactOpenRuntime } from "./workspace/useWorkspaceRightSurfaceArtifactOpenRuntime";
+import { useWorkspaceRightSurfaceCoordinatorRuntime } from "./workspace/useWorkspaceRightSurfaceCoordinatorRuntime";
 import { buildBrowserSessionRefFromBrowserAssistSessionState } from "./workspace/workspaceBrowserSessionRef";
 import {
   createRestoredInteractiveMessageSnapshot,
   resolveReadOnlyInteractiveMessageIds,
 } from "./workspace/workspaceRestoredInteractiveMessages";
-import { useWorkspaceWorkflowProgressRuntime } from "./workspace/useWorkspaceWorkflowProgressRuntime";
+import {
+  EMPTY_WORKSPACE_WORKFLOW_STEPS,
+  HIDDEN_WORKSPACE_WORKFLOW_STEP_INDEX,
+  ignoreHiddenWorkspaceWorkflowStepClick,
+  useWorkspaceHiddenWorkflowProgressRuntime,
+} from "./workspace/useWorkspaceHiddenWorkflowProgressRuntime";
 import { useWorkspaceDebugRuntime } from "./workspace/useWorkspaceDebugRuntime";
 import { useWorkspaceClassicClawSidebarRuntime } from "./workspace/useWorkspaceClassicClawSidebarRuntime";
 import { useWorkspaceChatToolPreferencesRuntime } from "./workspace/useWorkspaceChatToolPreferencesRuntime";
+import { useWorkspaceSkillDirectoryRuntime } from "./workspace/useWorkspaceSkillDirectoryRuntime";
+import { useWorkspaceSceneAppExecutionSurfaceRuntime } from "./workspace/useWorkspaceSceneAppExecutionSurfaceRuntime";
+import { useWorkspaceHomeRecoveryRuntime } from "./workspace/useWorkspaceHomeRecoveryRuntime";
 import { useWorkspaceExpertAgentLaunchSyncRuntime } from "./workspace/useWorkspaceExpertAgentLaunchSyncRuntime";
 import {
   useWorkspaceArtifactStoreRuntime,
@@ -381,7 +296,6 @@ import {
 import {
   useWorkspaceActiveContentTargetRuntime,
   useWorkspaceEntryStateRuntime,
-  useWorkspaceServiceSkillDirectoryToastRuntime,
   useWorkspaceSoulArtifactVoiceTurnRuntime,
   useWorkspaceTaskFilesRefSyncRuntime,
 } from "./workspace/useWorkspaceEntrySideEffectsRuntime";
@@ -404,29 +318,16 @@ import {
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
   shouldAutoInitWorkspaceSessionFiles,
-  shouldAutoRefreshWorkspaceRightSurfacePending,
   shouldBuildFullThreadTimeline,
   shouldPauseTaskCenterInitialSessionNavigation,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
-import {
-  clearActiveTaskCenterDraftTab,
-  removeTaskCenterDraftTab,
-} from "./workspace/taskCenterDraftTabs";
-import { SCENEAPP_QUICK_REVIEW_ACTIONS } from "@/lib/agent/legacySceneAppExecutionSummary";
-import { buildArticleWorkspaceForArtifactOpen } from "./workspace/workspaceArticleWorkspaceArtifactOpen";
 
 export type {
   AgentBackgroundSessionRuntimeSnapshot,
   AgentChatWorkspaceProps,
   WorkflowProgressSnapshot,
 } from "./agentChatWorkspaceContract";
-
-const EMPTY_LEGACY_WORKFLOW_STEPS: never[] = [];
-const LEGACY_WORKFLOW_STEP_INDEX = 0;
-const ignoreLegacyWorkflowStepClick = (index: number) => {
-  void index;
-};
 
 export function AgentChatWorkspace({
   onNavigate: _onNavigate,
@@ -897,44 +798,26 @@ export function AgentChatWorkspace({
   const [mentionedCharacters, setMentionedCharacters] = useState<Character[]>(
     [],
   );
-  const skillSuggestionsRequestedRef = useRef(false);
-  const serviceSkillSuggestionsRequestedRef = useRef(false);
-
-  // 技能列表（用于 @ 引用）
-  const {
-    skills,
-    skillsLoading,
-    refreshSkills: loadSkills,
-  } = useLimeSkills({
-    autoLoad: false,
-    deferredDelayMs: deferredWorkspaceAuxiliaryLoadMs,
-    logScope: "AgentChatPage",
-    onError: (error) => {
-      console.warn("[AgentChatPage] 加载 skills 失败:", error);
-    },
-  });
   const initialPendingServiceSkillLaunchSignature = useMemo(
     () =>
       buildPendingServiceSkillLaunchSignature(initialPendingServiceSkillLaunch),
     [initialPendingServiceSkillLaunch],
   );
   const {
-    skills: serviceSkills,
-    groups: serviceSkillGroups,
-    isLoading: serviceSkillsLoading,
-    error: serviceSkillsError,
-    refresh: loadServiceSkills,
-    recordUsage: recordServiceSkillUsage,
-  } = useServiceSkills({
-    enabled: activeTheme === "general",
-    autoLoad: Boolean(initialPendingServiceSkillLaunchSignature),
-    loadMode: shouldDeferWorkspaceAuxiliaryLoads ? "deferred" : "immediate",
-    deferredDelayMs: deferredWorkspaceAuxiliaryLoadMs,
-  });
-
-  useWorkspaceServiceSkillDirectoryToastRuntime({
-    activeTheme,
+    skills,
+    skillsLoading,
+    serviceSkills,
+    serviceSkillGroups,
+    serviceSkillsLoading,
     serviceSkillsError,
+    recordServiceSkillUsage,
+    handleRefreshSkills,
+    handleSkillSuggestionsNeeded,
+  } = useWorkspaceSkillDirectoryRuntime({
+    activeTheme,
+    autoLoadServiceSkills: Boolean(initialPendingServiceSkillLaunchSignature),
+    deferredDelayMs: deferredWorkspaceAuxiliaryLoadMs,
+    shouldDeferWorkspaceAuxiliaryLoads,
   });
 
   const initialAutoSendAllowsDetachedSession = useMemo(
@@ -1047,37 +930,6 @@ export function AgentChatWorkspace({
   const handleNavigateToSkillSettings = useCallback(() => {
     _onNavigate?.("skills");
   }, [_onNavigate]);
-  const handleRefreshSkills = useCallback(async () => {
-    skillSuggestionsRequestedRef.current = true;
-    await loadSkills(true);
-  }, [loadSkills]);
-  const handleSkillSuggestionsNeeded = useCallback(() => {
-    if (skillSuggestionsRequestedRef.current) {
-      if (
-        serviceSkillSuggestionsRequestedRef.current ||
-        activeTheme !== "general"
-      ) {
-        return;
-      }
-    } else {
-      skillSuggestionsRequestedRef.current = true;
-      void loadSkills(false);
-    }
-
-    if (
-      activeTheme === "general" &&
-      !serviceSkillSuggestionsRequestedRef.current
-    ) {
-      serviceSkillSuggestionsRequestedRef.current = true;
-      void loadServiceSkills();
-    }
-  }, [activeTheme, loadServiceSkills, loadSkills]);
-  useEffect(() => {
-    if (activeTheme !== "general") {
-      serviceSkillSuggestionsRequestedRef.current = false;
-    }
-  }, [activeTheme]);
-
   useEffect(() => {
     const normalizedProjectId = normalizeProjectId(projectId);
     if (!normalizedProjectId) {
@@ -1702,8 +1554,9 @@ export function AgentChatWorkspace({
     projectMemory,
     harnessState: harnessShellState,
   });
-  const [manualRightSurface, setManualRightSurface] =
-    useState<WorkspaceRightSurfaceKind | null>(null);
+  const rightSurfaceLocalState = useWorkspaceRightSurfaceLocalStateRuntime();
+  const { manualRightSurface, openArticleWorkspaceRightSurface } =
+    rightSurfaceLocalState;
   const {
     contextWorkspace,
     isThemeWorkbench,
@@ -2282,9 +2135,13 @@ export function AgentChatWorkspace({
           selection: imageWorkbenchSelectionRef.current,
         });
     } catch (error) {
-      logAgentDebug("AgentChatPage", "imageWorkbench.sendRoute.refresh.failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logAgentDebug(
+        "AgentChatPage",
+        "imageWorkbench.sendRoute.refresh.failed",
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
   }, [project?.settings?.imageGeneration]);
   const prepareImageWorkbenchSkillSend = useCallback(async () => {
@@ -2412,7 +2269,8 @@ export function AgentChatWorkspace({
     openRuntimeSceneGate,
     ensureSessionForCommandMetadata: ensureSession,
     prepareImageWorkbenchSkillSend,
-    resolveImageWorkbenchCommandRequest: resolveImageWorkbenchSendCommandRequest,
+    resolveImageWorkbenchCommandRequest:
+      resolveImageWorkbenchSendCommandRequest,
   });
   useEffect(() => {
     sceneGateResumeHandlerRef.current = async ({ rawText, requestMetadata }) =>
@@ -3163,60 +3021,17 @@ export function AgentChatWorkspace({
     },
     [_onNavigate, openProjectFilePreviewInCanvas, project?.rootPath, projectId],
   );
-  const articleEditorRightSurfaceRef = useRef<WorkspaceArticleWorkspace | null>(
-    null,
-  );
-  const articleInlineHostCommandDispatchSignatureRef = useRef<string | null>(
-    null,
-  );
-  const handleArticleWorkspaceImageSlotIntentRef = useRef<
-    | ((
-        intent: WorkspaceArticleWorkspaceImageSlotIntent,
-      ) => void | Promise<void>)
-    | null
-  >(null);
-  const rightSurfacePendingActionsRef = useRef<{
-    consumePendingRequestsForSurface?: (
-      surface: WorkspaceRightSurfaceKind,
-    ) => Promise<void>;
-    refreshRightSurfacePendingRequests?: () => Promise<void>;
-  }>({});
-  const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
-    useState<WorkspaceFilesSurfaceTarget | null>(null);
-  const [
-    activeObjectCanvasRightSurfaceCandidate,
-    setActiveObjectCanvasRightSurfaceCandidate,
-  ] = useState<WorkspaceObjectCanvasCandidate | null>(null);
-  const [activeArticleWorkspace, setActiveArticleWorkspace] =
-    useState<WorkspaceArticleWorkspace | null>(null);
-  const handleWorkspaceArtifactClick = useCallback(
-    (artifact: Artifact) => {
-      const articleWorkspaceFromArtifact = buildArticleWorkspaceForArtifactOpen(
-        artifact,
-        articleEditorRightSurfaceRef.current,
-      );
-      if (articleWorkspaceFromArtifact) {
-        workbenchRequests.clearFocusedArtifactBlock();
-        setHarnessPanelVisible(false);
-        setExpertInfoPanelCollapsed(true);
-        setActiveFilesRightSurfaceTarget(null);
-        setActiveObjectCanvasRightSurfaceCandidate(null);
-        setActiveArticleWorkspace(articleWorkspaceFromArtifact);
-        setManualRightSurface("articleWorkspace");
-        void rightSurfacePendingActionsRef.current.refreshRightSurfacePendingRequests?.();
-        void rightSurfacePendingActionsRef.current.consumePendingRequestsForSurface?.(
-          "articleWorkspace",
-        );
-        void rightSurfacePendingActionsRef.current.consumePendingRequestsForSurface?.(
-          "objectCanvas",
-        );
-        return;
-      }
-      workbenchRequests.clearFocusedArtifactBlock();
-      handleArtifactClick(artifact);
-    },
-    [handleArtifactClick, setHarnessPanelVisible, workbenchRequests],
-  );
+  const {
+    bindArticleEditorRightSurface,
+    bindRightSurfacePendingActions,
+    handleWorkspaceArtifactClick,
+  } = useWorkspaceRightSurfaceArtifactOpenRuntime({
+    clearFocusedArtifactBlock: workbenchRequests.clearFocusedArtifactBlock,
+    fallbackOpenArtifact: handleArtifactClick,
+    openArticleWorkspaceRightSurface,
+    setExpertInfoPanelCollapsed,
+    setHarnessPanelVisible,
+  });
   const handleOpenWorkspacePluginHistoryArtifactPreview = useCallback(
     (item: WorkspacePluginHistoryRestoreArtifactPreviewItem) => {
       const artifact =
@@ -3668,204 +3483,32 @@ export function AgentChatWorkspace({
       siteSkillExecutionState,
     ],
   );
-  const sceneAppExecutionSummaryState = useSceneAppExecutionSummaryRuntime({
-    initialSummary: initialSceneAppExecutionSummary,
-    sessionId,
-    isSending,
-  });
-  const sceneAppSummaryAvailable = Boolean(
-    sceneAppExecutionSummaryState?.summary,
-  );
-  const sceneAppExecutionReferenceEntry = useMemo(
-    () =>
-      sceneAppSummaryAvailable
-        ? buildCuratedTaskReferenceEntryFromSceneAppExecution({
-            summary: sceneAppExecutionSummaryState?.summary,
-          })
-        : null,
-    [sceneAppExecutionSummaryState?.summary, sceneAppSummaryAvailable],
-  );
-  const defaultCuratedTaskReferenceSelection = useMemo(
-    () =>
-      buildDefaultCuratedTaskReferenceSelection({
-        replayReferenceEntries:
-          initialCreationReplaySurface?.defaultReferenceEntries,
-        replayReferenceMemoryIds:
-          initialCreationReplaySurface?.defaultReferenceMemoryIds,
-        sceneAppReferenceEntry: sceneAppExecutionReferenceEntry,
-      }),
-    [
-      initialCreationReplaySurface?.defaultReferenceEntries,
-      initialCreationReplaySurface?.defaultReferenceMemoryIds,
-      sceneAppExecutionReferenceEntry,
-    ],
-  );
-  const defaultCuratedTaskReferenceEntries =
-    defaultCuratedTaskReferenceSelection.referenceEntries;
-  const defaultCuratedTaskReferenceMemoryIds =
-    defaultCuratedTaskReferenceSelection.referenceMemoryIds;
-  const handleReviewCurrentSceneAppExecution = useCallback(() => {
-    const followUpAction = buildSceneAppExecutionReviewFollowUpAction({
-      referenceEntries: defaultCuratedTaskReferenceEntries,
-    });
-    if (!followUpAction) {
-      toast.error("当前还没有足够的项目结果基线，暂时无法直接进入下一步判断。");
-      return;
-    }
-
-    applyWorkbenchFollowUpActionPayload(followUpAction);
-  }, [applyWorkbenchFollowUpActionPayload, defaultCuratedTaskReferenceEntries]);
-  const handleContinueSceneAppReviewFeedback = useCallback(
-    (taskId: string) => {
-      const followUpAction = buildSceneAppExecutionCuratedTaskFollowUpAction({
-        referenceEntries: defaultCuratedTaskReferenceEntries,
-        taskId,
-      });
-      if (!followUpAction) {
-        toast.error("当前判断建议还缺少可继续的结果模板。");
-        return;
-      }
-
-      applyWorkbenchFollowUpActionPayload(followUpAction);
-    },
-    [applyWorkbenchFollowUpActionPayload, defaultCuratedTaskReferenceEntries],
-  );
-  const sceneAppExecutionContentPostEntries = useMemo(
-    () =>
-      sceneAppSummaryAvailable
-        ? buildSceneAppExecutionContentPostEntries({
-            taskFiles,
-            sessionFiles,
-            artifacts,
-          })
-        : [],
-    [artifacts, sceneAppSummaryAvailable, sessionFiles, taskFiles],
-  );
-  const sceneAppReviewDecisionRuntime = useSceneAppReviewDecisionRuntime({
-    enabled: sceneAppSummaryAvailable,
-    projectId,
-    sessionId,
-    sceneAppExecutionSummaryState,
-    onNavigate: _onNavigate,
-  });
-  const handleOpenSceneAppExecutionDetail = useCallback(() => {
-    if (!_onNavigate) {
-      return;
-    }
-
-    _onNavigate("plugin-lab");
-  }, [_onNavigate]);
-  const handleOpenSceneAppExecutionGovernance = useCallback(() => {
-    if (!_onNavigate) {
-      return;
-    }
-
-    _onNavigate("plugin-lab");
-  }, [_onNavigate]);
-  const handleOpenSceneAppExecutionContentPost = useCallback(
-    (entry: SceneAppExecutionContentPostEntry) => {
-      if (entry.source.kind === "task_file") {
-        handleTaskFileClick(entry.source.file);
-        return;
-      }
-
-      if (entry.source.kind === "artifact") {
-        handleArtifactClick(entry.source.artifact);
-        return;
-      }
-
-      void (async () => {
-        try {
-          const matchedTaskFile = taskFiles.find((file) =>
-            doesWorkspaceFileCandidateMatch(file.name, entry.pathLabel),
-          );
-          if (matchedTaskFile) {
-            handleTaskFileClick(matchedTaskFile);
-            return;
-          }
-
-          const matchedArtifact = artifacts.find((artifact) =>
-            doesWorkspaceFileCandidateMatch(
-              resolveArtifactProtocolFilePath(artifact),
-              entry.pathLabel,
-            ),
-          );
-          if (matchedArtifact) {
-            handleArtifactClick(matchedArtifact);
-            return;
-          }
-
-          const matchedSessionFile = sessionFiles.find((file) =>
-            doesWorkspaceFileCandidateMatch(file.name, entry.pathLabel),
-          );
-          if (!matchedSessionFile) {
-            toast.error("当前发布产物已不存在，暂时无法打开。");
-            return;
-          }
-
-          const content = await readSessionFile(matchedSessionFile.name);
-          if (typeof content !== "string" || !content.trim()) {
-            toast.info("该发布产物当前没有可直接预览的正文内容。");
-            return;
-          }
-
-          handleWorkspaceFileClick(matchedSessionFile.name, content);
-        } catch (error) {
-          console.error("[AgentChatPage] 打开发布产物失败:", error);
-          toast.error("打开发布产物失败，请稍后重试。");
-        }
-      })();
-    },
-    [
+  const sceneAppExecutionSurfaceRuntime =
+    useWorkspaceSceneAppExecutionSurfaceRuntime({
       artifacts,
-      handleArtifactClick,
-      handleTaskFileClick,
-      handleWorkspaceFileClick,
+      initialSummary: initialSceneAppExecutionSummary,
+      isSending,
+      onApplyFollowUpAction: applyWorkbenchFollowUpActionPayload,
+      onNavigate: _onNavigate,
+      onOpenArtifact: handleArtifactClick,
+      onOpenTaskFile: handleTaskFileClick,
+      onOpenWorkspaceFile: handleWorkspaceFileClick,
+      projectId,
       readSessionFile,
+      replayReferenceEntries:
+        initialCreationReplaySurface?.defaultReferenceEntries,
+      replayReferenceMemoryIds:
+        initialCreationReplaySurface?.defaultReferenceMemoryIds,
       sessionFiles,
+      sessionId,
       taskFiles,
-    ],
-  );
-  const sceneAppExecutionSummaryCard = useMemo(
-    () =>
-      sceneAppExecutionSummaryState?.summary ? (
-        <SceneAppExecutionSummaryCard
-          summary={sceneAppExecutionSummaryState.summary}
-          latestReviewFeedbackSignal={
-            sceneAppReviewDecisionRuntime.latestReviewFeedbackSignal
-          }
-          onContinueReviewFeedback={handleContinueSceneAppReviewFeedback}
-          onReviewCurrentProject={handleReviewCurrentSceneAppExecution}
-          onSaveAsSkill={sceneAppReviewDecisionRuntime.handleSaveAsSkill}
-          onOpenSceneAppDetail={handleOpenSceneAppExecutionDetail}
-          onOpenSceneAppGovernance={handleOpenSceneAppExecutionGovernance}
-          humanReviewAvailable={
-            sceneAppReviewDecisionRuntime.humanReviewAvailable
-          }
-          humanReviewLoading={sceneAppReviewDecisionRuntime.loading}
-          quickReviewActions={SCENEAPP_QUICK_REVIEW_ACTIONS}
-          quickReviewPending={sceneAppReviewDecisionRuntime.quickReviewPending}
-          onOpenHumanReview={
-            sceneAppReviewDecisionRuntime.handleOpenHumanReview
-          }
-          onApplyQuickReview={
-            sceneAppReviewDecisionRuntime.handleApplyQuickReview
-          }
-          contentPostEntries={sceneAppExecutionContentPostEntries}
-          onContentPostAction={handleOpenSceneAppExecutionContentPost}
-        />
-      ) : null,
-    [
-      handleContinueSceneAppReviewFeedback,
-      handleOpenSceneAppExecutionContentPost,
-      handleOpenSceneAppExecutionDetail,
-      handleOpenSceneAppExecutionGovernance,
-      handleReviewCurrentSceneAppExecution,
-      sceneAppExecutionContentPostEntries,
-      sceneAppExecutionSummaryState,
-      sceneAppReviewDecisionRuntime,
-    ],
-  );
+    });
+  const {
+    defaultCuratedTaskReferenceEntries,
+    defaultCuratedTaskReferenceMemoryIds,
+    reviewDecisionDialogNode: sceneAppReviewDecisionDialogNode,
+    summaryCard: sceneAppExecutionSummaryCard,
+  } = sceneAppExecutionSurfaceRuntime;
   const handleJumpToTimelineItem = useCallback(
     (itemId: string) => {
       if (!workbenchRequests.jumpToTimelineItem(itemId)) {
@@ -4351,12 +3994,10 @@ export function AgentChatWorkspace({
     ComponentProps<typeof GeneralWorkbenchHarnessSurfaceSection>,
     "enabled" | "harnessState"
   >;
-  useWorkspaceWorkflowProgressRuntime({
-    currentStepIndex: LEGACY_WORKFLOW_STEP_INDEX,
+  useWorkspaceHiddenWorkflowProgressRuntime({
     hasMessages,
     isSpecializedThemeMode,
     onWorkflowProgressChange,
-    steps: EMPTY_LEGACY_WORKFLOW_STEPS,
   });
   const navigationActions = useWorkspaceNavigationActions({
     applyProjectSelection,
@@ -4413,7 +4054,7 @@ export function AgentChatWorkspace({
     currentGate,
     generalWorkbenchWorkflowSteps:
       generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowSteps,
-    steps: EMPTY_LEGACY_WORKFLOW_STEPS,
+    steps: EMPTY_WORKSPACE_WORKFLOW_STEPS,
     workflowRunState: themeWorkbenchRunState,
     handleSend,
     isPreparingSend,
@@ -4626,86 +4267,11 @@ export function AgentChatWorkspace({
     preferContentReviewInRightRail,
   });
 
-  const handleNonMaterializedTaskCenterSessionReady = useCallback(
-    (
-      readySessionId: string,
-      options?: { sourceDraftTabId?: string | null },
-    ) => {
-      if (typeof newChatAt === "number") {
-        markNewChatRequestHandled(String(newChatAt));
-      }
-      taskCenterDraftSurfaceActiveRef.current = false;
-      const sourceDraftTabId = options?.sourceDraftTabId?.trim() || null;
-      if (sourceDraftTabId) {
-        setTaskCenterDraftTabs((current) =>
-          removeTaskCenterDraftTab(current, sourceDraftTabId),
-        );
-        setActiveTaskCenterDraftTabId((current) =>
-          clearActiveTaskCenterDraftTab(current, sourceDraftTabId),
-        );
-      }
-      setTaskCenterTransitionTopicId(null);
-      setTaskCenterDetachedTopicId(null);
-      upsertTaskCenterOpenTab(readySessionId, taskCenterWorkspaceId);
-      markTaskCenterLocalSessionOverride(readySessionId);
-      persistTaskCenterMaterializedSessionNavigation(readySessionId);
-    },
-    [
-      markNewChatRequestHandled,
-      markTaskCenterLocalSessionOverride,
-      newChatAt,
-      persistTaskCenterMaterializedSessionNavigation,
-      setActiveTaskCenterDraftTabId,
-      setTaskCenterDetachedTopicId,
-      setTaskCenterDraftTabs,
-      setTaskCenterTransitionTopicId,
-      taskCenterWorkspaceId,
-      upsertTaskCenterOpenTab,
-    ],
-  );
-
-  const handleSendFromEmptyState = useTaskCenterEmptyStateSendRuntime({
-    agentEntry,
-    input,
-    setInput,
-    activeSessionIdRef,
-    activeDraftTabIdRef: activeTaskCenterDraftTabIdRef,
-    clearMessages,
-    displayMessagesLength: displayMessages.length,
-    turnsLength: turns.length,
-    threadItemsLength: effectiveThreadItems.length,
-    hasDisplayMessages,
-    handleSend,
-    sessionId,
-    taskCenterWorkspaceId,
-    setTaskCenterDraftTabs,
-    setTaskCenterDraftSendRequest,
-    taskCenterDraftSendRequest,
-    setHomePendingPreviewRequest,
-    onNonMaterializedSessionReady: handleNonMaterializedTaskCenterSessionReady,
-  });
-
-  useTaskCenterDraftSendDispatchRuntime({
-    taskCenterDraftSendRequest,
-    setTaskCenterDraftSendRequest,
-    setHomePendingPreviewRequest,
-    messagesLength: messages.length,
-    displayMessagesLength: displayMessages.length,
-    currentSessionId: sessionId,
-    materializedSessionIdsRef: taskCenterDraftMaterializedSessionIdsRef,
-    prewarmedDraftSessionIdsRef: taskCenterDraftWarmupSessionIdsRef,
-    materializeDraftTab: materializeTaskCenterDraftTab,
-    commitMaterializedDraftTab: commitMaterializedTaskCenterDraftTab,
-    onNonMaterializedSessionReady: handleNonMaterializedTaskCenterSessionReady,
-    restoreInput: setInput,
-    sendRef: handleSendRef,
-    workspaceId: taskCenterWorkspaceId,
-  });
-
   const shouldHideCurrentSessionContent =
     taskCenterHomeSurfaceState.shouldHideCurrentSessionContent;
   const sceneIsRestoringSession = taskCenterHomeSurfaceState.isRestoringSession;
   const {
+    handleSendFromEmptyState,
     sceneDisplayMessages,
     sceneTurns,
     sceneThreadItems,
@@ -4717,24 +4283,52 @@ export function AgentChatWorkspace({
     sceneQueuedTurns,
     sceneIsPreparingSend,
     sceneIsSending,
-  } = resolveWorkspaceSceneSessionProjection({
+  } = useWorkspaceTaskCenterSendRuntime({
+    activeDraftTabIdRef: activeTaskCenterDraftTabIdRef,
+    activeSessionIdRef,
+    agentEntry,
+    clearMessages,
+    commitMaterializedDraftTab: commitMaterializedTaskCenterDraftTab,
+    currentSessionId: sessionId,
+    currentTurnId,
     shouldHideCurrentSessionContent,
     displayMessages,
-    homePendingPreviewMessages:
-      homePendingPreviewMessages.length > 0
-        ? homePendingPreviewMessages
-        : bootstrapPendingPreviewMessages,
-    turns,
     effectiveThreadItems,
-    currentTurnId,
-    threadRead,
     executionRuntime,
-    planComposerPendingActions,
-    submittedActionsInFlight,
-    queuedTurns,
+    handleSend,
+    hasDisplayMessages,
+    homePendingPreviewMessages,
+    bootstrapPendingPreviewMessages,
+    input,
     isPreparingSend,
-    isTaskCenterDraftSendPending,
     isSending,
+    isTaskCenterDraftSendPending,
+    markNewChatRequestHandled,
+    markTaskCenterLocalSessionOverride,
+    materializedSessionIdsRef: taskCenterDraftMaterializedSessionIdsRef,
+    materializeDraftTab: materializeTaskCenterDraftTab,
+    messagesLength: messages.length,
+    newChatAt,
+    persistMaterializedSessionNavigation:
+      persistTaskCenterMaterializedSessionNavigation,
+    planComposerPendingActions,
+    prewarmedDraftSessionIdsRef: taskCenterDraftWarmupSessionIdsRef,
+    queuedTurns,
+    sendRef: handleSendRef,
+    setActiveDraftTabId: setActiveTaskCenterDraftTabId,
+    setDetachedTopicId: setTaskCenterDetachedTopicId,
+    setHomePendingPreviewRequest,
+    setInput,
+    setTaskCenterDraftSendRequest,
+    setTaskCenterDraftTabs,
+    setTransitionTopicId: setTaskCenterTransitionTopicId,
+    submittedActionsInFlight,
+    taskCenterDraftSendRequest,
+    taskCenterDraftSurfaceActiveRef,
+    taskCenterWorkspaceId,
+    threadRead,
+    turns,
+    upsertTaskCenterOpenTab,
   });
   const sceneSessionId = taskCenterHomeSurfaceState.sceneSessionId;
   const sceneMessageListEmptyStateVariant =
@@ -4767,1439 +4361,162 @@ export function AgentChatWorkspace({
     hasExpertInfoPanel &&
     !expertInfoPanelCollapsed &&
     sceneLayoutMode === "chat";
-  const [rightSurfaceBrowserTitle, setRightSurfaceBrowserTitle] = useState<
-    string | null
-  >(null);
-  const [activeBrowserRightSurfaceIntent, setActiveBrowserRightSurfaceIntent] =
-    useState<WorkspaceRightSurfaceBrowserIntent | null>(null);
-  const [activePluginSurfaces, setActivePluginSurfaces] = useState<
-    WorkspacePluginSurfaceDescriptor[]
-  >([]);
-  const [activePluginSurfaceContainerId, setActivePluginSurfaceContainerId] =
-    useState<string | null>(null);
-  const [activeArticleEditedDraft, setActiveArticleEditedDraft] =
-    useState<WorkspaceArticleEditedDraft | null>(null);
-  useEffect(() => {
-    setActiveArticleEditedDraft(null);
-  }, [runtimeWorkspaceId, sceneSessionId]);
   const canvasWorkbenchRootPath =
     sessionWorkingDir?.trim() || project?.rootPath || null;
   const shellRightSurfaceAvailable = Boolean(canvasWorkbenchRootPath);
-  const browserRightSurfaceAvailable = true;
-  const activePluginActivationContext =
-    workspacePluginRuntimeContext.context.status === "active"
-      ? workspacePluginRuntimeContext.context.activationContext
-      : null;
-  const rightSurfacePendingSessionId = sessionId || sceneSessionId;
-  const shouldAutoRefreshRightSurfacePending =
-    shouldAutoRefreshWorkspaceRightSurfacePending({
-      sessionId: rightSurfacePendingSessionId,
-      workspaceId: runtimeWorkspaceId,
-      workspaceRoot: canvasWorkbenchRootPath,
-      sceneIsSending,
-      sceneIsPreparingSend,
-      sceneLayoutMode,
-      taskCenterHomeHotpathActive:
-        shouldRenderTaskCenterEmbeddedHome ||
-        Boolean(taskCenterDraftSendRequest || homePendingPreviewRequest),
-      manualRightSurfaceActive: manualRightSurface !== null,
-      pluginActivationActive: Boolean(activePluginActivationContext),
-    });
-  const rightSurfaceAppServerPendingRuntime =
-    useWorkspaceRightSurfacePendingRuntime({
-      enabled: true,
-      autoRefreshEnabled: shouldAutoRefreshRightSurfacePending,
-      workspaceId: runtimeWorkspaceId,
-      workspaceRoot: canvasWorkbenchRootPath,
-      sessionId: rightSurfacePendingSessionId,
-      pluginActivationContext: activePluginActivationContext,
-      pluginContracts: workspacePluginRuntimeContext.context.contracts,
+  const { handleArticleWorkspaceImageSlotIntent } =
+    useWorkspaceArticleEditorImageSlotRuntime({
+      contentId,
+      handleImageWorkbenchCommand,
+      projectId,
+      setLayoutMode,
     });
   const {
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    refreshPendingRequests: refreshRightSurfacePendingRequests,
-  } = rightSurfaceAppServerPendingRuntime;
-  rightSurfacePendingActionsRef.current = {
-    consumePendingRequestsForSurface,
-    refreshRightSurfacePendingRequests,
-  };
-  const pendingBrowserRightSurfaceIntent =
-    rightSurfaceAppServerPendingRuntime.pendingBrowserIntent;
-  const browserRightSurfaceIntent =
-    activeBrowserRightSurfaceIntent ?? pendingBrowserRightSurfaceIntent;
-  const browserRightSurfaceSessionRef =
-    browserRightSurfaceIntent?.sessionRef ?? browserAssistSessionRef;
-  const browserRightSurfaceUsesBrowserAssistSession =
-    browserRightSurfaceSessionRef === browserAssistSessionRef;
-  const browserRightSurfaceControlMode =
-    browserRightSurfaceIntent?.controlMode ??
-    (browserRightSurfaceUsesBrowserAssistSession
-      ? browserAssistSessionState?.controlMode
-      : null);
-  const browserRightSurfaceLifecycleState =
-    browserRightSurfaceIntent?.lifecycleState ??
-    (browserRightSurfaceUsesBrowserAssistSession
-      ? browserAssistSessionState?.lifecycleState
-      : null);
-  const articleWorkspaceFromThreadRead = useMemo(
-    () =>
-      hasWorkspaceArticleWorkspaceThreadReadMetadata(sceneThreadRead)
-        ? buildWorkspaceArticleWorkspaceFromThreadRead(sceneThreadRead)
-        : null,
-    [sceneThreadRead],
-  );
-  const articleWorkspaceFromMessageArtifacts = useMemo(
-    () =>
-      hasWorkspaceArticleWorkspaceMessageArtifactSignals(sceneDisplayMessages)
-        ? buildWorkspaceArticleWorkspaceFromMessageArtifacts(
-            sceneDisplayMessages,
-          )
-        : null,
-    [sceneDisplayMessages],
-  );
-  const handleToggleExpertInfoPanel = useCallback(() => {
-    setHarnessPanelVisible(false);
-    setManualRightSurface(null);
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    const shouldOpenExpertInfo =
-      expertInfoPanelCollapsed || sceneLayoutMode !== "chat";
-    if (shouldOpenExpertInfo) {
-      setLayoutMode("chat");
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface("expertInfo");
-    } else {
-      void dismissPendingRequestsForSurface(
-        "expertInfo",
-        "user_closed_surface",
-      );
-    }
-    setExpertInfoPanelCollapsed(!shouldOpenExpertInfo);
-  }, [
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    expertInfoPanelCollapsed,
-    refreshRightSurfacePendingRequests,
-    sceneLayoutMode,
-    setHarnessPanelVisible,
-  ]);
-  const liveFilesRightSurfaceTarget: WorkspaceFilesSurfaceTarget | null =
-    preferredServiceSkillResultFileTarget ??
-    rightSurfaceAppServerPendingRuntime.pendingFileTarget;
-  const pluginSurfaceRightSurfaces =
-    activePluginSurfaces.length > 0
-      ? activePluginSurfaces
-      : rightSurfaceAppServerPendingRuntime.pendingPluginSurfaces;
-  const pluginSurfaceRightSurface = selectWorkspacePluginSurfaceDescriptor(
-    pluginSurfaceRightSurfaces,
-    activePluginSurfaceContainerId,
-  );
-  const pluginSurfaceRightSurfaceAvailable =
-    pluginSurfaceRightSurfaces.length > 0;
-  const filesRightSurfaceTarget: WorkspaceFilesSurfaceTarget | null =
-    activeFilesRightSurfaceTarget ?? liveFilesRightSurfaceTarget;
-  const filesRightSurfaceAvailable = Boolean(
-    filesRightSurfaceTarget?.relativePath,
-  );
-  const browserAssistObjectCanvasCandidateId = browserAssistLaunching
-    ? currentBrowserAssistScopeKey ||
-      browserAssistSessionState?.sessionId ||
-      browserAssistSessionState?.targetId ||
-      browserAssistSessionState?.profileKey ||
-      browserAssistSessionState?.url ||
-      "browser-assist-launching"
-    : browserAssistSessionState?.sessionId ||
-      browserAssistSessionState?.targetId ||
-      browserAssistSessionState?.profileKey ||
-      browserAssistSessionState?.url ||
-      null;
-  const browserAssistObjectCanvasCandidate: WorkspaceObjectCanvasCandidate | null =
-    browserAssistObjectCanvasCandidateId
-      ? {
-          candidateId: browserAssistObjectCanvasCandidateId || "browser-assist",
-          title: browserAssistSessionState?.title,
-          url: browserAssistSessionState?.url,
-          sessionId: browserAssistSessionState?.sessionId,
-          profileKey: browserAssistSessionState?.profileKey,
-          targetId: browserAssistSessionState?.targetId,
-          lifecycleState: browserAssistSessionState?.lifecycleState,
-          controlMode: browserAssistSessionState?.controlMode,
-          transportKind: browserAssistSessionState?.transportKind,
-          launching: browserAssistLaunching,
-          sourceKind: "browserAssist",
-        }
-      : null;
-  const objectCanvasRightSurfaceCandidate =
-    activeObjectCanvasRightSurfaceCandidate ??
-    browserAssistObjectCanvasCandidate ??
-    rightSurfaceAppServerPendingRuntime.pendingObjectCanvasCandidate;
-  const objectCanvasCandidateId =
-    objectCanvasRightSurfaceCandidate?.candidateId ?? null;
-  const objectCanvasRightSurfaceAvailable = Boolean(objectCanvasCandidateId);
-  const rawArticleEditorRightSurface =
-    articleWorkspaceFromThreadRead ??
-    articleWorkspaceFromMessageArtifacts ??
-    activeArticleWorkspace;
-  const baseArticleEditorRightSurface = useMemo(
-    () =>
-      applyWorkspaceArticleEditedDraft(
-        rawArticleEditorRightSurface,
-        activeArticleEditedDraft,
-      ),
-    [activeArticleEditedDraft, rawArticleEditorRightSurface],
-  );
-  const articleInlineHostCommandSyncResult = useMemo(
-    () =>
-      buildWorkspaceArticleInlineHostCommandSync({
-        articleWorkspace: baseArticleEditorRightSurface,
-        editedDraft: activeArticleEditedDraft,
-      }),
-    [activeArticleEditedDraft, baseArticleEditorRightSurface],
-  );
-  const articleInlineHostMaterializedRightSurface = useMemo(
-    () =>
-      applyWorkspaceArticleInlineHostCommandSyncResult(
-        baseArticleEditorRightSurface,
-        articleInlineHostCommandSyncResult,
-      ),
-    [articleInlineHostCommandSyncResult, baseArticleEditorRightSurface],
-  );
-  useEffect(() => {
-    const syncResult = articleInlineHostCommandSyncResult;
-    if (!syncResult || !baseArticleEditorRightSurface) {
-      return;
-    }
-    if (sceneIsSending || sceneIsPreparingSend) {
-      return;
-    }
-
-    const signature = [
-      syncResult.object.ref.appId,
-      syncResult.object.ref.sessionId,
-      syncResult.object.ref.kind,
-      syncResult.object.ref.id,
-      syncResult.markdown,
-    ].join(":");
-    if (articleInlineHostCommandDispatchSignatureRef.current === signature) {
-      return;
-    }
-    articleInlineHostCommandDispatchSignatureRef.current = signature;
-
-    const change: WorkspaceArticleMarkdownChange = {
-      articleWorkspace: baseArticleEditorRightSurface,
-      markdown: syncResult.markdown,
-      object: syncResult.object,
-    };
-    const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
-    if (editedDraft) {
-      setActiveArticleEditedDraft((previous) =>
-        previous?.objectKey === editedDraft.objectKey &&
-        previous.markdown === editedDraft.markdown
-          ? previous
-          : editedDraft,
-      );
-
-      const request = buildWorkspaceArticleEditedDraftUpdateRequest(
-        change,
-        editedDraft,
-      );
-      if (request) {
-        void updateAgentRuntimeSession(request).catch((error) => {
-          console.warn(
-            "[AgentChatWorkspace] Article Editor 配图占位写回失败:",
-            error,
-          );
-        });
-      }
-    }
-
-    syncResult.imageSlotIntents.forEach((intent) => {
-      void handleArticleWorkspaceImageSlotIntentRef.current?.({
-        ...intent,
-        articleWorkspace: baseArticleEditorRightSurface,
-      });
-    });
-  }, [
-    articleInlineHostCommandSyncResult,
-    baseArticleEditorRightSurface,
+    articleEditorRightSurface,
+    articleEditorRightSurfaceAvailable,
+    handleArticleWorkspaceMarkdownChange,
+    sceneDisplayMessagesWithArticleWorkspaceArtifact,
+  } = useWorkspaceArticleEditorRightSurfaceRuntime({
+    activeArticleWorkspace: rightSurfaceLocalState.activeArticleWorkspace,
+    canvasState,
+    canvasWorkbenchRootPath,
+    contentId,
+    currentImageWorkbenchState,
+    imageWorkbenchSessionKey,
+    messages,
+    onImageSlotIntent: handleArticleWorkspaceImageSlotIntent,
+    projectId,
+    runtimeWorkspaceId,
+    sceneDisplayMessages,
     sceneIsPreparingSend,
     sceneIsSending,
-  ]);
-  const articleInlineImageTaskSyncResult = useMemo(
-    () =>
-      buildWorkspaceArticleInlineImageTaskSync({
-        articleWorkspace: articleInlineHostMaterializedRightSurface,
-        editedDraft: activeArticleEditedDraft,
-        imageWorkbenchState: currentImageWorkbenchState,
-      }),
-    [
-      activeArticleEditedDraft,
-      articleInlineHostMaterializedRightSurface,
-      currentImageWorkbenchState,
-    ],
-  );
-  useEffect(() => {
-    const hasInlineRecoverySignal =
-      collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
-        articleWorkspace: articleInlineHostMaterializedRightSurface,
-        editedDraft: activeArticleEditedDraft,
-      }).length > 0;
-    const documentInlineTasks = currentImageWorkbenchState.tasks.filter(
-      (task) =>
-        task.applyTarget?.kind === "canvas-insert" &&
-        task.applyTarget.canvasType === "document",
-    );
-    if (
-      !hasInlineRecoverySignal &&
-      documentInlineTasks.length === 0 &&
-      !articleInlineImageTaskSyncResult
-    ) {
-      return;
-    }
-
-    logAgentDebug(
-      "AgentChatWorkspace",
-      "articleInlineImageSync.state",
-      {
-        consumedTaskIds:
-          articleInlineImageTaskSyncResult?.consumedTaskIds ?? [],
-        documentInlineSlotIds: documentInlineTasks.map((task) =>
-          task.applyTarget?.kind === "canvas-insert"
-            ? task.applyTarget.slotId || null
-            : null,
-        ),
-        hasInlineRecoverySignal,
-        hasSyncResult: Boolean(articleInlineImageTaskSyncResult),
-        outputCount: currentImageWorkbenchState.outputs.length,
-        taskCount: currentImageWorkbenchState.tasks.length,
-      },
-      { level: "debug", throttleMs: 1000 },
-    );
-  }, [
-    activeArticleEditedDraft,
-    articleInlineHostMaterializedRightSurface,
-    articleInlineImageTaskSyncResult,
-    currentImageWorkbenchState,
-  ]);
-  const articleEditorRightSurface = useMemo(
-    () =>
-      applyWorkspaceArticleInlineImageTaskSyncResult(
-        articleInlineHostMaterializedRightSurface,
-        articleInlineImageTaskSyncResult,
-      ),
-    [
-      articleInlineHostMaterializedRightSurface,
-      articleInlineImageTaskSyncResult,
-    ],
-  );
-  const articleInlineImageTaskIds = useMemo(
-    () =>
-      selectWorkspaceArticleInlineImageTaskIds({
-        articleWorkspace: articleEditorRightSurface,
-        editedDraft: activeArticleEditedDraft,
-        imageWorkbenchState: currentImageWorkbenchState,
-      }),
-    [
-      activeArticleEditedDraft,
-      articleEditorRightSurface,
-      currentImageWorkbenchState,
-    ],
-  );
-  const articleInlineImageTaskRecoveryMarkdowns = useMemo(() => {
-    const markdowns = new Set<string>();
-    collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
-      articleWorkspace: articleEditorRightSurface,
-      editedDraft: activeArticleEditedDraft,
-    }).forEach((markdown) => markdowns.add(markdown));
-    collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages(
-      sceneDisplayMessages,
-    ).forEach((markdown) => markdowns.add(markdown));
-    return [...markdowns];
-  }, [
-    activeArticleEditedDraft,
-    articleEditorRightSurface,
-    sceneDisplayMessages,
-  ]);
-  const shouldRestoreCurrentImageTasksFromWorkspace =
-    shouldRestoreImageTasksFromWorkspace ||
-    articleInlineImageTaskRecoveryMarkdowns.length > 0;
-  const imageTaskPreviewRuntimeEnabled = useMemo(
-    () =>
-      shouldEnableWorkspaceImageTaskPreviewRuntime({
-        shouldDeferWorkspaceAuxiliaryLoads,
-        restoreFromWorkspace: shouldRestoreCurrentImageTasksFromWorkspace,
-        messages,
-        imageWorkbenchState: currentImageWorkbenchState,
-        canvasState,
-        documentMarkdowns: articleInlineImageTaskRecoveryMarkdowns,
-      }),
-    [
-      articleInlineImageTaskRecoveryMarkdowns,
-      canvasState,
-      currentImageWorkbenchState,
-      messages,
-      shouldDeferWorkspaceAuxiliaryLoads,
-      shouldRestoreCurrentImageTasksFromWorkspace,
-    ],
-  );
-  useEffect(() => {
-    const hasInlineRecoverySignal =
-      articleInlineImageTaskRecoveryMarkdowns.some(
-        (markdown) =>
-          markdown.includes("pending-image-task://") ||
-          markdown.includes("lime:image-task-slot:"),
-      );
-    if (
-      !hasInlineRecoverySignal &&
-      !shouldRestoreCurrentImageTasksFromWorkspace &&
-      !imageTaskPreviewRuntimeEnabled
-    ) {
-      return;
-    }
-
-    logAgentDebug(
-      "AgentChatWorkspace",
-      "articleInlineImageRecovery.state",
-      {
-        canvasWorkbenchRootPath: canvasWorkbenchRootPath || null,
-        documentMarkdownCount: articleInlineImageTaskRecoveryMarkdowns.length,
-        hasArticleEditorRightSurface: Boolean(articleEditorRightSurface),
-        hasArticleWorkspaceFromMessageArtifacts: Boolean(
-          articleWorkspaceFromMessageArtifacts,
-        ),
-        hasArticleWorkspaceFromThreadRead: Boolean(
-          articleWorkspaceFromThreadRead,
-        ),
-        hasInlineRecoverySignal,
-        imageTaskPreviewRuntimeEnabled,
-        sceneDisplayMessagesCount: sceneDisplayMessages.length,
-        shouldDeferWorkspaceAuxiliaryLoads,
-        shouldRestoreCurrentImageTasksFromWorkspace,
-      },
-      { level: "debug", throttleMs: 1000 },
-    );
-  }, [
-    articleEditorRightSurface,
-    articleInlineImageTaskRecoveryMarkdowns,
-    articleWorkspaceFromMessageArtifacts,
-    articleWorkspaceFromThreadRead,
-    canvasWorkbenchRootPath,
-    imageTaskPreviewRuntimeEnabled,
-    sceneDisplayMessages.length,
-    shouldDeferWorkspaceAuxiliaryLoads,
-    shouldRestoreCurrentImageTasksFromWorkspace,
-  ]);
-  useWorkspaceImageTaskPreviewRuntime({
-    enabled: imageTaskPreviewRuntimeEnabled,
-    sessionId: imageWorkbenchSessionKey,
-    projectId,
-    contentId,
-    projectRootPath: canvasWorkbenchRootPath,
-    restoreFromWorkspace: shouldRestoreCurrentImageTasksFromWorkspace,
-    messages,
-    documentMarkdowns: articleInlineImageTaskRecoveryMarkdowns,
-    currentImageWorkbenchState,
-    canvasState,
+    sceneSessionId,
+    sceneThreadRead,
     setCanvasState,
     setChatMessages,
+    shouldDeferWorkspaceAuxiliaryLoads,
+    shouldHideCurrentSessionContent,
+    shouldRestoreImageTasksFromWorkspace,
     updateCurrentImageWorkbenchState,
   });
-  useWorkspaceImageTaskExecutorRuntime({
-    enabled: imageTaskPreviewRuntimeEnabled,
-    projectRootPath: canvasWorkbenchRootPath,
-    currentImageWorkbenchState,
-    getImageTask: getMediaTaskArtifact,
-  });
-  useEffect(() => {
-    const syncResult = articleInlineImageTaskSyncResult;
-    if (!syncResult || !articleInlineHostMaterializedRightSurface) {
-      return;
-    }
-
-    const change: WorkspaceArticleMarkdownChange = {
-      articleWorkspace: articleInlineHostMaterializedRightSurface,
-      markdown: syncResult.markdown,
-      object: syncResult.object,
-    };
-    const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
-    if (!editedDraft) {
-      logAgentDebug(
-        "AgentChatWorkspace",
-        "articleInlineImageSync.persistSkipped",
-        {
-          reason: "missing_edited_draft",
-          consumedTaskIds: syncResult.consumedTaskIds,
-        },
-        { level: "warn", throttleMs: 1000 },
-      );
-      return;
-    }
-
-    setActiveArticleEditedDraft((previous) =>
-      previous?.objectKey === editedDraft.objectKey &&
-      previous.markdown === editedDraft.markdown
-        ? previous
-        : editedDraft,
-    );
-
-    const request = buildWorkspaceArticleEditedDraftUpdateRequest(
-      change,
-      editedDraft,
-    );
-    if (!request) {
-      logAgentDebug(
-        "AgentChatWorkspace",
-        "articleInlineImageSync.persistSkipped",
-        {
-          reason: "missing_update_request",
-          consumedTaskIds: syncResult.consumedTaskIds,
-          sessionId: articleInlineHostMaterializedRightSurface.sessionId,
-        },
-        { level: "warn", throttleMs: 1000 },
-      );
-      return;
-    }
-    logAgentDebug(
-      "AgentChatWorkspace",
-      "articleInlineImageSync.persistStart",
-      {
-        consumedTaskIds: syncResult.consumedTaskIds,
-        markdownIncludesPending: syncResult.markdown.includes(
-          "pending-image-task://",
-        ),
-        markdownIncludesResolvedImage:
-          /!\[[^\]]*]\((?!pending-image-task:\/\/)(?:https?:\/\/|file:\/\/|asset:\/\/|data:image\/)/i.test(
-            syncResult.markdown,
-          ),
-        sessionId: request.session_id,
-      },
-      { level: "debug", throttleMs: 1000 },
-    );
-    void updateAgentRuntimeSession(request).catch((error) => {
-      console.warn(
-        "[AgentChatWorkspace] Article Editor 配图回填写回失败:",
-        error,
-      );
-    });
-  }, [
-    articleInlineImageTaskSyncResult,
-    articleInlineHostMaterializedRightSurface,
-  ]);
-  const sceneDisplayMessagesWithoutArticleInlineImageTasks = useMemo(
-    () =>
-      suppressWorkspaceArticleInlineImageTaskPreviewMessages(
-        sceneDisplayMessages,
-        articleInlineImageTaskIds,
-      ),
-    [articleInlineImageTaskIds, sceneDisplayMessages],
-  );
-  articleEditorRightSurfaceRef.current = articleEditorRightSurface;
-  const articleEditorRightSurfaceAvailable = hasWorkspaceArticleFinalDocument(
+  bindArticleEditorRightSurface(articleEditorRightSurface);
+  const rightSurfaceRuntime = useWorkspaceRightSurfaceCoordinatorRuntime({
     articleEditorRightSurface,
-  );
-  const sceneDisplayMessagesWithArticleWorkspaceArtifact = useMemo(
-    () =>
-      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
-        messages: sceneDisplayMessagesWithoutArticleInlineImageTasks,
-        articleWorkspace: shouldHideCurrentSessionContent
-          ? null
-          : articleEditorRightSurface,
-        status:
-          sceneIsSending || sceneIsPreparingSend ? "streaming" : "complete",
-      }),
-    [
-      articleEditorRightSurface,
-      sceneDisplayMessagesWithoutArticleInlineImageTasks,
-      sceneIsPreparingSend,
-      sceneIsSending,
-      shouldHideCurrentSessionContent,
-    ],
-  );
-  useEffect(() => {
-    const pendingPluginSurfaces =
-      rightSurfaceAppServerPendingRuntime.pendingPluginSurfaces;
-    if (pendingPluginSurfaces.length === 0) {
-      return;
-    }
-
-    setActivePluginSurfaces((current) =>
-      mergeWorkspacePluginSurfaceDescriptors(current, pendingPluginSurfaces),
-    );
-    setActivePluginSurfaceContainerId((current) =>
-      resolveWorkspacePluginSurfaceActiveContainerId({
-        activeContainerId: current,
-        preferredContainerId:
-          pendingPluginSurfaces[pendingPluginSurfaces.length - 1]?.containerId,
-        surfaces: mergeWorkspacePluginSurfaceDescriptors(
-          activePluginSurfaces,
-          pendingPluginSurfaces,
-        ),
-      }),
-    );
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setManualRightSurface(
-      (current) =>
-        current ?? (sceneLayoutMode === "chat" ? "appSurface" : current),
-    );
-    void refreshRightSurfacePendingRequests();
-    void consumePendingRequestsForSurface("appSurface");
-  }, [
-    activePluginSurfaces,
-    consumePendingRequestsForSurface,
-    refreshRightSurfacePendingRequests,
-    rightSurfaceAppServerPendingRuntime.pendingPluginSurfaces,
-    sceneLayoutMode,
-    setHarnessPanelVisible,
-  ]);
-  const rightSurfaceHarnessEnabled =
-    !suppressHomeNavbarUtilityActions && showHarnessToggle;
-  const rightSurfaceTraceAvailable = !suppressHomeNavbarUtilityActions;
-  const rightSurfaceTraceEnabled =
-    rightSurfaceTraceAvailable && clawTraceEnabled;
-  useEffect(() => {
-    if (
-      !pendingBrowserRightSurfaceIntent ||
-      pendingBrowserRightSurfaceIntent.priority !== "foreground"
-    ) {
-      return;
-    }
-    if (
-      manualRightSurface === "browser" &&
-      activeBrowserRightSurfaceIntent?.sourceRequestId ===
-        pendingBrowserRightSurfaceIntent.sourceRequestId
-    ) {
-      return;
-    }
-
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    setActiveBrowserRightSurfaceIntent(pendingBrowserRightSurfaceIntent);
-    setRightSurfaceBrowserTitle(
-      pendingBrowserRightSurfaceIntent.title?.trim() || null,
-    );
-    setManualRightSurface("browser");
-    void refreshRightSurfacePendingRequests();
-    void consumePendingRequestsForSurface("browser");
-  }, [
-    activeBrowserRightSurfaceIntent?.sourceRequestId,
-    consumePendingRequestsForSurface,
-    manualRightSurface,
-    pendingBrowserRightSurfaceIntent,
-    refreshRightSurfacePendingRequests,
-    setHarnessPanelVisible,
-  ]);
-  const handleToggleRightSurfaceFiles = useCallback(() => {
-    if (!filesRightSurfaceAvailable) {
-      return;
-    }
-    const shouldOpenFiles = manualRightSurface !== "files";
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    setActiveFilesRightSurfaceTarget(
-      shouldOpenFiles ? filesRightSurfaceTarget : null,
-    );
-    setManualRightSurface(shouldOpenFiles ? "files" : null);
-    if (shouldOpenFiles) {
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface("files");
-    } else {
-      void dismissPendingRequestsForSurface("files", "user_closed_surface");
-    }
-  }, [
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    filesRightSurfaceAvailable,
-    filesRightSurfaceTarget,
-    manualRightSurface,
-    refreshRightSurfacePendingRequests,
-    setHarnessPanelVisible,
-  ]);
-  const handleToggleRightSurfaceShell = useCallback(() => {
-    const shouldOpenShell = manualRightSurface !== "shell";
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    setManualRightSurface(shouldOpenShell ? "shell" : null);
-    if (shouldOpenShell) {
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface("shell");
-    } else {
-      void dismissPendingRequestsForSurface("shell", "user_closed_surface");
-    }
-  }, [
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    manualRightSurface,
-    refreshRightSurfacePendingRequests,
-    setHarnessPanelVisible,
-  ]);
-  const handleCloseRightSurfaceShell = useCallback(() => {
-    setManualRightSurface((current) => (current === "shell" ? null : current));
-    void dismissPendingRequestsForSurface("shell", "user_closed_surface");
-  }, [dismissPendingRequestsForSurface]);
-  const handleToggleRightSurfaceBrowser = useCallback(() => {
-    if (!browserRightSurfaceAvailable) {
-      return;
-    }
-    const shouldOpenBrowser = manualRightSurface !== "browser";
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    setManualRightSurface(shouldOpenBrowser ? "browser" : null);
-    if (shouldOpenBrowser) {
-      if (pendingBrowserRightSurfaceIntent) {
-        setActiveBrowserRightSurfaceIntent(pendingBrowserRightSurfaceIntent);
-        setRightSurfaceBrowserTitle(
-          pendingBrowserRightSurfaceIntent.title?.trim() || null,
-        );
-      }
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface("browser");
-    } else {
-      void dismissPendingRequestsForSurface("browser", "user_closed_surface");
-    }
-  }, [
-    browserRightSurfaceAvailable,
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    manualRightSurface,
-    pendingBrowserRightSurfaceIntent,
-    refreshRightSurfacePendingRequests,
-    setHarnessPanelVisible,
-  ]);
-  const handleRightSurfaceBrowserNavigate = useCallback(
-    (_url: string, title?: string | null) => {
-      setRightSurfaceBrowserTitle(title?.trim() || null);
-    },
-    [],
-  );
-  const handleToggleRightSurfaceObjectCanvas = useCallback(() => {
-    if (!objectCanvasRightSurfaceAvailable) {
-      return;
-    }
-    const targetSurface = "objectCanvas";
-    const shouldOpenObjectCanvas = manualRightSurface !== targetSurface;
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(
-      shouldOpenObjectCanvas ? objectCanvasRightSurfaceCandidate : null,
-    );
-    setActiveArticleWorkspace(null);
-    setManualRightSurface(shouldOpenObjectCanvas ? targetSurface : null);
-    if (shouldOpenObjectCanvas) {
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface(targetSurface);
-    } else {
-      void dismissPendingRequestsForSurface(
-        targetSurface,
-        "user_closed_surface",
-      );
-    }
-  }, [
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    manualRightSurface,
-    objectCanvasRightSurfaceAvailable,
-    objectCanvasRightSurfaceCandidate,
-    refreshRightSurfacePendingRequests,
-    setHarnessPanelVisible,
-  ]);
-  const handleToggleRightSurfaceHarness = useCallback(() => {
-    if (!rightSurfaceHarnessEnabled) {
-      return;
-    }
-    const shouldOpenHarness = manualRightSurface !== "harness";
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    setManualRightSurface(shouldOpenHarness ? "harness" : null);
-    if (shouldOpenHarness) {
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface("harness");
-    } else {
-      void dismissPendingRequestsForSurface("harness", "user_closed_surface");
-    }
-  }, [
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    manualRightSurface,
-    refreshRightSurfacePendingRequests,
-    rightSurfaceHarnessEnabled,
-    setHarnessPanelVisible,
-  ]);
-  const handleToggleRightSurfaceTrace = useCallback(() => {
-    if (!rightSurfaceTraceAvailable) {
-      return;
-    }
-    const shouldOpenTrace = manualRightSurface !== "trace";
-    setHarnessPanelVisible(false);
-    setExpertInfoPanelCollapsed(true);
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    setManualRightSurface(shouldOpenTrace ? "trace" : null);
-    if (shouldOpenTrace) {
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface("trace");
-    } else {
-      void dismissPendingRequestsForSurface("trace", "user_closed_surface");
-    }
-  }, [
-    consumePendingRequestsForSurface,
-    dismissPendingRequestsForSurface,
-    manualRightSurface,
-    refreshRightSurfacePendingRequests,
-    rightSurfaceTraceAvailable,
-    setHarnessPanelVisible,
-  ]);
-  useEffect(() => {
-    if (manualRightSurface === "harness" && !rightSurfaceHarnessEnabled) {
-      setManualRightSurface(null);
-    }
-    if (manualRightSurface === "trace" && !rightSurfaceTraceAvailable) {
-      setManualRightSurface(null);
-    }
-    if (manualRightSurface === "files" && !filesRightSurfaceAvailable) {
-      setManualRightSurface(null);
-      setActiveFilesRightSurfaceTarget(null);
-    }
-    if (
-      manualRightSurface === "appSurface" &&
-      !pluginSurfaceRightSurfaceAvailable
-    ) {
-      setManualRightSurface(null);
-      setActivePluginSurfaces([]);
-      setActivePluginSurfaceContainerId(null);
-    }
-    if (
-      manualRightSurface === "objectCanvas" &&
-      !objectCanvasRightSurfaceAvailable
-    ) {
-      setManualRightSurface(null);
-      setActiveObjectCanvasRightSurfaceCandidate(null);
-    }
-    if (
-      manualRightSurface === "articleWorkspace" &&
-      !articleEditorRightSurfaceAvailable
-    ) {
-      setManualRightSurface(null);
-      setActiveObjectCanvasRightSurfaceCandidate(null);
-      setActiveArticleWorkspace(null);
-    }
-    if (manualRightSurface === "browser" && !browserRightSurfaceAvailable) {
-      setManualRightSurface(null);
-    }
-  }, [
-    pluginSurfaceRightSurfaceAvailable,
-    browserRightSurfaceAvailable,
-    filesRightSurfaceAvailable,
-    manualRightSurface,
-    objectCanvasRightSurfaceAvailable,
     articleEditorRightSurfaceAvailable,
-    rightSurfaceHarnessEnabled,
-    rightSurfaceTraceAvailable,
-  ]);
-  const handleToggleCanvasFromRightSurface = useCallback(() => {
-    if (manualRightSurface && sceneLayoutMode !== "chat") {
-      void dismissPendingRequestsForSurface(
-        manualRightSurface,
-        "user_switched_surface",
-      );
-      setManualRightSurface(null);
-      setActiveFilesRightSurfaceTarget(null);
-      setActiveObjectCanvasRightSurfaceCandidate(null);
-      setActiveArticleWorkspace(null);
-      return;
-    }
-
-    setHarnessPanelVisible(false);
-    if (manualRightSurface) {
-      void dismissPendingRequestsForSurface(
-        manualRightSurface,
-        "user_switched_surface",
-      );
-    }
-    setActiveFilesRightSurfaceTarget(null);
-    setActiveObjectCanvasRightSurfaceCandidate(null);
-    setActiveArticleWorkspace(null);
-    setManualRightSurface(null);
-    handleToggleCanvas();
-  }, [
-    dismissPendingRequestsForSurface,
+    bindRightSurfacePendingActions,
+    browserAssistLaunching,
+    browserAssistSessionRef,
+    browserAssistSessionState,
+    canvasWorkbenchRootPath,
+    clawTraceEnabled,
+    currentBrowserAssistScopeKey,
+    expertInfoPanelCollapsed,
+    expertInfoPanelVisible,
     handleToggleCanvas,
-    manualRightSurface,
-    sceneLayoutMode,
-    setHarnessPanelVisible,
-  ]);
-  const rightSurfaceOpenSurfaces = useMemo(() => {
-    const next: WorkspaceRightSurfaceKind[] = [];
-    const add = (kind: WorkspaceRightSurfaceKind, enabled: boolean) => {
-      if (enabled && !next.includes(kind)) {
-        next.push(kind);
-      }
-    };
-
-    add("workbench", sceneLayoutMode !== "chat");
-    add("appSurface", pluginSurfaceRightSurfaceAvailable);
-    add("objectCanvas", objectCanvasRightSurfaceAvailable);
-    add("expertInfo", hasExpertInfoPanel);
-    add("files", filesRightSurfaceAvailable);
-    add("shell", shellRightSurfaceAvailable);
-    add("harness", rightSurfaceHarnessEnabled);
-    add("trace", rightSurfaceTraceAvailable);
-    add("objectCanvas", manualRightSurface === "objectCanvas");
-    add("articleWorkspace", manualRightSurface === "articleWorkspace");
-    add("files", manualRightSurface === "files");
-    add("shell", manualRightSurface === "shell");
-    add("harness", manualRightSurface === "harness");
-    add("trace", manualRightSurface === "trace");
-    add("appSurface", manualRightSurface === "appSurface");
-    add("expertInfo", manualRightSurface === "expertInfo");
-    add("browser", manualRightSurface === "browser");
-    return next;
-  }, [
-    pluginSurfaceRightSurfaceAvailable,
-    filesRightSurfaceAvailable,
-    hasExpertInfoPanel,
-    manualRightSurface,
-    objectCanvasRightSurfaceAvailable,
-    rightSurfaceHarnessEnabled,
-    rightSurfaceTraceAvailable,
-    sceneLayoutMode,
-    shellRightSurfaceAvailable,
-  ]);
-  const rightSurfaceState = resolveWorkspaceRightSurfaceState({
-    layoutMode: sceneLayoutMode,
-    hasExpertInfo: hasExpertInfoPanel,
-    expertInfoVisible: expertInfoPanelVisible,
-    openSurfaces: rightSurfaceOpenSurfaces,
-    requestedSurface: manualRightSurface ?? undefined,
-    source: manualRightSurface ? "user" : undefined,
-  });
-  const handleSelectRightSurfaceTab = useCallback(
-    (kind: WorkspaceRightSurfaceKind) => {
-      if (kind === rightSurfaceState.activeSurface) {
-        return;
-      }
-
-      setHarnessPanelVisible(false);
-      setExpertInfoPanelCollapsed(kind !== "expertInfo");
-      setActiveFilesRightSurfaceTarget(
-        kind === "files" ? filesRightSurfaceTarget : null,
-      );
-      if (kind === "appSurface" && pluginSurfaceRightSurface) {
-        setActivePluginSurfaces((current) =>
-          mergeWorkspacePluginSurfaceDescriptors(current, [
-            pluginSurfaceRightSurface,
-          ]),
-        );
-        setActivePluginSurfaceContainerId(
-          pluginSurfaceRightSurface.containerId,
-        );
-      }
-      setActiveObjectCanvasRightSurfaceCandidate(
-        kind === "articleWorkspace" || kind === "objectCanvas"
-          ? objectCanvasRightSurfaceCandidate
-          : null,
-      );
-      setActiveArticleWorkspace(
-        kind === "articleWorkspace" && articleEditorRightSurface
-          ? articleEditorRightSurface
-          : null,
-      );
-      if (kind === "browser" && pendingBrowserRightSurfaceIntent) {
-        setActiveBrowserRightSurfaceIntent(pendingBrowserRightSurfaceIntent);
-        setRightSurfaceBrowserTitle(
-          pendingBrowserRightSurfaceIntent.title?.trim() || null,
-        );
-      }
-      setManualRightSurface(kind === "workbench" ? null : kind);
-      void refreshRightSurfacePendingRequests();
-      void consumePendingRequestsForSurface(kind);
-      if (kind === "articleWorkspace") {
-        void consumePendingRequestsForSurface("objectCanvas");
-      }
-    },
-    [
-      consumePendingRequestsForSurface,
-      pluginSurfaceRightSurface,
-      filesRightSurfaceTarget,
-      objectCanvasRightSurfaceCandidate,
-      pendingBrowserRightSurfaceIntent,
-      refreshRightSurfacePendingRequests,
-      articleEditorRightSurface,
-      rightSurfaceState.activeSurface,
-      setHarnessPanelVisible,
-    ],
-  );
-  const handleSelectPluginSurface = useCallback(
-    (surface: WorkspacePluginSurfaceDescriptor) => {
-      setHarnessPanelVisible(false);
-      setExpertInfoPanelCollapsed(true);
-      setActivePluginSurfaceContainerId(surface.containerId);
-      setManualRightSurface("appSurface");
-    },
-    [setHarnessPanelVisible],
-  );
-  const handleClosePluginSurface = useCallback(
-    (surface: WorkspacePluginSurfaceDescriptor) => {
-      const result = closeWorkspacePluginSurfaceDescriptor({
-        activeContainerId: activePluginSurfaceContainerId,
-        containerId: surface.containerId,
-        surfaces: pluginSurfaceRightSurfaces,
-      });
-      setActivePluginSurfaces(result.surfaces);
-      setActivePluginSurfaceContainerId(result.activeContainerId);
-      if (result.surfaces.length === 0 && manualRightSurface === "appSurface") {
-        setManualRightSurface(null);
-        void dismissPendingRequestsForSurface(
-          "appSurface",
-          "user_closed_surface",
-        );
-      }
-    },
-    [
-      activePluginSurfaceContainerId,
-      pluginSurfaceRightSurfaces,
-      dismissPendingRequestsForSurface,
-      manualRightSurface,
-    ],
-  );
-  const handleArticleWorkspaceActionIntent = useCallback(
-    async (intent: WorkspaceArticleWorkspaceActionIntent) => {
-      setLayoutMode("chat");
-      await submitWorkspaceArticleEditorActionIntent({
-        intent,
-        restoreInput: setInput,
-        submit: async (prompt, options) =>
-          await handleSendRef.current(
-            [],
-            undefined,
-            undefined,
-            prompt,
-            "react",
-            undefined,
-            options,
-          ),
-      });
-    },
-    [handleSendRef, setInput],
-  );
-  const handleArticleWorkspaceImageSlotIntent = useCallback(
-    async (intent: WorkspaceArticleWorkspaceImageSlotIntent) => {
-      const command = buildWorkspaceArticleEditorImageSlotCommand({
-        intent,
-        projectId,
-        contentId,
-        actionLabel: t("agentChat.imageWorkbenchAction.apply.documentLabel"),
-        dispatchLabel: t(
-          "agentChat.imageWorkbenchAction.apply.documentDispatch",
-        ),
-      });
-      if (!command) {
-        toast.error(
-          t("agentChat.imageWorkbenchAction.toast.command.missingPrompt"),
-        );
-        return;
-      }
-
-      setLayoutMode("chat");
-      await handleImageWorkbenchCommand(command);
-    },
-    [contentId, handleImageWorkbenchCommand, projectId, t],
-  );
-  handleArticleWorkspaceImageSlotIntentRef.current =
-    handleArticleWorkspaceImageSlotIntent;
-  const handleArticleWorkspaceMarkdownChange = useCallback(
-    (change: WorkspaceArticleMarkdownChange) => {
-      const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
-      if (
-        shouldRejectWorkspaceArticleEditedDraftChange({
-          currentDraft: activeArticleEditedDraft,
-          currentMarkdown: readWorkspaceArticleObjectMarkdown(change.object),
-          nextDraft: editedDraft,
-        })
-      ) {
-        return;
-      }
-      setActiveArticleEditedDraft(editedDraft);
-      const request = buildWorkspaceArticleEditedDraftUpdateRequest(
-        change,
-        editedDraft,
-      );
-      if (!request) {
-        return;
-      }
-      void updateAgentRuntimeSession(request).catch((error) => {
-        console.warn(
-          "[AgentChatWorkspace] Article Editor 编辑正文写回失败:",
-          error,
-        );
-      });
-    },
-    [activeArticleEditedDraft],
-  );
-  const handleArticleWorkspaceSelectedObjectChange = useCallback(
-    (change: WorkspaceArticleWorkspaceSelectionChange) => {
-      const request =
-        buildWorkspaceArticleWorkspaceSelectionUpdateRequest(change);
-      if (!request) {
-        return;
-      }
-      void updateAgentRuntimeSession(request).catch((error) => {
-        console.warn(
-          "[AgentChatWorkspace] Article Editor selection 写回失败:",
-          error,
-        );
-      });
-    },
-    [],
-  );
-  const rightSurfaceDefinitions = buildWorkspaceRightSurfaceDefinitions({
-    expertInfo: () => (
-      <ExpertInfoPanel
-        requestMetadata={expertPanelRequestMetadata}
-        localSkills={skills}
-        serviceSkills={serviceSkills}
-        workspaceSkillBindings={workspaceSkillBindingsRuntime.bindings}
-        skillsLoading={combinedSkillsLoading}
-        threadItems={effectiveThreadItems}
-        skillRefsEdited={
-          expertSkillRefsOverride !== null ||
-          expertWorkspaceSkillRuntimeEnableRefs.length > 0
-        }
-        enabledWorkspaceSkillRuntimeCount={
-          expertWorkspaceSkillRuntimeEnableBindings.length
-        }
-        onSkillRefsChange={handleExpertSkillRefsChange}
-        onEnableWorkspaceSkillRuntime={handleEnableExpertWorkspaceSkillRuntime}
-        onExpertProfileSwitch={handleThreadExpertProfileSwitch}
-        onOpenSkillsManage={
-          _onNavigate ? handleOpenSkillsManageFromExpertPanel : undefined
-        }
-      />
-    ),
-    ...(pluginSurfaceRightSurface
-      ? {
-          appSurface: () => (
-            <WorkspacePluginSurface
-              activeContainerId={activePluginSurfaceContainerId}
-              surfaces={pluginSurfaceRightSurfaces}
-              surface={pluginSurfaceRightSurface}
-              onCloseSurface={handleClosePluginSurface}
-              onSelectSurface={handleSelectPluginSurface}
-            />
-          ),
-        }
-      : {}),
-    ...(articleEditorRightSurface
-      ? {
-          articleWorkspace: () => (
-            <WorkspaceArticleEditorRightSurface
-              actionsDisabled={sceneIsSending || sceneIsPreparingSend}
-              articleWorkspace={articleEditorRightSurface}
-              onActionIntent={handleArticleWorkspaceActionIntent}
-              onArticleMarkdownChange={handleArticleWorkspaceMarkdownChange}
-              onOpenPreviewArtifact={(artifact) => {
-                void openWorkspaceArtifactInWorkbench(artifact);
-              }}
-              onSelectedObjectChange={
-                handleArticleWorkspaceSelectedObjectChange
-              }
-            />
-          ),
-        }
-      : {}),
-    ...(objectCanvasRightSurfaceAvailable
-      ? {
-          objectCanvas: () => (
-            <WorkspaceObjectCanvasSurface
-              candidate={objectCanvasRightSurfaceCandidate}
-              onOpenBrowserRuntime={
-                browserAssistObjectCanvasCandidate
-                  ? handleOpenBrowserRuntimeForBrowserAssist
-                  : undefined
-              }
-            />
-          ),
-        }
-      : {}),
-    ...(filesRightSurfaceAvailable
-      ? {
-          files: () => (
-            <WorkspaceFilesSurface
-              target={filesRightSurfaceTarget}
-              onOpenResultFile={
-                preferredServiceSkillResultFileTarget
-                  ? handleOpenServiceSkillResultFile
-                  : undefined
-              }
-            />
-          ),
-        }
-      : {}),
-    ...(browserRightSurfaceAvailable
-      ? {
-          browser: {
-            label:
-              rightSurfaceBrowserTitle ??
-              browserRightSurfaceIntent?.title ??
-              browserRightSurfaceSessionRef?.title ??
-              null,
-            render: () => (
-              <RightSurfaceBrowserPanel
-                active={rightSurfaceState.activeSurface === "browser"}
-                controlMode={browserRightSurfaceControlMode}
-                initialUrl={browserRightSurfaceSessionRef?.launchUrl ?? null}
-                lifecycleState={browserRightSurfaceLifecycleState}
-                sessionRef={browserRightSurfaceSessionRef}
-                onNavigate={handleRightSurfaceBrowserNavigate}
-              />
-            ),
-          },
-        }
-      : {}),
-    ...(rightSurfaceHarnessEnabled
-      ? {
-          harness: () => (
-            <GeneralWorkbenchHarnessSurfaceSection
-              enabled={rightSurfaceHarnessEnabled}
-              harnessState={harnessState}
-              {...generalWorkbenchHarnessPanelBaseProps}
-            />
-          ),
-        }
-      : {}),
-    ...(rightSurfaceTraceAvailable
-      ? {
-          trace: () => (
-            <WorkspaceTraceTab
-              enabled={rightSurfaceTraceEnabled}
-              sessionId={sceneSessionId}
-              workspaceId={runtimeWorkspaceId}
-            />
-          ),
-        }
-      : {}),
-    shell: () => (
-      <TaskCenterShellPanel
-        variant="surface"
-        projectRootPath={canvasWorkbenchRootPath}
-        onClose={handleCloseRightSurfaceShell}
-      />
-    ),
-  });
-  const hasActiveRightSurfaceDefinition = rightSurfaceDefinitions.some(
-    (definition) => definition.kind === rightSurfaceState.activeSurface,
-  );
-  const rightSurfaceHostNode =
-    rightSurfaceState.activeSurface && hasActiveRightSurfaceDefinition ? (
-      <RightSurfaceHost
-        activeSurface={rightSurfaceState.activeSurface}
-        definitions={rightSurfaceDefinitions}
-        openSurfaces={rightSurfaceState.openSurfaces}
-        onSelectSurface={handleSelectRightSurfaceTab}
-      />
-    ) : null;
-  const rightSurfaceContent = rightSurfaceHostNode;
-  const generalWorkbenchSidebarNode = (
-    <WorkspaceGeneralWorkbenchSidebar
-      visible={showGeneralWorkbenchSidebar}
-      isThemeWorkbench={isThemeWorkbench}
-      enablePanelCollapse={
-        generalWorkbenchScaffoldRuntime.enableGeneralWorkbenchPanelCollapse
-      }
-      onRequestCollapse={handleCollapseGeneralWorkbenchSidebar}
-      generalWorkbenchHarnessSummary={
-        harnessInventoryRuntime.generalWorkbenchHarnessSummary
-      }
-      harnessPanelVisible={rightSurfaceState.activeSurface === "harness"}
-      onToggleHarnessPanel={handleToggleRightSurfaceHarness}
-      workflow={{
-        projectId,
-        sessionId,
-        branchItems: generalWorkbenchScaffoldRuntime.branchItems,
-        onCreateVersionSnapshot: handleCreateVersionSnapshot,
-        onSwitchBranchVersion: handleSwitchBranchVersion,
-        onDeleteTopic: handleDeleteGeneralWorkbenchVersion,
-        onSetBranchStatus: handleSetBranchStatus,
-        workflowSteps:
-          generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowSteps,
-        onAddImage: handleAddImage,
-        onImportDocument: handleImportDocument,
-        onApplyFollowUpAction: handleApplyGeneralWorkbenchFollowUpAction,
-        activityLogs:
-          generalWorkbenchSidebarRuntime.generalWorkbenchActivityLogs,
-        creationTaskEvents:
-          generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
-        onViewRunDetail:
-          generalWorkbenchSidebarRuntime.handleViewGeneralWorkbenchRunDetail,
-        activeRunDetail:
-          generalWorkbenchSidebarRuntime.selectedGeneralWorkbenchRunDetail,
-        activeRunDetailLoading:
-          generalWorkbenchSidebarRuntime.generalWorkbenchRunDetailLoading,
-        workflowControlItems:
-          generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowControlItems,
-        workflowControlPendingItemId:
-          generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowControlPendingItemId,
-        onTriggerWorkflowControl:
-          generalWorkbenchSidebarRuntime.handleTriggerGeneralWorkbenchWorkflowControl,
-      }}
-      contextWorkspace={contextHarnessRuntime.contextWorkspace}
-      onViewContextDetail={handleViewContextDetail}
-      history={{
-        hasMore: generalWorkbenchSidebarRuntime.generalWorkbenchHistoryHasMore,
-        loading: generalWorkbenchSidebarRuntime.generalWorkbenchHistoryLoading,
-        onLoadMore:
-          generalWorkbenchSidebarRuntime.handleLoadMoreGeneralWorkbenchHistory,
-        skillDetailMap:
-          generalWorkbenchSidebarRuntime.generalWorkbenchSkillDetailMap,
-        messages,
-      }}
-    />
-  );
-  const rightSurfaceRuntimePendingIntents = useMemo(() => {
-    const params = {
-      createdAt: Date.now(),
-      harnessPendingCount,
-      objectCanvasCandidateId: browserAssistObjectCanvasCandidateId,
-      preferredServiceSkillResultFileTargetRelativePath:
-        preferredServiceSkillResultFileTarget?.relativePath,
-      showHarnessToggle,
-      suppressHomeNavbarUtilityActions,
-    };
-    return hasWorkspaceRightSurfaceRuntimePendingSignals(params)
-      ? buildWorkspaceRightSurfaceRuntimePendingIntents(params)
-      : [];
-  }, [
-    browserAssistObjectCanvasCandidateId,
     harnessPendingCount,
-    preferredServiceSkillResultFileTarget?.relativePath,
+    hasExpertInfoPanel,
+    localState: rightSurfaceLocalState,
+    pluginRuntimeContext: workspacePluginRuntimeContext.context,
+    preferredServiceSkillResultFileTarget,
+    runtimeWorkspaceId,
+    sceneIsPreparingSend,
+    sceneIsSending,
+    sceneLayoutMode,
+    sceneSessionId,
+    sessionId,
+    shellRightSurfaceAvailable,
     showHarnessToggle,
     suppressHomeNavbarUtilityActions,
-  ]);
-  const rightSurfacePendingIntents = useMemo(
-    () => [
-      ...rightSurfaceRuntimePendingIntents,
-      ...rightSurfaceAppServerPendingRuntime.pendingIntents,
-    ],
-    [
-      rightSurfaceAppServerPendingRuntime.pendingIntents,
-      rightSurfaceRuntimePendingIntents,
-    ],
-  );
-  const rightSurfaceLaunchers = useMemo(
-    () =>
-      buildWorkspaceRightSurfaceRuntimeLaunchers({
-        surfaceState: rightSurfaceState,
-        pendingIntents: rightSurfacePendingIntents,
-        filesAvailable: filesRightSurfaceAvailable,
-        appSurfaceAvailable: pluginSurfaceRightSurfaceAvailable,
-        hasExpertInfoPanel,
-        objectCanvasAvailable: objectCanvasRightSurfaceAvailable,
-        articleWorkspaceAvailable: articleEditorRightSurfaceAvailable,
-        shellAvailable: shellRightSurfaceAvailable,
-        showHarnessToggle,
-        traceAvailable: rightSurfaceTraceAvailable,
-        suppressHomeNavbarUtilityActions,
-      }),
-    [
-      pluginSurfaceRightSurfaceAvailable,
-      articleEditorRightSurfaceAvailable,
-      filesRightSurfaceAvailable,
-      hasExpertInfoPanel,
-      objectCanvasRightSurfaceAvailable,
-      rightSurfacePendingIntents,
-      rightSurfaceState,
-      rightSurfaceTraceAvailable,
-      shellRightSurfaceAvailable,
-      showHarnessToggle,
-      suppressHomeNavbarUtilityActions,
-    ],
-  );
-  const homeRecoverySession = useMemo<HomeRecoverySession | null>(() => {
-    if (
-      !recentSessionTopic ||
-      (recentSessionTopic.status !== "running" &&
-        recentSessionTopic.status !== "queued" &&
-        recentSessionTopic.status !== "waiting")
-    ) {
-      return null;
-    }
-
-    const title = recentSessionTopic.title.trim();
-    if (!title) {
-      return null;
-    }
-
-    const summary = recentSessionTopic.lastPreview.trim();
-    return {
-      sessionId: recentSessionTopic.sourceSessionId || recentSessionTopic.id,
-      title,
-      summary: summary || undefined,
-      status: recentSessionTopic.status,
-    };
-  }, [recentSessionTopic]);
-  const backgroundSessionRuntime = useMemo(
-    () =>
-      homeRecoverySession
-        ? {
-            sessionId: homeRecoverySession.sessionId,
-            status: homeRecoverySession.status,
-          }
-        : null,
-    [homeRecoverySession],
-  );
-  useEffect(() => {
-    onBackgroundSessionRuntimeChange?.(backgroundSessionRuntime);
-  }, [backgroundSessionRuntime, onBackgroundSessionRuntimeChange]);
-  const handleResumeHomeRecoverySession = useCallback(() => {
-    if (!homeRecoverySession) {
-      handleResumeRecentSession();
-      return;
-    }
-
-    if (_onNavigate) {
-      const recoveryProjectId =
-        recentSessionTopic?.workspaceId ?? projectId ?? undefined;
-      _onNavigate(
-        "agent",
-        buildClawAgentParams({
-          initialSessionId: homeRecoverySession.sessionId,
-          projectId: recoveryProjectId ?? undefined,
-        }),
-      );
-      return;
-    }
-
-    void handleOpenTaskTopic(homeRecoverySession.sessionId, {
-      preferResume: true,
-      forceRefresh: true,
-      replaceOpenTabs: true,
+    taskCenterHomeHotpathActive:
+      shouldRenderTaskCenterEmbeddedHome ||
+      Boolean(taskCenterDraftSendRequest || homePendingPreviewRequest),
+    setExpertInfoPanelCollapsed,
+    setHarnessPanelVisible,
+    setLayoutMode,
+  });
+  const {
+    handleToggleCanvasFromRightSurface,
+    handleToggleExpertInfoPanel,
+    handleToggleRightSurfaceBrowser,
+    handleToggleRightSurfaceFiles,
+    handleToggleRightSurfaceHarness,
+    handleToggleRightSurfaceObjectCanvas,
+    handleToggleRightSurfaceShell,
+    handleToggleRightSurfaceTrace,
+    rightSurfaceLaunchers,
+    rightSurfaceState,
+  } = rightSurfaceRuntime;
+  const rightSurfaceContent = useWorkspaceRightSurfaceHostRuntime({
+    articleActionsDisabled: sceneIsSending || sceneIsPreparingSend,
+    articleEditorRightSurface,
+    canvasWorkbenchRootPath,
+    expertInfoPanelProps: {
+      requestMetadata: expertPanelRequestMetadata,
+      localSkills: skills,
+      serviceSkills,
+      workspaceSkillBindings: workspaceSkillBindingsRuntime.bindings,
+      skillsLoading: combinedSkillsLoading,
+      threadItems: effectiveThreadItems,
+      skillRefsEdited:
+        expertSkillRefsOverride !== null ||
+        expertWorkspaceSkillRuntimeEnableRefs.length > 0,
+      enabledWorkspaceSkillRuntimeCount:
+        expertWorkspaceSkillRuntimeEnableBindings.length,
+      onSkillRefsChange: handleExpertSkillRefsChange,
+      onEnableWorkspaceSkillRuntime: handleEnableExpertWorkspaceSkillRuntime,
+      onExpertProfileSwitch: handleThreadExpertProfileSwitch,
+      onOpenSkillsManage: _onNavigate
+        ? handleOpenSkillsManageFromExpertPanel
+        : undefined,
+    },
+    generalWorkbenchHarnessPanelBaseProps,
+    harnessState,
+    preferredServiceSkillResultFileTarget,
+    rightSurfaceRuntime,
+    runtimeWorkspaceId,
+    sceneSessionId,
+    onArticleMarkdownChange: handleArticleWorkspaceMarkdownChange,
+    onOpenArticlePreviewArtifact: openWorkspaceArtifactInWorkbench,
+    onOpenBrowserRuntimeForBrowserAssist:
+      handleOpenBrowserRuntimeForBrowserAssist,
+    onOpenServiceSkillResultFile: handleOpenServiceSkillResultFile,
+    handleSendRef,
+    restoreInput: setInput,
+    setLayoutMode,
+  });
+  const generalWorkbenchSidebarNode =
+    renderWorkspaceGeneralWorkbenchSidebarRuntime({
+      contextWorkspace: contextHarnessRuntime.contextWorkspace,
+      generalWorkbenchHarnessSummary:
+        harnessInventoryRuntime.generalWorkbenchHarnessSummary,
+      generalWorkbenchScaffoldRuntime,
+      generalWorkbenchSidebarRuntime,
+      harnessPanelVisible: rightSurfaceState.activeSurface === "harness",
+      isThemeWorkbench,
+      messages,
+      projectId,
+      sessionId,
+      visible: showGeneralWorkbenchSidebar,
+      onAddImage: handleAddImage,
+      onApplyFollowUpAction: handleApplyGeneralWorkbenchFollowUpAction,
+      onCreateVersionSnapshot: handleCreateVersionSnapshot,
+      onDeleteTopic: handleDeleteGeneralWorkbenchVersion,
+      onImportDocument: handleImportDocument,
+      onRequestCollapse: handleCollapseGeneralWorkbenchSidebar,
+      onSetBranchStatus: handleSetBranchStatus,
+      onSwitchBranchVersion: handleSwitchBranchVersion,
+      onToggleHarnessPanel: handleToggleRightSurfaceHarness,
+      onViewContextDetail: handleViewContextDetail,
     });
-  }, [
-    _onNavigate,
-    handleOpenTaskTopic,
-    handleResumeRecentSession,
-    homeRecoverySession,
-    projectId,
-    recentSessionTopic?.workspaceId,
-  ]);
+  const { homeRecoverySession, handleResumeHomeRecoverySession } =
+    useWorkspaceHomeRecoveryRuntime({
+      onBackgroundSessionRuntimeChange,
+      onNavigate: _onNavigate,
+      onOpenTaskTopic: handleOpenTaskTopic,
+      onResumeRecentSession: handleResumeRecentSession,
+      projectId,
+      recentSessionTopic,
+    });
   const conversationSceneRuntime = useWorkspaceConversationSceneRuntime({
     messageListEmptyStateVariant: sceneMessageListEmptyStateVariant,
     navbarContextVariant:
@@ -6345,12 +4662,12 @@ export function AgentChatWorkspace({
     hideInlineStepProgress,
     isSpecializedThemeMode,
     hasMessages,
-    steps: EMPTY_LEGACY_WORKFLOW_STEPS,
+    steps: EMPTY_WORKSPACE_WORKFLOW_STEPS,
     activityLogs: generalWorkbenchSidebarRuntime.generalWorkbenchActivityLogs,
     creationTaskEvents:
       generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
-    currentStepIndex: LEGACY_WORKFLOW_STEP_INDEX,
-    goToStep: ignoreLegacyWorkflowStepClick,
+    currentStepIndex: HIDDEN_WORKSPACE_WORKFLOW_STEP_INDEX,
+    goToStep: ignoreHiddenWorkspaceWorkflowStepClick,
     displayMessages: sceneDisplayMessagesWithArticleWorkspaceArtifact,
     turns: sceneTurns,
     effectiveThreadItems: sceneThreadItems,
@@ -6404,22 +4721,20 @@ export function AgentChatWorkspace({
     timelineFocusRequestKey: workbenchRequests.timelineFocusRequestKey,
   });
 
-  const fileManagerNode = fileManagerSidebar.fileManagerOpen ? (
-    <FileManagerSidebar
-      onClose={fileManagerSidebar.closeFileManagerSidebar}
-      onAddPathReferences={handleAddPathReferences}
-      onImportAsKnowledge={inputbarScene.onImportPathReferenceAsKnowledge}
-      onOpenFileInWorkspace={(entry) => {
-        void openProjectFilePreviewInCanvas({
-          absolutePath: entry.path,
-        });
-      }}
-      onInstallSkillPackage={
-        _onNavigate ? handleInstallSkillPackageFromFileManager : undefined
-      }
-      initialDirectory={project?.rootPath || null}
-    />
-  ) : null;
+  const fileManagerNode = renderWorkspaceFileManagerSidebarRuntime({
+    fileManagerSidebar,
+    initialDirectory: project?.rootPath || null,
+    onAddPathReferences: handleAddPathReferences,
+    onImportAsKnowledge: inputbarScene.onImportPathReferenceAsKnowledge,
+    onInstallSkillPackage: _onNavigate
+      ? handleInstallSkillPackageFromFileManager
+      : undefined,
+    onOpenWorkspaceFile: (absolutePath) => {
+      void openProjectFilePreviewInCanvas({
+        absolutePath,
+      });
+    },
+  });
   return (
     <>
       <WorkspaceShellScene
@@ -6451,13 +4766,7 @@ export function AgentChatWorkspace({
           workspaceServiceSkillEntryActions.handleAutomationDialogSubmit
         }
       />
-      <RuntimeReviewDecisionDialog
-        open={sceneAppReviewDecisionRuntime.dialogOpen}
-        template={sceneAppReviewDecisionRuntime.template}
-        saving={sceneAppReviewDecisionRuntime.saving}
-        onOpenChange={sceneAppReviewDecisionRuntime.setDialogOpen}
-        onSave={sceneAppReviewDecisionRuntime.handleSaveHumanReview}
-      />
+      {sceneAppReviewDecisionDialogNode}
     </>
   );
 }

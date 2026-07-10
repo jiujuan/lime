@@ -309,7 +309,8 @@ describe("ToolCallDisplay tool search and actions", () => {
       ],
     });
 
-    expect(container.textContent).toContain("Config Tool");
+    expect(container.textContent).toContain("ConfigTool");
+    expect(container.textContent).toContain("CronCreateTool");
     expect(container.textContent).toContain("Remote Trigger Tool");
     expect(container.textContent).toContain("已完成 2 个步骤");
     expect(container.textContent).toContain("EnterWorktreeTool");

@@ -5,10 +5,38 @@ import {
   buildHistoryMessageSignature,
   messageImageSignature,
 } from "./agentChatHistorySignatures";
+import { messageHasInterruptedPlaceholder } from "./agentInterruptedMessageContent";
 import {
   hasRetainableLocalAssistantProcessState,
   hasRetainableLocalMessageState,
 } from "./agentChatHistoryLocalMergeState";
+
+function hasLocalInterruptedStopMarker(message: Message): boolean {
+  return messageHasInterruptedPlaceholder(message);
+}
+
+function isPendingRuntimeTurnId(value?: string | null): boolean {
+  return Boolean(value?.trim().startsWith("pending-turn:"));
+}
+
+function canMatchLocalProcessAssistantToTarget(
+  candidate: Message,
+  targetRuntimeTurnId?: string,
+): boolean {
+  if (!targetRuntimeTurnId) {
+    return true;
+  }
+
+  const candidateRuntimeTurnId = candidate.runtimeTurnId?.trim();
+  if (candidateRuntimeTurnId === targetRuntimeTurnId) {
+    return true;
+  }
+
+  return (
+    hasLocalInterruptedStopMarker(candidate) &&
+    (!candidateRuntimeTurnId || isPendingRuntimeTurnId(candidateRuntimeTurnId))
+  );
+}
 
 export const findMatchingLocalUserMessageIndex = (
   localUserMessages: Message[],
@@ -93,6 +121,23 @@ export const findMatchingLocalAssistantMessageIndex = (
     }
   }
 
+  const targetRuntimeTurnId = targetMessage.runtimeTurnId?.trim();
+  if (targetRuntimeTurnId) {
+    for (
+      let index = startIndex;
+      index < localAssistantMessages.length;
+      index += 1
+    ) {
+      const candidate = localAssistantMessages[index];
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.runtimeTurnId?.trim() === targetRuntimeTurnId) {
+        return index;
+      }
+    }
+  }
+
   return -1;
 };
 
@@ -153,12 +198,39 @@ export function findNextLocalProcessAssistantIndex(
       continue;
     }
     if (
-      targetRuntimeTurnId &&
-      candidate.runtimeTurnId?.trim() !== targetRuntimeTurnId
+      !canMatchLocalProcessAssistantToTarget(candidate, targetRuntimeTurnId)
     ) {
       continue;
     }
-    if (hasRetainableLocalAssistantProcessState(candidate)) {
+    if (
+      hasRetainableLocalAssistantProcessState(candidate) ||
+      hasLocalInterruptedStopMarker(candidate)
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+export function findNextLocalInterruptedAssistantIndex(
+  localAssistantMessages: Message[],
+  startIndex: number,
+  matchedLocalMessageIds: Set<string>,
+): number {
+  for (
+    let index = Math.max(0, startIndex);
+    index < localAssistantMessages.length;
+    index += 1
+  ) {
+    const candidate = localAssistantMessages[index];
+    if (!candidate) {
+      continue;
+    }
+    if (candidate.id && matchedLocalMessageIds.has(candidate.id)) {
+      continue;
+    }
+    if (messageHasInterruptedPlaceholder(candidate)) {
       return index;
     }
   }

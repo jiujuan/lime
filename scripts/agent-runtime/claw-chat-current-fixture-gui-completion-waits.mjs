@@ -24,6 +24,30 @@ export function countTextOccurrences(text, needle) {
   return text.split(needle).length - 1;
 }
 
+export function isGuiCanceledSnapshotReady(
+  snapshot,
+  { partialText = "", requireApprovalRecord = false } = {},
+) {
+  if (
+    !snapshot?.hasPrompt ||
+    snapshot.textareaVisible !== true ||
+    snapshot.textareaDisabled !== false ||
+    snapshot.stopButtonVisible !== false
+  ) {
+    return false;
+  }
+
+  if (requireApprovalRecord) {
+    return Number(snapshot.approvalRecordShape?.recordCount || 0) > 0;
+  }
+
+  if (partialText) {
+    return snapshot.hasPartialText === true;
+  }
+
+  return snapshot.hasStoppedCopy === true;
+}
+
 export async function waitForGuiChatCompleted(
   page,
   options,
@@ -924,7 +948,7 @@ export async function waitForStopButtonVisibleAndClick(
 export async function waitForGuiChatCanceled(
   page,
   options,
-  { prompt = NEWS_PROMPT, partialText = "" } = {},
+  { prompt = NEWS_PROMPT, partialText = "", requireApprovalRecord = false } = {},
 ) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -1039,10 +1063,10 @@ export async function waitForGuiChatCanceled(
     }
     lastSnapshot = snapshot;
     if (
-      snapshot.hasPrompt &&
-      snapshot.textareaVisible &&
-      snapshot.textareaDisabled === false &&
-      snapshot.stopButtonVisible === false
+      isGuiCanceledSnapshotReady(snapshot, {
+        partialText,
+        requireApprovalRecord,
+      })
     ) {
       return snapshot;
     }

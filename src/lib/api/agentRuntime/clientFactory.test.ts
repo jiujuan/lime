@@ -1085,6 +1085,7 @@ describe("agentRuntime clientFactory", () => {
     });
 
     expect(appServerClient.exportHandoffBundle).toHaveBeenCalledWith({
+      locale: "en-US",
       sessionId: "session-1",
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();

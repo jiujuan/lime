@@ -3342,6 +3342,135 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server respond action 应先注册 event drain route 再发送 action/respond", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.drainEvents).mockResolvedValue([]);
+    vi.mocked(appServerClient.respondAction).mockImplementationOnce(
+      async () => {
+        expect(appServerClient.drainEvents).toHaveBeenCalled();
+        return {
+          id: 2,
+          result: {},
+          response: {
+            id: 2,
+            result: {},
+          },
+          messages: [],
+          notifications: [],
+        };
+      },
+    );
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+      enableAppServerEventDrain: true,
+    });
+
+    await client.respondAgentRuntimeAction({
+      session_id: "session-1",
+      request_id: "req-1",
+      action_type: "tool_confirmation",
+      decision: "allow_for_session",
+      event_name: "aster_stream_message-1",
+      action_scope: {
+        session_id: "session-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+      },
+    });
+
+    expect(appServerClient.respondAction).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      requestId: "req-1",
+      actionType: "tool_confirmation",
+      decision: "allow_for_session",
+      eventName: "aster_stream_message-1",
+      actionScope: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    });
+  });
+
+  it("App Server respond action 缺少 event_name 时应投递到 session stream event", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.respondAction).mockResolvedValueOnce({
+      id: 2,
+      result: {},
+      response: {
+        id: 2,
+        result: {},
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-action-resume-completed",
+              sequence: 8,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "turn.completed",
+              timestamp: "2026-06-06T00:00:02.000Z",
+              payload: {},
+            },
+          },
+        },
+      ],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "agentSession/event/session-1",
+      listener,
+    );
+
+    await client.respondAgentRuntimeAction({
+      session_id: "session-1",
+      request_id: "req-1",
+      action_type: "tool_confirmation",
+      decision: "allow_for_session",
+      action_scope: {
+        session_id: "session-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+      },
+    });
+
+    expect(appServerClient.respondAction).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      requestId: "req-1",
+      actionType: "tool_confirmation",
+      decision: "allow_for_session",
+      actionScope: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    });
+    expect(listener).toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        type: "turn_completed",
+        event_id: "evt-action-resume-completed",
+        session_id: "session-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 8,
+        server_event_emitted_at: Date.parse("2026-06-06T00:00:02.000Z"),
+      }),
+    });
+    unlisten();
+  });
+
   it("request projection 应在未传可选项时保持精简 App Server 参数", () => {
     expect(
       appServerTurnStartParamsFromRequest({

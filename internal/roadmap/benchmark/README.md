@@ -21,6 +21,12 @@
 5. **公开 benchmark 不能成为 prompt 过拟合目标。**
    固定公开子集只做 smoke 和趋势；发布判断必须同时看私有回归集、轮换样本、失败沉淀 replay 和真实 GUI 证据。
 
+6. **Coding 是 Lime P0 私有门禁，不是 DeepSWE 附属项。**
+   DeepSWE / SWE-bench 只能证明公开 coding 任务表现；Lime 每个大版本必须先证明自己的 Codex-first coding 主链：`agentSession/turn/start`、Read / `apply_patch` / Glob / Grep / Bash、command / file_changed lifecycle、workspace diff、`evidence/export`、Thread / Turn / Item projection、GUI Coding Workbench 和失败 replay/regression 晋升。
+
+7. **Benchmark 方案必须受 refactor v1 约束。**
+   `internal/research/refactor/v1` 是 coding / tool / runtime benchmark 的架构基线：Thread 管历史与 evidence，Turn 管执行和 tool lifecycle，Item 管 message / tool / artifact 投影。任何测试集或 release gate 只能证明这条主链，不能把 Aster compat、mock fallback 或外部 benchmark dry-run 当作 current 能力。
+
 ## 2. 文档索引
 
 | 文档 | 作用 |
@@ -72,6 +78,7 @@ Release Candidate / Model Candidate / Runtime Candidate
 - `internal/test/agent-qc-scenarios.manifest.json` 作为 Lime 私有场景事实源。
 - `internal/test/harness-evals.manifest.json`、`npm run harness:eval`、`npm run harness:eval:trend` 作为 replay / trend 入口。
 - `npm run agent-qc:*` 作为 Agent QC、Evidence Pack、release summary 入口。
+- `coding-workflow-p0` / `coding-workflow-current-chain` 作为 Lime 私有 coding 发布门禁；外部 DeepSWE 通过前也必须独立跑这条 P0。
 - 外部 benchmark adapter 只输出 Lime current trajectory / evidence / replay，不拥有运行事实。
 - 每个大版本生成 `.lime/benchmark/releases/<version>/` 下的 summary、trend、evidence 和 waiver。
 
@@ -115,7 +122,9 @@ Release Candidate / Model Candidate / Runtime Candidate
 
 ## 7. 下一刀
 
-第一阶段已经完成：P0 release gate 已映射到现有 `agent-qc` / `harness` 命令；`internal/test/benchmark-release.manifest.json` 已固定 P1 fixed slice；Terminal-Bench / Harbor 和 DeepSWE fixed 10 都已能通过 `npm run agent-qc:benchmark:dry-run` 批量生成 Lime 证据形状。
+第一阶段已经完成：P0 release gate 已映射到现有 `agent-qc` / `harness` 命令；`coding-workflow-p0` 已作为独立 required suite 接入 release verdict；`internal/test/benchmark-release.manifest.json` 已固定 P1 fixed slice；Terminal-Bench / Harbor 和 DeepSWE fixed 10 都已能通过 `npm run agent-qc:benchmark:dry-run` 批量生成 Lime 证据形状。
+
+本轮按 coding P0 smoke 暴露并修复了一个 current 主链问题：`smoke:agent-runtime-tool-execution -- --batch safe-core-tools` 命中了 App Server native gateway 注册 `tool_search` 时被 `tool-runtime` current registration policy 拒绝的问题。修复落在 `lime-rs/crates/tool-runtime/src/native_overlay.rs` 的 current allowlist，不在 `agent-compat` 续命；后续 release P0 改由 Codex-first `coding-current-tools` batch 验证 `Read` / `apply_patch` / `Glob` / `Grep` / `Bash`，避免把 Aster `Edit` / `Write` 旧工具面当 current。该问题证明 benchmark 不是只新增测试集，失败必须进入修复、验证和回归沉淀。
 
 Terminal-Bench / Harbor 的 `hello-world` 已新增 true-run preflight：
 
@@ -185,7 +194,9 @@ npm run agent-qc:benchmark-release:run -- \
   --check
 ```
 
-runner 始终把完整 JSON report 写到 `<output-root>/benchmark-release-run.json`；`--stdout summary` 只把控制台输出收敛为版本、输出目录、step 计数、storage、P0/full/strict 状态和失败摘要，适合正式 RC / release 日常使用。需要兼容旧的完整 stdout JSON 时可省略该参数，或显式使用 `--stdout full`；自动化只关心文件产物时可用 `--stdout none`。
+runner 始终把完整 JSON report 写到 `<output-root>/benchmark-release-run.json`，并在收尾阶段自动写出 `<output-root>/benchmark-release-report.md` 人读审计报告；`--stdout summary` 只把控制台输出收敛为版本、输出目录、run report 路径、audit report 路径、step 计数、storage、P0/full/strict 状态和失败摘要，适合正式 RC / release 日常使用。需要兼容旧的完整 stdout JSON 时可省略该参数，或显式使用 `--stdout full`；自动化只关心文件产物时可用 `--stdout none`。
+
+当已有 current-chain evidence 文件时，runner 可以传 `--current-chain-evidence-root "<root>"`，每个 true-run task 会按 `<root>/<suite-slug>/<task-id>/current-chain-evidence.json` 传给 `benchmark:true-run --current-chain-evidence`。该参数只透传 evidence 路径，不生成 evidence；缺文件或无效 evidence 会进入结构化 blocked evidence，不会误放行。
 
 如果只需要复核 P1 adapter readiness，可以单独执行：
 
@@ -226,9 +237,9 @@ npm run agent-qc:benchmark-release:summary -- \
   --check
 ```
 
-当前 summary 能把 manifest、P0 npm gate step results、P1 dry-run suite、true-run preflight 和 fail-closed true-run evidence 汇总成 `benchmark-release-summary-v1`；本地默认 runner 结果为 `p0GateBlockerCount=10`、`dryRunSuiteCount=2`、`preflightCount=2`、`trueRunTaskCount=2`、`releaseBlockerCount=2`、`preflightBlockerCount=6`、`trueRunBlockerCount=6`、`releaseReady=false`。`releaseReady=true` 必须同时满足 `issueCount=0`、`releaseBlockerCount=0`、`p0GateBlockerCount=0`、`preflightBlockerCount=0`、`trueRunBlockerCount=0`、`trueRunEvidenceBlockerCount=0`；即使 P1 adapter 已标成 `ready`，blocked preflight / true-run 也不能被误判为放行。即使 true-run task 自称 `verdict=ready`，summary 也会继续检查 `execution.currentChainInvoked=true`、`execution.trueRunInvoked=true`、`execution.verifierInvoked=true` 和同目录 `evidence-pack/manifest.json` 是否有效；缺任一项都会进入 `trueRunEvidenceBlockers`。required P1 suite 一旦 `adapterStatus=ready`，summary 还会要求 manifest `taskSet` 每个任务都有 task-level ready true-run evidence，首题 ready 不能代表 full fixed slice。默认 runner 只收集 P1 evidence 时，summary 会明确标出 P0 未跑，不能被误解为完整 release gate。
+当前 summary 能把 manifest、P0 npm gate step results、P1 dry-run suite、true-run preflight 和 fail-closed true-run evidence 汇总成 `benchmark-release-summary-v1`；本地默认 runner 结果为 `p0GateBlockerCount=10`、`dryRunSuiteCount=2`、`preflightCount=2`、`trueRunTaskCount=2`、`releaseBlockerCount=2`、`preflightBlockerCount=6`、`trueRunBlockerCount=6`、`releaseReady=false`。`releaseReady=true` 必须同时满足 `issueCount=0`、`releaseBlockerCount=0`、`p0GateBlockerCount=0`、`preflightBlockerCount=0`、`trueRunBlockerCount=0`、`trueRunEvidenceBlockerCount=0`；即使 P1 adapter 已标成 `ready`，blocked preflight / true-run 也不能被误判为放行。即使 true-run task 自称 `verdict=ready`，summary 也会继续检查 `execution.currentChainInvoked=true`、`execution.trueRunInvoked=true`、`execution.verifierInvoked=true`、`execution.currentChain.appServerMethod="agentSession/turn/start"`、`execution.currentChain.evidenceExportMethod="evidence/export"`、`execution.currentChain.evidenceExportInvoked=true` 和同目录 `evidence-pack/manifest.json` 是否有效；缺任一项都会进入 `trueRunEvidenceBlockers`。required P1 suite 一旦 `adapterStatus=ready`，summary 还会要求 manifest `taskSet` 每个任务都有 task-level ready true-run evidence，首题 ready 不能代表 full fixed slice。默认 runner 只收集 P1 evidence 时，summary 会明确标出 P0 未跑，不能被误解为完整 release gate。
 
-候选版本 summary 生成后，可以生成一页人读审计报告，方便 RC / release 评审时快速查看版本、artifact 完整性、decision、blocker 和 compare / baseline 状态：
+候选版本 summary 生成后，runner 会自动生成一页人读审计报告，方便 RC / release 评审时快速查看版本、artifact 完整性、decision、blocker 和 compare / baseline 状态。需要复跑、改输出路径或生成 JSON 格式时，可单独执行：
 
 ```bash
 npm run agent-qc:benchmark-release:report -- \
@@ -279,6 +290,27 @@ npm run agent-qc:benchmark:deepswe-run -- \
 ```
 
 当前 true-run 会先复用 preflight；环境或 runner 不满足时写出 `benchmark-true-run-v1` blocked evidence。即使 preflight 通过，在 Lime App Server current 主链 adapter 真正实现前，也会阻断在 `lime_current_true_run_adapter_not_implemented`，不会调用 provider、Docker verifier 或伪造 pass。release summary 已能聚合 true-run evidence，并按 task id 取最新一次运行。
+
+当后续 App Server true-run adapter 打通后，`benchmark:true-run` 可以通过 `--current-chain-evidence <path>` 消费一份 `benchmark-current-chain-evidence-v1`。该文件必须证明同一 suite / task 已经经 `agentSession/turn/start` 发起、经 `evidence/export` 导出 App Server Evidence Pack，且 external verifier 已执行并通过；否则 true-run 仍保持 blocked。runner 默认不传该参数，因此当前 blocked / dry-run evidence 不会因为存在本地文件而误放行。
+
+生成该文件的稳定入口是：
+
+```bash
+npm run agent-qc:benchmark:current-chain-evidence -- \
+  --suite "terminal-bench-release-slice" \
+  --task "hello-world" \
+  --turn-start ".lime/benchmark/current-chain/turn-start.json" \
+  --evidence-pack ".lime/benchmark/current-chain/evidence-pack.json" \
+  --verifier ".lime/benchmark/current-chain/verifier-result.json" \
+  --output ".lime/benchmark/current-chain/current-chain-evidence.json" \
+  --check
+```
+
+`turn-start.json` 必须记录 App Server `agentSession/turn/start` 已调用；`evidence-pack.json` 必须是 App Server `evidence/export` 返回的 Evidence Pack；`verifier-result.json` 必须来自外部 benchmark verifier 且 verdict 为 pass / passed / ready。这个 builder 只做证据合同归一化，不调用模型、不调用 Docker，也不改变 release gate。
+
+如果已有 Electron / App Server JSON-RPC trace，可用 `--json-rpc-trace <path>` 替代 `--turn-start`。trace 模式会从 `app_server_handle_json_lines` 请求行或 `appServerRequests` 中抽取 `agentSession/turn/start`，并要求同一 trace 出现 `evidence/export`；Evidence Pack 正文仍通过 `--evidence-pack` 输入，避免把大对象塞进 trace。
+
+`--current-chain-evidence` 指向缺失或无效文件时，true-run 不会直接崩溃。preflight ready 时会写出 `lime_current_chain_evidence` blocker；preflight blocked 时只记录 preflight blocker。这让后续 runner 可以安全传入约定路径，缺 evidence 仍是可审计 blocked evidence。
 
 下一刀进入真实 current-chain adapter：
 

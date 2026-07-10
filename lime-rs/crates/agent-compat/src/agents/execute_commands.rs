@@ -3,9 +3,8 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 
-use crate::context_mgmt::compact_messages_with_summary;
 use crate::conversation::message::{Message, SystemNotificationType};
-use crate::session::{apply_session_update, save_summary};
+use crate::session::apply_session_update;
 
 use super::Agent;
 
@@ -83,37 +82,10 @@ impl Agent {
     }
 
     async fn handle_compact_command(&self, session_id: &str) -> Result<Option<Message>> {
-        let session = self.store_get_session(session_id, true).await?;
-        let conversation = session
-            .conversation
-            .ok_or_else(|| anyhow!("Session has no conversation"))?;
-
-        let summarized_turn_count = conversation
-            .messages()
-            .iter()
-            .filter(|message| message.is_agent_visible() && message.role == rmcp::model::Role::User)
-            .count();
-
-        let (compacted_conversation, _usage, summary_text) = compact_messages_with_summary(
-            self.provider().await?.as_ref(),
-            &conversation,
-            true, // is_manual_compact
-        )
-        .await?;
-
-        self.store_replace_conversation(session_id, &compacted_conversation)
-            .await?;
-        if let Err(error) = save_summary(session_id, &summary_text, Some(summarized_turn_count)) {
-            tracing::warn!(
-                session_id = %session_id,
-                ?error,
-                "Failed to persist manual compact summary cache"
-            );
-        }
-
+        let _ = session_id;
         Ok(Some(Message::assistant().with_system_notification(
             SystemNotificationType::InlineMessage,
-            "Compaction complete",
+            "Aster /compact is retired; use the current App Server context compaction flow",
         )))
     }
 
@@ -296,26 +268,5 @@ impl Agent {
                 Message::assistant().with_text(format!("Error getting prompt: {}", e)),
             )),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_command_text_keeps_plain_text_borrowed() {
-        let normalized = normalize_command_text("  普通 direct answer 问题  ");
-
-        assert!(matches!(normalized, Cow::Borrowed(_)));
-        assert_eq!(normalized.as_ref(), "普通 direct answer 问题");
-    }
-
-    #[test]
-    fn normalize_command_text_maps_compat_compact_trigger() {
-        let normalized = normalize_command_text("Please compact this conversation");
-
-        assert!(matches!(normalized, Cow::Borrowed(_)));
-        assert_eq!(normalized.as_ref(), "/compact");
     }
 }

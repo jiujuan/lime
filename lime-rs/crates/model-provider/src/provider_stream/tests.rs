@@ -113,6 +113,599 @@ fn provider_binding_keeps_handle_with_backend_without_provider_trait_object() {
 }
 
 #[test]
+fn provider_response_event_contract_carries_response_items_without_turn_owner() {
+    let item = RuntimeReplyResponseItem::new(
+        "call-1",
+        "tool_call",
+        RuntimeReplyResponseItemPayload::ToolCall {
+            tool_name: "apply_patch".to_string(),
+            arguments: Some(json!({ "patch": "*** Begin Patch" })),
+            output: None,
+            success: None,
+            error: None,
+            metadata: Some(json!({ "source": "provider_response" })),
+        },
+    );
+
+    let event = RuntimeReplyResponseEvent::OutputItemAdded { item: item.clone() };
+
+    assert_eq!(event, RuntimeReplyResponseEvent::OutputItemAdded { item });
+}
+
+#[test]
+fn provider_response_content_projects_text_notification_and_tool_delta_without_aster_message() {
+    assert_eq!(
+        provider_stream_response_text_chars([
+            RuntimeReplyProviderResponseContent::text("  "),
+            RuntimeReplyProviderResponseContent::text(" hello "),
+        ]),
+        Some(5)
+    );
+
+    let notification = provider_stream_notification_text(
+        RuntimeReplyProviderStreamEvent::NOTIFICATION_KIND_SAFETY_BUFFERING,
+        json!({"type": "response.in_progress"}),
+        Vec::new(),
+    );
+    assert!(provider_stream_response_has_notification_text([
+        RuntimeReplyProviderResponseContent::text("plain"),
+        RuntimeReplyProviderResponseContent::system_notification(notification.as_str()),
+    ]));
+
+    let events = provider_stream_response_tool_input_delta_events([
+        RuntimeReplyProviderResponseContent::tool_input_delta(
+            "call-1",
+            Some("apply_patch"),
+            "{\"patch\"",
+            Some("{\"patch\""),
+            Some("openai"),
+        ),
+    ])
+    .expect("tool input delta events");
+    assert!(matches!(
+        events.as_slice(),
+        [RuntimeReplyResponseEvent::ToolCallInputDelta {
+            call_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        }] if call_id == "call-1"
+            && tool_name.as_deref() == Some("apply_patch")
+            && delta == "{\"patch\""
+            && accumulated_arguments.as_deref() == Some("{\"patch\"")
+            && provider.as_deref() == Some("openai")
+    ));
+}
+
+#[test]
+fn provider_response_content_keeps_mixed_tool_delta_messages_fail_closed() {
+    assert!(provider_stream_response_tool_input_delta_events([
+        RuntimeReplyProviderResponseContent::tool_input_delta(
+            "call-1",
+            Some("web_search"),
+            "{\"query\"",
+            Some("{\"query\""),
+            Some("openai"),
+        ),
+        RuntimeReplyProviderResponseContent::text("final answer"),
+    ])
+    .is_none());
+}
+
+#[test]
+fn provider_stream_response_context_extracts_request_id_without_reqwest() {
+    let context = provider_stream_response_context_from_header_pairs([
+        ("content-type", "application/json"),
+        ("X-OAI-Request-ID", " req_provider_123 "),
+    ])
+    .expect("provider response context");
+
+    assert_eq!(
+        context.provider_request_id.as_deref(),
+        Some("req_provider_123")
+    );
+    assert_eq!(
+        context.provider_request_id_header.as_deref(),
+        Some("x-oai-request-id")
+    );
+}
+
+#[test]
+fn provider_stream_response_context_rejects_empty_long_or_non_visible_ids() {
+    assert!(
+        provider_stream_response_context_from_header_pairs([("x-request-id", "   ")]).is_none()
+    );
+    assert!(provider_stream_response_context_from_header_pairs([(
+        "x-request-id",
+        "x".repeat(257),
+    )])
+    .is_none());
+    assert!(
+        provider_stream_response_context_from_header_pairs([("x-request-id", "req\nbad",)])
+            .is_none()
+    );
+}
+
+#[test]
+fn provider_sampling_request_selects_streaming_mode_without_aster_agent() {
+    let request = RuntimeReplyProviderSamplingRequest::new(
+        "openai",
+        "gpt-5-codex",
+        3,
+        2,
+        128,
+        Some("local_workspace".to_string()),
+        true,
+    );
+
+    assert_eq!(
+        request.sampling_mode(),
+        RuntimeReplyProviderSamplingMode::Streaming
+    );
+    assert_eq!(request.provider_name, "openai");
+    assert_eq!(request.model_name, "gpt-5-codex");
+    assert_eq!(request.message_count, 3);
+    assert_eq!(request.tool_count, 2);
+    assert_eq!(request.system_chars, 128);
+    assert_eq!(request.tool_surface.as_deref(), Some("local_workspace"));
+}
+
+#[test]
+fn provider_sampling_request_selects_non_streaming_mode_without_aster_agent() {
+    let request =
+        RuntimeReplyProviderSamplingRequest::new("openai", "gpt-5-codex", 1, 0, 32, None, false);
+
+    assert_eq!(
+        request.sampling_mode(),
+        RuntimeReplyProviderSamplingMode::NonStreaming
+    );
+}
+
+#[test]
+fn provider_empty_first_content_retry_marker_is_current_policy() {
+    assert!(provider_stream_should_retry_empty_first_content(
+        false,
+        "Anthropic stream ended without assistant content or tool call"
+    ));
+    assert!(!provider_stream_should_retry_empty_first_content(
+        true,
+        "Anthropic stream ended without assistant content or tool call"
+    ));
+    assert!(!provider_stream_should_retry_empty_first_content(
+        false,
+        "different provider error"
+    ));
+}
+
+#[test]
+fn provider_stream_failure_logging_classifies_transient_and_internal_failures() {
+    assert!(provider_stream_failure_should_log_as_error(
+        RuntimeReplyProviderFailure::new(RuntimeReplyProviderFailureKind::Server, true, false)
+    ));
+    assert!(provider_stream_failure_should_log_as_error(
+        RuntimeReplyProviderFailure::new(RuntimeReplyProviderFailureKind::Execution, false, false)
+    ));
+    assert!(provider_stream_failure_should_log_as_error(
+        RuntimeReplyProviderFailure::new(RuntimeReplyProviderFailureKind::Usage, false, false)
+    ));
+    assert!(provider_stream_failure_should_log_as_error(
+        RuntimeReplyProviderFailure::new(RuntimeReplyProviderFailureKind::Request, true, false)
+    ));
+    assert!(!provider_stream_failure_should_log_as_error(
+        RuntimeReplyProviderFailure::new(
+            RuntimeReplyProviderFailureKind::Authentication,
+            false,
+            true
+        )
+    ));
+    assert!(!provider_stream_failure_should_log_as_error(
+        RuntimeReplyProviderFailure::new(
+            RuntimeReplyProviderFailureKind::ContextLength,
+            false,
+            false
+        )
+    ));
+}
+
+#[test]
+fn provider_stream_failure_accepts_provider_telemetry_categories() {
+    let failure = RuntimeReplyProviderFailure::from_category("server", true, false);
+    assert_eq!(failure.kind, RuntimeReplyProviderFailureKind::Server);
+    assert_eq!(failure.kind.as_category(), "server");
+    assert!(provider_stream_failure_should_log_as_error(failure));
+
+    let unknown = RuntimeReplyProviderFailure::from_category("provider_custom", false, false);
+    assert_eq!(unknown.kind, RuntimeReplyProviderFailureKind::Unknown);
+    assert_eq!(unknown.kind.as_category(), "unknown");
+    assert!(!provider_stream_failure_should_log_as_error(unknown));
+}
+
+#[test]
+fn provider_stream_failure_message_logging_keeps_provider_rejections_quiet() {
+    assert!(!provider_stream_failure_message_should_log_as_warning(
+        "Request failed: Bad request (400): 当前模型未在租户白名单中开放"
+    ));
+    assert!(!provider_stream_failure_message_should_log_as_warning(
+        "Authentication error: invalid key"
+    ));
+    assert!(provider_stream_failure_message_should_log_as_warning(
+        "connection failed"
+    ));
+    assert!(provider_stream_failure_message_should_log_as_warning(
+        "Server error: temporarily unavailable"
+    ));
+}
+
+#[test]
+fn provider_stream_first_text_delta_chars_uses_first_non_empty_text() {
+    assert_eq!(
+        provider_stream_first_text_delta_chars(["", " \n\t", " 你好 "]),
+        Some(2)
+    );
+    assert_eq!(provider_stream_first_text_delta_chars(["", " \n\t"]), None);
+}
+
+#[test]
+fn provider_stream_model_supports_image_input_uses_canonical_modalities() {
+    assert_eq!(
+        provider_stream_model_supports_image_input("openai", "gpt-5.2"),
+        Some(true)
+    );
+    assert_eq!(
+        provider_stream_model_supports_image_input("deepseek", "deepseek-r1"),
+        Some(false)
+    );
+    assert_eq!(
+        provider_stream_model_supports_image_input("unknown-provider", "unknown-model"),
+        None
+    );
+}
+
+#[test]
+fn provider_stream_image_input_policy_disables_provider_images_from_runtime_metadata() {
+    let runtime_metadata = json!({
+        "image_input_policy": {
+            "submittedImageCount": 1,
+            "forwardedImageCount": 0,
+            "droppedImageCount": 1,
+            "providerSupportsVision": true
+        }
+    });
+    assert!(provider_stream_image_input_policy_disables_provider_images(
+        Some(&runtime_metadata)
+    ));
+
+    let runtime_metadata = json!({
+        "imageInputPolicy": {
+            "submitted_image_count": 1,
+            "forwarded_image_count": 0,
+            "dropped_image_count": 0,
+            "provider_supports_vision": false
+        }
+    });
+    assert!(provider_stream_image_input_policy_disables_provider_images(
+        Some(&runtime_metadata)
+    ));
+
+    let runtime_metadata = json!({
+        "image_input_policy": {
+            "forwardedImageCount": 1,
+            "droppedImageCount": 0,
+            "providerSupportsVision": true
+        }
+    });
+    assert!(!provider_stream_image_input_policy_disables_provider_images(Some(&runtime_metadata)));
+}
+
+#[test]
+fn provider_stream_should_omit_image_input_combines_model_and_turn_policy() {
+    assert!(provider_stream_should_omit_image_input(Some(false), None));
+    assert!(!provider_stream_should_omit_image_input(Some(true), None));
+
+    let runtime_metadata = json!({
+        "image_input_policy": {
+            "droppedImageCount": 1,
+            "providerSupportsVision": true
+        }
+    });
+    assert!(provider_stream_should_omit_image_input(
+        Some(true),
+        Some(&runtime_metadata)
+    ));
+}
+
+#[test]
+fn provider_stream_input_modality_policy_resolves_nested_metadata() {
+    let metadata = json!({
+        "runtime_options": {
+            "request_metadata": {
+                "model_request_policy": {
+                    "input_modality_policy": {
+                        "input_modalities": ["text"],
+                        "supports_image_input": false
+                    }
+                }
+            }
+        }
+    });
+    let policy =
+        provider_stream_input_modality_policy_from_metadata(&metadata).expect("input policy");
+
+    assert!(!provider_stream_input_modality_policy_allows_image_input(
+        Some(policy)
+    ));
+    assert!(!provider_stream_metadata_allows_image_input(Some(
+        &metadata
+    )));
+}
+
+#[test]
+fn provider_stream_input_modality_policy_defaults_to_image_allowed() {
+    assert!(provider_stream_input_modality_policy_allows_image_input(
+        None
+    ));
+    assert!(provider_stream_metadata_allows_image_input(None));
+
+    let metadata = json!({
+        "harness": {
+            "modelRequestPolicy": {
+                "inputModalityPolicy": {
+                    "inputModalities": ["text", "image"]
+                }
+            }
+        }
+    });
+
+    assert!(provider_stream_metadata_allows_image_input(Some(&metadata)));
+}
+
+#[test]
+fn provider_stream_tool_input_delta_events_projects_complete_delta_content() {
+    let events = provider_stream_tool_input_delta_events([
+        Some(RuntimeReplyProviderToolInputDelta::new(
+            "call-1",
+            Some("apply_patch"),
+            "{\"patch\"",
+            Some("{\"patch\""),
+            Some("openai"),
+        )),
+        Some(RuntimeReplyProviderToolInputDelta::new(
+            "call-1",
+            Some("apply_patch"),
+            ":\"...\"}",
+            Some("{\"patch\":\"...\"}"),
+            Some("openai"),
+        )),
+    ])
+    .expect("tool input delta events");
+
+    assert_eq!(
+        events,
+        vec![
+            RuntimeReplyResponseEvent::ToolCallInputDelta {
+                call_id: "call-1".to_string(),
+                tool_name: Some("apply_patch".to_string()),
+                delta: "{\"patch\"".to_string(),
+                accumulated_arguments: Some("{\"patch\"".to_string()),
+                provider: Some("openai".to_string()),
+            },
+            RuntimeReplyResponseEvent::ToolCallInputDelta {
+                call_id: "call-1".to_string(),
+                tool_name: Some("apply_patch".to_string()),
+                delta: ":\"...\"}".to_string(),
+                accumulated_arguments: Some("{\"patch\":\"...\"}".to_string()),
+                provider: Some("openai".to_string()),
+            },
+        ]
+    );
+}
+
+#[test]
+fn provider_stream_tool_input_delta_events_rejects_mixed_or_empty_content() {
+    assert_eq!(
+        provider_stream_tool_input_delta_events([
+            Some(RuntimeReplyProviderToolInputDelta::new(
+                "call-1", None, "{}", None, None
+            )),
+            None,
+        ]),
+        None
+    );
+    assert_eq!(
+        provider_stream_tool_input_delta_events(std::iter::empty()),
+        None
+    );
+    assert_eq!(
+        provider_stream_tool_input_delta_events([Some(RuntimeReplyProviderToolInputDelta::new(
+            "", None, "{}", None, None
+        ))]),
+        Some(Vec::new())
+    );
+}
+
+#[test]
+fn provider_stream_progress_tracks_first_milestones_once() {
+    let mut progress = RuntimeReplyProviderStreamProgress::new();
+
+    assert!(!progress.first_event_seen());
+    assert!(progress.note_first_event());
+    assert!(progress.first_event_seen());
+    assert!(!progress.note_first_event());
+
+    assert!(!progress.first_content_seen());
+    assert!(!progress.note_first_content(false));
+    assert!(progress.should_retry_empty_first_content(PROVIDER_EMPTY_STREAM_RETRY_MARKER));
+    assert!(progress.note_first_content(true));
+    assert!(progress.first_content_seen());
+    assert!(!progress.note_first_content(true));
+    assert!(!progress.should_retry_empty_first_content(PROVIDER_EMPTY_STREAM_RETRY_MARKER));
+
+    assert!(!progress.first_text_delta_seen());
+    assert_eq!(progress.note_first_text_delta(None), None);
+    assert_eq!(progress.note_first_text_delta(Some(4)), Some(4));
+    assert!(progress.first_text_delta_seen());
+    assert_eq!(progress.note_first_text_delta(Some(8)), None);
+}
+
+#[test]
+fn provider_stream_model_change_classifies_active_lead_worker_model() {
+    let lead = provider_stream_model_change("gpt-5-lead", "gpt-5-lead", "gpt-5-worker");
+    assert_eq!(lead.model, "gpt-5-lead");
+    assert_eq!(lead.mode, RuntimeReplyProviderModelChangeMode::Lead);
+    assert_eq!(lead.mode.as_str(), "lead");
+
+    let worker = provider_stream_model_change("gpt-5-worker", "gpt-5-lead", "gpt-5-worker");
+    assert_eq!(worker.model, "gpt-5-worker");
+    assert_eq!(worker.mode, RuntimeReplyProviderModelChangeMode::Worker);
+    assert_eq!(worker.mode.as_str(), "worker");
+
+    let unknown = provider_stream_model_change("gpt-5-other", "gpt-5-lead", "gpt-5-worker");
+    assert_eq!(unknown.model, "gpt-5-other");
+    assert_eq!(unknown.mode, RuntimeReplyProviderModelChangeMode::Unknown);
+    assert_eq!(unknown.mode.as_str(), "unknown");
+}
+
+#[test]
+fn provider_stream_notification_text_round_trips_current_prefix() {
+    let text = provider_stream_notification_text(
+        RuntimeReplyProviderStreamEvent::NOTIFICATION_KIND_SAFETY_BUFFERING,
+        json!({
+            "type": "response.output_text.delta",
+            "safety_buffering": {
+                "use_cases": ["cyber"],
+                "reasons": ["policy"],
+            },
+        }),
+        vec![(
+            SAFETY_BUFFERING_ENABLED_HEADER.to_string(),
+            "true".to_string(),
+        )],
+    );
+
+    assert!(text.starts_with(PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX));
+    assert!(!text.contains("__aster_provider_stream_event__"));
+
+    let payload =
+        provider_stream_notification_payload_from_text(&text).expect("notification payload");
+
+    assert_eq!(
+        payload["eventKind"],
+        json!(RuntimeReplyProviderStreamEvent::NOTIFICATION_KIND_SAFETY_BUFFERING)
+    );
+    assert_eq!(
+        payload["responseEvent"]["safety_buffering"]["reasons"],
+        json!(["policy"])
+    );
+    assert_eq!(
+        payload["headers"][0]["name"],
+        json!(SAFETY_BUFFERING_ENABLED_HEADER)
+    );
+    assert!(provider_stream_notification_payload_from_text(
+        "__aster_provider_stream_event__:{\"eventKind\":\"legacy\"}"
+    )
+    .is_none());
+    assert!(provider_stream_has_notification_text([text.as_str()]));
+    assert!(provider_stream_notification_payload_from_texts([text.as_str()]).is_some());
+    assert!(!provider_stream_has_notification_text(["plain text"]));
+}
+
+#[test]
+fn provider_stream_plaintext_tool_uses_extracts_xml_blocks_without_aster_message() {
+    let parsed = provider_stream_plaintext_tool_uses(
+        "我先做只读验证。\n\
+        <tool_use name=\"mcp__system__shell\">{\"command\":\"pwd\"}</tool_use>\n\
+        <tool_use name=\"mcp__system__read_file\">```json\n{\"path\":\"package.json\",\"head\":20}\n```</tool_use>\n\
+        抱歉，当前环境没有暴露工具接口。",
+    )
+    .expect("plaintext tool use");
+
+    assert_eq!(parsed.prefix.trim(), "我先做只读验证。");
+    assert_eq!(parsed.tool_calls.len(), 2);
+    assert_eq!(parsed.tool_calls[0].name, "mcp__system__shell");
+    assert_eq!(
+        parsed.tool_calls[0]
+            .arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("command"))
+            .and_then(|value| value.as_str()),
+        Some("pwd")
+    );
+    assert_eq!(parsed.tool_calls[1].name, "mcp__system__read_file");
+    assert_eq!(
+        parsed.tool_calls[1]
+            .arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("head"))
+            .and_then(|value| value.as_i64()),
+        Some(20)
+    );
+}
+
+#[test]
+fn provider_stream_plaintext_tool_uses_converts_search_aliases() {
+    let web_search = provider_stream_plaintext_tool_uses(
+        "我需要检索。\n<WebSearch query=\"2026年6月1日 国际新闻 今日 要闻\" />",
+    )
+    .expect("web search tag");
+    assert_eq!(web_search.tool_calls[0].name, "WebSearch");
+    assert_eq!(
+        web_search.tool_calls[0]
+            .arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("query"))
+            .and_then(|value| value.as_str()),
+        Some("2026年6月1日 国际新闻 今日 要闻")
+    );
+
+    let search =
+        provider_stream_plaintext_tool_uses("<Search query=\"today international news\" />")
+            .expect("search alias tag");
+    assert_eq!(search.tool_calls[0].name, "WebSearch");
+    assert_eq!(
+        search.tool_calls[0]
+            .arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("query"))
+            .and_then(|value| value.as_str()),
+        Some("today international news")
+    );
+}
+
+#[test]
+fn provider_stream_plaintext_tool_use_progress_tracks_split_xml_block() {
+    let open = "<tool_use name=\"mcp__system__shell\">";
+    let first_progress =
+        provider_stream_plaintext_tool_use_progress(open, open).expect("first progress");
+    assert_eq!(
+        first_progress.tool_name.as_deref(),
+        Some("mcp__system__shell")
+    );
+    assert_eq!(first_progress.delta, "");
+    assert_eq!(first_progress.accumulated_arguments, None);
+
+    let accumulated = format!("{open}{{\"command\":\"pwd\"}}");
+    let second_progress =
+        provider_stream_plaintext_tool_use_progress(&accumulated, "{\"command\":\"pwd\"}")
+            .expect("second progress");
+    assert_eq!(second_progress.delta, "{\"command\":\"pwd\"}");
+    assert_eq!(
+        second_progress.accumulated_arguments.as_deref(),
+        Some("{\"command\":\"pwd\"}")
+    );
+    assert_eq!(
+        provider_stream_plaintext_tool_use_start(&format!("prefix\n{open}")),
+        Some("prefix\n".len())
+    );
+    assert!(!provider_stream_plaintext_tool_use_is_complete(
+        &accumulated
+    ));
+    assert!(provider_stream_plaintext_tool_use_is_complete(&format!(
+        "{accumulated}</tool_use>"
+    )));
+}
+
+#[test]
 fn stream_request_carries_current_provider_handle() {
     let handle = RuntimeReplyProviderHandle::from_config(
         &runtime_config(),
@@ -300,11 +893,11 @@ fn provider_stream_poll_contract_carries_cancel_wait_rule() {
     );
     assert_eq!(provider_stream_cancel_poll_interval(false), None);
     assert_eq!(
-        provider_stream_timeout_poll(false),
+        provider_stream_timeout_poll::<()>(false),
         ProviderStreamPoll::Pending
     );
     assert_eq!(
-        provider_stream_timeout_poll(true),
+        provider_stream_timeout_poll::<()>(true),
         ProviderStreamPoll::Canceled(ProviderStreamCancelReason::WhileWaiting)
     );
     assert_eq!(

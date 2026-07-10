@@ -22,7 +22,7 @@
 //!
 //! 参考文档：`internal/prd/chat-architecture-redesign.md`
 
-use aster::agents::Agent;
+use aster::Agent;
 #[cfg(test)]
 use lime_skills::{
     find_skill_by_name, is_registered_skill, load_skills_from_directory, register_skill_directory,
@@ -433,14 +433,12 @@ pub use agent_runtime::session_config::SessionConfigBuilder;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::conversation::message::{Message, MessageContent};
-    use aster::model::ModelConfig;
-    use aster::providers::base::{
-        Provider, ProviderMetadata, ProviderUsage, SessionNameGenerationExecutionStrategy, Usage,
+    use aster::SessionType;
+    use aster::{
+        InspectionAction, InspectionResult, ModelConfig, Provider, ProviderError, ProviderMetadata,
+        ProviderUsage, SessionNameGenerationExecutionStrategy, ToolInspector, Usage,
     };
-    use aster::providers::errors::ProviderError;
-    use aster::session::SessionType;
-    use aster::tool_inspection::{InspectionAction, InspectionResult, ToolInspector};
+    use aster::{Message, MessageContent};
     use async_trait::async_trait;
     use rmcp::model::CallToolRequestParam;
     use std::fs;
@@ -564,7 +562,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl aster::tools::Tool for RuntimeApprovalResumeTool {
+    impl aster::Tool for RuntimeApprovalResumeTool {
         fn name(&self) -> &str {
             RUNTIME_APPROVAL_RESUME_TOOL_NAME
         }
@@ -583,9 +581,9 @@ mod tests {
         async fn execute(
             &self,
             _params: serde_json::Value,
-            _context: &aster::tools::ToolContext,
-        ) -> Result<aster::tools::ToolResult, aster::tools::ToolError> {
-            Ok(aster::tools::ToolResult::success("runtime-confirmed"))
+            _context: &aster::ToolContext,
+        ) -> Result<aster::ToolResult, aster::ToolError> {
+            Ok(aster::ToolResult::success("runtime-confirmed"))
         }
     }
 
@@ -599,7 +597,7 @@ mod tests {
 
         async fn inspect(
             &self,
-            tool_requests: &[aster::conversation::message::ToolRequest],
+            tool_requests: &[aster::ToolRequest],
             _messages: &[Message],
         ) -> anyhow::Result<Vec<InspectionResult>> {
             Ok(tool_requests

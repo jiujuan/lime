@@ -18,6 +18,7 @@ import {
   removeThreadTurnState,
 } from "./agentThreadState";
 import { rememberLocallyInterruptedAgentStreamBinding } from "./agentStreamResumeBinding";
+import { clearAgentStreamTextOverlay } from "./agentStreamTextOverlayStore";
 import {
   resolveInterruptedInputRestorePlan,
   resolveQueuedTurnsForRestore,
@@ -28,6 +29,12 @@ import {
   readRecord,
   readStringField,
 } from "./agentStreamReadModelParsing";
+import {
+  buildInterruptedMessageContentPatch,
+  markInterruptedAgentMessageThreadItems,
+} from "./agentInterruptedMessageContent";
+
+export { buildInterruptedMessageContentPatch } from "./agentInterruptedMessageContent";
 
 interface AgentStreamFlowNotify {
   info: (message: string) => void;
@@ -45,6 +52,7 @@ interface StopAgentStreamOptions {
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   getMessages?: () => readonly Message[];
+  getThreadItems?: () => readonly AgentThreadItem[];
   getQueuedTurns?: () => readonly QueuedTurnSnapshot[];
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
   submittedDraftFallback?: InterruptedInputDraftSnapshot | null;
@@ -67,8 +75,104 @@ function resolveInterruptTurnId(activeStream: ActiveStreamState | null) {
   return undefined;
 }
 
+function normalizeConcreteTurnId(value?: string | null): string | undefined {
+  const turnId = value?.trim();
+  if (!turnId || turnId.startsWith("pending-turn:")) {
+    return undefined;
+  }
+  return turnId;
+}
+
+function isSameSessionItem(
+  item: AgentThreadItem,
+  sessionId?: string | null,
+): boolean {
+  const normalizedSessionId = sessionId?.trim();
+  return !normalizedSessionId || item.thread_id === normalizedSessionId;
+}
+
+function resolveThreadItemInterruptedTurnId(options: {
+  activeStream: ActiveStreamState | null;
+  activeSessionId?: string | null;
+  restoredQueuedTurnId?: string;
+  threadItems: readonly AgentThreadItem[];
+}): string | undefined {
+  const { activeStream, activeSessionId, restoredQueuedTurnId, threadItems } =
+    options;
+  const activeThreadId = activeStream?.sessionId || activeSessionId;
+  const readTurnId = (value?: string | null): string | undefined => {
+    const turnId = normalizeConcreteTurnId(value);
+    return turnId && turnId !== restoredQueuedTurnId ? turnId : undefined;
+  };
+
+  const pendingItemKey = activeStream?.pendingItemKey?.trim();
+  if (pendingItemKey) {
+    const pendingItemTurnId = readTurnId(
+      threadItems.find((item) => item.id === pendingItemKey)?.turn_id,
+    );
+    if (pendingItemTurnId) {
+      return pendingItemTurnId;
+    }
+  }
+
+  const sameSessionItems = threadItems.filter((item) =>
+    isSameSessionItem(item, activeThreadId),
+  );
+  const findLatestTurnId = (predicate: (item: AgentThreadItem) => boolean) => {
+    for (let index = sameSessionItems.length - 1; index >= 0; index -= 1) {
+      const item = sameSessionItems[index];
+      if (!item || !predicate(item)) {
+        continue;
+      }
+      const turnId = readTurnId(item.turn_id);
+      if (turnId) {
+        return turnId;
+      }
+    }
+    return undefined;
+  };
+
+  return (
+    findLatestTurnId(
+      (item) => item.status === "in_progress" && item.type === "agent_message",
+    ) ?? findLatestTurnId((item) => item.status === "in_progress")
+  );
+}
+
+function resolveInterruptedRuntimeTurnId(options: {
+  activeStream: ActiveStreamState | null;
+  activeSessionId?: string | null;
+  assistantMessage?: Message | null;
+  interruptTurnId?: string;
+  restoredQueuedTurnId?: string;
+  threadItems: readonly AgentThreadItem[];
+}): string | undefined {
+  const {
+    activeStream,
+    activeSessionId,
+    assistantMessage,
+    interruptTurnId,
+    restoredQueuedTurnId,
+    threadItems,
+  } = options;
+  const readTurnId = (value?: string | null): string | undefined => {
+    const turnId = normalizeConcreteTurnId(value);
+    return turnId && turnId !== restoredQueuedTurnId ? turnId : undefined;
+  };
+
+  return (
+    readTurnId(interruptTurnId) ??
+    readTurnId(assistantMessage?.runtimeTurnId) ??
+    resolveThreadItemInterruptedTurnId({
+      activeStream,
+      activeSessionId,
+      restoredQueuedTurnId,
+      threadItems,
+    })
+  );
+}
+
 const INTERRUPTED_TOOL_RESULT_TEXT = "本轮已中止";
-const INTERRUPTED_PLACEHOLDER_TEXT = "(已停止)";
 
 function settleInterruptedToolCall<
   T extends { status: string; result?: unknown; endTime?: Date },
@@ -157,6 +261,7 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
     setCurrentTurnId,
     setMessages,
     getMessages,
+    getThreadItems,
     getQueuedTurns,
     setActiveStream,
     submittedDraftFallback,
@@ -177,6 +282,7 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
           (message) => message.id === activeStream.assistantMsgId,
         ) ?? null)
       : null;
+  const currentThreadItems = getThreadItems?.() ?? [];
   const initialQueuedTurns = getQueuedTurns?.() ?? [];
   let restorePlan = resolveInterruptedInputRestorePlan({
     submittedDraft: activeStream?.submittedDraft ?? submittedDraftFallback,
@@ -202,8 +308,19 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
     restorePlan.queuedTurnHandling === "restore_first"
       ? restorePlan.queuedTurns[0]
       : null;
+  const restoredQueuedTurnId = queuedTurnToRestore?.queued_turn_id?.trim();
+  const interruptTurnId = resolveInterruptTurnId(activeStream);
+  const interruptedRuntimeTurnId = resolveInterruptedRuntimeTurnId({
+    activeStream,
+    activeSessionId,
+    assistantMessage,
+    interruptTurnId,
+    restoredQueuedTurnId,
+    threadItems: currentThreadItems,
+  });
   logAgentDebug("AgentStream", "inputRestorePlan", {
-    assistantMessageContentLength: assistantMessage?.content?.trim().length ?? 0,
+    assistantMessageContentLength:
+      assistantMessage?.content?.trim().length ?? 0,
     assistantMessagePartCount: assistantMessage?.contentParts?.length ?? 0,
     draftImageCount: restorePlan.draft?.images?.length ?? 0,
     draftPathReferenceCount: restorePlan.draft?.pathReferences?.length ?? 0,
@@ -250,13 +367,15 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
     } catch (error) {
       onInterruptError?.(error);
     }
-    const interruptTurnId = resolveInterruptTurnId(activeStream);
-    const restoredQueuedTurnId = queuedTurnToRestore?.queued_turn_id?.trim();
     try {
-      if (!restoredQueuedTurnId || interruptTurnId !== restoredQueuedTurnId) {
+      const turnIdForCancel = interruptTurnId ?? interruptedRuntimeTurnId;
+      if (
+        turnIdForCancel &&
+        (!restoredQueuedTurnId || turnIdForCancel !== restoredQueuedTurnId)
+      ) {
         await runtime.interruptTurn(
           activeSessionId,
-          interruptTurnId,
+          turnIdForCancel,
           activeStream?.eventName,
         );
       }
@@ -271,10 +390,17 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   };
 
   if (activeStream?.assistantMsgId) {
-    if (activeStream.pendingItemKey) {
-      setThreadItems((prev) =>
-        removeThreadItemState(prev, activeStream.pendingItemKey!),
-      );
+    clearAgentStreamTextOverlay(activeStream.assistantMsgId);
+    if (activeStream.pendingItemKey || interruptedRuntimeTurnId) {
+      setThreadItems((prev) => {
+        const nextItems = activeStream.pendingItemKey
+          ? removeThreadItemState(prev, activeStream.pendingItemKey)
+          : prev;
+        return markInterruptedAgentMessageThreadItems(
+          nextItems,
+          new Set(interruptedRuntimeTurnId ? [interruptedRuntimeTurnId] : []),
+        );
+      });
     }
     if (activeStream.pendingTurnKey) {
       setThreadTurns((prev) =>
@@ -287,18 +413,21 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
     setMessages((prev) =>
       prev.map((msg) =>
         msg.id === activeStream.assistantMsgId
-          ? {
-              ...updateMessageArtifactsStatus(
-                settleInterruptedMessageProcess(msg),
-                "complete",
-              ),
-              isThinking: false,
-              content: msg.content || INTERRUPTED_PLACEHOLDER_TEXT,
-              runtimeStatus: undefined,
-            }
+          ? (() => {
+              const interruptedMessage = settleInterruptedMessageProcess(msg);
+              return {
+                ...updateMessageArtifactsStatus(interruptedMessage, "complete"),
+                ...buildInterruptedMessageContentPatch(interruptedMessage),
+                isThinking: false,
+                runtimeTurnId:
+                  interruptedRuntimeTurnId ?? interruptedMessage.runtimeTurnId,
+                runtimeStatus: undefined,
+              };
+            })()
           : msg,
       ),
     );
+    clearAgentStreamTextOverlay(activeStream.assistantMsgId);
   }
 
   setActiveStream(null);
@@ -322,7 +451,10 @@ export async function removeQueuedAgentTurn(options: RemoveQueuedTurnOptions) {
   }
 
   try {
-    const removed = await runtime.removeQueuedTurn(activeSessionId, queuedTurnId);
+    const removed = await runtime.removeQueuedTurn(
+      activeSessionId,
+      queuedTurnId,
+    );
     await refreshSessionReadModel(activeSessionId);
     return removed;
   } catch (error) {
@@ -422,9 +554,7 @@ function resolveRunningTurnIdFromReadModel(
       "active_turn_id",
       "activeTurnId",
     );
-    if (
-      isQueuedPromotionInterruptCandidate(activeTurnId, excludedTurnIds)
-    ) {
+    if (isQueuedPromotionInterruptCandidate(activeTurnId, excludedTurnIds)) {
       return activeTurnId;
     }
   }
@@ -561,7 +691,7 @@ export async function promoteQueuedAgentTurn(
         interruptTurnId,
         passedEventName:
           localInterruptTurnId === interruptTurnId
-            ? activeStream?.eventName ?? null
+            ? (activeStream?.eventName ?? null)
             : null,
         sessionId: activeSessionId,
       });

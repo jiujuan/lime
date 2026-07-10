@@ -1,6 +1,6 @@
 use crate::native_tools::runtime_tool_bridge::create_runtime_native_tool_adapter;
-use aster::agents::Agent;
-use aster::tools::{Tool, ToolRegistry};
+use aster::Agent;
+use aster::{Tool, ToolRegistry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tool_runtime::native_overlay::{
@@ -128,9 +128,9 @@ mod tests {
         async fn execute(
             &self,
             _params: serde_json::Value,
-            _context: &aster::tools::ToolContext,
-        ) -> Result<aster::tools::ToolResult, aster::tools::ToolError> {
-            Ok(aster::tools::ToolResult::success("blocked"))
+            _context: &aster::ToolContext,
+        ) -> Result<aster::ToolResult, aster::ToolError> {
+            Ok(aster::ToolResult::success("blocked"))
         }
     }
 

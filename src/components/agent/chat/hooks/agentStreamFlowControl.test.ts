@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
 import {
+  buildInterruptedMessageContentPatch,
   promoteQueuedAgentTurn,
   removeQueuedAgentTurn,
   resumeAgentStreamThread,
@@ -11,6 +12,11 @@ import {
   stopActiveAgentStream,
 } from "./agentStreamFlowControl";
 import { hasLocallyInterruptedAgentStreamBinding } from "./agentStreamResumeBinding";
+import {
+  clearAllAgentStreamTextOverlays,
+  getAgentStreamTextOverlay,
+  upsertAgentStreamTextOverlay,
+} from "./agentStreamTextOverlayStore";
 
 function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
   return (next: T | ((prev: T) => T)) => {
@@ -27,6 +33,10 @@ async function flushMicrotasks(times = 3) {
 }
 
 describe("agentStreamFlowControl", () => {
+  afterEach(() => {
+    clearAllAgentStreamTextOverlays();
+  });
+
   it("stopActiveAgentStream 应清理 optimistic 状态并刷新 read model", async () => {
     let queuedTurns: QueuedTurnSnapshot[] = [
       {
@@ -279,6 +289,335 @@ describe("agentStreamFlowControl", () => {
     await Promise.resolve();
 
     expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
+  });
+
+  it("stopActiveAgentStream 对已有部分输出也应追加已停止终态", async () => {
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-partial",
+      eventName: "stream-partial-cancel",
+      sessionId: "session-1",
+      turnId: "turn-runtime-1",
+      pendingTurnKey: "pending-turn:1",
+      pendingItemKey: "pending-item:1",
+    };
+    let messages: Message[] = [
+      {
+        id: "assistant-partial",
+        role: "assistant",
+        content: "以下是今日国际新闻简要整理：",
+        contentParts: [
+          {
+            type: "text",
+            text: "以下是今日国际新闻简要整理：",
+          },
+        ],
+        timestamp: new Date("2026-03-29T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
+        interruptTurn: vi.fn(async () => true),
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => null as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      getMessages: () => messages,
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(messages[0]?.content).toBe(
+      "以下是今日国际新闻简要整理：\n\n(已停止)",
+    );
+    expect(messages[0]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "以下是今日国际新闻简要整理：",
+      },
+      {
+        type: "text",
+        text: "(已停止)",
+      },
+    ]);
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(activeStream).toBeNull();
+  });
+
+  it("stopActiveAgentStream 应清理同一 assistant 的流式正文 overlay", async () => {
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-overlay-partial",
+      eventName: "stream-overlay-cancel",
+      sessionId: "session-1",
+      turnId: "turn-runtime-1",
+      pendingTurnKey: "pending-turn:1",
+      pendingItemKey: "pending-item:1",
+    };
+    let messages: Message[] = [
+      {
+        id: "assistant-overlay-partial",
+        role: "assistant",
+        content: "",
+        contentParts: [],
+        timestamp: new Date("2026-07-10T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+
+    upsertAgentStreamTextOverlay({
+      messageId: "assistant-overlay-partial",
+      eventName: "stream-overlay-cancel",
+      content: "以下是今日国际新闻简要整理：",
+      phase: "final_answer",
+    });
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
+        interruptTurn: vi.fn(async () => true),
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => null as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      getMessages: () => messages,
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(messages[0]?.content).toBe("(已停止)");
+    expect(messages[0]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "(已停止)",
+      },
+    ]);
+    expect(getAgentStreamTextOverlay("assistant-overlay-partial")).toBeNull();
+  });
+
+  it("stopActiveAgentStream 应把 pending 本地停止标记绑定到真实 runtime turn", async () => {
+    let threadItems: AgentThreadItem[] = [
+      {
+        id: "pending-item:cancel",
+        thread_id: "session-1",
+        turn_id: "pending-turn:cancel",
+        sequence: 0,
+        status: "in_progress",
+        started_at: "2026-07-10T00:00:00.000Z",
+        updated_at: "2026-07-10T00:00:00.000Z",
+        type: "turn_summary",
+        text: "正在生成回复",
+      },
+      {
+        id: "item-real-cancel",
+        thread_id: "session-1",
+        turn_id: "turn-real-cancel",
+        sequence: 1,
+        status: "in_progress",
+        started_at: "2026-07-10T00:00:01.000Z",
+        updated_at: "2026-07-10T00:00:01.000Z",
+        type: "agent_message",
+        text: "以下是今日国际新闻简要整理：",
+      },
+    ];
+    let threadTurns: AgentThreadTurn[] = [
+      {
+        id: "pending-turn:cancel",
+        thread_id: "session-1",
+        prompt_text: "整理今天的国际新闻",
+        status: "running",
+        started_at: "2026-07-10T00:00:00.000Z",
+        created_at: "2026-07-10T00:00:00.000Z",
+        updated_at: "2026-07-10T00:00:00.000Z",
+      },
+    ];
+    let currentTurnId: string | null = "pending-turn:cancel";
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-cancel",
+      eventName: "stream-real-turn-cancel",
+      sessionId: "session-1",
+      pendingTurnKey: "pending-turn:cancel",
+      pendingItemKey: "pending-item:cancel",
+    };
+    let messages: Message[] = [
+      {
+        id: "assistant-cancel",
+        role: "assistant",
+        content: "以下是今日国际新闻简要整理：",
+        contentParts: [
+          {
+            type: "text",
+            text: "以下是今日国际新闻简要整理：",
+          },
+        ],
+        timestamp: new Date("2026-07-10T00:00:01.000Z"),
+        isThinking: true,
+        runtimeTurnId: "pending-turn:cancel",
+      },
+    ];
+    const interruptTurn = vi.fn(async () => true);
+    upsertAgentStreamTextOverlay({
+      messageId: "assistant-cancel",
+      eventName: "stream-real-turn-cancel",
+      content: "以下是今日国际新闻简要整理：",
+      turnId: "turn-real-cancel",
+    });
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        getSessionReadModel: vi.fn(async () => ({ queued_turns: [] })),
+        interruptTurn,
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setThreadItems: createStateSetter(
+        () => threadItems,
+        (value) => {
+          threadItems = value;
+        },
+      ),
+      setThreadTurns: createStateSetter(
+        () => threadTurns,
+        (value) => {
+          threadTurns = value;
+        },
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => currentTurnId,
+        (value) => {
+          currentTurnId = value;
+        },
+      ),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      getMessages: () => messages,
+      getThreadItems: () => threadItems,
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(getAgentStreamTextOverlay("assistant-cancel")).toBeNull();
+    expect(interruptTurn).toHaveBeenCalledWith(
+      "session-1",
+      "turn-real-cancel",
+      "stream-real-turn-cancel",
+    );
+    expect(threadItems.map((item) => item.id)).toEqual(["item-real-cancel"]);
+    expect(threadItems[0]).toMatchObject({
+      type: "agent_message",
+      text: "以下是今日国际新闻简要整理：\n\n(已停止)",
+      contentParts: [
+        {
+          type: "text",
+          text: "(已停止)",
+        },
+      ],
+    });
+    expect(threadTurns).toEqual([]);
+    expect(currentTurnId).toBeNull();
+    expect(messages[0]).toMatchObject({
+      content: "以下是今日国际新闻简要整理：\n\n(已停止)",
+      isThinking: false,
+      runtimeTurnId: "turn-real-cancel",
+      runtimeStatus: undefined,
+    });
+    expect(
+      messages[0]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+    expect(activeStream).toBeNull();
+  });
+
+  it("buildInterruptedMessageContentPatch 已有停止标记时应保持幂等", () => {
+    const patch = buildInterruptedMessageContentPatch({
+      id: "assistant-already-stopped",
+      role: "assistant",
+      content: "已输出\n\n(已停止)",
+      contentParts: [
+        {
+          type: "text",
+          text: "已输出",
+        },
+        {
+          type: "text",
+          text: "(已停止)",
+        },
+      ],
+      timestamp: new Date("2026-03-29T00:00:00.000Z"),
+    });
+
+    expect(patch.content).toBe("已输出\n\n(已停止)");
+    expect(patch.contentParts).toEqual([
+      {
+        type: "text",
+        text: "已输出",
+      },
+      {
+        type: "text",
+        text: "(已停止)",
+      },
+    ]);
   });
 
   it("stopActiveAgentStream 应把 output-free 中断输入恢复为富输入请求", async () => {
@@ -700,7 +1039,7 @@ describe("agentStreamFlowControl", () => {
       }),
     ]);
     expect(messages[0]).toMatchObject({
-      content: "active output should remain visible",
+      content: "active output should remain visible\n\n(已停止)",
       isThinking: false,
       runtimeStatus: undefined,
     });
@@ -1238,9 +1577,9 @@ describe("agentStreamFlowControl", () => {
       undefined,
     );
     expect(resumeThread).toHaveBeenCalledWith("session-1");
-    expect(
-      promoteQueuedTurn.mock.invocationCallOrder[0],
-    ).toBeLessThan(interruptTurn.mock.invocationCallOrder[0]);
+    expect(promoteQueuedTurn.mock.invocationCallOrder[0]).toBeLessThan(
+      interruptTurn.mock.invocationCallOrder[0],
+    );
     expect(interruptTurn.mock.invocationCallOrder[0]).toBeLessThan(
       resumeThread.mock.invocationCallOrder[0],
     );

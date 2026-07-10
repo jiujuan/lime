@@ -733,7 +733,7 @@ export function useInputbarDictation({
       );
       setDictationState("idle");
     }
-  }, [copy, resetRecording, updateLiveTranscript]);
+  }, [copy, resetRecording, textareaRef, updateLiveTranscript]);
 
   const handleDictationToggle = useCallback(async () => {
     if (disabled || dictationState === "transcribing") {

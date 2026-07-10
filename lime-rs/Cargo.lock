@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "agent-protocol"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -29,7 +29,7 @@ dependencies = [
 
 [[package]]
 name = "agent-runtime"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "anyhow",
@@ -38,6 +38,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio-util",
+ "tool-runtime",
 ]
 
 [[package]]
@@ -182,7 +183,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "app-server"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "agent-runtime",
@@ -240,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-client"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "app-server-protocol",
  "app-server-transport",
@@ -251,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-daemon"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "app-server-protocol",
  "app-server-transport",
@@ -263,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-protocol"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "schemars",
  "serde",
@@ -272,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-test-client"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "anyhow",
  "app-server-client",
@@ -283,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "app-server-transport"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "app-server-protocol",
  "serde_json",
@@ -335,7 +336,7 @@ dependencies = [
 
 [[package]]
 name = "aster-core"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -351,9 +352,7 @@ dependencies = [
  "boa_engine",
  "boa_gc",
  "chrono",
- "chrono-tz",
  "clap",
- "cron",
  "dashmap 6.1.0",
  "dirs 5.0.1",
  "document-preview",
@@ -367,13 +366,11 @@ dependencies = [
  "hostname",
  "indexmap 2.13.0",
  "indoc",
- "insta",
  "jsonschema",
  "jsonwebtoken",
  "keyring",
  "lazy_static",
  "lru",
- "minijinja",
  "mockall",
  "model-provider",
  "nanoid",
@@ -407,7 +404,6 @@ dependencies = [
  "test-case",
  "thiserror 1.0.69",
  "tokio",
- "tokio-cron-scheduler",
  "tokio-stream",
  "tokio-tungstenite 0.28.0",
  "tokio-util",
@@ -1669,18 +1665,6 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.15.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "054ccb5b10f9f2cbf51eb355ca1d05c2d279ce1804688d0db74b4733a5aeafd8"
-dependencies = [
- "encode_unicode",
- "libc",
- "once_cell",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "console"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d64e8af5551369d19cf50138de61f1c42074ab970f74e99be916646777f8fc87"
@@ -1880,15 +1864,6 @@ dependencies = [
  "chrono",
  "once_cell",
  "winnow 0.6.26",
-]
-
-[[package]]
-name = "croner"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c344b0690c1ad1c7176fe18eb173e0c927008fdaaa256e40dfd43ddd149c0843"
-dependencies = [
- "chrono",
 ]
 
 [[package]]
@@ -2269,7 +2244,7 @@ dependencies = [
 
 [[package]]
 name = "document-preview"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "flate2",
  "tempfile",
@@ -3602,7 +3577,7 @@ version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25470f23803092da7d239834776d653104d551bc4d7eacaf31e6837854b8e9eb"
 dependencies = [
- "console 0.16.3",
+ "console",
  "portable-atomic",
  "unicode-width",
  "unit-prefix",
@@ -3657,18 +3632,6 @@ checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
  "block-padding",
  "generic-array",
-]
-
-[[package]]
-name = "insta"
-version = "1.46.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e82db8c87c7f1ccecb34ce0c24399b8a73081427f3c7c50a5d597925356115e4"
-dependencies = [
- "console 0.15.11",
- "once_cell",
- "similar",
- "tempfile",
 ]
 
 [[package]]
@@ -3961,7 +3924,7 @@ dependencies = [
 
 [[package]]
 name = "lime-agent"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "agent-runtime",
@@ -3995,7 +3958,7 @@ dependencies = [
 
 [[package]]
 name = "lime-browser-runtime"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "chrono",
  "futures",
@@ -4012,7 +3975,7 @@ dependencies = [
 
 [[package]]
 name = "lime-cli"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "clap",
  "lime-core",
@@ -4024,7 +3987,7 @@ dependencies = [
 
 [[package]]
 name = "lime-config"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "async-trait",
  "lime-core",
@@ -4040,7 +4003,7 @@ dependencies = [
 
 [[package]]
 name = "lime-core"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "async-trait",
@@ -4096,7 +4059,7 @@ dependencies = [
 
 [[package]]
 name = "lime-gateway"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "aes",
  "async-trait",
@@ -4124,7 +4087,7 @@ dependencies = [
 
 [[package]]
 name = "lime-infra"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "chrono",
  "dashmap 5.5.3",
@@ -4146,7 +4109,7 @@ dependencies = [
 
 [[package]]
 name = "lime-knowledge"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "chrono",
  "hex",
@@ -4159,7 +4122,7 @@ dependencies = [
 
 [[package]]
 name = "lime-mcp"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "async-trait",
  "axum 0.7.9",
@@ -4179,7 +4142,7 @@ dependencies = [
 
 [[package]]
 name = "lime-media-runtime"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "axum 0.7.9",
  "base64 0.22.1",
@@ -4197,7 +4160,7 @@ dependencies = [
 
 [[package]]
 name = "lime-processor"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "async-trait",
  "lime-core",
@@ -4216,7 +4179,7 @@ dependencies = [
 
 [[package]]
 name = "lime-providers"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -4271,7 +4234,7 @@ dependencies = [
 
 [[package]]
 name = "lime-server"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "async-stream",
@@ -4314,7 +4277,7 @@ dependencies = [
 
 [[package]]
 name = "lime-server-utils"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "axum 0.7.9",
  "futures",
@@ -4329,7 +4292,7 @@ dependencies = [
 
 [[package]]
 name = "lime-services"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4373,7 +4336,7 @@ dependencies = [
 
 [[package]]
 name = "lime-skills"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "async-trait",
  "dirs 5.0.1",
@@ -4393,7 +4356,7 @@ dependencies = [
 
 [[package]]
 name = "lime-websocket"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "axum 0.7.9",
  "chrono",
@@ -4562,12 +4525,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "memo-map"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d1115007560874e373613744c6fba374c17688327a71c1476d1a5954cc857b"
-
-[[package]]
 name = "memoffset"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4599,17 +4556,6 @@ checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
 dependencies = [
  "mime",
  "unicase",
-]
-
-[[package]]
-name = "minijinja"
-version = "2.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c54f3bcc034dd74496b5ca929fd0b710186672d5ff0b0f255a9ceb259042ece"
-dependencies = [
- "memo-map",
- "self_cell",
- "serde",
 ]
 
 [[package]]
@@ -4680,7 +4626,7 @@ dependencies = [
 
 [[package]]
 name = "model-provider"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "anyhow",
@@ -5462,7 +5408,7 @@ checksum = "b867cad97c0791bbd3aaa6472142568c6c9e8f71937e98379f584cfb0cf35bec"
 
 [[package]]
 name = "patch-apply"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "tempfile",
  "thiserror 1.0.69",
@@ -6456,7 +6402,7 @@ dependencies = [
 
 [[package]]
 name = "runtime-core"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "app-server-protocol",
  "serde",
@@ -6787,12 +6733,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "self_cell"
-version = "1.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b12e76d157a900eb52e81bc6e9f3069344290341720e9178cde2407113ac8d89"
-
-[[package]]
 name = "semver"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7088,12 +7028,6 @@ name = "simd-adler32"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
-
-[[package]]
-name = "similar"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "simple_asn1"
@@ -7754,7 +7688,7 @@ dependencies = [
 
 [[package]]
 name = "thread-store"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "chrono",
@@ -7909,21 +7843,6 @@ dependencies = [
  "socket2 0.6.2",
  "tokio-macros",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "tokio-cron-scheduler"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c71ce8f810abc9fabebccc30302a952f9e89c6cf246fafaf170fef164063141"
-dependencies = [
- "chrono",
- "croner",
- "num-derive",
- "num-traits",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -8084,7 +8003,7 @@ dependencies = [
 
 [[package]]
 name = "tool-runtime"
-version = "1.97.0"
+version = "1.98.0"
 dependencies = [
  "agent-protocol",
  "app-server-protocol",
@@ -8092,7 +8011,9 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
+ "document-preview",
  "encoding_rs",
+ "glob",
  "lime-core",
  "lime-skills",
  "patch-apply",
@@ -8108,6 +8029,7 @@ dependencies = [
  "tokio-util",
  "url",
  "urlencoding",
+ "uuid",
  "which 8.0.0",
 ]
 

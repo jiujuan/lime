@@ -12,60 +12,84 @@ use crate::safety::{
 use crate::ModelProviderProtocol;
 use agent_protocol::provider_trace::ProviderTraceEvent;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
-use std::pin::Pin;
-use std::time::Duration;
 
-pub const PROVIDER_STREAM_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
-pub const PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON: &str =
-    "cancelled_while_waiting_provider_stream";
-pub const PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON: &str =
-    "cancelled_before_provider_event_processing";
+mod failure;
+mod image_input;
+mod model_change;
+mod notification;
+mod plaintext_tool_use;
+mod poll;
+mod progress;
+mod response_content;
+mod response_context;
+mod response_event;
+mod sampling;
+mod source_execution;
+mod text_delta;
+mod tool_input_delta;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ProviderStreamCancelReason {
-    WhileWaiting,
-    BeforeEventProcessing,
-}
-
-impl ProviderStreamCancelReason {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::WhileWaiting => PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON,
-            Self::BeforeEventProcessing => PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ProviderStreamPoll<T> {
-    Item(T),
-    End,
-    Pending,
-    Canceled(ProviderStreamCancelReason),
-}
-
-pub fn provider_stream_cancel_poll_interval(cancelable: bool) -> Option<Duration> {
-    cancelable.then_some(PROVIDER_STREAM_CANCEL_POLL_INTERVAL)
-}
-
-pub fn provider_stream_timeout_poll(cancelled: bool) -> ProviderStreamPoll<()> {
-    if cancelled {
-        ProviderStreamPoll::Canceled(ProviderStreamCancelReason::WhileWaiting)
-    } else {
-        ProviderStreamPoll::Pending
-    }
-}
-
-pub fn provider_stream_event_poll<T>(next: Option<T>, cancelled: bool) -> ProviderStreamPoll<T> {
-    match (next, cancelled) {
-        (None, _) => ProviderStreamPoll::End,
-        (Some(_), true) => {
-            ProviderStreamPoll::Canceled(ProviderStreamCancelReason::BeforeEventProcessing)
-        }
-        (Some(item), false) => ProviderStreamPoll::Item(item),
-    }
-}
+pub use agent_protocol::provider_trace::{
+    ProviderTraceEvent as RuntimeReplyProviderTraceEvent,
+    ProviderTraceFailure as RuntimeReplyProviderTraceFailure,
+    ProviderTraceStage as RuntimeReplyProviderTraceStage,
+};
+pub use failure::{
+    provider_stream_failure_message_should_log_as_warning,
+    provider_stream_failure_should_log_as_error, provider_stream_trace_failure,
+    RuntimeReplyProviderFailure, RuntimeReplyProviderFailureKind,
+};
+pub use image_input::{
+    provider_stream_image_input_policy_disables_provider_images,
+    provider_stream_input_modality_policy_allows_image_input,
+    provider_stream_input_modality_policy_from_metadata,
+    provider_stream_metadata_allows_image_input, provider_stream_model_supports_image_input,
+    provider_stream_should_omit_image_input, RuntimeReplyProviderImageInputPolicy,
+    PROVIDER_IMAGE_INPUT_POLICY_METADATA_CAMEL_KEY, PROVIDER_IMAGE_INPUT_POLICY_METADATA_KEY,
+};
+pub use model_change::{
+    provider_stream_model_change, RuntimeReplyProviderModelChange,
+    RuntimeReplyProviderModelChangeMode,
+};
+pub use notification::{
+    provider_stream_has_notification_text, provider_stream_notification_payload_from_text,
+    provider_stream_notification_payload_from_texts, provider_stream_notification_text,
+    PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX,
+};
+pub use plaintext_tool_use::{
+    provider_stream_plaintext_tool_use_is_complete, provider_stream_plaintext_tool_use_progress,
+    provider_stream_plaintext_tool_use_start, provider_stream_plaintext_tool_uses,
+    RuntimeReplyProviderPlaintextToolCall, RuntimeReplyProviderPlaintextToolUse,
+    RuntimeReplyProviderPlaintextToolUseProgress, PROVIDER_STREAM_PLAINTEXT_TOOL_USE_PROVIDER,
+};
+pub use poll::{
+    provider_stream_cancel_poll_interval, provider_stream_event_poll, provider_stream_timeout_poll,
+    ProviderStreamCancelReason, ProviderStreamPoll, PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON,
+    PROVIDER_STREAM_CANCEL_POLL_INTERVAL, PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON,
+};
+pub use progress::RuntimeReplyProviderStreamProgress;
+pub use response_content::{
+    provider_stream_response_has_notification_text, provider_stream_response_text_chars,
+    provider_stream_response_tool_input_delta_events, RuntimeReplyProviderResponseContent,
+};
+pub use response_context::{
+    provider_stream_response_context_from_header_pairs, RuntimeReplyProviderResponseContext,
+};
+pub use response_event::{
+    RuntimeReplyResponseEvent, RuntimeReplyResponseItem, RuntimeReplyResponseItemPayload,
+};
+pub use sampling::{
+    provider_stream_should_retry_empty_first_content, RuntimeReplyProviderSamplingMode,
+    RuntimeReplyProviderSamplingRequest, PROVIDER_EMPTY_STREAM_RETRY_MARKER,
+};
+pub use source_execution::{
+    run_provider_source_execution, RuntimeReplyProviderExecutionRunner,
+    RuntimeReplyProviderExecutionSource, RuntimeReplyProviderSourceBackend,
+    RuntimeReplyProviderSourceBackendCall, RuntimeReplyProviderSourceFuture,
+};
+pub use text_delta::provider_stream_first_text_delta_chars;
+pub use tool_input_delta::{
+    provider_stream_tool_input_delta_events, RuntimeReplyProviderToolInputDelta,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -381,109 +405,6 @@ impl RuntimeReplyProviderStreamStart {
             provider_name: self.stream_request.provider_name(),
             model_name: self.stream_request.model_name(),
         }
-    }
-}
-
-pub type RuntimeReplyProviderSourceFuture<'a, S, E> =
-    Pin<Box<dyn Future<Output = Result<S, E>> + Send + 'a>>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RuntimeReplyProviderSourceBackendCall<R> {
-    source_request: R,
-}
-
-#[derive(Debug)]
-pub struct RuntimeReplyProviderExecutionSource<R> {
-    runner: R,
-}
-
-impl<R> RuntimeReplyProviderSourceBackendCall<R> {
-    pub fn new(source_request: R) -> Self {
-        Self { source_request }
-    }
-
-    pub fn source_request(&self) -> &R {
-        &self.source_request
-    }
-
-    pub fn into_source_request(self) -> R {
-        self.source_request
-    }
-}
-
-pub trait RuntimeReplyProviderSourceBackend<R>: Send + Sync {
-    type Stream<'a>
-    where
-        Self: 'a,
-        R: 'a;
-    type Error: std::fmt::Display;
-
-    fn stream_reply<'a>(
-        self,
-        call: RuntimeReplyProviderSourceBackendCall<R>,
-    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
-    where
-        Self: Sized + Send + 'a,
-        R: Send + 'a;
-}
-
-pub trait RuntimeReplyProviderExecutionRunner<R> {
-    type Stream<'a>
-    where
-        Self: 'a,
-        R: 'a;
-    type Error: std::fmt::Display;
-
-    fn run_execution<'a>(
-        self,
-        request: R,
-    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
-    where
-        Self: Sized + Send + 'a,
-        R: Send + 'a;
-}
-
-impl<R> RuntimeReplyProviderExecutionSource<R> {
-    pub fn new(runner: R) -> Self {
-        Self { runner }
-    }
-
-    pub fn into_runner(self) -> R {
-        self.runner
-    }
-}
-
-pub fn run_provider_source_execution<'a, R, X>(
-    call: RuntimeReplyProviderSourceBackendCall<R>,
-    runner: X,
-) -> RuntimeReplyProviderSourceFuture<'a, X::Stream<'a>, X::Error>
-where
-    R: Send + 'a,
-    X: RuntimeReplyProviderExecutionRunner<R> + Send + 'a,
-{
-    runner.run_execution(call.into_source_request())
-}
-
-impl<R, X> RuntimeReplyProviderSourceBackend<R> for RuntimeReplyProviderExecutionSource<X>
-where
-    X: RuntimeReplyProviderExecutionRunner<R> + Send + Sync,
-{
-    type Stream<'a>
-        = X::Stream<'a>
-    where
-        Self: 'a,
-        R: 'a;
-    type Error = X::Error;
-
-    fn stream_reply<'a>(
-        self,
-        call: RuntimeReplyProviderSourceBackendCall<R>,
-    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
-    where
-        Self: Sized + Send + 'a,
-        R: Send + 'a,
-    {
-        run_provider_source_execution(call, self.into_runner())
     }
 }
 

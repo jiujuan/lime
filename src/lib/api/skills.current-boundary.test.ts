@@ -120,8 +120,8 @@ describe("skillsApi current App Server boundary", () => {
   });
 
   it("App Server protocol 和治理 catalog 应记录 Skill 管理 current 方法", () => {
-    const clientProtocolSource = readRepoFile(
-      "packages/app-server-client/src/protocol.ts",
+    const generatedClientProtocolSource = readRepoFile(
+      "packages/app-server-client/src/generated/protocol-types.ts",
     );
     const rustProtocolSource = [
       readRepoFile(
@@ -134,7 +134,7 @@ describe("skillsApi current App Server boundary", () => {
     const catalog = readAgentCommandCatalog();
 
     for (const method of CURRENT_SKILL_MANAGEMENT_METHODS) {
-      expect(clientProtocolSource).toContain(`"${method}"`);
+      expect(generatedClientProtocolSource).toContain(`"${method}"`);
       expect(rustProtocolSource).toContain(`"${method}"`);
     }
 

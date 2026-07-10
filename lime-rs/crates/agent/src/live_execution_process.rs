@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use aster::agents::{Agent, NativeToolExecutionHook, NativeToolExecutionRequest, ToolCallResult};
+use aster::{Agent, NativeToolExecutionHook, NativeToolExecutionRequest, ToolCallResult};
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::FutureExt;
 use rmcp::model::{
@@ -203,7 +203,7 @@ mod tests {
         ExecutionProcessSnapshot, ExecutionProcessStartParams, ExecutionProcessStartResponse,
         ExecutionProcessStatus, ExecutionProcessStatusResponse,
     };
-    use aster::tools::ToolContext;
+    use aster::ToolContext;
     use async_trait::async_trait;
 
     use crate::runtime_facade::with_agent_turn_context;

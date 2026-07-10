@@ -4,8 +4,8 @@ use crate::native_tools::runtime_tool_bridge::{
 };
 use crate::native_tools::NativeRegistration;
 use crate::runtime_facade::current_agent_turn_context;
-use aster::session_context::{current_action_scope, current_session_id};
-use aster::tools::ToolContext;
+use aster::ToolContext;
+use aster::{current_action_scope, current_session_id};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tool_runtime::image_task::ImageTaskGateway;

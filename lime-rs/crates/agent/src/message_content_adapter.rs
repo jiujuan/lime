@@ -7,7 +7,7 @@ use agent_protocol::action_required::{
     elicitation_action, elicitation_response_event_action, elicitation_response_message_action,
     tool_confirmation_action, ActionRequiredProjection,
 };
-use aster::conversation::message::{
+use aster::{
     ActionRequiredData, ActionRequiredScope as AsterActionRequiredScope, Message, MessageContent,
 };
 use std::collections::HashMap;

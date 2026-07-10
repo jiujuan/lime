@@ -463,7 +463,7 @@ describe("benchmark release run", () => {
     ).toThrow("只能二选一");
   });
 
-  it("执行失败的必需步骤会停止后续步骤并让 run invalid", () => {
+  it("非 strict 执行失败时继续收集后续 evidence 并让 run invalid", () => {
     const root = makeRepo();
     const report = runBenchmarkRelease({
       rootDir: root,
@@ -483,13 +483,19 @@ describe("benchmark release run", () => {
     expect(validation.valid).toBe(false);
     expect(report.summary).toMatchObject({
       failedStepCount: 1,
-      skippedStepCount: 7,
+      skippedStepCount: 0,
       valid: false,
     });
     expect(report.steps.find((step) => step.id === "terminal-bench-release-slice:dry-run")).toEqual(
       expect.objectContaining({
         status: "failed",
         reason: "command_failed",
+      }),
+    );
+    expect(report.steps.at(-1)).toEqual(
+      expect.objectContaining({
+        id: "benchmark-release:check",
+        status: "passed",
       }),
     );
   });
@@ -779,7 +785,7 @@ describe("benchmark release run", () => {
     expect(report.issues).toEqual(["storage_preflight: available_below_minimum"]);
   });
 
-  it("P0 step 失败时会写出 failed 和 skipped step evidence", () => {
+  it("非 strict P0 step 失败时继续写出后续 step evidence", () => {
     const root = makeRepo();
     const report = runBenchmarkRelease({
       rootDir: root,
@@ -813,8 +819,8 @@ describe("benchmark release run", () => {
       readJson(path.join(root, "out", "p0", "agent-qc-p0-manifest", "02-test-contracts.json")),
     ).toEqual(
       expect.objectContaining({
-        status: "skipped",
-        reason: "previous_required_step_failed",
+        status: "passed",
+        reason: "",
       }),
     );
   });

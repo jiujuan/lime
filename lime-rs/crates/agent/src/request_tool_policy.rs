@@ -693,12 +693,12 @@ mod tests {
     use crate::request_tool_policy::web_retrieval_process::WebRetrievalProcessState;
     use crate::turn_context_configuration::AgentTurnContext;
     mod provider_stream_idle;
-    use aster::agents::Agent;
-    use aster::conversation::message::Message;
-    use aster::conversation::Conversation;
-    use aster::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
-    use aster::providers::errors::ProviderError;
-    use aster::session::{
+    use aster::Conversation;
+    use aster::Message;
+    use aster::{
+        Agent, MessageStream, Provider, ProviderError, ProviderMetadata, ProviderUsage, Usage,
+    };
+    use aster::{
         ChatHistoryMatch, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
         TurnStatus,
     };
@@ -858,7 +858,7 @@ mod tests {
         async fn update_extension_data(
             &self,
             _session_id: &str,
-            extension_data: aster::session::extension_data::ExtensionData,
+            extension_data: aster::ExtensionData,
         ) -> anyhow::Result<()> {
             let mut session = self.session.lock().expect("锁测试 session");
             session.extension_data = extension_data;
@@ -878,7 +878,7 @@ mod tests {
             &self,
             _session_id: &str,
             provider_name: Option<String>,
-            model_config: Option<aster::model::ModelConfig>,
+            model_config: Option<aster::ModelConfig>,
         ) -> anyhow::Result<()> {
             let mut session = self.session.lock().expect("锁测试 session");
             if let Some(provider_name) = provider_name {
@@ -894,7 +894,7 @@ mod tests {
         async fn update_recipe(
             &self,
             _session_id: &str,
-            _recipe: Option<aster::recipe::Recipe>,
+            _recipe: Option<aster::Recipe>,
             _user_recipe_values: Option<HashMap<String, String>>,
         ) -> anyhow::Result<()> {
             Ok(())
@@ -929,7 +929,7 @@ mod tests {
 
         async fn complete_with_model(
             &self,
-            _model_config: &aster::model::ModelConfig,
+            _model_config: &aster::ModelConfig,
             _system: &str,
             _messages: &[Message],
             _tools: &[rmcp::model::Tool],
@@ -939,8 +939,8 @@ mod tests {
             ))
         }
 
-        fn get_model_config(&self) -> aster::model::ModelConfig {
-            aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+        fn get_model_config(&self) -> aster::ModelConfig {
+            aster::ModelConfig::new("gpt-5.3-codex").expect("test model config")
         }
     }
 
@@ -963,7 +963,7 @@ mod tests {
 
         async fn complete_with_model(
             &self,
-            _model_config: &aster::model::ModelConfig,
+            _model_config: &aster::ModelConfig,
             _system: &str,
             _messages: &[Message],
             _tools: &[rmcp::model::Tool],
@@ -981,8 +981,8 @@ mod tests {
             ))
         }
 
-        fn get_model_config(&self) -> aster::model::ModelConfig {
-            aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+        fn get_model_config(&self) -> aster::ModelConfig {
+            aster::ModelConfig::new("gpt-5.3-codex").expect("test model config")
         }
     }
 
@@ -1003,7 +1003,7 @@ mod tests {
 
         async fn complete_with_model(
             &self,
-            _model_config: &aster::model::ModelConfig,
+            _model_config: &aster::ModelConfig,
             _system: &str,
             _messages: &[Message],
             _tools: &[rmcp::model::Tool],
@@ -1019,7 +1019,7 @@ mod tests {
             _system: &str,
             _messages: &[Message],
             _tools: &[rmcp::model::Tool],
-        ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+        ) -> Result<MessageStream, ProviderError> {
             Ok(Box::pin(async_stream::try_stream! {
                 yield (
                     Some(Message::assistant().with_text("第一段")),
@@ -1037,8 +1037,8 @@ mod tests {
             true
         }
 
-        fn get_model_config(&self) -> aster::model::ModelConfig {
-            aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+        fn get_model_config(&self) -> aster::ModelConfig {
+            aster::ModelConfig::new("gpt-5.3-codex").expect("test model config")
         }
     }
 
@@ -1061,7 +1061,7 @@ mod tests {
 
         async fn complete_with_model(
             &self,
-            _model_config: &aster::model::ModelConfig,
+            _model_config: &aster::ModelConfig,
             _system: &str,
             _messages: &[Message],
             _tools: &[rmcp::model::Tool],
@@ -1077,7 +1077,7 @@ mod tests {
             _system: &str,
             _messages: &[Message],
             _tools: &[rmcp::model::Tool],
-        ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+        ) -> Result<MessageStream, ProviderError> {
             let attempt = self.attempts.fetch_add(1, Ordering::SeqCst);
             Ok(Box::pin(async_stream::try_stream! {
                 if attempt == 0 {
@@ -1101,8 +1101,8 @@ mod tests {
             true
         }
 
-        fn get_model_config(&self) -> aster::model::ModelConfig {
-            aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+        fn get_model_config(&self) -> aster::ModelConfig {
+            aster::ModelConfig::new("gpt-5.3-codex").expect("test model config")
         }
     }
 
@@ -1123,7 +1123,7 @@ mod tests {
 
         async fn complete_with_model(
             &self,
-            _model_config: &aster::model::ModelConfig,
+            _model_config: &aster::ModelConfig,
             _system: &str,
             _messages: &[Message],
             _tools: &[rmcp::model::Tool],
@@ -1134,8 +1134,8 @@ mod tests {
             ))
         }
 
-        fn get_model_config(&self) -> aster::model::ModelConfig {
-            aster::model::ModelConfig::new("mimo-v2.5-pro").expect("test model config")
+        fn get_model_config(&self) -> aster::ModelConfig {
+            aster::ModelConfig::new("mimo-v2.5-pro").expect("test model config")
         }
     }
 

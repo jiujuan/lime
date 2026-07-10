@@ -350,10 +350,14 @@ describe("MessageList layout and scrolling", () => {
     const originalCancelAnimationFrame = window.cancelAnimationFrame;
     const originalResizeObserver = globalThis.ResizeObserver;
     const scrollIntoViewMock = vi.fn();
-    let resizeCallback: ResizeObserverCallback | null = null;
+    type TestResizeObserverCallback = (
+      entries: unknown[],
+      observer: MockResizeObserver,
+    ) => void;
+    let resizeCallback: TestResizeObserverCallback | null = null;
 
     class MockResizeObserver {
-      constructor(callback: ResizeObserverCallback) {
+      constructor(callback: TestResizeObserverCallback) {
         resizeCallback = callback;
       }
 
@@ -389,7 +393,7 @@ describe("MessageList layout and scrolling", () => {
       });
 
       act(() => {
-        resizeCallback?.([], {} as ResizeObserver);
+        resizeCallback?.([], {} as MockResizeObserver);
       });
 
       expect(scrollIntoViewMock).toHaveBeenCalledWith({

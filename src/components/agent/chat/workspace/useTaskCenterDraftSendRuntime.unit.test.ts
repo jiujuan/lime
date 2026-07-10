@@ -196,6 +196,8 @@ function mountEmptyStateSendRuntime({
   threadItemsLength = 0,
   hasDisplayMessages = false,
   input = "默认输入",
+  prewarmedDraftSession = false,
+  prewarmedMaterializedSessionId = null,
   sessionId = null,
   sendResult = true,
   taskCenterDraftSendRequest = null,
@@ -210,6 +212,8 @@ function mountEmptyStateSendRuntime({
   threadItemsLength?: number;
   hasDisplayMessages?: boolean;
   input?: string;
+  prewarmedDraftSession?: boolean;
+  prewarmedMaterializedSessionId?: string | null;
   sessionId?: string | null;
   sendResult?: boolean;
   taskCenterDraftSendRequest?: TaskCenterDraftSendRequest | null;
@@ -236,6 +240,18 @@ function mountEmptyStateSendRuntime({
 
   function Harness() {
     const activeDraftTabIdRef = useRef<string | null>(activeDraftTabId);
+    const materializedSessionIdsRef = useRef(
+      new Map<string, string>(
+        activeDraftTabId && prewarmedMaterializedSessionId
+          ? [[activeDraftTabId, prewarmedMaterializedSessionId]]
+          : [],
+      ),
+    );
+    const prewarmedDraftSessionIdsRef = useRef(
+      new Set<string>(
+        activeDraftTabId && prewarmedDraftSession ? [activeDraftTabId] : [],
+      ),
+    );
     sendHandler = useTaskCenterEmptyStateSendRuntime({
       agentEntry,
       input,
@@ -254,6 +270,8 @@ function mountEmptyStateSendRuntime({
       setTaskCenterDraftSendRequest,
       taskCenterDraftSendRequest,
       setHomePendingPreviewRequest,
+      materializedSessionIdsRef,
+      prewarmedDraftSessionIdsRef,
       onNonMaterializedSessionReady,
     });
     return null;
@@ -1062,6 +1080,42 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
         workspaceId: "workspace-test",
       }),
     );
+  });
+
+  it("已有 draft tab 且输入预热会话未完成时应交给 materialized dispatch", async () => {
+    const runtime = mountEmptyStateSendRuntime({
+      activeDraftTabId: "draft-a",
+      hasDisplayMessages: false,
+      prewarmedDraftSession: true,
+      sessionId: null,
+    });
+
+    act(() => {
+      runtime.send({ textOverride: "你好" });
+    });
+
+    expect(runtime.setTaskCenterDraftSendRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draftTabId: "draft-a",
+        materializeDraft: true,
+        source: "task-center-empty-state",
+        text: "你好",
+      }),
+    );
+    expect(runtime.setHomePendingPreviewRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draftTabId: "draft-a",
+        materializeDraft: true,
+        source: "task-center-empty-state",
+        text: "你好",
+      }),
+    );
+    expect(runtime.handleSend).not.toHaveBeenCalled();
+
+    await flushAfterNextPaint();
+
+    expect(runtime.handleSend).not.toHaveBeenCalled();
+    expect(runtime.setTaskCenterDraftTabs).not.toHaveBeenCalled();
   });
 
   it("已有 draft tab 首发成功后应把源 draft tab 绑定到真实 session", async () => {

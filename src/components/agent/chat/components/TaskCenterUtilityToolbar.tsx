@@ -68,6 +68,7 @@ import {
 } from "./generalWorkbenchWorkflowData";
 import { TaskCenterTaskRail } from "./TaskCenterTaskRail";
 import { hasImportedRuntimeDetailSignal } from "../utils/importedSourceProcess";
+import { hydrateAgentPlanState } from "../utils/planState";
 import type { WorkspaceRightSurfaceLauncherProjection } from "../workspace/right-surface";
 import { buildWorkspaceTaskRailRuntimeContext } from "../workspace/useWorkspaceTaskRailRuntime";
 
@@ -423,6 +424,16 @@ export function TaskCenterUtilityToolbar({
       t: taskRailTranslate,
     });
   }, [environmentOpen, taskRail, taskRailTranslate]);
+  React.useEffect(() => {
+    if (environmentOpen || !taskRail?.threadItems?.length) {
+      return;
+    }
+    if (!hydrateAgentPlanState({ threadItems: taskRail.threadItems }).revisionId) {
+      return;
+    }
+    setEnvironmentOpen(true);
+    setEnvironmentVisited(true);
+  }, [environmentOpen, taskRail?.threadItems]);
   const importedRuntimeDetail = React.useMemo(() => {
     if (!environmentOpen) {
       return {

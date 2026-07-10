@@ -42,6 +42,12 @@ import {
   hasRunningThreadReadActivity,
   hasRunningTurnRecordActivity,
 } from "../projection/threadReadActivity";
+import {
+  buildInterruptedMessageContentPatch,
+  markInterruptedAgentMessageThreadItems,
+  messageHasInterruptedPlaceholder,
+} from "./agentInterruptedMessageContent";
+import { consumeLocallyInterruptedAgentStreamBinding } from "./agentStreamResumeBinding";
 
 export interface AgentSessionSnapshot {
   sessionId: string | null;
@@ -59,6 +65,303 @@ export interface AgentSessionSnapshot {
 }
 
 export type { AgentSessionDetailMergeMode } from "./agentSessionTimelineMergePolicy";
+
+function normalizeTimelineStatus(value: unknown): string {
+  return typeof value === "string"
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_")
+    : "";
+}
+
+function isInterruptedTimelineStatus(value: unknown): boolean {
+  const status = normalizeTimelineStatus(value);
+  return (
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "aborted" ||
+    status === "interrupted"
+  );
+}
+
+function readTimelineRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readTimelineString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readTimelineTurnId(value: unknown): string {
+  const record = readTimelineRecord(value);
+  if (!record) {
+    return "";
+  }
+  return (
+    readTimelineString(record.id) ||
+    readTimelineString(record.turn_id) ||
+    readTimelineString(record.turnId)
+  );
+}
+
+function readTimelineItemTurnId(value: unknown): string {
+  const record = readTimelineRecord(value);
+  if (!record) {
+    return "";
+  }
+  return (
+    readTimelineString(record.turn_id) || readTimelineString(record.turnId)
+  );
+}
+
+function readTimelineTurnStatus(value: unknown): unknown {
+  const record = readTimelineRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  return record.status ?? record.native_status ?? record.nativeStatus;
+}
+
+function collectInterruptedTurnIds(options: {
+  items?: readonly unknown[];
+  threadRead?: AgentRuntimeThreadReadModel | null;
+  turns?: readonly unknown[];
+}): Set<string> {
+  const interruptedTurnIds = new Set<string>();
+
+  for (const turn of options.turns || []) {
+    if (!isInterruptedTimelineStatus(readTimelineTurnStatus(turn))) {
+      continue;
+    }
+    const turnId = readTimelineTurnId(turn);
+    if (turnId) {
+      interruptedTurnIds.add(turnId);
+    }
+  }
+
+  for (const turn of options.threadRead?.turns || []) {
+    if (!isInterruptedTimelineStatus(readTimelineTurnStatus(turn))) {
+      continue;
+    }
+    const turnId = readTimelineTurnId(turn);
+    if (turnId) {
+      interruptedTurnIds.add(turnId);
+    }
+  }
+
+  const activeTurnId = readTimelineString(options.threadRead?.active_turn_id);
+  if (
+    activeTurnId &&
+    (isInterruptedTimelineStatus(options.threadRead?.status) ||
+      isInterruptedTimelineStatus(options.threadRead?.profile_status) ||
+      isInterruptedTimelineStatus(
+        options.threadRead?.diagnostics?.latest_turn_status,
+      ))
+  ) {
+    interruptedTurnIds.add(activeTurnId);
+  }
+
+  if (
+    interruptedTurnIds.size === 0 &&
+    (isInterruptedTimelineStatus(options.threadRead?.status) ||
+      isInterruptedTimelineStatus(options.threadRead?.profile_status))
+  ) {
+    for (const item of options.items || []) {
+      const turnId = readTimelineItemTurnId(item);
+      if (turnId) {
+        interruptedTurnIds.add(turnId);
+      }
+    }
+  }
+
+  return interruptedTurnIds;
+}
+
+function collectLocalInterruptedCandidateTurnIds(options: {
+  currentTurnId?: string | null;
+  items?: readonly unknown[];
+  threadRead?: AgentRuntimeThreadReadModel | null;
+  turns?: readonly unknown[];
+}): string[] {
+  const candidateTurnIds: string[] = [];
+  const seen = new Set<string>();
+  const pushTurnId = (value: unknown) => {
+    const turnId = readTimelineString(value);
+    if (!turnId || turnId.startsWith("pending-turn:") || seen.has(turnId)) {
+      return;
+    }
+    seen.add(turnId);
+    candidateTurnIds.push(turnId);
+  };
+
+  pushTurnId(options.currentTurnId);
+  pushTurnId(options.threadRead?.active_turn_id);
+
+  for (let index = (options.turns?.length ?? 0) - 1; index >= 0; index -= 1) {
+    pushTurnId(readTimelineTurnId(options.turns?.[index]));
+  }
+
+  const threadReadTurns = options.threadRead?.turns ?? [];
+  for (let index = threadReadTurns.length - 1; index >= 0; index -= 1) {
+    pushTurnId(readTimelineTurnId(threadReadTurns[index]));
+  }
+
+  for (let index = (options.items?.length ?? 0) - 1; index >= 0; index -= 1) {
+    pushTurnId(readTimelineItemTurnId(options.items?.[index]));
+  }
+
+  return candidateTurnIds;
+}
+
+function collectLocallyInterruptedTurnIds(options: {
+  candidateTurnIds: readonly string[];
+  sessionId: string;
+  threadId?: string | null;
+}): Set<string> {
+  const interruptedTurnIds = new Set<string>();
+  const sessionId = readTimelineString(options.sessionId);
+  if (!sessionId) {
+    return interruptedTurnIds;
+  }
+
+  const threadId = readTimelineString(options.threadId) || sessionId;
+  for (const turnId of options.candidateTurnIds) {
+    if (
+      consumeLocallyInterruptedAgentStreamBinding({
+        eventName: `agentSession/event/${sessionId}`,
+        sessionId,
+        threadId,
+        turnId,
+      })
+    ) {
+      interruptedTurnIds.add(turnId);
+      return interruptedTurnIds;
+    }
+  }
+
+  return interruptedTurnIds;
+}
+
+function collectLocalInterruptedMarkerTurnIds(options: {
+  currentMessages: readonly Message[];
+  fallbackTurnId?: string | null;
+  incomingItems?: readonly unknown[];
+}): Set<string> {
+  const interruptedTurnIds = new Set<string>();
+  const pushTurnId = (value: unknown) => {
+    const turnId = readTimelineString(value);
+    if (!turnId || turnId.startsWith("pending-turn:")) {
+      return;
+    }
+    interruptedTurnIds.add(turnId);
+  };
+
+  const hasLocalInterruptedMarker = options.currentMessages.some(
+    (message) =>
+      message.role === "assistant" && messageHasInterruptedPlaceholder(message),
+  );
+  if (!hasLocalInterruptedMarker) {
+    return interruptedTurnIds;
+  }
+
+  for (const message of options.currentMessages) {
+    if (
+      message.role === "assistant" &&
+      messageHasInterruptedPlaceholder(message)
+    ) {
+      pushTurnId(message.runtimeTurnId);
+    }
+  }
+
+  pushTurnId(options.fallbackTurnId);
+  for (
+    let index = (options.incomingItems?.length ?? 0) - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    pushTurnId(readTimelineItemTurnId(options.incomingItems?.[index]));
+  }
+
+  return interruptedTurnIds;
+}
+
+function markInterruptedAssistantMessages(
+  messages: Message[],
+  interruptedTurnIds: Set<string>,
+  options?: {
+    fallbackTurnId?: string | null;
+  },
+): Message[] {
+  if (interruptedTurnIds.size === 0) {
+    return messages;
+  }
+  let hasMarkedMessage = false;
+  const nextMessages = messages.map((message) => {
+    if (
+      message.role !== "assistant" ||
+      !message.runtimeTurnId ||
+      !interruptedTurnIds.has(message.runtimeTurnId)
+    ) {
+      return message;
+    }
+    hasMarkedMessage = true;
+    return {
+      ...message,
+      ...buildInterruptedMessageContentPatch(message),
+      isThinking: false,
+      runtimeStatus:
+        message.runtimeStatus?.phase === "cancelled"
+          ? message.runtimeStatus
+          : undefined,
+    };
+  });
+  const fallbackTurnId = readTimelineString(options?.fallbackTurnId);
+  if (
+    hasMarkedMessage ||
+    !fallbackTurnId ||
+    !interruptedTurnIds.has(fallbackTurnId)
+  ) {
+    return nextMessages;
+  }
+
+  let fallbackAssistantIndex = -1;
+  for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
+    if (nextMessages[index]?.role === "assistant") {
+      fallbackAssistantIndex = index;
+      break;
+    }
+  }
+  if (fallbackAssistantIndex < 0) {
+    return nextMessages;
+  }
+
+  return nextMessages.map((message, index) =>
+    index === fallbackAssistantIndex
+      ? {
+          ...message,
+          ...buildInterruptedMessageContentPatch(message),
+          isThinking: false,
+          runtimeTurnId: message.runtimeTurnId?.startsWith("pending-turn:")
+            ? fallbackTurnId
+            : (message.runtimeTurnId ?? fallbackTurnId),
+          runtimeStatus:
+            message.runtimeStatus?.phase === "cancelled"
+              ? message.runtimeStatus
+              : undefined,
+        }
+      : message,
+  );
+}
+
+function markInterruptedThreadItems(
+  items: AgentThreadItem[],
+  interruptedTurnIds: Set<string>,
+): AgentThreadItem[] {
+  return markInterruptedAgentMessageThreadItems(items, interruptedTurnIds);
+}
 
 export function createEmptyAgentSessionSnapshot(options?: {
   executionRuntime?: AsterSessionExecutionRuntime | null;
@@ -467,7 +770,8 @@ export function buildHydratedAgentSessionSnapshot(
     turns: incomingTurns,
   });
   const shouldReconcileTerminalRuntimeDetail =
-    hasIncomingTerminalTimeline && normalizedDetailMergeMode !== "history_hydrate";
+    hasIncomingTerminalTimeline &&
+    normalizedDetailMergeMode !== "history_hydrate";
   const mayPreserveExistingTimelineBySession =
     effectiveCurrentSessionId === topicId ||
     (effectiveCurrentSessionId === null &&
@@ -552,9 +856,48 @@ export function buildHydratedAgentSessionSnapshot(
             },
           )
         : hydratedMessages;
+  const nextCurrentTurnId = resolveCurrentTurnIdFromTimeline({
+    turns: nextThreadTurns,
+    items: nextThreadItems,
+    preferredTurns: visibleIncomingTurns,
+    preferredItems: visibleIncomingItems,
+  });
+  const interruptedTurnIds = collectInterruptedTurnIds({
+    items: incomingItems,
+    threadRead: detail.thread_read,
+    turns: incomingTurns,
+  });
+  for (const turnId of collectLocallyInterruptedTurnIds({
+    candidateTurnIds: collectLocalInterruptedCandidateTurnIds({
+      currentTurnId: nextCurrentTurnId,
+      items: incomingItems,
+      threadRead: detail.thread_read,
+      turns: incomingTurns,
+    }),
+    sessionId: topicId,
+    threadId: detail.thread_id ?? detail.thread_read?.thread_id ?? topicId,
+  })) {
+    interruptedTurnIds.add(turnId);
+  }
+  for (const turnId of collectLocalInterruptedMarkerTurnIds({
+    currentMessages: effectiveCurrentMessages,
+    fallbackTurnId: nextCurrentTurnId,
+    incomingItems,
+  })) {
+    interruptedTurnIds.add(turnId);
+  }
+  const nextThreadItemsWithTerminalMarkers = markInterruptedThreadItems(
+    nextThreadItems,
+    interruptedTurnIds,
+  );
   const nextMessagesWithThreadReasoning = mergeThreadItemReasoningIntoMessages(
     nextMessages,
-    nextThreadItems,
+    nextThreadItemsWithTerminalMarkers,
+  );
+  const nextMessagesWithTerminalMarkers = markInterruptedAssistantMessages(
+    nextMessagesWithThreadReasoning,
+    interruptedTurnIds,
+    { fallbackTurnId: nextCurrentTurnId },
   );
 
   return {
@@ -562,15 +905,10 @@ export function buildHydratedAgentSessionSnapshot(
     snapshot: {
       sessionId: syncSessionId ? topicId : currentSessionId,
       workingDir: detail.working_dir?.trim() || null,
-      messages: nextMessagesWithThreadReasoning,
+      messages: nextMessagesWithTerminalMarkers,
       threadTurns: nextThreadTurns,
-      threadItems: nextThreadItems,
-      currentTurnId: resolveCurrentTurnIdFromTimeline({
-        turns: nextThreadTurns,
-        items: nextThreadItems,
-        preferredTurns: visibleIncomingTurns,
-        preferredItems: visibleIncomingItems,
-      }),
+      threadItems: nextThreadItemsWithTerminalMarkers,
+      currentTurnId: nextCurrentTurnId,
       queuedTurns: normalizeQueuedTurnSnapshots(
         detail.queued_turns ?? detail.thread_read?.queued_turns,
       ),

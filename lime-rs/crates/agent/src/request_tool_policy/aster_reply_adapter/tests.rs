@@ -8,11 +8,10 @@ use agent_runtime::reply_backend::RuntimeReplyBackendStart;
 use agent_runtime::reply_host::RuntimeReplyStartRequest;
 use agent_runtime::reply_input::RuntimeReplyInput;
 use agent_runtime::reply_request::RuntimeReplyRequest;
-use aster::conversation::message::Message;
-use aster::providers::formats::openai_responses::PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX;
+use aster::Message;
 use model_provider::provider_stream::{
-    RuntimeProviderBackend, RuntimeReplyInputKind, RuntimeReplyProviderHandle,
-    RuntimeReplyProviderStreamEvent, RuntimeReplyStreamRequest,
+    provider_stream_notification_text, RuntimeProviderBackend, RuntimeReplyInputKind,
+    RuntimeReplyProviderHandle, RuntimeReplyProviderStreamEvent, RuntimeReplyStreamRequest,
 };
 use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use model_provider::safety::ProviderSafetyBufferingRetryModelSource;
@@ -111,10 +110,23 @@ fn provider_stream_notification_projects_safety_buffering_event() {
     });
     let message = Message::assistant()
         .with_system_notification(
-            aster::conversation::message::SystemNotificationType::InlineMessage,
-            format!("{PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX}{payload}"),
+            aster::SystemNotificationType::InlineMessage,
+            provider_stream_notification_text(
+                RuntimeReplyProviderStreamEvent::NOTIFICATION_KIND_SAFETY_BUFFERING,
+                payload["responseEvent"].clone(),
+                vec![
+                    (
+                        "x-codex-safety-buffering-enabled".to_string(),
+                        "true".to_string(),
+                    ),
+                    (
+                        "x-codex-safety-buffering-faster-model".to_string(),
+                        "legacy-fast".to_string(),
+                    ),
+                ],
+            ),
         )
-        .with_metadata(aster::conversation::message::MessageMetadata::invisible());
+        .with_metadata(aster::MessageMetadata::invisible());
     let config = RuntimeProviderConfig {
         provider_name: "openai".to_string(),
         provider_selector: Some("openai".to_string()),

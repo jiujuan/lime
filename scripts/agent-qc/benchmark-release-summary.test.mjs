@@ -139,6 +139,14 @@ function makeReadyTrueRunTask({
   currentChainInvoked = true,
   trueRunInvoked = true,
   verifierInvoked = true,
+  currentChain = {
+    target: "lime_app_server_current",
+    appServerMethod: "agentSession/turn/start",
+    evidenceExportMethod: "evidence/export",
+    externalVerifier: true,
+    invoked: currentChainInvoked,
+    evidenceExportInvoked: currentChainInvoked,
+  },
 } = {}) {
   return {
     schemaVersion: "benchmark-true-run-v1",
@@ -163,6 +171,7 @@ function makeReadyTrueRunTask({
       liveProviderUsed: true,
       trueRunInvoked,
       currentChainInvoked,
+      currentChain,
       reason: "test ready true-run evidence",
     },
     checks: [],
@@ -639,6 +648,67 @@ describe("benchmark release summary", () => {
               }),
             }),
           ],
+        }),
+      ]),
+    );
+  });
+
+  it("ready true-run 声称 current chain invoked 时必须给出 current App Server contract", () => {
+    const root = makeTempDir();
+    writeJson(path.join(root, "manifest.json"), makeP0AndReadyExternalManifest());
+    writeJson(
+      path.join(root, "runs", "p0", "verify-local.json"),
+      makeP0GateStep({
+        id: "lime-p0-gate:npm-01-verify-local",
+        command: "npm run verify:local",
+        status: "passed",
+      }),
+    );
+    writeJson(
+      path.join(root, "runs", "dry", "terminal", "suite-summary.json"),
+      makeDryRunSuite("terminal-bench-release-slice"),
+    );
+    writeJson(
+      path.join(root, "runs", "true-run", "terminal", "hello-world", "summary.json"),
+      makeReadyTrueRunTask({
+        currentChain: {
+          target: "legacy_agent_runtime",
+          appServerMethod: "agent_runtime_turn_start",
+          evidenceExportMethod: "agent_runtime_export",
+          externalVerifier: true,
+          invoked: true,
+          evidenceExportInvoked: false,
+        },
+      }),
+    );
+    writeJson(
+      path.join(
+        root,
+        "runs",
+        "true-run",
+        "terminal",
+        "hello-world",
+        "evidence-pack",
+        "manifest.json",
+      ),
+      makeTrueRunEvidencePack(),
+    );
+
+    const summary = buildBenchmarkReleaseSummary({
+      rootDir: root,
+      manifestPath: "manifest.json",
+      evidenceRoot: "runs",
+    });
+
+    expect(summary.releaseReady).toBe(false);
+    expect(summary.summary.trueRunEvidenceBlockerCount).toBe(2);
+    expect(summary.trueRunEvidenceBlockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "current_chain_contract_invalid",
+        }),
+        expect.objectContaining({
+          id: "evidence_export_not_invoked",
         }),
       ]),
     );

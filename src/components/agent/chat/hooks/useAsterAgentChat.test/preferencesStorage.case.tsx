@@ -14,6 +14,21 @@ import {
   seedSession,
 } from "../useAsterAgentChat.testUtils";
 
+const expectCurrentProviderRoutingMetadata = () =>
+  expect.objectContaining({
+    executionRuntime: expect.objectContaining({
+      modelName: "gpt-5.4-mini",
+      providerSelector: "openai",
+    }),
+    extensionData: expect.objectContaining({
+      "lime_provider_routing.v0": expect.objectContaining({
+        providerSelector: "openai",
+      }),
+    }),
+    modelName: "gpt-5.4-mini",
+    providerSelector: "openai",
+  });
+
 describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
   it("初始化时应清理 sessionStorage 中空白 user 消息", async () => {
     const workspaceId = "ws-clean-blank-user";
@@ -309,7 +324,7 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
         {
           runStartHooks: true,
           workingDir: null,
-          metadata: undefined,
+          metadata: expectCurrentProviderRoutingMetadata(),
         },
       );
     } finally {
@@ -363,7 +378,7 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
         {
           runStartHooks: true,
           workingDir: null,
-          metadata: undefined,
+          metadata: expectCurrentProviderRoutingMetadata(),
         },
       );
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledWith(

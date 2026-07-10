@@ -398,13 +398,17 @@ export function readPlanImplementationConfirmationKeys(
   requestArguments?: unknown,
 ): string[] {
   const args = asRecord(requestArguments);
+  const snakePlanConfirmationKeys = Array.isArray(
+    args?.plan_confirmation_keys,
+  )
+    ? args.plan_confirmation_keys
+    : [];
+  const camelPlanConfirmationKeys = Array.isArray(args?.planConfirmationKeys)
+    ? args.planConfirmationKeys
+    : [];
   const explicitKeys = [
-    ...(Array.isArray(args?.plan_confirmation_keys)
-      ? args?.plan_confirmation_keys
-      : []),
-    ...(Array.isArray(args?.planConfirmationKeys)
-      ? args?.planConfirmationKeys
-      : []),
+    ...snakePlanConfirmationKeys,
+    ...camelPlanConfirmationKeys,
   ].filter((value): value is string => typeof value === "string");
   const explicitKey = readStringField(
     args,

@@ -6,6 +6,7 @@ import {
 } from "vitest";
 import {
   flushEffects,
+  mockGetAgentRuntimeSession,
   mockGetAgentRuntimeThreadRead,
   mockRespondAgentRuntimeAction,
   mountHook,
@@ -106,56 +107,119 @@ describe("useAsterAgentChat.confirmAction", () => {
     }
   });
 
-  it("confirmAction 成功后应刷新当前会话详情以同步 thread_read", async () => {
-    const workspaceId = "ws-ask-user-refresh";
-    seedSession(workspaceId, "session-ask-user-refresh");
-    mockGetAgentRuntimeThreadRead.mockResolvedValueOnce({
-      thread_id: "thread-ask-user-refresh",
-      status: "running",
-      pending_requests: [],
-      incidents: [],
-      queued_turns: [],
-    });
+  it("confirmAction 成功后应刷新当前会话详情以同步 terminal approval item", async () => {
+    const workspaceId = "ws-action-detail-refresh";
+    seedSession(workspaceId, "session-action-detail-refresh");
     const harness = mountHook(workspaceId);
 
     try {
       await flushEffects();
+      mockGetAgentRuntimeSession.mockClear();
+      mockGetAgentRuntimeThreadRead.mockClear();
+      mockGetAgentRuntimeSession.mockResolvedValueOnce({
+        id: "session-action-detail-refresh",
+        thread_id: "thread-action-detail-refresh",
+        created_at: 1_782_777_600,
+        updated_at: 1_782_777_601,
+        messages: [],
+        turns: [
+          {
+            id: "turn-action-detail-refresh",
+            thread_id: "thread-action-detail-refresh",
+            prompt_text: "",
+            status: "canceled",
+            started_at: "2026-07-10T00:00:00.000Z",
+            completed_at: "2026-07-10T00:00:01.000Z",
+            created_at: "2026-07-10T00:00:00.000Z",
+            updated_at: "2026-07-10T00:00:01.000Z",
+          },
+        ],
+        items: [
+          {
+            id: "approval-action-detail-refresh",
+            thread_id: "thread-action-detail-refresh",
+            turn_id: "turn-action-detail-refresh",
+            sequence: 1,
+            type: "approval_request",
+            request_id: "req-action-detail-refresh-1",
+            action_type: "tool_confirmation",
+            tool_name: "Bash",
+            arguments: { command: "echo approval-refresh" },
+            prompt: "允许执行命令？",
+            status: "completed",
+            response: { decision: "cancel" },
+            started_at: "2026-07-10T00:00:00.100Z",
+            completed_at: "2026-07-10T00:00:00.200Z",
+            updated_at: "2026-07-10T00:00:00.200Z",
+          },
+        ],
+        thread_read: {
+          thread_id: "thread-action-detail-refresh",
+          status: "canceled",
+          latest_turn_status: "canceled",
+          pending_requests: [],
+          incidents: [],
+          queued_turns: [],
+        },
+      });
+
       await act(async () => {
         await harness.getValue().confirmAction({
-          requestId: "req-ask-user-refresh-1",
-          confirmed: true,
-          actionType: "ask_user",
-          response: '{"answer":"已确认"}',
+          requestId: "req-action-detail-refresh-1",
+          confirmed: false,
+          decision: "cancel",
+          actionType: "tool_confirmation",
+          response: "取消",
         });
       });
 
-      expect(mockGetAgentRuntimeThreadRead).toHaveBeenCalledTimes(1);
-      expect(mockGetAgentRuntimeThreadRead).toHaveBeenCalledWith(
-        "session-ask-user-refresh",
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledTimes(1);
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        "session-action-detail-refresh",
+        { historyLimit: 40, source: "actionRespond" },
       );
+      expect(mockGetAgentRuntimeThreadRead).not.toHaveBeenCalled();
       expect(harness.getValue().threadRead).toMatchObject({
-        thread_id: "thread-ask-user-refresh",
-        status: "running",
+        thread_id: "thread-action-detail-refresh",
+        status: "canceled",
       });
+      expect(harness.getValue().threadItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "approval-action-detail-refresh",
+            type: "approval_request",
+            status: "completed",
+          }),
+        ]),
+      );
     } finally {
       harness.unmount();
     }
   });
 
-  it("confirmAction 等待 read-model 回填时，应暴露 submittedActionsInFlight", async () => {
+  it("confirmAction 等待会话详情回填时，应暴露 submittedActionsInFlight", async () => {
     const workspaceId = "ws-ask-user-submitting";
     seedSession(workspaceId, "session-ask-user-submitting");
     let resolveRefresh: (() => void) | null = null;
-    mockGetAgentRuntimeThreadRead.mockImplementation(
+    mockGetAgentRuntimeSession.mockImplementation(
       () =>
         new Promise((resolve) => {
           resolveRefresh = () =>
             resolve({
+              id: "session-ask-user-submitting",
               thread_id: "thread-ask-user-submitting",
-              status: "running",
-              pending_requests: [],
-              incidents: [],
-              queued_turns: [],
+              created_at: 1_782_777_600,
+              updated_at: 1_782_777_601,
+              messages: [],
+              turns: [],
+              items: [],
+              thread_read: {
+                thread_id: "thread-ask-user-submitting",
+                status: "running",
+                pending_requests: [],
+                incidents: [],
+                queued_turns: [],
+              },
             });
         }),
     );

@@ -2,8 +2,7 @@
 //!
 //! This module implements the `ReadTool` for reading files with:
 //! - Text file reading with line numbers
-//! - Image reading with base64 encoding
-//! - PDF reading (optional)
+//! - Document text previews
 //! - Jupyter notebook reading
 //! - File read history tracking
 //!
@@ -13,7 +12,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::debug;
@@ -25,9 +23,6 @@ use crate::tools::error::ToolError;
 
 /// Maximum file size for text files (10MB)
 pub const MAX_TEXT_FILE_SIZE: u64 = 10 * 1024 * 1024;
-
-/// Maximum file size for images (50MB)
-pub const MAX_IMAGE_FILE_SIZE: u64 = 50 * 1024 * 1024;
 
 /// Supported image extensions
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "svg"];
@@ -128,8 +123,7 @@ impl LineRange {
 ///
 /// Supports reading:
 /// - Text files with line numbers
-/// - Images as base64
-/// - PDF files (optional)
+/// - Document text previews
 /// - Jupyter notebooks
 ///
 /// Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
@@ -326,19 +320,11 @@ impl ReadTool {
 }
 
 // =============================================================================
-// Image Reading (Requirements: 4.2)
+// Retired image read path
 // =============================================================================
 
 impl ReadTool {
-    /// Read an image file with enhanced analysis capabilities
-    ///
-    /// 增强版实现，对齐当前多模态读取能力：
-    /// - Provides detailed image metadata
-    /// - Estimates token consumption
-    /// - Supports intelligent image analysis
-    /// - Returns structured information for AI processing
-    ///
-    /// Requirements: 4.2
+    /// Retired Aster image read path. Use the current `view_image` tool.
     pub async fn read_image(
         &self,
         path: &Path,
@@ -354,116 +340,30 @@ impl ReadTool {
             )));
         }
 
-        // Check file size
-        let metadata = fs::metadata(&full_path)?;
-        if metadata.len() > MAX_IMAGE_FILE_SIZE {
-            return Err(ToolError::execution_failed(format!(
-                "Image too large: {} bytes (max: {} bytes)",
-                metadata.len(),
-                MAX_IMAGE_FILE_SIZE
-            )));
-        }
-
-        // Use enhanced image processing from media module
-        let image_result = crate::media::read_image_file_enhanced(&full_path)
-            .map_err(|e| ToolError::execution_failed(format!("Failed to read image: {}", e)))?;
-
-        // Record the read
-        let content = fs::read(&full_path)?;
-        self.record_file_read(&full_path, &content, &metadata)?;
-
-        // Calculate enhanced metadata
-        let size_kb = (image_result.original_size as f64 / 1024.0).round() as u64;
-        let token_estimate = crate::media::estimate_image_tokens(&image_result.base64);
-
-        // Build enhanced output with analysis information
-        let mut output = Vec::new();
-        output.push(format!(
-            "[Enhanced Image Analysis: {}]",
+        Err(ToolError::execution_failed(format!(
+            "Image reading through Read is retired: {}. Use the current view_image tool for model-visible image inputs.",
             full_path.display()
-        ));
-        output.push(format!("Format: {}", image_result.mime_type));
-        output.push(format!(
-            "Size: {} KB ({} bytes)",
-            size_kb, image_result.original_size
-        ));
-
-        if let Some(dims) = &image_result.dimensions {
-            if let (Some(w), Some(h)) = (dims.original_width, dims.original_height) {
-                output.push(format!("Original dimensions: {}x{}", w, h));
-                if let (Some(dw), Some(dh)) = (dims.display_width, dims.display_height) {
-                    if dw != w || dh != h {
-                        output.push(format!("Display dimensions: {}x{} (resized)", dw, dh));
-                    }
-                }
-            }
-        }
-
-        output.push(format!("Estimated tokens: {}", token_estimate));
-
-        // Add analysis hints for AI processing
-        output.push(String::new());
-        output.push("AI Analysis Capabilities:".to_string());
-        output.push("- Content recognition and description".to_string());
-        output.push("- Text extraction (OCR)".to_string());
-        output.push("- Object and scene detection".to_string());
-        output.push("- Color analysis and composition".to_string());
-        output.push("- Technical diagram interpretation".to_string());
-        output.push("- Screenshot analysis and UI element identification".to_string());
-
-        debug!(
-            "Enhanced image read: {} ({} KB, {} tokens, {})",
-            full_path.display(),
-            size_kb,
-            token_estimate,
-            image_result.mime_type
-        );
-
-        // Return formatted analysis with base64 data
-        Ok(format!(
-            "{}\n\nBase64 Data: data:{};base64,{}",
-            output.join("\n"),
-            image_result.mime_type,
-            image_result.base64
-        ))
+        )))
     }
 
-    /// Check if a file is an image based on extension (uses media module)
+    /// Check if a file is an image based on extension.
     pub fn is_image_file(path: &Path) -> bool {
         let ext = path
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("")
             .to_lowercase();
-        crate::media::is_supported_image_format(&ext)
+        IMAGE_EXTENSIONS.contains(&ext.as_str())
     }
 }
 
 // =============================================================================
-// PDF Reading (Requirements: 4.3)
+// Retired PDF multimodal read path
 // =============================================================================
 
 impl ReadTool {
-    /// Read a PDF file with enhanced processing capabilities
-    ///
-    /// 增强版实现，对齐当前文档读取能力：
-    /// - Provides detailed PDF metadata
-    /// - Supports document block processing for AI analysis
-    /// - Returns structured information for multimodal AI processing
-    /// - Includes content extraction hints
-    ///
-    /// Note: PDF reading requires external dependencies and is disabled by default.
-    /// When enabled, extracts text content from PDF files and prepares them
-    /// for AI analysis with document blocks.
-    ///
-    /// Requirements: 4.3
+    /// Retired Aster PDF multimodal read path.
     pub async fn read_pdf(&self, path: &Path, context: &ToolContext) -> Result<String, ToolError> {
-        if !self.pdf_enabled {
-            return Err(ToolError::execution_failed(
-                "PDF reading is not enabled. Enable it with ReadTool::with_pdf_enabled(true)",
-            ));
-        }
-
         let full_path = self.resolve_path(path, context);
 
         // Check file exists
@@ -474,62 +374,19 @@ impl ReadTool {
             )));
         }
 
-        // Read file content for history tracking and analysis
-        let content = fs::read(&full_path)?;
-        let metadata = fs::metadata(&full_path)?;
-        self.record_file_read(&full_path, &content, &metadata)?;
-
-        // Calculate enhanced metadata
-        let size_mb = (metadata.len() as f64 / 1_048_576.0 * 100.0).round() / 100.0;
-        let base64_content = BASE64.encode(&content);
-        let base64_length = base64_content.len();
-
-        // Build enhanced output with analysis information
-        let mut output = Vec::new();
-        output.push(format!("[Enhanced PDF Analysis: {}]", full_path.display()));
-        output.push(format!("Size: {} MB ({} bytes)", size_mb, metadata.len()));
-        output.push(format!("Base64 length: {} chars", base64_length));
-        output.push(String::new());
-
-        // Add analysis capabilities information
-        output.push("AI Analysis Capabilities:".to_string());
-        output.push("- Document structure analysis".to_string());
-        output.push("- Text extraction and content analysis".to_string());
-        output.push("- Table and form recognition".to_string());
-        output.push("- Image and diagram extraction".to_string());
-        output.push("- Layout and formatting analysis".to_string());
-        output.push("- Multi-page document processing".to_string());
-        output.push(String::new());
-
-        // Add processing hints
-        output.push("Processing Notes:".to_string());
-        output
-            .push("- PDF content will be processed as document blocks for AI analysis".to_string());
-        output.push("- Large PDFs may be processed in chunks for optimal performance".to_string());
-        output.push("- Text and visual elements will be analyzed together".to_string());
-
-        debug!(
-            "Enhanced PDF read: {} ({} MB, {} base64 chars)",
-            full_path.display(),
-            size_mb,
-            base64_length
-        );
-
-        // Return enhanced analysis information
-        // Note: In a full implementation, this would include the actual PDF processing
-        // and document block creation for AI analysis
-        Ok(format!("{}\n\nDocument ready for AI analysis.\nBase64 data available for multimodal processing.", 
-                   output.join("\n")))
+        let _pdf_enabled = self.pdf_enabled;
+        Err(ToolError::execution_failed(format!(
+            "PDF multimodal reading through Read is retired: {}. Use current document preview or document ingestion instead.",
+            full_path.display()
+        )))
     }
 
-    /// Check if a file is a PDF (uses media module)
+    /// Check if a file is a PDF.
     pub fn is_pdf_file(path: &Path) -> bool {
-        let ext = path
-            .extension()
+        path.extension()
             .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        crate::media::is_pdf_extension(&ext)
+            .map(|extension| extension.eq_ignore_ascii_case("pdf"))
+            .unwrap_or(false)
     }
 }
 
@@ -884,11 +741,10 @@ impl Tool for ReadTool {
     }
 
     fn description(&self) -> &str {
-        "Multimodal file reader. \
+        "File reader for text, document previews, SVG, and Jupyter notebooks. \
          Text files are returned as direct line-numbered content by default, \
          with an optional enhanced analysis mode when explicitly requested. \
-         Also supports images (with metadata and AI analysis hints), PDF files (with document processing), \
-         SVG files (with vector graphics analysis), and Jupyter notebooks (with computational analysis). \
+         Images must use the current view_image tool; PDF multimodal ingestion is not provided by Read. \
          Optimized for reliable file reading in agent workflows."
     }
 
@@ -1368,383 +1224,3 @@ impl TextOutputMode {
 // =============================================================================
 // Unit Tests
 // =============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
-    use tempfile::TempDir;
-
-    fn create_test_context(dir: &Path) -> ToolContext {
-        ToolContext::new(dir.to_path_buf())
-            .with_session_id("test-session")
-            .with_user("test-user")
-    }
-
-    fn create_read_tool() -> ReadTool {
-        ReadTool::new(super::super::create_shared_history())
-    }
-
-    #[test]
-    fn test_line_range_new() {
-        let range = LineRange::new(5, Some(10));
-        assert_eq!(range.start, 5);
-        assert_eq!(range.end, Some(10));
-    }
-
-    #[test]
-    fn test_line_range_from_start() {
-        let range = LineRange::from_start(5);
-        assert_eq!(range.start, 5);
-        assert_eq!(range.end, None);
-    }
-
-    #[test]
-    fn test_line_range_lines() {
-        let range = LineRange::lines(5, 10);
-        assert_eq!(range.start, 5);
-        assert_eq!(range.end, Some(14));
-    }
-
-    #[test]
-    fn test_is_image_file() {
-        assert!(ReadTool::is_image_file(Path::new("test.png")));
-        assert!(ReadTool::is_image_file(Path::new("test.jpg")));
-        assert!(ReadTool::is_image_file(Path::new("test.JPEG")));
-        assert!(ReadTool::is_image_file(Path::new("test.gif")));
-        assert!(!ReadTool::is_image_file(Path::new("test.txt")));
-        assert!(!ReadTool::is_image_file(Path::new("test.rs")));
-    }
-
-    #[test]
-    fn test_is_pdf_file() {
-        assert!(ReadTool::is_pdf_file(Path::new("test.pdf")));
-        assert!(ReadTool::is_pdf_file(Path::new("test.PDF")));
-        assert!(!ReadTool::is_pdf_file(Path::new("test.txt")));
-    }
-
-    #[test]
-    fn test_is_notebook_file() {
-        assert!(ReadTool::is_notebook_file(Path::new("test.ipynb")));
-        assert!(ReadTool::is_notebook_file(Path::new("test.IPYNB")));
-        assert!(!ReadTool::is_notebook_file(Path::new("test.py")));
-    }
-
-    #[test]
-    fn test_is_text_file() {
-        assert!(ReadTool::is_text_file(Path::new("test.txt")));
-        assert!(ReadTool::is_text_file(Path::new("test.rs")));
-        assert!(ReadTool::is_text_file(Path::new("test.py")));
-        assert!(ReadTool::is_text_file(Path::new("test.json")));
-        // Unknown extensions default to text
-        assert!(ReadTool::is_text_file(Path::new("test.unknown")));
-    }
-
-    #[test]
-    fn test_is_document_file() {
-        assert!(ReadTool::is_document_file(Path::new("test.docx")));
-        assert!(ReadTool::is_document_file(Path::new("test.DOCX")));
-        assert!(!ReadTool::is_document_file(Path::new("test.zip")));
-    }
-
-    #[tokio::test]
-    async fn test_read_text_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.txt");
-
-        // Create test file
-        let mut file = fs::File::create(&file_path).unwrap();
-        writeln!(file, "Line 1").unwrap();
-        writeln!(file, "Line 2").unwrap();
-        writeln!(file, "Line 3").unwrap();
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-
-        let result = tool.read_text(&file_path, None, &context).await.unwrap();
-
-        assert!(result.contains("1 | Line 1"));
-        assert!(result.contains("2 | Line 2"));
-        assert!(result.contains("3 | Line 3"));
-
-        // Check history was recorded
-        assert!(tool.read_history.read().unwrap().has_read(&file_path));
-    }
-
-    #[tokio::test]
-    async fn test_read_docx_document_without_zip_noise() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("knowledge.docx");
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        {
-            let mut writer = zip::ZipWriter::new(&mut buffer);
-            let options = zip::write::FileOptions::default();
-            writer.start_file("word/document.xml", options).unwrap();
-            writer
-                .write_all(
-                    r#"<w:document><w:body><w:p><w:r><w:t>个人 IP 知识库</w:t></w:r></w:p></w:body></w:document>"#
-                        .as_bytes(),
-                )
-                .unwrap();
-            writer.finish().unwrap();
-        }
-        fs::write(&file_path, buffer.into_inner()).unwrap();
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-
-        let result = tool.read_document(&file_path, &context).await.unwrap();
-
-        assert!(result.contains("个人 IP 知识库"));
-        assert!(!result.contains("PK"));
-        assert!(!result.contains("word/document.xml"));
-        assert!(tool.read_history.read().unwrap().has_read(&file_path));
-    }
-
-    #[tokio::test]
-    async fn test_read_text_file_with_range() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.txt");
-
-        // Create test file with 10 lines
-        let mut file = fs::File::create(&file_path).unwrap();
-        for i in 1..=10 {
-            writeln!(file, "Line {}", i).unwrap();
-        }
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-
-        let range = LineRange::new(3, Some(5));
-        let result = tool
-            .read_text(&file_path, Some(range), &context)
-            .await
-            .unwrap();
-
-        assert!(result.contains("3 | Line 3"));
-        assert!(result.contains("4 | Line 4"));
-        assert!(result.contains("5 | Line 5"));
-        assert!(!result.contains("Line 1"));
-        assert!(!result.contains("Line 6"));
-    }
-
-    #[tokio::test]
-    async fn test_read_nonexistent_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("nonexistent.txt");
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-
-        let result = tool.read_text(&file_path, None, &context).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_read_image_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.png");
-
-        // Create a minimal PNG file (1x1 transparent pixel)
-        let png_data: Vec<u8> = vec![
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
-            0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, // IDAT chunk
-            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D,
-            0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, // IEND chunk
-            0x42, 0x60, 0x82,
-        ];
-        fs::write(&file_path, &png_data).unwrap();
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-
-        let result = tool.read_image(&file_path, &context).await.unwrap();
-
-        // Updated assertion for enhanced image output format
-        assert!(result.contains("[Enhanced Image Analysis:"));
-        assert!(result.contains("Base64 Data: data:image/png;base64,"));
-        assert!(tool.read_history.read().unwrap().has_read(&file_path));
-    }
-
-    #[tokio::test]
-    async fn test_read_notebook_file() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.ipynb");
-
-        // Create a minimal notebook
-        let notebook = serde_json::json!({
-            "cells": [
-                {
-                    "cell_type": "code",
-                    "source": ["print('Hello')"],
-                    "outputs": []
-                },
-                {
-                    "cell_type": "markdown",
-                    "source": ["# Title"]
-                }
-            ],
-            "metadata": {},
-            "nbformat": 4,
-            "nbformat_minor": 2
-        });
-        fs::write(&file_path, serde_json::to_string(&notebook).unwrap()).unwrap();
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-
-        let result = tool.read_notebook(&file_path, &context).await.unwrap();
-
-        // Updated assertions for enhanced notebook output format
-        assert!(result.contains("[Enhanced Notebook Analysis:"));
-        assert!(result.contains("Cell 1 [Code Cell]"));
-        assert!(result.contains("print('Hello')"));
-        assert!(result.contains("Cell 2 [Markdown Cell]"));
-        assert!(result.contains("# Title"));
-    }
-
-    #[tokio::test]
-    async fn test_tool_execute_text() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.txt");
-        fs::write(&file_path, "Hello, World!").unwrap();
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-        let params = serde_json::json!({
-            "path": file_path.to_str().unwrap()
-        });
-
-        let result = tool.execute(params, &context).await.unwrap();
-
-        assert!(result.is_success());
-        let output = result.output.unwrap();
-        assert!(output.contains("1 | Hello, World!"));
-        assert!(!output.contains("[Enhanced Text Analysis:"));
-        assert_eq!(
-            result.metadata.get("file_type"),
-            Some(&serde_json::json!("text"))
-        );
-        assert_eq!(
-            result.metadata.get("text_output_mode"),
-            Some(&serde_json::json!("plain"))
-        );
-    }
-
-    #[tokio::test]
-    async fn test_tool_execute_with_line_range() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.txt");
-
-        let mut file = fs::File::create(&file_path).unwrap();
-        for i in 1..=10 {
-            writeln!(file, "Line {}", i).unwrap();
-        }
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-        let params = serde_json::json!({
-            "path": file_path.to_str().unwrap(),
-            "start_line": 2,
-            "end_line": 4
-        });
-
-        let result = tool.execute(params, &context).await.unwrap();
-
-        assert!(result.is_success());
-        let output = result.output.unwrap();
-        assert!(output.contains("Line 2"));
-        assert!(output.contains("Line 3"));
-        assert!(output.contains("Line 4"));
-        assert!(!output.contains("Line 1"));
-        assert!(!output.contains("Line 5"));
-    }
-
-    #[tokio::test]
-    async fn test_tool_execute_text_with_enhanced_mode() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.md");
-        fs::write(&file_path, "# Title\n\nBody").unwrap();
-
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-        let params = serde_json::json!({
-            "path": file_path.to_str().unwrap(),
-            "text_output_mode": "enhanced"
-        });
-
-        let result = tool.execute(params, &context).await.unwrap();
-
-        assert!(result.is_success());
-        let output = result.output.unwrap();
-        assert!(output.contains("[Enhanced Text Analysis:"));
-        assert!(output.contains("File Content:"));
-        assert_eq!(
-            result.metadata.get("text_output_mode"),
-            Some(&serde_json::json!("enhanced"))
-        );
-    }
-
-    #[tokio::test]
-    async fn test_tool_execute_missing_path() {
-        let temp_dir = TempDir::new().unwrap();
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-        let params = serde_json::json!({});
-
-        let result = tool.execute(params, &context).await;
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ToolError::InvalidParams(_)));
-    }
-
-    #[test]
-    fn test_tool_name() {
-        let tool = create_read_tool();
-        assert_eq!(tool.name(), "Read");
-    }
-
-    #[test]
-    fn test_tool_description() {
-        let tool = create_read_tool();
-        assert!(!tool.description().is_empty());
-        assert!(
-            tool.description().contains("Enhanced") || tool.description().contains("multimodal")
-        );
-    }
-
-    #[test]
-    fn test_tool_input_schema() {
-        let tool = create_read_tool();
-        let schema = tool.input_schema();
-        assert_eq!(schema["type"], "object");
-        assert!(schema["properties"]["path"].is_object());
-        assert!(schema["properties"]["start_line"].is_object());
-        assert!(schema["properties"]["end_line"].is_object());
-    }
-
-    #[tokio::test]
-    async fn test_check_permissions() {
-        let temp_dir = TempDir::new().unwrap();
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-        let params = serde_json::json!({
-            "path": "test.txt"
-        });
-
-        let result = tool.check_permissions(&params, &context).await;
-        assert!(result.is_allowed());
-    }
-
-    #[tokio::test]
-    async fn test_check_permissions_missing_path() {
-        let temp_dir = TempDir::new().unwrap();
-        let tool = create_read_tool();
-        let context = create_test_context(temp_dir.path());
-        let params = serde_json::json!({});
-
-        let result = tool.check_permissions(&params, &context).await;
-        assert!(result.is_denied());
-    }
-}

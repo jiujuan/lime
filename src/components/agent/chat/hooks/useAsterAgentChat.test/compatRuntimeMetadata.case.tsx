@@ -11,6 +11,20 @@ import {
   mountHook,
 } from "../useAsterAgentChat.testUtils";
 
+const getSubmittedTurnMetadata = () =>
+  mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.metadata as
+    | {
+        agentUiPerformanceTrace?: unknown;
+        harness?: Record<string, unknown>;
+      }
+    | undefined;
+
+const expectHarnessMetadataRemoved = () => {
+  const metadata = getSubmittedTurnMetadata();
+  expect(metadata?.harness).toBeUndefined();
+  expect(metadata?.agentUiPerformanceTrace).toEqual(expect.any(Object));
+};
+
 describe("useAsterAgentChat 兼容接口 - runtime metadata", () => {
   it("已有会话时不应重复随 turn 提交 workspace_id", async () => {
     const workspaceId = "ws-runtime-workspace-reuse";
@@ -57,7 +71,7 @@ describe("useAsterAgentChat 兼容接口 - runtime metadata", () => {
     }
   });
 
-  it("首次创建新会话发送时仍应提交 workspace_id", async () => {
+  it("首次创建新会话发送时应通过建会话绑定 workspace", async () => {
     const workspaceId = "ws-runtime-workspace-bootstrap";
     const harness = mountHook(workspaceId);
 
@@ -78,8 +92,8 @@ describe("useAsterAgentChat 兼容接口 - runtime metadata", () => {
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
-      expect(mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.workspace_id).toBe(
-        workspaceId,
+      expect(mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]).not.toHaveProperty(
+        "workspace_id",
       );
     } finally {
       harness.unmount();
@@ -137,9 +151,7 @@ describe("useAsterAgentChat 兼容接口 - runtime metadata", () => {
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
-      expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.metadata,
-      ).toBeUndefined();
+      expectHarnessMetadataRemoved();
     } finally {
       harness.unmount();
     }
@@ -262,9 +274,7 @@ describe("useAsterAgentChat 兼容接口 - runtime metadata", () => {
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
-      expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.metadata,
-      ).toBeUndefined();
+      expectHarnessMetadataRemoved();
     } finally {
       harness.unmount();
     }
@@ -391,9 +401,7 @@ describe("useAsterAgentChat 兼容接口 - runtime metadata", () => {
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
-      expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.metadata,
-      ).toBeUndefined();
+      expectHarnessMetadataRemoved();
     } finally {
       harness.unmount();
     }
@@ -553,9 +561,7 @@ describe("useAsterAgentChat 兼容接口 - runtime metadata", () => {
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
-      expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.metadata,
-      ).toBeUndefined();
+      expectHarnessMetadataRemoved();
     } finally {
       harness.unmount();
     }

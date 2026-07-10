@@ -1,22 +1,17 @@
-pub mod aster_mode;
-pub mod base;
-pub mod declarative_providers;
-pub mod extensions;
+pub(crate) mod aster_mode;
+pub(crate) mod base;
+pub(crate) mod declarative_providers;
+pub(crate) mod extensions;
 pub mod paths;
-pub mod permission;
-pub mod search_path;
+pub(crate) mod permission;
+pub(crate) mod search_path;
 
-pub use crate::agents::ExtensionConfig;
-pub use aster_mode::AsterMode;
-pub use base::{Config, ConfigError};
-pub use declarative_providers::DeclarativeProviderConfig;
-pub use extensions::DEFAULT_DISPLAY_NAME;
-pub use extensions::DEFAULT_EXTENSION;
-pub use extensions::DEFAULT_EXTENSION_DESCRIPTION;
-pub use extensions::DEFAULT_EXTENSION_TIMEOUT;
-pub use extensions::{
-    get_all_extension_names, get_all_extensions, get_enabled_extensions, get_extension_by_name,
-    get_warnings, is_extension_enabled, remove_extension, set_extension, set_extension_enabled,
-    ExtensionEntry,
-};
-pub use permission::PermissionManager;
+pub(crate) use crate::agents::ExtensionConfig;
+pub(crate) use aster_mode::AsterMode;
+pub(crate) use base::{Config, ConfigError};
+pub(crate) use declarative_providers::DeclarativeProviderConfig;
+pub(crate) use extensions::DEFAULT_DISPLAY_NAME;
+pub(crate) use extensions::DEFAULT_EXTENSION;
+pub(crate) use extensions::DEFAULT_EXTENSION_TIMEOUT;
+pub(crate) use extensions::{get_all_extensions, get_extension_by_name};
+pub(crate) use permission::PermissionManager;

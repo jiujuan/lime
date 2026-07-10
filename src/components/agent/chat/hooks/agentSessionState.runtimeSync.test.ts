@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem, Message } from "../types";
 import { buildHydratedAgentSessionSnapshot } from "./agentSessionState";
+import {
+  hasLocallyInterruptedAgentStreamBinding,
+  rememberLocallyInterruptedAgentStreamBinding,
+} from "./agentStreamResumeBinding";
 
 function createMessage(overrides: Partial<Message> = {}): Message {
   return {
@@ -293,6 +297,106 @@ describe("agentSessionState runtimeSync detail refresh", () => {
     expect(result.snapshot.threadRead?.status).toBe("completed");
   });
 
+  it("runtimeSync terminal detail 接管 pending 壳时应迁移本地已停止标记", () => {
+    const turnId = "turn-runtime-sync-terminal-interrupted";
+    const promptText = "整理今天的国际新闻";
+    const finalText = "以下是今日国际新闻简要整理：";
+    const detail = {
+      id: "topic-runtime-sync-terminal-interrupted",
+      created_at: 1782800000,
+      updated_at: 1782800001,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1782800000,
+          content: [{ type: "text", text: promptText }],
+        },
+        {
+          role: "assistant",
+          timestamp: 1782800001,
+          content: [{ type: "text", text: finalText }],
+        },
+      ],
+      turns: [
+        {
+          id: turnId,
+          thread_id: "topic-runtime-sync-terminal-interrupted-thread",
+          prompt_text: promptText,
+          status: "completed",
+          started_at: "2026-07-10T00:00:00.000Z",
+          completed_at: "2026-07-10T00:00:02.000Z",
+          created_at: "2026-07-10T00:00:00.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        },
+      ],
+      items: [
+        createAgentMessageItem({
+          id: "item-runtime-sync-terminal-interrupted-final",
+          thread_id: "topic-runtime-sync-terminal-interrupted-thread",
+          turn_id: turnId,
+          text: finalText,
+          status: "completed",
+          sequence: 1,
+          started_at: "2026-07-10T00:00:01.000Z",
+          completed_at: "2026-07-10T00:00:02.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        }),
+      ],
+      thread_read: {
+        thread_id: "topic-runtime-sync-terminal-interrupted-thread",
+        status: "completed",
+        active_turn_id: turnId,
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-runtime-sync-terminal-interrupted",
+      detail,
+      currentSessionId: "topic-runtime-sync-terminal-interrupted",
+      currentMessages: [
+        createMessage({
+          id: "local-pending-user",
+          role: "user",
+          content: promptText,
+          runtimeTurnId: "pending-turn:interrupted",
+        }),
+        createMessage({
+          id: "local-pending-assistant",
+          role: "assistant",
+          content: "(已停止)",
+          contentParts: [{ type: "text", text: "(已停止)" }],
+          isThinking: false,
+          runtimeTurnId: "pending-turn:interrupted",
+        }),
+      ],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      detailMergeMode: "runtime_sync",
+    });
+
+    expect(result.snapshot.messages.map((message) => message.content)).toEqual([
+      promptText,
+      `${finalText}\n\n(已停止)`,
+    ]);
+    expect(result.snapshot.messages[1]).toMatchObject({
+      role: "assistant",
+      runtimeTurnId: turnId,
+      isThinking: false,
+    });
+    expect(result.snapshot.threadItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "agent_message",
+          turn_id: turnId,
+          text: `${finalText}\n\n(已停止)`,
+        }),
+      ]),
+    );
+  });
+
   it("runtimeSync terminal detail 只有 thread items 时也应替换本地 thinking pending 壳", () => {
     const turnId = "turn-runtime-sync-items-terminal";
     const promptText = "CDP 修复复测 marker";
@@ -388,5 +492,377 @@ describe("agentSessionState runtimeSync detail refresh", () => {
     expect(result.snapshot.messages[1]?.runtimeStatus).toBeUndefined();
     expect(result.snapshot.currentTurnId).toBe(turnId);
     expect(result.snapshot.threadRead?.status).toBe("completed");
+  });
+
+  it("terminalReconcile detached canceled detail 应迁移 pending-turn 已停止终态", () => {
+    const realTurnId = "turn-runtime-sync-detached-canceled-real";
+    const promptText = "整理今天的国际新闻";
+    const finalText = "以下是今日国际新闻简要整理：";
+    const detail = {
+      id: "topic-runtime-sync-detached-canceled",
+      created_at: 1782800000,
+      updated_at: 1782800001,
+      messages: [],
+      turns: [
+        {
+          id: realTurnId,
+          thread_id: "topic-runtime-sync-detached-canceled-thread",
+          prompt_text: promptText,
+          status: "canceled",
+          started_at: "2026-07-10T00:00:00.000Z",
+          completed_at: "2026-07-10T00:00:02.000Z",
+          created_at: "2026-07-10T00:00:00.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        },
+      ],
+      items: [
+        createAgentMessageItem({
+          id: "item-runtime-sync-detached-canceled-final",
+          thread_id: "topic-runtime-sync-detached-canceled-thread",
+          turn_id: realTurnId,
+          text: finalText,
+          status: "completed",
+          sequence: 1,
+          started_at: "2026-07-10T00:00:01.000Z",
+          completed_at: "2026-07-10T00:00:02.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        }),
+      ],
+      thread_read: {
+        thread_id: "topic-runtime-sync-detached-canceled-thread",
+        status: "canceled",
+        active_turn_id: realTurnId,
+        turns: [
+          {
+            turn_id: realTurnId,
+            status: "cancelled",
+            native_status: "canceled",
+          },
+        ],
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-runtime-sync-detached-canceled",
+      detail,
+      currentSessionId: null,
+      currentMessages: [
+        createMessage({
+          id: "local-pending-user",
+          role: "user",
+          content: promptText,
+          runtimeTurnId: "pending-turn:detached-canceled",
+        }),
+        createMessage({
+          id: "local-pending-assistant",
+          role: "assistant",
+          content: "(已停止)",
+          contentParts: [{ type: "text", text: "(已停止)" }],
+          isThinking: false,
+          runtimeStatus: undefined,
+          runtimeTurnId: "pending-turn:detached-canceled",
+        }),
+      ],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      detailMergeMode: "terminal_reconcile",
+    });
+
+    expect(result.snapshot.messages).toHaveLength(2);
+    expect(result.snapshot.messages[0]).toMatchObject({
+      id: "local-pending-user",
+      role: "user",
+      content: promptText,
+    });
+    expect(result.snapshot.messages[1]).toMatchObject({
+      id: "local-pending-assistant",
+      role: "assistant",
+      content: `${finalText}\n\n(已停止)`,
+      runtimeTurnId: realTurnId,
+      isThinking: false,
+    });
+    expect(
+      result.snapshot.messages[1]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+    expect(result.snapshot.currentTurnId).toBe(realTurnId);
+    expect(result.snapshot.threadRead?.status).toBe("canceled");
+  });
+
+  it("runtimeSync canceled detail 只有 thread items 时应保留已停止终态标记", () => {
+    const turnId = "turn-runtime-sync-items-canceled";
+    const promptText = "整理今天的国际新闻";
+    const finalText = "以下是今日国际新闻简要整理：";
+    const detail = {
+      id: "topic-runtime-sync-items-canceled",
+      created_at: 1782800000,
+      updated_at: 1782800001,
+      messages: [],
+      turns: [],
+      items: [
+        createAgentMessageItem({
+          id: "item-runtime-sync-items-canceled-final",
+          thread_id: "topic-runtime-sync-items-canceled-thread",
+          turn_id: turnId,
+          text: finalText,
+          status: "completed",
+          sequence: 1,
+          started_at: "2026-07-10T00:00:01.000Z",
+          completed_at: "2026-07-10T00:00:02.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        }),
+      ],
+      thread_read: {
+        thread_id: "topic-runtime-sync-items-canceled-thread",
+        status: "canceled",
+        active_turn_id: undefined,
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-runtime-sync-items-canceled",
+      detail,
+      currentSessionId: "topic-runtime-sync-items-canceled",
+      currentMessages: [
+        createMessage({
+          id: "local-pending-user",
+          role: "user",
+          content: promptText,
+          runtimeTurnId: turnId,
+        }),
+        createMessage({
+          id: "local-pending-assistant",
+          role: "assistant",
+          content: "",
+          isThinking: true,
+          runtimeTurnId: turnId,
+        }),
+      ],
+      currentThreadTurns: [
+        {
+          id: turnId,
+          thread_id: "topic-runtime-sync-items-canceled-thread",
+          prompt_text: promptText,
+          status: "running",
+          started_at: "2026-07-10T00:00:00.000Z",
+          created_at: "2026-07-10T00:00:00.000Z",
+          updated_at: "2026-07-10T00:00:01.000Z",
+        },
+      ],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      detailMergeMode: "runtime_sync",
+    });
+
+    expect(result.snapshot.messages.map((message) => message.content)).toEqual([
+      promptText,
+      `${finalText}\n\n(已停止)`,
+    ]);
+    expect(
+      result.snapshot.messages[1]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+    expect(result.snapshot.messages[1]?.isThinking).toBe(false);
+    expect(result.snapshot.currentTurnId).toBe(turnId);
+    expect(result.snapshot.threadRead?.status).toBe("canceled");
+  });
+
+  it("runtimeSync canceled 只出现在 thread_read.turns 时也应保留已停止终态标记", () => {
+    const turnId = "turn-runtime-sync-thread-read-canceled";
+    const promptText = "整理今天的国际新闻";
+    const finalText = "以下是今日国际新闻简要整理：";
+    const detail = {
+      id: "topic-runtime-sync-thread-read-canceled",
+      created_at: 1782800000,
+      updated_at: 1782800001,
+      messages: [],
+      turns: [
+        {
+          id: turnId,
+          thread_id: "topic-runtime-sync-thread-read-canceled-thread",
+          prompt_text: promptText,
+          status: "running",
+          started_at: "2026-07-10T00:00:00.000Z",
+          created_at: "2026-07-10T00:00:00.000Z",
+          updated_at: "2026-07-10T00:00:01.000Z",
+        },
+      ],
+      items: [
+        createAgentMessageItem({
+          id: "item-runtime-sync-thread-read-canceled-final",
+          thread_id: "topic-runtime-sync-thread-read-canceled-thread",
+          turn_id: turnId,
+          text: finalText,
+          status: "completed",
+          sequence: 1,
+          started_at: "2026-07-10T00:00:01.000Z",
+          completed_at: "2026-07-10T00:00:02.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        }),
+      ],
+      thread_read: {
+        thread_id: "topic-runtime-sync-thread-read-canceled-thread",
+        status: "canceled",
+        active_turn_id: turnId,
+        turns: [
+          {
+            turn_id: turnId,
+            status: "cancelled",
+            native_status: "canceled",
+          },
+        ],
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-runtime-sync-thread-read-canceled",
+      detail,
+      currentSessionId: "topic-runtime-sync-thread-read-canceled",
+      currentMessages: [
+        createMessage({
+          id: "local-pending-user",
+          role: "user",
+          content: promptText,
+          runtimeTurnId: turnId,
+        }),
+        createMessage({
+          id: "local-pending-assistant",
+          role: "assistant",
+          content: "",
+          isThinking: true,
+          runtimeTurnId: turnId,
+        }),
+      ],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      detailMergeMode: "runtime_sync",
+    });
+
+    expect(result.snapshot.messages.map((message) => message.content)).toEqual([
+      promptText,
+      `${finalText}\n\n(已停止)`,
+    ]);
+    expect(
+      result.snapshot.messages[1]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+    expect(result.snapshot.messages[1]?.isThinking).toBe(false);
+    expect(result.snapshot.currentTurnId).toBe(turnId);
+  });
+
+  it("terminal detail 只有 completed partial 时应消费本地停止绑定并保留已停止终态", () => {
+    const topicId = "topic-runtime-sync-local-interrupted-binding";
+    const turnId = "turn-runtime-sync-local-interrupted-binding";
+    const promptText = "整理今天的国际新闻";
+    const finalText = "以下是今日国际新闻简要整理：";
+
+    rememberLocallyInterruptedAgentStreamBinding({
+      assistantMsgId: "local-interrupted-assistant",
+      eventName: "aster_stream_local-interrupted-binding",
+      sessionId: topicId,
+    });
+
+    const detail = {
+      id: topicId,
+      created_at: 1782800000,
+      updated_at: 1782800001,
+      messages: [
+        {
+          id: `${turnId}:user`,
+          role: "user",
+          content: [{ type: "text", text: promptText }],
+        },
+        {
+          id: `${turnId}:assistant`,
+          role: "assistant",
+          content: [{ type: "text", text: finalText }],
+        },
+      ],
+      turns: [
+        {
+          id: turnId,
+          thread_id: `${topicId}-thread`,
+          prompt_text: promptText,
+          status: "running",
+          started_at: "2026-07-10T00:00:00.000Z",
+          created_at: "2026-07-10T00:00:00.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        },
+      ],
+      items: [
+        createAgentMessageItem({
+          id: "item-runtime-sync-local-interrupted-binding-final",
+          thread_id: `${topicId}-thread`,
+          turn_id: turnId,
+          text: finalText,
+          status: "completed",
+          sequence: 1,
+          started_at: "2026-07-10T00:00:01.000Z",
+          completed_at: "2026-07-10T00:00:02.000Z",
+          updated_at: "2026-07-10T00:00:02.000Z",
+        }),
+      ],
+      thread_read: {
+        thread_id: `${topicId}-thread`,
+        status: "running",
+        active_turn_id: turnId,
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId,
+      detail,
+      currentSessionId: topicId,
+      currentMessages: [],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      detailMergeMode: "terminal_reconcile",
+    });
+
+    expect(result.snapshot.messages.map((message) => message.content)).toEqual([
+      promptText,
+      `${finalText}\n\n(已停止)`,
+    ]);
+    expect(result.snapshot.messages[1]).toMatchObject({
+      role: "assistant",
+      runtimeTurnId: turnId,
+      isThinking: false,
+    });
+    expect(
+      result.snapshot.messages[1]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+    expect(result.snapshot.threadItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "agent_message",
+          turn_id: turnId,
+          text: `${finalText}\n\n(已停止)`,
+        }),
+      ]),
+    );
+    expect(
+      hasLocallyInterruptedAgentStreamBinding({
+        eventName: `agentSession/event/${topicId}`,
+        sessionId: topicId,
+        threadId: `${topicId}-thread`,
+        turnId,
+      }),
+    ).toBe(false);
   });
 });

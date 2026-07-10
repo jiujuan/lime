@@ -29,7 +29,10 @@ function renderMarkdown(report) {
   return `${lines.join("\n")}\n`;
 }
 
-function renderConsoleSummary(report, { outputPath = "", outputWriteError = "" } = {}) {
+function renderConsoleSummary(
+  report,
+  { outputPath = "", outputWriteError = "", auditReportPath = "", auditReportError = "" } = {},
+) {
   const failedSteps = report.steps.filter((step) => step.status === "failed");
   const skippedSteps = report.steps.filter((step) => step.status === "skipped");
   const lines = [
@@ -37,6 +40,7 @@ function renderConsoleSummary(report, { outputPath = "", outputWriteError = "" }
     `version=${report.plan.version}`,
     `outputRoot=${report.plan.outputRoot}`,
     `report=${outputPath || "-"}`,
+    `auditReport=${auditReportPath || "-"}`,
     `valid=${report.summary.valid ? "true" : "false"}`,
     `steps=${report.summary.passedStepCount} passed / ${report.summary.failedStepCount} failed / ${report.summary.skippedStepCount} skipped`,
     `storage=${report.storage?.status || "unknown"}${report.storage?.reason ? `:${report.storage.reason}` : ""}`,
@@ -47,6 +51,9 @@ function renderConsoleSummary(report, { outputPath = "", outputWriteError = "" }
 
   if (outputWriteError) {
     lines.push(`writeError=${outputWriteError}`);
+  }
+  if (auditReportError) {
+    lines.push(`auditReportError=${auditReportError}`);
   }
   if (report.baselineDescriptor?.status && report.baselineDescriptor.status !== "not_required") {
     lines.push(`baselineDescriptor=${report.baselineDescriptor.status}`);

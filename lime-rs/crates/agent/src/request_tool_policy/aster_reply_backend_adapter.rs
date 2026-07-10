@@ -8,7 +8,7 @@ use agent_runtime::reply_backend::{
     run_reply_source, RuntimeReplyBackend, RuntimeReplyBackendStart,
 };
 use agent_runtime::reply_host::{RuntimeReplyStartRequest, RuntimeReplyStartResult};
-use aster::agents::Agent;
+use aster::Agent;
 use futures::future::BoxFuture;
 use model_provider::provider_stream::RuntimeReplyProviderHandle;
 

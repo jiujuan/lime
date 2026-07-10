@@ -4,10 +4,8 @@
 //! paths consume `thread-store` conversation records.
 
 use anyhow::Result;
-use aster::conversation::message::Message;
-use aster::session::{
-    ItemRuntime, ItemRuntimePayload, ItemStatus, ThreadRuntimeStore, TurnRuntime,
-};
+use aster::Message;
+use aster::{ItemRuntime, ItemRuntimePayload, ItemStatus, ThreadRuntimeStore, TurnRuntime};
 use chrono::{DateTime, Utc};
 use thread_store::conversation_transcript::{
     project_runtime_conversation_record, transcript_item_id, ConversationMessageRecord,

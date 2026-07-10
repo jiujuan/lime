@@ -21,12 +21,17 @@ import {
 } from "./agentChatHistoryProcess";
 import type { HistoryToolCall } from "./agentChatHistoryTypes";
 import {
-  hasMessageImages,
-} from "./agentChatHistorySignatures";
+  buildInterruptedMessageContentPatch,
+  contentHasInterruptedPlaceholder,
+  contentPartsHaveInterruptedPlaceholder,
+  messageHasInterruptedPlaceholder,
+} from "./agentInterruptedMessageContent";
+import { hasMessageImages } from "./agentChatHistorySignatures";
 import {
   findMatchingLocalAssistantMessageIndex,
   findMatchingLocalUserMessageIndex,
   findNextLocalAssistantAfterUser,
+  findNextLocalInterruptedAssistantIndex,
   findNextLocalProcessAssistantIndex,
   hasRecoverableLocalUserBeforeAssistant,
   insertRecoverableLocalUsersForMatchedAssistantTurns,
@@ -164,18 +169,31 @@ export const mergeHydratedMessagesWithLocalState = (
               matchedLocalMessageIds,
               message,
             );
+      const interruptedAssistantIndex =
+        matchedAssistantIndex >= 0 ||
+        sequentialAssistantIndex >= 0 ||
+        processAssistantIndex >= 0
+          ? -1
+          : findNextLocalInterruptedAssistantIndex(
+              localAssistantMessages,
+              localAssistantCursor,
+              matchedLocalMessageIds,
+            );
       const resolvedMatchedAssistantIndex =
         matchedAssistantIndex >= 0
           ? matchedAssistantIndex
           : sequentialAssistantIndex >= 0
             ? sequentialAssistantIndex
-            : processAssistantIndex;
+            : processAssistantIndex >= 0
+              ? processAssistantIndex
+              : interruptedAssistantIndex;
       const didMatchLocalProcessAssistantOnly =
         processAssistantIndex >= 0 &&
         matchedAssistantIndex < 0 &&
         sequentialAssistantIndex < 0;
       const taskMatchedAssistantMessage =
-        resolvedMatchedAssistantIndex < 0 && message.imageWorkbenchPreview?.taskId
+        resolvedMatchedAssistantIndex < 0 &&
+        message.imageWorkbenchPreview?.taskId
           ? localImageAssistantMessageByTaskId.get(
               message.imageWorkbenchPreview.taskId,
             )
@@ -329,6 +347,9 @@ export const mergeHydratedMessagesWithLocalState = (
         extractThinkingContentFromParts(contentParts);
       const remoteIsFailedRuntimeStatus =
         message.runtimeStatus?.phase === "failed";
+      const localHasInterruptedStopMarker = messageHasInterruptedPlaceholder(
+        localAssistantMessage,
+      );
       const shouldPreserveLocalVisibleOutput =
         !options.preferHydratedAssistantOutput &&
         !remoteIsFailedRuntimeStatus &&
@@ -362,18 +383,31 @@ export const mergeHydratedMessagesWithLocalState = (
               settleRunningToolCallOnRemoteFailure(toolCall, message),
             )
           : toolCalls;
+      const resolvedContent = shouldPreserveLocalVisibleOutput
+        ? mergeAssistantVisibleOutput({
+            localContent: localAssistantMessage?.content || "",
+            remoteContent: message.content,
+          })
+        : message.content;
+      const shouldRetainInterruptedStopMarker =
+        localHasInterruptedStopMarker &&
+        (!contentHasInterruptedPlaceholder(resolvedContent) ||
+          !contentPartsHaveInterruptedPlaceholder(resolvedFailedContentParts));
+      const interruptedContentPatch = shouldRetainInterruptedStopMarker
+        ? buildInterruptedMessageContentPatch({
+            ...message,
+            content: resolvedContent,
+            contentParts: resolvedFailedContentParts,
+          })
+        : null;
 
       return {
         ...message,
         id: localAssistantMessage?.id ?? message.id,
-        content: shouldPreserveLocalVisibleOutput
-          ? mergeAssistantVisibleOutput({
-              localContent: localAssistantMessage?.content || "",
-              remoteContent: message.content,
-            })
-          : message.content,
+        content: interruptedContentPatch?.content ?? resolvedContent,
         usage: message.usage ?? localAssistantMessage?.usage,
-        contentParts: resolvedFailedContentParts,
+        contentParts:
+          interruptedContentPatch?.contentParts ?? resolvedFailedContentParts,
         toolCalls: resolvedFailedToolCalls,
         actionRequests,
         contextTrace,

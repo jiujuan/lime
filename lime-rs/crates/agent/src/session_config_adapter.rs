@@ -1,8 +1,8 @@
 use crate::turn_context_configuration::to_aster_turn_context;
 use agent_runtime::session_config::AgentSessionConfig;
 
-pub(crate) fn to_aster_session_config(config: AgentSessionConfig) -> aster::agents::SessionConfig {
-    aster::agents::SessionConfig {
+pub(crate) fn to_aster_session_config(config: AgentSessionConfig) -> aster::SessionConfig {
+    aster::SessionConfig {
         id: config.id,
         thread_id: config.thread_id,
         turn_id: config.turn_id,

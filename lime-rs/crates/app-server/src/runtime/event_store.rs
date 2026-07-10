@@ -156,8 +156,7 @@ fn append_runtime_events_to_stored_session(
         return Ok(Vec::new());
     }
     let runtime_events = runtime_events_with_turn_input(stored, turn_id, runtime_events);
-    let runtime_events =
-        runtime_events_with_synthetic_llm_tool_starts(stored, turn_id, runtime_events);
+    let runtime_events = runtime_events_with_synthetic_tool_starts(stored, turn_id, runtime_events);
     if runtime_events.is_empty() {
         return Ok(Vec::new());
     }
@@ -380,7 +379,7 @@ fn runtime_events_with_turn_input(
     events
 }
 
-fn runtime_events_with_synthetic_llm_tool_starts(
+fn runtime_events_with_synthetic_tool_starts(
     stored: &StoredSession,
     turn_id: Option<&str>,
     runtime_events: Vec<RuntimeEvent>,
@@ -394,14 +393,21 @@ fn runtime_events_with_synthetic_llm_tool_starts(
 
     for event in runtime_events {
         let event_class = normalized_runtime_event_class(&event.event_type);
+        if redundant_runtime_tool_start_after_synthetic_start(
+            event_class,
+            &event.payload,
+            &active_tool_call_ids,
+        ) {
+            continue;
+        }
         if let Some((tool_call_id, tool_name)) =
-            synthetic_llm_tool_start_candidate(event_class, &event.payload, &active_tool_call_ids)
+            synthetic_tool_start_candidate(event_class, &event.payload, &active_tool_call_ids)
         {
             events.push(RuntimeEvent::new(
                 "tool.started",
-                synthetic_llm_tool_start_payload(&event.payload, &tool_call_id, &tool_name),
+                synthetic_tool_start_payload(&event.payload, &tool_call_id, &tool_name),
             ));
-            active_tool_call_ids.insert(tool_call_id);
+            active_tool_call_ids.insert_synthetic(tool_call_id);
         }
 
         update_active_tool_call_ids_from_runtime_event(
@@ -415,8 +421,42 @@ fn runtime_events_with_synthetic_llm_tool_starts(
     events
 }
 
-fn active_tool_call_ids_for_turn(stored: &StoredSession, turn_id: Option<&str>) -> HashSet<String> {
-    let mut active_tool_call_ids = HashSet::new();
+#[derive(Default)]
+struct ActiveToolCallIds {
+    active: HashSet<String>,
+    synthetic: HashSet<String>,
+}
+
+impl ActiveToolCallIds {
+    fn contains(&self, tool_call_id: &str) -> bool {
+        self.active.contains(tool_call_id)
+    }
+
+    fn is_synthetic(&self, tool_call_id: &str) -> bool {
+        self.synthetic.contains(tool_call_id)
+    }
+
+    fn insert(&mut self, tool_call_id: String) {
+        self.synthetic.remove(&tool_call_id);
+        self.active.insert(tool_call_id);
+    }
+
+    fn insert_synthetic(&mut self, tool_call_id: String) {
+        self.active.insert(tool_call_id.clone());
+        self.synthetic.insert(tool_call_id);
+    }
+
+    fn remove(&mut self, tool_call_id: &str) {
+        self.active.remove(tool_call_id);
+        self.synthetic.remove(tool_call_id);
+    }
+}
+
+fn active_tool_call_ids_for_turn(
+    stored: &StoredSession,
+    turn_id: Option<&str>,
+) -> ActiveToolCallIds {
+    let mut active_tool_call_ids = ActiveToolCallIds::default();
     for event in stored
         .events
         .iter()
@@ -431,17 +471,12 @@ fn active_tool_call_ids_for_turn(stored: &StoredSession, turn_id: Option<&str>) 
     active_tool_call_ids
 }
 
-fn synthetic_llm_tool_start_candidate(
+fn synthetic_tool_start_candidate(
     event_class: &str,
     payload: &Value,
-    active_tool_call_ids: &HashSet<String>,
+    active_tool_call_ids: &ActiveToolCallIds,
 ) -> Option<(String, String)> {
-    if event_class != "tool.args.delta" {
-        return None;
-    }
-    if payload_string(payload, &["source"]).as_deref() != Some("llm_protocol")
-        || payload_string(payload, &["backend"]).as_deref() != Some("llm_protocol")
-    {
+    if !is_synthetic_tool_start_source(event_class, payload) {
         return None;
     }
 
@@ -456,7 +491,53 @@ fn synthetic_llm_tool_start_candidate(
     Some((tool_call_id, tool_name))
 }
 
-fn synthetic_llm_tool_start_payload(
+fn is_synthetic_tool_start_source(event_class: &str, payload: &Value) -> bool {
+    match event_class {
+        "tool.args.delta" => {
+            payload_string(payload, &["source"]).as_deref() == Some("llm_protocol")
+                && payload_string(payload, &["backend"]).as_deref() == Some("llm_protocol")
+        }
+        "tool.input.delta" => {
+            payload_string(payload, &["backend"]).as_deref() == Some("runtime")
+                && payload
+                    .get("runtimeEvent")
+                    .and_then(|event| payload_string(event, &["type"]))
+                    .as_deref()
+                    == Some("tool_input_delta")
+        }
+        _ => false,
+    }
+}
+
+fn redundant_runtime_tool_start_after_synthetic_start(
+    event_class: &str,
+    payload: &Value,
+    active_tool_call_ids: &ActiveToolCallIds,
+) -> bool {
+    if event_class != "tool.started" || !is_runtime_tool_start_event(payload) {
+        return false;
+    }
+
+    let Some(tool_call_id) = payload_string(
+        payload,
+        &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
+    ) else {
+        return false;
+    };
+
+    active_tool_call_ids.is_synthetic(&tool_call_id)
+}
+
+fn is_runtime_tool_start_event(payload: &Value) -> bool {
+    payload_string(payload, &["backend"]).as_deref() == Some("runtime")
+        && payload
+            .get("runtimeEvent")
+            .and_then(|event| payload_string(event, &["type"]))
+            .as_deref()
+            == Some("tool_start")
+}
+
+fn synthetic_tool_start_payload(
     source_payload: &Value,
     tool_call_id: &str,
     tool_name: &str,
@@ -464,8 +545,8 @@ fn synthetic_llm_tool_start_payload(
     let mut payload = json!({
         "toolCallId": tool_call_id,
         "toolName": tool_name,
-        "source": "llm_protocol_tool_delta",
-        "backend": "llm_protocol"
+        "source": synthetic_tool_start_source_name(source_payload),
+        "backend": payload_string(source_payload, &["backend"]).unwrap_or_else(|| "runtime".to_string())
     });
     if let Some(runtime_event) = source_payload.get("runtimeEvent").cloned() {
         payload["runtimeEvent"] = runtime_event;
@@ -473,8 +554,16 @@ fn synthetic_llm_tool_start_payload(
     payload
 }
 
+fn synthetic_tool_start_source_name(source_payload: &Value) -> &'static str {
+    match payload_string(source_payload, &["backend"]).as_deref() {
+        Some("llm_protocol") => "llm_protocol_tool_delta",
+        Some("runtime") => "runtime_tool_input_delta",
+        _ => "tool_input_delta",
+    }
+}
+
 fn update_active_tool_call_ids_from_runtime_event(
-    active_tool_call_ids: &mut HashSet<String>,
+    active_tool_call_ids: &mut ActiveToolCallIds,
     event_class: &str,
     payload: &Value,
 ) {
@@ -484,7 +573,11 @@ fn update_active_tool_call_ids_from_runtime_event(
                 payload,
                 &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
             ) {
-                active_tool_call_ids.insert(tool_call_id);
+                if is_synthetic_tool_started_payload(payload) {
+                    active_tool_call_ids.insert_synthetic(tool_call_id);
+                } else {
+                    active_tool_call_ids.insert(tool_call_id);
+                }
             }
         }
         "tool.result" | "tool.failed" => {
@@ -499,8 +592,15 @@ fn update_active_tool_call_ids_from_runtime_event(
     }
 }
 
+fn is_synthetic_tool_started_payload(payload: &Value) -> bool {
+    matches!(
+        payload_string(payload, &["source"]).as_deref(),
+        Some("llm_protocol_tool_delta" | "runtime_tool_input_delta")
+    )
+}
+
 fn update_active_tool_call_ids_from_agent_event(
-    active_tool_call_ids: &mut HashSet<String>,
+    active_tool_call_ids: &mut ActiveToolCallIds,
     event_class: &str,
     payload: &Value,
 ) {

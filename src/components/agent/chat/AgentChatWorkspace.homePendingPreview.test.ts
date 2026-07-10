@@ -3,7 +3,18 @@ import {
   buildHomePendingPreviewMessages,
   type TaskCenterDraftSendRequest,
 } from "./homePendingPreview";
-import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import {
+  resolveSoulInteractionCopy,
+  type SoulInteractionCopy,
+} from "@/lib/soul/interactionCopy";
+
+function withChinesePreparingCopy(copy: SoulInteractionCopy): SoulInteractionCopy {
+  return {
+    ...copy,
+    preparingTitle: "正在进入对话",
+    preparingDetail: "已收到输入，正在后台准备会话和执行环境。",
+  };
+}
 
 describe("buildHomePendingPreviewMessages", () => {
   it("首页首发等待态应保留 Skill route 与用户可见文本", () => {
@@ -26,7 +37,11 @@ describe("buildHomePendingPreviewMessages", () => {
       source: "empty-state",
     };
 
-    const messages = buildHomePendingPreviewMessages(request, "react");
+    const messages = buildHomePendingPreviewMessages(
+      request,
+      "react",
+      withChinesePreparingCopy(resolveSoulInteractionCopy()),
+    );
 
     expect(messages[0]).toMatchObject({
       id: "draft-send-1:user",
@@ -63,12 +78,14 @@ describe("buildHomePendingPreviewMessages", () => {
     const messages = buildHomePendingPreviewMessages(
       request,
       "react",
-      resolveSoulInteractionCopy({
-        soul: {
-          enabled: true,
-          style_profile_id: "cheeky_sassy_executor",
-        },
-      }),
+      withChinesePreparingCopy(
+        resolveSoulInteractionCopy({
+          soul: {
+            enabled: true,
+            style_profile_id: "cheeky_sassy_executor",
+          },
+        }),
+      ),
     );
 
     expect(messages[1]).toMatchObject({

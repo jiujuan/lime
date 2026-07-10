@@ -3,13 +3,13 @@ use super::response_event_adapter::response_stream_events_from_runtime_events;
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use agent_runtime::event_stream::EventProjector;
 use agent_runtime::reply_stream::{
-    project_reply_stream, RuntimeReplyInlineProviderError, RuntimeReplyResponseEvent,
-    RuntimeReplyResponseEventHints, RuntimeReplyStreamEvent, RuntimeReplyStreamProjection,
-    RuntimeReplyStreamProjector,
+    project_reply_stream, RuntimeReplyInlineProviderError, RuntimeReplyResponseEventHints,
+    RuntimeReplyStreamEvent, RuntimeReplyStreamProjection, RuntimeReplyStreamProjector,
 };
-use aster::agents::AgentEvent as AsterAgentEvent;
-use aster::conversation::message::Message;
-use aster::providers::formats::openai_responses::provider_stream_event_notification_payload_from_message;
+use aster::Message;
+use aster::{
+    provider_stream_event_notification_payload_from_message, AgentEvent as AsterAgentEvent,
+};
 use futures::stream::BoxStream;
 use model_provider::provider_stream::{RuntimeReplyProviderStreamEvent, RuntimeReplyStreamRequest};
 
@@ -105,7 +105,8 @@ fn inline_provider_error_from_aster_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::conversation::message::Message;
+    use agent_runtime::reply_stream::RuntimeReplyResponseEvent;
+    use aster::Message;
     use model_provider::provider_stream::{RuntimeReplyInputKind, RuntimeReplyStreamRequest};
 
     fn stream_request() -> RuntimeReplyStreamRequest {

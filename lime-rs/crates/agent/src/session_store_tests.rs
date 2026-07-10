@@ -16,7 +16,7 @@ use crate::subagent_control::SubagentTurnStatus;
 use agent_runtime::runtime_conversation::{
     project_runtime_conversation_window, RuntimeConversationMessageSource,
 };
-use aster::session::{
+use aster::{
     SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
 };
 use chrono::{Duration, Utc};

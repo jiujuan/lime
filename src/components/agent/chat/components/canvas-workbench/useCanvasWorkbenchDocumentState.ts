@@ -53,6 +53,7 @@ interface UseCanvasWorkbenchDocumentStateParams {
   translateWorkbench: CanvasWorkbenchTranslation;
   hasDefaultPreviewContent: boolean;
   hasCustomSessionView: boolean;
+  hasCustomOutputView: boolean;
   isCodingWorkbench: boolean;
   changeView?: CanvasWorkbenchChangeView | null;
 }
@@ -88,7 +89,6 @@ interface UseCanvasWorkbenchDocumentStateResult {
   >["refreshDirectorySubtree"];
   openDocumentSelection: (selectionKey: string) => void;
   handleSelectWorkspaceFile: (path: string) => Promise<void>;
-  shouldShowSessionTab: boolean;
 }
 
 export function useCanvasWorkbenchDocumentState({
@@ -104,6 +104,7 @@ export function useCanvasWorkbenchDocumentState({
   translateWorkbench,
   hasDefaultPreviewContent,
   hasCustomSessionView,
+  hasCustomOutputView,
   isCodingWorkbench,
   changeView,
 }: UseCanvasWorkbenchDocumentStateParams): UseCanvasWorkbenchDocumentStateResult {
@@ -337,7 +338,9 @@ export function useCanvasWorkbenchDocumentState({
     workspaceUnavailable,
   ]);
 
-  const shouldShowSessionTab = Boolean(sessionContext || hasCustomSessionView);
+  const canShowOutputsTab = Boolean(
+    sessionContext || hasCustomSessionView || hasCustomOutputView,
+  );
   const activeToolTabKind = resolveCanvasWorkbenchToolTabKind(activeTab);
   const activePreviewContext = isCanvasWorkbenchPreviewMode(activeTab)
     ? documentContext
@@ -351,15 +354,15 @@ export function useCanvasWorkbenchDocumentState({
         : null;
 
   useEffect(() => {
-    if (activeTab !== "outputs" || shouldShowSessionTab) {
+    if (activeTab !== "outputs" || canShowOutputsTab) {
       return;
     }
     setActiveTab(documentContext ? previewModeState.defaultMode : "workspace");
   }, [
     activeTab,
+    canShowOutputsTab,
     documentContext,
     previewModeState.defaultMode,
-    shouldShowSessionTab,
   ]);
 
   useEffect(() => {
@@ -391,6 +394,5 @@ export function useCanvasWorkbenchDocumentState({
     refreshDirectorySubtree,
     openDocumentSelection: handleOpenDocumentSelection,
     handleSelectWorkspaceFile,
-    shouldShowSessionTab,
   };
 }

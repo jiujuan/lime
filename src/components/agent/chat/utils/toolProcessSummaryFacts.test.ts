@@ -103,8 +103,8 @@ describe("toolProcessSummary facts", () => {
       }),
     );
 
-    expect(narrative.postSummary).toBe("已更新运行配置");
-    expect(narrative.summary).not.toContain("固定中文终稿");
+    expect(narrative.postSummary).toBeNull();
+    expect(narrative.summary).toBeNull();
   });
 
   it("应优先使用 tool_process_facts.subject 作为过程摘要主体", () => {

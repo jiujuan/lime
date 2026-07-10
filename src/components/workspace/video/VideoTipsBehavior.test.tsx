@@ -19,6 +19,33 @@ function getBodyText(): string {
   return document.body.textContent ?? "";
 }
 
+function queryTipButton(ariaLabel: string): HTMLButtonElement | null {
+  return (
+    Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>("button[aria-label]"),
+    ).find((button) => button.getAttribute("aria-label") === ariaLabel) ?? null
+  );
+}
+
+function expectTipContentOnHover(ariaLabel: string, content: string): void {
+  const button = queryTipButton(ariaLabel);
+
+  expect(button).not.toBeNull();
+  expect(getBodyText()).not.toContain(content);
+
+  act(() => {
+    button?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+
+  expect(getBodyText()).toContain(content);
+
+  act(() => {
+    button?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+  });
+
+  expect(getBodyText()).not.toContain(content);
+}
+
 describe("视频工作台 tips 收口", () => {
   beforeEach(async () => {
     setupReactActEnvironment();
@@ -30,7 +57,7 @@ describe("视频工作台 tips 收口", () => {
     cleanupMountedRoots(mountedRoots);
   });
 
-  it("提示词输入区不应再渲染 hover tip 入口或解释文案", async () => {
+  it("提示词输入区只在 tip 交互时展示解释文案", async () => {
     mountHarness(
       PromptInput,
       {
@@ -47,9 +74,10 @@ describe("视频工作台 tips 收口", () => {
     );
     expect(getBodyText()).not.toContain("按 Enter 直接生成");
 
-    expect(
-      document.body.querySelector("button[aria-label='提示词说明']"),
-    ).toBeNull();
+    expectTipContentOnHover(
+      "提示词说明",
+      "先写主体、场景和运动方式，再补充光线、氛围或镜头语言",
+    );
     expect(
       document.body.querySelector("button[aria-label='快捷键说明']"),
     ).toBeNull();
@@ -87,9 +115,10 @@ describe("视频工作台 tips 收口", () => {
     ).toContain("At dusk by the sea");
     expect(getBodyText()).toContain("Generate video");
 
-    expect(
-      document.body.querySelector("button[aria-label='Prompt guidance']"),
-    ).toBeNull();
+    expectTipContentOnHover(
+      "Prompt guidance",
+      "Start with the subject, scene, and motion",
+    );
     expect(
       document.body.querySelector("button[aria-label='Shortcut guidance']"),
     ).toBeNull();
@@ -101,7 +130,7 @@ describe("视频工作台 tips 收口", () => {
     );
   });
 
-  it("左侧参数栏不应再渲染 hover tip 入口或解释文案", async () => {
+  it("左侧参数栏只在 tip 交互时展示解释文案", async () => {
     mountHarness(
       VideoSidebar,
       {
@@ -124,9 +153,10 @@ describe("视频工作台 tips 收口", () => {
       "提示词优先写清主体、场景、镜头运动和光线。",
     );
 
-    expect(
-      document.body.querySelector("button[aria-label='生成参数说明']"),
-    ).toBeNull();
+    expectTipContentOnHover(
+      "生成参数说明",
+      "先确定模型，再补参考图和输出规格。这里保持轻量控制，主创作仍留在右侧画布。",
+    );
     expect(
       document.body.querySelector("button[aria-label='提示词建议']"),
     ).toBeNull();
@@ -192,33 +222,32 @@ describe("视频工作台 tips 收口", () => {
     expect(getBodyText()).toContain("Fixed camera");
     expect(getBodyText()).not.toContain("Creation tips");
     expect(getBodyText()).not.toContain("Parameter pacing");
-    expect(
-      document.body.querySelector(
-        "button[aria-label='Generation parameter guidance']",
-      ),
-    ).toBeNull();
-    expect(
-      document.body.querySelector(
-        "button[aria-label='Opening frame guidance']",
-      ),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='Ending frame guidance']"),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='Duration guidance']"),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='Seed guidance']"),
-    ).toBeNull();
-    expect(
-      document.body.querySelector(
-        "button[aria-label='Generate audio guidance']",
-      ),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='Fixed camera guidance']"),
-    ).toBeNull();
+    const expectedTips = [
+      [
+        "Generation parameter guidance",
+        "Choose the model first, then add reference images and output specs.",
+      ],
+      [
+        "Opening frame guidance",
+        "Use it to lock the opening composition",
+      ],
+      [
+        "Ending frame guidance",
+        "Use it to constrain the final shot",
+      ],
+      ["Duration guidance", "Start with 4 to 8 seconds"],
+      ["Seed guidance", "Lock the seed only"],
+      [
+        "Generate audio guidance",
+        "Turn this on only when you need ambience",
+      ],
+      ["Fixed camera guidance", "Reduce camera movement"],
+    ] as const;
+
+    expectedTips.forEach(([ariaLabel, content]) => {
+      expectTipContentOnHover(ariaLabel, content);
+    });
+
     expect(
       document.body.querySelector("button[aria-label='Prompt guidance']"),
     ).toBeNull();
@@ -273,10 +302,8 @@ describe("视频工作台 tips 收口", () => {
     expect(getBodyText()).toContain("Model");
     expect(getBodyText()).toContain("Sora-2-Pro");
 
-    expect(
-      document.body.querySelector("button[aria-label='Model guidance']"),
-    ).toBeNull();
-    expect(getBodyText()).not.toContain(
+    expectTipContentOnHover(
+      "Model guidance",
       "Model capabilities determine the available resolutions",
     );
 
@@ -299,7 +326,7 @@ describe("视频工作台 tips 收口", () => {
     );
   });
 
-  it("主工作台不应再渲染 hover tip 入口或解释文案", async () => {
+  it("主工作台只在 tip 交互时展示解释文案", async () => {
     mountHarness(
       VideoWorkspace,
       {
@@ -316,12 +343,11 @@ describe("视频工作台 tips 收口", () => {
     );
     expect(getBodyText()).not.toContain("请先在左侧选择视频服务");
 
-    expect(
-      document.body.querySelector("button[aria-label='视频创作说明']"),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='当前模型说明']"),
-    ).toBeNull();
+    expectTipContentOnHover(
+      "视频创作说明",
+      "用一句清晰的场景描述启动视频生成，再逐步补充镜头运动、情绪和画面锚点。",
+    );
+    expectTipContentOnHover("当前模型说明", "请先在左侧选择视频服务");
   });
 
   it("主工作台英文界面应使用 workspace namespace 首屏与摘要卡文案", async () => {
@@ -347,24 +373,17 @@ describe("视频工作台 tips 收口", () => {
     expect(getBodyText()).toContain("Task sync");
     expect(getBodyText()).toContain("Select a project first");
 
-    expect(
-      document.body.querySelector(
-        "button[aria-label='Video creation guidance']",
-      ),
-    ).toBeNull();
-    expect(
-      document.body.querySelector(
-        "button[aria-label='Current model guidance']",
-      ),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='Output spec guidance']"),
-    ).toBeNull();
-    expect(getBodyText()).not.toContain(
+    expectTipContentOnHover(
+      "Video creation guidance",
       "Start video generation with one clear scene description",
     );
-    expect(getBodyText()).not.toContain(
+    expectTipContentOnHover(
+      "Current model guidance",
       "Select a video provider from the left panel first.",
+    );
+    expectTipContentOnHover(
+      "Output spec guidance",
+      "Duration 5 sec",
     );
   });
 });

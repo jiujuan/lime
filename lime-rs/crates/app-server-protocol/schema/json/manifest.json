@@ -1072,6 +1072,10 @@
     },
     {
       "kind": "request",
+      "method": "voiceTranscription/polishText"
+    },
+    {
+      "kind": "request",
       "method": "voiceTranscription/transcribeAudio"
     },
     {

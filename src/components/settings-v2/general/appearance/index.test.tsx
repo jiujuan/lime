@@ -72,6 +72,33 @@ function getBodyText() {
   return document.body.textContent ?? "";
 }
 
+function queryTipButton(ariaLabel: string): HTMLButtonElement | null {
+  return (
+    Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>("button[aria-label]"),
+    ).find((button) => button.getAttribute("aria-label") === ariaLabel) ?? null
+  );
+}
+
+function expectTipContentOnHover(ariaLabel: string, content: string) {
+  const button = queryTipButton(ariaLabel);
+
+  expect(button).not.toBeNull();
+  expect(getBodyText()).not.toContain(content);
+
+  act(() => {
+    button?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+
+  expect(getBodyText()).toContain(content);
+
+  act(() => {
+    button?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+  });
+
+  expect(getBodyText()).not.toContain(content);
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -371,7 +398,7 @@ describe("AppearanceSettings", () => {
     expect(container.textContent ?? "").toContain("主题：深色");
   });
 
-  it("不再把首屏和基础外观说明收进 tips", async () => {
+  it("首屏和基础外观说明只在 tip 交互时展示", async () => {
     await renderPage();
 
     expect(getBodyText()).not.toContain(
@@ -380,17 +407,18 @@ describe("AppearanceSettings", () => {
     expect(getBodyText()).not.toContain(
       "先确定全局主题、界面语言和回复语言，再统一工作区里的视觉节奏。",
     );
-    expect(
-      document.body.querySelector("button[aria-label='外观设置总览说明']"),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='基础外观说明']"),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='界面语言说明']"),
-    ).toBeNull();
-    expect(
-      document.body.querySelector("button[aria-label='回复语言说明']"),
-    ).toBeNull();
+    expectTipContentOnHover(
+      "外观设置总览说明",
+      "管理主题、界面语言、回复语言，以及推荐问题的上下文带入方式。",
+    );
+    expectTipContentOnHover(
+      "基础外观说明",
+      "先确定全局主题、界面语言和回复语言，再统一工作区里的视觉节奏。",
+    );
+    expect(queryTipButton("界面语言说明")).not.toBeNull();
+    expectTipContentOnHover(
+      "回复语言说明",
+      "控制对话默认回复语言；不影响界面语言、浏览器站点语言或内容产物目标语言。",
+    );
   });
 });

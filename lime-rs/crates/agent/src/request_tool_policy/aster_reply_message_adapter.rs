@@ -3,9 +3,7 @@ use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequire
 use agent_runtime::reply_message::{
     RuntimeReplyMessage, RuntimeReplyMessageContent, RuntimeReplyMessageRole,
 };
-use aster::conversation::message::{
-    ActionRequired, ActionRequiredData, ActionRequiredScope, Message, MessageContent,
-};
+use aster::{ActionRequired, ActionRequiredData, ActionRequiredScope, Message, MessageContent};
 
 pub(crate) fn lower_aster_reply_message(message: RuntimeReplyMessage) -> Message {
     let mut aster_message = match message.role {
@@ -74,7 +72,7 @@ mod tests {
     use agent_runtime::reply_input::{
         RuntimeActionRequiredResponseInput, RuntimeReplyInput, RuntimeReplyInputImage,
     };
-    use aster::conversation::message::{ActionRequiredData, MessageContent};
+    use aster::{ActionRequiredData, MessageContent};
     use serde_json::json;
 
     #[test]

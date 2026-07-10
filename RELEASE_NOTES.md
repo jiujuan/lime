@@ -1,40 +1,40 @@
-## Lime v1.97.0
+## Lime v1.98.0
 
 ### 新功能
 
-- Agent Runtime 增加 provider source backend、response event materializer、tool input delta 和 reasoning delta 投影，使 provider streaming 能更直接进入 current timeline / read model。
-- App Server / protocol 新增 `voiceTranscription/polishText` 主链，并接入前端语音输入，支持实时预览转写和最终文本润色。
-- Agent / Claw 工作区补齐任务中心首页热路径、计划确认、审批输入栏优先级、图片工作台发送路由和会话文件自动初始化控制。
-- 新增版本级 benchmark release gate 脚本与 manifest，能生成 context、checklist、P1 dry-run / preflight、summary、baseline 和严格 gate 证据。
+- Tool Runtime 接入 current 工具执行面，新增协作 Agent、文件读取 / 搜索、Shell、原生 dispatch、用户输入请求、工具调用 surface 和结果投影模块，为 Codex-first Thread / Turn / Item 执行链提供统一 owner。
+- Agent Runtime 复用 `tool-runtime` 的 request user input 协议和 `model-provider` 的 response event 类型，减少 runtime / provider / tool 三侧重复定义。
+- Benchmark release gate 新增 current-chain evidence builder、P0 coding workflow、release audit report、baseline descriptor 和 true-run evidence 透传能力，要求外部 benchmark 证明 `agentSession/turn/start` 与 `evidence/export` 主链。
+- App Server coding evidence summary 增加 tool call 数量、完成 / 失败统计、tool name 和 tool call id 汇总，便于 release / replay 审计。
 
 ### 修复
 
-- 修复 provider tail idle 后已有纯文本输出仍被判失败的问题，降低长流式回复末尾超时导致空结果的风险。
-- 修复 Electron App Server sidecar 在 macOS / Linux / Windows 下加载同目录运行时库的环境变量传递，并补齐主窗口媒体权限处理。
-- 修复历史会话 hydrate、thread item 投影、reasoning 内容同步、输入框发送、任务中心草稿和 workspace 初始导航中的状态边界。
-- 修复模型选择器在模型未加载或未知模型场景下的自动切换逻辑，避免覆盖用户仍有效的模型选择。
+- 修复 App Server tool lifecycle 投影中 runtime `tool_input_delta` 缺少 `tool.started` 的情况，并避免 synthetic start 后重复记录 runtime start。
+- 修复停止 / 中断 Agent 流后 assistant 消息、thread item、文本 overlay、queued turn 恢复和后续继续发送之间的状态不一致。
+- 修复历史 hydrate / local merge 对 interrupted turn 的识别和保留，避免恢复会话时把已中止输出重新显示为仍在运行。
+- 修复 benchmark true-run summary 对 current-chain、external verifier、Evidence Pack 和 task set 的放行条件校验，避免首题或伪 evidence 误判为整套 ready。
 
 ### 优化与重构
 
-- 将 `lime-rs/vendor/aster-rust` 物理删除，迁移剩余 Aster-shaped adapter 到 `crates/agent-compat` 临时 owner，并收敛相关 governance guard。
-- 拆分 provider trace、reply backend、reply loop、tool lifecycle、approval decision contract、projection store 和 voice text processing 等 runtime 领域边界。
-- 清退旧浏览器工作区 home hint、旧 StreamingWriteFileCard、旧 text normalization 和若干旧 tool display copy 分支。
-- 优化输入栏语音采样、实时转写拼接、CJK 语种空格处理、图片生成偏好刷新和资源管理器搜索 / 工具栏展示。
+- 大幅收缩 `agent-compat` 旧 Aster-shaped 实现，删除旧 context、permission policy、parallel、resume、recipe、provider、prompt、scheduler 和部分 legacy tool 文件，保留必要 compat owner。
+- 将 App Server read model 拆分为 model routing、queued turns、runtime items、session metadata 和测试子模块，降低中心文件复杂度。
+- 拆分 Claw / AgentChatWorkspace 右侧 surface、文章编辑器、工作区文件管理、技能目录、任务中心发送、scene app execution 和 home recovery runtime，减少巨型组件直接持有业务状态。
+- 将 `model-provider` 的 provider stream 事件拆分到 failure、image input、model change、notification、plaintext tool use、poll、progress、response content / context / event、sampling、source execution、text delta 和 tool input delta 等子模块。
 
 ### 测试与质量
 
-- 新增和更新 provider stream idle、reply source backend、response materializer、approval decision、permission preflight、session hydration projection、voice polish 和 Electron media permission 回归。
-- 扩展 Claw current fixture、session history fixture、code artifact workbench fixture、benchmark runner 和 app-server asset / sidecar 脚本测试。
-- 更新 App Server protocol schema、generated TypeScript types、client methods、command policy guard、Aster migration boundary 和脚本治理检查。
-- 当前 benchmark release gate 仍 fail closed：P1 Terminal-Bench / DeepSWE true-run 依赖 Docker / runner 环境，尚不能作为正式放行依据。
+- 新增和更新 tool runtime execution、request user input、collab agent、provider stream、App Server read model、tool lifecycle、coding evidence、Agent stream flow control 和 session state 回归。
+- 扩展 benchmark release run / summary / render / audit report / current-chain evidence 测试，确保 strict gate、P0 blocker、true-run blocker 和 evidence blocker fail closed。
+- 更新 App Server protocol schema、manifest、generated TypeScript types、current boundary guard、Aster migration boundary 和 i18n unused key 检查。
+- 当前外部 benchmark release gate 仍要求真实 current-chain evidence，不会因为 dry-run / preflight / 本地缺证据而误放行。
 
 ### 文档
 
-- 新增和更新 Aster Phase 6 provider reply backend、迁移收口、dead code deletion、benchmark release、approval HITL 和 Clawstream guardrail 相关计划与路线图。
-- 更新 Aster migration、governance、执行计划索引、benchmark dataset / progress / version test plan 和测试场景 ledger / registry。
+- 更新 Aster migration Phase 6、dead code deletion、provider reply backend、refactor v1 impact audit、benchmark release、version test plan 和执行计划索引。
+- 补充 benchmark P0 coding 门禁、current-chain evidence、release audit report 和 strict gate baseline 的治理说明。
 
 ### 其他
 
-- 版本事实源更新到 `1.97.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.98.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.96.0` -> `v1.97.0`
+**完整变更**: `v1.97.0` -> `v1.98.0`

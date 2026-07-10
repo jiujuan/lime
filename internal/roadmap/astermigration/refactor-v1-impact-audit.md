@@ -41,6 +41,8 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 
 2026-07-09 追加复核：shell / command execution 的 approval contract、默认 decision set、runtime contract 与非敏感 `approvalScope` projection 已收敛到 `tool-runtime::execution_approval`。`lime-agent` 的 tool lifecycle 只把该 projection materialize 成 `RuntimeAgentEvent::ActionRequired`，不再持有 URL 归一化或 scope hash 规则；`runtime_tool_bridge` / `runtime_overlay` 仍不得新增 session cache、pending map 或 approval hook。shell 当前没有运行中 cache consumer，因此默认仍不宣告 `allow_for_session`。
 
+2026-07-10 复核：R4 Bash / PowerShell foreground shell execution 的完全授权不打扰语义已通过 GUI Gate A/B 复验。`tool-runtime::shell_execution` 在 `approval_policy=never`、`sandbox_policy=danger-full-access` 或 turn metadata `accessMode=full-access` 时直接处理 warning command，不生成 `ActionRequired`，因此输入区不出现 approval prompt；非 full-access warning 仍 fail back 到现有 HITL 退场边界。Gate B `approval-request-full-access` 通过真实 Electron CDP fixture 验证“完全授权下不弹确认”，Gate A 聚合验证 approval resume/decline/cancel/full-access、Plan hydrate、Inputbar pending steer 和 current read model 没有回流 Aster approval hook/cache/pending map。GUI 输入 helper 的 controlled setter / `InputEvent("input")` 只属于 fixture harness 稳定性，不是 production fallback。
+
 ### 1.2 Agent compat 文件移动纠偏
 
 2026-07-09 复核：`vendor/aster-rust/crates/aster*` 被移入 `lime-rs/crates/agent-compat*` 只是临时破局，不是 refactor v1 current owner。`agent-compat` 是待迁出 staging / compat blocker，不是“暂时不要改”的保护区；它的允许改动只有迁出生产调用、删除 Aster-only surface、减少本地 burn-down 依赖。`agent-compat` 现存指向 Lime current owner 的依赖也只能作为 burn-down allowlist，退出条件是迁出对应调用并删除依赖；不得再通过新增 owner 依赖给旧 reply loop、provider、tool、session 或 event source 续命。后续必须按 Thread / Turn / Item 和现有 crate owner 移动文件：
@@ -50,6 +52,12 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 - Item：message、tool output、media、approval、evidence projection 进入 current Item/read model owner，不通过 Aster `Message` / `ToolResult` 旁路投影。
 
 第一批 owner 文件移动已完成：`plan/**` -> `tool-runtime/src/compat/aster_reference/plan/**`、`rules/**` -> `agent-runtime/src/compat/aster_reference/rules/**`、`streaming/**` -> `model-provider/src/compat/aster_reference/streaming/**`，并从 `agent-compat/src/lib.rs` 删除 public module surface。`agent-compat-models/**` 已确认由 `agent-protocol::{openai, anthropic}` 承接并物理删除，不再作为 refactor v1 owner 或 compat crate。`agent-compat/tests/**` 与 `agent-compat/src` 下独立 `tests.rs` / `*_tests.rs` / `*_property_tests.rs` 已删除；旧 Aster integration / property / replay 测试不进入 Thread / Turn / Item current owner，必要回归必须回补到各 Lime owner crate。`config/signup_{openrouter,tetrate}/**` 已按 Codex 无对应 current 面删除；provider credential onboarding 若需要必须进入 Lime current provider/settings 主链，不通过 Aster config signup 目录。上述 reference 目录只是待吸收 / 待删除 reference，不是新的 current API；后续若 Codex 无对应能力，按 `dead / deleted / forbidden-to-restore` 删除。
+
+2026-07-10 补充：`agent-compat/src/agents/mod.rs` 的无外部生产消费者子模块已从 public API 收缩为 crate-private staging，`COMPACT_TRIGGERS` / `PromptManager` / `TaskConfig` re-export 已删除；Aster prompt snapshot `.snap.new` 产物、`prompt_manager` snapshot 测试和 `insta` direct dependency 已删除并由治理守卫禁止恢复。`Agent::reply(...)` 没有 Lime 外部生产调用，subagent staging adapter 已直接调用 pinned-provider `reply_with_provider(...)`，`Agent::reply(...)` wrapper 已删除；`reply_with_provider(...)` 仍因 `provider_reply_exit_source.rs` 最后一跳暂时 public，继续是 R2/R3 blocker。这一步不宣称 R2/R4/R7 完成，只是切断 Aster agents public surface 与旧正向测试 evidence 的无谓续命，剩余 `Agent` / `AgentEvent` / MCP extension bridge / live execution hook / session config 仍按 Thread / Turn / Item owner 继续迁出。
+
+2026-07-10 追加补充：`agent-compat/src/conversation/mod.rs` 的 `message` 子模块，以及 `agent-compat/src/lib.rs` 的 `model`、`recipe`、`tool_inspection` 顶层模块已从 public API 收缩为 crate-private staging；`lime-agent` 外部生产引用已改为最小 root re-export。Aster `Message` / `Conversation` / `ModelConfig` / `Recipe` / tool inspection DTO 仍是 R2/R5/R6/R4 未迁完前的 compat blocker，不进入 refactor v1 current owner；最终必须迁到 Thread / Turn / Item、`agent-protocol`、`model-provider`、`tool-runtime` 或 App Server read model 后删除这些 re-export。
+
+2026-07-10 再追加：`agent-compat/src/lib.rs` 的 `conversation`、`session`、`tools` 顶层模块也已从 public API 收缩为 private staging；`lime-agent` 外部生产引用改为 root `aster::{...}` 过渡面，`aster::conversation::*` / `aster::session::*` / `aster::tools::*` module path 不得恢复。该改动只减少 Aster public surface，不改变 Thread / Turn / Item 判定：message/conversation 归 Turn/Item blocker，session/runtime store 归 Thread/Turn blocker，tool registry 归 Turn tool lifecycle blocker。
 
 ## 2. 已迁能力复核
 
@@ -68,7 +76,7 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 | App Server media message delta Item skeleton                                                                                    | `app-server` `runtime/thread_item_projection/agent_message.rs`                                                                     | Turn `message.delta` -> Item `agent_message`    | `refactor-aligned current`                    | 消费 RuntimeCore `RuntimeMessageDeltaContent::from_payload(...)` parser；media-only `message.delta.contentPart/contentParts` 可 materialize 成 `agent_message.contentParts`，同 `itemId` text/media delta 可合并；`contentPart/contentParts` alias mismatch 与 inline `data:` media fail closed；这是 Item projection current owner，不在 Aster vendor、provider wire 或 GUI 中重新解释媒体。App Server 定向测试 `media_only_delta_creates_agent_message_content_parts` 已通过；退出条件是继续接协议 / generated client / projection package / Workbench。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | tool execution shell/path/web/apply_patch/skill_search/memory_store/image_task/sleep/view_image/update_plan/tool_search helpers | `tool-runtime::*` + Lime reply-loop Aster bridge                                                                                   | Turn tool lifecycle / Item tool projection      | `refactor-aligned current` + `compat blocker` | 已迁 helper 不再回 vendor；`tool-runtime::native_overlay` 已承接 Lime native overlay 清单、registration plan、install plan、turn-context source、stateless surface 和 `RuntimeNativePermissionDecision` / `check_runtime_native_tool_permissions(...)` permission owner，GUI inventory 通过 install plan 把命中的工具标为 `current_surface`；`tool-runtime::native_dispatch` 已承接无 gateway 工具 dispatcher，并通过 gateway-aware builder 接入 `memory_store` / `image_task` / `tool_search`，gateway-backed wrapper 也从同一个 dispatch 读取模型可见 definitions；`tool-runtime::web_fetch` / `tool-runtime::web_search` 已承接 Web executor，vendor Web wrapper 已删除，`lime-agent/src/native_tools/web_retrieval.rs`、`native_tools/{sleep,view_image,update_plan}.rs`、`tools/{apply_patch_tool,skill_search_tool}.rs` 已删除，Aster `PermissionCheckResult` / `ToolContext` / `ToolResult` 适配集中到 `runtime_tool_bridge.rs`，但 permission / confirmation 规则不再归属该 bridge；`tool-runtime::apply_patch` 已承接 patch 执行、路径权限和 metadata/diff 构造；`tool-runtime::skill_search` 已承接 skill metadata search、workspace 解析和 evidence metadata 构造；`tool-runtime::memory_store` 已承接 memory tools DTO/gateway、权限和 metadata 构造；`tool-runtime::image_task` 已承接 image generation task 的 App Server media DTO gateway、输入校验、project root / thread / turn 约束和 task metadata 投影；`tool-runtime::sleep` 已按 Codex `clock.sleep` / `duration_ms` 语义承接等待 executor、strict schema、elapsed/interrupted metadata 和 cancel token 中断，GUI display/process summary 消费 current `sleep`；`tool-runtime::view_image` 已按 Codex `view_image` 语义承接本地图片读取、strict schema、data URL 和 model-visible image metadata，GUI/imported runtime event 已消费 current `view_image` key；`tool-runtime::update_plan` 已按 Codex TODO/checklist 语义承接 plan/explanation metadata、Plan mode 禁用和 App Server `plan.final` 真实消费链；`tool-runtime::tool_search` 已对齐 Codex deferred tool discovery，canonical name 收敛为 `tool_search`，接入 App Server MCP `search_mcp_tools` current gateway 和前端结构化 ToolSearch summary；per-tool `#[cfg(test)] create_*_tool()` helper 已删除，adapter 回归集中到 `runtime_tool_bridge.rs`；下一步处理 Aster reply loop native tool registry 壳、sleep input queue activity signal 与 provider/reply loop |
 | Aster session memory stub / automatic memory injection                                                                          | 已删除：`thread-store::memory_stub`、`aster_session_store/memory_stub.rs`、vendor `session/memory*`                                | 旧 Thread memory 旁路，不进入 refactor v1 主链  | `dead / deleted / guarded`                    | Lime memory current 主链是 App Server memory store + `tool-runtime::memory_store` tool lifecycle；Aster `SessionStore` memory trait、`SessionManager` memory API、reply loop 自动 system prompt memory 注入、vendor memory repository/pipeline/FTS schema 均已删除，不保 disabled stub 兼容层                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| provider/reply stream request/event/host DTO                                                                                    | `agent-runtime::*` / `model-provider::*` + `aster_reply_adapter.rs`                                                                | Turn execution / provider event materialization | `partial current` + `compat blocker`          | 必须继续迁出 `Agent::reply`、Aster `Message`、Aster `AgentEvent`、provider trait object                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| provider/reply stream request/event/host DTO                                                                                    | `agent-runtime::*` / `model-provider::*` + `aster_reply_adapter.rs`                                                                | Turn execution / provider event materialization | `partial current` + `compat blocker`          | `model-provider` 已承接 provider notification envelope / text classification、response event/item DTO、sampling、poll/cancel、first-text delta、tool-input delta、model-change、progress、failure logging、plaintext tool-use 和 image input policy；`Agent::reply(...)` wrapper 已删除。仍必须继续迁出 Aster internal reply loop、Aster `Message`、Aster `AgentEvent`、provider trait object 和 `reply_with_provider(...)` 最后一跳                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | vendor unused public modules                                                                                                    | 已从 `aster-core` `lib.rs` 和物理目录删除                                                                                          | 不进入 Thread / Turn / Item current 主链        | `dead / deleted`                              | `aster_apps`、`auto_reply`、`background`、`blueprint`、`checkpoint`、`chrome*`、`codesign`、`diagnostics`、`git`、`github`、`heartbeat`、`map`、`core`、`logging`、`lsp`、`memory`、root `mcp` manager、`notifications`、`observability`、`plugins`、`prompt`、`ratelimit`、`recipe_deeplink`、`rewind`、`search`、`telemetry`、`teleport`、`tracing`、`updater` 不得恢复为 valuable reference                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ## 3. 立即生效的迁移规则
@@ -148,8 +156,20 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 - `tools::search`、Lime 自有 `lime_core::memory` / `lime_agent::prompt` 不属于本批 top-level vendor module 删除对象；旧 `mcp::logging` / `mcp::notifications` 已随 root MCP manager 删除，MCP current owner 是 `lime-mcp` / App Server gateway / `tool-runtime::mcp_*`。
 - Lime 自有 `infra::telemetry` 不属于本批 top-level vendor module 删除对象。
 - nested session wrapper `session/cleanup.rs` 与 `session/statistics.rs` 已删除；`cleanup_expired_data` / `CleanupStats`、`calculate_statistics` / `SessionStatistics` 等旧 Aster public API 没有 Lime current 消费，也没有进入 Thread / Turn / Item current owner。
+- `agent-compat/src/session/{fork,resume,worktree}.rs` 已删除；Aster session fork/merge、summary cache resume 和 worktree extension public API 没有 Lime current/compat 生产调用，不进入 Thread / Turn / Item current owner。后续若需要 branch、resume 或 worktree 产品能力，必须进入 Thread / App Server / project_git current owner。
+- `agent-compat/src/providers/{auto_detect,provider_test,testprovider}.rs` 已删除；Aster provider live test、record/replay provider 和 API-key auto-detect 不进入 provider current owner。Provider test/check 只能走 App Server / `model-provider` current 主链。
+- `agent-compat/src/providers/mod.rs` 已把 concrete provider implementation / helper modules 收缩为 crate-private staging，`providers/formats/mod.rs` 也已把 provider-specific wire-format helper 收缩为 crate-private；外部只保留 R2/R3 未迁完前必需的 `base`、`errors`、`formats::openai_responses` 与 factory exports。provider backend / connection test / stream execution 归 `model-provider` / App Server current owner，不得恢复 `aster::providers::<provider>` public API。
+- `agent-compat/src/config/mod.rs` 已把 `aster_mode`、`base`、`declarative_providers`、`extensions`、`permission`、`search_path` 和相关 re-export 收缩为 crate-private staging；外部只保留 `paths`，因为 `lime-agent` session/runtime store adapter 仍读取 `initialized_path_root()`。provider/settings/config UI/API 归 Lime current provider/settings/App Server 主链，不得恢复 `aster::config::*` public API。
+- `agent-compat/src/permission/mod.rs` 已把 `permission_confirmation`、`permission_inspector`、`permission_judge`、`permission_store` 子模块收缩为 crate-private staging；外部只保留 root 最小 re-export。Approval / HITL current owner 仍是 App Server RuntimeCore pending action、`agentSession/action/respond` 与 `tool-runtime::execution_approval`，不得恢复 `aster::permission::permission_*` public API。
+- `agent-compat/src/tools/mod.rs`、`tools/file/mod.rs`、`tools/search/mod.rs` 与 `session/mod.rs` 已把实现子模块收缩为 crate-private staging；外部只保留 root 最小 re-export。`tools/file/diff_summary.rs` 与 `tools/search/ripgrep.rs` 已删除；文件改动摘要、搜索执行和工具生命周期不得继续从 Aster staging 暴露。
 - `agent-compat/src/mcp/**` 已删除；R7 剩余 blocker 只保留 `agents/mcp_client.rs`、Aster extension manager / built-in extension clients 的 reply loop adapter，不得把 root MCP manager 当作 valuable reference 或 current owner 恢复。
-- `agent-compat/src/{posthog,security,slash_commands,tool_monitor,user_message_manager}.rs`、`agent-compat/src/{hints,network}/mod.rs`、`agent-compat/src/{oauth,token_counter}.rs` 已删除或迁出；这些只是 no-op telemetry、空 security / repetition inspector、custom slash recipe stub、空 user message queue、empty hints loader、root OAuth bail stub 和 dummy token counter，不进入 Thread / Turn / Item current owner。真实 permission inspection、ActionRequired elicitation、AGENTS.md runtime prompt context、provider HTTP proxy policy、provider usage fallback 和 GUI / Evidence projection 继续归属 current 主链，不能为了“看起来兼容”恢复 Aster 空壳。
+- `agent-compat/src/{context_mgmt,mcp_utils,posthog,prompt_template,security,slash_commands,tool_monitor,user_message_manager,utils}.rs`、`agent-compat/src/{execution,hints,hooks,network}/**`、`agent-compat/src/{oauth,token_counter}.rs`、`agent-compat/src/tools/hooks.rs`、`agent-compat/src/prompts/**` 已删除或迁出；这些只是 no-op telemetry、空 security / repetition inspector、custom slash recipe stub、空 user message queue、empty hints loader、root OAuth bail stub、dummy token counter、历史 `mcp_utils::ToolResult` 别名、root helper 垃圾桶、root hook public stub、Aster-only tool hook framework、返回原 conversation 的 context compaction 假实现、只缓存 `Agent::new()` 的 execution manager 和空模板系统，不进入 Thread / Turn / Item current owner。真实 permission inspection、ActionRequired elicitation、AGENTS.md runtime prompt context、provider HTTP proxy policy、provider usage fallback、App Server / agent-runtime context compaction、Codex-style multi-agent/task orchestration、agent control request DTO 和 GUI / Evidence projection 继续归属 current 主链，不能为了“看起来兼容”恢复 Aster 空壳。
+- `agent-compat/src/agents/{context,parallel,resume}/**` 已删除；这些 Aster agent context inheritance / isolation、parallel execution pool 和 checkpoint resume framework 没有 Lime current / compat 主链消费，也没有外部 `aster::agents::*` 生产引用。Codex-first current owner 分别是 Thread / Turn / Item、App Server task orchestration、file checkpoint API 和 `agent-runtime`，不得把 `AgentContextManager`、`ParallelAgentExecutor`、`AgentResumer` 等 Aster framework 当 valuable reference 编译留存。
+- `agent-compat/src/scheduler.rs`、`agent-compat/src/scheduler_trait.rs`、`agent-compat/src/recipe/{build_recipe,local_recipes,read_recipe_file_content,template_recipe,validate_recipe,yaml_format_utils}.rs` 已删除；Aster 本地 recipe 文件 loader / template renderer / validator / YAML formatter 与 recipe scheduler 不进入 Thread / Turn / Item current owner。`Agent::create_recipe(...)`、`Recipe::from_content(...)`、`Author`、`Settings`、`RecipeParameter*` 和 builder `author/settings/parameters` 旧 metadata 入口已删除；`Recipe` / `SubRecipe` DTO 暂留 session metadata / subagent staging blocker。真正 automation scheduler 与 Codex-style multi-agent 后续只允许进入 Lime current owner，不恢复 Aster recipe runtime helper或旧 recipe metadata parser。
+- `agent-compat/src/context_mgmt.rs` 已删除；Aster `/compact` 不再通过 no-op summarizer 写空 summary 或假成功。真正 context compaction 若恢复，必须落在 App Server / `agent-runtime` current owner，并把 Thread history / Item projection / Evidence 接起来。
+- `agent-compat/src/execution/**` 已删除；Aster `AgentManager` 只是 global cache / factory stub，子 agent staging 直接创建局部 `Agent::new()`，不把该 stub 当作 current multi-agent owner。真正 multi-agent / task orchestration 必须进入 App Server / `agent-runtime` current owner。
+- `agent-compat/src/mcp_utils.rs` 已删除；原 `ToolResult<T>` / `ToolError` 历史别名已内联为调用点局部 `Result<T, rmcp::model::ErrorData>`，不作为 Thread / Turn / Item current API。
+- `agent-compat/src/utils.rs` 已删除；unicode tag 清洗归 `conversation::unicode_tags`，provider text truncation 归 `providers::utils`，reply loop cancel 判断归 `agent.rs` 局部 helper，不保留 root utils 垃圾桶。
 
 判定：
 
@@ -160,7 +180,15 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 
 - `asterMigrationBoundary.test.ts` 持续要求上述目录不存在，且 `vendor/aster-rust/crates/aster/src/lib.rs` 不得恢复对应 `pub mod`。
 - `asterMigrationBoundary.test.ts` 持续要求 `session/cleanup.rs`、`session/statistics.rs`、对应 `mod` 和 public re-export 不得恢复。
+- `asterMigrationBoundary.test.ts` 持续要求 `session/{fork,resume,worktree}.rs`、provider test/autodetect helper 和 `tools/hooks.rs` 不得恢复，且对应 `mod` / re-export / public API 字符串不得重新挂回 `agent-compat` public surface。
+- `asterMigrationBoundary.test.ts` 持续要求 concrete provider implementation modules 与 provider-specific wire-format helper 不得恢复为 `pub mod` public API；这些模块只能随 R2/R3 作为 crate-private staging 存活，最终迁到 `model-provider` 后删除。
+- `asterMigrationBoundary.test.ts` 持续要求 `config` 除 `paths` 外不得恢复 public module / public re-export；`paths` 最终随 session/runtime store adapter 迁出后删除。
+- `asterMigrationBoundary.test.ts` 持续要求 permission 子模块不得恢复为 public module；permission root 最小 re-export 最终随 R4 reply loop native tool execution / approval bridge 迁出后删除。
+- `asterMigrationBoundary.test.ts` 持续要求 tools/session 实现子模块不得恢复为 public module；`diff_summary` / `ripgrep` helper 不得恢复。root `Tool` / `ToolRegistry` / `ToolContext` / `SessionStore` 等最小 re-export 最终随 R4/R5/R6 迁出后删除。
 - `asterMigrationBoundary.test.ts` 持续要求 `agent-compat/src/mcp/**` 目录和 `pub mod mcp;` 不得恢复。
+- `asterMigrationBoundary.test.ts` 持续要求 Aster recipe runtime / scheduler 文件、module exports、旧函数名、旧依赖、`scheduler_service`、`set_scheduler`、recipe generation/parser 和旧 metadata DTO 不得恢复。
+- `asterMigrationBoundary.test.ts` 持续要求 root hook stub、root `pub mod hooks;` 和 `crate::hooks::FrontmatterHooks` 不得恢复；`FrontmatterHooks` 只能作为 `tools::agent_control` 的局部 request DTO，后续随 R4/R9 迁出或删除。
+- `asterMigrationBoundary.test.ts` 持续要求 Aster agent context / parallel / resume framework 目录和相关 public re-export 不得恢复。
 - 如果后续确有产品需求，只能按 refactor v1 归属进入 Lime current owner；不得恢复 vendor public module 当作实现入口。
 
 ### 4.4.1 Batch A/D reply event stream projector contract
@@ -340,6 +368,7 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 - `tool-runtime::native_overlay` 也持有 `RuntimeNativeToolSurface`，承接 stateless overlay tool 的 definition、lookup-only aliases 和 retry override；`RuntimeNativePermissionDecision` / `check_runtime_native_tool_permissions(...)` 承接 stateless overlay tool 的 permission / confirmation 分派。`runtime_tool_bridge::RuntimeNativeToolAdapter` 统一读取该模型可见 surface、执行 current dispatcher，并只把 current permission decision 转换成临时 Aster `PermissionCheckResult`。`sleep`、`view_image`、`update_plan`、`WebFetch`、`WebSearch`、`apply_patch`、`skill_search` 的 per-tool wrapper 文件已删除，不再各自保留 permission delegate、adapter 创建、`*_tool_definition()` 调用、legacy alias 常量、surface/options 读取、turn context 接线、本地 `Tool` trait 样板或 test-only `create_*_tool()` helper；临时 `Tool` 创建和 adapter 回归统一由 `runtime_tool_bridge.rs` 承接。
 - vendored Aster `task_list_tools.rs`、`task_output_tool.rs`、`task_stop_tool.rs` 已删除；`tools/mod.rs` 不再导出或默认注册 `TaskCreate` / `TaskList` / `TaskGet` / `TaskUpdate` / `TaskOutput` / `TaskStop`，SubAgent production allowlist、ToolSearch production alias 与 `lime-core::tool_calling` discovery profiles 也不得恢复 Task\*。历史 frontend transcript / display 读面仍按 compat 处理，后续单独收缩。
 - `tool-runtime::native_dispatch` 持有已迁 native tool 的 current definition / executor dispatch：`apply_patch`、`skill_search`、`sleep`、`view_image`、`update_plan`、`WebFetch`、`WebSearch`，并通过 gateway-aware builder 接入 `memory_store` / `image_task` / `tool_search`；gateway-backed memory/image/tool_search adapter 也从同一个 dispatch 取模型可见 definitions，不再直接调用各自 definition helper 或 vendor ToolSearch surface。这对齐 Codex registry/router 的骨架，但还没有替代 Aster reply loop 的 `ToolRegistry`。
+- `tool-runtime::tool_result_projection` 持有 native tool execution result 到 MCP `CallToolResult` 的 current projection：success/error 文本选择、metadata -> `structured_content`、`model_visible_image` / `image_url` 模型可见图片内容附加，以及 `tool_surface_updated` 判定。`agent-compat/src/agents/agent.rs` 只能搬运 Aster `ToolResult` 字段到 `RuntimeToolResultParts`，不得重新持有这些 result projection 规则。
 - `lime-agent/src/native_tools/runtime_tool_bridge.rs` 集中已迁 tool 仍需的 Aster `PermissionCheckResult` / `ToolContext` / `ToolResult` / `ToolError` 临时转换；其中无 App Server gateway 的 stateless adapter 创建已进一步集中到 `create_runtime_native_tool_adapter(...)` / `RuntimeNativeToolAdapter`，但 bridge 不再持有 per-tool permission helper、`WebFetchInput` 或 preapproved host logic。需要 App Server gateway executor 的 `memory_store` / `image_task` / `tool_search` 已集中到 `native_tools/gateway_bridge.rs` + `RuntimeDefinitionToolAdapter`，旧 `native_tools/{memory_store,image_tasks,tool_search}.rs` 已删除。`apply_patch`、`skill_search`、`sleep`、`view_image`、`update_plan`、`WebFetch`、`WebSearch` 的 per-tool wrapper 也已删除。
 - `native_tools/runtime_overlay.rs::NativeRegistration` 现在集中承接 Aster `Box<dyn Tool>` 到 current `RuntimeToolDefinition` 的临时封装；`AgentRuntimeState` 只接收 `NativeRegistration` 并维护 current definition snapshot，不再直接 import `aster::tools::Tool`、不维护第二份 name set，也不从 `Box<dyn Tool>` 反推 current read model。gateway-backed `memory_store` / `image_task` / `tool_search` adapter factory 也只返回 `NativeRegistration`。
 - `tool-runtime::native_overlay` 现在同时持有 `runtime_native_tool_registration_allowlist()` 与 `runtime_native_tool_registration_is_allowed(...)`，作为 Lime 初始化 Aster registry 与后续 gateway-backed `NativeRegistration` 写入的 current policy owner；Lime 只允许注册 Codex-first/current 最小工具面，不再使用 Aster 默认全量工具池，也不允许测试专用或 Aster-only wrapper 名称绕过 allowlist 写回 production registry。
@@ -530,17 +559,18 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 - `lime-agent/src/native_tools/view_image.rs` 已删除；临时 Aster permission adapter 与 `Tool` trait adapter 由 `native_tools/runtime_tool_bridge.rs` / `native_tools/runtime_overlay.rs` 按 current install plan 统一创建。对外 tool name 是 `view_image`，`ViewImage` / `ViewImageTool` 只作为 lookup-only legacy alias。
 - Rust catalog、frontend normalization、GUI display config、process summary 和 imported runtime event detail 已消费 current `view_image` key；不再要求 Aster `ViewImageTool` 成为执行事实源。
 - vendored Aster `tools/view_image.rs` 已删除，`tools/mod.rs` 不恢复 `mod view_image` / `pub use view_image` / `ViewImageTool::new()`；Aster 默认 `Agent::new()` 不再把 `view_image` 当 vendor 默认工具。
+- `agent-compat/src/media/**` 已删除；`ReadTool::read_image(...)` 与 `read_pdf(...)` 已 fail-closed，不再通过 Aster `Read` 生成 base64 image/PDF multimodal payload。图片查看归 `tool-runtime::view_image`，PDF 文本归 current document preview / ingestion。
 
 判定：
 
 - `refactor-aligned current`：`tool-runtime::view_image` 承接 Turn tool lifecycle 规则，结果 metadata 属于 Item tool projection。
 - `compat blocker`：`runtime_overlay.rs` + `runtime_tool_bridge.rs::RuntimeNativeToolAdapter` 仍为 Aster reply loop 创建 `view_image` 临时 `Tool` trait wrapper，因为 Aster reply loop native tool registry 尚未迁出。
-- `dead / deleted / guarded`：`lime-agent/src/native_tools/view_image.rs`、Aster `ViewImageTool` vendor 实现、vendor media helper 依赖、vendor 默认注册。
+- `dead / deleted / guarded`：`lime-agent/src/native_tools/view_image.rs`、Aster `ViewImageTool` vendor 实现、vendor media helper 依赖、Aster `Read` image/PDF base64 分支、vendor 默认注册。
 
 退出条件：
 
 - Aster reply loop 不再通过 Aster `Tool` trait 执行 native tools 后，删除 `runtime_tool_bridge.rs` 里的 view_image permission adapter 和 `runtime_overlay.rs` 的临时 registry 接线。
-- GUI / Evidence / provider lowering 继续消费 current model-visible image metadata，不得在 Aster wrapper 或 vendor media helper 中恢复 `read_image_file_enhanced`、`estimate_image_tokens` 或第二份 schema。
+- GUI / Evidence / provider lowering 继续消费 current model-visible image metadata，不得在 Aster wrapper、vendor media helper 或 `ReadTool` 中恢复 `read_image_file_enhanced`、`estimate_image_tokens`、`Base64 Data` 或第二份 schema。
 - `ViewImage` / `ViewImageTool` alias 只服务历史 transcript lookup；current API、catalog 和文档继续使用 `view_image`。
 
 ### 4.12 Codex-style update_plan native executor current owner
@@ -897,21 +927,24 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 当前状态：
 
 - Codex 有 `request_user_input` 协议事件、`UserInputAnswer` 操作与 MCP elicitation 链路，因此 Aster `AskTool` 对应能力按 Codex-first 迁移。
-- `agent-runtime::ask` 已承接 `RequestUserInputRunRequest`、`RequestUserInputAction`、`RequestUserInputGateway` 和 `run_request_user_input(...)`，负责 prompt、requested schema、等待 gateway response 和 response normalization。
-- `lime-agent/src/ask_bridge.rs` 只保留 Aster `AskCallback` adapter、Aster `AskRequest` -> current `AskRequest` DTO 映射、Aster action scope -> `agent_protocol::ActionRequiredScope` 映射，以及临时 `ActionRequiredManager` gateway。
+- `tool-runtime::request_user_input` 已承接 `request_user_input` 工具名、DTO、输入 schema、parse、current surface validation、requested schema / elicitation schema、response extraction 与 result normalization；这是模型工具面的 current owner。
+- `agent-runtime::ask` 已承接 `RequestUserInputRunRequest`、`RequestUserInputAction`、`RequestUserInputGateway` 和 `run_request_user_input(...)`，负责 Turn-side prompt、requested schema、等待 gateway response 和 response normalization 调用编排，不再本地拥有 DTO/schema/helper。
+- `agent-compat/src/tools/ask.rs` 只保留 Aster `Tool` trait、callback、timeout 与 `ToolResult` metadata adapter；`AskOptionInput`、`AskQuestionInput`、`AskToolInput`、本地 schema builder、parse/validation 和 normalization owner 已迁出并由治理守卫禁止恢复。
+- `agent-compat/src/lib.rs` 与 `agent-compat/src/tools/mod.rs` 不再公开 re-export `AskRequest` / `AskOption` / `AskQuestion`；这些 DTO 只从 current `tool-runtime::request_user_input` / `agent-runtime::ask` 消费。
+- `lime-agent/src/ask_bridge.rs` 只保留 Aster `AskCallback` adapter、current `AskRequest` DTO 转交、Aster action scope -> `agent_protocol::ActionRequiredScope` 映射，以及临时 `ActionRequiredManager` gateway；它不再从 `aster` root 消费 Ask request DTO。
 - `ask_bridge.rs` 不再直接调用 `resolve_request_prompt`、`build_requested_schema` 或 current response extractor。
 
 判定：
 
-- `refactor-aligned current`：`agent-runtime::ask::{run_request_user_input, RequestUserInputGateway, RequestUserInputRunRequest}`。
+- `refactor-aligned current`：`tool-runtime::request_user_input::{parse_request_user_input_tool_input, request_user_input_tool_input_schema, build_requested_schema, build_elicitation_schema, normalize_request_user_input_result}` 与 `agent-runtime::ask::{run_request_user_input, RequestUserInputGateway, RequestUserInputRunRequest}`。
 - Thread / Turn / Item 归属：Turn action_required / elicitation lifecycle；GUI / App Server action response 主链继续消费用户输入。
 - `compat blocker`：Aster reply loop 仍通过 `AskCallback` 和 `ActionRequiredManager` 触发 request_user_input；这只是 reply loop 未迁出前的 adapter。
-- `dead / guarded`：`ask_bridge.rs` 恢复 prompt/schema/response runner、`extract_current_ask_response` 直连或把 Aster ask callback/request 从 `lime-agent` crate 根公开。
+- `dead / guarded`：`agent-compat/src/tools/ask.rs` 恢复本地 DTO/schema/parse/validation/normalization owner；`ask_bridge.rs` 恢复 prompt/schema/response runner、`extract_current_ask_response` 直连，或 root / tools public re-export 恢复 `AskRequest` / `AskOption` / `AskQuestion`。
 
 退出条件：
 
 - Aster `Agent::reply` / native tool registry 迁出后，删除 `ask_bridge.rs` 的 Aster callback / `ActionRequiredManager` gateway。
-- `asterMigrationBoundary.test.ts` 持续要求 current runner 存在于 `agent-runtime::ask` 且不含 `aster::`。
+- `asterMigrationBoundary.test.ts` 持续要求 tool surface owner 存在于 `tool-runtime::request_user_input`、current runner 存在于 `agent-runtime::ask` 且不含 `aster::`，并要求 Aster AskTool 只能做 callback 外壳。
 - 迁出最终阶段必须让 request_user_input 直接由 current Turn executor / App Server action_required 主链触发，不再经 Aster `AskTool`。
 
 ### 4.19 Gateway-backed native dispatch surface
@@ -1275,21 +1308,22 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 
 - `agent-compat/src/context/{agents_md_parser,cache_controller,compressor,file_mention,manager,priority_sorter,summarizer,window_manager}.rs` 没有 Lime App Server / frontend / Evidence / runtime current 消费链，也没有 `lime-agent` 生产 `use aster::context::*` 命中。
 - Codex 有 AGENTS.md / context 事实源，但对应实现是 `core/src/agents_md.rs`、session step context、Thread/Turn context materialization，不是 Aster 的 `AgentsMdParser`、`EnhancedContextManager`、`MessageCompressor`、`CacheController`、`ContextWindowManager` public API。
-- 本刀删除上述 8 个文件；后续两刀已继续删除 Aster-only `ContextService` / `ContextUri`，以及 Aster context `tool_io` / pruning / token estimator duplicate。`context/mod.rs` 现在只保留 `ContextTraceStep`。
+- 本刀删除上述 8 个文件；后续两刀已继续删除 Aster-only `ContextService` / `ContextUri`，以及 Aster context `tool_io` / pruning / token estimator duplicate。2026-07-10 继续删除 `agent-compat/src/context/**` root public surface，`ContextTraceStep` 的 current DTO 已迁到 `agent-protocol::context_trace`。
 - `context/types.rs` 已物理删除；`AgentsMdConfig`、`ContextConfig`、`ConversationTurn`、`Cache*`、`Compression*`、`FileMentionResult`、`ContextWindowStats`、`PruningConfig`、`PruningLevel` 等只服务已删 helper 的 DTO 均不再留在 `agent-compat`。
 
 判定：
 
 - `dead / deleted / forbidden-to-restore`：Aster unused context framework helper。
-- `compat blocker`：`ContextTraceStep` 仍被 Aster event -> Lime event projection 使用。
+- `compat blocker`：Aster `AgentEvent::ContextTrace` 在 R2/R6 未迁完前仍携带 `aster::agents::ContextTraceStep` 最小字段类型。
+- `refactor-aligned current`：`agent-protocol::context_trace::ContextTraceStep` 服务 Lime runtime event / App Server / frontend context trace projection。
 - `refactor-aligned current`：`tool-runtime::tool_io` 服务 Turn tool lifecycle / Item tool output projection；Aster context duplicate 不再保留。
 - Thread / Turn / Item 归属：保留 surface 归 Turn event materialization；被删除 helper 不进入 refactor v1 owner。
 
 退出条件：
 
-- `asterMigrationBoundary.test.ts` 持续要求上述 8 个文件不存在，`context/mod.rs` 不得恢复旧模块、旧 public helper 或 `pub mod types;` 完整框架出口，并禁止旧 context framework DTO 留在 `context/types.rs`。
+- `asterMigrationBoundary.test.ts` 持续要求 `agent-compat/src/context/**` 不存在，root `pub mod context;`、`crate::context::ContextTraceStep` 与外部 `aster::context::ContextTraceStep` 不得恢复，并禁止旧 context framework DTO 留在 `agent-compat` root context 下。
 - 后续如需要 AGENTS.md / context hydrate，只能按 Codex-first prompt/context owner 进入 Lime current 主链，不得恢复 Aster `AgentsMdParser` / `EnhancedContextManager`。
-- Aster reply loop 迁出后，继续复核 `ContextTraceStep` 是否仍需要留在 `agent-compat`；无生产引用后直接删除或迁到 current owner。
+- Aster reply loop / event source 迁出后，删除 `aster::agents::ContextTraceStep` compat 字段类型；current 侧继续只保留 `agent-protocol::context_trace`。
 
 验证记录：
 
@@ -1298,18 +1332,36 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 - `validated`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，`144 passed`。
 - `validated`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-aster-context-clean-target" cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2` 通过；保留既有 `reqwest default-features` workspace warning。
 
+### 4.24.7A Agent-compat inline test deletion
+
+当前状态：
+
+- `agent-compat/src` 下 88 个 `#[cfg(test)] mod tests` 内联正向测试模块已批量删除；这些测试只证明 Aster staging 行为，不能作为 refactor v1 current owner 的验收证据。
+- 少量 `#[cfg(test)]` helper/import 暂留在生产文件中，但不会进入生产编译；后续随对应 compat 文件删除。
+
+判定：
+
+- `dead / deleted / forbidden-to-restore`：Aster compat staging crate 内联正向测试面。
+- `refactor-aligned current`：必要回归必须迁到 `agent-runtime`、`agent-protocol`、`model-provider`、`tool-runtime`、`thread-store` 或 App Server owner tests。
+- `compat blocker`：生产 reply/provider/tool/session/event source 文件仍需继续迁出，不因测试删除而完成。
+
+退出条件：
+
+- `asterMigrationBoundary.test.ts` 持续禁止 `agent-compat/src` 恢复 inline `#[cfg(test)] mod tests {`，并继续禁止 `agent-compat/tests/**` 和源码独立测试文件回流。
+
 ### 4.24.8 Agent-compat context service / URI deletion
 
 当前状态：
 
 - Codex 对照确认 `/Users/coso/Documents/dev/rust/codex/codex-rs` 没有 Aster `ContextService`、`ContextUri`、`ContextNamespace` 或 `aster://` context storage API。Codex context 能力归属 AGENTS.md、Thread / Turn context materialization 和 current read model，不采用这套 Aster URI-backed service。
-- 本刀删除 `agent-compat/src/context/context_service.rs` 与 `context_uri.rs`，并把仍需的 `ContextTraceStep` 移到 `context/trace.rs`。
+- 本刀删除 `agent-compat/src/context/context_service.rs` 与 `context_uri.rs`，当时把仍需的 `ContextTraceStep` 移到 `context/trace.rs`；2026-07-10 已继续删除 root context 目录，并把 current DTO 固定到 `agent-protocol::context_trace`。
 - `context/mod.rs` 不再导出 `ContextService`、`ContextUri`、`ContextDocument`、`ContextLayer`、`ContextNamespace*` 或 `ContextReadResult`。
 
 判定：
 
 - `dead / deleted / forbidden-to-restore`：Aster context service、context URI parser、`aster://` storage API 和相关 DTO。
-- `compat blocker`：`ContextTraceStep` 仍被 Aster event -> Lime runtime event projection 使用。
+- `compat blocker`：Aster `AgentEvent::ContextTrace` 仍是 R6 未迁完前的 source adapter。
+- `refactor-aligned current`：`agent-protocol::context_trace::ContextTraceStep`。
 - Thread / Turn / Item 归属：保留的 trace DTO 暂归 Turn event materialization / Item read model projection；被删除的 URI context service 不进入 refactor v1 owner。
 
 退出条件：
@@ -1336,7 +1388,8 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 判定：
 
 - `refactor-aligned current`：`tool-runtime::tool_io`，归属 Turn tool lifecycle / Item tool output projection。
-- `compat blocker`：`ContextTraceStep`，仍服务 Aster event -> Lime runtime event projection。
+- `compat blocker`：Aster `AgentEvent::ContextTrace` 的最小 compat 字段类型，仍服务 Aster event -> Lime runtime event projection。
+- `refactor-aligned current`：`agent-protocol::context_trace::ContextTraceStep`，服务 current context trace projection。
 - `dead / deleted / forbidden-to-restore`：Aster context `tool_io`、heuristic `TokenEstimator`、`ProgressivePruner`、`PruningConfig` / `PruningLevel`、未调用 progressive pruning overflow path 和零引用 overflow result/getter API。
 
 退出条件：
@@ -1347,11 +1400,42 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 验证记录：
 
 - `validated`：`rg -n "ProgressivePruner|TokenEstimator|ToolIo|PruningConfig|PruningLevel|handle_overflow_with_pruning|OverflowResult|compaction_attempted\\(|pub mod tool_io|pub mod pruner|pub mod token_estimator|pub\\(crate\\) mod types" "lime-rs/crates/agent-compat/src/context" "lime-rs/crates/agent-compat/src/agents/error_handling/overflow_handler.rs"` 无命中。
-- `validated`：`find "lime-rs/crates/agent-compat/src/context" -maxdepth 1 -type f -print | sort | xargs wc -l` 显示 context 目录只剩 `mod.rs` 9 行与 `trace.rs` 8 行，共 17 行。
+- `superseded`：早期 `find "lime-rs/crates/agent-compat/src/context" ...` 曾显示 context 目录只剩 `mod.rs` 与 `trace.rs`；2026-07-10 已继续删除 root context 目录。
 - `validated`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package aster-core -- --check` 通过。
 - `validated`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-aster-context-service-clean-target" cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2` 通过，`Finished dev profile ... in 20.78s`；保留既有 `reqwest default-features` workspace warning。
 - `validated`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts" "internal/roadmap/astermigration/README.md" "internal/roadmap/astermigration/aster-capability-intake-execution-plan.md" "internal/roadmap/astermigration/refactor-v1-impact-audit.md"` 通过。
 - `validated`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，`144 passed`。
+
+### 4.24.10 Agent-compat integrated permission framework deletion
+
+当前状态：
+
+- Codex / refactor v1 口径确认 approval / permission 的 current owner 是 App Server RuntimeCore pending action、`agentSession/action/respond`、`tool-runtime::execution_approval`、Thread / Item read model 与输入区 approval prompt；不是 Aster staging crate 的 integrated permission / policy framework。
+- `agent-compat/src/permission/{audit,condition,integration,manager,merger,migration,pattern,policy,restriction,templates,types}*` 已删除；`permission/mod.rs` 不再导出 `ToolPermissionManager`、`ToolPolicyManager`、`PermissionContext`、`AuditLogger`、policy profile 或 parameter restriction surface。
+- `PermissionInspector` 已删除 optional integrated manager 分支，只保留当前 reply loop 仍需要的 legacy permission manager / readonly / regular tool 判定。
+- `ToolRegistry` 已删除 optional permission/audit manager、`with_managers(...)`、`set_permission_manager(...)`、`set_audit_logger(...)`、permission-context materialization 和 audit log hook。
+- `agents/tool_execution.rs` 已删除未调用的 ToolPermissionManager / AuditLogger helper；生产仍通过 Tool 自身 `check_permissions`、permission request callback、最小 `PermissionInspector`、`PermissionConfirmation` 和 `permission_judge` 维持 reply loop 过渡行为。
+
+判定：
+
+- `dead / deleted / forbidden-to-restore`：Aster integrated permission / policy / audit framework、registry-level optional permission/audit manager、ToolPermissionManager helper、policy profile / group / restriction / audit DTO。
+- `refactor-aligned current`：App Server RuntimeCore approval / pending action、`tool-runtime::execution_approval` 和 current tool permission projection。
+- `compat blocker`：最小 Aster `PermissionInspector` / `PermissionConfirmation` / `permission_judge` / `ToolPermissionStore` 仍服务 Aster reply loop，退出条件是 reply loop / Tool trait adapter 迁出后删除。
+- Thread / Turn / Item 归属：Turn 负责 permission preflight / approval lifecycle；Item / Evidence 只消费 current projection；被删除 framework 不进入 Thread / Turn / Item owner。
+
+退出条件：
+
+- `asterMigrationBoundary.test.ts` 持续要求 deleted permission framework paths 不存在，并禁止 `ToolPermissionManager` / `ToolPolicyManager` / `PermissionContext` / `AuditLogger`、`with_integrated_manager(...)`、registry `with_managers(...)` 等 surface 恢复。
+- R2/R4 完成后，继续删除最小 Aster permission adapter；不得把它升级为 current approval owner。
+
+验证记录：
+
+- `validated`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package aster-core -- --check` 通过。
+- `validated`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2` 通过。
+- `validated`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server -j 2` 通过；保留既有 `lime-agent` warning：`RuntimeReplyResponseEvent` unused import、`NativeRegistration::name` 未使用。
+- `validated`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts" "internal/roadmap/astermigration/README.md" "internal/roadmap/astermigration/phase6-continuation-tracker.md" "internal/roadmap/astermigration/refactor-v1-impact-audit.md"` 通过。
+- `validated`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，`151 passed`。
+- `validated`：`git diff --check -- "lime-rs/crates/agent-compat/src/permission" "lime-rs/crates/agent-compat/src/agents/tool_execution.rs" "lime-rs/crates/agent-compat/src/tools/registry.rs" "lime-rs/crates/agent-compat/src/tool_inspection.rs" "src/lib/governance/asterMigrationBoundary.test.ts" "internal/roadmap/astermigration/README.md" "internal/roadmap/astermigration/phase6-continuation-tracker.md" "internal/roadmap/astermigration/refactor-v1-impact-audit.md"` 通过。
 
 ### 4.25 Approval HITL session cache scope
 
@@ -1393,38 +1477,41 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 
 - Codex 对照确认 provider streaming 是 turn-scoped lifecycle，不应把 cancel poll、first event、first text、failure / cancellation reason 留在外部 framework 的局部实现里。
 - 本刀把 provider stream cancel poll interval、timeout outcome、event-boundary cancel outcome 和 stable cancel reason 的 target contract 建在 `model-provider::provider_stream`，作为 R2/R3 迁出后的 current owner 形状。
-- 已撤回 `agent-compat/src/agents/agent.rs` 对 `ProviderStreamPoll` / `ProviderStreamCancelReason` 的直接消费；该 staging 文件仍执行 Aster provider stream 和 tool loop，本地 cancel reason 字符串是待删除残留，不是 refactor v1 current 证据。
+- 2026-07-10 继续纠偏：`agent-compat` 不是保护区，已允许 staging loop 临时消费 `model-provider::provider_stream` current helper 来删除本地 provider stream poll policy。该文件仍执行 Aster provider stream 和 tool loop，消费 current helper只是缩短 compat blocker，不是 refactor v1 current 证据。
 
 判定：
 
 - `refactor-aligned current`：`model-provider::provider_stream::{ProviderStreamPoll, ProviderStreamCancelReason}`，归属 Turn provider stream lifecycle。
 - `compat blocker`：Aster `Agent::reply_with_provider(...)` / `reply_internal(...)` 仍执行 provider trait object stream、tool loop、session/event source。
-- `dead / guarded`：`agent-compat` 直接消费 `model-provider::provider_stream` poll helper。
+- `dead / guarded`：`agent-compat` 本地 provider stream poll policy、本地 cancel reason 字符串，或把消费 current poll helper写成迁移完成态。
 - Thread / Turn / Item 归属：Turn 负责 provider stream lifecycle；Item/read model 仍暂由 Aster event adapter 投影，后续必须迁到 current event source。
 
 退出条件：
 
-- `asterMigrationBoundary.test.ts` 持续要求 provider stream poll contract 存在于 `model-provider::provider_stream`，并禁止 `agent-compat` 生产代码 import current poll helper/type；`agent-compat` 本地 cancel reason 常量只作为 R2/R9 staging 残留追踪。
+- `asterMigrationBoundary.test.ts` 持续要求 provider stream poll contract 存在于 `model-provider::provider_stream`，并要求 `agent-compat` 生产代码消费 current poll helper；本地 cancel reason 常量和字符串不得恢复。
 - 后续把 provider stream start / event loop execution 从 Aster `reply_internal(...)` 迁出后，删除 `agent-compat` 中本地 cancel reason 字符串和整个 staging loop 残留。
 
 验证记录：
 
 - `passed`：`model-provider provider_stream` 单测 `23 passed`，Aster migration boundary guard `144 passed`，Prettier / rustfmt / `git diff --check` 均通过。
+- `passed`：2026-07-10 复验 `model-provider provider_stream`，`28 passed`；`lime-agent request_tool_policy`，`81 passed`。`agent-compat/src/agents/agent.rs` 已删除本地 provider stream cancel constants，并消费 `model-provider::provider_stream` current helper。
+- `passed`：2026-07-10 继续复验 `model-provider provider_stream`，`29 passed`；`lime-agent request_tool_policy`，`81 passed`。`provider_stream_first_text_delta_chars(...)` 已进入 `model-provider::provider_stream::text_delta`，`agent-compat` 只做 Aster `MessageContent::Text` 字符串投影。
 - `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/aster-provider-execution-module" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -- --nocapture`，`68 passed`；覆盖私有 `run_provider_reply_exit_source(...)` 退场点和现有 request policy 主链。
 
 ### 4.27 Provider reply execution runner
 
 当前状态：
 
-- `model-provider::provider_stream` 已新增 `RuntimeReplyProviderExecutionRunner<R>`、`RuntimeReplyProviderExecutionSource<R>` 与 `run_provider_source_execution(...)`，把 provider source backend trait implementation wrapper 下沉到 provider owner；`agent-runtime::reply_backend::RuntimeReplyProviderSourceExecution` 只负责把 Turn source request materialize 为 current execution payload。
+- `model-provider::provider_stream::source_execution` 已持有 `RuntimeReplyProviderSourceBackendCall`、`RuntimeReplyProviderSourceFuture`、`RuntimeReplyProviderExecutionRunner<R>`、`RuntimeReplyProviderExecutionSource<R>` 与 `run_provider_source_execution(...)`，把 provider source backend trait implementation wrapper 下沉到 provider owner 并从 `provider_stream.rs` 主文件拆出；`model-provider::provider_stream::response_event` 持有 `RuntimeReplyResponseEvent`、`RuntimeReplyResponseItem` 与 `RuntimeReplyResponseItemPayload`；`model-provider::provider_stream::poll` / `sampling` 分别持有 provider poll/cancel policy 与 provider sampling / empty-first-content retry policy。`agent-runtime::reply_stream` 只 re-export DTO 并保留 materializer / projection；`agent-runtime::reply_backend::RuntimeReplyProviderSourceExecution` 只负责把 Turn source request materialize 为 current execution payload，并由 default/provider source helper 在进入 provider backend 前统一完成 materialization。
 - `request_tool_policy/provider_reply_exit_source.rs` 只保留私有 `ProviderReplyExitRunner` 作为 Aster provider reply 最后一跳退场实现；`ProviderReplyExitSource` 已退化为 `model-provider::provider_stream::RuntimeReplyProviderExecutionSource<ProviderReplyExitRunner>` type alias，不再直接实现 provider source backend 或调用 `run_provider_reply_exit_source(self.agent, self.provider, call)`。
+- `agent-compat/src/prompts` 空目录残留已删除；prompt template surface 继续按 `dead / deleted / forbidden-to-restore` 处理，不能作为 staging crate 可保留面。
 - Codex 对照确认下一刀应迁向 provider `ResponseEvent` / `ResponseItem` stream contract：Codex 在 `codex-api` 规整 provider stream event，在 `core/src/session/turn.rs` 消费 response item loop，并经 `ToolRouter` / `ToolCallRuntime` 执行工具；Lime 不应把 Aster `AgentEvent` 长期作为 current stream event。
 
 判定：
 
-- `refactor-aligned current skeleton`：`model-provider::provider_stream::{RuntimeReplyProviderExecutionRunner, RuntimeReplyProviderExecutionSource, run_provider_source_execution}`，归属 provider source backend wrapper；`agent-runtime::reply_backend::RuntimeReplyProviderSourceExecution` 归属 Turn execution payload materialization。
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::source_execution::{RuntimeReplyProviderExecutionRunner, RuntimeReplyProviderExecutionSource, run_provider_source_execution}`、`model-provider::provider_stream::response_event::{RuntimeReplyResponseEvent, RuntimeReplyResponseItem, RuntimeReplyResponseItemPayload}`、`model-provider::provider_stream::{poll,sampling}`，归属 provider source backend wrapper、provider response event/item contract、provider poll/cancel 与 sampling policy；`agent-runtime::reply_backend::{RuntimeReplyProviderSourceExecution, run_default_provider_source_backend, run_provider_source_backend}` 归属 Turn execution payload materialization；`agent-runtime::reply_stream::RuntimeReplyResponseMaterializer` 归属 Turn Item projection。
 - `compat blocker`：`ProviderReplyExitRunner` / `run_provider_reply_exit_source(...)` 仍依赖 Aster `Agent` host、Aster provider trait object、Aster `Message` / `SessionConfig` lowering 和 Aster stream projector。
-- `dead / guarded`：provider reply exit source impl 自己从 backend call 拆 execution、backend adapter 恢复 provider source implementation、`agent-compat` 反向依赖 current owner。
+- `dead / guarded`：provider reply exit source impl 自己从 backend call 拆 execution、backend adapter 恢复 provider source implementation、`agent-runtime` 重新定义 provider response DTO、`agent-compat` 反向依赖 current owner。
 - Thread / Turn / Item 归属：Turn owner 只承接 execution payload 与 backend call handoff，provider owner 承接 backend wrapper；Item/read model 仍未脱离 Aster event projector，必须由下一刀的 response event/item stream contract 继续推进。
 
 退出条件：
@@ -1434,16 +1521,18 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 
 验证记录：
 
-- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-execution-runner-agent-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p agent-runtime reply_backend --lib -- --nocapture`，`19 passed`。
-- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-execution-runner-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -- --nocapture`，`68 passed`。
-- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`144 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-response-event-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`25 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-response-event-agent-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p agent-runtime reply_stream --lib -j 1 -- --nocapture`，`26 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-response-event-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`151 passed`。
+- `validated`：2026-07-10 子模块化后复验 `model-provider provider_stream`，`42 passed`；`agent-runtime reply_backend`，`20 passed`；`lime-agent request_tool_policy`，`81 passed`；`asterMigrationBoundary.test.ts`，`165 passed`。随后继续拆出 `poll.rs`、`sampling.rs`、`response_event.rs` 并复验 `model-provider provider_stream`，`42 passed`；`lime-agent request_tool_policy`，`81 passed`；`asterMigrationBoundary.test.ts`，`167 passed`。`provider_stream.rs` 当前约 `701` 行，`source_execution.rs` 约 `105` 行；provider source execution / poll / sampling / response event contract 不得回流到 `agent-runtime`、`agent-compat` 或 `provider_stream.rs` 主文件。
 
 ### 4.28 Provider response event stream materializer
 
 当前状态：
 
 - Codex 对照确认 provider stream current 形状应先规整成 typed `ResponseEvent` / `ResponseItem`，再由 Turn loop 和 tool router materialize Item / tool lifecycle，而不是直接暴露外部 agent framework event。
-- `agent-runtime::reply_stream::RuntimeReplyResponseEvent` 已承接 Lime-owned response stream event skeleton，覆盖 `OutputItemAdded`、`OutputItemDone`、`TextDelta`、`ToolCallInputDelta`、`ReasoningDelta`、`Completed`、`RateLimits`。
+- `model-provider::provider_stream::RuntimeReplyResponseEvent` 已承接 Lime-owned response stream event skeleton，覆盖 `OutputItemAdded`、`OutputItemDone`、`TextDelta`、`ToolCallInputDelta`、`ReasoningDelta`、`Completed`、`RateLimits`；`agent-runtime::reply_stream` 只 re-export provider response DTO 并保留 Turn-side materializer / projection。
 - `agent-runtime::reply_stream::RuntimeReplyResponseMaterializer` 已把 response event materialize 为 current projection：`OutputItemAdded` / `OutputItemDone` -> `ItemStarted` / `ItemCompleted`，`ReasoningDelta` -> `ThinkingDelta` + `ItemUpdated`，`ToolCallInputDelta` -> 带累积参数的 `ToolInputDelta`，并在工具名可识别或已由 `OutputItemAdded` 记录时同步投影 `ItemUpdated` 工具项；未知工具名 fail-closed，不伪造 item；`Completed` -> `Done`，`RateLimits` -> rate-limit provider stream event。
 - `RuntimeReplyStreamEvent<E>` 已新增 `ResponseEvent(RuntimeReplyResponseEvent)`；`request_tool_policy/agent_reply_stream.rs` 已真实消费该 variant，并把 response projection 适配到现有 `RuntimeAgentEvent` / timeline item 主链。非文本 response delta 不再被吞掉。
 - `request_tool_policy/aster_reply_stream_adapter.rs::AsterReplyStreamProjector` 已把 Aster Message text/thinking/tool-input delta、direct `AgentEvent::ToolInputDelta` 和可表达为 provider response item 的 `ItemStarted` / `ItemCompleted` 前移成 `RuntimeReplyResponseEvent`；Aster source adapter 不再让工具参数流或 provider item lifecycle 直接绕过 current response materializer。不属于 provider response item 的 payload 继续保留原 runtime event，避免信息丢失。
@@ -1451,7 +1540,7 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 
 判定：
 
-- `refactor-aligned current skeleton`：`RuntimeReplyResponseEvent` / `RuntimeReplyResponseMaterializer`，归属 Turn provider response stream contract 与 response item materialization skeleton。
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::RuntimeReplyResponseEvent` / `RuntimeReplyResponseItem` / `RuntimeReplyResponseItemPayload` 归属 provider response stream contract；`agent-runtime::reply_stream::RuntimeReplyResponseMaterializer` 归属 Turn response item materialization skeleton。
 - `transitional current adapter`：`agent_reply_stream.rs::runtime_agent_events_from_response_event(...)`，暂时把 response projection 适配到现有 `RuntimeAgentEvent` / timeline item 主链；后续应改为正式 Item materializer / read model owner。
 - `compat blocker`：`ProviderReplyExitSource`、`run_provider_reply_exit_source(...)`、Aster `Agent::reply_with_provider(...)` 和 `AsterReplyStreamProjector` 仍是 provider/reply loop 最后一跳；Aster `Message` 反推 provider notification / inline provider error 仍是迁移期兼容输入。
 - `dead / guarded`：response event 只消费 text delta、吞掉 tool input / reasoning / item / completed / rate limits、provider response item lifecycle 或工具参数 item update 绕过 materializer，或把 Aster `AgentEvent` 当长期 current stream event contract。
@@ -1478,6 +1567,845 @@ Approval decision 不属于 Aster vendor、Aster tool adapter 或 `runtime_tool_
 - `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/response-event-mapper-agent-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p agent-runtime reply_stream --lib -j 1 -- --nocapture`，`26 passed`；覆盖 provider accumulated tool input delta、unknown tool name fail-closed、item lifecycle、reasoning、completed 和 rate limits。
 - `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/response-event-nontext-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`；证明 current response projection adapter 已穿过 `lime-agent` request policy 主链。
 - `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`147 passed`。
+
+### 4.29 Provider sampling policy owner
+
+当前状态：
+
+- `model-provider::provider_stream` 已承接 `RuntimeReplyProviderSamplingRequest` 与 `RuntimeReplyProviderSamplingMode`，用于表达 provider / model / message count / tool count / system chars / tool surface / streaming support 这些采样决策输入。
+- `model-provider::provider_stream` 已承接 `PROVIDER_EMPTY_STREAM_RETRY_MARKER` 与 `provider_stream_should_retry_empty_first_content(...)`，把 Anthropic empty-first-content retry 判定从 Aster reply loop 本地硬编码前移到 provider owner。
+- `agent-compat/src/agents/reply_parts.rs` 只消费上述 current helper，以继续驱动尚未删除的 Aster provider reply 最后一跳；这属于 R2/R3 compat blocker 收缩，不是 `agent-compat` 成为 provider sampling owner。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::{RuntimeReplyProviderSamplingRequest, RuntimeReplyProviderSamplingMode, provider_stream_should_retry_empty_first_content, PROVIDER_EMPTY_STREAM_RETRY_MARKER}`，归属 provider sampling / retry policy。
+- `compat blocker`：`agent-compat/src/agents/reply_parts.rs::stream_response_from_provider(...)` 仍执行 Aster provider loop 和 non-stream fallback；它只能引用 current helper，不能新增 provider sampling policy。
+- `dead / guarded`：在 `agent-compat` 重新硬编码 `"Anthropic stream ended without assistant content or tool call"`，或把 provider sampling request/mode 定义回 `agent-runtime` / `agent-compat`。
+- Thread / Turn / Item 归属：provider owner 负责 sampling policy；Turn owner 只消费 provider execution payload；Item/read model 不应依赖 Aster reply loop 的 provider sampling 分支。
+
+退出条件：
+
+- `run_provider_reply_exit_source(...)` 删除后，provider stream sampling 与 retry 由 `model-provider` current backend 直接调用，`agent-compat/src/agents/reply_parts.rs` 不再被生产 reply path 命中。
+- `model-provider/src/provider_stream.rs` 继续增长前拆出 response / sampling 子模块，避免 provider owner 中心文件继续膨胀。
+
+验证记录：
+
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core --package lime-agent -- --check`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-sampling-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`28 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-sampling-agent-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p agent-runtime reply_stream --lib -j 1 -- --nocapture`，`26 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-sampling-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`152 passed`。
+
+### 4.30 Response event adapter naming split
+
+当前状态：
+
+- `request_tool_policy/response_event_adapter.rs` 已承接 `RuntimeAgentEvent` -> `RuntimeReplyResponseEvent` 的过渡映射，以及 `AgentThreadItem` 中可表达 provider response item 的 payload projection。
+- `request_tool_policy/aster_reply_stream_adapter.rs` 降回 Aster source adapter：只读取 Aster `AgentEvent` / `Message`，抽取 provider side-channel notification、inline provider error，并生成 response hints 后委托 current adapter。
+- `asterMigrationBoundary.test.ts` 已把守卫从“要求 Aster 文件持有 response mapper”改为“要求非 Aster 文件持有 response mapper，并禁止 Aster 文件重新持有 response item projection”。
+
+判定：
+
+- `refactor-aligned transitional current adapter`：`request_tool_policy/response_event_adapter.rs`，负责 current response event 过渡映射。
+- `compat blocker`：`AsterReplyStreamProjector` 仍消费 Aster source stream，直到 provider source 直接产出 Lime-owned response event。
+- `dead / guarded`：在 `aster_reply_stream_adapter.rs` 重新定义 `RuntimeAgentResponseEventMapper`、`response_item_from_agent_thread_item(...)` 或直接持有 response item lifecycle projection。
+- Thread / Turn / Item 归属：Turn response event materialization 不再挂在 Aster 命名文件；Item/read model projection 仍通过现有 timeline item 过渡接线。
+
+退出条件：
+
+- provider source 直接产出 `RuntimeReplyResponseEvent` / response item stream 后，删除 `AsterReplyStreamProjector` 与 Aster `Message` hint 生成。
+- response event adapter 后续迁入更合适的 owner，或被直接 provider response stream 替代；不得回流到 Aster 命名文件。
+
+验证记录：
+
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/response-event-adapter-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`153 passed`。
+
+### 4.31 Provider tool-input delta policy owner
+
+当前状态：
+
+- `model-provider::provider_stream::tool_input_delta` 已承接 provider tool-input delta 的 current policy：整条 provider message 必须全是 tool-input delta，空 `call_id` / 空 `delta` 跳过，并统一构造 `RuntimeReplyResponseEvent::ToolCallInputDelta`。
+- `agent-compat/src/agents/agent.rs` 只把 Aster `MessageContent::ToolInputDelta` 投影成 `RuntimeReplyProviderToolInputDelta`，再把 current response event 映射回临时 `AgentEvent`，用于维持尚未删除的 Aster provider stream source。
+- 这属于削薄 `agent-compat` staging loop，不是让 `agent-compat` 成为 current owner；它仍必须迁出或删除。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::{RuntimeReplyProviderToolInputDelta, provider_stream_tool_input_delta_events}`，归属 provider response event policy。
+- `compat blocker`：Aster `MessageContent` 仍是 provider stream item source，`collect_provider_tool_input_delta_events(...)` 仍存在于 staging loop 作为 source adapter。
+- `dead / guarded`：在 `agent-compat` 本地恢复 tool-input delta 空值过滤、message-content 全量判定或 current response event 构造规则。
+- Thread / Turn / Item 归属：provider owner 负责 response delta policy；Turn/Item materializer 消费 `RuntimeReplyResponseEvent::ToolCallInputDelta`；Aster source adapter 只做临时 DTO 投影。
+
+退出条件：
+
+- provider source 直接产出 `RuntimeReplyResponseEvent::ToolCallInputDelta` 后，删除 `agent-compat` 的 `collect_provider_tool_input_delta_events(...)` 和 Aster `MessageContent` 投影。
+- `ToolCallInputDelta` 进入 current tool router / `tool-runtime` execution 后，删除 Aster native `ToolRegistry` / `Tool` trait 壳。
+
+验证记录：
+
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core -- --check`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-tool-input-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`32 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-tool-input-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+
+### 4.32 Provider model-change policy owner
+
+当前状态：
+
+- `model-provider::provider_stream::model_change` 已承接 provider active model -> lead / worker / unknown 的 metadata policy。
+- `agent-compat/src/agents/agent.rs` 只从 Aster lead-worker provider 读取 `usage.model`、lead model 和 worker model，再调用 current helper 生成临时 `AgentEvent::ModelChange`。
+- 这属于削薄 Aster provider loop；`agent-compat` 仍是待迁出 source adapter，不是 model-change owner。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::{RuntimeReplyProviderModelChange, RuntimeReplyProviderModelChangeMode, provider_stream_model_change}`，归属 provider metadata / stream policy。
+- `compat blocker`：Aster `LeadWorkerProviderTrait`、Aster usage DTO 与 `AgentEvent::ModelChange` 仍是 source / sink adapter。
+- `dead / guarded`：在 `agent-compat` 本地恢复 `active_model == lead_model` / `active_model == worker_model` 字符串分类，或把 lead-worker provider trait 继续扩成 current owner。
+- Thread / Turn / Item 归属：provider owner 负责 active model metadata policy；Turn/Item 只消费 current provider response / runtime event projection。
+
+退出条件：
+
+- provider execution 迁出 Aster 后，由 current provider backend 直接产出 model-change metadata 或 provider trace metadata；删除 `agent-compat` 中这段 lead-worker source adapter。
+
+验证记录：
+
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-model-change-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`33 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-model-change-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+
+### 4.33 Provider stream notification envelope owner
+
+当前状态：
+
+- `model-provider::provider_stream::notification` 已承接 provider stream side-channel notification 的 current envelope 和 text classification：`provider_stream_notification_text(...)` 构造 JSON payload text，`provider_stream_notification_payload_from_text(...)` / `provider_stream_notification_payload_from_texts(...)` 解析 text，`provider_stream_has_notification_text(...)` 判定文本集合是否包含 provider notification，`PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX` 固定为 `__provider_stream_event__:`。
+- `agent-compat/src/providers/formats/openai_responses.rs` 不再定义 `PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX` 或 `PROVIDER_STREAM_EVENT_KIND_SAFETY_BUFFERING`，只把 current notification text 包成 Aster `SystemNotification`；`agent-compat/src/agents/agent.rs` 不再 import Aster format 判断函数，只把 Aster system notification 文本投影给 current helper。
+- 旧内部 prefix `__aster_provider_stream_event__:` 已直接下线；当前没有外部客户或持久化兼容要求，不为 Aster 命名保留双轨。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::{provider_stream_notification_text, provider_stream_notification_payload_from_text, provider_stream_notification_payload_from_texts, provider_stream_has_notification_text, PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX}`，归属 provider stream event envelope / text classification。
+- `compat blocker`：Aster `Message` / `SystemNotification` 仍作为 provider side-channel source container，`aster_reply_stream_adapter.rs` 仍从 Aster message 读取 payload 后委托 `RuntimeReplyProviderStreamEvent::from_notification_payload(...)`。
+- `dead / guarded`：在 Aster Responses 格式文件里恢复 notification prefix、event kind、JSON envelope 组包/解析规则，恢复 `__aster_provider_stream_event__:`，或让 `agent.rs` 重新 import Aster format 判断函数。
+- Thread / Turn / Item 归属：provider owner 负责 provider stream event envelope；Turn stream projection 只消费 typed `RuntimeReplyProviderStreamEvent`；Item/read model 不依赖 Aster notification text。
+
+退出条件：
+
+- provider source 直接产出 Lime-owned provider stream event 后，删除 Aster `SystemNotification` side-channel 和 `provider_stream_event_notification_payload_from_message(...)`。
+- `run_provider_reply_exit_source(...)` 删除后，Aster Responses 格式文件不再作为 current provider notification source。
+
+验证记录：
+
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-notification-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`32 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-notification-aster-core" cargo test --manifest-path "lime-rs/Cargo.toml" -p aster-core responses_streaming_safety_buffering --lib -j 1 -- --nocapture`，`1 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-notification-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+
+### 4.34 Provider stream progress / milestone policy owner
+
+当前状态：
+
+- `model-provider::provider_stream::progress` 已承接 provider stream first event、first content、first text delta 与 empty-first-content retry state。
+- `agent-compat/src/agents/agent.rs` 只在 current progress helper 返回 milestone 时构造临时 `AgentEvent::ProviderTrace`；`agent-compat/src/agents/reply_parts.rs` 只从 Aster `Message` 投影文本并调用 current helper。
+- 这属于削薄 Aster provider loop；`agent-compat` 仍是待迁出 source adapter，不是 progress state owner。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::RuntimeReplyProviderStreamProgress`，归属 provider stream progress / milestone policy。
+- `compat blocker`：Aster provider trait object stream、Aster `Message` 与 local `ProviderTraceEvent` 仍是 source / sink adapter。
+- `dead / guarded`：在 `agent-compat` 本地恢复 `provider_first_event_seen`、`provider_first_text_delta_seen`、`first_provider_content_seen` 或 `first_provider_text_delta_seen`。
+- Thread / Turn / Item 归属：provider owner 负责 stream milestone state；Turn trace / Item projection 只消费 materialized provider events。
+
+退出条件：
+
+- provider execution 迁出 Aster 后，由 current provider backend 直接维护 stream progress 并产出 current provider trace / response event；删除 `agent-compat` 中这段 milestone source adapter。
+
+验证记录：
+
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core -- --check`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`34 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`153 passed`。
+
+### 4.35 Provider failure logging classification owner
+
+当前状态：
+
+- `model-provider::provider_stream::failure` 已承接 provider failure kind、retryable、non-retryable rejection 到 error/warn 日志等级的 current policy。
+- `agent-compat/src/agents/agent.rs` 只把 Aster `ProviderError` 投影成 `RuntimeReplyProviderFailure`，不再本地维护 `ProviderError::ServerError | ExecutionError | UsageError` 的日志等级匹配，也不再直接调用 `ProviderError::message_is_non_retryable_provider_rejection(...)` 判定 session description warn/debug。
+- `lime-agent` 的 `aster_session_store_tests.rs` 只补测试 fixture builder，避免 `Recipe` DTO 变化阻塞 current provider policy 验证；这不是恢复 Aster recipe runtime。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::{RuntimeReplyProviderFailure, RuntimeReplyProviderFailureKind, provider_stream_failure_should_log_as_error, provider_stream_failure_message_should_log_as_warning}`，归属 provider failure classification。
+- `compat blocker`：Aster `ProviderError` 仍是 provider/reply loop source error，`agent-compat` 仍只是 source adapter。
+- `dead / guarded`：在 `agent-compat` 本地恢复 `matches!(ProviderError::ServerError | ExecutionError | UsageError)`、`ProviderError::message_is_non_retryable_provider_rejection(...)` 日志决策，或把 provider failure classification 写回 Aster error 类型。
+- Thread / Turn / Item 归属：provider owner 负责 failure classification；Turn loop 只消费分类结果决定临时日志等级；Item/read model 不依赖 Aster error variant。
+
+退出条件：
+
+- provider execution 迁出 Aster 后，由 current provider backend 直接构造 provider failure facts；删除 `agent-compat` 的 `ProviderError` source adapter。
+- `ProviderReplyExitSource` 删除后，provider failure classification 不再通过 Aster reply loop 间接消费。
+
+验证记录：
+
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core --package lime-agent -- --check`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-failure-policy-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`36 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`153 passed`。
+
+### 4.36 Provider plaintext tool-use normalization owner
+
+当前状态：
+
+- `model-provider::provider_stream::plaintext_tool_use` 已承接 provider 输出中的 `<tool_use>` XML block、JSON code fence、`WebSearch` / `Search` inline alias 和 split-stream tool input delta progress。
+- `agent-compat/src/agents/reply_parts.rs` 只把 Aster `MessageContent::Text` 投影成字符串，再把 current DTO 装回临时 `CallToolRequestParam` / `MessageContent::ToolInputDelta`，不再本地持有 marker、XML attribute、JSON fence、Search alias 或 tag scanning parser。
+- 这属于 provider stream normalization 外迁；Aster `Message` / Aster provider stream 仍是 source adapter，不是迁移完成态。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::{RuntimeReplyProviderPlaintextToolCall, RuntimeReplyProviderPlaintextToolUse, RuntimeReplyProviderPlaintextToolUseProgress, provider_stream_plaintext_tool_uses, provider_stream_plaintext_tool_use_progress}`，归属 provider output normalization。
+- `compat blocker`：Aster `Message` / `CallToolRequestParam` 仍是 provider/reply loop source adapter。
+- `dead / guarded`：在 `agent-compat` 本地恢复 `PLAINTEXT_TOOL_USE_OPEN_MARKER`、`extract_plaintext_tool_use_name`、`extract_xml_attribute`、`strip_json_code_fence`、`parse_plaintext_tool_use_arguments`、`find_next_plaintext_tool_tag` 或 Search alias parser owner。
+- Thread / Turn / Item 归属：provider owner 负责 provider text -> structured tool call / tool input delta normalization；Turn loop 暂时消费 current DTO 并通过 Aster source adapter 回填，Item/read model 继续通过 response materializer 过渡。
+
+退出条件：
+
+- provider execution 迁出 Aster 后，由 current provider backend 直接产出 `RuntimeReplyResponseEvent::ToolCallInputDelta` 或 provider response item；删除 `reply_parts.rs` 中的 Aster `Message` 装配层。
+- `ProviderReplyExitSource` 删除后，plaintext tool-use normalization 不再通过 Aster `Message` 间接消费。
+
+验证记录：
+
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core --package lime-agent -- --check`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-plaintext-tool-use-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`39 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`154 passed`。
+
+### 4.37 Provider image input policy owner
+
+当前状态：
+
+- `model-provider::provider_stream::image_input` 已承接 provider image input policy：canonical model image modality lookup、turn runtime `image_input_policy` / `imageInputPolicy` 解析，以及 model capability + runtime policy 组合后的 image omission decision。
+- `agent-compat/src/agents/reply_parts.rs` 不再直接依赖 `model_provider::canonical::maybe_get_canonical_model`，也不再本地维护 `image_input_policy` parser；它只读取当前 turn 的 `lime_runtime` metadata，并在 provider 请求前做 Aster `MessageContent::Image` / rmcp image content stripping。
+- 这属于 provider request normalization 外迁；Aster `Message` / `ToolResponse` 仍是 source adapter，不是迁移完成态。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::{RuntimeReplyProviderImageInputPolicy, provider_stream_model_supports_image_input, provider_stream_image_input_policy_disables_provider_images, provider_stream_should_omit_image_input}`，归属 provider request image input policy。
+- `compat blocker`：Aster `MessageContent::Image` / `ToolResponse` 仍是 provider request source adapter，`reply_parts.rs` 仍负责把图片内容从 Aster message 形状中剥离。
+- `dead / guarded`：在 `agent-compat` 本地恢复 `model_config_supports_image_input(...)`、`image_input_policy_disables_provider_images(...)`、`LIME_RUNTIME_IMAGE_INPUT_POLICY_KEY` parser 或 direct `maybe_get_canonical_model` lookup。
+- Thread / Turn / Item 归属：provider owner 负责 provider image capability / runtime policy 判定；Turn adapter 暂时做 Aster message stripping；Item/read model 不依赖 Aster image policy。
+
+退出条件：
+
+- provider execution 迁出 Aster 后，由 current provider backend 直接依据 `model-provider` image input policy lower provider request；删除 `reply_parts.rs` 中 Aster message image stripping adapter。
+- `ProviderReplyExitSource` 删除后，provider image input policy 不再通过 Aster `Message` 间接消费。
+
+验证记录：
+
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-image-input-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`42 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-image-input-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`157 passed`。
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core --package lime-agent -- --check`、`npx prettier --check ...`、`git diff --check -- ...`。
+
+### 4.38 Turn tool surface / scope policy owner
+
+当前状态：
+
+- `tool-runtime::turn_tool_surface` 已承接 turn-level tool surface / scope 纯策略：`direct_answer` / `local_workspace` / `compact_tools` 工具面、turn metadata 中 allowed / disallowed tools、prompt guidance、extension prompt context 与 workspace hints 判定。
+- `agent-compat/src/agents/reply_parts.rs` 不再本地维护 `normalize_turn_metadata_tool_list`、`matches_turn_tool_scope`、tool surface 常量或 prompt policy；它只读取 current turn metadata，并把 Aster `ToolRegistry::canonical_name(...)` 作为迁移期 alias resolver 传给 `tool-runtime`。
+- 这属于 Turn tool planning / tool surface policy 外迁；Aster `ToolRegistry` / rmcp `Tool` 仍是未迁 reply loop 的 source adapter，不是迁移完成态。
+
+判定：
+
+- `refactor-aligned current skeleton`：`tool-runtime::turn_tool_surface::{RuntimeTurnToolSurfaceMode, RuntimeTurnToolScope, runtime_turn_tool_surface_mode_from_metadata, runtime_turn_tool_scope_from_metadata, runtime_turn_tool_surface_allows_tool_name, runtime_turn_tool_scope_allows_tool_name}`，归属 Turn tool surface / scope policy。
+- `compat blocker`：Aster `ToolRegistry` / rmcp `Tool` 仍服务未迁 reply loop native tool surface；`reply_parts.rs` 仍负责把 current policy 套到 Aster-shaped tool list。
+- `dead / guarded`：在 `agent-compat` 本地恢复 turn tool surface/scope parser、prompt policy 或本地 `LIME_RUNTIME_TOOL_SURFACE_KEY` / `LOCAL_WORKSPACE_TOOL_NAMES` / `COMPACT_TOOL_SURFACE_TOOL_NAMES` owner。
+- Thread / Turn / Item 归属：Turn 负责本回合模型可见工具面与工具 scope；Item/read model 不参与策略判定；Evidence 只消费后续 tool lifecycle / approval projection。
+
+退出条件：
+
+- R4 native tool registry 迁出 Aster 后，`tool-runtime` current tool planner 直接接收 current tool definitions / native dispatch surface，不再通过 Aster `ToolRegistry::canonical_name(...)`。
+- R2/R3 provider reply loop 删除后，`reply_parts.rs` 中的 Aster `Tool` list 过滤 adapter 随 source adapter 一并删除。
+
+验证记录：
+
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/turn-tool-surface-tool-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime turn_tool_surface --lib -j 1 -- --nocapture`，`5 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-image-input-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`162 passed`。
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime --package aster-core --package lime-agent -- --check`。
+
+#### 4.38.1 Tool exposure / registration gate owner
+
+当前状态：
+
+- `tool-runtime::turn_tool_surface` 已继续承接 tool exposure / registration gate 纯策略：MCP resource-gated tools、PowerShell registration gate、subagent native/coordination/team tool allowlist 和 extension-prefixed tool exposure。
+- `agent-compat/src/agents/agent.rs` 不再维护 `RESOURCE_GATED_TOOL_NAMES`、`SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES`、`SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES`、`SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES` 或 `is_extension_prefixed_tool(...)`；它只把 Aster `SessionType`、resource support、team state 与 `Agent` / `StructuredOutput` 名称适配给 current helper。
+- `agent-compat/src/tools/mod.rs` 不再维护 `CurrentSurfaceToolGates`、PowerShell env parser 或 `should_register_current_surface_tool(...)`；它只在注册 Aster `Tool` trait fallback 时调用 current gate。
+- `agent-compat/src/session/mod.rs` 不再 re-export 零引用 `SessionPlanModeState`；Aster plan-mode tool 已删除，session extension state 不能继续作为 public root surface 续命。
+
+判定：
+
+- `refactor-aligned current skeleton`：`tool-runtime::turn_tool_surface::{RuntimeToolSurfaceGates, runtime_tool_surface_gates_from_env_map, runtime_tool_surface_should_register_name, runtime_registered_tool_exposure_allows_tool_name, runtime_turn_tool_exposure_allows_tool_name}`，归属 Turn tool lifecycle / model-visible tool surface owner。
+- `compat blocker`：Aster `ToolRegistry` / `Tool` / `ToolContext` 与 Aster `SessionType` 仍服务未迁 reply loop fallback。
+- `dead / guarded`：在 `agent-compat` 本地恢复 resource gate、subagent allowlist、extension-prefixed tool exposure、PowerShell registration gate owner 或 `SessionPlanModeState` public re-export。
+- Thread / Turn / Item 归属：Turn 负责工具可见性、注册 gate 与 subagent tool exposure；Thread 只提供 session/team metadata；Item/read model 只消费后续工具调用和结果投影。
+
+退出条件：
+
+- R4 native registry fallback 删除后，`agent-compat` 不再注册或过滤 Aster `Tool` trait 壳，tool exposure 直接由 current tool router / planner 消费。
+- R2/R3 provider reply loop 删除后，`Agent` / `StructuredOutput` 等迁移期 tool name adapter 不再通过 Aster `Agent` 文件传递。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/tool-runtime/src/turn_tool_surface.rs" "lime-rs/crates/agent-compat/src/agents/agent.rs" "lime-rs/crates/agent-compat/src/tools/mod.rs" "lime-rs/crates/agent-compat/src/session/mod.rs"`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/turn-tool-exposure-tool-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime turn_tool_surface --lib -j 1 -- --nocapture`，`8 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+- `passed`：`npx prettier --check ...` 与 `git diff --check -- ...`。
+
+### 4.39 Tool call surface normalization owner
+
+当前状态：
+
+- `tool-runtime::tool_call_surface` 已承接 provider/reply loop 工具调用 surface normalization：available tool exact / case-insensitive match、canonical alias 结果落回当前 surface name、`Read` 的 `file_path` / `filePath` / `head` 参数兼容，以及 `Glob` / `Grep` 的 `query -> pattern` 参数兼容。
+- `agent-compat/src/agents/reply_parts.rs` 不再本地维护 `current_surface_tool_name`、`normalize_current_surface_tool_call`、`normalize_current_surface_tool_arguments`、`integer_argument` 或 `copy_string_argument_if_missing`；它只把 Aster `ToolRegistry::canonical_name(...)` 与 `rmcp::CallToolRequestParam` 作为迁移期输入适配给 `tool-runtime`。
+- 这属于 Turn tool routing / current tool surface normalization 外迁；Aster `ToolRegistry` / rmcp `Tool` / native `Tool` trait 执行仍是未迁 reply loop source adapter，不是迁移完成态。
+
+判定：
+
+- `refactor-aligned current skeleton`：`tool-runtime::tool_call_surface::{runtime_tool_call_surface_name, runtime_tool_call_normalize_arguments}`，归属 Turn tool routing / tool call normalization。
+- `compat blocker`：Aster `ToolRegistry`、rmcp `Tool` 与 Aster native `Tool` trait 仍服务未迁 reply loop native tool execution；`reply_parts.rs` 仍负责把 Aster-shaped tool call 投影给 current helper。
+- `dead / guarded`：在 `agent-compat` 本地恢复工具名 exact / case-insensitive match、canonical alias surface mapping、`Read` / `Glob` / `Grep` 参数补齐 helper。
+- Thread / Turn / Item 归属：Turn 负责工具调用进入 current tool surface 前的 normalization；Tool lifecycle 后续必须进入 `tool-runtime` executor；Item/read model 只消费已执行工具事件和结果，不参与参数补齐。
+
+退出条件：
+
+- R4 native tool registry 迁出 Aster 后，tool call normalization 直接作用在 current tool definitions / native dispatch surface，不再通过 Aster `ToolRegistry::canonical_name(...)`。
+- R2/R3 provider reply loop 删除后，`reply_parts.rs` 中的 `rmcp::CallToolRequestParam` 适配层随 source adapter 一并删除。
+
+验证记录：
+
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/tool-call-surface-tool-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime tool_call_surface --lib -j 1 -- --nocapture`，`5 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-image-input-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`164 passed`。
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime --package aster-core --package lime-agent -- --check`。
+
+### 4.40 Provider response content owner
+
+当前状态：
+
+- `model-provider::provider_stream::response_content` 已承接 provider response content 的 current 组合入口：`RuntimeReplyProviderResponseContent`、`provider_stream_response_text_chars(...)`、`provider_stream_response_has_notification_text(...)`、`provider_stream_response_tool_input_delta_events(...)`。
+- `agent-compat/src/agents/agent.rs` 不再直接组合 `provider_stream_first_text_delta_chars(...)`、`provider_stream_tool_input_delta_events(...)`、`provider_stream_has_notification_text(...)` 或 `RuntimeReplyProviderToolInputDelta`；它只把 Aster `MessageContent` 适配成 current `RuntimeReplyProviderResponseContent`。
+- 这属于 provider stream content interpretation 外迁；Aster `MessageContent` 仍是未迁 provider source container，不是迁移完成态。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::response_content`，归属 Provider response content contract。
+- `compat blocker`：Aster `MessageContent` / `AgentEvent` projector 仍服务 `ProviderReplyExitSource`，`run_provider_reply_exit_source(...)` 仍调用 `Agent::reply_with_provider(...)`。
+- `dead / guarded`：在 `agent-compat` 本地恢复 provider response text / notification / tool-input delta 直接规则，或把 `RuntimeReplyProviderResponseContent` helper 消费写成 R2/R3 完成态。
+- Thread / Turn / Item 归属：Provider owner 负责 response content 解释；Turn owner 负责 materialization；Item/read model 只消费 materialized projection。
+
+退出条件：
+
+- `ProviderReplyExitSource` 删除后，provider response content 不再通过 Aster `MessageContent` 间接消费。
+- provider source backend 直接产出 Lime-owned response event / item stream，不再经过 Aster `AgentEvent` projector。
+
+验证记录：
+
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-response-content-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`44 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`168 passed`。
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core --package lime-agent -- --check`。
+
+### 4.41 Provider failure category projection owner
+
+当前状态：
+
+- `model-provider::provider_stream::failure` 已承接 provider telemetry category 到 current failure DTO 的映射：`RuntimeReplyProviderFailureKind::from_category(...)` / `as_category(...)` 与 `RuntimeReplyProviderFailure::from_category(...)`。
+- `agent-compat/src/agents/agent.rs` 不再维护 `provider_failure_kind(...)` 或 `ProviderError::* -> RuntimeReplyProviderFailureKind` 本地分支；它只把 Aster `ProviderError` 暴露的 category / retryable / non-retryable rejection 事实投影给 current DTO。
+- `agent-compat/src/agents/provider_trace.rs` 不再直接依赖 `crate::providers::errors::ProviderError`；failed trace event 只消费 current `RuntimeReplyProviderFailure`。这一步减少 provider trace 与 Aster provider error enum 的耦合，但不宣称 R2/R3 完成。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::failure` 的 provider failure category projection，归属 Provider stream / Turn failure classification。
+- `compat blocker`：Aster `ProviderError` 仍是 reply loop source error；`ProviderReplyExitSource` / `run_provider_reply_exit_source(...)` 仍调用 Aster `Agent::reply_with_provider(...)`。
+- `dead / guarded`：在 `agent-compat` 本地恢复 `provider_failure_kind(...)`、`ProviderError::*` 分类表，或让 `provider_trace.rs` 重新直接 import Aster `ProviderError`。
+- Thread / Turn / Item 归属：Provider owner 负责 failure category 归一化；Turn owner 负责失败事件生命周期和 retry / completion 决策；Item/read model 只消费已 materialized 的 failed trace / turn status。
+
+退出条件：
+
+- provider/reply loop 迁出 Aster 后，Aster `ProviderError` source adapter 删除，current provider backend 直接产出 current failure DTO / response event。
+- `agent-compat` 的 `ProviderTraceEvent` 临时 DTO 随 Aster `AgentEvent` projector 删除；最终 provider trace DTO 继续归 `agent-protocol`，attempt lifecycle 归 `agent-runtime`。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/model-provider/src/provider_stream/failure.rs" "lime-rs/crates/model-provider/src/provider_stream/tests.rs" "lime-rs/crates/agent-compat/src/agents/agent.rs" "lime-rs/crates/agent-compat/src/agents/provider_trace.rs"`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-failure-category-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`45 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`；`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`169 passed`。
+- `note`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package aster-core --package lime-agent -- --check` 仍会命中既有脏文件 `ask_bridge.rs`、`native_tools/gateway_bridge.rs`、`aster_reply_adapter.rs` 的 import 排序差异；本轮用 `rustfmt --check` 限定验证了实际写集。
+
+### 4.42 Provider response context extraction owner
+
+当前状态：
+
+- `model-provider::provider_stream::response_context` 已承接 provider response request-id header extraction：header allowlist、长度限制和可见 ASCII 清洗集中在 provider owner。
+- response context DTO 继续复用 `agent-protocol::provider_trace::ProviderTraceResponseContext`，在 `model-provider` 中 re-export 为 `RuntimeReplyProviderResponseContext`，避免在 Aster staging crate 再定义第三套 provider trace response context。
+- `agent-compat/src/session_context.rs` 不再维护 `PROVIDER_REQUEST_ID_HEADERS`、`MAX_PROVIDER_REQUEST_ID_LEN` 或 `normalize_provider_request_id(...)`；它只负责从 `reqwest::HeaderMap` 读取 header pairs 并交给 current helper，同时作为未迁 reply loop 的 task-local carrier 暂存 response context。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider::provider_stream::response_context` 的 response context extraction；DTO owner 是 `agent-protocol::provider_trace::ProviderTraceResponseContext`。
+- `compat blocker`：Aster `session_context` 仍是 reply loop 内的 task-local carrier；provider/reply loop 未迁出前，Aster provider client 仍通过它记录 provider response headers。
+- `dead / guarded`：在 `agent-compat/src/session_context.rs` 恢复 request-id header allowlist、最大长度常量或 request-id 清洗函数。
+- Thread / Turn / Item 归属：Provider owner 负责 provider response metadata extraction；Turn trace lifecycle 负责把 response context 附到 trace event；Item/read model 只消费 materialized provider trace。
+
+退出条件：
+
+- provider/reply loop 迁出 Aster 后，response context carrier 应进入 current provider backend / Turn execution context，删除 Aster `session_context` task-local 载体。
+- `ProviderReplyExitSource` 删除后，provider response headers 不再通过 Aster provider client 间接进入 trace event。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/model-provider/src/provider_stream.rs" "lime-rs/crates/model-provider/src/provider_stream/response_context.rs" "lime-rs/crates/model-provider/src/provider_stream/tests.rs" "lime-rs/crates/agent-compat/src/session_context.rs"`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-failure-category-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`47 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`；`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`171 passed`。
+
+### 4.43 Agent compat agents root re-export boundary
+
+当前状态：
+
+- `agent-compat/src/lib.rs` 不再暴露 `pub mod agents;`，只保留 private `mod agents;` 和 root 最小 re-export。
+- `lime-agent` 外部引用已从 `aster::agents::*`、`aster::agents::extension::*`、`aster::agents::mcp_client::*` 改为 root `aster::{...}` 过渡面。
+- `rg -n "aster::agents::|aster::agents\\{" "lime-rs/crates" -g "*.rs" -g "*.md"` 无命中。
+
+判定：
+
+- `compat blocker`：root re-export 的 `Agent` / `AgentEvent` / `SessionConfig` 仍服务 R2/R6 reply/event source；`ExtensionConfig` / `McpClientTrait` 仍服务 R7；`NativeToolExecutionHook` / `ToolCallResult` 仍服务 R4。
+- `dead / guarded`：外部 `aster::agents::*` public module path。后续不得恢复 `aster::agents::Agent`、`aster::agents::extension::*` 或 `aster::agents::mcp_client::*`。
+- Thread / Turn / Item 归属：Turn 应最终拥有 reply/event source 与 live execution lifecycle；MCP gateway 归 `lime-mcp` / App Server；tool call result projection 归 `tool-runtime`；`agent-compat` 不拥有这些 current API。
+
+退出条件：
+
+- R2/R3/R6 删除 Aster reply/event source 后，移除 `Agent` / `AgentEvent` / `SessionConfig` root re-export。
+- R7 删除 Aster extension manager / MCP bridge 形状后，移除 `ExtensionConfig` / `McpClientTrait` root re-export。
+- R4 删除 Aster native registry / hook adapter 后，移除 `NativeToolExecutionHook` / `ToolCallResult` root re-export。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check` 覆盖本轮 Rust 写集。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/aster-agents-root-surface-private" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2`。
+- `passed`：同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib -j 2`，仅剩既有 `NativeRegistration::name` unused warning。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`171 passed`。
+
+### 4.44 Agent compat config root re-export boundary
+
+当前状态：
+
+- `agent-compat/src/lib.rs` 不再暴露 `pub mod config;`，只保留 private `mod config;`。
+- 唯一外部 path root 消费已从 `aster::config::paths::initialized_path_root()` 改为 root `aster::initialized_path_root()`。
+- `rg -n "aster::config::|aster::config\\{" "lime-rs/crates" -g "*.rs" -g "*.md"` 无命中。
+
+判定：
+
+- `compat blocker`：root `initialized_path_root()` 只服务 R5/R6 runtime store adapter 的 path root 读取。
+- `dead / guarded`：外部 `aster::config::*` public module path。后续不得恢复 `aster::config::paths`、`aster::config::Config` 或 Aster config 子模块 public API。
+- Thread / Turn / Item 归属：runtime store root path 最终应随 Thread/runtime store adapter 迁出；provider/settings/config 能力归 App Server / current settings 主链，不归 Aster config。
+
+退出条件：
+
+- R5/R6 迁出 Aster `ThreadRuntimeStore` / runtime store adapter 后，删除 root `initialized_path_root()` re-export 和 Aster config staging 依赖。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check` 覆盖本轮 Rust 写集。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/aster-agents-root-surface-private" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2`。
+- `passed`：同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib -j 2`，仅剩既有 `NativeRegistration::name` unused warning。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`171 passed`。
+
+### 4.45 Agent compat providers root re-export boundary
+
+当前状态：
+
+- `agent-compat/src/lib.rs` 不再暴露 `pub mod providers;`，只保留 private `mod providers;`。
+- `providers::{base,errors,formats}` 与 `formats::openai_responses` 均已降为 crate-private staging。
+- `lime-agent` 外部 provider 引用已从 `aster::providers::*` 改为 root `aster::{Provider, ProviderError, MessageStream, RetryConfig, create_provider, ...}` 过渡面。
+- `rg -n "aster::providers::|aster::providers\\{" "lime-rs/crates" -g "*.rs" -g "*.md"` 无命中。
+
+判定：
+
+- `compat blocker`：root provider re-export 仍服务 R2/R3 provider trait object / provider reply source 最后一跳。
+- `dead / guarded`：外部 `aster::providers::*` public module path。后续不得恢复 `aster::providers::base`、`aster::providers::errors`、`aster::providers::formats` 或 concrete provider 子路径。
+- Thread / Turn / Item 归属：provider stream / backend / response event owner 是 `model-provider`；Turn execution 只应消费 current provider backend source；Aster provider trait object 不进入 refactor v1 current owner。
+
+退出条件：
+
+- R2/R3 迁出 `ProviderReplyExitSource` / `reply_with_provider(...)` 后，删除 provider root re-export 和 Aster provider trait object source adapter。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check` 覆盖本轮 Rust 写集。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/aster-provider-root-surface-private" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2`。
+- `passed`：同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib -j 2`，仅剩既有 `NativeRegistration::name` unused warning。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`171 passed`。
+
+### 4.46 R4 standard native dispatch execution owner
+
+当前状态：
+
+- `tool-runtime::native_dispatch` 已成为标准 dispatch-backed native tools 的执行事实源；`runtime_native_tool_overlay_for_dispatch_name(...)` 用 current dispatch canonical lookup 反查 overlay，避免 `agent-compat` 复制工具名表。
+- `tool-runtime::native_dispatch_execution::execute_runtime_native_dispatch_tool(...)` 已承接 dispatch-backed 标准 native tools 的接管、current permission preflight、cancel fail-fast、`runtime_native_dispatch_handle().execute(...)` 和 `CallToolResult` 投影；`agent-compat` 只把 Aster `ToolContext` / current turn context 适配成 `RuntimeNativeDispatchToolRequest`。
+- Aster reply loop native branch 在 live-execution hook 之后，先调用 current native dispatch execution；只有未迁工具继续 fallback 到 Aster `ToolRegistry::execute(...)`。
+- 这一步只迁出标准 native dispatch 执行路径，不宣称 R4 完成：foreground shell 与 Read/Glob/Grep 后续已迁到 `tool-runtime`，Ask / Skill、gateway-backed tools、MCP / extension bridge、background / sandbox shell 与 Aster `Tool` trait 壳仍是 compat blocker。
+
+判定：
+
+- `refactor-aligned current skeleton`：`tool-runtime::native_dispatch`、`tool-runtime::native_dispatch_execution`、`tool-runtime::native_overlay::runtime_native_tool_overlay_for_dispatch_name(...)` 与 `check_runtime_native_tool_permissions(...)`，归属 Turn tool execution / permission preflight。
+- `compat blocker`：Aster `ToolRegistry` / `Tool` / `ToolContext` fallback 仍服务未迁 native tools；`agent-compat` helper 只能做 current request 适配。
+- `dead / guarded`：标准 native tools 重新优先走 `registry.execute(...)`、`agent-compat` 恢复本地 overlay/tool-name 表，或把 current approval / permission preflight 写回 Aster session cache、hook 或 pending map。
+- Thread / Turn / Item 归属：Turn 拥有 tool dispatch、permission preflight 与 tool lifecycle；Item/read model 只消费 materialized tool call / result projection；Approval / HITL 仍由 App Server RuntimeCore pending action 与 `tool-runtime::execution_approval` current owner 处理。
+
+退出条件：
+
+- 未迁 fallback 工具进入 `tool-runtime` / App Server / `lime-mcp` / `lime-skills` current owner 后，删除 Aster `ToolRegistry` execution fallback 和 root `Tool` / `ToolContext` re-export。
+- `ToolCallInputDelta` / tool call item 直接进入 current tool router 后，删除 `agent-compat` reply loop native tool adapter，而不是继续扩展 Aster `Tool` trait 壳。
+
+验证记录：
+
+- `passed`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime --package aster-core -- --check`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/native-dispatch-reply-loop-tool-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime native_overlay --lib -j 1 -- --nocapture`，`13 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/provider-image-input-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`rustfmt --edition 2021 --config skip_children=true --check "lime-rs/crates/tool-runtime/src/native_dispatch_execution.rs" "lime-rs/crates/tool-runtime/src/lib.rs" "lime-rs/crates/agent-compat/src/agents/agent.rs"`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime native_dispatch_execution --lib -j 2 -- --nocapture`，`2 passed`。
+- `passed`：同 target `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 2 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+- `note`：包含 `lime-agent` 的 workspace fmt 会命中既有脏文件 `ask_bridge.rs`、`native_tools/gateway_bridge.rs`、`aster_reply_adapter.rs` import 排序差异；本刀未扩大到这些无关写集。
+
+### 4.46 R4 tool execution scheduling policy owner
+
+当前状态：
+
+- `tool-runtime::tool_batch` 已承接 reply loop 工具执行调度中的纯规则：单个 tool call 是否允许并发执行，以及相邻并发安全请求如何合批。
+- `agent-compat/src/agents/agent.rs` 只保留 Aster `ToolRequest` source adapter：从旧 `CallToolRequestParam` 提取 tool name 和 optional `command` 后调用 `runtime_tool_call_concurrency_safe(...)` / `partition_tool_execution_requests(...)`。
+- 这一步不迁出 Aster `ToolRegistry::execute(...)` 和 Aster `Tool` trait fallback；它只是把 Turn tool scheduling policy 从 staging loop 中移出，避免 reply loop 继续持有工具调度事实源。
+
+判定：
+
+- `refactor-aligned current skeleton`：`tool-runtime::tool_batch::{ToolExecutionScheduleBatch, runtime_tool_call_concurrency_safe, partition_tool_execution_requests}`，归属 Turn tool scheduling / lifecycle policy。
+- `compat blocker`：Aster `ToolRequest`、Aster `ToolRegistry`、Aster `Tool` trait 和 tool response assembly 仍服务未迁 reply loop fallback。
+- `dead / guarded`：`agent-compat` 本地恢复 `ToolExecutionBatch`、`is_concurrency_safe_tool_request(...)`、`partition_tool_requests_for_execution(...)`，或直接 import shell concurrency analysis 作为 reply loop 调度事实源。
+- Thread / Turn / Item 归属：Turn 拥有 tool execution scheduling；Item/read model 只消费 materialized tool lifecycle；Aster `Message` / `ToolRequest` 只是 provider/reply loop 未迁完前的 source adapter。
+
+退出条件：
+
+- R4 迁出 Aster native registry fallback 后，current tool router 应直接接收 current tool call DTO 并使用 `tool-runtime` scheduling policy；删除 `agent-compat` 的 `ToolRequest` adapter、Aster registry fallback 和 Aster `Tool` trait壳。
+- R2/R3 provider reply loop 删除后，tool request source 不再经过 Aster `MessageContent::ToolRequest`。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/tool-runtime/src/tool_batch.rs" "lime-rs/crates/agent-compat/src/agents/agent.rs" "lime-rs/crates/agent-compat/src/lib.rs" "lime-rs/crates/agent-compat/src/agents/mod.rs" "lime-rs/crates/agent-compat/src/providers/mod.rs"`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/tool-batch-schedule-tool-runtime" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime tool_batch --lib -j 1 -- --nocapture`，`4 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`171 passed`。
+
+### 4.47 Provider trace DTO alias owner
+
+当前状态：
+
+- `agent-protocol::provider_trace` 继续作为 provider trace DTO owner；`model-provider::provider_stream` 现在以 `RuntimeReplyProviderTraceEvent`、`RuntimeReplyProviderTraceStage`、`RuntimeReplyProviderTraceFailure` alias 暴露给 provider stream owner。
+- `model-provider::provider_stream::failure::provider_stream_trace_failure(...)` 承接 current provider failure DTO 到 provider trace failure DTO 的投影，避免 Aster staging loop 或 `event_converter` 重新拼 trace failure。
+- `agent-compat/src/agents/provider_trace.rs` 不再定义或 alias 本地 `ProviderTraceStage`，也不再定义本地 `ProviderTraceEvent`；只保留 request started / first event / first text / failed / canceled thin wrapper，服务未迁 Aster reply loop source adapter。
+- `agent-compat` root 不再 re-export `ProviderTraceStage`；`ProviderTraceEvent` 只因 Aster `AgentEvent::ProviderTrace` public 字段暂留 root surface。
+- `agent/src/event_converter.rs` 对 `AgentEvent::ProviderTrace` 直接透传 current DTO，不再恢复 `AsterProviderTraceStage`、`convert_provider_trace_stage(...)` 或字段复制。
+
+判定：
+
+- `refactor-aligned current skeleton`：`agent-protocol` provider trace DTO + `model-provider` provider trace alias / failure projection，归属 Provider stream metadata / trace fact。
+- `compat blocker`：Aster `AgentEvent::ProviderTrace` 仍从未迁 `reply_with_provider(...)` 最后一跳传出；provider/reply loop 删除前仍需要 source adapter。
+- `dead / guarded`：`agent-compat` 本地 `ProviderTraceStage` enum / alias / root re-export、`ProviderTraceEvent` struct、`event_converter` stage 映射和字段复制。
+- Thread / Turn / Item 归属：Provider owner 持有 trace fact / failure projection，Turn adapter 只透传 typed event，Item/read model 消费已 materialized provider trace；Aster stage 字段不进入 refactor v1 current owner。
+
+退出条件：
+
+- provider/reply loop 迁出 Aster 后，删除 `agent-compat` provider trace thin wrapper 和 Aster `AgentEvent` source adapter。
+- `ProviderReplyExitSource` 删除后，current provider backend 直接产出 provider trace / response event，不再经过 Aster `AgentEvent::ProviderTrace`。
+- `ProviderTraceEvent` root re-export 随 Aster `AgentEvent` source adapter 删除；`ProviderTraceStage` root re-export 已下线，不得恢复。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/model-provider/src/provider_stream.rs" "lime-rs/crates/model-provider/src/provider_stream/failure.rs" "lime-rs/crates/agent-compat/src/agents/provider_trace.rs" "lime-rs/crates/agent-compat/src/agents/agent.rs" "lime-rs/crates/agent/src/event_converter.rs"`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-trace-dto-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`47 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`；`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+- `passed`：`git diff --check` 本轮 provider trace DTO 写集。
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/agent-compat/src/agents/provider_trace.rs" "lime-rs/crates/agent-compat/src/agents/mod.rs" "lime-rs/crates/agent-compat/src/lib.rs"`；复跑 `lime-agent request_tool_policy` 仍为 `81 passed`，验证下线 `ProviderTraceStage` root re-export 不影响外部生产编译。
+
+### 4.48 Agent compat session/tools explicit root allowlist
+
+当前状态：
+
+- `agent-compat/src/lib.rs` 不再以 `pub use session::*;` / `pub use tools::*;` 暴露 staging module 全量 surface。
+- root 只显式导出 `ThreadRuntimeStore` / `SessionRuntimeSnapshot` / `QueuedTurnRuntime`、`Tool` / `ToolContext` / `ToolRegistry` / `PermissionCheckResult` 等 `lime-agent` adapter 仍命中的 blocker。
+- `session/mod.rs`、`tools/mod.rs`、`tools/search/mod.rs` 同步删除无消费者 re-export，并移除已删除 vendored ripgrep helper 的过期说明。
+
+判定：
+
+- `compat blocker`：显式 root allowlist 仍服务 R4/R5/R6；这些类型不进入 refactor v1 current owner。
+- `dead / guarded`：`session::*` / `tools::*` broad root surface 和无消费者 private re-export。
+- Thread / Turn / Item 归属：Thread/runtime store blocker 继续迁向 Thread owner；Tool registry / Tool trait blocker 继续迁向 Turn tool lifecycle owner；Item/read model 不再通过 wildcard surface 扩散。
+
+退出条件：
+
+- R4 删除 Aster native registry fallback 后，移除 root `Tool` / `ToolContext` / `ToolRegistry` / `PermissionCheckResult` allowlist。
+- R5/R6 删除 Aster runtime store source 后，移除 root `ThreadRuntimeStore` / `SessionRuntimeSnapshot` / `QueuedTurnRuntime` allowlist。
+
+验证记录：
+
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/aster-provider-root-surface-private" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2`。
+- `passed`：同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib -j 2`，仅剩既有 `NativeRegistration::name` unused warning。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`。
+
+### 4.49 Provider input modality policy owner
+
+当前状态：
+
+- `model-provider::provider_stream::image_input` 已承接 input modality metadata 解析和 image input allowed 判定，暴露 `provider_stream_input_modality_policy_from_metadata(...)`、`provider_stream_input_modality_policy_allows_image_input(...)` 与 `provider_stream_metadata_allows_image_input(...)`。
+- `agent-compat/src/agents/prompt_input_modalities.rs` 不再维护 `input_modality_policy_*` parser；它只把 Aster `MessageContent::Image` 与 RMCP image content 降级为文本占位，服务未迁 provider prompt source adapter。
+
+判定：
+
+- `refactor-aligned current skeleton`：`model-provider` provider/media input policy，归属 Provider stream / media lowering owner。
+- `compat blocker`：Aster `Message` / RMCP `Content` 仍是未迁 reply loop 的 provider prompt source adapter。
+- `dead / guarded`：`agent-compat` 本地 input modality parser 和重复 metadata key walk。
+- Thread / Turn / Item 归属：Provider owner 负责 provider/media capability 与 input policy；Turn adapter 只做未迁 source lowering；Item/read model 不消费 Aster input modality parser。
+
+退出条件：
+
+- R2/R3 provider/reply loop 删除后，provider prompt source 不再经过 Aster `Message`；`prompt_input_modalities.rs` 随 Aster reply source adapter 一并删除。
+- `lime-agent` 侧现有 `model_request_policy` parser 后续应继续收敛到 provider/current policy owner，避免再次形成平行 parser。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/model-provider/src/provider_stream.rs" "lime-rs/crates/model-provider/src/provider_stream/image_input.rs" "lime-rs/crates/model-provider/src/provider_stream/tests.rs" "lime-rs/crates/agent-compat/src/agents/prompt_input_modalities.rs"`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/input-modality-model-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider provider_stream --lib -j 1 -- --nocapture`，`49 passed`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture`，`81 passed`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+
+### 4.50 BashTool root surface retired from external tests
+
+当前状态：
+
+- `lime-agent/tests/windows_shell_runtime.rs` 不再通过 `aster::BashTool` 验证 Windows shell fallback，改为直接调用 `tool-runtime::shell_runtime::build_platform_shell_command(...)`。
+- `agent-compat/src/lib.rs` root allowlist 不再 re-export `BashTool`。
+- `agent-compat` 内部 `BashTool` 仍存在，只服务未迁完的 Aster reply loop registry fallback。
+
+判定：
+
+- `refactor-aligned current skeleton`：`tool-runtime::shell_runtime` 作为平台 shell command 构造 owner，归属 Turn tool execution。
+- `dead / guarded`：外部 `aster::BashTool` root surface 和测试入口。
+- `compat blocker`：Aster 内部 `BashTool` / `Tool` trait registry fallback，退出条件是 R4 current tool router 接管 shell execution。
+
+退出条件：
+
+- Bash / PowerShell execution 进入 current tool router 后，删除 Aster 内部 `BashTool` / `PowerShellTool` registry fallback 和相关 root blocker。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/agent/tests/windows_shell_runtime.rs" "lime-rs/crates/agent-compat/src/lib.rs"`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/aster-provider-root-surface-private" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2`。
+- `passed`：同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib -j 2`，仅剩既有 `NativeRegistration::name` unused warning。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+- `blocked-by-env`：`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --target x86_64-pc-windows-msvc --test windows_shell_runtime -j 2` 在 `ring` 的 C 编译阶段因 `assert.h` missing 失败，未进入本次测试代码；需要完整 Windows C target toolchain 后复跑。
+
+### 4.51 Aster concrete tool implementation surface made crate-private
+
+当前状态：
+
+- `agent-compat/src/tools/mod.rs` 不再公开 re-export `BashTool` / `PowerShellTool` / `ReadTool` / `GlobTool` / `GrepTool` / `AskTool` / `DEFAULT_ASK_TIMEOUT_SECS`。
+- `agent-compat/src/tools/file/mod.rs` 与 `agent-compat/src/tools/search/mod.rs` 的 `ReadTool` / `GlobTool` / `GrepTool` / `SharedFileReadHistory` 实现面已收成 `pub(crate)`。
+- `register_all_tools(...)` / `register_default_tools(...)` 只保留 crate-private，继续服务未迁出的 Aster reply-loop registry fallback。
+- 公开面只保留 `Tool` / `ToolRegistry` / `ToolContext`、`ToolRegistrationConfig`、permission 类型和 `AskCallback` 等仍被 bridge 使用的最小 blocker；`AskRequest` / `AskOption` / `AskQuestion` DTO 已归 current `tool-runtime::request_user_input` / `agent-runtime::ask`。
+
+判定：
+
+- `dead / guarded`：Aster 具体工具实现 public surface；这些类型不得再作为 `aster` 对外 API。
+- `compat blocker`：crate-private Aster `Tool` trait / registry fallback，退出条件是 R4 current tool router 接管 Ask/Skill/gateway-backed/MCP、background / sandbox shell 和其余未迁执行壳。
+- `refactor-aligned current`：`tool-runtime::native_dispatch`、`tool-runtime::request_user_input` 与后续 current gateway executor。
+- Thread / Turn / Item 归属：Turn tool execution 只消费 current tool surface / dispatcher；具体 Aster `*Tool` 类型只是未迁 source adapter，不进入 Item/read model 或 App Server protocol。
+
+退出条件：
+
+- R4 native registry 迁出后，删除内部 Aster concrete tools 和 `register_all_tools(...)` fallback；root `aster` dependency 才能继续向删除收敛。
+- `AskCallback` bridge blocker 在 request_user_input 直接由 current Turn executor / App Server action-required 主链触发后删除。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/agent-compat/src/tools/mod.rs" "lime-rs/crates/agent-compat/src/tools/file/mod.rs" "lime-rs/crates/agent-compat/src/tools/search/mod.rs"`。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts" "internal/exec-plans/aster-phase6-provider-reply-backend-plan.md" "internal/roadmap/astermigration/README.md" "internal/roadmap/astermigration/phase6-continuation-tracker.md" "internal/roadmap/astermigration/refactor-v1-impact-audit.md" "internal/roadmap/astermigration/aster-capability-intake-execution-plan.md"`。
+- `passed`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=".lime/cargo-target/aster-tools-impl-surface-private" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 2`，仅有既有 `SessionPlanModeState` unused import warning。
+- `passed`：同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib -j 2`，仅有既有 `NativeRegistration::name` unused warning。
+
+### 4.4.11 R4 team tool 具体实现 public surface 下线
+
+当前状态：
+
+- `agent-compat/src/tools/mod.rs` 不再公开 re-export `TeamCreateTool` / `TeamDeleteTool` / `ListPeersTool`。
+- `agent-compat/src/tools/team_tools.rs` 的三个具体工具类型和 `new()` 构造器已降为 crate-private，仅服务未迁出的 Aster reply-loop registry fallback。
+- `SpawnAgentRequest` / `SpawnAgentResponse` 与 `AgentControlToolConfig` 仍因 callback bridge 暂留，后续随 Agent / SendMessage / Team 执行壳一起迁出。
+
+判定：
+
+- `dead / guarded`：Aster team 具体工具实现 public surface，外部不得恢复 `aster::TeamCreateTool` / `aster::TeamDeleteTool` / `aster::ListPeersTool`。
+- `compat blocker`：crate-private Aster team `Tool` trait fallback。
+- `refactor-aligned current`：team / multi-agent 执行应进入 Turn owner（`agent-runtime` / `tool-runtime` current executor），协作状态和工具结果经 Item/read model 投影。
+
+退出条件：
+
+- Team/Agent/SendMessage 执行壳迁入 current owner 后，删除 Aster `team_tools.rs` 的 `Tool` trait 实现和 registry fallback。
+- `asterMigrationBoundary.test.ts` 持续禁止 team 具体工具类型 public re-export 与外部 `aster::*Tool` 引用回流。
+
+### 4.52 Aster session plan-mode extension dead deletion
+
+当前状态：
+
+- `agent-compat/src/session/plan.rs` 已删除，`session/mod.rs` 不再声明 `mod plan;`。
+- `SessionPlanModeState` / `session_plan_mode` extension 没有 Lime 外部生产消费者；Codex-style plan / checklist 能力已经归 `tool-runtime::update_plan` 与 App Server / 前端计划轨。
+
+判定：
+
+- `dead / deleted / forbidden-to-restore`：Aster session plan-mode extension 文件、`mod plan;`、`SessionPlanModeState`。
+- `refactor-aligned current`：`tool-runtime::update_plan`，归 Turn tool execution / Item read model 投影链。
+- `compat blocker`：其余 Aster `SessionStore` / `ThreadRuntimeStore` / runtime DTO 仍按 R5/R6 继续迁出。
+
+退出条件：
+
+- `asterMigrationBoundary.test.ts` 持续禁止恢复 `session/plan.rs`、`mod plan;`、`SessionPlanModeState`。
+- 后续计划能力只允许沿 `tool-runtime::update_plan`、App Server event 和前端计划轨演进，不得恢复 Aster session extension。
+
+### 4.53 R4 collab agent tool surface owner
+
+当前状态：
+
+- Agent / SendMessage / Team / ListPeers 的工具名、描述、DTO、schema、结构化消息和 team helper 已归 `tool-runtime::collab_agent`。
+- `agent-compat/src/tools/agent_control.rs` 的 `SpawnAgentTool` / `SendInputTool` 与注册函数已删除；Agent / SendMessage 不再通过 Aster `Tool` trait 壳进入 registry。
+- SendMessage 输出/metadata、unsupported bridge peer 返回，以及 TeamCreate / TeamDelete / ListPeers metadata 已归 `tool-runtime::collab_agent` projection 子模块。
+- Agent spawn request 归一化与结果 metadata 投影已归 `tool-runtime::collab_agent`；`agent-compat` 不再本地构造 `SpawnAgentRequest { ... }` 或 agent metadata。
+- SendMessage peer address parse / scheme contract 直接由 `tool-runtime::collab_agent` 提供；旧 `agent-compat/src/tools/peer_address_surface.rs` re-export helper 已删除。
+- SendMessage peer target normalization、summary requirement、structured cross-session/broadcast rejection、shutdown response 和 plan approval sender 校验已归 `tool-runtime::collab_agent::validation`。
+- Agent spawn / SendMessage 执行编排已归 `tool-runtime::collab_agent::execution`：参数 parse、target normalization、team-lead validation、message 构造、callback dispatch、routing/result projection 和 metadata 包装由 Turn tool owner 承接。
+- `agent-compat` 不再经 `agent_control.rs` / `tools/mod.rs` 代理 re-export `SpawnAgentRequest` / `SpawnAgentResponse`；未迁完的 `agent.rs` 直接消费 `tool-runtime::collab_agent` current DTO。
+- `agent-compat/src/tools/agent_control.rs` 只实现 `CollabAgentExecutionBackend` 的 session/team resolver 与 callback adapter；`team_tools.rs` 的 TeamCreate / TeamDelete / ListPeers execution owner 已在 4.55 迁到 `tool-runtime::collab_agent::execution`，自身只保留 team/session 状态接线与 storage adapter，不再保留 Aster `Tool` trait 实现。
+- `tool-runtime::collab_agent` 还承接 `collab_agent_canonical_tool_name(...)`、`collab_agent_tool_definition(...)` 与 `collab_agent_tool_definitions(...)`；`agent.rs` 的 `list_tools` 从 current definitions 注入协作工具，并在执行时先走 current collab canonical lookup。
+- `agent-compat/src/agents/agent.rs` 的 native branch 已在 Aster `registry.execute(...)` 前优先调用 `execute_runtime_collab_tool(...)`，其中 `SendMessage` 走 current agent-control executor，`TeamCreate` / `TeamDelete` / `ListPeers` 走 current team executor；`Agent` 特殊 nested subagent 分支仍单独暂留，后续随 R4/R2 继续迁出。
+
+判定：
+
+- `refactor-aligned current`：`tool-runtime::collab_agent::{execution,projection,validation}`，归 Turn tool surface / collaboration tool contract / tool execution orchestration。
+- `compat blocker`：callback adapter、session/team resolver 与 R5/R6 session/team storage adapter；`Agent` 特殊 nested subagent 语义还需另行迁入 current Turn owner。
+- `dead / guarded`：在 `agent-compat` 恢复本地协作工具 DTO、schema builder、canonical / definition owner、Agent spawn request/projection、SendMessage validation / execution owner、peer address re-export helper、公开具体工具实现类型、Aster `Tool` trait 壳或 root/public re-export。
+
+退出条件：
+
+- Aster `SpawnAgentTool` / `SendInputTool` / `TeamCreateTool` / `TeamDeleteTool` / `ListPeersTool` 和协作工具注册壳已删除；后续不得恢复。
+- `asterMigrationBoundary.test.ts` 持续要求协作工具 surface 只来自 `tool-runtime::collab_agent`。
+- `asterMigrationBoundary.test.ts` 持续禁止 `agent-compat` 恢复本地 SendMessage / Team result projection。
+- `asterMigrationBoundary.test.ts` 持续禁止 `agent-compat` 恢复本地 Agent spawn request/projection。
+- `asterMigrationBoundary.test.ts` 持续禁止 `agent-compat` 恢复本地 SendMessage validation 分支。
+- `asterMigrationBoundary.test.ts` 持续禁止 `agent_control.rs` 恢复本地 SendMessage 投递循环、`MessageRouting` / `SendMessageDelivery` 构造和 `project_*` 调用。
+- `asterMigrationBoundary.test.ts` 持续禁止恢复 `agent-compat/src/tools/peer_address_surface.rs`。
+- `asterMigrationBoundary.test.ts` 持续禁止恢复 `agent_control.rs` 对 current collab DTO 的 `pub use` 代理出口。
+- `asterMigrationBoundary.test.ts` 持续要求 reply loop 在 Aster `registry.execute(...)` 前调用 current collab executor。
+
+### 4.54 R4 Bash / PowerShell foreground execution owner
+
+当前状态：
+
+- `tool-runtime::shell_execution` 已承接 Bash / PowerShell 前台执行 owner：参数解析、shell permission、missing read target / blocked sleep / Windows WSL path preflight、foreground subprocess、bounded output、decode / truncation metadata 和 `CallToolResult` projection。
+- `agent-compat/src/agents/agent.rs` 在 live-execution hook 后先调用 `execute_runtime_shell_tool(...)`，再调用 `execute_runtime_native_dispatch_tool(...)`，最后才 fallback 到 Aster `registry.execute(...)`。
+- full-access 不确认语义已进入 current owner：`approval_policy=never`、`sandbox_policy=danger-full-access` 或 turn metadata `accessMode=full-access` 时，warning shell command 不回落到 Aster approval / registry。
+- `AGENT_TERMINAL=1` 是 current shell execution 环境标记；不得恢复 `ASTER_TERMINAL`。
+
+判定：
+
+- `refactor-aligned current`：`tool-runtime::shell_execution`，归属 Turn tool execution / permission preflight / process result projection。
+- `compat blocker`：background execution、workspace sandbox、Ask / Skill、gateway-backed tools、MCP / extension bridge 和 Aster `Tool` trait壳；这些仍阻塞 root `aster` dependency 删除。
+- `dead / guarded`：Aster shell execution owner、Aster approval hook/cache/pending map、`ASTER_TERMINAL` 环境标记，以及在 `agent-compat` 中恢复 shell permission / process execution 编排。
+- Thread / Turn / Item 归属：Thread 只保存 session/runtime policy；Turn 负责 shell execution 和 approval/sandbox 决策输入；Item/read model 只消费 materialized tool result / metadata，不通过 Aster `ToolResult` 旁路新增 approval 事实。
+
+退出条件：
+
+- background shell、workspace sandbox 和剩余 registry fallback 工具迁到 current owner 后，删除 Aster 内部 `BashTool` / `PowerShellTool`、`ToolRegistry::execute(...)` fallback、root `Tool` / `ToolContext` / `PermissionCheckResult` allowlist。
+- App Server / RuntimeCore approval session cache 继续作为 HITL owner；不得为了完成 R4 在 Aster vendor 或 Aster adapter 中新增 session cache、pending map 或 approval hook。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --config skip_children=true --check "lime-rs/crates/tool-runtime/src/shell_execution.rs" "lime-rs/crates/tool-runtime/src/shell_execution/tests.rs" "lime-rs/crates/tool-runtime/src/lib.rs" "lime-rs/crates/agent-compat/src/agents/agent.rs"`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=".lime/cargo-target/provider-progress-lime-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime shell_execution --lib -j 2 -- --nocapture`，`7 passed`。
+- `passed`：同 target `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 2 -- --nocapture`，`81 passed`。
+- `passed`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"`；`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+- `passed`：Gate B Electron CDP `approval-request-full-access`：`LIME_ELECTRON_FIXTURE_BUILD_READY=1 npm run smoke:claw-chat-current-fixture -- --scenario approval-request-full-access --timeout-ms 240000 --cdp-port 9232 --prefix claw-chat-current-fixture-approval-full-access-shell-r4-after-input-helper --evidence-dir ".lime/qc/gui-evidence/claw-chat-current-fixture"`；summary 为 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-approval-full-access-shell-r4-after-input-helper-summary.json`。
+- `passed`：Gate A 聚合 `LIME_ELECTRON_FIXTURE_BUILD_READY=1 npm run smoke:agent-runtime-current-fixture` 完整通过，覆盖 approval resume/decline/cancel/full-access、inputbar restore/pending steer、Plan hydrate、Skills Runtime、Multi-Agent Team、MCP structuredContent、media reference 与 Content Factory Article Editor，`liveProviderUsed=false`。
+
+### 4.55 R4 collab team execution owner
+
+当前状态：
+
+- `tool-runtime::collab_agent::execution` 已承接 TeamCreate / TeamDelete / ListPeers 的 runtime-neutral execution owner：参数解析、team name 冲突处理、lead 校验、active member 拒绝删除、membership cleanup 调度、peer output 与 metadata projection。
+- `agent-compat/src/tools/team_tools.rs` 只保留 Aster session/team storage DTO 转换、reachable member 查询和 local peer 查询 adapter；`TeamCreateTool` / `TeamDeleteTool` / `ListPeersTool` Aster `Tool` trait 壳已删除。
+- `agent-compat/src/agents/agent.rs` 已在 Aster `registry.execute(...)` 前优先调用 `execute_team_runtime_tool(...)`，TeamCreate / TeamDelete / ListPeers 不再等到 Aster registry fallback 才执行。
+- `asterMigrationBoundary.test.ts` 禁止 `team_tools.rs` 恢复 TeamCreate / TeamDelete / ListPeers 输出构造、metadata 投影和本地 cleanup loop。
+
+判定：
+
+- `refactor-aligned current`：`tool-runtime::collab_agent::execution`，归属 Turn tool lifecycle / multi-agent collaboration execution。
+- `compat blocker`：Aster `TeamSessionState` / `TeamMembershipState` storage adapter；这些仍阻塞 root `aster` dependency 删除。
+- `dead / guarded`：`agent-compat` 本地 team mutation / output owner 和 Team Aster `Tool` trait 壳。
+- Thread / Turn / Item 归属：Thread 仍保存 team membership extension data；Turn 执行 TeamCreate / TeamDelete / ListPeers；Item/read model 只消费 materialized tool output / metadata，不再从 Aster team tool 旁路推断协作状态。
+
+退出条件：
+
+- `TeamCreateTool` / `TeamDeleteTool` / `ListPeersTool` Aster `Tool` trait 壳已删除；后续不得恢复。
+- R5/R6 session/runtime store 迁完后，删除 Aster `TeamSessionState` / `TeamMembershipState` storage adapter 和 root `aster` dependency。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --check "lime-rs/crates/tool-runtime/src/collab_agent.rs" "lime-rs/crates/tool-runtime/src/collab_agent/execution.rs" "lime-rs/crates/agent-compat/src/tools/team_tools.rs"`。
+- `passed`：`CARGO_TARGET_DIR=".lime/cargo-target/collab-agent-team-execution" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime collab_agent --lib -j 1 -- --nocapture`，`19 passed`。
+- `passed`：同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 1`。
+- `passed`：后续体量收口将 `execution.rs` inline tests 拆到 `collab_agent/execution_tests.rs` 后，`rustfmt --edition 2021 --check "lime-rs/crates/tool-runtime/src/collab_agent/execution.rs" "lime-rs/crates/tool-runtime/src/collab_agent/execution_tests.rs"` 通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime collab_agent --lib -j 1 -- --nocapture` 仍为 `19 passed`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture` 为 `81 passed`；`asterMigrationBoundary.test.ts` 为 `172 passed`。
+- `passed`：删除协作 Aster `Tool` trait 壳后，`cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime collab_agent --lib -j 1 -- --nocapture` 为 `20 passed`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 1 -- --nocapture` 为 `81 passed`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools --lib -j 1 -- --nocapture` 为 `102 passed`；`asterMigrationBoundary.test.ts` 为 `172 passed`。
+- `passed`：reply-loop current executor 接管后，`rustfmt --edition 2021 --check` 覆盖 `agent.rs`、`agent_control.rs`、`team_tools.rs`、`tools/mod.rs`；`CARGO_TARGET_DIR=".lime/cargo-target/collab-reply-loop-takeover" cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib -j 1` 通过；同 target `cargo check --manifest-path "lime-rs/Cargo.toml" -p tool-runtime --lib -j 1` 通过；同 target `cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime collab_agent --lib -j 1 -- --nocapture`，`20 passed`；`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，`172 passed`。
+
+### 4.56 R4 Read / Glob / Grep execution owner
+
+当前状态：
+
+- `tool-runtime::file_read_execution` 已承接 Read 的 Turn tool execution owner：路径解析、文本 line-numbered 输出、document preview、SVG / Notebook 文本抽取、图片 / PDF retired fail-closed 和 result metadata projection。
+- `tool-runtime::file_search_execution` 已承接 Glob / Grep 的 Turn tool execution owner：Glob pattern / exclude / mtime 排序 / truncation，Grep regex parse、content / files_with_matches / count 模式、hidden 文件策略、binary skip 和 result metadata projection。
+- `agent-compat/src/agents/agent.rs` 已在 Aster `registry.execute(...)` 前优先调用 current read/search executor；`agent-compat` 只传递 working directory 与 cancellation token，不持有文件读取或搜索执行规则。
+- `asterMigrationBoundary.test.ts` 禁止 current owner import Aster，禁止 reply loop 把 Read / Glob / Grep 放回 registry 优先，并禁止 `agent.rs` 恢复本地文件读取 / 搜索执行 owner。
+
+判定：
+
+- `refactor-aligned current`：`tool-runtime::{file_read_execution,file_search_execution}`，归属 Turn tool lifecycle / tool execution。
+- `compat blocker`：Aster `Tool` trait 壳、ToolRegistry fallback、Ask/Skill/gateway-backed/MCP、background / sandbox shell；这些仍阻塞 root `aster` dependency 删除。
+- `dead / guarded`：Aster Read image/PDF multimodal payload、`agent-compat` 本地 Read / Glob / Grep execution owner。
+- Thread / Turn / Item 归属：Thread 只提供工作目录 / session context；Turn 负责 Read/Glob/Grep 执行；Item/read model 只消费 materialized tool result / metadata，不再从 Aster read/search implementation 推断状态。
+
+退出条件：
+
+- R4 registry fallback 全部迁完后，删除 `ReadTool` / `GlobTool` / `GrepTool` Aster `Tool` trait 壳和注册 fallback。
+- `agent-compat/Cargo.toml` 中只因旧 ReadTool 保留的 `document-preview` burn-down 依赖在 Aster read 壳删除后移除；current `tool-runtime` 可继续直接依赖 `document-preview`。
+
+验证记录：
+
+- `passed`：`rustfmt --edition 2021 --config skip_children=true --check "lime-rs/crates/tool-runtime/src/file_read_execution.rs" "lime-rs/crates/tool-runtime/src/file_search_execution.rs" "lime-rs/crates/tool-runtime/src/lib.rs" "lime-rs/crates/agent-compat/src/agents/agent.rs"`。
+- `passed`：`CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=".lime/cargo-target/file-search-execution" cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime file_read_execution --lib -j 2 -- --nocapture`，`3 passed`。
+- `passed`：同 target `cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime file_search_execution --lib -j 2 -- --nocapture`，`3 passed`。
+- `passed`：同 target `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib -j 2 -- --nocapture`，`81 passed`。
 
 ## 5. 下一刀排序修正
 

@@ -281,8 +281,8 @@ describe("useAsterAgentChat 首页新会话", () => {
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       const request = mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0];
       expect(request?.workspace_id).toBeUndefined();
-      expect(request?.turn_config?.provider_preference).toBe("deepseek");
-      expect(request?.turn_config?.model_preference).toBe("deepseek-v4-flash");
+      expect(request?.turn_config?.provider_preference).toBeUndefined();
+      expect(request?.turn_config?.model_preference).toBeUndefined();
     } finally {
       harness.unmount();
     }
@@ -363,10 +363,21 @@ describe("useAsterAgentChat 首页新会话", () => {
         currentModel: null,
         theme: "general",
       });
+      expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        "react",
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            modelName: "gpt-5.4-mini",
+            providerSelector: "openai",
+          }),
+        }),
+      );
       const request = mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0];
       expect(request?.workspace_id).toBeUndefined();
-      expect(request?.turn_config?.provider_preference).toBe("openai");
-      expect(request?.turn_config?.model_preference).toBe("gpt-5.4-mini");
+      expect(request?.turn_config?.provider_preference).toBeUndefined();
+      expect(request?.turn_config?.model_preference).toBeUndefined();
     } finally {
       harness.unmount();
     }
@@ -598,7 +609,7 @@ describe("useAsterAgentChat 首页新会话", () => {
         2,
         {
           currentProviderType: "lime-hub",
-          currentModel: "",
+          currentModel: null,
           theme: "general",
         },
       );

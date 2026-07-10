@@ -11,8 +11,7 @@ use agent_runtime::reply_backend::{
 use agent_runtime::reply_host::RuntimeReplyStream;
 use agent_runtime::reply_message::RuntimeReplyMessage;
 use agent_runtime::session_config::AgentSessionConfig;
-use aster::agents::Agent;
-use aster::providers::base::Provider;
+use aster::{Agent, Provider};
 use futures::future::BoxFuture;
 use model_provider::provider_stream::{
     RuntimeReplyProviderExecutionRunner, RuntimeReplyProviderExecutionSource,

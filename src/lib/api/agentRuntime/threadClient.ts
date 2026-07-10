@@ -283,26 +283,27 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
     request: AgentRuntimeRespondActionRequest,
   ): Promise<void> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
+    const eventName = appServerActionRespondEventNameFromRequest(request);
+    const route = appServerEventRouter?.register({
+      eventName,
+      sessionId: request.session_id,
+      turnId: request.action_scope?.turn_id,
+    });
     try {
       const result = await standardRuntimeClient.respondAction(
         appServerActionRespondParamsFromRequest(request),
       );
-      const route = appServerEventRouter?.register({
-        eventName: request.event_name,
-        sessionId: request.session_id,
-        turnId: request.action_scope?.turn_id,
-      });
       if (route) {
         route.publish(result.notifications);
       } else {
         publishAppServerAgentSessionNotifications(
-          request.event_name,
+          eventName,
           result.notifications,
         );
       }
     } catch (error) {
       publishAppServerRpcErrorNotifications(error, {
-        eventName: request.event_name,
+        eventName,
         sessionId: request.session_id,
         turnId: request.action_scope?.turn_id,
       });
@@ -1020,6 +1021,17 @@ export function appServerActionRespondParamsFromRequest(
     eventName: request.event_name,
     actionScope: appServerActionScopeFromRequest(request.action_scope),
   });
+}
+
+function appServerActionRespondEventNameFromRequest(
+  request: AgentRuntimeRespondActionRequest,
+): string | undefined {
+  const explicitEventName = request.event_name?.trim();
+  if (explicitEventName) {
+    return explicitEventName;
+  }
+  const sessionId = request.session_id.trim();
+  return sessionId ? `agentSession/event/${sessionId}` : undefined;
 }
 
 function appServerActionReplayParamsFromRequest(

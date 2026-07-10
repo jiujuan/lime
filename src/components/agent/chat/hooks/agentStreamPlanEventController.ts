@@ -3,6 +3,31 @@ import type {
   AgentThreadItem,
 } from "@/lib/api/agentProtocol";
 
+function readStructuredPlanStepText(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of ["step", "text", "content", "title"]) {
+    const field = record[key];
+    if (typeof field === "string" && field.trim()) {
+      return field.trim();
+    }
+  }
+  return "";
+}
+
+function planTextFromStructuredPlan(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+  return value
+    .map(readStructuredPlanStepText)
+    .filter((step) => step.length > 0)
+    .map((step) => `- ${step}`)
+    .join("\n");
+}
+
 export function buildAgentStreamPlanThreadItem(params: {
   activeSessionId: string;
   event: Extract<AgentEvent, { type: "plan_delta" | "plan_final" }>;
@@ -11,7 +36,10 @@ export function buildAgentStreamPlanThreadItem(params: {
   pendingItemKey?: string;
   sequence?: number | null;
 }): AgentThreadItem | null {
-  const text = params.event.text.trim() || params.event.delta?.trim() || "";
+  const text =
+    params.event.text.trim() ||
+    params.event.delta?.trim() ||
+    planTextFromStructuredPlan(params.event.plan);
   if (!text) {
     return null;
   }

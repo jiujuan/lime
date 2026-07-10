@@ -56,12 +56,13 @@ const GREP_RELATIVE_PATH = `${FIXTURE_ROOT}/files/search-target.txt`;
 const IMAGE_RELATIVE_PATH = `${FIXTURE_ROOT}/images/tiny.png`;
 const NOTEBOOK_RELATIVE_PATH = `${FIXTURE_ROOT}/notebooks/sample.ipynb`;
 const AUDIO_RELATIVE_PATH = `${FIXTURE_ROOT}/media/sample-audio.txt`;
-const DEFAULT_BATCH_ID = "safe-core-tools";
+const DEFAULT_BATCH_ID = "coding-current-tools";
 const CONTEXT7_LIVE_URL = "https://mcp.context7.com/mcp";
 const CONTEXT7_HEADER_NAME = "CONTEXT7_API_KEY";
 const CONTEXT7_ENV_VAR_NAME = "CONTEXT7_API_KEY";
 const CONTEXT7_LIBRARY_ID = "/openai/openai-agents-python";
 const SAFE_FILE_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep"];
+const CODING_CURRENT_TOOLS = ["Read", "apply_patch", "Glob", "Grep", "Bash"];
 const MEDIA_NOTEBOOK_SHELL_TOOLS = ["view_image", "NotebookEdit", "Bash"];
 const TASK_BOARD_TOOLS = ["TaskCreate", "TaskGet", "TaskUpdate", "TaskList"];
 const BACKGROUND_TASK_TOOLS = ["Bash", "TaskOutput", "TaskStop"];
@@ -95,7 +96,8 @@ const MCP_RESOURCE_TOOLS = ["ListMcpResourcesTool", "ReadMcpResourceTool"];
 const SKILL_TOOLS = ["Skill"];
 const MCP_CONTEXT7_TOOLSEARCH_BATCH_ID = "mcp-context7-toolsearch";
 const BATCH_TARGET_TOOLS = {
-  [DEFAULT_BATCH_ID]: SAFE_FILE_TOOLS,
+  "safe-core-tools": SAFE_FILE_TOOLS,
+  "coding-current-tools": CODING_CURRENT_TOOLS,
   "media-notebook-shell-tools": MEDIA_NOTEBOOK_SHELL_TOOLS,
   "task-board-tools": TASK_BOARD_TOOLS,
   "background-task-tools": BACKGROUND_TASK_TOOLS,
@@ -411,6 +413,49 @@ function buildSafeFileFixtureResponses() {
     {
       type: "text",
       content: "AGENT_RUNTIME_SAFE_FILE_TOOLS_DONE",
+    },
+  ];
+}
+
+function buildCodingCurrentFixtureResponses() {
+  const patch = [
+    "*** Begin Patch",
+    `*** Update File: ${EDIT_RELATIVE_PATH}`,
+    "@@",
+    " Lime runtime tool execution fixture",
+    "-replace-target",
+    "+replace-done",
+    " LIME_TOOL_EXECUTION_MARKER",
+    "*** Add File: " + WRITE_RELATIVE_PATH,
+    "+LIME_TOOL_EXECUTION_WRITE_OK",
+    "*** End Patch",
+  ].join("\n");
+  const bashScript = "console.log('LIME_TOOL_EXECUTION_TEST_OK')";
+  return [
+    toolCall("Read", "call-tool-exec-coding-read", {
+      path: EDIT_RELATIVE_PATH,
+    }),
+    toolCall("apply_patch", "call-tool-exec-coding-apply-patch", {
+      patch,
+    }),
+    toolCall("Glob", "call-tool-exec-coding-glob", {
+      pattern: `${FIXTURE_ROOT}/**/*.txt`,
+      max_results: 20,
+    }),
+    toolCall("Grep", "call-tool-exec-coding-grep", {
+      pattern: "LIME_TOOL_EXECUTION_MARKER",
+      path: FIXTURE_ROOT,
+      mode: "content",
+      include_hidden: true,
+      max_results: 20,
+    }),
+    toolCall("Bash", "call-tool-exec-coding-bash", {
+      command: `node -e ${JSON.stringify(bashScript)}`,
+      timeout: 30,
+    }),
+    {
+      type: "text",
+      content: "AGENT_RUNTIME_CODING_CURRENT_TOOLS_DONE",
     },
   ];
 }
@@ -949,6 +994,44 @@ function buildBatchScenario(batchId, fixtureFiles) {
     };
   }
 
+  if (batchId === "coding-current-tools") {
+    return {
+      id: "coding-current-tools",
+      prompt:
+        "请从普通输入框自然语言触发 Codex-first coding 工具验收：读取 fixture 文件，用 apply_patch 修改并新增文件，再用 glob/grep 搜索文件，最后运行一个输出 LIME_TOOL_EXECUTION_TEST_OK 的最小本地命令。不要使用命令入口。",
+      promptNeedle: "Codex-first coding 工具验收",
+      targetTools: CODING_CURRENT_TOOLS,
+      requiresTargetToolsInInitialInventory: false,
+      deferScriptedToolCallsUntilAvailable: true,
+      expectedFixtureRequestCount: 2,
+      scriptedResponses: buildCodingCurrentFixtureResponses(),
+      buildAssertions({ evidencePackText, fixtureFiles, toolOutputText }) {
+        const editContent = readTextIfExists(fixtureFiles.editPath);
+        const writeContent = readTextIfExists(fixtureFiles.writePath);
+        return {
+          applyPatchMutatedFile: editContent.includes("replace-done"),
+          applyPatchCreatedFile: writeContent.includes(
+            "LIME_TOOL_EXECUTION_WRITE_OK",
+          ),
+          grepToolReturnedMarker: toolOutputText.includes(
+            "LIME_TOOL_EXECUTION_MARKER",
+          ),
+          globToolReturnedFixturePath:
+            toolOutputText.includes("edit-target.txt") ||
+            toolOutputText.includes("write-target.txt") ||
+            toolOutputText.includes("search-target.txt"),
+          bashToolReturnedOutput: toolOutputText.includes(
+            "LIME_TOOL_EXECUTION_TEST_OK",
+          ),
+          evidencePackMentionsCodingExecution:
+            evidencePackText.includes("apply_patch") ||
+            evidencePackText.includes("LIME_TOOL_EXECUTION_TEST_OK") ||
+            evidencePackText.includes("LIME_TOOL_EXECUTION_WRITE_OK"),
+        };
+      },
+    };
+  }
+
   if (batchId === "task-board-tools") {
     return {
       id: "task-board-tools",
@@ -1230,7 +1313,7 @@ function buildBatchScenario(batchId, fixtureFiles) {
   }
 
   return {
-    id: DEFAULT_BATCH_ID,
+    id: "safe-core-tools",
     prompt:
       "请从普通输入框自然语言触发本地文件工具验收：读取文件、编辑文件、写入文件、按 glob 搜索文件、按 grep 搜索文件内容。不要使用命令入口。",
     promptNeedle: "本地文件工具验收",

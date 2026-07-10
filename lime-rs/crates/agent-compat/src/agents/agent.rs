@@ -9,11 +9,23 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use futures::stream::BoxStream;
 use futures::{future::join_all, stream, FutureExt, Stream, StreamExt, TryStreamExt};
+use model_provider::provider_stream::{
+    provider_stream_cancel_poll_interval, provider_stream_event_poll,
+    provider_stream_failure_message_should_log_as_warning,
+    provider_stream_failure_should_log_as_error, provider_stream_model_change,
+    provider_stream_response_has_notification_text, provider_stream_response_text_chars,
+    provider_stream_response_tool_input_delta_events, provider_stream_timeout_poll,
+    ProviderStreamPoll, RuntimeReplyProviderFailure, RuntimeReplyProviderResponseContent,
+    RuntimeReplyProviderStreamProgress, RuntimeReplyResponseEvent,
+};
 use uuid::Uuid;
 
 use super::final_output_tool::FinalOutputTool;
 use super::prompt_input_modalities::provider_prompt_messages_for_turn_context;
-use super::provider_trace::ProviderTraceEvent;
+use super::provider_trace::{
+    provider_trace_canceled, provider_trace_failed, provider_trace_first_event_received,
+    provider_trace_first_text_delta_received, provider_trace_request_started, ProviderTraceEvent,
+};
 use super::tool_execution::{ToolCallResult, CHAT_MODE_TOOL_SKIPPED_RESPONSE, DECLINED_RESPONSE};
 use crate::action_required_manager::ActionRequiredManager;
 use crate::agents::extension::{ExtensionConfig, ExtensionResult, ToolInfo};
@@ -28,33 +40,25 @@ use crate::agents::types::SessionConfig;
 use crate::agents::types::{
     FrontendTool, PermissionRequestHookHandler, SharedProvider, ToolResultReceiver,
 };
-use crate::config::{get_enabled_extensions, AsterMode, Config};
-use crate::context::ContextTraceStep;
-use crate::context_mgmt::{
-    automatic_compaction_enabled_for_current_turn, check_if_compaction_needed,
-    compact_messages_with_summary, DEFAULT_COMPACTION_THRESHOLD,
-};
+use crate::agents::ContextTraceStep;
+use crate::config::{AsterMode, Config};
 use crate::conversation::message::{
     ActionRequired, ActionRequiredData, ActionRequiredScope, Message, MessageContent,
     ProviderMetadata, SystemNotificationType, ThinkingContent, ToolRequest, ToolResponse,
 };
 use crate::conversation::{debug_conversation_fix, fix_conversation, Conversation};
-use crate::mcp_utils::ToolResult;
 use crate::model::ModelConfig;
 use crate::permission::permission_inspector::PermissionInspector;
 use crate::permission::permission_judge::PermissionCheckResult;
 use crate::permission::PermissionConfirmation;
 use crate::providers::base::{Provider, SessionNameGenerationExecutionStrategy};
 use crate::providers::errors::ProviderError;
-use crate::providers::formats::openai_responses::is_provider_stream_event_notification;
-use crate::recipe::{Author, Recipe, Response, Settings, SubRecipe};
-use crate::scheduler_trait::SchedulerTrait;
-use crate::session::extension_data::{EnabledExtensionsState, ExtensionState};
+use crate::recipe::{Response, SubRecipe};
 use crate::session::{
     apply_session_update, load_managed_session_runtime_snapshot, query_session,
-    replace_session_conversation, require_shared_session_runtime_store, save_summary,
-    InMemoryThreadRuntimeStore, ItemRuntime, ItemRuntimePayload, ItemStatus, Session,
-    SessionManager, SessionPlanModeState, SessionRuntimeSnapshot, SessionStore, SessionType,
+    replace_session_conversation, require_shared_session_runtime_store, EnabledExtensionsState,
+    ExtensionState, InMemoryThreadRuntimeStore, ItemRuntime, ItemRuntimePayload, ItemStatus,
+    Session, SessionManager, SessionRuntimeSnapshot, SessionStore, SessionType,
     TeamMembershipState, TeamSessionState, ThreadRuntime, ThreadRuntimeStore, TurnContextOverride,
     TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy, TurnRuntime,
     TurnStatus,
@@ -62,25 +66,46 @@ use crate::session::{
 use crate::tool_inspection::ToolInspectionManager;
 use crate::tool_inspection::ToolInspector;
 use crate::tools::{
-    current_surface_tool_gates, register_all_tools, should_register_current_surface_tool,
-    AgentControlToolConfig, AskTool, CurrentSurfaceToolGates, SharedFileReadHistory,
-    SpawnAgentRequest, SpawnAgentResponse, ToolContext, ToolRegistrationConfig, ToolRegistry,
+    execute_agent_control_runtime_tool, execute_request_user_input_runtime_tool,
+    execute_team_runtime_tool, register_all_tools, AgentControlToolConfig, AskCallback, AskTool,
+    SharedFileReadHistory, ToolContext, ToolError, ToolRegistrationConfig, ToolRegistry,
     DEFAULT_ASK_TIMEOUT_SECS,
 };
-use crate::utils::is_token_cancelled;
-use regex::Regex;
 use rmcp::model::{
     CallToolRequestParam, CallToolResult, Content, ErrorCode, ErrorData, GetPromptResult, Prompt,
-    Role, ServerNotification, TextContent, Tool,
+    ServerNotification, TextContent, Tool,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
-use tool_runtime::shell_analysis::{
-    is_bash_command_concurrency_safe, is_powershell_command_concurrency_safe,
+use tool_runtime::collab_agent::{
+    collab_agent_canonical_tool_name, collab_agent_tool_definition, CollabAgentSurfaceError,
+    CollabAgentSurfaceErrorKind, RuntimeCollabToolOutput, SpawnAgentRequest, SpawnAgentResponse,
+    AGENT_TOOL_NAME as COLLAB_AGENT_TOOL_NAME, LIST_PEERS_TOOL_NAME, SEND_MESSAGE_TOOL_NAME,
+    TEAM_CREATE_TOOL_NAME, TEAM_DELETE_TOOL_NAME,
+};
+use tool_runtime::file_read_execution::RuntimeFileReadRequest;
+use tool_runtime::file_search_execution::RuntimeFileSearchRequest;
+use tool_runtime::native_dispatch_execution::RuntimeNativeDispatchToolRequest;
+use tool_runtime::request_user_input::REQUEST_USER_INPUT_TOOL_NAME;
+use tool_runtime::shell_execution::RuntimeShellToolRequest;
+use tool_runtime::tool_batch::{
+    partition_tool_execution_requests, runtime_tool_call_concurrency_safe,
+};
+use tool_runtime::tool_definition::RuntimeToolDefinition;
+use tool_runtime::tool_executor::RuntimeToolTurnContext;
+use tool_runtime::tool_result_projection::{
+    runtime_tool_result_surface_updated, runtime_tool_result_to_call_tool_result,
+    RuntimeToolResultParts,
+};
+use tool_runtime::turn_tool_surface::{
+    runtime_registered_tool_exposure_allows_tool_name, runtime_tool_surface_gates,
+    runtime_turn_tool_exposure_allows_tool_name, RuntimeToolSurfaceGates,
 };
 use tracing::{debug, error, info, instrument, warn};
+
+type ToolResult<T> = Result<T, ErrorData>;
 
 struct OverflowHandler {
     max_attempts: usize,
@@ -116,14 +141,16 @@ impl OverflowHandler {
     }
 }
 
+fn provider_failure(error: &ProviderError) -> RuntimeReplyProviderFailure {
+    RuntimeReplyProviderFailure::from_category(
+        error.telemetry_type(),
+        error.is_retryable(),
+        error.is_non_retryable_provider_rejection(),
+    )
+}
+
 fn should_log_provider_failure_as_error(error: &ProviderError) -> bool {
-    !error.is_non_retryable_provider_rejection()
-        && (matches!(
-            error,
-            ProviderError::ServerError(_)
-                | ProviderError::ExecutionError(_)
-                | ProviderError::UsageError(_)
-        ) || error.is_retryable())
+    provider_stream_failure_should_log_as_error(provider_failure(error))
 }
 
 fn should_log_session_description_failure_as_warning(error: &anyhow::Error) -> bool {
@@ -131,7 +158,7 @@ fn should_log_session_description_failure_as_warning(error: &anyhow::Error) -> b
         return should_log_provider_failure_as_error(provider_error);
     }
 
-    !ProviderError::message_is_non_retryable_provider_rejection(&error.to_string())
+    provider_stream_failure_message_should_log_as_warning(error.to_string())
 }
 
 fn log_session_description_failure(error: &anyhow::Error) {
@@ -148,29 +175,11 @@ fn log_session_description_failure(error: &anyhow::Error) {
 const DEFAULT_MAX_TURNS: u32 = 1000;
 const MAX_REPLY_TURNS_REACHED_MESSAGE: &str =
     "I've reached the maximum number of actions I can do without user input. Would you like me to continue?";
-const PROVIDER_STREAM_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON: &str = "cancelled_while_waiting_provider_stream";
-const PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON: &str =
-    "cancelled_before_provider_event_processing";
 const COMPACTION_THINKING_TEXT: &str = "aster is compacting the conversation...";
 const CONTEXT_COMPACTION_WARNING_TEXT: &str =
     "长对话和多次上下文压缩会降低模型准确性；如果后续结果开始漂移，建议新开会话。";
-const RESOURCE_GATED_TOOL_NAMES: [&str; 2] = ["list_mcp_resources", "read_mcp_resource"];
-const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: [&str; 7] = [
-    "Bash",
-    "PowerShell",
-    "Read",
-    "Glob",
-    "Grep",
-    "WebFetch",
-    "WebSearch",
-];
-const SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES: [&str; 3] =
-    ["Skill", "ToolSearch", FINAL_OUTPUT_TOOL_NAME];
-const SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES: [&str; 2] = ["SendMessage", "ListPeers"];
 const CANCELLED_TURN_CONTEXT_MARKER: &str =
     "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
-const AUTO_COMPACTION_PRE_REPLY_MODEL_TIMEOUT: Duration = Duration::from_millis(500);
 const AUTO_COMPACTION_DISABLED_CONTEXT_LIMIT_TEXT: &str =
     "Automatic compaction is disabled for this turn. The conversation reached the context limit. Compact the session manually or start a new session before retrying.";
 const PROPOSED_PLAN_OPEN: &str = "<proposed_plan>";
@@ -276,59 +285,18 @@ fn extract_proposed_plan_block(text: &str) -> Option<String> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct ToolExecutionBatch {
-    is_concurrency_safe: bool,
-    requests: Vec<ToolRequest>,
-}
-
-fn is_concurrency_safe_tool_request(request: &ToolRequest) -> bool {
+fn tool_request_is_concurrency_safe(request: &ToolRequest) -> bool {
     let Ok(tool_call) = &request.tool_call else {
         return false;
     };
-
-    match tool_call.name.as_ref() {
-        "Read" | "Glob" | "Grep" | "WebFetch" | "WebSearch" | "list_mcp_resources"
-        | "read_mcp_resource" => true,
-        "Bash" => tool_call
+    runtime_tool_call_concurrency_safe(
+        tool_call.name.as_ref(),
+        tool_call
             .arguments
             .as_ref()
             .and_then(|arguments| arguments.get("command"))
-            .and_then(Value::as_str)
-            .is_some_and(is_bash_command_concurrency_safe),
-        "PowerShell" => tool_call
-            .arguments
-            .as_ref()
-            .and_then(|arguments| arguments.get("command"))
-            .and_then(Value::as_str)
-            .is_some_and(is_powershell_command_concurrency_safe),
-        _ => false,
-    }
-}
-
-fn partition_tool_requests_for_execution(requests: &[ToolRequest]) -> Vec<ToolExecutionBatch> {
-    let mut batches = Vec::new();
-
-    for request in requests {
-        let is_concurrency_safe = is_concurrency_safe_tool_request(request);
-        if is_concurrency_safe
-            && batches
-                .last()
-                .is_some_and(|batch: &ToolExecutionBatch| batch.is_concurrency_safe)
-        {
-            if let Some(last_batch) = batches.last_mut() {
-                last_batch.requests.push(request.clone());
-            }
-            continue;
-        }
-
-        batches.push(ToolExecutionBatch {
-            is_concurrency_safe,
-            requests: vec![request.clone()],
-        });
-    }
-
-    batches
+            .and_then(Value::as_str),
+    )
 }
 
 fn is_assistant_phase_summary_heading_line(line: &str) -> bool {
@@ -393,69 +361,42 @@ fn build_reasoning_summary_sections(text: &str) -> Option<Vec<String>> {
 fn should_expose_registered_tool_with_gates(
     name: &str,
     resources_supported: bool,
-    tool_gates: CurrentSurfaceToolGates,
+    tool_gates: RuntimeToolSurfaceGates,
 ) -> bool {
-    if RESOURCE_GATED_TOOL_NAMES.contains(&name) {
-        return resources_supported;
-    }
-
-    should_register_current_surface_tool(name, tool_gates)
+    runtime_registered_tool_exposure_allows_tool_name(name, resources_supported, tool_gates)
 }
 
-fn should_expose_registered_tool(name: &str, resources_supported: bool) -> bool {
-    should_expose_registered_tool_with_gates(
-        name,
-        resources_supported,
-        current_surface_tool_gates(),
-    )
-}
-
-fn is_extension_prefixed_tool(name: &str) -> bool {
-    name.contains("__")
-}
-
-fn should_expose_tool_for_session(
-    name: &str,
-    session_type: Option<SessionType>,
-    resources_supported: bool,
+fn allowed_tool_names_allow_collab_tool(
+    allowed_tool_names: Option<&[String]>,
+    tool_name: &str,
 ) -> bool {
-    should_expose_tool_for_session_with_gates(
-        name,
-        session_type,
-        resources_supported,
-        current_surface_tool_gates(),
-        false,
-        false,
-    )
+    let Some(allowed_tool_names) = allowed_tool_names else {
+        return true;
+    };
+
+    allowed_tool_names.iter().any(|allowed| {
+        allowed.eq_ignore_ascii_case(tool_name)
+            || collab_agent_canonical_tool_name(allowed)
+                .is_some_and(|canonical| canonical.eq_ignore_ascii_case(tool_name))
+    })
 }
 
 fn should_expose_tool_for_session_with_gates(
     name: &str,
     session_type: Option<SessionType>,
     resources_supported: bool,
-    tool_gates: CurrentSurfaceToolGates,
+    tool_gates: RuntimeToolSurfaceGates,
     subagent_teammate_tools_enabled: bool,
-    _plan_mode_active: bool,
 ) -> bool {
-    if !should_expose_registered_tool_with_gates(name, resources_supported, tool_gates) {
-        return false;
-    }
-
-    if !matches!(session_type, Some(SessionType::SubAgent)) {
-        return true;
-    }
-
-    if is_extension_prefixed_tool(name) {
-        return true;
-    }
-
-    if name == AGENT_TOOL_NAME && subagent_teammate_tools_enabled {
-        return true;
-    }
-
-    SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES.contains(&name)
-        || SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES.contains(&name)
-        || (subagent_teammate_tools_enabled && SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES.contains(&name))
+    runtime_turn_tool_exposure_allows_tool_name(
+        name,
+        matches!(session_type, Some(SessionType::SubAgent)),
+        resources_supported,
+        tool_gates,
+        subagent_teammate_tools_enabled,
+        AGENT_TOOL_NAME,
+        FINAL_OUTPUT_TOOL_NAME,
+    )
 }
 
 fn session_allows_subagent_teammate_tools(session: &Session) -> bool {
@@ -464,15 +405,232 @@ fn session_allows_subagent_teammate_tools(session: &Session) -> bool {
             || TeamSessionState::from_session(session).is_some())
 }
 
-fn session_plan_mode_active(session: &Session) -> bool {
-    SessionPlanModeState::from_session(session).is_some_and(|state| state.active)
+fn cancel_token_cancelled(token: &Option<CancellationToken>) -> bool {
+    token.as_ref().is_some_and(CancellationToken::is_cancelled)
 }
 
-fn turn_context_plan_mode_active() -> bool {
-    crate::session_context::current_turn_context()
-        .as_ref()
-        .and_then(|context| context.collaboration_mode.as_deref())
-        .is_some_and(|mode| matches!(mode.trim(), "plan" | "planning"))
+fn insert_runtime_turn_identity_if_absent(
+    metadata: &mut HashMap<String, Value>,
+    key: &str,
+    value: String,
+) {
+    let value = value.trim();
+    if value.is_empty() {
+        return;
+    }
+    metadata
+        .entry(key.to_string())
+        .or_insert_with(|| Value::String(value.to_string()));
+}
+
+fn runtime_tool_turn_context_from_current_session() -> Option<RuntimeToolTurnContext> {
+    let mut turn_context =
+        crate::session_context::current_turn_context().map(|context| RuntimeToolTurnContext {
+            cwd: context.cwd,
+            model: context.model,
+            effort: context.effort,
+            approval_policy: context.approval_policy,
+            sandbox_policy: context.sandbox_policy,
+            collaboration_mode: context.collaboration_mode,
+            user_visible_input_text: context.user_visible_input_text,
+            output_schema: context.output_schema,
+            output_schema_source: None,
+            metadata: context.metadata,
+        });
+    let had_turn_context = turn_context.is_some();
+    let context = turn_context.get_or_insert_with(RuntimeToolTurnContext::default);
+
+    if let Some(session_id) = crate::session_context::current_session_id() {
+        insert_runtime_turn_identity_if_absent(&mut context.metadata, "session_id", session_id);
+    }
+    if let Some(scope) = crate::session_context::current_action_scope() {
+        if let Some(session_id) = scope.session_id {
+            insert_runtime_turn_identity_if_absent(&mut context.metadata, "session_id", session_id);
+        }
+        if let Some(thread_id) = scope.thread_id {
+            insert_runtime_turn_identity_if_absent(&mut context.metadata, "thread_id", thread_id);
+        }
+        if let Some(turn_id) = scope.turn_id {
+            insert_runtime_turn_identity_if_absent(&mut context.metadata, "turn_id", turn_id);
+        }
+    }
+
+    if had_turn_context || !context.metadata.is_empty() {
+        turn_context
+    } else {
+        None
+    }
+}
+
+async fn execute_runtime_native_dispatch_tool(
+    tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> Option<ToolCallResult> {
+    let turn_context = runtime_tool_turn_context_from_current_session();
+    tool_runtime::native_dispatch_execution::execute_runtime_native_dispatch_tool(
+        RuntimeNativeDispatchToolRequest {
+            tool_name,
+            params,
+            working_directory: context.working_directory.clone(),
+            session_id: context.session_id.clone(),
+            cancel_token: context.cancellation_token.clone(),
+            turn_context: turn_context.as_ref(),
+        },
+    )
+    .await
+    .map(ToolCallResult::from)
+}
+
+async fn execute_runtime_shell_tool(
+    tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> Option<ToolCallResult> {
+    let turn_context = runtime_tool_turn_context_from_current_session();
+    tool_runtime::shell_execution::execute_runtime_shell_tool(RuntimeShellToolRequest {
+        tool_name,
+        params,
+        working_directory: context.working_directory.clone(),
+        session_id: context.session_id.clone(),
+        environment: context.environment.clone(),
+        has_workspace_sandbox: context.workspace_sandbox.is_some(),
+        cancel_token: context.cancellation_token.clone(),
+        turn_context: turn_context.as_ref(),
+    })
+    .await
+    .map(ToolCallResult::from)
+}
+
+async fn execute_runtime_file_read_tool(
+    tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> Option<ToolCallResult> {
+    tool_runtime::file_read_execution::execute_runtime_file_read_tool(RuntimeFileReadRequest {
+        tool_name,
+        params,
+        working_directory: context.working_directory.clone(),
+        cancel_token: context.cancellation_token.clone(),
+    })
+    .await
+    .map(ToolCallResult::from)
+}
+
+async fn execute_runtime_file_search_tool(
+    tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> Option<ToolCallResult> {
+    tool_runtime::file_search_execution::execute_runtime_file_search_tool(
+        RuntimeFileSearchRequest {
+            tool_name,
+            params,
+            working_directory: context.working_directory.clone(),
+            cancel_token: context.cancellation_token.clone(),
+        },
+    )
+    .await
+    .map(ToolCallResult::from)
+}
+
+fn tool_error_to_error_data(error: ToolError) -> ErrorData {
+    let code = match error {
+        ToolError::InvalidParams(_) => ErrorCode::INVALID_PARAMS,
+        _ => ErrorCode::INTERNAL_ERROR,
+    };
+    ErrorData::new(code, error.to_string(), None)
+}
+
+async fn execute_runtime_request_user_input_tool(
+    tool_name: &str,
+    params: &Value,
+    ask_callback: Option<&AskCallback>,
+) -> Option<ToolCallResult> {
+    if tool_name != REQUEST_USER_INPUT_TOOL_NAME {
+        return None;
+    }
+
+    let execution = execute_request_user_input_runtime_tool(
+        params.clone(),
+        ask_callback,
+        Duration::from_secs(DEFAULT_ASK_TIMEOUT_SECS),
+    )
+    .await;
+
+    Some(match execution {
+        Ok(projection) => {
+            let metadata = projection.metadata.into_iter().collect();
+            ToolCallResult::from(Ok(runtime_tool_result_to_call_tool_result(
+                RuntimeToolResultParts {
+                    success: true,
+                    output: Some(projection.output),
+                    error: None,
+                    metadata,
+                },
+            )))
+        }
+        Err(error) => ToolCallResult::from(Err(tool_error_to_error_data(error))),
+    })
+}
+
+fn collab_error_to_error_data(error: CollabAgentSurfaceError) -> ErrorData {
+    let code = match error.kind() {
+        CollabAgentSurfaceErrorKind::InvalidParams => ErrorCode::INVALID_PARAMS,
+        CollabAgentSurfaceErrorKind::ExecutionFailed => ErrorCode::INTERNAL_ERROR,
+    };
+    ErrorData::new(code, error.message().to_string(), None)
+}
+
+fn collab_output_to_tool_call_result(
+    tool_name: &str,
+    output: RuntimeCollabToolOutput,
+) -> ToolCallResult {
+    let mut metadata = HashMap::new();
+    if matches!(
+        tool_name,
+        TEAM_CREATE_TOOL_NAME | TEAM_DELETE_TOOL_NAME | LIST_PEERS_TOOL_NAME
+    ) {
+        metadata.extend(output.metadata);
+    } else {
+        metadata.insert(
+            output.metadata_key.to_string(),
+            Value::Object(output.metadata),
+        );
+    }
+
+    ToolCallResult::from(Ok(runtime_tool_result_to_call_tool_result(
+        RuntimeToolResultParts {
+            success: true,
+            output: Some(output.output),
+            error: None,
+            metadata,
+        },
+    )))
+}
+
+async fn execute_runtime_collab_tool(
+    tool_name: &str,
+    params: &Value,
+    session_id: &str,
+    agent_control_tools: Option<&AgentControlToolConfig>,
+) -> Option<ToolCallResult> {
+    let params = params.clone();
+    let execution = match tool_name {
+        SEND_MESSAGE_TOOL_NAME => {
+            execute_agent_control_runtime_tool(tool_name, params, session_id, agent_control_tools)
+                .await
+        }
+        TEAM_CREATE_TOOL_NAME | TEAM_DELETE_TOOL_NAME | LIST_PEERS_TOOL_NAME => {
+            execute_team_runtime_tool(tool_name, params, session_id).await
+        }
+        _ => None,
+    }?;
+
+    Some(match execution {
+        Ok(output) => collab_output_to_tool_call_result(tool_name, output),
+        Err(error) => ToolCallResult::from(Err(collab_error_to_error_data(error))),
+    })
 }
 
 fn collect_string_values(value: &Value) -> Vec<String> {
@@ -744,117 +902,6 @@ fn should_stop_after_tool_result(
     })
 }
 
-fn native_tool_metadata_to_value(
-    metadata: std::collections::HashMap<String, Value>,
-) -> Option<Value> {
-    if metadata.is_empty() {
-        None
-    } else {
-        Some(Value::Object(metadata.into_iter().collect()))
-    }
-}
-
-fn parse_model_visible_image_data_url(data_url: &str) -> Option<(String, String)> {
-    let normalized = data_url.trim();
-    if !normalized.starts_with("data:image/") {
-        return None;
-    }
-
-    let (meta, data) = normalized.split_once(',')?;
-    if !meta.to_ascii_lowercase().contains(";base64") {
-        return None;
-    }
-
-    let mime_type = meta.strip_prefix("data:")?.split(';').next()?.trim();
-    let data = data.trim();
-    if mime_type.starts_with("image/") && !data.is_empty() {
-        Some((mime_type.to_string(), data.to_string()))
-    } else {
-        None
-    }
-}
-
-fn native_tool_model_visible_image_content(metadata: &HashMap<String, Value>) -> Option<Content> {
-    let model_visible_image = metadata
-        .get("model_visible_image")
-        .or_else(|| metadata.get("modelVisibleImage"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    if !model_visible_image {
-        return None;
-    }
-
-    let image_url = metadata
-        .get("image_url")
-        .or_else(|| metadata.get("imageUrl"))
-        .and_then(Value::as_str)?;
-    let (mime_type, data) = parse_model_visible_image_data_url(image_url)?;
-    Some(Content::image(data, mime_type))
-}
-
-fn remove_model_visible_image_transport_metadata(metadata: &mut HashMap<String, Value>) {
-    for key in [
-        "image_url",
-        "imageUrl",
-        "model_visible_image",
-        "modelVisibleImage",
-    ] {
-        metadata.remove(key);
-    }
-}
-
-fn native_tool_result_to_call_tool_result(result: crate::tools::ToolResult) -> CallToolResult {
-    let mut metadata = result.metadata;
-    let image_content = if result.success {
-        native_tool_model_visible_image_content(&metadata)
-    } else {
-        None
-    };
-    if image_content.is_some() {
-        remove_model_visible_image_transport_metadata(&mut metadata);
-    }
-
-    let structured_content = native_tool_metadata_to_value(metadata);
-    let fallback_text = structured_content
-        .as_ref()
-        .and_then(|value| serde_json::to_string_pretty(value).ok());
-    let text = if result.success {
-        result
-            .output
-            .filter(|value| !value.is_empty())
-            .or_else(|| fallback_text.clone())
-            .unwrap_or_default()
-    } else {
-        result
-            .error
-            .or(result.output)
-            .filter(|value| !value.is_empty())
-            .or(fallback_text)
-            .unwrap_or_default()
-    };
-
-    let mut content = vec![Content::text(text)];
-    if let Some(image_content) = image_content {
-        content.push(image_content);
-    }
-
-    CallToolResult {
-        content,
-        structured_content,
-        is_error: Some(!result.success),
-        meta: None,
-    }
-}
-
-fn tool_surface_updated_from_call_tool_result(result: &CallToolResult) -> bool {
-    result
-        .structured_content
-        .as_ref()
-        .and_then(|value| value.get("tool_surface_updated"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-}
-
 fn normalize_agent_optional_text(value: Option<String>) -> Option<String> {
     let trimmed = value?.trim().to_string();
     if trimmed.is_empty() {
@@ -1100,7 +1147,6 @@ pub struct Agent {
     pub(super) tool_result_tx: mpsc::Sender<(String, ToolResult<CallToolResult>)>,
     pub(super) tool_result_rx: ToolResultReceiver,
 
-    pub(super) scheduler_service: Mutex<Option<Arc<dyn SchedulerTrait>>>,
     pub(super) retry_manager: RetryManager,
     pub(super) tool_inspection_manager: ToolInspectionManager,
     pub(super) permission_request_hook_handler: Option<PermissionRequestHookHandler>,
@@ -1116,7 +1162,9 @@ pub struct Agent {
     /// 如果未设置，会回退到全局 SessionManager（向后兼容）。
     pub(super) session_store: Option<Arc<dyn SessionStore>>,
     pub(super) thread_runtime_store: Arc<dyn ThreadRuntimeStore>,
+    pub(super) ask_callback: Option<AskCallback>,
     pub(super) agent_control_tools: Option<AgentControlToolConfig>,
+    pub(super) allowed_tool_names: Option<Vec<String>>,
     native_tool_execution_hook: Option<Arc<dyn NativeToolExecutionHook>>,
 }
 
@@ -1169,43 +1217,68 @@ pub enum AgentEvent {
     },
 }
 
-fn collect_provider_tool_input_delta_events(message: &Message) -> Option<Vec<AgentEvent>> {
-    if message.content.is_empty() {
-        return None;
-    }
-
-    let mut events = Vec::new();
-    for content in &message.content {
-        let MessageContent::ToolInputDelta(delta) = content else {
-            return None;
-        };
-        if delta.id.trim().is_empty() || delta.delta.is_empty() {
-            continue;
+fn provider_response_content(content: &MessageContent) -> RuntimeReplyProviderResponseContent<'_> {
+    match content {
+        MessageContent::Text(text) => RuntimeReplyProviderResponseContent::text(text.text.as_str()),
+        MessageContent::ToolInputDelta(delta) => {
+            RuntimeReplyProviderResponseContent::tool_input_delta(
+                delta.id.as_str(),
+                delta.tool_name.as_deref(),
+                delta.delta.as_str(),
+                delta.accumulated_arguments.as_deref(),
+                delta.provider.as_deref(),
+            )
         }
-        events.push(AgentEvent::ToolInputDelta {
-            tool_id: delta.id.clone(),
-            tool_name: delta.tool_name.clone(),
-            delta: delta.delta.clone(),
-            accumulated_arguments: delta.accumulated_arguments.clone(),
-            provider: delta.provider.clone(),
-        });
+        _ => content
+            .as_system_notification()
+            .map(|notification| {
+                RuntimeReplyProviderResponseContent::system_notification(notification.msg.as_str())
+            })
+            .unwrap_or(RuntimeReplyProviderResponseContent::Other),
     }
+}
 
-    Some(events)
+fn collect_provider_tool_input_delta_events(message: &Message) -> Option<Vec<AgentEvent>> {
+    provider_stream_response_tool_input_delta_events(
+        message.content.iter().map(provider_response_content),
+    )
+    .map(|events| {
+        events
+            .into_iter()
+            .filter_map(agent_event_from_provider_response_event)
+            .collect()
+    })
+}
+
+fn agent_event_from_provider_response_event(
+    event: RuntimeReplyResponseEvent,
+) -> Option<AgentEvent> {
+    match event {
+        RuntimeReplyResponseEvent::ToolCallInputDelta {
+            call_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        } => Some(AgentEvent::ToolInputDelta {
+            tool_id: call_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        }),
+        _ => None,
+    }
 }
 
 fn provider_response_text_chars(message: &Message) -> Option<usize> {
-    message.content.iter().find_map(|content| {
-        let MessageContent::Text(text) = content else {
-            return None;
-        };
-        let trimmed = text.text.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.chars().count())
-        }
-    })
+    provider_stream_response_text_chars(message.content.iter().map(provider_response_content))
+}
+
+fn provider_response_has_notification(message: &Message) -> bool {
+    provider_stream_response_has_notification_text(
+        message.content.iter().map(provider_response_content),
+    )
 }
 
 fn strip_tool_requests_for_direct_answer(mut message: Message) -> Message {
@@ -1783,11 +1856,11 @@ impl Agent {
 
         // Initialize ToolRegistry with all native tools (Requirements: 11.3, 11.4)
         let mut tool_registry = ToolRegistry::new();
+        let ask_callback = default_ask_callback();
         let tool_config = ToolRegistrationConfig::new()
-            .with_ask_callback(default_ask_callback())
+            .with_ask_callback(ask_callback.clone())
             .with_extension_manager(Arc::downgrade(&extension_manager));
-        let (file_read_history, _hook_manager) =
-            register_all_tools(&mut tool_registry, tool_config);
+        let file_read_history = register_all_tools(&mut tool_registry, tool_config);
 
         Self {
             provider: provider.clone(),
@@ -1803,7 +1876,6 @@ impl Agent {
             confirmation_rx: Mutex::new(confirm_rx),
             tool_result_tx: tool_tx,
             tool_result_rx: Arc::new(Mutex::new(tool_rx)),
-            scheduler_service: Mutex::new(None),
             retry_manager: RetryManager::new(),
             tool_inspection_manager: Self::create_default_tool_inspection_manager(),
             permission_request_hook_handler: None,
@@ -1811,7 +1883,9 @@ impl Agent {
             file_read_history,
             session_store: None, // 默认使用全局 SessionManager
             thread_runtime_store: Arc::new(InMemoryThreadRuntimeStore::default()),
+            ask_callback: Some(ask_callback),
             agent_control_tools: None,
+            allowed_tool_names: None,
             native_tool_execution_hook: None,
         }
     }
@@ -1848,6 +1922,7 @@ impl Agent {
     pub fn with_shared_native_tool_surface_from(mut self, other: &Agent) -> Self {
         self.tool_registry = other.tool_registry.clone();
         self.file_read_history = other.file_read_history.clone();
+        self.ask_callback = other.ask_callback.clone();
         self.native_tool_execution_hook = other.native_tool_execution_hook.clone();
         self
     }
@@ -1869,7 +1944,7 @@ impl Agent {
     ///
     /// # Example
     /// ```ignore
-    /// use aster::agents::{Agent, AgentIdentity};
+    /// use aster::{Agent, AgentIdentity};
     ///
     /// let identity = AgentIdentity::new("ProxyCast 助手")
     ///     .with_language("Chinese")
@@ -1912,15 +1987,16 @@ impl Agent {
         let extension_manager = Arc::new(ExtensionManager::new(provider.clone()));
         let mut config = config;
         let agent_control_tools = config.agent_control_tools.clone();
+        let allowed_tool_names = config.allowed_tool_names.clone();
         if config.ask_callback.is_none() {
             config.ask_callback = Some(default_ask_callback());
         }
+        let ask_callback = config.ask_callback.clone();
         config = config.with_extension_manager(Arc::downgrade(&extension_manager));
 
         // Initialize ToolRegistry with configured tools
         let mut tool_registry = ToolRegistry::new();
-        let (file_read_history, _hook_manager) =
-            crate::tools::register_all_tools(&mut tool_registry, config);
+        let file_read_history = crate::tools::register_all_tools(&mut tool_registry, config);
 
         Self {
             provider: provider.clone(),
@@ -1936,7 +2012,6 @@ impl Agent {
             confirmation_rx: Mutex::new(confirm_rx),
             tool_result_tx: tool_tx,
             tool_result_rx: Arc::new(Mutex::new(tool_rx)),
-            scheduler_service: Mutex::new(None),
             retry_manager: RetryManager::new(),
             tool_inspection_manager: Self::create_default_tool_inspection_manager(),
             permission_request_hook_handler: None,
@@ -1944,7 +2019,9 @@ impl Agent {
             file_read_history,
             session_store: None,
             thread_runtime_store: Arc::new(InMemoryThreadRuntimeStore::default()),
+            ask_callback,
             agent_control_tools,
+            allowed_tool_names,
             native_tool_execution_hook: None,
         }
     }
@@ -1994,6 +2071,43 @@ impl Agent {
     /// initialized, so this must not be limited to `Agent::with_tool_config`.
     pub fn set_agent_control_tools(&mut self, config: Option<AgentControlToolConfig>) {
         self.agent_control_tools = config;
+    }
+
+    fn configured_collab_tool_allows(&self, tool_name: &str) -> bool {
+        allowed_tool_names_allow_collab_tool(self.allowed_tool_names.as_deref(), tool_name)
+    }
+
+    fn canonical_current_collab_tool_name(&self, tool_name: &str) -> Option<String> {
+        let canonical = collab_agent_canonical_tool_name(tool_name)?;
+        self.configured_collab_tool_allows(canonical)
+            .then(|| canonical.to_string())
+    }
+
+    fn current_collab_tool_definitions(&self) -> Vec<RuntimeToolDefinition> {
+        let Some(callbacks) = self.agent_control_tools.as_ref() else {
+            return Vec::new();
+        };
+
+        let mut tool_names = Vec::new();
+        if callbacks.spawn_agent.is_some() {
+            tool_names.push(COLLAB_AGENT_TOOL_NAME);
+        }
+        if callbacks.send_input.is_some() {
+            tool_names.push(SEND_MESSAGE_TOOL_NAME);
+        }
+        if callbacks.spawn_agent.is_some() && callbacks.send_input.is_some() {
+            tool_names.extend([
+                TEAM_CREATE_TOOL_NAME,
+                TEAM_DELETE_TOOL_NAME,
+                LIST_PEERS_TOOL_NAME,
+            ]);
+        }
+
+        tool_names
+            .into_iter()
+            .filter(|tool_name| self.configured_collab_tool_allows(tool_name))
+            .filter_map(collab_agent_tool_definition)
+            .collect()
     }
 
     /// Replace the current native tool execution hook.
@@ -2330,50 +2444,16 @@ impl Agent {
         format!("context_compaction:{turn_id}:{}", Uuid::new_v4())
     }
 
-    fn estimated_compacted_turn_count(conversation: &Conversation) -> usize {
-        conversation
-            .messages()
-            .iter()
-            .filter(|message| message.is_agent_visible() && message.role == Role::User)
-            .count()
-    }
-
     pub(crate) async fn perform_context_compaction(
         &self,
         session_config: &SessionConfig,
         conversation: &Conversation,
         manual_compact: bool,
     ) -> Result<ContextCompactionResult> {
-        let (compacted_conversation, summarization_usage, summary_text) =
-            compact_messages_with_summary(
-                self.provider().await?.as_ref(),
-                conversation,
-                manual_compact,
-            )
-            .await?;
-
-        self.store_replace_conversation(&session_config.id, &compacted_conversation)
-            .await?;
-        Self::update_session_metrics(
-            session_config,
-            &summarization_usage,
-            true,
-            self.session_store.as_ref(),
-        )
-        .await?;
-
-        let turn_count = Self::estimated_compacted_turn_count(conversation);
-        if let Err(error) = save_summary(&session_config.id, &summary_text, Some(turn_count)) {
-            warn!(
-                session_id = %session_config.id,
-                ?error,
-                "Failed to persist compacted summary cache"
-            );
-        }
-
-        Ok(ContextCompactionResult {
-            compacted_conversation,
-        })
+        let _ = (session_config, conversation, manual_compact);
+        Err(anyhow!(
+            "Aster context compaction is retired; use the current App Server context compaction flow"
+        ))
     }
 
     pub async fn compact_session(
@@ -2746,7 +2826,10 @@ impl Agent {
     ) -> Result<Vec<(String, ToolStream)>> {
         let mut tool_futures: Vec<(String, ToolStream)> = Vec::new();
 
-        for batch in partition_tool_requests_for_execution(&permission_check_result.approved) {
+        for batch in partition_tool_execution_requests(
+            &permission_check_result.approved,
+            tool_request_is_concurrency_safe,
+        ) {
             if batch.is_concurrency_safe {
                 let batch_cancel_token = cancel_token.clone();
                 let batch_pinned_provider = pinned_provider.clone();
@@ -2839,13 +2922,6 @@ impl Agent {
                     request.metadata.as_ref(),
                 );
             }
-        }
-    }
-
-    pub async fn set_scheduler(&self, scheduler: Arc<dyn SchedulerTrait>) {
-        {
-            let mut scheduler_service = self.scheduler_service.lock().await;
-            *scheduler_service = Some(scheduler.clone());
         }
     }
 
@@ -3267,11 +3343,16 @@ impl Agent {
         } else {
             // 优先检查 tool_registry 中的原生工具
             // 原生工具直接在进程内执行，不需要 MCP 子进程
-            let native_tool_name = self
-                .tool_registry
-                .read()
-                .await
-                .canonical_native_name(tool_call.name.as_ref());
+            let native_tool_name = if let Some(tool_name) =
+                self.canonical_current_collab_tool_name(tool_call.name.as_ref())
+            {
+                Some(tool_name)
+            } else {
+                self.tool_registry
+                    .read()
+                    .await
+                    .canonical_native_name(tool_call.name.as_ref())
+            };
 
             if let Some(tool_name) = native_tool_name {
                 // 原生工具：直接通过 tool_registry 执行
@@ -3305,15 +3386,53 @@ impl Agent {
                     })
                 {
                     hook_result
+                } else if let Some(ask_result) = execute_runtime_request_user_input_tool(
+                    &tool_name,
+                    &params,
+                    self.ask_callback.as_ref(),
+                )
+                .await
+                {
+                    ask_result
+                } else if let Some(collab_result) = execute_runtime_collab_tool(
+                    &tool_name,
+                    &params,
+                    &context.session_id,
+                    self.agent_control_tools.as_ref(),
+                )
+                .await
+                {
+                    collab_result
+                } else if let Some(shell_result) =
+                    execute_runtime_shell_tool(&tool_name, &params, &context).await
+                {
+                    shell_result
+                } else if let Some(read_result) =
+                    execute_runtime_file_read_tool(&tool_name, &params, &context).await
+                {
+                    read_result
+                } else if let Some(search_result) =
+                    execute_runtime_file_search_tool(&tool_name, &params, &context).await
+                {
+                    search_result
+                } else if let Some(dispatch_result) =
+                    execute_runtime_native_dispatch_tool(&tool_name, &params, &context).await
+                {
+                    dispatch_result
                 } else {
                     let registry = self.tool_registry.read().await;
                     let execute_result = registry.execute(&tool_name, params, &context, None).await;
                     drop(registry);
 
                     match execute_result {
-                        Ok(result) => {
-                            ToolCallResult::from(Ok(native_tool_result_to_call_tool_result(result)))
-                        }
+                        Ok(result) => ToolCallResult::from(Ok(
+                            runtime_tool_result_to_call_tool_result(RuntimeToolResultParts {
+                                success: result.success,
+                                output: result.output,
+                                error: result.error,
+                                metadata: result.metadata,
+                            }),
+                        )),
                         Err(e) => ToolCallResult::from(Err(ErrorData::new(
                             ErrorCode::INTERNAL_ERROR,
                             e.to_string(),
@@ -3495,7 +3614,7 @@ impl Agent {
             .subagents_enabled_for_session_type(current_session_type)
             .await;
         let resources_supported = self.extension_manager.supports_resources().await;
-        let tool_gates = current_surface_tool_gates();
+        let tool_gates = runtime_tool_surface_gates();
         let callback_backed_agent_enabled = self
             .agent_control_tools
             .as_ref()
@@ -3510,7 +3629,10 @@ impl Agent {
                 prefixed_tools.push(final_output_tool.tool());
             }
 
-            if subagents_enabled && !callback_backed_agent_enabled && !registry_has_agent_tool {
+            if (subagents_enabled || subagent_teammate_tools_enabled)
+                && !callback_backed_agent_enabled
+                && !registry_has_agent_tool
+            {
                 let sub_recipes = self.sub_recipes.lock().await;
                 let sub_recipes_vec: Vec<_> = sub_recipes.values().cloned().collect();
                 prefixed_tools.push(create_subagent_tool(&sub_recipes_vec));
@@ -3521,6 +3643,22 @@ impl Agent {
                 .iter()
                 .map(|tool| tool.name.as_ref().to_string())
                 .collect();
+            for tool_def in self.current_collab_tool_definitions() {
+                if !listed_tool_names.insert(tool_def.name.clone()) {
+                    continue;
+                }
+
+                let tool = Tool::new(
+                    tool_def.name,
+                    tool_def.description,
+                    tool_def
+                        .input_schema
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default(),
+                );
+                prefixed_tools.push(tool);
+            }
             let registry = self.tool_registry.read().await;
             for tool_def in registry.get_definitions() {
                 if !should_expose_registered_tool_with_gates(
@@ -3554,10 +3692,6 @@ impl Agent {
                 resources_supported,
                 tool_gates,
                 subagent_teammate_tools_enabled,
-                current_session
-                    .as_ref()
-                    .map(session_plan_mode_active)
-                    .unwrap_or_else(turn_context_plan_mode_active),
             )
         });
 
@@ -3626,18 +3760,6 @@ impl Agent {
         if let Err(e) = self.confirmation_tx.send((request_id, confirmation)).await {
             error!("Failed to send confirmation: {}", e);
         }
-    }
-
-    #[instrument(skip(self, user_message, session_config), fields(user_message))]
-    pub async fn reply(
-        &self,
-        user_message: Message,
-        session_config: SessionConfig,
-        cancel_token: Option<CancellationToken>,
-    ) -> Result<BoxStream<'_, Result<AgentEvent>>> {
-        let provider = self.provider().await?;
-        self.reply_with_provider(user_message, session_config, cancel_token, provider)
-            .await
     }
 
     #[instrument(
@@ -3787,15 +3909,7 @@ impl Agent {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("Session {} has no conversation", session_config.id))?;
 
-        let needs_auto_compact = crate::session_context::with_turn_context(
-            session_config.turn_context.clone(),
-            check_if_compaction_needed(provider.as_ref(), &conversation, None, &session),
-        )
-        .await?;
-
-        let conversation_to_compact = conversation.clone();
         let scope_session_config = session_config.clone();
-        let stream_session_config = session_config.clone();
         let scoped_session_config = session_config.clone();
         let input_text_for_turn = scoped_session_config
             .turn_context
@@ -3810,116 +3924,7 @@ impl Agent {
         Ok(Self::scope_reply_stream(
             &scope_session_config,
             Box::pin(async_stream::try_stream! {
-                let final_conversation = if !needs_auto_compact {
-                    conversation
-                } else {
-                    let config = Config::global();
-                    let threshold = config
-                        .get_param::<f64>("ASTER_AUTO_COMPACT_THRESHOLD")
-                        .unwrap_or(DEFAULT_COMPACTION_THRESHOLD);
-                    let threshold_percentage = (threshold * 100.0) as u32;
-
-                    let inline_msg = format!(
-                        "Exceeded auto-compact threshold of {}%. Performing auto-compaction...",
-                        threshold_percentage
-                    );
-
-                    yield AgentEvent::Message(
-                        Message::assistant().with_system_notification(
-                            SystemNotificationType::InlineMessage,
-                            inline_msg,
-                        )
-                    );
-
-                    yield AgentEvent::Message(
-                        Message::assistant().with_system_notification(
-                            SystemNotificationType::ThinkingMessage,
-                            COMPACTION_THINKING_TEXT,
-                        )
-                    );
-
-                    let compaction_item_id = Self::context_compaction_item_id(
-                        stream_session_config
-                            .turn_id
-                            .as_deref()
-                            .unwrap_or("unknown-turn"),
-                    );
-                    yield AgentEvent::ContextCompactionStarted {
-                        item_id: compaction_item_id.clone(),
-                        trigger: ContextCompactionTrigger::Auto.as_str().to_string(),
-                        detail: Some(ContextCompactionTrigger::Auto.started_detail().to_string()),
-                    };
-
-                    match tokio::time::timeout(
-                        AUTO_COMPACTION_PRE_REPLY_MODEL_TIMEOUT,
-                        self.perform_context_compaction(
-                            &stream_session_config,
-                            &conversation_to_compact,
-                            false,
-                        ),
-                    )
-                    .await
-                    {
-                        Err(_) => {
-                            warn!(
-                                session_id = %stream_session_config.id,
-                                timeout_ms = AUTO_COMPACTION_PRE_REPLY_MODEL_TIMEOUT.as_millis(),
-                                "Auto-compaction exceeded first-token budget; continuing current turn without pre-reply compaction"
-                            );
-                            yield AgentEvent::ContextCompactionCompleted {
-                                item_id: compaction_item_id,
-                                trigger: ContextCompactionTrigger::Auto.as_str().to_string(),
-                                detail: Some(
-                                    "Auto-compaction exceeded the first-token budget. Continuing this turn without blocking on compaction."
-                                        .to_string(),
-                                ),
-                            };
-                            conversation
-                        }
-                        Ok(Ok(result)) => {
-                            yield AgentEvent::HistoryReplaced(
-                                result.compacted_conversation.clone(),
-                            );
-                            yield AgentEvent::ContextCompactionCompleted {
-                                item_id: compaction_item_id,
-                                trigger: ContextCompactionTrigger::Auto.as_str().to_string(),
-                                detail: Some(
-                                    ContextCompactionTrigger::Auto
-                                        .completed_detail()
-                                        .to_string(),
-                                ),
-                            };
-                            yield AgentEvent::ContextCompactionWarning {
-                                message: CONTEXT_COMPACTION_WARNING_TEXT.to_string(),
-                            };
-
-                            yield AgentEvent::Message(
-                                Message::assistant().with_system_notification(
-                                    SystemNotificationType::InlineMessage,
-                                    "Compaction complete",
-                                )
-                            );
-
-                            result.compacted_conversation
-                        }
-                        Ok(Err(e)) => {
-                            yield AgentEvent::ContextCompactionCompleted {
-                                item_id: compaction_item_id,
-                                trigger: ContextCompactionTrigger::Auto.as_str().to_string(),
-                                detail: Some(
-                                    "Auto-compaction failed before this turn. The assistant could not continue from a compacted summary."
-                                        .to_string(),
-                                ),
-                            };
-                            yield AgentEvent::Message(
-                                Message::assistant().with_text(
-                                    format!("Ran into this error trying to compact: {e}.\n\nPlease try again or create a new session")
-                                )
-                            );
-                            return;
-                        }
-                    }
-                };
+                let final_conversation = conversation;
 
                 self.ensure_thread_runtime(&session, &scoped_session_config).await?;
                 let turn_runtime = self
@@ -3980,7 +3985,7 @@ impl Agent {
                             yield event;
                         }
                         Err(err) => {
-                            turn_status = if is_token_cancelled(&cancel_token) {
+                            turn_status = if cancel_token_cancelled(&cancel_token) {
                                 self.store_add_message(
                                     &scoped_session_config.id,
                                     &cancelled_turn_context_marker_message(),
@@ -4004,7 +4009,7 @@ impl Agent {
                     }
                 }
 
-                if is_token_cancelled(&cancel_token) {
+                if cancel_token_cancelled(&cancel_token) {
                     turn_status = TurnStatus::Aborted;
                 }
                 for runtime_event in item_runtime_projector.finalize_open_items(turn_status) {
@@ -4094,7 +4099,7 @@ impl Agent {
             }
 
             loop {
-                if is_token_cancelled(&cancel_token) {
+                if cancel_token_cancelled(&cancel_token) {
                     break;
                 }
 
@@ -4138,10 +4143,9 @@ impl Agent {
                 let provider_trace_started_at = Instant::now();
                 let provider_trace_provider = pinned_provider.get_name().to_string();
                 let provider_trace_model = model_config.model_name.clone();
-                let mut provider_first_event_seen = false;
-                let mut provider_first_text_delta_seen = false;
+                let mut provider_stream_progress = RuntimeReplyProviderStreamProgress::new();
                 yield AgentEvent::ProviderTrace {
-                    event: ProviderTraceEvent::request_started(
+                    event: provider_trace_request_started(
                         &provider_trace_provider,
                         &provider_trace_model,
                         provider_trace_attempt,
@@ -4173,64 +4177,51 @@ impl Agent {
                 let mut did_recovery_compact_this_iteration = false;
 
                 loop {
-                    let next = if cancel_token.is_some() {
-                        match tokio::time::timeout(
-                            PROVIDER_STREAM_CANCEL_POLL_INTERVAL,
-                            stream.next(),
-                        )
-                        .await
-                        {
-                            Ok(next) => next,
-                            Err(_) => {
-                                if !is_token_cancelled(&cancel_token) {
-                                    continue;
-                                }
-                                yield AgentEvent::ProviderTrace {
-                                    event: ProviderTraceEvent::canceled(
-                                        &provider_trace_provider,
-                                        &provider_trace_model,
-                                        provider_trace_attempt,
-                                        &provider_trace_started_at,
-                                        PROVIDER_STREAM_CANCEL_WHILE_WAITING_REASON,
-                                    )
-                                    .with_provider_response_context(provider_response_context.as_ref()),
-                                };
-                                break;
-                            }
+                    let next = if let Some(interval) =
+                        provider_stream_cancel_poll_interval(cancel_token.is_some())
+                    {
+                        match tokio::time::timeout(interval, stream.next()).await {
+                            Ok(next) => provider_stream_event_poll(
+                                next,
+                                cancel_token_cancelled(&cancel_token),
+                            ),
+                            Err(_) => provider_stream_timeout_poll(
+                                cancel_token_cancelled(&cancel_token),
+                            ),
                         }
                     } else {
-                        stream.next().await
+                        provider_stream_event_poll(stream.next().await, false)
                     };
-                    let next = match (next, is_token_cancelled(&cancel_token)) {
-                        (Some(_), true) => {
+                    let next = match next {
+                        ProviderStreamPoll::Item(next) => next,
+                        ProviderStreamPoll::End => break,
+                        ProviderStreamPoll::Pending => continue,
+                        ProviderStreamPoll::Canceled(reason) => {
                             yield AgentEvent::ProviderTrace {
-                                event: ProviderTraceEvent::canceled(
+                                event: provider_trace_canceled(
                                     &provider_trace_provider,
                                     &provider_trace_model,
                                     provider_trace_attempt,
                                     &provider_trace_started_at,
-                                    PROVIDER_STREAM_CANCEL_BEFORE_EVENT_REASON,
+                                    reason.as_str(),
                                 )
-                                .with_provider_response_context(provider_response_context.as_ref()),
+                                .with_response_context(provider_response_context.as_ref()),
                             };
                             break;
                         }
-                        (Some(next), false) => next,
-                        (None, _) => break,
                     };
 
                     match next {
                         Ok((response, usage)) => {
-                            if !provider_first_event_seen {
-                                provider_first_event_seen = true;
+                            if provider_stream_progress.note_first_event() {
                                 yield AgentEvent::ProviderTrace {
-                                    event: ProviderTraceEvent::first_event_received(
+                                    event: provider_trace_first_event_received(
                                         &provider_trace_provider,
                                         &provider_trace_model,
                                         provider_trace_attempt,
                                         &provider_trace_started_at,
                                     )
-                                    .with_provider_response_context(provider_response_context.as_ref()),
+                                    .with_response_context(provider_response_context.as_ref()),
                                 };
                             }
                             overflow_handler.reset();
@@ -4238,19 +4229,16 @@ impl Agent {
                             // Emit model change event if provider is lead-worker
                             if let Some(lead_worker) = pinned_provider.as_lead_worker() {
                                 if let Some(ref usage) = usage {
-                                    let active_model = usage.model.clone();
                                     let (lead_model, worker_model) = lead_worker.get_model_info();
-                                    let mode = if active_model == lead_model {
-                                        "lead"
-                                    } else if active_model == worker_model {
-                                        "worker"
-                                    } else {
-                                        "unknown"
-                                    };
+                                    let model_change = provider_stream_model_change(
+                                        usage.model.as_str(),
+                                        lead_model.as_str(),
+                                        worker_model.as_str(),
+                                    );
 
                                     yield AgentEvent::ModelChange {
-                                        model: active_model,
-                                        mode: mode.to_string(),
+                                        model: model_change.model,
+                                        mode: model_change.mode.as_str().to_string(),
                                     };
                                 }
                             }
@@ -4260,20 +4248,19 @@ impl Agent {
                             }
 
                             if let Some(response) = response {
-                                if !provider_first_text_delta_seen {
-                                    if let Some(text_chars) = provider_response_text_chars(&response) {
-                                        provider_first_text_delta_seen = true;
-                                        yield AgentEvent::ProviderTrace {
-                                            event: ProviderTraceEvent::first_text_delta_received(
-                                                &provider_trace_provider,
-                                                &provider_trace_model,
-                                                provider_trace_attempt,
-                                                &provider_trace_started_at,
-                                                text_chars,
-                                            )
-                                            .with_provider_response_context(provider_response_context.as_ref()),
-                                        };
-                                    }
+                                if let Some(text_chars) = provider_stream_progress
+                                    .note_first_text_delta(provider_response_text_chars(&response))
+                                {
+                                    yield AgentEvent::ProviderTrace {
+                                        event: provider_trace_first_text_delta_received(
+                                            &provider_trace_provider,
+                                            &provider_trace_model,
+                                            provider_trace_attempt,
+                                            &provider_trace_started_at,
+                                            text_chars,
+                                        )
+                                        .with_response_context(provider_response_context.as_ref()),
+                                    };
                                 }
                                 if let Some(tool_input_events) =
                                     collect_provider_tool_input_delta_events(&response)
@@ -4283,7 +4270,7 @@ impl Agent {
                                     }
                                     continue;
                                 }
-                                if is_provider_stream_event_notification(&response) {
+                                if provider_response_has_notification(&response) {
                                     yield AgentEvent::Message(response);
                                     continue;
                                 }
@@ -4427,7 +4414,7 @@ impl Agent {
                                     let mut all_install_successful = true;
 
                                     while let Some((request_id, item)) = combined.next().await {
-                                        if is_token_cancelled(&cancel_token) {
+                                        if cancel_token_cancelled(&cancel_token) {
                                             break;
                                         }
 
@@ -4445,7 +4432,7 @@ impl Agent {
                                                 if output
                                                     .as_ref()
                                                     .ok()
-                                                    .is_some_and(tool_surface_updated_from_call_tool_result)
+                                                    .is_some_and(runtime_tool_result_surface_updated)
                                                 {
                                                     tools_updated = true;
                                                 }
@@ -4494,14 +4481,14 @@ impl Agent {
                         }
                         Err(ref provider_err @ ProviderError::ContextLengthExceeded(_)) => {
                             yield AgentEvent::ProviderTrace {
-                                event: ProviderTraceEvent::failed(
+                                event: provider_trace_failed(
                                     &provider_trace_provider,
                                     &provider_trace_model,
                                     provider_trace_attempt,
                                     &provider_trace_started_at,
-                                    provider_err,
+                                    provider_failure(provider_err),
                                 )
-                                .with_provider_response_context(provider_response_context.as_ref()),
+                                .with_response_context(provider_response_context.as_ref()),
                             };
 
                             if !overflow_handler.can_retry() {
@@ -4515,7 +4502,8 @@ impl Agent {
                                 break;
                             }
 
-                            if !automatic_compaction_enabled_for_current_turn() {
+                            let automatic_compaction_enabled = false;
+                            if !automatic_compaction_enabled {
                                 yield AgentEvent::Message(
                                     Message::assistant().with_system_notification(
                                         SystemNotificationType::InlineMessage,
@@ -4604,14 +4592,14 @@ impl Agent {
                         }
                         Err(ref provider_err) => {
                             yield AgentEvent::ProviderTrace {
-                                event: ProviderTraceEvent::failed(
+                                event: provider_trace_failed(
                                     &provider_trace_provider,
                                     &provider_trace_model,
                                     provider_trace_attempt,
                                     &provider_trace_started_at,
-                                    provider_err,
+                                    provider_failure(provider_err),
                                 )
-                                .with_provider_response_context(provider_response_context.as_ref()),
+                                .with_response_context(provider_response_context.as_ref()),
                             };
                             if should_log_provider_failure_as_error(provider_err) {
                                 error!("Error: {}", provider_err);
@@ -4640,7 +4628,7 @@ impl Agent {
                         ).await?;
                 }
                 let mut exit_chat = false;
-                if is_token_cancelled(&cancel_token) {
+                if cancel_token_cancelled(&cancel_token) {
                     messages_to_add.clear();
                     messages_to_add.push(cancelled_turn_context_marker_message());
                     exit_chat = true;
@@ -4809,4103 +4797,5 @@ impl Agent {
         if let Err(e) = self.tool_result_tx.send((id, result)).await {
             error!("Failed to send tool result: {}", e);
         }
-    }
-
-    pub async fn create_recipe(&self, mut messages: Conversation) -> Result<Recipe> {
-        tracing::info!("Starting recipe creation with {} messages", messages.len());
-
-        let extensions_info = self.extension_manager.get_extensions_info().await;
-        tracing::debug!("Retrieved {} extensions info", extensions_info.len());
-        let (extension_count, tool_count) =
-            self.extension_manager.get_extension_and_tool_counts().await;
-
-        // Get model name from provider
-        let provider = self.provider().await.map_err(|e| {
-            tracing::error!("Failed to get provider for recipe creation: {}", e);
-            e
-        })?;
-        let model_config = provider.get_model_config();
-        let model_name = &model_config.model_name;
-        tracing::debug!("Using model: {}", model_name);
-
-        let prompt_manager = self.prompt_manager.lock().await;
-        let system_prompt = prompt_manager
-            .builder()
-            .with_extensions(extensions_info.into_iter())
-            .with_frontend_instructions(self.frontend_instructions.lock().await.clone())
-            .with_extension_and_tool_counts(extension_count, tool_count)
-            .build();
-
-        let recipe_prompt = prompt_manager.get_recipe_prompt().await;
-        let tools = self
-            .extension_manager
-            .get_prefixed_tools(None)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to get tools for recipe creation: {}", e);
-                e
-            })?;
-
-        messages.push(Message::user().with_text(recipe_prompt));
-
-        let (messages, issues) = fix_conversation(messages);
-        if !issues.is_empty() {
-            issues
-                .iter()
-                .for_each(|issue| tracing::warn!(recipe.conversation.issue = issue));
-        }
-
-        tracing::debug!(
-            "Added recipe prompt to messages, total messages: {}",
-            messages.len()
-        );
-
-        tracing::info!("Calling provider to generate recipe content");
-        let (result, _usage) = self
-            .provider
-            .lock()
-            .await
-            .as_ref()
-            .ok_or_else(|| {
-                let error = anyhow!("Provider not available during recipe creation");
-                tracing::error!("{}", error);
-                error
-            })?
-            .complete(&system_prompt, messages.messages(), &tools)
-            .await
-            .map_err(|e| {
-                tracing::error!("Provider completion failed during recipe creation: {}", e);
-                e
-            })?;
-
-        let content = result.as_concat_text();
-        tracing::debug!(
-            "Provider returned content with {} characters",
-            content.len()
-        );
-
-        // the response may be contained in ```json ```, strip that before parsing json
-        let re = Regex::new(r"(?s)```[^\n]*\n(.*?)\n```").unwrap();
-        let clean_content = re
-            .captures(&content)
-            .and_then(|caps| caps.get(1).map(|m| m.as_str()))
-            .unwrap_or(&content)
-            .trim()
-            .to_string();
-
-        let (instructions, activities) =
-            if let Ok(json_content) = serde_json::from_str::<Value>(&clean_content) {
-                let instructions = json_content
-                    .get("instructions")
-                    .ok_or_else(|| anyhow!("Missing 'instructions' in json response"))?
-                    .as_str()
-                    .ok_or_else(|| anyhow!("instructions' is not a string"))?
-                    .to_string();
-
-                let activities = json_content
-                    .get("activities")
-                    .ok_or_else(|| anyhow!("Missing 'activities' in json response"))?
-                    .as_array()
-                    .ok_or_else(|| anyhow!("'activities' is not an array'"))?
-                    .iter()
-                    .map(|act| {
-                        act.as_str()
-                            .map(|s| s.to_string())
-                            .ok_or(anyhow!("'activities' array element is not a string"))
-                    })
-                    .collect::<Result<_, _>>()?;
-
-                (instructions, activities)
-            } else {
-                tracing::warn!("Failed to parse JSON, falling back to string parsing");
-                // If we can't get valid JSON, try string parsing
-                // Use split_once to get the content after "Instructions:".
-                let after_instructions = content
-                    .split_once("instructions:")
-                    .map(|(_, rest)| rest)
-                    .unwrap_or(&content);
-
-                // Split once more to separate instructions from activities.
-                let (instructions_part, activities_text) = after_instructions
-                    .split_once("activities:")
-                    .unwrap_or((after_instructions, ""));
-
-                let instructions = instructions_part
-                    .trim_end_matches(|c: char| c.is_whitespace() || c == '#')
-                    .trim()
-                    .to_string();
-                let activities_text = activities_text.trim();
-
-                // Regex to remove bullet markers or numbers with an optional dot.
-                let bullet_re = Regex::new(r"^[•\-*\d]+\.?\s*").expect("Invalid regex");
-
-                // Process each line in the activities section.
-                let activities: Vec<String> = activities_text
-                    .lines()
-                    .map(|line| bullet_re.replace(line, "").to_string())
-                    .map(|s| s.trim().to_string())
-                    .filter(|line| !line.is_empty())
-                    .collect();
-
-                (instructions, activities)
-            };
-
-        let extension_configs = get_enabled_extensions();
-
-        let author = Author {
-            contact: std::env::var("USER")
-                .or_else(|_| std::env::var("USERNAME"))
-                .ok(),
-            metadata: None,
-        };
-
-        // Ideally we'd get the name of the provider we are using from the provider itself,
-        // but it doesn't know and the plumbing looks complicated.
-        let config = Config::global();
-        let provider_name: String = config
-            .get_aster_provider()
-            .expect("No provider configured. Run 'aster configure' first");
-
-        let settings = Settings {
-            aster_provider: Some(provider_name.clone()),
-            aster_model: Some(model_name.clone()),
-            temperature: Some(model_config.temperature.unwrap_or(0.0)),
-        };
-
-        tracing::debug!(
-            "Building recipe with {} activities and {} extensions",
-            activities.len(),
-            extension_configs.len()
-        );
-
-        let (title, description) =
-            if let Ok(json_content) = serde_json::from_str::<Value>(&clean_content) {
-                let title = json_content
-                    .get("title")
-                    .and_then(|t| t.as_str())
-                    .unwrap_or("Custom recipe from chat")
-                    .to_string();
-
-                let description = json_content
-                    .get("description")
-                    .and_then(|d| d.as_str())
-                    .unwrap_or("a custom recipe instance from this chat session")
-                    .to_string();
-
-                (title, description)
-            } else {
-                (
-                    "Custom recipe from chat".to_string(),
-                    "a custom recipe instance from this chat session".to_string(),
-                )
-            };
-
-        let recipe = Recipe::builder()
-            .title(title)
-            .description(description)
-            .instructions(instructions)
-            .activities(activities)
-            .extensions(extension_configs)
-            .settings(settings)
-            .author(author)
-            .build()
-            .map_err(|e| {
-                tracing::error!("Failed to build recipe: {}", e);
-                anyhow!("Recipe build failed: {}", e)
-            })?;
-
-        tracing::info!("Recipe creation completed successfully");
-        Ok(recipe)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::agents::extension::PlatformExtensionContext;
-    use crate::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
-    use crate::providers::errors::ProviderError;
-    use crate::session::{
-        extension_data::ExtensionData, initialize_session_runtime_store, ChatHistoryMatch,
-        InMemoryThreadRuntimeStore, SessionInsights, SessionManager, SessionStore, SessionType,
-        TokenStatsUpdate, TurnContextOverride,
-    };
-    use async_trait::async_trait;
-    use futures::StreamExt;
-    use rmcp::{model::Tool, object};
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
-
-    struct NativeOutputSchemaProvider;
-
-    struct ModelAwareNativeOutputSchemaProvider;
-    struct ContextLengthExceededProvider;
-    struct FastReplyProvider;
-    struct RecordingFastReplyProvider {
-        observed_message_texts: Arc<Mutex<Vec<Vec<String>>>>,
-    }
-    struct FrontendToolRequestFastReplyProvider;
-    struct TitleAwareFastReplyProvider {
-        session_name_calls: Arc<AtomicUsize>,
-    }
-
-    struct CountingSessionStore {
-        get_session_calls: AtomicUsize,
-        session: Mutex<Session>,
-    }
-
-    struct DispatchAliasTool {
-        name: String,
-    }
-
-    #[test]
-    fn provider_trace_event_attaches_provider_response_context() {
-        let started_at = Instant::now();
-        let context = crate::session_context::ProviderResponseContext {
-            provider_request_id: Some("req-provider-1".to_string()),
-            provider_request_id_header: Some("x-request-id".to_string()),
-        };
-
-        let event =
-            ProviderTraceEvent::first_text_delta_received("openai", "gpt-4.1", 1, &started_at, 4)
-                .with_provider_response_context(Some(&context));
-
-        assert_eq!(event.provider_request_id.as_deref(), Some("req-provider-1"));
-        assert_eq!(
-            event.provider_request_id_header.as_deref(),
-            Some("x-request-id")
-        );
-    }
-
-    #[async_trait]
-    impl crate::tools::Tool for DispatchAliasTool {
-        fn name(&self) -> &str {
-            &self.name
-        }
-
-        fn description(&self) -> &str {
-            "dispatch alias test tool"
-        }
-
-        fn input_schema(&self) -> Value {
-            serde_json::json!({
-                "type": "object",
-                "properties": {}
-            })
-        }
-
-        async fn execute(
-            &self,
-            _params: Value,
-            _context: &crate::tools::ToolContext,
-        ) -> std::result::Result<crate::tools::ToolResult, crate::tools::ToolError> {
-            Ok(crate::tools::ToolResult::success(format!(
-                "executed:{}",
-                self.name
-            )))
-        }
-    }
-
-    struct PanickingDispatchTool;
-
-    #[async_trait]
-    impl crate::tools::Tool for PanickingDispatchTool {
-        fn name(&self) -> &str {
-            "PanicDispatch"
-        }
-
-        fn description(&self) -> &str {
-            "panic dispatch regression test tool"
-        }
-
-        fn input_schema(&self) -> Value {
-            serde_json::json!({
-                "type": "object",
-                "additionalProperties": true
-            })
-        }
-
-        async fn execute(
-            &self,
-            _params: Value,
-            _context: &crate::tools::ToolContext,
-        ) -> std::result::Result<crate::tools::ToolResult, crate::tools::ToolError> {
-            panic!("index out of bounds: the len is 0 but the index is 0");
-        }
-    }
-
-    async fn panicking_tool_result_future() -> crate::mcp_utils::ToolResult<CallToolResult> {
-        panic!("index out of bounds: the len is 0 but the index is 0");
-    }
-
-    fn tool_request(id: &str, name: &str, arguments: Value) -> ToolRequest {
-        ToolRequest {
-            id: id.to_string(),
-            tool_call: Ok(CallToolRequestParam {
-                name: std::borrow::Cow::Owned(name.to_string()),
-                arguments: Some(
-                    arguments
-                        .as_object()
-                        .cloned()
-                        .expect("tool arguments should be an object"),
-                ),
-            }),
-            metadata: None,
-            tool_meta: None,
-        }
-    }
-
-    #[tokio::test]
-    async fn test_tool_stream_converts_result_future_panic_to_tool_error() {
-        let mut stream = tool_stream(futures::stream::empty(), panicking_tool_result_future());
-
-        let Some(ToolStreamItem::Result(result)) = stream.next().await else {
-            panic!("tool stream should yield a terminal result");
-        };
-        let Err(error) = result else {
-            panic!("panicking tool future should become a tool error");
-        };
-
-        assert!(
-            error
-                .message
-                .contains("tool execution panic: index out of bounds"),
-            "tool panic should stay scoped to the tool result"
-        );
-        assert!(stream.next().await.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_dispatch_tool_call_converts_native_tool_panic_to_tool_error() -> Result<()> {
-        let agent = Agent::new();
-        agent
-            .tool_registry()
-            .write()
-            .await
-            .register(Box::new(PanickingDispatchTool));
-
-        let temp_dir = tempfile::tempdir()?;
-        let session = SessionManager::create_session(
-            temp_dir.path().to_path_buf(),
-            "panic-dispatch".to_string(),
-            SessionType::User,
-        )
-        .await?;
-
-        let (request_id, result) = agent
-            .dispatch_tool_call_with_provider(
-                CallToolRequestParam {
-                    name: std::borrow::Cow::Borrowed("PanicDispatch"),
-                    arguments: Some(serde_json::Map::new()),
-                },
-                "req-panic".to_string(),
-                None,
-                &session,
-                None,
-            )
-            .await;
-
-        assert_eq!(request_id, "req-panic");
-        let Err(error) = result else {
-            panic!("panicking native tool should become a dispatch error");
-        };
-        assert!(
-            error
-                .message
-                .contains("tool execution panic: index out of bounds"),
-            "dispatch panic should stay scoped to the tool request"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_handle_approved_tools_converts_dispatch_panic_to_tool_error() -> Result<()> {
-        let agent = Agent::new();
-        agent
-            .tool_registry()
-            .write()
-            .await
-            .register(Box::new(PanickingDispatchTool));
-
-        let temp_dir = tempfile::tempdir()?;
-        let session = SessionManager::create_session(
-            temp_dir.path().to_path_buf(),
-            "panic-dispatch-stream".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        let permission_check_result = PermissionCheckResult {
-            approved: vec![tool_request(
-                "req-panic-stream",
-                "PanicDispatch",
-                serde_json::json!({}),
-            )],
-            needs_approval: vec![],
-            denied: vec![],
-        };
-
-        let mut tool_futures = agent
-            .handle_approved_and_denied_tools(
-                &permission_check_result,
-                &HashMap::new(),
-                None,
-                &session,
-                None,
-            )
-            .await?;
-
-        assert_eq!(tool_futures.len(), 1);
-        let (request_id, mut stream) = tool_futures.pop().expect("tool stream");
-        assert_eq!(request_id, "req-panic-stream");
-
-        let Some(ToolStreamItem::Result(result)) = stream.next().await else {
-            panic!("tool stream should yield a terminal error result");
-        };
-        let Err(error) = result else {
-            panic!("panicking native tool should become a tool error");
-        };
-        assert!(
-            error
-                .message
-                .contains("tool execution panic: index out of bounds"),
-            "approved tool panic should produce a matching tool response"
-        );
-        assert!(stream.next().await.is_none());
-
-        Ok(())
-    }
-
-    impl CountingSessionStore {
-        fn new(session: Session) -> Self {
-            Self {
-                get_session_calls: AtomicUsize::new(0),
-                session: Mutex::new(session),
-            }
-        }
-
-        fn get_session_calls(&self) -> usize {
-            self.get_session_calls.load(Ordering::SeqCst)
-        }
-
-        fn current_session(&self, include_messages: bool) -> Session {
-            let mut session = self.session.lock().expect("锁测试 session").clone();
-            if !include_messages {
-                session.conversation = None;
-            }
-            session
-        }
-    }
-
-    #[async_trait]
-    impl SessionStore for CountingSessionStore {
-        async fn create_session(
-            &self,
-            _working_dir: PathBuf,
-            _name: String,
-            _session_type: SessionType,
-        ) -> Result<Session> {
-            Ok(self.current_session(true))
-        }
-
-        async fn get_session(&self, _id: &str, include_messages: bool) -> Result<Session> {
-            self.get_session_calls.fetch_add(1, Ordering::SeqCst);
-            Ok(self.current_session(include_messages))
-        }
-
-        async fn add_message(&self, _session_id: &str, _message: &Message) -> Result<()> {
-            Ok(())
-        }
-
-        async fn replace_conversation(
-            &self,
-            _session_id: &str,
-            _conversation: &Conversation,
-        ) -> Result<()> {
-            Ok(())
-        }
-
-        async fn list_sessions(&self) -> Result<Vec<Session>> {
-            Ok(vec![self.current_session(false)])
-        }
-
-        async fn list_sessions_by_types(&self, _types: &[SessionType]) -> Result<Vec<Session>> {
-            Ok(vec![self.current_session(false)])
-        }
-
-        async fn delete_session(&self, _id: &str) -> Result<()> {
-            Ok(())
-        }
-
-        async fn get_insights(&self) -> Result<SessionInsights> {
-            Ok(SessionInsights {
-                total_sessions: 1,
-                total_tokens: 0,
-            })
-        }
-
-        async fn update_session_name(
-            &self,
-            _session_id: &str,
-            _name: String,
-            _user_set: bool,
-        ) -> Result<()> {
-            Ok(())
-        }
-
-        async fn update_working_dir(&self, _session_id: &str, working_dir: PathBuf) -> Result<()> {
-            let mut session = self.session.lock().expect("锁测试 session");
-            session.working_dir = working_dir;
-            session.updated_at = chrono::Utc::now();
-            Ok(())
-        }
-
-        async fn update_session_type(
-            &self,
-            _session_id: &str,
-            session_type: SessionType,
-        ) -> Result<()> {
-            let mut session = self.session.lock().expect("锁测试 session");
-            session.session_type = session_type;
-            session.updated_at = chrono::Utc::now();
-            Ok(())
-        }
-
-        async fn update_extension_data(
-            &self,
-            _session_id: &str,
-            _extension_data: ExtensionData,
-        ) -> Result<()> {
-            Ok(())
-        }
-
-        async fn update_token_stats(
-            &self,
-            _session_id: &str,
-            _stats: TokenStatsUpdate,
-        ) -> Result<()> {
-            Ok(())
-        }
-
-        async fn update_provider_config(
-            &self,
-            _session_id: &str,
-            _provider_name: Option<String>,
-            _model_config: Option<crate::model::ModelConfig>,
-        ) -> Result<()> {
-            Ok(())
-        }
-
-        async fn update_recipe(
-            &self,
-            _session_id: &str,
-            _recipe: Option<crate::recipe::Recipe>,
-            _user_recipe_values: Option<HashMap<String, String>>,
-        ) -> Result<()> {
-            Ok(())
-        }
-
-        async fn search_chat_history(
-            &self,
-            _query: &str,
-            _limit: Option<usize>,
-            _after_date: Option<chrono::DateTime<chrono::Utc>>,
-            _before_date: Option<chrono::DateTime<chrono::Utc>>,
-            _exclude_session_id: Option<String>,
-        ) -> Result<Vec<ChatHistoryMatch>> {
-            Ok(Vec::new())
-        }
-    }
-
-    #[async_trait]
-    impl Provider for NativeOutputSchemaProvider {
-        fn metadata() -> ProviderMetadata
-        where
-            Self: Sized,
-        {
-            ProviderMetadata::empty()
-        }
-
-        fn get_name(&self) -> &str {
-            "native-output-schema-provider"
-        }
-
-        async fn complete_with_model(
-            &self,
-            _model_config: &crate::model::ModelConfig,
-            _system: &str,
-            _messages: &[Message],
-            _tools: &[Tool],
-        ) -> Result<(Message, ProviderUsage), ProviderError> {
-            Err(ProviderError::NotImplemented(
-                "test provider should not execute completions".to_string(),
-            ))
-        }
-
-        fn get_model_config(&self) -> crate::model::ModelConfig {
-            crate::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
-        }
-
-        fn supports_native_output_schema(&self) -> bool {
-            true
-        }
-    }
-
-    #[async_trait]
-    impl Provider for ModelAwareNativeOutputSchemaProvider {
-        fn metadata() -> ProviderMetadata
-        where
-            Self: Sized,
-        {
-            ProviderMetadata::empty()
-        }
-
-        fn get_name(&self) -> &str {
-            "model-aware-native-output-schema-provider"
-        }
-
-        async fn complete_with_model(
-            &self,
-            _model_config: &crate::model::ModelConfig,
-            _system: &str,
-            _messages: &[Message],
-            _tools: &[Tool],
-        ) -> Result<(Message, ProviderUsage), ProviderError> {
-            Err(ProviderError::NotImplemented(
-                "test provider should not execute completions".to_string(),
-            ))
-        }
-
-        fn get_model_config(&self) -> crate::model::ModelConfig {
-            crate::model::ModelConfig::new("fallback-model").expect("test model config")
-        }
-
-        fn supports_native_output_schema_with_model(
-            &self,
-            model_config: &crate::model::ModelConfig,
-        ) -> bool {
-            model_config.model_name == "native-model"
-        }
-    }
-
-    #[async_trait]
-    impl Provider for ContextLengthExceededProvider {
-        fn metadata() -> ProviderMetadata
-        where
-            Self: Sized,
-        {
-            ProviderMetadata::empty()
-        }
-
-        fn get_name(&self) -> &str {
-            "context-length-exceeded-provider"
-        }
-
-        async fn complete_with_model(
-            &self,
-            _model_config: &crate::model::ModelConfig,
-            _system: &str,
-            _messages: &[Message],
-            _tools: &[Tool],
-        ) -> Result<(Message, ProviderUsage), ProviderError> {
-            Err(ProviderError::ContextLengthExceeded(
-                "mock context overflow".to_string(),
-            ))
-        }
-
-        fn get_model_config(&self) -> crate::model::ModelConfig {
-            crate::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
-        }
-    }
-
-    #[async_trait]
-    impl Provider for FastReplyProvider {
-        fn metadata() -> ProviderMetadata
-        where
-            Self: Sized,
-        {
-            ProviderMetadata::empty()
-        }
-
-        fn get_name(&self) -> &str {
-            "fast-reply-provider"
-        }
-
-        async fn complete_with_model(
-            &self,
-            _model_config: &crate::model::ModelConfig,
-            _system: &str,
-            _messages: &[Message],
-            _tools: &[Tool],
-        ) -> Result<(Message, ProviderUsage), ProviderError> {
-            Ok((
-                Message::assistant().with_text("快速回答"),
-                ProviderUsage::new("fast-reply-provider".to_string(), Usage::default()),
-            ))
-        }
-
-        fn get_model_config(&self) -> crate::model::ModelConfig {
-            crate::model::ModelConfig {
-                model_name: "fast-reply-provider".to_string(),
-                context_limit: Some(100),
-                temperature: None,
-                max_tokens: None,
-                reasoning_effort: None,
-                toolshim: false,
-                toolshim_model: None,
-                fast_model: None,
-            }
-        }
-    }
-
-    #[async_trait]
-    impl Provider for RecordingFastReplyProvider {
-        fn metadata() -> ProviderMetadata
-        where
-            Self: Sized,
-        {
-            ProviderMetadata::empty()
-        }
-
-        fn get_name(&self) -> &str {
-            "recording-fast-reply-provider"
-        }
-
-        async fn complete_with_model(
-            &self,
-            _model_config: &crate::model::ModelConfig,
-            _system: &str,
-            messages: &[Message],
-            _tools: &[Tool],
-        ) -> Result<(Message, ProviderUsage), ProviderError> {
-            self.observed_message_texts
-                .lock()
-                .expect("记录 provider messages")
-                .push(messages.iter().map(Message::as_concat_text).collect());
-            Ok((
-                Message::assistant().with_text("快速回答"),
-                ProviderUsage::new(
-                    "recording-fast-reply-provider".to_string(),
-                    Usage::default(),
-                ),
-            ))
-        }
-
-        fn get_model_config(&self) -> crate::model::ModelConfig {
-            crate::model::ModelConfig {
-                model_name: "recording-fast-reply-provider".to_string(),
-                context_limit: Some(100),
-                temperature: None,
-                max_tokens: None,
-                reasoning_effort: None,
-                toolshim: false,
-                toolshim_model: None,
-                fast_model: None,
-            }
-        }
-    }
-
-    #[async_trait]
-    impl Provider for FrontendToolRequestFastReplyProvider {
-        fn metadata() -> ProviderMetadata
-        where
-            Self: Sized,
-        {
-            ProviderMetadata::empty()
-        }
-
-        fn get_name(&self) -> &str {
-            "frontend-tool-request-fast-reply-provider"
-        }
-
-        async fn complete_with_model(
-            &self,
-            _model_config: &crate::model::ModelConfig,
-            _system: &str,
-            _messages: &[Message],
-            _tools: &[Tool],
-        ) -> Result<(Message, ProviderUsage), ProviderError> {
-            Ok((
-                Message::assistant()
-                    .with_text("快速回答")
-                    .with_tool_request(
-                        "req-fast-frontend",
-                        Ok(CallToolRequestParam {
-                            name: "frontend__noop".into(),
-                            arguments: Some(serde_json::Map::new()),
-                        }),
-                    ),
-                ProviderUsage::new(
-                    "frontend-tool-request-fast-reply-provider".to_string(),
-                    Usage::default(),
-                ),
-            ))
-        }
-
-        fn get_model_config(&self) -> crate::model::ModelConfig {
-            crate::model::ModelConfig {
-                model_name: "frontend-tool-request-fast-reply-provider".to_string(),
-                context_limit: Some(100),
-                temperature: None,
-                max_tokens: None,
-                reasoning_effort: None,
-                toolshim: false,
-                toolshim_model: None,
-                fast_model: None,
-            }
-        }
-    }
-
-    #[async_trait]
-    impl Provider for TitleAwareFastReplyProvider {
-        fn metadata() -> ProviderMetadata
-        where
-            Self: Sized,
-        {
-            ProviderMetadata::empty()
-        }
-
-        fn get_name(&self) -> &str {
-            "title-aware-fast-reply-provider"
-        }
-
-        async fn complete_with_model(
-            &self,
-            _model_config: &crate::model::ModelConfig,
-            _system: &str,
-            _messages: &[Message],
-            _tools: &[Tool],
-        ) -> Result<(Message, ProviderUsage), ProviderError> {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            Ok((
-                Message::assistant().with_text("快速回答"),
-                ProviderUsage::new(
-                    "title-aware-fast-reply-provider".to_string(),
-                    Usage::default(),
-                ),
-            ))
-        }
-
-        async fn generate_session_name(
-            &self,
-            _messages: &Conversation,
-        ) -> Result<String, ProviderError> {
-            self.session_name_calls.fetch_add(1, Ordering::SeqCst);
-            Ok("快速回答标题".to_string())
-        }
-
-        fn get_model_config(&self) -> crate::model::ModelConfig {
-            crate::model::ModelConfig {
-                model_name: "title-aware-fast-reply-provider".to_string(),
-                context_limit: Some(100),
-                temperature: None,
-                max_tokens: None,
-                reasoning_effort: None,
-                toolshim: false,
-                toolshim_model: None,
-                fast_model: None,
-            }
-        }
-    }
-
-    fn build_auto_compaction_disabled_turn_context() -> TurnContextOverride {
-        let mut metadata = HashMap::new();
-        metadata.insert(
-            "lime_runtime".to_string(),
-            serde_json::json!({
-                "auto_compact": false,
-            }),
-        );
-        TurnContextOverride {
-            metadata,
-            ..TurnContextOverride::default()
-        }
-    }
-
-    fn build_direct_answer_turn_context() -> TurnContextOverride {
-        let mut metadata = HashMap::new();
-        metadata.insert(
-            "lime_runtime".to_string(),
-            serde_json::json!({
-                "tool_surface": "direct_answer",
-                "auto_compact": false,
-            }),
-        );
-        TurnContextOverride {
-            metadata,
-            ..TurnContextOverride::default()
-        }
-    }
-
-    #[test]
-    fn test_new_with_required_session_runtime_store_uses_initialized_store() {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-        assert!(Agent::new_with_required_session_runtime_store().is_ok());
-    }
-
-    #[test]
-    fn test_extract_proposed_plan_block_returns_inner_markdown() {
-        let text = "前言\n<proposed_plan>\n- 调研\n- 实现\n</proposed_plan>\n结尾";
-        assert_eq!(
-            extract_proposed_plan_block(text).as_deref(),
-            Some("- 调研\n- 实现")
-        );
-    }
-
-    #[test]
-    fn test_build_reasoning_summary_sections_splits_blank_line_boundaries() {
-        assert_eq!(
-            build_reasoning_summary_sections("先判断任务类型\n\n再决定是否联网"),
-            Some(vec![
-                "先判断任务类型".to_string(),
-                "再决定是否联网".to_string()
-            ])
-        );
-        assert_eq!(build_reasoning_summary_sections("   "), None);
-    }
-
-    #[test]
-    fn test_strip_assistant_phase_summary_title() {
-        assert_eq!(
-            strip_assistant_phase_summary_title(
-                "先说明\n## 阶段结论\n\n已确认主入口和长链路瓶颈。"
-            ),
-            "先说明\n已确认主入口和长链路瓶颈。"
-        );
-        assert_eq!(
-            strip_assistant_phase_summary_title("先说明\n阶段结论：已确认主入口和长链路瓶颈。"),
-            "先说明\n已确认主入口和长链路瓶颈。"
-        );
-    }
-
-    #[test]
-    fn test_project_message_emits_plan_runtime_item() {
-        let turn = TurnRuntime::new(
-            "turn-1",
-            "session-1",
-            "thread-1",
-            Some("实现计划".to_string()),
-            None,
-        );
-        let mut projector = TurnItemRuntimeProjector::new(&turn);
-        let message = Message::assistant()
-            .with_text("先说明\n<proposed_plan>\n- 调研\n- 实现\n</proposed_plan>\n再继续");
-
-        let events = projector.project_agent_event(&AgentEvent::Message(message));
-
-        assert!(
-            events.iter().any(|event| matches!(
-                event,
-                AgentEvent::ItemStarted { item } | AgentEvent::ItemUpdated { item }
-                    if matches!(&item.payload, ItemRuntimePayload::Plan { text } if text == "- 调研\n- 实现")
-            )),
-            "应生成显式的 plan runtime item"
-        );
-    }
-
-    #[test]
-    fn test_project_message_strips_phase_summary_title() {
-        let turn = TurnRuntime::new(
-            "turn-phase-summary",
-            "session-1",
-            "thread-1",
-            Some("分析本地项目".to_string()),
-            None,
-        );
-        let mut projector = TurnItemRuntimeProjector::new(&turn);
-
-        let message = Message::assistant()
-            .with_id("assistant-msg-phase")
-            .with_text("好的。\n阶段结论：已确认主入口和长链路瓶颈，下一步只需补一个证据点。");
-
-        let events = projector.project_agent_event(&AgentEvent::Message(message));
-
-        assert!(
-            events.iter().any(|event| matches!(
-                event,
-                AgentEvent::ItemStarted { item } | AgentEvent::ItemUpdated { item }
-                    if item.id == "assistant:assistant-msg-phase"
-                        && matches!(
-                            &item.payload,
-                            ItemRuntimePayload::AgentMessage { text }
-                                if text == "好的。\n已确认主入口和长链路瓶颈，下一步只需补一个证据点。"
-                        )
-            )),
-            "assistant 消息正文不应再保留“阶段结论”标题"
-        );
-    }
-
-    #[test]
-    fn test_project_message_emits_reasoning_summary_runtime_item() {
-        let turn = TurnRuntime::new(
-            "turn-2",
-            "session-1",
-            "thread-1",
-            Some("推理摘要".to_string()),
-            None,
-        );
-        let mut projector = TurnItemRuntimeProjector::new(&turn);
-        let message = Message::assistant()
-            .with_id("assistant-msg-1")
-            .with_thinking("先判断任务类型\n\n再决定是否联网", "sig-anthropic");
-
-        let events = projector.project_agent_event(&AgentEvent::Message(message));
-
-        assert!(
-            events.iter().any(|event| matches!(
-                event,
-                AgentEvent::ItemStarted { item } | AgentEvent::ItemUpdated { item }
-                    if item.id == "reasoning:assistant-msg-1"
-                        && matches!(
-                            &item.payload,
-                            ItemRuntimePayload::Reasoning { text, summary, metadata }
-                                if text == "先判断任务类型\n\n再决定是否联网"
-                                    && summary.as_ref()
-                                        == Some(&vec![
-                                            "先判断任务类型".to_string(),
-                                            "再决定是否联网".to_string(),
-                                        ])
-                                    && metadata.as_ref()
-                                        .and_then(|metadata| metadata.get("provider_metadata"))
-                                        .and_then(|metadata| metadata.get("signature"))
-                                        == Some(&serde_json::json!("sig-anthropic"))
-                        )
-            )),
-            "应保留 reasoning summary 分段"
-        );
-    }
-
-    #[test]
-    fn test_project_message_skips_agent_only_text_message() {
-        let turn = TurnRuntime::new(
-            "turn-hidden",
-            "session-1",
-            "thread-1",
-            Some("隐藏内部提示".to_string()),
-            None,
-        );
-        let mut projector = TurnItemRuntimeProjector::new(&turn);
-        let message = Message::user()
-            .with_text("internal continuation")
-            .agent_only();
-
-        let events = projector.project_agent_event(&AgentEvent::Message(message));
-
-        assert!(
-            events.is_empty(),
-            "agent-only 消息不应再投影到用户可见事件流"
-        );
-    }
-
-    #[test]
-    fn test_project_user_input_prefers_user_visible_turn_context() {
-        let turn = TurnRuntime::new(
-            "turn-skill-visible",
-            "session-1",
-            "thread-1",
-            Some("内部结构化执行输入".to_string()),
-            Some(TurnContextOverride {
-                user_visible_input_text: Some("@analysis 帮我分析一下今天的国际形势".to_string()),
-                ..TurnContextOverride::default()
-            }),
-        );
-        let mut projector = TurnItemRuntimeProjector::new(&turn);
-
-        let event = projector
-            .project_user_input(&turn)
-            .expect("user input event");
-
-        let AgentEvent::ItemCompleted { item } = event else {
-            panic!("expected item completed event");
-        };
-        assert_eq!(item.id, "user:turn-skill-visible");
-        assert!(matches!(
-            item.payload,
-            ItemRuntimePayload::UserMessage { ref content }
-                if content == "@analysis 帮我分析一下今天的国际形势"
-        ));
-    }
-
-    #[test]
-    fn test_build_user_visible_context_message_keeps_visible_skill_input_only_for_user() {
-        let hidden_user_message = Message::user()
-            .with_text("{\"analysis_request\":{\"content\":\"内部结构化输入\"}}")
-            .with_image("base64-image", "image/png")
-            .agent_only();
-        let session_config = SessionConfig {
-            id: "session-skill-visible".to_string(),
-            thread_id: Some("thread-skill-visible".to_string()),
-            turn_id: Some("turn-skill-visible".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(TurnContextOverride {
-                user_visible_input_text: Some("@analysis 帮我分析一下今天的国际形势".to_string()),
-                ..TurnContextOverride::default()
-            }),
-        };
-
-        let visible_message =
-            Agent::build_user_visible_context_message(&hidden_user_message, &session_config)
-                .expect("visible user message");
-
-        assert!(visible_message.is_user_visible());
-        assert!(!visible_message.is_agent_visible());
-        assert_eq!(
-            visible_message.as_concat_text(),
-            "@analysis 帮我分析一下今天的国际形势"
-        );
-        assert!(visible_message
-            .content
-            .iter()
-            .any(|content| matches!(content, MessageContent::Image(_))));
-        assert!(!visible_message
-            .as_concat_text()
-            .contains("analysis_request"));
-    }
-
-    #[test]
-    fn test_project_tool_response_emits_file_artifact_runtime_item() {
-        let turn = TurnRuntime::new(
-            "turn-1",
-            "session-1",
-            "thread-1",
-            Some("生成产物".to_string()),
-            None,
-        );
-        let mut projector = TurnItemRuntimeProjector::new(&turn);
-        let mut artifact_meta = rmcp::model::Meta::new();
-        artifact_meta.0.insert(
-            "output_file".to_string(),
-            Value::String("/tmp/result.md".to_string()),
-        );
-        artifact_meta.0.insert(
-            "artifact_id".to_string(),
-            Value::String("artifact-1".to_string()),
-        );
-
-        let message = Message::user().with_tool_response(
-            "tool-call-1",
-            Ok(CallToolResult {
-                content: vec![Content::text("写入完成")],
-                structured_content: None,
-                is_error: Some(false),
-                meta: Some(artifact_meta),
-            }),
-        );
-
-        let events = projector.project_agent_event(&AgentEvent::Message(message));
-
-        assert!(
-            events.iter().any(|event| matches!(
-                event,
-                AgentEvent::ItemCompleted { item }
-                    if item.id == "artifact-1"
-                        && matches!(
-                            &item.payload,
-                            ItemRuntimePayload::FileArtifact { path, source, content, metadata }
-                                if path == "/tmp/result.md"
-                                    && source == "tool_result"
-                                    && content.is_none()
-                                    && metadata
-                                        .as_ref()
-                                        .and_then(|value| value.get("output_file"))
-                                        == Some(&Value::String("/tmp/result.md".to_string()))
-                        )
-            )),
-            "应生成显式的 file artifact runtime item"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_ensure_runtime_turn_initialized_reuses_existing_thread_without_reloading_session()
-    {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-runtime-cache".to_string(),
-            working_dir: PathBuf::from("/tmp/runtime-cache"),
-            name: "runtime cache".to_string(),
-            user_set_name: false,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: None,
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::default()),
-            message_count: 0,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store.clone());
-        let session_config = SessionConfig {
-            id: "session-runtime-cache".to_string(),
-            thread_id: Some("thread-runtime-cache".to_string()),
-            turn_id: Some("turn-runtime-cache".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
-
-        agent
-            .ensure_runtime_turn_initialized(&session_config, Some("第一次初始化".to_string()))
-            .await
-            .expect("首次初始化 turn runtime 失败");
-        agent
-            .ensure_runtime_turn_initialized(&session_config, None)
-            .await
-            .expect("二次初始化 turn runtime 失败");
-
-        assert_eq!(store.get_session_calls(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_prepare_tools_and_prompt_reuses_listed_tools_for_subagent_prompt_flag() {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-prompt-surface".to_string(),
-            working_dir: PathBuf::from("/tmp/prompt-surface"),
-            name: "prompt surface".to_string(),
-            user_set_name: false,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: None,
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::default()),
-            message_count: 0,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store.clone());
-        agent
-            .extension_manager
-            .set_context(PlatformExtensionContext {
-                session_id: Some("session-prompt-surface".to_string()),
-                extension_manager: Some(Arc::downgrade(&agent.extension_manager)),
-            })
-            .await;
-
-        let working_dir = std::env::current_dir().expect("读取当前目录失败");
-        agent
-            .prepare_tools_and_prompt(
-                &working_dir,
-                None,
-                false,
-                &crate::model::ModelConfig::new("test-model").expect("model config"),
-            )
-            .await
-            .expect("准备 tools 与 prompt 失败");
-
-        assert_eq!(store.get_session_calls(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_prepare_tools_and_prompt_reuses_session_type_hint_after_runtime_init() {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-runtime-hint".to_string(),
-            working_dir: PathBuf::from("/tmp/runtime-hint"),
-            name: "runtime hint".to_string(),
-            user_set_name: false,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: None,
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::default()),
-            message_count: 0,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store.clone());
-        let session_config = SessionConfig {
-            id: "session-runtime-hint".to_string(),
-            thread_id: Some("thread-runtime-hint".to_string()),
-            turn_id: Some("turn-runtime-hint".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
-
-        agent
-            .ensure_runtime_turn_initialized(&session_config, Some("首次初始化".to_string()))
-            .await
-            .expect("初始化 turn runtime 失败");
-
-        let working_dir = std::env::current_dir().expect("读取当前目录失败");
-        agent
-            .prepare_tools_and_prompt(
-                &working_dir,
-                None,
-                false,
-                &crate::model::ModelConfig::new("test-model").expect("model config"),
-            )
-            .await
-            .expect("准备 tools 与 prompt 失败");
-
-        assert_eq!(store.get_session_calls(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_reply_reuses_session_type_hint_after_loading_session() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-reply-hint".to_string(),
-            working_dir: PathBuf::from("/tmp/reply-hint"),
-            name: "reply hint".to_string(),
-            user_set_name: false,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: None,
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::default()),
-            message_count: 0,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store.clone());
-        agent
-            .extension_manager
-            .set_context(PlatformExtensionContext {
-                session_id: Some("session-reply-hint".to_string()),
-                extension_manager: Some(Arc::downgrade(&agent.extension_manager)),
-            })
-            .await;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), "session-reply-hint")
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-reply-hint".to_string(),
-            thread_id: Some("thread-reply-hint".to_string()),
-            turn_id: Some("turn-reply-hint".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
-
-        let mut stream = agent
-            .reply(Message::user().with_text("继续处理"), session_config, None)
-            .await?;
-
-        while let Some(event) = stream.next().await {
-            if event.is_err() {
-                break;
-            }
-        }
-
-        assert_eq!(store.get_session_calls(), 1);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_reply_uses_turn_context_for_pre_reply_compaction_check() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-fast-no-compact".to_string(),
-            working_dir: PathBuf::from("/tmp/fast-no-compact"),
-            name: "fast no compact".to_string(),
-            user_set_name: true,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: Some(90),
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::new_unvalidated(vec![
-                Message::user().with_text("快速问题")
-            ])),
-            message_count: 1,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store);
-        agent
-            .update_provider(Arc::new(FastReplyProvider), "session-fast-no-compact")
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-fast-no-compact".to_string(),
-            thread_id: Some("thread-fast-no-compact".to_string()),
-            turn_id: Some("turn-fast-no-compact".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(build_auto_compaction_disabled_turn_context()),
-        };
-
-        let mut stream = agent
-            .reply(Message::user().with_text("快速问题"), session_config, None)
-            .await?;
-        let mut saw_reply = false;
-
-        while let Some(event) = stream.next().await {
-            match event? {
-                AgentEvent::ContextCompactionStarted { .. } => {
-                    panic!("fast/direct answer turn should not run pre-reply compaction")
-                }
-                AgentEvent::HistoryReplaced(_) => {
-                    panic!("fast/direct answer turn should not replace history before reply")
-                }
-                AgentEvent::Message(message) if message.as_concat_text().contains("快速回答") =>
-                {
-                    saw_reply = true;
-                    break;
-                }
-                _ => {}
-            }
-        }
-
-        assert!(saw_reply, "应直接进入 provider 回复");
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_direct_answer_skips_moim_injection_before_provider_request() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let observed_message_texts = Arc::new(Mutex::new(Vec::new()));
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-fast-no-moim".to_string(),
-            working_dir: PathBuf::from("/tmp/fast-no-moim"),
-            name: "fast no moim".to_string(),
-            user_set_name: true,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: Some(1),
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::new_unvalidated(vec![
-                Message::user().with_text("快速问题")
-            ])),
-            message_count: 1,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store);
-        agent
-            .update_provider(
-                Arc::new(RecordingFastReplyProvider {
-                    observed_message_texts: observed_message_texts.clone(),
-                }),
-                "session-fast-no-moim",
-            )
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-fast-no-moim".to_string(),
-            thread_id: Some("thread-fast-no-moim".to_string()),
-            turn_id: Some("turn-fast-no-moim".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(build_direct_answer_turn_context()),
-        };
-
-        let mut stream = agent
-            .reply(Message::user().with_text("快速问题"), session_config, None)
-            .await?;
-        let mut saw_reply = false;
-
-        while let Some(event) = stream.next().await {
-            match event? {
-                AgentEvent::Message(message) if message.as_concat_text().contains("快速回答") =>
-                {
-                    saw_reply = true;
-                    break;
-                }
-                _ => {}
-            }
-        }
-
-        assert!(saw_reply, "应先看到主回复");
-        let observed = observed_message_texts
-            .lock()
-            .expect("读取 provider messages");
-        let first_request = observed.first().expect("provider 应收到一次请求");
-        assert!(
-            first_request
-                .iter()
-                .all(|text| !text.contains("<info-msg>")),
-            "direct_answer 首包前不应注入 MOIM 当前时间信息，actual={first_request:?}"
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_direct_answer_does_not_classify_frontend_tool_requests() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-fast-no-tool-classify".to_string(),
-            working_dir: PathBuf::from("/tmp/fast-no-tool-classify"),
-            name: "fast no tool classify".to_string(),
-            user_set_name: true,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: Some(1),
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::new_unvalidated(vec![
-                Message::user().with_text("快速问题")
-            ])),
-            message_count: 1,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store);
-        agent
-            .add_extension(ExtensionConfig::Frontend {
-                name: "frontend".to_string(),
-                description: "desc".to_string(),
-                tools: vec![Tool::new(
-                    "frontend__noop".to_string(),
-                    "No-op frontend tool".to_string(),
-                    object!({ "type": "object", "properties": {} }),
-                )],
-                instructions: None,
-                bundled: None,
-                available_tools: vec![],
-                deferred_loading: false,
-                always_expose_tools: vec![],
-                allowed_caller: None,
-            })
-            .await?;
-        agent
-            .update_provider(
-                Arc::new(FrontendToolRequestFastReplyProvider),
-                "session-fast-no-tool-classify",
-            )
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-fast-no-tool-classify".to_string(),
-            thread_id: Some("thread-fast-no-tool-classify".to_string()),
-            turn_id: Some("turn-fast-no-tool-classify".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(build_direct_answer_turn_context()),
-        };
-
-        let mut stream = agent
-            .reply(Message::user().with_text("快速问题"), session_config, None)
-            .await?;
-        let mut saw_reply = false;
-
-        loop {
-            let next = tokio::time::timeout(Duration::from_secs(1), stream.next())
-                .await
-                .expect("direct_answer 空工具面不应等待前端工具响应");
-            let Some(event) = next else {
-                break;
-            };
-
-            if let AgentEvent::Message(message) = event? {
-                assert!(
-                    message
-                        .content
-                        .iter()
-                        .all(|content| !matches!(content, MessageContent::FrontendToolRequest(_))),
-                    "direct_answer 不应把 provider tool request 转成 frontend tool request"
-                );
-                if message.as_concat_text().contains("快速回答") {
-                    assert!(
-                        message
-                            .content
-                            .iter()
-                            .all(|content| !matches!(content, MessageContent::ToolRequest(_))),
-                        "direct_answer 空工具面不应保留 provider 结构化 tool request"
-                    );
-                    saw_reply = true;
-                }
-            }
-        }
-
-        assert!(saw_reply, "应看到剥离工具请求后的主回复");
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_direct_answer_defers_session_name_generation_until_after_reply() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let session_name_calls = Arc::new(AtomicUsize::new(0));
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-fast-title-deferred".to_string(),
-            working_dir: PathBuf::from("/tmp/fast-title-deferred"),
-            name: "New Session".to_string(),
-            user_set_name: false,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: Some(1),
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::new_unvalidated(vec![
-                Message::user().with_text("快速问题")
-            ])),
-            message_count: 1,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store);
-        agent
-            .update_provider(
-                Arc::new(TitleAwareFastReplyProvider {
-                    session_name_calls: session_name_calls.clone(),
-                }),
-                "session-fast-title-deferred",
-            )
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-fast-title-deferred".to_string(),
-            thread_id: Some("thread-fast-title-deferred".to_string()),
-            turn_id: Some("turn-fast-title-deferred".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(build_direct_answer_turn_context()),
-        };
-
-        let mut stream = agent
-            .reply(Message::user().with_text("快速问题"), session_config, None)
-            .await?;
-        let mut saw_reply = false;
-
-        while let Some(event) = stream.next().await {
-            match event? {
-                AgentEvent::Message(message) if message.as_concat_text().contains("快速回答") =>
-                {
-                    assert_eq!(
-                        session_name_calls.load(Ordering::SeqCst),
-                        0,
-                        "direct_answer 首个回复前不应启动标题生成"
-                    );
-                    saw_reply = true;
-                }
-                _ => {}
-            }
-        }
-
-        assert!(saw_reply, "应先看到主回复");
-        for _ in 0..20 {
-            if session_name_calls.load(Ordering::SeqCst) > 0 {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        assert_eq!(
-            session_name_calls.load(Ordering::SeqCst),
-            1,
-            "主回复完成后仍应异步生成会话标题"
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_dispatch_tool_call_skips_session_reload_for_non_agent_tools() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let store = Arc::new(CountingSessionStore::new(Session {
-            id: "session-tool-dispatch".to_string(),
-            working_dir: PathBuf::from("/tmp/tool-dispatch"),
-            name: "tool dispatch".to_string(),
-            user_set_name: false,
-            session_type: SessionType::User,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            extension_data: ExtensionData::default(),
-            total_tokens: None,
-            input_tokens: None,
-            output_tokens: None,
-            cached_input_tokens: None,
-            cache_creation_input_tokens: None,
-            accumulated_total_tokens: None,
-            accumulated_input_tokens: None,
-            accumulated_output_tokens: None,
-            schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
-            conversation: Some(Conversation::default()),
-            message_count: 0,
-            provider_name: None,
-            model_config: None,
-        }));
-
-        let agent = Agent::new_with_required_session_runtime_store()
-            .expect("初始化 agent 失败")
-            .with_session_store(store.clone());
-        agent
-            .add_final_output_tool(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "answer": { "type": "string" }
-                },
-                "required": ["answer"]
-            }))
-            .await?;
-
-        let session = store.current_session(false);
-        let tool_call = CallToolRequestParam {
-            name: FINAL_OUTPUT_TOOL_NAME.into(),
-            arguments: Some(
-                serde_json::json!({
-                    "answer": "ok"
-                })
-                .as_object()
-                .cloned()
-                .expect("final output arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = agent
-            .dispatch_tool_call(tool_call, "req-final-output".to_string(), None, &session)
-            .await;
-
-        let tool_result = tool_result.expect("final output dispatch should succeed");
-        let call_result = tool_result
-            .result
-            .await
-            .expect("final output should resolve successfully");
-        assert_eq!(call_result.is_error, Some(false));
-        assert_eq!(store.get_session_calls(), 0);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_add_final_output_tool() -> Result<()> {
-        let agent = Agent::new();
-
-        agent
-            .add_final_output_tool(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "result": {"type": "string"}
-                }
-            }))
-            .await?;
-
-        let tools = agent.list_tools(None).await;
-        let final_output_tool = tools
-            .iter()
-            .find(|tool| tool.name == FINAL_OUTPUT_TOOL_NAME);
-
-        assert!(
-            final_output_tool.is_some(),
-            "Final output tool should be present after adding"
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_prepare_session_config_for_reply_merges_session_output_schema() -> Result<()> {
-        let agent = Agent::new();
-        let output_schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "answer": {"type": "string"}
-            }
-        });
-
-        agent
-            .set_session_output_schema(Some(output_schema.clone()))
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-1".to_string(),
-            thread_id: None,
-            turn_id: None,
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
-
-        let prepared = agent
-            .prepare_session_config_for_reply(session_config)
-            .await?;
-        assert_eq!(
-            prepared
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.output_schema.as_ref()),
-            Some(&output_schema)
-        );
-        assert_eq!(
-            prepared
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.output_schema_source),
-            Some(TurnOutputSchemaSource::Session)
-        );
-
-        let final_output_tool = agent.final_output_tool.lock().await;
-        assert!(final_output_tool.is_some());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_prepare_session_config_for_reply_skips_final_output_tool_for_native_provider(
-    ) -> Result<()> {
-        let agent = Agent::new();
-        {
-            let mut provider = agent.provider.lock().await;
-            *provider = Some(Arc::new(NativeOutputSchemaProvider));
-        }
-
-        let output_schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "answer": {"type": "string"}
-            }
-        });
-
-        agent
-            .set_session_output_schema(Some(output_schema.clone()))
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-native-1".to_string(),
-            thread_id: None,
-            turn_id: None,
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
-
-        let prepared = agent
-            .prepare_session_config_for_reply(session_config)
-            .await?;
-        assert_eq!(
-            prepared
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.output_schema.as_ref()),
-            Some(&output_schema)
-        );
-        assert_eq!(
-            prepared
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.output_schema_source),
-            Some(TurnOutputSchemaSource::Session)
-        );
-
-        let final_output_tool = agent.final_output_tool.lock().await;
-        assert!(final_output_tool.is_none());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_prepare_session_config_for_reply_uses_turn_model_for_native_schema_detection(
-    ) -> Result<()> {
-        let agent = Agent::new();
-        {
-            let mut provider = agent.provider.lock().await;
-            *provider = Some(Arc::new(ModelAwareNativeOutputSchemaProvider));
-        }
-
-        let output_schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "answer": {"type": "string"}
-            }
-        });
-
-        agent
-            .set_session_output_schema(Some(output_schema.clone()))
-            .await?;
-
-        let session_config = SessionConfig {
-            id: "session-native-2".to_string(),
-            thread_id: None,
-            turn_id: None,
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(TurnContextOverride {
-                model: Some("native-model".to_string()),
-                ..TurnContextOverride::default()
-            }),
-        };
-
-        let prepared = agent
-            .prepare_session_config_for_reply(session_config)
-            .await?;
-        assert_eq!(
-            prepared
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.output_schema.as_ref()),
-            Some(&output_schema)
-        );
-        assert_eq!(
-            prepared
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.output_schema_source),
-            Some(TurnOutputSchemaSource::Session)
-        );
-
-        let final_output_tool = agent.final_output_tool.lock().await;
-        assert!(final_output_tool.is_none());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_resolve_turn_output_schema_runtime_tracks_native_strategy_and_model() -> Result<()>
-    {
-        let agent = Agent::new();
-        {
-            let mut provider = agent.provider.lock().await;
-            *provider = Some(Arc::new(ModelAwareNativeOutputSchemaProvider));
-        }
-
-        agent
-            .set_session_output_schema(Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "answer": {"type": "string"}
-                }
-            })))
-            .await?;
-
-        let prepared = agent
-            .prepare_session_config_for_reply(SessionConfig {
-                id: "session-native-runtime".to_string(),
-                thread_id: None,
-                turn_id: None,
-                schedule_id: None,
-                max_turns: None,
-                retry_config: None,
-                system_prompt: None,
-                system_prompt_override: None,
-                include_context_trace: None,
-                turn_context: Some(TurnContextOverride {
-                    model: Some("native-model".to_string()),
-                    ..TurnContextOverride::default()
-                }),
-            })
-            .await?;
-
-        let runtime = agent
-            .resolve_turn_output_schema_runtime(prepared.turn_context.as_ref())
-            .await;
-
-        assert_eq!(
-            runtime,
-            Some(TurnOutputSchemaRuntime {
-                source: TurnOutputSchemaSource::Session,
-                strategy: TurnOutputSchemaStrategy::Native,
-                provider_name: Some("model-aware-native-output-schema-provider".to_string()),
-                model_name: Some("native-model".to_string()),
-            })
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_reply_surfaces_manual_compaction_hint_when_overflow_auto_compaction_disabled(
-    ) -> Result<()> {
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::default(),
-            "overflow-auto-compact-disabled".to_string(),
-            SessionType::Hidden,
-        )
-        .await?;
-
-        agent
-            .update_provider(Arc::new(ContextLengthExceededProvider), &session.id)
-            .await?;
-
-        let session_config = SessionConfig {
-            id: session.id.clone(),
-            thread_id: None,
-            turn_id: Some("turn-overflow-auto-compact-disabled".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(build_auto_compaction_disabled_turn_context()),
-        };
-
-        let mut stream = agent
-            .reply(Message::user().with_text("继续处理"), session_config, None)
-            .await?;
-
-        let mut saw_disabled_notification = false;
-        let mut saw_context_compaction_started = false;
-        let mut saw_history_replaced = false;
-
-        while let Some(event) = stream.next().await {
-            match event? {
-                AgentEvent::Message(message) => {
-                    if let Some(MessageContent::SystemNotification(notification)) =
-                        message.content.first()
-                    {
-                        if notification.msg == AUTO_COMPACTION_DISABLED_CONTEXT_LIMIT_TEXT {
-                            saw_disabled_notification = true;
-                        }
-                    }
-                }
-                AgentEvent::ContextCompactionStarted { .. } => {
-                    saw_context_compaction_started = true;
-                }
-                AgentEvent::HistoryReplaced(_) => {
-                    saw_history_replaced = true;
-                }
-                _ => {}
-            }
-        }
-
-        assert!(
-            saw_disabled_notification,
-            "禁用自动压缩后，overflow 应提示手动压缩而不是静默失败"
-        );
-        assert!(
-            !saw_context_compaction_started,
-            "禁用自动压缩后，不应再启动 overflow recovery compaction"
-        );
-        assert!(!saw_history_replaced, "禁用自动压缩后，不应发生历史替换");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_tool_inspection_manager_has_all_inspectors() -> Result<()> {
-        let agent = Agent::new();
-
-        let inspector_names = agent.tool_inspection_manager.inspector_names();
-
-        assert!(
-            inspector_names.contains(&"permission"),
-            "Tool inspection manager should contain permission inspector"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_has_tool_registry() -> Result<()> {
-        let agent = Agent::new();
-
-        // Verify that the tool registry is initialized
-        let registry = agent.tool_registry();
-        let registry_guard = registry.read().await;
-
-        // Verify core native tools are registered
-        assert!(
-            registry_guard.contains("Bash"),
-            "Bash tool should be registered"
-        );
-        assert_eq!(
-            registry_guard.canonical_native_name("BashTool").as_deref(),
-            Some("Bash"),
-            "BashTool should remain a lookup-only alias for Bash"
-        );
-        assert!(
-            registry_guard.contains("Read"),
-            "Read tool should be registered"
-        );
-        assert!(
-            !registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
-            "view_image is registered by Lime's tool-runtime overlay, not Aster default tools"
-        );
-        assert!(
-            !registry_guard.contains("Write"),
-            "Aster Write tool should stay deleted"
-        );
-        assert!(
-            !registry_guard.contains("Edit"),
-            "Aster Edit tool should stay deleted"
-        );
-        assert!(
-            registry_guard.contains("Glob"),
-            "Glob tool should be registered"
-        );
-        assert!(
-            registry_guard.contains("Grep"),
-            "Grep tool should be registered"
-        );
-        assert!(
-            !registry_guard.contains("list_mcp_resources"),
-            "list_mcp_resources is registered by Lime tool-runtime gateway, not Aster default tools"
-        );
-        assert!(
-            !registry_guard.contains("read_mcp_resource"),
-            "read_mcp_resource is registered by Lime tool-runtime gateway, not Aster default tools"
-        );
-        assert!(
-            !registry_guard.contains("ToolSearch"),
-            "ToolSearch is registered by Lime tool-runtime gateway, not Aster default tools"
-        );
-        assert!(
-            registry_guard.contains("request_user_input"),
-            "request_user_input should be registered"
-        );
-        assert!(
-            !registry_guard.contains("AskUserQuestion"),
-            "AskUserQuestion should not remain in the current native surface"
-        );
-        assert!(
-            !registry_guard.contains("Config"),
-            "Config should not remain on the current native surface"
-        );
-        assert!(
-            !registry_guard.contains("Sleep"),
-            "Sleep should not remain on the current native surface"
-        );
-
-        // Verify tool count
-        assert!(
-            registry_guard.native_tool_count() >= 10,
-            "Should have at least 10 native tools"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_dispatch_tool_call_resolves_all_default_native_aliases() -> Result<()> {
-        let agent = Agent::new();
-        {
-            let mut registry = agent.tool_registry().write().await;
-            for (canonical, _) in crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS {
-                registry.register(Box::new(DispatchAliasTool {
-                    name: canonical.to_string(),
-                }));
-            }
-        }
-
-        let temp_dir = tempfile::tempdir()?;
-        let session = SessionManager::create_session(
-            temp_dir.path().to_path_buf(),
-            "dispatch-default-native-aliases".to_string(),
-            SessionType::User,
-        )
-        .await?;
-
-        let mut request_count = 0usize;
-        for (canonical, aliases) in crate::tools::registry::DEFAULT_NATIVE_ALIAS_PAIRS {
-            for alias in *aliases {
-                let request_id = format!("req-alias-{request_count}");
-                let (returned_request_id, tool_result) = agent
-                    .dispatch_tool_call(
-                        CallToolRequestParam {
-                            name: (*alias).into(),
-                            arguments: Some(serde_json::Map::new()),
-                        },
-                        request_id.clone(),
-                        None,
-                        &session,
-                    )
-                    .await;
-
-                assert_eq!(returned_request_id, request_id);
-                let tool_result = tool_result.expect("alias dispatch should return a tool result");
-                let call_result = tool_result
-                    .result
-                    .await
-                    .expect("alias dispatch should resolve successfully");
-                assert_eq!(
-                    call_result.is_error,
-                    Some(false),
-                    "{alias} should execute the canonical native tool"
-                );
-                let expected_output = format!("executed:{canonical}");
-                assert_eq!(
-                    call_result.content[0]
-                        .as_text()
-                        .map(|text| text.text.as_str()),
-                    Some(expected_output.as_str()),
-                    "{alias} should execute {canonical}"
-                );
-                request_count += 1;
-            }
-        }
-
-        assert!(
-            request_count > 20,
-            "dispatch alias test should cover the broad current tool surface"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_with_tool_config() -> Result<()> {
-        let config = ToolRegistrationConfig::new().with_pdf_enabled(true);
-        let agent = Agent::with_tool_config(config);
-
-        // Verify that the tool registry is initialized
-        let registry = agent.tool_registry();
-        let registry_guard = registry.read().await;
-
-        // Verify core native tools are registered
-        assert!(
-            registry_guard.contains("Bash"),
-            "Bash tool should be registered"
-        );
-        assert!(
-            registry_guard.contains("Read"),
-            "Read tool should be registered"
-        );
-        assert!(
-            !registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
-            "view_image is registered by Lime's tool-runtime overlay, not Aster default tools"
-        );
-        assert!(
-            !registry_guard.contains("list_mcp_resources"),
-            "list_mcp_resources is registered by Lime tool-runtime gateway, not Aster default tools"
-        );
-        assert!(
-            !registry_guard.contains("read_mcp_resource"),
-            "read_mcp_resource is registered by Lime tool-runtime gateway, not Aster default tools"
-        );
-        assert!(
-            !registry_guard.contains("ToolSearch"),
-            "ToolSearch is registered by Lime tool-runtime gateway, not Aster default tools"
-        );
-        assert!(
-            registry_guard.contains("request_user_input"),
-            "request_user_input should be registered"
-        );
-        assert!(
-            !registry_guard.contains("AskUserQuestion"),
-            "AskUserQuestion should not remain in the current native surface"
-        );
-        assert!(
-            !registry_guard.contains("Config"),
-            "Config should not remain on the current native surface"
-        );
-        assert!(
-            !registry_guard.contains("Sleep"),
-            "Sleep should not remain on the current native surface"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_list_tools_includes_current_agent_tool_without_extensions() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-tool-visibility".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        assert!(agent.subagents_enabled().await);
-
-        let tools = agent.list_tools(None).await;
-        assert!(
-            tools.iter().any(|tool| tool.name == AGENT_TOOL_NAME),
-            "Agent tool should be visible once provider is ready, even without extensions"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_list_tools_deduplicates_callback_backed_agent_surface() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: request.parent_session_id,
-                    nickname: None,
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-        let agent_control_tools =
-            AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback);
-        let mut agent = Agent::new();
-        agent.set_agent_control_tools(Some(agent_control_tools.clone()));
-        {
-            let registry_arc = agent.tool_registry().clone();
-            let mut registry = registry_arc.write().await;
-            crate::tools::register_agent_control_tools(&mut registry, &agent_control_tools);
-        }
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-tool-callback-dedupe".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let tools = agent.list_tools(None).await;
-        let agent_tools = tools
-            .iter()
-            .filter(|tool| tool.name == AGENT_TOOL_NAME)
-            .collect::<Vec<_>>();
-
-        assert_eq!(agent_tools.len(), 1);
-        assert_eq!(
-            agent_tools[0].input_schema["properties"]["run_in_background"]["description"].as_str(),
-            Some("是否在后台启动子代理。")
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_dynamic_agent_control_routes_mode_and_isolation_through_callbacks() -> Result<()>
-    {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
-        let captured_clone = captured.clone();
-        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
-            *captured_clone.lock().expect("capture lock") = Some(request.clone());
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: "dynamic-agent-control".to_string(),
-                    nickname: Some("dynamic-agent".to_string()),
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-        let agent_control_tools =
-            AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback);
-        let mut agent = Agent::new();
-        agent.set_agent_control_tools(Some(agent_control_tools.clone()));
-        {
-            let registry_arc = agent.tool_registry().clone();
-            let mut registry = registry_arc.write().await;
-            crate::tools::register_agent_control_tools(&mut registry, &agent_control_tools);
-        }
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-dynamic-callback-surface".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let tool_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                serde_json::json!({
-                    "description": "权限隔离",
-                    "prompt": "把权限与隔离字段交给宿主 runtime",
-                    "mode": "acceptEdits",
-                    "isolation": "worktree"
-                })
-                .as_object()
-                .cloned()
-                .expect("agent tool arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = agent
-            .dispatch_tool_call(
-                tool_call,
-                "req-agent-dynamic-callback".to_string(),
-                None,
-                &session,
-            )
-            .await;
-        let call_result = tool_result
-            .expect("agent dispatch should succeed")
-            .result
-            .await
-            .expect("dynamic callback-backed agent result");
-
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("status"))
-                .and_then(Value::as_str),
-            Some("async_launched")
-        );
-        let captured_request = captured
-            .lock()
-            .expect("capture lock")
-            .clone()
-            .expect("spawn callback should capture request");
-        assert_eq!(captured_request.mode.as_deref(), Some("acceptEdits"));
-        assert_eq!(captured_request.isolation.as_deref(), Some("worktree"));
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_list_tools_excludes_legacy_agent_control_surface() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-tool-legacy-surface".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let tools = agent.list_tools(None).await;
-        for legacy_name in [
-            "spawn_agent",
-            "send_input",
-            "wait_agent",
-            "resume_agent",
-            "close_agent",
-        ] {
-            assert!(
-                !tools.iter().any(|tool| tool.name == legacy_name),
-                "legacy tool surface should stay hidden: {legacy_name}"
-            );
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_current_surface_resource_helpers_are_visibility_gated() {
-        assert!(!should_expose_registered_tool("list_mcp_resources", false));
-        assert!(!should_expose_registered_tool("read_mcp_resource", false));
-        assert!(should_expose_registered_tool("list_mcp_resources", true));
-        assert!(should_expose_registered_tool("read_mcp_resource", true));
-        assert!(should_expose_registered_tool("ToolSearch", false));
-    }
-
-    #[test]
-    fn test_current_surface_main_thread_tool_gates_match_reference_contract() {
-        let external_env = HashMap::new();
-        let external_gates =
-            crate::tools::current_surface_tool_gates_from_env_map(&external_env, true);
-        assert!(external_gates.powershell);
-
-        let ant_env = HashMap::from([("USER_TYPE".to_string(), "ant".to_string())]);
-        let ant_gates = crate::tools::current_surface_tool_gates_from_env_map(&ant_env, true);
-        assert!(ant_gates.powershell);
-
-        let external_powershell_env = HashMap::from([(
-            crate::tools::CURRENT_SURFACE_POWERSHELL_ENV.to_string(),
-            "1".to_string(),
-        )]);
-        let external_powershell_gates =
-            crate::tools::current_surface_tool_gates_from_env_map(&external_powershell_env, true);
-        assert!(external_powershell_gates.powershell);
-
-        let ant_powershell_disabled_env = HashMap::from([
-            ("USER_TYPE".to_string(), "ant".to_string()),
-            (
-                crate::tools::CURRENT_SURFACE_POWERSHELL_ENV.to_string(),
-                "0".to_string(),
-            ),
-            ("PROACTIVE".to_string(), "true".to_string()),
-            ("WORKFLOW_SCRIPTS".to_string(), "yes".to_string()),
-        ]);
-        let ant_powershell_disabled_gates = crate::tools::current_surface_tool_gates_from_env_map(
-            &ant_powershell_disabled_env,
-            true,
-        );
-        assert!(!ant_powershell_disabled_gates.powershell);
-
-        let non_windows_env = HashMap::from([(
-            crate::tools::CURRENT_SURFACE_POWERSHELL_ENV.to_string(),
-            "1".to_string(),
-        )]);
-        let non_windows_gates =
-            crate::tools::current_surface_tool_gates_from_env_map(&non_windows_env, false);
-        assert!(!non_windows_gates.powershell);
-    }
-
-    #[test]
-    fn test_current_surface_subagent_tool_visibility_matches_async_surface() {
-        assert!(should_expose_tool_for_session(
-            "Bash",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(should_expose_tool_for_session(
-            "ToolSearch",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(should_expose_tool_for_session(
-            FINAL_OUTPUT_TOOL_NAME,
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(should_expose_tool_for_session(
-            "mcp__docs__search",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "TaskCreate",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "TaskGet",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "TaskList",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "TaskUpdate",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "TaskOutput",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "TaskStop",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "SendMessage",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "Config",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "Sleep",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "Workflow",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            "list_mcp_resources",
-            Some(SessionType::SubAgent),
-            false
-        ));
-        assert!(!should_expose_tool_for_session(
-            AGENT_TOOL_NAME,
-            Some(SessionType::SubAgent),
-            false
-        ));
-    }
-
-    #[test]
-    fn test_current_surface_subagent_plan_mode_hides_aster_plan_tools() {
-        let tool_gates = CurrentSurfaceToolGates { powershell: false };
-
-        assert!(!should_expose_tool_for_session_with_gates(
-            "ExitPlanMode",
-            Some(SessionType::SubAgent),
-            false,
-            tool_gates,
-            false,
-            true
-        ));
-        assert!(!should_expose_tool_for_session_with_gates(
-            "EnterPlanMode",
-            Some(SessionType::SubAgent),
-            false,
-            tool_gates,
-            false,
-            true
-        ));
-    }
-
-    #[test]
-    fn test_current_surface_team_subagent_keeps_agent_visible_for_sync_nested_subagents() {
-        let tool_gates = CurrentSurfaceToolGates { powershell: false };
-
-        assert!(should_expose_tool_for_session_with_gates(
-            AGENT_TOOL_NAME,
-            Some(SessionType::SubAgent),
-            false,
-            tool_gates,
-            true,
-            false
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_list_tools_hides_resource_helpers_without_resource_extensions() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-resource-helper-visibility".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let tools = agent.list_tools(None).await;
-
-        assert!(
-            !tools.iter().any(|tool| tool.name == "ToolSearch"),
-            "ToolSearch is registered by Lime tool-runtime gateway, not Aster default tools"
-        );
-        assert!(
-            !tools.iter().any(|tool| tool.name == "list_mcp_resources"),
-            "resource helper should stay hidden until a resource-capable extension is active"
-        );
-        assert!(
-            !tools.iter().any(|tool| tool.name == "read_mcp_resource"),
-            "resource helper should stay hidden until a resource-capable extension is active"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_list_tools_applies_current_surface_main_thread_gates() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-main-thread-surface".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let tools = agent.list_tools(None).await;
-        let tool_gates = current_surface_tool_gates();
-
-        for (tool_name, expected_visible) in [("PowerShell", tool_gates.powershell)] {
-            assert_eq!(
-                tools.iter().any(|tool| tool.name == tool_name),
-                expected_visible,
-                "main-thread current surface visibility mismatch for {tool_name}"
-            );
-        }
-        for deleted_tool in ["Config", "Sleep", "Workflow"] {
-            assert!(
-                !tools.iter().any(|tool| tool.name == deleted_tool),
-                "deleted Aster tool should not be visible on main-thread surface: {deleted_tool}"
-            );
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_prepare_reply_context_applies_session_turn_scoped_allowed_tools() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-turn-context-tool-scope".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let mut metadata = HashMap::new();
-        metadata.insert(
-            "subagent".to_string(),
-            serde_json::json!({
-                "allowed_tools": ["Read"]
-            }),
-        );
-        let session_config = SessionConfig {
-            id: session.id.clone(),
-            thread_id: Some("thread-turn-context-tool-scope".to_string()),
-            turn_id: Some("turn-turn-context-tool-scope".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(TurnContextOverride {
-                metadata,
-                ..TurnContextOverride::default()
-            }),
-        };
-
-        let reply_context = agent
-            .prepare_reply_context(
-                Conversation::default(),
-                PathBuf::from(".").as_path(),
-                &session_config,
-                false,
-                None,
-            )
-            .await?;
-
-        let tool_names = reply_context
-            .tools
-            .iter()
-            .map(|tool| tool.name.clone())
-            .collect::<Vec<_>>();
-        assert_eq!(tool_names, vec!["Read".to_string()]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_prepare_reply_context_skips_permission_inspector_for_direct_answer() -> Result<()>
-    {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-direct-answer-skip-inspector".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let session_config = SessionConfig {
-            id: session.id.clone(),
-            thread_id: Some("thread-direct-answer-skip-inspector".to_string()),
-            turn_id: Some("turn-direct-answer-skip-inspector".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(build_direct_answer_turn_context()),
-        };
-
-        let reply_context = agent
-            .prepare_reply_context(
-                Conversation::default(),
-                PathBuf::from(".").as_path(),
-                &session_config,
-                true,
-                None,
-            )
-            .await?;
-
-        assert!(reply_context.tools.is_empty());
-        assert!(
-            reply_context.context_trace.iter().any(|step| {
-                step.stage == "permission_inspector" && step.detail == "skipped=direct_answer"
-            }),
-            "direct_answer 首包前不应更新工具审批 inspector"
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_list_tools_hides_main_thread_only_tools_for_subagent_sessions() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let agent = Agent::new();
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-subagent-surface".to_string(),
-            SessionType::SubAgent,
-        )
-        .await?;
-        agent
-            .extension_manager
-            .set_context(PlatformExtensionContext {
-                session_id: Some(session.id.clone()),
-                extension_manager: Some(Arc::downgrade(&agent.extension_manager)),
-            })
-            .await;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-        agent
-            .add_final_output_tool(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "answer": { "type": "string" }
-                },
-                "required": ["answer"]
-            }))
-            .await?;
-
-        let tools = agent.list_tools(None).await;
-
-        for visible_name in ["Bash", "Read", FINAL_OUTPUT_TOOL_NAME] {
-            assert!(
-                tools.iter().any(|tool| tool.name == visible_name),
-                "subagent current surface should keep: {visible_name}"
-            );
-        }
-
-        for hidden_name in [
-            "Edit",
-            "Write",
-            "TaskCreate",
-            "TaskGet",
-            "TaskList",
-            "TaskUpdate",
-            "TaskOutput",
-            "TaskStop",
-            "Config",
-            "Sleep",
-            "Workflow",
-            "request_user_input",
-            "EnterPlanMode",
-            "ExitPlanMode",
-            "EnterWorktree",
-            "ExitWorktree",
-        ] {
-            assert!(
-                !tools.iter().any(|tool| tool.name == hidden_name),
-                "subagent current surface should hide: {hidden_name}"
-            );
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_list_tools_exposes_teammate_coordination_tools_for_team_subagents() -> Result<()>
-    {
-        use crate::execution::manager::AgentManager;
-        use crate::session::{
-            save_team_membership, save_team_state, TeamMember, TeamMembershipState,
-            TeamSessionState,
-        };
-
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let manager = AgentManager::new_with_thread_runtime_store(
-            None,
-            Arc::new(InMemoryThreadRuntimeStore::default()),
-        )
-        .await?;
-        let working_dir = tempfile::tempdir()?;
-        let lead = SessionManager::create_session(
-            working_dir.path().to_path_buf(),
-            "team-lead".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        let child = SessionManager::create_session(
-            working_dir.path().to_path_buf(),
-            "team-child".to_string(),
-            SessionType::SubAgent,
-        )
-        .await?;
-
-        let mut team_state = TeamSessionState::new("delivery-team", lead.id.clone(), None, None);
-        team_state.add_or_update_member(TeamMember::teammate(
-            child.id.clone(),
-            "verifier".to_string(),
-            None,
-        ));
-        save_team_state(&lead.id, Some(team_state)).await?;
-        save_team_membership(
-            &child.id,
-            Some(TeamMembershipState {
-                team_name: "delivery-team".to_string(),
-                lead_session_id: lead.id.clone(),
-                agent_id: child.id.clone(),
-                name: "verifier".to_string(),
-                agent_type: None,
-            }),
-        )
-        .await?;
-
-        let child_agent = manager.get_or_create_agent(child.id.clone()).await?;
-        let tools = child_agent.list_tools(None).await;
-
-        for visible_name in [AGENT_TOOL_NAME, "SendMessage", "ListPeers"] {
-            assert!(
-                tools.iter().any(|tool| tool.name == visible_name),
-                "team subagent current surface should keep teammate tool: {visible_name}"
-            );
-        }
-
-        for hidden_name in ["TeamCreate", "TeamDelete"] {
-            assert!(
-                !tools.iter().any(|tool| tool.name == hidden_name),
-                "team subagent current surface should still hide main-thread-only tool: {hidden_name}"
-            );
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_team_subagent_agent_tool_reaches_sync_nested_subagent_runtime() -> Result<()> {
-        use crate::execution::manager::AgentManager;
-        use crate::session::{
-            save_team_membership, save_team_state, TeamMember, TeamMembershipState,
-            TeamSessionState,
-        };
-
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let manager = AgentManager::new_with_thread_runtime_store(
-            None,
-            Arc::new(InMemoryThreadRuntimeStore::default()),
-        )
-        .await?;
-        let working_dir = tempfile::tempdir()?;
-        let lead = SessionManager::create_session(
-            working_dir.path().to_path_buf(),
-            "sync-team-lead".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        let child = SessionManager::create_session(
-            working_dir.path().to_path_buf(),
-            "sync-team-child".to_string(),
-            SessionType::SubAgent,
-        )
-        .await?;
-
-        let mut team_state = TeamSessionState::new("delivery-team", lead.id.clone(), None, None);
-        team_state.add_or_update_member(TeamMember::teammate(
-            child.id.clone(),
-            "verifier".to_string(),
-            None,
-        ));
-        save_team_state(&lead.id, Some(team_state)).await?;
-        save_team_membership(
-            &child.id,
-            Some(TeamMembershipState {
-                team_name: "delivery-team".to_string(),
-                lead_session_id: lead.id.clone(),
-                agent_id: child.id.clone(),
-                name: "verifier".to_string(),
-                agent_type: None,
-            }),
-        )
-        .await?;
-
-        let child_agent = manager.get_or_create_agent(child.id.clone()).await?;
-        let tool_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                serde_json::json!({
-                    "description": "继续拆解",
-                    "prompt": "同步执行下一层子任务"
-                })
-                .as_object()
-                .cloned()
-                .expect("agent tool arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = child_agent
-            .dispatch_tool_call(tool_call, "req-team-sync-agent".to_string(), None, &child)
-            .await;
-        let error = match tool_result {
-            Ok(_) => panic!("missing provider should surface sync runtime path"),
-            Err(error) => error,
-        };
-
-        assert_eq!(error.code, ErrorCode::INTERNAL_ERROR);
-        assert_eq!(error.message, "Provider is required");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_team_subagent_agent_tool_rejects_background_and_teammate_spawn_fields(
-    ) -> Result<()> {
-        use crate::session::{
-            save_team_membership, save_team_state, TeamMember, TeamMembershipState,
-            TeamSessionState,
-        };
-
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let spawn_agent_callback = Arc::new(move |_request: SpawnAgentRequest| {
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: "agent-team-child".to_string(),
-                    nickname: Some("team-child".to_string()),
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-        let agent =
-            Agent::with_tool_config(ToolRegistrationConfig::new().with_agent_control_tools(
-                AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
-            ));
-        let working_dir = tempfile::tempdir()?;
-        let lead = SessionManager::create_session(
-            working_dir.path().to_path_buf(),
-            "team-guard-lead".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        let child = SessionManager::create_session(
-            working_dir.path().to_path_buf(),
-            "team-guard-child".to_string(),
-            SessionType::SubAgent,
-        )
-        .await?;
-
-        let mut team_state = TeamSessionState::new("delivery-team", lead.id.clone(), None, None);
-        team_state.add_or_update_member(TeamMember::teammate(
-            child.id.clone(),
-            "verifier".to_string(),
-            None,
-        ));
-        save_team_state(&lead.id, Some(team_state)).await?;
-        save_team_membership(
-            &child.id,
-            Some(TeamMembershipState {
-                team_name: "delivery-team".to_string(),
-                lead_session_id: lead.id.clone(),
-                agent_id: child.id.clone(),
-                name: "verifier".to_string(),
-                agent_type: None,
-            }),
-        )
-        .await?;
-
-        let background_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                serde_json::json!({
-                    "description": "后台校验",
-                    "prompt": "尝试启动后台 agent",
-                    "run_in_background": true
-                })
-                .as_object()
-                .cloned()
-                .expect("agent tool arguments should be an object"),
-            ),
-        };
-        let (_request_id, background_result) = agent
-            .dispatch_tool_call(
-                background_call,
-                "req-team-background".to_string(),
-                None,
-                &child,
-            )
-            .await;
-        let background_error = match background_result {
-            Ok(_) => panic!("team subagent background agent should be rejected"),
-            Err(error) => error,
-        };
-        assert_eq!(background_error.code, ErrorCode::INVALID_PARAMS);
-        assert_eq!(
-            background_error.message,
-            "Team subagents cannot spawn background agents in the current runtime"
-        );
-
-        let teammate_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                serde_json::json!({
-                    "description": "派生 teammate",
-                    "prompt": "尝试再创建 teammate",
-                    "name": "nested",
-                    "team_name": "delivery-team"
-                })
-                .as_object()
-                .cloned()
-                .expect("agent tool arguments should be an object"),
-            ),
-        };
-        let (_request_id, teammate_result) = agent
-            .dispatch_tool_call(teammate_call, "req-team-nested".to_string(), None, &child)
-            .await;
-        let teammate_error = match teammate_result {
-            Ok(_) => panic!("team subagent teammate spawn should be rejected"),
-            Err(error) => error,
-        };
-        assert_eq!(teammate_error.code, ErrorCode::INVALID_PARAMS);
-        assert_eq!(
-            teammate_error.message,
-            "Team subagents cannot spawn teammates in the current runtime; omit name and team_name"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_tool_routes_async_current_surface_through_callbacks() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
-        let captured_clone = captured.clone();
-        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
-            *captured_clone.lock().expect("capture lock") = Some(request.clone());
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: "agent-42".to_string(),
-                    nickname: Some("delegate".to_string()),
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-
-        let agent =
-            Agent::with_tool_config(ToolRegistrationConfig::new().with_agent_control_tools(
-                AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
-            ));
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-callback-surface".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let arguments = serde_json::json!({
-            "description": "并行验证",
-            "prompt": "检查这个改动是否会影响子代理通信",
-            "name": "verifier",
-            "run_in_background": true
-        });
-        let tool_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                arguments
-                    .as_object()
-                    .cloned()
-                    .expect("agent tool arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = agent
-            .dispatch_tool_call(tool_call, "req-agent-callback".to_string(), None, &session)
-            .await;
-        let tool_result = tool_result.expect("agent dispatch should succeed");
-        let call_result = tool_result
-            .result
-            .await
-            .expect("callback-backed agent result");
-
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("status"))
-                .and_then(Value::as_str),
-            Some("async_launched")
-        );
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("agentId"))
-                .and_then(Value::as_str),
-            Some("agent-42")
-        );
-
-        let captured_request = captured
-            .lock()
-            .expect("capture lock")
-            .clone()
-            .expect("spawn callback should capture request");
-        assert_eq!(captured_request.parent_session_id, session.id);
-        assert_eq!(captured_request.message, "检查这个改动是否会影响子代理通信");
-        assert_eq!(captured_request.name.as_deref(), Some("verifier"));
-        assert!(captured_request.allowed_tools.is_empty());
-        assert!(captured_request.disallowed_tools.is_empty());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_tool_routes_basic_top_level_spawn_through_callbacks() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
-        let captured_clone = captured.clone();
-        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
-            *captured_clone.lock().expect("capture lock") = Some(request.clone());
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: "agent-basic".to_string(),
-                    nickname: Some("basic-agent".to_string()),
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-
-        let agent =
-            Agent::with_tool_config(ToolRegistrationConfig::new().with_agent_control_tools(
-                AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
-            ));
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-basic-callback-surface".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let tool_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                serde_json::json!({
-                    "description": "基础委派",
-                    "prompt": "整理今天的国际新闻"
-                })
-                .as_object()
-                .cloned()
-                .expect("agent tool arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = agent
-            .dispatch_tool_call(tool_call, "req-agent-basic".to_string(), None, &session)
-            .await;
-        let call_result = tool_result
-            .expect("agent dispatch should succeed")
-            .result
-            .await
-            .expect("callback-backed agent result");
-
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("status"))
-                .and_then(Value::as_str),
-            Some("async_launched")
-        );
-        let captured_request = captured
-            .lock()
-            .expect("capture lock")
-            .clone()
-            .expect("spawn callback should capture request");
-        assert_eq!(captured_request.message, "整理今天的国际新闻");
-        assert!(!captured_request.run_in_background);
-        assert!(captured_request.mode.is_none());
-        assert!(captured_request.isolation.is_none());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_tool_routes_tool_scope_through_callbacks() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
-        let captured_clone = captured.clone();
-        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
-            *captured_clone.lock().expect("capture lock") = Some(request.clone());
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: "agent-tools".to_string(),
-                    nickname: Some("tool-scope-agent".to_string()),
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-
-        let agent =
-            Agent::with_tool_config(ToolRegistrationConfig::new().with_agent_control_tools(
-                AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
-            ));
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-tool-scope-callback".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let arguments = serde_json::json!({
-            "description": "工具白名单",
-            "prompt": "把工具限制同步给子代理",
-            "allowed_tools": ["Read", "Bash", "Read", " "],
-            "disallowed_tools": ["WebSearch", "WebSearch"]
-        });
-        let tool_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                arguments
-                    .as_object()
-                    .cloned()
-                    .expect("agent tool arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = agent
-            .dispatch_tool_call(
-                tool_call,
-                "req-agent-tool-scope".to_string(),
-                None,
-                &session,
-            )
-            .await;
-        let tool_result = tool_result.expect("agent dispatch should succeed");
-        let call_result = tool_result
-            .result
-            .await
-            .expect("callback-backed agent result");
-
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("status"))
-                .and_then(Value::as_str),
-            Some("async_launched")
-        );
-
-        let captured_request = captured
-            .lock()
-            .expect("capture lock")
-            .clone()
-            .expect("spawn callback should capture request");
-        assert_eq!(captured_request.allowed_tools, vec!["Read", "Bash"]);
-        assert_eq!(captured_request.disallowed_tools, vec!["WebSearch"]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_tool_routes_cwd_override_through_callbacks() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
-        let captured_clone = captured.clone();
-        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
-            *captured_clone.lock().expect("capture lock") = Some(request.clone());
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: "agent-cwd".to_string(),
-                    nickname: Some("cwd-agent".to_string()),
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-
-        let agent =
-            Agent::with_tool_config(ToolRegistrationConfig::new().with_agent_control_tools(
-                AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
-            ));
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-cwd-callback-surface".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let cwd = tempfile::tempdir()?;
-        let arguments = serde_json::json!({
-            "description": "隔离目录验证",
-            "prompt": "在自定义 cwd 中执行这个子任务",
-            "cwd": cwd.path().display().to_string()
-        });
-        let tool_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                arguments
-                    .as_object()
-                    .cloned()
-                    .expect("agent tool arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = agent
-            .dispatch_tool_call(tool_call, "req-agent-cwd".to_string(), None, &session)
-            .await;
-        let tool_result = tool_result.expect("agent dispatch should succeed");
-        let call_result = tool_result
-            .result
-            .await
-            .expect("callback-backed agent result");
-
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("status"))
-                .and_then(Value::as_str),
-            Some("async_launched")
-        );
-
-        let captured_request = captured
-            .lock()
-            .expect("capture lock")
-            .clone()
-            .expect("spawn callback should capture request");
-        assert_eq!(
-            captured_request.cwd.as_deref(),
-            Some(cwd.path().to_string_lossy().as_ref())
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_tool_routes_mode_and_isolation_through_callbacks() -> Result<()> {
-        initialize_session_runtime_store(Arc::new(InMemoryThreadRuntimeStore::default()));
-
-        let captured = Arc::new(std::sync::Mutex::new(None::<SpawnAgentRequest>));
-        let captured_clone = captured.clone();
-        let spawn_agent_callback = Arc::new(move |request: SpawnAgentRequest| {
-            *captured_clone.lock().expect("capture lock") = Some(request.clone());
-            Box::pin(async move {
-                Ok(SpawnAgentResponse {
-                    agent_id: "agent-mode-isolation".to_string(),
-                    nickname: Some("mode-isolation-agent".to_string()),
-                    extra: std::collections::BTreeMap::new(),
-                })
-            })
-                as Pin<Box<dyn Future<Output = Result<SpawnAgentResponse, String>> + Send>>
-        });
-
-        let agent =
-            Agent::with_tool_config(ToolRegistrationConfig::new().with_agent_control_tools(
-                AgentControlToolConfig::new().with_spawn_agent_callback(spawn_agent_callback),
-            ));
-        let session = SessionManager::create_session(
-            PathBuf::from("."),
-            "agent-mode-isolation-callback-surface".to_string(),
-            SessionType::User,
-        )
-        .await?;
-        agent
-            .update_provider(Arc::new(NativeOutputSchemaProvider), &session.id)
-            .await?;
-
-        let arguments = serde_json::json!({
-            "description": "权限与隔离验证",
-            "prompt": "把 mode 与 isolation 透传给宿主 runtime",
-            "mode": "acceptEdits",
-            "isolation": "worktree"
-        });
-        let tool_call = CallToolRequestParam {
-            name: AGENT_TOOL_NAME.into(),
-            arguments: Some(
-                arguments
-                    .as_object()
-                    .cloned()
-                    .expect("agent tool arguments should be an object"),
-            ),
-        };
-
-        let (_request_id, tool_result) = agent
-            .dispatch_tool_call(
-                tool_call,
-                "req-agent-mode-isolation".to_string(),
-                None,
-                &session,
-            )
-            .await;
-        let tool_result = tool_result.expect("agent dispatch should succeed");
-        let call_result = tool_result
-            .result
-            .await
-            .expect("callback-backed agent result");
-
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("status"))
-                .and_then(Value::as_str),
-            Some("async_launched")
-        );
-
-        let captured_request = captured
-            .lock()
-            .expect("capture lock")
-            .clone()
-            .expect("spawn callback should capture request");
-        assert_eq!(captured_request.mode.as_deref(), Some("acceptEdits"));
-        assert_eq!(captured_request.isolation.as_deref(), Some("worktree"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_native_tool_result_to_call_tool_result_preserves_metadata_and_error_flag() {
-        let tool_result = crate::tools::ToolResult::error("failed")
-            .with_metadata("tool_surface_updated", Value::Bool(true))
-            .with_metadata("matches", serde_json::json!(["demo__tool"]));
-
-        let call_result = native_tool_result_to_call_tool_result(tool_result);
-
-        assert_eq!(call_result.is_error, Some(true));
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("tool_surface_updated")),
-            Some(&Value::Bool(true))
-        );
-        assert!(tool_surface_updated_from_call_tool_result(&call_result));
-    }
-
-    #[test]
-    fn test_native_tool_result_to_call_tool_result_attaches_model_visible_image() {
-        let tool_result = crate::tools::ToolResult::success("Viewed image: sample.png")
-            .with_metadata("tool_result_kind", serde_json::json!("view_image"))
-            .with_metadata("model_visible_image", serde_json::json!(true))
-            .with_metadata(
-                "image_url",
-                serde_json::json!("data:image/png;base64,aGVsbG8="),
-            )
-            .with_metadata("mime_type", serde_json::json!("image/png"));
-
-        let call_result = native_tool_result_to_call_tool_result(tool_result);
-
-        assert_eq!(call_result.is_error, Some(false));
-        assert_eq!(call_result.content.len(), 2);
-        assert_eq!(
-            call_result.content[0]
-                .as_text()
-                .map(|text| text.text.as_str()),
-            Some("Viewed image: sample.png")
-        );
-        let image = call_result.content[1]
-            .as_image()
-            .expect("view_image should attach image content");
-        assert_eq!(image.mime_type, "image/png");
-        assert_eq!(image.data, "aGVsbG8=");
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("image_url")),
-            None
-        );
-        assert_eq!(
-            call_result
-                .structured_content
-                .as_ref()
-                .and_then(|value| value.get("mime_type"))
-                .and_then(Value::as_str),
-            Some("image/png")
-        );
-    }
-
-    #[test]
-    fn test_should_stop_after_tool_result_matches_forwarded_image_task_metadata() {
-        let turn_context = TurnContextOverride {
-            metadata: HashMap::from([(
-                "runtime_control".to_string(),
-                serde_json::json!({
-                    "stop_after_tool_result": {
-                        "metadata_equals": {
-                            "skill_forwarded_tool_name": "lime_create_image_generation_task",
-                            "task_type": "image_generate"
-                        },
-                        "require_any": ["task_id", "artifact_path", "path"],
-                        "statuses": ["pending_submit", "queued", "running", "partial", "succeeded"]
-                    }
-                }),
-            )]),
-            ..TurnContextOverride::default()
-        };
-        let mut messages = Conversation::default();
-        messages.push(Message::user().with_tool_response(
-            "call-image-skill",
-            Ok(CallToolResult {
-                content: vec![Content::text("图片任务已创建")],
-                structured_content: Some(serde_json::json!({
-                    "skill_forwarded_tool_name": "lime_create_image_generation_task",
-                    "task_type": "image_generate",
-                    "task_id": "task-image-1",
-                    "status": "pending_submit"
-                })),
-                is_error: Some(false),
-                meta: None,
-            }),
-        ));
-
-        assert!(should_stop_after_tool_result(
-            Some(&turn_context),
-            &messages
-        ));
-    }
-
-    #[test]
-    fn test_should_stop_after_tool_result_ignores_unmatched_metadata() {
-        let turn_context = TurnContextOverride {
-            metadata: HashMap::from([(
-                "runtime_control".to_string(),
-                serde_json::json!({
-                    "stop_after_tool_result": {
-                        "metadata_equals": {
-                            "skill_forwarded_tool_name": "lime_create_image_generation_task",
-                            "task_type": "image_generate"
-                        },
-                        "require_any": ["task_id"],
-                        "statuses": ["pending_submit"]
-                    }
-                }),
-            )]),
-            ..TurnContextOverride::default()
-        };
-        let mut messages = Conversation::default();
-        messages.push(Message::user().with_tool_response(
-            "call-other",
-            Ok(CallToolResult {
-                content: vec![Content::text("其它工具完成")],
-                structured_content: Some(serde_json::json!({
-                    "skill_forwarded_tool_name": "lime_create_cover_generation_task",
-                    "task_type": "cover_generate",
-                    "task_id": "task-cover-1",
-                    "status": "pending_submit"
-                })),
-                is_error: Some(false),
-                meta: None,
-            }),
-        ));
-
-        assert!(!should_stop_after_tool_result(
-            Some(&turn_context),
-            &messages
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_agent_register_mcp_tool() -> Result<()> {
-        let agent = Agent::new();
-
-        // Register an MCP tool
-        agent
-            .register_mcp_tool(
-                "test_mcp_tool".to_string(),
-                "A test MCP tool".to_string(),
-                serde_json::json!({"type": "object"}),
-                "test_server".to_string(),
-            )
-            .await;
-
-        // Verify the MCP tool is registered
-        let registry = agent.tool_registry();
-        let registry_guard = registry.read().await;
-        assert!(
-            registry_guard.contains("test_mcp_tool"),
-            "MCP tool should be registered"
-        );
-        assert!(
-            registry_guard.contains_mcp("test_mcp_tool"),
-            "Should be registered as MCP tool"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_agent_file_read_history() -> Result<()> {
-        let agent = Agent::new();
-
-        // Verify that the file read history is initialized and accessible
-        let history = agent.file_read_history();
-        assert!(
-            history.read().unwrap().is_empty(),
-            "History should be empty initially"
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_partition_tool_requests_for_execution_groups_consecutive_safe_requests() {
-        fn request(id: &str, name: &str, arguments: Value) -> ToolRequest {
-            ToolRequest {
-                id: id.to_string(),
-                tool_call: Ok(CallToolRequestParam {
-                    name: std::borrow::Cow::Owned(name.to_string()),
-                    arguments: Some(
-                        arguments
-                            .as_object()
-                            .cloned()
-                            .expect("tool arguments should be an object"),
-                    ),
-                }),
-                metadata: None,
-                tool_meta: None,
-            }
-        }
-
-        let batches = partition_tool_requests_for_execution(&[
-            request(
-                "req-read",
-                "Read",
-                serde_json::json!({ "path": "README.md" }),
-            ),
-            request(
-                "req-grep",
-                "Grep",
-                serde_json::json!({ "pattern": "Agent" }),
-            ),
-            request(
-                "req-write",
-                "Bash",
-                serde_json::json!({ "command": "mkdir scratch" }),
-            ),
-            request(
-                "req-bash",
-                "Bash",
-                serde_json::json!({ "command": "rg Agent src | head -n 5" }),
-            ),
-        ]);
-
-        assert_eq!(batches.len(), 3);
-        assert!(batches[0].is_concurrency_safe);
-        assert_eq!(batches[0].requests.len(), 2);
-        assert!(!batches[1].is_concurrency_safe);
-        assert_eq!(batches[1].requests.len(), 1);
-        assert!(batches[2].is_concurrency_safe);
-        assert_eq!(batches[2].requests.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_handle_approved_and_denied_tools_runs_read_only_batch_in_parallel() -> Result<()>
-    {
-        struct SlowSuccessTool {
-            name: &'static str,
-            delay: Duration,
-        }
-
-        #[async_trait::async_trait]
-        impl crate::tools::Tool for SlowSuccessTool {
-            fn name(&self) -> &str {
-                self.name
-            }
-
-            fn description(&self) -> &str {
-                "slow success test tool"
-            }
-
-            fn input_schema(&self) -> Value {
-                serde_json::json!({
-                    "type": "object",
-                    "additionalProperties": true
-                })
-            }
-
-            async fn execute(
-                &self,
-                _params: Value,
-                _context: &crate::tools::ToolContext,
-            ) -> std::result::Result<crate::tools::ToolResult, crate::tools::ToolError>
-            {
-                tokio::time::sleep(self.delay).await;
-                Ok(crate::tools::ToolResult::success(format!(
-                    "{} completed",
-                    self.name
-                )))
-            }
-        }
-
-        fn request(id: &str, name: &str, arguments: Value) -> ToolRequest {
-            ToolRequest {
-                id: id.to_string(),
-                tool_call: Ok(CallToolRequestParam {
-                    name: std::borrow::Cow::Owned(name.to_string()),
-                    arguments: Some(
-                        arguments
-                            .as_object()
-                            .cloned()
-                            .expect("tool arguments should be an object"),
-                    ),
-                }),
-                metadata: None,
-                tool_meta: None,
-            }
-        }
-
-        let agent = Agent::new();
-        {
-            let mut registry = agent.tool_registry().write().await;
-            let _ = registry.unregister("Read");
-            let _ = registry.unregister("Glob");
-            registry.register(Box::new(SlowSuccessTool {
-                name: "Read",
-                delay: Duration::from_millis(250),
-            }));
-            registry.register(Box::new(SlowSuccessTool {
-                name: "Glob",
-                delay: Duration::from_millis(250),
-            }));
-        }
-
-        let temp_dir = tempfile::tempdir()?;
-        let session = SessionManager::create_session(
-            temp_dir.path().to_path_buf(),
-            "concurrent-read-only-batch".to_string(),
-            SessionType::User,
-        )
-        .await?;
-
-        let permission_check_result = PermissionCheckResult {
-            approved: vec![
-                request(
-                    "req-read",
-                    "Read",
-                    serde_json::json!({ "path": "README.md" }),
-                ),
-                request(
-                    "req-glob",
-                    "Glob",
-                    serde_json::json!({ "pattern": "**/*.rs" }),
-                ),
-            ],
-            needs_approval: vec![],
-            denied: vec![],
-        };
-
-        let started_at = std::time::Instant::now();
-        let tool_futures = agent
-            .handle_approved_and_denied_tools(
-                &permission_check_result,
-                &HashMap::new(),
-                None,
-                &session,
-                None,
-            )
-            .await?;
-        let elapsed = started_at.elapsed();
-
-        assert_eq!(tool_futures.len(), 2);
-        assert!(
-            elapsed < Duration::from_millis(420),
-            "read-only batch should execute concurrently, elapsed={elapsed:?}"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_inherit_frontend_tool_surface_from_copies_frontend_tools_without_extensions(
-    ) -> Result<()> {
-        let source = Agent::new();
-        source
-            .add_extension(ExtensionConfig::Frontend {
-                name: "frontend".to_string(),
-                description: "desc".to_string(),
-                tools: vec![Tool::new(
-                    "lime_create_image_generation_task".to_string(),
-                    "Create image task".to_string(),
-                    serde_json::Map::new(),
-                )],
-                instructions: Some("frontend instructions".to_string()),
-                bundled: None,
-                available_tools: vec![],
-                deferred_loading: false,
-                always_expose_tools: vec![],
-                allowed_caller: None,
-            })
-            .await?;
-
-        let target = Agent::new();
-        target.inherit_frontend_tool_surface_from(&source).await;
-
-        assert!(target.get_extension_configs().await.is_empty());
-        assert!(
-            target
-                .is_frontend_tool("lime_create_image_generation_task")
-                .await
-        );
-        assert_eq!(
-            target
-                .get_frontend_tool("lime_create_image_generation_task")
-                .await
-                .as_ref()
-                .map(|tool| tool.name.as_str()),
-            Some("lime_create_image_generation_task")
-        );
-
-        Ok(())
     }
 }

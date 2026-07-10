@@ -87,6 +87,22 @@ describe("agentSessionTimelineMergePolicy", () => {
     ).toBe(false);
   });
 
+  it("已停止终态 marker 应被识别为可保留的本地快照", () => {
+    expect(
+      hasAssistantActivitySnapshot([
+        createMessage({
+          id: "assistant-canceled",
+          role: "assistant",
+          content: "(已停止)",
+          contentParts: [{ type: "text", text: "(已停止)" }],
+          isThinking: false,
+          runtimeStatus: undefined,
+          runtimeTurnId: "pending-turn:cancelled",
+        }),
+      ]),
+    ).toBe(true);
+  });
+
   it("旧空 state 不应覆盖已经写入 ref 的活跃本地发送预览", () => {
     const activePreview = [
       createMessage({

@@ -1,6 +1,6 @@
 use super::inventory::ExtensionToolInventorySeed;
 use crate::AgentRuntimeState;
-use aster::agents::extension::ExtensionConfig as AsterExtensionConfig;
+use aster::ExtensionConfig as AsterExtensionConfig;
 use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_extension::RuntimeExtensionConfig;
 

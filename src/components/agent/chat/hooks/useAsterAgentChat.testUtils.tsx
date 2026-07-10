@@ -491,7 +491,15 @@ beforeEach(async () => {
   mockParseAgentEvent.mockImplementation((payload: unknown) => payload);
   mockSafeListen.mockResolvedValue(() => {});
   mockGetDefaultProvider.mockResolvedValue("openai");
-  mockResolveClawWorkspaceProviderSelection.mockResolvedValue(null);
+  mockResolveClawWorkspaceProviderSelection.mockImplementation(
+    async (input?: {
+      currentProviderType?: string | null;
+      currentModel?: string | null;
+    }) => ({
+      providerType: input?.currentProviderType?.trim() || "openai",
+      model: input?.currentModel?.trim() || "gpt-5.4-mini",
+    }),
+  );
   clearAllAgentStreamTextOverlays();
 });
 

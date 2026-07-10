@@ -5,8 +5,8 @@
 
 #[cfg(test)]
 use agent_runtime::session_config::SessionConfigBuilder;
-use aster::agents::AgentIdentity;
-use aster::tools::ToolRegistrationConfig;
+use aster::AgentIdentity;
+use aster::ToolRegistrationConfig;
 use lime_core::app_paths;
 use lime_skills::{
     is_registered_skill, load_skills_from_directory, register_project_skill_directory,

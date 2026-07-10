@@ -23,7 +23,7 @@ const SKILL_GATE_OWNER_FILES = new Set([
 const SKILL_TOOL_WRAPPER_OWNER =
   "lime-rs/crates/agent/src/tools/skill_tool_gate.rs";
 const SKILL_SEARCH_TOOL_OWNER =
-  "lime-rs/crates/agent/src/tools/skill_search_tool.rs";
+  "lime-rs/crates/tool-runtime/src/skill_search.rs";
 
 function collectRustFiles(dir: string): string[] {
   const files: string[] = [];
@@ -119,7 +119,7 @@ describe("agent skills runtime boundary", () => {
         source: productionSource(file),
       }))
       .filter(({ path, source }) => {
-        if (!source.includes("SkillTool::new(")) {
+        if (!/\bSkillTool::new\(/u.test(source)) {
           return false;
         }
         return path !== SKILL_TOOL_WRAPPER_OWNER;

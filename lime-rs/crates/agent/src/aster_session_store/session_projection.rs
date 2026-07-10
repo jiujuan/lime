@@ -1,5 +1,5 @@
-use aster::model::ModelConfig;
-use aster::session::{Session, SessionType};
+use aster::ModelConfig;
+use aster::{Session, SessionType};
 use lime_core::database::agent_session_repository::resolve_persisted_session_working_dir;
 use thread_store::session_record::{
     parse_optional_json, SessionRecordProjection, SessionRecordRow, DEFAULT_MODEL_NAME,

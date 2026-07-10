@@ -335,6 +335,8 @@ export const METHOD_VOICE_INSTRUCTION_SAVE = "voiceInstruction/save";
 export const METHOD_VOICE_MODEL_DEFAULT_SET = "voiceModel/default/set";
 export const METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE =
   "voiceModel/testTranscribeFile";
+export const METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT =
+  "voiceTranscription/polishText";
 export const METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO =
   "voiceTranscription/transcribeAudio";
 export const METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE =
@@ -1437,6 +1439,10 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "voiceModel/testTranscribeFile",
+  },
+  {
+    kind: "request",
+    method: "voiceTranscription/polishText",
   },
   {
     kind: "request",

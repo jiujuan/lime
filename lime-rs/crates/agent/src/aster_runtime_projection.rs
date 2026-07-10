@@ -3,8 +3,8 @@
 //! Aster DTOs must stay behind this migration boundary; current projection APIs
 //! consume Lime-owned shapes.
 
-use aster::agents::AgentEvent as AsterAgentEvent;
-use aster::conversation::message::{
+use aster::AgentEvent as AsterAgentEvent;
+use aster::{
     Message as AsterMessage, MessageContent as AsterMessageContent,
     SystemNotificationType as AsterSystemNotificationType,
 };

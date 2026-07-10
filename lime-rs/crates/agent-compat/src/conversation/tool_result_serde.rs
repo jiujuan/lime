@@ -1,8 +1,9 @@
-use crate::mcp_utils::ToolResult;
 use rmcp::model::{CallToolRequestParam, ErrorCode, ErrorData, JsonObject};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
+
+type ToolResult<T> = Result<T, ErrorData>;
 
 pub fn serialize<T, S>(value: &ToolResult<T>, serializer: S) -> Result<S::Ok, S::Error>
 where

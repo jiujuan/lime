@@ -5,6 +5,13 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+import {
+  p0GateBlockersForSuite,
+  suiteIdFromP0Step,
+  summarizeP0GateSteps,
+} from "./benchmark-release-summary-p0.mjs";
+import { renderMarkdown } from "./benchmark-release-summary-render.mjs";
+
 const DEFAULT_MANIFEST_PATH = "internal/test/benchmark-release.manifest.json";
 const DEFAULT_EVIDENCE_ROOT = ".lime/benchmark/runs";
 
@@ -170,7 +177,9 @@ function loadEvidenceFile(rootDir, filePath, issues) {
   try {
     payload = readJsonFile(resolvedPath);
   } catch (error) {
-    issues.push(`${relativePath(rootDir, resolvedPath)}: JSON 读取失败：${error.message}`);
+    issues.push(
+      `${relativePath(rootDir, resolvedPath)}: JSON 读取失败：${error.message}`,
+    );
     return null;
   }
 
@@ -214,14 +223,18 @@ function discoverEvidence(rootDir, options, issues) {
 }
 
 function latestByGeneratedAt(entries) {
-  return [...entries].sort((left, right) => {
-    const leftAt = left.payload?.generatedAt || "";
-    const rightAt = right.payload?.generatedAt || "";
-    if (leftAt === rightAt) {
-      return left.path.localeCompare(right.path);
-    }
-    return leftAt.localeCompare(rightAt);
-  }).at(-1) || null;
+  return (
+    [...entries]
+      .sort((left, right) => {
+        const leftAt = left.payload?.generatedAt || "";
+        const rightAt = right.payload?.generatedAt || "";
+        if (leftAt === rightAt) {
+          return left.path.localeCompare(right.path);
+        }
+        return leftAt.localeCompare(rightAt);
+      })
+      .at(-1) || null
+  );
 }
 
 function groupEvidence(evidence) {
@@ -251,7 +264,10 @@ function groupEvidence(evidence) {
     }
     const currentAt = current.payload.generatedAt || "";
     const nextAt = normalized.payload.generatedAt || "";
-    if (nextAt > currentAt || (nextAt === currentAt && normalized.path > current.path)) {
+    if (
+      nextAt > currentAt ||
+      (nextAt === currentAt && normalized.path > current.path)
+    ) {
       p0GateSteps.set(key, normalized);
     }
   }
@@ -309,26 +325,14 @@ function groupEvidence(evidence) {
   return { dryRuns, preflights, trueRuns, trueRunTasks, p0GateSteps };
 }
 
-function suiteIdFromP0Step(step) {
-  const id = step?.id || "";
-  const marker = ":npm-";
-  return id.includes(marker) ? id.slice(0, id.indexOf(marker)) : "";
-}
-
-function summarizeP0GateSteps(entries) {
-  return entries.map((entry) => ({
-    path: entry.path,
-    generatedAt: entry.payload.generatedAt || "",
-    id: entry.payload.id || "",
-    command: entry.payload.command || "",
-    status: entry.payload.status || "",
-    exitCode: entry.payload.exitCode ?? null,
-    reason: entry.payload.reason || "",
-    outputPath: entry.payload.outputPath || "",
-  }));
-}
-
-function suiteEvidenceState({ suite, dryRun, preflights, trueRun, trueRunTasks, p0GateSteps }) {
+function suiteEvidenceState({
+  suite,
+  dryRun,
+  preflights,
+  trueRun,
+  trueRunTasks,
+  p0GateSteps,
+}) {
   const externalRunner = suite.runner && suite.runner !== "npm";
   if (!externalRunner) {
     if (p0GateSteps.some((entry) => entry.payload?.status === "failed")) {
@@ -453,7 +457,10 @@ function summarizeTrueRunTasks(entries) {
     }
     const currentAt = current.payload.generatedAt || "";
     const entryAt = entry.payload.generatedAt || "";
-    if (entryAt > currentAt || (entryAt === currentAt && entry.path > current.path)) {
+    if (
+      entryAt > currentAt ||
+      (entryAt === currentAt && entry.path > current.path)
+    ) {
       latestByTask.set(taskId, entry);
     }
   }
@@ -469,7 +476,23 @@ function summarizeTrueRunTasks(entries) {
       dockerInvoked: Boolean(entry.payload.execution?.dockerInvoked),
       liveProviderUsed: Boolean(entry.payload.execution?.liveProviderUsed),
       trueRunInvoked: Boolean(entry.payload.execution?.trueRunInvoked),
-      currentChainInvoked: Boolean(entry.payload.execution?.currentChainInvoked),
+      currentChainInvoked: Boolean(
+        entry.payload.execution?.currentChainInvoked,
+      ),
+      currentChain: {
+        target: String(entry.payload.execution?.currentChain?.target || ""),
+        appServerMethod: String(
+          entry.payload.execution?.currentChain?.appServerMethod || "",
+        ),
+        evidenceExportMethod: String(
+          entry.payload.execution?.currentChain?.evidenceExportMethod || "",
+        ),
+        externalVerifier:
+          entry.payload.execution?.currentChain?.externalVerifier === true,
+        invoked: entry.payload.execution?.currentChain?.invoked === true,
+        evidenceExportInvoked:
+          entry.payload.execution?.currentChain?.evidenceExportInvoked === true,
+      },
     },
     evidencePack: trueRunEvidencePackForEntry(entry),
     blockers: Array.isArray(entry.payload.blockers)
@@ -494,6 +517,17 @@ function trueRunEvidenceBlockersForTask(suite, task) {
       reason: "ready_true_run_must_use_lime_app_server_current_chain",
     },
     {
+      passed:
+        !task.execution.currentChainInvoked ||
+        (task.execution.currentChain.target === "lime_app_server_current" &&
+          task.execution.currentChain.appServerMethod ===
+            "agentSession/turn/start" &&
+          task.execution.currentChain.invoked === true),
+      id: "current_chain_contract_invalid",
+      reason:
+        "ready_true_run_must_identify_lime_app_server_current_chain_contract",
+    },
+    {
       passed: task.execution.trueRunInvoked,
       id: "true_run_not_invoked",
       reason: "ready_true_run_must_execute_agent_turn",
@@ -504,9 +538,20 @@ function trueRunEvidenceBlockersForTask(suite, task) {
       reason: "ready_true_run_must_call_external_verifier",
     },
     {
+      passed:
+        !task.execution.currentChainInvoked ||
+        (task.execution.currentChain.evidenceExportMethod ===
+          "evidence/export" &&
+          task.execution.currentChain.evidenceExportInvoked === true),
+      id: "evidence_export_not_invoked",
+      reason: "ready_true_run_must_export_evidence_from_current_chain",
+    },
+    {
       passed: task.evidencePack.valid,
       id: "evidence_pack_invalid",
-      reason: task.evidencePack.reason || "ready_true_run_requires_valid_evidence_pack",
+      reason:
+        task.evidencePack.reason ||
+        "ready_true_run_requires_valid_evidence_pack",
     },
   ];
 
@@ -524,14 +569,26 @@ function trueRunEvidenceBlockersForTask(suite, task) {
 
 function trueRunEvidenceBlockersForSuite(suite) {
   const externalRunner = suite.runner && suite.runner !== "npm";
-  if (!suite.requiredForRelease || !externalRunner || suite.adapterStatus !== "ready") {
+  if (
+    !suite.requiredForRelease ||
+    !externalRunner ||
+    suite.adapterStatus !== "ready"
+  ) {
     return [];
   }
 
-  const readyTasks = (suite.trueRunTasks || []).filter((task) => task.verdict === "ready");
-  const tasksById = new Map((suite.trueRunTasks || []).map((task) => [task.taskId, task]));
-  const blockers = readyTasks.flatMap((task) => trueRunEvidenceBlockersForTask(suite, task));
-  const taskSet = Array.isArray(suite.taskSet) ? suite.taskSet.filter(Boolean) : [];
+  const readyTasks = (suite.trueRunTasks || []).filter(
+    (task) => task.verdict === "ready",
+  );
+  const tasksById = new Map(
+    (suite.trueRunTasks || []).map((task) => [task.taskId, task]),
+  );
+  const blockers = readyTasks.flatMap((task) =>
+    trueRunEvidenceBlockersForTask(suite, task),
+  );
+  const taskSet = Array.isArray(suite.taskSet)
+    ? suite.taskSet.filter(Boolean)
+    : [];
   if (taskSet.length > 0) {
     for (const taskId of taskSet) {
       const task = tasksById.get(taskId);
@@ -551,7 +608,8 @@ function trueRunEvidenceBlockersForSuite(suite) {
           suiteId: suite.id,
           taskId,
           id: "task_set_true_run_not_ready",
-          reason: "required_external_suite_task_must_have_ready_current_chain_true_run",
+          reason:
+            "required_external_suite_task_must_have_ready_current_chain_true_run",
           path: task.path,
           evidencePackPath: task.evidencePack?.path || "",
         });
@@ -581,7 +639,14 @@ function trueRunEvidenceBlockersForSuite(suite) {
   return blockers;
 }
 
-function buildSuiteReport({ suite, dryRun, preflights, trueRun, trueRunTasks, p0GateSteps }) {
+function buildSuiteReport({
+  suite,
+  dryRun,
+  preflights,
+  trueRun,
+  trueRunTasks,
+  p0GateSteps,
+}) {
   const state = suiteEvidenceState({
     suite,
     dryRun,
@@ -591,8 +656,11 @@ function buildSuiteReport({ suite, dryRun, preflights, trueRun, trueRunTasks, p0
     p0GateSteps,
   });
   const externalRunner = suite.runner && suite.runner !== "npm";
-  const releaseBlocking =
-    Boolean(suite.requiredForRelease && externalRunner && suite.adapterStatus !== "ready");
+  const releaseBlocking = Boolean(
+    suite.requiredForRelease &&
+    externalRunner &&
+    suite.adapterStatus !== "ready",
+  );
   const p0Gate = summarizeP0GateSteps(p0GateSteps);
 
   return {
@@ -653,7 +721,8 @@ function buildBenchmarkReleaseSummary({
     { evidenceRoot, dryRunSummaryPaths, preflightSummaryPaths },
     issues,
   );
-  const { dryRuns, preflights, trueRuns, trueRunTasks, p0GateSteps } = groupEvidence(evidence);
+  const { dryRuns, preflights, trueRuns, trueRunTasks, p0GateSteps } =
+    groupEvidence(evidence);
   const suites = Array.isArray(manifest.suites) ? manifest.suites : [];
   const suiteReports = suites.map((suite) => {
     const dryRun = latestByGeneratedAt(dryRuns.get(suite.id) || []);
@@ -675,8 +744,15 @@ function buildBenchmarkReleaseSummary({
 
   for (const suite of suiteReports) {
     const externalRunner = suite.runner && suite.runner !== "npm";
-    if (suite.requiredForRelease && externalRunner && !suite.dryRun && suite.preflights.length === 0) {
-      issues.push(`${suite.id}: required external suite 缺少 dry-run 或 preflight evidence`);
+    if (
+      suite.requiredForRelease &&
+      externalRunner &&
+      !suite.dryRun &&
+      suite.preflights.length === 0
+    ) {
+      issues.push(
+        `${suite.id}: required external suite 缺少 dry-run 或 preflight evidence`,
+      );
     }
   }
 
@@ -687,33 +763,14 @@ function buildBenchmarkReleaseSummary({
         `${suite.id}: adapterStatus=${suite.adapterStatus || "(empty)"}，尚不能作为 release gate 运行`,
     );
 
-  const p0GateBlockers = suiteReports.flatMap((suite) => {
-    if (suite.runner !== "npm" || !suite.requiredForRelease) {
-      return [];
-    }
-    const manifestSuite = suites.find((entry) => entry.id === suite.id);
-    const expectedCommands = Array.isArray(manifestSuite?.commands)
-      ? manifestSuite.commands
-      : [];
-    const observedCommands = new Set(suite.p0Gate.map((step) => step.command));
-    const missingBlockers = expectedCommands
-      .filter((command) => !observedCommands.has(command))
-      .map((command) => ({
-          suiteId: suite.id,
-          id: "p0_gate_missing",
-          command,
-          reason: "missing_p0_gate_evidence",
-        }));
-    const failedBlockers = suite.p0Gate
-      .filter((step) => step.status !== "passed")
-      .map((step) => ({
-        suiteId: suite.id,
-        id: step.id,
-        command: step.command,
-        reason: step.reason || step.status || "p0_gate_not_passed",
-      }));
-    return [...missingBlockers, ...failedBlockers];
-  });
+  const p0GateBlockers = suiteReports.flatMap((suite) =>
+    p0GateBlockersForSuite({
+      rootDir,
+      evidenceRoot,
+      suite,
+      manifestSuites: suites,
+    }),
+  );
 
   const preflightBlockers = suiteReports.flatMap((suite) =>
     suite.preflights.flatMap((preflight) =>
@@ -767,25 +824,42 @@ function buildBenchmarkReleaseSummary({
     summary: {
       suiteCount: suiteReports.length,
       evidenceFileCount: evidence.length,
-      dryRunSuiteCount: evidence.filter((entry) => entry.kind === "dry_run_suite").length,
-      preflightCount: evidence.filter((entry) => entry.kind === "true_run_preflight").length,
-      trueRunSuiteCount: evidence.filter((entry) => entry.kind === "true_run_suite").length,
-      trueRunTaskEvidenceCount: evidence.filter((entry) => entry.kind === "true_run_task").length,
+      dryRunSuiteCount: evidence.filter(
+        (entry) => entry.kind === "dry_run_suite",
+      ).length,
+      preflightCount: evidence.filter(
+        (entry) => entry.kind === "true_run_preflight",
+      ).length,
+      trueRunSuiteCount: evidence.filter(
+        (entry) => entry.kind === "true_run_suite",
+      ).length,
+      trueRunTaskEvidenceCount: evidence.filter(
+        (entry) => entry.kind === "true_run_task",
+      ).length,
       trueRunTaskCount: suiteReports.reduce(
         (count, suite) => count + suite.trueRunTasks.length,
         0,
       ),
-      p0GateStepCount: suiteReports.reduce((count, suite) => count + suite.p0Gate.length, 0),
+      p0GateStepCount: suiteReports.reduce(
+        (count, suite) => count + suite.p0Gate.length,
+        0,
+      ),
       p0GatePassedCount: suiteReports.reduce(
-        (count, suite) => count + suite.p0Gate.filter((step) => step.status === "passed").length,
+        (count, suite) =>
+          count +
+          suite.p0Gate.filter((step) => step.status === "passed").length,
         0,
       ),
       p0GateFailedCount: suiteReports.reduce(
-        (count, suite) => count + suite.p0Gate.filter((step) => step.status === "failed").length,
+        (count, suite) =>
+          count +
+          suite.p0Gate.filter((step) => step.status === "failed").length,
         0,
       ),
       p0GateSkippedCount: suiteReports.reduce(
-        (count, suite) => count + suite.p0Gate.filter((step) => step.status === "skipped").length,
+        (count, suite) =>
+          count +
+          suite.p0Gate.filter((step) => step.status === "skipped").length,
         0,
       ),
       releaseBlockerCount: releaseBlockers.length,
@@ -810,118 +884,6 @@ function validateBenchmarkReleaseSummary(summary) {
     valid: Array.isArray(summary.issues) && summary.issues.length === 0,
     issues: summary.issues || [],
   };
-}
-
-function renderMarkdown(summary) {
-  const lines = [
-    "# Benchmark Release Summary",
-    "",
-    `- datasetVersion: ${summary.datasetVersion || "-"}`,
-    `- releaseReady: ${summary.releaseReady ? "yes" : "no"}`,
-    `- evidenceRoot: ${summary.evidenceRoot}`,
-    `- evidenceFiles: ${summary.summary.evidenceFileCount}`,
-    `- p0Gate: ${summary.summary.p0GatePassedCount || 0} passed / ${summary.summary.p0GateFailedCount || 0} failed / ${summary.summary.p0GateSkippedCount || 0} skipped`,
-    `- releaseBlockers: ${summary.summary.releaseBlockerCount}`,
-    `- p0GateBlockers: ${summary.summary.p0GateBlockerCount || 0}`,
-    `- preflightBlockers: ${summary.summary.preflightBlockerCount}`,
-    `- trueRunBlockers: ${summary.summary.trueRunBlockerCount || 0}`,
-    `- trueRunEvidenceBlockers: ${summary.summary.trueRunEvidenceBlockerCount || 0}`,
-    "",
-    "## Suites",
-    "",
-    "| Suite | Priority | Runner | State | P0 Gate | Dry Run | Preflight | True Run | Release Blocking |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-  ];
-
-  for (const suite of summary.suites) {
-    const dryRun = suite.dryRun
-      ? `${suite.dryRun.verdict} ${suite.dryRun.readyCount}/${suite.dryRun.taskCount}`
-      : "-";
-    const p0Gate =
-      suite.p0Gate.length === 0
-        ? "-"
-        : suite.p0Gate
-            .map((entry) => `${entry.command}:${entry.status || "unknown"}`)
-            .join("<br>");
-    const preflight =
-      suite.preflights.length === 0
-        ? "-"
-        : suite.preflights
-            .map((entry) => `${entry.taskId}:${entry.verdict}`)
-            .join("<br>");
-    const trueRun = suite.trueRun
-      ? `${suite.trueRun.verdict} ${suite.trueRun.readyCount}/${suite.trueRun.taskCount}`
-      : suite.trueRunTasks.length === 0
-        ? "-"
-        : suite.trueRunTasks
-            .map((entry) => `${entry.taskId}:${entry.verdict}`)
-            .join("<br>");
-    lines.push(
-      `| ${suite.id} | ${suite.priority} | ${suite.runner} | ${suite.state} | ${p0Gate} | ${dryRun} | ${preflight} | ${trueRun} | ${suite.releaseBlocking ? "yes" : "no"} |`,
-    );
-  }
-
-  lines.push("", "## Release Blockers", "");
-  if (summary.releaseBlockers.length === 0) {
-    lines.push("- 无");
-  } else {
-    for (const blocker of summary.releaseBlockers) {
-      lines.push(`- ${blocker}`);
-    }
-  }
-
-  lines.push("", "## P0 Gate Blockers", "");
-  if ((summary.p0GateBlockers || []).length === 0) {
-    lines.push("- 无");
-  } else {
-    for (const blocker of summary.p0GateBlockers) {
-      lines.push(
-        `- ${blocker.suiteId}: ${blocker.id}${blocker.command ? ` ${blocker.command}` : ""} (${blocker.reason})`,
-      );
-    }
-  }
-
-  lines.push("", "## Preflight Blockers", "");
-  if (summary.preflightBlockers.length === 0) {
-    lines.push("- 无");
-  } else {
-    for (const blocker of summary.preflightBlockers) {
-      lines.push(
-        `- ${blocker.suiteId}/${blocker.taskId}: ${blocker.id} (${blocker.reason})`,
-      );
-    }
-  }
-
-  lines.push("", "## True Run Blockers", "");
-  if ((summary.trueRunBlockers || []).length === 0) {
-    lines.push("- 无");
-  } else {
-    for (const blocker of summary.trueRunBlockers) {
-      lines.push(
-        `- ${blocker.suiteId}${blocker.taskId ? `/${blocker.taskId}` : ""}: ${blocker.id} (${blocker.reason})`,
-      );
-    }
-  }
-
-  lines.push("", "## True Run Evidence Blockers", "");
-  if ((summary.trueRunEvidenceBlockers || []).length === 0) {
-    lines.push("- 无");
-  } else {
-    for (const blocker of summary.trueRunEvidenceBlockers) {
-      lines.push(
-        `- ${blocker.suiteId}${blocker.taskId ? `/${blocker.taskId}` : ""}: ${blocker.id} (${blocker.reason})`,
-      );
-    }
-  }
-
-  if (summary.issues.length > 0) {
-    lines.push("", "## Issues", "");
-    for (const issue of summary.issues) {
-      lines.push(`- ${issue}`);
-    }
-  }
-
-  return `${lines.join("\n")}\n`;
 }
 
 function main() {
@@ -957,7 +919,10 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main();
 }
 

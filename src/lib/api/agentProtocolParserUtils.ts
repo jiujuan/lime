@@ -174,6 +174,16 @@ export function normalizeToolExecutionResult(
       ? (source.images as AgentToolResultImage[])
       : undefined,
     metadata: normalizeRecord(source.metadata),
+    structuredContent:
+      source.structuredContent ??
+      source.structured_content ??
+      event.structuredContent ??
+      event.structured_content,
+    structured_content:
+      source.structured_content ??
+      source.structuredContent ??
+      event.structured_content ??
+      event.structuredContent,
   };
 }
 

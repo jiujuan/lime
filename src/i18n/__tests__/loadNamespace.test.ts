@@ -177,9 +177,6 @@ describe("i18n namespace loader", () => {
         "agentChat.decisionPanel.action.recording",
         "agentChat.decisionPanel.action.recordAnswer",
         "agentChat.decisionPanel.action.submitAnswer",
-        "agentChat.decisionPanel.action.processing",
-        "agentChat.decisionPanel.action.allow",
-        "agentChat.decisionPanel.action.deny",
         "agentChat.decisionPanel.runtimePermission.title",
         "agentChat.decisionPanel.runtimePermission.description",
         "agentChat.decisionPanel.runtimePermission.submittedTitle",
@@ -847,9 +844,6 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.video.sidebar.intro.title",
-      );
-      expect(resources[locale].workspace).toHaveProperty(
-        "workspace.video.sidebar.helper.parameterPace.content",
       );
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.video.sidebar.reference.start.title",

@@ -21,18 +21,19 @@
 
 ## 2. 版本测试 Lane
 
-| Lane | 名称 | 必跑时机 | 当前入口 / 计划入口 | 发布阻断 |
-| --- | --- | --- | --- | --- |
-| L0 | Static / Unit / Type | 每次 RC | `npm run verify:local` | 是 |
-| L1 | Contract / Bridge | Agent / command / bridge 改动；大版本默认跑 | `npm run test:contracts` | 是 |
-| L2 | Agent Runtime Current Fixture | AgentRuntime / tool / streaming 改动；大版本默认跑 | `npm run smoke:agent-runtime-current-fixture` | 是 |
-| L3 | GUI Product Smoke | 每次大版本 | `npm run verify:gui-smoke` | 是 |
-| L4 | Harness Replay / Trend | 每次大版本、nightly | `npm run harness:eval` + `npm run harness:eval:trend` | 是 |
-| L5 | Agent QC P0 | 每次大版本 | `npm run agent-qc:check` + `npm run agent-qc:benchmark-release:run` + qcloop / Evidence Pack；正式 release 放行前跑 `benchmark-release:run -- --include-p0 --baseline-version <baseline> --strict-gate`，`npm run agent-qc:benchmark-release:gate` 仅作 adapter readiness 单独复核 | 是 |
-| L6 | External Coding | 每次大版本 | 当前：`npm run agent-qc:benchmark:dry-run -- --suite deepswe-fixed-ten --all-tasks ...` + `npm run agent-qc:benchmark:deepswe-run -- --task ytt-jsonpath-query-api ...`；true-run 当前 fail-closed，计划接 DeepSWE / SWE-bench current adapter | P1 阻断 |
-| L7 | External Terminal | 每次大版本 | 当前：`npm run agent-qc:benchmark:dry-run -- --suite terminal-bench-release-slice --all-tasks ...` + `npm run agent-qc:benchmark:terminal-run -- --task hello-world ...`；true-run 当前 fail-closed，计划接 Terminal-Bench / Harbor current adapter | P1 阻断 |
-| L8 | Browser / Desktop / General Radar | 大版本 RC、weekly、专项 | WebArena / OSWorld / GAIA / tau3-bench adapter | 默认不阻断 |
-| L9 | Release Ops | 每次正式发布 | `npm run verify:app-version` + startup / package smoke | 是 |
+| Lane | 名称                              | 必跑时机                                                | 当前入口 / 计划入口                                                                                                                                                                                                                                                                                                                 | 发布阻断   |
+| ---- | --------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| L0   | Static / Unit / Type              | 每次 RC                                                 | `npm run verify:local`                                                                                                                                                                                                                                                                                                              | 是         |
+| L1   | Contract / Bridge                 | Agent / command / bridge 改动；大版本默认跑             | `npm run test:contracts`                                                                                                                                                                                                                                                                                                            | 是         |
+| L2   | Agent Runtime Current Fixture     | AgentRuntime / tool / streaming 改动；大版本默认跑      | `npm run smoke:agent-runtime-current-fixture`                                                                                                                                                                                                                                                                                       | 是         |
+| L2C  | Coding Workflow P0                | 每次大版本；coding / tool / App Server runtime 改动必跑 | `npm run smoke:agent-runtime-tool-execution -- --batch coding-current-tools` + `npm run smoke:agent-runtime-current-fixture` + `npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs` | 是         |
+| L3   | GUI Product Smoke                 | 每次大版本                                              | `npm run verify:gui-smoke`                                                                                                                                                                                                                                                                                                          | 是         |
+| L4   | Harness Replay / Trend            | 每次大版本、nightly                                     | `npm run harness:eval` + `npm run harness:eval:trend`                                                                                                                                                                                                                                                                               | 是         |
+| L5   | Agent QC P0                       | 每次大版本                                              | `npm run agent-qc:check` + `npm run agent-qc:benchmark-release:run` + qcloop / Evidence Pack；正式 release 放行前跑 `benchmark-release:run -- --include-p0 --baseline-version <baseline> --strict-gate`，`npm run agent-qc:benchmark-release:gate` 仅作 adapter readiness 单独复核                                                  | 是         |
+| L6   | External Coding                   | 每次大版本                                              | 当前：`npm run agent-qc:benchmark:dry-run -- --suite deepswe-fixed-ten --all-tasks ...` + `npm run agent-qc:benchmark:deepswe-run -- --task ytt-jsonpath-query-api ...`；true-run 当前 fail-closed，计划接 DeepSWE / SWE-bench current adapter                                                                                      | P1 阻断    |
+| L7   | External Terminal                 | 每次大版本                                              | 当前：`npm run agent-qc:benchmark:dry-run -- --suite terminal-bench-release-slice --all-tasks ...` + `npm run agent-qc:benchmark:terminal-run -- --task hello-world ...`；true-run 当前 fail-closed，计划接 Terminal-Bench / Harbor current adapter                                                                                 | P1 阻断    |
+| L8   | Browser / Desktop / General Radar | 大版本 RC、weekly、专项                                 | WebArena / OSWorld / GAIA / tau3-bench adapter                                                                                                                                                                                                                                                                                      | 默认不阻断 |
+| L9   | Release Ops                       | 每次正式发布                                            | `npm run verify:app-version` + startup / package smoke                                                                                                                                                                                                                                                                              | 是         |
 
 ## 3. 每个大版本的执行顺序
 
@@ -86,6 +87,8 @@ npm run agent-qc:benchmark-release:run -- \
 - `run-context.json`
 - `benchmark-release-checklist.json`
 - P0 npm 门禁 step result，包括 `verify:local`、contracts、Agent Runtime fixture、GUI smoke、harness replay / trend 和 Agent QC manifest check
+- Coding Workflow P0 step result，包括 Codex-first coding provider request、真实 Read / `apply_patch` / Glob / Grep / Bash 执行、coding lifecycle projection、workspace diff / file checkpoint diff、Evidence Pack 和 replay/regression 晋升要求
+- Coding Workflow P0 runtime artifact：runner 会把 `coding-current-tools` smoke 输出固定到 `<output-root>/p0/coding-workflow-p0/coding-current-tools/agent-runtime-tool-execution-coding-current-tools.json`，summary 必须校验 `scenarioId=coding-current-tools`、`status=pass`、目标工具均出现在 provider request、runtime 全部 completed、Evidence Pack 已导出且 coding assertions 全 true
 - P1 fixed slice dry-run evidence
 - P1 full fixed slice true-run preflight evidence；默认非 strict runner 只跑每个 external suite 首题，`--strict-gate` 或 `--full-external-suites` 会展开 manifest `taskSet` 全量
 - P1 full fixed slice fail-closed true-run evidence；当前 adapter 未 ready 时仍写 blocked evidence，不计 release-ready
@@ -114,9 +117,11 @@ npm run agent-qc:benchmark-release:run -- \
 
 默认不带 `--include-p0` 时，runner 的目标是“收集 P1 evidence 并生成 summary”，不是“宣布 release ready”。默认 P1 preflight / true-run 只覆盖每个 external suite 的首题；需要在非 strict 环境预演 full fixed slice 时，显式加 `--full-external-suites`。正式 RC / release 必须带 `--include-p0`，否则不能宣称 L0-L5 多方面门禁已跑完。P1 true-run 因 Docker、runner 或 current adapter 缺失而 blocked 时，runner 仍继续执行后续 summary；blocked 状态必须进入 `benchmark-release-summary.json`，不能被解释为 pass。`--strict-gate` 已被收紧为正式放行路径：缺少 `--include-p0` 或缺少 `--baseline-version` / `--baseline-summary` 时，runner 会直接拒绝生成计划；strict gate 会自动启用 external suite 全量 `taskSet`，不能只凭首题放行。
 
-runner 始终写出 `<output-root>/benchmark-release-run.json`。正式 RC / release 推荐带 `--stdout summary`，让控制台只显示版本、report 路径、step 计数、storage、full/P0/strict 状态和失败摘要；完整结构化证据以 JSON 文件为准。需要旧行为时使用默认 `--stdout full`，CI 只消费文件时可用 `--stdout none`。
+runner 始终写出 `<output-root>/benchmark-release-run.json`，并在 run JSON 写入后自动生成 `<output-root>/benchmark-release-report.md`。正式 RC / release 推荐带 `--stdout summary`，让控制台只显示版本、run report 路径、audit report 路径、step 计数、storage、full/P0/strict 状态和失败摘要；完整结构化证据以 JSON 文件为准。需要旧行为时使用默认 `--stdout full`，CI 只消费文件时可用 `--stdout none`。
 
-summary 生成后，release owner 需要生成一页人读审计报告，给人工评审快速查看 artifact 是否齐全、decision 是否 blocked、blocker 来自 P0 还是 P1、compare / baseline 是否存在：
+如果本次 run 已有由 App Server current 主链生成的 per-task current-chain evidence，可给 runner 传 `--current-chain-evidence-root "<root>"`。runner 会把每题路径解析为 `<root>/<suite-slug>/<task-id>/current-chain-evidence.json` 并透传给 true-run step；缺文件、坏 JSON 或合同无效必须产出 blocked evidence，不能跳过 task 或变成 release-ready。
+
+summary 生成后，runner 的自动审计报告会给人工评审快速查看 artifact 是否齐全、decision 是否 blocked、blocker 来自 P0 还是 P1、compare / baseline 是否存在。需要复跑、改输出路径或生成 JSON 格式时，可单独执行：
 
 ```bash
 npm run agent-qc:benchmark-release:report -- \
@@ -155,7 +160,7 @@ npm run agent-qc:benchmark-release:compare -- \
 
 `benchmark-release:compare` 的职责是版本间判退化，不替代单次运行 summary / gate。它读取 manifest 的 `p1RegressionBudget.maxAdditionalFailedTasks`，阻断 P0 step 从 pass 退化、P1 true-run 新增 failed / blocked 超预算、以及 baseline 已 `releaseReady=true` 而 candidate 变为 false 的情况。正式 release summary、strict gate 和 compare 三者都必须通过，才允许声明本次大版本 benchmark 放行。`--strict-gate` 使用 baseline 时还会校验上一稳定版本的 `benchmark-baseline.json`；缺失、`baselineReady=false`、`releaseReady=false`、`baselineKind=bootstrap` 或 `allowNotReady=true` 时，runner 会在执行 P0 / P1 前 fail closed。
 
-`benchmark-release-summary.json` 的 `releaseReady=true` 只在所有 blocker 归零时成立：`issueCount=0`、`releaseBlockerCount=0`、`p0GateBlockerCount=0`、`preflightBlockerCount=0`、`trueRunBlockerCount=0`、`trueRunEvidenceBlockerCount=0`。P1 adapter 未来升级到 `ready` 后，blocked true-run / preflight evidence 仍必须阻断 release-ready，不能只凭 manifest 状态放行。P1 true-run task 即使输出 `verdict=ready`，也必须证明 `execution.currentChainInvoked=true`、`execution.trueRunInvoked=true`、`execution.verifierInvoked=true`，并在 task 输出目录写出有效 `evidence-pack/manifest.json`；否则 summary 作为 fake-ready evidence 处理。required P1 suite 在 `adapterStatus=ready` 后，还必须覆盖 manifest `taskSet` 全量任务；缺任一任务的 ready true-run evidence 时，summary 会产生 `task_set_true_run_missing` 或 `task_set_true_run_not_ready` blocker。
+`benchmark-release-summary.json` 的 `releaseReady=true` 只在所有 blocker 归零时成立：`issueCount=0`、`releaseBlockerCount=0`、`p0GateBlockerCount=0`、`preflightBlockerCount=0`、`trueRunBlockerCount=0`、`trueRunEvidenceBlockerCount=0`。P0 npm step 退出码通过后，summary 仍会读取 coding P0 artifact；缺失、坏 JSON、目标工具不完整、runtime 未 completed、Evidence Pack 未导出或关键 coding assertions 失败，都会进入 `p0GateBlockers`。P1 adapter 未来升级到 `ready` 后，blocked true-run / preflight evidence 仍必须阻断 release-ready，不能只凭 manifest 状态放行。P1 true-run task 即使输出 `verdict=ready`，也必须证明 `execution.currentChainInvoked=true`、`execution.trueRunInvoked=true`、`execution.verifierInvoked=true`，且 current chain contract 指向 `agentSession/turn/start` 与 `evidence/export` 并标记 `evidenceExportInvoked=true`，同时在 task 输出目录写出有效 `evidence-pack/manifest.json`；否则 summary 作为 fake-ready evidence 处理。required P1 suite 在 `adapterStatus=ready` 后，还必须覆盖 manifest `taskSet` 全量任务；缺任一任务的 ready true-run evidence 时，summary 会产生 `task_set_true_run_missing` 或 `task_set_true_run_not_ready` blocker。
 
 strict gate 通过后，`--promote-baseline` 会自动登记当前版本作为下一版 baseline。需要单独复跑时使用：
 
@@ -185,6 +190,12 @@ npm run agent-qc:benchmark-release:run -- \
 
 在 P1 external adapter 尚未 `ready` 前，严格 gate 应该失败。只有通过 Lime App Server current 主链执行 Agent turn、生成 Evidence Pack、再调用外部 verifier 的 true-run，才允许计入 release-ready。
 
+current adapter 的第一份输入合同是 `benchmark-current-chain-evidence-v1`：同一 suite / task 必须记录 `appServer.method="agentSession/turn/start"` 且 `invoked=true`、`evidenceExport.method="evidence/export"` 且 `invoked=true`、App Server Evidence Pack 至少包含 `session_id / thread_id / pack_relative_root / exported_at / observability_summary.source="app-server-current"`，并且 `externalVerifier.invoked=true`、`externalVerifier.verdict=pass|passed|ready`。`benchmark:true-run --current-chain-evidence <path>` 只有在 preflight ready 且该合同有效时才会产出 `verdict=ready`；runner 默认不传该参数，所以本地 blocked evidence 不会自动升级。
+
+该合同由 `agent-qc:benchmark:current-chain-evidence` 生成，输入固定为三份真实证据：App Server `agentSession/turn/start` 记录、App Server `evidence/export` 返回的 Evidence Pack、external verifier 结果。也可以用 `--json-rpc-trace` 替代独立 turn-start 文件，让 builder 从 Electron / App Server JSON-RPC trace 中抽取 `agentSession/turn/start` 并确认 `evidence/export` 出现；Evidence Pack 正文仍由 `--evidence-pack` 输入。该 builder 只归一化证据，不执行 Agent turn；后续真实 adapter 要负责产生这些输入，再把输出交给 `benchmark:true-run --current-chain-evidence`。
+
+`benchmark:true-run` 对缺失或无效 current-chain evidence 必须 fail closed 成结构化 blocked evidence，而不是进程崩溃或跳过 task：preflight ready 时记录 `lime_current_chain_evidence` blocker；preflight blocked 时不追加 current-chain blocker，避免把尚未到达的阶段误判为真实执行失败。
+
 ### Step 2：跑 Lime P0 基础门禁
 
 先生成本次版本的 benchmark 执行清单：
@@ -205,7 +216,9 @@ npm run agent-qc:benchmark-release:checklist -- \
 ```bash
 npm run verify:local
 npm run test:contracts
+npm run smoke:agent-runtime-tool-execution -- --batch coding-current-tools
 npm run smoke:agent-runtime-current-fixture
+npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs
 npm run verify:gui-smoke
 npm run harness:eval
 npm run harness:eval:trend
@@ -225,6 +238,8 @@ npm run verify:app-version
 
 - 任一命令失败且无法证明是环境阻断。
 - GUI smoke 没有真实 current 主路径证据。
+- Coding P0 没有固定 release artifact，或 artifact 没有证明 provider tool request、真实工具结果、patch/file artifact、command output、workspace diff / file checkpoint diff 或 Evidence Pack。
+- Coding P0 发现 runtime/tool/App Server bug 后只记录不修复，或修复后没有沉淀 replay / regression / Rust 或 TS 定向测试。
 - harness fixture invalid。
 - Agent QC P0 manifest / GUI flow manifest 缺场景或引用不存在命令。
 - Benchmark release manifest 无法校验本地测试集 source、固定 slice 或 evidence 要求。
@@ -470,13 +485,14 @@ npm run agent-qc:benchmark-release:summary -- \
 
 失败分五类：
 
-| 类型 | 处理 |
-| --- | --- |
-| Product regression | 必须修复；补 replay / test / GUI flow。 |
-| Runtime / tool bug | 必须修复；补 tool timeline 回归和 Rust / TS 定向测试。 |
-| Model limitation | 可记录为能力缺口；不阻断，除非上一版本已通过。 |
-| Harness / environment issue | 标记 blocked；修 harness 或重跑，不能算 pass。 |
-| Grader issue | 修 verifier 或暂时 waiver；记录上游 issue / 本地 patch。 |
+| 类型                        | 处理                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Product regression          | 必须修复；补 replay / test / GUI flow。                                                                    |
+| Runtime / tool bug          | 必须修复；补 tool timeline 回归和 Rust / TS 定向测试。                                                     |
+| Coding workflow bug         | 必须修复；补 coding lifecycle、workspace diff / file checkpoint、Evidence Pack 或 replay/regression 回归。 |
+| Model limitation            | 可记录为能力缺口；不阻断，除非上一版本已通过。                                                             |
+| Harness / environment issue | 标记 blocked；修 harness 或重跑，不能算 pass。                                                             |
+| Grader issue                | 修 verifier 或暂时 waiver；记录上游 issue / 本地 patch。                                                   |
 
 每个 P0/P1 失败修复后必须至少沉淀一项：
 
@@ -489,13 +505,13 @@ npm run agent-qc:benchmark-release:summary -- \
 
 ## 6. 运行频率
 
-| 频率 | 内容 |
-| --- | --- |
-| 每次 PR / 本地交付 | 按 diff 风险跑 `verify:local`、contracts、GUI smoke 或定向 smoke。 |
-| 每日 nightly | `harness:eval:history:record`、P0 replay trend、低成本 Agent QC smoke。 |
-| 每周 | Terminal-Bench / DeepSWE expanded slice，WebArena / GAIA / tau3-bench small slice。 |
-| 每个 release candidate | L0-L9 全部大版本计划。 |
-| 每个正式大版本 | RC 全套 + release summary + waiver audit + 失败沉淀检查。 |
+| 频率                   | 内容                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| 每次 PR / 本地交付     | 按 diff 风险跑 `verify:local`、contracts、GUI smoke 或定向 smoke。                  |
+| 每日 nightly           | `harness:eval:history:record`、P0 replay trend、低成本 Agent QC smoke。             |
+| 每周                   | Terminal-Bench / DeepSWE expanded slice，WebArena / GAIA / tau3-bench small slice。 |
+| 每个 release candidate | L0-L9 全部大版本计划。                                                              |
+| 每个正式大版本         | RC 全套 + release summary + waiver audit + 失败沉淀检查。                           |
 
 ## 7. Manifest 形状草案
 

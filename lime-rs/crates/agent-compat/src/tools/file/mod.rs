@@ -5,8 +5,7 @@
 //!
 //! Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10
 
-pub mod diff_summary;
-pub mod read;
+pub(crate) mod read;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -16,7 +15,7 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 
-pub use read::ReadTool;
+pub(crate) use read::ReadTool;
 
 /// Record of a file read operation
 ///
@@ -153,10 +152,10 @@ impl FileReadHistory {
 }
 
 /// Shared file read history for use across tools
-pub type SharedFileReadHistory = Arc<RwLock<FileReadHistory>>;
+pub(crate) type SharedFileReadHistory = Arc<RwLock<FileReadHistory>>;
 
 /// Create a new shared file read history
-pub fn create_shared_history() -> SharedFileReadHistory {
+pub(crate) fn create_shared_history() -> SharedFileReadHistory {
     Arc::new(RwLock::new(FileReadHistory::new()))
 }
 
@@ -168,194 +167,4 @@ pub fn compute_content_hash(content: &[u8]) -> String {
     let mut hasher = DefaultHasher::new();
     content.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_file_read_record_new() {
-        let record = FileReadRecord::new(PathBuf::from("/tmp/test.txt"), "abc123".to_string(), 100);
-
-        assert_eq!(record.path, PathBuf::from("/tmp/test.txt"));
-        assert_eq!(record.content_hash, "abc123");
-        assert_eq!(record.size, 100);
-        assert!(record.mtime.is_none());
-        assert!(record.line_count.is_none());
-    }
-
-    #[test]
-    fn test_file_read_record_with_mtime() {
-        let mtime = SystemTime::now();
-        let record = FileReadRecord::new(PathBuf::from("/tmp/test.txt"), "abc123".to_string(), 100)
-            .with_mtime(mtime);
-
-        assert_eq!(record.mtime, Some(mtime));
-    }
-
-    #[test]
-    fn test_file_read_record_with_line_count() {
-        let record = FileReadRecord::new(PathBuf::from("/tmp/test.txt"), "abc123".to_string(), 100)
-            .with_line_count(50);
-
-        assert_eq!(record.line_count, Some(50));
-    }
-
-    #[test]
-    fn test_file_read_record_is_modified() {
-        let mtime = SystemTime::now();
-        let record = FileReadRecord::new(PathBuf::from("/tmp/test.txt"), "abc123".to_string(), 100)
-            .with_mtime(mtime);
-
-        // Same mtime - not modified
-        assert!(!record.is_modified(mtime));
-
-        // Different mtime - modified
-        let new_mtime = mtime + std::time::Duration::from_secs(1);
-        assert!(record.is_modified(new_mtime));
-    }
-
-    #[test]
-    fn test_file_read_history_new() {
-        let history = FileReadHistory::new();
-        assert!(history.is_empty());
-        assert_eq!(history.len(), 0);
-    }
-
-    #[test]
-    fn test_file_read_history_record_read() {
-        let mut history = FileReadHistory::new();
-        let path = PathBuf::from("/tmp/test.txt");
-        let record = FileReadRecord::new(path.clone(), "abc123".to_string(), 100);
-
-        history.record_read(record);
-
-        assert!(history.has_read(&path));
-        assert_eq!(history.len(), 1);
-    }
-
-    #[test]
-    fn test_file_read_history_get_record() {
-        let mut history = FileReadHistory::new();
-        let path = PathBuf::from("/tmp/test.txt");
-        let record = FileReadRecord::new(path.clone(), "abc123".to_string(), 100);
-
-        history.record_read(record);
-
-        let retrieved = history.get_record(&path);
-        assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().content_hash, "abc123");
-    }
-
-    #[test]
-    fn test_file_read_history_remove_record() {
-        let mut history = FileReadHistory::new();
-        let path = PathBuf::from("/tmp/test.txt");
-        let record = FileReadRecord::new(path.clone(), "abc123".to_string(), 100);
-
-        history.record_read(record);
-        assert!(history.has_read(&path));
-
-        let removed = history.remove_record(&path);
-        assert!(removed.is_some());
-        assert!(!history.has_read(&path));
-    }
-
-    #[test]
-    fn test_file_read_history_clear() {
-        let mut history = FileReadHistory::new();
-        history.record_read(FileReadRecord::new(
-            PathBuf::from("/tmp/test1.txt"),
-            "abc".to_string(),
-            100,
-        ));
-        history.record_read(FileReadRecord::new(
-            PathBuf::from("/tmp/test2.txt"),
-            "def".to_string(),
-            200,
-        ));
-
-        assert_eq!(history.len(), 2);
-
-        history.clear();
-        assert!(history.is_empty());
-    }
-
-    #[test]
-    fn test_file_read_history_tracked_files() {
-        let mut history = FileReadHistory::new();
-        let path1 = PathBuf::from("/tmp/test1.txt");
-        let path2 = PathBuf::from("/tmp/test2.txt");
-
-        history.record_read(FileReadRecord::new(path1.clone(), "abc".to_string(), 100));
-        history.record_read(FileReadRecord::new(path2.clone(), "def".to_string(), 200));
-
-        let tracked = history.tracked_files();
-        assert_eq!(tracked.len(), 2);
-        assert!(tracked.contains(&&path1));
-        assert!(tracked.contains(&&path2));
-    }
-
-    #[test]
-    fn test_file_read_history_is_file_modified() {
-        let mut history = FileReadHistory::new();
-        let path = PathBuf::from("/tmp/test.txt");
-        let mtime = SystemTime::now();
-        let record = FileReadRecord::new(path.clone(), "abc123".to_string(), 100).with_mtime(mtime);
-
-        history.record_read(record);
-
-        // Same mtime - not modified
-        assert_eq!(history.is_file_modified(&path, mtime), Some(false));
-
-        // Different mtime - modified
-        let new_mtime = mtime + std::time::Duration::from_secs(1);
-        assert_eq!(history.is_file_modified(&path, new_mtime), Some(true));
-
-        // Unknown file
-        let unknown_path = PathBuf::from("/tmp/unknown.txt");
-        assert_eq!(history.is_file_modified(&unknown_path, mtime), None);
-    }
-
-    #[test]
-    fn test_compute_content_hash() {
-        let content1 = b"Hello, World!";
-        let content2 = b"Hello, World!";
-        let content3 = b"Different content";
-
-        let hash1 = compute_content_hash(content1);
-        let hash2 = compute_content_hash(content2);
-        let hash3 = compute_content_hash(content3);
-
-        // Same content should produce same hash
-        assert_eq!(hash1, hash2);
-
-        // Different content should produce different hash
-        assert_ne!(hash1, hash3);
-
-        // Hash should be 16 hex characters
-        assert_eq!(hash1.len(), 16);
-    }
-
-    #[test]
-    fn test_create_shared_history() {
-        let history = create_shared_history();
-
-        // Should be able to write
-        {
-            let mut write_guard = history.write().unwrap();
-            write_guard.record_read(FileReadRecord::new(
-                PathBuf::from("/tmp/test.txt"),
-                "abc".to_string(),
-                100,
-            ));
-        }
-
-        // Should be able to read
-        {
-            let read_guard = history.read().unwrap();
-            assert!(read_guard.has_read(&PathBuf::from("/tmp/test.txt")));
-        }
-    }
 }

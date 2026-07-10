@@ -111,31 +111,3 @@ fn parse_session_timestamp(session_name: &str) -> Option<SystemTime> {
         .and_then(|dt| Local.from_local_datetime(&dt).single())
         .map(SystemTime::from)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rmcp::model::Role;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_load_legacy_session_without_metadata() {
-        let temp_dir = TempDir::new().unwrap();
-        let session_path = temp_dir.path().join("20240101_120000.jsonl");
-
-        let legacy_content = r#"{"description":"test","id":"20240101_120000","created_at":"2024-01-01T12:00:00Z","updated_at":"2024-01-01T12:00:00Z","extension_data":{},"message_count":0}
-{"id":"msg1","role":"user","created":1704110400,"content":[{"type":"text","text":"Hello"}]}
-{"id":"msg2","role":"assistant","created":1704110401,"content":[{"type":"text","text":"Hi there"}]}"#;
-
-        fs::write(&session_path, legacy_content).unwrap();
-
-        let session = load_session("20240101_120000", &session_path).unwrap();
-
-        assert_eq!(session.id, "20240101_120000");
-        let conversation = session.conversation.as_ref().unwrap();
-        let messages = conversation.messages();
-        assert_eq!(messages.len(), 2);
-        assert_eq!(messages[0].role, Role::User);
-        assert_eq!(messages[1].role, Role::Assistant);
-    }
-}

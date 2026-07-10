@@ -6,7 +6,7 @@
 use agent_runtime::runtime_queue::{
     RuntimeQueueResult, RuntimeQueueService, RuntimeQueueStore, RuntimeQueuedTurn,
 };
-use aster::session::{QueuedTurnRuntime as AsterQueuedTurnRuntime, ThreadRuntimeStore};
+use aster::{QueuedTurnRuntime as AsterQueuedTurnRuntime, ThreadRuntimeStore};
 use futures::future::{BoxFuture, FutureExt};
 use std::sync::Arc;
 

@@ -1,5 +1,6 @@
 pub mod action_required;
 pub mod anthropic;
+pub mod context_trace;
 pub mod model_context;
 pub mod openai;
 pub mod provider_trace;

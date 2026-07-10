@@ -222,8 +222,7 @@ describe("agentChatHistory local merge", () => {
         contentParts: [
           {
             type: "text" as const,
-            text:
-              "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\n",
+            text: "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\n",
           },
         ],
       },
@@ -1293,5 +1292,186 @@ describe("agentChatHistory local merge", () => {
       cached_input_tokens: 8192,
       cache_creation_input_tokens: 2048,
     });
+  });
+
+  it("terminal 详情刷新偏向远端正文时仍应保留本地已停止标记", () => {
+    const localMessages = [
+      {
+        id: "local-user-cancelled",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-07-10T00:00:00.000Z"),
+      },
+      {
+        id: "local-assistant-cancelled",
+        role: "assistant" as const,
+        content: "以下是今日国际新闻简要整理：\n\n(已停止)",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "以下是今日国际新闻简要整理：",
+          },
+          {
+            type: "text" as const,
+            text: "(已停止)",
+          },
+        ],
+        timestamp: new Date("2026-07-10T00:00:01.000Z"),
+        runtimeTurnId: "turn-cancelled",
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-cancelled",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-07-10T00:00:00.500Z"),
+      },
+      {
+        id: "history-assistant-cancelled",
+        role: "assistant" as const,
+        content: "以下是今日国际新闻简要整理：",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "以下是今日国际新闻简要整理：",
+          },
+        ],
+        timestamp: new Date("2026-07-10T00:00:01.500Z"),
+        runtimeTurnId: "turn-cancelled",
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+      { preferHydratedAssistantOutput: true },
+    );
+
+    expect(mergedMessages[1]?.content).toBe(
+      "以下是今日国际新闻简要整理：\n\n(已停止)",
+    );
+    expect(
+      mergedMessages[1]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+  });
+
+  it("terminal 详情缺少用户 item 时也应按 runtimeTurnId 保留本地已停止标记", () => {
+    const localMessages = [
+      {
+        id: "local-user-cancelled",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-07-10T00:00:00.000Z"),
+        runtimeTurnId: "turn-cancelled-without-user-item",
+      },
+      {
+        id: "local-assistant-cancelled",
+        role: "assistant" as const,
+        content: "(已停止)",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "(已停止)",
+          },
+        ],
+        timestamp: new Date("2026-07-10T00:00:01.000Z"),
+        runtimeTurnId: "turn-cancelled-without-user-item",
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-assistant-cancelled",
+        role: "assistant" as const,
+        content: "以下是今日国际新闻简要整理：",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "以下是今日国际新闻简要整理：",
+          },
+        ],
+        timestamp: new Date("2026-07-10T00:00:01.500Z"),
+        runtimeTurnId: "turn-cancelled-without-user-item",
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+      { preferHydratedAssistantOutput: true },
+    );
+
+    expect(mergedMessages).toHaveLength(2);
+    expect(mergedMessages[0]?.id).toBe("local-user-cancelled");
+    expect(mergedMessages[1]?.id).toBe("local-assistant-cancelled");
+    expect(mergedMessages[1]?.content).toBe(
+      "以下是今日国际新闻简要整理：\n\n(已停止)",
+    );
+    expect(
+      mergedMessages[1]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+  });
+
+  it("terminal 详情只有真实 turn assistant 时应迁移 pending-turn 已停止标记", () => {
+    const localMessages = [
+      {
+        id: "local-user-cancelled-pending",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-07-10T00:00:00.000Z"),
+        runtimeTurnId: "pending-turn:cancelled",
+      },
+      {
+        id: "local-assistant-cancelled-pending",
+        role: "assistant" as const,
+        content: "(已停止)",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "(已停止)",
+          },
+        ],
+        timestamp: new Date("2026-07-10T00:00:01.000Z"),
+        runtimeTurnId: "pending-turn:cancelled",
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-assistant-cancelled-real-turn",
+        role: "assistant" as const,
+        content: "以下是今日国际新闻简要整理：",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "以下是今日国际新闻简要整理：",
+          },
+        ],
+        timestamp: new Date("2026-07-10T00:00:01.500Z"),
+        runtimeTurnId: "turn-cancelled-real",
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+      { preferHydratedAssistantOutput: true },
+    );
+
+    expect(mergedMessages).toHaveLength(2);
+    expect(mergedMessages[0]?.id).toBe("local-user-cancelled-pending");
+    expect(mergedMessages[1]?.id).toBe("local-assistant-cancelled-pending");
+    expect(mergedMessages[1]?.runtimeTurnId).toBe("turn-cancelled-real");
+    expect(mergedMessages[1]?.content).toBe(
+      "以下是今日国际新闻简要整理：\n\n(已停止)",
+    );
+    expect(
+      mergedMessages[1]?.contentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
   });
 });

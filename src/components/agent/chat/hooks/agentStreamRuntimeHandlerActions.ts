@@ -17,6 +17,10 @@ import {
   upsertThreadItemState,
   upsertThreadTurnState,
 } from "./agentThreadState";
+import {
+  buildInterruptedMessageContentPatch,
+  markInterruptedAgentMessageThreadItems,
+} from "./agentInterruptedMessageContent";
 import { settleInterruptedMessageProcess } from "./agentStreamFlowControl";
 import {
   buildAgentStreamCompletedAssistantMessagePatch,
@@ -420,9 +424,9 @@ export function createAgentStreamRuntimeHandlerActions({
         finalTextPartMetadata: buildAgentTextDeltaContentPartMetadata({
           itemId: requestState.activeTextSegmentItemId,
           phase: requestState.activeTextSegmentPhase,
-            sequence: requestState.activeTextSegmentSequence,
-            turnId: requestState.activeTextSegmentTurnId,
-          }),
+          sequence: requestState.activeTextSegmentSequence,
+          turnId: requestState.activeTextSegmentTurnId,
+        }),
         rawContent,
         surfaceThinkingDeltas: shouldPreserveVisibleProcessForMessage(msg),
       }),
@@ -674,7 +678,7 @@ export function createAgentStreamRuntimeHandlerActions({
         const interruptedMessage = settleInterruptedMessageProcess(msg);
         return {
           ...updateMessageArtifactsStatus(interruptedMessage, "complete"),
-          content: interruptedMessage.content || "(已停止)",
+          ...buildInterruptedMessageContentPatch(interruptedMessage),
           isThinking: false,
           runtimeStatus: undefined,
         };
@@ -683,6 +687,9 @@ export function createAgentStreamRuntimeHandlerActions({
       return nextMessages;
     });
     clearStreamingTextOverlay();
+    setThreadItems((prev) =>
+      markInterruptedAgentMessageThreadItems(prev, new Set([turn.id])),
+    );
     setCurrentTurnId(turn.id);
     finalizeTerminalStreamState();
   };

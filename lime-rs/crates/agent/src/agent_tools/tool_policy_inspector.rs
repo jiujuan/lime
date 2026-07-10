@@ -5,8 +5,8 @@ use crate::agent_tools::execution::{
 use crate::runtime_facade::current_agent_turn_context;
 use crate::turn_context_configuration::agent_turn_context_metadata;
 use anyhow::Result;
-use aster::conversation::message::{Message, ToolRequest};
-use aster::tool_inspection::{InspectionAction, InspectionResult, ToolInspector};
+use aster::{InspectionAction, InspectionResult, ToolInspector};
+use aster::{Message, ToolRequest};
 use async_trait::async_trait;
 use serde_json::Value;
 

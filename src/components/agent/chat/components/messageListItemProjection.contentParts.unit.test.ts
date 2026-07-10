@@ -403,6 +403,41 @@ describe("messageListItemProjection content parts", () => {
     expect(projection.trailingTimeline).toBeNull();
   });
 
+  it("contentParts 已有停止终态时不应被旧 partial content 覆盖", () => {
+    const partialText = "以下是今日国际新闻简要整理：";
+    const message: Message = {
+      id: "assistant-interrupted-partial-content",
+      role: "assistant",
+      content: partialText,
+      timestamp: new Date("2026-07-10T10:00:00.000Z"),
+      isThinking: false,
+      runtimeTurnId: "turn-interrupted-partial-content",
+      contentParts: [
+        {
+          type: "text",
+          text: partialText,
+        },
+        {
+          type: "text",
+          text: "(已停止)",
+        },
+      ],
+    };
+
+    const projection = buildProjection(message, null, {
+      hasActiveInteractiveRuntime: false,
+      isSending: false,
+    });
+
+    expect(projection.actionContent).toBe(`${partialText}\n\n(已停止)`);
+    expect(projection.rendererRawContent).toBe(`${partialText}\n\n(已停止)`);
+    expect(
+      projection.rendererContentParts?.some(
+        (part) => part.type === "text" && part.text === "(已停止)",
+      ),
+    ).toBe(true);
+  });
+
   it("同一 reasoning item 夹在最终正文前后时只应渲染一个思考卡片", () => {
     const finalText = "你好。说吧，今天要我帮你把哪件事拎清楚、推进掉。";
     const message: Message = {

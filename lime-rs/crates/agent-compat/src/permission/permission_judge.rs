@@ -3,7 +3,6 @@ use crate::config::permission::PermissionLevel;
 use crate::config::PermissionManager;
 use crate::conversation::message::{Message, MessageContent, ToolRequest};
 use crate::conversation::Conversation;
-use crate::prompt_template::render_global_file;
 use crate::providers::base::Provider;
 use chrono::Utc;
 use indoc::indoc;
@@ -14,10 +13,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-#[derive(Serialize)]
-struct PermissionJudgeContext {
-    // Empty struct for now since the current template doesn't need variables
-}
+const READ_ONLY_TOOL_ANALYSIS_PROMPT: &str = "You are a careful analyst. Decide which requested tools are strictly read-only operations. If unsure, do not classify the tool as read-only.";
 
 /// Creates the tool definition for checking read-only permissions.
 fn create_read_only_tool() -> Tool {
@@ -139,9 +135,7 @@ pub async fn detect_read_only_tools(
     let tool = create_read_only_tool();
     let check_messages = create_check_messages(tool_requests);
 
-    let context = PermissionJudgeContext {};
-    let system_prompt = render_global_file("permission_judge.md", &context)
-        .unwrap_or_else(|_| "You are a good analyst and can detect operations whether they have read-only operations.".to_string());
+    let system_prompt = READ_ONLY_TOOL_ANALYSIS_PROMPT.to_string();
 
     let res = provider
         .complete(

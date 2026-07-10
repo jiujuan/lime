@@ -342,12 +342,19 @@ describe("MessageList artifacts timeline", () => {
     expect(contentFactoryToolParts).toHaveLength(2);
     expect(contentFactoryToolParts[0]?.metadata).toEqual(
       expect.objectContaining({
-        source: "workspace_patch_host_tool_requests",
+        source: "agent_thread_item",
+        threadItemId: "item-content-factory-search-1",
+        turnId: "turn-content-factory-process",
+        sequence: 1,
         workflowKey: "content_article_workflow",
       }),
     );
     expect(contentFactoryToolParts[1]?.metadata).toEqual(
       expect.objectContaining({
+        source: "agent_thread_item",
+        threadItemId: "item-content-factory-search-2",
+        turnId: "turn-content-factory-process",
+        sequence: 2,
         workflow_key: "content_article_workflow",
       }),
     );

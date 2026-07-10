@@ -3,7 +3,7 @@ use super::{
     SessionExecutionRuntimePreferences, SessionExecutionRuntimeRecentTeamRole,
     SessionExecutionRuntimeRecentTeamSelection, SessionExecutionRuntimeSource,
 };
-use aster::session::{
+use aster::{
     ExtensionData, Session, SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot,
     TurnContextOverride, TurnRuntime, TurnStatus,
 };

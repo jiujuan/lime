@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
@@ -36,6 +36,14 @@ const turn: AgentThreadTurn = {
 };
 
 describe("agentStreamThreadItemController", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
+  afterEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("应保留运行中 reasoning 更新，避免思考区只停在首个片段", () => {
     expect(shouldDeferAgentStreamThreadItemUpdate(threadItem())).toBe(false);
   });

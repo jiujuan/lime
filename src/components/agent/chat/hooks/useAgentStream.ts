@@ -496,6 +496,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       setCurrentTurnId,
       setMessages,
       getMessages: () => getMessagesRef.current?.() ?? [],
+      getThreadItems: () => getThreadItemsRef.current?.() ?? [],
       getQueuedTurns: () => queuedTurnsRef.current,
       setActiveStream,
       submittedDraftFallback: submittedDraftFallbackRef.current,
@@ -521,6 +522,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     setThreadTurns,
     removeStreamListener,
     activeStreamRef,
+    getThreadItemsRef,
     queuedTurnsRef,
   ]);
 

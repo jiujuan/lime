@@ -1,13 +1,12 @@
 //! Aster SessionStore 实现
 //!
-//! 实现 aster::session::SessionStore trait，将 aster 的会话数据
+//! 实现 aster::SessionStore trait，将 aster 的会话数据
 //! 存储到 Lime 的 SQLite 数据库中。
 //!
 //! 这是应用层接管框架层存储的关键桥接模块。
 
 use anyhow::{anyhow, Result};
-use aster::session::extension_data::ExtensionData;
-use aster::session::{Session, SessionType};
+use aster::{ExtensionData, Session, SessionType};
 use chrono::Utc;
 use lime_core::database::agent_session_repository::{
     get_session_extension_data_json, get_session_working_dir, insert_session_record,

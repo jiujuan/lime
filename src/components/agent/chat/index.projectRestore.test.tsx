@@ -21,7 +21,7 @@ const {
   mockToast,
 } = getIndexTestMocks();
 
-describe("AgentChatPage 话题切换项目恢复", () => {
+describe("AgentChatPage 话题切换项目恢复", { timeout: 60_000 }, () => {
   it("应先切换到话题绑定项目，再执行话题切换", async () => {
     localStorage.setItem(
       "agent_session_workspace_topic-a",

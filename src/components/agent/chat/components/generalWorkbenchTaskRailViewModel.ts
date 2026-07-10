@@ -233,6 +233,56 @@ function buildPlanRevisionProjection(
   };
 }
 
+function readThreadItemTimestamp(item: AgentThreadItem): number {
+  for (const value of [item.updated_at, item.completed_at, item.started_at]) {
+    if (!value) {
+      continue;
+    }
+    const timestamp = Date.parse(value);
+    if (Number.isFinite(timestamp)) {
+      return timestamp;
+    }
+  }
+  return 0;
+}
+
+function buildPlanStateThreadItems({
+  threadItems,
+  threadRead,
+}: {
+  threadItems?: readonly AgentThreadItem[];
+  threadRead?: AgentRuntimeThreadReadModel | null;
+}): AgentThreadItem[] {
+  const byKey = new Map<string, AgentThreadItem>();
+  const pushItem = (item: AgentThreadItem) => {
+    const key =
+      item.id?.trim() ||
+      `${item.type}:${item.turn_id || "no-turn"}:${item.sequence ?? "no-sequence"}`;
+    byKey.set(key, item);
+  };
+
+  for (const item of threadRead?.thread_items ?? []) {
+    pushItem(item);
+  }
+  for (const item of threadItems ?? []) {
+    pushItem(item);
+  }
+
+  return [...byKey.values()].sort((left, right) => {
+    const leftSequence = left.sequence ?? 0;
+    const rightSequence = right.sequence ?? 0;
+    if (leftSequence !== rightSequence) {
+      return leftSequence - rightSequence;
+    }
+    const leftTimestamp = readThreadItemTimestamp(left);
+    const rightTimestamp = readThreadItemTimestamp(right);
+    if (leftTimestamp !== rightTimestamp) {
+      return leftTimestamp - rightTimestamp;
+    }
+    return (left.id || "").localeCompare(right.id || "");
+  });
+}
+
 function formatToolArgs(value: string | undefined): string | null {
   if (!value?.trim()) {
     return null;
@@ -807,7 +857,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
   ]);
   const outputItems = buildOutputItems(items);
   const planState = hydrateAgentPlanState({
-    threadItems,
+    threadItems: buildPlanStateThreadItems({ threadItems, threadRead }),
   });
   const planItems = buildRecoveredPlanItems({
     workflowSteps,

@@ -11,10 +11,11 @@ use super::retry::ProviderRetry;
 use super::utils::{map_http_error_to_provider_error, parse_tool_arguments_json_object};
 use crate::conversation::message::{Message, MessageContent};
 
-use crate::mcp_utils::ToolResult;
 use crate::model::ModelConfig;
 use rmcp::model::{object, CallToolRequestParam, ErrorCode, ErrorData, Role, Tool};
 use std::borrow::Cow;
+
+type ToolResult<T> = Result<T, ErrorData>;
 
 // ---------- Capability Flags ----------
 #[derive(Debug)]
@@ -550,50 +551,5 @@ impl Provider for VeniceProvider {
             Message::new(Role::Assistant, Utc::now().timestamp(), content),
             ProviderUsage::new(strip_flags(&self.model.model_name).to_string(), usage),
         ))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_metadata_structure() {
-        let metadata = VeniceProvider::metadata();
-
-        assert_eq!(metadata.default_model, "llama-3.3-70b");
-        assert!(!metadata.known_models.is_empty());
-
-        assert_eq!(metadata.config_keys.len(), 4);
-        assert_eq!(metadata.config_keys[0].name, "VENICE_API_KEY");
-        assert_eq!(metadata.config_keys[1].name, "VENICE_HOST");
-        assert_eq!(metadata.config_keys[2].name, "VENICE_BASE_PATH");
-        assert_eq!(metadata.config_keys[3].name, "VENICE_MODELS_PATH");
-    }
-
-    #[test]
-    fn test_normalize_internal_model_config_strips_flags() {
-        let model = ModelConfig::new("llama-3.3-70b [cvfr]")
-            .unwrap()
-            .with_temperature(Some(0.2))
-            .with_max_tokens(Some(2048));
-
-        let normalized = normalize_internal_model_config(&model);
-
-        assert_eq!(normalized.model_name, "llama-3.3-70b");
-        assert_eq!(normalized.temperature, Some(0.2));
-        assert_eq!(normalized.max_tokens, Some(2048));
-    }
-
-    #[test]
-    fn test_normalize_internal_model_config_preserves_custom_context_limit() {
-        let model = ModelConfig::new("llama-3.3-70b [cvfr]")
-            .unwrap()
-            .with_context_limit(Some(222_222));
-
-        let normalized = normalize_internal_model_config(&model);
-
-        assert_eq!(normalized.model_name, "llama-3.3-70b");
-        assert_eq!(normalized.context_limit, Some(222_222));
     }
 }

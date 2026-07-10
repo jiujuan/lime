@@ -60,6 +60,7 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
                 "tool.result",
                 json!({
                     "toolCallId": "tool_snapshot_evidence",
+                    "toolName": "Bash",
                     "outputRef": "output://snapshot-evidence",
                     "outputPreview": "snapshot output",
                     "outputBytes": 42,
@@ -73,6 +74,21 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
                         "contentStatus": "available",
                         "createdAt": "2026-06-14T00:00:00.000Z"
                     }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "tool_apply_patch_evidence",
+                    "toolName": "apply_patch"
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "tool_apply_patch_evidence",
+                    "toolName": "apply_patch",
+                    "outputRef": "output://apply-patch-evidence"
                 }),
             ),
             RuntimeEvent::new(
@@ -268,6 +284,18 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
     assert_eq!(coding_summary["actionRequiredCount"], 1);
     assert_eq!(coding_summary["actionResolvedCount"], 1);
     assert_eq!(coding_summary["recoveryRequestCount"], 1);
+    assert_eq!(coding_summary["toolCallCount"], 2);
+    assert_eq!(coding_summary["completedToolCallCount"], 2);
+    assert_eq!(coding_summary["failedToolCallCount"], 0);
+    assert_json_array_contains(coding_summary, "toolNames", "Bash");
+    assert_json_array_contains(coding_summary, "toolNames", "apply_patch");
+    assert_json_array_contains(coding_summary, "toolCallIds", "tool_snapshot_evidence");
+    assert_json_array_contains(coding_summary, "toolCallIds", "tool_apply_patch_evidence");
+    assert_json_array_contains(
+        coding_summary,
+        "completedToolCallIds",
+        "tool_apply_patch_evidence",
+    );
     assert_json_array_contains(coding_summary, "outputRefs", "output://snapshot-evidence");
     assert_json_array_contains(coding_summary, "diffRefs", "diff://snapshot-evidence");
     assert_json_array_contains(

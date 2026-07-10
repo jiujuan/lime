@@ -8,8 +8,8 @@ use agent_runtime::session_execution::{
     project_session_execution_runtime_session, SessionExecutionRuntimeSessionSource,
     SessionExecutionRuntimeUsageSource, SESSION_RECENT_EXTENSION_VERSION,
 };
-use aster::session::ExtensionData;
-use aster::session::{
+use aster::ExtensionData;
+use aster::{
     Session, SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnContextOverride,
     TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy, TurnRuntime,
     TurnStatus,
@@ -93,7 +93,7 @@ fn falls_back_to_session_when_runtime_snapshot_missing() {
     let session = Session {
         id: "session-1".to_string(),
         provider_name: Some("openai".to_string()),
-        model_config: Some(aster::model::ModelConfig::new("gpt-5.1").expect("model config")),
+        model_config: Some(aster::ModelConfig::new("gpt-5.1").expect("model config")),
         ..Session::default()
     };
 
@@ -121,7 +121,7 @@ fn prefers_latest_runtime_snapshot_with_output_schema_runtime() {
     let session = Session {
         id: "session-2".to_string(),
         provider_name: Some("openai".to_string()),
-        model_config: Some(aster::model::ModelConfig::new("gpt-5.1").expect("model config")),
+        model_config: Some(aster::ModelConfig::new("gpt-5.1").expect("model config")),
         ..Session::default()
     };
 

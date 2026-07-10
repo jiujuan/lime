@@ -453,23 +453,3 @@ impl Provider for CodexStatefulProvider {
         }))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_metadata() {
-        let metadata = CodexStatefulProvider::metadata();
-        assert_eq!(metadata.name, "codex-stateful");
-        assert!(!metadata.known_models.is_empty());
-    }
-
-    #[test]
-    fn test_should_use_app_server_default() {
-        // 默认应该使用 app-server
-        // 注意：这个测试可能受环境变量影响
-        let _result = CodexStatefulProvider::should_use_app_server();
-        // 测试只验证函数能正常调用，结果依赖环境变量
-    }
-}

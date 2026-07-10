@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import type { Message, MessageImage } from "../types";
 import type { WorkspacePathMissingState } from "./agentChatShared";
@@ -29,6 +30,14 @@ function noopDispatch<T>() {
 }
 
 describe("handleAgentStreamSubmitFailure", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
+  afterEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("提交阶段失败应保持 neutral 文案并携带 Soul metadata", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")

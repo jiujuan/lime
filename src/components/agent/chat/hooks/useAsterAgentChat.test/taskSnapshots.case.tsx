@@ -116,9 +116,7 @@ describe("useAsterAgentChat 任务快照", () => {
         sessionId,
         expect.objectContaining({ historyLimit: 40 }),
       );
-      expect(mockInterruptAgentRuntimeTurn).toHaveBeenCalledWith({
-        session_id: sessionId,
-      });
+      expect(mockInterruptAgentRuntimeTurn).not.toHaveBeenCalled();
       expect(mockGetAgentRuntimeThreadRead).toHaveBeenCalledWith(sessionId);
       expect(harness.getValue().threadRead).toMatchObject({
         thread_id: "thread-stop-refresh",
@@ -347,7 +345,7 @@ describe("useAsterAgentChat 任务快照", () => {
       expect(
         harness.getValue().topics.find((topic) => topic.id === sessionId),
       ).toMatchObject({
-        status: "running",
+        status: "queued",
       });
     } finally {
       harness.unmount();

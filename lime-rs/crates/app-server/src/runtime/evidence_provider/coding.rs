@@ -19,6 +19,13 @@ struct CodingEvidenceSummary {
     approval_session_cache_hit_count: usize,
     approval_session_cache_resolved_count: usize,
     recovery_request_count: usize,
+    tool_call_count: usize,
+    completed_tool_call_count: usize,
+    failed_tool_call_count: usize,
+    tool_names: Vec<String>,
+    tool_call_ids: Vec<String>,
+    completed_tool_call_ids: Vec<String>,
+    failed_tool_call_ids: Vec<String>,
     output_refs: Vec<String>,
     diff_refs: Vec<String>,
     checkpoint_refs: Vec<String>,
@@ -36,7 +43,25 @@ pub(super) fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
     let mut summary = CodingEvidenceSummary::default();
     for event in events {
         collect_common_coding_refs(&mut summary, event);
+        collect_tool_identity(&mut summary, event);
         match event.event_type.as_str() {
+            "tool.started" => {
+                summary.tool_call_count += 1;
+                push_unique(&mut summary.source_event_ids, event.event_id.clone());
+            }
+            "tool.result" | "tool.failed" => {
+                summary.completed_tool_call_count += 1;
+                if let Some(tool_call_id) = tool_call_id_from_event(event) {
+                    push_unique(&mut summary.completed_tool_call_ids, tool_call_id.clone());
+                    if event.event_type == "tool.failed" {
+                        push_unique(&mut summary.failed_tool_call_ids, tool_call_id);
+                    }
+                }
+                if event.event_type == "tool.failed" {
+                    summary.failed_tool_call_count += 1;
+                }
+                push_unique(&mut summary.source_event_ids, event.event_id.clone());
+            }
             "file.changed" => {
                 summary.file_change_count += 1;
                 push_unique(&mut summary.source_event_ids, event.event_id.clone());
@@ -126,6 +151,13 @@ pub(super) fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
         "approvalSessionCacheResolvedRequestIds": summary.approval_session_cache_resolved_request_ids,
         "approvalSessionCacheHitKeys": summary.approval_session_cache_hit_keys,
         "recoveryRequestCount": summary.recovery_request_count,
+        "toolCallCount": summary.tool_call_count,
+        "completedToolCallCount": summary.completed_tool_call_count,
+        "failedToolCallCount": summary.failed_tool_call_count,
+        "toolNames": summary.tool_names,
+        "toolCallIds": summary.tool_call_ids,
+        "completedToolCallIds": summary.completed_tool_call_ids,
+        "failedToolCallIds": summary.failed_tool_call_ids,
         "outputRefs": summary.output_refs,
         "diffRefs": summary.diff_refs,
         "checkpointRefs": summary.checkpoint_refs,
@@ -135,6 +167,59 @@ pub(super) fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
         "actionToolCallIds": summary.action_tool_call_ids,
         "sourceEventIds": summary.source_event_ids,
     })
+}
+
+fn collect_tool_identity(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {
+    match event.event_type.as_str() {
+        "tool.started" | "tool.args" | "tool.args.delta" | "tool.input.delta"
+        | "tool.output.delta" | "tool.result" | "tool.failed" | "patch.started"
+        | "patch.applied" | "patch.failed" | "file.changed" | "command.started"
+        | "command.output" | "command.exited" => {}
+        _ => return,
+    }
+
+    collect_tool_identity_fields(summary, &event.payload);
+    for key in [
+        "metadata",
+        "runtimeEvent",
+        "item",
+        "result",
+        "structuredContent",
+        "toolProcessFacts",
+        "tool_process_facts",
+    ] {
+        if let Some(value) = event.payload.get(key) {
+            collect_tool_identity_fields(summary, value);
+        }
+    }
+    if let Some(result) = event.payload.get("result") {
+        for key in [
+            "metadata",
+            "structuredContent",
+            "toolProcessFacts",
+            "tool_process_facts",
+        ] {
+            if let Some(value) = result.get(key) {
+                collect_tool_identity_fields(summary, value);
+            }
+        }
+    }
+}
+
+fn collect_tool_identity_fields(summary: &mut CodingEvidenceSummary, value: &Value) {
+    push_value_strings(&mut summary.tool_names, value, &["toolName", "tool_name"]);
+    push_value_strings(
+        &mut summary.tool_call_ids,
+        value,
+        &["toolCallId", "tool_call_id", "toolId", "tool_id"],
+    );
+}
+
+fn tool_call_id_from_event(event: &AgentEvent) -> Option<String> {
+    metadata_string(
+        Some(&event.payload),
+        &["toolCallId", "tool_call_id", "toolId", "tool_id"],
+    )
 }
 
 fn collect_action_correlation(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {

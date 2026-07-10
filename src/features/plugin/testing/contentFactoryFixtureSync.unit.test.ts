@@ -162,6 +162,7 @@ describe("contentFactoryFixtureSync", () => {
         title: connector.title,
         description: connector.description,
         kind: connector.kind,
+        required: connector.required,
         taskKinds: connector.taskKinds,
       })),
     ).toEqual(connectorRegistry.connectors);

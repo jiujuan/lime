@@ -120,7 +120,7 @@ describe("useAsterAgentChat queue hydration", () => {
       expect(
         harness.getValue().topics.find((topic) => topic.id === "session-queue"),
       ).toMatchObject({
-        status: "running",
+        status: "queued",
       });
       expect(mockResumeAgentRuntimeThread).not.toHaveBeenCalled();
     } finally {

@@ -155,6 +155,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content + guiActionsContent).toContain("waitForInputReady");
     expect(guiActionsContent).toContain("waitForSendButtonReady");
     expect(content).toContain("sendNewsPromptFromGui");
+    expect(guiActionsContent).toContain("setControlledTextareaValue");
+    expect(guiActionsContent).toContain('new InputEvent("input"');
     expect(content).toContain("整理今天的国际新闻");
     expect(content).toContain("promptVisibleInTextarea");
     expect(content).toContain("hasPrompt");
@@ -226,6 +228,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("HOME_HOTPATH_PENDING_PREVIEW_PAINT_BUDGET_MS");
     expect(content).toContain("HOME_HOTPATH_SEND_DISPATCH_BUDGET_MS");
     expect(content).toContain("HOME_HOTPATH_SUBMIT_ACCEPTED_BUDGET_MS");
+    expect(content).toContain(
+      "const HOME_HOTPATH_SUBMIT_ACCEPTED_BUDGET_MS = 1800;",
+    );
     expect(content).toContain("HOME_HOTPATH_TEXT_DELTA_TO_PAINT_BUDGET_MS");
     expect(content).toContain("homeHotpathSendDispatchWithinBudget");
     expect(content).toContain("homeHotpathTraceHasSubmitAccepted");
@@ -262,8 +267,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("config.prompt");
     expect(content).toContain("config.doneText");
     expect(content).toContain("config.summaryText");
-    expect(content).toContain("promptInBody: prompt ? bodyText.includes(prompt) : false");
-    expect(content).toContain("doneInBody: doneText ? bodyText.includes(doneText) : false");
+    expect(content).toContain(
+      "promptInBody: prompt ? bodyText.includes(prompt) : false",
+    );
+    expect(content).toContain(
+      "doneInBody: doneText ? bodyText.includes(doneText) : false",
+    );
     expect(content).toContain("readHomeHotpathSnapshot");
     expect(content).toContain("HOME_HOTPATH_MATCHERS");
     expect(snapshotFunction).not.toContain("NEWS_PROMPT");
@@ -451,9 +460,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
       approvalCancelBranchEnd,
     );
     expect(approvalCancelCompletionBranch).toContain('type: "tool.failed"');
-    expect(approvalCancelCompletionBranch).toContain(
-      'type: "turn.canceled"',
-    );
+    expect(approvalCancelCompletionBranch).toContain('type: "turn.canceled"');
     expect(approvalCancelCompletionBranch).toContain(
       'reason: "approval_request_cancelled"',
     );
@@ -473,7 +480,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_RESULT_TEXT");
     expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_DONE_TEXT");
     expect(content).toContain("runApprovalRequestFullAccessScenario");
-    expect(content).toContain('setInputbarAccessMode(\n    page,\n    options,\n    "full-access"');
+    expect(content).toContain(
+      'setInputbarAccessMode(\n    page,\n    options,\n    "full-access"',
+    );
     expect(content).toContain("waitForGuiApprovalPromptAbsent");
     expect(content).toContain("approvalPromptVisible");
     expect(content).toContain("approvalRecordCount");
@@ -483,7 +492,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('"never"');
     expect(content).toContain('"danger-full-access"');
     expect(content).toContain("approvalRequestFullAccessNoActionRespond");
-    expect(content).toContain("approvalRequestFullAccessNoLegacyRuntimeRespond");
+    expect(content).toContain(
+      "approvalRequestFullAccessNoLegacyRuntimeRespond",
+    );
     expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS");
     expect(content).toContain(
       "!appServerRequestMethods.includes(\n        APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",

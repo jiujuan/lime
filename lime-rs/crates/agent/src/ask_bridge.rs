@@ -1,19 +1,17 @@
 //! Ask 工具桥接
 //!
-//! 将 aster 的 AskTool 回调桥接到 ActionRequiredManager，
+//! 将 Aster registry 的 Ask callback 桥接到 ActionRequiredManager，
 //! 通过 elicitation 事件把问题发送到前端并等待用户输入。
 
 use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
 use agent_runtime::ask::{
-    run_request_user_input, AskOption as CurrentAskOption, AskQuestion as CurrentAskQuestion,
-    AskRequest as CurrentAskRequest, RequestUserInputAction, RequestUserInputGateway,
+    run_request_user_input, AskRequest, RequestUserInputAction, RequestUserInputGateway,
     RequestUserInputRunRequest,
 };
-use aster::action_required_manager::ActionRequiredManager;
-use aster::conversation::message::ActionRequiredScope as AsterActionRequiredScope;
-use aster::session_context::{current_action_scope, current_session_id};
-use aster::tools::ask::AskRequest;
-use aster::tools::AskCallback;
+use aster::ActionRequiredManager;
+use aster::ActionRequiredScope as AsterActionRequiredScope;
+use aster::AskCallback;
+use aster::{current_action_scope, current_session_id};
 use futures::future::BoxFuture;
 use std::time::Duration;
 
@@ -43,9 +41,8 @@ impl RequestUserInputGateway for AsterActionRequiredGateway {
 pub(crate) fn create_ask_callback() -> AskCallback {
     std::sync::Arc::new(|request: AskRequest| {
         Box::pin(async move {
-            let current_request = project_ask_request(&request);
             let run_request = RequestUserInputRunRequest::new(
-                current_request,
+                request,
                 resolve_action_scope(),
                 Duration::from_secs(DEFAULT_ASK_TIMEOUT_SECS),
             );
@@ -82,31 +79,6 @@ fn project_aster_action_scope(
     RuntimeActionRequiredScope::from_parts(scope.session_id, scope.thread_id, scope.turn_id)
 }
 
-fn project_ask_request(request: &AskRequest) -> CurrentAskRequest {
-    CurrentAskRequest {
-        questions: request
-            .questions
-            .iter()
-            .map(|question| CurrentAskQuestion {
-                id: question.id.clone(),
-                question: question.question.clone(),
-                header: question.header.clone(),
-                options: question
-                    .options
-                    .iter()
-                    .map(|option| CurrentAskOption {
-                        value: option.value.clone(),
-                        label: option.label.clone(),
-                        description: option.description.clone(),
-                        preview: option.preview.clone(),
-                    })
-                    .collect(),
-                multi_select: question.multi_select,
-            })
-            .collect(),
-    }
-}
-
 fn resolve_action_scope() -> Option<RuntimeActionRequiredScope> {
     current_action_scope()
         .and_then(project_aster_action_scope)
@@ -119,8 +91,8 @@ fn resolve_action_scope() -> Option<RuntimeActionRequiredScope> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::session_context::{with_action_scope, with_session_id};
-    use aster::tools::ask::{AskOption, AskQuestion};
+    use agent_runtime::ask::{AskOption, AskQuestion};
+    use aster::{with_action_scope, with_session_id};
 
     #[tokio::test]
     async fn resolve_action_scope_prefers_runtime_scope() {
@@ -160,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn project_ask_request_preserves_aster_questions_for_current_runner() {
+    fn ask_callback_uses_current_request_user_input_dto() {
         let request = AskRequest {
             questions: vec![
                 AskQuestion::new("第一问"),
@@ -177,17 +149,15 @@ mod tests {
             ],
         };
 
-        let current = project_ask_request(&request);
-
-        assert_eq!(current.questions.len(), 2);
-        assert_eq!(current.questions[0].question, "第一问");
-        assert_eq!(current.questions[1].id.as_deref(), Some("mode"));
-        assert_eq!(current.questions[1].header.as_deref(), Some("mode"));
-        assert_eq!(current.questions[1].options[0].value, "auto");
+        assert_eq!(request.questions.len(), 2);
+        assert_eq!(request.questions[0].question, "第一问");
+        assert_eq!(request.questions[1].id.as_deref(), Some("mode"));
+        assert_eq!(request.questions[1].header.as_deref(), Some("mode"));
+        assert_eq!(request.questions[1].options[0].value, "auto");
         assert_eq!(
-            current.questions[1].options[0].label.as_deref(),
+            request.questions[1].options[0].label.as_deref(),
             Some("自动执行")
         );
-        assert!(!current.questions[1].multi_select);
+        assert!(!request.questions[1].multi_select);
     }
 }

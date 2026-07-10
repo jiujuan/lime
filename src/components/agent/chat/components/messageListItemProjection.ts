@@ -7,6 +7,11 @@ import {
 } from "../utils/messageDisplaySanitizer";
 import { hasStructuredHistoricalContentHint } from "../projection/historicalMessageHydrationProjection";
 import { shouldUseAgentMessageAsFinalText } from "../utils/agentMessagePhase";
+import {
+  appendInterruptedPlaceholderText,
+  contentHasInterruptedPlaceholder,
+  contentPartsHaveInterruptedPlaceholder,
+} from "../hooks/agentInterruptedMessageContent";
 import { buildHistoricalMessagePreview } from "./messageListHistoricalPreviewText";
 import {
   parseLeadingUserCommandTag,
@@ -113,8 +118,14 @@ export function resolveMessageListItemProjection({
     imageWorkbenchDisplayState.shouldSuppressStandaloneProcess;
   const shouldSuppressImageProcessFlow =
     imageWorkbenchDisplayState.shouldSuppressProcessFlow;
-  const visibleRawDisplayContent =
+  const rawVisibleDisplayContent =
     imageWorkbenchDisplayState.visibleRawDisplayContent;
+  const visibleRawDisplayContent =
+    message.role === "assistant" &&
+    contentPartsHaveInterruptedPlaceholder(message.contentParts) &&
+    !contentHasInterruptedPlaceholder(rawVisibleDisplayContent)
+      ? appendInterruptedPlaceholderText(rawVisibleDisplayContent)
+      : rawVisibleDisplayContent;
   const displayContent = sanitizeMessageTextForDisplay(
     visibleRawDisplayContent,
     {

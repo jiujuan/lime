@@ -5,7 +5,7 @@ use crate::aster_runtime_projection::{
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use crate::turn_context_configuration::{to_agent_turn_context, AgentTurnContext};
 use agent_runtime::event_stream::EventProjector;
-use aster::agents::AgentEvent as AsterAgentEvent;
+use aster::AgentEvent as AsterAgentEvent;
 
 pub(super) struct AsterEventProjector {
     auto_compaction: AutoCompactionProjectionState,
@@ -41,8 +41,8 @@ impl EventProjector<AsterAgentEvent, RuntimeAgentEvent> for AsterEventProjector 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::conversation::message::Message;
-    use aster::session::{TurnContextOverride, TurnRuntime};
+    use aster::Message;
+    use aster::{TurnContextOverride, TurnRuntime};
     use std::collections::HashMap;
 
     #[test]

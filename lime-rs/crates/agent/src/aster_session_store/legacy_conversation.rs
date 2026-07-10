@@ -1,6 +1,6 @@
 use anyhow::Result;
-use aster::conversation::message::{Message, MessageContent, MessageMetadata};
-use aster::conversation::Conversation;
+use aster::Conversation;
+use aster::{Message, MessageContent, MessageMetadata};
 use thread_store::conversation_transcript::ConversationMessageRole;
 use thread_store::legacy_conversation::{
     project_legacy_conversation_message_record, LegacyConversationMessageRecord,

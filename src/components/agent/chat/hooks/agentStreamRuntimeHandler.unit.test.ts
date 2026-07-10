@@ -2574,9 +2574,10 @@ describe("agentStreamRuntimeHandler", () => {
       setIsSending: setIsSending as never,
     });
 
-    expect((messages[0]?.content.match(new RegExp(partialAnswer, "g")) ?? []))
-      .toHaveLength(1);
-    expect((messages[0]?.content.match(/执行失败：/g) ?? [])).toHaveLength(1);
+    expect(
+      messages[0]?.content.match(new RegExp(partialAnswer, "g")) ?? [],
+    ).toHaveLength(1);
+    expect(messages[0]?.content.match(/执行失败：/g) ?? []).toHaveLength(1);
     expect(messages[0]?.content).toContain(failureMessage);
     expect(messages[0]?.contentParts).toEqual([
       expect.objectContaining({ type: "tool_use" }),
@@ -2594,9 +2595,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(failureMessage);
-    expect(mockToast.error).toHaveBeenCalledWith(
-      `响应错误: ${failureMessage}`,
-    );
+    expect(mockToast.error).toHaveBeenCalledWith(`响应错误: ${failureMessage}`);
   });
 
   it("收到空 turn_completed 且没有真实产物信号时也应收起发送态并落失败态", () => {
@@ -3422,7 +3421,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
 
-  it("收到 turn_canceled 时应收起发送态并保留已输出内容", () => {
+  it("收到 turn_canceled 时应收起发送态并追加已停止终态", () => {
     let messages: Message[] = [
       {
         id: "assistant-canceled",
@@ -3432,9 +3431,32 @@ describe("agentStreamRuntimeHandler", () => {
         isThinking: true,
       },
     ];
+    let threadItems: AgentThreadItem[] = [
+      {
+        id: "agent-message-canceled",
+        thread_id: "thread-news",
+        turn_id: "turn-canceled",
+        sequence: 1,
+        status: "in_progress",
+        started_at: "2026-06-07T10:00:00.000Z",
+        updated_at: "2026-06-07T10:00:00.500Z",
+        type: "agent_message",
+        text: "已经输出的内容",
+      },
+    ];
     const setMessages = vi.fn(
       (value: Message[] | ((prev: Message[]) => Message[])) => {
         messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems =
+          typeof value === "function" ? value(threadItems) : value;
       },
     );
     const setIsSending = vi.fn();
@@ -3490,7 +3512,7 @@ describe("agentStreamRuntimeHandler", () => {
       toolNameByToolId: new Map<string, string>(),
       setMessages: setMessages as never,
       setPendingActions: vi.fn() as never,
-      setThreadItems: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
       setThreadTurns: vi.fn() as never,
       setCurrentTurnId: vi.fn() as never,
       setExecutionRuntime: vi.fn() as never,
@@ -3498,8 +3520,18 @@ describe("agentStreamRuntimeHandler", () => {
     });
 
     expect(messages[0]).toMatchObject({
-      content: "已经输出的内容",
+      content: "已经输出的内容\n\n(已停止)",
       isThinking: false,
+    });
+    expect(threadItems[0]).toMatchObject({
+      type: "agent_message",
+      text: "已经输出的内容\n\n(已停止)",
+      contentParts: [
+        {
+          type: "text",
+          text: "(已停止)",
+        },
+      ],
     });
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);

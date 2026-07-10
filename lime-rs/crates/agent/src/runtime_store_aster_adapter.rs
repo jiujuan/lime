@@ -8,7 +8,7 @@ use crate::turn_context_configuration::to_agent_turn_context;
 use agent_protocol::turn_context::{
     TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy,
 };
-use aster::session::{
+use aster::{
     initialize_shared_session_runtime_with_root, load_shared_session_runtime_snapshot,
     require_shared_session_runtime_store, ItemRuntime, ItemRuntimePayload, ItemStatus,
     SessionRuntimeSnapshot, SessionStore, ThreadRuntimeSnapshot, ThreadRuntimeStore,
@@ -28,7 +28,7 @@ pub(crate) type AsterThreadRuntimeStore = dyn ThreadRuntimeStore;
 pub(crate) type AsterSessionRuntimeSnapshot = SessionRuntimeSnapshot;
 
 pub(crate) fn initialized_aster_runtime_root() -> Option<PathBuf> {
-    aster::config::paths::initialized_path_root()
+    aster::initialized_path_root()
 }
 
 pub(crate) async fn initialize_aster_runtime_with_root(
@@ -121,7 +121,7 @@ fn runtime_turn_status_from_aster(status: TurnStatus) -> RuntimeTurnStatusRecord
 }
 
 pub(crate) fn runtime_output_schema_from_aster(
-    runtime: &aster::session::TurnOutputSchemaRuntime,
+    runtime: &aster::TurnOutputSchemaRuntime,
 ) -> TurnOutputSchemaRuntime {
     TurnOutputSchemaRuntime {
         source: match runtime.source {

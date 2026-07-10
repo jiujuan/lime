@@ -6,7 +6,22 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { renderConsoleSummary, renderMarkdown } from "./benchmark-release-run-render.mjs";
+import { writeReleaseAuditReportFile } from "./benchmark-release-run-audit-report.mjs";
+import {
+  resolveBaselineSummaryPath,
+  validateBaselineDescriptorForStrictGate,
+} from "./benchmark-release-run-baseline-descriptor.mjs";
+import {
+  renderConsoleSummary,
+  renderMarkdown,
+} from "./benchmark-release-run-render.mjs";
+import {
+  buildNpmSuiteSteps,
+  currentChainEvidencePathForTask,
+  externalSuiteSlug,
+  makeNpmStep,
+  trueRunScriptForSuite,
+} from "./benchmark-release-run-suite-helpers.mjs";
 
 const DEFAULT_MANIFEST_PATH = "internal/test/benchmark-release.manifest.json";
 const DEFAULT_VERSION = new Date().toISOString().slice(0, 10);
@@ -19,6 +34,7 @@ function parseArgs(argv) {
     baselineSummaryPath: "",
     baselineVersion: "",
     check: false,
+    currentChainEvidenceRoot: "",
     dryRunOnly: false,
     format: "json",
     fullExternalSuites: false,
@@ -47,6 +63,11 @@ function parseArgs(argv) {
     }
     if (arg === "--check") {
       result.check = true;
+      continue;
+    }
+    if (arg === "--current-chain-evidence-root" && argv[index + 1]) {
+      result.currentChainEvidenceRoot = String(argv[index + 1]).trim();
+      index += 1;
       continue;
     }
     if (arg === "--dry-run-only") {
@@ -119,14 +140,26 @@ function parseArgs(argv) {
   if (result.strictGate && !result.includeP0) {
     throw new Error("--strict-gate 必须和 --include-p0 一起使用");
   }
-  if (result.strictGate && !result.baselineSummaryPath && !result.baselineVersion) {
-    throw new Error("--strict-gate 需要 --baseline-version 或 --baseline-summary");
+  if (
+    result.strictGate &&
+    !result.baselineSummaryPath &&
+    !result.baselineVersion
+  ) {
+    throw new Error(
+      "--strict-gate 需要 --baseline-version 或 --baseline-summary",
+    );
   }
   if (result.promoteBaseline && !result.strictGate) {
     throw new Error("--promote-baseline 必须和 --strict-gate 一起使用");
   }
-  if (result.promoteBaseline && !result.baselineSummaryPath && !result.baselineVersion) {
-    throw new Error("--promote-baseline 需要 --baseline-version 或 --baseline-summary");
+  if (
+    result.promoteBaseline &&
+    !result.baselineSummaryPath &&
+    !result.baselineVersion
+  ) {
+    throw new Error(
+      "--promote-baseline 需要 --baseline-version 或 --baseline-summary",
+    );
   }
 
   return result;
@@ -152,6 +185,8 @@ Lime Benchmark Release Run
   --min-free-mb N    output root 所在卷的最低可用空间，默认 ${DEFAULT_MIN_FREE_MB}
   --include-p0      执行 manifest 中 runner=npm 的 P0 基础门禁；正式 RC / release 推荐启用
   --dry-run-only     只跳过 P1 preflight / fail-closed true-run；若带 --include-p0 仍执行 P0 门禁
+  --current-chain-evidence-root PATH
+                    true-run current-chain evidence 根目录；每题读取 <root>/<suite-slug>/<task-id>/current-chain-evidence.json
   --full-external-suites
                     对 P1 external suite 的全部 taskSet 执行 preflight / true-run；strict gate 自动启用
   --strict-gate      正式放行 gate；必须同时提供 --include-p0 和 baseline
@@ -178,83 +213,6 @@ function normalizePath(filePath) {
 
 function releaseRoot(version, outputRoot) {
   return normalizePath(outputRoot || `.lime/benchmark/releases/${version}`);
-}
-
-function baselineSummaryPathForVersion(version) {
-  return normalizePath(`.lime/benchmark/releases/${version}/benchmark-release-summary.json`);
-}
-
-function baselineDescriptorPathForSummary(summaryPath) {
-  return normalizePath(path.join(path.dirname(summaryPath), "benchmark-baseline.json"));
-}
-
-function resolveBaselineSummaryPath({ baselineSummaryPath = "", baselineVersion = "" } = {}) {
-  if (baselineSummaryPath && baselineVersion) {
-    throw new Error("baselineSummaryPath 和 baselineVersion 只能二选一");
-  }
-  if (baselineSummaryPath) {
-    return normalizePath(baselineSummaryPath);
-  }
-  if (baselineVersion) {
-    return baselineSummaryPathForVersion(baselineVersion);
-  }
-  return "";
-}
-
-function validateBaselineDescriptorForStrictGate({
-  rootDir,
-  strictGate,
-  baselineSummaryPath = "",
-} = {}) {
-  if (!strictGate) {
-    return {
-      status: "not_required",
-      descriptorPath: "",
-      issues: [],
-      payload: null,
-    };
-  }
-  const descriptorPath = baselineDescriptorPathForSummary(baselineSummaryPath);
-  const resolvedDescriptorPath = path.resolve(rootDir, descriptorPath);
-  const issues = [];
-  let payload = null;
-  if (!fs.existsSync(resolvedDescriptorPath)) {
-    issues.push(`${descriptorPath}: baseline descriptor 不存在`);
-  } else {
-    try {
-      payload = readJsonFile(resolvedDescriptorPath);
-    } catch (error) {
-      issues.push(`${descriptorPath}: baseline descriptor 读取失败：${error.message}`);
-    }
-  }
-  if (payload) {
-    if (payload.schemaVersion !== "benchmark-release-baseline-v1") {
-      issues.push(`${descriptorPath}: schemaVersion 不是 benchmark-release-baseline-v1`);
-    }
-    if (payload.baselineReady !== true) {
-      issues.push(`${descriptorPath}: baselineReady 不是 true`);
-    }
-    if (payload.releaseReady !== true) {
-      issues.push(`${descriptorPath}: releaseReady 不是 true`);
-    }
-    if (payload.allowNotReady === true || payload.baselineKind === "bootstrap") {
-      issues.push(`${descriptorPath}: bootstrap baseline 不能用于 strict gate`);
-    }
-    const descriptorSummaryPath = payload.summaryPath
-      ? normalizePath(payload.summaryPath)
-      : "";
-    if (descriptorSummaryPath && descriptorSummaryPath !== normalizePath(baselineSummaryPath)) {
-      issues.push(
-        `${descriptorPath}: summaryPath=${descriptorSummaryPath} 与 baselineSummaryPath=${normalizePath(baselineSummaryPath)} 不一致`,
-      );
-    }
-  }
-  return {
-    status: issues.length === 0 ? "ready" : "blocked",
-    descriptorPath,
-    issues,
-    payload,
-  };
 }
 
 function nearestExistingPath(filePath) {
@@ -327,76 +285,6 @@ function defaultStorageChecker({ rootDir, outputRoot, minFreeBytes }) {
   }
 }
 
-function npmExecutable() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
-}
-
-function externalSuiteSlug(suite) {
-  if (suite.id === "terminal-bench-release-slice") {
-    return "terminal-bench";
-  }
-  if (suite.id === "deepswe-fixed-ten") {
-    return "deepswe";
-  }
-  return suite.id;
-}
-
-function trueRunScriptForSuite(suite) {
-  if (suite.runner === "harbor-adapter") {
-    return "agent-qc:benchmark:terminal-run";
-  }
-  if (suite.runner === "deepswe-adapter") {
-    return "agent-qc:benchmark:deepswe-run";
-  }
-  return "agent-qc:benchmark:true-run";
-}
-
-function makeNpmStep({ id, kind, script, args = [], outputPath = "", blocking = true }) {
-  return {
-    id,
-    kind,
-    executable: npmExecutable(),
-    args: ["run", script, "--", ...args],
-    command: `npm run ${script}${args.length ? ` -- ${args.join(" ")}` : ""}`,
-    outputPath,
-    blocking,
-  };
-}
-
-function slugify(value) {
-  return String(value)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function parseNpmRunCommand(command) {
-  const parts = String(command).trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 3 || parts[0] !== "npm" || parts[1] !== "run") {
-    throw new Error(`只支持 npm run 命令：${command}`);
-  }
-  const script = parts[2];
-  const extraArgs = parts[3] === "--" ? parts.slice(4) : parts.slice(3);
-  return { script, args: extraArgs };
-}
-
-function buildNpmSuiteSteps(suite, root) {
-  const commands = Array.isArray(suite.commands) ? suite.commands : [];
-  return commands.map((command, index) => {
-    const parsed = parseNpmRunCommand(command);
-    const commandIndex = String(index + 1).padStart(2, "0");
-    const scriptSlug = slugify(parsed.script) || `command-${index + 1}`;
-    return makeNpmStep({
-      id: `${suite.id}:npm-${commandIndex}-${scriptSlug}`,
-      kind: "p0_npm_gate",
-      script: parsed.script,
-      args: parsed.args,
-      outputPath: `${root}/p0/${suite.id}/${commandIndex}-${scriptSlug}.json`,
-    });
-  });
-}
-
 function buildExternalSuiteSteps(suite, root, options) {
   const taskSet = Array.isArray(suite.taskSet) ? suite.taskSet : [];
   const firstTask = taskSet[0] || "<task-id>";
@@ -453,6 +341,16 @@ function buildExternalSuiteSteps(suite, root, options) {
             taskId,
             "--output",
             `${root}/${slug}/${taskId}-true-run`,
+            ...(options.currentChainEvidenceRoot
+              ? [
+                  "--current-chain-evidence",
+                  currentChainEvidencePathForTask({
+                    currentChainEvidenceRoot: options.currentChainEvidenceRoot,
+                    slug,
+                    taskId,
+                  }),
+                ]
+              : []),
             "--format",
             "json",
           ],
@@ -472,6 +370,7 @@ function buildBenchmarkReleaseRunPlan({
   outputRoot = "",
   baselineSummaryPath = "",
   baselineVersion = "",
+  currentChainEvidenceRoot = "",
   dryRunOnly = false,
   fullExternalSuites = false,
   includeP0 = false,
@@ -494,9 +393,13 @@ function buildBenchmarkReleaseRunPlan({
     throw new Error("strictGate 需要 baselineSummaryPath 或 baselineVersion");
   }
   if (promoteBaseline && !resolvedBaselineSummaryPath) {
-    throw new Error("promoteBaseline 需要 baselineSummaryPath 或 baselineVersion");
+    throw new Error(
+      "promoteBaseline 需要 baselineSummaryPath 或 baselineVersion",
+    );
   }
-  const npmSuites = (manifest.suites || []).filter((suite) => suite.runner === "npm");
+  const npmSuites = (manifest.suites || []).filter(
+    (suite) => suite.runner === "npm",
+  );
   const externalSuites = (manifest.suites || []).filter(
     (suite) => suite.runner && suite.runner !== "npm",
   );
@@ -540,12 +443,15 @@ function buildBenchmarkReleaseRunPlan({
       ],
       outputPath: `${root}/benchmark-release-checklist.json`,
     }),
-    ...(includeP0 ? npmSuites.flatMap((suite) => buildNpmSuiteSteps(suite, root)) : []),
+    ...(includeP0
+      ? npmSuites.flatMap((suite) => buildNpmSuiteSteps(suite, root))
+      : []),
     ...externalSuites.flatMap((suite) =>
       buildExternalSuiteSteps(suite, root, {
         dryRunOnly,
         fullExternalSuites: shouldRunFullExternalSuites,
         manifestPath,
+        currentChainEvidenceRoot,
       }),
     ),
     makeNpmStep({
@@ -570,7 +476,12 @@ function buildBenchmarkReleaseRunPlan({
       id: "benchmark-release:check",
       kind: "manifest_check",
       script: "agent-qc:benchmark-release:check",
-      args: ["--manifest", manifestPath, "--output", `${root}/benchmark-release-check.json`],
+      args: [
+        "--manifest",
+        manifestPath,
+        "--output",
+        `${root}/benchmark-release-check.json`,
+      ],
       outputPath: `${root}/benchmark-release-check.json`,
     }),
     ...(resolvedBaselineSummaryPath
@@ -644,6 +555,7 @@ function buildBenchmarkReleaseRunPlan({
     outputRoot: root,
     baselineSummaryPath: resolvedBaselineSummaryPath,
     baselineVersion: normalizePath(baselineVersion),
+    currentChainEvidenceRoot: normalizePath(currentChainEvidenceRoot),
     dryRunOnly: Boolean(dryRunOnly),
     fullExternalSuites: shouldRunFullExternalSuites,
     includeP0: Boolean(includeP0),
@@ -677,6 +589,7 @@ function runBenchmarkRelease({
   outputRoot = "",
   baselineSummaryPath = "",
   baselineVersion = "",
+  currentChainEvidenceRoot = "",
   dryRunOnly = false,
   fullExternalSuites = false,
   includeP0 = false,
@@ -694,6 +607,7 @@ function runBenchmarkRelease({
     outputRoot,
     baselineSummaryPath,
     baselineVersion,
+    currentChainEvidenceRoot,
     dryRunOnly,
     fullExternalSuites,
     includeP0,
@@ -725,6 +639,7 @@ function runBenchmarkRelease({
         outputRoot: plan.outputRoot,
         baselineSummaryPath: plan.baselineSummaryPath,
         baselineVersion: plan.baselineVersion,
+        currentChainEvidenceRoot: plan.currentChainEvidenceRoot,
         dryRunOnly: plan.dryRunOnly,
         fullExternalSuites: plan.fullExternalSuites,
         includeP0: plan.includeP0,
@@ -750,7 +665,9 @@ function runBenchmarkRelease({
         valid: false,
       },
       steps: skippedSteps,
-      issues: baselineDescriptor.issues.map((issue) => `baseline_descriptor: ${issue}`),
+      issues: baselineDescriptor.issues.map(
+        (issue) => `baseline_descriptor: ${issue}`,
+      ),
     };
   }
   const storage = storageChecker({
@@ -778,6 +695,7 @@ function runBenchmarkRelease({
         outputRoot: plan.outputRoot,
         baselineSummaryPath: plan.baselineSummaryPath,
         baselineVersion: plan.baselineVersion,
+        currentChainEvidenceRoot: plan.currentChainEvidenceRoot,
         dryRunOnly: plan.dryRunOnly,
         fullExternalSuites: plan.fullExternalSuites,
         includeP0: plan.includeP0,
@@ -813,8 +731,14 @@ function runBenchmarkRelease({
         reason: "previous_required_step_failed",
       };
       stepResults.push(skippedStepResult);
-      if (skippedStepResult.kind === "p0_npm_gate" && skippedStepResult.outputPath) {
-        writeJsonFile(path.resolve(rootDir, skippedStepResult.outputPath), skippedStepResult);
+      if (
+        skippedStepResult.kind === "p0_npm_gate" &&
+        skippedStepResult.outputPath
+      ) {
+        writeJsonFile(
+          path.resolve(rootDir, skippedStepResult.outputPath),
+          skippedStepResult,
+        );
       }
       continue;
     }
@@ -836,7 +760,7 @@ function runBenchmarkRelease({
       writeJsonFile(path.resolve(rootDir, stepResult.outputPath), stepResult);
     }
 
-    if (step.blocking && !passed) {
+    if (plan.strictGate && step.blocking && !passed) {
       stopped = true;
     }
   }
@@ -853,6 +777,7 @@ function runBenchmarkRelease({
       outputRoot: plan.outputRoot,
       baselineSummaryPath: plan.baselineSummaryPath,
       baselineVersion: plan.baselineVersion,
+      currentChainEvidenceRoot: plan.currentChainEvidenceRoot,
       dryRunOnly: plan.dryRunOnly,
       fullExternalSuites: plan.fullExternalSuites,
       includeP0: plan.includeP0,
@@ -901,6 +826,7 @@ function main() {
     outputRoot: options.outputRoot,
     baselineSummaryPath: options.baselineSummaryPath,
     baselineVersion: options.baselineVersion,
+    currentChainEvidenceRoot: options.currentChainEvidenceRoot,
     dryRunOnly: options.dryRunOnly,
     fullExternalSuites: options.fullExternalSuites,
     includeP0: options.includeP0,
@@ -913,23 +839,62 @@ function main() {
     options.format === "json"
       ? `${JSON.stringify({ ...report, validation }, null, 2)}\n`
       : renderMarkdown(report);
-  const outputPath = path.join(report.plan.outputRoot, "benchmark-release-run.json");
+  const outputPath = path.join(
+    report.plan.outputRoot,
+    "benchmark-release-run.json",
+  );
+  const auditReportPath = path.join(
+    report.plan.outputRoot,
+    "benchmark-release-report.md",
+  );
   let outputWriteError = "";
+  let auditReportError = "";
   try {
     writeJsonFile(outputPath, { ...report, validation });
   } catch (error) {
     outputWriteError = error.message;
   }
+  if (!outputWriteError) {
+    try {
+      const auditReportResult = writeReleaseAuditReportFile({
+        rootDir: process.cwd(),
+        releaseRoot: report.plan.outputRoot,
+        outputPath: auditReportPath,
+      });
+      if (!auditReportResult.validation.valid) {
+        auditReportError = auditReportResult.validation.issues.join("; ");
+      }
+    } catch (error) {
+      auditReportError = error.message;
+    }
+  }
   if (options.stdoutMode === "full") {
     process.stdout.write(content);
   } else if (options.stdoutMode === "summary") {
-    process.stdout.write(renderConsoleSummary(report, { outputPath, outputWriteError }));
+    process.stdout.write(
+      renderConsoleSummary(report, {
+        outputPath,
+        outputWriteError,
+        auditReportPath,
+        auditReportError,
+      }),
+    );
   }
   if (outputWriteError) {
-    console.error(`[benchmark-release-run] report 写入失败：${outputWriteError}`);
+    console.error(
+      `[benchmark-release-run] report 写入失败：${outputWriteError}`,
+    );
+  }
+  if (auditReportError) {
+    console.error(
+      `[benchmark-release-run] audit report 生成失败：${auditReportError}`,
+    );
   }
 
-  if (options.check && (!validation.valid || outputWriteError)) {
+  if (
+    options.check &&
+    (!validation.valid || outputWriteError || auditReportError)
+  ) {
     for (const issue of validation.issues) {
       console.error(`[benchmark-release-run] ${issue}`);
     }
@@ -937,7 +902,10 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main();
 }
 
@@ -947,4 +915,5 @@ export {
   renderMarkdown,
   runBenchmarkRelease,
   validateBenchmarkReleaseRun,
+  writeReleaseAuditReportFile,
 };

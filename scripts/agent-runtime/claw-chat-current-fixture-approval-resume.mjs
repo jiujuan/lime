@@ -245,6 +245,7 @@ export async function runApprovalRequestDecisionScenario({
     const guiCanceled = sanitizeJson(
       await waitForGuiChatCanceled(page, options, {
         prompt: APPROVAL_REQUEST_RESUME_PROMPT,
+        requireApprovalRecord: true,
       }),
     );
 

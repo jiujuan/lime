@@ -116,7 +116,7 @@ export function buildHarnessStatusPanelSectionModels({
   mcpPrepareError,
   onPrepareMcpTargets,
   onReplayPendingRequest,
-  onRespondToAction,
+  onRespondToAction: _onRespondToAction,
   onResumeThread,
   pendingActions,
   previewModel,

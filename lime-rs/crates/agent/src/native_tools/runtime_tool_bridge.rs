@@ -1,5 +1,5 @@
 use crate::runtime_facade::current_agent_turn_context;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
+use aster::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -323,7 +323,7 @@ fn runtime_failure_to_aster(error: RuntimeToolExecutionFailure) -> ToolError {
 mod tests {
     use super::*;
     use agent_protocol::turn_context::TurnContextOverride;
-    use aster::tools::{PermissionBehavior, ToolContext};
+    use aster::{PermissionBehavior, ToolContext};
     use serde_json::json;
     use std::fs;
     use tempfile::tempdir;

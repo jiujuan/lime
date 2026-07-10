@@ -263,6 +263,44 @@ export function hasLocallyInterruptedAgentStreamBinding(
   );
 }
 
+export function consumeLocallyInterruptedAgentStreamBinding(
+  target?: AgentStreamResumeBindingTarget | null,
+): boolean {
+  const sessionId = normalizeNonEmpty(target?.sessionId);
+  if (!sessionId) {
+    return false;
+  }
+
+  pruneAgentStreamBindingRecords(
+    locallyInterruptedAgentStreamBindingRecords,
+    LOCALLY_INTERRUPTED_STREAM_BINDING_TTL_MS,
+  );
+  const turnId = normalizeRealTurnId(target?.turnId);
+  const exactKey = createLocallyStartedAgentStreamBindingKey(sessionId, turnId);
+  const sessionKey = createLocallyStartedAgentStreamBindingKey(sessionId, null);
+  const record =
+    locallyInterruptedAgentStreamBindingRecords.get(exactKey) ??
+    locallyInterruptedAgentStreamBindingRecords.get(sessionKey);
+  if (!record) {
+    return false;
+  }
+
+  locallyInterruptedAgentStreamBindingRecords.delete(exactKey);
+  locallyInterruptedAgentStreamBindingRecords.delete(sessionKey);
+  if (record.turnId) {
+    locallyInterruptedAgentStreamBindingRecords.delete(
+      createLocallyStartedAgentStreamBindingKey(
+        record.sessionId,
+        record.turnId,
+      ),
+    );
+  }
+  locallyInterruptedAgentStreamBindingRecords.delete(
+    createLocallyStartedAgentStreamBindingKey(record.sessionId, null),
+  );
+  return true;
+}
+
 function findRunningThreadTurn(
   threadTurns: readonly AgentThreadTurn[],
 ): AgentThreadTurn | null {
@@ -284,9 +322,7 @@ function findRunningThreadReadTurnId(
     if (isRunningStatus(turn?.status)) {
       return (
         normalizeRealTurnId(turn.turn_id) ??
-        normalizeRealTurnId(
-          (turn as { turnId?: string | null }).turnId,
-        ) ??
+        normalizeRealTurnId((turn as { turnId?: string | null }).turnId) ??
         normalizeRealTurnId((turn as { id?: string | null }).id)
       );
     }
@@ -358,8 +394,12 @@ export function resolveAgentStreamResumeBindingTarget(
   const turnId =
     normalizeRealTurnId(options.threadRead?.active_turn_id) ??
     normalizeRealTurnId(
-      (options.threadRead as { activeTurnId?: string | null } | null | undefined)
-        ?.activeTurnId,
+      (
+        options.threadRead as
+          | { activeTurnId?: string | null }
+          | null
+          | undefined
+      )?.activeTurnId,
     ) ??
     findRunningThreadReadTurnId(options.threadRead);
   if (!turnId) {

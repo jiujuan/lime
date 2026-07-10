@@ -111,10 +111,11 @@ describe("Session files frontend boundary", () => {
     ].join("\n");
     const processorSource = [
       readRepoFile("lime-rs/crates/app-server/src/processor/mod.rs"),
+      readRepoFile("lime-rs/crates/app-server/src/processor/dispatch.rs"),
       readRepoFile("lime-rs/crates/app-server/src/processor/workspace.rs"),
     ].join("\n");
-    const clientProtocolSource = readRepoFile(
-      "packages/app-server-client/src/protocol.ts",
+    const generatedClientProtocolSource = readRepoFile(
+      "packages/app-server-client/src/generated/protocol-types.ts",
     );
     const appServerFacadeSource = readAppServerApiSources();
 
@@ -131,7 +132,7 @@ describe("Session files frontend boundary", () => {
           .replace("delete", "DELETE")
           .replace("list", "LIST"),
       );
-      expect(clientProtocolSource).toContain(`"${method}"`);
+      expect(generatedClientProtocolSource).toContain(`"${method}"`);
       expect(appServerFacadeSource).toContain(
         `METHOD_SESSION_FILE_${method
           .replace("sessionFile/", "")

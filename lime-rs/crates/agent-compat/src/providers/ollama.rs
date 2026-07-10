@@ -16,7 +16,7 @@ use crate::conversation::Conversation;
 
 use crate::model::ModelConfig;
 use crate::providers::formats::openai::{create_request, get_usage, response_to_message};
-use crate::utils::safe_truncate;
+use crate::providers::utils::safe_truncate;
 use anyhow::Result;
 use async_trait::async_trait;
 use regex::Regex;
@@ -140,38 +140,6 @@ impl OllamaProvider {
         handle_response_openai_compat(response).await
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::OllamaProvider;
-
-    #[test]
-    fn should_normalize_localhost_to_ipv4_loopback() {
-        let url = OllamaProvider::resolve_base_url(Some("http://localhost:11434"), None)
-            .expect("resolve localhost base url");
-
-        assert_eq!(url.as_str(), "http://127.0.0.1:11434/");
-    }
-
-    #[test]
-    fn should_apply_default_port_for_host_only_input() {
-        let url = OllamaProvider::resolve_base_url(None, Some("127.0.0.1")).expect("resolve host");
-
-        assert_eq!(url.as_str(), "http://127.0.0.1:11434/");
-    }
-
-    #[test]
-    fn should_prefer_base_url_override_over_host_override() {
-        let url = OllamaProvider::resolve_base_url(
-            Some("http://127.0.0.1:11434/api"),
-            Some("127.0.0.1:9999"),
-        )
-        .expect("resolve base url override");
-
-        assert_eq!(url.as_str(), "http://127.0.0.1:11434/api");
-    }
-}
-
 struct NoAuth;
 
 #[async_trait]

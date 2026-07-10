@@ -134,6 +134,12 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     () => normalizedToolName === "toolsearch",
     [normalizedToolName],
   );
+  const isMcpStructuredToolResult = useMemo(
+    () =>
+      normalizedToolName === "mcp" ||
+      toolCall.name.trim().toLowerCase().startsWith("mcp__"),
+    [normalizedToolName, toolCall.name],
+  );
   const isSkillLikeTool =
     toolDisplay.family === "skill" ||
     metadata?.tool_family === "skill" ||
@@ -278,6 +284,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       return structuredContentDetail || "";
     }
 
+    if (isMcpStructuredToolResult && structuredContentDetail) {
+      return structuredContentDetail;
+    }
+
     if (isUnifiedWebFetchToolName(toolCall.name)) {
       return resolveWebFetchResultText({
         rawResultText,
@@ -327,6 +337,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     );
   }, [
     importedSourcePresentation,
+    isMcpStructuredToolResult,
     metadata,
     processNarrative.postSummary,
     processNarrative.preSummary,
@@ -338,7 +349,6 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     structuredContentDetail,
     t,
     toolCall.name,
-    toolCall.result,
     toolCall.status,
   ]);
   const isRawDiagnosticDetail = useMemo(
@@ -505,6 +515,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       toolCall.status !== "running" &&
       Boolean(structuredResultPreview) &&
       (shouldPreferStructuredProtocolResult ||
+        (isMcpStructuredToolResult && Boolean(structuredContentDetail)) ||
         (toolDisplay.family === "command" &&
           (processNarrative.postSource === "generic" ||
             processNarrative.postSource === "none")));
@@ -531,12 +542,14 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     headline,
     importedSourcePresentation,
     isSkillLikeTool,
+    isMcpStructuredToolResult,
     liveResultPreview,
     processNarrative.postSource,
     processNarrative.postSummary,
     processNarrative.preSummary,
     shouldSuppressResultText,
     shouldPreferStructuredProtocolResult,
+    structuredContentDetail,
     structuredResultPreview,
     t,
     toolCall.progress?.message,

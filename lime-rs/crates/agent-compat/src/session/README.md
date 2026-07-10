@@ -35,7 +35,7 @@ Session 模块提供会话管理功能，支持可插拔的存储抽象。
 ### 方式 1: 使用默认 SQLite 存储（向后兼容）
 
 ```rust
-use aster::session::SessionManager;
+use aster::SessionManager;
 
 // 使用全局 SessionManager（默认 SQLite 存储）
 let session = SessionManager::create_session(dir, name, session_type).await?;
@@ -45,8 +45,7 @@ SessionManager::add_message(&session.id, &message).await?;
 ### 方式 2: 注入自定义存储（推荐）
 
 ```rust
-use aster::session::{SessionStore, NoopSessionStore};
-use aster::agents::Agent;
+use aster::{Agent, NoopSessionStore, SessionStore};
 use std::sync::Arc;
 
 // 使用空存储（不保存任何数据）
@@ -84,6 +83,7 @@ let agent = Agent::new().with_session_store(store);
 ### NoopSessionStore
 
 空实现，不保存任何数据。适用于：
+
 - 测试场景
 - 无状态 API 服务
 - 应用层自行管理存储
@@ -97,11 +97,13 @@ let agent = Agent::new().with_session_store(store);
 ### 从旧版本迁移
 
 旧代码（直接使用 SessionManager）：
+
 ```rust
 SessionManager::add_message(&session_id, &msg).await?;
 ```
 
 新代码（使用 Agent 注入存储）：
+
 ```rust
 let agent = Agent::new().with_session_store(my_store);
 // Agent 内部会自动使用注入的存储

@@ -36,6 +36,7 @@ import {
   filterActionsForCurrentAssistantTail,
   findActionRequestSourceMessageId,
 } from "../utils/currentTurnActionRequests";
+import type { AgentSessionDetailRefreshRequest } from "./agentSessionRefresh";
 
 interface UseAgentToolsOptions {
   runtime: AgentRuntimeAdapter;
@@ -46,6 +47,10 @@ interface UseAgentToolsOptions {
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
+  refreshSessionDetail?: (
+    targetSessionId?: string,
+    request?: AgentSessionDetailRefreshRequest,
+  ) => Promise<boolean>;
 }
 
 function findActionRequestInMessages(
@@ -97,6 +102,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
     setMessages,
     setThreadItems,
     refreshSessionReadModel,
+    refreshSessionDetail,
   } = options;
 
   const [pendingActions, setPendingActions] = useState<ActionRequired[]>([]);
@@ -107,6 +113,22 @@ export function useAgentTools(options: UseAgentToolsOptions) {
   const queuedFallbackResponsesRef = useRef<
     Map<string, QueuedFallbackActionResponse>
   >(new Map());
+
+  const refreshActionResponseSession = useCallback(
+    async (targetSessionId: string) => {
+      if (refreshSessionDetail) {
+        const refreshedDetail = await refreshSessionDetail(targetSessionId, {
+          source: "actionRespond",
+          detailMergeMode: "runtime_sync",
+        });
+        if (refreshedDetail) {
+          return true;
+        }
+      }
+      return refreshSessionReadModel(targetSessionId);
+    },
+    [refreshSessionDetail, refreshSessionReadModel],
+  );
 
   const confirmAction = useCallback(
     async (response: ConfirmResponse) => {
@@ -300,7 +322,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
           ),
         );
         if (refreshSessionId) {
-          await refreshSessionReadModel(refreshSessionId);
+          await refreshActionResponseSession(refreshSessionId);
         }
         setSubmittedActionsInFlight((prev) =>
           removeActionsByRequestIds(prev, acknowledgedRequestIds),
@@ -322,6 +344,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
       currentStreamingEventNameRef,
       messages,
       pendingActions,
+      refreshActionResponseSession,
       runtime,
       refreshSessionReadModel,
       sessionIdRef,

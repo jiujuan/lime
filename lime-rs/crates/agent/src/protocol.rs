@@ -74,11 +74,7 @@ pub struct AgentTokenUsage {
     pub cache_creation_input_tokens: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentContextTraceStep {
-    pub stage: String,
-    pub detail: String,
-}
+pub type AgentContextTraceStep = agent_protocol::context_trace::ContextTraceStep;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AgentContextBudget {

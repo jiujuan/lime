@@ -385,6 +385,21 @@ pub fn runtime_native_tool_surface(
     }
 }
 
+pub fn runtime_native_tool_overlay_for_dispatch_name(
+    tool_name: &str,
+) -> Option<RuntimeNativeToolOverlay> {
+    let canonical_name = crate::native_dispatch::runtime_native_dispatch()
+        .canonical_name(tool_name)?
+        .to_string();
+    runtime_native_tool_overlay_registrations()
+        .iter()
+        .find(|registration| {
+            registration.owner() == RuntimeNativeToolRegistrationOwner::NativeDispatch
+                && registration.name().eq_ignore_ascii_case(&canonical_name)
+        })
+        .map(|registration| registration.tool())
+}
+
 pub fn check_runtime_native_tool_permissions(
     tool: RuntimeNativeToolOverlay,
     params: &Value,
@@ -544,6 +559,7 @@ const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
     "update_plan",
     "WebFetch",
     "WebSearch",
+    TOOL_SEARCH_TOOL_NAME,
     "memory_list",
     "memory_read",
     "memory_search",
@@ -699,6 +715,24 @@ mod tests {
     }
 
     #[test]
+    fn runtime_native_tool_overlay_lookup_follows_dispatch_aliases() {
+        assert_eq!(
+            runtime_native_tool_overlay_for_dispatch_name("UpdatePlanTool"),
+            Some(RuntimeNativeToolOverlay::UpdatePlan)
+        );
+        assert_eq!(
+            runtime_native_tool_overlay_for_dispatch_name("clock.sleep"),
+            Some(RuntimeNativeToolOverlay::Sleep)
+        );
+        assert_eq!(
+            runtime_native_tool_overlay_for_dispatch_name("mcp__system__web_search"),
+            Some(RuntimeNativeToolOverlay::WebSearch)
+        );
+        assert_eq!(runtime_native_tool_overlay_for_dispatch_name("Skill"), None);
+        assert_eq!(runtime_native_tool_overlay_for_dispatch_name("Write"), None);
+    }
+
+    #[test]
     fn runtime_native_tool_surface_keeps_wrapper_alias_and_retry_contract() {
         assert_eq!(
             runtime_native_tool_surface(RuntimeNativeToolOverlay::ViewImage)
@@ -775,6 +809,7 @@ mod tests {
         assert!(runtime_native_tool_registration_is_allowed("memory_list"));
         assert!(runtime_native_tool_registration_is_allowed(" Memory_List "));
         assert!(runtime_native_tool_registration_is_allowed("WebSearch"));
+        assert!(runtime_native_tool_registration_is_allowed("tool_search"));
         assert!(!runtime_native_tool_registration_is_allowed(""));
         assert!(!runtime_native_tool_registration_is_allowed("Write"));
         assert!(!runtime_native_tool_registration_is_allowed(

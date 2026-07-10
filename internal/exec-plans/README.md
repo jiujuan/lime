@@ -33,8 +33,7 @@
 - 生产命令 current 迁移计划：`internal/exec-plans/production-command-current-migration-plan.md`
 - Agent App uninstall current UI 进度：`internal/exec-plans/agent-app-uninstall-current-ui-progress.md`
 - P16 Diagnostics current fail-closed 进度：`internal/exec-plans/p16-diagnostics-current-fail-closed-progress.md`
-- 旧 Tauri wrapper 清理队列：`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
-- 旧 Tauri wrapper 机械 inventory：`internal/exec-plans/tauri-wrapper-command-inventory.md`
+- 旧 Tauri wrapper 清理入口已合并到生产命令 current 迁移计划；历史 quick cleanup 队列和机械 inventory 文件已删除，不再作为 current 执行计划入口。
 - Provider 模型能力 taxonomy 进度日志：`internal/exec-plans/provider-model-taxonomy-progress.md`
 - MCP 现代化进度：`internal/exec-plans/mcp-modernization-progress.md`
 - Right Surface 统一承载实施进度：`internal/exec-plans/right-surface-implementation-progress.md`

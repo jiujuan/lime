@@ -47,4 +47,44 @@ describe("agentStreamPlanEventController", () => {
       },
     });
   });
+
+  it("plan.final 只有 structured plan 时也应生成可恢复 thread item", () => {
+    const item = buildAgentStreamPlanThreadItem({
+      activeSessionId: "session-1",
+      fallbackTurnId: "turn-1",
+      now: "2026-06-23T10:00:00.000Z",
+      sequence: 8,
+      event: {
+        type: "plan_final",
+        text: "",
+        revisionId: "proposed_plan:fixture-1",
+        source: "proposed_plan",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        plan: [
+          { step: "确认计划模式请求进入 App Server", status: "completed" },
+          { step: "输出 proposed_plan", status: "in_progress" },
+        ],
+      } satisfies AgentEventPlanFinal & AgentEventEnvelope,
+    });
+
+    expect(item).toMatchObject({
+      id: "plan:proposed_plan:fixture-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "plan",
+      status: "completed",
+      text:
+        "- 确认计划模式请求进入 App Server\n" +
+        "- 输出 proposed_plan",
+      metadata: {
+        revisionId: "proposed_plan:fixture-1",
+        source: "proposed_plan",
+        plan: [
+          { step: "确认计划模式请求进入 App Server", status: "completed" },
+          { step: "输出 proposed_plan", status: "in_progress" },
+        ],
+      },
+    });
+  });
 });

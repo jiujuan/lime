@@ -1,5 +1,5 @@
 /* global process */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -47,6 +47,11 @@ const VENDOR_CONTEXT_POLICY_FORBIDDEN_SNIPPETS = [
 
 function readRepoFile(path: string): string {
   return readFileSync(join(REPO_ROOT, path), "utf8");
+}
+
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = join(REPO_ROOT, path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
 }
 
 describe("Aster context policy migration boundary", () => {
@@ -103,8 +108,8 @@ describe("Aster context policy migration boundary", () => {
   });
 
   it("vendor Aster 不得重新承接 selected model context policy / token-limit 规则", () => {
-    const vendorContextSource = readRepoFile(VENDOR_CONTEXT_MGMT_PATH);
-    const vendorAgentSource = readRepoFile(VENDOR_AGENT_PATH);
+    const vendorContextSource = readOptionalRepoFile(VENDOR_CONTEXT_MGMT_PATH);
+    const vendorAgentSource = readOptionalRepoFile(VENDOR_AGENT_PATH);
     const vendorContextLeaks = VENDOR_CONTEXT_POLICY_FORBIDDEN_SNIPPETS.filter(
       (snippet) => vendorContextSource.includes(snippet),
     ).map((snippet) => `${VENDOR_CONTEXT_MGMT_PATH}: ${snippet}`);

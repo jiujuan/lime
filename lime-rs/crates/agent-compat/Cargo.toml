@@ -74,10 +74,7 @@ regex = "1.11.1"
 scraper = "0.20"
 async-trait = "0.1.89"
 async-stream = "0.3"
-minijinja = { version = "2.12.0", features = ["loader"] }
 chrono = { version = "0.4.38", features = ["serde"] }
-chrono-tz = "0.10"
-cron = "0.15"
 clap = { version = "4.4", features = ["derive"] }
 indoc = "2.0.5"
 nanoid = "0.4"
@@ -105,7 +102,6 @@ hostname = "0.4"
 etcetera = { workspace = true }
 rand = "0.8.5"
 utoipa = { version = "4.1", features = ["chrono"] }
-tokio-cron-scheduler = "0.14.0"
 urlencoding = "2.1"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "json"] }
 
@@ -133,7 +129,6 @@ zip = "0.6"
 sys-info = "0.9"
 
 schemars = { version = "1.0.4", default-features = false, features = ["derive"] }
-insta = "1.43.2"
 paste = "1.0.0"
 posthog-rs = { version = "0.3.7", optional = true }
 shellexpand = "3.1.1"

@@ -12,6 +12,7 @@
     "evidenceRoot": ".lime/benchmark/releases/<version>",
     "releaseVerdictRequires": [
       "lime-p0-gate",
+      "coding-workflow-p0",
       "harness-replay-trend",
       "agent-qc-p0-manifest",
       "terminal-bench-release-slice",
@@ -86,14 +87,31 @@
       "status": "planned"
     },
     {
-      "id": "harness-replay-trend",
+      "id": "coding-workflow-p0",
       "priority": "P0",
       "runner": "npm",
       "requiredForRelease": true,
       "commands": [
-        "npm run harness:eval",
-        "npm run harness:eval:trend"
+        "npm run smoke:agent-runtime-tool-execution -- --batch coding-current-tools",
+        "npm run smoke:agent-runtime-current-fixture",
+        "npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs"
       ],
+      "evidenceRequired": [
+        "provider request exposes Read/apply_patch/Glob/Grep/Bash through current tool lifecycle",
+        "runtime transcript records tool request, tool result, patch/file artifact, command output, and no mock fallback",
+        "App Server Evidence Pack exported through evidence/export with Thread/Turn/Item coding projection",
+        "workspace diff or agentSession/fileCheckpoint diff for changed files",
+        "coding event sequence covers apply_patch/command/file_changed/test output where applicable",
+        "failed coding task repair produces replay/regression promotion record before waiver"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "harness-replay-trend",
+      "priority": "P0",
+      "runner": "npm",
+      "requiredForRelease": true,
+      "commands": ["npm run harness:eval", "npm run harness:eval:trend"],
       "evidenceRequired": [
         ".lime/benchmark/runs/<run-id>/harness-eval-summary.json",
         ".lime/benchmark/runs/<run-id>/harness-eval-trend.json"

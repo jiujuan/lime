@@ -211,7 +211,10 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         {
           runStartHooks: true,
           workingDir: null,
-          metadata: undefined,
+          metadata: expect.objectContaining({
+            modelName: expect.any(String),
+            providerSelector: expect.any(String),
+          }),
         },
       );
       expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
@@ -322,11 +325,11 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(
         mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
           ?.provider_preference,
-      ).toBe(selectedProvider);
+      ).toBeUndefined();
       expect(
         mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
           ?.model_preference,
-      ).toBe(selectedModel);
+      ).toBeUndefined();
       expect(mockUpdateAgentRuntimeSession).not.toHaveBeenCalledWith({
         session_id: "session-first-send",
         provider_name: harness.getValue().providerType,
@@ -363,10 +366,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       });
 
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledTimes(1);
-      expect(harness.getValue().messages).toHaveLength(2);
-      expect(harness.getValue().messages[1]?.runtimeStatus?.title).toBe(
-        "正在准备处理",
-      );
+      expect(harness.getValue().messages).toHaveLength(0);
 
       let secondSendPromise: Promise<void> | null = null;
       await act(async () => {
@@ -377,10 +377,8 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       });
 
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledTimes(1);
-      expect(harness.getValue().messages).toHaveLength(4);
-      expect(harness.getValue().messages[3]?.runtimeStatus?.title).toBe(
-        "已加入排队列表",
-      );
+      expect(harness.getValue().messages).toHaveLength(0);
+      expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
 
       await act(async () => {
         deferredSession.resolve("session-first-send-gated");
@@ -640,7 +638,7 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         localStorage.getItem(
           `agent_topic_model_pref_${workspaceId}_${createdSessionId}`,
         ),
-      ).toBe(null);
+      ).not.toBe(null);
       expect(scheduledTasks).toHaveLength(1);
 
       act(() => {

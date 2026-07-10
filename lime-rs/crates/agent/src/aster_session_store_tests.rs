@@ -1,14 +1,14 @@
 use super::*;
-use aster::conversation::message::Message;
-use aster::conversation::Conversation;
-use aster::model::ModelConfig;
-use aster::recipe::Recipe;
-use aster::session::{
+use aster::Conversation;
+use aster::Message;
+use aster::ModelConfig;
+use aster::Recipe;
+use aster::{
     initialize_session_runtime_store, require_shared_session_runtime_store,
     InMemoryThreadRuntimeStore, ItemRuntime, ItemRuntimePayload, ItemStatus, ThreadRuntime,
     TokenStatsUpdate, TurnRuntime,
 };
-use aster::session::{SessionStore, SessionType};
+use aster::{SessionStore, SessionType};
 use chrono::Utc;
 use lime_core::app_paths;
 use lime_core::database::schema::create_tables;
@@ -54,6 +54,22 @@ fn setup_test_store() -> LimeSessionStore {
     let conn = Connection::open_in_memory().expect("创建内存数据库失败");
     create_tables(&conn).expect("初始化表结构失败");
     LimeSessionStore::new(Arc::new(Mutex::new(conn)))
+}
+
+fn test_recipe_fixture() -> Recipe {
+    serde_json::from_value(serde_json::json!({
+        "version": "1.0.0",
+        "title": "demo",
+        "description": "demo recipe",
+        "instructions": null,
+        "prompt": null,
+        "extensions": null,
+        "activities": null,
+        "response": null,
+        "sub_recipes": null,
+        "retry": null,
+    }))
+    .expect("recipe fixture")
 }
 
 fn create_test_legacy_agent_messages_table(conn: &Connection) {
@@ -249,21 +265,7 @@ async fn update_session_metadata_should_roundtrip() {
     store
         .update_recipe(
             &session.id,
-            Some(Recipe {
-                version: "1.0.0".to_string(),
-                title: "demo".to_string(),
-                description: "demo recipe".to_string(),
-                instructions: None,
-                prompt: None,
-                extensions: None,
-                settings: None,
-                activities: None,
-                author: None,
-                parameters: None,
-                response: None,
-                sub_recipes: None,
-                retry: None,
-            }),
+            Some(test_recipe_fixture()),
             Some(HashMap::from([(
                 "temperature".to_string(),
                 "0.2".to_string(),
@@ -715,21 +717,7 @@ async fn update_recipe_should_clear_existing_values_when_input_is_none() {
     store
         .update_recipe(
             &session.id,
-            Some(Recipe {
-                version: "1.0.0".to_string(),
-                title: "demo".to_string(),
-                description: "demo recipe".to_string(),
-                instructions: None,
-                prompt: None,
-                extensions: None,
-                settings: None,
-                activities: None,
-                author: None,
-                parameters: None,
-                response: None,
-                sub_recipes: None,
-                retry: None,
-            }),
+            Some(test_recipe_fixture()),
             Some(HashMap::from([(
                 "temperature".to_string(),
                 "0.2".to_string(),

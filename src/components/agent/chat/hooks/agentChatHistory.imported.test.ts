@@ -238,7 +238,11 @@ describe("agentChatHistory imported Codex timeline", () => {
       text: "I need to inspect the test failure first.",
       metadata: {
         imported: true,
+        sequence: 1,
+        source: "thread_item_reasoning",
         source_client: "codex",
+        threadItemId: "reasoning-codex",
+        turnId: "turn-codex",
       },
     });
   });

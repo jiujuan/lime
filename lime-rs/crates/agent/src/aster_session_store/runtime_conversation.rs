@@ -1,7 +1,7 @@
 use anyhow::Result;
-use aster::conversation::message::Message;
-use aster::conversation::Conversation;
-use aster::session::{require_shared_session_runtime_store, ThreadRuntime, TurnRuntime};
+use aster::Conversation;
+use aster::Message;
+use aster::{require_shared_session_runtime_store, ThreadRuntime, TurnRuntime};
 use std::path::Path;
 use thread_store::conversation_transcript::{
     count_selected_messages, select_conversation_messages, ConversationMessageRecord,
@@ -87,7 +87,7 @@ pub(super) async fn import_legacy_conversation_if_runtime_empty(
 }
 
 async fn delete_transcript_items(
-    store: &(impl aster::session::ThreadRuntimeStore + ?Sized),
+    store: &(impl aster::ThreadRuntimeStore + ?Sized),
     session_id: &str,
 ) -> Result<()> {
     for thread in store.list_threads(session_id).await? {
@@ -101,7 +101,7 @@ async fn delete_transcript_items(
 }
 
 async fn load_runtime_conversation_from_store(
-    store: &(impl aster::session::ThreadRuntimeStore + ?Sized),
+    store: &(impl aster::ThreadRuntimeStore + ?Sized),
     session_id: &str,
 ) -> Result<Option<Conversation>> {
     let threads = store.list_threads(session_id).await?;
@@ -128,7 +128,7 @@ async fn load_runtime_conversation_from_store(
 }
 
 async fn collect_conversation_records_from_threads(
-    store: &(impl aster::session::ThreadRuntimeStore + ?Sized),
+    store: &(impl aster::ThreadRuntimeStore + ?Sized),
     threads: Vec<ThreadRuntime>,
 ) -> Result<Vec<ConversationMessageRecord>> {
     let mut records = Vec::new();
@@ -164,11 +164,11 @@ fn conversation_record_to_message(record: ConversationMessageRecord) -> Result<O
 }
 
 async fn ensure_runtime_turn(
-    store: &(impl aster::session::ThreadRuntimeStore + ?Sized),
+    store: &(impl aster::ThreadRuntimeStore + ?Sized),
     session_id: &str,
     working_dir: &Path,
 ) -> Result<TurnRuntime> {
-    let scope = aster::session_context::current_action_scope();
+    let scope = aster::current_action_scope();
     let thread_id = scope
         .as_ref()
         .and_then(|scope| scope.thread_id.clone())
@@ -196,7 +196,7 @@ async fn ensure_runtime_turn(
             session_id.to_string(),
             thread_id,
             None,
-            aster::session_context::current_turn_context(),
+            aster::current_turn_context(),
         ))
         .await
 }

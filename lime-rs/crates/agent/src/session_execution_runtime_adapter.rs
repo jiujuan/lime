@@ -14,7 +14,7 @@ use crate::runtime_store_aster_adapter::runtime_output_schema_from_aster;
 use crate::session_execution_runtime::SessionExecutionRuntimeSnapshotProjection;
 
 pub(crate) fn project_aster_output_schema_runtime(
-    runtime: &aster::session::TurnOutputSchemaRuntime,
+    runtime: &aster::TurnOutputSchemaRuntime,
 ) -> agent_protocol::turn_context::TurnOutputSchemaRuntime {
     runtime_output_schema_from_aster(runtime)
 }

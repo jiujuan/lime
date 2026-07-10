@@ -1,13 +1,10 @@
 use super::provider_env::{set_provider_env_vars, should_disable_provider_default_fast_model};
 use super::CredentialBridgeError;
-use aster::conversation::message::{Message, MessageContent};
-use aster::model::ModelConfig;
-use aster::providers::base::{
-    LeadWorkerProviderTrait, MessageStream, Provider, ProviderMetadata, ProviderUsage,
-    SessionNameGenerationExecutionStrategy,
+use aster::{
+    LeadWorkerProviderTrait, MessageStream, ModelConfig, Provider, ProviderError, ProviderMetadata,
+    ProviderUsage, RetryConfig, SessionNameGenerationExecutionStrategy,
 };
-use aster::providers::errors::ProviderError;
-use aster::providers::RetryConfig;
+use aster::{Message, MessageContent};
 use async_trait::async_trait;
 use model_provider::provider_stream::{
     RuntimeProviderBackend, RuntimeReplyProviderBinding, RuntimeReplyProviderCapabilities,
@@ -79,7 +76,7 @@ impl CompatAsterReplyProviderBackend {
 
         let model_config = build_provider_model_config(config)?;
 
-        aster::providers::create(&config.provider_name, model_config)
+        aster::create_provider(&config.provider_name, model_config)
             .await
             .map(|provider| Self {
                 inner: wrap_provider_with_safety(provider, disable_default_fast_model),
@@ -308,7 +305,7 @@ impl Provider for ProviderSafety {
 
     async fn generate_session_name(
         &self,
-        messages: &aster::conversation::Conversation,
+        messages: &aster::Conversation,
     ) -> Result<String, ProviderError> {
         if !self.disable_default_fast_model {
             return self.inner.generate_session_name(messages).await;
@@ -350,13 +347,12 @@ mod tests {
         build_provider_model_config, normalize_provider_messages, normalize_provider_model_config,
         wrap_provider_with_safety,
     };
-    use aster::conversation::message::{Message, MessageContent};
-    use aster::conversation::Conversation;
-    use aster::model::ModelConfig;
-    use aster::providers::base::{
-        Provider, ProviderMetadata, ProviderUsage, SessionNameGenerationExecutionStrategy, Usage,
+    use aster::Conversation;
+    use aster::{Message, MessageContent};
+    use aster::{
+        ModelConfig, Provider, ProviderError, ProviderMetadata, ProviderUsage,
+        SessionNameGenerationExecutionStrategy, Usage,
     };
-    use aster::providers::errors::ProviderError;
     use async_trait::async_trait;
     use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
     use rmcp::model::{CallToolRequestParam, CallToolResult, ErrorCode, ErrorData, Tool};
@@ -525,7 +521,7 @@ mod tests {
 
         async fn generate_session_name(
             &self,
-            _messages: &aster::conversation::Conversation,
+            _messages: &aster::Conversation,
         ) -> Result<String, ProviderError> {
             Ok("wrapped-title".to_string())
         }

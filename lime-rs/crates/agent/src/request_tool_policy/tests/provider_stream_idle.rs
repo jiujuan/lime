@@ -1,7 +1,7 @@
 use super::*;
 use crate::request_tool_policy::aster_reply_adapter::AsterReplyRuntimeHost;
 use agent_runtime::reply_stream::MIN_PROVIDER_STREAM_FIRST_EVENT_TIMEOUT;
-use aster::conversation::message::Message;
+use aster::Message;
 
 const PROVIDER_STREAM_IDLE_TIMEOUT: Duration = Duration::from_millis(200);
 
@@ -28,7 +28,7 @@ impl Provider for IdleThenTextProvider {
 
     async fn complete_with_model(
         &self,
-        _model_config: &aster::model::ModelConfig,
+        _model_config: &aster::ModelConfig,
         _system: &str,
         _messages: &[Message],
         _tools: &[rmcp::model::Tool],
@@ -44,7 +44,7 @@ impl Provider for IdleThenTextProvider {
         _system: &str,
         _messages: &[Message],
         _tools: &[rmcp::model::Tool],
-    ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+    ) -> Result<aster::MessageStream, ProviderError> {
         let attempt = self.attempts.fetch_add(1, Ordering::SeqCst);
         Ok(Box::pin(async_stream::try_stream! {
             if attempt == 0 {
@@ -66,8 +66,8 @@ impl Provider for IdleThenTextProvider {
         true
     }
 
-    fn get_model_config(&self) -> aster::model::ModelConfig {
-        aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+    fn get_model_config(&self) -> aster::ModelConfig {
+        aster::ModelConfig::new("gpt-5.3-codex").expect("test model config")
     }
 }
 
@@ -86,7 +86,7 @@ impl Provider for IdleTextThenIdleTextProvider {
 
     async fn complete_with_model(
         &self,
-        _model_config: &aster::model::ModelConfig,
+        _model_config: &aster::ModelConfig,
         _system: &str,
         _messages: &[Message],
         _tools: &[rmcp::model::Tool],
@@ -102,7 +102,7 @@ impl Provider for IdleTextThenIdleTextProvider {
         _system: &str,
         _messages: &[Message],
         _tools: &[rmcp::model::Tool],
-    ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+    ) -> Result<aster::MessageStream, ProviderError> {
         let attempt = self.attempts.fetch_add(1, Ordering::SeqCst);
         Ok(Box::pin(async_stream::try_stream! {
             if attempt == 0 {
@@ -124,8 +124,8 @@ impl Provider for IdleTextThenIdleTextProvider {
         true
     }
 
-    fn get_model_config(&self) -> aster::model::ModelConfig {
-        aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+    fn get_model_config(&self) -> aster::ModelConfig {
+        aster::ModelConfig::new("gpt-5.3-codex").expect("test model config")
     }
 }
 
@@ -146,7 +146,7 @@ impl Provider for NeverStreamingProvider {
 
     async fn complete_with_model(
         &self,
-        _model_config: &aster::model::ModelConfig,
+        _model_config: &aster::ModelConfig,
         _system: &str,
         _messages: &[Message],
         _tools: &[rmcp::model::Tool],
@@ -162,7 +162,7 @@ impl Provider for NeverStreamingProvider {
         _system: &str,
         _messages: &[Message],
         _tools: &[rmcp::model::Tool],
-    ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+    ) -> Result<aster::MessageStream, ProviderError> {
         Ok(Box::pin(async_stream::try_stream! {
             std::future::pending::<()>().await;
             yield (
@@ -176,8 +176,8 @@ impl Provider for NeverStreamingProvider {
         true
     }
 
-    fn get_model_config(&self) -> aster::model::ModelConfig {
-        aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+    fn get_model_config(&self) -> aster::ModelConfig {
+        aster::ModelConfig::new("gpt-5.3-codex").expect("test model config")
     }
 }
 

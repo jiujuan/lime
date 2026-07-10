@@ -23,6 +23,9 @@ vi.mock("@/lib/api/asrProvider", () => asrProviderMocks);
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
+type TestMediaRecorderState = "inactive" | "recording" | "paused";
+type TestEventListener = (event: Event) => void;
+
 function translateResource(
   resource: Partial<Record<InputbarCoreCopyKey, string>>,
   key: InputbarCoreCopyKey,
@@ -158,16 +161,17 @@ describe("InputbarCore", () => {
       }
 
       mimeType = "audio/webm";
-      state: RecordingState = "inactive";
-      private readonly listeners = new Map<string, Set<EventListener>>();
+      state: TestMediaRecorderState = "inactive";
+      private readonly listeners = new Map<string, Set<TestEventListener>>();
 
-      addEventListener(type: string, listener: EventListener) {
-        const listeners = this.listeners.get(type) ?? new Set<EventListener>();
+      addEventListener(type: string, listener: TestEventListener) {
+        const listeners =
+          this.listeners.get(type) ?? new Set<TestEventListener>();
         listeners.add(listener);
         this.listeners.set(type, listeners);
       }
 
-      removeEventListener(type: string, listener: EventListener) {
+      removeEventListener(type: string, listener: TestEventListener) {
         this.listeners.get(type)?.delete(listener);
       }
 
@@ -270,7 +274,7 @@ describe("InputbarCore", () => {
       }
 
       mimeType = "audio/webm";
-      state: RecordingState = "inactive";
+      state: TestMediaRecorderState = "inactive";
 
       addEventListener() {}
 

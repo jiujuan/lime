@@ -192,9 +192,6 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.decisionPanel.action.recording", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.action.recordAnswer", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.action.submitAnswer", { ns: "agent" });
-  i18n.t("agentChat.decisionPanel.action.processing", { ns: "agent" });
-  i18n.t("agentChat.decisionPanel.action.allow", { ns: "agent" });
-  i18n.t("agentChat.decisionPanel.action.deny", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.runtimePermission.title", { ns: "agent" });
   i18n.t("agentChat.decisionPanel.runtimePermission.description", {
     ns: "agent",
@@ -852,9 +849,6 @@ function assertI18nKeyTypes() {
     ns: "workspace",
   });
   i18n.t("workspace.video.sidebar.intro.title", { ns: "workspace" });
-  i18n.t("workspace.video.sidebar.helper.parameterPace.content", {
-    ns: "workspace",
-  });
   i18n.t("workspace.video.sidebar.reference.start.title", { ns: "workspace" });
   i18n.t("workspace.video.sidebar.reference.empty.action", {
     ns: "workspace",

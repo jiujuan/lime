@@ -156,6 +156,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_VOICE_MODEL_DEFAULT_SET,
             METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
             METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
+            METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT,
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
             METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
             METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
@@ -362,6 +363,9 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
     ));
     assert!(is_app_server_request_method(
         METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO
+    ));
+    assert!(is_app_server_request_method(
+        METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT
     ));
     assert!(!is_app_server_request_method(
         METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED

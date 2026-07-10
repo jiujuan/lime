@@ -3,12 +3,10 @@
 //! 将 Aster AgentEvent 转换为 runtime event 格式
 //! 用于前端实时显示流式响应
 
-use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceStage};
-use aster::agents::{AgentEvent, ProviderTraceStage as AsterProviderTraceStage};
+use aster::AgentEvent;
 
 use crate::protocol::{
     AgentContextTraceStep as RuntimeContextTraceStep, AgentEvent as RuntimeAgentEvent,
-    AgentProviderTraceStage as RuntimeProviderTraceStage,
     AgentToolProgressPayload as RuntimeToolProgressPayload,
 };
 use crate::turn_context_configuration::{to_agent_turn_context, AgentTurnContext};
@@ -181,27 +179,7 @@ pub(crate) fn convert_agent_event_with_turn_context(
         AgentEvent::ModelChange { model, mode } => {
             vec![RuntimeAgentEvent::ModelChange { model, mode }]
         }
-        AgentEvent::ProviderTrace { event } => vec![RuntimeAgentEvent::ProviderTrace {
-            event: ProviderTraceEvent {
-                stage: convert_provider_trace_stage(event.stage),
-                provider: event.provider,
-                model: event.model,
-                attempt: event.attempt,
-                elapsed_ms: event.elapsed_ms,
-                text_chars: event.text_chars,
-                status: event.status.to_string(),
-                failure_category: event.failure_category,
-                retryable: event.retryable,
-                non_retryable_provider_rejection: event.non_retryable_provider_rejection,
-                cancel_reason: event.cancel_reason,
-                provider_request_id: event.provider_request_id,
-                provider_request_id_header: event.provider_request_id_header,
-                runtime_provider_backend: None,
-                runtime_provider_selector: None,
-                runtime_provider_protocol: None,
-                runtime_provider_active_model: None,
-            },
-        }],
+        AgentEvent::ProviderTrace { event } => vec![RuntimeAgentEvent::ProviderTrace { event }],
         AgentEvent::HistoryReplaced(_conversation) => vec![],
         AgentEvent::ContextTrace { steps } => vec![RuntimeAgentEvent::ContextTrace {
             steps: steps
@@ -237,28 +215,16 @@ pub(crate) fn convert_agent_event_with_turn_context(
     }
 }
 
-fn convert_provider_trace_stage(stage: AsterProviderTraceStage) -> RuntimeProviderTraceStage {
-    match stage {
-        AsterProviderTraceStage::RequestStarted => ProviderTraceStage::RequestStarted,
-        AsterProviderTraceStage::FirstEventReceived => ProviderTraceStage::FirstEventReceived,
-        AsterProviderTraceStage::FirstTextDeltaReceived => {
-            ProviderTraceStage::FirstTextDeltaReceived
-        }
-        AsterProviderTraceStage::Failed => ProviderTraceStage::Failed,
-        AsterProviderTraceStage::Canceled => ProviderTraceStage::Canceled,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::message_content_adapter::convert_aster_message_to_events;
     use crate::protocol::AgentMessageContent as RuntimeMessageContent;
-    use aster::conversation::message::{
+    use aster::TurnRuntime;
+    use aster::{
         ActionRequiredData, ActionRequiredScope as AsterActionRequiredScope, Message,
         MessageContent,
     };
-    use aster::session::TurnRuntime;
     use std::collections::HashMap;
 
     #[test]
@@ -277,7 +243,7 @@ mod tests {
     #[test]
     fn test_convert_action_required_scope_for_event_and_message_content() {
         let message = Message::assistant().with_content(MessageContent::ActionRequired(
-            aster::conversation::message::ActionRequired {
+            aster::ActionRequired {
                 data: ActionRequiredData::Elicitation {
                     id: "req-1".to_string(),
                     message: "请补充发布渠道".to_string(),
@@ -370,7 +336,7 @@ mod tests {
     #[test]
     fn test_convert_context_trace() {
         let event = AgentEvent::ContextTrace {
-            steps: vec![aster::context::ContextTraceStep {
+            steps: vec![aster::ContextTraceStep {
                 stage: "memory_injection".to_string(),
                 detail: "query_len=10,injected=2".to_string(),
             }],
@@ -590,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_convert_history_replaced_returns_empty_for_runtime_projection() {
-        let event = AgentEvent::HistoryReplaced(aster::conversation::Conversation::empty());
+        let event = AgentEvent::HistoryReplaced(aster::Conversation::empty());
 
         let events = convert_agent_event(event);
         assert!(events.is_empty());
@@ -688,14 +654,14 @@ mod tests {
             "session-2",
             "thread-2",
             Some("输出结构化结果".to_string()),
-            Some(aster::session::TurnContextOverride {
+            Some(aster::TurnContextOverride {
                 model: Some("gpt-5.4".to_string()),
-                ..aster::session::TurnContextOverride::default()
+                ..aster::TurnContextOverride::default()
             }),
         )
-        .with_output_schema_runtime(Some(aster::session::TurnOutputSchemaRuntime {
-            source: aster::session::TurnOutputSchemaSource::Turn,
-            strategy: aster::session::TurnOutputSchemaStrategy::Native,
+        .with_output_schema_runtime(Some(aster::TurnOutputSchemaRuntime {
+            source: aster::TurnOutputSchemaSource::Turn,
+            strategy: aster::TurnOutputSchemaStrategy::Native,
             provider_name: Some("openai".to_string()),
             model_name: Some("gpt-5.4".to_string()),
         }));
@@ -738,9 +704,9 @@ mod tests {
             "session-code",
             "thread-code",
             Some("修复图片卡片回归".to_string()),
-            Some(aster::session::TurnContextOverride {
+            Some(aster::TurnContextOverride {
                 metadata,
-                ..aster::session::TurnContextOverride::default()
+                ..aster::TurnContextOverride::default()
             }),
         );
 
@@ -817,11 +783,11 @@ mod tests {
             "session-context",
             "thread-context",
             Some("使用项目资料".to_string()),
-            Some(aster::session::TurnContextOverride {
+            Some(aster::TurnContextOverride {
                 approval_policy: Some("on-request".to_string()),
                 sandbox_policy: Some("workspace-write".to_string()),
                 metadata,
-                ..aster::session::TurnContextOverride::default()
+                ..aster::TurnContextOverride::default()
             }),
         );
 

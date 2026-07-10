@@ -10,13 +10,13 @@ use crate::session_record_sql::{
     load_session_record_rows_by_types,
 };
 use anyhow::{anyhow, Result};
-use aster::conversation::message::Message;
-use aster::conversation::Conversation;
-use aster::model::ModelConfig;
-use aster::recipe::Recipe;
-use aster::session::extension_data::ExtensionData;
-use aster::session::{
-    ChatHistoryMatch, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
+use aster::Conversation;
+use aster::Message;
+use aster::ModelConfig;
+use aster::Recipe;
+use aster::{
+    ChatHistoryMatch, ExtensionData, Session, SessionInsights, SessionStore, SessionType,
+    TokenStatsUpdate,
 };
 use async_trait::async_trait;
 use chrono::Utc;

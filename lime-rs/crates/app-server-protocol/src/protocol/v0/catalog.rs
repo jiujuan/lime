@@ -1905,6 +1905,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_VOICE_TRANSCRIPTION_POLISH_TEXT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
         kind: AppServerMethodKind::Request,
     },

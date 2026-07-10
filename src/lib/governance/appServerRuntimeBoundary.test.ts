@@ -685,7 +685,7 @@ describe("app-server runtime boundary", () => {
     expect(agentSessionConfiguration).toContain("build_agent_session_config");
     expect(agentSessionConfiguration).not.toContain("aster::agents::SessionConfig");
     expect(agentSessionConfigAdapter).toContain("to_aster_session_config");
-    expect(agentSessionConfigAdapter).toContain("aster::agents::SessionConfig");
+    expect(agentSessionConfigAdapter).toContain("aster::SessionConfig");
     expect(appServerAdapter).toContain("build_agent_session_config");
     expect(appServerAdapter).toContain("AgentSessionConfigurationRequest");
     expect(
@@ -767,7 +767,8 @@ describe("app-server runtime boundary", () => {
     expect(agentBoundary).toContain("execute_workspace_patch_runtime_tool_batch");
     expect(agentRuntimeAdapter).toContain("execute_planned_tool_batch");
     expect(agentRuntimeAdapter).toContain("ToolExecutionBatchInput");
-    expect(agentRuntimeAdapter).toContain("agent.tool_registry().clone()");
+    expect(agentRuntimeAdapter).toContain("runtime_web_search_executor_handle");
+    expect(agentRuntimeAdapter).not.toContain("agent.tool_registry().clone()");
     expect(appServerAdapter).toContain("WorkspacePatchHostToolPlan::from_patch");
     expect(appServerAdapter).toContain(
       "update_workspace_patch_with_host_tool_evidence",
@@ -982,8 +983,8 @@ describe("app-server runtime boundary", () => {
     ].filter((snippet) => appServerExecutionProcess.includes(snippet));
 
     expect(agentToolOrchestrator).toContain("check_shell_tool_permissions");
-    expect(agentToolOrchestrator).toContain("BashTool");
-    expect(agentToolOrchestrator).toContain("PowerShellTool");
+    expect(agentToolOrchestrator).not.toContain("BashTool");
+    expect(agentToolOrchestrator).not.toContain("PowerShellTool");
     expect(toolRuntimeShellPermission).toContain("check_shell_command_permission");
     expect(toolRuntimeShellPermission).toContain("check_bash_command_permission");
     expect(toolRuntimeShellPermission).toContain("check_powershell_command_permission");

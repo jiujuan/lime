@@ -256,6 +256,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   const isCodingWorkbench = workbenchMode === "coding";
   const hasDefaultPreviewContent = Boolean(defaultPreview?.content.trim());
   const hasCustomSessionView = Boolean(sessionView?.renderPanel);
+  const hasCustomOutputView = Boolean(outputView?.renderPanel);
   const shellRef = useRef<HTMLElement | null>(null);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
   const {
@@ -289,6 +290,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     translateWorkbench,
     hasDefaultPreviewContent,
     hasCustomSessionView,
+    hasCustomOutputView,
     isCodingWorkbench,
     changeView,
   });
@@ -512,7 +514,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         documentDiffLineCount: documentDiffLines.length,
         failedChangeItemCount,
         utilityTabs: {
-          outputs: Boolean(outputView?.renderPanel),
+          outputs: hasCustomOutputView,
           logs: Boolean(logView?.renderPanel),
         },
         openedToolTabs,
@@ -524,7 +526,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       failedChangeItemCount,
       logView?.renderPanel,
       openedToolTabs,
-      outputView?.renderPanel,
+      hasCustomOutputView,
       canvasT,
     ],
   );

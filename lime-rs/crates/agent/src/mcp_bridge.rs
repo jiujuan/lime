@@ -3,10 +3,10 @@
 //! 实现 Aster 的 McpClientTrait，将工具调用转发到
 //! Lime 已有的 MCP RunningService，避免重复启动进程。
 
-use aster::agents::extension::ExtensionConfig;
-use aster::agents::mcp_client::{Error as McpError, McpClientTrait};
-use aster::agents::Agent;
-use aster::session_context::{current_session_id, SESSION_ID_HEADER};
+use aster::{
+    current_session_id, Agent, ExtensionConfig, McpClientError as McpError, McpClientTrait,
+    SESSION_ID_HEADER,
+};
 use lime_mcp::{McpBridgeClient as RuntimeMcpBridgeClient, McpBridgeSnapshot};
 use rmcp::model::{
     CallToolResult, Extensions, GetPromptResult, InitializeResult, JsonObject, ListPromptsResult,

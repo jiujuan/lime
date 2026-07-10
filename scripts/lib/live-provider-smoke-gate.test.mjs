@@ -398,6 +398,7 @@ function listSmokeScripts() {
         .replaceAll("\\", "/");
       if (
         entry.name.endsWith(".test.mjs") ||
+        entry.name.endsWith("-guards.mjs") ||
         entry.name.startsWith("check-") ||
         relativePath.includes("/test-fixtures/")
       ) {

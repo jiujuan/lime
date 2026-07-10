@@ -109,8 +109,8 @@ describe("galleryMaterials current App Server boundary", () => {
 
   it("App Server protocol / client 应记录 Gallery material current 方法", () => {
     const appServerSource = readAppServerApiSources();
-    const clientProtocolSource = readRepoFile(
-      "packages/app-server-client/src/protocol.ts",
+    const generatedClientProtocolSource = readRepoFile(
+      "packages/app-server-client/src/generated/protocol-types.ts",
     );
     const rustProtocolSource = [
       readRepoFile(
@@ -128,7 +128,7 @@ describe("galleryMaterials current App Server boundary", () => {
       expect(appServerSource).toContain(`${helper}(`);
     }
     for (const method of CURRENT_GALLERY_MATERIAL_METHODS) {
-      expect(clientProtocolSource).toContain(`"${method}"`);
+      expect(generatedClientProtocolSource).toContain(`"${method}"`);
       expect(rustProtocolSource).toContain(`"${method}"`);
     }
   });

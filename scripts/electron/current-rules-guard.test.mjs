@@ -127,8 +127,10 @@ describe("Electron current repository rules guard", () => {
     const docs = [
       "internal/exec-plans/README.md",
       "internal/exec-plans/production-command-current-migration-plan.md",
-      "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md",
-      "internal/exec-plans/tauri-wrapper-command-inventory.md",
+      ...existingFiles([
+        "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md",
+        "internal/exec-plans/tauri-wrapper-command-inventory.md",
+      ]),
     ];
 
     for (const filePath of docs) {

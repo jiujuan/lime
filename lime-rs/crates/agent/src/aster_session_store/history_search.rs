@@ -1,5 +1,5 @@
 use anyhow::Result;
-use aster::session::{ChatHistoryMatch, Session};
+use aster::{ChatHistoryMatch, Session};
 use chrono::DateTime;
 use thread_store::conversation_transcript::ConversationMessageRole;
 use thread_store::history_search::{
@@ -9,9 +9,7 @@ use thread_store::history_search::{
 
 use super::runtime_conversation;
 
-fn conversation_message_role_from_aster(
-    message: &aster::conversation::message::Message,
-) -> ConversationMessageRole {
+fn conversation_message_role_from_aster(message: &aster::Message) -> ConversationMessageRole {
     match message.role {
         rmcp::model::Role::User => ConversationMessageRole::User,
         rmcp::model::Role::Assistant => ConversationMessageRole::Assistant,
@@ -73,7 +71,7 @@ fn chat_history_match_from_record(record: ChatHistoryMatchRecord) -> ChatHistory
 #[cfg(test)]
 mod tests {
     use super::conversation_message_role_from_aster;
-    use aster::conversation::message::Message;
+    use aster::Message;
     use thread_store::conversation_transcript::ConversationMessageRole;
 
     #[test]

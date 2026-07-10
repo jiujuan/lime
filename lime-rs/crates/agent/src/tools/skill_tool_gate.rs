@@ -4,10 +4,9 @@
 //! - 避免通用对话默认向模型暴露全部本地 Skills
 //! - 保留显式工作流对 Skill 工具的按会话放行能力
 
-use aster::conversation::message::Message;
-use aster::model::ModelConfig;
-use aster::providers::base::Provider;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
+use aster::Message;
+use aster::{ModelConfig, Provider};
+use aster::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
 use async_trait::async_trait;
 use lime_skills::{LlmProvider, SkillError};
 use serde_json::Value;
@@ -167,7 +166,7 @@ impl LlmProvider for CurrentSessionSkillProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::tools::PermissionBehavior;
+    use aster::PermissionBehavior;
     use serde_json::json;
     use tool_runtime::skill_gate::{
         add_skill_tool_session_allowed_capabilities, clear_skill_tool_session_access,

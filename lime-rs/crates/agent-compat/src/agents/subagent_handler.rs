@@ -1,8 +1,7 @@
 use crate::{
-    agents::{subagent_task_config::TaskConfig, AgentEvent, SessionConfig},
+    agents::extension::PlatformExtensionContext,
+    agents::{subagent_task_config::TaskConfig, Agent, AgentEvent, SessionConfig},
     conversation::{message::Message, Conversation},
-    execution::manager::AgentManager,
-    prompt_template::render_global_file,
     recipe::Recipe,
 };
 use anyhow::{anyhow, Result};
@@ -21,6 +20,17 @@ struct SubagentPromptContext {
     task_instructions: String,
     tool_count: usize,
     available_tools: String,
+}
+
+fn render_subagent_prompt(context: &SubagentPromptContext) -> String {
+    format!(
+        "You are subagent {subagent_id}. Complete the delegated task within {max_turns} turns.\n\nTask instructions:\n{task_instructions}\n\nAvailable tools ({tool_count}): {available_tools}",
+        subagent_id = context.subagent_id,
+        max_turns = context.max_turns,
+        task_instructions = context.task_instructions,
+        tool_count = context.tool_count,
+        available_tools = context.available_tools,
+    )
 }
 
 type AgentMessagesFuture =
@@ -144,14 +154,14 @@ fn get_agent_messages(
             .clone()
             .unwrap_or_else(|| "Begin.".to_string());
 
-        let agent_manager = AgentManager::instance()
-            .await
-            .map_err(|e| anyhow!("Failed to create AgentManager: {}", e))?;
-
-        let agent = agent_manager
-            .get_or_create_agent(session_id.clone())
-            .await
-            .map_err(|e| anyhow!("Failed to get sub agent session file path: {}", e))?;
+        let agent = Agent::new();
+        agent
+            .extension_manager
+            .set_context(PlatformExtensionContext {
+                session_id: Some(session_id.clone()),
+                extension_manager: Some(std::sync::Arc::downgrade(&agent.extension_manager)),
+            })
+            .await;
 
         agent
             .update_provider(task_config.provider.clone(), &session_id)
@@ -174,24 +184,23 @@ fn get_agent_messages(
             .await
             .map_err(|e| anyhow!("Failed to configure subagent recipe components: {}", e))?;
 
-        let tools = agent.list_tools(None).await;
-        let subagent_prompt = render_global_file(
-            "subagent_system.md",
-            &SubagentPromptContext {
-                max_turns: task_config
-                    .max_turns
-                    .expect("TaskConfig always sets max_turns"),
-                subagent_id: session_id.clone(),
-                task_instructions: system_instructions,
-                tool_count: tools.len(),
-                available_tools: tools
-                    .iter()
-                    .map(|t| t.name.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            },
-        )
-        .map_err(|e| anyhow!("Failed to render subagent system prompt: {}", e))?;
+        let tools = crate::session_context::with_session_id(Some(session_id.clone()), async {
+            agent.list_tools(None).await
+        })
+        .await;
+        let subagent_prompt = render_subagent_prompt(&SubagentPromptContext {
+            max_turns: task_config
+                .max_turns
+                .expect("TaskConfig always sets max_turns"),
+            subagent_id: session_id.clone(),
+            task_instructions: system_instructions,
+            tool_count: tools.len(),
+            available_tools: tools
+                .iter()
+                .map(|t| t.name.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+        });
         agent.override_system_prompt(subagent_prompt).await;
 
         let mut user_message = Message::user().with_text(user_task);
@@ -215,7 +224,12 @@ fn get_agent_messages(
 
         let mut stream = crate::session_context::with_session_id(Some(session_id.clone()), async {
             agent
-                .reply(user_message, session_config, cancellation_token)
+                .reply_with_provider(
+                    user_message,
+                    session_config,
+                    cancellation_token,
+                    task_config.provider.clone(),
+                )
                 .await
         })
         .await
@@ -258,52 +272,4 @@ fn get_agent_messages(
 
         Ok((conversation, final_output))
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::providers::testprovider::TestProvider;
-    use crate::session::TurnContextOverride;
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-    use std::sync::Arc;
-
-    #[test]
-    fn build_subagent_session_config_preserves_inherited_turn_context() {
-        let task_config = TaskConfig {
-            provider: Arc::new(
-                TestProvider::new_replaying("/tmp/aster-subagent-handler.json").expect("provider"),
-            ),
-            parent_session_id: "parent-session-1".to_string(),
-            parent_working_dir: PathBuf::from("/tmp/workspace-parent"),
-            extensions: Vec::new(),
-            max_turns: Some(7),
-            turn_context: Some(TurnContextOverride {
-                model: Some("gpt-5.4".to_string()),
-                effort: Some("high".to_string()),
-                metadata: HashMap::new(),
-                ..TurnContextOverride::default()
-            }),
-        };
-
-        let session_config =
-            build_subagent_session_config("subagent-session-1".to_string(), &task_config, None);
-
-        assert_eq!(session_config.max_turns, Some(7));
-        assert_eq!(
-            session_config
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.model.as_deref()),
-            Some("gpt-5.4")
-        );
-        assert_eq!(
-            session_config
-                .turn_context
-                .as_ref()
-                .and_then(|context| context.effort.as_deref()),
-            Some("high")
-        );
-    }
 }

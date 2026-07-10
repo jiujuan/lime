@@ -204,7 +204,7 @@ describe("toolDisplayInfo", () => {
 
   it("应为用户可见场景提供更自然的工具标签", () => {
     expect(resolveUserFacingToolDisplayLabel("FileReadTool")).toBe("查看文件");
-    expect(resolveUserFacingToolDisplayLabel("apply_patch")).toBe("应用补丁");
+    expect(resolveUserFacingToolDisplayLabel("apply_patch")).toBe("修改文件");
     expect(resolveUserFacingToolDisplayLabel("PowerShellTool")).toBe(
       "运行命令",
     );

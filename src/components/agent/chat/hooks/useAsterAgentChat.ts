@@ -385,6 +385,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     setMessages: session.setMessages,
     setThreadItems: session.setThreadItems,
     refreshSessionReadModel: session.refreshSessionReadModel,
+    refreshSessionDetail: session.refreshSessionDetail,
   });
 
   resetPendingActionsRef.current = () => tools.setPendingActions([]);

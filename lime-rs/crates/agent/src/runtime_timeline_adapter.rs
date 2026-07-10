@@ -10,7 +10,7 @@ use agent_runtime::runtime_timeline::{
     RuntimeTimelineSnapshotSource, RuntimeTimelineSnapshotThread, RuntimeTimelineTurnProjection,
     RuntimeTimelineTurnSource, RuntimeTimelineTurnStatusSource,
 };
-use aster::session::{ItemRuntime, TurnRuntime};
+use aster::{ItemRuntime, TurnRuntime};
 use thread_store::runtime_snapshot::{
     RuntimeItemPayloadRecord, RuntimeItemSnapshotRecord, RuntimeItemStatusRecord,
     RuntimeSessionSnapshotRecord, RuntimeTurnSnapshotRecord, RuntimeTurnStatusRecord,
@@ -223,8 +223,8 @@ mod tests {
     use agent_runtime::runtime_timeline::{
         RuntimeTimelineItemPayload, RuntimeTimelineRequestOption, RuntimeTimelineRequestQuestion,
     };
-    use aster::conversation::message::MessageContent;
-    use aster::session::{
+    use aster::MessageContent;
+    use aster::{
         ItemRuntime, ItemRuntimePayload, ItemStatus, SessionRuntimeSnapshot, ThreadRuntime,
         ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
     };

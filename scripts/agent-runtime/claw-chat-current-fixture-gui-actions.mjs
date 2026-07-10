@@ -79,6 +79,58 @@ function describeExpectedSession(expectedSessionId) {
   return expectedSessionId ? ` session=${expectedSessionId}` : "";
 }
 
+async function setControlledTextareaValue(page, prompt, expectedSessionId) {
+  return await page.evaluate(
+    ({ expectedPrompt, sessionId }) => {
+      const input = Array.from(
+        document.querySelectorAll('textarea[name="agent-chat-message"]'),
+      ).find(
+        (node) =>
+          node instanceof HTMLTextAreaElement &&
+          (!sessionId || node.dataset.sessionId === sessionId),
+      );
+      if (!(input instanceof HTMLTextAreaElement)) {
+        return {
+          ok: false,
+          reason: "missing-textarea",
+          expectedSessionId: sessionId,
+          textareaSessionId: null,
+          value: null,
+        };
+      }
+
+      input.focus();
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+      if (valueSetter) {
+        valueSetter.call(input, expectedPrompt);
+      } else {
+        input.value = expectedPrompt;
+      }
+      input.setSelectionRange(expectedPrompt.length, expectedPrompt.length);
+      input.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          inputType: "insertText",
+          data: expectedPrompt,
+        }),
+      );
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return {
+        ok: input.value === expectedPrompt,
+        reason: input.value === expectedPrompt ? null : "value-mismatch",
+        expectedSessionId: sessionId,
+        textareaSessionId: input.dataset.sessionId || null,
+        value: input.value,
+      };
+    },
+    { expectedPrompt: prompt, sessionId: expectedSessionId },
+  );
+}
+
 export async function waitForInputReady(page, options, constraints = {}) {
   const expectedSessionId = constraints.expectedSessionId ?? null;
   const allowTaskCenterHomeInput =
@@ -564,10 +616,17 @@ export async function sendPromptFromGui(
 ) {
   const expectedSessionId = constraints.expectedSessionId ?? null;
   const before = await waitForInputReady(page, options, constraints);
-  const textarea = expectedSessionId
-    ? page.locator(buildInputSelector(expectedSessionId))
-    : page.locator('textarea[name="agent-chat-message"]').first();
-  await textarea.fill(prompt);
+  const appliedInput = await setControlledTextareaValue(
+    page,
+    prompt,
+    expectedSessionId,
+  );
+  assert(
+    appliedInput.ok &&
+      (!expectedSessionId ||
+        appliedInput.textareaSessionId === expectedSessionId),
+    `输入框写入失败: ${JSON.stringify(sanitizeJson(appliedInput))}`,
+  );
   await waitForControlledInputValue(
     page,
     prompt,

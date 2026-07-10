@@ -316,7 +316,7 @@ describe("MessageList web process", () => {
     expect(timelineToolNames).toEqual(["Read", "Write"]);
   });
 
-  it("完成态 timeline 已有计划时应保留执行轨迹但不重复渲染计划卡", () => {
+  it("完成态 timeline 只有计划时应保留内联执行轨迹但不重复渲染计划卡", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -369,7 +369,7 @@ describe("MessageList web process", () => {
 
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).toBeNull();
@@ -381,6 +381,10 @@ describe("MessageList web process", () => {
           {
             type: "thinking",
             text: "先对照用户截图，再确认 thread item 是否有重复来源。",
+          },
+          {
+            type: "text",
+            text: "<proposed_plan>\n1. 合并 assistant turn\n2. 收拢补充 timeline\n</proposed_plan>",
           },
           { type: "text", text: "已经整理完执行思路。" },
         ],

@@ -54,8 +54,8 @@ describe("Document Import current App Server boundary", () => {
 
   it("App Server protocol / client 应保留 fileSystem/readFilePreview current 方法", () => {
     const appServerSource = readAppServerApiSources();
-    const clientProtocolSource = readRepoFile(
-      "packages/app-server-client/src/protocol.ts",
+    const generatedClientProtocolSource = readRepoFile(
+      "packages/app-server-client/src/generated/protocol-types.ts",
     );
     const rustProtocolSource = readRepoFile(
       "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
@@ -65,7 +65,9 @@ describe("Document Import current App Server boundary", () => {
       "APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW",
     );
     expect(appServerSource).toContain("readFilePreview(");
-    expect(clientProtocolSource).toContain(`"${CURRENT_FILE_PREVIEW_METHOD}"`);
+    expect(generatedClientProtocolSource).toContain(
+      `"${CURRENT_FILE_PREVIEW_METHOD}"`,
+    );
     expect(rustProtocolSource).toContain(`"${CURRENT_FILE_PREVIEW_METHOD}"`);
   });
 
