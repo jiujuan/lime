@@ -4,6 +4,11 @@ import path from "node:path";
 const CODING_P0_SUITE_ID = "coding-workflow-p0";
 const CODING_P0_BATCH_ID = "coding-current-tools";
 const CODING_P0_SCRIPT = "smoke:agent-runtime-tool-execution";
+const CODING_P0_MANAGED_SCRIPT = "smoke:agent-runtime-tool-execution:managed";
+const CODING_P0_SCRIPTS = new Set([
+  CODING_P0_SCRIPT,
+  CODING_P0_MANAGED_SCRIPT,
+]);
 const CODING_P0_ARTIFACT_KIND = "agent_runtime_tool_execution_smoke";
 const CODING_P0_TARGET_TOOLS = ["Read", "apply_patch", "Glob", "Grep", "Bash"];
 const REQUIRED_CODING_ASSERTIONS = [
@@ -39,7 +44,10 @@ function argValue(args, name) {
 
 function commandMentionsCodingP0Smoke(command) {
   const value = String(command || "");
-  return value.includes(CODING_P0_SCRIPT) && value.includes(CODING_P0_BATCH_ID);
+  return (
+    [...CODING_P0_SCRIPTS].some((script) => value.includes(script)) &&
+    value.includes(CODING_P0_BATCH_ID)
+  );
 }
 
 function isCodingP0ToolExecutionCommand({
@@ -49,7 +57,7 @@ function isCodingP0ToolExecutionCommand({
 } = {}) {
   return (
     suiteId === CODING_P0_SUITE_ID &&
-    script === CODING_P0_SCRIPT &&
+    CODING_P0_SCRIPTS.has(script) &&
     argValue(args, "--batch") === CODING_P0_BATCH_ID
   );
 }
@@ -232,6 +240,8 @@ function codingP0ArtifactBlockersForSuite({ rootDir, evidenceRoot, suite }) {
 
 export {
   CODING_P0_BATCH_ID,
+  CODING_P0_MANAGED_SCRIPT,
+  CODING_P0_SCRIPT,
   CODING_P0_SUITE_ID,
   CODING_P0_TARGET_TOOLS,
   codingP0ArtifactBlockersForSuite,

@@ -58,6 +58,7 @@ describe("agentStreamRuntimeHandler", () => {
     clearAgentUiProjectionEvents();
     const requestState = {
       accumulatedContent: "",
+      currentTurnId: "pending-turn-local",
       queuedTurnId: null,
       requestLogId: null,
       requestStartedAt: 0,
@@ -392,6 +393,118 @@ describe("agentStreamRuntimeHandler", () => {
     expect(messages[0]?.content).not.toContain("马上生成");
     expect(messages[0]?.taskPreview).toBeUndefined();
     expect(requestState.hasMeaningfulCompletionSignal).toBe(true);
+    expect(requestState.currentTurnId).toBe("turn-image-workflow");
+    expect(messages[0]?.runtimeTurnId).toBe("turn-image-workflow");
+  });
+
+  it("ImageCommandWorkflow 创建图片任务后应允许对应 turn_completed 收起发送态", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-image-workflow-terminal",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-02T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      currentTurnId: "pending-turn-local",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+    const setIsSending = vi.fn();
+    const disposeListener = vi.fn();
+    const setCurrentTurnId = vi.fn();
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnsFromProjection: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-workflow-terminal",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-workflow-terminal",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "@配图 画一张广州夏天的图",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: setCurrentTurnId as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: setIsSending as never,
+    } satisfies Omit<Parameters<typeof handleTurnStreamEvent>[0], "data">;
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "image_task_created",
+        task_id: "task-image-workflow-terminal",
+        task_type: "image_generate",
+        task_family: "image_generation",
+        status: "pending_submit",
+        normalized_status: "pending",
+        artifact_path:
+          ".lime/tasks/image_generate/task-image-workflow-terminal.json",
+        payload: {
+          prompt: "画一张广州夏天的图",
+          session_id: "session-1",
+          turn_id: "turn-image-workflow-terminal",
+        },
+      } as AgentEvent,
+    });
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        turn: {
+          id: "turn-image-workflow-terminal",
+          thread_id: "thread-image-workflow-terminal",
+          prompt_text: "@配图 画一张广州夏天的图",
+          status: "completed",
+          started_at: "2026-07-02T10:00:00.000Z",
+          completed_at: "2026-07-02T10:00:01.000Z",
+          created_at: "2026-07-02T10:00:00.000Z",
+          updated_at: "2026-07-02T10:00:01.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(requestState.currentTurnId).toBe("turn-image-workflow-terminal");
+    expect(setCurrentTurnId).toHaveBeenCalledWith(
+      "turn-image-workflow-terminal",
+    );
+    expect(messages[0]?.runtimeTurnId).toBe("turn-image-workflow-terminal");
+    expect(setIsSending).toHaveBeenCalledWith(false);
+    expect(disposeListener).toHaveBeenCalled();
   });
 
   it("ImageCommandWorkflow 创建事件不应在前端改写已有模型文案", () => {
@@ -2477,7 +2590,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
 
-  it("收到 turn_failed 时应保留 partial answer 且只补一个失败说明", () => {
+  it("收到 turn_failed 但已有有效正文时应按完成态收口且不显示失败条", () => {
     const partialAnswer = "已完成的部分回答：先确认时序，再输出结论。";
     const failureMessage = "provider stream closed before final answer";
     let messages: Message[] = [
@@ -2577,25 +2690,24 @@ describe("agentStreamRuntimeHandler", () => {
     expect(
       messages[0]?.content.match(new RegExp(partialAnswer, "g")) ?? [],
     ).toHaveLength(1);
-    expect(messages[0]?.content.match(/执行失败：/g) ?? []).toHaveLength(1);
-    expect(messages[0]?.content).toContain(failureMessage);
-    expect(messages[0]?.contentParts).toEqual([
-      expect.objectContaining({ type: "tool_use" }),
-      expect.objectContaining({
-        type: "text",
-        text: expect.stringContaining(partialAnswer),
-      }),
-    ]);
-    expect(messages[0]?.runtimeStatus).toMatchObject({
-      phase: "failed",
-      title: "当前处理失败",
-      detail: failureMessage,
-    });
+    expect(messages[0]?.content).not.toContain("执行失败");
+    expect(messages[0]?.content).not.toContain(failureMessage);
+    expect(messages[0]?.contentParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "tool_use" }),
+        expect.objectContaining({
+          type: "text",
+          text: partialAnswer,
+        }),
+      ]),
+    );
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(messages[0]?.runtimeStatus).toBeUndefined();
     expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
     expect(setIsSending).toHaveBeenCalledWith(false);
     expect(disposeListener).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledWith(failureMessage);
-    expect(mockToast.error).toHaveBeenCalledWith(`响应错误: ${failureMessage}`);
+    expect(onError).not.toHaveBeenCalled();
+    expect(mockToast.error).not.toHaveBeenCalled();
   });
 
   it("收到空 turn_completed 且没有真实产物信号时也应收起发送态并落失败态", () => {
@@ -3239,6 +3351,139 @@ describe("agentStreamRuntimeHandler", () => {
         }),
       ]),
     );
+    expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
+    expect(mockToast.error).not.toHaveBeenCalledWith(
+      "模型未输出最终答复，请重试",
+    );
+  });
+
+  it("过程事件后晚到的无 phase text_delta 应作为最终正文完成", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-late-legacy-final",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-24T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const requestState = {
+      accumulatedContent: "",
+      hasFinalAnswerRequiredProcessBoundary: false,
+      hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+      queuedTurnId: "queued-late-legacy-final",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const removeQueuedTurnsFromProjection = vi.fn();
+    const onComplete = vi.fn();
+    const callbacks = {
+      activateStream: () => {},
+      isStreamActivated: () => true,
+      clearOptimisticItem: () => {},
+      clearOptimisticTurn: () => {},
+      disposeListener: () => {},
+      removeQueuedDraftMessages: () => {},
+      clearActiveStreamIfMatch: () => true,
+      upsertQueuedTurn: () => {},
+      removeQueuedTurnsFromProjection,
+      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+        parts,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks,
+      observer: {
+        onComplete,
+      },
+      eventName: "agent-runtime-late-legacy-final",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-late-legacy-final",
+      activeSessionId: "session-late-legacy-final",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "你好",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_delta",
+        text: "先理解用户问候。",
+        sequence: 1,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "你好！有什么我可以帮你的吗？",
+        sequence: 2,
+        turn_id: "turn-late-legacy-final",
+      } as AgentEvent,
+    });
+
+    expect(
+      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
+    ).toBe(true);
+    expect(getAgentStreamTextOverlay("assistant-late-legacy-final")?.content).toBe(
+      "你好！有什么我可以帮你的吗？",
+    );
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        sequence: 3,
+        turn: {
+          id: "turn-late-legacy-final",
+          thread_id: "thread-late-legacy-final",
+          prompt_text: "你好",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:01.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:01.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.content).toBe("你好！有什么我可以帮你的吗？");
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: "你好！有什么我可以帮你的吗？",
+        metadata: expect.objectContaining({
+          source: "agent_text_delta",
+          sequence: 2,
+          turnId: "turn-late-legacy-final",
+        }),
+      }),
+    ]);
+    expect(messages[0]?.runtimeStatus).toBeUndefined();
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(onComplete).toHaveBeenCalledWith("你好！有什么我可以帮你的吗？");
     expect(removeQueuedTurnsFromProjection).not.toHaveBeenCalled();
     expect(mockToast.error).not.toHaveBeenCalledWith(
       "模型未输出最终答复，请重试",
@@ -4035,7 +4280,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(requestState.accumulatedContent).toBe("先分析。");
   });
 
-  it("process 后的无 phase 文本不应 live 显示，最终只接受 turn_completed.text", () => {
+  it("process 后晚到的无 phase 文本应 live 显示，并允许 turn_completed.text 修正最终正文", () => {
     let messages: Message[] = [
       {
         id: "assistant-live-search",
@@ -4126,8 +4371,10 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
     });
 
-    expect(requestState.accumulatedContent).toBe("");
-    expect(getAgentStreamTextOverlay("assistant-live-search")).toBeNull();
+    expect(requestState.accumulatedContent).toBe("我");
+    expect(getAgentStreamTextOverlay("assistant-live-search")?.content).toBe(
+      "我",
+    );
     expect(messages[0]?.content).toBe("");
     expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
       "tool_use",

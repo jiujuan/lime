@@ -294,17 +294,10 @@ fn metadata_model_request_policy_reasoning_effort(metadata: &Value) -> Option<St
     .into_iter()
     .filter_map(|pointer| metadata.pointer(pointer))
     .find_map(|policy| {
-        let supports_reasoning = policy
-            .pointer("/supports_reasoning_summaries")
-            .or_else(|| policy.pointer("/supportsReasoningSummaries"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        supports_reasoning.then(|| {
-            json_pointer_string(
-                policy,
-                &["/default_reasoning_level", "/defaultReasoningLevel"],
-            )
-        })?
+        json_pointer_string(
+            policy,
+            &["/default_reasoning_level", "/defaultReasoningLevel"],
+        )
     })
 }
 

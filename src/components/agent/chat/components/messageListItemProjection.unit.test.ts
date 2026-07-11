@@ -92,6 +92,34 @@ describe("messageListItemProjection basic state", () => {
     expect(projection.rendererContentParts).toBeUndefined();
   });
 
+  it("首字前启动态已有 timeline 但本地 stream 仍活跃时不应折叠 assistant 占位", () => {
+    const message: Message = {
+      id: "assistant-startup-note-placeholder-with-timeline",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-07T10:00:00.000Z"),
+      isThinking: true,
+      runtimeStatus: {
+        phase: "routing",
+        title: "正在生成回复",
+        detail: "等待首个输出。",
+      },
+    };
+
+    const projection = buildProjection(message, [], {
+      isSending: true,
+      lastAssistantMessageId: message.id,
+      turnStatus: "completed",
+    });
+
+    expect(projection.shouldRenderFirstTokenRuntimeStatus).toBe(true);
+    expect(projection.hasAssistantBodyContent).toBe(true);
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(projection.rendererContentParts).toBeUndefined();
+  });
+
   it("assistant 正文首字已出现时应保留运行态且不回退到首字前状态", () => {
     const message: Message = {
       id: "assistant-visible-text-still-running",
@@ -179,6 +207,154 @@ describe("messageListItemProjection basic state", () => {
     ]);
     expect(projection.actionContent).not.toContain("执行失败");
     expect(projection.actionContent).not.toContain("OpenAIException");
+  });
+
+  it("failed runtimeStatus 只有失败诊断时应保留友好失败正文", () => {
+    const rawError =
+      "execution backend error: Agent provider execution failed: Request failed: Resource not found (404): ***NotFoundError: NotFoundError: OpenAIException - {\"detail\":\"Not Found\"}";
+    const message: Message = {
+      id: "assistant-provider-failure-only",
+      role: "assistant",
+      content: `执行失败：${rawError}`,
+      timestamp: new Date("2026-06-07T10:00:04.000Z"),
+      contentParts: [
+        {
+          type: "text",
+          text: `执行失败：${rawError}`,
+        },
+      ],
+      runtimeStatus: {
+        phase: "failed",
+        title: "当前处理失败",
+        detail: rawError,
+      },
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: false,
+      hasActiveInteractiveRuntime: false,
+      lastAssistantMessageId: message.id,
+    });
+
+    expect(projection.actionContent.trim().length).toBeGreaterThan(0);
+    expect(projection.rendererContent).toBe(projection.actionContent);
+    expect(projection.rendererRawContent).toBe(projection.actionContent);
+    expect(projection.rendererContentParts).toEqual([
+      {
+        type: "text",
+        text: projection.actionContent,
+      },
+    ]);
+    expect(projection.actionContent).not.toContain("执行失败");
+    expect(projection.actionContent).not.toContain("OpenAIException");
+    expect(projection.hasAssistantBodyContent).toBe(true);
+  });
+
+  it("failed runtimeStatus 正文为空时应补回友好失败正文", () => {
+    const rawError =
+      "execution backend error: Agent provider execution failed: failed to connect to provider endpoint";
+    const message: Message = {
+      id: "assistant-empty-provider-failure",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-07T10:00:04.000Z"),
+      contentParts: [],
+      runtimeStatus: {
+        phase: "failed",
+        title: "当前处理失败",
+        detail: rawError,
+      },
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: false,
+      hasActiveInteractiveRuntime: false,
+      lastAssistantMessageId: message.id,
+    });
+
+    expect(projection.actionContent.trim().length).toBeGreaterThan(0);
+    expect(projection.rendererContent).toBe(projection.actionContent);
+    expect(projection.rendererRawContent).toBe(projection.actionContent);
+    expect(projection.rendererContentParts).toEqual([
+      {
+        type: "text",
+        text: projection.actionContent,
+      },
+    ]);
+    expect(projection.actionContent).not.toContain("failed to connect");
+    expect(projection.actionContent).not.toContain("execution backend error");
+    expect(projection.hasAssistantBodyContent).toBe(true);
+  });
+
+  it("failed runtimeStatus 只有 reasoning 和孤立标点时不应泄露过程流", () => {
+    const turnId = "turn-failed-reasoning-only";
+    const rawError =
+      "execution backend error: Agent provider execution failed: failed to connect to provider endpoint";
+    const internalReasoning = [
+      "interaction soul: cheeky_sassy_executor",
+      "style profile constraints should stay internal",
+    ].join("\n");
+    const message: Message = {
+      id: "assistant-failed-reasoning-only",
+      role: "assistant",
+      content: "。",
+      timestamp: new Date("2026-06-07T10:00:04.000Z"),
+      runtimeTurnId: turnId,
+      contentParts: [
+        {
+          type: "thinking",
+          text: internalReasoning,
+        },
+        {
+          type: "text",
+          text: "。",
+        },
+      ],
+      runtimeStatus: {
+        phase: "failed",
+        title: "当前处理失败",
+        detail: rawError,
+      },
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "reasoning-failed-only",
+          thread_id: "thread-failed-reasoning-only",
+          turn_id: turnId,
+          sequence: 1,
+          type: "reasoning",
+          text: internalReasoning,
+          status: "completed",
+          started_at: "2026-06-07T10:00:01.000Z",
+          completed_at: "2026-06-07T10:00:02.000Z",
+          updated_at: "2026-06-07T10:00:02.000Z",
+        },
+      ],
+      {
+        isSending: false,
+        hasActiveInteractiveRuntime: false,
+        lastAssistantMessageId: message.id,
+        turnId,
+        turnStatus: "failed",
+      },
+    );
+
+    expect(projection.actionContent.trim().length).toBeGreaterThan(0);
+    expect(projection.actionContent).not.toBe("。");
+    expect(projection.actionContent).not.toContain("cheeky_sassy_executor");
+    expect(projection.rendererContentParts).toEqual([
+      {
+        type: "text",
+        text: projection.actionContent,
+      },
+    ]);
+    expect(projection.rendererThinkingContent).toBeUndefined();
+    expect(projection.primaryTimeline).toBeNull();
+    expect(projection.trailingTimeline).toBeNull();
+    expect(projection.hasAssistantBodyContent).toBe(true);
   });
 
   it("completed read model 清运行态时不应丢弃 reasoning/tool/text 结构", () => {

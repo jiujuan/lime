@@ -2,7 +2,7 @@
 
 状态：current implementation
 
-更新时间：2026-07-09
+更新时间：2026-07-10
 
 ## 结论
 
@@ -50,7 +50,7 @@ Codex-rs 的后端口径也支持该判断：
 - 不把 `tool_confirmation` 包装成 A2UI schema。
 - 不保留旧消息流 approval 大卡或 Harness 待审批区作为主入口。
 - 不处理所有历史 imported approval 的视觉重设计；历史已提交记录可以继续只读展示。
-- 当前实现不一次性落所有 tool family 的完整 Codex `ApprovalStore`；本轮已接入 decision-based App Server contract，并完成 browser_control permission preflight 的 session-scoped cache、scope/lifecycle、Evidence export first slice 与真实 Electron CDP second-request 证据。后续仍需补历史只读展示与更多 tool policy scope 接入。
+- 当前实现不一次性落所有 tool family 的完整 Codex `ApprovalStore`；本轮已接入 decision-based App Server contract，并完成 browser_control permission preflight 的 session-scoped cache、scope/lifecycle、Evidence export first slice、历史只读投影与真实 Electron CDP second-request 证据。后续只按实际 tool policy 继续接入 scope/cache owner，不再扩展旧 UI 或 A2UI approval 面。
 
 ## 用户价值
 
@@ -76,7 +76,7 @@ Codex-rs 的后端口径也支持该判断：
 | ----------------- | -------------------------------- | ---------------------- | --------------------------------------------------------------------- |
 | 允许命令执行      | runtime 发出 `tool_confirmation` | 点击输入区 `允许`      | 调用 `agentSession/action/respond`，`decision=allow_once`，输入框恢复 |
 | 拒绝命令执行      | runtime 发出 `tool_confirmation` | 点击输入区 `拒绝`      | 调用 `agentSession/action/respond`，`decision=decline`，输入框恢复    |
-| 查看参数          | approval prompt 展示参数摘要     | 展开完整参数           | 只读查看 JSON 参数，不影响提交                                        |
+| 单行确认          | approval prompt 已替换输入框     | 查看摘要并选择决策     | 同一行完成授权，不展开详情卡或参数面板                                |
 | ask_user 补充信息 | runtime 发出 `ask_user`          | 在 A2UI/问答控件中提交 | 继续使用 ask/elicitation 原链路                                       |
 | 历史回放          | 历史里有已完成 approval          | 查看执行轨迹           | 只读回显或不展示提交按钮，不重新授权                                  |
 | 前置 Plan 确认    | 用户提出长程任务                 | 确认或修改 Plan        | 需求和授权边界前置收敛，执行阶段减少打扰                              |
@@ -131,15 +131,14 @@ Codex decision 对照：
 
 ## 交互设计
 
-输入区 prompt 采用单层 compact panel：
+输入区 prompt 固定为一行：
 
-- 左侧：风险/权限图标。
-- 主体：短标题、风险 badge、prompt 文案。
-- 摘要：工具名、命令/目录/路径/链接等最多 3 个核心参数。
-- 折叠详情：完整 JSON 参数，仅在需要时展开。
-- 右侧动作：`拒绝` 次按钮、`允许` 主按钮。
+- 左侧：一个权限提醒图标。
+- 主体：单行截断的 runtime prompt；完整文本只通过原生 tooltip / title 辅助查看。
+- 右侧：只渲染 backend `availableDecisions` 宣告的必要动作。
+- 窄宽度：动作保留图标、`aria-label` 和 tooltip，隐藏按钮文字，输入区高度不变化。
 
-不在 panel 内放大段说明，不新增二级表单，不引入 A2UI task card 样式。
+禁止恢复风险 badge、工具/目录/路径参数 chips、完整 JSON 展开、二级说明、A2UI task card 或多行详情面板。参数和 scope 继续只进入 read model / Evidence，不进入输入区主交互。
 
 输入区阻塞态优先级固定为：
 
@@ -262,6 +261,7 @@ flowchart LR
 - pending `tool_confirmation` 不再从消息流 `DecisionPanel` 提交。
 - Harness approvals / runtime status panel 不再展示 inline 允许/拒绝按钮，不再发送 `{ confirmed }` respond；只保留风险、范围、参数和请求 ID 的只读 evidence。
 - Workspace 输入区用 `InputbarApprovalPrompt` 替换普通 `Inputbar`。
+- `InputbarApprovalPrompt` 删除风险分级、参数 chips 和 JSON 详情，只保留单行 prompt 与决策动作。
 - 选择逻辑集中在 `inputbarApprovalAction`，避免父层散落判断。
 - 测试断言更新为：approval 不走 A2UI；pending approval 不在消息流渲染 DecisionPanel；提交后输入区恢复。
 - PRD 将 HITL 分成 Plan、runtime approval、ask/elicitation、interrupt/cancel，不再把所有人工介入合并成一个 A2UI 面。
@@ -283,7 +283,8 @@ flowchart LR
 
 P0 当前实现验收：
 
-- pending `tool_confirmation` 出现时，输入区展示 compact approval prompt，普通 textarea 不渲染。
+- pending `tool_confirmation` 出现时，输入区展示固定高度单行 approval prompt，普通 textarea 不渲染。
+- 单行 prompt 不展示风险 badge、工具/目录/路径参数 chips 或 JSON 详情；窄宽度下动作退为带 `aria-label` / tooltip 的图标按钮。
 - 点击 `允许` 发送 `{ requestId, decision: "allow_once", response, actionType: "tool_confirmation" }`。
 - 点击 `拒绝` 发送 `{ requestId, decision: "decline", response, actionType: "tool_confirmation" }`。
 - 同一 request 进入 `submittedActionsInFlight` 后，prompt 不再占用输入区，普通输入框恢复。
@@ -329,10 +330,11 @@ P3 / Plan 编排验收：
 
 | ID         | 阶段 | 场景                         | 前置条件                                           | 操作                                                                                              | 期望结果                                                                                                                                  | 证据入口                                                                                                      |
 | ---------- | ---- | ---------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| APR-T-001  | P0   | 输入区替换普通输入框         | 存在 pending `tool_confirmation`                   | 渲染 Workspace inputbar                                                                           | 显示 compact approval prompt，普通 textarea 不渲染                                                                                        | `useWorkspaceInputbarSceneRuntime.test.tsx`                                                                   |
+| APR-T-001  | P0   | 输入区替换普通输入框         | 存在 pending `tool_confirmation`                   | 渲染 Workspace inputbar                                                                           | 显示固定高度单行 approval prompt，普通 textarea 不渲染                                                                                    | `useWorkspaceInputbarSceneRuntime.test.tsx`                                                                   |
 | APR-T-002  | P0   | 允许本次 approval            | prompt 已展示                                      | 点击 `允许`                                                                                       | 发送 `{ decision: "allow_once", actionType: "tool_confirmation" }`                                                                        | `useWorkspaceInputbarSceneRuntime.test.tsx`                                                                   |
 | APR-T-003  | P0   | 拒绝本次 approval            | prompt 已展示                                      | 点击 `拒绝`                                                                                       | 发送 `{ decision: "decline", actionType: "tool_confirmation" }`                                                                           | `useWorkspaceInputbarSceneRuntime.test.tsx`                                                                   |
 | APR-T-004  | P0   | 提交后输入框恢复             | request 进入 submitted in-flight                   | 重新渲染 Workspace inputbar                                                                       | approval prompt 释放占位，普通输入框恢复                                                                                                  | `useWorkspaceInputbarSceneRuntime.test.tsx`                                                                   |
+| APR-T-004B | P0   | 单行视觉边界                 | prompt 带 tool / command / cwd / risk arguments    | 渲染 `InputbarApprovalPrompt`                                                                     | 只展示单行 prompt 与 backend 决策；无风险文案、工具名、命令、目录、`details` / `pre`                                                      | `InputbarApprovalPrompt.test.tsx`                                                                             |
 | APR-T-005  | P0   | approval 不进入 A2UI         | `tool_confirmation` action                         | 调用 A2UI preview builder                                                                         | `buildActionRequestA2UI(tool_confirmation)` 返回 `null`                                                                                   | `actionRequestA2UI.test.ts`                                                                                   |
 | APR-T-006  | P0   | 消息流不提供 pending 提交    | Timeline 有 pending approval                       | 渲染消息流 / streaming renderer                                                                   | 不出现可提交 `DecisionPanel`                                                                                                              | `StreamingRenderer.structuredContent.test.tsx`、`AgentThreadTimeline.test.tsx`                                |
 | APR-T-006B | P0   | Harness 待审批区只读         | Harness state 有 pending approval                  | 渲染 `HarnessStatusPanel`                                                                         | 显示风险、范围、参数、请求 ID 和输入区提示；不出现允许/拒绝按钮；不调用 respond                                                           | `HarnessStatusPanel.runtime.test.tsx`                                                                         |
@@ -358,7 +360,7 @@ Gate A 证明 renderer / browser projection 在可控环境下稳定，可使用
 
 | ID        | 阶段 | 场景                               | 操作                                                                        | 必须断言                                                                                      | 不能声明                                  |
 | --------- | ---- | ---------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| APR-A-001 | P0   | pending approval 投影              | 在 browser projection / fixture 中注入 pending `tool_confirmation`          | inputbar 区域出现 approval prompt；textarea 隐藏；按钮尺寸适配输入区                          | 不能声明 Electron IPC / App Server 已闭环 |
+| APR-A-001 | P0   | pending approval 投影              | 在 browser projection / fixture 中注入 pending `tool_confirmation`          | inputbar 区域出现单行 approval prompt；textarea 隐藏；窄宽度按钮不改变输入区高度              | 不能声明 Electron IPC / App Server 已闭环 |
 | APR-A-002 | P0   | A2UI / Timeline / Harness 回流守卫 | 同一 projection 中渲染 A2UI、消息流与 Harness 待审批区                      | A2UI 不出现 approval 表单；消息流和 Harness 不出现 pending 可提交按钮                         | 不能声明 runtime 已收到 decision          |
 | APR-A-003 | P0   | 提交中恢复状态                     | 模拟 submitted in-flight                                                    | inputbar 恢复普通输入；不会被旧 pending request 占住                                          | 不能声明真实 pendingActions 已从后端清除  |
 | APR-A-004 | P1   | decision action 可用态渲染         | 注入 `available_decisions=[allow_once, allow_for_session, decline, cancel]` | UI 只显示 backend 宣告可用的精简动作；无 backend 支持时不显示“本会话允许”                     | 不能声明 session cache 已写入             |
@@ -424,7 +426,19 @@ npm run smoke:agent-session-recovery-cdp-gate -- --cdp-port 9223 --prefix approv
 - GUI 主路径最终补跑 `npm run verify:gui-smoke`。
 - P1 落地时新增 App Server / frontend contract 测试，覆盖 decision 枚举、缺 decision fail closed、拒绝继续和取消停止；P2 已补 RuntimeCore browser_control session cache、scope key、lifecycle 定向测试，Evidence export first slice 已覆盖 cache hit / auto resolve summary，Gate B second-request 已通过；P2 后续 tool family first slice 已补 shell session 授权假入口守卫，并把 shell approval contract/scope projection 收敛到 `tool-runtime::execution_approval`；P4 Timeline / replay 只读分类已落地；P3 Plan / approval / A2UI 输入区编排已补 release 级 Gate A 聚合。
 
-2026-07-09 当前验证记录：
+2026-07-10 当前验证记录：
+
+- 单行输入区回归：`InputbarApprovalPrompt` 固定为 `h-11`，只保留权限图标、单行截断 prompt 和 backend `availableDecisions`；删除风险 badge、工具/命令/目录参数 chips、JSON `details/pre` 及五语言废弃文案。Approval/A2UI/Timeline 定向组测通过，`4 files / 50 tests`；fixture 脚本测试通过，`58 tests`；`npm run typecheck`、`npm run i18n:unused -- --check`、Prettier 与 `git diff --check` 均通过。
+- Gate A 聚合：`npm run smoke:agent-runtime-current-fixture` 在 2026-07-10 当前工作树通过。最新 approval current fixture summary 中，resume `50` 项、decline `43` 项、cancel `43` 项、full-access `40` 项断言全部为 `true`；resume pending UI 实测高度 `44px`、textarea 隐藏、无 tool/command/details/pre，full-access 无 approval prompt、无 Timeline approval record。
+- Gate B CDP：四个真实 Electron CDP 场景全部通过，proof level 均为 `Gate B CDP controlled fixture`，renderer 均满足 `electron=true`、`hasInvokeBridge=true`、`supportsAppServer=true`，且无失败断言：
+  - resume：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-approval-request-resume-cdp-p6-summary.json`，包含 `agentSession/action/respond`，pending 高度 `44px`、单行、无 tool/command/details/pre，并证明同 session 同 scope 第二次 request 自动放行。
+  - decline：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-approval-request-decline-cdp-p6-summary.json`，证明 `decision=decline` 不取消 turn、被拒绝动作不执行、输入区恢复。
+  - cancel：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-approval-request-cancel-cdp-p6-summary.json`，证明 `decision=cancel` 进入 canceled 终态、被拒绝动作不执行、输入区恢复。
+  - full-access：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-approval-request-full-access-cdp-p6-summary.json`，证明 `approvalPolicy=never`、`sandboxPolicy=danger-full-access`、无 approval prompt、Timeline record 数量为 `0`，且不发送 `agentSession/action/respond`。
+- GUI / contract 门槛：`npm run verify:gui-smoke` 通过，真实 Electron renderer、preload、App Server sidecar、Claw workbench shell 与 memory settings ready；`npm run test:contracts` 通过，protocol types、App Server client、Electron command、Harness、modality、scripts、release workflow 与 docs boundary 均无漂移。
+- 环境处置记录：首次给 Gate B 设置相对隔离 `CARGO_TARGET_DIR=".lime/cargo-target/r4-verification"` 时，sidecar 链接因该 target 缺少 `sherpa-onnx` 预编译库而失败，尚未进入 Electron/CDP 阶段；改回仓库默认 `lime-rs/target` 后四个 Gate B 全部通过。该失败不是 Approval 产品断言失败，也没有通过修改 `agent-compat` 规避。
+
+2026-07-09 基线验证记录：
 
 - Gate A：`CARGO_TARGET_DIR="/tmp/lime-approval-gateb-target" npm run smoke:agent-runtime-current-fixture` 已通过，证明 renderer/current fixture 投影不回流；覆盖 history/cache hydration、turn completed 收尾、Claw GUI current fixture、Inputbar pending steer 队列 / 恢复、Plan revisioned history hydrate、Skills / Multi-Agent / MCP / media contentParts / Expert Skills / 内容工厂 article editor 等场景，`liveProviderUsed=false`。
 - Gate A P3 release 级复跑：2026-07-09 13:20 CST，`CARGO_TARGET_DIR="/tmp/lime-approval-gateb-target" npm run smoke:agent-runtime-current-fixture` 再次通过，覆盖真实 Electron 首页首发热路径、Coding Workbench、图片命令、cancel-then-continue、approval allow-for-session resume / decline / cancel / full-access no prompt、Inputbar pending steer 队列 / 恢复、Plan revisioned history hydrate、Skills / Multi-Agent / MCP / media contentParts / Expert Skills / 内容工厂 article editor 等 current fixture，`liveProviderUsed=false`；其中 full-access 场景断言完全授权下无 approval prompt / 无 timeline record，P3 场景断言 Plan / approval / inputbar 队列编排未回流旧面。

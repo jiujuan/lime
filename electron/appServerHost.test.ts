@@ -346,6 +346,7 @@ const runtimeLibraryEnvKeys = [
   "DYLD_FALLBACK_LIBRARY_PATH",
   "DYLD_LIBRARY_PATH",
   "LD_LIBRARY_PATH",
+  "LIME_CONFIG_PATH",
 ] as const;
 
 function setProcessPlatform(platform: NodeJS.Platform): void {
@@ -421,6 +422,19 @@ describe("ElectronAppServerHost", () => {
       dataDir: "/tmp/lime-electron-user-data/app-server",
       productDbMigrationCleanup: "drop-tables",
     });
+  });
+
+  it("启动 App Server 时应把配置事实源收敛到 Electron userData config.yaml", async () => {
+    process.env.LIME_CONFIG_PATH = "/tmp/legacy-global-config.yaml";
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleOptions).toHaveLength(1);
+    expect(lifecycleOptions[0].env?.LIME_CONFIG_PATH).toBe(
+      "/tmp/lime-electron-user-data/config.yaml",
+    );
   });
 
   it("macOS 启动 App Server 时应把可执行文件目录放入动态库搜索路径", async () => {

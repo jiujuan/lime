@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 import {
   hydrateSessionDetailMessages,
@@ -9,6 +10,13 @@ import {
 } from "./agentChatHistory";
 
 describe("agentChatHistory missing user recovery", () => {
+  const internalRuntimeErrorMessage =
+    "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。";
+
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("App Server failed read model 应恢复用户请求并追加失败助手消息", () => {
     const detail: AsterSessionDetail = {
       id: "session-app-server-failed-read",
@@ -114,10 +122,15 @@ describe("agentChatHistory missing user recovery", () => {
       runtimeStatus: {
         phase: "failed",
         title: "当前处理失败",
-        detail: expect.stringContaining("token-plan-cn.xiaomimimo.com"),
+        detail: internalRuntimeErrorMessage,
       },
     });
-    expect(messages[1]?.content).toContain("token-plan-cn.xiaomimimo.com");
+    expect(messages[1]?.content).toBe(
+      `执行失败：${internalRuntimeErrorMessage}`,
+    );
+    expect(messages[1]?.content).not.toContain(
+      "token-plan-cn.xiaomimimo.com",
+    );
     expect(messages[1]?.contentParts).toEqual([
       {
         type: "text",

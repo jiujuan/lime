@@ -496,8 +496,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "approvalRequestFullAccessNoLegacyRuntimeRespond",
     );
     expect(content).toContain("APPROVAL_REQUEST_FULL_ACCESS_ASSERTION_KEYS");
-    expect(content).toContain(
-      "!appServerRequestMethods.includes(\n        APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
+    expect(content).toMatch(
+      /approvalRequestFullAccessNoActionRespond:\s*!appServerRequestMethods\.includes\(\s*APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND/u,
     );
     expect(regressionContent).toContain(
       "Claw approval full-access no prompt Electron fixture",
@@ -505,6 +505,23 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(regressionContent).toContain("approval-request-full-access");
     expect(regressionContent).toContain(
       "claw-chat-current-fixture-approval-request-full-access-regression",
+    );
+  });
+
+  it("keeps pending approval as a single inputbar row without tool argument details", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain('[data-testid="inputbar-approval-prompt"]');
+    expect(content).toContain('[data-testid="inputbar-approval-summary"]');
+    expect(content).toContain('approvalPrompt?.querySelector("details")');
+    expect(content).toContain('approvalPrompt?.querySelector("pre")');
+    expect(content).toContain("snapshot.textareaVisible === false");
+    expect(content).toContain("snapshot.singleLine === true");
+    expect(content).toContain(
+      "approvalRequestResumePendingGui?.hasToolName === false",
+    );
+    expect(content).toContain(
+      "approvalRequestResumePendingGui?.hasCommand === false",
     );
   });
 

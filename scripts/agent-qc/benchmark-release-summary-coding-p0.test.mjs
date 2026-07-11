@@ -7,12 +7,13 @@ import { describe, expect, it } from "vitest";
 import { buildBenchmarkReleaseSummary } from "./benchmark-release-summary.mjs";
 import {
   CODING_P0_BATCH_ID,
+  CODING_P0_MANAGED_SCRIPT,
   CODING_P0_SUITE_ID,
   CODING_P0_TARGET_TOOLS,
   codingP0ToolExecutionArtifactPath,
 } from "./benchmark-release-coding-p0-artifact.mjs";
 
-const CODING_COMMAND = `npm run smoke:agent-runtime-tool-execution -- --batch ${CODING_P0_BATCH_ID}`;
+const CODING_COMMAND = `npm run ${CODING_P0_MANAGED_SCRIPT} -- --batch ${CODING_P0_BATCH_ID}`;
 
 function makeTempDir() {
   return fs.mkdtempSync(
@@ -51,14 +52,14 @@ function makeManifest() {
 function makeP0GateStep(artifactPath) {
   return {
     kind: "p0_npm_gate",
-    id: `${CODING_P0_SUITE_ID}:npm-01-smoke-agent-runtime-tool-execution`,
+    id: `${CODING_P0_SUITE_ID}:npm-01-smoke-agent-runtime-tool-execution-managed`,
     command: `${CODING_COMMAND} --output ${artifactPath}`,
     manifestCommand: CODING_COMMAND,
     status: "passed",
     exitCode: 0,
     reason: "",
     outputPath:
-      "runs/p0/coding-workflow-p0/01-smoke-agent-runtime-tool-execution.json",
+      "runs/p0/coding-workflow-p0/01-smoke-agent-runtime-tool-execution-managed.json",
     evidenceArtifacts: [
       {
         kind: "agent_runtime_tool_execution_smoke",

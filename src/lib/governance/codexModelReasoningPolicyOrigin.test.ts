@@ -28,10 +28,12 @@ const CODEX_REASONING_EFFORT_VALUES = [
 const CODEX_REASONING_MODEL_INFO_FIELDS = [
   "default_reasoning_level",
   "supported_reasoning_levels",
-  "supports_reasoning_summaries",
+  "supports_reasoning_summary_parameter",
 ];
 
 const LIME_REASONING_POLICY_INPUT_FIELDS = [
+  "supports_reasoning_summary_parameter",
+  "supportsReasoningSummaryParameter",
   "supports_reasoning_summaries",
   "supportsReasoningSummaries",
   "default_reasoning_level",
@@ -161,10 +163,10 @@ describe("Codex model reasoning policy origin", () => {
     ).toEqual(CODEX_REASONING_MODEL_INFO_FIELDS);
   });
 
-  it("request reasoning effort 沿用 Codex supports_reasoning_summaries + default 语义", () => {
+  it("request reasoning effort 沿用 Codex default fallback 语义", () => {
     const limeSource = readRepoFile(LIME_REASONING_POLICY_SOURCE);
 
-    expect(limeSource).toContain("if (!policy.supports_reasoning_summaries)");
+    expect(limeSource).toContain("hasReasoningEffortPolicy(policy)");
     expect(limeSource).toContain("return policy.default_reasoning_level");
 
     const codexTurnContextSource = readIfExists(CODEX_TURN_CONTEXT_SOURCE);
@@ -172,9 +174,6 @@ describe("Codex model reasoning policy origin", () => {
       return;
     }
 
-    expect(codexTurnContextSource).toContain(
-      "if self.model_info.supports_reasoning_summaries",
-    );
     expect(codexTurnContextSource).toContain(
       ".or_else(|| self.model_info.default_reasoning_level.clone())",
     );

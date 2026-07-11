@@ -1,4 +1,3 @@
-use crate::agent_tools::catalog::{build_mcp_extension_surface, mcp_extension_runtime_name};
 use crate::agent_tools::inventory::{
     build_tool_inventory, AgentToolInventoryBuildInput, AgentToolInventorySnapshot,
     ExtensionToolInventorySeed,
@@ -7,6 +6,7 @@ use crate::agent_tools::tool_inventory_runtime_adapter::read_agent_tool_inventor
 use crate::mcp::McpToolDefinition;
 use crate::AgentRuntimeState;
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
+use lime_mcp::{build_runtime_extension_surface, runtime_extension_name};
 use std::collections::{BTreeMap, HashSet};
 use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_extension::RuntimeExtensionConfig;
@@ -123,7 +123,7 @@ fn merge_mcp_extension_projection(
         .collect::<HashSet<_>>();
     let mut tools_by_extension: BTreeMap<String, Vec<McpToolDefinition>> = BTreeMap::new();
     for tool in mcp_tools {
-        let extension_name = mcp_extension_runtime_name(&tool.server_name);
+        let extension_name = runtime_extension_name(&tool.server_name);
         tools_by_extension
             .entry(extension_name)
             .or_default()
@@ -148,7 +148,7 @@ fn merge_mcp_extension_projection(
             .first()
             .map(|tool| tool.server_name.as_str())
             .unwrap_or(extension_name.as_str());
-        let surface = build_mcp_extension_surface(
+        let surface = build_runtime_extension_surface(
             &extension_name,
             format!("MCP server {server_name} tools"),
             &tools,

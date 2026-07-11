@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { buildBenchmarkReleaseRunPlan } from "./benchmark-release-run.mjs";
 import {
   CODING_P0_BATCH_ID,
+  CODING_P0_MANAGED_SCRIPT,
   CODING_P0_SUITE_ID,
   CODING_P0_TARGET_TOOLS,
   codingP0ToolExecutionArtifactPath,
@@ -34,7 +35,7 @@ function makeManifest() {
         runner: "npm",
         requiredForRelease: true,
         commands: [
-          `npm run smoke:agent-runtime-tool-execution -- --batch ${CODING_P0_BATCH_ID}`,
+          `npm run ${CODING_P0_MANAGED_SCRIPT} -- --batch ${CODING_P0_BATCH_ID}`,
         ],
         status: "planned",
       },
@@ -62,9 +63,9 @@ describe("benchmark release coding P0 runner artifact", () => {
     expect(step).toEqual(
       expect.objectContaining({
         kind: "p0_npm_gate",
-        manifestCommand: `npm run smoke:agent-runtime-tool-execution -- --batch ${CODING_P0_BATCH_ID}`,
+        manifestCommand: `npm run ${CODING_P0_MANAGED_SCRIPT} -- --batch ${CODING_P0_BATCH_ID}`,
         outputPath:
-          "out/p0/coding-workflow-p0/01-smoke-agent-runtime-tool-execution.json",
+          "out/p0/coding-workflow-p0/01-smoke-agent-runtime-tool-execution-managed.json",
       }),
     );
     expect(step.args).toEqual(

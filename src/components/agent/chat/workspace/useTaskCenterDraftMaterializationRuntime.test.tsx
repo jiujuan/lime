@@ -376,7 +376,7 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
     );
   });
 
-  it("首页首发发送 commit materialized 草稿时可只同步路由不拉详情", async () => {
+  it("commit materialized 草稿可只同步路由不拉详情", async () => {
     const createFreshSession = vi.fn(async () => "session-navigation-only");
     const markTaskCenterEmbeddedHomeSession = vi.fn();
     const markTaskCenterLocalSessionOverride = vi.fn();

@@ -61,6 +61,16 @@ describe("agentStreamCompletionController", () => {
     ).toBe(false);
     expect(
       shouldFailAgentStreamMissingFinalReply({
+        accumulatedContent: "。",
+      }),
+    ).toBe(true);
+    expect(
+      shouldFailAgentStreamMissingFinalReply({
+        accumulatedContent: "已有正文",
+      }),
+    ).toBe(false);
+    expect(
+      shouldFailAgentStreamMissingFinalReply({
         accumulatedContent: "最终答复",
         hasFinalAnswerRequiredProcessBoundary: true,
         hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
@@ -93,6 +103,12 @@ describe("agentStreamCompletionController", () => {
         fallbackContent: "",
       }),
     ).toBe("");
+    expect(
+      resolveAgentStreamGracefulCompletionContent({
+        accumulatedContent: "。",
+        fallbackContent: "兜底内容",
+      }),
+    ).toBe("兜底内容");
   });
 
   it("最终文本变化时应保留过程顺序并把最终正文放到过程后", () => {
@@ -631,6 +647,24 @@ describe("agentStreamCompletionController", () => {
       type: "complete",
       finalContent: "本轮执行已完成，详细过程与产物已保留在当前对话中。",
       queuedTurnIds: ["queued-2"],
+      requestLogPayload: {
+        eventType: "chat_request_complete",
+        status: "success",
+        description: "请求完成，模型未补充最终总结，已降级保留当前过程结果",
+      },
+    });
+
+    expect(
+      buildAgentStreamEmptyFinalErrorPlan({
+        errorMessage: "模型未输出最终答复：工具已完成",
+        accumulatedContent: "已经输出的正文",
+        hasMeaningfulCompletionSignal: false,
+        queuedTurnId: "queued-3",
+      }),
+    ).toEqual({
+      type: "complete",
+      finalContent: "已经输出的正文",
+      queuedTurnIds: ["queued-3"],
       requestLogPayload: {
         eventType: "chat_request_complete",
         status: "success",

@@ -83,12 +83,56 @@ describe("sendAgentStreamMessage", () => {
 
     expect(order).toEqual(["ensureSession", "prepare"]);
     expect(ensureSession).toHaveBeenCalledWith({
+      targetSessionId: undefined,
       skipSessionRestore: false,
       skipSessionStartHooks: false,
     });
     expect(prepareAgentStreamUserInputSend).toHaveBeenCalledWith(
       expect.objectContaining({ env }),
     );
+    expect(dispatchPreparedAgentStreamSend).toHaveBeenCalledWith({
+      preparedSend,
+      env,
+    });
+  });
+
+  it("目标会话首发应先绑定 session 再准备乐观消息", async () => {
+    const order: string[] = [];
+    const sessionIdRef = { current: null as string | null };
+    const ensureSession = vi.fn(
+      async (options?: { targetSessionId?: string }) => {
+        order.push("ensureSession");
+        sessionIdRef.current = options?.targetSessionId ?? null;
+        return sessionIdRef.current;
+      },
+    );
+    const env = createEnv({
+      sessionIdRef,
+      ensureSession,
+    });
+    const preparedSend = { prepared: true };
+    vi.mocked(prepareAgentStreamUserInputSend).mockImplementation(() => {
+      order.push(`prepare:${sessionIdRef.current ?? "none"}`);
+      return preparedSend as never;
+    });
+
+    await sendAgentStreamMessage({
+      content: "你好",
+      images: [],
+      options: {
+        targetSessionId: "session-materialized",
+        skipSessionRestore: true,
+        skipSessionStartHooks: true,
+      },
+      env,
+    });
+
+    expect(order).toEqual(["ensureSession", "prepare:session-materialized"]);
+    expect(ensureSession).toHaveBeenCalledWith({
+      targetSessionId: "session-materialized",
+      skipSessionRestore: true,
+      skipSessionStartHooks: true,
+    });
     expect(dispatchPreparedAgentStreamSend).toHaveBeenCalledWith({
       preparedSend,
       env,

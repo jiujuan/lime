@@ -26,7 +26,7 @@ use provider_env::{
 };
 use runtime_config_projection::runtime_provider_config_from_credential;
 pub(crate) use runtime_provider_adapter::{
-    create_configured_reply_provider, ConfiguredReplyProvider,
+    create_configured_reply_provider, CompatReplyProvider, ConfiguredReplyProvider,
 };
 
 /// 凭证桥接错误

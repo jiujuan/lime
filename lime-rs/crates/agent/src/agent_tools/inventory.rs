@@ -1,8 +1,8 @@
 use crate::agent_tools::catalog::{
-    mcp_extension_runtime_name, tool_catalog_entries_for_surface, tool_catalog_entry,
-    workspace_default_allowed_tool_names, ToolCapability, ToolCatalogEntry, ToolLifecycle,
-    ToolPermissionPlane, ToolSourceKind, ToolSurfaceProfile, WorkspaceToolSurface,
-    BROWSER_RUNTIME_TOOL_PREFIX, LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME,
+    tool_catalog_entries_for_surface, tool_catalog_entry, workspace_default_allowed_tool_names,
+    ToolCapability, ToolCatalogEntry, ToolLifecycle, ToolPermissionPlane, ToolSourceKind,
+    ToolSurfaceProfile, WorkspaceToolSurface, BROWSER_RUNTIME_TOOL_PREFIX,
+    LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME,
 };
 use crate::agent_tools::execution::{
     resolve_tool_execution_policy_resolution, ToolExecutionPolicySource,
@@ -15,6 +15,7 @@ use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyCon
 use lime_core::tool_calling::{
     extract_tool_surface_metadata, tool_matches_caller, tool_visible_in_context,
 };
+use lime_mcp::runtime_extension_name;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
 use tool_runtime::tool_definition::RuntimeToolDefinition;
@@ -328,7 +329,7 @@ pub(crate) fn build_tool_inventory(
     mcp_servers.sort();
     let mcp_extension_lookup = mcp_servers
         .iter()
-        .map(|server_name| mcp_extension_runtime_name(server_name))
+        .map(|server_name| runtime_extension_name(server_name))
         .collect::<HashSet<_>>();
 
     let mut default_allowed_tools = workspace_default_allowed_tool_names(surface)

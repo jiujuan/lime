@@ -1,5 +1,5 @@
 use crate::conversation::message::ActionRequiredScope;
-use crate::providers::base::Provider;
+use crate::reply_provider::Provider;
 use crate::session::TurnContextOverride;
 use rmcp::model::{CallToolResult, ErrorData, Tool};
 use serde::{Deserialize, Serialize};

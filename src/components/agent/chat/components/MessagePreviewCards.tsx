@@ -22,6 +22,7 @@ export function MessagePreviewCards({
       <div className={hasImageWorkbenchLeadContent ? "mt-2.5" : ""}>
         <ImageWorkbenchMessagePreview
           preview={message.imageWorkbenchPreview}
+          showCompletionCaption={false}
           onOpen={
             onOpenMessagePreview
               ? (preview, selection) =>

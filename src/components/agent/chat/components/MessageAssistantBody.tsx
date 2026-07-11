@@ -8,6 +8,7 @@ import {
 import { MessageCanvasShortcut } from "./MessageCanvasShortcut";
 import { MessagePreviewCards } from "./MessagePreviewCards";
 import type { resolveImageWorkbenchRendererProcessState } from "./imageWorkbenchMessageDisplay";
+import { resolveImageWorkbenchCompletionCaption } from "../utils/imageWorkbenchPresentation";
 import type {
   ConfirmResponse,
   Message,
@@ -138,6 +139,10 @@ export function MessageAssistantBody({
   const shouldShowStreamingCursor = Boolean(
     message.isThinking && isMessageStreaming,
   );
+  const imageWorkbenchCompletionCaption = message.imageWorkbenchPreview
+    ? resolveImageWorkbenchCompletionCaption(message.imageWorkbenchPreview)
+    : "";
+  const imageWorkbenchTaskId = message.imageWorkbenchPreview?.taskId;
 
   return (
     <>
@@ -162,38 +167,41 @@ export function MessageAssistantBody({
       ) : message.imageWorkbenchPreview ? (
         hasImageWorkbenchLeadContent ||
         imageWorkbenchRendererState.shouldRenderInlineProcess ? (
-          <StreamingRenderer
-            content={rendererContent}
-            rawContent={rendererRawContent}
-            isStreaming={isMessageStreaming}
-            showCursor={shouldShowStreamingCursor && !displayContent}
-            thinkingContent={imageWorkbenchRendererState.thinkingContent}
-            contentParts={imageWorkbenchRendererState.contentParts}
-            toolCalls={imageWorkbenchRendererState.toolCalls}
-            actionRequests={rendererActionRequests}
-            markdownRenderMode={rendererMarkdownRenderMode}
-            suppressProcessFlow={false}
-            showContentBlockActions={Boolean(actionContent)}
-            onQuoteContent={
-              onQuoteMessage
-                ? (quotedContent) => onQuoteMessage(quotedContent, message.id)
-                : undefined
-            }
-            onOpenUrlPreview={onOpenUrlPreview}
-            onOpenMediaReference={
-              onOpenMessagePreview
-                ? (reference, index) =>
-                    onOpenMessagePreview(
-                      {
-                        kind: "media_reference",
-                        reference,
-                        index,
-                      },
-                      message,
-                    )
-                : undefined
-            }
-          />
+          <div
+            data-testid={`image-workbench-assistant-intro-${imageWorkbenchTaskId}`}
+          >
+            <StreamingRenderer
+              content={rendererContent}
+              rawContent={rendererRawContent}
+              isStreaming={isMessageStreaming}
+              showCursor={shouldShowStreamingCursor && !displayContent}
+              contentParts={imageWorkbenchRendererState.contentParts}
+              toolCalls={imageWorkbenchRendererState.toolCalls}
+              actionRequests={rendererActionRequests}
+              markdownRenderMode={rendererMarkdownRenderMode}
+              suppressProcessFlow={false}
+              showContentBlockActions={Boolean(actionContent)}
+              onQuoteContent={
+                onQuoteMessage
+                  ? (quotedContent) => onQuoteMessage(quotedContent, message.id)
+                  : undefined
+              }
+              onOpenUrlPreview={onOpenUrlPreview}
+              onOpenMediaReference={
+                onOpenMessagePreview
+                  ? (reference, index) =>
+                      onOpenMessagePreview(
+                        {
+                          kind: "media_reference",
+                          reference,
+                          index,
+                        },
+                        message,
+                      )
+                  : undefined
+              }
+            />
+          </div>
         ) : null
       ) : (
         <StreamingRenderer
@@ -275,6 +283,14 @@ export function MessageAssistantBody({
         hasImageWorkbenchLeadContent={hasImageWorkbenchLeadContent}
         onOpenMessagePreview={onOpenMessagePreview}
       />
+      {imageWorkbenchCompletionCaption && imageWorkbenchTaskId ? (
+        <div
+          data-testid={`image-workbench-completion-caption-${imageWorkbenchTaskId}`}
+          className="mt-2.5 max-w-[800px] whitespace-pre-line text-sm leading-6 text-slate-700"
+        >
+          {imageWorkbenchCompletionCaption}
+        </div>
+      ) : null}
     </>
   );
 }

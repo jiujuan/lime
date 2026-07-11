@@ -100,6 +100,40 @@ export type AgentStreamEmptyFinalErrorPlan =
 const resolveQueuedTurnIds = (queuedTurnId?: string | null): string[] =>
   queuedTurnId ? [queuedTurnId] : [];
 
+const TRIVIAL_ASSISTANT_FINAL_TEXT_CHARS = ".,!?;:，。！？；：、…";
+
+function isTrivialAssistantFinalText(value?: string | null): boolean {
+  const normalized = (value || "").trim();
+  if (!normalized) {
+    return true;
+  }
+
+  for (const char of normalized) {
+    if (char.trim() && !TRIVIAL_ASSISTANT_FINAL_TEXT_CHARS.includes(char)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function resolveVisibleAssistantFinalText(value: string): string {
+  const cleanedFinalContent = stripAssistantProtocolResidue(value);
+  if (cleanedFinalContent) {
+    return cleanedFinalContent;
+  }
+
+  const rawFinalContent = value.trim();
+  if (
+    rawFinalContent &&
+    !containsAssistantProtocolResidue(value) &&
+    !isTrivialAssistantFinalText(rawFinalContent)
+  ) {
+    return rawFinalContent;
+  }
+
+  return "";
+}
+
 export function buildAgentStreamMissingFinalReplyFailurePlan(params: {
   errorMessage: string;
   toastMessage?: string;
@@ -159,15 +193,28 @@ export function shouldFailAgentStreamMissingFinalReply(params: {
     return false;
   }
 
+  const visibleAssistantFinalText = resolveVisibleAssistantFinalText(
+    params.accumulatedContent,
+  );
+  if (
+    visibleAssistantFinalText &&
+    !isTrivialAssistantFinalText(visibleAssistantFinalText) &&
+    (!params.hasFinalAnswerRequiredProcessBoundary ||
+      params.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary)
+  ) {
+    return false;
+  }
+
   const rawFinalContent = params.accumulatedContent.trim();
   const cleanedFinalContent = stripAssistantProtocolResidue(
     params.accumulatedContent,
   );
 
   return (
-    !cleanedFinalContent &&
+    (!cleanedFinalContent || isTrivialAssistantFinalText(cleanedFinalContent)) &&
     (containsAssistantProtocolResidue(params.accumulatedContent) ||
-      !rawFinalContent)
+      !rawFinalContent ||
+      isTrivialAssistantFinalText(rawFinalContent))
   ) || Boolean(
     params.hasFinalAnswerRequiredProcessBoundary &&
       !params.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
@@ -183,12 +230,13 @@ export function resolveAgentStreamGracefulCompletionContent(params: {
     params.accumulatedContent,
   );
 
-  if (cleanedFinalContent) {
+  if (cleanedFinalContent && !isTrivialAssistantFinalText(cleanedFinalContent)) {
     return cleanedFinalContent;
   }
   if (
     !containsAssistantProtocolResidue(params.accumulatedContent) &&
-    rawFinalContent
+    rawFinalContent &&
+    !isTrivialAssistantFinalText(rawFinalContent)
   ) {
     return rawFinalContent;
   }
@@ -614,7 +662,12 @@ export function buildAgentStreamEmptyFinalErrorPlan(params: {
   hasMeaningfulCompletionSignal?: boolean;
   queuedTurnId?: string | null;
 }): AgentStreamEmptyFinalErrorPlan {
-  if (!params.hasMeaningfulCompletionSignal) {
+  if (
+    shouldFailAgentStreamMissingFinalReply({
+      accumulatedContent: params.accumulatedContent,
+      hasMeaningfulCompletionSignal: params.hasMeaningfulCompletionSignal,
+    })
+  ) {
     return buildAgentStreamMissingFinalReplyFailurePlan({
       errorMessage: params.errorMessage,
       queuedTurnId: params.queuedTurnId,

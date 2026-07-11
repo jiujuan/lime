@@ -1,6 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use chrono::{DateTime, Utc};
+
+use crate::runtime_snapshot::{
+    RuntimeItemPayloadRecord, RuntimeItemSnapshotRecord, RuntimeItemStatusRecord,
+};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationMessageRole {
@@ -110,6 +116,38 @@ pub enum RuntimeConversationItemSource {
     },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TranscriptItemRecordInput {
+    pub thread_id: String,
+    pub turn_id: String,
+    pub sequence: i64,
+    pub role: ConversationMessageRole,
+    pub content_json: Value,
+    pub metadata_json: Value,
+    pub created_timestamp: i64,
+    pub message_id: Option<String>,
+    pub recorded_at: DateTime<Utc>,
+}
+
+pub fn build_transcript_item_record(input: TranscriptItemRecordInput) -> RuntimeItemSnapshotRecord {
+    RuntimeItemSnapshotRecord {
+        id: transcript_item_id(&input.turn_id, input.message_id.as_deref(), input.sequence),
+        thread_id: input.thread_id,
+        turn_id: input.turn_id,
+        sequence: input.sequence,
+        status: RuntimeItemStatusRecord::Completed,
+        started_at: input.recorded_at,
+        completed_at: Some(input.recorded_at),
+        updated_at: input.recorded_at,
+        payload: RuntimeItemPayloadRecord::InternalTranscript {
+            role: input.role.as_str().to_string(),
+            content_json: input.content_json,
+            metadata_json: input.metadata_json,
+            created_timestamp: input.created_timestamp,
+        },
+    }
+}
+
 pub fn project_runtime_conversation_record(
     source: RuntimeConversationItemSource,
 ) -> Option<ConversationMessageRecord> {
@@ -131,6 +169,46 @@ pub fn project_runtime_conversation_record(
         RuntimeConversationItemSource::AgentMessage { text } => {
             ConversationMessageRecord::runtime_projection(ConversationMessageRole::Assistant, text)
         }
+    }
+}
+
+pub fn project_runtime_conversation_record_from_item_record(
+    item: &RuntimeItemSnapshotRecord,
+) -> Option<ConversationMessageRecord> {
+    project_runtime_conversation_record_from_item_payload(&item.payload)
+}
+
+pub fn project_runtime_conversation_record_from_item_payload(
+    payload: &RuntimeItemPayloadRecord,
+) -> Option<ConversationMessageRecord> {
+    runtime_conversation_item_source_from_payload(payload)
+        .and_then(project_runtime_conversation_record)
+}
+
+pub fn runtime_conversation_item_source_from_payload(
+    payload: &RuntimeItemPayloadRecord,
+) -> Option<RuntimeConversationItemSource> {
+    match payload {
+        RuntimeItemPayloadRecord::InternalTranscript {
+            role,
+            content_json,
+            metadata_json,
+            created_timestamp,
+        } => Some(RuntimeConversationItemSource::TranscriptMessage {
+            role: ConversationMessageRole::from_role_name(role),
+            content_json: content_json.clone(),
+            metadata_json: metadata_json.clone(),
+            created_timestamp: *created_timestamp,
+        }),
+        RuntimeItemPayloadRecord::UserMessage { content } => {
+            Some(RuntimeConversationItemSource::UserMessage {
+                text: content.clone(),
+            })
+        }
+        RuntimeItemPayloadRecord::AgentMessage { text } => {
+            Some(RuntimeConversationItemSource::AgentMessage { text: text.clone() })
+        }
+        _ => None,
     }
 }
 
@@ -197,13 +275,30 @@ pub fn transcript_item_id(turn_id: &str, message_id: Option<&str>, sequence: i64
         .unwrap_or_else(|| format!("transcript:{turn_id}:{sequence}"))
 }
 
+pub fn next_runtime_item_sequence(sequences: impl IntoIterator<Item = i64>) -> i64 {
+    sequences.into_iter().max().unwrap_or(0) + 1
+}
+
+pub fn is_runtime_transcript_item_payload(payload: &RuntimeItemPayloadRecord) -> bool {
+    matches!(payload, RuntimeItemPayloadRecord::InternalTranscript { .. })
+}
+
+pub fn is_runtime_transcript_item_record(item: &RuntimeItemSnapshotRecord) -> bool {
+    is_runtime_transcript_item_payload(&item.payload)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        count_selected_messages, project_runtime_conversation_record, select_conversation_messages,
+        build_transcript_item_record, count_selected_messages, is_runtime_transcript_item_record,
+        next_runtime_item_sequence, project_runtime_conversation_record,
+        project_runtime_conversation_record_from_item_payload, select_conversation_messages,
         transcript_item_id, truncate_before_timestamp, ConversationMessageRecord,
         ConversationMessageRole, ConversationMessageSource, RuntimeConversationItemSource,
+        TranscriptItemRecordInput,
     };
+    use crate::runtime_snapshot::RuntimeItemPayloadRecord;
+    use chrono::Utc;
 
     fn transcript(created_timestamp: i64) -> ConversationMessageRecord {
         ConversationMessageRecord::transcript(
@@ -285,6 +380,40 @@ mod tests {
     }
 
     #[test]
+    fn project_runtime_conversation_record_from_item_payload_should_use_current_snapshot_record() {
+        let transcript = project_runtime_conversation_record_from_item_payload(
+            &RuntimeItemPayloadRecord::InternalTranscript {
+                role: "assistant".to_string(),
+                content_json: serde_json::json!([{ "type": "text", "text": "reply" }]),
+                metadata_json: serde_json::json!({ "userVisible": true }),
+                created_timestamp: 42,
+            },
+        )
+        .expect("transcript record");
+        let user_projection = project_runtime_conversation_record_from_item_payload(
+            &RuntimeItemPayloadRecord::UserMessage {
+                content: "  hello  ".to_string(),
+            },
+        )
+        .expect("user projection");
+
+        assert_eq!(transcript.source, ConversationMessageSource::Transcript);
+        assert_eq!(transcript.role, ConversationMessageRole::Assistant);
+        assert_eq!(transcript.created_timestamp, Some(42));
+        assert_eq!(
+            user_projection.source,
+            ConversationMessageSource::RuntimeProjection
+        );
+        assert_eq!(user_projection.text.as_deref(), Some("hello"));
+        assert!(project_runtime_conversation_record_from_item_payload(
+            &RuntimeItemPayloadRecord::Plan {
+                text: "todo".to_string()
+            }
+        )
+        .is_none());
+    }
+
+    #[test]
     fn truncate_before_timestamp_should_keep_only_older_transcript_records() {
         let records = truncate_before_timestamp(vec![transcript(10), transcript(20)], 20);
 
@@ -307,5 +436,35 @@ mod tests {
             transcript_item_id("turn-1", Some(" "), 2),
             "transcript:turn-1:2"
         );
+    }
+
+    #[test]
+    fn build_transcript_item_record_should_use_current_id_and_payload_rules() {
+        let now = Utc::now();
+
+        let item = build_transcript_item_record(TranscriptItemRecordInput {
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            sequence: 7,
+            role: ConversationMessageRole::Assistant,
+            content_json: serde_json::json!([{ "type": "text", "text": "hello" }]),
+            metadata_json: serde_json::json!({ "userVisible": true }),
+            created_timestamp: 42,
+            message_id: Some("message-1".to_string()),
+            recorded_at: now,
+        });
+
+        assert_eq!(item.id, "transcript:message-1");
+        assert_eq!(item.thread_id, "thread-1");
+        assert_eq!(item.turn_id, "turn-1");
+        assert_eq!(item.sequence, 7);
+        assert_eq!(item.completed_at, Some(now));
+        assert!(is_runtime_transcript_item_record(&item));
+    }
+
+    #[test]
+    fn next_runtime_item_sequence_should_append_after_max_sequence() {
+        assert_eq!(next_runtime_item_sequence([1, 7, 3]), 8);
+        assert_eq!(next_runtime_item_sequence([]), 1);
     }
 }

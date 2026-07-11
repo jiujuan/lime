@@ -4,11 +4,11 @@ import { createInitialSessionImageWorkbenchState } from "./imageWorkbenchHelpers
 import {
   createParsedCommand,
   mockGenerateAgentRuntimeTitle,
-  renderHook,
+  renderCommandActionHook,
   toast,
 } from "./useWorkspaceImageWorkbenchActionRuntime.testFixtures";
 
-describe("useWorkspaceImageWorkbenchActionRuntime", () => {
+describe("useWorkspaceImageWorkbenchCommandActionRuntime", () => {
   it("图片 Provider 刷新后同一轮命令应使用最新 selection", async () => {
     const submitImageWorkbenchAgentCommand = vi.fn().mockResolvedValue(true);
     let resolveProvidersLoaded: (() => void) | null = null;
@@ -18,7 +18,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
           resolveProvidersLoaded = resolve;
         }),
     );
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       ensureImageWorkbenchProvidersLoaded,
       imageWorkbenchProvidersLoading: true,
       imageWorkbenchSelectedModelId: "",
@@ -66,10 +66,8 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
 
   it("应通过 Agent 主链提交图片 skill launch，而不是前端直建 task", async () => {
     const submitImageWorkbenchAgentCommand = vi.fn().mockResolvedValue(true);
-    const createImageGenerationTask = vi.fn();
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       submitImageWorkbenchAgentCommand,
-      createImageGenerationTask,
     });
 
     await render();
@@ -113,7 +111,6 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
       previewText: "城市夜景主视觉",
       titleKind: "image_task",
     });
-    expect(createImageGenerationTask).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
   });
 
@@ -121,7 +118,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
     const submitImageWorkbenchAgentCommand = vi.fn().mockResolvedValue(true);
     const localImageWorkbenchSessionKey =
       "__local_image_workbench__:draft:image";
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       submitImageWorkbenchAgentCommand,
       imageWorkbenchSessionKey: localImageWorkbenchSessionKey,
     });
@@ -152,7 +149,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
   });
 
   it("普通图片生成缺少项目时仍应构造 Agent skill launch 上下文", async () => {
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       projectId: null,
       projectRootPath: null,
     });
@@ -183,7 +180,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
   });
 
   it("需要写回画布的配图仍应要求项目上下文", async () => {
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       projectId: null,
       projectRootPath: null,
     });
@@ -227,7 +224,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
         },
       ],
     };
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       currentImageWorkbenchState,
     });
 
@@ -278,7 +275,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
   });
 
   it("普通输入 resolver 应把当前图片渠道写成图片执行路由", async () => {
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       imageWorkbenchPreferredModelId: "gpt-images-2",
       imageWorkbenchPreferredProviderId:
         "custom-f0181b00-35b6-4731-94e2-24f17fd247c9",

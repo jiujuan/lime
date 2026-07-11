@@ -1,3 +1,4 @@
+use crate::tool_definition::RuntimeToolDefinition;
 use crate::tool_result_projection::{
     runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
 };
@@ -17,12 +18,164 @@ use tokio_util::sync::CancellationToken;
 const DEFAULT_MAX_RESULTS: usize = 100;
 const DEFAULT_MAX_CONTEXT_LINES: usize = 5;
 const MAX_OUTPUT_SIZE: usize = 100_000;
+pub const GLOB_TOOL_NAME: &str = "Glob";
+pub const GREP_TOOL_NAME: &str = "Grep";
+const GLOB_LEGACY_ALIASES: &[&str] = &["GlobTool", "mcp__system__glob"];
+const GREP_LEGACY_ALIASES: &[&str] = &["GrepTool", "ripgrep", "mcp__system__grep"];
 
 pub struct RuntimeFileSearchRequest<'a> {
     pub tool_name: &'a str,
     pub params: &'a Value,
     pub working_directory: PathBuf,
     pub cancel_token: Option<CancellationToken>,
+}
+
+pub fn file_search_tool_definitions() -> Vec<RuntimeToolDefinition> {
+    [GLOB_TOOL_NAME, GREP_TOOL_NAME]
+        .into_iter()
+        .filter_map(file_search_tool_definition)
+        .collect()
+}
+
+pub fn file_search_tool_definition(tool_name: &str) -> Option<RuntimeToolDefinition> {
+    match file_search_canonical_tool_name(tool_name)? {
+        GLOB_TOOL_NAME => Some(RuntimeToolDefinition::new(
+            GLOB_TOOL_NAME,
+            "Find files using glob patterns. Supports wildcards like *, **, ?, and character classes. \
+             Results are sorted by modification time (newest first).",
+            json!({
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern to match files. Examples: '*.rs', 'src/**/*.ts', 'test_*.py'"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Base path to search from. Defaults to working directory."
+                    },
+                    "exclude": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Patterns to exclude from results (e.g., ['node_modules', '.git'])"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return. Default: 100"
+                    }
+                },
+                "required": ["pattern"]
+            }),
+        )),
+        GREP_TOOL_NAME => Some(RuntimeToolDefinition::new(
+            GREP_TOOL_NAME,
+            "Search file contents using regex patterns. Supports multiple output modes: content (default), \
+             files_with_matches, and count.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Regex pattern to search for"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Path to search in. Defaults to working directory."
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["content", "files_with_matches", "count"],
+                        "description": "Output mode. 'content' returns matching lines, 'files_with_matches' returns file names, 'count' returns match counts."
+                    },
+                    "context_before": {
+                        "type": "integer",
+                        "description": "Number of lines to show before each match. Default: 0"
+                    },
+                    "context_after": {
+                        "type": "integer",
+                        "description": "Number of lines to show after each match. Default: 0"
+                    },
+                    "case_insensitive": {
+                        "type": "boolean",
+                        "description": "Whether to ignore case. Default: false"
+                    },
+                    "include_hidden": {
+                        "type": "boolean",
+                        "description": "Whether to search hidden files. Default: false"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return. Default: 100"
+                    }
+                },
+                "required": ["pattern"]
+            }),
+        )),
+        _ => None,
+    }
+}
+
+pub fn file_search_canonical_tool_name(tool_name: &str) -> Option<&'static str> {
+    let trimmed = tool_name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    file_search_canonical_tool_name_direct(trimmed).or_else(|| {
+        model_visible_namespace_tail(trimmed).and_then(file_search_canonical_tool_name_direct)
+    })
+}
+
+fn file_search_canonical_tool_name_direct(tool_name: &str) -> Option<&'static str> {
+    if tool_name.eq_ignore_ascii_case(GLOB_TOOL_NAME) {
+        return Some(GLOB_TOOL_NAME);
+    }
+    if tool_name.eq_ignore_ascii_case(GREP_TOOL_NAME) {
+        return Some(GREP_TOOL_NAME);
+    }
+    if GLOB_LEGACY_ALIASES
+        .iter()
+        .any(|alias| tool_name.eq_ignore_ascii_case(alias))
+    {
+        return Some(GLOB_TOOL_NAME);
+    }
+    if GREP_LEGACY_ALIASES
+        .iter()
+        .any(|alias| tool_name.eq_ignore_ascii_case(alias))
+    {
+        return Some(GREP_TOOL_NAME);
+    }
+
+    None
+}
+
+fn model_visible_namespace_tail(name: &str) -> Option<&str> {
+    for prefix in [
+        "functions.",
+        "functions__",
+        "function.",
+        "function__",
+        "tools.",
+        "tools__",
+        "tool.",
+        "tool__",
+        "native.",
+        "native__",
+        "builtin.",
+        "builtin__",
+    ] {
+        if name
+            .get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+        {
+            let tail = name[prefix.len()..].trim();
+            if !tail.is_empty() {
+                return Some(tail);
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,9 +306,9 @@ pub async fn execute_runtime_file_search_tool(
         )));
     }
 
-    match request.tool_name.trim() {
-        "Glob" | "GlobTool" => Some(execute_glob(request.params, &request.working_directory)),
-        "Grep" | "GrepTool" => Some(execute_grep(request.params, &request.working_directory)),
+    match file_search_canonical_tool_name(request.tool_name)? {
+        GLOB_TOOL_NAME => Some(execute_glob(request.params, &request.working_directory)),
+        GREP_TOOL_NAME => Some(execute_grep(request.params, &request.working_directory)),
         _ => None,
     }
 }
@@ -660,5 +813,22 @@ mod tests {
         .await;
 
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn definitions_and_aliases_are_owned_by_tool_runtime() {
+        let names = file_search_tool_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec![GLOB_TOOL_NAME, GREP_TOOL_NAME]);
+        assert_eq!(
+            file_search_canonical_tool_name("functions.GlobTool"),
+            Some(GLOB_TOOL_NAME)
+        );
+        assert_eq!(
+            file_search_canonical_tool_name("ripgrep"),
+            Some(GREP_TOOL_NAME)
+        );
     }
 }

@@ -9,7 +9,7 @@ import { shouldShowChatLayout } from "../utils/chatLayoutVisibility";
 import { resolveWorkflowLayoutBottomSpacing } from "../utils/workflowLayout";
 import type { WorkflowGateState } from "../utils/workflowInputState";
 
-interface ResolveWorkspaceShellChromeRuntimeParams {
+export interface ResolveWorkspaceShellChromeRuntimeParams {
   activeTheme: string;
   agentEntry: "new-task" | "claw";
   contextWorkspaceEnabled: boolean;

@@ -27,6 +27,7 @@ import {
   messageHasInterruptedPlaceholder,
 } from "./agentInterruptedMessageContent";
 import { hasMessageImages } from "./agentChatHistorySignatures";
+import { hasMeaningfulAssistantVisibleText } from "../utils/assistantVisibleText";
 import {
   findMatchingLocalAssistantMessageIndex,
   findMatchingLocalUserMessageIndex,
@@ -347,18 +348,22 @@ export const mergeHydratedMessagesWithLocalState = (
         extractThinkingContentFromParts(contentParts);
       const remoteIsFailedRuntimeStatus =
         message.runtimeStatus?.phase === "failed";
+      const shouldPreserveLocalVisibleOutputOnRemoteFailure =
+        remoteIsFailedRuntimeStatus &&
+        hasMeaningfulAssistantVisibleText(localAssistantMessage);
       const localHasInterruptedStopMarker = messageHasInterruptedPlaceholder(
         localAssistantMessage,
       );
       const shouldPreserveLocalVisibleOutput =
         !options.preferHydratedAssistantOutput &&
-        !remoteIsFailedRuntimeStatus &&
-        (localAssistantMessage?.isThinking === true ||
-          shouldPreserveLocalRuntimeSnapshot ||
-          shouldPreserveLocalAssistantVisibleOutput(
-            localAssistantMessage,
-            message,
-          ));
+        (remoteIsFailedRuntimeStatus
+          ? shouldPreserveLocalVisibleOutputOnRemoteFailure
+          : localAssistantMessage?.isThinking === true ||
+            shouldPreserveLocalRuntimeSnapshot ||
+            shouldPreserveLocalAssistantVisibleOutput(
+              localAssistantMessage,
+              message,
+            ));
       const resolvedContentParts = shouldPreserveLocalVisibleOutput
         ? (mergeHydratedToolStateContentParts(
             localAssistantMessage?.contentParts,

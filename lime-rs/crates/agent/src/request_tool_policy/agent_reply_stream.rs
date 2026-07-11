@@ -27,6 +27,7 @@ use model_provider::provider_stream::{
     apply_runtime_provider_metadata, RuntimeReplyProviderStreamEvent,
 };
 use serde_json::Value;
+use std::path::Path;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -88,6 +89,7 @@ pub(super) async fn stream_agent_reply_once<F>(
     host: &impl RuntimeReplyPolicyHost<RuntimeAgentEvent, crate::protocol::AgentRuntimeStatus>,
     user_input: ReplyAttemptInput,
     session_config: &AgentSessionConfig,
+    working_directory: Option<&Path>,
     cancel_token: Option<CancellationToken>,
     stream_idle_timeout: Option<Duration>,
     request_tool_policy: &RequestToolPolicy,
@@ -128,7 +130,8 @@ where
         session_config.clone(),
         provider_cancel_token,
         attempt_state.emitted_any(),
-    );
+    )
+    .with_working_directory(working_directory.map(Path::to_path_buf));
     let start_result = reply_backend.start_reply_stream(start_request).await;
     let (mut stream, message_chars) = start_result.map_err(ReplyAttemptError::from)?;
     tracing::info!(

@@ -186,10 +186,10 @@ describe("Codex model reasoning output policy origin", () => {
       ".unwrap_or(model_info.default_reasoning_summary)",
     );
     expect(codexClientSource).toContain(
-      "if model_info.supports_reasoning_summaries",
+      "model_info.supports_reasoning_summary_parameter",
     );
     expect(codexClientSource).toContain(
-      "summary == ReasoningSummaryConfig::None",
+      "summary != ReasoningSummaryConfig::None",
     );
   });
 

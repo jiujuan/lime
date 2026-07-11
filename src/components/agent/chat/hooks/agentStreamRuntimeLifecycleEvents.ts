@@ -402,11 +402,15 @@ export function handleAgentStreamTurnCanceledEvent(params: {
 
 export function handleAgentStreamTurnFailedEvent(params: {
   assistantMsgId: string;
+  completeAssistantStreamMessageFromCompletionPlan: (
+    plan: AgentStreamCompletionMessagePlan,
+  ) => void;
   event: Extract<AgentEvent, { type: "turn_failed" }>;
   finalizeMissingFinalReplyFailure: (plan: AgentStreamMissingFinalReplyPlan) => void;
   pendingTurnKey: string;
   requestState: StreamRequestState;
   setters: RuntimeHandlerStateSetters;
+  toolCallCount: number;
 }): void {
   bindAssistantMessageToRuntimeTurn(
     params.setters.setMessages,
@@ -420,6 +424,25 @@ export function handleAgentStreamTurnFailedEvent(params: {
     ),
   );
   params.setters.setCurrentTurnId(params.event.turn.id);
+  const softCompletionPlan = buildAgentStreamTerminalCompletionPlan({
+    accumulatedContent: resolveAccumulatedFinalContentForCompletion(
+      params.requestState,
+    ),
+    hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary:
+      params.requestState
+        .hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
+    hasFinalAnswerRequiredProcessBoundary:
+      params.requestState.hasFinalAnswerRequiredProcessBoundary,
+    hasMeaningfulCompletionSignal:
+      params.requestState.hasMeaningfulCompletionSignal,
+    queuedTurnId: params.requestState.queuedTurnId,
+    toolCallCount: params.toolCallCount,
+  });
+  if (softCompletionPlan.type === "complete") {
+    params.completeAssistantStreamMessageFromCompletionPlan(softCompletionPlan);
+    return;
+  }
+
   const errorMessage = params.event.turn.error_message || "当前处理失败";
   params.finalizeMissingFinalReplyFailure(
     buildAgentStreamMissingFinalReplyFailurePlan({

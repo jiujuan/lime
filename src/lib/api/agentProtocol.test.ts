@@ -1242,6 +1242,27 @@ describe("agentProtocol", () => {
 
     expect(
       parseAgentEvent({
+        type: "image_task.created",
+        task_id: "task-image-1",
+        payload: {
+          prompt: "画一张广州夏天的图",
+          session_id: "session-1",
+          turn_id: "turn-image-1",
+        },
+      }),
+    ).toMatchObject({
+      type: "image_task_created",
+      task_id: "task-image-1",
+      turn_id: "turn-image-1",
+      payload: {
+        prompt: "画一张广州夏天的图",
+        session_id: "session-1",
+        turn_id: "turn-image-1",
+      },
+    });
+
+    expect(
+      parseAgentEvent({
         type: "item_updated",
         item: {
           id: "turn-summary-1",

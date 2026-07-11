@@ -570,7 +570,7 @@ fn image_command_task_created_turn_completed_includes_presentation_usage() {
 }
 
 #[tokio::test]
-async fn image_command_workflow_ignores_legacy_image_skill_launch_metadata() {
+async fn image_command_workflow_ignores_retired_image_skill_launch_metadata() {
     let request = request_with_metadata(json!({
         "harness": {
             "image_skill_launch": {
@@ -600,7 +600,7 @@ async fn image_command_workflow_ignores_legacy_image_skill_launch_metadata() {
         &mut sink,
     )
     .await
-    .expect("legacy image skill launch should be ignored");
+    .expect("retired image skill launch should be ignored");
 
     assert!(!handled);
     assert!(sink.events.is_empty());

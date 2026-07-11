@@ -41,11 +41,13 @@ pub(crate) fn create_lime_identity() -> AgentIdentity {
 
 /// 创建 Lime 的工具注册配置
 ///
-/// 启用 Ask 回调，确保 request_user_input 工具在 Agent 初始化时可用。
+/// 启用 request_user_input 回调，确保工具在 Agent 初始化时可用。
 pub(crate) fn create_lime_tool_config() -> ToolRegistrationConfig {
     ToolRegistrationConfig::new()
         .with_allowed_tool_names(runtime_native_tool_registration_allowlist().iter().copied())
-        .with_ask_callback(crate::ask_bridge::create_ask_callback())
+        .with_request_user_input_callback(
+            crate::request_user_input_bridge::create_request_user_input_callback(),
+        )
 }
 
 /// 加载 Lime Skills 到 `lime-skills` current registry。

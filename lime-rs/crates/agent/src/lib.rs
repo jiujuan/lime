@@ -12,7 +12,6 @@
 
 pub mod agent_tools;
 pub mod artifact_protocol;
-mod ask_bridge;
 mod aster_runtime_projection;
 mod aster_session_store;
 mod credential_bridge;
@@ -39,11 +38,11 @@ pub mod provider_continuation_state;
 pub mod provider_runtime_governor;
 pub mod queued_turn;
 mod request_tool_policy;
+mod request_user_input_bridge;
 mod runtime_conversation_aster_adapter;
 mod runtime_facade;
 pub mod runtime_projection_snapshot;
 pub mod runtime_queue;
-mod runtime_queue_aster_adapter;
 mod runtime_snapshot_adapter;
 mod runtime_state;
 mod runtime_state_support;

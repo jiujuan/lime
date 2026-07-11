@@ -8,6 +8,15 @@ function normalizeFailureContentForCompare(value?: string | null): string {
   return (value || "").trim().replace(/\s+/g, " ");
 }
 
+export function isTrivialAssistantFinalText(value?: string | null): boolean {
+  const normalized = (value || "").trim();
+  if (!normalized) {
+    return true;
+  }
+
+  return /^[\s.,!?;:，。！？；：、…]+$/.test(normalized);
+}
+
 function stripRuntimeFailureDiagnosticSegments(value: string): string {
   const diagnosticMarkers = [
     "执行失败：",
@@ -65,7 +74,8 @@ export function sanitizeRuntimeFailureAssistantText(
   if (
     message.role !== "assistant" ||
     message.runtimeStatus?.phase !== "failed" ||
-    !actionContent.trim()
+    !actionContent.trim() ||
+    isTrivialAssistantFinalText(actionContent)
   ) {
     return actionContent;
   }
@@ -109,6 +119,65 @@ export function isRuntimeFailureOnlyAssistantText(
     contentText === `执行失败：${detailText}` ||
     contentText === `执行失败: ${detailText}` ||
     contentText === `当前处理失败 ${detailText}`
+  );
+}
+
+export function isRuntimeFailureDiagnosticAliasText(
+  message: Message,
+  actionContent: string,
+): boolean {
+  if (
+    message.role !== "assistant" ||
+    message.runtimeStatus?.phase !== "failed"
+  ) {
+    return false;
+  }
+
+  const detailText = normalizeFailureContentForCompare(
+    message.runtimeStatus.detail,
+  );
+  if (!detailText) {
+    return false;
+  }
+
+  const contentText = normalizeFailureContentForCompare(actionContent);
+  const rawFailureText = contentText.replace(/^执行失败[:：]\s*/, "").trim();
+  if (!rawFailureText || rawFailureText === detailText) {
+    return false;
+  }
+
+  return (
+    normalizeFailureContentForCompare(
+      resolveAgentRuntimeErrorPresentation(rawFailureText).displayMessage,
+    ) === detailText
+  );
+}
+
+export function resolveRuntimeFailureFallbackAssistantText(
+  message: Message,
+  actionContent: string,
+): string {
+  if (
+    message.role !== "assistant" ||
+    message.runtimeStatus?.phase !== "failed"
+  ) {
+    return "";
+  }
+
+  const rawContent = actionContent
+    .trim()
+    .replace(/^执行失败[:：]\s*/, "")
+    .trim();
+  const sourceText =
+    normalizeFailureContentForCompare(message.runtimeStatus.detail) ||
+    normalizeFailureContentForCompare(rawContent) ||
+    normalizeFailureContentForCompare(message.runtimeStatus.title);
+  if (!sourceText) {
+    return normalizeFailureContentForCompare(message.runtimeStatus.title);
+  }
+
+  return normalizeFailureContentForCompare(
+    resolveAgentRuntimeErrorPresentation(sourceText).displayMessage,
   );
 }
 

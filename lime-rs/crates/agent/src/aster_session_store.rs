@@ -9,9 +9,8 @@ use anyhow::{anyhow, Result};
 use aster::{ExtensionData, Session, SessionType};
 use chrono::Utc;
 use lime_core::database::agent_session_repository::{
-    get_session_extension_data_json, get_session_working_dir, insert_session_record,
-    resolve_default_session_working_dir, resolve_persisted_session_working_dir, session_exists,
-    SessionCreateRecord,
+    get_session_working_dir, insert_session_record, resolve_default_session_working_dir,
+    resolve_persisted_session_working_dir, session_exists, SessionCreateRecord,
 };
 use lime_core::database::DbConnection;
 use std::collections::HashMap;
@@ -42,17 +41,6 @@ impl LimeSessionStore {
         }
     }
 
-    pub fn load_extension_data_from_conn(
-        conn: &rusqlite::Connection,
-        session_id: &str,
-    ) -> Result<ExtensionData> {
-        let extension_data_json = get_session_extension_data_json(conn, session_id)
-            .map_err(anyhow::Error::msg)?
-            .ok_or_else(|| anyhow!("读取 extension_data 失败: 会话不存在"))?;
-
-        Ok(serde_json::from_str(&extension_data_json).unwrap_or_default())
-    }
-
     fn cache_session_metadata(&self, session: &Session) {
         let mut cached = session.clone();
         cached.conversation = None;
@@ -67,12 +55,6 @@ impl LimeSessionStore {
             .lock()
             .ok()
             .and_then(|metadata_cache| metadata_cache.get(session_id).cloned())
-    }
-
-    fn invalidate_cached_session_metadata(&self, session_id: &str) {
-        if let Ok(mut metadata_cache) = self.metadata_cache.lock() {
-            metadata_cache.remove(session_id);
-        }
     }
 
     fn update_cached_session_metadata(&self, session_id: &str, updater: impl FnOnce(&mut Session)) {

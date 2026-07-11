@@ -10,6 +10,7 @@ const userDataDir =
   process.env.ELECTRON_E2E_USER_DATA_DIR?.trim() ||
   mkdtempSync(path.join(os.tmpdir(), "lime-electron-smoke-userdata-"));
 const shouldRemoveUserDataDir = !process.env.ELECTRON_E2E_USER_DATA_DIR?.trim();
+const smokeVisible = process.env.LIME_ELECTRON_SMOKE_VISIBLE?.trim() === "1";
 
 function cleanupUserDataDir() {
   if (!shouldRemoveUserDataDir) {
@@ -27,6 +28,7 @@ const child = spawnElectron({
     ELECTRON_E2E_USER_DATA_DIR: userDataDir,
     LIME_ELECTRON_E2E: "1",
     LIME_ELECTRON_SMOKE: "1",
+    LIME_ELECTRON_SMOKE_VISIBLE: smokeVisible ? "1" : "0",
   },
 });
 

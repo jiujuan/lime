@@ -11,15 +11,12 @@ use tool_runtime::native_overlay::{
     RuntimeNativeToolRegistrationOwner, RuntimeNativeToolSurface,
     RuntimeNativeToolTurnContextSource,
 };
-use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_executor::{
     run_runtime_tool_execution, RuntimeToolExecutionContext, RuntimeToolExecutionContextInput,
     RuntimeToolExecutionFailure, RuntimeToolExecutionFailureKind, RuntimeToolExecutionOutcome,
     RuntimeToolExecutionRequest, RuntimeToolExecutorHandle, RuntimeToolTurnContext,
 };
 
-pub(crate) type RuntimeDefinitionPermissionCheck =
-    fn(&str, &Value, &ToolContext) -> RuntimeNativePermissionDecision;
 pub(crate) type RuntimeNativeTurnContextProvider = fn() -> Option<RuntimeToolTurnContext>;
 
 fn no_turn_context() -> Option<RuntimeToolTurnContext> {
@@ -128,102 +125,6 @@ fn permission_decision_to_aster(
         RuntimeNativePermissionDecision::Allow => PermissionCheckResult::allow(),
         RuntimeNativePermissionDecision::Deny(message) => PermissionCheckResult::deny(message),
         RuntimeNativePermissionDecision::Ask(message) => PermissionCheckResult::ask(message),
-    }
-}
-
-/// 已迁入 `tool-runtime`、但需要 App Server gateway executor 的临时 Aster `Tool` 壳。
-///
-/// 这是删除边界：current Turn executor 直接消费 gateway-backed runtime tool 后，本 adapter 应删除。
-pub(crate) struct RuntimeDefinitionToolAdapter {
-    definition: RuntimeToolDefinition,
-    executor: RuntimeToolExecutorHandle,
-    permission_check: RuntimeDefinitionPermissionCheck,
-    turn_context_provider: RuntimeNativeTurnContextProvider,
-    aliases: &'static [&'static str],
-    max_retries: Option<u32>,
-}
-
-impl RuntimeDefinitionToolAdapter {
-    pub(crate) fn new(
-        definition: RuntimeToolDefinition,
-        executor: RuntimeToolExecutorHandle,
-        permission_check: RuntimeDefinitionPermissionCheck,
-    ) -> Self {
-        Self {
-            definition,
-            executor,
-            permission_check,
-            turn_context_provider: no_turn_context,
-            aliases: &[],
-            max_retries: None,
-        }
-    }
-
-    pub(crate) fn with_turn_context_provider(
-        mut self,
-        provider: RuntimeNativeTurnContextProvider,
-    ) -> Self {
-        self.turn_context_provider = provider;
-        self
-    }
-
-    pub(crate) fn with_max_retries(mut self, max_retries: u32) -> Self {
-        self.max_retries = Some(max_retries);
-        self
-    }
-
-    pub(crate) fn with_aliases(mut self, aliases: &'static [&'static str]) -> Self {
-        self.aliases = aliases;
-        self
-    }
-}
-
-#[async_trait]
-impl Tool for RuntimeDefinitionToolAdapter {
-    fn name(&self) -> &str {
-        &self.definition.name
-    }
-
-    fn description(&self) -> &str {
-        &self.definition.description
-    }
-
-    fn input_schema(&self) -> Value {
-        self.definition.input_schema.clone()
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        self.aliases
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if context.is_cancelled() {
-            return Err(ToolError::Cancelled);
-        }
-
-        let turn_context = (self.turn_context_provider)();
-        execute_runtime_tool(
-            self.executor.clone(),
-            self.name(),
-            &params,
-            context,
-            turn_context.as_ref(),
-        )
-        .await
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        context: &ToolContext,
-    ) -> PermissionCheckResult {
-        permission_decision_to_aster((self.permission_check)(self.name(), params, context))
-    }
-
-    fn options(&self) -> ToolOptions {
-        self.max_retries.map_or_else(ToolOptions::new, |retries| {
-            ToolOptions::new().with_max_retries(retries)
-        })
     }
 }
 

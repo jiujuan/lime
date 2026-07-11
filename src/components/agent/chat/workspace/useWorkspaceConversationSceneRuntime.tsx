@@ -1,9 +1,4 @@
-import type {
-  ComponentProps,
-  Dispatch,
-  ReactNode,
-  SetStateAction,
-} from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
@@ -11,22 +6,15 @@ import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceCanvasSceneRuntime } from "./useWorkspaceCanvasSceneRuntime";
 import { MessageList } from "../components/MessageList";
-import type { ChatToolPreferences } from "../utils/chatToolPreferences";
-import type { CreationMode } from "../components/types";
 import type { WriteArtifactContext } from "../types";
 import type { PendingA2UISource } from "../types";
-import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
-import type { Artifact } from "@/lib/artifact/types";
-import type { Character } from "@/lib/api/projectMemory";
+import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 import type { TaskFile } from "../components/TaskFiles";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
-import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { WorkspacePathMissingState } from "../hooks/agentChatShared";
 import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
 import type { SyncStatus } from "../hooks/useContentSync";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
-import { buildAgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
-import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 import { buildWorkspaceConversationCodingViews } from "./workspaceConversationCodingViews";
@@ -36,12 +24,21 @@ import type {
 } from "@/lib/api/agentRuntime";
 import type { CodingWorkbenchRecoveryContext } from "./codingWorkbenchRecovery";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
+import type { GeneralWorkbenchTaskRailContextInput } from "../components/generalWorkbenchTaskRailViewModel";
 import { useWorkspaceTaskRailRuntime } from "./useWorkspaceTaskRailRuntime";
 import { useSessionRuntimeProjectionDeferral } from "./useSessionRuntimeProjectionDeferral";
 import {
   buildQuotedReplyText,
   buildWorkspaceHeaderView,
 } from "./workspaceConversationSceneViewModel";
+import {
+  useWorkspaceConversationLandingSessionRuntime,
+  type WorkspaceConversationLandingSurfaceRuntime,
+} from "./useWorkspaceConversationLandingSurfaceRuntime";
+import {
+  buildWorkspaceConversationRightSurfaceSceneProps,
+  type WorkspaceConversationRightSurfaceChromeRuntime,
+} from "./workspaceConversationRightSurfaceChrome";
 
 type InputbarScene = Pick<
   ReturnType<typeof useWorkspaceInputbarSceneRuntime>,
@@ -72,6 +69,7 @@ type WorkspaceConversationSceneProps = ComponentProps<
 type CanvasWorkbenchLayoutProps = NonNullable<
   WorkspaceConversationSceneProps["canvasWorkbenchLayoutProps"]
 >;
+type MessageListProps = ComponentProps<typeof MessageList>;
 interface ConversationScenePresentationParams {
   scene: Omit<
     WorkspaceConversationSceneProps,
@@ -93,7 +91,7 @@ interface ConversationScenePresentationParams {
       ComponentProps<typeof StepProgress>["onStepClick"]
     >;
   };
-  messageList: ComponentProps<typeof MessageList>;
+  messageList: MessageListProps;
   workspaceAlert: {
     workspacePathMissing: boolean;
     workspaceHealthError: boolean;
@@ -135,6 +133,67 @@ interface ShellChromeRuntime {
   layoutTransitionChatPanelMinWidth?: string;
   shouldShowGeneralWorkbenchFloatingInputOverlay: boolean;
   shouldRenderInlineA2UI: boolean;
+}
+
+export interface WorkspaceConversationMessageListRuntime {
+  emptyStateVariant?: "none" | "task-center";
+  quoteInput: string;
+  onQuoteInputChange: (value: string) => void;
+  providerType: MessageListProps["providerType"];
+  model: string | null | undefined;
+  reasoningEffort?: string | null;
+  accessMode: GeneralWorkbenchTaskRailContextInput["accessMode"];
+  messages: ConversationScenePresentationParams["messageList"]["messages"];
+  turns: ConversationScenePresentationParams["messageList"]["turns"];
+  threadItems: ConversationScenePresentationParams["messageList"]["threadItems"];
+  todoItems?: AsterTodoItem[];
+  currentTurnId: ConversationScenePresentationParams["messageList"]["currentTurnId"];
+  threadRead: ConversationScenePresentationParams["messageList"]["threadRead"];
+  executionRuntime?: AsterSessionExecutionRuntime | null;
+  pendingActions: NonNullable<
+    ConversationScenePresentationParams["messageList"]["pendingActions"]
+  >;
+  submittedActionsInFlight: NonNullable<
+    ConversationScenePresentationParams["messageList"]["submittedActionsInFlight"]
+  >;
+  queuedTurns: NonNullable<
+    ConversationScenePresentationParams["messageList"]["queuedTurns"]
+  >;
+  childSubagentSessions?: NonNullable<
+    ConversationScenePresentationParams["messageList"]["childSubagentSessions"]
+  >;
+  sessionHistoryWindow?: ConversationScenePresentationParams["messageList"]["sessionHistoryWindow"];
+  onLoadFullHistory?: ConversationScenePresentationParams["messageList"]["onLoadFullHistory"];
+  isSending: ConversationScenePresentationParams["messageList"]["isSending"];
+  onInterruptCurrentTurn: ConversationScenePresentationParams["messageList"]["onInterruptCurrentTurn"];
+  onResumeThread: ConversationScenePresentationParams["messageList"]["onResumeThread"];
+  onReplayPendingRequest: ConversationScenePresentationParams["messageList"]["onReplayPendingRequest"];
+  onPromoteQueuedTurn: ConversationScenePresentationParams["messageList"]["onPromoteQueuedTurn"];
+  onDeleteMessage: ConversationScenePresentationParams["messageList"]["onDeleteMessage"];
+  onEditMessage: ConversationScenePresentationParams["messageList"]["onEditMessage"];
+  onA2UISubmit: ConversationScenePresentationParams["messageList"]["onA2UISubmit"];
+  onWriteFile: (
+    content: string,
+    fileName: string,
+    context?: WriteArtifactContext,
+  ) => void | Promise<void>;
+  onFileClick: ConversationScenePresentationParams["messageList"]["onFileClick"];
+  onOpenArtifactFromTimeline: (target: ArtifactTimelineOpenTarget) => void;
+  onOpenSavedSiteContent: ConversationScenePresentationParams["messageList"]["onOpenSavedSiteContent"];
+  onArtifactClick: ConversationScenePresentationParams["messageList"]["onArtifactClick"];
+  onOpenUrlPreview?: ConversationScenePresentationParams["messageList"]["onOpenUrlPreview"];
+  onOpenMessagePreview?: ConversationScenePresentationParams["messageList"]["onOpenMessagePreview"];
+  onSaveMessageAsSkill?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsSkill"];
+  onSaveMessageAsKnowledge?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsKnowledge"];
+  onOpenSubagentSession: ConversationScenePresentationParams["messageList"]["onOpenSubagentSession"];
+  onPermissionResponse: ConversationScenePresentationParams["messageList"]["onPermissionResponse"];
+  onRefreshSessionReadModel?: () => void | Promise<unknown>;
+  pendingPromotedA2UIActionRequest: unknown;
+  collapseCodeBlocks: ConversationScenePresentationParams["messageList"]["collapseCodeBlocks"];
+  shouldCollapseCodeBlock: ConversationScenePresentationParams["messageList"]["shouldCollapseCodeBlock"];
+  onCodeBlockClick: ConversationScenePresentationParams["messageList"]["onCodeBlockClick"];
+  focusedTimelineItemId: string | null;
+  timelineFocusRequestKey: number;
 }
 
 function renderWorkspaceConversationScene({
@@ -189,79 +248,16 @@ const EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS: NonNullable<
 > = [];
 
 interface UseWorkspaceConversationSceneRuntimeParams {
-  messageListEmptyStateVariant?: "none" | "task-center";
   navbarContextVariant?: "default" | "task-center";
   navigationActions: NavigationActions;
   inputbarScene: InputbarScene;
   canvasScene: CanvasScene;
   handleSendFromEmptyState: InputbarSendHandler;
-  emptyStateSendOnPointerDown?: ConversationScenePresentationParams["scene"]["emptyStateSendOnPointerDown"];
+  landingSurface: WorkspaceConversationLandingSurfaceRuntime;
   shellChromeRuntime: ShellChromeRuntime;
-  entryBannerVisible: ConversationScenePresentationParams["scene"]["entryBannerVisible"];
-  entryBannerMessage: ConversationScenePresentationParams["scene"]["entryBannerMessage"];
-  creationReplaySurface?: CreationReplaySurfaceModel | null;
-  defaultCuratedTaskReferenceMemoryIds?: ConversationScenePresentationParams["scene"]["defaultCuratedTaskReferenceMemoryIds"];
-  defaultCuratedTaskReferenceEntries?: ConversationScenePresentationParams["scene"]["defaultCuratedTaskReferenceEntries"];
-  pathReferences?: ConversationScenePresentationParams["scene"]["pathReferences"];
-  onAddPathReferences?: ConversationScenePresentationParams["scene"]["onAddPathReferences"];
-  inputRestoreRequest?: ConversationScenePresentationParams["scene"]["inputRestoreRequest"];
-  onInputRestoreRequestHandled?: ConversationScenePresentationParams["scene"]["onInputRestoreRequestHandled"];
-  onImportPathReferenceAsKnowledge?: ConversationScenePresentationParams["scene"]["onImportPathReferenceAsKnowledge"];
-  onRemovePathReference?: ConversationScenePresentationParams["scene"]["onRemovePathReference"];
-  onClearPathReferences?: ConversationScenePresentationParams["scene"]["onClearPathReferences"];
-  fileManagerOpen?: ConversationScenePresentationParams["scene"]["fileManagerOpen"];
-  onToggleFileManager?: ConversationScenePresentationParams["scene"]["onToggleFileManager"];
-  sceneAppExecutionSummaryCard?: ConversationScenePresentationParams["scene"]["sceneAppExecutionSummaryCard"];
-  pluginHistoryRestoreLandingCard?: ConversationScenePresentationParams["scene"]["pluginHistoryRestoreLandingCard"];
-  serviceSkillExecutionCard?: ConversationScenePresentationParams["scene"]["serviceSkillExecutionCard"];
   contextWorkspaceEnabled: boolean;
-  input: ConversationScenePresentationParams["scene"]["input"];
-  setInput: ConversationScenePresentationParams["scene"]["setInput"];
-  providerType: ConversationScenePresentationParams["scene"]["providerType"];
-  setProviderType: ConversationScenePresentationParams["scene"]["setProviderType"];
-  model: ConversationScenePresentationParams["scene"]["model"];
-  setModel: ConversationScenePresentationParams["scene"]["setModel"];
-  reasoningEffort: ConversationScenePresentationParams["scene"]["reasoningEffort"];
-  setReasoningEffort: ConversationScenePresentationParams["scene"]["setReasoningEffort"];
-  accessMode: ConversationScenePresentationParams["scene"]["accessMode"];
-  setAccessMode: ConversationScenePresentationParams["scene"]["setAccessMode"];
-  chatToolPreferences: ChatToolPreferences;
-  setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
-  objectiveEnabled?: ConversationScenePresentationParams["scene"]["objectiveEnabled"];
-  onObjectiveEnabledChange?: ConversationScenePresentationParams["scene"]["onObjectiveEnabledChange"];
-  selectedTeam?: TeamDefinition | null;
-  creationMode: CreationMode;
-  setCreationMode: Dispatch<SetStateAction<CreationMode>>;
   activeTheme: string;
-  setActiveTheme: Dispatch<SetStateAction<string>>;
-  lockTheme: boolean;
-  artifacts: Artifact[];
-  generalCanvasContent: string;
-  resolvedCanvasState: ConversationScenePresentationParams["scene"]["resolvedCanvasState"];
   contentId: ConversationScenePresentationParams["scene"]["contentId"];
-  selectedText: ConversationScenePresentationParams["scene"]["selectedText"];
-  handleRecommendationClick: ConversationScenePresentationParams["scene"]["onRecommendationClick"];
-  projectCharacters: Character[];
-  skills: ConversationScenePresentationParams["scene"]["skills"];
-  serviceSkills: ConversationScenePresentationParams["scene"]["serviceSkills"];
-  serviceSkillGroups: ConversationScenePresentationParams["scene"]["serviceSkillGroups"];
-  skillsLoading: ConversationScenePresentationParams["scene"]["isSkillsLoading"];
-  onSelectServiceSkill?: ConversationScenePresentationParams["scene"]["onSelectServiceSkill"];
-  pluginSuggestions?: ConversationScenePresentationParams["scene"]["pluginSuggestions"];
-  pluginSuggestionsError?: ConversationScenePresentationParams["scene"]["pluginSuggestionsError"];
-  pluginSuggestionsLoading?: ConversationScenePresentationParams["scene"]["pluginSuggestionsLoading"];
-  onPluginSuggestionsNeeded?: ConversationScenePresentationParams["scene"]["onPluginSuggestionsNeeded"];
-  handleNavigateToSkillSettings: ConversationScenePresentationParams["scene"]["onNavigateToSettings"];
-  handleRefreshSkills: ConversationScenePresentationParams["scene"]["onRefreshSkills"];
-  handleOpenBrowserAssistInCanvas: ConversationScenePresentationParams["scene"]["onLaunchBrowserAssist"];
-  browserAssistLaunching: ConversationScenePresentationParams["scene"]["browserAssistLoading"];
-  recentSessionTitle?: ConversationScenePresentationParams["scene"]["recentSessionTitle"];
-  recentSessionSummary?: ConversationScenePresentationParams["scene"]["recentSessionSummary"];
-  recentSessionActionLabel?: ConversationScenePresentationParams["scene"]["recentSessionActionLabel"];
-  homeRecoverySession?: ConversationScenePresentationParams["scene"]["homeRecoverySession"];
-  handleResumeRecentSession?: ConversationScenePresentationParams["scene"]["handleResumeRecentSession"];
-  projectConversationGroups?: ConversationScenePresentationParams["scene"]["projectConversationGroups"];
-  handleOpenProjectConversation?: ConversationScenePresentationParams["scene"]["handleOpenProjectConversation"];
   projectId: string | null;
   openedProjects?: ConversationScenePresentationParams["scene"]["openedProjects"];
   onCloseProject?: ConversationScenePresentationParams["scene"]["onCloseProject"];
@@ -272,27 +268,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   onBackToProjectManagement?: ConversationScenePresentationParams["scene"]["onBackToProjectManagement"];
   fromResources: boolean;
   handleBackHome: ConversationScenePresentationParams["scene"]["onBackHome"];
-  rightSurfaceContent?: ConversationScenePresentationParams["scene"]["rightSurfaceContent"];
-  rightSurfaceLaunchers?: ConversationScenePresentationParams["scene"]["rightSurfaceLaunchers"];
-  rightSurfaceObjectCanvasOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceObjectCanvasOpen"];
-  onToggleRightSurfaceObjectCanvas?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceObjectCanvas"];
-  rightSurfaceBrowserOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceBrowserOpen"];
-  onToggleRightSurfaceBrowser?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceBrowser"];
-  rightSurfaceFilesOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceFilesOpen"];
-  onToggleRightSurfaceFiles?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceFiles"];
-  rightSurfaceTraceOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceTraceOpen"];
-  onToggleRightSurfaceTrace?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceTrace"];
-  rightSurfaceShellOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceShellOpen"];
-  onToggleRightSurfaceShell?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceShell"];
-  showHarnessToggle: ConversationScenePresentationParams["scene"]["showHarnessToggle"];
-  navbarHarnessPanelVisible: ConversationScenePresentationParams["scene"]["harnessPanelVisible"];
-  handleToggleHarnessPanel: ConversationScenePresentationParams["scene"]["onToggleHarnessPanel"];
-  showExpertInfoToggle?: ConversationScenePresentationParams["scene"]["showExpertInfoToggle"];
-  expertInfoPanelVisible?: ConversationScenePresentationParams["scene"]["expertInfoPanelVisible"];
-  handleToggleExpertInfoPanel?: ConversationScenePresentationParams["scene"]["onToggleExpertInfoPanel"];
-  harnessPendingCount: ConversationScenePresentationParams["scene"]["harnessPendingCount"];
-  harnessAttentionLevel: ConversationScenePresentationParams["scene"]["harnessAttentionLevel"];
-  harnessToggleLabel: ConversationScenePresentationParams["scene"]["harnessToggleLabel"];
+  rightSurfaceChrome: WorkspaceConversationRightSurfaceChromeRuntime;
   isRestoringSession: boolean;
   sessionId: string | null | undefined;
   syncStatus: SyncStatus;
@@ -316,59 +292,11 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   creationTaskEvents?: GeneralWorkbenchCreationTaskEvent[];
   currentStepIndex: ConversationScenePresentationParams["stepProgress"]["currentIndex"];
   goToStep: ConversationScenePresentationParams["stepProgress"]["onStepClick"];
-  displayMessages: ConversationScenePresentationParams["messageList"]["messages"];
-  turns: ConversationScenePresentationParams["messageList"]["turns"];
-  effectiveThreadItems: ConversationScenePresentationParams["messageList"]["threadItems"];
-  todoItems?: AsterTodoItem[];
-  currentTurnId: ConversationScenePresentationParams["messageList"]["currentTurnId"];
-  threadRead: ConversationScenePresentationParams["messageList"]["threadRead"];
-  executionRuntime?: AsterSessionExecutionRuntime | null;
-  pendingActions: NonNullable<
-    ConversationScenePresentationParams["messageList"]["pendingActions"]
-  >;
-  submittedActionsInFlight: NonNullable<
-    ConversationScenePresentationParams["messageList"]["submittedActionsInFlight"]
-  >;
-  queuedTurns: NonNullable<
-    ConversationScenePresentationParams["messageList"]["queuedTurns"]
-  >;
-  childSubagentSessions?: NonNullable<
-    ConversationScenePresentationParams["messageList"]["childSubagentSessions"]
-  >;
-  sessionHistoryWindow?: ConversationScenePresentationParams["messageList"]["sessionHistoryWindow"];
-  loadFullSessionHistory?: ConversationScenePresentationParams["messageList"]["onLoadFullHistory"];
-  isPreparingSend: boolean;
-  isSending: ConversationScenePresentationParams["messageList"]["isSending"];
-  stopSending: ConversationScenePresentationParams["messageList"]["onInterruptCurrentTurn"];
-  resumeThread: ConversationScenePresentationParams["messageList"]["onResumeThread"];
-  replayPendingAction: ConversationScenePresentationParams["messageList"]["onReplayPendingRequest"];
-  promoteQueuedTurn: ConversationScenePresentationParams["messageList"]["onPromoteQueuedTurn"];
-  deleteMessage: ConversationScenePresentationParams["messageList"]["onDeleteMessage"];
-  editMessage: ConversationScenePresentationParams["messageList"]["onEditMessage"];
-  handleA2UISubmit: ConversationScenePresentationParams["messageList"]["onA2UISubmit"];
-  handleWriteFile: (
-    content: string,
-    fileName: string,
-    context?: WriteArtifactContext,
-  ) => void | Promise<void>;
-  handleFileClick: ConversationScenePresentationParams["messageList"]["onFileClick"];
-  handleOpenArtifactFromTimeline: (target: ArtifactTimelineOpenTarget) => void;
-  handleOpenSavedSiteContent: ConversationScenePresentationParams["messageList"]["onOpenSavedSiteContent"];
-  handleArtifactClick: ConversationScenePresentationParams["messageList"]["onArtifactClick"];
-  handleOpenUrlPreview?: ConversationScenePresentationParams["messageList"]["onOpenUrlPreview"];
-  handleOpenMessagePreview?: ConversationScenePresentationParams["messageList"]["onOpenMessagePreview"];
-  handleSaveMessageAsSkill?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsSkill"];
-  handleSaveMessageAsKnowledge?: ConversationScenePresentationParams["messageList"]["onSaveMessageAsKnowledge"];
-  handleOpenSubagentSession: ConversationScenePresentationParams["messageList"]["onOpenSubagentSession"];
-  handlePermissionResponse: ConversationScenePresentationParams["messageList"]["onPermissionResponse"];
-  onRefreshSessionReadModel?: () => void | Promise<unknown>;
-  pendingPromotedA2UIActionRequest: unknown;
-  shouldCollapseCodeBlocks: ConversationScenePresentationParams["messageList"]["collapseCodeBlocks"];
-  shouldCollapseCodeBlockInChat: ConversationScenePresentationParams["messageList"]["shouldCollapseCodeBlock"];
-  handleCodeBlockClick: ConversationScenePresentationParams["messageList"]["onCodeBlockClick"];
+  messageListRuntime: WorkspaceConversationMessageListRuntime;
   layoutMode: LayoutMode;
   isThemeWorkbench: boolean;
   settledWorkbenchArtifacts: ConversationScenePresentationParams["canvasWorkbenchLayout"]["artifacts"];
+  resolvedCanvasState: ConversationScenePresentationParams["canvasWorkbenchLayout"]["canvasState"];
   taskFiles: TaskFile[];
   selectedFileId: string | undefined;
   projectRootPath: string | null;
@@ -377,83 +305,19 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   setCanvasWorkbenchLayoutMode: ConversationScenePresentationParams["canvasWorkbenchLayout"]["onLayoutModeChange"];
   workspacePathMissing: WorkspacePathMissingState | boolean | null;
   workspaceHealthError: boolean;
-  focusedTimelineItemId: string | null;
-  timelineFocusRequestKey: number;
 }
 
 export function useWorkspaceConversationSceneRuntime({
-  messageListEmptyStateVariant = "none",
   navbarContextVariant = "default",
   navigationActions,
   inputbarScene,
   canvasScene,
   handleSendFromEmptyState,
-  emptyStateSendOnPointerDown = false,
+  landingSurface,
   shellChromeRuntime,
-  entryBannerVisible,
-  entryBannerMessage,
-  creationReplaySurface,
-  defaultCuratedTaskReferenceMemoryIds,
-  defaultCuratedTaskReferenceEntries,
-  pathReferences,
-  onAddPathReferences,
-  inputRestoreRequest,
-  onInputRestoreRequestHandled,
-  onImportPathReferenceAsKnowledge,
-  onRemovePathReference,
-  onClearPathReferences,
-  fileManagerOpen,
-  onToggleFileManager,
-  sceneAppExecutionSummaryCard,
-  pluginHistoryRestoreLandingCard,
-  serviceSkillExecutionCard,
   contextWorkspaceEnabled,
-  input,
-  setInput,
-  providerType,
-  setProviderType,
-  model,
-  setModel,
-  reasoningEffort,
-  setReasoningEffort,
-  accessMode,
-  setAccessMode,
-  chatToolPreferences,
-  setChatToolPreferences,
-  objectiveEnabled,
-  onObjectiveEnabledChange,
-  creationMode,
-  setCreationMode,
   activeTheme,
-  setActiveTheme,
-  lockTheme,
-  artifacts,
-  generalCanvasContent,
-  resolvedCanvasState,
   contentId,
-  selectedText,
-  handleRecommendationClick,
-  projectCharacters,
-  skills,
-  serviceSkills,
-  serviceSkillGroups,
-  skillsLoading,
-  onSelectServiceSkill,
-  pluginSuggestions,
-  pluginSuggestionsError,
-  pluginSuggestionsLoading,
-  onPluginSuggestionsNeeded,
-  handleNavigateToSkillSettings,
-  handleRefreshSkills,
-  handleOpenBrowserAssistInCanvas,
-  browserAssistLaunching,
-  recentSessionTitle,
-  recentSessionSummary,
-  recentSessionActionLabel,
-  homeRecoverySession,
-  handleResumeRecentSession,
-  projectConversationGroups,
-  handleOpenProjectConversation,
   projectId,
   openedProjects,
   onCloseProject,
@@ -464,27 +328,7 @@ export function useWorkspaceConversationSceneRuntime({
   onBackToProjectManagement,
   fromResources,
   handleBackHome,
-  rightSurfaceContent,
-  rightSurfaceLaunchers,
-  rightSurfaceObjectCanvasOpen,
-  onToggleRightSurfaceObjectCanvas,
-  rightSurfaceBrowserOpen,
-  onToggleRightSurfaceBrowser,
-  rightSurfaceFilesOpen,
-  onToggleRightSurfaceFiles,
-  rightSurfaceTraceOpen,
-  onToggleRightSurfaceTrace,
-  rightSurfaceShellOpen,
-  onToggleRightSurfaceShell,
-  showHarnessToggle,
-  navbarHarnessPanelVisible,
-  handleToggleHarnessPanel,
-  showExpertInfoToggle,
-  expertInfoPanelVisible,
-  handleToggleExpertInfoPanel,
-  harnessPendingCount,
-  harnessAttentionLevel,
-  harnessToggleLabel,
+  rightSurfaceChrome,
   isRestoringSession,
   sessionId,
   syncStatus,
@@ -506,47 +350,11 @@ export function useWorkspaceConversationSceneRuntime({
   creationTaskEvents = [],
   currentStepIndex,
   goToStep,
-  displayMessages,
-  turns = EMPTY_PROJECTED_TURNS,
-  effectiveThreadItems = EMPTY_PROJECTED_THREAD_ITEMS,
-  todoItems = [],
-  currentTurnId,
-  threadRead,
-  executionRuntime,
-  pendingActions = EMPTY_PROJECTED_PENDING_ACTIONS,
-  submittedActionsInFlight = EMPTY_PROJECTED_SUBMITTED_ACTIONS,
-  queuedTurns = EMPTY_PROJECTED_QUEUED_TURNS,
-  childSubagentSessions = EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS,
-  sessionHistoryWindow = null,
-  loadFullSessionHistory,
-  isPreparingSend,
-  isSending,
-  stopSending,
-  resumeThread,
-  replayPendingAction,
-  promoteQueuedTurn,
-  deleteMessage,
-  editMessage,
-  handleA2UISubmit,
-  handleWriteFile,
-  handleFileClick,
-  handleOpenArtifactFromTimeline,
-  handleOpenSavedSiteContent,
-  handleArtifactClick,
-  handleOpenUrlPreview,
-  handleOpenMessagePreview,
-  handleSaveMessageAsSkill,
-  handleSaveMessageAsKnowledge,
-  handleOpenSubagentSession,
-  handlePermissionResponse,
-  onRefreshSessionReadModel,
-  pendingPromotedA2UIActionRequest,
-  shouldCollapseCodeBlocks,
-  shouldCollapseCodeBlockInChat,
-  handleCodeBlockClick,
+  messageListRuntime,
   layoutMode,
   isThemeWorkbench,
   settledWorkbenchArtifacts,
+  resolvedCanvasState,
   taskFiles,
   selectedFileId,
   projectRootPath,
@@ -555,11 +363,57 @@ export function useWorkspaceConversationSceneRuntime({
   setCanvasWorkbenchLayoutMode,
   workspacePathMissing,
   workspaceHealthError,
-  focusedTimelineItemId,
-  timelineFocusRequestKey,
 }: UseWorkspaceConversationSceneRuntimeParams) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language;
+  const {
+    emptyStateVariant: messageListEmptyStateVariant = "none",
+    quoteInput,
+    onQuoteInputChange,
+    providerType,
+    model,
+    reasoningEffort,
+    accessMode,
+    messages: displayMessages,
+    turns = EMPTY_PROJECTED_TURNS,
+    threadItems: effectiveThreadItems = EMPTY_PROJECTED_THREAD_ITEMS,
+    todoItems = [],
+    currentTurnId,
+    threadRead,
+    executionRuntime,
+    pendingActions = EMPTY_PROJECTED_PENDING_ACTIONS,
+    submittedActionsInFlight = EMPTY_PROJECTED_SUBMITTED_ACTIONS,
+    queuedTurns = EMPTY_PROJECTED_QUEUED_TURNS,
+    childSubagentSessions = EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS,
+    sessionHistoryWindow = null,
+    onLoadFullHistory,
+    isSending,
+    onInterruptCurrentTurn,
+    onResumeThread,
+    onReplayPendingRequest,
+    onPromoteQueuedTurn,
+    onDeleteMessage,
+    onEditMessage,
+    onA2UISubmit,
+    onWriteFile,
+    onFileClick,
+    onOpenArtifactFromTimeline,
+    onOpenSavedSiteContent,
+    onArtifactClick,
+    onOpenUrlPreview,
+    onOpenMessagePreview,
+    onSaveMessageAsSkill,
+    onSaveMessageAsKnowledge,
+    onOpenSubagentSession,
+    onPermissionResponse,
+    onRefreshSessionReadModel,
+    pendingPromotedA2UIActionRequest,
+    collapseCodeBlocks,
+    shouldCollapseCodeBlock,
+    onCodeBlockClick,
+    focusedTimelineItemId,
+    timelineFocusRequestKey,
+  } = messageListRuntime;
   const projectedRuntime = useSessionRuntimeProjectionDeferral({
     sessionId,
     messages: displayMessages,
@@ -588,52 +442,26 @@ export function useWorkspaceConversationSceneRuntime({
   const handleQuoteMessage = (content: string) => {
     const quotedText = buildQuotedReplyText({
       content,
-      input,
+      input: quoteInput,
     });
     if (!quotedText) {
       return;
     }
-    setInput(quotedText);
+    onQuoteInputChange(quotedText);
   };
 
   const navbarUtilityActionsVisible = !suppressNavbarUtilityActions;
   const taskCenterUtilityActionsVisible =
     navbarUtilityActionsVisible || navbarContextVariant === "task-center";
+  const rightSurfaceSceneProps =
+    buildWorkspaceConversationRightSurfaceSceneProps({
+      rightSurfaceChrome,
+      utilityActionsVisible: taskCenterUtilityActionsVisible,
+    });
   const shouldSyncCanvasWorkbenchLayoutMode =
     !isThemeWorkbench &&
     activeTheme === "general" &&
     layoutMode === "chat-canvas";
-  const shouldBuildRuntimeTaskCard = !shellChromeRuntime.showChatLayout;
-  const runtimeTaskCard = useMemo(() => {
-    if (!shouldBuildRuntimeTaskCard) {
-      return null;
-    }
-
-    return buildAgentTaskRuntimeCardModel({
-      messages: displayMessages,
-      turns: projectedTurns,
-      threadItems: projectedThreadItems,
-      currentTurnId: projectedCurrentTurnId,
-      threadRead: projectedThreadRead,
-      pendingActions: projectedPendingActions,
-      submittedActionsInFlight: projectedSubmittedActionsInFlight,
-      queuedTurns: projectedQueuedTurns,
-      childSubagentSessions: projectedChildSubagentSessions,
-      isSending,
-    });
-  }, [
-    displayMessages,
-    isSending,
-    projectedChildSubagentSessions,
-    projectedCurrentTurnId,
-    projectedPendingActions,
-    projectedSubmittedActionsInFlight,
-    projectedQueuedTurns,
-    projectedThreadItems,
-    projectedThreadRead,
-    projectedTurns,
-    shouldBuildRuntimeTaskCard,
-  ]);
   const codingWorkbenchViews = useMemo(
     () =>
       buildWorkspaceConversationCodingViews({
@@ -648,7 +476,7 @@ export function useWorkspaceConversationSceneRuntime({
         isSending,
         focusedTimelineItemId,
         onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
-        onRespondToAction: handlePermissionResponse,
+        onRespondToAction: onPermissionResponse,
         onRefreshSessionReadModel,
         onSubmitRecoveryPrompt: (
           prompt,
@@ -671,7 +499,7 @@ export function useWorkspaceConversationSceneRuntime({
       canvasScene.handleOpenCanvasWorkbenchPath,
       focusedTimelineItemId,
       handleSendFromEmptyState,
-      handlePermissionResponse,
+      onPermissionResponse,
       onRefreshSessionReadModel,
       isSending,
       locale,
@@ -684,6 +512,28 @@ export function useWorkspaceConversationSceneRuntime({
       t,
     ],
   );
+  const landingSurfaceWithSessionRuntime =
+    useWorkspaceConversationLandingSessionRuntime({
+      landingSurface,
+      showChatLayout: shellChromeRuntime.showChatLayout,
+      messages: displayMessages,
+      turns: projectedTurns,
+      threadItems: projectedThreadItems,
+      currentTurnId: projectedCurrentTurnId,
+      threadRead: projectedThreadRead,
+      pendingActions: projectedPendingActions,
+      submittedActionsInFlight: projectedSubmittedActionsInFlight,
+      queuedTurns: projectedQueuedTurns,
+      childSubagentSessions: projectedChildSubagentSessions,
+      isSending,
+      sessionId,
+      projectRootPath,
+      currentUserMessage:
+        codingWorkbenchViews.currentSessionTurn?.prompt_text || null,
+      onOpenMemoryWorkbench: navigationActions.handleOpenRuntimeMemoryWorkbench,
+      onOpenChannels: navigationActions.handleOpenChannels,
+      onOpenChromeRelay: navigationActions.handleOpenChromeRelay,
+    });
   const sessionRuntimeCounters = codingWorkbenchViews.counters;
   const shouldUseCodingWorkbenchChrome =
     sessionRuntimeCounters.shouldUseRuntimeWorkbench ||
@@ -710,7 +560,7 @@ export function useWorkspaceConversationSceneRuntime({
     projectRootPath,
     canvasWorkbenchRootPath,
     onOpenWorkspacePath: canvasScene.handleOpenCanvasWorkbenchPath,
-    onRespondToAction: handlePermissionResponse,
+    onRespondToAction: onPermissionResponse,
   });
   const workspaceView = buildWorkspaceHeaderView({
     projectRootPath: effectiveCanvasWorkbenchRootPath,
@@ -720,24 +570,7 @@ export function useWorkspaceConversationSceneRuntime({
 
   return renderWorkspaceConversationScene({
     scene: {
-      entryBannerVisible,
-      entryBannerMessage,
-      onDismissEntryBanner: navigationActions.handleDismissEntryBanner,
-      creationReplaySurface,
-      defaultCuratedTaskReferenceMemoryIds,
-      defaultCuratedTaskReferenceEntries,
-      pathReferences,
-      onAddPathReferences,
-      inputRestoreRequest,
-      onInputRestoreRequestHandled,
-      onImportPathReferenceAsKnowledge,
-      onRemovePathReference,
-      onClearPathReferences,
-      fileManagerOpen,
-      onToggleFileManager,
-      sceneAppExecutionSummaryCard,
-      pluginHistoryRestoreLandingCard,
-      serviceSkillExecutionCard,
+      landingSurface: landingSurfaceWithSessionRuntime,
       showChatLayout: shellChromeRuntime.showChatLayout,
       compactChrome: shellChromeRuntime.isWorkspaceCompactChrome,
       contextWorkspaceEnabled,
@@ -751,115 +584,18 @@ export function useWorkspaceConversationSceneRuntime({
       shouldHideGeneralWorkbenchInputForTheme:
         shellChromeRuntime.shouldHideGeneralWorkbenchInputForTheme,
       inputbarNode: inputbarScene.inputbarNode,
-      input,
-      setInput,
-      onSendMessage: handleSendFromEmptyState,
-      onStopSending: stopSending,
-      emptyStateSendOnPointerDown,
-      emptyStateIsLoading: isPreparingSend || isSending,
-      emptyStateDisabled: isPreparingSend || isSending,
-      providerType,
-      setProviderType,
-      model,
-      setModel,
-      reasoningEffort,
-      setReasoningEffort,
-      accessMode,
-      setAccessMode,
-      onManageProviders: navigationActions.handleManageProviders,
-      onOpenExecutionPolicySettings:
-        navigationActions.handleOpenExecutionPolicySettings,
-      toolPreferences: chatToolPreferences,
-      onToolPreferenceChange: (key, enabled) =>
-        setChatToolPreferences((previous) => ({
-          ...previous,
-          [key]: enabled,
-        })),
-      objectiveEnabled,
-      onObjectiveEnabledChange,
-      creationMode,
-      onCreationModeChange: setCreationMode,
-      activeTheme: activeTheme as ThemeType,
-      onThemeChange: setActiveTheme,
-      themeLocked: lockTheme,
-      artifactsCount: artifacts.length,
-      generalCanvasContent,
-      resolvedCanvasState,
       contentId,
-      selectedText,
-      onRecommendationClick: handleRecommendationClick,
-      characters: projectCharacters,
-      skills,
-      serviceSkills,
-      serviceSkillGroups,
-      isSkillsLoading: skillsLoading,
-      onSelectServiceSkill,
-      onNavigateToSettings: handleNavigateToSkillSettings,
-      onRefreshSkills: handleRefreshSkills,
-      onLaunchBrowserAssist: handleOpenBrowserAssistInCanvas,
-      browserAssistLoading: browserAssistLaunching,
-      recentSessionTitle:
-        messageListEmptyStateVariant === "task-center"
-          ? undefined
-          : recentSessionTitle,
-      recentSessionSummary:
-        messageListEmptyStateVariant === "task-center"
-          ? undefined
-          : recentSessionSummary,
-      recentSessionActionLabel:
-        messageListEmptyStateVariant === "task-center"
-          ? undefined
-          : recentSessionActionLabel,
-      homeRecoverySession:
-        messageListEmptyStateVariant === "task-center"
-          ? undefined
-          : homeRecoverySession,
-      handleResumeRecentSession:
-        messageListEmptyStateVariant === "task-center"
-          ? undefined
-          : handleResumeRecentSession,
-      projectConversationGroups:
-        messageListEmptyStateVariant === "task-center"
-          ? undefined
-          : projectConversationGroups,
-      handleOpenProjectConversation:
-        messageListEmptyStateVariant === "task-center"
-          ? undefined
-          : handleOpenProjectConversation,
       projectId,
       openedProjects,
       projectRootPath,
       deferWorkspaceListLoad,
-      sessionId,
       onProjectChange: navigationActions.handleProjectChange,
       onCloseProject,
       onOpenSettings: navbarUtilityActionsVisible
         ? navigationActions.handleOpenAppearanceSettings
         : undefined,
-      runtimeToolAvailability: inputbarScene.runtimeToolAvailability,
-      pluginSuggestions,
-      pluginSuggestionsError,
-      pluginSuggestionsLoading,
-      onPluginSuggestionsNeeded,
-      knowledgePackSelection: inputbarScene.knowledgePackSelection,
-      knowledgePackOptions: inputbarScene.knowledgePackOptions,
-      onToggleKnowledgePack: inputbarScene.onToggleKnowledgePack,
-      onSelectKnowledgePack: inputbarScene.onSelectKnowledgePack,
-      onToggleKnowledgeCompanionPack:
-        inputbarScene.onToggleKnowledgeCompanionPack,
-      onStartKnowledgeOrganize: inputbarScene.onStartKnowledgeOrganize,
-      onManageKnowledgePacks: inputbarScene.onManageKnowledgePacks,
-      runtimeTaskCard,
       taskCenterTabsNode,
-      onOpenMemoryWorkbench: () =>
-        navigationActions.handleOpenRuntimeMemoryWorkbench({
-          sessionId,
-          workingDir: projectRootPath,
-          userMessage:
-            codingWorkbenchViews.currentSessionTurn?.prompt_text || null,
-        }),
-      onOpenChannels: navigationActions.handleOpenChannels,
-      onOpenChromeRelay: navigationActions.handleOpenChromeRelay,
+      workspaceType: activeTheme,
       navbarVisible: shellChromeRuntime.shouldRenderTopBar,
       isRunning: Boolean(isSending),
       navbarChrome: topBarChrome,
@@ -872,56 +608,7 @@ export function useWorkspaceConversationSceneRuntime({
       layoutMode,
       onToggleCanvas: handleToggleCanvas,
       onBackHome: handleBackHome,
-      rightSurfaceContent,
-      rightSurfaceLaunchers,
-      rightSurfaceObjectCanvasOpen:
-        taskCenterUtilityActionsVisible &&
-        Boolean(rightSurfaceObjectCanvasOpen),
-      onToggleRightSurfaceObjectCanvas: taskCenterUtilityActionsVisible
-        ? onToggleRightSurfaceObjectCanvas
-        : undefined,
-      rightSurfaceBrowserOpen:
-        taskCenterUtilityActionsVisible && Boolean(rightSurfaceBrowserOpen),
-      onToggleRightSurfaceBrowser: taskCenterUtilityActionsVisible
-        ? onToggleRightSurfaceBrowser
-        : undefined,
-      rightSurfaceFilesOpen:
-        taskCenterUtilityActionsVisible && Boolean(rightSurfaceFilesOpen),
-      onToggleRightSurfaceFiles: taskCenterUtilityActionsVisible
-        ? onToggleRightSurfaceFiles
-        : undefined,
-      rightSurfaceTraceOpen:
-        taskCenterUtilityActionsVisible && Boolean(rightSurfaceTraceOpen),
-      onToggleRightSurfaceTrace: taskCenterUtilityActionsVisible
-        ? onToggleRightSurfaceTrace
-        : undefined,
-      rightSurfaceShellOpen:
-        taskCenterUtilityActionsVisible && Boolean(rightSurfaceShellOpen),
-      onToggleRightSurfaceShell: taskCenterUtilityActionsVisible
-        ? onToggleRightSurfaceShell
-        : undefined,
-      showHarnessToggle: taskCenterUtilityActionsVisible && showHarnessToggle,
-      harnessPanelVisible:
-        taskCenterUtilityActionsVisible && navbarHarnessPanelVisible,
-      onToggleHarnessPanel: taskCenterUtilityActionsVisible
-        ? handleToggleHarnessPanel
-        : undefined,
-      showExpertInfoToggle:
-        taskCenterUtilityActionsVisible && Boolean(showExpertInfoToggle),
-      expertInfoPanelVisible:
-        taskCenterUtilityActionsVisible && Boolean(expertInfoPanelVisible),
-      onToggleExpertInfoPanel: taskCenterUtilityActionsVisible
-        ? handleToggleExpertInfoPanel
-        : undefined,
-      harnessPendingCount: taskCenterUtilityActionsVisible
-        ? harnessPendingCount
-        : 0,
-      harnessAttentionLevel: taskCenterUtilityActionsVisible
-        ? harnessAttentionLevel
-        : "idle",
-      harnessToggleLabel: taskCenterUtilityActionsVisible
-        ? harnessToggleLabel
-        : undefined,
+      ...rightSurfaceSceneProps,
       showContextCompactionAction:
         navbarUtilityActionsVisible && Boolean(sessionId),
       contextCompactionRunning: navbarUtilityActionsVisible && isSending,
@@ -967,34 +654,34 @@ export function useWorkspaceConversationSceneRuntime({
       queuedTurns: projectedQueuedTurns,
       childSubagentSessions: projectedChildSubagentSessions,
       sessionHistoryWindow,
-      onLoadFullHistory: loadFullSessionHistory,
+      onLoadFullHistory,
       isRestoringSession,
       isSending,
-      onInterruptCurrentTurn: stopSending,
-      onResumeThread: resumeThread,
-      onReplayPendingRequest: replayPendingAction,
-      onPromoteQueuedTurn: promoteQueuedTurn,
-      onDeleteMessage: deleteMessage,
-      onEditMessage: editMessage,
+      onInterruptCurrentTurn,
+      onResumeThread,
+      onReplayPendingRequest,
+      onPromoteQueuedTurn,
+      onDeleteMessage,
+      onEditMessage,
       onQuoteMessage: handleQuoteMessage,
-      onA2UISubmit: handleA2UISubmit,
-      onWriteFile: handleWriteFile,
-      onFileClick: handleFileClick,
-      onOpenArtifactFromTimeline: handleOpenArtifactFromTimeline,
-      onOpenSavedSiteContent: handleOpenSavedSiteContent,
-      onArtifactClick: handleArtifactClick,
-      onOpenUrlPreview: handleOpenUrlPreview,
-      onOpenMessagePreview: handleOpenMessagePreview,
-      onSaveMessageAsSkill: handleSaveMessageAsSkill,
-      onSaveMessageAsKnowledge: handleSaveMessageAsKnowledge,
-      onOpenSubagentSession: handleOpenSubagentSession,
-      onPermissionResponse: handlePermissionResponse,
+      onA2UISubmit,
+      onWriteFile,
+      onFileClick,
+      onOpenArtifactFromTimeline,
+      onOpenSavedSiteContent,
+      onArtifactClick,
+      onOpenUrlPreview,
+      onOpenMessagePreview,
+      onSaveMessageAsSkill,
+      onSaveMessageAsKnowledge,
+      onOpenSubagentSession,
+      onPermissionResponse,
       promoteActionRequestsToA2UI: Boolean(pendingPromotedA2UIActionRequest),
       renderA2UIInline: shellChromeRuntime.shouldRenderInlineA2UI,
       activePendingA2UISource: pendingA2UISource,
-      collapseCodeBlocks: shouldCollapseCodeBlocks,
-      shouldCollapseCodeBlock: shouldCollapseCodeBlockInChat,
-      onCodeBlockClick: handleCodeBlockClick,
+      collapseCodeBlocks,
+      shouldCollapseCodeBlock,
+      onCodeBlockClick,
       focusedTimelineItemId,
       timelineFocusRequestKey,
     },

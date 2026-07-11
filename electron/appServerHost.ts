@@ -47,6 +47,7 @@ const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_CANCEL_REQUEST_METHOD = "$/cancelRequest";
 const APP_SERVER_DATA_DIR_NAME = "app-server";
+const APP_SERVER_CONFIG_FILE_NAME = "config.yaml";
 const APP_SERVER_RECENT_NOTIFICATION_LIMIT = 500;
 const APP_SERVER_PROXY_PROBE_URL = "https://llm.limeai.run/v1/models";
 const APP_SERVER_PROXY_ENV_KEYS = [
@@ -687,13 +688,17 @@ async function resolveAppServerSidecarEnv(
 function resolveAppServerRuntimeLibraryEnv(
   binaryPath: string,
 ): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    LIME_CONFIG_PATH: resolveAppServerConfigPath(),
+  };
   const binaryDir = path.dirname(binaryPath);
   if (!binaryDir || binaryDir === ".") {
-    return {};
+    return env;
   }
 
   if (process.platform === "darwin") {
     return {
+      ...env,
       DYLD_FALLBACK_LIBRARY_PATH: prependPathEnv(
         process.env.DYLD_FALLBACK_LIBRARY_PATH,
         [binaryDir],
@@ -706,6 +711,7 @@ function resolveAppServerRuntimeLibraryEnv(
 
   if (process.platform === "linux") {
     return {
+      ...env,
       LD_LIBRARY_PATH: prependPathEnv(process.env.LD_LIBRARY_PATH, [
         binaryDir,
       ]),
@@ -714,11 +720,12 @@ function resolveAppServerRuntimeLibraryEnv(
 
   if (process.platform === "win32") {
     return {
+      ...env,
       PATH: prependPathEnv(process.env.PATH, [binaryDir]),
     };
   }
 
-  return {};
+  return env;
 }
 
 function prependPathEnv(
@@ -868,6 +875,10 @@ function stdioSidecarWithRuntimeBackend(
 
 function resolveAppServerDataDir(): string {
   return path.join(app.getPath("userData"), APP_SERVER_DATA_DIR_NAME);
+}
+
+function resolveAppServerConfigPath(): string {
+  return path.join(app.getPath("userData"), APP_SERVER_CONFIG_FILE_NAME);
 }
 
 function resolveProductDbMigrationCleanup(): NonNullable<

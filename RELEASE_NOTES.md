@@ -1,40 +1,40 @@
-## Lime v1.98.0
+## Lime v1.99.0
 
 ### 新功能
 
-- Tool Runtime 接入 current 工具执行面，新增协作 Agent、文件读取 / 搜索、Shell、原生 dispatch、用户输入请求、工具调用 surface 和结果投影模块，为 Codex-first Thread / Turn / Item 执行链提供统一 owner。
-- Agent Runtime 复用 `tool-runtime` 的 request user input 协议和 `model-provider` 的 response event 类型，减少 runtime / provider / tool 三侧重复定义。
-- Benchmark release gate 新增 current-chain evidence builder、P0 coding workflow、release audit report、baseline descriptor 和 true-run evidence 透传能力，要求外部 benchmark 证明 `agentSession/turn/start` 与 `evidence/export` 主链。
-- App Server coding evidence summary 增加 tool call 数量、完成 / 失败统计、tool name 和 tool call id 汇总，便于 release / replay 审计。
+- Agent / Tool Runtime 继续收敛到 Codex-first Thread / Turn / Item 主链，新增 request user input、runtime timeline record、runtime item / request / status / turn event 等结构化模块。
+- MCP、thread-store、model-provider 和 tool-runtime 增加 current extension surface、runtime store、sampling、gateway dispatch 与用户输入执行分层，减少旧 Aster surface 对生产路径的占用。
+- Agent Chat Workspace 拆出 artifact、browser assist、conversation message list、right surface、service skill、team memory、image workbench 和 inputbar presentation 等运行时模块，降低巨型组件复杂度。
+- Benchmark release / agent runtime smoke 增加 managed tool execution、P0 coding artifact 和 current fixture 断言，强化发布前对真实主链的证据要求。
 
 ### 修复
 
-- 修复 App Server tool lifecycle 投影中 runtime `tool_input_delta` 缺少 `tool.started` 的情况，并避免 synthetic start 后重复记录 runtime start。
-- 修复停止 / 中断 Agent 流后 assistant 消息、thread item、文本 overlay、queued turn 恢复和后续继续发送之间的状态不一致。
-- 修复历史 hydrate / local merge 对 interrupted turn 的识别和保留，避免恢复会话时把已中止输出重新显示为仍在运行。
-- 修复 benchmark true-run summary 对 current-chain、external verifier、Evidence Pack 和 task set 的放行条件校验，避免首题或伪 evidence 误判为整套 ready。
+- 修复 Agent stream 完成、失败、停止、继续发送、历史恢复和 assistant 可见文本之间的状态收口问题，减少伪运行态和重复输出。
+- 修复 request user input、approval prompt、tool batch、shell / file execution、runtime overlay 和 tool inventory 的 current 投影一致性。
+- 修复 image command、model selection、provider stream、OpenAI image request 和 reasoning policy 的边界回归。
+- 修复 Workspace 会话初始导航、输入框恢复、任务中心发送、右侧 surface 和工作台 canvas 布局的多处回归。
 
 ### 优化与重构
 
-- 大幅收缩 `agent-compat` 旧 Aster-shaped 实现，删除旧 context、permission policy、parallel、resume、recipe、provider、prompt、scheduler 和部分 legacy tool 文件，保留必要 compat owner。
-- 将 App Server read model 拆分为 model routing、queued turns、runtime items、session metadata 和测试子模块，降低中心文件复杂度。
-- 拆分 Claw / AgentChatWorkspace 右侧 surface、文章编辑器、工作区文件管理、技能目录、任务中心发送、scene app execution 和 home recovery runtime，减少巨型组件直接持有业务状态。
-- 将 `model-provider` 的 provider stream 事件拆分到 failure、image input、model change、notification、plaintext tool use、poll、progress、response content / context / event、sampling、source execution、text delta 和 tool input delta 等子模块。
+- 大幅删除 `agent-compat` 和 `agent-runtime` 中旧 ask、subagent、session manager、legacy tool、file/search/shell/powershell 等 Aster-shaped 实现，保留必要 compat owner。
+- 将 runtime state、request tool policy、runtime store、conversation transcript、runtime snapshot 和 reply backend 进一步拆分为更小的职责模块。
+- 收缩 `AgentChatWorkspace.tsx` 和 Workspace scene runtime 的直接业务状态，把可测试逻辑迁到 projection、selector、hook runtime 与单元测试。
+- 更新 Desktop Host、DevBridge、command runtime、Playwright、质量工作流和 Aster migration 边界说明，继续把旧路径归类为 retired guard / dead surface。
 
 ### 测试与质量
 
-- 新增和更新 tool runtime execution、request user input、collab agent、provider stream、App Server read model、tool lifecycle、coding evidence、Agent stream flow control 和 session state 回归。
-- 扩展 benchmark release run / summary / render / audit report / current-chain evidence 测试，确保 strict gate、P0 blocker、true-run blocker 和 evidence blocker fail closed。
-- 更新 App Server protocol schema、manifest、generated TypeScript types、current boundary guard、Aster migration boundary 和 i18n unused key 检查。
-- 当前外部 benchmark release gate 仍要求真实 current-chain evidence，不会因为 dry-run / preflight / 本地缺证据而误放行。
+- 新增和更新 AgentChatWorkspace boundary guard、InputbarApprovalPrompt、message list projection、stream lifecycle、Workspace scene、conversation message list、right surface 和 service skill 回归。
+- 扩展 Rust runtime / tool-runtime / provider / thread-store / App Server 定向测试，覆盖 request user input、runtime store、gateway dispatch、sampling 和 session state。
+- 更新 Aster migration boundary、production command current boundary、DevBridge command policy、model reasoning policy 和 modality execution profile 守卫。
+- 更新 benchmark release manifest、agent-qc 脚本和 Electron smoke 入口，确保发布证据仍绑定 current 链路。
 
 ### 文档
 
-- 更新 Aster migration Phase 6、dead code deletion、provider reply backend、refactor v1 impact audit、benchmark release、version test plan 和执行计划索引。
-- 补充 benchmark P0 coding 门禁、current-chain evidence、release audit report 和 strict gate baseline 的治理说明。
+- 更新 Aster migration Phase 6、refactor v1 impact audit、approval HITL decision model、provider reply backend、clawstream guardrail、benchmark progress 和 version test plan。
+- 更新命令运行时、命令边界、Playwright E2E 和质量工作流文档，明确 current / compat / dead 口径。
 
 ### 其他
 
-- 版本事实源更新到 `1.98.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.99.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.97.0` -> `v1.98.0`
+**完整变更**: `v1.98.0` -> `v1.99.0`

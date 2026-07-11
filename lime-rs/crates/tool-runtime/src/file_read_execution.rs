@@ -1,3 +1,4 @@
+use crate::tool_definition::RuntimeToolDefinition;
 use crate::tool_result_projection::{
     runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
 };
@@ -19,12 +20,107 @@ const CONFIG_EXTENSIONS: &[&str] = &[
     "json", "yaml", "yml", "toml", "xml", "ini", "cfg", "conf", "env",
 ];
 const DOCUMENTATION_EXTENSIONS: &[&str] = &["md", "txt", "rst", "adoc"];
+pub const FILE_READ_TOOL_NAME: &str = "Read";
+const FILE_READ_LEGACY_ALIASES: &[&str] = &[
+    "ReadTool",
+    "FileReadTool",
+    "read_file",
+    "developer__read",
+    "mcp__system__read_file",
+];
 
 pub struct RuntimeFileReadRequest<'a> {
     pub tool_name: &'a str,
     pub params: &'a Value,
     pub working_directory: PathBuf,
     pub cancel_token: Option<CancellationToken>,
+}
+
+pub fn file_read_tool_definition() -> RuntimeToolDefinition {
+    RuntimeToolDefinition::new(
+        FILE_READ_TOOL_NAME,
+        "File reader for text, document previews, SVG, and Jupyter notebooks. \
+         Text files are returned as direct line-numbered content by default, \
+         with an optional enhanced analysis mode when explicitly requested. \
+         Images must use the current view_image tool; PDF multimodal ingestion is not provided by Read. \
+         Optimized for reliable file reading in agent workflows.",
+        json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to the file to read (relative to working directory or absolute)"
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "Start line number (1-indexed, for text files only)",
+                    "minimum": 1
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "End line number (1-indexed, inclusive, for text files only)",
+                    "minimum": 1
+                },
+                "text_output_mode": {
+                    "type": "string",
+                    "enum": ["plain", "enhanced"],
+                    "description": "For text files only. `plain` returns direct line-numbered content and is the default. `enhanced` adds file-analysis headers and hints."
+                }
+            },
+            "required": ["path"]
+        }),
+    )
+}
+
+pub fn file_read_canonical_tool_name(tool_name: &str) -> Option<&'static str> {
+    let trimmed = tool_name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    file_read_canonical_tool_name_direct(trimmed).or_else(|| {
+        model_visible_namespace_tail(trimmed).and_then(file_read_canonical_tool_name_direct)
+    })
+}
+
+fn file_read_canonical_tool_name_direct(tool_name: &str) -> Option<&'static str> {
+    if tool_name.eq_ignore_ascii_case(FILE_READ_TOOL_NAME) {
+        return Some(FILE_READ_TOOL_NAME);
+    }
+
+    FILE_READ_LEGACY_ALIASES
+        .iter()
+        .any(|alias| tool_name.eq_ignore_ascii_case(alias))
+        .then_some(FILE_READ_TOOL_NAME)
+}
+
+fn model_visible_namespace_tail(name: &str) -> Option<&str> {
+    for prefix in [
+        "functions.",
+        "functions__",
+        "function.",
+        "function__",
+        "tools.",
+        "tools__",
+        "tool.",
+        "tool__",
+        "native.",
+        "native__",
+        "builtin.",
+        "builtin__",
+    ] {
+        if name
+            .get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+        {
+            let tail = name[prefix.len()..].trim();
+            if !tail.is_empty() {
+                return Some(tail);
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,7 +168,7 @@ impl TextOutputMode {
 pub async fn execute_runtime_file_read_tool(
     request: RuntimeFileReadRequest<'_>,
 ) -> Option<Result<CallToolResult, ErrorData>> {
-    if !runtime_read_tool_name(request.tool_name) {
+    if file_read_canonical_tool_name(request.tool_name).is_none() {
         return None;
     }
     if request
@@ -87,10 +183,6 @@ pub async fn execute_runtime_file_read_tool(
     }
 
     Some(execute_read(request.params, &request.working_directory))
-}
-
-fn runtime_read_tool_name(tool_name: &str) -> bool {
-    matches!(tool_name.trim(), "Read" | "ReadTool" | "read_file")
 }
 
 fn execute_read(params: &Value, working_directory: &Path) -> Result<CallToolResult, ErrorData> {
@@ -577,5 +669,20 @@ mod tests {
         .await;
 
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn definition_and_aliases_are_owned_by_tool_runtime() {
+        let definition = file_read_tool_definition();
+        assert_eq!(definition.name, FILE_READ_TOOL_NAME);
+        assert!(definition.description.contains("view_image"));
+        assert_eq!(
+            file_read_canonical_tool_name("functions.read_file"),
+            Some(FILE_READ_TOOL_NAME)
+        );
+        assert_eq!(
+            file_read_canonical_tool_name("FileReadTool"),
+            Some(FILE_READ_TOOL_NAME)
+        );
     }
 }

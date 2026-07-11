@@ -685,7 +685,9 @@ impl CodeExecutionClient {
 
     async fn run_tool_handler(
         mut call_rx: mpsc::UnboundedReceiver<ToolCallRequest>,
-        extension_manager: Option<std::sync::Weak<crate::agents::ExtensionManager>>,
+        extension_manager: Option<
+            std::sync::Weak<crate::agents::extension_manager::ExtensionManager>,
+        >,
         allowed_callers: HashMap<String, Option<String>>,
     ) {
         while let Some((tool_name, arguments, response_tx)) = call_rx.recv().await {

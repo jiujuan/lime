@@ -16,14 +16,15 @@ use crate::subagent_control::SubagentTurnStatus;
 use agent_runtime::runtime_conversation::{
     project_runtime_conversation_window, RuntimeConversationMessageSource,
 };
-use aster::{
-    SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
-};
 use chrono::{Duration, Utc};
 use lime_core::agent::types::{FunctionCall, ImageUrl, ToolCall};
 use lime_core::database::{schema, DbConnection};
 use std::ffi::OsString;
 use std::sync::{Arc, Mutex, OnceLock};
+use thread_store::runtime_snapshot::{
+    RuntimeSessionSnapshotRecord, RuntimeThreadSnapshotRecord, RuntimeTurnSnapshotRecord,
+    RuntimeTurnStatusRecord,
+};
 
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -290,32 +291,38 @@ fn should_probe_runtime_overlay_for_empty_limited_history() {
 
 #[test]
 fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
+    let now = Utc::now();
     let mut detail = build_detail_with_turn_status(AgentThreadTurnStatus::Aborted);
     let thread_id = detail.thread_id.clone();
     let turn_id = detail.turns[0].id.clone();
-    let mut runtime_turn = TurnRuntime::new(
-        turn_id.clone(),
-        detail.id.clone(),
-        thread_id.clone(),
-        Some("测试".to_string()),
-        None,
-    );
-    runtime_turn.status = TurnStatus::Running;
-    let snapshot = SessionRuntimeSnapshot {
+    let runtime_turn = RuntimeTurnSnapshotRecord {
+        id: turn_id.clone(),
         session_id: detail.id.clone(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                thread_id,
-                detail.id.clone(),
-                std::path::PathBuf::from("/tmp/lime-runtime-overlay-test"),
-            ),
+        thread_id: thread_id.clone(),
+        status: RuntimeTurnStatusRecord::Running,
+        input_text: Some("测试".to_string()),
+        error_message: None,
+        context_override: None,
+        output_schema_runtime: None,
+        created_at: now,
+        started_at: Some(now),
+        completed_at: None,
+        updated_at: now,
+    };
+    let snapshot_record = RuntimeSessionSnapshotRecord {
+        session_id: detail.id.clone(),
+        threads: vec![RuntimeThreadSnapshotRecord {
+            id: thread_id,
+            session_id: detail.id.clone(),
+            working_dir: std::path::PathBuf::from("/tmp/lime-runtime-overlay-test"),
+            created_at: now,
+            updated_at: now,
+            metadata: Default::default(),
             turns: vec![runtime_turn],
             items: Vec::new(),
         }],
     };
 
-    let snapshot_record =
-        crate::runtime_store_aster_adapter::runtime_snapshot_record_from_aster(&snapshot);
     let runtime_projection =
         crate::runtime_snapshot_adapter::project_runtime_snapshot_record(&snapshot_record);
     apply_runtime_snapshot(&mut detail, &runtime_projection);

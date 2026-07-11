@@ -15,6 +15,7 @@ import {
   readHistoryString,
 } from "./agentChatHistoryPrimitives";
 import {
+  isWorkspaceArticlePatchArtifactPath,
   isWorkspaceArticlePatchArtifactKind,
   readWorkspaceArticlePatchRecordFromMetadata,
 } from "../workspace/workspaceArticleWorkspaceMetadata";
@@ -232,7 +233,7 @@ function isHiddenWorkspacePatchArtifactSummary(
       "artifactPath",
       "artifact_path",
     ]);
-  if (isWorkspacePatchPath(path)) {
+  if (isWorkspaceArticlePatchArtifactPath(path)) {
     return true;
   }
   if (!metadata) {
@@ -246,15 +247,6 @@ function isHiddenWorkspacePatchArtifactSummary(
   ]);
   return (
     Boolean(workspacePatch) || isWorkspaceArticlePatchArtifactKind(artifactKind)
-  );
-}
-
-function isWorkspacePatchPath(path: string): boolean {
-  const normalized = path.trim().replaceAll("\\", "/").toLowerCase();
-  return (
-    normalized.endsWith("/workspace-patch.json") ||
-    normalized.endsWith("content-factory-workspace-patch.json") ||
-    normalized.includes("/content-factory/workspace-patch.json")
   );
 }
 

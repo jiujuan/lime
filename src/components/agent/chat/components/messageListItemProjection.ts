@@ -31,7 +31,6 @@ import {
   isDeferredTimelineItem,
   mergeStreamingOverlayContentParts,
   resolveInlineProcessCoverage,
-  resolveInlineThinkingContent,
   hasPersistedReasoningTimelineItem,
   shouldKeepInlineProcessForActiveAssistant,
   shouldRenderConversationTimelineItem,
@@ -70,7 +69,10 @@ import {
 import {
   canMergeTimelineAsSparseProcessPatch,
   canTimelineOwnInlineProcessFlow,
+  isRuntimeFailureDiagnosticAliasText,
   isRuntimeFailureOnlyAssistantText,
+  isTrivialAssistantFinalText,
+  resolveRuntimeFailureFallbackAssistantText,
   resolveMessageInteractiveProjectionState,
   resolveTimelineOwnedVisibleText,
   sanitizeRuntimeFailureAssistantText,
@@ -109,10 +111,6 @@ export function resolveMessageListItemProjection({
   const imageWorkbenchDisplayState = resolveImageWorkbenchMessageDisplayState({
     message,
     rawDisplayContent,
-    thinkingContent:
-      message.role === "assistant" && message.imageWorkbenchPreview
-        ? resolveInlineThinkingContent(message)
-        : undefined,
   });
   const shouldSuppressStandaloneImageWorkbenchProcess =
     imageWorkbenchDisplayState.shouldSuppressStandaloneProcess;
@@ -224,6 +222,9 @@ export function resolveMessageListItemProjection({
     hasFinalAnswerTextAfterRunningWebRetrieval(rawTimelineItems);
   const hasFinalAnswerTimelineItem =
     hasFinalAnswerTextTimelineItem(rawTimelineItems);
+  const hasRuntimeFailureTimelineErrorItem = Boolean(
+    rawTimelineItems?.some((item) => item.type === "error"),
+  );
   const isActiveAssistantOutput =
     message.isThinking ||
     isSending ||
@@ -243,6 +244,21 @@ export function resolveMessageListItemProjection({
       rawTimelineItems,
       shouldNormalizeInactiveRunningWebRetrieval,
     );
+  const isTerminalRuntimeFailure =
+    message.role === "assistant" && message.runtimeStatus?.phase === "failed";
+  const hasMeaningfulAssistantTextContentPart = Boolean(
+    displayContentParts?.some(
+      (part) =>
+        part.type === "text" && !isTrivialAssistantFinalText(part.text),
+    ),
+  );
+  const hasUserVisibleRuntimeFailureAnswer =
+    isTerminalRuntimeFailure &&
+    (!isTrivialAssistantFinalText(displayContent) ||
+      hasMeaningfulAssistantTextContentPart ||
+      hasFinalAnswerTimelineItem);
+  const shouldSuppressRuntimeFailureProcessFlow =
+    isTerminalRuntimeFailure && !hasUserVisibleRuntimeFailureAnswer;
   const hasTimelinePlanItem = Boolean(
     timelineItemsForDisplay?.some((item) => item.type === "plan"),
   );
@@ -304,6 +320,7 @@ export function resolveMessageListItemProjection({
     canTimelineOwnInlineProcessFlow(timelineItemsForDisplay);
   const timelineInlineContentParts =
     message.role === "assistant" &&
+    !shouldSuppressRuntimeFailureProcessFlow &&
     (timelineOwnsInlineProcessFlow ||
       (messageContentPartsOwnInlineProcessFlow &&
         canMergeTimelineAsSparseProcessPatch(timelineItemsForDisplay)) ||
@@ -327,6 +344,7 @@ export function resolveMessageListItemProjection({
     !shouldDeferMessageDetails &&
     !shouldSuppressRendererProcessFlow &&
     message.role === "assistant" &&
+    !shouldSuppressRuntimeFailureProcessFlow &&
     (Boolean(timelineInlineContentParts?.length) ||
       shouldFoldSuppressedProcessFlow ||
       shouldKeepInlineProcessForActiveAssistant(
@@ -374,8 +392,6 @@ export function resolveMessageListItemProjection({
     message.role === "assistant" && includeInlineProcessFlow
       ? message.thinkingContent
       : undefined;
-  const imageWorkbenchThinkingContent =
-    imageWorkbenchDisplayState.thinkingContent;
   const shouldAllowLegacyToolCallsProcess =
     message.role === "assistant" &&
     includeInlineProcessFlow &&
@@ -413,7 +429,10 @@ export function resolveMessageListItemProjection({
     inlineProcessCoverage,
   );
   const primaryTimelineItems = timeline
-    ? (timelineItemsForDisplay || []).filter((item) => {
+    ? (shouldSuppressRuntimeFailureProcessFlow
+        ? []
+        : timelineItemsForDisplay || []
+      ).filter((item) => {
         if (shouldLetInlineProcessOwnActiveTurn) {
           return false;
         }
@@ -550,12 +569,29 @@ export function resolveMessageListItemProjection({
   const runtimeFailureSanitizedActionContent =
     sanitizeRuntimeFailureAssistantText(message, sanitizedRawActionContent);
   const shouldSuppressDuplicatedFailureText =
-    isRuntimeFailureOnlyAssistantText(message, sanitizedRawActionContent);
+    hasRuntimeFailureTimelineErrorItem &&
+    isRuntimeFailureOnlyAssistantText(message, sanitizedRawActionContent) &&
+    isRuntimeFailureDiagnosticAliasText(message, sanitizedRawActionContent);
   const shouldUseRuntimeFailureSanitizedText =
     runtimeFailureSanitizedActionContent !== sanitizedRawActionContent;
+  const shouldBackfillEmptyRuntimeFailureText =
+    message.role === "assistant" &&
+    message.runtimeStatus?.phase === "failed" &&
+    isTrivialAssistantFinalText(runtimeFailureSanitizedActionContent);
+  const shouldUseRuntimeFailureFallbackText =
+    !shouldSuppressDuplicatedFailureText &&
+    shouldBackfillEmptyRuntimeFailureText;
+  const runtimeFailureFallbackActionContent = shouldUseRuntimeFailureFallbackText
+    ? resolveRuntimeFailureFallbackAssistantText(
+        message,
+        sanitizedRawActionContent,
+      )
+    : "";
   const actionContent = shouldSuppressDuplicatedFailureText
     ? ""
-    : runtimeFailureSanitizedActionContent;
+    : shouldUseRuntimeFailureFallbackText
+      ? runtimeFailureFallbackActionContent
+      : runtimeFailureSanitizedActionContent;
   const installedSkillMessageLabel =
     message.role === "user" ? resolveInstalledSkillMessageLabel(message) : null;
   const isUserCommandMessage =
@@ -618,7 +654,7 @@ export function resolveMessageListItemProjection({
       )
     : actionContent;
   const rawRendererRawContent = shouldSuppressDuplicatedFailureText
-    ? ""
+    ? actionContent
     : shouldUseRuntimeFailureSanitizedText
       ? actionContent
     : shouldCollapseLongHistoricalMessage ||
@@ -633,7 +669,9 @@ export function resolveMessageListItemProjection({
     rawRendererRawContent,
   );
   const runtimeFailureTextContentParts =
-    shouldUseRuntimeFailureSanitizedText && actionContent
+    (shouldUseRuntimeFailureSanitizedText ||
+      shouldUseRuntimeFailureFallbackText) &&
+    actionContent
       ? ([{ type: "text" as const, text: actionContent }] satisfies NonNullable<
           typeof rendererConversationContentParts
         >)
@@ -726,8 +764,10 @@ export function resolveMessageListItemProjection({
     shouldRenderMessageCanvasShortcut ||
     Boolean(message.imageWorkbenchPreview) ||
     Boolean(message.taskPreview);
+  const hasLocalFirstTokenRuntime =
+    message.isThinking || (isSending && message.id === lastAssistantMessageId);
   const hasActiveFirstTokenRuntime =
-    timeline !== null ? hasActiveTimelineTurn : message.isThinking || isSending;
+    hasActiveTimelineTurn || hasLocalFirstTokenRuntime;
   const shouldRenderFirstTokenRuntimeStatus =
     message.role === "assistant" &&
     isConversationTailAssistant &&
@@ -755,11 +795,9 @@ export function resolveMessageListItemProjection({
   const imageWorkbenchRendererState = resolveImageWorkbenchRendererProcessState(
     {
       actionContent,
-      imageWorkbenchThinkingContent,
       message,
       rendererActionRequests,
       rendererContentParts,
-      rendererThinkingContent,
       rendererToolCalls,
       shouldSuppressRendererProcessFlow,
     },

@@ -1,6 +1,6 @@
 # 版本级 Benchmark 测试计划
 
-> 更新时间：2026-07-10
+> 更新时间：2026-07-11
 > 范围：每个 Lime 大版本、release candidate、Agent Runtime 大改、Provider / model routing 大改、coding / browser / tool runtime 大改。
 
 ## 1. 目标
@@ -26,7 +26,7 @@
 | L0   | Static / Unit / Type              | 每次 RC                                                 | `npm run verify:local`                                                                                                                                                                                                                                                                                                              | 是         |
 | L1   | Contract / Bridge                 | Agent / command / bridge 改动；大版本默认跑             | `npm run test:contracts`                                                                                                                                                                                                                                                                                                            | 是         |
 | L2   | Agent Runtime Current Fixture     | AgentRuntime / tool / streaming 改动；大版本默认跑      | `npm run smoke:agent-runtime-current-fixture`                                                                                                                                                                                                                                                                                       | 是         |
-| L2C  | Coding Workflow P0                | 每次大版本；coding / tool / App Server runtime 改动必跑 | `npm run smoke:agent-runtime-tool-execution -- --batch coding-current-tools` + `npm run smoke:agent-runtime-current-fixture` + `npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs` | 是         |
+| L2C  | Coding Workflow P0                | 每次大版本；coding / tool / App Server runtime 改动必跑 | `npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools` + `npm run smoke:agent-runtime-current-fixture` + `npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs` | 是         |
 | L3   | GUI Product Smoke                 | 每次大版本                                              | `npm run verify:gui-smoke`                                                                                                                                                                                                                                                                                                          | 是         |
 | L4   | Harness Replay / Trend            | 每次大版本、nightly                                     | `npm run harness:eval` + `npm run harness:eval:trend`                                                                                                                                                                                                                                                                               | 是         |
 | L5   | Agent QC P0                       | 每次大版本                                              | `npm run agent-qc:check` + `npm run agent-qc:benchmark-release:run` + qcloop / Evidence Pack；正式 release 放行前跑 `benchmark-release:run -- --include-p0 --baseline-version <baseline> --strict-gate`，`npm run agent-qc:benchmark-release:gate` 仅作 adapter readiness 单独复核                                                  | 是         |
@@ -216,7 +216,7 @@ npm run agent-qc:benchmark-release:checklist -- \
 ```bash
 npm run verify:local
 npm run test:contracts
-npm run smoke:agent-runtime-tool-execution -- --batch coding-current-tools
+npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools
 npm run smoke:agent-runtime-current-fixture
 npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs
 npm run verify:gui-smoke

@@ -1,16 +1,26 @@
-use super::provider_reply_exit_source::ReplyExitSource;
-use crate::credential_bridge::ConfiguredReplyProvider;
+use super::aster_reply_message_adapter::lower_aster_reply_message;
+use super::aster_reply_stream_adapter::project_aster_reply_stream;
+use super::runtime_turn_event;
+use crate::credential_bridge::{CompatReplyProvider, ConfiguredReplyProvider};
 use crate::model_request_policy::{
     native_tool_policy_disallowed_tool_names, native_tool_policy_from_turn_context,
 };
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
+use crate::runtime_store_aster_adapter::AsterThreadRuntimeStore;
+use crate::session_config_adapter::to_aster_session_config;
 use agent_runtime::reply_backend::{
-    run_reply_source, RuntimeReplyBackend, RuntimeReplyBackendStart,
+    RuntimeReplyBackend, RuntimeReplyBackendRunPath, RuntimeReplyBackendStart,
 };
-use agent_runtime::reply_host::{RuntimeReplyStartRequest, RuntimeReplyStartResult};
+use agent_runtime::reply_host::{
+    RuntimeReplyStartRequest, RuntimeReplyStartResult, RuntimeReplyStream,
+};
 use aster::Agent;
 use futures::future::BoxFuture;
-use model_provider::provider_stream::RuntimeReplyProviderHandle;
+use model_provider::provider_stream::{RuntimeReplyProviderHandle, RuntimeReplyStreamRequest};
+use std::path::PathBuf;
+use std::sync::Arc;
+use thread_store::runtime_snapshot::RuntimeTurnStatusRecord;
+use tokio_util::sync::CancellationToken;
 
 pub(super) struct AsterReplyBackend<'a> {
     agent: &'a Agent,
@@ -105,9 +115,154 @@ pub(super) async fn start_aster_reply_stream<'a>(
             "[AgentRuntime][ReplyPolicy] provider request wire shape 序列化失败，已跳过 metadata 注入"
         );
     }
-    let source = ReplyExitSource::new(agent, provider);
-    let (outcome, stream_request, stream_result) = run_reply_source(source, backend_run).await;
-
-    drop(stream_request);
+    let outcome = backend_run.outcome();
+    let (message, path, stream_request, session_config, working_directory, cancel_token, _) =
+        backend_run.into_parts();
+    let runtime_store = agent.thread_runtime_store();
+    let input_text = non_empty_input_text(message.concat_text());
+    let initial_turn_id = match runtime_turn_event::ensure_current_turn(
+        runtime_store.clone(),
+        &session_config,
+        input_text,
+        working_directory.as_deref(),
+    )
+    .await
+    {
+        Ok(turn_id) => turn_id,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "[AgentRuntime][ReplyPolicy] failed to ensure current runtime turn before Aster reply stream"
+            );
+            None
+        }
+    };
+    let compat_provider = match path {
+        RuntimeReplyBackendRunPath::Default => match agent.provider().await {
+            Ok(provider) => CompatReplyProvider::from_aster_provider(provider),
+            Err(error) => {
+                complete_start_error_turn(
+                    runtime_store.clone(),
+                    initial_turn_id.as_deref(),
+                    error.to_string(),
+                )
+                .await;
+                return outcome.finish_stream(Err(error));
+            }
+        },
+        RuntimeReplyBackendRunPath::Provider(_) => match provider {
+            Some(provider) => provider.clone().into_compat_provider(),
+            None => {
+                let error = anyhow::anyhow!("Provider reply path requires a configured provider");
+                complete_start_error_turn(
+                    runtime_store.clone(),
+                    initial_turn_id.as_deref(),
+                    error.to_string(),
+                )
+                .await;
+                return outcome.finish_stream(Err(error));
+            }
+        },
+    };
+    let request = AsterReplyBackendRequest::from_current(
+        message,
+        stream_request,
+        session_config,
+        working_directory,
+        cancel_token,
+    );
+    let stream_result = run_aster_reply_backend(
+        agent,
+        compat_provider,
+        runtime_store.clone(),
+        initial_turn_id.clone(),
+        request,
+    )
+    .await;
+    if let Err(error) = &stream_result {
+        complete_start_error_turn(runtime_store, initial_turn_id.as_deref(), error.to_string())
+            .await;
+    }
     outcome.finish_stream(stream_result)
+}
+
+fn non_empty_input_text(input_text: String) -> Option<String> {
+    let input_text = input_text.trim();
+    (!input_text.is_empty()).then(|| input_text.to_string())
+}
+
+async fn complete_start_error_turn(
+    runtime_store: Arc<AsterThreadRuntimeStore>,
+    turn_id: Option<&str>,
+    error_message: String,
+) {
+    let Some(turn_id) = turn_id else {
+        return;
+    };
+    if let Err(error) = runtime_turn_event::complete_aster_turn(
+        runtime_store,
+        turn_id,
+        RuntimeTurnStatusRecord::Failed,
+        Some(error_message),
+    )
+    .await
+    {
+        tracing::warn!(
+            turn_id = %turn_id,
+            error = %error,
+            "[AgentRuntime][ReplyPolicy] failed to mark start-error runtime turn as failed"
+        );
+    }
+}
+
+struct AsterReplyBackendRequest {
+    user_message: aster::Message,
+    stream_request: RuntimeReplyStreamRequest,
+    session_config: aster::SessionConfig,
+    working_directory: Option<PathBuf>,
+    cancel_token: Option<CancellationToken>,
+}
+
+impl AsterReplyBackendRequest {
+    fn from_current(
+        message: agent_runtime::reply_message::RuntimeReplyMessage,
+        stream_request: RuntimeReplyStreamRequest,
+        session_config: agent_runtime::session_config::AgentSessionConfig,
+        working_directory: Option<PathBuf>,
+        cancel_token: Option<CancellationToken>,
+    ) -> Self {
+        Self {
+            user_message: lower_aster_reply_message(message),
+            stream_request,
+            session_config: to_aster_session_config(session_config),
+            working_directory,
+            cancel_token,
+        }
+    }
+}
+
+async fn run_aster_reply_backend<'a>(
+    agent: &'a Agent,
+    provider: CompatReplyProvider,
+    runtime_store: Arc<AsterThreadRuntimeStore>,
+    initial_turn_id: Option<String>,
+    request: AsterReplyBackendRequest,
+) -> Result<RuntimeReplyStream<'a, RuntimeAgentEvent>, anyhow::Error> {
+    let stream = agent
+        .reply_with_provider(
+            request.user_message,
+            request.session_config,
+            request.cancel_token.clone(),
+            provider.into_aster_provider(),
+        )
+        .await?;
+
+    Ok(project_aster_reply_stream(
+        stream,
+        request.stream_request,
+        runtime_store,
+        request.working_directory,
+        request.cancel_token,
+        initial_turn_id,
+    ))
 }

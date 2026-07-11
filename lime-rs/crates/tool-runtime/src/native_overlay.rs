@@ -8,6 +8,7 @@ use crate::memory_store::{
     check_runtime_memory_store_permissions, MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME,
     MEMORY_READ_TOOL_NAME, MEMORY_SEARCH_TOOL_NAME,
 };
+use crate::request_user_input::REQUEST_USER_INPUT_TOOL_NAME;
 use crate::skill_gate::skill_tool_definition;
 use crate::skill_search::{check_runtime_skill_search_permissions, skill_search_tool_definition};
 use crate::sleep::{check_runtime_sleep_permissions, sleep_tool_definition, CLOCK_SLEEP_TOOL_NAME};
@@ -169,6 +170,13 @@ impl RuntimeNativeToolInstallStep {
 
     pub const fn turn_context_source(self) -> RuntimeNativeToolTurnContextSource {
         self.registration.turn_context_source()
+    }
+
+    pub const fn registers_aster_tool(self) -> bool {
+        matches!(
+            self.registration.owner(),
+            RuntimeNativeToolRegistrationOwner::NativeDispatch
+        )
     }
 }
 
@@ -551,7 +559,7 @@ const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
     "view_image",
     "Glob",
     "Grep",
-    "Ask",
+    REQUEST_USER_INPUT_TOOL_NAME,
     "Skill",
     "apply_patch",
     "skill_search",
@@ -688,6 +696,10 @@ mod tests {
                 }
                 RuntimeNativeToolRegistrationOwner::SkillGate => {
                     assert_eq!(step.name(), "Skill");
+                    assert!(
+                        !step.registers_aster_tool(),
+                        "Skill must stay definition-only; execution is owned by the current live hook"
+                    );
                 }
             }
         }
@@ -775,9 +787,11 @@ mod tests {
         assert!(names.contains(&"Bash"));
         assert!(names.contains(&"Read"));
         assert!(names.contains(&"view_image"));
+        assert!(names.contains(&REQUEST_USER_INPUT_TOOL_NAME));
         assert!(names.contains(&"apply_patch"));
         assert!(names.contains(&"sleep"));
         assert!(names.contains(&"update_plan"));
+        assert!(!names.contains(&"Ask"));
         assert!(!names.contains(&"LSP"));
         assert!(!names.contains(&"LSPTool"));
         assert!(!names.contains(&"Write"));

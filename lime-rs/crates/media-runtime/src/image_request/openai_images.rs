@@ -8,6 +8,8 @@ use super::{
     read_response_error_message, summarize_response_body, ImageGenerationRequestInput,
 };
 
+const AGNES_DEFAULT_SIZE_FOR_RATIO: &str = "2K";
+
 pub(super) async fn request_single_image_generation(
     client: &reqwest::Client,
     runner_config: &ImageGenerationRunnerConfig,
@@ -196,13 +198,12 @@ fn build_agnes_image_generation_request_body(
     let mut body = serde_json::Map::new();
     body.insert("model".to_string(), json!(prepared_input.model));
     body.insert("prompt".to_string(), json!(request_prompt));
-    if let Some(size) = prepared_input
-        .size
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
+    let size_request = normalize_agnes_image_size_request(prepared_input.size.as_deref());
+    if let Some(size) = size_request.size {
         body.insert("size".to_string(), json!(size));
+    }
+    if let Some(ratio) = size_request.ratio {
+        body.insert("ratio".to_string(), json!(ratio));
     }
 
     let mut extra_body = serde_json::Map::new();
@@ -222,6 +223,40 @@ fn build_agnes_image_generation_request_body(
     body.insert("extra_body".to_string(), Value::Object(extra_body));
 
     Value::Object(body)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AgnesImageSizeRequest {
+    size: Option<String>,
+    ratio: Option<String>,
+}
+
+fn normalize_agnes_image_size_request(size: Option<&str>) -> AgnesImageSizeRequest {
+    let Some(size) = size.map(str::trim).filter(|value| !value.is_empty()) else {
+        return AgnesImageSizeRequest {
+            size: None,
+            ratio: None,
+        };
+    };
+
+    if is_supported_image_aspect_ratio(size) {
+        return AgnesImageSizeRequest {
+            size: Some(AGNES_DEFAULT_SIZE_FOR_RATIO.to_string()),
+            ratio: Some(size.to_string()),
+        };
+    }
+
+    AgnesImageSizeRequest {
+        size: Some(size.to_string()),
+        ratio: None,
+    }
+}
+
+fn is_supported_image_aspect_ratio(value: &str) -> bool {
+    matches!(
+        value.trim(),
+        "1:1" | "16:9" | "9:16" | "4:3" | "3:4" | "3:2" | "2:3" | "21:9" | "4:5" | "5:4"
+    )
 }
 
 fn collect_generated_images(response_body: &Value) -> Vec<Value> {
@@ -338,5 +373,32 @@ mod tests {
             ),
             "https://gateway.test/v1/images/generations"
         );
+    }
+
+    #[test]
+    fn agnes_request_body_maps_ratio_size_to_official_size_and_ratio_fields() {
+        let prepared_input = ImageGenerationRequestInput {
+            model: "agnes-image-2.1-flash".to_string(),
+            size: Some("16:9".to_string()),
+            style: None,
+            provider_id: Some("agnes".to_string()),
+            executor_mode: "images_api".to_string(),
+            outer_model: None,
+            reference_image_urls: Vec::new(),
+        };
+
+        let body = build_agnes_image_generation_request_body(&prepared_input, "深圳夏天街景");
+
+        assert_eq!(
+            body.get("size").and_then(Value::as_str),
+            Some(AGNES_DEFAULT_SIZE_FOR_RATIO)
+        );
+        assert_eq!(body.get("ratio").and_then(Value::as_str), Some("16:9"));
+        assert_eq!(
+            body.pointer("/extra_body/response_format")
+                .and_then(Value::as_str),
+            Some("url")
+        );
+        assert_eq!(body.get("response_format"), None);
     }
 }

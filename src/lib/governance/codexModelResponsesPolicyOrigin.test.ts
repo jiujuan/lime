@@ -133,8 +133,8 @@ describe("Codex model responses policy origin", () => {
     expect(codexClientSource).toContain(
       "build_ws_client_metadata(responses_metadata, model_info.use_responses_lite)",
     );
-    expect(codexClientSource).toContain(
-      ".use_responses_lite\n                    .then_some(ReasoningContext::AllTurns)",
+    expect(codexClientSource).toMatch(
+      /context:\s*model_info\s*\.use_responses_lite\s*\.then_some\(ReasoningContext::AllTurns\)/u,
     );
     expect(codexClientSource).toContain(
       "prompt.get_formatted_input_for_request(model_info.use_responses_lite)",

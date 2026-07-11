@@ -47,6 +47,7 @@ interface ResolveTaskCenterHomeChromeStateParams {
   isPreparingSend: boolean;
   isSending: boolean;
   isHomePendingPreviewActive: boolean;
+  isHomeSendStarting?: boolean;
   queuedTurnCount: number;
   hasLocalSessionOverride?: boolean;
   sessionId?: string | null;
@@ -138,6 +139,7 @@ export function resolveTaskCenterHomeChromeState({
   isPreparingSend,
   isSending,
   isHomePendingPreviewActive,
+  isHomeSendStarting = false,
   queuedTurnCount,
   hasLocalSessionOverride = false,
   sessionId,
@@ -164,6 +166,7 @@ export function resolveTaskCenterHomeChromeState({
       Boolean(draftSendRequest) ||
       hasForegroundLocalSession ||
       hasPendingA2UIForm ||
+      isHomeSendStarting ||
       isPreparingSend ||
       isSending ||
       isHomePendingPreviewActive ||
@@ -200,6 +203,7 @@ export function resolveTaskCenterHomeChromeState({
     threadItemCount > 0 ||
     Boolean(draftSendRequest) ||
     hasPendingA2UIForm ||
+    isHomeSendStarting ||
     isPreparingSend ||
     isSending ||
     isHomePendingPreviewActive ||

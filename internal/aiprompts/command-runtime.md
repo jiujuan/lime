@@ -96,7 +96,7 @@ Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格
 
 对图片任务再补一条固定约束：
 
-`@配图/@修图/@重绘`、文稿 inline 配图、封面位、图片工作台编辑/变体和统一目录显式声明的图片模型标签，current 主链统一是 `Agent turn -> App Server ImageCommandWorkflow -> 标准 image task artifact + worker`。前端只负责把 `entry_source / provider_id / model / executor_mode / modality_contract_key / runtime_contract / routing_slot` 等上下文并入 `harness.image_command_intent.image_task`，发送前的 `session_id` 绑定仍必须走统一发送边界。App Server 在普通聊天模型路由前识别 `ImageCommandIntent`：参数完整时创建 `.lime/tasks/image_generate/*.json`，参数不足时返回补参状态，provider/model 不可执行时 fail closed。`Skill(image_generate)`、旧 `harness.image_skill_launch`、`Bash -> lime media image generate --json`、`lime task create image --json` 和前端直接 `create_image_generation_task_artifact` 都不能再作为聊天 @图片命令首发事实源；短期读取旧 metadata 只能是输入桥，不能决定 current 架构命名。未在 catalog 中声明的任意 `@模型名` 不得自动变成图片 API 入口。图片 command 还必须显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用偏航工具，避免模型在“搜技能目录”里空转或把权限错误暴露给用户。
+`@配图/@修图/@重绘`、文稿 inline 配图、封面位、图片工作台编辑/变体和统一目录显式声明的图片模型标签，current 主链统一是 `Agent turn -> App Server ImageCommandWorkflow -> 标准 image task artifact + worker`。前端只负责把 `entry_source / provider_id / model / executor_mode / modality_contract_key / runtime_contract / routing_slot` 等上下文并入 `harness.image_command_intent.image_task`，发送前的 `session_id` 绑定仍必须走统一发送边界。App Server 在普通聊天模型路由前识别 `ImageCommandIntent`：参数完整时创建 `.lime/tasks/image_generate/*.json`，参数不足时返回补参状态，provider/model 不可执行时 fail closed。`Skill(image_generate)`、旧 `harness.image_skill_launch`、`Bash -> lime media image generate --json`、`lime task create image --json` 和前端直接 `create_image_generation_task_artifact` 都不能再作为聊天 @图片命令首发事实源；旧 `harness.image_skill_launch` 已判 `dead / forbidden-to-restore`，只能在剥离逻辑、retired guard 和负向测试中出现。未在 catalog 中声明的任意 `@模型名` 不得自动变成图片 API 入口。图片 command 还必须显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用偏航工具，避免模型在“搜技能目录”里空转或把权限错误暴露给用户。
 
 对所有 skills 再补一条全局约束：
 
@@ -109,7 +109,7 @@ Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格
 - 只要当前还需要模型做补参、作用域绑定、viewer 回填或结构化 metadata 投影，就不要把 CLI 当 current 首发路径。
 - 共享决策锚点见 `internal/roadmap/gongneng/command-runtime/architecture.md`；单功能如 `@配图` 还要继续服从各自 `internal/prd/gongneng/<feature>/architecture.md`。
 
-- 显式图片动作允许先在前端补 `image_command_intent` metadata；如果仍读到旧 `image_skill_launch`，只能在 App Server 入口标准化成同一个 `ImageCommandIntent`。发送前的 `session_id` 绑定仍必须走统一发送边界；如果 metadata 里暂时还是本地 draft key，必须在真正发起 send 时替换成真实会话 ID，而不是在图片动作入口提前额外建一个图片专用会话。
+- 显式图片动作允许先在前端补 `image_command_intent` metadata；如果仍读到旧 `image_skill_launch`，发送边界必须剥离或 fail closed，不能在 App Server 入口再标准化成 current intent。发送前的 `session_id` 绑定仍必须走统一发送边界；如果 metadata 里暂时还是本地 draft key，必须在真正发起 send 时替换成真实会话 ID，而不是在图片动作入口提前额外建一个图片专用会话。
 - `.lime/tasks/**/*.json` 继续作为图片主链的唯一恢复事实源，但它们属于内部任务快照，默认不应直接渲染成用户可见 artifact 卡片或时间线文件卡；用户面看到的应该是轻结果卡、工具过程和右侧查看。
 
 图片结果进入 UI 时还必须遵守以下 viewer 收口规则：

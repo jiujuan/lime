@@ -133,13 +133,146 @@ describe("MessageList failure and web tools", () => {
       '[data-testid="message-runtime-status-pill"]',
     );
 
-    expect(assistantRenderer?.textContent).toBe("<empty-assistant>");
+    expect(assistantRenderer?.textContent).toContain(detail);
+    expect(assistantRenderer?.textContent).not.toContain("<empty-assistant>");
+    expect(assistantRenderer?.textContent).not.toContain("执行失败");
     expect(
       container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
     ).toBeNull();
     expect(statusPill?.textContent).toContain("当前处理失败");
     expect(statusPill?.textContent).not.toContain(detail);
     expect(metaFooter?.textContent).not.toContain(detail);
+  });
+
+  it("失败回复正文为空时应展示友好失败正文", async () => {
+    const detail =
+      "execution backend error: Agent provider execution failed: failed to connect to provider endpoint";
+    const messages: Message[] = [
+      {
+        id: "msg-user-empty-failure",
+        role: "user",
+        content: "你好",
+        timestamp: new Date("2026-05-11T00:20:46Z"),
+      },
+      {
+        id: "msg-assistant-empty-failure",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-05-11T00:20:55Z"),
+        runtimeStatus: {
+          phase: "failed",
+          title: "当前处理失败",
+          detail,
+          checkpoints: [],
+        },
+      },
+    ];
+
+    const container = await renderZh(messages);
+
+    const assistantRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+
+    expect(assistantRenderer?.textContent?.trim().length).toBeGreaterThan(0);
+    expect(assistantRenderer?.textContent).not.toContain("<empty-assistant>");
+    expect(assistantRenderer?.textContent).not.toContain("failed to connect");
+    expect(assistantRenderer?.textContent).not.toContain(
+      "execution backend error",
+    );
+    expect(container.textContent).toContain("当前处理失败");
+  });
+
+  it("失败回复只有 reasoning 和孤立标点时不应暴露内部思考卡", async () => {
+    const turnId = "turn-failed-internal-reasoning";
+    const detail =
+      "execution backend error: Agent provider execution failed: failed to connect to provider endpoint";
+    const internalReasoning = [
+      "interaction soul: cheeky_sassy_executor",
+      "style profile constraints should stay internal",
+    ].join("\n");
+    const messages: Message[] = [
+      {
+        id: "msg-user-failed-internal-reasoning",
+        role: "user",
+        content: "你好",
+        timestamp: new Date("2026-05-11T00:20:46Z"),
+      },
+      {
+        id: "msg-assistant-failed-internal-reasoning",
+        role: "assistant",
+        content: "。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: internalReasoning,
+          },
+          {
+            type: "text",
+            text: "。",
+          },
+        ],
+        timestamp: new Date("2026-05-11T00:20:55Z"),
+        runtimeTurnId: turnId,
+        runtimeStatus: {
+          phase: "failed",
+          title: "当前处理失败",
+          detail,
+          checkpoints: [],
+        },
+      },
+    ];
+
+    const container = await renderZh(messages, {
+      currentTurnId: turnId,
+      turns: [
+        {
+          id: turnId,
+          thread_id: "thread-failed-internal-reasoning",
+          prompt_text: "你好",
+          status: "failed",
+          error_message: detail,
+          started_at: "2026-05-11T00:20:46Z",
+          completed_at: "2026-05-11T00:20:55Z",
+          created_at: "2026-05-11T00:20:46Z",
+          updated_at: "2026-05-11T00:20:55Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-failed-internal",
+          thread_id: "thread-failed-internal-reasoning",
+          turn_id: turnId,
+          sequence: 1,
+          type: "reasoning",
+          text: internalReasoning,
+          status: "completed",
+          started_at: "2026-05-11T00:20:48Z",
+          completed_at: "2026-05-11T00:20:49Z",
+          updated_at: "2026-05-11T00:20:49Z",
+        },
+      ],
+    });
+
+    const assistantRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    const statusPill = container.querySelector(
+      '[data-testid="message-runtime-status-pill"]',
+    );
+
+    expect(assistantRenderer?.textContent?.trim()).not.toBe("。");
+    expect(assistantRenderer?.textContent?.trim().length).toBeGreaterThan(0);
+    expect(statusPill?.textContent).toContain("当前处理失败");
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("已完成思考");
+    expect(container.textContent).not.toContain("interaction soul");
+    expect(container.textContent).not.toContain("cheeky_sassy_executor");
+    expect(container.textContent).not.toContain("style profile");
+    expect(container.textContent).not.toContain("failed to connect");
+    expect(container.textContent).not.toContain("execution backend error");
   });
 
   it("完成态 App Server reasoning 应与 WebSearch/WebFetch 按 turn 顺序进入同一内联过程", () => {

@@ -68,7 +68,7 @@ fn backend_start_session_metadata_disallows_unsupported_native_tools() {
     backend_start.prepare_session_metadata(native_tool_policy_disallowed_tool_names(
         native_policy.as_ref(),
     ));
-    let (_, _, config, _, _) = backend_start.into_parts();
+    let (_, _, config, _, _, _) = backend_start.into_parts();
 
     let turn_context = config.turn_context.expect("turn context");
     let disallowed_tools = turn_context

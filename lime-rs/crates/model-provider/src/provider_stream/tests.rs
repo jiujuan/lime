@@ -6,8 +6,6 @@ use crate::safety::{
 };
 use agent_protocol::provider_trace::ProviderTraceEvent;
 use serde_json::json;
-use std::sync::Arc;
-use std::task::{Context, Poll, Wake, Waker};
 
 fn runtime_config() -> RuntimeProviderConfig {
     RuntimeProviderConfig {
@@ -260,6 +258,74 @@ fn provider_sampling_request_selects_non_streaming_mode_without_aster_agent() {
         request.sampling_mode(),
         RuntimeReplyProviderSamplingMode::NonStreaming
     );
+}
+
+#[tokio::test]
+async fn provider_sampling_session_runs_streaming_branch_without_aster_agent() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let request =
+        RuntimeReplyProviderSamplingRequest::new("openai", "gpt-5-codex", 1, 0, 32, None, true);
+    let session = RuntimeReplyProviderSamplingSession::start(request);
+    let stream_calls = Arc::new(AtomicUsize::new(0));
+    let complete_calls = Arc::new(AtomicUsize::new(0));
+    let stream_calls_for_open = stream_calls.clone();
+    let complete_calls_for_complete = complete_calls.clone();
+
+    let output = session
+        .open_stream(
+            || async move {
+                stream_calls_for_open.fetch_add(1, Ordering::SeqCst);
+                Ok::<_, &'static str>("stream".to_string())
+            },
+            || async move {
+                complete_calls_for_complete.fetch_add(1, Ordering::SeqCst);
+                Ok::<_, &'static str>("complete")
+            },
+            |value| format!("single:{value}"),
+            |_| RuntimeReplyProviderSamplingFailureLogLevel::Warn,
+        )
+        .await
+        .expect("streaming branch");
+
+    assert_eq!(output, "stream");
+    assert_eq!(stream_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(complete_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn provider_sampling_session_runs_non_streaming_branch_without_aster_agent() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let request =
+        RuntimeReplyProviderSamplingRequest::new("openai", "gpt-5-codex", 1, 0, 32, None, false);
+    let session = RuntimeReplyProviderSamplingSession::start(request);
+    let stream_calls = Arc::new(AtomicUsize::new(0));
+    let complete_calls = Arc::new(AtomicUsize::new(0));
+    let stream_calls_for_open = stream_calls.clone();
+    let complete_calls_for_complete = complete_calls.clone();
+
+    let output = session
+        .open_stream(
+            || async move {
+                stream_calls_for_open.fetch_add(1, Ordering::SeqCst);
+                Ok::<_, &'static str>("stream".to_string())
+            },
+            || async move {
+                complete_calls_for_complete.fetch_add(1, Ordering::SeqCst);
+                Ok::<_, &'static str>("complete")
+            },
+            |value| format!("single:{value}"),
+            |_| RuntimeReplyProviderSamplingFailureLogLevel::Warn,
+        )
+        .await
+        .expect("non-streaming branch");
+
+    assert_eq!(output, "single:complete");
+    assert_eq!(stream_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(complete_calls.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -798,91 +864,6 @@ fn provider_stream_start_rejects_mismatched_handle() {
     assert!(error.message.contains("Provider stream handle mismatch"));
     assert!(error.message.contains("openai/gpt-5.3-codex"));
     assert!(error.message.contains("anthropic/claude-sonnet-4.5"));
-}
-
-#[derive(Clone)]
-struct RecordingSourceBackend;
-
-struct RecordingExecutionRunner {
-    prefix: String,
-}
-
-impl RuntimeReplyProviderSourceBackend<String> for RecordingSourceBackend {
-    type Stream<'a>
-        = String
-    where
-        Self: 'a,
-        String: 'a;
-    type Error = std::convert::Infallible;
-
-    fn stream_reply<'a>(
-        self,
-        call: RuntimeReplyProviderSourceBackendCall<String>,
-    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
-    where
-        Self: Sized + Send + 'a,
-        String: Send + 'a,
-    {
-        Box::pin(async move { Ok(format!("source:{}", call.into_source_request())) })
-    }
-}
-
-impl RuntimeReplyProviderExecutionRunner<String> for RecordingExecutionRunner {
-    type Stream<'a>
-        = String
-    where
-        Self: 'a;
-    type Error = std::convert::Infallible;
-
-    fn run_execution<'a>(
-        self,
-        request: String,
-    ) -> RuntimeReplyProviderSourceFuture<'a, Self::Stream<'a>, Self::Error>
-    where
-        Self: Sized + Send + 'a,
-        String: Send + 'a,
-    {
-        Box::pin(async move { Ok(format!("{}:{request}", self.prefix)) })
-    }
-}
-
-struct NoopWaker;
-
-impl Wake for NoopWaker {
-    fn wake(self: Arc<Self>) {}
-}
-
-fn block_on_ready<F: std::future::Future>(future: F) -> F::Output {
-    let waker = Waker::from(Arc::new(NoopWaker));
-    let mut context = Context::from_waker(&waker);
-    let mut future = Box::pin(future);
-    match future.as_mut().poll(&mut context) {
-        Poll::Ready(output) => output,
-        Poll::Pending => panic!("test future should complete without parking"),
-    }
-}
-
-#[test]
-fn provider_source_backend_contract_runs_without_provider_trait_object() {
-    let call = RuntimeReplyProviderSourceBackendCall::new("payload".to_string());
-    assert_eq!(call.source_request(), "payload");
-
-    let output =
-        block_on_ready(RecordingSourceBackend.stream_reply(call)).expect("source backend stream");
-
-    assert_eq!(output, "source:payload");
-}
-
-#[test]
-fn provider_execution_source_wrapper_runs_without_provider_trait_object() {
-    let call = RuntimeReplyProviderSourceBackendCall::new("payload".to_string());
-    let source = RuntimeReplyProviderExecutionSource::new(RecordingExecutionRunner {
-        prefix: "runner".to_string(),
-    });
-
-    let output = block_on_ready(source.stream_reply(call)).expect("execution source output");
-
-    assert_eq!(output, "runner:payload");
 }
 
 #[test]

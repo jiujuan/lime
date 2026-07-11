@@ -325,6 +325,10 @@ describe("Electron current package entrypoints", () => {
 
     expect(mainContent).toContain("waitForElectronSmokeWorkbenchReady");
     expect(mainContent).toContain("waitForElectronSmokeMemorySettingsReady");
+    expect(mainContent).toContain("showMainWindowDuringStartup");
+    expect(mainContent).toContain("shouldShowMainWindowDuringStartup");
+    expect(mainContent).toContain("LIME_ELECTRON_SMOKE_VISIBLE");
+    expect(mainContent).toContain("window.showInactive()");
     expect(mainContent).toContain('[data-testid="workspace-shell-scene"]');
     expect(mainContent).toContain('[data-testid="inputbar-core-container"]');
     expect(mainContent).toContain('textarea[name="agent-chat-message"]');
@@ -373,6 +377,7 @@ describe("Electron current package entrypoints", () => {
     expect(smokeScript).toContain("mkdtempSync");
     expect(smokeScript).toContain("ELECTRON_E2E_USER_DATA_DIR");
     expect(smokeScript).toContain('LIME_ELECTRON_E2E: "1"');
+    expect(smokeScript).toContain("LIME_ELECTRON_SMOKE_VISIBLE");
     expect(smokeScript).toContain("timed out waiting for renderer/workbench");
   });
 
@@ -404,6 +409,9 @@ describe("Electron current package entrypoints", () => {
     expect(buildRenderer).toContain("startRendererBuildHeartbeat");
     expect(smokeBuildRenderer).toContain("LIME_ELECTRON_RENDERER");
     expect(smokeBuildRenderer).toContain("LIME_VITE_EMPTY_OUT_DIR");
+    expect(smokeBuildRenderer).not.toContain(
+      'LIME_VITE_EMPTY_OUT_DIR = "0"',
+    );
     expect(smokeBuildRenderer).toContain("rendererBuildEnv");
     expect(smokeBuildRenderer).toContain("startRendererBuildHeartbeat");
     expect(rendererBuildEnv).toContain("--max-old-space-size=8192");

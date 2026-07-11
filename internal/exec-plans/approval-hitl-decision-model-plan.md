@@ -1,13 +1,13 @@
 # Approval HITL Decision Model Plan
 
 > 状态：active
-> 更新时间：2026-07-09
+> 更新时间：2026-07-10
 > 主路线图：`internal/roadmap/approval/prd.md`
-> 当前阶段：P0 输入区 approval 已落地；P1 decision-based approval contract 已接入；P2 browser_control session-scoped 授权、scope/lifecycle、Evidence export、Gate A 聚合与 Gate B second-request 已接入；P4 Timeline/replay 历史只读分类已落地；P3 Plan / approval / A2UI 输入区编排已完成并补跑 release 级 Gate A 聚合；更多 tool family 第一刀已补 shell approval scope/contract 事件形状、`tool-runtime::execution_approval` current owner 和 App Server cache-owner fail-closed 守卫，暂不启用 shell session cache
+> 当前阶段：P0 输入区 approval 已落地并收敛为固定高度单行控件；P1 decision-based approval contract 已接入；P2 browser_control session-scoped 授权、scope/lifecycle、Evidence export、Gate A 聚合与 Gate B second-request 已接入；P4 Timeline/replay 历史只读分类已落地；P3 Plan / approval / A2UI 输入区编排已完成；2026-07-10 最新 Gate A、四个 Gate B CDP、GUI smoke 与 contracts 已通过；更多 tool family 第一刀已补 shell approval scope/contract 事件形状、`tool-runtime::execution_approval` current owner 和 App Server cache-owner fail-closed 守卫，暂不启用 shell session cache
 
 ## 目标
 
-把 Approval 从“消息流 / A2UI 确认卡”收敛为 Codex-first 的 runtime control plane：长程任务先通过 Plan 前置确认需求和边界，执行中只在权限缺口处用输入区 compact approval prompt 打断用户，并在后续协议里支持允许一次、本会话允许、拒绝并继续、取消任务。
+把 Approval 从“消息流 / A2UI 确认卡”收敛为 Codex-first 的 runtime control plane：长程任务先通过 Plan 前置确认需求和边界，执行中只在权限缺口处用输入区单行 approval prompt 打断用户，并支持允许一次、本会话允许、拒绝并继续、取消任务。
 
 ## 当前原则
 
@@ -52,7 +52,7 @@ RuntimeCore / service owner：App Server RuntimeCore pending action / approval w
 read model：pendingActions / submittedActionsInFlight / thread timeline read model
 runtime event：action_required(tool_confirmation) -> action/respond -> resolve pending approval
 Evidence Pack 字段：read model / execution trace 记录 decision、scope、request id；Timeline 仅展示工具名 + 终态的一行状态；P2 first slice 导出 approval session cache hit / auto-resolved request / 非敏感 cache key
-GUI surface：Workspace inputbar compact approval prompt；Timeline 只读 evidence
+GUI surface：Workspace inputbar 固定高度单行 approval prompt；Timeline 只读 evidence
 more tool family：shell / command execution 的 contract / scope / decisions projection 归属 `tool-runtime::execution_approval`；运行中事件只投影 `actionKind=tool_execution_policy`、`runtime_contract.contract_key=shell_command`、`toolFamily=shell_command` 和非敏感 `approvalScope`；默认 decisions 不含 `allow_for_session`；App Server 对没有 session cache owner 的 `allow_for_session` fail closed
 ```
 
@@ -192,7 +192,7 @@ Supervisor 不判断：
 
 ```text
 主线目标是否完成：P0 / P1 / P2 / P3 / P4 主链均已完成；P2 session-scoped approval cache 已完成 browser_control permission preflight current 闭环，scope key 覆盖 risk class、workspace、cwd/project root hash 与 network host，cancel / delete 会清理 session cache，Evidence export 能解释 session cache 命中，Gate B second-request 已证明同 session 同 scope 第二轮不再打扰；P3 已完成 Plan 前置确认、approval 优先抢占、A2UI 暂停和同一计划不重复确认。
-已跑验证：本轮已跑定向 Vitest / i18n、protocol/client/Rust 定向测试、`npm run test:contracts`、Gate A `smoke:agent-runtime-current-fixture`、Gate B approval CDP、Gate B full-access CDP、Gate B session recovery CDP；scope/lifecycle 增量已跑 `permission_preflight`、`coding_snapshot`、`approval_session_cache_auto_resolved` 与 `cargo check -p app-server`；2026-07-09 13:20 CST 复跑 `CARGO_TARGET_DIR="/tmp/lime-approval-gateb-target" npm run smoke:agent-runtime-current-fixture` 通过，覆盖 approval resume / decline / cancel / full-access、Inputbar pending steer、Plan history hydrate 与多类 current Electron fixture，`liveProviderUsed=false`。后续 tool family first slice 已补 `approval_decision_contract` Rust test，证明 shell `allow_for_session` 没有 cache owner 时 fail closed。
+已跑验证：本轮已跑定向 Vitest / i18n、protocol/client/Rust 定向测试、`npm run test:contracts`、Gate A `smoke:agent-runtime-current-fixture`、Gate B approval CDP、Gate B full-access CDP、Gate B session recovery CDP；scope/lifecycle 增量已跑 `permission_preflight`、`coding_snapshot`、`approval_session_cache_auto_resolved` 与 `cargo check -p app-server`。2026-07-10 最新验证中，Approval/A2UI/Timeline 定向组测 `4 files / 50 tests`、fixture 脚本测试 `58 tests`、`npm run typecheck`、`npm run i18n:unused -- --check`、Gate A 聚合、四个 Gate B CDP、`npm run verify:gui-smoke` 与 `npm run test:contracts` 均通过；resume pending 实测高度 `44px`，无 tool/command/details/pre；full-access 无 prompt、无 timeline record、无 `agentSession/action/respond`。后续 tool family first slice 已补 `approval_decision_contract` Rust test，证明 shell `allow_for_session` 没有 cache owner 时 fail closed。
 未跑验证及原因：未跑 full qcloop / live Provider；本计划不涉及 release packaging 或 live model provider，Gate B 使用受控 fixture 足以证明当前 approval 主链。
 是否存在 token / Provider / GUI owner 风险：Gate B 使用 fixture / CDP，不使用 live Provider。
 是否可进入 release evidence：P2 browser_control session-scoped approval、P3 Plan / approval / A2UI 编排、P4 Timeline/replay 只读分类可进入受控 fixture evidence；仍不能声明所有 tool family 的完整 Codex `ApprovedForSession` 等价能力，后续需要按 tool policy 逐类接入。
@@ -203,30 +203,31 @@ Supervisor 不判断：
 
 ### 常规测试用例
 
-| ID        | 阶段 | 场景                         | 操作                                                     | 期望结果                                                                    | 证据入口                                                                       |
-| --------- | ---- | ---------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| APR-T-001 | P0   | 输入区替换普通输入框         | 渲染 pending `tool_confirmation`                         | 展示 compact approval prompt，普通 textarea 不渲染                          | `useWorkspaceInputbarSceneRuntime.test.tsx`                                    |
-| APR-T-002 | P0   | 允许 / 拒绝回写              | 点击 `允许` / `拒绝`                                     | 分别发送 `decision=allow_once/decline` 与 `actionType`                      | `useWorkspaceInputbarSceneRuntime.test.tsx`                                    |
-| APR-T-003 | P0   | 提交中恢复输入框             | request 进入 in-flight                                   | prompt 不再占位，普通 inputbar 恢复                                         | `useWorkspaceInputbarSceneRuntime.test.tsx`                                    |
-| APR-T-004 | P0   | approval 不进入 A2UI         | 构造 `tool_confirmation` action                          | A2UI builder 返回 `null`                                                    | `actionRequestA2UI.test.ts`                                                    |
-| APR-T-005 | P0   | Timeline 不提供 pending 提交 | 渲染 pending approval timeline                           | 不出现可提交 `DecisionPanel`                                                | `StreamingRenderer.structuredContent.test.tsx`、`AgentThreadTimeline.test.tsx` |
-| APR-T-006 | P1   | decision contract            | 发送 `allow_once / allow_for_session / decline / cancel` | App Server / RuntimeCore 收到真实 decision；缺 decision fail closed         | `permission_preflight` Rust test + `npm run test:contracts`                    |
-| APR-T-007 | P2   | session cache                | 同类 request 重复触发                                    | `allow_for_session` 后同 scope 第二次 request 不再打扰；不同 host 不复用    | RuntimeCore approval cache unit / integration test                             |
-| APR-T-008 | P1   | decline / cancel 分离        | 分别选择 decline 和 cancel                               | decline 不触发 turn cancel；cancel 停止 turn                                | approval sandbox runtime transcript                                            |
-| APR-T-009 | P4   | 历史 approval 单行回溯       | 渲染 completed / failed approval                         | 只展示工具名 + 终态；不展示 prompt/request/scope/source/read-only hint      | `AgentThreadTimeline.test.tsx`、`StreamingRenderer.structuredContent.test.tsx` |
-| APR-T-010 | P4   | full-access 不展示记录       | 渲染 full-access approval record                         | `approval_policy=never` 或 `sandbox_policy=danger-full-access` 时不生成记录 | `itemConverters.unit.test.ts`                                                  |
+| ID         | 阶段 | 场景                         | 操作                                                     | 期望结果                                                                     | 证据入口                                                                       |
+| ---------- | ---- | ---------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| APR-T-001  | P0   | 输入区替换普通输入框         | 渲染 pending `tool_confirmation`                         | 展示固定高度单行 approval prompt，普通 textarea 不渲染                       | `useWorkspaceInputbarSceneRuntime.test.tsx`                                    |
+| APR-T-002  | P0   | 允许 / 拒绝回写              | 点击 `允许` / `拒绝`                                     | 分别发送 `decision=allow_once/decline` 与 `actionType`                       | `useWorkspaceInputbarSceneRuntime.test.tsx`                                    |
+| APR-T-003  | P0   | 提交中恢复输入框             | request 进入 in-flight                                   | prompt 不再占位，普通 inputbar 恢复                                          | `useWorkspaceInputbarSceneRuntime.test.tsx`                                    |
+| APR-T-003B | P0   | 单行视觉边界                 | request 带 tool / command / cwd / risk arguments         | 只展示单行 prompt 与 backend 决策；不渲染风险 badge、参数 chips 或 JSON 详情 | `InputbarApprovalPrompt.test.tsx`                                              |
+| APR-T-004  | P0   | approval 不进入 A2UI         | 构造 `tool_confirmation` action                          | A2UI builder 返回 `null`                                                     | `actionRequestA2UI.test.ts`                                                    |
+| APR-T-005  | P0   | Timeline 不提供 pending 提交 | 渲染 pending approval timeline                           | 不出现可提交 `DecisionPanel`                                                 | `StreamingRenderer.structuredContent.test.tsx`、`AgentThreadTimeline.test.tsx` |
+| APR-T-006  | P1   | decision contract            | 发送 `allow_once / allow_for_session / decline / cancel` | App Server / RuntimeCore 收到真实 decision；缺 decision fail closed          | `permission_preflight` Rust test + `npm run test:contracts`                    |
+| APR-T-007  | P2   | session cache                | 同类 request 重复触发                                    | `allow_for_session` 后同 scope 第二次 request 不再打扰；不同 host 不复用     | RuntimeCore approval cache unit / integration test                             |
+| APR-T-008  | P1   | decline / cancel 分离        | 分别选择 decline 和 cancel                               | decline 不触发 turn cancel；cancel 停止 turn                                 | approval sandbox runtime transcript                                            |
+| APR-T-009  | P4   | 历史 approval 单行回溯       | 渲染 completed / failed approval                         | 只展示工具名 + 终态；不展示 prompt/request/scope/source/read-only hint       | `AgentThreadTimeline.test.tsx`、`StreamingRenderer.structuredContent.test.tsx` |
+| APR-T-010  | P4   | full-access 不展示记录       | 渲染 full-access approval record                         | `approval_policy=never` 或 `sandbox_policy=danger-full-access` 时不生成记录  | `itemConverters.unit.test.ts`                                                  |
 
 ### Gate A 测试用例
 
-| ID        | 阶段 | 场景                     | 操作                                                           | 必须断言                                                         | 完成证据                       |
-| --------- | ---- | ------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------ |
-| APR-A-001 | P0   | pending approval 投影    | renderer / browser projection 注入 pending `tool_confirmation` | inputbar 显示 approval prompt；textarea 隐藏；按钮适配输入区     | Gate A summary / screenshot    |
-| APR-A-002 | P0   | A2UI / Timeline 回流守卫 | 同时渲染 A2UI、Timeline、inputbar                              | 只有 inputbar 可提交；A2UI 和 Timeline 没有 pending 提交入口     | Gate A summary / DOM assertion |
-| APR-A-003 | P0   | 提交恢复                 | 模拟 submitted in-flight                                       | inputbar 恢复普通输入，不被旧 pending request 占住               | Gate A summary / DOM assertion |
-| APR-A-004 | P1   | decision 动作投影        | 注入 `available_decisions`                                     | 只显示 backend 宣告可用动作；无 backend 支持时不显示“本会话允许” | Gate A summary / DOM assertion |
-| APR-A-005 | P1   | Plan / approval 互斥     | 同时构造 Plan 确认态和 approval prompt fixture                 | 输入区只展示一个阻塞态；Plan 修改不会误触发 approval respond     | Gate A summary / DOM assertion |
-| APR-A-006 | P4   | 历史 approval 单行投影   | renderer / fixture 注入 completed approval                     | 记录只是一行；无 prompt/request/scope/source/read-only hint      | Gate A DOM assertion           |
-| APR-A-007 | P4   | full-access 隐藏投影     | renderer / fixture 注入 full-access approval                   | 不生成 `timeline-approval-record`                                | Gate A DOM assertion           |
+| ID        | 阶段 | 场景                     | 操作                                                           | 必须断言                                                                     | 完成证据                       |
+| --------- | ---- | ------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
+| APR-A-001 | P0   | pending approval 投影    | renderer / browser projection 注入 pending `tool_confirmation` | inputbar 显示单行 approval prompt；textarea 隐藏；窄宽度按钮不改变输入区高度 | Gate A summary / screenshot    |
+| APR-A-002 | P0   | A2UI / Timeline 回流守卫 | 同时渲染 A2UI、Timeline、inputbar                              | 只有 inputbar 可提交；A2UI 和 Timeline 没有 pending 提交入口                 | Gate A summary / DOM assertion |
+| APR-A-003 | P0   | 提交恢复                 | 模拟 submitted in-flight                                       | inputbar 恢复普通输入，不被旧 pending request 占住                           | Gate A summary / DOM assertion |
+| APR-A-004 | P1   | decision 动作投影        | 注入 `available_decisions`                                     | 只显示 backend 宣告可用动作；无 backend 支持时不显示“本会话允许”             | Gate A summary / DOM assertion |
+| APR-A-005 | P1   | Plan / approval 互斥     | 同时构造 Plan 确认态和 approval prompt fixture                 | 输入区只展示一个阻塞态；Plan 修改不会误触发 approval respond                 | Gate A summary / DOM assertion |
+| APR-A-006 | P4   | 历史 approval 单行投影   | renderer / fixture 注入 completed approval                     | 记录只是一行；无 prompt/request/scope/source/read-only hint                  | Gate A DOM assertion           |
+| APR-A-007 | P4   | full-access 隐藏投影     | renderer / fixture 注入 full-access approval                   | 不生成 `timeline-approval-record`                                            | Gate A DOM assertion           |
 
 ### Gate B 测试用例
 
@@ -249,6 +250,7 @@ Gate B 必须是 Electron CDP：真实 Electron renderer、preload/contextBridge
 ### P0：输入区 approval current 收口
 
 - [x] 新增 `InputbarApprovalPrompt`，pending `tool_confirmation` 时替换普通输入框。
+- [x] 将 `InputbarApprovalPrompt` 收敛为固定高度单行控件，删除风险 badge、工具/参数 chips、JSON 详情和对应废弃 i18n。
 - [x] 新增 `inputbarApprovalAction` selector，集中选择当前待处理 approval。
 - [x] 提交后通过 `submittedActionsInFlight` 释放输入区，普通输入框恢复。
 - [x] pending `tool_confirmation` 不再进入 A2UI。
@@ -260,6 +262,7 @@ Gate B 必须是 Electron CDP：真实 Electron renderer、preload/contextBridge
 退出条件：
 
 - 输入区是 `tool_confirmation` 唯一可提交入口。
+- 输入区 approval 只有一行 prompt 与 backend 宣告决策；不得恢复详情卡、风险 badge 或参数面板。
 - A2UI approval 表单、消息流 pending decision panel 和 Harness inline approval 按 `dead` 处理。
 - `ask_user` / `elicitation` 原行为不受影响。
 
@@ -374,12 +377,17 @@ Gate B 必须是 Electron CDP：真实 Electron renderer、preload/contextBridge
 - 2026-07-09：更多 tool family 第一刀完成：shell / command execution 的 `action.required` 补齐 decision-first payload，包括 `actionKind=tool_execution_policy`、`toolFamily=shell_command`、`runtime_contract.contract_key=shell_command`、`approvalScope/approval_scope` 非敏感摘要、`contractKey/contract_key` 与 `availableDecisions`。默认 shell decisions 固定为 `allow_once / decline / cancel`，不宣告 `allow_for_session`；即使上游 metadata 错误透传该 decision，App Server 也要求 `allow_for_session` 能生成 RuntimeCore session approval cache entry，否则 fail closed。`approvalScope` 中 cwd/project root 只输出 hash，不输出 raw path，network URL 只归一化到 scheme/host/port。验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent -- --check` 通过；`CARGO_TARGET_DIR="/tmp/lime-approval-gateb-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent tool_lifecycle --lib -- --nocapture` 通过，`14 passed`。
 - 2026-07-09：App Server approval decision contract guard 完成：新增 `runtime::approval_decision_contract`，`agentSession/action/respond` 在调用 backend 前校验 decision 必须来自 pending `tool_confirmation.availableDecisions`；`allow_for_session` 还必须能通过 `approval_cache::entry_from_action_response` 生成 current session cache entry。shell / command execution 当前没有运行中 tool lifecycle cache consumer，所以 `allow_for_session` 即使被错误宣告也会 fail closed，且不会调用 backend resume。验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server -- --check` 通过；`CARGO_TARGET_DIR="/tmp/lime-approval-gateb-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server approval_decision_contract --lib -- --nocapture` 通过，`1 passed`；`CARGO_TARGET_DIR="/tmp/lime-approval-gateb-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server permission_preflight --lib -- --nocapture` 通过，`8 passed`。文件体量备注：`turn_execution.rs` 已超过 1000 行，本轮只接一行 current guard 调用并把新逻辑拆到 `approval_decision_contract.rs`；下一次触碰 respond path 时应继续把 action response contract / workflow audit helper 从中心文件拆出。
 - 2026-07-09：shell approval contract / scope projection owner 收敛到 `tool-runtime::execution_approval`，`lime-agent` 的 `ToolApprovalActionSnapshot` 只负责把 current projection materialize 成 `RuntimeAgentEvent::ActionRequired`。`lime-agent` 不再持有 URL 归一化和 scope hash 规则，也移除了 `url` 直接依赖；该改造没有启用 shell `allow_for_session`，只是把后续 stable shell approval key 的 owner 放回 Turn tool lifecycle 层。验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime --package lime-agent -- --check` 通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime execution_approval --lib -- --nocapture` 通过，`2 passed`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent tool_lifecycle --lib -- --nocapture` 通过，`14 passed`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent tool_orchestrator --lib -- --nocapture` 通过，`16 passed`；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server approval_decision_contract --lib -- --nocapture` 通过，`1 passed`。
+- 2026-07-10：按最终 GUI 反馈将输入区 approval 从多行 compact panel 收敛为固定高度单行控件：只保留权限图标、单行截断 prompt 和 backend `availableDecisions` 动作；窄宽度下按钮隐藏文字但保留图标、`aria-label` 与 tooltip。删除风险分级、工具/命令/目录参数 chips、JSON details/pre、旧 risk/argument/details i18n，并补 `InputbarApprovalPrompt.test.tsx` 防止详情卡回流。该刀不修改 App Server contract、RuntimeCore cache 或 `agent-compat`。
+- 2026-07-10：单行 UI 静态与组件验证完成：Approval/A2UI/Timeline 定向组测 `4 files / 50 tests`，fixture 脚本测试 `58 tests`，`npm run typecheck`、`npm run i18n:unused -- --check`、Prettier 与 `git diff --check` 通过；五语言 `agentInputbar.json` 已删除废弃 risk/argument/tool/details 文案，unused key 为 `0`。
+- 2026-07-10：Gate A 聚合 `npm run smoke:agent-runtime-current-fixture` 通过。最新 approval current fixture summary 的 resume `50`、decline `43`、cancel `43`、full-access `40` 项断言全部通过；resume pending UI 实测 `44px`、textarea 隐藏、无 tool/command/details/pre；full-access 无 prompt 与 timeline record。该聚合不替代 CDP proof level。
+- 2026-07-10：四个最新 Gate B Electron CDP 场景全部通过，proof level 均为 `Gate B CDP controlled fixture`，renderer 均为真实 Electron + preload invoke + App Server current bridge，且无失败断言。证据分别为 `claw-chat-current-fixture-approval-request-resume-cdp-p6-summary.json`、`claw-chat-current-fixture-approval-request-decline-cdp-p6-summary.json`、`claw-chat-current-fixture-approval-request-cancel-cdp-p6-summary.json`、`claw-chat-current-fixture-approval-request-full-access-cdp-p6-summary.json`。resume 证明单行 pending 与 session cache second-request；decline/cancel 证明 decision 语义分离；full-access 证明无 prompt、无 timeline record、无 `agentSession/action/respond`。
+- 2026-07-10：GUI 与契约最终门槛通过：`npm run verify:gui-smoke` 证明真实 Electron renderer、preload、App Server sidecar、Claw workbench shell 与 memory settings ready；`npm run test:contracts` 证明 protocol/client/Electron command/Harness/modality/scripts/release/docs boundary 无漂移。首次 Gate B 使用相对隔离 `CARGO_TARGET_DIR=".lime/cargo-target/r4-verification"` 时，仅因 target 缺少 `sherpa-onnx` 预编译库在 sidecar 链接阶段失败，未进入 Electron/CDP；改回默认 `lime-rs/target` 后四场景全部通过，未修改 `agent-compat`。
 
 ## 当前下一刀
 
 P2 browser_control session cache、scope/lifecycle、Evidence export first slice、Gate B second-request、full-access Gate B、decline/cancel Gate B、P4 Timeline / replay 只读分类、P3 输入区阻塞态优先级、Plan accept/adjust 接线、approval/A2UI 互斥、Plan 确认后不重复打断、P3 release 级 Gate A 聚合、shell approval scope/contract 事件形状 first slice、`tool-runtime::execution_approval` owner 收敛，以及 App Server cache-owner fail-closed 守卫均已完成。当前不再新增 approval 旧 UI / A2UI 兼容入口。下一刀策略：
 
-1. 修改 App Server / fixture approval contract 后，再按需重跑 approval-request Electron CDP p5 复验。
+1. 修改 App Server / fixture approval contract 后，再按需重跑四个 approval-request Electron CDP 场景并生成新证据前缀。
 2. 若继续推进 shell / command execution 的 `ApprovedForSession`，必须先在 App Server / RuntimeCore 定义 stable shell scope key、Evidence 非敏感摘要、cache lifecycle 和 read model auto-resolved 事件，再把 `allow_for_session` 加入默认 decisions 并补对应 Gate B。
 3. 进入其它 tool family 的 approval scope 接入时，沿用同一顺序：先 contract/scope 形状，再 cache owner，再 Gate B；不得直接在前端或 Aster adapter 展示“本会话允许”。
 

@@ -32,7 +32,7 @@ describe("agentStreamErrorController", () => {
     });
   });
 
-  it("应构造失败 assistant 消息 patch，并保留局部输出", () => {
+  it("应构造失败 assistant 消息 patch，并保留局部输出但不追加失败详情", () => {
     expect(
       buildAgentStreamFailedAssistantMessagePatch({
         accumulatedContent: "已输出一半",
@@ -41,9 +41,9 @@ describe("agentStreamErrorController", () => {
       }),
     ).toMatchObject({
       isThinking: false,
-      content: "已输出一半\n\n执行失败：provider failed",
+      content: "已输出一半",
       contentParts: [
-        { type: "text", text: "已输出一半\n\n执行失败：provider failed" },
+        { type: "text", text: "已输出一半" },
       ],
       runtimeStatus: {
         phase: "failed",
@@ -139,7 +139,7 @@ describe("agentStreamErrorController", () => {
     expect(item.text).not.toContain("Insufficient Balance");
   });
 
-  it("应在无局部输出时回退 previousContent，并按需带回 usage", () => {
+  it("应在无局部输出时回退 previousContent 且不追加失败详情，并按需带回 usage", () => {
     const usage = { input_tokens: 1, output_tokens: 2 };
     expect(
       buildAgentStreamFailedAssistantMessagePatch({
@@ -149,7 +149,7 @@ describe("agentStreamErrorController", () => {
         usage,
       }),
     ).toMatchObject({
-      content: "旧内容\n\n执行失败：boom",
+      content: "旧内容",
       usage,
     });
   });

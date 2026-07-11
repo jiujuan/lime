@@ -3,33 +3,47 @@ use aster::Agent;
 use aster::{Tool, ToolRegistry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tool_runtime::gateway_dispatch_execution::RuntimeGatewayToolExecutionRegistration;
 use tool_runtime::native_overlay::{
     runtime_native_tool_definition, runtime_native_tool_install_plan,
     runtime_native_tool_registration_is_allowed, RuntimeNativeToolInstallStep,
-    RuntimeNativeToolRegistrationOwner,
 };
 use tool_runtime::tool_definition::RuntimeToolDefinition;
 
 pub(crate) struct NativeRegistration {
     definition: RuntimeToolDefinition,
-    tool: Box<dyn Tool>,
+    tool: Option<Box<dyn Tool>>,
+    gateway_execution: Option<RuntimeGatewayToolExecutionRegistration>,
 }
 
 impl NativeRegistration {
     pub(crate) fn new(definition: RuntimeToolDefinition, tool: Box<dyn Tool>) -> Self {
-        Self { definition, tool }
+        Self {
+            definition,
+            tool: Some(tool),
+            gateway_execution: None,
+        }
     }
 
-    pub(crate) fn name(&self) -> &str {
-        &self.definition.name
+    pub(crate) fn gateway(registration: RuntimeGatewayToolExecutionRegistration) -> Self {
+        Self {
+            definition: registration.definition(),
+            tool: None,
+            gateway_execution: Some(registration),
+        }
     }
 
     pub(crate) fn definition(&self) -> RuntimeToolDefinition {
         self.definition.clone()
     }
 
+    pub(crate) fn gateway_execution(&self) -> Option<RuntimeGatewayToolExecutionRegistration> {
+        self.gateway_execution.clone()
+    }
+
     pub(crate) fn into_tool(self) -> Box<dyn Tool> {
         self.tool
+            .expect("non-gateway native registration must include an Aster Tool adapter")
     }
 }
 
@@ -54,11 +68,6 @@ pub(crate) async fn register_native_tool_on_agent(
     agent_state: &Arc<RwLock<Option<Agent>>>,
     registration: NativeRegistration,
 ) -> Result<RuntimeToolDefinition, String> {
-    let registry = {
-        let agent_guard = agent_state.read().await;
-        let agent = agent_guard.as_ref().ok_or("Agent not initialized")?;
-        agent.tool_registry().clone()
-    };
     let definition = registration.definition();
     if !runtime_native_tool_registration_is_allowed(&definition.name) {
         return Err(format!(
@@ -66,8 +75,18 @@ pub(crate) async fn register_native_tool_on_agent(
             definition.name
         ));
     }
+    let gateway_execution = registration.gateway_execution();
+    let mut agent_guard = agent_state.write().await;
+    let agent = agent_guard.as_mut().ok_or("Agent not initialized")?;
+    if let Some(gateway_execution) = gateway_execution {
+        agent.register_runtime_gateway_tool_execution(gateway_execution);
+        return Ok(definition);
+    }
+    let tool = registration.into_tool();
+    let registry = agent.tool_registry().clone();
+    drop(agent_guard);
     let mut registry = registry.write().await;
-    registry.register(registration.into_tool());
+    registry.register(tool);
     Ok(definition)
 }
 
@@ -75,28 +94,22 @@ fn register_runtime_native_tool_overlay(
     registry: &mut ToolRegistry,
     step: RuntimeNativeToolInstallStep,
 ) -> RuntimeToolDefinition {
-    let registration = create_runtime_native_tool(step);
-    let definition = registration.definition();
+    let definition = runtime_native_tool_definition(step.tool());
     debug_assert!(
         runtime_native_tool_registration_is_allowed(&definition.name),
         "{} must be allowed by tool-runtime current registration policy",
         definition.name
     );
-    registry.register(registration.into_tool());
+    if step.registers_aster_tool() {
+        let registration = create_runtime_native_tool(step);
+        registry.register(registration.into_tool());
+    }
     definition
 }
 
 fn create_runtime_native_tool(step: RuntimeNativeToolInstallStep) -> NativeRegistration {
     let definition = runtime_native_tool_definition(step.tool());
-    let tool = match step.owner() {
-        RuntimeNativeToolRegistrationOwner::NativeDispatch => {
-            create_runtime_native_tool_adapter(step.tool())
-        }
-        // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
-        RuntimeNativeToolRegistrationOwner::SkillGate => {
-            Box::new(crate::tools::LimeSkillTool::new())
-        }
-    };
+    let tool = create_runtime_native_tool_adapter(step.tool());
     NativeRegistration::new(definition, tool)
 }
 
@@ -168,7 +181,7 @@ mod tests {
         let tool_config = crate::runtime_state_support::create_lime_tool_config();
         let mut agent = Agent::with_tool_config(tool_config);
 
-        configure_lime_native_tool_overlay(&mut agent).await;
+        let definitions = configure_lime_native_tool_overlay(&mut agent).await;
 
         let registry = agent.tool_registry();
         let registry = registry.read().await;
@@ -182,6 +195,10 @@ mod tests {
         assert!(!registry.contains("TaskStop"));
         assert!(registry.contains("apply_patch"));
         assert!(registry.contains("update_plan"));
+        assert!(!registry.contains("Skill"));
+        assert!(definitions
+            .iter()
+            .any(|definition| definition.name == "Skill"));
     }
 
     #[tokio::test]

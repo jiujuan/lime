@@ -1,5 +1,6 @@
 import type { InputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
 import type { AgentRuntimeStatus, Message } from "../types";
+import { hasMeaningfulAssistantVisibleText } from "../utils/assistantVisibleText";
 
 function isTerminalThreadReadStatus(status?: string | null): boolean {
   return (
@@ -19,6 +20,29 @@ export function shouldRenderAssistantRuntimeStatusPill(
 
 function hasTerminalAssistantRuntimeStatus(message: Message): boolean {
   return shouldRenderAssistantRuntimeStatusPill(message.runtimeStatus);
+}
+
+function hasFailureDiagnosticMarker(value?: string | null): boolean {
+  const text = (value || "").trim().replace(/\s+/g, " ");
+  return /(?:执行失败\s*[:：]|execution failed\s*:|当前处理失败(?:\s|$))/i.test(
+    text,
+  );
+}
+
+function hasEmbeddedFailureDiagnosticText(message: Message): boolean {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  if (hasFailureDiagnosticMarker(message.content)) {
+    return true;
+  }
+
+  return Boolean(
+    message.contentParts?.some(
+      (part) => part.type === "text" && hasFailureDiagnosticMarker(part.text),
+    ),
+  );
 }
 
 function hasRenderedImageWorkbenchPreview(message: Message): boolean {
@@ -69,14 +93,14 @@ export function resolveMessageAssistantMetaFooterState({
   threadReadStatus,
 }: ResolveMessageAssistantMetaFooterStateOptions): MessageAssistantMetaFooterState {
   const hasTerminalRuntimeStatus = hasTerminalAssistantRuntimeStatus(message);
-  const hasFinalAssistantContent =
-    message.role === "assistant" &&
-    Boolean(
-      message.content.trim() ||
-        message.contentParts?.some(
-          (part) => part.type === "text" && part.text.trim().length > 0,
-        ),
-    );
+  const hasFinalAssistantContent = hasMeaningfulAssistantVisibleText(message);
+  const hasFailureDiagnosticText =
+    message.runtimeStatus?.phase === "failed" &&
+    hasEmbeddedFailureDiagnosticText(message);
+  const shouldSuppressTerminalStatusPillForVisibleAnswer =
+    message.runtimeStatus?.phase === "failed" &&
+    hasFinalAssistantContent &&
+    !hasFailureDiagnosticText;
   const shouldSuppressStaleActiveRuntimeLine =
     hasFinalAssistantContent &&
     (isTerminalThreadReadStatus(threadReadStatus) ||
@@ -130,7 +154,8 @@ export function resolveMessageAssistantMetaFooterState({
     !message.imageWorkbenchPreview &&
     !shouldSuppressAssistantMetaFooter &&
     !shouldRenderTailRuntimeStatusLine &&
-    hasTerminalRuntimeStatus;
+    hasTerminalRuntimeStatus &&
+    !shouldSuppressTerminalStatusPillForVisibleAnswer;
   const hasAssistantMetaFooter =
     message.role === "assistant" &&
     !shouldSuppressAssistantMetaFooter &&

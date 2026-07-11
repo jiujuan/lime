@@ -158,6 +158,13 @@ function isLikelyInternalRuntimeTransportError(message: string): boolean {
     includesAny(message, [
       "-32603",
       "-32002",
+      "failed to connect",
+      "connection refused",
+      "connection reset",
+      "connection timed out",
+      "connect timeout",
+      "network error",
+      "dns error",
       "troubleshooting",
       "agent runtime tool lifecycle validation failed",
       "runtime tool lifecycle validation failed",

@@ -34,8 +34,6 @@ fn build_session_from_record_projection(
         accumulated_input_tokens: projection.accumulated_input_tokens,
         accumulated_output_tokens: projection.accumulated_output_tokens,
         schedule_id: projection.schedule_id,
-        recipe: parse_optional_json(projection.recipe_json),
-        user_recipe_values: parse_optional_json(projection.user_recipe_values_json),
         conversation: None,
         message_count: projection.message_count,
         provider_name: projection.provider_name,

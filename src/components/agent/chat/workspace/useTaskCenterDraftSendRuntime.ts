@@ -995,10 +995,6 @@ export function useTaskCenterDraftSendDispatchRuntime({
           ? (materializedSessionIdsRef.current.get(latestRequest.draftTabId) ??
             null)
           : null;
-        const hasPrewarmedMaterializedSession =
-          latestRequest.materializeDraft &&
-          (Boolean(readyMaterializedSessionId) ||
-            prewarmedDraftSessionIdsRef?.current.has(latestRequest.draftTabId));
         const materializedSessionId = latestRequest.materializeDraft
           ? (readyMaterializedSessionId ??
             (await materializeDraftTab(latestRequest.draftTabId, {
@@ -1042,10 +1038,8 @@ export function useTaskCenterDraftSendDispatchRuntime({
             embedHomeSession: false,
             hydrateSession: false,
             preserveInput: false,
+            syncRoute: false,
           };
-          if (hasPrewarmedMaterializedSession) {
-            commitOptions.syncRoute = false;
-          }
           commitMaterializedDraftTab(
             latestRequest.draftTabId,
             materializedSessionId,

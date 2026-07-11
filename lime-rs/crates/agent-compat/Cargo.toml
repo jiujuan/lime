@@ -36,7 +36,6 @@ tokio = { workspace = true }
 reqwest = { workspace = true, features = ["json", "rustls-tls-native-roots"] }
 
 [dependencies]
-document-preview = { path = "../document-preview" }
 model-provider = { path = "../model-provider" }
 tool-runtime = { path = "../tool-runtime" }
 lru = "0.12"

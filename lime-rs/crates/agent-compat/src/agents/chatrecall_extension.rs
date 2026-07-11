@@ -1,6 +1,6 @@
 use crate::agents::extension::PlatformExtensionContext;
 use crate::agents::mcp_client::{Error, McpClientTrait};
-use crate::session::{query_session, SessionManager};
+use crate::session::SessionStore;
 use anyhow::Result;
 use async_trait::async_trait;
 use indoc::indoc;
@@ -12,6 +12,7 @@ use rmcp::model::{
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -77,12 +78,32 @@ impl ChatRecallClient {
         Ok(Self { info, context })
     }
 
+    async fn current_context(&self) -> PlatformExtensionContext {
+        if let Some(manager) = self
+            .context
+            .extension_manager
+            .as_ref()
+            .and_then(|manager| manager.upgrade())
+        {
+            return manager.get_context().await;
+        }
+        self.context.clone()
+    }
+
+    async fn session_store(&self) -> Result<Arc<dyn SessionStore>, String> {
+        self.current_context().await.session_store.ok_or_else(|| {
+            "Chat recall requires injected session_store; global SessionManager fallback disabled"
+                .to_string()
+        })
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn handle_chatrecall(
         &self,
         arguments: Option<JsonObject>,
     ) -> Result<Vec<Content>, String> {
         let arguments = arguments.ok_or("Missing arguments")?;
+        let session_store = self.session_store().await?;
 
         let session_id = arguments
             .get("session_id")
@@ -91,7 +112,7 @@ impl ChatRecallClient {
 
         if let Some(sid) = session_id {
             // LOAD MODE: Get session summary (first and last few messages)
-            match query_session(&sid, true).await {
+            match session_store.get_session(&sid, true).await {
                 Ok(loaded_session) => {
                     let conversation = loaded_session.conversation.as_ref();
 
@@ -187,53 +208,46 @@ impl ChatRecallClient {
                 .map(|dt| dt.with_timezone(&chrono::Utc));
 
             // Exclude current session from results to avoid self-referential loops
-            let exclude_session_id = self.context.session_id.clone();
+            let exclude_session_id = self.current_context().await.session_id.clone();
 
-            match SessionManager::search_chat_history(
-                &query,
-                Some(limit),
-                after_date,
-                before_date,
-                exclude_session_id,
-            )
-            .await
+            match session_store
+                .search_chat_history(
+                    &query,
+                    Some(limit),
+                    after_date,
+                    before_date,
+                    exclude_session_id,
+                )
+                .await
             {
                 Ok(results) => {
-                    let formatted_results = if results.total_matches == 0 {
+                    let formatted_results = if results.is_empty() {
                         format!("No results found for query: '{}'", query)
                     } else {
                         let mut output = format!(
-                            "Found {} matching message(s) across {} session(s) for query: '{}'\n\n",
-                            results.total_matches,
-                            results.results.len(),
+                            "Found {} matching message(s) for query: '{}'\n\n",
+                            results.len(),
                             query
                         );
-                        for (idx, result) in results.results.iter().enumerate() {
+                        for (idx, result) in results.iter().enumerate() {
                             output.push_str(&format!(
-                                "{}. Session: {} (ID: {})\n   Working Dir: {}\n   Last Activity: {}\n   Showing {} of {} total message(s) in session:\n\n",
+                                "{}. Session: {} (ID: {})\n   Matched At: {}\n   Role: {}\n   Score: {:.2}\n\n",
                                 idx + 1,
-                                result.session_description,
+                                result.session_name,
                                 result.session_id,
-                                result.session_working_dir,
-                                result.last_activity.format("%Y-%m-%d"),
-                                result.messages.len(),
-                                result.total_messages_in_session
+                                result.timestamp.format("%Y-%m-%d"),
+                                result.message_role,
+                                result.relevance_score
                             ));
-
-                            for (msg_idx, message) in result.messages.iter().enumerate() {
-                                output.push_str(&format!(
-                                    "   {}.{} [{}]\n   {}\n\n",
-                                    idx + 1,
-                                    msg_idx + 1,
-                                    message.role,
-                                    message
-                                        .content
-                                        .lines()
-                                        .map(|line| format!("   {}", line))
-                                        .collect::<Vec<_>>()
-                                        .join("\n")
-                                ));
-                            }
+                            output.push_str(
+                                &result
+                                    .message_content
+                                    .lines()
+                                    .map(|line| format!("   {}", line))
+                                    .collect::<Vec<_>>()
+                                    .join("\n"),
+                            );
+                            output.push_str("\n\n");
                         }
                         output
                     };

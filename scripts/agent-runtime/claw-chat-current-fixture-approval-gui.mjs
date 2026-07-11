@@ -41,7 +41,9 @@ export async function waitForGuiApprovalPending(page, options) {
               normalized.includes("拒絕") ||
               normalized.includes("却下") ||
               normalized.includes("거부") ||
-              normalized.includes("agentChat.inputbar.approval.action.decline") ||
+              normalized.includes(
+                "agentChat.inputbar.approval.action.decline",
+              ) ||
               /\bDecline\b/i.test(normalized) ||
               /\bDeny\b/i.test(normalized)
             );
@@ -52,7 +54,9 @@ export async function waitForGuiApprovalPending(page, options) {
               normalized.includes("中止") ||
               normalized.includes("キャンセル") ||
               normalized.includes("취소") ||
-              normalized.includes("agentChat.inputbar.approval.action.cancel") ||
+              normalized.includes(
+                "agentChat.inputbar.approval.action.cancel",
+              ) ||
               /\bCancel\b/i.test(normalized) ||
               /\bAbort\b/i.test(normalized)
             );
@@ -64,15 +68,31 @@ export async function waitForGuiApprovalPending(page, options) {
           Array.from(document.querySelectorAll("[data-request-id]")).find(
             (element) => element.getAttribute("data-request-id") === requestId,
           ) ?? null;
-        const toolSummary = document.querySelector(
-          '[data-testid="decision-panel-tool-confirmation-summary"]',
+        const approvalPrompt = document.querySelector(
+          '[data-testid="inputbar-approval-prompt"]',
         );
-        const section =
-          requestSection ??
-          toolSummary?.closest("[data-request-id]") ??
-          document.querySelector('[data-harness-section="approvals"]');
+        const section = requestSection ?? approvalPrompt;
         const sectionText = section?.textContent || "";
         const searchRoot = section || document;
+        const promptSummary = approvalPrompt?.querySelector(
+          '[data-testid="inputbar-approval-summary"]',
+        );
+        const promptRect = approvalPrompt?.getBoundingClientRect();
+        const textarea = document.querySelector(
+          'textarea[name="agent-chat-message"]',
+        );
+        const textareaRect = textarea?.getBoundingClientRect();
+        const textareaStyle = textarea
+          ? window.getComputedStyle(textarea)
+          : null;
+        const textareaVisible = Boolean(
+          textarea &&
+          textareaRect &&
+          textareaRect.width > 16 &&
+          textareaRect.height > 16 &&
+          textareaStyle?.visibility !== "hidden" &&
+          textareaStyle?.display !== "none",
+        );
         const buttons = Array.from(searchRoot.querySelectorAll("button")).map(
           (button) => {
             const label = [
@@ -97,17 +117,23 @@ export async function waitForGuiApprovalPending(page, options) {
           },
         );
         const approveButton = buttons.find((button) => button.approve);
-        const hasApprovalContent =
-          bodyText.includes(promptText) &&
-          bodyText.includes(toolName) &&
-          bodyText.includes(commandText);
+        const promptSummaryText = promptSummary?.textContent || "";
         return {
-          hasSection: Boolean(section || toolSummary || hasApprovalContent),
-          hasApprovalContent,
-          hasPrompt: bodyText.includes(promptText),
+          hasSection: Boolean(approvalPrompt),
+          hasApprovalContent: promptSummaryText.includes(promptText),
+          hasPrompt: promptSummaryText.includes(promptText),
           hasRequestId: Boolean(requestSection),
-          hasToolName: bodyText.includes(toolName),
-          hasCommand: bodyText.includes(commandText),
+          hasToolName: sectionText.includes(toolName),
+          hasCommand: sectionText.includes(commandText),
+          hasDetails: Boolean(approvalPrompt?.querySelector("details")),
+          hasPreformattedArguments: Boolean(
+            approvalPrompt?.querySelector("pre"),
+          ),
+          textareaVisible,
+          promptHeight: promptRect?.height ?? null,
+          singleLine:
+            Boolean(promptRect) &&
+            (promptRect?.height ?? Number.POSITIVE_INFINITY) <= 48,
           approveButtonVisible: Boolean(approveButton),
           approveButtonDisabled: approveButton?.disabled ?? null,
           declineButtonVisible: buttons.some((button) => button.decline),
@@ -159,9 +185,15 @@ export async function waitForGuiApprovalPending(page, options) {
     }
     lastSnapshot = snapshot;
     if (
+      snapshot.hasSection &&
+      snapshot.hasApprovalContent &&
       snapshot.hasPrompt &&
-      snapshot.hasToolName &&
-      snapshot.hasCommand &&
+      snapshot.hasToolName === false &&
+      snapshot.hasCommand === false &&
+      snapshot.hasDetails === false &&
+      snapshot.hasPreformattedArguments === false &&
+      snapshot.textareaVisible === false &&
+      snapshot.singleLine === true &&
       snapshot.approveButtonVisible &&
       snapshot.approveButtonDisabled === false
     ) {
@@ -210,7 +242,9 @@ export async function clickApprovalDecisionButton(
               normalized.includes("拒絕") ||
               normalized.includes("却下") ||
               normalized.includes("거부") ||
-              normalized.includes("agentChat.inputbar.approval.action.decline") ||
+              normalized.includes(
+                "agentChat.inputbar.approval.action.decline",
+              ) ||
               /\bDecline\b/i.test(normalized) ||
               /\bDeny\b/i.test(normalized)
             );
@@ -221,7 +255,9 @@ export async function clickApprovalDecisionButton(
               normalized.includes("中止") ||
               normalized.includes("キャンセル") ||
               normalized.includes("취소") ||
-              normalized.includes("agentChat.inputbar.approval.action.cancel") ||
+              normalized.includes(
+                "agentChat.inputbar.approval.action.cancel",
+              ) ||
               /\bCancel\b/i.test(normalized) ||
               /\bAbort\b/i.test(normalized)
             );
@@ -296,7 +332,10 @@ export function clickApprovalApproveButton(page, options) {
 export async function waitForGuiApprovalPromptAbsent(
   page,
   options,
-  { requiredText = "", runtimePromptText = APPROVAL_REQUEST_RESUME_APPROVAL_PROMPT } = {},
+  {
+    requiredText = "",
+    runtimePromptText = APPROVAL_REQUEST_RESUME_APPROVAL_PROMPT,
+  } = {},
 ) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -315,14 +354,16 @@ export async function waitForGuiApprovalPromptAbsent(
           'textarea[name="agent-chat-message"]',
         );
         const textareaRect = textarea?.getBoundingClientRect();
-        const textareaStyle = textarea ? window.getComputedStyle(textarea) : null;
+        const textareaStyle = textarea
+          ? window.getComputedStyle(textarea)
+          : null;
         const textareaVisible = Boolean(
           textarea &&
-            textareaRect &&
-            textareaRect.width > 16 &&
-            textareaRect.height > 16 &&
-            textareaStyle?.visibility !== "hidden" &&
-            textareaStyle?.display !== "none",
+          textareaRect &&
+          textareaRect.width > 16 &&
+          textareaRect.height > 16 &&
+          textareaStyle?.visibility !== "hidden" &&
+          textareaStyle?.display !== "none",
         );
         const buttons = Array.from(document.querySelectorAll("button"));
         const stopButtonVisible = buttons.some((button) => {
@@ -345,7 +386,9 @@ export async function waitForGuiApprovalPromptAbsent(
           includesRuntimeApprovalPrompt: runtimePromptText
             ? bodyText.includes(runtimePromptText)
             : false,
-          hasRequiredText: requiredText ? bodyText.includes(requiredText) : true,
+          hasRequiredText: requiredText
+            ? bodyText.includes(requiredText)
+            : true,
           textareaVisible,
           textareaDisabled:
             textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,

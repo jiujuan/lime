@@ -1,33 +1,42 @@
 use anyhow::Result;
 use aster::Conversation;
 use aster::Message;
-use aster::{require_shared_session_runtime_store, ThreadRuntime, TurnRuntime};
+use aster::TurnRuntime;
 use std::path::Path;
 use thread_store::conversation_transcript::{
     count_selected_messages, select_conversation_messages, ConversationMessageRecord,
     ConversationMessageRole,
 };
-use uuid::Uuid;
-
-use crate::runtime_conversation_aster_adapter::{
-    build_aster_transcript_item, conversation_record_from_aster_item,
-    is_aster_transcript_item_payload,
+use thread_store::runtime_store::{
+    collect_runtime_conversation_records, delete_runtime_transcript_items,
+    ensure_runtime_turn_record, next_runtime_item_sequence_for_thread, upsert_runtime_item_record,
+    RuntimeItemStore, RuntimeStore, RuntimeTurnEnsureInput, RuntimeTurnScopeInput,
 };
 
+use crate::runtime_conversation_aster_adapter::transcript_item_record_from_aster_message;
+use crate::runtime_store_aster_adapter::{
+    aster_turn_from_runtime_record, runtime_item_store_from_aster, runtime_read_store_from_aster,
+    runtime_thread_turn_store_from_aster, AsterThreadRuntimeStore,
+};
+use crate::runtime_support::require_runtime_store;
+use crate::turn_context_configuration::to_agent_turn_context;
+
 pub(super) async fn load_runtime_conversation(session_id: &str) -> Result<Option<Conversation>> {
-    let store = require_shared_session_runtime_store()?;
-    load_runtime_conversation_from_store(store.as_ref(), session_id).await
+    let store = require_runtime_store_for_conversation()?;
+    let read_store = runtime_read_store_from_aster(store);
+    load_runtime_conversation_from_store(read_store.as_ref(), session_id).await
 }
 
 pub(super) async fn count_runtime_messages(session_id: &str) -> Result<Option<usize>> {
-    let store = require_shared_session_runtime_store()?;
-    let threads = store.list_threads(session_id).await?;
-    if threads.is_empty() {
+    let store = require_runtime_store_for_conversation()?;
+    let read_store = runtime_read_store_from_aster(store);
+    let records = collect_runtime_conversation_records(read_store.as_ref(), session_id).await?;
+    let count = count_selected_messages(&records);
+    if count == 0 {
         return Ok(None);
     }
 
-    let records = collect_conversation_records_from_threads(store.as_ref(), threads).await?;
-    Ok(Some(count_selected_messages(&records)))
+    Ok(Some(count))
 }
 
 pub(super) async fn append_runtime_message(
@@ -35,22 +44,13 @@ pub(super) async fn append_runtime_message(
     working_dir: &Path,
     message: &Message,
 ) -> Result<usize> {
-    let store = require_shared_session_runtime_store()?;
-    let turn = ensure_runtime_turn(store.as_ref(), session_id, working_dir).await?;
-    let existing_items = store.list_items(&turn.thread_id).await?;
-    let next_sequence = existing_items
-        .iter()
-        .map(|item| item.sequence)
-        .max()
-        .unwrap_or(0)
-        + 1;
-    let item = build_aster_transcript_item(&turn, message, next_sequence);
-
-    if store.get_item(&item.id).await?.is_some() {
-        store.update_item(item).await?;
-    } else {
-        store.create_item(item).await?;
-    }
+    let store = require_runtime_store_for_conversation()?;
+    let item_store = runtime_item_store_from_aster(store.clone());
+    let turn = ensure_runtime_turn(store.clone(), session_id, working_dir).await?;
+    let next_sequence =
+        next_runtime_item_sequence_for_thread(item_store.as_ref(), &turn.thread_id).await?;
+    let item = transcript_item_record_from_aster_message(&turn, message, next_sequence)?;
+    upsert_runtime_item_record(item_store.as_ref(), item).await?;
 
     Ok(count_runtime_messages(session_id).await?.unwrap_or(1))
 }
@@ -60,16 +60,21 @@ pub(super) async fn replace_runtime_conversation(
     working_dir: &Path,
     conversation: &Conversation,
 ) -> Result<usize> {
-    let store = require_shared_session_runtime_store()?;
-    delete_transcript_items(store.as_ref(), session_id).await?;
-    let turn = ensure_runtime_turn(store.as_ref(), session_id, working_dir).await?;
+    let store = require_runtime_store_for_conversation()?;
+    let item_store = runtime_item_store_from_aster(store.clone());
+    delete_transcript_items(item_store.as_ref(), session_id).await?;
+    let turn = ensure_runtime_turn(store.clone(), session_id, working_dir).await?;
 
     for (index, message) in conversation.messages().iter().enumerate() {
-        let item = build_aster_transcript_item(&turn, message, index as i64 + 1);
-        store.create_item(item).await?;
+        let item = transcript_item_record_from_aster_message(&turn, message, index as i64 + 1)?;
+        upsert_runtime_item_record(item_store.as_ref(), item).await?;
     }
 
     Ok(conversation.messages().len())
+}
+
+fn require_runtime_store_for_conversation() -> Result<std::sync::Arc<AsterThreadRuntimeStore>> {
+    require_runtime_store().map_err(anyhow::Error::msg)
 }
 
 pub(super) async fn import_legacy_conversation_if_runtime_empty(
@@ -87,25 +92,17 @@ pub(super) async fn import_legacy_conversation_if_runtime_empty(
 }
 
 async fn delete_transcript_items(
-    store: &(impl aster::ThreadRuntimeStore + ?Sized),
+    store: &(impl RuntimeItemStore + ?Sized),
     session_id: &str,
 ) -> Result<()> {
-    for thread in store.list_threads(session_id).await? {
-        for item in store.list_items(&thread.id).await? {
-            if is_aster_transcript_item_payload(&item.payload) {
-                store.delete_item(&item.id).await?;
-            }
-        }
-    }
-    Ok(())
+    Ok(delete_runtime_transcript_items(store, session_id).await?)
 }
 
 async fn load_runtime_conversation_from_store(
-    store: &(impl aster::ThreadRuntimeStore + ?Sized),
+    store: &(impl RuntimeStore + ?Sized),
     session_id: &str,
 ) -> Result<Option<Conversation>> {
-    let threads = store.list_threads(session_id).await?;
-    let records = collect_conversation_records_from_threads(store, threads).await?;
+    let records = collect_runtime_conversation_records(store, session_id).await?;
     let messages = select_conversation_messages(records)
         .into_iter()
         .filter_map(|record| match conversation_record_to_message(record) {
@@ -125,21 +122,6 @@ async fn load_runtime_conversation_from_store(
     } else {
         Ok(Some(Conversation::new_unvalidated(messages)))
     }
-}
-
-async fn collect_conversation_records_from_threads(
-    store: &(impl aster::ThreadRuntimeStore + ?Sized),
-    threads: Vec<ThreadRuntime>,
-) -> Result<Vec<ConversationMessageRecord>> {
-    let mut records = Vec::new();
-    for thread in threads {
-        for item in store.list_items(&thread.id).await? {
-            if let Some(record) = conversation_record_from_aster_item(item)? {
-                records.push(record);
-            }
-        }
-    }
-    Ok(records)
 }
 
 fn conversation_record_to_message(record: ConversationMessageRecord) -> Result<Option<Message>> {
@@ -164,41 +146,29 @@ fn conversation_record_to_message(record: ConversationMessageRecord) -> Result<O
 }
 
 async fn ensure_runtime_turn(
-    store: &(impl aster::ThreadRuntimeStore + ?Sized),
+    store: std::sync::Arc<AsterThreadRuntimeStore>,
     session_id: &str,
     working_dir: &Path,
 ) -> Result<TurnRuntime> {
     let scope = aster::current_action_scope();
-    let thread_id = scope
-        .as_ref()
-        .and_then(|scope| scope.thread_id.clone())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| session_id.to_string());
-    let turn_id = scope
-        .as_ref()
-        .and_then(|scope| scope.turn_id.clone())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let turn_store = runtime_thread_turn_store_from_aster(store);
+    let turn = ensure_runtime_turn_record(
+        turn_store.as_ref(),
+        RuntimeTurnEnsureInput {
+            session_id: session_id.to_string(),
+            working_dir: working_dir.to_path_buf(),
+            scope: RuntimeTurnScopeInput {
+                thread_id: scope.as_ref().and_then(|scope| scope.thread_id.clone()),
+                turn_id: scope.as_ref().and_then(|scope| scope.turn_id.clone()),
+            },
+            input_text: None,
+            context_override: aster::current_turn_context().map(to_agent_turn_context),
+            output_schema_runtime: None,
+        },
+    )
+    .await?;
 
-    let thread = store
-        .get_thread(&thread_id)
-        .await?
-        .unwrap_or_else(|| ThreadRuntime::new(&thread_id, session_id, working_dir.to_path_buf()));
-    store.upsert_thread(thread).await?;
-
-    if let Some(turn) = store.get_turn(&turn_id).await? {
-        return Ok(turn);
-    }
-
-    store
-        .create_turn(TurnRuntime::new(
-            turn_id,
-            session_id.to_string(),
-            thread_id,
-            None,
-            aster::current_turn_context(),
-        ))
-        .await
+    Ok(aster_turn_from_runtime_record(turn))
 }
 
 fn text_message(message: Message, text: String) -> Option<Message> {

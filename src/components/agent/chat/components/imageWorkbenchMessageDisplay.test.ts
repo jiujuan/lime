@@ -54,7 +54,6 @@ describe("imageWorkbenchMessageDisplay", () => {
     const displayState = resolveImageWorkbenchMessageDisplayState({
       message,
       rawDisplayContent: message.content,
-      thinkingContent: "先确认青柠插画风格。",
     });
     const processState = resolveImageWorkbenchProcessDisplayState({
       message,
@@ -66,11 +65,9 @@ describe("imageWorkbenchMessageDisplay", () => {
     });
     const rendererState = resolveImageWorkbenchRendererProcessState({
       actionContent: "",
-      imageWorkbenchThinkingContent: displayState.thinkingContent,
       message,
       rendererActionRequests: undefined,
       rendererContentParts: processState.displayContentParts,
-      rendererThinkingContent: undefined,
       rendererToolCalls: message.toolCalls,
       shouldSuppressRendererProcessFlow:
         processState.shouldSuppressRendererProcessFlow,
@@ -79,20 +76,13 @@ describe("imageWorkbenchMessageDisplay", () => {
     expect(displayState.visibleRawDisplayContent).toBe("");
     expect(processState.shouldFoldSuppressedProcessFlow).toBe(false);
     expect(processState.shouldSuppressRendererProcessFlow).toBe(false);
-    expect(processState.displayContentParts?.map((part) => part.type)).toEqual([
-      "thinking",
-      "text",
-    ]);
-    expect(rendererState.shouldRenderInlineProcess).toBe(true);
-    expect(rendererState.thinkingContent).toBe("先确认青柠插画风格。");
-    expect(rendererState.contentParts?.map((part) => part.type)).toEqual([
-      "thinking",
-      "text",
-    ]);
+    expect(processState.displayContentParts).toBeUndefined();
+    expect(rendererState.shouldRenderInlineProcess).toBe(false);
+    expect(rendererState.contentParts).toBeUndefined();
     expect(rendererState.toolCalls).toBeUndefined();
   });
 
-  it("图片任务已有自然正文时仍应把 text/thinking 交给 renderer，内部工具不外显", () => {
+  it("图片任务已有自然正文时只把正文交给 renderer，内部思考和工具不外显", () => {
     const message = createImageMessage({
       content: "好啊，我按花城汇视角来生成广州塔春天照片。",
       contentParts: [
@@ -124,7 +114,6 @@ describe("imageWorkbenchMessageDisplay", () => {
     const displayState = resolveImageWorkbenchMessageDisplayState({
       message,
       rawDisplayContent: message.content,
-      thinkingContent: "先判断花城汇视角和春天元素。",
     });
     const processState = resolveImageWorkbenchProcessDisplayState({
       message,
@@ -136,10 +125,8 @@ describe("imageWorkbenchMessageDisplay", () => {
     });
     const rendererState = resolveImageWorkbenchRendererProcessState({
       actionContent: message.content,
-      imageWorkbenchThinkingContent: displayState.thinkingContent,
       message,
       rendererContentParts: processState.displayContentParts,
-      rendererThinkingContent: undefined,
       rendererToolCalls: message.toolCalls,
       shouldSuppressRendererProcessFlow:
         processState.shouldSuppressRendererProcessFlow,
@@ -147,13 +134,7 @@ describe("imageWorkbenchMessageDisplay", () => {
 
     expect(displayState.visibleRawDisplayContent).toBe(message.content);
     expect(rendererState.shouldRenderInlineProcess).toBe(true);
-    expect(rendererState.contentParts?.map((part) => part.type)).toEqual([
-      "thinking",
-      "text",
-    ]);
-    expect(rendererState.thinkingContent).toBe(
-      "先判断花城汇视角和春天元素。",
-    );
+    expect(rendererState.contentParts?.map((part) => part.type)).toEqual(["text"]);
     expect(rendererState.toolCalls).toBeUndefined();
   });
 
@@ -173,7 +154,6 @@ describe("imageWorkbenchMessageDisplay", () => {
     });
     const rendererState = resolveImageWorkbenchRendererProcessState({
       actionContent: "",
-      imageWorkbenchThinkingContent: displayState.thinkingContent,
       message,
       rendererContentParts: processState.displayContentParts,
       shouldSuppressRendererProcessFlow:
@@ -204,12 +184,10 @@ describe("imageWorkbenchMessageDisplay", () => {
     const displayState = resolveImageWorkbenchMessageDisplayState({
       message,
       rawDisplayContent: message.content,
-      thinkingContent: "先按用户描述准备画面。",
     });
 
     expect(displayState.visibleRawDisplayContent).toBe("");
-    expect(displayState.hasLeadContent).toBe(true);
-    expect(displayState.thinkingContent).toBe("先按用户描述准备画面。");
+    expect(displayState.hasLeadContent).toBe(false);
     expect(displayState.shouldSuppressAssistantText).toBe(true);
   });
 

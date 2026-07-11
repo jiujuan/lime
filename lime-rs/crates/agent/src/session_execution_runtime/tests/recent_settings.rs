@@ -1,15 +1,15 @@
 use super::{
-    build_session_execution_runtime, SessionExecutionRuntimeAccessMode,
-    SessionExecutionRuntimePreferences, SessionExecutionRuntimeRecentTeamRole,
-    SessionExecutionRuntimeRecentTeamSelection, SessionExecutionRuntimeSource,
+    build_session_execution_runtime, runtime_snapshot_record, runtime_thread_snapshot_record,
+    SessionExecutionRuntimeAccessMode, SessionExecutionRuntimePreferences,
+    SessionExecutionRuntimeRecentTeamRole, SessionExecutionRuntimeRecentTeamSelection,
+    SessionExecutionRuntimeSource,
 };
-use aster::{
-    ExtensionData, Session, SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot,
-    TurnContextOverride, TurnRuntime, TurnStatus,
-};
+use agent_protocol::turn_context::TurnContextOverride;
+use aster::{ExtensionData, Session};
 use chrono::{Duration, Utc};
 use serde_json::json;
 use std::path::PathBuf;
+use thread_store::runtime_snapshot::{RuntimeTurnSnapshotRecord, RuntimeTurnStatusRecord};
 
 fn set_recent_extension_state<T: serde::Serialize>(
     extension_data: &mut ExtensionData,
@@ -26,11 +26,11 @@ fn set_recent_extension_state<T: serde::Serialize>(
 #[test]
 fn keeps_recent_preferences_from_latest_turn_metadata() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-pref".to_string(),
         session_id: "session-3".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride {
@@ -53,14 +53,16 @@ fn keeps_recent_preferences_from_latest_turn_metadata() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-3".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new("thread-1", "session-3", PathBuf::from("/tmp/workspace")),
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record(
+        "session-3",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-3",
+            PathBuf::from("/tmp/workspace"),
+            vec![latest_turn],
+            Vec::new(),
+        )],
+    );
 
     let runtime = build_session_execution_runtime("session-3", None, None, Some(&snapshot), None)
         .expect("runtime");
@@ -83,11 +85,11 @@ fn keeps_recent_preferences_from_latest_turn_metadata() {
 #[test]
 fn keeps_recent_access_mode_from_latest_turn_context_override() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-access".to_string(),
         session_id: "session-access".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride {
@@ -101,18 +103,16 @@ fn keeps_recent_access_mode_from_latest_turn_context_override() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-access".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-1",
-                "session-access",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record(
+        "session-access",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-access",
+            PathBuf::from("/tmp/workspace"),
+            vec![latest_turn],
+            Vec::new(),
+        )],
+    );
 
     let runtime =
         build_session_execution_runtime("session-access", None, None, Some(&snapshot), None)
@@ -181,11 +181,11 @@ fn default_session_access_mode_is_full_access() {
 #[test]
 fn keeps_recent_team_selection_from_latest_turn_metadata() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-team".to_string(),
         session_id: "session-5".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride {
@@ -219,14 +219,16 @@ fn keeps_recent_team_selection_from_latest_turn_metadata() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-5".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new("thread-1", "session-5", PathBuf::from("/tmp/workspace")),
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record(
+        "session-5",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-5",
+            PathBuf::from("/tmp/workspace"),
+            vec![latest_turn],
+            Vec::new(),
+        )],
+    );
 
     let runtime = build_session_execution_runtime("session-5", None, None, Some(&snapshot), None)
         .expect("runtime");
@@ -259,11 +261,11 @@ fn keeps_recent_team_selection_from_latest_turn_metadata() {
 #[test]
 fn keeps_recent_content_id_from_latest_turn_metadata() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-content".to_string(),
         session_id: "session-content".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride {
@@ -282,18 +284,16 @@ fn keeps_recent_content_id_from_latest_turn_metadata() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-content".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-1",
-                "session-content",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record(
+        "session-content",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-content",
+            PathBuf::from("/tmp/workspace"),
+            vec![latest_turn],
+            Vec::new(),
+        )],
+    );
 
     let runtime =
         build_session_execution_runtime("session-content", None, None, Some(&snapshot), None)
@@ -313,11 +313,11 @@ fn keeps_recent_content_id_from_latest_turn_metadata() {
 #[test]
 fn keeps_recent_theme_and_session_mode_from_latest_turn_metadata() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-harness".to_string(),
         session_id: "session-harness".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride {
@@ -340,18 +340,16 @@ fn keeps_recent_theme_and_session_mode_from_latest_turn_metadata() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-harness".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-1",
-                "session-harness",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record(
+        "session-harness",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-harness",
+            PathBuf::from("/tmp/workspace"),
+            vec![latest_turn],
+            Vec::new(),
+        )],
+    );
 
     let runtime =
         build_session_execution_runtime("session-harness", None, None, Some(&snapshot), None)
@@ -374,11 +372,11 @@ fn keeps_recent_theme_and_session_mode_from_latest_turn_metadata() {
 #[test]
 fn falls_back_to_thread_metadata_recent_content_id() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-without-content".to_string(),
         session_id: "session-thread-content".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride::default()),
@@ -388,10 +386,12 @@ fn falls_back_to_thread_metadata_recent_content_id() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let mut thread = ThreadRuntime::new(
+    let mut thread = runtime_thread_snapshot_record(
         "thread-1",
         "session-thread-content",
         PathBuf::from("/tmp/workspace"),
+        vec![latest_turn],
+        Vec::new(),
     );
     thread
         .metadata
@@ -400,14 +400,7 @@ fn falls_back_to_thread_metadata_recent_content_id() {
         .metadata
         .insert("agent_response_language".to_string(), json!("ja-JP"));
     thread.updated_at = now;
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-thread-content".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread,
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record("session-thread-content", vec![thread]);
 
     let runtime = build_session_execution_runtime(
         "session-thread-content",
@@ -428,11 +421,11 @@ fn falls_back_to_thread_metadata_recent_content_id() {
 #[test]
 fn falls_back_to_thread_metadata_recent_theme_and_session_mode() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-without-harness".to_string(),
         session_id: "session-thread-harness".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride::default()),
@@ -442,10 +435,12 @@ fn falls_back_to_thread_metadata_recent_theme_and_session_mode() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let mut thread = ThreadRuntime::new(
+    let mut thread = runtime_thread_snapshot_record(
         "thread-1",
         "session-thread-harness",
         PathBuf::from("/tmp/workspace"),
+        vec![latest_turn],
+        Vec::new(),
     );
     thread
         .metadata
@@ -463,14 +458,7 @@ fn falls_back_to_thread_metadata_recent_theme_and_session_mode() {
         .metadata
         .insert("content_id".to_string(), json!("content-from-thread"));
     thread.updated_at = now;
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-thread-harness".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread,
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record("session-thread-harness", vec![thread]);
 
     let runtime = build_session_execution_runtime(
         "session-thread-harness",
@@ -497,11 +485,11 @@ fn falls_back_to_thread_metadata_recent_theme_and_session_mode() {
 #[test]
 fn falls_back_to_thread_metadata_recent_response_language() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-without-response-language".to_string(),
         session_id: "session-thread-response-language".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride::default()),
@@ -511,23 +499,18 @@ fn falls_back_to_thread_metadata_recent_response_language() {
         completed_at: Some(now - Duration::seconds(1)),
         updated_at: now,
     };
-    let mut thread = ThreadRuntime::new(
+    let mut thread = runtime_thread_snapshot_record(
         "thread-1",
         "session-thread-response-language",
         PathBuf::from("/tmp/workspace"),
+        vec![latest_turn],
+        Vec::new(),
     );
     thread
         .metadata
         .insert("response_language".to_string(), json!("ko-KR"));
     thread.updated_at = now;
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-thread-response-language".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread,
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record("session-thread-response-language", vec![thread]);
 
     let runtime = build_session_execution_runtime(
         "session-thread-response-language",

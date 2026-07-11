@@ -476,10 +476,7 @@ export function buildCommonAssertions(context) {
                                     : isTerminalFailedAfterAnswerScenario
                                       ? summary
                                           .guiTerminalFailedAfterAnswerCompleted
-                                          ?.hasAssistantSummary === true &&
-                                        summary
-                                          .guiTerminalFailedAfterAnswerCompleted
-                                          ?.hasDoneText === true
+                                          ?.hasAssistantSummary === true
                                       : isTerminalStaleGuardScenario
                                         ? summary
                                             .guiTerminalStaleGuardSecondCompleted
@@ -1007,9 +1004,6 @@ export function buildCommonAssertions(context) {
                                         ) &&
                                         pageText.includes(
                                           TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-                                        ) &&
-                                        pageText.includes(
-                                          TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
                                         )
                                       : isTerminalStaleGuardScenario
                                         ? pageText.includes(

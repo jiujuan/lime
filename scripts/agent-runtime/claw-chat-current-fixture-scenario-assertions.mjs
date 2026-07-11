@@ -805,6 +805,8 @@ export function buildScenarioAssertions(context) {
                       summary.guiImageCommandTerminal?.mediaCount >= 1 &&
                       summary.guiImageCommandTerminal?.hasPresentationIntro ===
                         true &&
+                      summary.guiImageCommandTerminal
+                        ?.hasPresentationIntroInAssistantText === true &&
                       summary.guiImageCommandTerminal?.hasToolStripLabel ===
                         true &&
                       summary.guiImageCommandTerminal?.hasImageModelLabel ===
@@ -814,6 +816,14 @@ export function buildScenarioAssertions(context) {
                         true &&
                       summary.guiImageCommandTerminal
                         ?.hasLoadedVisiblePreviewImage === true &&
+                      summary.guiImageCommandTerminal
+                        ?.hasPresentationCaptionAfterCard === true &&
+                      summary.guiImageCommandTerminal
+                        ?.cardHasPresentationCaption === false &&
+                      summary.guiImageCommandTerminal?.introBeforeCard ===
+                        true &&
+                      summary.guiImageCommandTerminal?.completionAfterCard ===
+                        true &&
                       summary.guiImageCommandTerminal?.visiblePendingStatus ===
                         false,
                     guiImageCommandSingleTaskCard:
@@ -832,6 +842,8 @@ export function buildScenarioAssertions(context) {
                       summary.guiImageCommandRestoredAfterReload
                         ?.hasPresentationIntro === true &&
                       summary.guiImageCommandRestoredAfterReload
+                        ?.hasPresentationIntroInAssistantText === true &&
+                      summary.guiImageCommandRestoredAfterReload
                         ?.hasToolStripLabel === true &&
                       summary.guiImageCommandRestoredAfterReload
                         ?.hasImageModelLabel === true &&
@@ -841,6 +853,14 @@ export function buildScenarioAssertions(context) {
                         ?.hasPreviewImage === true &&
                       summary.guiImageCommandRestoredAfterReload
                         ?.hasLoadedVisiblePreviewImage === true &&
+                      summary.guiImageCommandRestoredAfterReload
+                        ?.hasPresentationCaptionAfterCard === true &&
+                      summary.guiImageCommandRestoredAfterReload
+                        ?.cardHasPresentationCaption === false &&
+                      summary.guiImageCommandRestoredAfterReload
+                        ?.introBeforeCard === true &&
+                      summary.guiImageCommandRestoredAfterReload
+                        ?.completionAfterCard === true &&
                       summary.guiImageCommandRestoredAfterReload
                         ?.visiblePendingStatus === false,
                     guiImageCommandNoDraftCard:

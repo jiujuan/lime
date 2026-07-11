@@ -2,7 +2,6 @@ use super::*;
 use aster::Conversation;
 use aster::Message;
 use aster::ModelConfig;
-use aster::Recipe;
 use aster::{
     initialize_session_runtime_store, require_shared_session_runtime_store,
     InMemoryThreadRuntimeStore, ItemRuntime, ItemRuntimePayload, ItemStatus, ThreadRuntime,
@@ -54,22 +53,6 @@ fn setup_test_store() -> LimeSessionStore {
     let conn = Connection::open_in_memory().expect("创建内存数据库失败");
     create_tables(&conn).expect("初始化表结构失败");
     LimeSessionStore::new(Arc::new(Mutex::new(conn)))
-}
-
-fn test_recipe_fixture() -> Recipe {
-    serde_json::from_value(serde_json::json!({
-        "version": "1.0.0",
-        "title": "demo",
-        "description": "demo recipe",
-        "instructions": null,
-        "prompt": null,
-        "extensions": null,
-        "activities": null,
-        "response": null,
-        "sub_recipes": null,
-        "retry": null,
-    }))
-    .expect("recipe fixture")
 }
 
 fn create_test_legacy_agent_messages_table(conn: &Connection) {
@@ -226,14 +209,6 @@ async fn update_session_metadata_should_roundtrip() {
         .await
         .expect("更新名称失败");
     store
-        .update_working_dir(&session.id, PathBuf::from("/tmp/lime-worktree-child"))
-        .await
-        .expect("更新 working_dir 失败");
-    store
-        .update_session_type(&session.id, SessionType::Hidden)
-        .await
-        .expect("更新 session_type 失败");
-    store
         .update_extension_data(&session.id, extension_data.clone())
         .await
         .expect("更新 extension_data 失败");
@@ -262,17 +237,6 @@ async fn update_session_metadata_should_roundtrip() {
         )
         .await
         .expect("更新 provider 配置失败");
-    store
-        .update_recipe(
-            &session.id,
-            Some(test_recipe_fixture()),
-            Some(HashMap::from([(
-                "temperature".to_string(),
-                "0.2".to_string(),
-            )])),
-        )
-        .await
-        .expect("更新 recipe 失败");
 
     let loaded = store
         .get_session(&session.id, false)
@@ -281,11 +245,6 @@ async fn update_session_metadata_should_roundtrip() {
 
     assert_eq!(loaded.name, "已命名会话");
     assert!(loaded.user_set_name);
-    assert_eq!(
-        loaded.working_dir,
-        PathBuf::from("/tmp/lime-worktree-child")
-    );
-    assert_eq!(loaded.session_type, SessionType::Hidden);
     assert_eq!(loaded.total_tokens, Some(100));
     assert_eq!(loaded.cached_input_tokens, Some(24));
     assert_eq!(loaded.cache_creation_input_tokens, Some(12));
@@ -305,18 +264,6 @@ async fn update_session_metadata_should_roundtrip() {
             .get_extension_state("todo", "v0")
             .cloned(),
         extension_data.get_extension_state("todo", "v0").cloned()
-    );
-    assert_eq!(
-        loaded.recipe.as_ref().map(|recipe| recipe.title.as_str()),
-        Some("demo")
-    );
-    assert_eq!(
-        loaded
-            .user_recipe_values
-            .as_ref()
-            .and_then(|values| values.get("temperature"))
-            .map(String::as_str),
-        Some("0.2")
     );
 }
 
@@ -700,44 +647,6 @@ async fn metadata_cache_should_refresh_after_provider_update() {
             .map(|config| config.model_name.as_str()),
         Some("gpt-4.1")
     );
-}
-
-#[tokio::test]
-async fn update_recipe_should_clear_existing_values_when_input_is_none() {
-    let store = setup_test_store();
-    let session = store
-        .create_session(
-            PathBuf::from("."),
-            "recipe 清空测试".to_string(),
-            SessionType::User,
-        )
-        .await
-        .expect("创建会话失败");
-
-    store
-        .update_recipe(
-            &session.id,
-            Some(test_recipe_fixture()),
-            Some(HashMap::from([(
-                "temperature".to_string(),
-                "0.2".to_string(),
-            )])),
-        )
-        .await
-        .expect("初始化 recipe 失败");
-
-    store
-        .update_recipe(&session.id, None, None)
-        .await
-        .expect("清空 recipe 失败");
-
-    let loaded = store
-        .get_session(&session.id, false)
-        .await
-        .expect("读取会话失败");
-
-    assert!(loaded.recipe.is_none());
-    assert!(loaded.user_recipe_values.is_none());
 }
 
 #[tokio::test]

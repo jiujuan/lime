@@ -1,0 +1,60 @@
+import { useCallback, type Dispatch, type SetStateAction } from "react";
+import type { LayoutMode } from "@/lib/workspace/workbenchContract";
+import type { WorkspaceWorkbenchRequestsController } from "../hooks/useWorkspaceWorkbenchRequests";
+import { useWorkspacePluginHistoryRestoreRuntime } from "./useWorkspacePluginHistoryRestoreRuntime";
+import { useWorkspaceSceneAppExecutionSurfaceRuntime } from "./useWorkspaceSceneAppExecutionSurfaceRuntime";
+import { useWorkspaceServiceSkillExecutionCardRuntime } from "./useWorkspaceServiceSkillExecutionCardRuntime";
+
+interface UseWorkspaceArtifactSurfaceRuntimeParams {
+  pluginHistoryRestore: Parameters<
+    typeof useWorkspacePluginHistoryRestoreRuntime
+  >[0];
+  sceneAppExecution: Parameters<
+    typeof useWorkspaceSceneAppExecutionSurfaceRuntime
+  >[0];
+  serviceSkillExecution: Parameters<
+    typeof useWorkspaceServiceSkillExecutionCardRuntime
+  >[0];
+  setLayoutMode: Dispatch<SetStateAction<LayoutMode>>;
+  workbenchRequests: WorkspaceWorkbenchRequestsController;
+}
+
+export function useWorkspaceArtifactSurfaceRuntime({
+  pluginHistoryRestore,
+  sceneAppExecution,
+  serviceSkillExecution,
+  setLayoutMode,
+  workbenchRequests,
+}: UseWorkspaceArtifactSurfaceRuntimeParams) {
+  const { landingCard: workspacePluginHistoryRestoreLandingCard } =
+    useWorkspacePluginHistoryRestoreRuntime(pluginHistoryRestore);
+  const { card: serviceSkillExecutionCard } =
+    useWorkspaceServiceSkillExecutionCardRuntime(serviceSkillExecution);
+  const sceneAppExecutionSurfaceRuntime =
+    useWorkspaceSceneAppExecutionSurfaceRuntime(sceneAppExecution);
+  const handleJumpToTimelineItem = useCallback(
+    (itemId: string) => {
+      if (!workbenchRequests.jumpToTimelineItem(itemId)) {
+        return;
+      }
+
+      setLayoutMode((current) =>
+        current === "canvas" ? "chat-canvas" : current,
+      );
+    },
+    [setLayoutMode, workbenchRequests],
+  );
+
+  return {
+    defaultCuratedTaskReferenceEntries:
+      sceneAppExecutionSurfaceRuntime.defaultCuratedTaskReferenceEntries,
+    defaultCuratedTaskReferenceMemoryIds:
+      sceneAppExecutionSurfaceRuntime.defaultCuratedTaskReferenceMemoryIds,
+    handleJumpToTimelineItem,
+    sceneAppExecutionSummaryCard: sceneAppExecutionSurfaceRuntime.summaryCard,
+    sceneAppReviewDecisionDialogNode:
+      sceneAppExecutionSurfaceRuntime.reviewDecisionDialogNode,
+    serviceSkillExecutionCard,
+    workspacePluginHistoryRestoreLandingCard,
+  };
+}

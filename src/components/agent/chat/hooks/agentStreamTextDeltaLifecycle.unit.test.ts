@@ -8,6 +8,7 @@ import {
   resolveAccumulatedFinalContentForCompletion,
   resolveTextSegmentFinalEligibility,
   shouldCommitActiveTextSegmentAsFinal,
+  shouldRouteLegacyTextDeltaAfterProcessBoundaryToFinalOverlay,
   shouldRouteTextDeltaToFinalOverlay,
   shouldSuppressLegacyTextDeltaAfterProcessBoundary,
   type TextDeltaAgentEvent,
@@ -62,26 +63,65 @@ describe("agentStreamTextDeltaLifecycle", () => {
     ).toBe(false);
   });
 
-  it("process boundary 后 legacy delta 必须被 suppress", () => {
+  it("process boundary 后仅 suppress 不晚于 boundary 的 legacy delta", () => {
     const requestState = createRequestState({
       hasFinalAnswerRequiredProcessBoundary: true,
+      maxFinalAnswerRequiredProcessEventSequence: 3,
     });
 
+    expect(
+      shouldSuppressLegacyTextDeltaAfterProcessBoundary({
+        event: textDelta({ itemId: "legacy-preface", sequence: 2 }),
+        requestState,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSuppressLegacyTextDeltaAfterProcessBoundary({
+        event: textDelta({ sequence: 3 }),
+        requestState,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSuppressLegacyTextDeltaAfterProcessBoundary({
+        event: textDelta({ sequence: 4 }),
+        requestState,
+      }),
+    ).toBe(false);
     expect(
       shouldSuppressLegacyTextDeltaAfterProcessBoundary({
         event: textDelta({ itemId: "legacy-item-without-sequence" }),
         requestState,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldSuppressLegacyTextDeltaAfterProcessBoundary({
-        event: textDelta(),
+        event: textDelta({ phase: "final_answer" }),
+        requestState,
+      }),
+    ).toBe(false);
+  });
+
+  it("process boundary 后晚到 legacy assistant text 应进入 final overlay", () => {
+    const requestState = createRequestState({
+      hasFinalAnswerRequiredProcessBoundary: true,
+      maxFinalAnswerRequiredProcessEventSequence: 3,
+    });
+
+    expect(
+      shouldRouteLegacyTextDeltaAfterProcessBoundaryToFinalOverlay({
+        event: textDelta({ sequence: 4 }),
         requestState,
       }),
     ).toBe(true);
     expect(
-      shouldSuppressLegacyTextDeltaAfterProcessBoundary({
-        event: textDelta({ phase: "final_answer" }),
+      shouldRouteLegacyTextDeltaAfterProcessBoundaryToFinalOverlay({
+        event: textDelta({ sequence: 3 }),
+        requestState,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRouteLegacyTextDeltaAfterProcessBoundaryToFinalOverlay({
+        event: textDelta({ phase: "commentary", sequence: 4 }),
         requestState,
       }),
     ).toBe(false);
@@ -130,6 +170,10 @@ describe("agentStreamTextDeltaLifecycle", () => {
     requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
       true;
     expect(shouldCommitActiveTextSegmentAsFinal(requestState)).toBe(false);
+
+    requestState.activeTextSegmentSequence = 4;
+    requestState.maxFinalAnswerRequiredProcessEventSequence = 3;
+    expect(shouldCommitActiveTextSegmentAsFinal(requestState)).toBe(true);
 
     clearActiveTextSegmentState(requestState);
     noteActiveFinalTextSegment({

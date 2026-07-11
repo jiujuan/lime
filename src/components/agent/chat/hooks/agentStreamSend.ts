@@ -39,10 +39,14 @@ export async function sendAgentStreamMessage(
     env,
   } = options;
 
-  const hasCurrentSession = Boolean(env.sessionIdRef.current?.trim());
+  const currentSessionId = env.sessionIdRef.current?.trim() || "";
+  const hasCurrentSession = Boolean(currentSessionId);
   const targetSessionId = sendOptions?.targetSessionId?.trim();
-  if (!skipUserMessage && !hasCurrentSession && !targetSessionId) {
+  const shouldBindTargetSession =
+    Boolean(targetSessionId) && targetSessionId !== currentSessionId;
+  if (!skipUserMessage && (!hasCurrentSession || shouldBindTargetSession)) {
     await env.ensureSession({
+      targetSessionId: targetSessionId || undefined,
       skipSessionRestore: sendOptions?.skipSessionRestore === true,
       skipSessionStartHooks: sendOptions?.skipSessionStartHooks === true,
     });

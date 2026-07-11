@@ -8,10 +8,7 @@ use futures::{Stream, StreamExt};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use crate::config::permission::PermissionLevel;
-use crate::config::AsterMode;
-use crate::permission::Permission;
-use crate::tools::{ToolContext, ToolRegistry};
+use crate::tool::Permission;
 use rmcp::model::{CallToolRequestParam, Content, ErrorData, ServerNotification};
 
 type ToolResult<T> = Result<T, ErrorData>;
@@ -35,7 +32,7 @@ impl From<ToolResult<rmcp::model::CallToolResult>> for ToolCallResult {
 use super::agent::{tool_stream, ToolStream};
 use crate::agents::{Agent, PermissionRequestHookContext, PermissionRequestHookDecision};
 use crate::conversation::message::{Message, ToolRequest};
-use crate::providers::base::Provider;
+use crate::reply_provider::Provider;
 use crate::session::Session;
 use crate::tool_inspection::get_security_finding_id_from_results;
 
@@ -53,14 +50,6 @@ pub const CHAT_MODE_TOOL_SKIPPED_RESPONSE: &str = "Let the user know the tool ca
                                         If needed, adjust the explanation based on user preferences or questions.";
 
 const PERMISSION_REQUEST_HOOK_DENIED_RESPONSE: &str = "Permission denied by PermissionRequest hook";
-
-fn map_permission_request_mode(mode: AsterMode) -> Option<String> {
-    match mode {
-        AsterMode::Auto => Some("bypassPermissions".to_string()),
-        AsterMode::Approve | AsterMode::SmartApprove => Some("default".to_string()),
-        AsterMode::Chat => None,
-    }
-}
 
 fn build_permission_request_hook_denied_message(message: Option<String>) -> String {
     message
@@ -88,18 +77,13 @@ impl Agent {
         session: &Session,
     ) -> Option<PermissionRequestHookDecision> {
         let handler = self.permission_request_hook_handler.clone()?;
-        let permission_mode = self
-            .tool_inspection_manager
-            .current_permission_mode()
-            .await
-            .and_then(map_permission_request_mode);
 
         let input = PermissionRequestHookContext {
             tool_name: tool_call.name.to_string(),
             tool_input: tool_call.arguments.clone().map(serde_json::Value::Object),
             tool_use_id: request_id.to_string(),
             session_id: session.id.clone(),
-            permission_mode,
+            permission_mode: None,
         };
 
         match handler(input).await {
@@ -242,13 +226,6 @@ impl Agent {
                                     futures::future::ready(Err(e)),
                                 ),
                             }));
-
-                            // Update the shared permission manager when user selects "Always Allow"
-                            if confirmation.permission == Permission::AlwaysAllow {
-                                self.tool_inspection_manager
-                                    .update_permission_manager(&tool_call.name, PermissionLevel::AlwaysAllow)
-                                    .await;
-                            }
                         } else {
                             // User declined - update the specific response message for this request
                             if let Some(response_msg) = request_to_response_map.get(&request.id) {
@@ -299,101 +276,5 @@ impl Agent {
             }
         }
         .boxed()
-    }
-
-    // =============================================================================
-    // ToolRegistry Integration (Requirements: 8.1, 8.2, 8.3, 8.4, 8.5)
-    // =============================================================================
-
-    /// Create a ToolContext from a Session
-    ///
-    /// This helper function creates a ToolContext suitable for use with the
-    /// ToolRegistry from the current session information.
-    ///
-    /// Requirements: 8.4
-    pub fn create_tool_context(
-        session: &Session,
-        cancellation_token: Option<CancellationToken>,
-    ) -> ToolContext {
-        let mut ctx = ToolContext::new(session.working_dir.clone()).with_session_id(&session.id);
-
-        if let Some(token) = cancellation_token {
-            ctx = ctx.with_cancellation_token(token);
-        }
-
-        ctx
-    }
-
-    /// Execute a tool through the ToolRegistry with permission callback handling.
-    ///
-    /// This method provides a unified interface for executing tools through the
-    /// ToolRegistry, integrating user confirmation handling for 'ask'
-    /// permission behavior.
-    ///
-    /// # Arguments
-    /// * `registry` - The ToolRegistry containing registered tools
-    /// * `tool_name` - Name of the tool to execute
-    /// * `params` - Tool parameters as JSON
-    /// * `session` - Current session
-    /// * `cancellation_token` - Optional cancellation token
-    /// * `on_permission_request` - Optional callback for permission requests
-    ///
-    /// # Returns
-    /// * `Ok(ToolResult)` - The tool execution result
-    /// * `Err(ToolError)` - If permission denied or execution fails
-    ///
-    /// Requirements: 8.1, 8.2, 8.3, 8.4, 8.5
-    pub async fn execute_tool_with_registry(
-        registry: &ToolRegistry,
-        tool_name: &str,
-        params: serde_json::Value,
-        session: &Session,
-        cancellation_token: Option<CancellationToken>,
-        on_permission_request: Option<crate::tools::PermissionRequestCallback>,
-    ) -> Result<crate::tools::ToolResult, crate::tools::ToolError> {
-        let context = Self::create_tool_context(session, cancellation_token);
-        registry
-            .execute(tool_name, params, &context, on_permission_request)
-            .await
-    }
-
-    /// Create a permission request callback that uses the Agent's confirmation channel
-    ///
-    /// This method creates a callback that can be used with `execute_tool_with_user_confirmation`
-    /// to handle 'ask' permission behavior by sending confirmation requests through the
-    /// Agent's existing confirmation channel.
-    ///
-    /// # Arguments
-    /// * `request_id` - The tool request ID for tracking
-    /// * `confirmation_tx` - The confirmation sender channel
-    ///
-    /// # Returns
-    /// A callback that sends permission requests and waits for user confirmation
-    ///
-    /// Requirements: 8.2, 8.3
-    pub fn create_permission_callback(
-        request_id: String,
-        _confirmation_tx: tokio::sync::mpsc::Sender<(
-            String,
-            crate::permission::PermissionConfirmation,
-        )>,
-    ) -> crate::tools::PermissionRequestCallback {
-        Box::new(move |tool_name: String, message: String| {
-            let req_id = request_id.clone();
-            Box::pin(async move {
-                // Log the permission request
-                tracing::info!(
-                    tool_name = %tool_name,
-                    message = %message,
-                    request_id = %req_id,
-                    "Permission request for tool execution"
-                );
-
-                // For now, we return false (deny) as the actual confirmation
-                // would need to be handled through the UI flow
-                // The existing handle_approval_tool_requests handles this flow
-                false
-            })
-        })
     }
 }

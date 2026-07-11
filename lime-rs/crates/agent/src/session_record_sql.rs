@@ -1,5 +1,4 @@
 use anyhow::Result;
-use thread_store::session_insights::{project_session_insights, SessionInsightsRecord};
 use thread_store::session_record::SessionRecordRow;
 use thread_store::session_repository::SessionListQuery;
 
@@ -122,25 +121,10 @@ fn append_limit_offset(sql: &mut String, limit: Option<usize>, offset: Option<us
     }
 }
 
-pub(crate) fn load_session_insights_record(
-    conn: &rusqlite::Connection,
-) -> Result<SessionInsightsRecord> {
-    let total_sessions: i64 =
-        conn.query_row("SELECT COUNT(*) FROM agent_sessions", [], |row| row.get(0))?;
-    let total_tokens: i64 = conn.query_row(
-        "SELECT COALESCE(SUM(COALESCE(accumulated_total_tokens, total_tokens, 0)), 0)
-         FROM agent_sessions",
-        [],
-        |row| row.get(0),
-    )?;
-
-    Ok(project_session_insights(total_sessions, total_tokens))
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        load_all_session_record_rows, load_session_insights_record, load_session_record_row_by_id,
+        load_all_session_record_rows, load_session_record_row_by_id,
         load_session_record_rows_by_types, load_session_record_rows_for_query,
     };
     use thread_store::session_repository::SessionListQuery;
@@ -190,30 +174,6 @@ mod tests {
             rusqlite::params![id, updated_at, session_type],
         )
         .expect("insert session");
-    }
-
-    #[test]
-    fn load_session_insights_record_should_count_sessions_and_prefer_accumulated_tokens() {
-        let conn = rusqlite::Connection::open_in_memory().expect("open in-memory db");
-        conn.execute(
-            "CREATE TABLE agent_sessions (
-                accumulated_total_tokens INTEGER,
-                total_tokens INTEGER
-            )",
-            [],
-        )
-        .expect("create agent_sessions");
-        conn.execute(
-            "INSERT INTO agent_sessions (accumulated_total_tokens, total_tokens)
-             VALUES (10, 1), (NULL, 7), (NULL, NULL)",
-            [],
-        )
-        .expect("insert sessions");
-
-        let insights = load_session_insights_record(&conn).expect("load insights");
-
-        assert_eq!(insights.total_sessions, 3);
-        assert_eq!(insights.total_tokens, 17);
     }
 
     #[test]

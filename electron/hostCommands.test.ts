@@ -1210,6 +1210,46 @@ describe("ElectronHostCommands app config persistence", () => {
     await expect(stat(path.join(userDataDir, "config.json"))).rejects.toThrow();
   });
 
+  it("save_config 写入微信模型配置时不应生成重复 YAML 键", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("save_config", {
+        config: {
+          channels: {
+            wechat: {
+              enabled: false,
+              default_model: "lime-hub/claude-sonnet-4-6",
+              dm_policy: "pairing",
+              group_policy: "allowlist",
+              streaming: "off",
+              reply_to_mode: "off",
+            },
+          },
+        },
+      }),
+    ).resolves.toBeNull();
+
+    const yamlContent = await readFile(
+      path.join(userDataDir, "config.yaml"),
+      "utf8",
+    );
+    const parsedConfig = parseYaml(yamlContent) as Record<string, unknown>;
+
+    expect(parsedConfig).toMatchObject({
+      channels: {
+        wechat: {
+          default_model: "lime-hub/claude-sonnet-4-6",
+          streaming: "off",
+          reply_to_mode: "off",
+        },
+      },
+    });
+    expect(yamlContent.match(/^\s{4}streaming:/gm)).toHaveLength(1);
+    expect(yamlContent.match(/^\s{4}reply_to_mode:/gm)).toHaveLength(1);
+  });
+
   it("get_config 应读取 App Server current config.yaml", async () => {
     const userDataDir = await createTempUserDataDir();
     await mkdir(userDataDir, { recursive: true });

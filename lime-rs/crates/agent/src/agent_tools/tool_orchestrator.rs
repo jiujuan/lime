@@ -228,7 +228,7 @@ async fn execute_live_shell_process(
 
     let cwd = context.working_directory().clone();
     let mut env = context.environment().clone();
-    env.insert("ASTER_TERMINAL".to_string(), "1".to_string());
+    env.insert("AGENT_TERMINAL".to_string(), "1".to_string());
     let request = LocalExecutionRequest {
         process_id: process_id_for_tool(&planned.tool_id),
         tool_id: planned.tool_id.clone(),

@@ -1,5 +1,8 @@
 import { toast } from "sonner";
-import type { AgentThreadItem } from "@/lib/api/agentProtocol";
+import type {
+  AgentEventImageTaskCreated,
+  AgentThreadItem,
+} from "@/lib/api/agentProtocol";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { updateMessageArtifactsStatus } from "../utils/messageArtifacts";
 import {
@@ -109,6 +112,7 @@ import {
 import {
   noteActiveFinalTextSegment,
   resolveTextSegmentFinalEligibility,
+  shouldRouteLegacyTextDeltaAfterProcessBoundaryToFinalOverlay,
   shouldRouteTextDeltaToFinalOverlay,
   shouldSuppressLegacyTextDeltaAfterProcessBoundary,
   type TextDeltaAgentEvent,
@@ -118,6 +122,46 @@ import { shouldApplyAgentStreamTerminalEvent } from "./agentStreamTerminalTurnGu
 function normalizeOptionalText(value?: string | null): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function readOptionalRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readOptionalStringField(
+  source: unknown,
+  keys: string[],
+): string | null {
+  const record = readOptionalRecord(source);
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function resolveImageTaskCreatedTurnId(
+  event: AgentEventImageTaskCreated,
+): string | null {
+  const response = readOptionalRecord(event.response);
+  const responseRecord = readOptionalRecord(response?.record);
+  const payload =
+    readOptionalRecord(event.payload) ||
+    readOptionalRecord(responseRecord?.payload);
+  return (
+    readOptionalStringField(event, ["turn_id", "turnId"]) ||
+    readOptionalStringField(payload, ["turn_id", "turnId"]) ||
+    readOptionalStringField(responseRecord, ["turn_id", "turnId"]) ||
+    readOptionalStringField(response, ["turn_id", "turnId"])
+  );
 }
 
 export function handleTurnStreamEvent({
@@ -636,11 +680,13 @@ export function handleTurnStreamEvent({
       clearOptimisticTurn();
       handleAgentStreamTurnFailedEvent({
         assistantMsgId,
+        completeAssistantStreamMessageFromCompletionPlan,
         event: data,
         finalizeMissingFinalReplyFailure,
         pendingTurnKey,
         requestState,
         setters: runtimeStateSetters,
+        toolCallCount: toolLogIdByToolId.size,
       });
       break;
     }
@@ -937,10 +983,15 @@ export function handleTurnStreamEvent({
     case "text_delta_batch": {
       activateStream();
       clearOptimisticItem();
-      const shouldRouteToFinalOverlay = shouldRouteTextDeltaToFinalOverlay({
-        event: data,
-        requestState,
-      });
+      const shouldRouteToFinalOverlay =
+        shouldRouteTextDeltaToFinalOverlay({
+          event: data,
+          requestState,
+        }) ||
+        shouldRouteLegacyTextDeltaAfterProcessBoundaryToFinalOverlay({
+          event: data,
+          requestState,
+        });
       if (!shouldRouteToFinalOverlay) {
         if (
           shouldSuppressLegacyTextDeltaAfterProcessBoundary({
@@ -1192,6 +1243,16 @@ export function handleTurnStreamEvent({
       activateStream();
       clearOptimisticItem();
       {
+        const imageTaskTurnId = resolveImageTaskCreatedTurnId(data);
+        if (imageTaskTurnId) {
+          requestState.currentTurnId = imageTaskTurnId;
+          bindAssistantMessageToRuntimeTurn(
+            setMessages,
+            assistantMsgId,
+            imageTaskTurnId,
+          );
+          setCurrentTurnId(imageTaskTurnId);
+        }
         const didApplyImageTaskCreated = applyAgentStreamImageTaskCreatedEvent({
           assistantMsgId,
           currentAssistantContent: requestState.accumulatedContent,

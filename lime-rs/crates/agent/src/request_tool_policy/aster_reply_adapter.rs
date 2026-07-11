@@ -1,15 +1,16 @@
 use super::aster_reply_backend_adapter::AsterReplyBackend;
 use super::aster_reply_message_adapter::cancelled_turn_context_marker_message;
+use super::runtime_request_item;
+use super::runtime_status_item;
 use super::{
     stream_message_reply_with_policy_with_options, ReplyAttemptError, ReplyInput,
     RequestToolPolicy, StreamReplyExecution, StreamReplyPolicyExecutionOptions,
 };
-use crate::aster_runtime_projection::project_aster_runtime_event_with_turn_context;
 use crate::credential_bridge::ConfiguredReplyProvider;
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::provider_configuration::ConfiguredSessionProvider;
 use crate::runtime_state::AgentRuntimeState;
-use crate::session_config_adapter::to_aster_session_config;
+use crate::runtime_store_aster_adapter::AsterThreadRuntimeStore;
 use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
 use agent_runtime::reply_host::{RuntimeReplyPolicyHost, RuntimeReplyStreamHost};
 use agent_runtime::reply_input::{
@@ -17,26 +18,29 @@ use agent_runtime::reply_input::{
     RuntimeReplyAttemptInput as ReplyAttemptInput,
 };
 use agent_runtime::session_config::AgentSessionConfig;
-use aster::SessionManager;
 use aster::{Agent, Permission, PermissionConfirmation, PrincipalType};
 use futures::future::BoxFuture;
 use std::path::Path;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 pub(super) struct AsterReplyRuntimeHost<'a> {
     backend: AsterReplyBackend<'a>,
+    runtime_store: Arc<AsterThreadRuntimeStore>,
 }
 
 impl<'a> AsterReplyRuntimeHost<'a> {
     pub(super) fn new(agent: &'a Agent) -> Self {
         Self {
             backend: AsterReplyBackend::new(agent),
+            runtime_store: agent.thread_runtime_store(),
         }
     }
 
     pub(super) fn with_reply_provider(agent: &'a Agent, provider: ConfiguredReplyProvider) -> Self {
         Self {
             backend: AsterReplyBackend::with_reply_provider(agent, provider),
+            runtime_store: agent.thread_runtime_store(),
         }
     }
 
@@ -52,26 +56,17 @@ impl<'a> AsterReplyRuntimeHost<'a> {
     ) where
         F: FnMut(&RuntimeAgentEvent) + Send,
     {
-        let aster_session_config = to_aster_session_config(session_config.clone());
-        match self
-            .agent()
-            .upsert_runtime_status_item(
-                &aster_session_config,
-                status.phase.clone(),
-                status.title.clone(),
-                status.detail.clone(),
-                status.checkpoints.clone(),
-            )
-            .await
+        match runtime_status_item::upsert_runtime_status_item(
+            self.runtime_store.clone(),
+            session_config,
+            &status,
+        )
+        .await
         {
-            Ok(agent_event) => {
-                for event in project_aster_runtime_event_with_turn_context(
-                    agent_event,
-                    session_config.turn_context.as_ref(),
-                ) {
-                    on_event(&event);
-                }
+            Ok(Some(event)) => {
+                on_event(&event);
             }
+            Ok(None) => {}
             Err(error) => {
                 tracing::warn!(
                     "[AgentRuntime][RuntimeStatus] 写入 runtime item 失败，降级仅发 transient 事件: {}",
@@ -290,6 +285,20 @@ pub(crate) async fn submit_runtime_tool_action_confirmation(
     let agent = agent_guard
         .as_ref()
         .ok_or_else(runtime_not_initialized_error)?;
+    let response = serde_json::json!({ "confirmed": confirmed });
+    if let Err(error) = runtime_request_item::complete_runtime_request_item(
+        agent.thread_runtime_store(),
+        &request_id,
+        Some(response),
+    )
+    .await
+    {
+        tracing::warn!(
+            request_id = %request_id,
+            "[AgentRuntime][RequestItem] 写入 approval completion 失败: {}",
+            error
+        );
+    }
     submit_tool_action_confirmation(agent, request_id, confirmed).await;
     Ok(())
 }
@@ -359,11 +368,28 @@ async fn stream_action_required_response_with_policy<F>(
     session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     request_tool_policy: &RequestToolPolicy,
-    on_event: F,
+    mut on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
     F: FnMut(&RuntimeAgentEvent) + Send,
 {
+    match runtime_request_item::complete_runtime_request_item(
+        agent.thread_runtime_store(),
+        &response.request_id,
+        Some(response.user_data.clone()),
+    )
+    .await
+    {
+        Ok(Some(event)) => on_event(&event),
+        Ok(None) => {}
+        Err(error) => {
+            tracing::warn!(
+                request_id = %response.request_id,
+                "[AgentRuntime][RequestItem] 写入 request_user_input completion 失败: {}",
+                error
+            );
+        }
+    }
     let reply_host = AsterReplyRuntimeHost::new(agent);
     stream_message_reply_with_policy_with_options(
         &reply_host,
@@ -456,12 +482,15 @@ async fn submit_tool_action_confirmation(
 
 async fn persist_cancelled_turn_context_marker(agent: &Agent, session_id: &str) {
     let message = cancelled_turn_context_marker_message();
-    let result = if let Some(store) = agent.session_store() {
-        store.add_message(session_id, &message).await
-    } else {
-        SessionManager::add_message(session_id, &message).await
+    let Some(store) = agent.session_store() else {
+        tracing::warn!(
+            "[AgentRuntime][ReplyPolicy] 写入取消上下文标记失败，Agent 未注入 session store: session_id={}",
+            session_id
+        );
+        return;
     };
 
+    let result = store.add_message(session_id, &message).await;
     if let Err(error) = result {
         tracing::warn!(
             "[AgentRuntime][ReplyPolicy] 写入取消上下文标记失败，已降级继续: session_id={}, error={}",

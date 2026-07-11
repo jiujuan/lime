@@ -164,7 +164,9 @@ function createMainWindow(): BrowserWindow {
   installDevRendererContextMenu(window, devServerUrl);
   installDevRendererShortcuts(window, devServerUrl);
   void showStartupScreenBeforeRenderer(window, devServerUrl).catch((error) => {
-    if (isMainWindowRendererLoadInterruption(error, mainWindowLoadState(window))) {
+    if (
+      isMainWindowRendererLoadInterruption(error, mainWindowLoadState(window))
+    ) {
       return;
     }
     console.error(
@@ -236,9 +238,7 @@ function registerLocalAssetProtocol(): void {
 function decodeLocalAssetFilePath(requestUrl: string): string | null {
   try {
     const url = new URL(requestUrl);
-    const encodedPath = url.host
-      ? `${url.host}${url.pathname}`
-      : url.pathname;
+    const encodedPath = url.host ? `${url.host}${url.pathname}` : url.pathname;
     const filePath = decodeURIComponent(encodedPath);
     return isAbsoluteLocalAssetPath(filePath) ? filePath : null;
   } catch {
@@ -260,10 +260,31 @@ async function showStartupScreenBeforeRenderer(
 ): Promise<void> {
   await loadMainWindowStartupScreen(window);
   await waitForMainWindowStartupScreenVisible(window);
-  if (!window.isDestroyed()) {
-    window.show();
-  }
+  showMainWindowDuringStartup(window);
   await loadMainWindowRenderer(window, devServerUrl);
+}
+
+function showMainWindowDuringStartup(window: BrowserWindow): void {
+  if (window.isDestroyed() || !shouldShowMainWindowDuringStartup()) {
+    return;
+  }
+
+  if (isElectronSmokeMode()) {
+    window.showInactive();
+    return;
+  }
+
+  window.show();
+}
+
+function shouldShowMainWindowDuringStartup(): boolean {
+  return (
+    !isElectronSmokeMode() || process.env.LIME_ELECTRON_SMOKE_VISIBLE === "1"
+  );
+}
+
+function isElectronSmokeMode(): boolean {
+  return process.env.LIME_ELECTRON_SMOKE === "1";
 }
 
 async function loadMainWindowStartupScreen(
@@ -391,7 +412,9 @@ async function loadMainWindowUrl(
   }
 }
 
-function mainWindowLoadState(window: Pick<BrowserWindow, "isDestroyed" | "webContents">) {
+function mainWindowLoadState(
+  window: Pick<BrowserWindow, "isDestroyed" | "webContents">,
+) {
   return {
     appQuitting: isQuitting,
     windowDestroyed: window.isDestroyed(),

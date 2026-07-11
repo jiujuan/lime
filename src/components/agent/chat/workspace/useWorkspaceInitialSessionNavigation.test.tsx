@@ -14,6 +14,7 @@ interface ProbeProps {
   currentSessionId?: string | null;
   initialSessionId?: string | null;
   shouldAllowResolvedForceMatchedHydration?: boolean;
+  shouldCancelPausedInitialSessionNavigationOnCurrentSessionChange?: boolean;
   shouldPauseInitialSessionNavigation?: boolean;
   shouldHydrateMatchedInitialSession?: boolean;
   switchTopic: (
@@ -318,6 +319,41 @@ describe("useWorkspaceInitialSessionNavigation", () => {
       allowDetachedSession: true,
       forceRefresh: true,
     });
+  });
+
+  it("任务中心首发已切到新会话后不应恢复旧 initialSessionId", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+    const mounted = renderHook({
+      initialSessionId: "session-old",
+      currentSessionId: "session-old",
+      shouldCancelPausedInitialSessionNavigationOnCurrentSessionChange: true,
+      shouldPauseInitialSessionNavigation: true,
+      shouldHydrateMatchedInitialSession: true,
+      switchTopic,
+      resolveInitialSessionSwitch: () => ({
+        allowDetachedSession: true,
+        forceRefresh: true,
+      }),
+    });
+
+    await flushEffects();
+    expect(switchTopic).not.toHaveBeenCalled();
+
+    mounted.rerender({
+      initialSessionId: "session-old",
+      currentSessionId: "session-new",
+      shouldCancelPausedInitialSessionNavigationOnCurrentSessionChange: true,
+      shouldPauseInitialSessionNavigation: false,
+      shouldHydrateMatchedInitialSession: true,
+      switchTopic,
+      resolveInitialSessionSwitch: () => ({
+        allowDetachedSession: true,
+        forceRefresh: true,
+      }),
+    });
+    await flushEffects();
+
+    expect(switchTopic).not.toHaveBeenCalled();
   });
 
   it("短时间内重复挂载相同初始会话时应去重", async () => {

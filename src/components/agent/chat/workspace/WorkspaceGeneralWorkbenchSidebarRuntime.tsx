@@ -31,7 +31,7 @@ type GeneralWorkbenchSidebarRuntime = Pick<
   | "selectedGeneralWorkbenchRunDetail"
 >;
 
-interface RenderWorkspaceGeneralWorkbenchSidebarRuntimeParams {
+export interface RenderWorkspaceGeneralWorkbenchSidebarRuntimeParams {
   contextWorkspace: WorkspaceGeneralWorkbenchSidebarProps["contextWorkspace"];
   generalWorkbenchHarnessSummary: WorkspaceGeneralWorkbenchSidebarProps["generalWorkbenchHarnessSummary"];
   generalWorkbenchScaffoldRuntime: GeneralWorkbenchScaffoldRuntime;

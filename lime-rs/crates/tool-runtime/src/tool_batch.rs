@@ -154,7 +154,10 @@ mod tests {
             "PowerShell",
             Some("Set-Content out.txt hi")
         ));
-        assert!(!runtime_tool_call_concurrency_safe("Ask", None));
+        assert!(!runtime_tool_call_concurrency_safe(
+            "request_user_input",
+            None
+        ));
         assert!(!runtime_tool_call_concurrency_safe("Bash", None));
     }
 

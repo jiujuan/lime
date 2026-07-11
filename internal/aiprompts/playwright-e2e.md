@@ -43,6 +43,8 @@
 - `lime_invoke_trace_buffer_v1` 中的 `agentSession/turn/start` 是 renderer 发给 App Server 的请求预览，只证明前端、Electron IPC 与 App Server JSON-RPC 主链；它不是 Runtime backend 完成 session config / final prompt 拼装后的模型请求。不要用其中的 `runtimeOptions.hostOptions.asterChatRequest.system_prompt` 判断 Soul prompt 是否最终生效
 - `APP_SERVER_BACKEND_MODE=external` 适合证明 GUI、read model、Electron IPC 和 current JSON-RPC 链路，但会绕过 `RuntimeBackend::handle_turn_start` 中的 `session_config_from_request` / session prompt 拼装，因此不能作为 Soul 最终 prompt 注入证据
 - Soul / AI 个性最终 prompt 只能通过 Rust prompt 单测或 `APP_SERVER_BACKEND_MODE=runtime` + 本地 OpenAI-compatible provider fixture 证明；provider fixture evidence 只保存 marker booleans，例如 `hasInteractionSoul`、`hasMemorySoulSchema`、`profileId`、`stylePackId`、`hasSurfaceContracts`，不得保存完整 `system_prompt`、provider request / response 或用户私密 prompt
+- `verify:gui-smoke` 默认启动真实 Electron Desktop Host 但隐藏主窗口，避免本地最小 smoke 抢占开发者当前窗口；这仍属于真实 Electron fixture 证据，不是 browser mirror
+- 如需肉眼调试最小 smoke，可显式设置 `LIME_ELECTRON_SMOKE_VISIBLE=1 npm run verify:gui-smoke`；该模式优先用 Electron `showInactive()` 显示窗口，尽量不抢焦点，但 Linux / Wayland 仍可能受平台限制
 - `verify:gui-smoke` 内部的 browser runtime 校验默认走无界面浏览器会话；它只证明主链可启动，不替代后续真实页面交互验证
 - 本节基于 Playwright 官方 best practices、Electron 官方 IPC / context isolation 文档和 JSON-RPC 2.0 规范收敛：
   - Playwright：使用 locator 和 web-first assertion，依赖 auto-wait / retry，不用固定 sleep 证明状态达成（官方文档：https://playwright.dev/docs/best-practices）

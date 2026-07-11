@@ -2479,3 +2479,7 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `dead`：vendored Aster 恢复 `src/subprocess.rs`、`tools/shell_runtime.rs`、`encoding_rs` direct dependency 或公开 re-export process runtime helper 的形态不得恢复。
 - `progress`：本批继续把已迁 process / shell runtime helper 从 vendor Aster 中物理删掉，避免“迁了但旧实现继续当垃圾”。整体目标完成度保守更新为约 `78%`；root `aster` dependency、`lime-agent` 的 `aster.workspace = true`、`tool_orchestrator` Aster registry execution adapter、provider/reply loop 与 session store adapters 仍是 Phase 6 blocker。
 - `next`：下一刀不应继续围绕已迁 shell helper 做小修小补；应回到主阻塞链，让 `tool-runtime` 提供 current tool executor / result / error 类型以替换 `AsterToolRegistryAdapter`，或转入 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 的 provider/reply loop 退场。
+
+## 后续跟踪
+
+- 2026-07-12 起的 session todo 去 Aster 记录拆分到 [`phase6-session-todo-migration-tracker.md`](./phase6-session-todo-migration-tracker.md)，避免继续扩张本文件。

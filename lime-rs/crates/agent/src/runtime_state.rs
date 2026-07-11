@@ -431,6 +431,10 @@ impl AgentRuntimeState {
 pub use agent_runtime::session_config::SessionConfigBuilder;
 
 #[cfg(test)]
+#[path = "runtime_state/gateway_registration_tests.rs"]
+mod gateway_registration_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use aster::SessionType;
@@ -546,7 +550,6 @@ mod tests {
     struct RuntimeApprovalResumeTool;
 
     const RUNTIME_APPROVAL_RESUME_TOOL_NAME: &str = "memory_list";
-
     fn runtime_approval_resume_registration() -> crate::native_tools::NativeRegistration {
         crate::native_tools::NativeRegistration::new(
             tool_runtime::tool_definition::RuntimeToolDefinition::new(

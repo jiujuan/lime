@@ -153,11 +153,10 @@ export function buildTerminalScenarioAssertions({
         summary.guiTerminalFailedAfterAnswerCompleted?.completionScope?.assistantText?.includes(
           TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
         ) === true,
-      guiTerminalFailedAfterAnswerFailureVisible:
-        summary.guiTerminalFailedAfterAnswerCompleted?.hasDoneText === true &&
+      guiTerminalFailedAfterAnswerFailureHiddenFromBody:
         summary.guiTerminalFailedAfterAnswerCompleted?.completionScope?.assistantText?.includes(
           TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
-        ) === true,
+        ) === false,
       guiTerminalFailedAfterAnswerNoDuplicates: (
         summary.guiTerminalFailedAfterAnswerCompleted
           ?.assistantScopeDedupeGuardHits ?? []

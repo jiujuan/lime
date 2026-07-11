@@ -565,6 +565,47 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.metadata).toBe(requestMetadata);
   });
 
+  it("旧 image_skill_launch 不应继续作为图片路由或提交 metadata", () => {
+    const requestMetadata = {
+      harness: {
+        trace_id: "trace-image-retired",
+        image_skill_launch: {
+          kind: "image_task",
+          skill_name: "image_generate",
+          image_task: {
+            prompt: "生成一张公众号封面",
+            provider_id: "fal",
+            model: "fal-ai/nano-banana-pro",
+            runtime_contract: {
+              contract_key: "image_generation",
+              routing_slot: "image_generation_model",
+            },
+          },
+        },
+      },
+    };
+
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata,
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-flash",
+    });
+
+    expect(result.providerConfig).toBeUndefined();
+    expect(result.shouldSubmitProviderPreference).toBe(true);
+    expect(result.shouldSubmitModelPreference).toBe(true);
+    expect(result.metadata).toEqual({
+      harness: {
+        trace_id: "trace-image-retired",
+      },
+    });
+  });
+
   it("图片生成命令已有会话模型时仍应提交编排 provider_config", () => {
     const requestMetadata = {
       harness: {

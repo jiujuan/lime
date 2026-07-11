@@ -28,14 +28,16 @@ use super::provider_trace::{
 };
 use super::tool_execution::{ToolCallResult, CHAT_MODE_TOOL_SKIPPED_RESPONSE, DECLINED_RESPONSE};
 use crate::action_required_manager::ActionRequiredManager;
-use crate::agents::extension::{ExtensionConfig, ExtensionResult, ToolInfo};
+use crate::agents::collab_runtime::{execute_agent_control_runtime_tool, AgentControlToolConfig};
+use crate::agents::extension::{
+    ExtensionConfig, ExtensionResult, PlatformExtensionContext, ToolInfo,
+};
 use crate::agents::extension_manager::{get_parameter_names, ExtensionManager};
 use crate::agents::extension_manager_extension::MANAGE_EXTENSIONS_TOOL_NAME_COMPLETE;
 use crate::agents::final_output_tool::{FINAL_OUTPUT_CONTINUATION_MESSAGE, FINAL_OUTPUT_TOOL_NAME};
 use crate::agents::prompt_manager::PromptManager;
 use crate::agents::retry::{RetryManager, RetryResult};
-use crate::agents::subagent_task_config::TaskConfig;
-use crate::agents::subagent_tool::{create_subagent_tool, handle_subagent_tool, AGENT_TOOL_NAME};
+use crate::agents::team_runtime::execute_team_runtime_tool;
 use crate::agents::types::SessionConfig;
 use crate::agents::types::{
     FrontendTool, PermissionRequestHookHandler, SharedProvider, ToolResultReceiver,
@@ -43,53 +45,62 @@ use crate::agents::types::{
 use crate::agents::ContextTraceStep;
 use crate::config::{AsterMode, Config};
 use crate::conversation::message::{
-    ActionRequired, ActionRequiredData, ActionRequiredScope, Message, MessageContent,
-    ProviderMetadata, SystemNotificationType, ThinkingContent, ToolRequest, ToolResponse,
+    ActionRequired, ActionRequiredData, Message, MessageContent, ProviderMetadata,
+    SystemNotificationType, ThinkingContent, ToolRequest, ToolResponse,
 };
 use crate::conversation::{debug_conversation_fix, fix_conversation, Conversation};
 use crate::model::ModelConfig;
-use crate::permission::permission_inspector::PermissionInspector;
-use crate::permission::permission_judge::PermissionCheckResult;
-use crate::permission::PermissionConfirmation;
-use crate::providers::base::{Provider, SessionNameGenerationExecutionStrategy};
-use crate::providers::errors::ProviderError;
-use crate::recipe::{Response, SubRecipe};
+use crate::reply_provider::ProviderError;
+use crate::reply_provider::{
+    Provider, SessionNameGenerationExecutionStrategy, MSG_COUNT_FOR_SESSION_NAME_GENERATION,
+};
 use crate::session::{
-    apply_session_update, load_managed_session_runtime_snapshot, query_session,
-    replace_session_conversation, require_shared_session_runtime_store, EnabledExtensionsState,
-    ExtensionState, InMemoryThreadRuntimeStore, ItemRuntime, ItemRuntimePayload, ItemStatus,
-    Session, SessionManager, SessionRuntimeSnapshot, SessionStore, SessionType,
-    TeamMembershipState, TeamSessionState, ThreadRuntime, ThreadRuntimeStore, TurnContextOverride,
+    require_shared_session_runtime_store, EnabledExtensionsState, ExtensionState,
+    InMemoryThreadRuntimeStore, ItemRuntime, ItemRuntimePayload, ItemStatus, Session, SessionStore,
+    SessionType, TeamMembershipState, TeamSessionState, ThreadRuntimeStore, TurnContextOverride,
     TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy, TurnRuntime,
     TurnStatus,
 };
-use crate::tool_inspection::ToolInspectionManager;
-use crate::tool_inspection::ToolInspector;
-use crate::tools::{
-    execute_agent_control_runtime_tool, execute_request_user_input_runtime_tool,
-    execute_team_runtime_tool, register_all_tools, AgentControlToolConfig, AskCallback, AskTool,
-    SharedFileReadHistory, ToolContext, ToolError, ToolRegistrationConfig, ToolRegistry,
-    DEFAULT_ASK_TIMEOUT_SECS,
+use crate::tool::{PermissionConfirmation, ToolContext, ToolRegistrationConfig, ToolRegistry};
+use crate::tool_inspection::{
+    categorize_inspected_tools, ToolInspectionDecision, ToolInspectionManager, ToolInspector,
 };
 use rmcp::model::{
     CallToolRequestParam, CallToolResult, Content, ErrorCode, ErrorData, GetPromptResult, Prompt,
-    ServerNotification, TextContent, Tool,
+    Role, ServerNotification, TextContent, Tool,
 };
-use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use tool_runtime::collab_agent::{
     collab_agent_canonical_tool_name, collab_agent_tool_definition, CollabAgentSurfaceError,
-    CollabAgentSurfaceErrorKind, RuntimeCollabToolOutput, SpawnAgentRequest, SpawnAgentResponse,
+    CollabAgentSurfaceErrorKind, RuntimeCollabToolOutput,
     AGENT_TOOL_NAME as COLLAB_AGENT_TOOL_NAME, LIST_PEERS_TOOL_NAME, SEND_MESSAGE_TOOL_NAME,
     TEAM_CREATE_TOOL_NAME, TEAM_DELETE_TOOL_NAME,
 };
-use tool_runtime::file_read_execution::RuntimeFileReadRequest;
-use tool_runtime::file_search_execution::RuntimeFileSearchRequest;
+use tool_runtime::file_read_execution::{
+    file_read_canonical_tool_name, file_read_tool_definition, RuntimeFileReadRequest,
+    FILE_READ_TOOL_NAME,
+};
+use tool_runtime::file_search_execution::{
+    file_search_canonical_tool_name, file_search_tool_definition, RuntimeFileSearchRequest,
+    GLOB_TOOL_NAME, GREP_TOOL_NAME,
+};
+use tool_runtime::gateway_dispatch_execution::{
+    execute_runtime_gateway_dispatch_tool, RuntimeGatewayDispatchToolRequest,
+    RuntimeGatewayToolExecutionRegistration, RuntimeGatewayToolExecutionRegistry,
+};
 use tool_runtime::native_dispatch_execution::RuntimeNativeDispatchToolRequest;
-use tool_runtime::request_user_input::REQUEST_USER_INPUT_TOOL_NAME;
-use tool_runtime::shell_execution::RuntimeShellToolRequest;
+use tool_runtime::request_user_input::{
+    execute_request_user_input, request_user_input_canonical_tool_name,
+    request_user_input_tool_definition, RequestUserInputCallback, RequestUserInputSurfaceError,
+    RequestUserInputSurfaceErrorKind, DEFAULT_REQUEST_USER_INPUT_TIMEOUT_SECS,
+};
+use tool_runtime::shell_execution::{
+    shell_canonical_tool_name, shell_tool_definition, RuntimeShellToolRequest, BASH_TOOL_NAME,
+    POWERSHELL_TOOL_NAME,
+};
+use tool_runtime::skill_gate::{skill_tool_definition, SKILL_TOOL_NAME};
 use tool_runtime::tool_batch::{
     partition_tool_execution_requests, runtime_tool_call_concurrency_safe,
 };
@@ -172,16 +183,76 @@ fn log_session_description_failure(error: &anyhow::Error) {
     }
 }
 
+const AUTO_SESSION_NAME_PLACEHOLDERS: &[&str] = &[
+    "",
+    "新对话",
+    "New Session",
+    "未命名会话",
+    "Untitled Session",
+    "Untitled",
+];
+
+fn is_auto_session_name_placeholder(name: &str) -> bool {
+    let trimmed = name.trim();
+    AUTO_SESSION_NAME_PLACEHOLDERS.iter().any(|placeholder| {
+        if placeholder.is_empty() {
+            trimmed.is_empty()
+        } else if placeholder.is_ascii() {
+            trimmed.eq_ignore_ascii_case(placeholder)
+        } else {
+            trimmed == *placeholder
+        }
+    })
+}
+
+fn should_attempt_session_name_generation(session: &Session, conversation: &Conversation) -> bool {
+    if session.user_set_name || !is_auto_session_name_placeholder(&session.name) {
+        return false;
+    }
+
+    let user_message_count = conversation
+        .messages()
+        .iter()
+        .filter(|message| matches!(message.role, Role::User))
+        .take(MSG_COUNT_FOR_SESSION_NAME_GENERATION + 1)
+        .count();
+
+    user_message_count > 0 && user_message_count <= MSG_COUNT_FOR_SESSION_NAME_GENERATION
+}
+
+async fn maybe_update_name_for_session_with_store(
+    session_store: Option<Arc<dyn SessionStore>>,
+    session: Session,
+    conversation: Conversation,
+    provider: Arc<dyn Provider>,
+) -> Result<()> {
+    if !should_attempt_session_name_generation(&session, &conversation) {
+        return Ok(());
+    }
+
+    let Some(store) = session_store else {
+        warn!(
+            "[AsterAgent] session name generation missing injected session_store; global SessionManager fallback disabled: session_id={}",
+            session.id
+        );
+        return Err(anyhow!(
+            "missing injected session_store for session name generation: session_id={}",
+            session.id
+        ));
+    };
+
+    let name = provider.generate_session_name(&conversation).await?;
+    store.update_session_name(&session.id, name, false).await
+}
+
 const DEFAULT_MAX_TURNS: u32 = 1000;
-const MAX_REPLY_TURNS_REACHED_MESSAGE: &str =
-    "I've reached the maximum number of actions I can do without user input. Would you like me to continue?";
+const MAX_REPLY_TURNS_REACHED_MESSAGE: &str = "I've reached the maximum number of actions I can do without user input. Would you like me to continue?";
 const COMPACTION_THINKING_TEXT: &str = "aster is compacting the conversation...";
 const CONTEXT_COMPACTION_WARNING_TEXT: &str =
     "长对话和多次上下文压缩会降低模型准确性；如果后续结果开始漂移，建议新开会话。";
 const CANCELLED_TURN_CONTEXT_MARKER: &str =
     "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
-const AUTO_COMPACTION_DISABLED_CONTEXT_LIMIT_TEXT: &str =
-    "Automatic compaction is disabled for this turn. The conversation reached the context limit. Compact the session manually or start a new session before retrying.";
+const AUTO_COMPACTION_DISABLED_CONTEXT_LIMIT_TEXT: &str = "Automatic compaction is disabled for this turn. The conversation reached the context limit. Compact the session manually or start a new session before retrying.";
 const PROPOSED_PLAN_OPEN: &str = "<proposed_plan>";
 const PROPOSED_PLAN_CLOSE: &str = "</proposed_plan>";
 const FILE_ARTIFACT_METADATA_KEYS: [&str; 9] = [
@@ -206,71 +277,6 @@ fn cancelled_turn_context_marker_message() -> Message {
 struct ResolvedOutputSchema {
     schema: Value,
     source: TurnOutputSchemaSource,
-}
-
-#[derive(Debug, Deserialize)]
-struct CurrentAgentToolRequest {
-    description: String,
-    prompt: String,
-    #[serde(default)]
-    subagent_type: Option<String>,
-    #[serde(default)]
-    model: Option<String>,
-    #[serde(default)]
-    run_in_background: bool,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    team_name: Option<String>,
-    #[serde(default)]
-    mode: Option<String>,
-    #[serde(default)]
-    isolation: Option<String>,
-    #[serde(default)]
-    cwd: Option<String>,
-    #[serde(default)]
-    allowed_tools: Vec<String>,
-    #[serde(default)]
-    disallowed_tools: Vec<String>,
-}
-
-#[derive(Debug)]
-struct CallbackBackedAgentSpawn {
-    request: CurrentAgentToolRequest,
-    spawn_request: SpawnAgentRequest,
-    description: String,
-    prompt: String,
-}
-
-fn default_ask_callback() -> crate::tools::AskCallback {
-    Arc::new(|request| {
-        Box::pin(async move {
-            let scope = crate::session_context::current_action_scope().unwrap_or_else(|| {
-                let session_id = crate::session_context::current_session_id();
-                ActionRequiredScope {
-                    session_id: session_id.clone(),
-                    thread_id: session_id,
-                    turn_id: None,
-                }
-            });
-
-            match ActionRequiredManager::global()
-                .request_and_wait_scoped(
-                    scope,
-                    AskTool::build_elicitation_message(&request),
-                    AskTool::build_elicitation_schema(&request),
-                    Duration::from_secs(DEFAULT_ASK_TIMEOUT_SECS),
-                )
-                .await
-            {
-                Ok(user_data) => Some(user_data),
-                Err(error) => {
-                    warn!(?error, "request_user_input elicitation failed");
-                    None
-                }
-            }
-        })
-    })
 }
 
 fn extract_proposed_plan_block(text: &str) -> Option<String> {
@@ -381,6 +387,52 @@ fn allowed_tool_names_allow_collab_tool(
     })
 }
 
+fn allowed_tool_names_allow_file_read_tool(allowed_tool_names: Option<&[String]>) -> bool {
+    match allowed_tool_names {
+        Some(allowed_tool_names) => allowed_tool_names
+            .iter()
+            .any(|allowed| file_read_canonical_tool_name(allowed).is_some()),
+        None => true,
+    }
+}
+
+fn allowed_tool_names_allow_file_search_tool(
+    allowed_tool_names: Option<&[String]>,
+    tool_name: &str,
+) -> bool {
+    let Some(allowed_tool_names) = allowed_tool_names else {
+        return true;
+    };
+
+    allowed_tool_names.iter().any(|allowed| {
+        file_search_canonical_tool_name(allowed)
+            .is_some_and(|canonical| canonical.eq_ignore_ascii_case(tool_name))
+    })
+}
+
+fn allowed_tool_names_allow_shell_tool(
+    allowed_tool_names: Option<&[String]>,
+    tool_name: &str,
+) -> bool {
+    let Some(allowed_tool_names) = allowed_tool_names else {
+        return true;
+    };
+
+    allowed_tool_names.iter().any(|allowed| {
+        shell_canonical_tool_name(allowed)
+            .is_some_and(|canonical| canonical.eq_ignore_ascii_case(tool_name))
+    })
+}
+
+fn allowed_tool_names_allow_skill_tool(allowed_tool_names: Option<&[String]>) -> bool {
+    match allowed_tool_names {
+        Some(allowed_tool_names) => allowed_tool_names
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(SKILL_TOOL_NAME)),
+        None => true,
+    }
+}
+
 fn should_expose_tool_for_session_with_gates(
     name: &str,
     session_type: Option<SessionType>,
@@ -394,7 +446,7 @@ fn should_expose_tool_for_session_with_gates(
         resources_supported,
         tool_gates,
         subagent_teammate_tools_enabled,
-        AGENT_TOOL_NAME,
+        COLLAB_AGENT_TOOL_NAME,
         FINAL_OUTPUT_TOOL_NAME,
     )
 }
@@ -534,27 +586,49 @@ async fn execute_runtime_file_search_tool(
     .map(ToolCallResult::from)
 }
 
-fn tool_error_to_error_data(error: ToolError) -> ErrorData {
-    let code = match error {
-        ToolError::InvalidParams(_) => ErrorCode::INVALID_PARAMS,
-        _ => ErrorCode::INTERNAL_ERROR,
+async fn execute_runtime_gateway_tool(
+    registry: &RuntimeGatewayToolExecutionRegistry,
+    tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> Option<ToolCallResult> {
+    let turn_context = runtime_tool_turn_context_from_current_session();
+    execute_runtime_gateway_dispatch_tool(
+        registry,
+        RuntimeGatewayDispatchToolRequest {
+            tool_name,
+            params,
+            working_directory: context.working_directory.clone(),
+            session_id: context.session_id.clone(),
+            cancel_token: context.cancellation_token.clone(),
+            turn_context: turn_context.as_ref(),
+        },
+    )
+    .await
+    .map(ToolCallResult::from)
+}
+
+fn request_user_input_error_to_error_data(error: RequestUserInputSurfaceError) -> ErrorData {
+    let code = match error.kind() {
+        RequestUserInputSurfaceErrorKind::InvalidParams => ErrorCode::INVALID_PARAMS,
+        RequestUserInputSurfaceErrorKind::ExecutionFailed => ErrorCode::INTERNAL_ERROR,
     };
-    ErrorData::new(code, error.to_string(), None)
+    ErrorData::new(code, error.message().to_string(), None)
 }
 
 async fn execute_runtime_request_user_input_tool(
     tool_name: &str,
     params: &Value,
-    ask_callback: Option<&AskCallback>,
+    callback: Option<&RequestUserInputCallback>,
 ) -> Option<ToolCallResult> {
-    if tool_name != REQUEST_USER_INPUT_TOOL_NAME {
+    if request_user_input_canonical_tool_name(tool_name).is_none() {
         return None;
     }
 
-    let execution = execute_request_user_input_runtime_tool(
+    let execution = execute_request_user_input(
         params.clone(),
-        ask_callback,
-        Duration::from_secs(DEFAULT_ASK_TIMEOUT_SECS),
+        callback,
+        Duration::from_secs(DEFAULT_REQUEST_USER_INPUT_TIMEOUT_SECS),
     )
     .await;
 
@@ -570,7 +644,7 @@ async fn execute_runtime_request_user_input_tool(
                 },
             )))
         }
-        Err(error) => ToolCallResult::from(Err(tool_error_to_error_data(error))),
+        Err(error) => ToolCallResult::from(Err(request_user_input_error_to_error_data(error))),
     })
 }
 
@@ -614,15 +688,22 @@ async fn execute_runtime_collab_tool(
     params: &Value,
     session_id: &str,
     agent_control_tools: Option<&AgentControlToolConfig>,
+    session_store: Option<Arc<dyn SessionStore>>,
 ) -> Option<ToolCallResult> {
     let params = params.clone();
     let execution = match tool_name {
-        SEND_MESSAGE_TOOL_NAME => {
-            execute_agent_control_runtime_tool(tool_name, params, session_id, agent_control_tools)
-                .await
+        COLLAB_AGENT_TOOL_NAME | SEND_MESSAGE_TOOL_NAME => {
+            execute_agent_control_runtime_tool(
+                tool_name,
+                params,
+                session_id,
+                agent_control_tools,
+                session_store,
+            )
+            .await
         }
         TEAM_CREATE_TOOL_NAME | TEAM_DELETE_TOOL_NAME | LIST_PEERS_TOOL_NAME => {
-            execute_team_runtime_tool(tool_name, params, session_id).await
+            execute_team_runtime_tool(tool_name, params, session_id, session_store).await
         }
         _ => None,
     }?;
@@ -902,215 +983,6 @@ fn should_stop_after_tool_result(
     })
 }
 
-fn normalize_agent_optional_text(value: Option<String>) -> Option<String> {
-    let trimmed = value?.trim().to_string();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    }
-}
-
-fn require_agent_text(value: String, field_name: &str) -> Result<String, ErrorData> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(ErrorData::new(
-            ErrorCode::INVALID_PARAMS,
-            format!("{field_name} cannot be empty"),
-            None,
-        ));
-    }
-
-    Ok(trimmed.to_string())
-}
-
-fn normalize_agent_cwd(value: Option<String>) -> Result<Option<String>, ErrorData> {
-    let Some(cwd) = normalize_agent_optional_text(value) else {
-        return Ok(None);
-    };
-
-    let path = std::path::Path::new(&cwd);
-    if !path.is_absolute() {
-        return Err(ErrorData::new(
-            ErrorCode::INVALID_PARAMS,
-            "cwd must be an absolute path".to_string(),
-            None,
-        ));
-    }
-    if !path.is_dir() {
-        return Err(ErrorData::new(
-            ErrorCode::INVALID_PARAMS,
-            format!("cwd is not a directory: {cwd}"),
-            None,
-        ));
-    }
-
-    Ok(Some(cwd))
-}
-
-fn normalize_agent_tool_list(values: &[String]) -> Vec<String> {
-    let mut normalized = Vec::new();
-    let mut seen = std::collections::BTreeSet::new();
-
-    for value in values {
-        let Some(item) = normalize_agent_optional_text(Some(value.clone())) else {
-            continue;
-        };
-        if seen.insert(item.clone()) {
-            normalized.push(item);
-        }
-    }
-
-    normalized
-}
-
-fn parse_current_agent_tool_request(
-    arguments: Value,
-) -> Result<CurrentAgentToolRequest, ErrorData> {
-    serde_json::from_value(arguments).map_err(|error| {
-        ErrorData::new(
-            ErrorCode::INVALID_PARAMS,
-            format!("Invalid parameters: {error}"),
-            None,
-        )
-    })
-}
-
-fn prepare_callback_backed_agent_spawn(
-    request: CurrentAgentToolRequest,
-    session: &Session,
-) -> Result<Option<CallbackBackedAgentSpawn>, ErrorData> {
-    let mode = normalize_agent_optional_text(request.mode.clone());
-    let isolation = normalize_agent_optional_text(request.isolation.clone());
-    let name = normalize_agent_optional_text(request.name.clone());
-    let team_name = normalize_agent_optional_text(request.team_name.clone());
-    let cwd = normalize_agent_cwd(request.cwd.clone())?;
-    let allowed_tools = normalize_agent_tool_list(&request.allowed_tools);
-    let disallowed_tools = normalize_agent_tool_list(&request.disallowed_tools);
-    let team_subagent = session_allows_subagent_teammate_tools(session);
-    if team_subagent && request.run_in_background {
-        return Err(ErrorData::new(
-            ErrorCode::INVALID_PARAMS,
-            "Team subagents cannot spawn background agents in the current runtime".to_string(),
-            None,
-        ));
-    }
-    if team_subagent && (name.is_some() || team_name.is_some()) {
-        return Err(ErrorData::new(
-            ErrorCode::INVALID_PARAMS,
-            "Team subagents cannot spawn teammates in the current runtime; omit name and team_name"
-                .to_string(),
-            None,
-        ));
-    }
-
-    let should_use_callback = !team_subagent;
-    if !should_use_callback {
-        return Ok(None);
-    }
-    if team_name.is_some() && name.is_none() {
-        return Err(ErrorData::new(
-            ErrorCode::INVALID_PARAMS,
-            "team_name requires name in the current runtime".to_string(),
-            None,
-        ));
-    }
-
-    let description = require_agent_text(request.description.clone(), "description")?;
-    let prompt = require_agent_text(request.prompt.clone(), "prompt")?;
-    let spawn_request = SpawnAgentRequest {
-        parent_session_id: session.id.clone(),
-        message: prompt.clone(),
-        name,
-        team_name,
-        agent_type: normalize_agent_optional_text(request.subagent_type.clone()),
-        model: normalize_agent_optional_text(request.model.clone()),
-        run_in_background: request.run_in_background,
-        reasoning_effort: None,
-        fork_context: false,
-        blueprint_role_id: None,
-        blueprint_role_label: None,
-        profile_id: None,
-        profile_name: None,
-        role_key: None,
-        skill_ids: Vec::new(),
-        skill_directories: Vec::new(),
-        team_preset_id: None,
-        theme: None,
-        system_overlay: None,
-        output_contract: None,
-        hooks: None,
-        allowed_tools,
-        disallowed_tools,
-        mode,
-        isolation,
-        cwd,
-    };
-
-    Ok(Some(CallbackBackedAgentSpawn {
-        request,
-        spawn_request,
-        description,
-        prompt,
-    }))
-}
-
-fn build_async_agent_call_result(
-    request: &CurrentAgentToolRequest,
-    response: &SpawnAgentResponse,
-    description: String,
-    prompt: String,
-) -> CallToolResult {
-    let mut structured = serde_json::Map::new();
-    structured.insert(
-        "status".to_string(),
-        Value::String("async_launched".to_string()),
-    );
-    structured.insert(
-        "agentId".to_string(),
-        Value::String(response.agent_id.clone()),
-    );
-    structured.insert("description".to_string(), Value::String(description));
-    structured.insert("prompt".to_string(), Value::String(prompt));
-    structured.insert(
-        "outputFile".to_string(),
-        response
-            .extra
-            .get("outputFile")
-            .or_else(|| response.extra.get("output_file"))
-            .cloned()
-            .unwrap_or_else(|| Value::String(String::new())),
-    );
-    structured.insert(
-        "canReadOutputFile".to_string(),
-        response
-            .extra
-            .get("canReadOutputFile")
-            .or_else(|| response.extra.get("can_read_output_file"))
-            .cloned()
-            .unwrap_or(Value::Bool(false)),
-    );
-    if let Some(name) = normalize_agent_optional_text(request.name.clone()) {
-        structured.insert("name".to_string(), Value::String(name));
-    }
-    if let Some(team_name) = normalize_agent_optional_text(request.team_name.clone()) {
-        structured.insert("teamName".to_string(), Value::String(team_name));
-    }
-    if let Some(agent_type) = normalize_agent_optional_text(request.subagent_type.clone()) {
-        structured.insert("agentType".to_string(), Value::String(agent_type));
-    }
-
-    CallToolResult {
-        content: vec![Content::text(format!(
-            "Agent launched: {}",
-            response.agent_id
-        ))],
-        structured_content: Some(Value::Object(structured)),
-        is_error: Some(false),
-        meta: None,
-    }
-}
-
 /// Context needed for the reply function
 pub struct ReplyContext {
     pub conversation: Conversation,
@@ -1136,7 +1008,6 @@ pub struct Agent {
 
     pub extension_manager: Arc<ExtensionManager>,
     pub(super) session_type_hint: RwLock<Option<SessionType>>,
-    pub(super) sub_recipes: Mutex<HashMap<String, SubRecipe>>,
     pub(super) session_output_schema: Arc<Mutex<Option<Value>>>,
     pub(super) final_output_tool: Arc<Mutex<Option<FinalOutputTool>>>,
     pub(super) frontend_tools: Mutex<HashMap<String, FrontendTool>>,
@@ -1153,18 +1024,17 @@ pub struct Agent {
 
     /// Tool registry for native tools (Requirements: 11.3, 11.4, 11.5)
     pub(super) tool_registry: Arc<RwLock<ToolRegistry>>,
-    /// Shared file read history for file tools
-    pub(super) file_read_history: SharedFileReadHistory,
 
     /// 可选的 session 存储
     ///
     /// 如果设置，Agent 会使用此存储保存消息。
-    /// 如果未设置，会回退到全局 SessionManager（向后兼容）。
+    /// 如果未设置，需要持久化 session 的路径会 fail closed。
     pub(super) session_store: Option<Arc<dyn SessionStore>>,
     pub(super) thread_runtime_store: Arc<dyn ThreadRuntimeStore>,
-    pub(super) ask_callback: Option<AskCallback>,
+    pub(super) request_user_input_callback: Option<RequestUserInputCallback>,
     pub(super) agent_control_tools: Option<AgentControlToolConfig>,
     pub(super) allowed_tool_names: Option<Vec<String>>,
+    runtime_gateway_tools: RuntimeGatewayToolExecutionRegistry,
     native_tool_execution_hook: Option<Arc<dyn NativeToolExecutionHook>>,
 }
 
@@ -1317,17 +1187,29 @@ impl ContextCompactionTrigger {
 
     fn started_detail(self) -> &'static str {
         match self {
-            Self::Auto => "Context window is nearing its limit. Compacting earlier messages into a summary.",
-            Self::Overflow => "Context limit was reached. Compacting earlier messages into a summary before retrying.",
-            Self::Manual => "Compacting the current session on request and replacing earlier history with a summary.",
+            Self::Auto => {
+                "Context window is nearing its limit. Compacting earlier messages into a summary."
+            }
+            Self::Overflow => {
+                "Context limit was reached. Compacting earlier messages into a summary before retrying."
+            }
+            Self::Manual => {
+                "Compacting the current session on request and replacing earlier history with a summary."
+            }
         }
     }
 
     fn completed_detail(self) -> &'static str {
         match self {
-            Self::Auto => "Auto-compaction finished. The assistant will continue from the compacted summary.",
-            Self::Overflow => "Recovery compaction finished. The assistant will retry with the compacted summary.",
-            Self::Manual => "Context compaction finished. Earlier history was replaced with a summary for future turns.",
+            Self::Auto => {
+                "Auto-compaction finished. The assistant will continue from the compacted summary."
+            }
+            Self::Overflow => {
+                "Recovery compaction finished. The assistant will retry with the compacted summary."
+            }
+            Self::Manual => {
+                "Context compaction finished. Earlier history was replaced with a summary for future turns."
+            }
         }
     }
 }
@@ -1823,6 +1705,16 @@ where
 }
 
 impl Agent {
+    async fn sync_platform_extension_context(&self, session_id: Option<String>) {
+        self.extension_manager
+            .set_context(PlatformExtensionContext {
+                session_id,
+                session_store: self.session_store.clone(),
+                extension_manager: Some(Arc::downgrade(&self.extension_manager)),
+            })
+            .await;
+    }
+
     fn build_user_visible_context_message(
         user_message: &Message,
         session_config: &SessionConfig,
@@ -1854,19 +1746,14 @@ impl Agent {
         let provider = Arc::new(Mutex::new(None));
         let extension_manager = Arc::new(ExtensionManager::new(provider.clone()));
 
-        // Initialize ToolRegistry with all native tools (Requirements: 11.3, 11.4)
-        let mut tool_registry = ToolRegistry::new();
-        let ask_callback = default_ask_callback();
-        let tool_config = ToolRegistrationConfig::new()
-            .with_ask_callback(ask_callback.clone())
-            .with_extension_manager(Arc::downgrade(&extension_manager));
-        let file_read_history = register_all_tools(&mut tool_registry, tool_config);
+        // 旧 Aster built-in tools 已删除。这个 registry 只保存 current overlay 的
+        // 临时 adapter，用于 reply loop 最后一段还未迁出前的查找和模型定义。
+        let tool_registry = ToolRegistry::new();
 
         Self {
             provider: provider.clone(),
             extension_manager,
             session_type_hint: RwLock::new(None),
-            sub_recipes: Mutex::new(HashMap::new()),
             session_output_schema: Arc::new(Mutex::new(None)),
             final_output_tool: Arc::new(Mutex::new(None)),
             frontend_tools: Mutex::new(HashMap::new()),
@@ -1880,12 +1767,12 @@ impl Agent {
             tool_inspection_manager: Self::create_default_tool_inspection_manager(),
             permission_request_hook_handler: None,
             tool_registry: Arc::new(RwLock::new(tool_registry)),
-            file_read_history,
-            session_store: None, // 默认使用全局 SessionManager
+            session_store: None,
             thread_runtime_store: Arc::new(InMemoryThreadRuntimeStore::default()),
-            ask_callback: Some(ask_callback),
+            request_user_input_callback: None,
             agent_control_tools: None,
             allowed_tool_names: None,
+            runtime_gateway_tools: RuntimeGatewayToolExecutionRegistry::default(),
             native_tool_execution_hook: None,
         }
     }
@@ -1896,8 +1783,8 @@ impl Agent {
 
     /// 设置自定义 session 存储
     ///
-    /// 允许应用层注入自己的存储实现，而不是使用默认的 SQLite 存储。
-    /// 如果设置为 None，会回退到全局 SessionManager。
+    /// 允许应用层注入 current session store adapter。
+    /// 迁移期不再把全局 SessionManager 作为生产 fallback。
     ///
     /// # Example
     /// ```ignore
@@ -1919,10 +1806,14 @@ impl Agent {
         self
     }
 
+    pub fn thread_runtime_store(&self) -> Arc<dyn ThreadRuntimeStore> {
+        self.thread_runtime_store.clone()
+    }
+
     pub fn with_shared_native_tool_surface_from(mut self, other: &Agent) -> Self {
         self.tool_registry = other.tool_registry.clone();
-        self.file_read_history = other.file_read_history.clone();
-        self.ask_callback = other.ask_callback.clone();
+        self.request_user_input_callback = other.request_user_input_callback.clone();
+        self.runtime_gateway_tools = other.runtime_gateway_tools.clone();
         self.native_tool_execution_hook = other.native_tool_execution_hook.clone();
         self
     }
@@ -1985,24 +1876,18 @@ impl Agent {
         let (tool_tx, tool_rx) = mpsc::channel(32);
         let provider = Arc::new(Mutex::new(None));
         let extension_manager = Arc::new(ExtensionManager::new(provider.clone()));
-        let mut config = config;
         let agent_control_tools = config.agent_control_tools.clone();
         let allowed_tool_names = config.allowed_tool_names.clone();
-        if config.ask_callback.is_none() {
-            config.ask_callback = Some(default_ask_callback());
-        }
-        let ask_callback = config.ask_callback.clone();
-        config = config.with_extension_manager(Arc::downgrade(&extension_manager));
+        let request_user_input_callback = config.request_user_input_callback.clone();
 
-        // Initialize ToolRegistry with configured tools
-        let mut tool_registry = ToolRegistry::new();
-        let file_read_history = crate::tools::register_all_tools(&mut tool_registry, config);
+        // 不再恢复 Aster built-in tool pool；current native tools 由 Lime overlay
+        // 和 tool-runtime dispatch 显式注册。
+        let tool_registry = ToolRegistry::new();
 
         Self {
             provider: provider.clone(),
             extension_manager,
             session_type_hint: RwLock::new(None),
-            sub_recipes: Mutex::new(HashMap::new()),
             session_output_schema: Arc::new(Mutex::new(None)),
             final_output_tool: Arc::new(Mutex::new(None)),
             frontend_tools: Mutex::new(HashMap::new()),
@@ -2016,53 +1901,14 @@ impl Agent {
             tool_inspection_manager: Self::create_default_tool_inspection_manager(),
             permission_request_hook_handler: None,
             tool_registry: Arc::new(RwLock::new(tool_registry)),
-            file_read_history,
             session_store: None,
             thread_runtime_store: Arc::new(InMemoryThreadRuntimeStore::default()),
-            ask_callback,
+            request_user_input_callback,
             agent_control_tools,
             allowed_tool_names,
+            runtime_gateway_tools: RuntimeGatewayToolExecutionRegistry::default(),
             native_tool_execution_hook: None,
         }
-    }
-
-    async fn try_dispatch_callback_backed_agent_tool(
-        &self,
-        arguments: Value,
-        session: &Session,
-    ) -> Option<Result<ToolCallResult, ErrorData>> {
-        let callbacks = self.agent_control_tools.as_ref()?;
-        let spawn_callback = callbacks.spawn_agent.clone()?;
-
-        let request = match parse_current_agent_tool_request(arguments) {
-            Ok(request) => request,
-            Err(error) => return Some(Err(error)),
-        };
-        let prepared = match prepare_callback_backed_agent_spawn(request, session) {
-            Ok(Some(prepared)) => prepared,
-            Ok(None) => return None,
-            Err(error) => return Some(Err(error)),
-        };
-        let CallbackBackedAgentSpawn {
-            request,
-            spawn_request,
-            description,
-            prompt,
-        } = prepared;
-
-        Some(
-            spawn_callback(spawn_request)
-                .await
-                .map(|response| {
-                    ToolCallResult::from(Ok(build_async_agent_call_result(
-                        &request,
-                        &response,
-                        description,
-                        prompt,
-                    )))
-                })
-                .map_err(|error| ErrorData::new(ErrorCode::INTERNAL_ERROR, error, None)),
-        )
     }
 
     /// Replace the callback-backed agent control surface used by the current runtime.
@@ -2073,14 +1919,117 @@ impl Agent {
         self.agent_control_tools = config;
     }
 
+    /// Register a current gateway-backed native tool executor.
+    ///
+    /// This is a migration adapter while the reply loop still lives in
+    /// agent-compat. The execution owner remains `tool-runtime`.
+    pub fn register_runtime_gateway_tool_execution(
+        &mut self,
+        registration: RuntimeGatewayToolExecutionRegistration,
+    ) {
+        self.runtime_gateway_tools.register(registration);
+    }
+
     fn configured_collab_tool_allows(&self, tool_name: &str) -> bool {
         allowed_tool_names_allow_collab_tool(self.allowed_tool_names.as_deref(), tool_name)
+    }
+
+    fn configured_request_user_input_allows(&self) -> bool {
+        match self.allowed_tool_names.as_deref() {
+            Some(allowed_tool_names) => allowed_tool_names
+                .iter()
+                .any(|allowed| request_user_input_canonical_tool_name(allowed).is_some()),
+            None => true,
+        }
+    }
+
+    fn canonical_current_request_user_input_tool_name(&self, tool_name: &str) -> Option<String> {
+        if !self.configured_request_user_input_allows() {
+            return None;
+        }
+
+        request_user_input_canonical_tool_name(tool_name).map(str::to_string)
     }
 
     fn canonical_current_collab_tool_name(&self, tool_name: &str) -> Option<String> {
         let canonical = collab_agent_canonical_tool_name(tool_name)?;
         self.configured_collab_tool_allows(canonical)
             .then(|| canonical.to_string())
+    }
+
+    fn configured_file_read_allows(&self) -> bool {
+        allowed_tool_names_allow_file_read_tool(self.allowed_tool_names.as_deref())
+    }
+
+    fn configured_file_search_allows(&self, tool_name: &str) -> bool {
+        allowed_tool_names_allow_file_search_tool(self.allowed_tool_names.as_deref(), tool_name)
+    }
+
+    fn canonical_current_file_read_tool_name(&self, tool_name: &str) -> Option<String> {
+        file_read_canonical_tool_name(tool_name)
+            .filter(|_| self.configured_file_read_allows())
+            .map(str::to_string)
+    }
+
+    fn canonical_current_file_search_tool_name(&self, tool_name: &str) -> Option<String> {
+        let canonical = file_search_canonical_tool_name(tool_name)?;
+        self.configured_file_search_allows(canonical)
+            .then(|| canonical.to_string())
+    }
+
+    fn configured_shell_tool_allows(&self, tool_name: &str) -> bool {
+        allowed_tool_names_allow_shell_tool(self.allowed_tool_names.as_deref(), tool_name)
+    }
+
+    fn canonical_current_shell_tool_name(&self, tool_name: &str) -> Option<String> {
+        let canonical = shell_canonical_tool_name(tool_name)?;
+        self.configured_shell_tool_allows(canonical)
+            .then(|| canonical.to_string())
+    }
+
+    fn configured_skill_tool_allows(&self) -> bool {
+        allowed_tool_names_allow_skill_tool(self.allowed_tool_names.as_deref())
+    }
+
+    fn canonical_current_skill_tool_name(&self, tool_name: &str) -> Option<String> {
+        let trimmed = tool_name.trim();
+        (self.configured_skill_tool_allows() && trimmed.eq_ignore_ascii_case(SKILL_TOOL_NAME))
+            .then(|| SKILL_TOOL_NAME.to_string())
+    }
+
+    fn current_skill_tool_definition(&self) -> Option<RuntimeToolDefinition> {
+        self.configured_skill_tool_allows()
+            .then(skill_tool_definition)
+    }
+
+    fn canonical_current_gateway_tool_name(&self, tool_name: &str) -> Option<String> {
+        self.runtime_gateway_tools.canonical_name(tool_name)
+    }
+
+    fn current_gateway_tool_definitions(
+        &self,
+        resources_supported: bool,
+        tool_gates: RuntimeToolSurfaceGates,
+    ) -> Vec<RuntimeToolDefinition> {
+        self.runtime_gateway_tools
+            .definitions()
+            .into_iter()
+            .filter(|tool_def| {
+                should_expose_registered_tool_with_gates(
+                    &tool_def.name,
+                    resources_supported,
+                    tool_gates,
+                )
+            })
+            .collect()
+    }
+
+    fn current_request_user_input_tool_definition(&self) -> Option<RuntimeToolDefinition> {
+        self.request_user_input_callback
+            .is_some()
+            .then(|| self.configured_request_user_input_allows())
+            .filter(|allowed| *allowed)
+            .map(|_| request_user_input_tool_definition())
     }
 
     fn current_collab_tool_definitions(&self) -> Vec<RuntimeToolDefinition> {
@@ -2110,6 +2059,54 @@ impl Agent {
             .collect()
     }
 
+    fn current_file_tool_definitions(
+        &self,
+        resources_supported: bool,
+        tool_gates: RuntimeToolSurfaceGates,
+    ) -> Vec<RuntimeToolDefinition> {
+        let mut tool_defs = Vec::new();
+        if self.configured_file_read_allows()
+            && should_expose_registered_tool_with_gates(
+                FILE_READ_TOOL_NAME,
+                resources_supported,
+                tool_gates,
+            )
+        {
+            tool_defs.push(file_read_tool_definition());
+        }
+
+        for tool_name in [GLOB_TOOL_NAME, GREP_TOOL_NAME] {
+            if self.configured_file_search_allows(tool_name)
+                && should_expose_registered_tool_with_gates(
+                    tool_name,
+                    resources_supported,
+                    tool_gates,
+                )
+            {
+                if let Some(tool_def) = file_search_tool_definition(tool_name) {
+                    tool_defs.push(tool_def);
+                }
+            }
+        }
+
+        tool_defs
+    }
+
+    fn current_shell_tool_definitions(
+        &self,
+        resources_supported: bool,
+        tool_gates: RuntimeToolSurfaceGates,
+    ) -> Vec<RuntimeToolDefinition> {
+        [BASH_TOOL_NAME, POWERSHELL_TOOL_NAME]
+            .into_iter()
+            .filter(|tool_name| self.configured_shell_tool_allows(tool_name))
+            .filter(|tool_name| {
+                should_expose_registered_tool_with_gates(tool_name, resources_supported, tool_gates)
+            })
+            .filter_map(shell_tool_definition)
+            .collect()
+    }
+
     /// Replace the current native tool execution hook.
     ///
     /// Embedders use this narrow seam to route selected native tools through
@@ -2129,59 +2126,18 @@ impl Agent {
         &self.tool_registry
     }
 
-    /// Get a reference to the shared file read history
-    ///
-    /// This is useful for tools that need to track file reads.
-    pub fn file_read_history(&self) -> &SharedFileReadHistory {
-        &self.file_read_history
-    }
-
     /// Register an additional tool inspector for runtime-specific policy.
     pub fn add_tool_inspector(&mut self, inspector: Box<dyn ToolInspector>) {
         self.tool_inspection_manager.add_inspector(inspector);
     }
 
-    /// Register an MCP tool with the registry
-    ///
-    /// This method allows registering MCP tools from extensions into the
-    /// native tool registry. Native tools have priority over MCP tools
-    /// with the same name.
-    ///
-    /// # Arguments
-    /// * `name` - The tool name
-    /// * `description` - Tool description
-    /// * `input_schema` - JSON schema for tool input
-    /// * `server_name` - Name of the MCP server providing this tool
-    ///
-    /// Requirements: 11.4, 11.5
-    pub async fn register_mcp_tool(
-        &self,
-        name: String,
-        description: String,
-        input_schema: serde_json::Value,
-        server_name: String,
-    ) {
-        let wrapper =
-            crate::tools::McpToolWrapper::new(name.clone(), description, input_schema, server_name);
-        let mut registry = self.tool_registry.write().await;
-        registry.register_mcp(name, wrapper);
-    }
-
     /// Create a tool inspection manager with default inspectors
     fn create_default_tool_inspection_manager() -> ToolInspectionManager {
-        let mut tool_inspection_manager = ToolInspectionManager::new();
-
-        tool_inspection_manager.add_inspector(Box::new(PermissionInspector::new(
-            AsterMode::SmartApprove,
-            std::collections::HashSet::new(), // readonly tools - will be populated from extension manager
-            std::collections::HashSet::new(), // regular tools - will be populated from extension manager
-        )));
-
-        tool_inspection_manager
+        ToolInspectionManager::new()
     }
 
     // ========== Session 存储辅助方法 ==========
-    // 这些方法会优先使用注入的 session_store，如果没有则回退到全局 SessionManager
+    // 这些方法只使用注入的 session_store；缺 store 时 fail closed，避免继续走全局 Aster SessionManager。
 
     /// 添加消息到 session
     pub(crate) async fn store_add_message(
@@ -2189,11 +2145,18 @@ impl Agent {
         session_id: &str,
         message: &Message,
     ) -> Result<()> {
-        if let Some(store) = &self.session_store {
-            store.add_message(session_id, message).await
-        } else {
-            SessionManager::add_message(session_id, message).await
-        }
+        let Some(store) = &self.session_store else {
+            warn!(
+                "[AsterAgent] store_add_message missing injected session_store; global SessionManager fallback disabled: session_id={}",
+                session_id
+            );
+            return Err(anyhow!(
+                "missing injected session_store for add_message: session_id={}",
+                session_id
+            ));
+        };
+
+        store.add_message(session_id, message).await
     }
 
     /// 获取 session
@@ -2202,11 +2165,18 @@ impl Agent {
         session_id: &str,
         include_messages: bool,
     ) -> Result<Session> {
-        if let Some(store) = &self.session_store {
-            store.get_session(session_id, include_messages).await
-        } else {
-            query_session(session_id, include_messages).await
-        }
+        let Some(store) = &self.session_store else {
+            warn!(
+                "[AsterAgent] store_get_session missing injected session_store; global SessionManager fallback disabled: session_id={}",
+                session_id
+            );
+            return Err(anyhow!(
+                "missing injected session_store for get_session: session_id={}",
+                session_id
+            ));
+        };
+
+        store.get_session(session_id, include_messages).await
     }
 
     /// 替换整个对话历史
@@ -2215,11 +2185,18 @@ impl Agent {
         session_id: &str,
         conversation: &Conversation,
     ) -> Result<()> {
-        if let Some(store) = &self.session_store {
-            store.replace_conversation(session_id, conversation).await
-        } else {
-            replace_session_conversation(session_id, conversation).await
-        }
+        let Some(store) = &self.session_store else {
+            warn!(
+                "[AsterAgent] store_replace_conversation missing injected session_store; global SessionManager fallback disabled: session_id={}",
+                session_id
+            );
+            return Err(anyhow!(
+                "missing injected session_store for replace_conversation: session_id={}",
+                session_id
+            ));
+        };
+
+        store.replace_conversation(session_id, conversation).await
     }
 
     /// 更新 session 扩展数据
@@ -2228,13 +2205,20 @@ impl Agent {
         session_id: &str,
         extension_data: crate::session::ExtensionData,
     ) -> Result<()> {
-        if let Some(store) = &self.session_store {
-            store
-                .update_extension_data(session_id, extension_data)
-                .await
-        } else {
-            apply_session_update(session_id, |update| update.extension_data(extension_data)).await
-        }
+        let Some(store) = &self.session_store else {
+            warn!(
+                "[AsterAgent] store_update_extension_data missing injected session_store; global SessionManager fallback disabled: session_id={}",
+                session_id
+            );
+            return Err(anyhow!(
+                "missing injected session_store for update_extension_data: session_id={}",
+                session_id
+            ));
+        };
+
+        store
+            .update_extension_data(session_id, extension_data)
+            .await
     }
 
     /// 更新 session 的 provider 和 model 配置
@@ -2244,18 +2228,20 @@ impl Agent {
         provider_name: String,
         model_config: crate::model::ModelConfig,
     ) -> Result<()> {
-        if let Some(store) = &self.session_store {
-            store
-                .update_provider_config(session_id, Some(provider_name), Some(model_config))
-                .await
-        } else {
-            apply_session_update(session_id, |update| {
-                update
-                    .provider_name(provider_name)
-                    .model_config(model_config)
-            })
+        let Some(store) = &self.session_store else {
+            warn!(
+                "[AsterAgent] store_update_provider_config missing injected session_store; global SessionManager fallback disabled: session_id={}",
+                session_id
+            );
+            return Err(anyhow!(
+                "missing injected session_store for update_provider_config: session_id={}",
+                session_id
+            ));
+        };
+
+        store
+            .update_provider_config(session_id, Some(provider_name), Some(model_config))
             .await
-        }
     }
 
     fn scope_reply_stream<'a>(
@@ -2270,32 +2256,7 @@ impl Agent {
         ))
     }
 
-    async fn ensure_thread_runtime(
-        &self,
-        session: &Session,
-        session_config: &SessionConfig,
-    ) -> Result<()> {
-        let thread_id = session_config.resolved_thread_id().to_string();
-
-        let existing = self.thread_runtime_store.get_thread(&thread_id).await?;
-        let thread = existing.unwrap_or_else(|| {
-            ThreadRuntime::new(thread_id, session.id.clone(), session.working_dir.clone())
-        });
-        self.thread_runtime_store.upsert_thread(thread).await?;
-        Ok(())
-    }
-
-    async fn create_turn_runtime(
-        &self,
-        session: &Session,
-        session_config: &SessionConfig,
-        input_text: Option<String>,
-    ) -> Result<TurnRuntime> {
-        self.create_turn_runtime_for_session_id(&session.id, session_config, input_text)
-            .await
-    }
-
-    async fn create_turn_runtime_for_session_id(
+    async fn build_turn_runtime(
         &self,
         session_id: &str,
         session_config: &SessionConfig,
@@ -2306,37 +2267,8 @@ impl Agent {
             .as_ref()
             .cloned()
             .ok_or_else(|| anyhow!("Missing turn id after session normalization"))?;
-        if let Some(mut existing) = self.thread_runtime_store.get_turn(&turn_id).await? {
-            let mut changed = false;
-
-            if existing.input_text.is_none() && input_text.is_some() {
-                existing.input_text = input_text;
-                changed = true;
-            }
-            if existing.context_override.is_none() && session_config.turn_context.is_some() {
-                existing.context_override = session_config.turn_context.clone();
-                changed = true;
-            }
-            if existing.output_schema_runtime.is_none() {
-                let output_schema_runtime = self
-                    .resolve_turn_output_schema_runtime(session_config.turn_context.as_ref())
-                    .await;
-                if output_schema_runtime.is_some() {
-                    existing.output_schema_runtime = output_schema_runtime;
-                    changed = true;
-                }
-            }
-
-            if changed {
-                existing.updated_at = Utc::now();
-                return self.thread_runtime_store.update_turn(existing).await;
-            }
-
-            return Ok(existing);
-        }
-
         let thread_id = session_config.resolved_thread_id().to_string();
-        let turn = TurnRuntime::new(
+        Ok(TurnRuntime::new(
             turn_id,
             session_id.to_string(),
             thread_id,
@@ -2346,98 +2278,7 @@ impl Agent {
         .with_output_schema_runtime(
             self.resolve_turn_output_schema_runtime(session_config.turn_context.as_ref())
                 .await,
-        );
-        let turn = self.thread_runtime_store.create_turn(turn).await?;
-        Ok(turn)
-    }
-
-    async fn finalize_turn_runtime(
-        &self,
-        session_config: &SessionConfig,
-        status: TurnStatus,
-        error_message: Option<String>,
-    ) -> Result<()> {
-        let Some(turn_id) = session_config.turn_id.as_ref() else {
-            return Ok(());
-        };
-        let Some(mut turn) = self.thread_runtime_store.get_turn(turn_id).await? else {
-            return Ok(());
-        };
-
-        turn.status = status;
-        turn.error_message = error_message;
-        turn.completed_at = Some(chrono::Utc::now());
-        self.thread_runtime_store.update_turn(turn).await?;
-        Ok(())
-    }
-
-    async fn persist_item_runtime(&self, event: &AgentEvent) -> Result<()> {
-        let Some(item) = (match event {
-            AgentEvent::ItemStarted { item }
-            | AgentEvent::ItemUpdated { item }
-            | AgentEvent::ItemCompleted { item } => Some(item.clone()),
-            _ => None,
-        }) else {
-            return Ok(());
-        };
-
-        let existing = self.thread_runtime_store.get_item(&item.id).await?;
-        if existing.is_some() {
-            self.thread_runtime_store.update_item(item).await?;
-        } else {
-            self.thread_runtime_store.create_item(item).await?;
-        }
-        Ok(())
-    }
-
-    async fn complete_runtime_request_item(
-        &self,
-        request_id: &str,
-        response: Option<Value>,
-    ) -> Result<()> {
-        let Some(mut item) = self.thread_runtime_store.get_item(request_id).await? else {
-            return Ok(());
-        };
-
-        item.status = ItemStatus::Completed;
-        item.completed_at = Some(Utc::now());
-        item.payload = match item.payload {
-            ItemRuntimePayload::ApprovalRequest {
-                request_id,
-                action_type,
-                prompt,
-                tool_name,
-                arguments,
-                ..
-            } => ItemRuntimePayload::ApprovalRequest {
-                request_id,
-                action_type,
-                prompt,
-                tool_name,
-                arguments,
-                response,
-            },
-            ItemRuntimePayload::RequestUserInput {
-                request_id,
-                action_type,
-                prompt,
-                requested_schema,
-                ..
-            } => ItemRuntimePayload::RequestUserInput {
-                request_id,
-                action_type,
-                prompt,
-                requested_schema,
-                response,
-            },
-            payload => payload,
-        };
-        self.thread_runtime_store.update_item(item).await?;
-        Ok(())
-    }
-
-    fn runtime_status_item_id(turn_id: &str) -> String {
-        format!("turn_summary:{turn_id}")
+        ))
     }
 
     fn context_compaction_item_id(turn_id: &str) -> String {
@@ -2469,14 +2310,13 @@ impl Agent {
             .ok_or_else(|| anyhow!("Session {} has no conversation", session_config.id))?;
         let scoped_session_config = session_config.clone();
         let turn_session_config = session_config.clone();
-        let turn_session = session.clone();
+        let turn_session_id = session.id.clone();
 
         Ok(Self::scope_reply_stream(
             &session_config,
             Box::pin(async_stream::try_stream! {
-                self.ensure_thread_runtime(&turn_session, &turn_session_config).await?;
                 let turn_runtime = self
-                    .create_turn_runtime(&turn_session, &turn_session_config, None)
+                    .build_turn_runtime(&turn_session_id, &turn_session_config, None)
                     .await?;
                 let item_id = Self::context_compaction_item_id(&turn_runtime.id);
 
@@ -2507,134 +2347,14 @@ impl Agent {
                         yield AgentEvent::ContextCompactionWarning {
                             message: CONTEXT_COMPACTION_WARNING_TEXT.to_string(),
                         };
-                        self.finalize_turn_runtime(
-                            &scoped_session_config,
-                            TurnStatus::Completed,
-                            None,
-                        )
-                        .await?;
                     }
                     Err(error) => {
-                        self.finalize_turn_runtime(
-                            &scoped_session_config,
-                            TurnStatus::Failed,
-                            Some(error.to_string()),
-                        )
-                        .await?;
+                        let _ = &scoped_session_config;
                         Err(error)?;
                     }
                 }
             }),
         ))
-    }
-
-    pub async fn ensure_runtime_turn_initialized(
-        &self,
-        session_config: &SessionConfig,
-        input_text: Option<String>,
-    ) -> Result<TurnRuntime> {
-        let session_config = session_config.clone().with_runtime_defaults();
-        let thread_id = session_config.resolved_thread_id().to_string();
-
-        if self
-            .thread_runtime_store
-            .get_thread(&thread_id)
-            .await?
-            .is_some()
-        {
-            return self
-                .create_turn_runtime_for_session_id(&session_config.id, &session_config, input_text)
-                .await;
-        }
-
-        let session = self.store_get_session(&session_config.id, false).await?;
-        self.remember_session_type_hint(session.session_type).await;
-        self.ensure_thread_runtime(&session, &session_config)
-            .await?;
-        self.create_turn_runtime(&session, &session_config, input_text)
-            .await
-    }
-
-    pub async fn upsert_runtime_status_item(
-        &self,
-        session_config: &SessionConfig,
-        phase: impl Into<String>,
-        title: impl Into<String>,
-        detail: impl Into<String>,
-        checkpoints: Vec<String>,
-    ) -> Result<AgentEvent> {
-        let turn = self
-            .ensure_runtime_turn_initialized(session_config, None)
-            .await?;
-        let item_id = Self::runtime_status_item_id(&turn.id);
-        let payload = ItemRuntimePayload::RuntimeStatus {
-            phase: phase.into(),
-            title: title.into(),
-            detail: detail.into(),
-            checkpoints,
-        };
-        let now = Utc::now();
-
-        if let Some(mut existing) = self.thread_runtime_store.get_item(&item_id).await? {
-            existing.status = ItemStatus::InProgress;
-            existing.completed_at = None;
-            existing.updated_at = now;
-            existing.payload = payload;
-            let item = self.thread_runtime_store.update_item(existing).await?;
-            return Ok(AgentEvent::ItemUpdated { item });
-        }
-
-        let next_sequence = self
-            .thread_runtime_store
-            .list_items(&turn.thread_id)
-            .await?
-            .into_iter()
-            .map(|item| item.sequence)
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let item = ItemRuntime {
-            id: item_id,
-            thread_id: turn.thread_id,
-            turn_id: turn.id,
-            sequence: next_sequence,
-            status: ItemStatus::InProgress,
-            started_at: now,
-            completed_at: None,
-            updated_at: now,
-            payload,
-        };
-        let item = self.thread_runtime_store.create_item(item).await?;
-        Ok(AgentEvent::ItemStarted { item })
-    }
-
-    pub async fn complete_runtime_status_item(
-        &self,
-        session_config: &SessionConfig,
-    ) -> Result<Option<AgentEvent>> {
-        let session_config = session_config.clone().with_runtime_defaults();
-        let Some(turn_id) = session_config.turn_id.as_ref() else {
-            return Ok(None);
-        };
-        let item_id = Self::runtime_status_item_id(turn_id);
-        let Some(mut item) = self.thread_runtime_store.get_item(&item_id).await? else {
-            return Ok(None);
-        };
-
-        if item.status == ItemStatus::Completed {
-            return Ok(None);
-        }
-
-        let now = Utc::now();
-        item.status = ItemStatus::Completed;
-        item.completed_at = Some(now);
-        item.updated_at = now;
-        let item = self.thread_runtime_store.update_item(item).await?;
-        Ok(Some(AgentEvent::ItemCompleted { item }))
-    }
-
-    pub async fn runtime_snapshot(&self, session_id: &str) -> Result<SessionRuntimeSnapshot> {
-        load_managed_session_runtime_snapshot(self.thread_runtime_store.as_ref(), session_id).await
     }
 
     // ========== End Session 存储辅助方法 ==========
@@ -2780,11 +2500,7 @@ impl Agent {
         push_trace("mode", format!("aster_mode={:?}", aster_mode));
 
         if direct_answer_surface {
-            push_trace("permission_inspector", "skipped=direct_answer".to_string());
-        } else {
-            self.tool_inspection_manager
-                .update_permission_inspector_mode(aster_mode)
-                .await;
+            push_trace("tool_inspection", "skipped=direct_answer".to_string());
         }
 
         Ok(ReplyContext {
@@ -2818,7 +2534,7 @@ impl Agent {
 
     async fn handle_approved_and_denied_tools(
         &self,
-        permission_check_result: &PermissionCheckResult,
+        permission_check_result: &ToolInspectionDecision,
         request_to_response_map: &HashMap<String, Arc<Mutex<Message>>>,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
         session: &Session,
@@ -2905,7 +2621,7 @@ impl Agent {
     }
 
     async fn handle_denied_tools(
-        permission_check_result: &PermissionCheckResult,
+        permission_check_result: &ToolInspectionDecision,
         request_to_response_map: &HashMap<String, Arc<Mutex<Message>>>,
     ) {
         for request in &permission_check_result.denied {
@@ -3165,33 +2881,6 @@ impl Agent {
         Ok(session_config)
     }
 
-    pub async fn add_sub_recipes(&self, sub_recipes_to_add: Vec<SubRecipe>) {
-        let mut sub_recipes = self.sub_recipes.lock().await;
-        for sr in sub_recipes_to_add {
-            sub_recipes.insert(sr.name.clone(), sr);
-        }
-    }
-
-    pub async fn apply_recipe_components(
-        &self,
-        sub_recipes: Option<Vec<SubRecipe>>,
-        response: Option<Response>,
-        include_final_output: bool,
-    ) -> Result<()> {
-        if let Some(sub_recipes) = sub_recipes {
-            self.add_sub_recipes(sub_recipes).await;
-        }
-
-        let output_schema = if include_final_output {
-            response.and_then(|response| response.json_schema)
-        } else {
-            None
-        };
-
-        self.set_session_output_schema(output_schema).await?;
-        Ok(())
-    }
-
     /// Dispatch a single tool call to the appropriate client
     #[instrument(skip(self, tool_call, request_id), fields(input, output))]
     pub async fn dispatch_tool_call(
@@ -3258,7 +2947,7 @@ impl Agent {
             };
         }
 
-        let needs_current_surface_session = tool_call.name == AGENT_TOOL_NAME
+        let needs_current_surface_session = tool_call.name == COLLAB_AGENT_TOOL_NAME
             && (session.session_type == SessionType::SubAgent
                 || self.agent_control_tools.is_some());
         let latest_session = if needs_current_surface_session {
@@ -3269,7 +2958,7 @@ impl Agent {
         let effective_session = latest_session.as_ref().unwrap_or(session);
 
         if effective_session.session_type == SessionType::SubAgent
-            && tool_call.name == AGENT_TOOL_NAME
+            && tool_call.name == COLLAB_AGENT_TOOL_NAME
         {
             // Only team subagents keep the current surface needed for synchronous nested subagents.
             // Plain delegated workers still must not recursively spawn more agents.
@@ -3291,48 +2980,29 @@ impl Agent {
         }
 
         debug!("WAITING_TOOL_START: {}", tool_call.name);
-        let result: ToolCallResult = if tool_call.name == AGENT_TOOL_NAME {
+        let result: ToolCallResult = if tool_call.name == COLLAB_AGENT_TOOL_NAME {
             let arguments = tool_call
                 .arguments
                 .clone()
                 .map(Value::Object)
                 .unwrap_or(Value::Object(serde_json::Map::new()));
-            if let Some(callback_result) = self
-                .try_dispatch_callback_backed_agent_tool(arguments.clone(), effective_session)
-                .await
+            if let Some(collab_result) = execute_runtime_collab_tool(
+                COLLAB_AGENT_TOOL_NAME,
+                &arguments,
+                &effective_session.id,
+                self.agent_control_tools.as_ref(),
+                self.session_store.clone(),
+            )
+            .await
             {
-                return (request_id, callback_result);
+                return (request_id, Ok(collab_result));
             }
 
-            let provider = match pinned_provider.clone() {
-                Some(provider) => provider,
-                None => match self.provider().await {
-                    Ok(provider) => provider,
-                    Err(_) => {
-                        return (
-                            request_id,
-                            Err(ErrorData::new(
-                                ErrorCode::INTERNAL_ERROR,
-                                "Provider is required".to_string(),
-                                None,
-                            )),
-                        );
-                    }
-                },
-            };
-
-            let extensions = self.get_extension_configs().await;
-            let task_config =
-                TaskConfig::new(provider, &session.id, &session.working_dir, extensions);
-            let sub_recipes = self.sub_recipes.lock().await.clone();
-
-            handle_subagent_tool(
-                arguments,
-                task_config,
-                sub_recipes,
-                session.working_dir.clone(),
-                cancellation_token,
-            )
+            ToolCallResult::from(Err(ErrorData::new(
+                ErrorCode::INTERNAL_ERROR,
+                "Agent runtime spawn callback is not configured".to_string(),
+                None,
+            )))
         } else if self.is_frontend_tool(&tool_call.name).await {
             // For frontend tools, return an error indicating we need frontend execution
             ToolCallResult::from(Err(ErrorData::new(
@@ -3344,7 +3014,31 @@ impl Agent {
             // 优先检查 tool_registry 中的原生工具
             // 原生工具直接在进程内执行，不需要 MCP 子进程
             let native_tool_name = if let Some(tool_name) =
+                self.canonical_current_request_user_input_tool_name(tool_call.name.as_ref())
+            {
+                Some(tool_name)
+            } else if let Some(tool_name) =
                 self.canonical_current_collab_tool_name(tool_call.name.as_ref())
+            {
+                Some(tool_name)
+            } else if let Some(tool_name) =
+                self.canonical_current_file_read_tool_name(tool_call.name.as_ref())
+            {
+                Some(tool_name)
+            } else if let Some(tool_name) =
+                self.canonical_current_file_search_tool_name(tool_call.name.as_ref())
+            {
+                Some(tool_name)
+            } else if let Some(tool_name) =
+                self.canonical_current_shell_tool_name(tool_call.name.as_ref())
+            {
+                Some(tool_name)
+            } else if let Some(tool_name) =
+                self.canonical_current_skill_tool_name(tool_call.name.as_ref())
+            {
+                Some(tool_name)
+            } else if let Some(tool_name) =
+                self.canonical_current_gateway_tool_name(tool_call.name.as_ref())
             {
                 Some(tool_name)
             } else {
@@ -3361,9 +3055,8 @@ impl Agent {
                     .clone()
                     .map(Value::Object)
                     .unwrap_or(Value::Object(serde_json::Map::new()));
-                let mut context =
-                    crate::tools::context::ToolContext::new(session.working_dir.clone())
-                        .with_session_id(session.id.clone());
+                let mut context = ToolContext::new(session.working_dir.clone())
+                    .with_session_id(session.id.clone());
                 let provider = match pinned_provider.clone() {
                     Some(provider) => Some(provider),
                     None => self.provider().await.ok(),
@@ -3386,19 +3079,21 @@ impl Agent {
                     })
                 {
                     hook_result
-                } else if let Some(ask_result) = execute_runtime_request_user_input_tool(
-                    &tool_name,
-                    &params,
-                    self.ask_callback.as_ref(),
-                )
-                .await
+                } else if let Some(request_user_input_result) =
+                    execute_runtime_request_user_input_tool(
+                        &tool_name,
+                        &params,
+                        self.request_user_input_callback.as_ref(),
+                    )
+                    .await
                 {
-                    ask_result
+                    request_user_input_result
                 } else if let Some(collab_result) = execute_runtime_collab_tool(
                     &tool_name,
                     &params,
                     &context.session_id,
                     self.agent_control_tools.as_ref(),
+                    self.session_store.clone(),
                 )
                 .await
                 {
@@ -3415,13 +3110,22 @@ impl Agent {
                     execute_runtime_file_search_tool(&tool_name, &params, &context).await
                 {
                     search_result
+                } else if let Some(gateway_result) = execute_runtime_gateway_tool(
+                    &self.runtime_gateway_tools,
+                    &tool_name,
+                    &params,
+                    &context,
+                )
+                .await
+                {
+                    gateway_result
                 } else if let Some(dispatch_result) =
                     execute_runtime_native_dispatch_tool(&tool_name, &params, &context).await
                 {
                     dispatch_result
                 } else {
                     let registry = self.tool_registry.read().await;
-                    let execute_result = registry.execute(&tool_name, params, &context, None).await;
+                    let execute_result = registry.execute(&tool_name, params, &context).await;
                     drop(registry);
 
                     match execute_result {
@@ -3442,6 +3146,8 @@ impl Agent {
                 }
             } else {
                 // MCP 工具：通过 extension_manager 分发
+                self.sync_platform_extension_context(Some(session.id.clone()))
+                    .await;
                 let result = self
                     .extension_manager
                     .dispatch_tool_call(tool_call.clone(), cancellation_token.unwrap_or_default())
@@ -3519,6 +3225,8 @@ impl Agent {
                 }
             }
             _ => {
+                self.sync_platform_extension_context(crate::session_context::current_session_id())
+                    .await;
                 self.extension_manager
                     .add_extension(extension.clone())
                     .await?;
@@ -3526,11 +3234,6 @@ impl Agent {
         }
 
         Ok(())
-    }
-
-    pub async fn subagents_enabled(&self) -> bool {
-        let session_type = self.current_session_type().await;
-        self.subagents_enabled_for_session_type(session_type).await
     }
 
     async fn remember_session_type_hint(&self, session_type: SessionType) {
@@ -3545,44 +3248,9 @@ impl Agent {
         *self.session_type_hint.read().await
     }
 
-    async fn current_session_type(&self) -> Option<SessionType> {
-        if let Some(session_type) = self.session_type_hint().await {
-            return Some(session_type);
-        }
-
-        let session_id = self.extension_manager.get_context().await.session_id?;
-        let session_type = self
-            .store_get_session(&session_id, false)
-            .await
-            .ok()
-            .map(|session| session.session_type);
-        if let Some(session_type) = session_type {
-            self.remember_session_type_hint(session_type).await;
-        }
-        session_type
-    }
-
-    async fn subagents_enabled_for_session_type(&self, session_type: Option<SessionType>) -> bool {
-        let config = crate::config::Config::global();
-        let is_autonomous = config.get_aster_mode().unwrap_or(AsterMode::Auto) == AsterMode::Auto;
-        if !is_autonomous {
-            return false;
-        }
-        if self
-            .provider()
-            .await
-            .map(|provider| provider.get_active_model_name().starts_with("gemini"))
-            .unwrap_or(false)
-        {
-            return false;
-        }
-        if matches!(session_type, Some(SessionType::SubAgent)) {
-            return false;
-        }
-        true
-    }
-
     pub async fn list_tools(&self, extension_name: Option<String>) -> Vec<Tool> {
+        self.sync_platform_extension_context(crate::session_context::current_session_id())
+            .await;
         let mut prefixed_tools = self
             .extension_manager
             .get_prefixed_tools(extension_name.clone())
@@ -3610,32 +3278,12 @@ impl Agent {
         let subagent_teammate_tools_enabled = current_session
             .as_ref()
             .is_some_and(session_allows_subagent_teammate_tools);
-        let subagents_enabled = self
-            .subagents_enabled_for_session_type(current_session_type)
-            .await;
         let resources_supported = self.extension_manager.supports_resources().await;
         let tool_gates = runtime_tool_surface_gates();
-        let callback_backed_agent_enabled = self
-            .agent_control_tools
-            .as_ref()
-            .is_some_and(|config| config.spawn_agent.is_some());
-        let registry_has_agent_tool = {
-            let registry = self.tool_registry.read().await;
-            registry.contains_native(AGENT_TOOL_NAME)
-        };
 
         if extension_name.is_none() {
             if let Some(final_output_tool) = self.final_output_tool.lock().await.as_ref() {
                 prefixed_tools.push(final_output_tool.tool());
-            }
-
-            if (subagents_enabled || subagent_teammate_tools_enabled)
-                && !callback_backed_agent_enabled
-                && !registry_has_agent_tool
-            {
-                let sub_recipes = self.sub_recipes.lock().await;
-                let sub_recipes_vec: Vec<_> = sub_recipes.values().cloned().collect();
-                prefixed_tools.push(create_subagent_tool(&sub_recipes_vec));
             }
 
             // 添加 tool_registry 中的原生工具；Skill 由 Lime current overlay 注入。
@@ -3643,7 +3291,83 @@ impl Agent {
                 .iter()
                 .map(|tool| tool.name.as_ref().to_string())
                 .collect();
+            if let Some(tool_def) = self.current_request_user_input_tool_definition() {
+                if listed_tool_names.insert(tool_def.name.clone()) {
+                    let tool = Tool::new(
+                        tool_def.name,
+                        tool_def.description,
+                        tool_def
+                            .input_schema
+                            .as_object()
+                            .cloned()
+                            .unwrap_or_default(),
+                    );
+                    prefixed_tools.push(tool);
+                }
+            }
             for tool_def in self.current_collab_tool_definitions() {
+                if !listed_tool_names.insert(tool_def.name.clone()) {
+                    continue;
+                }
+
+                let tool = Tool::new(
+                    tool_def.name,
+                    tool_def.description,
+                    tool_def
+                        .input_schema
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default(),
+                );
+                prefixed_tools.push(tool);
+            }
+            for tool_def in self.current_file_tool_definitions(resources_supported, tool_gates) {
+                if !listed_tool_names.insert(tool_def.name.clone()) {
+                    continue;
+                }
+
+                let tool = Tool::new(
+                    tool_def.name,
+                    tool_def.description,
+                    tool_def
+                        .input_schema
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default(),
+                );
+                prefixed_tools.push(tool);
+            }
+            for tool_def in self.current_shell_tool_definitions(resources_supported, tool_gates) {
+                if !listed_tool_names.insert(tool_def.name.clone()) {
+                    continue;
+                }
+
+                let tool = Tool::new(
+                    tool_def.name,
+                    tool_def.description,
+                    tool_def
+                        .input_schema
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default(),
+                );
+                prefixed_tools.push(tool);
+            }
+            if let Some(tool_def) = self.current_skill_tool_definition() {
+                if listed_tool_names.insert(tool_def.name.clone()) {
+                    let tool = Tool::new(
+                        tool_def.name,
+                        tool_def.description,
+                        tool_def
+                            .input_schema
+                            .as_object()
+                            .cloned()
+                            .unwrap_or_default(),
+                    );
+                    prefixed_tools.push(tool);
+                }
+            }
+            for tool_def in self.current_gateway_tool_definitions(resources_supported, tool_gates) {
                 if !listed_tool_names.insert(tool_def.name.clone()) {
                     continue;
                 }
@@ -3741,22 +3465,6 @@ impl Agent {
         request_id: String,
         confirmation: PermissionConfirmation,
     ) {
-        let response = serde_json::json!({
-            "confirmed": !matches!(
-                confirmation.permission,
-                crate::permission::Permission::Cancel | crate::permission::Permission::DenyOnce
-            )
-        });
-        if let Err(error) = self
-            .complete_runtime_request_item(&request_id, Some(response))
-            .await
-        {
-            warn!(
-                request_id = %request_id,
-                ?error,
-                "Failed to complete runtime approval item"
-            );
-        }
         if let Err(e) = self.confirmation_tx.send((request_id, confirmation)).await {
             error!("Failed to send confirmation: {}", e);
         }
@@ -3797,16 +3505,6 @@ impl Agent {
                                 ))
                             })),
                         ));
-                    }
-                    if let Err(error) = self
-                        .complete_runtime_request_item(id, Some(user_data.clone()))
-                        .await
-                    {
-                        warn!(
-                            request_id = %id,
-                            ?error,
-                            "Failed to complete runtime elicitation item"
-                        );
                     }
                     self.store_add_message(&session_config.id, &user_message)
                         .await?;
@@ -3868,7 +3566,14 @@ impl Agent {
                             let updated_session = if let Some(store) = &session_store_clone {
                                 store.get_session(&session_id_clone, true).await
                             } else {
-                                query_session(&session_id_clone, true).await
+                                warn!(
+                                    "[AsterAgent] history replacement missing injected session_store; global SessionManager fallback disabled: session_id={}",
+                                    session_id_clone
+                                );
+                                Err(anyhow!(
+                                    "missing injected session_store for history replacement: session_id={}",
+                                    session_id_clone
+                                ))
                             }
                                 .map_err(|e| anyhow!("Failed to fetch updated session: {}", e))?;
                             let updated_conversation = updated_session
@@ -3926,9 +3631,8 @@ impl Agent {
             Box::pin(async_stream::try_stream! {
                 let final_conversation = conversation;
 
-                self.ensure_thread_runtime(&session, &scoped_session_config).await?;
                 let turn_runtime = self
-                    .create_turn_runtime(&session, &scoped_session_config, input_text_for_turn.clone())
+                    .build_turn_runtime(&session.id, &scoped_session_config, input_text_for_turn.clone())
                     .await?;
                 let mut item_runtime_projector = TurnItemRuntimeProjector::new(&turn_runtime);
                 yield AgentEvent::TurnStarted {
@@ -3936,12 +3640,10 @@ impl Agent {
                 };
                 if let Some(user_item_event) = item_runtime_projector.project_user_input(&turn_runtime)
                 {
-                    self.persist_item_runtime(&user_item_event).await?;
                     yield user_item_event;
                 }
 
                 let mut turn_status = TurnStatus::Completed;
-                let mut turn_error = None;
 
                 let mut reply_stream = match self
                     .reply_internal(
@@ -3955,9 +3657,6 @@ impl Agent {
                 {
                     Ok(stream) => stream,
                     Err(err) => {
-                        turn_status = TurnStatus::Failed;
-                        turn_error = Some(err.to_string());
-                        self.finalize_turn_runtime(&scoped_session_config, turn_status, turn_error.clone()).await?;
                         Err(err)?;
                         unreachable!();
                     }
@@ -3979,7 +3678,6 @@ impl Agent {
                     match event {
                         Ok(event) => {
                             for runtime_event in item_runtime_projector.project_agent_event(&event) {
-                                self.persist_item_runtime(&runtime_event).await?;
                                 yield runtime_event;
                             }
                             yield event;
@@ -3995,14 +3693,11 @@ impl Agent {
                             } else {
                                 TurnStatus::Failed
                             };
-                            turn_error = Some(err.to_string());
                             for runtime_event in
                                 item_runtime_projector.finalize_open_items(turn_status)
                             {
-                                self.persist_item_runtime(&runtime_event).await?;
                                 yield runtime_event;
                             }
-                            self.finalize_turn_runtime(&scoped_session_config, turn_status, turn_error.clone()).await?;
                             Err(err)?;
                             unreachable!();
                         }
@@ -4013,10 +3708,8 @@ impl Agent {
                     turn_status = TurnStatus::Aborted;
                 }
                 for runtime_event in item_runtime_projector.finalize_open_items(turn_status) {
-                    self.persist_item_runtime(&runtime_event).await?;
                     yield runtime_event;
                 }
-                self.finalize_turn_runtime(&scoped_session_config, turn_status, turn_error).await?;
             }),
         ))
     }
@@ -4066,10 +3759,12 @@ impl Agent {
             match pinned_provider.session_name_generation_execution_strategy() {
                 SessionNameGenerationExecutionStrategy::Background => {
                     let provider = pinned_provider.clone();
+                    let session_store = self.session_store.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = SessionManager::maybe_update_name_for_session(
-                            &session_for_name,
-                            &conversation_for_name,
+                        if let Err(e) = maybe_update_name_for_session_with_store(
+                            session_store,
+                            session_for_name,
+                            conversation_for_name,
                             provider,
                         )
                         .await
@@ -4349,20 +4044,10 @@ impl Agent {
                                         )
                                         .await?;
 
-                                    let permission_check_result = self.tool_inspection_manager
-                                        .process_inspection_results_with_permission_inspector(
-                                            &remaining_requests,
-                                            &inspection_results,
-                                        )
-                                        .unwrap_or_else(|| {
-                                            let mut result = PermissionCheckResult {
-                                                approved: vec![],
-                                                needs_approval: vec![],
-                                                denied: vec![],
-                                            };
-                                            result.needs_approval.extend(remaining_requests.iter().cloned());
-                                            result
-                                        });
+                                    let permission_check_result = categorize_inspected_tools(
+                                        &remaining_requests,
+                                        &inspection_results,
+                                    );
 
                                     // Track extension requests
                                     let mut enable_extension_request_ids = vec![];
@@ -4692,10 +4377,12 @@ impl Agent {
             {
                 let conversation_for_name =
                     conversation_for_name.unwrap_or_else(|| conversation.clone());
+                let session_store = self.session_store.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = SessionManager::maybe_update_name_for_session(
-                        &session_for_name,
-                        &conversation_for_name,
+                    if let Err(e) = maybe_update_name_for_session_with_store(
+                        session_store,
+                        session_for_name,
+                        conversation_for_name,
                         provider,
                     )
                     .await
@@ -4727,12 +4414,6 @@ impl Agent {
         )
         .await
         .context("Failed to persist provider config to session")
-    }
-
-    pub async fn set_permission_mode(&self, mode: AsterMode) {
-        self.tool_inspection_manager
-            .update_permission_inspector_mode(mode)
-            .await;
     }
 
     /// Override the system prompt with a custom template

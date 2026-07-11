@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildBenchmarkReleaseRunPlan,
+  resolveStepTimeoutMs,
   runBenchmarkRelease,
   validateBenchmarkReleaseRun,
 } from "./benchmark-release-run.mjs";
@@ -291,6 +292,36 @@ describe("benchmark release run", () => {
     ]);
   });
 
+  it("P0 长门禁使用分级超时，避免大版本 GUI / Rust 回归被固定 30 分钟截断", () => {
+    const fixtureStep = {
+      kind: "p0_npm_gate",
+      command: "npm run smoke:agent-runtime-current-fixture",
+    };
+    const codingStep = {
+      kind: "p0_npm_gate",
+      command:
+        "npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools",
+    };
+    const verifyLocalStep = {
+      kind: "p0_npm_gate",
+      command: "npm run verify:local",
+    };
+    const guiSmokeStep = {
+      kind: "p0_npm_gate",
+      command: "npm run verify:gui-smoke",
+    };
+    const regularStep = {
+      kind: "p0_npm_gate",
+      command: "npm run test:contracts",
+    };
+
+    expect(resolveStepTimeoutMs(fixtureStep)).toBe(90 * 60 * 1000);
+    expect(resolveStepTimeoutMs(codingStep)).toBe(90 * 60 * 1000);
+    expect(resolveStepTimeoutMs(verifyLocalStep)).toBe(120 * 60 * 1000);
+    expect(resolveStepTimeoutMs(guiSmokeStep)).toBe(60 * 60 * 1000);
+    expect(resolveStepTimeoutMs(regularStep)).toBe(30 * 60 * 1000);
+  });
+
   it("strict gate 会加入 release gate 步骤", () => {
     const root = makeRepo();
 
@@ -492,6 +523,50 @@ describe("benchmark release run", () => {
         reason: "command_failed",
       }),
     );
+    expect(report.steps.at(-1)).toEqual(
+      expect.objectContaining({
+        id: "benchmark-release:check",
+        status: "passed",
+      }),
+    );
+  });
+
+  it("P0 step artifact 写入失败时保留结构化 failed step", () => {
+    const root = makeRepo();
+    const blockedP0SuiteDir = path.join(
+      root,
+      ".lime/benchmark/releases/1.97.0/p0/agent-qc-p0-manifest",
+    );
+    fs.mkdirSync(path.dirname(blockedP0SuiteDir), { recursive: true });
+    fs.writeFileSync(blockedP0SuiteDir, "not a directory", "utf8");
+
+    const report = runBenchmarkRelease({
+      rootDir: root,
+      manifestPath: "manifest.json",
+      version: "1.97.0",
+      includeP0: true,
+      commandRunner: () => ({
+        status: 0,
+        signal: "",
+        stdout: "",
+        stderr: "",
+        error: "",
+      }),
+      now: () => new Date("2026-07-09T00:00:00.000Z"),
+    });
+    const validation = validateBenchmarkReleaseRun(report);
+    const p0Step = report.steps.find(
+      (step) => step.id === "agent-qc-p0-manifest:npm-01-agent-qc-check",
+    );
+
+    expect(validation.valid).toBe(false);
+    expect(p0Step).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        reason: "artifact_write_failed",
+      }),
+    );
+    expect(p0Step.error).toContain("artifact_write_failed:");
     expect(report.steps.at(-1)).toEqual(
       expect.objectContaining({
         id: "benchmark-release:check",

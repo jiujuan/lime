@@ -4,102 +4,88 @@
 //! - 避免通用对话默认向模型暴露全部本地 Skills
 //! - 保留显式工作流对 Skill 工具的按会话放行能力
 
-use aster::Message;
-use aster::{ModelConfig, Provider};
-use aster::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
+use aster::{Message, ModelConfig, Provider, ToolContext};
 use async_trait::async_trait;
+use futures::FutureExt;
 use lime_skills::{LlmProvider, SkillError};
+use rmcp::model::{CallToolResult, ErrorCode, ErrorData};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use tool_runtime::skill_execute::{
     run_skill_execution, RuntimeSkillDefinitionBackend, RuntimeSkillExecutionError,
     RuntimeSkillExecutionRequest, RuntimeSkillExecutionResult,
 };
-use tool_runtime::skill_gate::{
-    check_skill_tool_access, skill_tool_input_schema, SKILL_TOOL_DESCRIPTION, SKILL_TOOL_NAME,
+use tool_runtime::skill_gate::{check_skill_tool_access, SKILL_TOOL_NAME};
+use tool_runtime::tool_result_projection::{
+    runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
 };
 
-fn attach_metadata(mut tool_result: ToolResult, metadata: HashMap<String, Value>) -> ToolResult {
-    for (key, value) in metadata {
-        tool_result = tool_result.with_metadata(key, value);
-    }
-    tool_result
-}
-
-fn tool_result_from_runtime(result: RuntimeSkillExecutionResult) -> ToolResult {
+fn call_tool_result_from_runtime(result: RuntimeSkillExecutionResult) -> CallToolResult {
     let RuntimeSkillExecutionResult {
         success,
         output,
         error,
         metadata,
     } = result;
-    let tool_result = if success {
-        output
-            .map(ToolResult::success)
-            .unwrap_or_else(ToolResult::success_empty)
-    } else {
-        ToolResult::error(error.or(output).unwrap_or_default())
+    runtime_tool_result_to_call_tool_result(RuntimeToolResultParts {
+        success,
+        output,
+        error,
+        metadata,
+    })
+}
+
+fn skill_execution_error_data(message: impl Into<String>) -> ErrorData {
+    ErrorData::new(ErrorCode::INTERNAL_ERROR, message.into(), None)
+}
+
+pub(crate) type SkillCallFuture =
+    Pin<Box<dyn Future<Output = Result<CallToolResult, ErrorData>> + Send>>;
+
+pub(crate) fn execute_current_skill_tool_request(
+    tool_name: &str,
+    params: &Value,
+    context: &ToolContext,
+) -> Option<SkillCallFuture> {
+    if tool_name.trim() != SKILL_TOOL_NAME {
+        return None;
+    }
+
+    if let Err(error) = check_skill_tool_access(&context.session_id, params) {
+        return Some(
+            futures::future::ready(Err(skill_execution_error_data(error.message()))).boxed(),
+        );
+    }
+
+    let provider = match CurrentSessionSkillProvider::from_context(context) {
+        Ok(provider) => provider,
+        Err(error) => {
+            return Some(
+                futures::future::ready(Err(skill_execution_error_data(
+                    error.message().to_string(),
+                )))
+                .boxed(),
+            );
+        }
     };
-    attach_metadata(tool_result, metadata)
-}
+    let session_id = context.session_id.clone();
+    let params = params.clone();
 
-pub struct LimeSkillTool;
-
-impl LimeSkillTool {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for LimeSkillTool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[async_trait]
-impl Tool for LimeSkillTool {
-    fn name(&self) -> &str {
-        SKILL_TOOL_NAME
-    }
-
-    fn description(&self) -> &str {
-        SKILL_TOOL_DESCRIPTION
-    }
-
-    fn input_schema(&self) -> Value {
-        skill_tool_input_schema()
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        if let Err(error) = check_skill_tool_access(&context.session_id, &params) {
-            return Err(ToolError::execution_failed(error.message()));
+    Some(
+        async move {
+            let backend = RuntimeSkillDefinitionBackend::new(provider);
+            run_skill_execution(
+                &backend,
+                RuntimeSkillExecutionRequest::new(session_id, params),
+            )
+            .await
+            .map(call_tool_result_from_runtime)
+            .map_err(|error| skill_execution_error_data(error.message().to_string()))
         }
-
-        let provider = CurrentSessionSkillProvider::from_context(context)
-            .map_err(|error| ToolError::execution_failed(error.message().to_string()))?;
-        let backend = RuntimeSkillDefinitionBackend::new(provider);
-        run_skill_execution(
-            &backend,
-            RuntimeSkillExecutionRequest::new(context.session_id.clone(), params),
-        )
-        .await
-        .map(tool_result_from_runtime)
-        .map_err(|error| ToolError::execution_failed(error.message().to_string()))
-    }
-
-    async fn check_permissions(
-        &self,
-        params: &Value,
-        context: &ToolContext,
-    ) -> PermissionCheckResult {
-        if let Err(error) = check_skill_tool_access(&context.session_id, params) {
-            return PermissionCheckResult::deny(error.message());
-        }
-
-        PermissionCheckResult::allow()
-    }
+        .boxed(),
+    )
 }
 
 #[derive(Clone)]
@@ -166,14 +152,14 @@ impl LlmProvider for CurrentSessionSkillProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::PermissionBehavior;
     use serde_json::json;
     use tool_runtime::skill_gate::{
-        add_skill_tool_session_allowed_capabilities, clear_skill_tool_session_access,
-        normalize_skill_invocation_params, set_skill_tool_session_access,
-        set_skill_tool_session_allowed_skill_sources, set_skill_tool_session_allowed_skills,
-        skill_tool_disabled_message, workspace_skill_source_for_invocation_params,
-        SkillToolSessionSkillSource, IMAGE_GENERATE_SKILL_NAME, IMAGE_GENERATION_CONTRACT_KEY,
+        add_skill_tool_session_allowed_capabilities, check_skill_tool_access,
+        clear_skill_tool_session_access, normalize_skill_invocation_params,
+        set_skill_tool_session_access, set_skill_tool_session_allowed_skill_sources,
+        set_skill_tool_session_allowed_skills, skill_tool_disabled_message,
+        workspace_skill_source_for_invocation_params, SkillToolSessionSkillSource,
+        IMAGE_GENERATE_SKILL_NAME, IMAGE_GENERATION_CONTRACT_KEY,
     };
     use tool_runtime::skill_result::workspace_skill_source_metadata_map;
 
@@ -186,18 +172,14 @@ mod tests {
         let session_id = "skill-disabled-session";
         clear_skill_tool_session_access(session_id);
 
-        let tool = LimeSkillTool::new();
-        let result = tool
-            .check_permissions(
-                &serde_json::json!({ "skill": "research" }),
-                &create_context(session_id),
-            )
-            .await;
+        let result =
+            check_skill_tool_access(session_id, &serde_json::json!({ "skill": "research" }));
 
-        assert_eq!(result.behavior, PermissionBehavior::Deny);
         assert_eq!(
-            result.message.as_deref(),
-            Some(skill_tool_disabled_message())
+            result
+                .expect_err("disabled session should reject")
+                .message(),
+            skill_tool_disabled_message()
         );
     }
 
@@ -206,17 +188,12 @@ mod tests {
         let session_id = "skill-enabled-session";
         set_skill_tool_session_access(session_id, true);
 
-        let tool = LimeSkillTool::new();
-        let result = tool
-            .check_permissions(
-                &serde_json::json!({ "skill": "research" }),
-                &create_context(session_id),
-            )
-            .await;
+        let result =
+            check_skill_tool_access(session_id, &serde_json::json!({ "skill": "research" }));
 
         clear_skill_tool_session_access(session_id);
 
-        assert_eq!(result.behavior, PermissionBehavior::Allow);
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -224,28 +201,21 @@ mod tests {
         let session_id = "skill-allowlisted-session";
         set_skill_tool_session_allowed_skills(session_id, ["project:capability-report"]);
 
-        let tool = LimeSkillTool::new();
-        let allowed = tool
-            .check_permissions(
-                &serde_json::json!({ "skill": "project:capability-report" }),
-                &create_context(session_id),
-            )
-            .await;
-        let denied = tool
-            .check_permissions(
-                &serde_json::json!({ "skill": "project:other-skill" }),
-                &create_context(session_id),
-            )
-            .await;
+        let allowed = check_skill_tool_access(
+            session_id,
+            &serde_json::json!({ "skill": "project:capability-report" }),
+        );
+        let denied = check_skill_tool_access(
+            session_id,
+            &serde_json::json!({ "skill": "project:other-skill" }),
+        );
 
         clear_skill_tool_session_access(session_id);
 
-        assert_eq!(allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(denied.behavior, PermissionBehavior::Deny);
+        assert!(allowed.is_ok());
         assert!(denied
-            .message
-            .as_deref()
-            .unwrap_or_default()
+            .expect_err("other skill should be denied")
+            .message()
             .contains("未授权执行 Skill"));
     }
 
@@ -254,28 +224,19 @@ mod tests {
         let session_id = "skill-image-capability-session";
         add_skill_tool_session_allowed_capabilities(session_id, [IMAGE_GENERATION_CONTRACT_KEY]);
 
-        let tool = LimeSkillTool::new();
-        let image_allowed = tool
-            .check_permissions(
-                &serde_json::json!({ "skill": IMAGE_GENERATE_SKILL_NAME }),
-                &create_context(session_id),
-            )
-            .await;
-        let research_denied = tool
-            .check_permissions(
-                &serde_json::json!({ "skill": "research" }),
-                &create_context(session_id),
-            )
-            .await;
+        let image_allowed = check_skill_tool_access(
+            session_id,
+            &serde_json::json!({ "skill": IMAGE_GENERATE_SKILL_NAME }),
+        );
+        let research_denied =
+            check_skill_tool_access(session_id, &serde_json::json!({ "skill": "research" }));
 
         clear_skill_tool_session_access(session_id);
 
-        assert_eq!(image_allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(research_denied.behavior, PermissionBehavior::Deny);
+        assert!(image_allowed.is_ok());
         assert!(research_denied
-            .message
-            .as_deref()
-            .unwrap_or_default()
+            .expect_err("research skill should be denied")
+            .message()
             .contains("未授权执行 Skill"));
     }
 
@@ -296,13 +257,10 @@ mod tests {
         };
         set_skill_tool_session_allowed_skill_sources(session_id, [source.clone()]);
 
-        let tool = LimeSkillTool::new();
-        let allowed = tool
-            .check_permissions(
-                &serde_json::json!({ "skill": "capability-report" }),
-                &create_context(session_id),
-            )
-            .await;
+        let allowed = check_skill_tool_access(
+            session_id,
+            &serde_json::json!({ "skill": "capability-report" }),
+        );
         let restored = workspace_skill_source_for_invocation_params(
             session_id,
             &serde_json::json!({ "skill": "project:capability-report" }),
@@ -312,7 +270,7 @@ mod tests {
 
         clear_skill_tool_session_access(session_id);
 
-        assert_eq!(allowed.behavior, PermissionBehavior::Allow);
+        assert!(allowed.is_ok());
         assert_eq!(restored, source);
         assert_eq!(metadata.get("tool_family"), Some(&json!("skill")));
         assert_eq!(
@@ -345,19 +303,45 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn disabled_session_should_fail_execute() {
-        let session_id = "skill-execute-disabled-session";
+    async fn current_skill_hook_rejects_disabled_session_before_provider() {
+        let session_id = "skill-current-hook-disabled";
         clear_skill_tool_session_access(session_id);
 
-        let tool = LimeSkillTool::new();
-        let error = tool
-            .execute(
-                serde_json::json!({ "skill": "research" }),
-                &create_context(session_id),
-            )
-            .await
-            .expect_err("disabled session should reject execute");
+        let params = json!({ "skill": "research" });
+        let context = create_context(session_id);
 
-        assert!(error.to_string().contains("未启用技能自动调用"));
+        let result = execute_current_skill_tool_request(SKILL_TOOL_NAME, &params, &context)
+            .expect("Skill should be handled before Aster registry fallback");
+        let error = result
+            .await
+            .expect_err("disabled Skill execution should fail");
+
+        assert!(error.message.contains("未启用技能自动调用"));
+    }
+
+    #[tokio::test]
+    async fn current_skill_hook_requires_provider_after_gate_allows() {
+        let session_id = "skill-current-hook-missing-provider";
+        set_skill_tool_session_access(session_id, true);
+
+        let params = json!({ "skill": "research" });
+        let context = create_context(session_id);
+
+        let result = execute_current_skill_tool_request(SKILL_TOOL_NAME, &params, &context)
+            .expect("Skill should be handled before Aster registry fallback");
+        let error = result
+            .await
+            .expect_err("Skill execution without provider should fail");
+        clear_skill_tool_session_access(session_id);
+
+        assert!(error.message.contains("当前 turn 没有关联可用 provider"));
+    }
+
+    #[test]
+    fn current_skill_hook_ignores_non_skill_tools() {
+        let params = json!({ "command": "printf ignored" });
+        let context = create_context("skill-current-hook-non-skill");
+
+        assert!(execute_current_skill_tool_request("Bash", &params, &context).is_none());
     }
 }

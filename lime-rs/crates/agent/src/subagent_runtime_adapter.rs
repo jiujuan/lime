@@ -100,21 +100,22 @@ fn project_runtime_subagent_turn_status(status: RuntimeTurnStatusRecord) -> Suba
 mod tests {
     use super::project_subagent_latest_turn_record;
     use agent_runtime::session_execution::SubagentTurnStatus;
-    use aster::{
-        ItemRuntime, ItemRuntimePayload, ItemStatus, SessionRuntimeSnapshot, ThreadRuntime,
-        ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
-    };
     use chrono::Utc;
+    use thread_store::runtime_snapshot::{
+        RuntimeItemPayloadRecord, RuntimeItemSnapshotRecord, RuntimeItemStatusRecord,
+        RuntimeSessionSnapshotRecord, RuntimeThreadSnapshotRecord, RuntimeTurnSnapshotRecord,
+        RuntimeTurnStatusRecord,
+    };
 
     #[test]
     fn project_subagent_latest_turn_record_should_include_duration_tool_count_and_result_ref() {
         let started_at = Utc::now();
         let completed_at = started_at + chrono::Duration::milliseconds(1_250);
-        let turn = TurnRuntime {
+        let turn = RuntimeTurnSnapshotRecord {
             id: "turn-1".to_string(),
             session_id: "child-1".to_string(),
             thread_id: "thread-1".to_string(),
-            status: TurnStatus::Completed,
+            status: RuntimeTurnStatusRecord::Completed,
             input_text: Some("整理结果".to_string()),
             error_message: None,
             context_override: None,
@@ -124,16 +125,16 @@ mod tests {
             completed_at: Some(completed_at),
             updated_at: completed_at,
         };
-        let tool_item = ItemRuntime {
+        let tool_item = RuntimeItemSnapshotRecord {
             id: "item-tool-1".to_string(),
             thread_id: "thread-1".to_string(),
             turn_id: "turn-1".to_string(),
             sequence: 1,
-            status: ItemStatus::Completed,
+            status: RuntimeItemStatusRecord::Completed,
             started_at,
             completed_at: Some(completed_at),
             updated_at: completed_at,
-            payload: ItemRuntimePayload::ToolCall {
+            payload: RuntimeItemPayloadRecord::ToolCall {
                 tool_name: "read_file".to_string(),
                 arguments: None,
                 output: None,
@@ -142,30 +143,33 @@ mod tests {
                 metadata: None,
             },
         };
-        let text_item = ItemRuntime {
+        let text_item = RuntimeItemSnapshotRecord {
             id: "item-text-1".to_string(),
             thread_id: "thread-1".to_string(),
             turn_id: "turn-1".to_string(),
             sequence: 2,
-            status: ItemStatus::Completed,
+            status: RuntimeItemStatusRecord::Completed,
             started_at,
             completed_at: Some(completed_at),
             updated_at: completed_at,
-            payload: ItemRuntimePayload::AgentMessage {
+            payload: RuntimeItemPayloadRecord::AgentMessage {
                 text: "完成".to_string(),
             },
         };
-        let snapshot = SessionRuntimeSnapshot {
+        let snapshot_record = RuntimeSessionSnapshotRecord {
             session_id: "child-1".to_string(),
-            threads: vec![ThreadRuntimeSnapshot {
-                thread: ThreadRuntime::new("thread-1", "child-1", std::path::PathBuf::from("/tmp")),
+            threads: vec![RuntimeThreadSnapshotRecord {
+                id: "thread-1".to_string(),
+                session_id: "child-1".to_string(),
+                working_dir: std::path::PathBuf::from("/tmp"),
+                created_at: started_at,
+                updated_at: completed_at,
+                metadata: Default::default(),
                 turns: vec![turn],
                 items: vec![tool_item, text_item],
             }],
         };
 
-        let snapshot_record =
-            crate::runtime_store_aster_adapter::runtime_snapshot_record_from_aster(&snapshot);
         let projection =
             project_subagent_latest_turn_record(&snapshot_record).expect("应存在最新 turn");
 

@@ -49,9 +49,6 @@ pub(super) async fn read_agent_tool_inventory_runtime_seed(
 
 fn project_aster_extension_config(config: AsterExtensionConfig) -> RuntimeExtensionConfig {
     match config {
-        AsterExtensionConfig::Sse {
-            name, description, ..
-        } => RuntimeExtensionConfig::new(name, description, Vec::new(), false, Vec::new(), None),
         AsterExtensionConfig::StreamableHttp {
             name,
             description,
@@ -80,15 +77,6 @@ fn project_aster_extension_config(config: AsterExtensionConfig) -> RuntimeExtens
             ..
         }
         | AsterExtensionConfig::Platform {
-            name,
-            description,
-            available_tools,
-            deferred_loading,
-            always_expose_tools,
-            allowed_caller,
-            ..
-        }
-        | AsterExtensionConfig::InlinePython {
             name,
             description,
             available_tools,

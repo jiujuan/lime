@@ -458,8 +458,4 @@ impl PromptManager {
             include_capabilities_layer: true,
         }
     }
-
-    pub async fn get_recipe_prompt(&self) -> String {
-        "Recipe execution is only available when the current runtime explicitly configures recipe components.".to_string()
-    }
 }

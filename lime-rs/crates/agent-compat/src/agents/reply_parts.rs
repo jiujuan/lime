@@ -1,43 +1,39 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use std::time::Instant;
 
 use async_stream::try_stream;
 use futures::stream::StreamExt;
 use serde_json::Value;
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use super::super::agents::Agent;
 use crate::conversation::message::{Message, MessageContent, ToolRequest};
 use crate::conversation::Conversation;
 use crate::model::ModelConfig;
-use crate::providers::base::{stream_from_single_message, MessageStream, Provider, ProviderUsage};
-use crate::providers::errors::ProviderError;
-use crate::providers::toolshim::{
-    augment_message_with_tool_calls, convert_tool_messages_to_text,
-    modify_system_prompt_for_tool_json, OllamaInterpreter,
+use crate::reply_provider::{
+    set_current_model, stream_from_single_message, MessageStream, Provider, ProviderError,
+    ProviderUsage,
 };
 use crate::session_context::current_turn_context;
-use crate::tools::{ToolRegistry, VIEW_IMAGE_TOOL_NAME};
+use crate::tool::ToolRegistry;
 
 use crate::agents::code_execution_extension::EXTENSION_NAME as CODE_EXECUTION_EXTENSION;
-use crate::agents::subagent_tool::AGENT_TOOL_NAME;
 use crate::agents::tool_argument_coercion::coerce_tool_arguments;
-use crate::session::{
-    apply_session_update, query_session, SessionStore, TokenStatsUpdate, TurnContextOverride,
-};
+use crate::session::{SessionStore, TokenStatsUpdate, TurnContextOverride};
 use model_provider::provider_stream::{
-    provider_stream_first_text_delta_chars,
     provider_stream_image_input_policy_disables_provider_images,
     provider_stream_model_supports_image_input, provider_stream_plaintext_tool_use_is_complete,
     provider_stream_plaintext_tool_use_progress, provider_stream_plaintext_tool_use_start,
-    provider_stream_plaintext_tool_uses, provider_stream_should_omit_image_input,
-    RuntimeReplyProviderPlaintextToolCall, RuntimeReplyProviderSamplingMode,
-    RuntimeReplyProviderSamplingRequest, RuntimeReplyProviderStreamProgress,
-    PROVIDER_STREAM_PLAINTEXT_TOOL_USE_PROVIDER,
+    provider_stream_plaintext_tool_uses, provider_stream_response_text_chars,
+    provider_stream_should_omit_image_input, RuntimeReplyProviderPlaintextToolCall,
+    RuntimeReplyProviderResponseContent, RuntimeReplyProviderSamplingFailureLogLevel,
+    RuntimeReplyProviderSamplingRequest, RuntimeReplyProviderSamplingSession,
+    RuntimeReplyProviderStreamProgress, PROVIDER_STREAM_PLAINTEXT_TOOL_USE_PROVIDER,
 };
 use rmcp::model::{CallToolRequestParam, Content, Tool};
+use tool_runtime::collab_agent::AGENT_TOOL_NAME;
 use tool_runtime::tool_call_surface::{
     runtime_tool_call_normalize_arguments, runtime_tool_call_surface_name,
 };
@@ -49,6 +45,7 @@ use tool_runtime::turn_tool_surface::{
     runtime_turn_tool_surface_should_strip_extension_prompt_context, RuntimeTurnToolScope,
     RuntimeTurnToolSurfaceMode, RUNTIME_METADATA_KEY,
 };
+use tool_runtime::view_image::VIEW_IMAGE_TOOL_NAME;
 
 fn current_turn_image_input_policy_disables_provider_images() -> bool {
     let Some(turn_context) = current_turn_context() else {
@@ -82,12 +79,28 @@ fn filter_tools_for_image_input_support(
 }
 
 fn first_text_delta_chars(message: &Message) -> Option<usize> {
-    provider_stream_first_text_delta_chars(message.content.iter().filter_map(|content| {
-        let MessageContent::Text(text) = content else {
-            return None;
-        };
-        Some(text.text.as_str())
-    }))
+    provider_stream_response_text_chars(message.content.iter().map(provider_response_content))
+}
+
+fn provider_response_content(content: &MessageContent) -> RuntimeReplyProviderResponseContent<'_> {
+    match content {
+        MessageContent::Text(text) => RuntimeReplyProviderResponseContent::text(text.text.as_str()),
+        MessageContent::ToolInputDelta(delta) => {
+            RuntimeReplyProviderResponseContent::tool_input_delta(
+                delta.id.as_str(),
+                delta.tool_name.as_deref(),
+                delta.delta.as_str(),
+                delta.accumulated_arguments.as_deref(),
+                delta.provider.as_deref(),
+            )
+        }
+        _ => content
+            .as_system_notification()
+            .map(|notification| {
+                RuntimeReplyProviderResponseContent::system_notification(notification.msg.as_str())
+            })
+            .unwrap_or(RuntimeReplyProviderResponseContent::Other),
+    }
 }
 
 fn trace_first_provider_text_delta(
@@ -101,7 +114,7 @@ fn trace_first_provider_text_delta(
         return;
     };
     tracing::info!(
-        "[AsterAgent][TTFT] first provider text delta decoded: provider={}, model={}, elapsed_ms={}, chars={}",
+        "[ModelProvider][TTFT] first provider text delta decoded: provider={}, model={}, elapsed_ms={}, chars={}",
         provider_name,
         model_name,
         started_at.elapsed().as_millis(),
@@ -427,21 +440,6 @@ impl PlaintextToolUseStreamNormalizer {
     }
 }
 
-async fn toolshim_postprocess(
-    response: Message,
-    toolshim_tools: &[Tool],
-    toolshim_model: Option<&str>,
-) -> Result<Message, ProviderError> {
-    let interpreter = OllamaInterpreter::new_with_model(toolshim_model.map(str::to_string))
-        .map_err(|e| {
-            ProviderError::ExecutionError(format!("Failed to create OllamaInterpreter: {}", e))
-        })?;
-
-    augment_message_with_tool_calls(&interpreter, response, toolshim_tools)
-        .await
-        .map_err(|e| ProviderError::ExecutionError(format!("Failed to augment message: {}", e)))
-}
-
 impl Agent {
     pub async fn prepare_tools_and_prompt(
         &self,
@@ -555,15 +553,11 @@ impl Agent {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(guidance);
         }
-        // Handle toolshim if enabled
-        let mut toolshim_tools = vec![];
+        let toolshim_tools = vec![];
         if model_config.toolshim {
-            // If tool interpretation is enabled, modify the system prompt
-            system_prompt = modify_system_prompt_for_tool_json(&system_prompt, &tools);
-            // Make a copy of tools before emptying
-            toolshim_tools = tools.clone();
-            // Empty the tools vector for provider completion
-            tools = vec![];
+            return Err(anyhow!(
+                "Aster toolshim has been removed; use the current tool-runtime native tool surface"
+            ));
         }
 
         tracing::info!(
@@ -587,15 +581,15 @@ impl Agent {
         system_prompt: &str,
         messages: &[Message],
         tools: &[Tool],
-        toolshim_tools: &[Tool],
+        _toolshim_tools: &[Tool],
     ) -> Result<MessageStream, ProviderError> {
-        let started_at = Instant::now();
-        // Convert tool messages to text if toolshim is enabled
-        let messages_for_provider = if model_config.toolshim {
-            convert_tool_messages_to_text(messages)
-        } else {
-            Conversation::new_unvalidated(messages.to_vec())
-        };
+        if model_config.toolshim {
+            return Err(ProviderError::NotImplemented(
+                "Aster toolshim has been removed; use the current tool-runtime native tool surface"
+                    .to_string(),
+            ));
+        }
+        let messages_for_provider = Conversation::new_unvalidated(messages.to_vec());
         let messages_for_provider = if current_turn_image_input_policy_disables_provider_images() {
             strip_images_for_text_only_provider(messages_for_provider.messages())
         } else {
@@ -606,7 +600,6 @@ impl Agent {
         let model_config = model_config.clone();
         let system_prompt = system_prompt.to_owned();
         let tools = tools.to_owned();
-        let toolshim_tools = toolshim_tools.to_owned();
         let provider = provider.clone();
         let turn_tool_surface_mode = resolve_turn_tool_surface_mode();
         let direct_answer_surface =
@@ -622,92 +615,48 @@ impl Agent {
                 .map(|mode| mode.as_str().to_string()),
             provider.supports_streaming(),
         );
+        let sampling_session = RuntimeReplyProviderSamplingSession::start(sampling_request);
 
         // Capture errors during stream creation and return them as part of the stream
         // so they can be handled by the existing error handling logic in the agent
-        let stream_result = if sampling_request.sampling_mode()
-            == RuntimeReplyProviderSamplingMode::Streaming
-        {
-            tracing::info!(
-                "[AsterAgent][TTFT] provider stream request start: provider={}, model={}, messages={}, tools={}, tool_surface={:?}, system_chars={}",
-                sampling_request.provider_name,
-                sampling_request.model_name,
-                sampling_request.message_count,
-                sampling_request.tool_count,
-                sampling_request.tool_surface,
-                sampling_request.system_chars
-            );
-            debug!("WAITING_LLM_STREAM_START");
-            let result = provider
-                .stream_with_model(
-                    &model_config,
-                    system_prompt.as_str(),
-                    messages_for_provider.messages(),
-                    &tools,
-                )
-                .await;
-            let elapsed_ms = started_at.elapsed().as_millis();
-            match &result {
-                Ok(_) => tracing::info!(
-                    "[AsterAgent][TTFT] provider stream response headers received: provider={}, model={}, elapsed_ms={}",
-                    sampling_request.provider_name,
-                    sampling_request.model_name,
-                    elapsed_ms
-                ),
-                Err(error) => {
+        let stream_result = sampling_session
+            .open_stream(
+                || async {
+                    debug!("WAITING_LLM_STREAM_START");
+                    let result = provider
+                        .stream_with_model(
+                            &model_config,
+                            system_prompt.as_str(),
+                            messages_for_provider.messages(),
+                            &tools,
+                        )
+                        .await;
+                    debug!("WAITING_LLM_STREAM_END");
+                    result
+                },
+                || async {
+                    debug!("WAITING_LLM_START");
+                    let result = provider
+                        .complete_with_model(
+                            &model_config,
+                            system_prompt.as_str(),
+                            messages_for_provider.messages(),
+                            &tools,
+                        )
+                        .await;
+                    debug!("WAITING_LLM_END");
+                    result
+                },
+                |(message, usage)| stream_from_single_message(message, usage),
+                |error| {
                     if error.is_non_retryable_provider_rejection() {
-                        tracing::info!(
-                            "[AsterAgent][TTFT] provider stream request rejected before body: provider={}, model={}, elapsed_ms={}, error={}",
-                            sampling_request.provider_name,
-                            sampling_request.model_name,
-                            elapsed_ms,
-                            error
-                        );
+                        RuntimeReplyProviderSamplingFailureLogLevel::Info
                     } else {
-                        tracing::warn!(
-                            "[AsterAgent][TTFT] provider stream request failed before body: provider={}, model={}, elapsed_ms={}, error={}",
-                            sampling_request.provider_name,
-                            sampling_request.model_name,
-                            elapsed_ms,
-                            error
-                        );
+                        RuntimeReplyProviderSamplingFailureLogLevel::Warn
                     }
-                }
-            }
-            debug!("WAITING_LLM_STREAM_END");
-            result
-        } else {
-            tracing::info!(
-                "[AsterAgent][TTFT] provider non-stream request start: provider={}, model={}, messages={}, tools={}, tool_surface={:?}, system_chars={}",
-                sampling_request.provider_name,
-                sampling_request.model_name,
-                sampling_request.message_count,
-                sampling_request.tool_count,
-                sampling_request.tool_surface,
-                sampling_request.system_chars
-            );
-            debug!("WAITING_LLM_START");
-            let complete_result = provider
-                .complete_with_model(
-                    &model_config,
-                    system_prompt.as_str(),
-                    messages_for_provider.messages(),
-                    &tools,
-                )
-                .await;
-            tracing::info!(
-                "[AsterAgent][TTFT] provider non-stream response complete: provider={}, model={}, elapsed_ms={}",
-                sampling_request.provider_name,
-                sampling_request.model_name,
-                started_at.elapsed().as_millis()
-            );
-            debug!("WAITING_LLM_END");
-
-            match complete_result {
-                Ok((message, usage)) => Ok(stream_from_single_message(message, usage)),
-                Err(e) => Err(e),
-            }
-        };
+                },
+            )
+            .await;
 
         // If there was an error creating the stream, return a stream that yields that error
         let mut stream = match stream_result {
@@ -730,13 +679,7 @@ impl Agent {
                     Err(error)
                         if provider_stream_progress.should_retry_empty_first_content(&error) =>
                     {
-                        tracing::warn!(
-                            "[AsterAgent][TTFT] empty provider stream before first message, retrying non-stream fallback: provider={}, model={}, elapsed_ms={}, error={}",
-                            sampling_request.provider_name,
-                            sampling_request.model_name,
-                            started_at.elapsed().as_millis(),
-                            error
-                        );
+                        sampling_session.log_empty_first_content_retry(&error);
                         let (message, usage) = provider
                             .complete_with_model(
                                 &model_config,
@@ -750,28 +693,11 @@ impl Agent {
                     Err(error) => Err(error)?,
                 };
                 if provider_stream_progress.note_first_content(message.is_some()) {
-                    tracing::info!(
-                        "[AsterAgent][TTFT] first provider stream message decoded: provider={}, model={}, elapsed_ms={}",
-                        provider.get_name(),
-                        model_config.model_name,
-                        started_at.elapsed().as_millis()
-                    );
+                    sampling_session.log_first_content_decoded();
                 }
                 // Store the model information in the global store
                 if let Some(usage) = usage.as_ref() {
-                    crate::providers::base::set_current_model(&usage.model);
-                }
-
-                // Post-process / structure the response only if tool interpretation is enabled
-                if message.is_some() && model_config.toolshim {
-                    message = Some(
-                        toolshim_postprocess(
-                            message.unwrap(),
-                            &toolshim_tools,
-                            model_config.toolshim_model.as_deref(),
-                        )
-                        .await?,
-                    );
+                    set_current_model(&usage.model);
                 }
                 if let Some(response) = message.take() {
                     let mut usage_to_emit = usage;
@@ -780,7 +706,7 @@ impl Agent {
                             &mut provider_stream_progress,
                             provider.get_name(),
                             &model_config.model_name,
-                            &started_at,
+                            sampling_session.started_at(),
                             &response,
                         );
                         yield (Some(response), usage_to_emit.take());
@@ -796,7 +722,7 @@ impl Agent {
                             &mut provider_stream_progress,
                             provider.get_name(),
                             &model_config.model_name,
-                            &started_at,
+                            sampling_session.started_at(),
                             &normalized_message,
                         );
                         emitted_message = true;
@@ -809,7 +735,7 @@ impl Agent {
                                 &mut provider_stream_progress,
                                 provider.get_name(),
                                 &model_config.model_name,
-                                &started_at,
+                                sampling_session.started_at(),
                                 &pending_message,
                             );
                             emitted_message = true;
@@ -833,7 +759,7 @@ impl Agent {
                     &mut provider_stream_progress,
                     provider.get_name(),
                     &model_config.model_name,
-                    &started_at,
+                    sampling_session.started_at(),
                     &pending_message,
                 );
                 yield (Some(pending_message), None);
@@ -972,11 +898,18 @@ impl Agent {
         session_store: Option<&Arc<dyn SessionStore>>,
     ) -> Result<()> {
         let session_id = session_config.id.as_str();
-        let session = if let Some(store) = session_store {
-            store.get_session(session_id, false).await?
-        } else {
-            query_session(session_id, false).await?
+        let Some(store) = session_store else {
+            warn!(
+                "[AsterReplyParts] session metrics update missing injected session_store; global SessionManager fallback disabled: session_id={}",
+                session_id
+            );
+            return Err(anyhow!(
+                "missing injected session_store for session metrics update: session_id={}",
+                session_id
+            ));
         };
+
+        let session = store.get_session(session_id, false).await?;
 
         let accumulate = |a: Option<i32>, b: Option<i32>| -> Option<i32> {
             match (a, b) {
@@ -1014,38 +947,22 @@ impl Agent {
             usage.usage.cache_creation_input_tokens
         };
 
-        if let Some(store) = session_store {
-            store
-                .update_token_stats(
-                    session_id,
-                    TokenStatsUpdate {
-                        schedule_id: session_config.schedule_id.clone(),
-                        total_tokens: current_total,
-                        input_tokens: current_input,
-                        output_tokens: current_output,
-                        cached_input_tokens: current_cached_input,
-                        cache_creation_input_tokens: current_cache_creation_input,
-                        accumulated_total,
-                        accumulated_input,
-                        accumulated_output,
-                    },
-                )
-                .await?;
-        } else {
-            apply_session_update(session_id, |update| {
-                update
-                    .schedule_id(session_config.schedule_id.clone())
-                    .total_tokens(current_total)
-                    .input_tokens(current_input)
-                    .output_tokens(current_output)
-                    .cached_input_tokens(current_cached_input)
-                    .cache_creation_input_tokens(current_cache_creation_input)
-                    .accumulated_total_tokens(accumulated_total)
-                    .accumulated_input_tokens(accumulated_input)
-                    .accumulated_output_tokens(accumulated_output)
-            })
+        store
+            .update_token_stats(
+                session_id,
+                TokenStatsUpdate {
+                    schedule_id: session_config.schedule_id.clone(),
+                    total_tokens: current_total,
+                    input_tokens: current_input,
+                    output_tokens: current_output,
+                    cached_input_tokens: current_cached_input,
+                    cache_creation_input_tokens: current_cache_creation_input,
+                    accumulated_total,
+                    accumulated_input,
+                    accumulated_output,
+                },
+            )
             .await?;
-        }
 
         Ok(())
     }

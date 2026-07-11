@@ -24,6 +24,8 @@ const HARNESS_FAST_RESPONSE_ROUTING_KEYS = [
 const HARNESS_IMAGE_COMMAND_INTENT_KEYS = [
   "image_command_intent",
   "imageCommandIntent",
+] as const;
+const RETIRED_HARNESS_IMAGE_SKILL_LAUNCH_KEYS = [
   "image_skill_launch",
   "imageSkillLaunch",
 ] as const;
@@ -333,6 +335,15 @@ function omitHarnessFieldsFromRequestMetadata(
   return Object.keys(harness).length > 0 ? harness : undefined;
 }
 
+function omitRetiredImageSkillLaunchMetadata(
+  requestMetadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  return omitHarnessFieldsFromRequestMetadata(
+    requestMetadata,
+    RETIRED_HARNESS_IMAGE_SKILL_LAUNCH_KEYS,
+  );
+}
+
 function normalizeComparableText(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -528,7 +539,6 @@ export function buildSubmitOpRuntimeCompaction(
   options: BuildSubmitOpRuntimeCompactionOptions,
 ): SubmitOpRuntimeCompactionResult {
   const {
-    requestMetadata,
     executionRuntime,
     syncedRecentPreferences,
     syncedSessionModelPreference,
@@ -540,6 +550,9 @@ export function buildSubmitOpRuntimeCompaction(
     requestedWebSearch,
     requestedThinking,
   } = options;
+  const requestMetadata = omitRetiredImageSkillLaunchMetadata(
+    options.requestMetadata,
+  );
 
   const syncedProviderSelector =
     syncedSessionModelPreference?.providerType?.trim() || null;

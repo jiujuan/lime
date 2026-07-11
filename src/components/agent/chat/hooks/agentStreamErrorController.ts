@@ -70,19 +70,21 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
   const partialContent = (
     params.accumulatedContent || params.previousContent
   ).trim();
-  const content = buildFailedAgentMessageContent(
-    params.errorMessage,
-    partialContent || undefined,
-    params.soulCopy,
-  );
+  const content =
+    partialContent ||
+    buildFailedAgentMessageContent(params.errorMessage, undefined, params.soulCopy);
   const processParts = (params.previousContentParts || []).filter(
     (part) => part.type !== "text",
   );
+  const contentParts = [
+    ...processParts,
+    { type: "text" as const, text: content },
+  ];
 
   return {
     isThinking: false,
     content,
-    contentParts: [...processParts, { type: "text", text: content }],
+    contentParts,
     runtimeStatus: buildFailedAgentRuntimeStatus(
       params.errorMessage,
       params.soulCopy,

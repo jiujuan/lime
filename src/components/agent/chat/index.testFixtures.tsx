@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 import {
   agentEnUSResource,
   agentZhCNResource,
@@ -976,6 +976,10 @@ export { AgentChatPage };
 
 const agentChatWorkspacePreload = import("./AgentChatWorkspace");
 
+beforeAll(async () => {
+  await agentChatWorkspacePreload;
+}, 120_000);
+
 interface MountedHarness {
   container: HTMLDivElement;
   root: Root;
@@ -1709,7 +1713,6 @@ beforeEach(async () => {
   sharedSendMessageMock = vi.fn(async () => undefined);
   sharedTriggerAIGuideMock = vi.fn();
   installMockAgentChatUnifiedState(createMockAgentChatUnifiedState());
-  await agentChatWorkspacePreload;
 }, 60_000);
 
 afterEach(() => {

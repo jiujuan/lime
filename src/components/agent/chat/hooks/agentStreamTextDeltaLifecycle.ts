@@ -21,9 +21,14 @@ function isLegacyFinalFallbackEligibility(
   eligibility: TextSegmentFinalEligibility | null,
 ): eligibility is "item_scoped_legacy" | "legacy_unphased" {
   return (
-    eligibility === "item_scoped_legacy" ||
-    eligibility === "legacy_unphased"
+    eligibility === "item_scoped_legacy" || eligibility === "legacy_unphased"
   );
+}
+
+function sequenceFromTextDeltaEvent(event: TextDeltaAgentEvent): number | null {
+  return typeof event.sequence === "number" && Number.isFinite(event.sequence)
+    ? event.sequence
+    : null;
 }
 
 export function resolveTextSegmentFinalEligibility(
@@ -52,6 +57,32 @@ export function shouldRouteTextDeltaToFinalOverlay(params: {
   return false;
 }
 
+export function shouldRouteLegacyTextDeltaAfterProcessBoundaryToFinalOverlay(params: {
+  event: TextDeltaAgentEvent;
+  requestState: StreamRequestState;
+}): boolean {
+  if (!params.requestState.hasFinalAnswerRequiredProcessBoundary) {
+    return false;
+  }
+  const eligibility = resolveTextSegmentFinalEligibility(params.event);
+  if (!isLegacyFinalFallbackEligibility(eligibility)) {
+    return false;
+  }
+
+  const eventSequence = sequenceFromTextDeltaEvent(params.event);
+  const latestProcessSequence =
+    params.requestState.maxFinalAnswerRequiredProcessEventSequence ??
+    params.requestState.maxProcessEventSequence;
+  if (
+    typeof eventSequence !== "number" ||
+    typeof latestProcessSequence !== "number"
+  ) {
+    return false;
+  }
+
+  return eventSequence > latestProcessSequence;
+}
+
 export function shouldSuppressLegacyTextDeltaAfterProcessBoundary(params: {
   event: TextDeltaAgentEvent;
   requestState: StreamRequestState;
@@ -60,7 +91,22 @@ export function shouldSuppressLegacyTextDeltaAfterProcessBoundary(params: {
     return false;
   }
   const eligibility = resolveTextSegmentFinalEligibility(params.event);
-  return isLegacyFinalFallbackEligibility(eligibility);
+  if (!isLegacyFinalFallbackEligibility(eligibility)) {
+    return false;
+  }
+
+  const eventSequence = sequenceFromTextDeltaEvent(params.event);
+  const latestProcessSequence =
+    params.requestState.maxFinalAnswerRequiredProcessEventSequence ??
+    params.requestState.maxProcessEventSequence;
+  if (
+    typeof eventSequence !== "number" ||
+    typeof latestProcessSequence !== "number"
+  ) {
+    return false;
+  }
+
+  return eventSequence <= latestProcessSequence;
 }
 
 export function noteActiveFinalTextSegment(params: {
@@ -79,7 +125,24 @@ export function shouldCommitActiveTextSegmentAsFinal(
   requestState: StreamRequestState,
 ): boolean {
   const eligibility = requestState.activeTextSegmentFinalEligibility;
-  if (eligibility === "explicit_final" || eligibility === "item_scoped_legacy") {
+  if (
+    requestState.hasFinalAnswerRequiredProcessBoundary &&
+    isLegacyFinalFallbackEligibility(eligibility ?? null)
+  ) {
+    const activeTextSequence = requestState.activeTextSegmentSequence;
+    const latestProcessSequence =
+      requestState.maxFinalAnswerRequiredProcessEventSequence ??
+      requestState.maxProcessEventSequence;
+    return (
+      typeof activeTextSequence === "number" &&
+      typeof latestProcessSequence === "number" &&
+      activeTextSequence > latestProcessSequence
+    );
+  }
+  if (
+    eligibility === "explicit_final" ||
+    eligibility === "item_scoped_legacy"
+  ) {
     return eligibility === "explicit_final"
       ? true
       : !requestState.hasFinalAnswerRequiredProcessBoundary;
@@ -95,9 +158,9 @@ export function hasActiveTextSegmentProvenance(
 ): boolean {
   return Boolean(
     normalizeOptionalText(requestState.activeTextSegmentItemId) ||
-      normalizeOptionalText(requestState.activeTextSegmentPhase) ||
-      normalizeOptionalText(requestState.activeTextSegmentTurnId) ||
-      typeof requestState.activeTextSegmentSequence === "number",
+    normalizeOptionalText(requestState.activeTextSegmentPhase) ||
+    normalizeOptionalText(requestState.activeTextSegmentTurnId) ||
+    typeof requestState.activeTextSegmentSequence === "number",
   );
 }
 

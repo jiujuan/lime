@@ -101,6 +101,21 @@ describe("agentRuntimeErrorPresentation", () => {
     });
   });
 
+  it("运行时连接失败应转换为短提示并隐藏内部 host", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+      ),
+    ).toEqual({
+      displayMessage:
+        "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
+      toastMessage:
+        "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
+    });
+  });
+
   it("运行时工具生命周期诊断应转换为短提示", async () => {
     await changeLimeLocale("zh-CN");
 

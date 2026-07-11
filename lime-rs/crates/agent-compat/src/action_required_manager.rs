@@ -41,21 +41,6 @@ impl ActionRequiredManager {
         &INSTANCE
     }
 
-    pub async fn request_and_wait(
-        &self,
-        message: String,
-        schema: Value,
-        timeout_duration: Duration,
-    ) -> Result<Value> {
-        self.request_and_wait_scoped(
-            ActionRequiredScope::default(),
-            message,
-            schema,
-            timeout_duration,
-        )
-        .await
-    }
-
     pub async fn request_and_wait_scoped(
         &self,
         scope: ActionRequiredScope,
@@ -107,11 +92,6 @@ impl ActionRequiredManager {
         self.pending.write().await.remove(&id);
 
         result
-    }
-
-    pub async fn submit_response(&self, request_id: String, user_data: Value) -> Result<()> {
-        self.submit_response_scoped(request_id, None, user_data)
-            .await
     }
 
     pub async fn submit_response_scoped(

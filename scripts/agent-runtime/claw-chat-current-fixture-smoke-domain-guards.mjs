@@ -134,8 +134,11 @@ export function registerImageContentAndTeamSmokeGuards({
       "expectedSessionId: SESSION_ID",
       'entrySource: "at_image_command"',
       "image_command_workflow",
-      "suppresses submission-summary chat",
       "snapshot.hasVisibleImageTaskProcess",
+      "hasPresentationIntroInAssistantText",
+      "hasPresentationCaptionAfterCard",
+      "cardHasPresentationCaption",
+      "completionAfterCard",
     ]);
     expectAllToContain(expect, rpcContent, [
       "modelProvider/create",
@@ -154,7 +157,7 @@ export function registerImageContentAndTeamSmokeGuards({
       "IMAGE_COMMAND_SKILL_NAME",
       "IMAGE_COMMAND_SKILL_TOOL_CALL_ID",
       "(snapshot.hasAssistantSummary || snapshot.hasDoneText) &&",
-      "snapshot.hasPresentationCaption === true",
+      "cardText.includes(presentationCaption) ||",
     ]);
   });
 

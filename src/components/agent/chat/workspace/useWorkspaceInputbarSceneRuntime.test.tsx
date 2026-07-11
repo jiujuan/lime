@@ -35,24 +35,98 @@ vi.mock("./knowledge/useWorkspaceKnowledgeRuntime", () => ({
 }));
 
 type HookProps = Parameters<typeof useWorkspaceInputbarSceneRuntime>[0];
+type HarnessPanelBaseProps = HookProps["generalWorkbenchHarnessPanelBaseProps"];
+type HookPropsOverrides = Partial<
+  Omit<HookProps, "generalWorkbenchHarnessPanelBaseProps">
+> &
+  Partial<HarnessPanelBaseProps> & {
+    generalWorkbenchHarnessPanelBaseProps?: Partial<HarnessPanelBaseProps>;
+  };
 
 const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];
 
-function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
+function createDefaultHarnessPanelBaseProps(
+  noop: ReturnType<typeof vi.fn>,
+  overrides: Partial<HarnessPanelBaseProps> = {},
+): HarnessPanelBaseProps {
+  return {
+    environment: {
+      skillsCount: 0,
+      skillNames: [],
+      memorySignals: [],
+      contextItemsCount: 0,
+      activeContextCount: 0,
+      contextItemNames: [],
+      contextEnabled: false,
+    },
+    childSubagentSessions: [],
+    selectedTeamLabel: undefined,
+    selectedTeamSummary: undefined,
+    selectedTeamRoles: [],
+    teamMemorySnapshot: null,
+    threadRead: null,
+    turns: [],
+    threadItems: [],
+    currentTurnId: null,
+    pendingActions: [],
+    submittedActionsInFlight: [],
+    onRespondToAction: noop,
+    messages: [],
+    queuedTurns: [],
+    canInterrupt: false,
+    onInterruptCurrentTurn: noop,
+    onResumeThread: noop,
+    onReplayPendingRequest: noop,
+    onPromoteQueuedTurn: noop,
+    onObjectiveChanged: noop,
+    onManageProviders: noop,
+    onOpenExecutionPolicySettings: noop,
+    diagnosticRuntimeContext: {
+      sessionId: null,
+      workspaceId: "project-1",
+      workingDir: "/tmp/project-1",
+      providerType: "openai",
+      model: "gpt-5",
+      executionStrategy: "react",
+      activeTheme: "general",
+      selectedTeamLabel: null,
+    },
+    toolInventory: null,
+    toolInventoryLoading: false,
+    toolInventoryError: null,
+    onRefreshToolInventory: noop,
+    onOpenSubagentSession: noop,
+    onLoadFilePreview: noop,
+    onOpenFile: noop,
+    ...overrides,
+  };
+}
+
+function createDefaultProps(overrides: HookPropsOverrides = {}): HookProps {
   const noop = vi.fn();
+  const {
+    generalWorkbenchHarnessPanelBaseProps,
+    pendingActions,
+    submittedActionsInFlight,
+    onRespondToAction,
+    ...hookOverrides
+  } = overrides;
 
   return {
     setMentionedCharacters: noop,
     isThemeWorkbench: true,
     sessionId: "session-1",
-    childSubagentSessions: [],
-    subagentParentContext: null,
-    selectedTeamLabel: undefined,
-    selectedTeamSummary: undefined,
-    teamMemorySnapshot: null,
+    generalWorkbenchHarnessPanelBaseProps: createDefaultHarnessPanelBaseProps(
+      noop,
+      {
+        ...generalWorkbenchHarnessPanelBaseProps,
+        ...(pendingActions ? { pendingActions } : {}),
+        ...(submittedActionsInFlight ? { submittedActionsInFlight } : {}),
+        ...(onRespondToAction ? { onRespondToAction } : {}),
+      },
+    ),
     currentSessionTitle: "当前会话",
     handleStopSending: noop,
-    handleOpenSubagentSession: noop,
     input: "",
     setInput: noop,
     currentGate: null,
@@ -82,7 +156,6 @@ function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
       handleOpenKnowledgeManagement: noop,
       handleProjectChange: noop,
     },
-    selectedTeam: null,
     characters: [],
     skills: [],
     serviceSkills: [],
@@ -97,23 +170,8 @@ function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
     soulArtifactVoiceGenerationBrief: null,
     soulArtifactVoiceEnabledForTurn: true,
     onSoulArtifactVoiceEnabledForTurnChange: noop,
-    turns: [],
-    threadItems: [],
-    currentTurnId: null,
-    threadRead: null,
-    activeExecutionRuntime: null,
-    pendingActions: [],
-    submittedActionsInFlight: [],
-    onRespondToAction: noop,
-    messages: [],
-    queuedTurns: [],
-    resumeThread: noop,
-    replayPendingAction: noop,
-    promoteQueuedTurn: noop,
-    onObjectiveChanged: noop,
+    isExecutionRuntimeActive: false,
     removeQueuedTurn: noop,
-    latestAssistantMessageId: null,
-    sessionIdForDiagnostics: null,
     generalWorkbenchEntryPrompt: null,
     handleRestartGeneralWorkbenchEntryPrompt: noop,
     handleContinueGeneralWorkbenchEntryPrompt: noop,
@@ -142,23 +200,8 @@ function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
       recentFileEvents: [],
       hasSignals: false,
     },
-    harnessEnvironment: {
-      skillsCount: 0,
-      skillNames: [],
-      memorySignals: [],
-      contextItemsCount: 0,
-      activeContextCount: 0,
-      contextItemNames: [],
-      contextEnabled: false,
-    },
-    toolInventory: null,
-    toolInventoryLoading: false,
-    toolInventoryError: null,
-    refreshToolInventory: noop,
     mappedTheme: "general",
     activeRuntimeStatusTitle: null,
-    handleHarnessLoadFilePreview: noop,
-    handleFileClick: noop,
     chatToolPreferences: {
       task: false,
       subagent: false,
@@ -172,7 +215,7 @@ function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
     fileManagerOpen: false,
     onToggleFileManager: noop,
     inputCompletionEnabled: true,
-    ...overrides,
+    ...hookOverrides,
   };
 }
 
@@ -198,6 +241,15 @@ function getLatestInputbarProps(): {
   disabled?: boolean;
   inputRestoreRequest?: unknown;
   onInputRestoreRequestHandled?: (requestId: string) => void;
+  onSend?: (payload?: {
+    images?: unknown[];
+    textOverride?: string;
+    sendOptions?: {
+      requestMetadata?: Record<string, unknown>;
+      targetSessionId?: string;
+      skipSessionRestore?: boolean;
+    };
+  }) => void | Promise<boolean> | boolean;
   toolStates?: Record<string, boolean>;
   onToolStatesChange?: (states: Record<string, boolean>) => void;
 } {
@@ -207,6 +259,15 @@ function getLatestInputbarProps(): {
     disabled?: boolean;
     inputRestoreRequest?: unknown;
     onInputRestoreRequestHandled?: (requestId: string) => void;
+    onSend?: (payload?: {
+      images?: unknown[];
+      textOverride?: string;
+      sendOptions?: {
+        requestMetadata?: Record<string, unknown>;
+        targetSessionId?: string;
+        skipSessionRestore?: boolean;
+      };
+    }) => void | Promise<boolean> | boolean;
     toolStates?: Record<string, boolean>;
     onToolStatesChange?: (states: Record<string, boolean>) => void;
   };
@@ -236,6 +297,79 @@ afterEach(() => {
 });
 
 describe("useWorkspaceInputbarSceneRuntime", () => {
+  it("Inputbar 发送应绑定当前会话，避免落到旧 active session", async () => {
+    const handleSend = vi.fn().mockResolvedValue(true);
+    renderHookNode(
+      createDefaultProps({
+        sessionId: "session-current-inputbar",
+        handleSend,
+      }),
+    );
+
+    await act(async () => {
+      await getLatestInputbarProps().onSend?.({
+        textOverride: "整理今天的国际新闻",
+        sendOptions: {
+          requestMetadata: {
+            harness: {
+              scenario: "home-hotpath",
+            },
+          },
+        },
+      });
+    });
+
+    expect(handleSend).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      "整理今天的国际新闻",
+      "react",
+      undefined,
+      expect.objectContaining({
+        requestMetadata: {
+          harness: {
+            scenario: "home-hotpath",
+          },
+        },
+        targetSessionId: "session-current-inputbar",
+      }),
+    );
+  });
+
+  it("Inputbar 显式 targetSessionId 应优先于当前会话", async () => {
+    const handleSend = vi.fn().mockResolvedValue(true);
+    renderHookNode(
+      createDefaultProps({
+        sessionId: "session-current-inputbar",
+        handleSend,
+      }),
+    );
+
+    await act(async () => {
+      await getLatestInputbarProps().onSend?.({
+        textOverride: "继续处理草稿",
+        sendOptions: {
+          targetSessionId: "session-explicit-target",
+          skipSessionRestore: true,
+        },
+      });
+    });
+
+    expect(handleSend).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      "继续处理草稿",
+      "react",
+      undefined,
+      expect.objectContaining({
+        targetSessionId: "session-explicit-target",
+        skipSessionRestore: true,
+      }),
+    );
+  });
+
   it("有已保存创作声线时应在输入区显示本轮开关并响应切换", () => {
     const onSoulArtifactVoiceEnabledForTurnChange = vi.fn();
     const container = renderHookNode(
@@ -351,7 +485,8 @@ describe("useWorkspaceInputbarSceneRuntime", () => {
     ).not.toBeNull();
     expect(container.querySelector('[data-testid="inputbar-mock"]')).toBeNull();
     expect(container.textContent).toContain("允许执行当前命令？");
-    expect(container.textContent).toContain("functions.exec_command");
+    expect(container.textContent).not.toContain("functions.exec_command");
+    expect(container.textContent).not.toContain("npm test -- --runInBand");
 
     const allowButton = container.querySelector(
       'button[data-decision="allow_once"]',

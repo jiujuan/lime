@@ -1,21 +1,11 @@
-use crate::native_tools::runtime_tool_bridge::{
-    RuntimeDefinitionPermissionCheck, RuntimeDefinitionToolAdapter,
-    RuntimeNativeTurnContextProvider,
-};
 use crate::native_tools::NativeRegistration;
-use crate::runtime_facade::current_agent_turn_context;
-use aster::ToolContext;
-use aster::{current_action_scope, current_session_id};
-use serde_json::{json, Value};
 use std::sync::Arc;
+use tool_runtime::gateway_dispatch_execution::RuntimeGatewayToolExecutionRegistration;
 use tool_runtime::image_task::ImageTaskGateway;
 use tool_runtime::mcp_resource::McpResourceGateway;
 use tool_runtime::memory_store::MemoryStoreGateway;
 use tool_runtime::native_dispatch::NativeDispatch;
-use tool_runtime::native_overlay::{
-    check_runtime_gateway_tool_permissions, RuntimeNativePermissionDecision,
-};
-use tool_runtime::tool_executor::{RuntimeToolExecutorHandle, RuntimeToolTurnContext};
+use tool_runtime::tool_executor::RuntimeToolExecutorHandle;
 use tool_runtime::tool_search::ToolSearchGateway;
 
 pub(crate) fn create_memory_tools(gateway: Arc<dyn MemoryStoreGateway>) -> Vec<NativeRegistration> {
@@ -23,8 +13,6 @@ pub(crate) fn create_memory_tools(gateway: Arc<dyn MemoryStoreGateway>) -> Vec<N
         NativeDispatch::builder()
             .with_memory_store_gateway(gateway)
             .build(),
-        check_gateway_tool_permissions,
-        None,
     )
 }
 
@@ -33,8 +21,6 @@ pub(crate) fn create_image_tools(gateway: Arc<dyn ImageTaskGateway>) -> Vec<Nati
         NativeDispatch::builder()
             .with_image_task_gateway(gateway)
             .build(),
-        check_gateway_tool_permissions,
-        Some(runtime_turn_context_from_aster),
     )
 }
 
@@ -45,8 +31,6 @@ pub(crate) fn create_tool_search_tools(
         NativeDispatch::builder()
             .with_tool_search_gateway(gateway)
             .build(),
-        check_gateway_tool_permissions,
-        None,
     )
 }
 
@@ -57,92 +41,24 @@ pub(crate) fn create_mcp_resource_tools(
         NativeDispatch::builder()
             .with_mcp_resource_gateway(gateway)
             .build(),
-        check_gateway_tool_permissions,
-        None,
     )
 }
 
-fn create_gateway_tools(
-    dispatch: NativeDispatch,
-    permission_check: RuntimeDefinitionPermissionCheck,
-    turn_context_provider: Option<RuntimeNativeTurnContextProvider>,
-) -> Vec<NativeRegistration> {
+fn create_gateway_tools(dispatch: NativeDispatch) -> Vec<NativeRegistration> {
     let surfaces = dispatch.surfaces();
     let executor = RuntimeToolExecutorHandle::new(Arc::new(dispatch));
 
     surfaces
         .into_iter()
         .map(|surface| {
-            let definition = surface.definition();
-            let adapter = RuntimeDefinitionToolAdapter::new(
-                definition.clone(),
+            let execution_registration = RuntimeGatewayToolExecutionRegistration::new(
+                surface.definition(),
                 executor.clone(),
-                permission_check,
-            )
-            .with_aliases(surface.aliases())
-            .with_max_retries(0);
-            let adapter = match turn_context_provider {
-                Some(provider) => adapter.with_turn_context_provider(provider),
-                None => adapter,
-            };
-            NativeRegistration::new(definition, Box::new(adapter))
+                surface.aliases(),
+            );
+            NativeRegistration::gateway(execution_registration)
         })
         .collect()
-}
-
-fn check_gateway_tool_permissions(
-    tool_name: &str,
-    params: &Value,
-    context: &ToolContext,
-) -> RuntimeNativePermissionDecision {
-    let turn_context = runtime_turn_context_from_aster();
-    check_runtime_gateway_tool_permissions(
-        tool_name,
-        params,
-        &context.working_directory,
-        &context.session_id,
-        turn_context.as_ref(),
-    )
-}
-
-fn runtime_turn_context_from_aster() -> Option<RuntimeToolTurnContext> {
-    let mut turn_context = current_agent_turn_context();
-    let had_turn_context = turn_context.is_some();
-    let context = turn_context.get_or_insert_with(RuntimeToolTurnContext::default);
-
-    if let Some(session_id) = current_session_id() {
-        insert_identity_if_absent(&mut context.metadata, "session_id", session_id);
-    }
-    if let Some(scope) = current_action_scope() {
-        if let Some(session_id) = scope.session_id {
-            insert_identity_if_absent(&mut context.metadata, "session_id", session_id);
-        }
-        if let Some(thread_id) = scope.thread_id {
-            insert_identity_if_absent(&mut context.metadata, "thread_id", thread_id);
-        }
-        if let Some(turn_id) = scope.turn_id {
-            insert_identity_if_absent(&mut context.metadata, "turn_id", turn_id);
-        }
-    }
-
-    if had_turn_context || !context.metadata.is_empty() {
-        turn_context
-    } else {
-        None
-    }
-}
-
-fn insert_identity_if_absent(
-    metadata: &mut std::collections::HashMap<String, Value>,
-    key: &str,
-    value: String,
-) {
-    if value.trim().is_empty() {
-        return;
-    }
-    metadata
-        .entry(key.to_string())
-        .or_insert_with(|| json!(value.trim()));
 }
 
 #[cfg(test)]
@@ -158,9 +74,23 @@ mod tests {
     use serde_json::json;
     use tempfile::{tempdir, TempDir};
     use tokio::sync::Mutex;
+    use tool_runtime::gateway_dispatch_execution::{
+        execute_runtime_gateway_dispatch_tool, RuntimeGatewayDispatchToolRequest,
+        RuntimeGatewayToolExecutionRegistry,
+    };
 
-    fn context(path: std::path::PathBuf) -> ToolContext {
-        ToolContext::new(path).with_session_id("test-session")
+    fn install_gateway_registrations(
+        registrations: Vec<NativeRegistration>,
+    ) -> RuntimeGatewayToolExecutionRegistry {
+        let registry = RuntimeGatewayToolExecutionRegistry::default();
+        for registration in registrations {
+            registry.register(
+                registration
+                    .gateway_execution()
+                    .expect("gateway registration"),
+            );
+        }
+        registry
     }
 
     #[derive(Default)]
@@ -294,93 +224,122 @@ mod tests {
     #[tokio::test]
     async fn memory_read_delegates_to_runtime_permissions_and_executor() {
         let dir = tempdir().expect("tempdir");
-        let tool = create_memory_tools(Arc::new(FakeMemoryStoreGateway))
-            .into_iter()
-            .find(|registration| {
-                registration.name() == tool_runtime::memory_store::MEMORY_READ_TOOL_NAME
-            })
-            .expect("memory_read tool")
-            .into_tool();
+        let registry =
+            install_gateway_registrations(create_memory_tools(Arc::new(FakeMemoryStoreGateway)));
+        let denied_params = json!({ "path": "../MEMORY.md" });
+        let denied = execute_runtime_gateway_dispatch_tool(
+            &registry,
+            RuntimeGatewayDispatchToolRequest {
+                tool_name: tool_runtime::memory_store::MEMORY_READ_TOOL_NAME,
+                params: &denied_params,
+                working_directory: dir.path().to_path_buf(),
+                session_id: "test-session".to_string(),
+                cancel_token: None,
+                turn_context: None,
+            },
+        )
+        .await
+        .expect("memory_read registration");
+        let params = json!({ "path": "MEMORY.md" });
+        let result = execute_runtime_gateway_dispatch_tool(
+            &registry,
+            RuntimeGatewayDispatchToolRequest {
+                tool_name: tool_runtime::memory_store::MEMORY_READ_TOOL_NAME,
+                params: &params,
+                working_directory: dir.path().to_path_buf(),
+                session_id: "test-session".to_string(),
+                cancel_token: None,
+                turn_context: None,
+            },
+        )
+        .await
+        .expect("memory_read registration")
+        .expect("memory_read result");
 
-        let denied = tool
-            .check_permissions(
-                &json!({
-                    "path": "../MEMORY.md"
-                }),
-                &context(dir.path().to_path_buf()),
-            )
-            .await;
-        let result = tool
-            .execute(
-                json!({
-                    "path": "MEMORY.md"
-                }),
-                &context(dir.path().to_path_buf()),
-            )
-            .await
-            .expect("tool result");
-
-        assert!(denied.is_denied());
-        assert!(result.success);
-        assert_eq!(result.output.as_deref(), Some("remember this"));
-        assert_eq!(result.metadata["operation"], json!("read"));
+        assert!(denied.is_err());
+        assert_eq!(result.is_error, Some(false));
+        assert_eq!(
+            result.content[0].as_text().map(|text| text.text.as_str()),
+            Some("remember this")
+        );
+        assert_eq!(
+            result
+                .structured_content
+                .as_ref()
+                .and_then(|metadata| metadata.get("operation")),
+            Some(&json!("read"))
+        );
     }
 
     #[tokio::test]
     async fn image_task_delegates_to_runtime_permissions_and_executor() {
         let workspace = TempDir::new().expect("workspace");
         let gateway = Arc::new(ImageToolTestGateway::default());
-        let tool = create_image_tools(gateway.clone())
-            .into_iter()
-            .next()
-            .expect("image tool")
-            .into_tool();
+        let registry = install_gateway_registrations(create_image_tools(gateway.clone()));
+        let denied_params = json!({
+            "project_root_path": workspace.path().to_string_lossy(),
+            "prompt": "生成分镜",
+            "layout_hint": "storyboard_3x3",
+            "thread_id": "thread-image-1",
+            "turn_id": "turn-image-1"
+        });
+        let denied = execute_runtime_gateway_dispatch_tool(
+            &registry,
+            RuntimeGatewayDispatchToolRequest {
+                tool_name: tool_runtime::image_task::IMAGE_TASK_TOOL_NAME,
+                params: &denied_params,
+                working_directory: workspace.path().to_path_buf(),
+                session_id: "test-session".to_string(),
+                cancel_token: None,
+                turn_context: None,
+            },
+        )
+        .await
+        .expect("image registration");
+        let params = json!({
+            "project_root_path": workspace.path().to_string_lossy(),
+            "prompt": "生成一张青柠实验室封面",
+            "provider_id": "openai",
+            "model": "gpt-image-2",
+            "executor_mode": "images_api",
+            "thread_id": "thread-image-1",
+            "turn_id": "turn-image-1",
+            "content_id": "content-image-1",
+            "entry_source": "at_image_command",
+            "modality_contract_key": "image_generation",
+            "modality": "image",
+            "routing_slot": "image_generation_model",
+            "runtime_contract": {
+                "contract_key": "image_generation",
+                "routing_slot": "image_generation_model"
+            },
+            "usage": "document-inline",
+            "slot_id": "document-image-slot-1",
+            "anchor_section_title": "产品愿景",
+            "anchor_text": "给这一段生成配图"
+        });
+        let result = execute_runtime_gateway_dispatch_tool(
+            &registry,
+            RuntimeGatewayDispatchToolRequest {
+                tool_name: tool_runtime::image_task::IMAGE_TASK_TOOL_NAME,
+                params: &params,
+                working_directory: workspace.path().to_path_buf(),
+                session_id: "test-session".to_string(),
+                cancel_token: None,
+                turn_context: None,
+            },
+        )
+        .await
+        .expect("image registration")
+        .expect("image result");
 
-        let denied = tool
-            .check_permissions(
-                &json!({
-                    "project_root_path": workspace.path().to_string_lossy(),
-                    "prompt": "生成分镜",
-                    "layout_hint": "storyboard_3x3",
-                    "thread_id": "thread-image-1",
-                    "turn_id": "turn-image-1"
-                }),
-                &context(workspace.path().to_path_buf()),
-            )
-            .await;
-        let result = tool
-            .execute(
-                json!({
-                    "project_root_path": workspace.path().to_string_lossy(),
-                    "prompt": "生成一张青柠实验室封面",
-                    "provider_id": "openai",
-                    "model": "gpt-image-2",
-                    "executor_mode": "images_api",
-                    "thread_id": "thread-image-1",
-                    "turn_id": "turn-image-1",
-                    "content_id": "content-image-1",
-                    "entry_source": "at_image_command",
-                    "modality_contract_key": "image_generation",
-                    "modality": "image",
-                    "routing_slot": "image_generation_model",
-                    "runtime_contract": {
-                        "contract_key": "image_generation",
-                        "routing_slot": "image_generation_model"
-                    },
-                    "usage": "document-inline",
-                    "slot_id": "document-image-slot-1",
-                    "anchor_section_title": "产品愿景",
-                    "anchor_text": "给这一段生成配图"
-                }),
-                &context(workspace.path().to_path_buf()),
-            )
-            .await
-            .expect("image tool should call gateway");
-
-        assert!(denied.is_denied());
-        assert!(result.success);
+        assert!(denied.is_err());
+        assert_eq!(result.is_error, Some(false));
         assert_eq!(
-            result.metadata.get("task_type"),
+            result
+                .structured_content
+                .as_ref()
+                .and_then(|metadata| metadata.get("task_type")),
             Some(&json!("image_generate"))
         );
         let params = gateway
@@ -398,23 +357,38 @@ mod tests {
     async fn tool_search_delegates_to_runtime_executor() {
         let dir = tempdir().expect("tempdir");
         let gateway = Arc::new(FakeToolSearchGateway::default());
-        let tool = create_tool_search_tools(gateway.clone())
-            .into_iter()
-            .next()
-            .expect("tool search")
-            .into_tool();
+        let registry = install_gateway_registrations(create_tool_search_tools(gateway.clone()));
+        let params = json!({ "query": "browser click", "max_results": 3 });
+        let result = execute_runtime_gateway_dispatch_tool(
+            &registry,
+            RuntimeGatewayDispatchToolRequest {
+                tool_name: tool_runtime::tool_search::TOOL_SEARCH_TOOL_NAME,
+                params: &params,
+                working_directory: dir.path().to_path_buf(),
+                session_id: "test-session".to_string(),
+                cancel_token: None,
+                turn_context: None,
+            },
+        )
+        .await
+        .expect("tool_search registration")
+        .expect("tool_search result");
 
-        let result = tool
-            .execute(
-                json!({ "query": "browser click", "max_results": 3 }),
-                &context(dir.path().to_path_buf()),
-            )
-            .await
-            .expect("tool result");
-
-        assert!(result.success);
-        assert_eq!(result.metadata["tool_search_result_count"], json!(1));
-        let output: Value = serde_json::from_str(result.output.as_deref().unwrap()).unwrap();
+        assert_eq!(result.is_error, Some(false));
+        assert_eq!(
+            result
+                .structured_content
+                .as_ref()
+                .and_then(|metadata| metadata.get("tool_search_result_count")),
+            Some(&json!(1))
+        );
+        let output: serde_json::Value = serde_json::from_str(
+            result.content[0]
+                .as_text()
+                .map(|text| text.text.as_str())
+                .expect("tool_search text"),
+        )
+        .expect("tool_search output");
         assert_eq!(output["matches"], json!(["mcp__browser__click"]));
 
         let params = gateway

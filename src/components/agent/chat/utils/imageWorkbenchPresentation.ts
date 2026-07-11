@@ -134,6 +134,36 @@ export function resolveImageWorkbenchPreviewModelLabel(
   );
 }
 
+export function resolveImageWorkbenchCaptionStatus(
+  preview: MessageImageWorkbenchPreview,
+): MessageImageWorkbenchPreview["status"] {
+  const hasRenderedImage = Boolean(
+    preview.imageUrl || preview.previewImages?.some((url) => url.trim()),
+  );
+  if (preview.status !== "running" || !hasRenderedImage) {
+    return preview.status;
+  }
+
+  return preview.expectedImageCount &&
+    preview.imageCount &&
+    preview.imageCount < preview.expectedImageCount
+    ? "partial"
+    : "complete";
+}
+
+export function resolveImageWorkbenchCompletionCaption(
+  preview: MessageImageWorkbenchPreview,
+): string {
+  const status = resolveImageWorkbenchCaptionStatus(preview);
+  if (status !== "complete" && status !== "partial") {
+    return "";
+  }
+
+  return sanitizeImageWorkbenchPresentationText(preview.caption, {
+    languageSource: preview.prompt,
+  });
+}
+
 function tImageWorkbenchPresentation(
   key: ImageWorkbenchPresentationKey,
   options?: Record<string, unknown>,

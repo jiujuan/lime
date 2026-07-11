@@ -6,33 +6,25 @@ use super::{
     history_search, legacy_conversation, runtime_conversation, session_projection, LimeSessionStore,
 };
 use crate::session_record_sql::{
-    load_all_session_record_rows, load_session_insights_record, load_session_record_row_by_id,
-    load_session_record_rows_by_types,
+    load_all_session_record_rows, load_session_record_row_by_id, load_session_record_rows_by_types,
 };
 use anyhow::{anyhow, Result};
 use aster::Conversation;
 use aster::Message;
 use aster::ModelConfig;
-use aster::Recipe;
 use aster::{
-    ChatHistoryMatch, ExtensionData, Session, SessionInsights, SessionStore, SessionType,
-    TokenStatsUpdate,
+    ChatHistoryMatch, ExtensionData, Session, SessionStore, SessionType, TokenStatsUpdate,
 };
 use async_trait::async_trait;
 use chrono::Utc;
 use lime_core::database::agent_session_repository::{
-    delete_session as delete_session_record,
     touch_session_updated_at as touch_session_updated_at_record,
     update_session_extension_data as update_session_extension_data_record,
     update_session_name as update_session_name_record,
     update_session_provider_config as update_session_provider_config_record,
-    update_session_recipe as update_session_recipe_record,
-    update_session_token_stats as update_session_token_stats_record,
-    update_session_type as update_session_type_record,
-    update_session_working_dir_with_updated_at as update_session_working_dir_record,
-    SessionProviderConfigUpdate, SessionRecipeUpdate, SessionTokenStatsUpdate,
+    update_session_token_stats as update_session_token_stats_record, SessionProviderConfigUpdate,
+    SessionTokenStatsUpdate,
 };
-use std::collections::HashMap;
 use std::path::PathBuf;
 use thread_store::session_record::parse_timestamp_or_now;
 
@@ -67,8 +59,6 @@ impl SessionStore for LimeSessionStore {
             accumulated_input_tokens: None,
             accumulated_output_tokens: None,
             schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
             conversation: Some(Conversation::default()),
             message_count: 0,
             provider_name: None,
@@ -255,18 +245,6 @@ impl SessionStore for LimeSessionStore {
         Ok(())
     }
 
-    async fn list_sessions(&self) -> Result<Vec<Session>> {
-        let mut sessions: Vec<Session> = {
-            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            load_all_session_record_rows(&conn)?
-                .into_iter()
-                .map(|row| session_projection::build_session_from_listing_row(&conn, row))
-                .collect()
-        };
-        self.apply_runtime_message_counts(&mut sessions).await;
-        Ok(sessions)
-    }
-
     async fn list_sessions_by_types(&self, types: &[SessionType]) -> Result<Vec<Session>> {
         if types.is_empty() {
             return Ok(Vec::new());
@@ -284,28 +262,6 @@ impl SessionStore for LimeSessionStore {
         Ok(sessions)
     }
 
-    async fn delete_session(&self, id: &str) -> Result<()> {
-        {
-            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            delete_session_record(&conn, id).map_err(|e: String| anyhow!(e))?;
-        }
-        self.invalidate_cached_session_metadata(id);
-
-        Ok(())
-    }
-
-    async fn get_insights(&self) -> Result<SessionInsights> {
-        let insights = {
-            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            load_session_insights_record(&conn)?
-        };
-
-        Ok(SessionInsights {
-            total_sessions: insights.total_sessions,
-            total_tokens: insights.total_tokens,
-        })
-    }
-
     async fn update_session_name(
         &self,
         session_id: &str,
@@ -321,34 +277,6 @@ impl SessionStore for LimeSessionStore {
         self.update_cached_session_metadata(session_id, |session| {
             session.name = cached_name;
             session.user_set_name = user_set;
-            session.updated_at = updated_at;
-        });
-        Ok(())
-    }
-
-    async fn update_working_dir(&self, session_id: &str, working_dir: PathBuf) -> Result<()> {
-        let cached_working_dir = working_dir.clone();
-        let working_dir_value = working_dir.to_string_lossy().to_string();
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        let now = Utc::now().to_rfc3339();
-        update_session_working_dir_record(&conn, session_id, &working_dir_value, &now)
-            .map_err(|e: String| anyhow!(e))?;
-        let updated_at = parse_timestamp_or_now(&now);
-        self.update_cached_session_metadata(session_id, |session| {
-            session.working_dir = cached_working_dir;
-            session.updated_at = updated_at;
-        });
-        Ok(())
-    }
-
-    async fn update_session_type(&self, session_id: &str, session_type: SessionType) -> Result<()> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        let now = Utc::now().to_rfc3339();
-        update_session_type_record(&conn, session_id, &session_type.to_string(), &now)
-            .map_err(|e: String| anyhow!(e))?;
-        let updated_at = parse_timestamp_or_now(&now);
-        self.update_cached_session_metadata(session_id, |session| {
-            session.session_type = session_type;
             session.updated_at = updated_at;
         });
         Ok(())
@@ -463,41 +391,6 @@ impl SessionStore for LimeSessionStore {
             if let (true, Some(model_config)) = (should_update_model_config, cached_model_config) {
                 session.model_config = Some(model_config);
             }
-            session.updated_at = updated_at;
-        });
-        Ok(())
-    }
-
-    async fn update_recipe(
-        &self,
-        session_id: &str,
-        recipe: Option<Recipe>,
-        user_recipe_values: Option<HashMap<String, String>>,
-    ) -> Result<()> {
-        let cached_recipe = recipe.clone();
-        let cached_user_recipe_values = user_recipe_values.clone();
-        let recipe_json = recipe
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()
-            .map_err(|e| anyhow!("序列化 recipe 失败: {e}"))?;
-        let user_recipe_values_json = user_recipe_values
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()
-            .map_err(|e| anyhow!("序列化 user_recipe_values 失败: {e}"))?;
-        let update = SessionRecipeUpdate {
-            recipe_json,
-            user_recipe_values_json,
-        };
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        let now = Utc::now().to_rfc3339();
-        update_session_recipe_record(&conn, session_id, &update, &now)
-            .map_err(|e: String| anyhow!(e))?;
-        let updated_at = parse_timestamp_or_now(&now);
-        self.update_cached_session_metadata(session_id, |session| {
-            session.recipe = cached_recipe;
-            session.user_recipe_values = cached_user_recipe_values;
             session.updated_at = updated_at;
         });
         Ok(())

@@ -22,6 +22,8 @@ export interface ModelReasoningEffortPreset {
 }
 
 export interface ModelReasoningPolicyInput {
+  supports_reasoning_summary_parameter?: unknown;
+  supportsReasoningSummaryParameter?: unknown;
   supports_reasoning_summaries?: unknown;
   supportsReasoningSummaries?: unknown;
   default_reasoning_level?: unknown;
@@ -135,6 +137,8 @@ export function buildModelReasoningPolicy(
   const source = input ?? {};
   const supportsReasoningSummaries = normalizeBoolean(
     firstPresent(source, [
+      "supports_reasoning_summary_parameter",
+      "supportsReasoningSummaryParameter",
       "supports_reasoning_summaries",
       "supportsReasoningSummaries",
     ]),
@@ -160,9 +164,20 @@ export function buildModelReasoningPolicy(
     default_reasoning_level: defaultReasoningLevel,
     supported_reasoning_levels: supportedReasoningLevels,
     supported_reasoning_efforts: supportedReasoningEfforts,
-    can_set_reasoning_effort:
-      supportsReasoningSummaries && supportedReasoningEfforts.length > 0,
+    can_set_reasoning_effort: supportedReasoningEfforts.length > 0,
   };
+}
+
+function hasReasoningEffortPolicy(
+  policy: Pick<
+    ModelReasoningPolicy,
+    "default_reasoning_level" | "supported_reasoning_efforts"
+  >,
+): boolean {
+  return (
+    policy.default_reasoning_level !== null ||
+    policy.supported_reasoning_efforts.length > 0
+  );
 }
 
 export function resolveModelReasoningEffortForRequest(
@@ -174,7 +189,7 @@ export function resolveModelReasoningEffortForRequest(
   >,
   requestedReasoningEffort: unknown,
 ): ModelReasoningEffort | null {
-  if (!policy.supports_reasoning_summaries) {
+  if (!hasReasoningEffortPolicy(policy)) {
     return null;
   }
   const requested = normalizeModelReasoningEffort(requestedReasoningEffort);
@@ -193,7 +208,7 @@ export function resolveModelReasoningEffortForModelSwitch(
   >,
   currentReasoningEffort: unknown,
 ): ModelReasoningEffort | null {
-  if (!policy.supports_reasoning_summaries) {
+  if (!hasReasoningEffortPolicy(policy)) {
     return null;
   }
   const current = normalizeModelReasoningEffort(currentReasoningEffort);

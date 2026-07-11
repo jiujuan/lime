@@ -1,5 +1,6 @@
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
+import { AgentChatWorkspace } from "./AgentChatWorkspace";
 import { resolveAgentChatPageShellViewModel } from "./agentChatPageShellViewModel";
 
 export type {
@@ -7,17 +8,6 @@ export type {
   AgentChatWorkspaceProps,
   WorkflowProgressSnapshot,
 } from "./agentChatWorkspaceContract";
-
-const AgentChatWorkspace = lazy(() =>
-  import("./AgentChatWorkspace").then((module) => ({
-    default: module.AgentChatWorkspace,
-  })),
-);
-
-const workspaceLoadingStyle = {
-  flex: 1,
-  minHeight: 0,
-} as const;
 
 export function AgentChatPage(props: AgentChatWorkspaceProps) {
   const {
@@ -59,19 +49,10 @@ export function AgentChatPage(props: AgentChatWorkspaceProps) {
   ]);
 
   return (
-    <Suspense
-      fallback={
-        <div
-          data-testid="agent-chat-workspace-loading"
-          style={workspaceLoadingStyle}
-        />
-      }
-    >
-      <AgentChatWorkspace
-        {...props}
-        agentEntry={effectiveAgentEntry}
-        showChatPanel={effectiveShowChatPanel}
-      />
-    </Suspense>
+    <AgentChatWorkspace
+      {...props}
+      agentEntry={effectiveAgentEntry}
+      showChatPanel={effectiveShowChatPanel}
+    />
   );
 }

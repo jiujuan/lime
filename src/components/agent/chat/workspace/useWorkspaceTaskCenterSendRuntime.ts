@@ -20,6 +20,8 @@ import {
   removeTaskCenterDraftTab,
 } from "./taskCenterDraftTabs";
 import type { TaskCenterDraftTab } from "./agentChatWorkspaceHelpers";
+import type { TaskCenterHomeSurfaceState } from "./agentChatWorkspaceHelpers";
+import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 
 interface UseWorkspaceTaskCenterSendRuntimeParams<
   TMessage,
@@ -58,6 +60,7 @@ interface UseWorkspaceTaskCenterSendRuntimeParams<
   isPreparingSend: boolean;
   isSending: boolean;
   isTaskCenterDraftSendPending: boolean;
+  layoutMode: LayoutMode;
   markNewChatRequestHandled: (requestKey: string) => void;
   markTaskCenterLocalSessionOverride: (topicId: string) => void;
   materializedSessionIdsRef: MutableRefObject<Map<string, string>>;
@@ -67,7 +70,7 @@ interface UseWorkspaceTaskCenterSendRuntimeParams<
   ) => Promise<string | null>;
   messagesLength: number;
   newChatAt?: number;
-  persistMaterializedSessionNavigation: (sessionId: string) => void;
+  normalizedInitialSessionId?: string | null;
   planComposerPendingActions: TPendingAction[];
   prewarmedDraftSessionIdsRef: MutableRefObject<Set<string>>;
   queuedTurns: TQueuedTurn[];
@@ -83,13 +86,19 @@ interface UseWorkspaceTaskCenterSendRuntimeParams<
   >;
   setTaskCenterDraftTabs: Dispatch<SetStateAction<TaskCenterDraftTab[]>>;
   setTransitionTopicId: Dispatch<SetStateAction<string | null>>;
-  shouldHideCurrentSessionContent: boolean;
+  shouldRenderTaskCenterEmbeddedHome: boolean;
+  shouldSuppressTaskCenterDraftContent: boolean;
   submittedActionsInFlight: TSubmittedAction[];
   taskCenterDraftSendRequest: TaskCenterDraftSendRequest | null;
   taskCenterDraftSurfaceActiveRef: MutableRefObject<boolean>;
+  taskCenterHomeSurfaceState: TaskCenterHomeSurfaceState;
   taskCenterWorkspaceId?: string | null;
   threadRead: TThreadRead | null;
   turns: TTurn[];
+  switchToReadySession?: (
+    sessionId: string,
+    options?: { forceRefresh?: boolean; allowDetachedSession?: boolean },
+  ) => Promise<unknown>;
   upsertTaskCenterOpenTab: (
     topicId: string,
     workspaceIdOverride?: string | null,
@@ -116,6 +125,11 @@ type WorkspaceTaskCenterSendRuntime<
   TQueuedTurn
 > & {
   handleSendFromEmptyState: InputbarSendHandler;
+  sceneIsRestoringSession: boolean;
+  sceneLayoutMode: LayoutMode;
+  sceneMessageListEmptyStateVariant: "task-center" | "none";
+  sceneSessionId: string | null;
+  shouldHideCurrentSessionContent: boolean;
 };
 
 export function useWorkspaceTaskCenterSendRuntime<
@@ -146,13 +160,14 @@ export function useWorkspaceTaskCenterSendRuntime<
   isPreparingSend,
   isSending,
   isTaskCenterDraftSendPending,
+  layoutMode,
   markNewChatRequestHandled,
   markTaskCenterLocalSessionOverride,
   materializedSessionIdsRef,
   materializeDraftTab,
   messagesLength,
   newChatAt,
-  persistMaterializedSessionNavigation,
+  normalizedInitialSessionId,
   planComposerPendingActions,
   prewarmedDraftSessionIdsRef,
   queuedTurns,
@@ -164,13 +179,16 @@ export function useWorkspaceTaskCenterSendRuntime<
   setTaskCenterDraftSendRequest,
   setTaskCenterDraftTabs,
   setTransitionTopicId,
-  shouldHideCurrentSessionContent,
+  shouldRenderTaskCenterEmbeddedHome,
+  shouldSuppressTaskCenterDraftContent,
   submittedActionsInFlight,
   taskCenterDraftSendRequest,
   taskCenterDraftSurfaceActiveRef,
+  taskCenterHomeSurfaceState,
   taskCenterWorkspaceId,
   threadRead,
   turns,
+  switchToReadySession,
   upsertTaskCenterOpenTab,
 }: UseWorkspaceTaskCenterSendRuntimeParams<
   TMessage,
@@ -213,17 +231,23 @@ export function useWorkspaceTaskCenterSendRuntime<
       setDetachedTopicId(null);
       upsertTaskCenterOpenTab(readySessionId, taskCenterWorkspaceId);
       markTaskCenterLocalSessionOverride(readySessionId);
-      persistMaterializedSessionNavigation(readySessionId);
+      if (readySessionId !== currentSessionId?.trim()) {
+        void switchToReadySession?.(readySessionId, {
+          allowDetachedSession: true,
+          forceRefresh: true,
+        });
+      }
     },
     [
+      currentSessionId,
       markNewChatRequestHandled,
       markTaskCenterLocalSessionOverride,
       newChatAt,
-      persistMaterializedSessionNavigation,
       setActiveDraftTabId,
       setDetachedTopicId,
       setTaskCenterDraftTabs,
       setTransitionTopicId,
+      switchToReadySession,
       taskCenterDraftSurfaceActiveRef,
       taskCenterWorkspaceId,
       upsertTaskCenterOpenTab,
@@ -272,8 +296,21 @@ export function useWorkspaceTaskCenterSendRuntime<
 
   return {
     handleSendFromEmptyState,
+    sceneIsRestoringSession: taskCenterHomeSurfaceState.isRestoringSession,
+    sceneLayoutMode: shouldRenderTaskCenterEmbeddedHome ? "chat" : layoutMode,
+    sceneMessageListEmptyStateVariant:
+      agentEntry === "claw" &&
+      !normalizedInitialSessionId &&
+      !shouldRenderTaskCenterEmbeddedHome &&
+      !shouldSuppressTaskCenterDraftContent
+        ? "task-center"
+        : "none",
+    sceneSessionId: taskCenterHomeSurfaceState.sceneSessionId,
+    shouldHideCurrentSessionContent:
+      taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
     ...resolveWorkspaceSceneSessionProjection({
-      shouldHideCurrentSessionContent,
+      shouldHideCurrentSessionContent:
+        taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
       displayMessages,
       homePendingPreviewMessages:
         homePendingPreviewMessages.length > 0

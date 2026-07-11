@@ -40,12 +40,14 @@ function renderHook(props?: Partial<HookProps>) {
     },
     hasCurrentCanvasArtifact: false,
     currentCanvasArtifactType: null,
-    hasBrowserAssistArtifact: false,
+    browserAssistCanvasControl: {
+      hasArtifact: false,
+      suppressGeneralArtifactAutoOpen: vi.fn(),
+      suppressAutoOpen: vi.fn(),
+      clearArtifact: vi.fn(),
+    },
     currentImageWorkbenchActive: false,
     onHasMessagesChange: vi.fn(),
-    suppressGeneralCanvasArtifactAutoOpen: vi.fn(),
-    suppressBrowserAssistCanvasAutoOpen: vi.fn(),
-    clearBrowserAssistCanvasArtifact: vi.fn(),
     setShowSidebar: vi.fn(),
     setLayoutMode: vi.fn(),
     setGeneralCanvasState: vi.fn(),
@@ -241,8 +243,12 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
       showSidebar: true,
       setLayoutMode,
       setShowSidebar,
-      suppressGeneralCanvasArtifactAutoOpen,
-      suppressBrowserAssistCanvasAutoOpen,
+      browserAssistCanvasControl: {
+        hasArtifact: false,
+        suppressGeneralArtifactAutoOpen: suppressGeneralCanvasArtifactAutoOpen,
+        suppressAutoOpen: suppressBrowserAssistCanvasAutoOpen,
+        clearArtifact: vi.fn(),
+      },
     });
 
     await render();
@@ -286,10 +292,12 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
     const setGeneralCanvasState = vi.fn();
     const { render, getValue } = renderHook({
       activeTheme: "general",
-      hasBrowserAssistArtifact: true,
-      suppressGeneralCanvasArtifactAutoOpen,
-      suppressBrowserAssistCanvasAutoOpen,
-      clearBrowserAssistCanvasArtifact,
+      browserAssistCanvasControl: {
+        hasArtifact: true,
+        suppressGeneralArtifactAutoOpen: suppressGeneralCanvasArtifactAutoOpen,
+        suppressAutoOpen: suppressBrowserAssistCanvasAutoOpen,
+        clearArtifact: clearBrowserAssistCanvasArtifact,
+      },
       setLayoutMode,
       setGeneralCanvasState,
     });

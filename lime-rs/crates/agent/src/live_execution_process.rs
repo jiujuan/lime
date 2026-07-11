@@ -50,6 +50,17 @@ pub(crate) fn install_runtime_live_execution_process_hook(
 
 impl NativeToolExecutionHook for RuntimeLiveExecutionProcessHook {
     fn execute_native_tool(&self, request: NativeToolExecutionRequest) -> Option<ToolCallResult> {
+        if let Some(skill_result) = crate::tools::execute_current_skill_tool_request(
+            &request.tool_name,
+            &request.params,
+            &request.context,
+        ) {
+            return Some(ToolCallResult {
+                result: Box::new(skill_result),
+                notification_stream: None,
+            });
+        }
+
         let runtime_request = prepare_live_execution(request)?;
         let (notification_tx, notification_rx) = unbounded();
         let (result_tx, result_rx) = oneshot::channel();
@@ -133,7 +144,7 @@ fn prepare_live_execution(
     }
 
     let mut env = request.context.environment.clone();
-    env.insert("ASTER_TERMINAL".to_string(), "1".to_string());
+    env.insert("AGENT_TERMINAL".to_string(), "1".to_string());
     let command = runtime_live_execution_shell_command(tool_name, &command_text);
     let working_directory = request
         .context

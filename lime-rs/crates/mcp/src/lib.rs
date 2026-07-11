@@ -7,6 +7,7 @@ pub mod auth_status;
 pub mod bridge_client;
 pub mod client;
 pub mod events;
+pub mod extension_surface;
 pub mod manager;
 pub mod naming;
 pub mod oauth;
@@ -24,6 +25,7 @@ pub use events::{
     McpServerErrorPayload, McpServerStartedPayload, McpServerStoppedPayload,
     McpToolsUpdatedPayload,
 };
+pub use extension_surface::{build_runtime_extension_surface, runtime_extension_name};
 pub use manager::{McpBridgeSnapshot, McpClientManager};
 pub use oauth::{McpOAuthLoginParams, McpOAuthLoginResponse, McpOAuthRegistry};
 pub use tool_converter::ToolConverter;

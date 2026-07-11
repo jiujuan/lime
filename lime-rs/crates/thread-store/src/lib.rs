@@ -2,6 +2,8 @@ pub mod conversation_transcript;
 pub mod history_search;
 pub mod legacy_conversation;
 pub mod runtime_snapshot;
+pub mod runtime_status_item;
+pub mod runtime_store;
 pub mod session_insights;
 pub mod session_record;
 pub mod session_repository;

@@ -11,10 +11,13 @@ mod aster_reply_message_adapter;
 mod aster_reply_stream_adapter;
 pub(crate) mod auto_compaction_projection;
 mod policy_config;
-mod provider_reply_exit_source;
 mod reply_retry;
 mod response_event_adapter;
+mod runtime_item_event;
+mod runtime_request_item;
 mod runtime_status;
+mod runtime_status_item;
+mod runtime_turn_event;
 mod stream_diagnostics;
 mod stream_idle;
 mod stream_text_batcher;
@@ -295,6 +298,7 @@ where
         reply_host,
         user_input,
         &session_config,
+        working_directory,
         cancel_token.clone(),
         options.provider_stream_idle_timeout,
         request_tool_policy,
@@ -365,6 +369,7 @@ where
                 reply_host,
                 ReplyInput::agent_only_text(PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT).into(),
                 &session_config,
+                working_directory,
                 cancel_token.clone(),
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -452,6 +457,7 @@ where
                 reply_host,
                 ReplyInput::agent_only_text(WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT).into(),
                 &session_config,
+                working_directory,
                 cancel_token,
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -513,6 +519,7 @@ where
                 reply_host,
                 ReplyInput::agent_only_text(EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT).into(),
                 &session_config,
+                working_directory,
                 cancel_token,
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -575,6 +582,7 @@ where
                 reply_host,
                 ReplyInput::agent_only_text(INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT).into(),
                 &session_config,
+                working_directory,
                 cancel_token,
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -699,8 +707,8 @@ mod tests {
         Agent, MessageStream, Provider, ProviderError, ProviderMetadata, ProviderUsage, Usage,
     };
     use aster::{
-        ChatHistoryMatch, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
-        TurnStatus,
+        ChatHistoryMatch, InMemoryThreadRuntimeStore, Session, SessionStore, SessionType,
+        TokenStatsUpdate,
     };
     use async_trait::async_trait;
     use std::collections::HashMap;
@@ -708,6 +716,8 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use thread_store::runtime_snapshot::RuntimeTurnStatusRecord;
+    use thread_store::runtime_store::load_runtime_snapshot_record;
     use uuid::Uuid;
 
     struct TestSessionStore {
@@ -750,8 +760,6 @@ mod tests {
             accumulated_input_tokens: None,
             accumulated_output_tokens: None,
             schedule_id: None,
-            recipe: None,
-            user_recipe_values: None,
             conversation: Some(Conversation::default()),
             message_count: 0,
             provider_name: None,
@@ -798,26 +806,11 @@ mod tests {
             Ok(())
         }
 
-        async fn list_sessions(&self) -> anyhow::Result<Vec<Session>> {
-            Ok(vec![self.current_session(false)])
-        }
-
         async fn list_sessions_by_types(
             &self,
             _types: &[SessionType],
         ) -> anyhow::Result<Vec<Session>> {
             Ok(vec![self.current_session(false)])
-        }
-
-        async fn delete_session(&self, _id: &str) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn get_insights(&self) -> anyhow::Result<SessionInsights> {
-            Ok(SessionInsights {
-                total_sessions: 1,
-                total_tokens: 0,
-            })
         }
 
         async fn update_session_name(
@@ -829,28 +822,6 @@ mod tests {
             let mut session = self.session.lock().expect("锁测试 session");
             session.name = name;
             session.user_set_name = user_set;
-            session.updated_at = chrono::Utc::now();
-            Ok(())
-        }
-
-        async fn update_working_dir(
-            &self,
-            _session_id: &str,
-            working_dir: PathBuf,
-        ) -> anyhow::Result<()> {
-            let mut session = self.session.lock().expect("锁测试 session");
-            session.working_dir = working_dir;
-            session.updated_at = chrono::Utc::now();
-            Ok(())
-        }
-
-        async fn update_session_type(
-            &self,
-            _session_id: &str,
-            session_type: SessionType,
-        ) -> anyhow::Result<()> {
-            let mut session = self.session.lock().expect("锁测试 session");
-            session.session_type = session_type;
             session.updated_at = chrono::Utc::now();
             Ok(())
         }
@@ -888,15 +859,6 @@ mod tests {
                 session.model_config = Some(model_config);
             }
             session.updated_at = chrono::Utc::now();
-            Ok(())
-        }
-
-        async fn update_recipe(
-            &self,
-            _session_id: &str,
-            _recipe: Option<aster::Recipe>,
-            _user_recipe_values: Option<HashMap<String, String>>,
-        ) -> anyhow::Result<()> {
             Ok(())
         }
 
@@ -2094,7 +2056,10 @@ mod tests {
     async fn stream_message_reply_with_policy_should_drain_inline_provider_error_and_mark_turn_failed(
     ) {
         let (store, session) = create_test_session_store("lime-inline-provider-error");
-        let agent = Agent::new().with_session_store(store.clone());
+        let runtime_store = Arc::new(InMemoryThreadRuntimeStore::default());
+        let agent = Agent::new()
+            .with_session_store(store.clone())
+            .with_thread_runtime_store(runtime_store.clone());
         agent
             .update_provider(Arc::new(AuthenticationErrorProvider), &session.id)
             .await
@@ -2128,10 +2093,11 @@ mod tests {
             "不应把底层 provider inline 错误文本透传给前端"
         );
 
-        let snapshot = agent
-            .runtime_snapshot(&session.id)
+        let read_store =
+            crate::runtime_store_aster_adapter::runtime_read_store_from_aster(runtime_store);
+        let snapshot = load_runtime_snapshot_record(read_store.as_ref(), &session.id)
             .await
-            .expect("应读取 runtime snapshot");
+            .expect("应读取 current runtime snapshot record");
         let latest_turn = snapshot
             .threads
             .iter()
@@ -2139,11 +2105,11 @@ mod tests {
             .max_by_key(|turn| turn.updated_at.timestamp_millis())
             .expect("应存在 runtime turn");
 
-        assert_ne!(latest_turn.status, TurnStatus::Running);
+        assert_ne!(latest_turn.status, RuntimeTurnStatusRecord::Running);
         assert!(
             matches!(
                 latest_turn.status,
-                TurnStatus::Completed | TurnStatus::Failed
+                RuntimeTurnStatusRecord::Completed | RuntimeTurnStatusRecord::Failed
             ),
             "turn 至少应进入终态，不能继续停留在 running"
         );

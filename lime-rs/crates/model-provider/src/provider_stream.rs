@@ -24,7 +24,6 @@ mod response_content;
 mod response_context;
 mod response_event;
 mod sampling;
-mod source_execution;
 mod text_delta;
 mod tool_input_delta;
 
@@ -78,13 +77,9 @@ pub use response_event::{
     RuntimeReplyResponseEvent, RuntimeReplyResponseItem, RuntimeReplyResponseItemPayload,
 };
 pub use sampling::{
-    provider_stream_should_retry_empty_first_content, RuntimeReplyProviderSamplingMode,
-    RuntimeReplyProviderSamplingRequest, PROVIDER_EMPTY_STREAM_RETRY_MARKER,
-};
-pub use source_execution::{
-    run_provider_source_execution, RuntimeReplyProviderExecutionRunner,
-    RuntimeReplyProviderExecutionSource, RuntimeReplyProviderSourceBackend,
-    RuntimeReplyProviderSourceBackendCall, RuntimeReplyProviderSourceFuture,
+    provider_stream_should_retry_empty_first_content, RuntimeReplyProviderSamplingFailureLogLevel,
+    RuntimeReplyProviderSamplingMode, RuntimeReplyProviderSamplingRequest,
+    RuntimeReplyProviderSamplingSession, PROVIDER_EMPTY_STREAM_RETRY_MARKER,
 };
 pub use text_delta::provider_stream_first_text_delta_chars;
 pub use tool_input_delta::{

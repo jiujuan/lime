@@ -214,6 +214,11 @@ export function parseAgentToolEvent(
         task_family:
           pickStringField(event, "task_family", "taskFamily") ||
           pickStringField(responseSource, "task_family", "taskFamily"),
+        turn_id:
+          pickStringField(event, "turn_id", "turnId") ||
+          pickStringField(payload ?? {}, "turn_id", "turnId") ||
+          pickStringField(record ?? {}, "turn_id", "turnId") ||
+          pickStringField(responseSource, "turn_id", "turnId"),
         status:
           pickStringField(event, "status") ||
           pickStringField(responseSource, "status"),

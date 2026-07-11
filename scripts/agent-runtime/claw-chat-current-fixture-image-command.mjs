@@ -167,7 +167,15 @@ export async function waitForGuiImageCommandCompleted(
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({ prompt, imagePrompt, doneText, createTaskToolName, toolLabel }) => {
+      ({
+        prompt,
+        imagePrompt,
+        doneText,
+        createTaskToolName,
+        toolLabel,
+        presentationIntro,
+        presentationCaption,
+      }) => {
         const text = document.body?.innerText || "";
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
@@ -224,12 +232,8 @@ export async function waitForGuiImageCommandCompleted(
           text.includes(toolLabel) ||
           combinedProcessText.includes("图片生成") ||
           combinedProcessText.includes(toolLabel);
-        // The current image-task persona suppresses submission-summary chat
-        // text, so GUI proof comes from the tool process and task card.
         const hasAssistantSummary =
-          text.includes("图片任务已提交到标准 task artifact") ||
-          (text.includes("已发起") && hasVisibleImageTaskProcess) ||
-          false;
+          text.includes(presentationIntro) || text.includes(presentationCaption);
         const imageTaskCardVisible =
           text.includes(".lime/tasks/image_generate") ||
           text.includes("image_generate") ||
@@ -241,6 +245,8 @@ export async function waitForGuiImageCommandCompleted(
           url: window.location.href,
           hasPrompt,
           hasAssistantSummary,
+          hasPresentationIntro: text.includes(presentationIntro),
+          hasPresentationCaption: text.includes(presentationCaption),
           hasDoneText: text.includes(doneText),
           hasWorkflowSource:
             text.includes("image_command_workflow") ||
@@ -272,6 +278,8 @@ export async function waitForGuiImageCommandCompleted(
         doneText: IMAGE_COMMAND_DONE_TEXT,
         createTaskToolName: IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
         toolLabel: IMAGE_COMMAND_TOOL_LABEL,
+        presentationIntro: IMAGE_COMMAND_PRESENTATION_INTRO,
+        presentationCaption: IMAGE_COMMAND_PRESENTATION_CAPTION,
       },
     );
     if (!snapshot) {
@@ -694,10 +702,22 @@ export async function waitForGuiImageCommandTerminal(
           );
         });
         const cardSelector = `[data-testid="image-workbench-message-preview-${taskId}"]`;
+        const introSelector = `[data-testid="image-workbench-assistant-intro-${taskId}"]`;
+        const completionSelector = `[data-testid="image-workbench-completion-caption-${taskId}"]`;
         const mediaSelector = `[data-testid="image-workbench-message-preview-single-media-${taskId}"], [data-testid="image-workbench-message-preview-grid-${taskId}"]`;
         const cards = Array.from(document.querySelectorAll(cardSelector));
+        const introNodes = Array.from(document.querySelectorAll(introSelector));
+        const completionNodes = Array.from(
+          document.querySelectorAll(completionSelector),
+        );
         const mediaNodes = Array.from(document.querySelectorAll(mediaSelector));
         const cardText = cards.map((card) => card.textContent || "").join("\n");
+        const introText = introNodes
+          .map((node) => node.textContent || "")
+          .join("\n");
+        const completionText = completionNodes
+          .map((node) => node.textContent || "")
+          .join("\n");
         const toolbarSelector = `[data-testid="image-workbench-message-preview-toolbar-${taskId}"]`;
         const toolbarText = Array.from(
           document.querySelectorAll(toolbarSelector),
@@ -729,10 +749,27 @@ export async function waitForGuiImageCommandTerminal(
             image.height > 16,
         );
         const hasNaturalCompletionCaption =
-          (cardText.includes("搞定") || cardText.includes("完成了")) &&
-          (cardText.includes("已经做好了") || cardText.includes("已经生成")) &&
-          !cardText.includes("任务ID") &&
-          !cardText.includes("{task_id}");
+          (completionText.includes("搞定") ||
+            completionText.includes("完成了")) &&
+          (completionText.includes("已经做好了") ||
+            completionText.includes("已经生成")) &&
+          !completionText.includes("任务ID") &&
+          !completionText.includes("{task_id}");
+        const introNode = introNodes[0] ?? null;
+        const cardNode = cards[0] ?? null;
+        const completionNode = completionNodes[0] ?? null;
+        const introBeforeCard = Boolean(
+          introNode &&
+            cardNode &&
+            (introNode.compareDocumentPosition(cardNode) &
+              Node.DOCUMENT_POSITION_FOLLOWING),
+        );
+        const completionAfterCard = Boolean(
+          cardNode &&
+            completionNode &&
+            (cardNode.compareDocumentPosition(completionNode) &
+              Node.DOCUMENT_POSITION_FOLLOWING),
+        );
         const visiblePendingStatus =
           text.includes("pending_submit") ||
           text.includes("排队中") ||
@@ -744,6 +781,8 @@ export async function waitForGuiImageCommandTerminal(
             text.includes(prompt) ||
             (text.includes("@配图") && text.includes(imagePrompt)),
           hasPresentationIntro: text.includes(presentationIntro),
+          hasPresentationIntroInAssistantText:
+            introText.includes(presentationIntro),
           hasToolStripLabel: toolLabels.some((label) =>
             toolbarText.includes(label),
           ),
@@ -751,7 +790,12 @@ export async function waitForGuiImageCommandTerminal(
           hasTokenUsage: text.includes(tokenLabel),
           hasPresentationCaption:
             text.includes(presentationCaption) ||
-            cardText.includes(presentationCaption),
+            completionText.includes(presentationCaption),
+          hasPresentationCaptionAfterCard:
+            completionText.includes(presentationCaption) && completionAfterCard,
+          cardHasPresentationCaption: cardText.includes(presentationCaption),
+          introBeforeCard,
+          completionAfterCard,
           hasNaturalCompletionCaption,
           templateTaskIdVisible: text.includes("{task_id}"),
           draftImageVisible: text.includes("draft-image-"),
@@ -761,6 +805,8 @@ export async function waitForGuiImageCommandTerminal(
           cardCount: cards.length,
           mediaCount: mediaNodes.length,
           toolbarText,
+          introText,
+          completionText,
           hasPreviewImage,
           hasLoadedVisiblePreviewImage,
           imageMetrics,
@@ -798,12 +844,17 @@ export async function waitForGuiImageCommandTerminal(
       snapshot.cardCount === 1 &&
       snapshot.mediaCount >= 1 &&
       snapshot.hasPresentationIntro === true &&
+      snapshot.hasPresentationIntroInAssistantText === true &&
       snapshot.hasToolStripLabel === true &&
       snapshot.hasImageModelLabel === true &&
       snapshot.hasTokenUsage === true &&
       snapshot.hasPreviewImage === true &&
       snapshot.hasLoadedVisiblePreviewImage === true &&
       hasTerminalResultCaption &&
+      snapshot.hasPresentationCaptionAfterCard === true &&
+      snapshot.cardHasPresentationCaption === false &&
+      snapshot.introBeforeCard === true &&
+      snapshot.completionAfterCard === true &&
       snapshot.visiblePendingStatus === false &&
       snapshot.templateTaskIdVisible === false &&
       snapshot.draftImageVisible === false &&

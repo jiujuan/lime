@@ -7,6 +7,8 @@ const REPO_ROOT = cwd();
 const REASONING_POLICY_SOURCE = "src/lib/model/modelReasoningPolicy.ts";
 
 const MODEL_REASONING_POLICY_INPUT_FIELDS = [
+  "supports_reasoning_summary_parameter",
+  "supportsReasoningSummaryParameter",
   "supports_reasoning_summaries",
   "supportsReasoningSummaries",
   "default_reasoning_level",

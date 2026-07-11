@@ -26,7 +26,7 @@ describe("modelReasoningPolicy", () => {
 
     expect(
       buildModelReasoningPolicy({
-        supports_reasoning_summaries: true,
+        supports_reasoning_summary_parameter: true,
         default_reasoning_level: "medium",
         supported_reasoning_levels: [
           { effort: "low", description: "Small budget" },
@@ -49,9 +49,9 @@ describe("modelReasoningPolicy", () => {
     });
   });
 
-  it("request effort 只有模型支持 reasoning summaries 且请求档位受支持时才透传", () => {
+  it("request effort 只有请求档位受支持时才透传，缺省走 model default", () => {
     const policy = buildModelReasoningPolicy({
-      supportsReasoningSummaries: true,
+      supportsReasoningSummaryParameter: false,
       defaultReasoningLevel: "medium",
       supportedReasoningLevels: [
         { effort: "low", description: "" },
@@ -72,12 +72,12 @@ describe("modelReasoningPolicy", () => {
         { ...policy, supports_reasoning_summaries: false },
         "high",
       ),
-    ).toBeNull();
+    ).toBe("high");
   });
 
   it("切模型时沿用 Codex 语义：保留受支持 current，否则取 supported 中位数，再 fallback default", () => {
     const policy = buildModelReasoningPolicy({
-      supports_reasoning_summaries: true,
+      supports_reasoning_summary_parameter: false,
       default_reasoning_level: "medium",
       supported_reasoning_levels: [
         { effort: "minimal", description: "" },

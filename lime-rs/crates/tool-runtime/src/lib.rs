@@ -9,6 +9,7 @@ pub mod execution_process;
 pub mod execution_rules;
 pub mod file_read_execution;
 pub mod file_search_execution;
+pub mod gateway_dispatch_execution;
 pub mod image_task;
 pub mod mcp_notification;
 pub mod mcp_resource;

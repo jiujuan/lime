@@ -641,7 +641,12 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     expect(runtime.commitMaterializedDraftTab).toHaveBeenCalledWith(
       request.draftTabId,
       "session-materialized",
-      { embedHomeSession: false, hydrateSession: false, preserveInput: false },
+      {
+        embedHomeSession: false,
+        hydrateSession: false,
+        preserveInput: false,
+        syncRoute: false,
+      },
     );
     expect(runtime.send).toHaveBeenCalledWith(
       request.images,
@@ -725,7 +730,12 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     expect(runtime.commitMaterializedDraftTab).toHaveBeenCalledWith(
       request.draftTabId,
       "session-materialized-preview-race",
-      { embedHomeSession: false, hydrateSession: false, preserveInput: false },
+      {
+        embedHomeSession: false,
+        hydrateSession: false,
+        preserveInput: false,
+        syncRoute: false,
+      },
     );
     expect(runtime.send).toHaveBeenCalledWith(
       request.images,
@@ -778,11 +788,16 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     expect(runtime.commitMaterializedDraftTab).toHaveBeenCalledWith(
       request.draftTabId,
       "session-materialized-owner",
-      { embedHomeSession: false, hydrateSession: false, preserveInput: false },
+      {
+        embedHomeSession: false,
+        hydrateSession: false,
+        preserveInput: false,
+        syncRoute: false,
+      },
     );
   });
 
-  it("materialized 草稿发送成功后应同步路由但不拉取空详情", async () => {
+  it("materialized 草稿发送成功后不应同步路由或拉取空详情", async () => {
     const request = createDraftSendRequest({
       draftTabId: "task-draft-route-sync",
       materializeDraft: true,
@@ -809,6 +824,7 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
           embedHomeSession: false,
           hydrateSession: false,
           preserveInput: false,
+          syncRoute: false,
         },
       );
     });
@@ -816,9 +832,7 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
     expect(commitOptions).toEqual(
       expect.objectContaining({ hydrateSession: false }),
     );
-    expect(commitOptions).not.toEqual(
-      expect.objectContaining({ syncRoute: false }),
-    );
+    expect(commitOptions).toEqual(expect.objectContaining({ syncRoute: false }));
   });
 
   it("materialized 草稿发送复用输入预热 session 时不应同步路由", async () => {

@@ -16,6 +16,7 @@ import {
 import {
   clearTaskCenterLocalSessionOverrideForTopic,
   clearTaskCenterTransitionTopicForTopic,
+  isTaskCenterTopicSwitchSuccess,
   resolveTaskCenterTopicClosePlan,
   resolveTaskCenterTopicSwitchOptions,
   rollbackTaskCenterOpenTabMapForFailedSwitch,
@@ -202,7 +203,7 @@ export function useTaskCenterTopicNavigationRuntime({
           () => {
             void switchTopic(topicId, switchOptions)
               .then((retryResult) => {
-                if (retryResult !== "success" && retryResult !== "deferred") {
+                if (!isTaskCenterTopicSwitchSuccess(retryResult)) {
                   rollbackPendingOpen();
                 }
               })
@@ -217,7 +218,7 @@ export function useTaskCenterTopicNavigationRuntime({
         );
         return;
       }
-      if (switchResult !== "success" && switchResult !== "deferred") {
+      if (!isTaskCenterTopicSwitchSuccess(switchResult)) {
         rollbackPendingOpen();
         return;
       }

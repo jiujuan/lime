@@ -10,7 +10,7 @@ const DEFAULT_CODEX_OPENAI_MODELS_SOURCE =
 const DEFAULT_CODEX_TURN_SOURCE =
   "/Users/coso/Documents/dev/rust/codex/codex-rs/core/src/session/turn.rs";
 const DEFAULT_CODEX_COMPACT_SOURCE =
-  "/Users/coso/Documents/dev/rust/codex/codex-rs/core/src/compact_remote.rs";
+  "/Users/coso/Documents/dev/rust/codex/codex-rs/core/src/compact_remote_request.rs";
 const CODEX_OPENAI_MODELS_SOURCE =
   env.CODEX_OPENAI_MODELS_SOURCE ?? DEFAULT_CODEX_OPENAI_MODELS_SOURCE;
 const CODEX_TURN_SOURCE = env.CODEX_TURN_SOURCE ?? DEFAULT_CODEX_TURN_SOURCE;

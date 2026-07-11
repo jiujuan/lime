@@ -636,6 +636,19 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "right-surface-pending",
+              method: "workspaceRightSurface/pending/list",
+              params: { workspaceId: "workspace-1", limit: 50 },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "mcp-status",
               method: "mcpServerStatus/list",
               params: {},

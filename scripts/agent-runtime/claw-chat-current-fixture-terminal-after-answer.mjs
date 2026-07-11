@@ -95,12 +95,11 @@ export async function runTerminalFailedAfterAnswerScenario({
   logStage("wait-gui-terminal-failed-after-answer-failed");
   result.guiTerminalFailedAfterAnswerCompleted = sanitizeJson(
     await waitForGuiChatCompleted(page, options, {
-      prompt: TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
-      doneText: TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
       summaryText: TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
-      requiredVisibleTexts: [TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT],
-      dedupeGuardTexts: [
-        TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT,
+      prompt: TERMINAL_FAILED_AFTER_ANSWER_PROMPT,
+      dedupeGuardTexts: [TERMINAL_FAILED_AFTER_ANSWER_PARTIAL_TEXT],
+      disallowedVisibleTexts: [
+        "legacy_tool_event",
         TERMINAL_FAILED_AFTER_ANSWER_FAILURE_TEXT,
       ],
     }),

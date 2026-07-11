@@ -7,7 +7,10 @@ use aster::{
     current_session_id, Agent, ExtensionConfig, McpClientError as McpError, McpClientTrait,
     SESSION_ID_HEADER,
 };
-use lime_mcp::{McpBridgeClient as RuntimeMcpBridgeClient, McpBridgeSnapshot};
+use lime_mcp::{
+    build_runtime_extension_surface, runtime_extension_name,
+    McpBridgeClient as RuntimeMcpBridgeClient, McpBridgeSnapshot,
+};
 use rmcp::model::{
     CallToolResult, Extensions, GetPromptResult, InitializeResult, JsonObject, ListPromptsResult,
     ListResourcesResult, ListToolsResult, Meta, ReadResourceResult, ServerNotification,
@@ -34,9 +37,8 @@ impl McpBridgeRuntimeRegistry {
         let mut snapshots_by_bridge_name = HashMap::new();
         let mut registrations = Vec::new();
         for snapshot in snapshots {
-            let extension_name =
-                crate::agent_tools::catalog::mcp_extension_runtime_name(&snapshot.server_name);
-            let surface = crate::agent_tools::catalog::build_mcp_extension_surface(
+            let extension_name = runtime_extension_name(&snapshot.server_name);
+            let surface = build_runtime_extension_surface(
                 &extension_name,
                 snapshot.description.clone(),
                 &snapshot.tools,

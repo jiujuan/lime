@@ -6,6 +6,9 @@ import {
   mergeHydratedMessagesWithLocalState,
 } from "./agentChatHistory";
 
+const INTERNAL_RUNTIME_ERROR_MESSAGE =
+  "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。";
+
 describe("agentChatHistory local merge", () => {
   it("应从内容片段中提取合并后的 thinkingContent", () => {
     expect(
@@ -511,7 +514,7 @@ describe("agentChatHistory local merge", () => {
     });
   });
 
-  it("远端 failed runtimeStatus 应覆盖本地正在输出状态", () => {
+  it("远端 failed runtimeStatus 不应覆盖本地已输出正文", () => {
     const localMessages = [
       {
         id: "local-user-news",
@@ -557,12 +560,11 @@ describe("agentChatHistory local merge", () => {
       {
         id: "history-assistant-news-failed",
         role: "assistant" as const,
-        content:
-          "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+        content: `执行失败：${INTERNAL_RUNTIME_ERROR_MESSAGE}`,
         contentParts: [
           {
             type: "text" as const,
-            text: "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+            text: `执行失败：${INTERNAL_RUNTIME_ERROR_MESSAGE}`,
           },
         ],
         timestamp: new Date("2026-06-07T09:30:12.000Z"),
@@ -571,8 +573,7 @@ describe("agentChatHistory local merge", () => {
         runtimeStatus: {
           phase: "failed" as const,
           title: "当前处理失败",
-          detail:
-            "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+          detail: INTERNAL_RUNTIME_ERROR_MESSAGE,
         },
       },
     ];
@@ -585,8 +586,7 @@ describe("agentChatHistory local merge", () => {
     expect(mergedMessages).toHaveLength(2);
     expect(mergedMessages[1]).toMatchObject({
       id: "local-assistant-news",
-      content:
-        "执行失败：Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+      content: "我会先检索多组来源并交叉核对。",
       isThinking: false,
       runtimeTurnId: "turn-news-failed",
       runtimeStatus: {
@@ -594,17 +594,27 @@ describe("agentChatHistory local merge", () => {
         title: "当前处理失败",
       },
     });
-    expect(mergedMessages[1]?.content).not.toContain("我会先检索");
-    expect(mergedMessages[1]?.runtimeStatus?.detail).toContain(
+    expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "我会先检索多组来源并交叉核对。",
+      },
+    ]);
+    expect(mergedMessages[1]?.content).not.toContain(
+      INTERNAL_RUNTIME_ERROR_MESSAGE,
+    );
+    expect(mergedMessages[1]?.content).not.toContain(
       "token-plan-cn.xiaomimimo.com",
+    );
+    expect(mergedMessages[1]?.runtimeStatus?.detail).toBe(
+      INTERNAL_RUNTIME_ERROR_MESSAGE,
     );
     expect(mergedMessages[1]?.toolCalls?.[0]).toMatchObject({
       id: "tool-web-search-running",
       status: "failed",
       result: {
         success: false,
-        error:
-          "Request failed: failed to connect to token-plan-cn.xiaomimimo.com",
+        error: INTERNAL_RUNTIME_ERROR_MESSAGE,
       },
     });
   });

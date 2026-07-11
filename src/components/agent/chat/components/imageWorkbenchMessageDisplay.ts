@@ -13,7 +13,6 @@ export interface ImageWorkbenchMessageDisplayState {
   shouldSuppressAssistantText: boolean;
   shouldSuppressProcessFlow: boolean;
   shouldSuppressStandaloneProcess: boolean;
-  thinkingContent?: string;
   visibleRawDisplayContent: string;
 }
 
@@ -26,7 +25,6 @@ export interface ImageWorkbenchProcessDisplayState {
 export interface ImageWorkbenchRendererProcessState {
   contentParts?: Message["contentParts"];
   shouldRenderInlineProcess: boolean;
-  thinkingContent?: string;
   toolCalls?: Message["toolCalls"];
 }
 
@@ -51,7 +49,6 @@ function hasImageTaskCreationProcess(message: Message): boolean {
 export function resolveImageWorkbenchMessageDisplayState(params: {
   message: Message;
   rawDisplayContent: string;
-  thinkingContent?: string;
 }): ImageWorkbenchMessageDisplayState {
   const isAssistantMessage = params.message.role === "assistant";
   const isImageWorkbenchMessage = Boolean(params.message.imageWorkbenchPreview);
@@ -79,13 +76,8 @@ export function resolveImageWorkbenchMessageDisplayState(params: {
     (shouldSuppressAssistantText || shouldSuppressStandaloneText)
       ? ""
       : params.rawDisplayContent;
-  const thinkingContent =
-    isAssistantMessage && isImageWorkbenchMessage
-      ? params.thinkingContent
-      : undefined;
-
   return {
-    hasLeadContent: Boolean(visibleRawDisplayContent.trim() || thinkingContent),
+    hasLeadContent: Boolean(visibleRawDisplayContent.trim()),
     isImageWorkbenchMessage,
     shouldFoldSuppressedProcessFlow:
       isImageWorkbenchMessage || !hasImageTaskProcess,
@@ -94,7 +86,6 @@ export function resolveImageWorkbenchMessageDisplayState(params: {
       isImageWorkbenchMessage || shouldSuppressStandaloneProcess,
     ),
     shouldSuppressStandaloneProcess,
-    thinkingContent,
     visibleRawDisplayContent,
   };
 }
@@ -109,7 +100,10 @@ function filterImageWorkbenchLeadContentParts(
   parts: Message["contentParts"] | undefined,
 ): Message["contentParts"] | undefined {
   const filtered = (parts || []).filter(
-    (part) => part.type === "text" || part.type === "thinking",
+    (part) =>
+      part.type === "text" &&
+      !shouldSuppressImageWorkbenchStatusText(part.text) &&
+      !isImageGenerationProtocolFailureResidue(part.text),
   );
   return filtered.length > 0 ? filtered : undefined;
 }
@@ -156,11 +150,9 @@ export function resolveImageWorkbenchProcessDisplayState(params: {
 
 export function resolveImageWorkbenchRendererProcessState(params: {
   actionContent: string;
-  imageWorkbenchThinkingContent?: string;
   message: Message;
   rendererActionRequests?: Message["actionRequests"];
   rendererContentParts?: Message["contentParts"];
-  rendererThinkingContent?: string;
   rendererToolCalls?: Message["toolCalls"];
   shouldSuppressRendererProcessFlow: boolean;
 }): ImageWorkbenchRendererProcessState {
@@ -168,7 +160,6 @@ export function resolveImageWorkbenchRendererProcessState(params: {
     return {
       contentParts: params.rendererContentParts,
       shouldRenderInlineProcess: false,
-      thinkingContent: params.rendererThinkingContent,
       toolCalls: params.rendererToolCalls,
     };
   }
@@ -184,19 +175,14 @@ export function resolveImageWorkbenchRendererProcessState(params: {
   );
   const contentParts =
     hasLeadTextPart || !hasActionContent ? leadContentParts : undefined;
-  const thinkingContent =
-    params.imageWorkbenchThinkingContent ||
-    params.rendererThinkingContent;
   const shouldRenderInlineProcess = Boolean(
     hasActionContent ||
-      (contentParts?.length || 0) > 0 ||
-      thinkingContent?.trim(),
+      (contentParts?.length || 0) > 0,
   );
 
   return {
     contentParts,
     shouldRenderInlineProcess,
-    thinkingContent,
     toolCalls: undefined,
   };
 }

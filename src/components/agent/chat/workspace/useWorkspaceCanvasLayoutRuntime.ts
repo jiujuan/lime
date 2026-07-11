@@ -19,6 +19,7 @@ import {
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
 import { isSpecializedWorkbenchTheme } from "@/lib/workspace/workbenchContract";
 import type { CanvasWorkbenchLayoutMode } from "../components/CanvasWorkbenchLayout";
+import type { WorkspaceBrowserAssistCanvasControl } from "./workspaceBrowserAssistCanvasControl";
 
 const FALLBACK_CANVAS_CONTENT = "";
 
@@ -41,12 +42,9 @@ interface UseWorkspaceCanvasLayoutRuntimeParams {
   generalCanvasState: GeneralCanvasState;
   hasCurrentCanvasArtifact: boolean;
   currentCanvasArtifactType?: string | null;
-  hasBrowserAssistArtifact: boolean;
+  browserAssistCanvasControl: WorkspaceBrowserAssistCanvasControl;
   currentImageWorkbenchActive: boolean;
   onHasMessagesChange?: (hasMessages: boolean) => void;
-  suppressGeneralCanvasArtifactAutoOpen: () => void;
-  suppressBrowserAssistCanvasAutoOpen: () => void;
-  clearBrowserAssistCanvasArtifact: () => void;
   setShowSidebar: Dispatch<SetStateAction<boolean>>;
   setLayoutMode: Dispatch<SetStateAction<LayoutMode>>;
   setGeneralCanvasState: Dispatch<SetStateAction<GeneralCanvasState>>;
@@ -75,12 +73,9 @@ export function useWorkspaceCanvasLayoutRuntime({
   generalCanvasState,
   hasCurrentCanvasArtifact,
   currentCanvasArtifactType,
-  hasBrowserAssistArtifact,
+  browserAssistCanvasControl,
   currentImageWorkbenchActive,
   onHasMessagesChange,
-  suppressGeneralCanvasArtifactAutoOpen,
-  suppressBrowserAssistCanvasAutoOpen,
-  clearBrowserAssistCanvasArtifact,
   setShowSidebar,
   setLayoutMode,
   setGeneralCanvasState,
@@ -88,6 +83,12 @@ export function useWorkspaceCanvasLayoutRuntime({
   setCanvasWorkbenchLayoutMode,
 }: UseWorkspaceCanvasLayoutRuntimeParams) {
   const previousThemeWorkbenchStateRef = useRef(false);
+  const {
+    clearArtifact: clearBrowserAssistCanvasArtifact,
+    hasArtifact: hasBrowserAssistArtifact,
+    suppressAutoOpen: suppressBrowserAssistCanvasAutoOpen,
+    suppressGeneralArtifactAutoOpen: suppressGeneralCanvasArtifactAutoOpen,
+  } = browserAssistCanvasControl;
 
   useEffect(() => {
     autoCollapsedTopicSidebarRef.current = false;

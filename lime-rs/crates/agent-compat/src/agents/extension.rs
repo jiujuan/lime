@@ -7,12 +7,14 @@ use crate::agents::mcp_client::McpClientTrait;
 use crate::config;
 use crate::config::extensions::name_to_key;
 use crate::config::permission::PermissionLevel;
+use crate::session::SessionStore;
 use once_cell::sync::Lazy;
 use rmcp::model::Tool;
 use rmcp::service::ClientInitializeError;
 use rmcp::ServiceError as ClientError;
 use serde::Deserializer;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 use tracing::warn;
 use utoipa::ToSchema;
@@ -84,8 +86,8 @@ pub static PLATFORM_EXTENSIONS: Lazy<HashMap<&'static str, PlatformExtensionDef>
 #[derive(Clone)]
 pub struct PlatformExtensionContext {
     pub session_id: Option<String>,
-    pub extension_manager:
-        Option<std::sync::Weak<crate::agents::extension_manager::ExtensionManager>>,
+    pub session_store: Option<Arc<dyn SessionStore>>,
+    pub extension_manager: Option<Weak<crate::agents::extension_manager::ExtensionManager>>,
 }
 
 #[derive(Debug, Clone)]
@@ -210,19 +212,6 @@ impl Envs {
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema, PartialEq)]
 #[serde(tag = "type")]
 pub enum ExtensionConfig {
-    /// SSE transport is no longer supported - kept only for config file compatibility
-    #[serde(rename = "sse")]
-    Sse {
-        #[serde(default)]
-        #[schema(required)]
-        name: String,
-        #[serde(default)]
-        #[serde(deserialize_with = "deserialize_null_with_default")]
-        #[schema(required)]
-        description: String,
-        #[serde(default)]
-        uri: Option<String>,
-    },
     /// Standard I/O client with command and arguments
     #[serde(rename = "stdio")]
     Stdio {
@@ -343,30 +332,6 @@ pub enum ExtensionConfig {
         #[serde(default)]
         allowed_caller: Option<String>,
     },
-    /// Inline Python code that will be executed using uvx
-    #[serde(rename = "inline_python")]
-    InlinePython {
-        /// The name used to identify this extension
-        name: String,
-        #[serde(deserialize_with = "deserialize_null_with_default")]
-        #[schema(required)]
-        description: String,
-        /// The Python code to execute
-        code: String,
-        /// Timeout in seconds
-        timeout: Option<u64>,
-        /// Python package dependencies required by this extension
-        #[serde(default)]
-        dependencies: Option<Vec<String>>,
-        #[serde(default)]
-        available_tools: Vec<String>,
-        #[serde(default)]
-        deferred_loading: bool,
-        #[serde(default)]
-        always_expose_tools: Vec<String>,
-        #[serde(default)]
-        allowed_caller: Option<String>,
-    },
 }
 
 impl Default for ExtensionConfig {
@@ -430,25 +395,6 @@ impl ExtensionConfig {
         }
     }
 
-    pub fn inline_python<S: Into<String>, T: Into<u64>>(
-        name: S,
-        code: S,
-        description: S,
-        timeout: T,
-    ) -> Self {
-        Self::InlinePython {
-            name: name.into(),
-            code: code.into(),
-            description: description.into(),
-            timeout: Some(timeout.into()),
-            dependencies: None,
-            available_tools: Vec::new(),
-            deferred_loading: false,
-            always_expose_tools: Vec::new(),
-            allowed_caller: None,
-        }
-    }
-
     pub fn with_args<I, S>(self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -494,13 +440,11 @@ impl ExtensionConfig {
     /// Get the extension name regardless of variant
     pub fn name(&self) -> String {
         match self {
-            Self::Sse { name, .. } => name,
             Self::StreamableHttp { name, .. } => name,
             Self::Stdio { name, .. } => name,
             Self::Builtin { name, .. } => name,
             Self::Platform { name, .. } => name,
             Self::Frontend { name, .. } => name,
-            Self::InlinePython { name, .. } => name,
         }
         .to_string()
     }
@@ -508,7 +452,6 @@ impl ExtensionConfig {
     /// Check if a tool should be available to the LLM
     pub fn is_tool_available(&self, tool_name: &str) -> bool {
         let available_tools = match self {
-            Self::Sse { .. } => return false, // SSE is unsupported
             Self::StreamableHttp {
                 available_tools, ..
             }
@@ -519,9 +462,6 @@ impl ExtensionConfig {
                 available_tools, ..
             }
             | Self::Platform {
-                available_tools, ..
-            }
-            | Self::InlinePython {
                 available_tools, ..
             }
             | Self::Frontend {
@@ -536,7 +476,6 @@ impl ExtensionConfig {
 
     pub fn deferred_loading(&self) -> bool {
         match self {
-            Self::Sse { .. } => false,
             Self::StreamableHttp {
                 deferred_loading, ..
             }
@@ -547,9 +486,6 @@ impl ExtensionConfig {
                 deferred_loading, ..
             }
             | Self::Platform {
-                deferred_loading, ..
-            }
-            | Self::InlinePython {
                 deferred_loading, ..
             }
             | Self::Frontend {
@@ -560,7 +496,6 @@ impl ExtensionConfig {
 
     pub fn always_expose_tools(&self) -> &[String] {
         match self {
-            Self::Sse { .. } => &[],
             Self::StreamableHttp {
                 always_expose_tools,
                 ..
@@ -574,10 +509,6 @@ impl ExtensionConfig {
                 ..
             }
             | Self::Platform {
-                always_expose_tools,
-                ..
-            }
-            | Self::InlinePython {
                 always_expose_tools,
                 ..
             }
@@ -594,12 +525,10 @@ impl ExtensionConfig {
 
     pub fn allowed_caller(&self) -> Option<&str> {
         match self {
-            Self::Sse { .. } => None,
             Self::StreamableHttp { allowed_caller, .. }
             | Self::Stdio { allowed_caller, .. }
             | Self::Builtin { allowed_caller, .. }
             | Self::Platform { allowed_caller, .. }
-            | Self::InlinePython { allowed_caller, .. }
             | Self::Frontend { allowed_caller, .. } => allowed_caller.as_deref(),
         }
     }
@@ -613,9 +542,6 @@ impl ExtensionConfig {
 impl std::fmt::Display for ExtensionConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExtensionConfig::Sse { name, .. } => {
-                write!(f, "SSE({}: unsupported)", name)
-            }
             ExtensionConfig::StreamableHttp { name, uri, .. } => {
                 write!(f, "StreamableHttp({}: {})", name, uri)
             }
@@ -628,9 +554,6 @@ impl std::fmt::Display for ExtensionConfig {
             ExtensionConfig::Platform { name, .. } => write!(f, "Platform({})", name),
             ExtensionConfig::Frontend { name, tools, .. } => {
                 write!(f, "Frontend({}: {} tools)", name, tools.len())
-            }
-            ExtensionConfig::InlinePython { name, code, .. } => {
-                write!(f, "InlinePython({}: {} chars)", name, code.len())
             }
         }
     }

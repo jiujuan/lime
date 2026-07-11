@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExportClient } from "./exportClient";
 import type { AppServerRequestResult } from "@/lib/api/appServer";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentRuntimeEvidenceExportAppServerClient } from "./exportClient";
 
 const handoffBundleOutput = {
@@ -246,6 +247,14 @@ function malformedAppServerResult<T>(
 }
 
 describe("agentRuntime exportClient", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
+  });
+
+  afterEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("handoff export 应走 App Server current，不回退 legacy command", async () => {
     const appServerClient = appServerClientMock();
     const client = createExportClient({

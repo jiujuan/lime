@@ -268,6 +268,59 @@ mod tests {
     }
 
     #[test]
+    fn image_command_intent_emits_no_agent_skill_telemetry() {
+        let workspace = TempDir::new().expect("workspace");
+        write_agent_skill(&workspace, "image_generate");
+        let request = super::super::tests::request_for_test(
+            "$image_generate 画一张广州夏天的图",
+            None,
+            Some(json!({
+                "workspaceRoot": workspace.path().to_string_lossy().to_string(),
+                "harness": {
+                    "image_command_intent": {
+                        "kind": "image_task",
+                        "image_task": {
+                            "prompt": "广州夏天",
+                            "modality_contract_key": "image_generation"
+                        }
+                    }
+                }
+            })),
+        );
+
+        let events = runtime_status_events_for_agent_skills(&request);
+
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn retired_image_skill_launch_emits_no_agent_skill_telemetry() {
+        let workspace = TempDir::new().expect("workspace");
+        write_agent_skill(&workspace, "image_generate");
+        let request = super::super::tests::request_for_test(
+            "$image_generate 画一张广州夏天的图",
+            None,
+            Some(json!({
+                "workspaceRoot": workspace.path().to_string_lossy().to_string(),
+                "harness": {
+                    "image_skill_launch": {
+                        "skill_name": "image_generate",
+                        "kind": "image_task",
+                        "image_task": {
+                            "prompt": "广州夏天",
+                            "modality_contract_key": "image_generation"
+                        }
+                    }
+                }
+            })),
+        );
+
+        let events = runtime_status_events_for_agent_skills(&request);
+
+        assert!(events.is_empty());
+    }
+
+    #[test]
     fn emits_expert_bound_skill_telemetry_from_expert_metadata() {
         let workspace = TempDir::new().expect("workspace");
         write_agent_skill(&workspace, "writer");

@@ -5,6 +5,7 @@ use crate::session_config::AgentSessionConfig;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use model_provider::provider_stream::RuntimeReplyProviderWireSupportIssue;
+use std::path::PathBuf;
 use tokio_util::sync::CancellationToken;
 
 pub type RuntimeReplyStream<'a, E> = BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<E>>>;
@@ -15,6 +16,7 @@ pub type RuntimeReplyStartResult<'a, E> =
 pub struct RuntimeReplyStartRequest {
     pub request: RuntimeReplyRequest,
     pub session_config: AgentSessionConfig,
+    pub working_directory: Option<PathBuf>,
     pub cancel_token: Option<CancellationToken>,
     pub emitted_any: bool,
 }
@@ -29,9 +31,15 @@ impl RuntimeReplyStartRequest {
         Self {
             request,
             session_config,
+            working_directory: None,
             cancel_token,
             emitted_any,
         }
+    }
+
+    pub fn with_working_directory(mut self, working_directory: Option<PathBuf>) -> Self {
+        self.working_directory = working_directory;
+        self
     }
 }
 

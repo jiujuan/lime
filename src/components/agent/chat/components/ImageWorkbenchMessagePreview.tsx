@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import {
   buildImageWorkbenchCaption,
+  resolveImageWorkbenchCaptionStatus,
   resolveImageWorkbenchPreviewModelLabel,
   sanitizeImageWorkbenchPresentationText,
 } from "../utils/imageWorkbenchPresentation";
@@ -16,6 +17,7 @@ import { ImageWorkbenchPreviewMedia } from "./ImageWorkbenchPreviewMedia";
 
 interface ImageWorkbenchMessagePreviewProps {
   preview: MessageImageWorkbenchPreview;
+  showCompletionCaption?: boolean;
   onOpen?: (
     preview: MessageImageWorkbenchPreview,
     selection?: MessageImageWorkbenchPreviewSelection,
@@ -42,7 +44,7 @@ function resolveToolLabel(
 
 export const ImageWorkbenchMessagePreview: React.FC<
   ImageWorkbenchMessagePreviewProps
-> = ({ preview, onOpen }) => {
+> = ({ preview, showCompletionCaption = true, onOpen }) => {
   const { t } = useTranslation("agent");
   const toolLabel = resolveToolLabel(preview, t);
   const modelId = (
@@ -51,17 +53,8 @@ export const ImageWorkbenchMessagePreview: React.FC<
     ""
   ).trim();
   const modelLabel = resolveImageWorkbenchPreviewModelLabel(preview);
-  const hasRenderedImage = Boolean(
-    preview.imageUrl || preview.previewImages?.some((url) => url.trim()),
-  );
   const resolvedCaptionStatus: CaptionStatus =
-    preview.status === "running" && hasRenderedImage
-      ? preview.expectedImageCount &&
-        preview.imageCount &&
-        preview.imageCount < preview.expectedImageCount
-        ? "partial"
-        : "complete"
-      : preview.status;
+    resolveImageWorkbenchCaptionStatus(preview);
   const displayPrompt =
     sanitizeImageWorkbenchPresentationText(preview.prompt, {
       languageSource: preview.prompt,
@@ -80,6 +73,12 @@ export const ImageWorkbenchMessagePreview: React.FC<
       imageCount: preview.imageCount ?? preview.expectedImageCount ?? null,
       statusMessage: preview.statusMessage ?? null,
     });
+  const shouldShowCaption = Boolean(
+    caption &&
+      (showCompletionCaption ||
+        resolvedCaptionStatus === "failed" ||
+        resolvedCaptionStatus === "cancelled"),
+  );
   const showRetryAction =
     (preview.status === "failed" || preview.status === "cancelled") &&
     preview.retryable !== false;
@@ -151,7 +150,7 @@ export const ImageWorkbenchMessagePreview: React.FC<
             onSelect={canOpenPreview ? openPreview : undefined}
           />
         </div>
-        {caption ? (
+        {shouldShowCaption ? (
           <div
             data-testid={`image-workbench-message-preview-caption-${preview.taskId}`}
             className="mt-2 max-w-[800px] whitespace-pre-line text-sm leading-6 text-slate-700"

@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use tempfile::{tempdir, TempDir};
+use tempfile::TempDir;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -295,7 +295,7 @@ async fn merge_environments(
             continue;
         }
 
-        match config_instance.get(key, true) {
+        match config_instance.get_secret::<Value>(key) {
             Ok(value) => {
                 if value.is_null() {
                     warn!(
@@ -437,6 +437,7 @@ impl ExtensionManager {
             pending_extensions: Mutex::new(HashSet::new()),
             context: Mutex::new(PlatformExtensionContext {
                 session_id: None,
+                session_store: None,
                 extension_manager: None,
             }),
             provider,
@@ -482,14 +483,9 @@ impl ExtensionManager {
         }
 
         let result = async {
-            let mut temp_dir = None;
+            let temp_dir = None;
 
             let client: Box<dyn McpClientTrait> = match &config {
-                ExtensionConfig::Sse { .. } => {
-                    return Err(ExtensionError::ConfigError(
-                        "SSE is unsupported, migrate to streamable_http".to_string(),
-                    ));
-                }
                 ExtensionConfig::StreamableHttp {
                     uri,
                     timeout,
@@ -555,28 +551,6 @@ impl ExtensionManager {
                         })?;
                     let context = self.get_context().await;
                     (def.client_factory)(context)
-                }
-                ExtensionConfig::InlinePython {
-                    name,
-                    code,
-                    timeout,
-                    dependencies,
-                    ..
-                } => {
-                    let dir = tempdir()?;
-                    let file_path = dir.path().join(format!("{}.py", name));
-                    temp_dir = Some(dir);
-                    std::fs::write(&file_path, code)?;
-
-                    let command = Command::new("uvx").configure(|command| {
-                        command.arg("--with").arg("mcp");
-                        dependencies.iter().flatten().for_each(|dep| {
-                            command.arg("--with").arg(dep);
-                        });
-                        command.arg("python").arg(file_path.to_str().unwrap());
-                    });
-
-                    Box::new(child_process_client(command, timeout, self.provider.clone()).await?)
                 }
                 ExtensionConfig::Frontend { .. } => {
                     return Err(ExtensionError::ConfigError(
@@ -1514,12 +1488,10 @@ impl ExtensionManager {
                             description
                         }
                     }
-                    ExtensionConfig::Sse { .. } => "SSE extension (unsupported)",
                     ExtensionConfig::Platform { description, .. }
                     | ExtensionConfig::StreamableHttp { description, .. }
                     | ExtensionConfig::Stdio { description, .. }
-                    | ExtensionConfig::Frontend { description, .. }
-                    | ExtensionConfig::InlinePython { description, .. } => description,
+                    | ExtensionConfig::Frontend { description, .. } => description,
                 };
                 disabled_extensions.push(format!("- {} - {}", config.name(), description));
             }

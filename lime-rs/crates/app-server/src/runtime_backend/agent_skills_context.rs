@@ -17,6 +17,10 @@ pub(super) fn append_agent_skills_context_to_system_prompt(
     working_dir: Option<&Path>,
     project_root: Option<&Path>,
 ) -> Option<String> {
+    if should_suppress_agent_skills_for_metadata(metadata_values) {
+        return system_prompt;
+    }
+
     let snapshot = build_agent_skill_snapshot_for_turn(working_dir, project_root, metadata_values);
     let system_prompt =
         append_selected_agent_skill_bodies(system_prompt, user_input, metadata_values, &snapshot);
@@ -46,6 +50,10 @@ pub(super) fn selected_agent_skill_names_for_turn(
     working_dir: Option<&Path>,
     project_root: Option<&Path>,
 ) -> Vec<String> {
+    if should_suppress_agent_skills_for_metadata(metadata_values) {
+        return Vec::new();
+    }
+
     let snapshot = build_agent_skill_snapshot_for_turn(working_dir, project_root, metadata_values);
     selected_agent_skill_selections(user_input, metadata_values, &snapshot)
         .into_iter()
@@ -110,6 +118,10 @@ pub(super) fn selected_agent_skill_selections(
     metadata_values: &[&Value],
     snapshot: &AgentSkillSnapshot,
 ) -> Vec<AgentSkillSelection> {
+    if should_suppress_agent_skills_for_metadata(metadata_values) {
+        return Vec::new();
+    }
+
     let mut selections = select_catalog_bound_agent_skills(metadata_values, snapshot);
     selections.extend(select_expert_bound_agent_skills(metadata_values, snapshot));
     selections.extend(select_plugin_runtime_agent_skills(
@@ -129,6 +141,10 @@ pub(super) fn selected_agent_skill_body_selections_for_prompt(
     metadata_values: &[&Value],
     snapshot: &AgentSkillSnapshot,
 ) -> Vec<AgentSkillSelection> {
+    if should_suppress_agent_skills_for_metadata(metadata_values) {
+        return Vec::new();
+    }
+
     let mut selections = select_catalog_bound_agent_skills(metadata_values, snapshot);
     selections.extend(select_plugin_runtime_agent_skills(
         metadata_values,
@@ -400,14 +416,14 @@ fn model_skill_launch_values(metadata: &Value) -> Vec<&Value> {
     let mut values = Vec::new();
     if let Some(harness) = metadata.get("harness").and_then(Value::as_object) {
         for (key, value) in harness {
-            if looks_like_model_skill_launch_key(key) && !is_image_skill_launch_key(key) {
+            if looks_like_model_skill_launch_key(key) && !is_retired_model_skill_launch_key(key) {
                 values.push(value);
             }
         }
     }
     if let Some(object) = metadata.as_object() {
         for (key, value) in object {
-            if looks_like_model_skill_launch_key(key) && !is_image_skill_launch_key(key) {
+            if looks_like_model_skill_launch_key(key) && !is_retired_model_skill_launch_key(key) {
                 values.push(value);
             }
         }
@@ -420,8 +436,36 @@ fn looks_like_model_skill_launch_key(key: &str) -> bool {
     normalized.ends_with("_skill_launch") || normalized.ends_with("SkillLaunch")
 }
 
-fn is_image_skill_launch_key(key: &str) -> bool {
+fn is_retired_model_skill_launch_key(key: &str) -> bool {
     matches!(key.trim(), "image_skill_launch" | "imageSkillLaunch")
+}
+
+fn should_suppress_agent_skills_for_metadata(metadata_values: &[&Value]) -> bool {
+    metadata_values.iter().any(|metadata| {
+        has_current_image_command_intent(metadata) || has_retired_image_skill_launch(metadata)
+    })
+}
+
+fn has_current_image_command_intent(metadata: &Value) -> bool {
+    [
+        "/harness/image_command_intent",
+        "/harness/imageCommandIntent",
+        "/image_command_intent",
+        "/imageCommandIntent",
+    ]
+    .iter()
+    .any(|pointer| metadata.pointer(pointer).is_some())
+}
+
+fn has_retired_image_skill_launch(metadata: &Value) -> bool {
+    [
+        "/harness/image_skill_launch",
+        "/harness/imageSkillLaunch",
+        "/image_skill_launch",
+        "/imageSkillLaunch",
+    ]
+    .iter()
+    .any(|pointer| metadata.pointer(pointer).is_some())
 }
 
 fn push_string_candidate(candidates: &mut Vec<String>, value: Option<&Value>) {
@@ -564,7 +608,7 @@ mod tests {
     }
 
     #[test]
-    fn image_skill_launch_does_not_inject_agent_skill_body() {
+    fn retired_image_skill_launch_does_not_enter_agent_skills() {
         let workspace = TempDir::new().expect("workspace");
         let skill_dir = workspace.path().join(".agents/skills/image-router");
         std::fs::create_dir_all(&skill_dir).expect("skill dir");
@@ -603,8 +647,58 @@ Call lime_create_image_generation_task directly.
             Some(workspace.path()),
         )
         .expect("prompt");
+        assert_eq!(prompt, "base");
         assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("## 可用 Agent Skills"));
         assert!(!prompt.contains("Call lime_create_image_generation_task directly."));
+
+        let names = selected_agent_skill_names_for_turn(
+            "$image-router",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        );
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn image_command_intent_does_not_enter_agent_skills() {
+        let workspace = TempDir::new().expect("workspace");
+        write_skill(
+            &workspace,
+            "image_generate",
+            "image_generate",
+            "Generate image task.",
+        );
+        let metadata = serde_json::json!({
+            "harness": {
+                "image_command_intent": {
+                    "kind": "image_task",
+                    "image_task": {
+                        "prompt": "广州夏天",
+                        "modality_contract_key": "image_generation"
+                    }
+                }
+            }
+        });
+
+        let prompt = append_agent_skills_context_to_system_prompt(
+            Some("base".to_string()),
+            "$image_generate 画一张广州夏天的图",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        )
+        .expect("prompt");
+        assert_eq!(prompt, "base");
+
+        let names = selected_agent_skill_names_for_turn(
+            "$image_generate 画一张广州夏天的图",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        );
+        assert!(names.is_empty());
     }
 
     #[test]

@@ -326,11 +326,60 @@ describe("MessageList runtime status", () => {
     expect(
       container.querySelector('[data-testid="message-runtime-status-pill"]'),
     ).not.toBeNull();
+    const renderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    expect(renderer?.getAttribute("data-is-streaming")).toBe("no");
+  });
+
+  it("assistant 已有有效正文时不应再显示远端 failed 标红状态", () => {
+    const now = new Date("2026-06-07T09:31:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-hello",
+        role: "user",
+        content: "你好",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-hello-soft-failed",
+        role: "assistant",
+        content: "你好，我在。可以继续帮你处理。",
+        contentParts: [
+          {
+            type: "text",
+            text: "你好，我在。可以继续帮你处理。",
+          },
+        ],
+        timestamp: new Date("2026-06-07T09:31:05.000Z"),
+        isThinking: false,
+        runtimeStatus: {
+          phase: "failed",
+          title: "当前处理失败",
+          detail: "terminal status arrived after visible answer",
+        },
+      },
+    ];
+
+    const container = render(messages, {
+      isSending: false,
+    });
+
+    expect(container.textContent).toContain("你好");
+    expect(container.textContent).toContain("你好，我在。可以继续帮你处理。");
+    expect(container.textContent).not.toContain("当前处理失败");
     expect(
-      container
-        .querySelector('[data-testid="streaming-renderer"]')
-        ?.getAttribute("data-is-streaming"),
-    ).toBe("no");
+      container.querySelector(
+        '[data-testid="assistant-streaming-inline-indicator"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-runtime-status-pill"]'),
+    ).toBeNull();
+    const renderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    expect(renderer?.getAttribute("data-is-streaming")).toBe("no");
   });
 
   it("完成态 assistant 有正文时不应被旧 running 工具状态拖回正在输出", () => {

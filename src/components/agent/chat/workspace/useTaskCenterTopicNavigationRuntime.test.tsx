@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +15,12 @@ const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
 function mountRuntime(overrides: {
   clearTaskCenterEmbeddedHomeSession?: (topicId: string) => void;
+  setTaskCenterOpenTabMap?: Dispatch<SetStateAction<TaskCenterWorkspaceTabMap>>;
   switchTopic?: (topicId: string, options?: unknown) => Promise<unknown>;
+  upsertTaskCenterOpenTab?: (
+    topicId: string,
+    workspaceIdOverride?: string | null,
+  ) => void;
 } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -63,7 +68,10 @@ function mountRuntime(overrides: {
       sessionId: string;
       routeSessionId: string | null;
     } | null>(null);
-    const [, setTaskCenterOpenTabMap] = useState<TaskCenterWorkspaceTabMap>({});
+    const [, setTaskCenterOpenTabMapState] =
+      useState<TaskCenterWorkspaceTabMap>({});
+    const setTaskCenterOpenTabMap =
+      overrides.setTaskCenterOpenTabMap ?? setTaskCenterOpenTabMapState;
     const [, setTaskCenterTransitionTopicId] = useState<string | null>(null);
 
     runtimeRef.current = useTaskCenterTopicNavigationRuntime({
@@ -100,7 +108,7 @@ function mountRuntime(overrides: {
       taskCenterTransitionTopicId: null,
       taskCenterWorkspaceId: "workspace-test",
       topicById,
-      upsertTaskCenterOpenTab: vi.fn(),
+      upsertTaskCenterOpenTab: overrides.upsertTaskCenterOpenTab ?? vi.fn(),
       markTaskCenterLocalSessionOverride: vi.fn(),
     });
     return null;
@@ -144,5 +152,28 @@ describe("useTaskCenterTopicNavigationRuntime", () => {
       "topic-next",
     );
     expect(switchTopic).toHaveBeenCalledWith("topic-next", undefined);
+  });
+
+  it("switchTopic 成功返回 undefined 时不应回滚已打开会话", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const switchTopic = vi.fn(async () => undefined);
+    const upsertTaskCenterOpenTab = vi.fn();
+    const setTaskCenterOpenTabMap = vi.fn();
+    const runtime = mountRuntime({
+      switchTopic,
+      upsertTaskCenterOpenTab,
+      setTaskCenterOpenTabMap,
+    });
+
+    await act(async () => {
+      await runtime.handleOpenTaskTopic("topic-next");
+    });
+
+    expect(switchTopic).toHaveBeenCalledWith("topic-next", undefined);
+    expect(upsertTaskCenterOpenTab).toHaveBeenCalledWith(
+      "topic-next",
+      "workspace-test",
+    );
+    expect(setTaskCenterOpenTabMap).not.toHaveBeenCalled();
   });
 });

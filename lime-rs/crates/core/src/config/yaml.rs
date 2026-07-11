@@ -7,7 +7,10 @@
 
 use super::types::Config;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+
+const CONFIG_PATH_ENV: &str = "LIME_CONFIG_PATH";
 
 /// 配置错误类型
 #[derive(Debug, Clone)]
@@ -234,6 +237,10 @@ impl ConfigManager {
 
     /// 获取默认配置文件路径
     pub fn default_config_path() -> PathBuf {
+        if let Some(path) = config_path_from_override(std::env::var_os(CONFIG_PATH_ENV)) {
+            return path;
+        }
+
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("lime")
@@ -263,23 +270,6 @@ fn normalize_legacy_workspace_preferences_yaml_value(value: &mut serde_yaml::Val
     false
 }
 
-fn normalize_legacy_workspace_preferences_json_value(value: &mut serde_json::Value) -> bool {
-    let Some(object) = value.as_object_mut() else {
-        return false;
-    };
-
-    if object.contains_key("workspace_preferences") {
-        return object.remove("content_creator").is_some();
-    }
-
-    if let Some(legacy_value) = object.remove("content_creator") {
-        object.insert("workspace_preferences".to_string(), legacy_value);
-        return true;
-    }
-
-    false
-}
-
 fn parse_yaml_config_with_legacy_tracking(yaml: &str) -> Result<(Config, bool), ConfigError> {
     let mut value: serde_yaml::Value =
         serde_yaml::from_str(yaml).map_err(|e| ConfigError::ParseError(e.to_string()))?;
@@ -287,19 +277,6 @@ fn parse_yaml_config_with_legacy_tracking(yaml: &str) -> Result<(Config, bool), 
     let config =
         serde_yaml::from_value(value).map_err(|e| ConfigError::ParseError(e.to_string()))?;
     Ok((config, migrated_legacy_key))
-}
-
-fn parse_json_config_with_legacy_tracking(json: &str) -> Result<(Config, bool), ConfigError> {
-    let mut value: serde_json::Value =
-        serde_json::from_str(json).map_err(|e| ConfigError::ParseError(e.to_string()))?;
-    let migrated_legacy_key = normalize_legacy_workspace_preferences_json_value(&mut value);
-    let config =
-        serde_json::from_value(value).map_err(|e| ConfigError::ParseError(e.to_string()))?;
-    Ok((config, migrated_legacy_key))
-}
-
-fn parse_json_config(json: &str) -> Result<Config, ConfigError> {
-    parse_json_config_with_legacy_tracking(json).map(|(config, _)| config)
 }
 
 fn normalized_config_for_persistence(config: &Config) -> Config {
@@ -710,105 +687,88 @@ impl YamlService {
     }
 }
 
-// ============ 向后兼容的 JSON 配置函数 ============
+// ============ 当前 YAML 配置函数 ============
 
-/// 获取 JSON 配置文件路径（向后兼容）
-fn json_config_path() -> std::path::PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("lime")
-        .join("config.json")
+fn config_path_from_override(value: Option<OsString>) -> Option<PathBuf> {
+    let value = value?;
+    let trimmed = value.to_string_lossy().trim().to_string();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(trimmed))
 }
 
-/// 加载配置（向后兼容）
+/// 加载当前 YAML 配置。
 ///
-/// 优先加载 YAML 配置，如果不存在则尝试加载 JSON 配置
 /// 首次启动时自动生成强随机 API Key 并保存配置
 pub fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
+    let yaml_path = ConfigManager::default_config_path();
+    load_config_from_path(&yaml_path)
+}
+
+fn normalize_loaded_config(mut config: Config, migrated_legacy_key: bool) -> (Config, bool) {
     use super::types::{generate_secure_api_key, is_default_api_key};
 
-    let yaml_path = ConfigManager::default_config_path();
-    let json_path = json_config_path();
-
-    // 优先尝试 YAML 配置
-    if yaml_path.exists() {
-        let content = std::fs::read_to_string(&yaml_path)?;
-        let (mut config, migrated_legacy_key) = parse_yaml_config_with_legacy_tracking(&content)?;
-        let mut should_save = migrated_legacy_key || config.normalize_workspace_preferences();
-        if config.normalize_local_server_surface() {
-            should_save = true;
-        }
-        // 如果配置中使用默认 API Key，生成强随机 Key 并保存
-        if is_default_api_key(&config.server.api_key) {
-            let new_key = generate_secure_api_key();
-            tracing::warn!("[CONFIG] 检测到默认 API Key，已自动生成强随机 Key");
-            config.server.api_key = new_key;
-            should_save = true;
-        }
-        if should_save {
-            if let Err(e) = save_config(&config) {
-                tracing::error!("[CONFIG] 保存配置失败: {}", e);
-            }
-        }
-        return Ok(config);
+    let mut should_save = migrated_legacy_key || config.normalize_workspace_preferences();
+    if config.normalize_local_server_surface() {
+        should_save = true;
+    }
+    if is_default_api_key(&config.server.api_key) {
+        let new_key = generate_secure_api_key();
+        tracing::warn!("[CONFIG] 检测到默认 API Key，已自动生成强随机 Key");
+        config.server.api_key = new_key;
+        should_save = true;
     }
 
-    // 回退到 JSON 配置
-    if json_path.exists() {
-        let content = std::fs::read_to_string(&json_path)?;
-        let (mut config, migrated_legacy_key) = parse_json_config_with_legacy_tracking(&content)?;
-        let mut should_save = migrated_legacy_key || config.normalize_workspace_preferences();
-        if config.normalize_local_server_surface() {
-            should_save = true;
-        }
-        // 如果配置中使用默认 API Key，生成强随机 Key 并保存
-        if is_default_api_key(&config.server.api_key) {
-            let new_key = generate_secure_api_key();
-            tracing::warn!("[CONFIG] 检测到默认 API Key，已自动生成强随机 Key");
-            config.server.api_key = new_key;
-            should_save = true;
-        }
+    (config, should_save)
+}
+
+fn persist_loaded_config(config: &Config, yaml_path: &Path) {
+    if let Err(e) = save_config_yaml_to_path(config, yaml_path) {
+        tracing::error!("[CONFIG] 保存配置失败: {}", e);
+    }
+}
+
+fn load_config_from_path(yaml_path: &Path) -> Result<Config, Box<dyn std::error::Error>> {
+    if yaml_path.exists() {
+        let content = std::fs::read_to_string(&yaml_path)?;
+        let (config, migrated_legacy_key) = parse_yaml_config_with_legacy_tracking(&content)?;
+        let (config, should_save) = normalize_loaded_config(config, migrated_legacy_key);
         if should_save {
-            if let Err(e) = save_config(&config) {
-                tracing::error!("[CONFIG] 保存配置失败: {}", e);
-            }
+            persist_loaded_config(&config, yaml_path);
         }
         return Ok(config);
     }
 
     // 都不存在，创建默认配置并生成强随机 API Key
     let mut config = Config::default();
-    let new_key = generate_secure_api_key();
+    let new_key = super::types::generate_secure_api_key();
     tracing::info!("[CONFIG] 首次启动，已生成强随机 API Key");
     config.server.api_key = new_key;
     // 保存初始配置
-    if let Err(e) = save_config_yaml(&config) {
+    if let Err(e) = save_config_yaml_to_path(&config, yaml_path) {
         tracing::error!("[CONFIG] 保存初始配置失败: {}", e);
     }
     Ok(config)
 }
 
-/// 保存配置（同时写入 YAML 与 JSON，兼容旧版）
+/// 保存当前 YAML 配置。
 pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let normalized = normalized_config_for_persistence(config);
-
-    // 主配置优先写入 YAML
-    save_config_yaml(&normalized)?;
-
-    // 兼容旧版 JSON 配置
-    let path = json_config_path();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let content = serde_json::to_string_pretty(&normalized)?;
-    std::fs::write(&path, content)?;
-    Ok(())
+    let yaml_path = ConfigManager::default_config_path();
+    save_config_yaml_to_path(config, &yaml_path)
 }
 
 /// 保存配置为 YAML 格式
 pub fn save_config_yaml(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let normalized = normalized_config_for_persistence(config);
     let path = ConfigManager::default_config_path();
+    save_config_yaml_to_path(config, &path)
+}
+
+fn save_config_yaml_to_path(
+    config: &Config,
+    path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let normalized = normalized_config_for_persistence(config);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -907,37 +867,65 @@ content_creator:
     }
 
     #[test]
-    fn test_parse_json_config_migrates_legacy_content_creator_key() {
-        let json = r#"{
-            "content_creator": {
-                "schema_version": 0,
-                "media_defaults": {
-                    "image": {
-                        "preferred_provider_id": "fal"
-                    }
-                }
-            }
-        }"#;
-
-        let config = parse_json_config(json).unwrap();
-        assert_eq!(config.workspace_preferences.schema_version, 0);
-        assert_eq!(
-            config
-                .workspace_preferences
-                .media_defaults
-                .image
-                .preferred_provider_id
-                .as_deref(),
-            Some("fal")
-        );
-    }
-
-    #[test]
     fn test_to_yaml_roundtrip() {
         let config = Config::default();
         let yaml = ConfigManager::to_yaml(&config).unwrap();
         let parsed = ConfigManager::parse_yaml(&yaml).unwrap();
         assert_eq!(config, parsed);
+    }
+
+    #[test]
+    fn test_to_yaml_serializes_wechat_runtime_fields_once() {
+        let mut config = Config::default();
+        config.channels.wechat.default_model = Some("openai/gpt-4.1".to_string());
+
+        let yaml = ConfigManager::to_yaml(&config).unwrap();
+        let mut in_wechat = false;
+        let mut wechat_lines = Vec::new();
+        for line in yaml.lines() {
+            if line == "  wechat:" {
+                in_wechat = true;
+            } else if in_wechat && line.starts_with("  ") && !line.starts_with("    ") {
+                break;
+            }
+            if in_wechat {
+                wechat_lines.push(line);
+            }
+        }
+        let wechat_block = wechat_lines.join("\n");
+
+        assert_eq!(wechat_block.matches("    streaming: off").count(), 1);
+        assert_eq!(wechat_block.matches("    reply_to_mode: off").count(), 1);
+        ConfigManager::parse_yaml(&yaml).unwrap();
+    }
+
+    #[test]
+    fn test_current_yaml_parse_error_does_not_fallback_to_json() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let yaml_path = temp_dir.path().join("config.yaml");
+        let json_path = temp_dir.path().join("config.json");
+        std::fs::write(
+            &yaml_path,
+            "channels:\n  wechat:\n    streaming: off\n    streaming: partial\n",
+        )
+        .unwrap();
+        std::fs::write(&json_path, r#"{"server":{"api_key":"json-key"}}"#).unwrap();
+
+        let error = load_config_from_path(&yaml_path).unwrap_err().to_string();
+
+        assert!(error.contains("duplicate entry with key"));
+    }
+
+    #[test]
+    fn test_save_config_yaml_to_path_only_writes_current_yaml() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let yaml_path = temp_dir.path().join("config.yaml");
+        let json_path = temp_dir.path().join("config.json");
+
+        save_config_yaml_to_path(&Config::default(), &yaml_path).unwrap();
+
+        assert!(yaml_path.is_file());
+        assert!(!json_path.exists());
     }
 
     #[test]

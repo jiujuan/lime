@@ -1,11 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use std::collections::{HashMap, HashSet};
 
-use crate::config::AsterMode;
 use crate::conversation::message::{Message, ToolRequest};
-use crate::permission::permission_inspector::PermissionInspector;
-use crate::permission::permission_judge::PermissionCheckResult;
 
 /// Result of inspecting a tool call
 #[derive(Debug, Clone)]
@@ -115,80 +111,6 @@ impl ToolInspectionManager {
     pub fn inspector_names(&self) -> Vec<&'static str> {
         self.inspectors.iter().map(|i| i.name()).collect()
     }
-
-    /// Update the permission inspector's mode
-    pub async fn update_permission_inspector_mode(&self, mode: AsterMode) {
-        for inspector in &self.inspectors {
-            if inspector.name() == "permission" {
-                // Downcast to PermissionInspector to access update_mode method
-                if let Some(permission_inspector) =
-                    inspector.as_any().downcast_ref::<PermissionInspector>()
-                {
-                    permission_inspector.update_mode(mode).await;
-                    return;
-                }
-            }
-        }
-        tracing::warn!("Permission inspector not found for mode update");
-    }
-
-    pub async fn current_permission_mode(&self) -> Option<AsterMode> {
-        for inspector in &self.inspectors {
-            if inspector.name() == "permission" {
-                if let Some(permission_inspector) =
-                    inspector.as_any().downcast_ref::<PermissionInspector>()
-                {
-                    return Some(permission_inspector.current_mode().await);
-                }
-            }
-        }
-        None
-    }
-
-    /// Update the permission manager for a specific tool
-    pub async fn update_permission_manager(
-        &self,
-        tool_name: &str,
-        permission_level: crate::config::permission::PermissionLevel,
-    ) {
-        for inspector in &self.inspectors {
-            if inspector.name() == "permission" {
-                // Downcast to PermissionInspector to access permission manager
-                if let Some(permission_inspector) =
-                    inspector.as_any().downcast_ref::<PermissionInspector>()
-                {
-                    let mut permission_manager =
-                        permission_inspector.permission_manager.lock().await;
-                    permission_manager.update_user_permission(tool_name, permission_level);
-                    return;
-                }
-            }
-        }
-        tracing::warn!("Permission inspector not found for permission manager update");
-    }
-
-    /// Process inspection results using the permission inspector
-    /// This delegates to the permission inspector's process_inspection_results method
-    pub fn process_inspection_results_with_permission_inspector(
-        &self,
-        remaining_requests: &[ToolRequest],
-        inspection_results: &[InspectionResult],
-    ) -> Option<PermissionCheckResult> {
-        for inspector in &self.inspectors {
-            if inspector.name() == "permission" {
-                if let Some(permission_inspector) =
-                    inspector.as_any().downcast_ref::<PermissionInspector>()
-                {
-                    return Some(
-                        permission_inspector
-                            .process_inspection_results(remaining_requests, inspection_results),
-                    );
-                }
-            }
-        }
-        tracing::warn!("Permission inspector not found for processing inspection results");
-        None
-    }
 }
 
 impl Default for ToolInspectionManager {
@@ -197,108 +119,58 @@ impl Default for ToolInspectionManager {
     }
 }
 
-/// Apply inspection results to permission check results
-/// This is the generic permission-mixing logic that works for all inspector types
-pub fn apply_inspection_results_to_permissions(
-    mut permission_result: PermissionCheckResult,
+#[derive(Debug, Default)]
+pub(crate) struct ToolInspectionDecision {
+    pub approved: Vec<ToolRequest>,
+    pub needs_approval: Vec<ToolRequest>,
+    pub denied: Vec<ToolRequest>,
+}
+
+pub(crate) fn categorize_inspected_tools(
+    requests: &[ToolRequest],
     inspection_results: &[InspectionResult],
-) -> PermissionCheckResult {
-    if inspection_results.is_empty() {
-        return permission_result;
-    }
+) -> ToolInspectionDecision {
+    let mut decision = ToolInspectionDecision::default();
 
-    // Create a map of tool requests by ID for easy lookup
-    let mut all_requests: HashMap<String, ToolRequest> = HashMap::new();
+    for request in requests {
+        let matching = inspection_results
+            .iter()
+            .filter(|result| result.tool_request_id == request.id)
+            .collect::<Vec<_>>();
 
-    // Collect all tool requests
-    for req in &permission_result.approved {
-        all_requests.insert(req.id.clone(), req.clone());
-    }
-    for req in &permission_result.needs_approval {
-        all_requests.insert(req.id.clone(), req.clone());
-    }
-    for req in &permission_result.denied {
-        all_requests.insert(req.id.clone(), req.clone());
-    }
+        for result in &matching {
+            tracing::info!(
+                inspector_name = result.inspector_name,
+                tool_request_id = %result.tool_request_id,
+                action = ?result.action,
+                confidence = result.confidence,
+                reason = %result.reason,
+                finding_id = ?result.finding_id,
+                "Applying inspection result"
+            );
+        }
 
-    let mut blocked_by_non_permission: HashSet<String> = HashSet::new();
-
-    // Process inspection results
-    for result in inspection_results {
-        let request_id = &result.tool_request_id;
-
-        tracing::info!(
-            inspector_name = result.inspector_name,
-            tool_request_id = %request_id,
-            action = ?result.action,
-            confidence = result.confidence,
-            reason = %result.reason,
-            finding_id = ?result.finding_id,
-            "Applying inspection result"
-        );
-
-        match result.action {
-            InspectionAction::Deny => {
-                blocked_by_non_permission.insert(request_id.clone());
-                // Remove from approved and needs_approval, add to denied
-                permission_result
-                    .approved
-                    .retain(|req| req.id != *request_id);
-                permission_result
-                    .needs_approval
-                    .retain(|req| req.id != *request_id);
-
-                if let Some(request) = all_requests.get(request_id) {
-                    if !permission_result
-                        .denied
-                        .iter()
-                        .any(|req| req.id == *request_id)
-                    {
-                        permission_result.denied.push(request.clone());
-                    }
-                }
-            }
-            InspectionAction::RequireApproval(_) => {
-                blocked_by_non_permission.insert(request_id.clone());
-                // Remove from approved, add to needs_approval if not already there
-                permission_result
-                    .approved
-                    .retain(|req| req.id != *request_id);
-
-                if let Some(request) = all_requests.get(request_id) {
-                    if !permission_result
-                        .needs_approval
-                        .iter()
-                        .any(|req| req.id == *request_id)
-                    {
-                        permission_result.needs_approval.push(request.clone());
-                    }
-                }
-            }
-            InspectionAction::Allow => {
-                // Allow may clear the baseline permission inspector decision, but it must not
-                // override a previous non-permission inspector that required approval or denied.
-                if blocked_by_non_permission.contains(request_id) {
-                    continue;
-                }
-                if let Some(request) = all_requests.get(request_id) {
-                    permission_result.denied.retain(|req| req.id != *request_id);
-                    permission_result
-                        .needs_approval
-                        .retain(|req| req.id != *request_id);
-                    if !permission_result
-                        .approved
-                        .iter()
-                        .any(|req| req.id == *request_id)
-                    {
-                        permission_result.approved.push(request.clone());
-                    }
-                }
-            }
+        if matching
+            .iter()
+            .any(|result| result.action == InspectionAction::Deny)
+        {
+            decision.denied.push(request.clone());
+        } else if matching
+            .iter()
+            .any(|result| matches!(result.action, InspectionAction::RequireApproval(_)))
+        {
+            decision.needs_approval.push(request.clone());
+        } else if matching
+            .iter()
+            .any(|result| result.action == InspectionAction::Allow)
+        {
+            decision.approved.push(request.clone());
+        } else {
+            decision.needs_approval.push(request.clone());
         }
     }
 
-    permission_result
+    decision
 }
 
 pub fn get_security_finding_id_from_results(

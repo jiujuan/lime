@@ -53,6 +53,7 @@ interface UseTaskCenterChromeNavigationRuntimeParams {
   isBootstrapDispatchPending: boolean;
   isHomeSessionBackgroundRecovery: boolean;
   isHomePendingPreviewActive: boolean;
+  isHomeSendStarting?: boolean;
   isPreparingSend: boolean;
   isSending: boolean;
   isSessionHydrating: boolean;
@@ -143,6 +144,7 @@ export function useTaskCenterChromeNavigationRuntime({
   isBootstrapDispatchPending,
   isHomeSessionBackgroundRecovery,
   isHomePendingPreviewActive,
+  isHomeSendStarting = false,
   isPreparingSend,
   isSending,
   isSessionHydrating,
@@ -207,6 +209,7 @@ export function useTaskCenterChromeNavigationRuntime({
     isPreparingSend,
     isSending,
     isHomePendingPreviewActive,
+    isHomeSendStarting,
     queuedTurnCount: queuedTurnsLength,
     hasLocalSessionOverride,
     embeddedHomeSessionIds,

@@ -3,17 +3,15 @@
 //! 收口 Lime 对迁移期 thread runtime store 的访问边界，
 //! 避免业务层散落依赖上游 free function。
 
-use crate::aster_session_store::LimeSessionStore;
 use crate::queued_turn::QueuedTurnSnapshot;
-use crate::runtime_queue_aster_adapter::runtime_queue_service_from_store;
 use crate::runtime_snapshot_adapter::{
     project_runtime_snapshot_record, RuntimeTimelineSnapshotProjection,
 };
 use crate::runtime_state::QueuedTurnTask;
 use crate::runtime_store_aster_adapter::{
     initialize_aster_runtime_with_root, initialized_aster_runtime_root,
-    load_aster_runtime_snapshot, require_aster_runtime_store, runtime_snapshot_record_from_aster,
-    AsterThreadRuntimeStore,
+    require_aster_runtime_store, runtime_queue_service_from_store, runtime_queue_store_from_aster,
+    runtime_read_store_from_aster, AsterThreadRuntimeStore,
 };
 use crate::session_execution_runtime::SessionExecutionRuntimeSnapshotProjection;
 use crate::session_execution_runtime_adapter::project_session_execution_runtime_snapshot_record;
@@ -27,6 +25,9 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use thread_store::runtime_snapshot::RuntimeSessionSnapshotRecord;
+use thread_store::runtime_store::{
+    load_runtime_snapshot_record as load_runtime_snapshot_record_from_store, RuntimeStore,
+};
 
 const QUEUED_TURN_EVENT_NAME_METADATA_KEY: &str = "event_name";
 const DEFAULT_QUEUE_EVENT_NAME: &str = "agent_stream";
@@ -61,13 +62,12 @@ pub(crate) fn ensure_runtime_dirs_with_root(root: PathBuf) -> Result<PathBuf, St
         .clone()
 }
 
-/// 启动期显式初始化 Agent runtime 目录、共享 runtime store 与全局 session store。
-pub fn initialize_agent_runtime(db: DbConnection) -> Result<(), String> {
+/// 启动期显式初始化 Agent runtime 目录与共享 runtime store。
+pub fn initialize_agent_runtime(_db: DbConnection) -> Result<(), String> {
     let runtime_root = ensure_runtime_dirs()?;
-    let session_store = Arc::new(LimeSessionStore::new(db.clone()));
 
     block_on_runtime_init(async move {
-        initialize_aster_runtime_with_root(runtime_root, Some(session_store)).await?;
+        initialize_aster_runtime_with_root(runtime_root).await?;
         Ok(())
     })
 }
@@ -122,9 +122,7 @@ fn initialize_runtime_dirs() -> Result<PathBuf, String> {
 
 fn initialize_runtime_dirs_with_root(root: PathBuf) -> Result<PathBuf, String> {
     let runtime_root = root.clone();
-    block_on_runtime_init(
-        async move { initialize_aster_runtime_with_root(runtime_root, None).await },
-    )?;
+    block_on_runtime_init(async move { initialize_aster_runtime_with_root(runtime_root).await })?;
     Ok(root)
 }
 
@@ -144,33 +142,38 @@ async fn ensure_runtime_dirs_async() -> Result<PathBuf, String> {
         .map_err(|error| format!("异步初始化 Agent runtime 失败: {error}"))?
 }
 
-async fn require_runtime_store_async() -> Result<Arc<AsterThreadRuntimeStore>, String> {
-    ensure_runtime_dirs_async().await?;
-    require_aster_runtime_store()
+async fn require_runtime_read_store_async() -> Result<Arc<dyn RuntimeStore>, String> {
+    let store = require_runtime_store_async().await?;
+    Ok(runtime_read_store_from_aster(store))
 }
 
 fn require_runtime_queue_service() -> Result<Arc<RuntimeQueueService>, String> {
-    ensure_runtime_dirs()?;
-    let store = require_aster_runtime_store()?;
+    let store = runtime_queue_store_from_aster(require_runtime_store()?);
     Ok(RUNTIME_QUEUE_SERVICE
         .get_or_init(|| runtime_queue_service_from_store(store))
         .clone())
 }
 
 async fn require_runtime_queue_service_async() -> Result<Arc<RuntimeQueueService>, String> {
-    let store = require_runtime_store_async().await?;
+    let store = runtime_queue_store_from_aster(require_runtime_store_async().await?);
     Ok(RUNTIME_QUEUE_SERVICE
         .get_or_init(|| runtime_queue_service_from_store(store))
         .clone())
+}
+
+async fn require_runtime_store_async() -> Result<Arc<AsterThreadRuntimeStore>, String> {
+    ensure_runtime_dirs_async().await?;
+    require_aster_runtime_store()
 }
 
 /// 读取 runtime snapshot current record；Aster DTO 只在 store adapter 内短暂存在。
 async fn load_runtime_snapshot_record(
     session_id: &str,
 ) -> Result<RuntimeSessionSnapshotRecord, String> {
-    ensure_runtime_dirs_async().await?;
-    let snapshot = load_aster_runtime_snapshot(session_id).await?;
-    Ok(runtime_snapshot_record_from_aster(&snapshot))
+    let store = require_runtime_read_store_async().await?;
+    load_runtime_snapshot_record_from_store(store.as_ref(), session_id)
+        .await
+        .map_err(|error| format!("读取 runtime snapshot record 失败: {error}"))
 }
 
 /// 读取会话 runtime snapshot 并立即投影为 Lime current read model。

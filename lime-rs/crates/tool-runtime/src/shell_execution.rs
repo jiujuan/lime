@@ -11,6 +11,7 @@ use crate::subprocess::{
     configure_command_for_gui, decode_process_output, summarize_decoded_with,
     wrap_powershell_command_for_utf8,
 };
+use crate::tool_definition::RuntimeToolDefinition;
 use crate::tool_executor::RuntimeToolTurnContext;
 use crate::tool_result_projection::{
     runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
@@ -22,15 +23,18 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 const MAX_OUTPUT_LENGTH: usize = 128 * 1024;
 const DEFAULT_BASH_TIMEOUT_SECS: u64 = 300;
 const MAX_BASH_TIMEOUT_SECS: u64 = 1800;
 const DEFAULT_POWERSHELL_TIMEOUT_MS: u64 = 300_000;
 const MAX_POWERSHELL_TIMEOUT_MS: u64 = 1_800_000;
+pub const BASH_TOOL_NAME: &str = "Bash";
+pub const POWERSHELL_TOOL_NAME: &str = "PowerShell";
 
 pub struct RuntimeShellToolRequest<'a> {
     pub tool_name: &'a str,
@@ -51,6 +55,7 @@ enum RuntimeShellToolKind {
 
 #[derive(Debug, Deserialize)]
 struct BashInput {
+    #[serde(alias = "cmd", alias = "script")]
     command: String,
     #[serde(default)]
     timeout: Option<u64>,
@@ -60,11 +65,85 @@ struct BashInput {
 
 #[derive(Debug, Deserialize)]
 struct PowerShellInput {
+    #[serde(alias = "cmd", alias = "script")]
     command: String,
     #[serde(default)]
     timeout: Option<u64>,
+    #[serde(default)]
+    description: Option<String>,
     #[serde(default, alias = "runInBackground")]
     run_in_background: Option<bool>,
+}
+
+pub fn shell_tool_definitions() -> Vec<RuntimeToolDefinition> {
+    vec![
+        shell_tool_definition(BASH_TOOL_NAME).expect("Bash shell tool definition"),
+        shell_tool_definition(POWERSHELL_TOOL_NAME).expect("PowerShell shell tool definition"),
+    ]
+}
+
+pub fn shell_tool_definition(tool_name: &str) -> Option<RuntimeToolDefinition> {
+    match runtime_shell_tool_kind(tool_name)? {
+        RuntimeShellToolKind::Bash => Some(RuntimeToolDefinition::new(
+            BASH_TOOL_NAME,
+            "Execute a shell command in the current workspace and return stdout, stderr, exit status, and execution metadata. Use Read, Glob, Grep, or apply_patch for file reads and edits when those tools fit better.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Shell command to run from the current working directory."
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Maximum command runtime in seconds. Defaults to 300 and is capped at 1800.",
+                        "minimum": 1,
+                        "maximum": MAX_BASH_TIMEOUT_SECS
+                    },
+                    "background": {
+                        "type": "boolean",
+                        "description": "Run the command in the background and return a task id plus output file."
+                    }
+                },
+                "required": ["command"]
+            }),
+        )),
+        RuntimeShellToolKind::PowerShell => Some(RuntimeToolDefinition::new(
+            POWERSHELL_TOOL_NAME,
+            "Execute a PowerShell command in the current workspace and return stdout, stderr, exit status, and execution metadata. Prefer Bash on non-Windows hosts unless PowerShell is explicitly required.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "PowerShell command to run from the current working directory."
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Maximum command runtime in milliseconds. Defaults to 300000 and is capped at 1800000.",
+                        "minimum": 1,
+                        "maximum": MAX_POWERSHELL_TIMEOUT_MS
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional short command summary used for background execution metadata."
+                    },
+                    "run_in_background": {
+                        "type": "boolean",
+                        "description": "Run the command in the background and return a task id plus output file."
+                    }
+                },
+                "required": ["command"]
+            }),
+        )),
+    }
+}
+
+pub fn shell_canonical_tool_name(tool_name: &str) -> Option<&'static str> {
+    match runtime_shell_tool_kind(tool_name)? {
+        RuntimeShellToolKind::Bash => Some(BASH_TOOL_NAME),
+        RuntimeShellToolKind::PowerShell => Some(POWERSHELL_TOOL_NAME),
+    }
 }
 
 #[derive(Debug)]
@@ -134,18 +213,18 @@ pub async fn execute_runtime_shell_tool(
     request: RuntimeShellToolRequest<'_>,
 ) -> Option<Result<CallToolResult, ErrorData>> {
     let kind = runtime_shell_tool_kind(request.tool_name)?;
-    if request.has_workspace_sandbox {
-        return None;
-    }
 
     let input = match parse_shell_input(kind, request.params) {
         Ok(input) => input,
         Err(error) => return Some(Err(runtime_shell_error(error))),
     };
-    if input.background {
-        return None;
+    if request.has_workspace_sandbox {
+        return Some(Ok(workspace_sandbox_shell_result(
+            kind,
+            &input.command,
+            &request.working_directory,
+        )));
     }
-
     match shell_permission_decision(
         kind,
         &input.command,
@@ -156,7 +235,14 @@ pub async fn execute_runtime_shell_tool(
         RuntimeShellPermissionOutcome::Deny(message) => {
             return Some(Err(runtime_shell_error(message)));
         }
-        RuntimeShellPermissionOutcome::FallbackToRegistry => return None,
+        RuntimeShellPermissionOutcome::RequiresConfirmation(message) => {
+            return Some(Ok(shell_requires_confirmation_result(
+                kind,
+                &input.command,
+                &request.working_directory,
+                message,
+            )));
+        }
     }
 
     if request
@@ -169,6 +255,21 @@ pub async fn execute_runtime_shell_tool(
 
     let mut environment = request.environment;
     environment.insert("AGENT_TERMINAL".to_string(), "1".to_string());
+
+    if input.background {
+        return Some(
+            execute_background_shell(
+                kind,
+                &input.command,
+                input.description.as_deref(),
+                input.timeout,
+                &request.working_directory,
+                &request.session_id,
+                environment,
+            )
+            .await,
+        );
+    }
 
     Some(
         execute_foreground_shell(
@@ -185,7 +286,8 @@ pub async fn execute_runtime_shell_tool(
 
 fn runtime_shell_tool_kind(tool_name: &str) -> Option<RuntimeShellToolKind> {
     match tool_name.trim() {
-        "Bash" | "BashTool" => Some(RuntimeShellToolKind::Bash),
+        "Bash" | "BashTool" | "Shell" | "developer__shell" | "mcp__system__shell"
+        | "shell_command" | "exec_command" | "local_shell_call" => Some(RuntimeShellToolKind::Bash),
         "PowerShell" | "PowerShellTool" => Some(RuntimeShellToolKind::PowerShell),
         _ => None,
     }
@@ -196,6 +298,7 @@ struct ShellExecutionInput {
     command: String,
     timeout: Duration,
     background: bool,
+    description: Option<String>,
 }
 
 fn parse_shell_input(
@@ -215,6 +318,7 @@ fn parse_shell_input(
                 command,
                 timeout: Duration::from_secs(timeout_secs),
                 background: input.background.unwrap_or(false),
+                description: None,
             })
         }
         RuntimeShellToolKind::PowerShell => {
@@ -229,6 +333,7 @@ fn parse_shell_input(
                 command,
                 timeout: Duration::from_millis(timeout_ms),
                 background: input.run_in_background.unwrap_or(false),
+                description: input.description,
             })
         }
     }
@@ -245,7 +350,7 @@ fn normalize_command(command: String, field: &str) -> Result<String, String> {
 enum RuntimeShellPermissionOutcome {
     Allow,
     Deny(String),
-    FallbackToRegistry,
+    RequiresConfirmation(String),
 }
 
 fn shell_permission_decision(
@@ -257,11 +362,11 @@ fn shell_permission_decision(
     match check_shell_command_permission(shell_tool_name(kind), command, working_directory) {
         ShellPermissionDecision::Allow => RuntimeShellPermissionOutcome::Allow,
         ShellPermissionDecision::Deny(reason) => RuntimeShellPermissionOutcome::Deny(reason),
-        ShellPermissionDecision::RequiresConfirmation(_) => {
+        ShellPermissionDecision::RequiresConfirmation(message) => {
             if turn_context_allows_shell_without_confirmation(turn_context) {
                 RuntimeShellPermissionOutcome::Allow
             } else {
-                RuntimeShellPermissionOutcome::FallbackToRegistry
+                RuntimeShellPermissionOutcome::RequiresConfirmation(message)
             }
         }
     }
@@ -326,6 +431,161 @@ async fn execute_foreground_shell(
         working_directory,
         output,
     ))
+}
+
+async fn execute_background_shell(
+    kind: RuntimeShellToolKind,
+    command: &str,
+    description: Option<&str>,
+    max_runtime: Duration,
+    working_directory: &Path,
+    session_id: &str,
+    mut environment: HashMap<String, String>,
+) -> Result<CallToolResult, ErrorData> {
+    let task_id = Uuid::new_v4().to_string();
+    let output_directory = std::env::temp_dir().join("agent_tasks");
+    tokio::fs::create_dir_all(&output_directory)
+        .await
+        .map_err(|error| {
+            runtime_shell_error(format!(
+                "Failed to create background output directory: {error}"
+            ))
+        })?;
+    let output_file = output_directory.join(format!("{task_id}.log"));
+    let output_file_handle = tokio::fs::File::create(&output_file)
+        .await
+        .map_err(|error| {
+            runtime_shell_error(format!("Failed to create background output file: {error}"))
+        })?;
+
+    environment.insert("AGENT_BACKGROUND".to_string(), "1".to_string());
+    let mut child = build_command(kind, command, working_directory, &environment)?
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|error| {
+            runtime_shell_error(format!("Failed to spawn background command: {error}"))
+        })?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let output_file_for_task = output_file.clone();
+    tokio::spawn(async move {
+        monitor_background_shell_process(child, stdout, stderr, output_file_handle, max_runtime)
+            .await;
+    });
+
+    let output_file_text = output_file_for_task.display().to_string();
+    let summary = description
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(command);
+    let output = match kind {
+        RuntimeShellToolKind::PowerShell => format!(
+            "PowerShell command running in background with ID: {task_id}\nSummary: {summary}\nOutput file: {output_file_text}"
+        ),
+        RuntimeShellToolKind::Bash => format!(
+            "Background task started with ID: {task_id}\nOutput file: {output_file_text}\nRead the output file path for logs."
+        ),
+    };
+    let mut metadata = HashMap::from([
+        ("task_id".to_string(), json!(task_id)),
+        ("background".to_string(), json!(true)),
+        ("shell".to_string(), json!(shell_name(kind))),
+        ("command".to_string(), json!(command)),
+        (
+            "cwd".to_string(),
+            json!(working_directory.display().to_string()),
+        ),
+        ("session_id".to_string(), json!(session_id)),
+        ("execution_surface".to_string(), json!("embedded")),
+        ("output_file".to_string(), json!(output_file_text)),
+    ]);
+    if matches!(kind, RuntimeShellToolKind::PowerShell) {
+        metadata.insert("summary".to_string(), json!(summary));
+    }
+
+    Ok(runtime_tool_result_to_call_tool_result(
+        RuntimeToolResultParts {
+            success: true,
+            output: Some(output),
+            error: None,
+            metadata,
+        },
+    ))
+}
+
+async fn monitor_background_shell_process(
+    mut child: tokio::process::Child,
+    stdout: Option<tokio::process::ChildStdout>,
+    stderr: Option<tokio::process::ChildStderr>,
+    output_file: tokio::fs::File,
+    max_runtime: Duration,
+) {
+    let output_file = std::sync::Arc::new(tokio::sync::Mutex::new(output_file));
+    let stdout_task = stdout.map(|stream| {
+        tokio::spawn(write_background_stream_to_file(
+            stream,
+            output_file.clone(),
+            None,
+        ))
+    });
+    let stderr_task = stderr.map(|stream| {
+        tokio::spawn(write_background_stream_to_file(
+            stream,
+            output_file.clone(),
+            Some("[stderr] "),
+        ))
+    });
+
+    let status = tokio::time::timeout(max_runtime, child.wait()).await;
+    if status.is_err() {
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        let _ = write_background_line(&output_file, "\n[tool-runtime] background task timed out\n")
+            .await;
+    }
+
+    if let Some(task) = stdout_task {
+        let _ = task.await;
+    }
+    if let Some(task) = stderr_task {
+        let _ = task.await;
+    }
+    let _ = output_file.lock().await.flush().await;
+}
+
+async fn write_background_stream_to_file<R>(
+    mut stream: R,
+    output_file: std::sync::Arc<tokio::sync::Mutex<tokio::fs::File>>,
+    prefix: Option<&'static str>,
+) where
+    R: AsyncRead + Unpin,
+{
+    let mut buffer = [0u8; 8192];
+    loop {
+        let Ok(read_bytes) = stream.read(&mut buffer).await else {
+            break;
+        };
+        if read_bytes == 0 {
+            break;
+        }
+        let mut file = output_file.lock().await;
+        if let Some(prefix) = prefix {
+            let _ = file.write_all(prefix.as_bytes()).await;
+        }
+        let _ = file.write_all(&buffer[..read_bytes]).await;
+        let _ = file.flush().await;
+    }
+}
+
+async fn write_background_line(
+    output_file: &std::sync::Arc<tokio::sync::Mutex<tokio::fs::File>>,
+    line: &str,
+) -> std::io::Result<()> {
+    let mut file = output_file.lock().await;
+    file.write_all(line.as_bytes()).await?;
+    file.flush().await
 }
 
 fn preflight_shell(
@@ -416,6 +676,64 @@ fn error_result_with_metadata(
         error: Some(error.into()),
         metadata,
     })
+}
+
+fn workspace_sandbox_shell_result(
+    kind: RuntimeShellToolKind,
+    command: &str,
+    working_directory: &Path,
+) -> CallToolResult {
+    error_result_with_metadata(
+        "workspace sandbox shell execution is not implemented in the current shell owner; refusing to fall back to the legacy Aster sandbox stub",
+        HashMap::from([
+            (
+                "execution_surface".to_string(),
+                json!("current_workspace_sandbox_guard"),
+            ),
+            ("sandboxBackendEnforced".to_string(), json!(true)),
+            (
+                "reasonCode".to_string(),
+                json!("workspace_sandbox_current_executor_missing"),
+            ),
+            ("failureCategory".to_string(), json!("sandbox_blocked")),
+            ("shell".to_string(), json!(shell_name(kind))),
+            ("command".to_string(), json!(command)),
+            (
+                "cwd".to_string(),
+                json!(working_directory.display().to_string()),
+            ),
+        ]),
+    )
+}
+
+fn shell_requires_confirmation_result(
+    kind: RuntimeShellToolKind,
+    command: &str,
+    working_directory: &Path,
+    approval_message: String,
+) -> CallToolResult {
+    error_result_with_metadata(
+        "current shell execution requires explicit approval; refusing to fall back to the legacy Aster registry for Bash/PowerShell",
+        HashMap::from([
+            (
+                "execution_surface".to_string(),
+                json!("current_shell_permission_guard"),
+            ),
+            (
+                "reasonCode".to_string(),
+                json!("shell_confirmation_required"),
+            ),
+            ("confirmationRequired".to_string(), json!(true)),
+            ("approvalMessage".to_string(), json!(approval_message)),
+            ("failureCategory".to_string(), json!("approval_required")),
+            ("shell".to_string(), json!(shell_name(kind))),
+            ("command".to_string(), json!(command)),
+            (
+                "cwd".to_string(),
+                json!(working_directory.display().to_string()),
+            ),
+        ]),
+    )
 }
 
 async fn execute_embedded_command(

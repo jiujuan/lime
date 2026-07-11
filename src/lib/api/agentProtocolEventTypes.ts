@@ -197,6 +197,7 @@ export interface AgentEventImageTaskCreated {
   task_id: string;
   task_type?: string;
   task_family?: string;
+  turn_id?: string;
   status?: string;
   normalized_status?: string;
   artifact_path?: string;

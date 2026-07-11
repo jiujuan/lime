@@ -32,8 +32,26 @@ impl ConfiguredReplyProvider {
         self.binding.handle()
     }
 
-    pub(crate) fn into_compat_provider(self) -> Arc<dyn Provider> {
-        self.binding.into_backend().into_inner()
+    pub(crate) fn into_compat_provider(self) -> CompatReplyProvider {
+        CompatReplyProvider::from_aster_provider(self.binding.into_backend().into_inner())
+    }
+}
+
+/// 退场期 Aster provider 句柄。
+///
+/// 该类型只把 Aster provider trait object 留在 credential bridge 边界内；
+/// request_tool_policy 只持有本句柄，最终随 Aster provider reply loop 一起删除。
+pub(crate) struct CompatReplyProvider {
+    inner: Arc<dyn Provider>,
+}
+
+impl CompatReplyProvider {
+    pub(crate) fn from_aster_provider(inner: Arc<dyn Provider>) -> Self {
+        Self { inner }
+    }
+
+    pub(crate) fn into_aster_provider(self) -> Arc<dyn Provider> {
+        self.inner
     }
 }
 

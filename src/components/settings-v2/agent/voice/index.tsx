@@ -64,6 +64,7 @@ import {
 } from "@/hooks/useConfiguredProviders";
 import { MediaPreferenceSection } from "../shared/MediaPreferenceSection";
 import { SettingModelSelectorField } from "../shared/SettingModelSelectorField";
+import { useAutoDismissMessage } from "./useAutoDismissMessage";
 
 const DEFAULT_MEDIA_PREFERENCE: MediaGenerationPreference = {
   allowFallback: true,
@@ -311,10 +312,7 @@ export function VoiceSettings() {
   const [voiceModelTestError, setVoiceModelTestError] = useState<string | null>(
     null,
   );
-  const [message, setMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const { message, showMessage } = useAutoDismissMessage();
   const [loading, setLoading] = useState(true);
   const [globalVoicePreference, setGlobalVoicePreference] =
     useState<MediaGenerationPreference>(DEFAULT_MEDIA_PREFERENCE);
@@ -350,14 +348,11 @@ export function VoiceSettings() {
       );
     } catch (error) {
       console.error("加载语音设置失败:", error);
-      setMessage({
-        type: "error",
-        text: t("settings.voice.message.loadFailed"),
-      });
+      showMessage("error", t("settings.voice.message.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [showMessage, t]);
 
   useEffect(() => {
     void loadVoiceSettings();
@@ -400,11 +395,6 @@ export function VoiceSettings() {
 
     window.requestAnimationFrame(retryFocusVoiceModelSection);
   }, [loading]);
-
-  const showMessage = useCallback((type: "success" | "error", text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  }, []);
 
   const persistVoiceConfig = useCallback(
     async (updater: (current: VoiceInputConfig) => VoiceInputConfig) => {

@@ -1,8 +1,13 @@
 use super::{
-    build_requested_schema, extract_response, normalize_request_user_input_result,
-    parse_request_user_input_tool_input, project_request_user_input_result, AskOption, AskQuestion,
-    AskRequest, ASK_USER_QUESTIONS_SCHEMA_KEY,
+    build_requested_schema, execute_request_user_input, extract_response,
+    normalize_request_user_input_result, parse_request_user_input_tool_input,
+    project_request_user_input_result, request_user_input_canonical_tool_name,
+    request_user_input_tool_definition, RequestUserInputCallback, RequestUserInputOption,
+    RequestUserInputQuestion, RequestUserInputRequest, REQUEST_USER_INPUT_QUESTIONS_SCHEMA_KEY,
+    REQUEST_USER_INPUT_TOOL_NAME,
 };
+use std::sync::Arc;
+use std::time::Duration;
 
 #[test]
 fn parse_request_user_input_tool_input_validates_current_surface() {
@@ -25,20 +30,76 @@ fn parse_request_user_input_tool_input_validates_current_surface() {
 }
 
 #[test]
+fn request_user_input_tool_definition_uses_current_name_and_schema() {
+    let definition = request_user_input_tool_definition();
+
+    assert_eq!(definition.name, REQUEST_USER_INPUT_TOOL_NAME);
+    assert_eq!(
+        request_user_input_canonical_tool_name(REQUEST_USER_INPUT_TOOL_NAME),
+        Some(REQUEST_USER_INPUT_TOOL_NAME)
+    );
+    assert_eq!(request_user_input_canonical_tool_name("Ask"), None);
+    assert!(definition.description.contains("Request user input"));
+    assert_eq!(
+        definition.input_schema["required"],
+        serde_json::json!(["questions"])
+    );
+}
+
+#[tokio::test]
+async fn execute_request_user_input_uses_callback_and_projects_result() {
+    let callback: RequestUserInputCallback = Arc::new(|_request| {
+        Box::pin(async move {
+            Some(serde_json::json!({
+                "模式": "确认后执行"
+            }))
+        })
+    });
+
+    let projection = execute_request_user_input(
+        serde_json::json!({
+            "questions": [{
+                "id": "mode",
+                "header": "模式",
+                "question": "请选择执行模式",
+                "options": [
+                    {"label": "自动执行", "description": "继续执行"},
+                    {"label": "确认后执行", "description": "等待用户确认"}
+                ]
+            }]
+        }),
+        Some(&callback),
+        Duration::from_secs(5),
+    )
+    .await
+    .expect("request_user_input should execute");
+
+    assert!(projection
+        .output
+        .contains("\"请选择执行模式\"=\"确认后执行\""));
+    assert_eq!(
+        projection.metadata.get("answers"),
+        Some(&serde_json::json!({
+            "请选择执行模式": "确认后执行"
+        }))
+    );
+}
+
+#[test]
 fn build_requested_schema_embeds_questions_extension() {
-    let request = AskRequest {
-        questions: vec![AskQuestion {
+    let request = RequestUserInputRequest {
+        questions: vec![RequestUserInputQuestion {
             id: Some("primary_color".to_string()),
             question: "你希望主色调是什么？".to_string(),
             header: Some("主色调".to_string()),
             options: vec![
-                AskOption {
+                RequestUserInputOption {
                     value: "blue-purple".to_string(),
                     label: Some("蓝紫".to_string()),
                     description: Some("冷色科技感".to_string()),
                     preview: None,
                 },
-                AskOption {
+                RequestUserInputOption {
                     value: "cyber-green".to_string(),
                     label: Some("赛博绿".to_string()),
                     description: Some("高亮未来感".to_string()),
@@ -52,7 +113,7 @@ fn build_requested_schema_embeds_questions_extension() {
     let schema = build_requested_schema(&request);
     assert_eq!(
         schema
-            .get(ASK_USER_QUESTIONS_SCHEMA_KEY)
+            .get(REQUEST_USER_INPUT_QUESTIONS_SCHEMA_KEY)
             .and_then(|value| value.as_array())
             .map(|value| value.len()),
         Some(1)
@@ -65,16 +126,16 @@ fn build_requested_schema_embeds_questions_extension() {
 
 #[test]
 fn extract_response_normalizes_question_answers() {
-    let request = AskRequest {
+    let request = RequestUserInputRequest {
         questions: vec![
-            AskQuestion::new("第一问"),
-            AskQuestion {
+            RequestUserInputQuestion::new("第一问"),
+            RequestUserInputQuestion {
                 id: Some("mode".to_string()),
                 question: "第二问".to_string(),
                 header: Some("mode".to_string()),
                 options: vec![
-                    AskOption::with_label("auto", "自动执行"),
-                    AskOption::with_label("confirm", "确认后执行"),
+                    RequestUserInputOption::with_label("auto", "自动执行"),
+                    RequestUserInputOption::with_label("confirm", "确认后执行"),
                 ],
                 multi_select: false,
             },
@@ -102,15 +163,50 @@ fn extract_response_normalizes_question_answers() {
 }
 
 #[test]
-fn normalize_result_preserves_annotations_and_option_identity() {
-    let request = AskRequest {
-        questions: vec![AskQuestion {
+fn extract_response_uses_question_text_as_single_answer_key() {
+    let request = RequestUserInputRequest {
+        questions: vec![RequestUserInputQuestion {
             id: Some("mode".to_string()),
             question: "请选择执行模式".to_string(),
             header: Some("mode".to_string()),
             options: vec![
-                AskOption::with_label("auto", "自动执行"),
-                AskOption::with_label("confirm", "确认后执行"),
+                RequestUserInputOption::with_label("auto", "自动执行"),
+                RequestUserInputOption::with_label("confirm", "确认后执行"),
+            ],
+            multi_select: false,
+        }],
+    };
+
+    let response = extract_response(
+        &request,
+        &serde_json::json!({
+            "answer": "确认后执行"
+        }),
+    )
+    .expect("expected normalized response");
+
+    assert_eq!(
+        response,
+        serde_json::json!({
+            "answer": "confirm",
+            "answers": {
+                "请选择执行模式": "confirm"
+            }
+        })
+    );
+    assert!(response["answers"].get("question_text").is_none());
+}
+
+#[test]
+fn normalize_result_preserves_annotations_and_option_identity() {
+    let request = RequestUserInputRequest {
+        questions: vec![RequestUserInputQuestion {
+            id: Some("mode".to_string()),
+            question: "请选择执行模式".to_string(),
+            header: Some("mode".to_string()),
+            options: vec![
+                RequestUserInputOption::with_label("auto", "自动执行"),
+                RequestUserInputOption::with_label("confirm", "确认后执行"),
             ],
             multi_select: false,
         }],
@@ -144,14 +240,14 @@ fn normalize_result_preserves_annotations_and_option_identity() {
 
 #[test]
 fn project_request_user_input_result_builds_output_and_metadata() {
-    let request = AskRequest {
-        questions: vec![AskQuestion {
+    let request = RequestUserInputRequest {
+        questions: vec![RequestUserInputQuestion {
             id: Some("mode".to_string()),
             question: "请选择执行模式".to_string(),
             header: Some("mode".to_string()),
             options: vec![
-                AskOption::with_label("auto", "自动执行"),
-                AskOption::with_label("confirm", "确认后执行"),
+                RequestUserInputOption::with_label("auto", "自动执行"),
+                RequestUserInputOption::with_label("confirm", "确认后执行"),
             ],
             multi_select: false,
         }],

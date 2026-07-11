@@ -1,32 +1,31 @@
-use super::build_session_execution_runtime;
+use super::{
+    build_session_execution_runtime, runtime_snapshot_record, runtime_thread_snapshot_record,
+};
 use crate::session_execution_runtime::runtime_payload::{
     apply_usage_to_cost_state, detect_runtime_limit_event,
 };
 use crate::{SessionExecutionRuntimeCostState, SessionExecutionRuntimeLimitEvent};
-use aster::{
-    Session, SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnContextOverride,
-    TurnRuntime, TurnStatus,
-};
+use agent_protocol::turn_context::TurnContextOverride;
+use aster::Session;
 use chrono::Utc;
 use serde_json::json;
 use std::path::PathBuf;
+use thread_store::runtime_snapshot::{RuntimeTurnSnapshotRecord, RuntimeTurnStatusRecord};
 
 #[test]
 fn extracts_task_routing_and_limit_state_from_lime_runtime_metadata() {
     let now = Utc::now();
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-routing".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-1",
-                "session-routing",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![TurnRuntime {
+    let snapshot = runtime_snapshot_record(
+        "session-routing",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-routing",
+            PathBuf::from("/tmp/workspace"),
+            vec![RuntimeTurnSnapshotRecord {
                 id: "turn-1".to_string(),
                 session_id: "session-routing".to_string(),
                 thread_id: "thread-1".to_string(),
-                status: TurnStatus::Completed,
+                status: RuntimeTurnStatusRecord::Completed,
                 input_text: Some("继续处理翻译任务".to_string()),
                 error_message: None,
                 context_override: Some(TurnContextOverride {
@@ -82,9 +81,9 @@ fn extracts_task_routing_and_limit_state_from_lime_runtime_metadata() {
                 completed_at: Some(now),
                 updated_at: now,
             }],
-            items: Vec::new(),
-        }],
-    };
+            Vec::new(),
+        )],
+    );
 
     let runtime =
         build_session_execution_runtime("session-routing", None, None, Some(&snapshot), None)
@@ -151,19 +150,17 @@ fn extracts_task_routing_and_limit_state_from_lime_runtime_metadata() {
 #[test]
 fn extracts_plugin_scope_from_lime_runtime_summary_fallback() {
     let now = Utc::now();
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-plugin".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-1",
-                "session-plugin",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![TurnRuntime {
+    let snapshot = runtime_snapshot_record(
+        "session-plugin",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-plugin",
+            PathBuf::from("/tmp/workspace"),
+            vec![RuntimeTurnSnapshotRecord {
                 id: "turn-1".to_string(),
                 session_id: "session-plugin".to_string(),
                 thread_id: "thread-1".to_string(),
-                status: TurnStatus::Completed,
+                status: RuntimeTurnStatusRecord::Completed,
                 input_text: Some("内容工厂任务".to_string()),
                 error_message: None,
                 context_override: Some(TurnContextOverride {
@@ -187,9 +184,9 @@ fn extracts_plugin_scope_from_lime_runtime_summary_fallback() {
                 completed_at: Some(now),
                 updated_at: now,
             }],
-            items: Vec::new(),
-        }],
-    };
+            Vec::new(),
+        )],
+    );
 
     let runtime =
         build_session_execution_runtime("session-plugin", None, None, Some(&snapshot), None)
@@ -218,15 +215,17 @@ fn extracts_cost_state_and_limit_event_from_latest_turn() {
         ..Session::default()
     };
 
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-cost".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new("thread-1", "session-cost", PathBuf::from("/tmp/workspace")),
-            turns: vec![TurnRuntime {
+    let snapshot = runtime_snapshot_record(
+        "session-cost",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-cost",
+            PathBuf::from("/tmp/workspace"),
+            vec![RuntimeTurnSnapshotRecord {
                 id: "turn-1".to_string(),
                 session_id: "session-cost".to_string(),
                 thread_id: "thread-1".to_string(),
-                status: TurnStatus::Failed,
+                status: RuntimeTurnStatusRecord::Failed,
                 input_text: Some("继续".to_string()),
                 error_message: Some("429 Too Many Requests".to_string()),
                 context_override: Some(TurnContextOverride {
@@ -254,9 +253,9 @@ fn extracts_cost_state_and_limit_event_from_latest_turn() {
                 completed_at: Some(now),
                 updated_at: now,
             }],
-            items: Vec::new(),
-        }],
-    };
+            Vec::new(),
+        )],
+    );
 
     let runtime = build_session_execution_runtime(
         "session-cost",
@@ -288,19 +287,17 @@ fn extracts_cost_state_and_limit_event_from_latest_turn() {
 #[test]
 fn extracts_limit_event_from_turn_metadata_without_error_text() {
     let now = Utc::now();
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-oem-limit".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-1",
-                "session-oem-limit",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![TurnRuntime {
+    let snapshot = runtime_snapshot_record(
+        "session-oem-limit",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-oem-limit",
+            PathBuf::from("/tmp/workspace"),
+            vec![RuntimeTurnSnapshotRecord {
                 id: "turn-1".to_string(),
                 session_id: "session-oem-limit".to_string(),
                 thread_id: "thread-1".to_string(),
-                status: TurnStatus::Completed,
+                status: RuntimeTurnStatusRecord::Completed,
                 input_text: Some("继续".to_string()),
                 error_message: None,
                 context_override: Some(TurnContextOverride {
@@ -334,9 +331,9 @@ fn extracts_limit_event_from_turn_metadata_without_error_text() {
                 completed_at: Some(now),
                 updated_at: now,
             }],
-            items: Vec::new(),
-        }],
-    };
+            Vec::new(),
+        )],
+    );
 
     let runtime =
         build_session_execution_runtime("session-oem-limit", None, None, Some(&snapshot), None)

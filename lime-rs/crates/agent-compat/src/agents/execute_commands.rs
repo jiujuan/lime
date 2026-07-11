@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 
 use crate::conversation::message::{Message, SystemNotificationType};
-use crate::session::apply_session_update;
 
 use super::Agent;
 
@@ -95,34 +94,30 @@ impl Agent {
         self.store_replace_conversation(session_id, &Conversation::default())
             .await?;
 
-        if let Some(store) = &self.session_store {
-            use crate::session::TokenStatsUpdate;
-            store
-                .update_token_stats(
-                    session_id,
-                    TokenStatsUpdate {
-                        schedule_id: None,
-                        total_tokens: Some(0),
-                        input_tokens: Some(0),
-                        output_tokens: Some(0),
-                        cached_input_tokens: Some(0),
-                        cache_creation_input_tokens: Some(0),
-                        accumulated_total: None,
-                        accumulated_input: None,
-                        accumulated_output: None,
-                    },
-                )
-                .await?;
-        } else {
-            apply_session_update(session_id, |update| {
-                update
-                    .total_tokens(Some(0))
-                    .input_tokens(Some(0))
-                    .output_tokens(Some(0))
-                    .cache_creation_input_tokens(Some(0))
-            })
+        let Some(store) = &self.session_store else {
+            return Err(anyhow!(
+                "missing injected session_store for clear command token reset: session_id={}",
+                session_id
+            ));
+        };
+
+        use crate::session::TokenStatsUpdate;
+        store
+            .update_token_stats(
+                session_id,
+                TokenStatsUpdate {
+                    schedule_id: None,
+                    total_tokens: Some(0),
+                    input_tokens: Some(0),
+                    output_tokens: Some(0),
+                    cached_input_tokens: Some(0),
+                    cache_creation_input_tokens: Some(0),
+                    accumulated_total: None,
+                    accumulated_input: None,
+                    accumulated_output: None,
+                },
+            )
             .await?;
-        }
 
         Ok(Some(Message::assistant().with_system_notification(
             SystemNotificationType::InlineMessage,

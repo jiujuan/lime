@@ -1426,6 +1426,80 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     ],
   );
 
+  const bindTargetSessionSnapshot = useCallback(
+    (
+      targetSessionId: string,
+      options?: {
+        detail?: Awaited<ReturnType<AgentRuntimeAdapter["getSession"]>>;
+      },
+    ) => {
+      const resolvedSessionId = targetSessionId.trim();
+      if (!resolvedSessionId) {
+        return;
+      }
+      if (sessionIdRef.current?.trim() === resolvedSessionId) {
+        return;
+      }
+
+      const detail = options?.detail;
+      const runtimeWorkspaceId = normalizeProjectId(detail?.workspace_id);
+      const resolvedWorkspaceId =
+        runtimeWorkspaceId || normalizeProjectId(workspaceId);
+      const runtimeWorkingDir = normalizeSessionScopeWorkingDir(
+        detail?.working_dir,
+      );
+      const resolvedWorkingDir = runtimeWorkingDir || normalizedWorkingDir;
+
+      invalidatePendingSessionSwitches();
+      skipAutoRestoreRef.current = true;
+      applySessionSnapshot({
+        ...createEmptyAgentSessionSnapshot({
+          workingDir: resolvedWorkingDir,
+        }),
+        sessionId: resolvedSessionId,
+      });
+      setSessionHistoryWindow(null);
+      setIsAutoRestoringSession(false);
+      setIsSessionHydrating(false);
+      setRecoveredStreamBindingSessionId(null);
+      resetPendingActions();
+      resetStreamingRefs();
+      hydratedSessionRef.current = resolvedSessionId;
+      restoredWorkspaceRef.current = resolvedWorkspaceId || null;
+      persistSessionRestoreCandidate(resolvedSessionId);
+
+      if (detail) {
+        setTopics((prev) =>
+          upsertTopicFromSessionDetail(
+            prev,
+            mapSessionDetailToTopic(
+              resolvedSessionId,
+              detail,
+              resolvedWorkspaceId,
+            ),
+            { workspaceId },
+          ),
+        );
+      }
+
+      logAgentDebug("useAgentSession", "ensureSession.targetSessionBound", {
+        sessionId: resolvedSessionId,
+        workspaceId: resolvedWorkspaceId || null,
+        workingDir: resolvedWorkingDir,
+      });
+    },
+    [
+      applySessionSnapshot,
+      invalidatePendingSessionSwitches,
+      normalizedWorkingDir,
+      persistSessionRestoreCandidate,
+      resetPendingActions,
+      resetStreamingRefs,
+      sessionIdRef,
+      workspaceId,
+    ],
+  );
+
   const clearMessages = useCallback(
     (options: ClearMessagesOptions = {}) => {
       const { showToast = true, toastMessage = "新任务已创建" } = options;
@@ -2557,6 +2631,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       const targetSessionId = options?.targetSessionId?.trim();
       if (targetSessionId) {
         if (appServerConfirmedSessionIdsRef.current.has(targetSessionId)) {
+          bindTargetSessionSnapshot(targetSessionId);
           return targetSessionId;
         }
 
@@ -2594,6 +2669,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             );
           }
           appServerConfirmedSessionIdsRef.current.add(targetSessionId);
+          bindTargetSessionSnapshot(targetSessionId, { detail });
           return targetSessionId;
         } catch (error) {
           logAgentDebug(
@@ -2700,6 +2776,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     [
       createFreshSession,
       applySessionSnapshot,
+      bindTargetSessionSnapshot,
       normalizedWorkingDir,
       persistSessionRestoreCandidate,
       runtime,

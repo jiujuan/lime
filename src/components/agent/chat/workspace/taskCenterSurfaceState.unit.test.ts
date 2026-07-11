@@ -268,6 +268,41 @@ describe("resolveTaskCenterHomeChromeState", () => {
     );
   });
 
+  it("首页发送刚触发但 preview 尚未派生时不应闪回 embedded home", () => {
+    const state = resolveTaskCenterHomeChromeState({
+      agentEntry: "claw",
+      draftSurfaceActive: true,
+      draftTabActive: false,
+      shouldSuppressDraftContent: false,
+      draftSendRequest: null,
+      sessionSwitchPending: false,
+      hasInitialSessionRoute: false,
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: false,
+      isHomePendingPreviewActive: false,
+      isHomeSendStarting: true,
+      queuedTurnCount: 0,
+      sessionId: null,
+      embeddedHomeSessionIds: new Set(),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+      shouldUseBrowserWorkspaceHomeChrome: true,
+    });
+
+    expect(state.hasCurrentSessionActivity).toBe(true);
+    expect(state.hasHomeConversationActivity).toBe(true);
+    expect(state.taskCenterHomeSurfaceState.shouldRenderEmbeddedHome).toBe(
+      false,
+    );
+    expect(
+      state.taskCenterHomeSurfaceState.shouldHideCurrentSessionContent,
+    ).toBe(false);
+    expect(state.suppressHomeNavbarUtilityActions).toBe(false);
+  });
+
   it("new-task 后台恢复时应把旧 running session 留在后台，不作为首页前台会话活动", () => {
     const state = resolveTaskCenterHomeChromeState({
       agentEntry: "new-task",

@@ -36,7 +36,6 @@ export function buildImageTaskPersonaContext(): Record<string, unknown> {
       single_assistant_message: true,
       no_submission_summary: true,
       no_task_ids_in_chat: true,
-      no_second_reply_after_tool_submit: true,
       no_internal_tool_names_in_chat: true,
     },
     opening_policy: {
@@ -91,7 +90,7 @@ export function buildImageTaskPresentationContext(params: {
     },
     message_contract: {
       single_assistant_message: true,
-      preserve_intro_during_stream: false,
+      preserve_intro_during_stream: true,
       prefer_model_stream_text: true,
       hide_runtime_details: true,
     },

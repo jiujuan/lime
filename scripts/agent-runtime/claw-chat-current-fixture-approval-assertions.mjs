@@ -123,8 +123,7 @@ export function buildApprovalRequestFullAccessScenarioAssertions({
     guiApprovalRequestFullAccessNoApprovalRecord:
       summary.guiApprovalRequestFullAccessCompleted?.approvalRecordShape
         ?.recordCount === 0 &&
-      summary.guiApprovalRequestFullAccessNoApproval?.approvalRecordCount ===
-        0,
+      summary.guiApprovalRequestFullAccessNoApproval?.approvalRecordCount === 0,
     readModelApprovalRequestFullAccessCompleted:
       summary.readModelApprovalRequestFullAccessCompleted?.latestTurnStatus ===
         "completed" &&
@@ -145,12 +144,13 @@ export function buildApprovalRequestFullAccessScenarioAssertions({
         ?.includesActionResolved === false &&
       summary.readModelApprovalRequestFullAccessCompleted
         ?.includesApprovalPrompt === false,
-    approvalRequestFullAccessNoActionRespond:
-      !appServerRequestMethods.includes(
-        APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
-      ),
-    approvalRequestFullAccessNoLegacyRuntimeRespond:
-      noLegacyRuntimeRespond(appServerRequestMethods, pageText),
+    approvalRequestFullAccessNoActionRespond: !appServerRequestMethods.includes(
+      APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+    ),
+    approvalRequestFullAccessNoLegacyRuntimeRespond: noLegacyRuntimeRespond(
+      appServerRequestMethods,
+      pageText,
+    ),
   };
 }
 
@@ -172,8 +172,13 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.approvalRequestResumePendingGui?.hasSection === true &&
       summary.approvalRequestResumePendingGui?.hasApprovalContent === true &&
       summary.approvalRequestResumePendingGui?.hasPrompt === true &&
-      summary.approvalRequestResumePendingGui?.hasToolName === true &&
-      summary.approvalRequestResumePendingGui?.hasCommand === true &&
+      summary.approvalRequestResumePendingGui?.hasToolName === false &&
+      summary.approvalRequestResumePendingGui?.hasCommand === false &&
+      summary.approvalRequestResumePendingGui?.hasDetails === false &&
+      summary.approvalRequestResumePendingGui?.hasPreformattedArguments ===
+        false &&
+      summary.approvalRequestResumePendingGui?.textareaVisible === false &&
+      summary.approvalRequestResumePendingGui?.singleLine === true &&
       summary.approvalRequestResumePendingGui?.approveButtonVisible === true &&
       summary.approvalRequestResumePendingGui?.approveButtonDisabled === false,
     readModelApprovalRequestResumePending:
@@ -360,8 +365,13 @@ export function buildApprovalRequestDecisionScenarioAssertions({
       summary.approvalRequestDecisionPendingGui?.hasSection === true &&
       summary.approvalRequestDecisionPendingGui?.hasApprovalContent === true &&
       summary.approvalRequestDecisionPendingGui?.hasPrompt === true &&
-      summary.approvalRequestDecisionPendingGui?.hasToolName === true &&
-      summary.approvalRequestDecisionPendingGui?.hasCommand === true &&
+      summary.approvalRequestDecisionPendingGui?.hasToolName === false &&
+      summary.approvalRequestDecisionPendingGui?.hasCommand === false &&
+      summary.approvalRequestDecisionPendingGui?.hasDetails === false &&
+      summary.approvalRequestDecisionPendingGui?.hasPreformattedArguments ===
+        false &&
+      summary.approvalRequestDecisionPendingGui?.textareaVisible === false &&
+      summary.approvalRequestDecisionPendingGui?.singleLine === true &&
       (expectedDecision === "cancel"
         ? summary.approvalRequestDecisionPendingGui?.cancelButtonVisible ===
           true

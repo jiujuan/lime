@@ -17,5 +17,9 @@ futures.workspace = true
 model-provider.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thread-store.workspace = true
 tool-runtime.workspace = true
 tokio-util.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true

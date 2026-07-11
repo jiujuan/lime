@@ -9,6 +9,7 @@ import { createInitialSessionImageWorkbenchState } from "./imageWorkbenchHelpers
 import {
   type HookProps,
   createParsedCommand,
+  renderCommandActionHook,
   renderHook,
   toast,
 } from "./useWorkspaceImageWorkbenchActionRuntime.testFixtures";
@@ -22,7 +23,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime document apply", () => {
 
   it("文稿插图任务应把 document-inline slot 信息写入 Agent launch 上下文", async () => {
     const submitImageWorkbenchAgentCommand = vi.fn().mockResolvedValue(true);
-    const { render, getValue } = renderHook({
+    const { render, getValue } = renderCommandActionHook({
       submitImageWorkbenchAgentCommand,
     });
 

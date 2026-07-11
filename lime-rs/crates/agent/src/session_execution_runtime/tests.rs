@@ -4,16 +4,14 @@ use super::{
     SessionExecutionRuntimeRecentTeamRole, SessionExecutionRuntimeRecentTeamSelection,
     SessionExecutionRuntimeRoutingDecision, SessionExecutionRuntimeSource,
 };
+use agent_protocol::turn_context::{
+    TurnContextOverride, TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy,
+};
 use agent_runtime::session_execution::{
     project_session_execution_runtime_session, SessionExecutionRuntimeSessionSource,
     SessionExecutionRuntimeUsageSource, SESSION_RECENT_EXTENSION_VERSION,
 };
-use aster::ExtensionData;
-use aster::{
-    Session, SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnContextOverride,
-    TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy, TurnRuntime,
-    TurnStatus,
-};
+use aster::{ExtensionData, Session};
 use chrono::{Duration, Utc};
 use lime_core::database::dao::agent_timeline::{
     AgentThreadItem, AgentThreadItemPayload, AgentThreadItemStatus,
@@ -21,22 +19,22 @@ use lime_core::database::dao::agent_timeline::{
 use serde_json::json;
 use serde_json::Value;
 use std::path::PathBuf;
+use thread_store::runtime_snapshot::{
+    RuntimeItemSnapshotRecord, RuntimeSessionSnapshotRecord, RuntimeThreadSnapshotRecord,
+    RuntimeTurnSnapshotRecord, RuntimeTurnStatusRecord,
+};
 
 fn build_session_execution_runtime(
     session_id: &str,
     session: Option<&Session>,
     execution_strategy: Option<String>,
-    snapshot: Option<&SessionRuntimeSnapshot>,
+    snapshot: Option<&RuntimeSessionSnapshotRecord>,
     provider_selector: Option<String>,
 ) -> Option<SessionExecutionRuntime> {
     let session_projection = session.map(project_test_session_execution_runtime_session);
-    let snapshot_projection = snapshot.map(|snapshot| {
-        let snapshot_record =
-            crate::runtime_store_aster_adapter::runtime_snapshot_record_from_aster(snapshot);
-        crate::session_execution_runtime_adapter::project_session_execution_runtime_snapshot_record(
-            &snapshot_record,
-        )
-    });
+    let snapshot_projection = snapshot.map(
+        crate::session_execution_runtime_adapter::project_session_execution_runtime_snapshot_record,
+    );
     super::build_session_execution_runtime(
         session_id,
         session_projection.as_ref(),
@@ -44,6 +42,36 @@ fn build_session_execution_runtime(
         snapshot_projection.as_ref(),
         provider_selector,
     )
+}
+
+fn runtime_snapshot_record(
+    session_id: &str,
+    threads: Vec<RuntimeThreadSnapshotRecord>,
+) -> RuntimeSessionSnapshotRecord {
+    RuntimeSessionSnapshotRecord {
+        session_id: session_id.to_string(),
+        threads,
+    }
+}
+
+fn runtime_thread_snapshot_record(
+    thread_id: &str,
+    session_id: &str,
+    working_dir: PathBuf,
+    turns: Vec<RuntimeTurnSnapshotRecord>,
+    items: Vec<RuntimeItemSnapshotRecord>,
+) -> RuntimeThreadSnapshotRecord {
+    let now = Utc::now();
+    RuntimeThreadSnapshotRecord {
+        id: thread_id.to_string(),
+        session_id: session_id.to_string(),
+        working_dir,
+        created_at: now,
+        updated_at: now,
+        metadata: Default::default(),
+        turns,
+        items,
+    }
 }
 
 fn read_test_extension_state_value(
@@ -125,11 +153,11 @@ fn prefers_latest_runtime_snapshot_with_output_schema_runtime() {
         ..Session::default()
     };
 
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-new".to_string(),
         session_id: "session-2".to_string(),
         thread_id: "thread-1".to_string(),
-        status: TurnStatus::Running,
+        status: RuntimeTurnStatusRecord::Running,
         input_text: Some("hello".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride {
@@ -147,16 +175,18 @@ fn prefers_latest_runtime_snapshot_with_output_schema_runtime() {
         completed_at: None,
         updated_at: now,
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-2".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new("thread-1", "session-2", PathBuf::from("/tmp/workspace")),
-            turns: vec![
-                TurnRuntime {
+    let snapshot = runtime_snapshot_record(
+        "session-2",
+        vec![runtime_thread_snapshot_record(
+            "thread-1",
+            "session-2",
+            PathBuf::from("/tmp/workspace"),
+            vec![
+                RuntimeTurnSnapshotRecord {
                     id: "turn-old".to_string(),
                     session_id: "session-2".to_string(),
                     thread_id: "thread-1".to_string(),
-                    status: TurnStatus::Completed,
+                    status: RuntimeTurnStatusRecord::Completed,
                     input_text: Some("old".to_string()),
                     error_message: None,
                     context_override: None,
@@ -168,9 +198,9 @@ fn prefers_latest_runtime_snapshot_with_output_schema_runtime() {
                 },
                 latest_turn.clone(),
             ],
-            items: Vec::new(),
-        }],
-    };
+            Vec::new(),
+        )],
+    );
 
     let runtime = build_session_execution_runtime(
         "session-2",
@@ -201,11 +231,11 @@ fn prefers_latest_runtime_snapshot_with_output_schema_runtime() {
 #[test]
 fn prefers_effective_execution_strategy_from_latest_turn_context_metadata() {
     let now = Utc::now();
-    let latest_turn = TurnRuntime {
+    let latest_turn = RuntimeTurnSnapshotRecord {
         id: "turn-code".to_string(),
         session_id: "session-code".to_string(),
         thread_id: "thread-code".to_string(),
-        status: TurnStatus::Completed,
+        status: RuntimeTurnStatusRecord::Completed,
         input_text: Some("修复代码并运行校验".to_string()),
         error_message: None,
         context_override: Some(TurnContextOverride {
@@ -221,18 +251,16 @@ fn prefers_effective_execution_strategy_from_latest_turn_context_metadata() {
         completed_at: Some(now),
         updated_at: now,
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-code".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-code",
-                "session-code",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![latest_turn],
-            items: Vec::new(),
-        }],
-    };
+    let snapshot = runtime_snapshot_record(
+        "session-code",
+        vec![runtime_thread_snapshot_record(
+            "thread-code",
+            "session-code",
+            PathBuf::from("/tmp/workspace"),
+            vec![latest_turn],
+            Vec::new(),
+        )],
+    );
 
     let runtime = build_session_execution_runtime(
         "session-code",
@@ -254,19 +282,17 @@ fn prefers_effective_execution_strategy_from_latest_turn_context_metadata() {
 #[test]
 fn projects_context_summary_from_latest_turn_metadata() {
     let now = Utc::now();
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-context".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-context",
-                "session-context",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![TurnRuntime {
+    let snapshot = runtime_snapshot_record(
+        "session-context",
+        vec![runtime_thread_snapshot_record(
+            "thread-context",
+            "session-context",
+            PathBuf::from("/tmp/workspace"),
+            vec![RuntimeTurnSnapshotRecord {
                 id: "turn-context".to_string(),
                 session_id: "session-context".to_string(),
                 thread_id: "thread-context".to_string(),
-                status: TurnStatus::Running,
+                status: RuntimeTurnStatusRecord::Running,
                 input_text: Some("使用项目资料".to_string()),
                 error_message: None,
                 context_override: Some(TurnContextOverride {
@@ -312,9 +338,9 @@ fn projects_context_summary_from_latest_turn_metadata() {
                 completed_at: None,
                 updated_at: now,
             }],
-            items: Vec::new(),
-        }],
-    };
+            Vec::new(),
+        )],
+    );
 
     let runtime = build_session_execution_runtime(
         "session-context",
@@ -348,19 +374,17 @@ fn projects_context_budget_from_session_input_tokens() {
         output_tokens: Some(40_000),
         ..Session::default()
     };
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "session-context-usage".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-context-usage",
-                "session-context-usage",
-                PathBuf::from("/tmp/workspace"),
-            ),
-            turns: vec![TurnRuntime {
+    let snapshot = runtime_snapshot_record(
+        "session-context-usage",
+        vec![runtime_thread_snapshot_record(
+            "thread-context-usage",
+            "session-context-usage",
+            PathBuf::from("/tmp/workspace"),
+            vec![RuntimeTurnSnapshotRecord {
                 id: "turn-context-usage".to_string(),
                 session_id: "session-context-usage".to_string(),
                 thread_id: "thread-context-usage".to_string(),
-                status: TurnStatus::Running,
+                status: RuntimeTurnStatusRecord::Running,
                 input_text: Some("继续".to_string()),
                 error_message: None,
                 context_override: Some(TurnContextOverride {
@@ -383,9 +407,9 @@ fn projects_context_budget_from_session_input_tokens() {
                 completed_at: None,
                 updated_at: now,
             }],
-            items: Vec::new(),
-        }],
-    };
+            Vec::new(),
+        )],
+    );
 
     let runtime = build_session_execution_runtime(
         "session-context-usage",

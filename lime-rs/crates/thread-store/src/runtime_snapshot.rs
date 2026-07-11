@@ -69,7 +69,12 @@ pub struct RuntimeItemSnapshotRecord {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeItemPayloadRecord {
-    InternalTranscript,
+    InternalTranscript {
+        role: String,
+        content_json: Value,
+        metadata_json: Value,
+        created_timestamp: i64,
+    },
     UserMessage {
         content: String,
     },

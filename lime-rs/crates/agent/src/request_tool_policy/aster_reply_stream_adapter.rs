@@ -1,6 +1,9 @@
 use super::aster_event_adapter::AsterEventProjector;
 use super::response_event_adapter::response_stream_events_from_runtime_events;
+use super::runtime_item_event;
+use super::runtime_turn_event;
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
+use crate::runtime_store_aster_adapter::AsterThreadRuntimeStore;
 use agent_runtime::event_stream::EventProjector;
 use agent_runtime::reply_stream::{
     project_reply_stream, RuntimeReplyInlineProviderError, RuntimeReplyResponseEventHints,
@@ -10,14 +13,120 @@ use aster::Message;
 use aster::{
     provider_stream_event_notification_payload_from_message, AgentEvent as AsterAgentEvent,
 };
-use futures::stream::BoxStream;
+use futures::{stream::BoxStream, StreamExt};
 use model_provider::provider_stream::{RuntimeReplyProviderStreamEvent, RuntimeReplyStreamRequest};
+use std::path::PathBuf;
+use std::sync::Arc;
+use thread_store::runtime_snapshot::RuntimeTurnStatusRecord;
+use tokio_util::sync::CancellationToken;
 
 pub(super) fn project_aster_reply_stream<'a>(
     stream: BoxStream<'a, anyhow::Result<AsterAgentEvent>>,
     stream_request: RuntimeReplyStreamRequest,
+    runtime_store: Arc<AsterThreadRuntimeStore>,
+    working_directory: Option<PathBuf>,
+    cancel_token: Option<CancellationToken>,
+    initial_turn_id: Option<String>,
 ) -> BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeAgentEvent>>> {
+    let stream = persist_aster_runtime_events(
+        stream,
+        runtime_store,
+        working_directory,
+        cancel_token,
+        initial_turn_id,
+    );
     project_reply_stream(stream, AsterReplyStreamProjector::new(stream_request))
+}
+
+fn persist_aster_runtime_events<'a>(
+    stream: BoxStream<'a, anyhow::Result<AsterAgentEvent>>,
+    runtime_store: Arc<AsterThreadRuntimeStore>,
+    working_directory: Option<PathBuf>,
+    cancel_token: Option<CancellationToken>,
+    initial_turn_id: Option<String>,
+) -> BoxStream<'a, anyhow::Result<AsterAgentEvent>> {
+    Box::pin(async_stream::try_stream! {
+        let mut stream = stream;
+        let mut active_turn_id = initial_turn_id;
+
+        while let Some(event_result) = stream.next().await {
+            let event = match event_result {
+                Ok(event) => event,
+                Err(error) => {
+                    complete_active_turn(
+                        runtime_store.clone(),
+                        active_turn_id.as_deref(),
+                        cancel_token.as_ref(),
+                        Some(error.to_string()),
+                    )
+                    .await;
+                    Err(error)?;
+                    unreachable!();
+                }
+            };
+
+            match runtime_turn_event::persist_aster_turn_started_event(
+                runtime_store.clone(),
+                &event,
+                working_directory.as_deref(),
+            )
+            .await
+            {
+                Ok(Some(turn_id)) => active_turn_id = Some(turn_id),
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "failed to persist Aster runtime turn event through current store boundary"
+                    );
+                }
+            }
+            if let Err(error) =
+                runtime_item_event::persist_aster_item_event(runtime_store.clone(), &event).await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "failed to persist Aster runtime item event through current store boundary"
+                );
+            }
+            yield event;
+        }
+
+        complete_active_turn(
+            runtime_store,
+            active_turn_id.as_deref(),
+            cancel_token.as_ref(),
+            None,
+        )
+        .await;
+    })
+}
+
+async fn complete_active_turn(
+    runtime_store: Arc<AsterThreadRuntimeStore>,
+    turn_id: Option<&str>,
+    cancel_token: Option<&CancellationToken>,
+    error_message: Option<String>,
+) {
+    let Some(turn_id) = turn_id else {
+        return;
+    };
+    let status = if cancel_token.is_some_and(CancellationToken::is_cancelled) {
+        RuntimeTurnStatusRecord::Aborted
+    } else if error_message.is_some() {
+        RuntimeTurnStatusRecord::Failed
+    } else {
+        RuntimeTurnStatusRecord::Completed
+    };
+    if let Err(error) =
+        runtime_turn_event::complete_aster_turn(runtime_store, turn_id, status, error_message).await
+    {
+        tracing::warn!(
+            turn_id = %turn_id,
+            error = %error,
+            "failed to complete Aster runtime turn through current store boundary"
+        );
+    }
 }
 
 struct AsterReplyStreamProjector {

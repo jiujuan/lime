@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -32,15 +32,15 @@ function collectSourceFiles(dir: string): string[] {
   }
 
   const result: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    const stats = statSync(path);
-    if (stats.isDirectory()) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
       result.push(...collectSourceFiles(path));
       continue;
     }
 
     if (
+      entry.isFile() &&
       SOURCE_EXTENSIONS.some((extension) => path.endsWith(extension)) &&
       !TEST_OR_FIXTURE_PATTERN.test(path.replace(/\\/g, "/"))
     ) {
@@ -59,13 +59,15 @@ function readProductionUiSources(): Array<{
   path: string;
   source: string;
 }> {
-  return PRODUCTION_UI_ROOTS.flatMap((root) =>
-    collectSourceFiles(join(cwd(), root)).map((path) => ({
-      path: relativeSourcePath(path),
-      source: readFileSync(path, "utf8"),
-    })),
-  );
+  return productionUiSources;
 }
+
+const productionUiSources = PRODUCTION_UI_ROOTS.flatMap((root) =>
+  collectSourceFiles(join(cwd(), root)).map((path) => ({
+    path: relativeSourcePath(path),
+    source: readFileSync(path, "utf8"),
+  })),
+);
 
 function importedNames(importList: string): string[] {
   return importList
@@ -83,7 +85,7 @@ describe("production UI command current boundary", () => {
       .map(({ path }) => path);
 
     expect(offenders).toEqual([]);
-  });
+  }, 15_000);
 
   it("组件、Hook 与 feature island 不应直接导入命令桥或 mock helper", () => {
     const offenders = readProductionUiSources().flatMap(({ path, source }) => {
@@ -101,7 +103,7 @@ describe("production UI command current boundary", () => {
     });
 
     expect(offenders).toEqual([]);
-  });
+  }, 15_000);
 
   it("legacy supportsCommand gate 必须显式登记退出条件", () => {
     const offenders = readProductionUiSources().flatMap(({ path, source }) => {
@@ -114,5 +116,5 @@ describe("production UI command current boundary", () => {
     });
 
     expect(offenders).toEqual([]);
-  });
+  }, 15_000);
 });

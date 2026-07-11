@@ -552,7 +552,7 @@ export const TERMINAL_FAILED_AFTER_ANSWER_ASSERTION_KEYS = [
   "terminalFailedAfterAnswerPromptReachedBackend",
   "guiTerminalFailedAfterAnswerInputSubmitted",
   "guiTerminalFailedAfterAnswerPartialRetained",
-  "guiTerminalFailedAfterAnswerFailureVisible",
+  "guiTerminalFailedAfterAnswerFailureHiddenFromBody",
   "guiTerminalFailedAfterAnswerNoDuplicates",
   "guiTerminalFailedAfterAnswerInputReady",
   "readModelTerminalFailedAfterAnswerFailed",

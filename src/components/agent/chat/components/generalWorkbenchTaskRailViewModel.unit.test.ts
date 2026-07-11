@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Artifact } from "@/lib/artifact/types";
 import type {
   AgentThreadItem,
   AgentToolCallState,
 } from "@/lib/api/agentProtocol";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { Message } from "../types";
 import type {
   GeneralWorkbenchActivityLogGroup,
@@ -180,6 +181,10 @@ function statuses(
 }
 
 describe("buildGeneralWorkbenchTaskRailProjection", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("应把步骤、工具和产物合并到同一任务轨道，并优先展示运行中步骤", () => {
     const projection = buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: [

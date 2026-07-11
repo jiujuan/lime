@@ -14,7 +14,7 @@ import {
 } from "./workspaceArtifactStoreSync";
 import { resolveSettledWorkbenchArtifacts } from "./workspaceSettledArtifacts";
 
-type ArtifactStoreSetter<T> = (update: T | ((previous: T) => T)) => void;
+export type ArtifactStoreSetter<T> = (update: T | ((previous: T) => T)) => void;
 
 interface UseWorkspaceArtifactStoreRuntimeParams {
   activeTheme: string;

@@ -43,7 +43,11 @@ pub(super) fn model_info_from_value(value: &Value) -> ModelInfo {
             .unwrap_or(false),
         default_reasoning_level: string_field(value, "default_reasoning_level"),
         supported_reasoning_levels: value_vec_field(value, "supported_reasoning_levels"),
-        supports_reasoning_summaries: bool_field(Some(value), "supports_reasoning_summaries")
+        supports_reasoning_summaries: bool_field(
+            Some(value),
+            "supports_reasoning_summary_parameter",
+        )
+            .or_else(|| bool_field(Some(value), "supports_reasoning_summaries"))
             .unwrap_or(false),
         default_reasoning_summary: string_field(value, "default_reasoning_summary"),
         support_verbosity: bool_field(Some(value), "support_verbosity").unwrap_or(false),
@@ -218,7 +222,7 @@ mod tests {
             "supportsParallelToolCalls": true,
             "defaultReasoningLevel": "medium",
             "supportedReasoningLevels": ["low", "medium", "high"],
-            "supportsReasoningSummaries": true,
+            "supportsReasoningSummaryParameter": true,
             "defaultReasoningSummary": "auto",
             "supportVerbosity": true,
             "defaultVerbosity": "medium",

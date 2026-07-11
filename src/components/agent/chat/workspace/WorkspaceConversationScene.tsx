@@ -1,8 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
-import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
-import type { ExecutionPolicyFocusContext } from "@/types/page";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import type {
   A2UIFormData,
@@ -24,19 +22,13 @@ import type { ConfirmResponse } from "../types";
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
 import { EmptyState } from "../components/EmptyState";
-import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
-import type { InterruptedInputRestoreRequest } from "../hooks/agentStreamInputRestoreTypes";
 import { MessageList } from "../components/MessageList";
 import { WorkspaceMainArea } from "./WorkspaceMainArea";
 import { WorkspacePendingA2UIPanel } from "./WorkspacePendingA2UIPanel";
-import {
-  buildWorkspaceEmptyStateProps,
-  buildWorkspaceNavbarProps,
-} from "./chatSurfaceProps";
-import { isCanvasStateEmpty } from "./generalWorkbenchHelpers";
+import { buildWorkspaceNavbarProps } from "./chatSurfaceProps";
 import type { SyncStatus } from "../hooks/useContentSync";
 import type { A2UISubmissionNoticeData } from "./A2UISubmissionNotice";
-import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
+import type { WorkspaceConversationLandingSurfaceRuntime } from "./useWorkspaceConversationLandingSurfaceRuntime";
 import {
   ChatContainer,
   ChatContainerInner,
@@ -58,27 +50,15 @@ type WorkspaceMainAreaProps = Omit<
   | "canvasContent"
 >;
 type CanvasWorkbenchLayoutProps = ComponentProps<typeof CanvasWorkbenchLayout>;
-type ChatToolPreferences = {
-  task: boolean;
-  subagent: boolean;
-};
-type ChatToolPreferenceKey = keyof ChatToolPreferences;
 type StepProgressProps = ComponentProps<typeof StepProgress>;
 type MessageListProps = ComponentProps<typeof MessageList>;
-type EmptyStateProps = ComponentProps<typeof EmptyState>;
 type AgentNamespaceTranslation = (
   key: string,
   options?: Record<string, unknown>,
 ) => unknown;
 
 interface WorkspaceChatContentParams {
-  entryBannerVisible: boolean;
-  entryBannerMessage?: string;
-  onDismissEntryBanner: () => void;
-  creationReplaySurface?: CreationReplaySurfaceModel | null;
-  sceneAppExecutionSummaryCard?: ReactNode;
-  pluginHistoryRestoreLandingCard?: ReactNode;
-  serviceSkillExecutionCard?: ReactNode;
+  landingSurface: WorkspaceConversationLandingSurfaceRuntime;
   stepProgressProps?: StepProgressProps | null;
   showChatLayout: boolean;
   compactChrome: boolean;
@@ -86,7 +66,6 @@ interface WorkspaceChatContentParams {
   contextWorkspaceEnabled: boolean;
   generalWorkbenchMessageViewportBottomPadding?: string;
   messageListProps: MessageListProps;
-  emptyStateProps: EmptyStateProps;
   showWorkspaceAlert: boolean;
   onSelectWorkspaceDirectory: () => void;
   onDismissWorkspaceAlert: () => void;
@@ -133,13 +112,7 @@ function resolveContentSyncNoticeMeta(status: Exclude<SyncStatus, "idle">): {
 }
 
 function renderWorkspaceChatContent({
-  entryBannerVisible,
-  entryBannerMessage,
-  onDismissEntryBanner,
-  creationReplaySurface,
-  sceneAppExecutionSummaryCard,
-  pluginHistoryRestoreLandingCard,
-  serviceSkillExecutionCard,
+  landingSurface,
   stepProgressProps,
   showChatLayout,
   compactChrome,
@@ -147,7 +120,6 @@ function renderWorkspaceChatContent({
   contextWorkspaceEnabled,
   generalWorkbenchMessageViewportBottomPadding,
   messageListProps,
-  emptyStateProps,
   showWorkspaceAlert,
   onSelectWorkspaceDirectory,
   onDismissWorkspaceAlert,
@@ -169,15 +141,15 @@ function renderWorkspaceChatContent({
       pendingA2UISource.kind === "service_skill" ||
       Boolean(a2uiSubmissionNotice));
   const leadingMessageContent =
-    pluginHistoryRestoreLandingCard ||
-    sceneAppExecutionSummaryCard ||
+    landingSurface.pluginHistoryRestoreLandingCard ||
+    landingSurface.sceneAppExecutionSummaryCard ||
     stepProgressProps ||
-    serviceSkillExecutionCard ? (
+    landingSurface.serviceSkillExecutionCard ? (
       <>
-        {pluginHistoryRestoreLandingCard}
-        {sceneAppExecutionSummaryCard}
+        {landingSurface.pluginHistoryRestoreLandingCard}
+        {landingSurface.sceneAppExecutionSummaryCard}
         {stepProgressProps ? <StepProgress {...stepProgressProps} /> : null}
-        {serviceSkillExecutionCard}
+        {landingSurface.serviceSkillExecutionCard}
       </>
     ) : null;
   const pendingA2UIMessageTail = shouldRenderPendingA2UIAsMessageTail ? (
@@ -208,15 +180,16 @@ function renderWorkspaceChatContent({
   return (
     <ChatContainer>
       <ChatContainerInner $taskCenterSurface={taskCenterSurface}>
-        {entryBannerVisible && entryBannerMessage ? (
+        {landingSurface.entryBannerVisible &&
+        landingSurface.entryBannerMessage ? (
           <EntryBanner data-testid="workspace-entry-banner">
             <Info className="h-4 w-4 shrink-0" />
             <span data-testid="workspace-entry-banner-text">
-              {entryBannerMessage}
+              {landingSurface.entryBannerMessage}
             </span>
             <EntryBannerClose
               type="button"
-              onClick={onDismissEntryBanner}
+              onClick={landingSurface.onDismissEntryBanner}
               aria-label={copy.entryBannerCloseAria}
             >
               {copy.entryBannerClose}
@@ -224,9 +197,9 @@ function renderWorkspaceChatContent({
           </EntryBanner>
         ) : null}
 
-        {showChatLayout && creationReplaySurface ? (
+        {showChatLayout && landingSurface.creationReplaySurface ? (
           <CreationReplaySurfaceBanner
-            surface={creationReplaySurface}
+            surface={landingSurface.creationReplaySurface}
             className="mx-4 mb-2"
           />
         ) : null}
@@ -271,7 +244,7 @@ function renderWorkspaceChatContent({
             </>
           </ChatContent>
         ) : (
-          <EmptyState {...emptyStateProps} />
+          <EmptyState {...landingSurface.emptyStateProps} />
         )}
       </ChatContainerInner>
     </ChatContainer>
@@ -279,41 +252,7 @@ function renderWorkspaceChatContent({
 }
 
 interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
-  entryBannerVisible: boolean;
-  entryBannerMessage?: string;
-  onDismissEntryBanner: () => void;
-  creationReplaySurface?: CreationReplaySurfaceModel | null;
-  defaultCuratedTaskReferenceMemoryIds?: ComponentProps<
-    typeof EmptyState
-  >["defaultCuratedTaskReferenceMemoryIds"];
-  defaultCuratedTaskReferenceEntries?: ComponentProps<
-    typeof EmptyState
-  >["defaultCuratedTaskReferenceEntries"];
-  pathReferences?: ComponentProps<typeof EmptyState>["pathReferences"];
-  onAddPathReferences?: ComponentProps<
-    typeof EmptyState
-  >["onAddPathReferences"];
-  inputRestoreRequest?: InterruptedInputRestoreRequest | null;
-  onInputRestoreRequestHandled?: (requestId: string) => void;
-  onImportPathReferenceAsKnowledge?: ComponentProps<
-    typeof EmptyState
-  >["onImportPathReferenceAsKnowledge"];
-  onRemovePathReference?: ComponentProps<
-    typeof EmptyState
-  >["onRemovePathReference"];
-  onClearPathReferences?: ComponentProps<
-    typeof EmptyState
-  >["onClearPathReferences"];
-  fileManagerOpen?: ComponentProps<typeof EmptyState>["fileManagerOpen"];
-  onToggleFileManager?: ComponentProps<
-    typeof EmptyState
-  >["onToggleFileManager"];
-  initialInputCapability?: ComponentProps<
-    typeof EmptyState
-  >["initialInputCapability"];
-  sceneAppExecutionSummaryCard?: WorkspaceChatContentParams["sceneAppExecutionSummaryCard"];
-  pluginHistoryRestoreLandingCard?: WorkspaceChatContentParams["pluginHistoryRestoreLandingCard"];
-  serviceSkillExecutionCard?: WorkspaceChatContentParams["serviceSkillExecutionCard"];
+  landingSurface: WorkspaceConversationLandingSurfaceRuntime;
   stepProgressProps?: WorkspaceChatContentParams["stepProgressProps"];
   showChatLayout: boolean;
   contextWorkspaceEnabled: boolean;
@@ -342,141 +281,16 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onPendingA2UISubmit?: WorkspaceChatContentParams["onPendingA2UISubmit"];
   a2uiSubmissionNotice?: WorkspaceChatContentParams["a2uiSubmissionNotice"];
   shouldHideGeneralWorkbenchInputForTheme: boolean;
-  input: ComponentProps<typeof EmptyState>["input"];
-  setInput: ComponentProps<typeof EmptyState>["setInput"];
-  onSendMessage: InputbarSendHandler;
-  onStopSending?: ComponentProps<typeof EmptyState>["onStop"];
-  emptyStateSendOnPointerDown?: ComponentProps<
-    typeof EmptyState
-  >["sendOnPointerDown"];
-  emptyStateIsLoading?: ComponentProps<typeof EmptyState>["isLoading"];
-  emptyStateDisabled?: ComponentProps<typeof EmptyState>["disabled"];
-  providerType: ComponentProps<typeof EmptyState>["providerType"];
-  setProviderType: ComponentProps<typeof EmptyState>["setProviderType"];
-  model: ComponentProps<typeof EmptyState>["model"];
-  setModel: ComponentProps<typeof EmptyState>["setModel"];
-  reasoningEffort?: ComponentProps<typeof EmptyState>["reasoningEffort"];
-  setReasoningEffort?: ComponentProps<typeof EmptyState>["setReasoningEffort"];
-  accessMode: ComponentProps<typeof EmptyState>["accessMode"];
-  setAccessMode?: ComponentProps<typeof EmptyState>["setAccessMode"];
-  onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];
-  onOpenExecutionPolicySettings?: (
-    context?: ExecutionPolicyFocusContext,
-  ) => void;
-  toolPreferences: ChatToolPreferences;
-  onToolPreferenceChange: (
-    key: ChatToolPreferenceKey,
-    enabled: boolean,
-  ) => void;
-  objectiveEnabled?: ComponentProps<typeof EmptyState>["objectiveEnabled"];
-  onObjectiveEnabledChange?: ComponentProps<
-    typeof EmptyState
-  >["onObjectiveEnabledChange"];
-  creationMode: ComponentProps<typeof EmptyState>["creationMode"];
-  onCreationModeChange?: ComponentProps<
-    typeof EmptyState
-  >["onCreationModeChange"];
-  activeTheme: ComponentProps<typeof EmptyState>["activeTheme"];
-  onThemeChange?: NonNullable<
-    ComponentProps<typeof EmptyState>["onThemeChange"]
-  >;
-  themeLocked: boolean;
-  artifactsCount: number;
-  generalCanvasContent?: string | null;
-  resolvedCanvasState: CanvasStateUnion | null;
-  selectedText: ComponentProps<typeof EmptyState>["selectedText"];
-  onRecommendationClick?: ComponentProps<
-    typeof EmptyState
-  >["onRecommendationClick"];
-  characters: NonNullable<ComponentProps<typeof EmptyState>["characters"]>;
-  skills: NonNullable<ComponentProps<typeof EmptyState>["skills"]>;
-  serviceSkills: NonNullable<
-    ComponentProps<typeof EmptyState>["serviceSkills"]
-  >;
-  serviceSkillGroups: NonNullable<
-    ComponentProps<typeof EmptyState>["serviceSkillGroups"]
-  >;
-  isSkillsLoading: boolean;
-  onSelectServiceSkill?: ComponentProps<
-    typeof EmptyState
-  >["onSelectServiceSkill"];
-  onNavigateToSettings?: ComponentProps<
-    typeof EmptyState
-  >["onNavigateToSettings"];
-  onRefreshSkills?: ComponentProps<typeof EmptyState>["onRefreshSkills"];
-  onLaunchBrowserAssist?: ComponentProps<
-    typeof EmptyState
-  >["onLaunchBrowserAssist"];
-  browserAssistLoading: boolean;
-  recentSessionTitle?: ComponentProps<typeof EmptyState>["recentSessionTitle"];
-  recentSessionSummary?: ComponentProps<
-    typeof EmptyState
-  >["recentSessionSummary"];
-  recentSessionActionLabel?: ComponentProps<
-    typeof EmptyState
-  >["recentSessionActionLabel"];
-  homeRecoverySession?: ComponentProps<
-    typeof EmptyState
-  >["homeRecoverySession"];
-  handleResumeRecentSession?: ComponentProps<
-    typeof EmptyState
-  >["onResumeRecentSession"];
-  projectConversationGroups?: ComponentProps<
-    typeof EmptyState
-  >["projectConversationGroups"];
-  handleOpenProjectConversation?: ComponentProps<
-    typeof EmptyState
-  >["onOpenProjectConversation"];
   projectId: string | null;
-  openedProjects?: ComponentProps<typeof EmptyState>["openedProjects"];
+  openedProjects?: ComponentProps<typeof ChatNavbar>["openedProjects"];
   projectRootPath?: string | null;
-  sessionId?: ComponentProps<typeof EmptyState>["sessionId"];
   onProjectChange?: (projectId: string | null) => void;
   onCloseProject?: ComponentProps<typeof ChatNavbar>["onCloseProject"];
+  workspaceType?: ComponentProps<typeof ChatNavbar>["workspaceType"];
   deferWorkspaceListLoad?: ComponentProps<
     typeof ChatNavbar
   >["deferWorkspaceListLoad"];
   onOpenSettings?: () => void;
-  runtimeToolAvailability?: ComponentProps<
-    typeof EmptyState
-  >["runtimeToolAvailability"];
-  pluginSuggestions?: ComponentProps<typeof EmptyState>["pluginSuggestions"];
-  pluginSuggestionsError?: ComponentProps<
-    typeof EmptyState
-  >["pluginSuggestionsError"];
-  pluginSuggestionsLoading?: ComponentProps<
-    typeof EmptyState
-  >["pluginSuggestionsLoading"];
-  onPluginSuggestionsNeeded?: ComponentProps<
-    typeof EmptyState
-  >["onPluginSuggestionsNeeded"];
-  knowledgePackSelection?: ComponentProps<
-    typeof EmptyState
-  >["knowledgePackSelection"];
-  knowledgePackOptions?: ComponentProps<
-    typeof EmptyState
-  >["knowledgePackOptions"];
-  onToggleKnowledgePack?: ComponentProps<
-    typeof EmptyState
-  >["onToggleKnowledgePack"];
-  onSelectKnowledgePack?: ComponentProps<
-    typeof EmptyState
-  >["onSelectKnowledgePack"];
-  onToggleKnowledgeCompanionPack?: ComponentProps<
-    typeof EmptyState
-  >["onToggleKnowledgeCompanionPack"];
-  onStartKnowledgeOrganize?: ComponentProps<
-    typeof EmptyState
-  >["onStartKnowledgeOrganize"];
-  onManageKnowledgePacks?: ComponentProps<
-    typeof EmptyState
-  >["onManageKnowledgePacks"];
-  runtimeTaskCard?: ComponentProps<typeof EmptyState>["runtimeTaskCard"];
-  onOpenMemoryWorkbench?: ComponentProps<
-    typeof EmptyState
-  >["onOpenMemoryWorkbench"];
-  onOpenChannels?: ComponentProps<typeof EmptyState>["onOpenChannels"];
-  onOpenChromeRelay?: ComponentProps<typeof EmptyState>["onOpenChromeRelay"];
   taskCenterTabsNode?: ReactNode;
   navbarVisible: boolean;
   isRunning: boolean;
@@ -533,24 +347,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
 }
 
 export function WorkspaceConversationScene({
-  entryBannerVisible,
-  entryBannerMessage,
-  onDismissEntryBanner,
-  creationReplaySurface,
-  defaultCuratedTaskReferenceMemoryIds,
-  defaultCuratedTaskReferenceEntries,
-  pathReferences,
-  onAddPathReferences,
-  inputRestoreRequest,
-  onInputRestoreRequestHandled,
-  onImportPathReferenceAsKnowledge,
-  onRemovePathReference,
-  onClearPathReferences,
-  fileManagerOpen,
-  onToggleFileManager,
-  sceneAppExecutionSummaryCard,
-  pluginHistoryRestoreLandingCard,
-  serviceSkillExecutionCard,
+  landingSurface,
   stepProgressProps,
   showChatLayout,
   compactChrome,
@@ -566,79 +363,15 @@ export function WorkspaceConversationScene({
   a2uiSubmissionNotice,
   shouldHideGeneralWorkbenchInputForTheme,
   inputbarNode,
-  input,
-  setInput,
-  onSendMessage,
-  onStopSending,
-  emptyStateSendOnPointerDown = false,
-  emptyStateIsLoading = false,
-  emptyStateDisabled = false,
-  providerType,
-  setProviderType,
-  model,
-  setModel,
-  reasoningEffort,
-  setReasoningEffort,
-  accessMode,
-  setAccessMode,
-  onManageProviders,
-  toolPreferences,
-  onToolPreferenceChange,
-  objectiveEnabled,
-  onObjectiveEnabledChange,
-  creationMode,
-  onCreationModeChange,
-  activeTheme,
-  onThemeChange,
-  themeLocked,
-  artifactsCount,
-  generalCanvasContent,
-  resolvedCanvasState,
   contentId,
-  selectedText,
-  onRecommendationClick,
-  characters,
-  skills,
-  serviceSkills,
-  serviceSkillGroups,
-  isSkillsLoading,
-  onSelectServiceSkill,
-  onNavigateToSettings,
-  onRefreshSkills,
-  onLaunchBrowserAssist,
-  browserAssistLoading,
-  recentSessionTitle,
-  recentSessionSummary,
-  recentSessionActionLabel,
-  homeRecoverySession,
-  handleResumeRecentSession,
-  projectConversationGroups,
-  handleOpenProjectConversation,
   projectId,
   openedProjects,
   projectRootPath,
-  sessionId,
   onProjectChange,
   onCloseProject,
+  workspaceType,
   deferWorkspaceListLoad,
   onOpenSettings,
-  runtimeToolAvailability,
-  pluginSuggestions,
-  pluginSuggestionsError,
-  pluginSuggestionsLoading,
-  onPluginSuggestionsNeeded,
-  initialInputCapability,
-  knowledgePackSelection,
-  knowledgePackOptions,
-  onToggleKnowledgePack,
-  onSelectKnowledgePack,
-  onToggleKnowledgeCompanionPack,
-  onStartKnowledgeOrganize,
-  onManageKnowledgePacks,
-  runtimeTaskCard,
-  onOpenMemoryWorkbench,
-  onOpenChannels,
-  onOpenChromeRelay,
   taskCenterTabsNode,
   navbarVisible,
   isRunning,
@@ -691,100 +424,8 @@ export function WorkspaceConversationScene({
   const agentT = t as unknown as AgentNamespaceTranslation;
   const text = (key: string) =>
     String(agentT(`agentChat.workspaceConversation.${key}`));
-  const emptyStateProps = buildWorkspaceEmptyStateProps({
-    input,
-    setInput,
-    onSendMessage,
-    onStopSending,
-    sendOnPointerDown: emptyStateSendOnPointerDown,
-    isLoading: emptyStateIsLoading,
-    disabled: emptyStateDisabled,
-    providerType,
-    setProviderType,
-    model,
-    setModel,
-    reasoningEffort,
-    setReasoningEffort,
-    accessMode,
-    setAccessMode,
-    onManageProviders,
-    toolPreferences,
-    onToolPreferenceChange,
-    objectiveEnabled,
-    onObjectiveEnabledChange,
-    creationMode,
-    onCreationModeChange,
-    activeTheme,
-    onThemeChange,
-    themeLocked,
-    hasCanvasContent:
-      activeTheme === "general"
-        ? artifactsCount > 0 || Boolean(generalCanvasContent?.trim())
-        : !isCanvasStateEmpty(resolvedCanvasState),
-    hasContentId: Boolean(contentId),
-    selectedText,
-    onRecommendationClick,
-    characters,
-    skills,
-    serviceSkills,
-    serviceSkillGroups,
-    isSkillsLoading,
-    onSelectServiceSkill,
-    onNavigateToSettings,
-    onRefreshSkills,
-    onLaunchBrowserAssist,
-    browserAssistLoading,
-    recentSessionTitle,
-    recentSessionSummary,
-    recentSessionActionLabel,
-    homeRecoverySession,
-    onResumeRecentSession: handleResumeRecentSession,
-    projectConversationGroups,
-    onOpenProjectConversation: handleOpenProjectConversation,
-    projectId,
-    openedProjects,
-    onProjectChange: onProjectChange
-      ? (nextProjectId) => onProjectChange(nextProjectId)
-      : undefined,
-    sessionId,
-    runtimeToolAvailability,
-    pluginSuggestions,
-    pluginSuggestionsError,
-    pluginSuggestionsLoading,
-    onPluginSuggestionsNeeded,
-    initialInputCapability,
-    knowledgePackSelection,
-    knowledgePackOptions,
-    onToggleKnowledgePack,
-    onSelectKnowledgePack,
-    onToggleKnowledgeCompanionPack,
-    onStartKnowledgeOrganize,
-    onManageKnowledgePacks,
-    runtimeTaskCard,
-    onOpenMemoryWorkbench,
-    onOpenChannels,
-    onOpenChromeRelay,
-    creationReplaySurface,
-    defaultCuratedTaskReferenceMemoryIds,
-    defaultCuratedTaskReferenceEntries,
-    pathReferences,
-    onAddPathReferences,
-    inputRestoreRequest,
-    onInputRestoreRequestHandled,
-    onImportPathReferenceAsKnowledge,
-    onRemovePathReference,
-    onClearPathReferences,
-    fileManagerOpen,
-    onToggleFileManager,
-  });
   const chatContent = renderWorkspaceChatContent({
-    entryBannerVisible,
-    entryBannerMessage,
-    onDismissEntryBanner,
-    creationReplaySurface,
-    sceneAppExecutionSummaryCard,
-    pluginHistoryRestoreLandingCard,
-    serviceSkillExecutionCard,
+    landingSurface,
     stepProgressProps,
     showChatLayout,
     compactChrome,
@@ -792,7 +433,6 @@ export function WorkspaceConversationScene({
     contextWorkspaceEnabled,
     generalWorkbenchMessageViewportBottomPadding,
     messageListProps,
-    emptyStateProps,
     showWorkspaceAlert: workspaceAlertVisible,
     onSelectWorkspaceDirectory,
     onDismissWorkspaceAlert,
@@ -901,7 +541,7 @@ export function WorkspaceConversationScene({
     onProjectChange,
     onCloseProject,
     deferWorkspaceListLoad,
-    workspaceType: activeTheme,
+    workspaceType,
     onBackHome,
     showHarnessToggle,
     harnessPanelVisible,

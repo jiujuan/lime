@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.98.0",
+  "version": "1.99.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -250,6 +250,7 @@
     "knowledge:release-scope-report": "node scripts/knowledge/release-scope-report.mjs",
     "smoke:agent-runtime-approval-sandbox": "node scripts/agent-runtime/approval-sandbox-smoke.mjs",
     "smoke:agent-runtime-tool-execution": "node scripts/agent-runtime/tool-execution-smoke.mjs",
+    "smoke:agent-runtime-tool-execution:managed": "node scripts/agent-runtime/tool-execution-managed-smoke.mjs",
     "smoke:code-runtime-fixture": "node scripts/code-runtime-fixture-smoke.mjs",
     "smoke:managed-objective-continuation": "node scripts/managed-objective-continuation-smoke.mjs",
     "smoke:managed-objective-automation": "node scripts/managed-objective-automation-smoke.mjs",

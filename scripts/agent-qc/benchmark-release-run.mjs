@@ -26,6 +26,9 @@ import {
 const DEFAULT_MANIFEST_PATH = "internal/test/benchmark-release.manifest.json";
 const DEFAULT_VERSION = new Date().toISOString().slice(0, 10);
 const COMMAND_TIMEOUT_MS = 30 * 60 * 1000;
+const GUI_SMOKE_TIMEOUT_MS = 60 * 60 * 1000;
+const AGENT_RUNTIME_FIXTURE_TIMEOUT_MS = 90 * 60 * 1000;
+const VERIFY_LOCAL_TIMEOUT_MS = 120 * 60 * 1000;
 const BYTES_PER_MIB = 1024 * 1024;
 const DEFAULT_MIN_FREE_MB = 512;
 
@@ -205,6 +208,37 @@ function readJsonFile(filePath) {
 function writeJsonFile(filePath, payload) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+function writeP0StepResultFile(rootDir, stepResult) {
+  if (stepResult.kind !== "p0_npm_gate" || !stepResult.outputPath) {
+    return "";
+  }
+
+  try {
+    writeJsonFile(path.resolve(rootDir, stepResult.outputPath), stepResult);
+    return "";
+  } catch (error) {
+    return error?.message || String(error);
+  }
+}
+
+function withArtifactWriteFailure(stepResult, writeError) {
+  const reason = stepResult.reason
+    ? `${stepResult.reason};artifact_write_failed`
+    : "artifact_write_failed";
+  const error = [
+    stepResult.error,
+    `artifact_write_failed: ${writeError}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return {
+    ...stepResult,
+    status: "failed",
+    reason,
+    error,
+  };
 }
 
 function normalizePath(filePath) {
@@ -567,12 +601,15 @@ function buildBenchmarkReleaseRunPlan({
 }
 
 function defaultCommandRunner(step) {
+  const timeout = resolveStepTimeoutMs(step);
   const result = spawnSync(step.executable, step.args, {
     cwd: process.cwd(),
+    detached: process.platform !== "win32",
     encoding: "utf8",
-    timeout: COMMAND_TIMEOUT_MS,
+    timeout,
     windowsHide: true,
   });
+  terminateTimedOutProcessGroup(result);
   return {
     status: result.status,
     signal: result.signal || "",
@@ -580,6 +617,49 @@ function defaultCommandRunner(step) {
     stderr: result.stderr || "",
     error: result.error?.message || "",
   };
+}
+
+function terminateTimedOutProcessGroup(result) {
+  if (
+    process.platform === "win32" ||
+    result?.error?.code !== "ETIMEDOUT" ||
+    typeof result.pid !== "number"
+  ) {
+    return;
+  }
+
+  try {
+    process.kill(-result.pid, "SIGTERM");
+  } catch {
+    // spawnSync 已经结束主进程时，进程组可能已不存在。
+  }
+}
+
+function resolveStepTimeoutMs(step) {
+  if (step?.kind !== "p0_npm_gate") {
+    return COMMAND_TIMEOUT_MS;
+  }
+
+  if (step?.command === "npm run verify:local") {
+    return VERIFY_LOCAL_TIMEOUT_MS;
+  }
+
+  if (step?.command === "npm run verify:gui-smoke") {
+    return GUI_SMOKE_TIMEOUT_MS;
+  }
+
+  if (step?.command === "npm run smoke:agent-runtime-current-fixture") {
+    return AGENT_RUNTIME_FIXTURE_TIMEOUT_MS;
+  }
+
+  if (
+    step?.command ===
+    "npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools"
+  ) {
+    return AGENT_RUNTIME_FIXTURE_TIMEOUT_MS;
+  }
+
+  return COMMAND_TIMEOUT_MS;
 }
 
 function runBenchmarkRelease({
@@ -730,22 +810,20 @@ function runBenchmarkRelease({
         stderrTail: "",
         reason: "previous_required_step_failed",
       };
-      stepResults.push(skippedStepResult);
-      if (
-        skippedStepResult.kind === "p0_npm_gate" &&
-        skippedStepResult.outputPath
-      ) {
-        writeJsonFile(
-          path.resolve(rootDir, skippedStepResult.outputPath),
-          skippedStepResult,
+      const writeError = writeP0StepResultFile(rootDir, skippedStepResult);
+      if (writeError) {
+        stepResults.push(
+          withArtifactWriteFailure(skippedStepResult, writeError),
         );
+      } else {
+        stepResults.push(skippedStepResult);
       }
       continue;
     }
 
     const result = commandRunner(step);
     const passed = result.status === 0;
-    const stepResult = {
+    let stepResult = {
       ...step,
       status: passed ? "passed" : "failed",
       exitCode: result.status,
@@ -755,12 +833,13 @@ function runBenchmarkRelease({
       stderrTail: String(result.stderr || "").slice(-4_000),
       reason: passed ? "" : "command_failed",
     };
-    stepResults.push(stepResult);
-    if (stepResult.kind === "p0_npm_gate" && stepResult.outputPath) {
-      writeJsonFile(path.resolve(rootDir, stepResult.outputPath), stepResult);
+    const writeError = writeP0StepResultFile(rootDir, stepResult);
+    if (writeError) {
+      stepResult = withArtifactWriteFailure(stepResult, writeError);
     }
+    stepResults.push(stepResult);
 
-    if (plan.strictGate && step.blocking && !passed) {
+    if (plan.strictGate && step.blocking && stepResult.status !== "passed") {
       stopped = true;
     }
   }
@@ -913,6 +992,7 @@ export {
   buildBenchmarkReleaseRunPlan,
   renderConsoleSummary,
   renderMarkdown,
+  resolveStepTimeoutMs,
   runBenchmarkRelease,
   validateBenchmarkReleaseRun,
   writeReleaseAuditReportFile,

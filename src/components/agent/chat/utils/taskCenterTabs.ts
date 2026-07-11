@@ -35,6 +35,10 @@ export interface TaskCenterTopicClosePlan {
   fallbackTopicId: string | null;
 }
 
+export function isTaskCenterTopicSwitchSuccess(result: unknown): boolean {
+  return result === undefined || result === "success" || result === "deferred";
+}
+
 export type TaskCenterFallbackRestoreSkipReason =
   | "not-task-center"
   | "workspace-missing"

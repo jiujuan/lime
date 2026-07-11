@@ -304,7 +304,7 @@ fn model_request_policy_reasoning_default_flows_to_selection_and_turn_context() 
             "harness": {
                 "model_request_policy": {
                     "reasoning_policy": {
-                        "supports_reasoning_summaries": true,
+                        "supports_reasoning_summary_parameter": false,
                         "default_reasoning_level": "high"
                     }
                 }
@@ -335,7 +335,7 @@ fn explicit_reasoning_effort_wins_over_model_request_policy_default() {
                 "reasoning_effort": "low",
                 "model_request_policy": {
                     "reasoning_policy": {
-                        "supports_reasoning_summaries": true,
+                        "supports_reasoning_summary_parameter": false,
                         "default_reasoning_level": "high"
                     }
                 }

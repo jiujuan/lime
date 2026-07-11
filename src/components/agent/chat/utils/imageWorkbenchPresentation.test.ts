@@ -91,7 +91,7 @@ describe("imageWorkbenchPresentation", () => {
         avoid_visible_process_lines: true,
       },
       message_contract: {
-        preserve_intro_during_stream: false,
+        preserve_intro_during_stream: true,
         prefer_model_stream_text: true,
       },
       assistant_intro_request: {

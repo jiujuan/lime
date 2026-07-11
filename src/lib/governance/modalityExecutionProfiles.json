@@ -57,7 +57,7 @@
         "executor_kind",
         "artifact_kind"
       ],
-      "notes": "图片生成 profile 只允许写 image_task/image_output；通用 @配图 与 catalog / Lime Cloud 声明的图片模型 @命令都必须先进入 App Server ImageCommandWorkflow，再由 workflow 创建标准 task artifact。harness.image_skill_launch 只允许作为短期输入桥读取；未注册入口不得直接写 artifact、调用旧 Skill 首发链或退回 legacy CLI。"
+      "notes": "图片生成 profile 只允许写 image_task/image_output；通用 @配图 与 catalog / Lime Cloud 声明的图片模型 @命令都必须先进入 App Server ImageCommandWorkflow，再由 workflow 创建标准 task artifact。harness.image_skill_launch 已判 dead / forbidden-to-restore，只允许被发送边界剥离或 retired guard 忽略；未注册入口不得直接写 artifact、调用旧 Skill 首发链或退回 legacy CLI。"
     },
     {
       "profile_key": "browser_control_profile",

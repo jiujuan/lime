@@ -230,6 +230,15 @@ describe("MessageList image tasks", () => {
     const image = container.querySelector(
       '[data-testid="image-workbench-message-preview-single-media-task-replica-image"] img',
     );
+    const intro = container.querySelector(
+      '[data-testid="image-workbench-assistant-intro-task-replica-image"]',
+    );
+    const preview = container.querySelector(
+      '[data-testid="image-workbench-message-preview-task-replica-image"]',
+    );
+    const completion = container.querySelector(
+      '[data-testid="image-workbench-completion-caption-task-replica-image"]',
+    );
 
     expect(text).toContain("好啊，我来按花城汇视角做一张广州塔春天照片。");
     expect(text).not.toContain("先获取下工具参数");
@@ -242,6 +251,18 @@ describe("MessageList image tasks", () => {
     );
     expect(text).toContain("完成了，从花城汇望向广州塔的春日画面已经生成");
     expect(text).toContain("想换成更写实或更通透的光线，可以继续说。");
+    expect(
+      intro &&
+        preview &&
+        completion &&
+        Boolean(intro.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+        Boolean(
+          preview.compareDocumentPosition(completion) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+    ).toBe(true);
+    expect(preview?.textContent).not.toContain("完成了");
+    expect(completion?.textContent).toContain("完成了");
     expect(text).not.toContain("我随时待命");
     const forbiddenBrandName = ["R", "ibbi"].join("");
     expect(text).not.toContain(forbiddenBrandName);
@@ -446,17 +467,14 @@ describe("MessageList image tasks", () => {
     ]);
     expect(
       mockStreamingRenderer.mock.calls.map((call) => call[0].thinkingContent),
-    ).toEqual(["先判断广州塔照片的季节和视角。", "再判断青柠插画的极简构图。"]);
+    ).toEqual([undefined, undefined]);
     expect(
       mockStreamingRenderer.mock.calls.map((call) =>
         call[0].contentParts?.map(
           (part) => (part as { type?: string }).type,
         ),
       ),
-    ).toEqual([
-      ["thinking", "text"],
-      ["thinking", "text"],
-    ]);
+    ).toEqual([["text"], ["text"]]);
     expect(
       mockStreamingRenderer.mock.calls.every(
         (call) => !call[0].toolCalls,
@@ -466,10 +484,20 @@ describe("MessageList image tasks", () => {
       container.querySelector(
         '[data-testid="image-workbench-message-preview-task-image-turn-1"]',
       )?.textContent,
+    ).not.toContain("第一张已经好了");
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-completion-caption-task-image-turn-1"]',
+      )?.textContent,
     ).toContain("第一张已经好了");
     expect(
       container.querySelector(
         '[data-testid="image-workbench-message-preview-task-image-turn-2"]',
+      )?.textContent,
+    ).not.toContain("第二张也好了");
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-completion-caption-task-image-turn-2"]',
       )?.textContent,
     ).toContain("第二张也好了");
     expect(container.textContent).not.toContain("任务 ID");
@@ -590,7 +618,7 @@ describe("MessageList image tasks", () => {
     );
   });
 
-  it("图片任务消息应保留思考并隐藏内部工具完成摘要", () => {
+  it("图片任务消息应隐藏内部思考和工具完成摘要", () => {
     const container = render(
       [
         {
@@ -659,24 +687,10 @@ describe("MessageList image tasks", () => {
       },
     );
 
-    expect(mockStreamingRenderer).toHaveBeenCalledTimes(1);
-    const rendererProps = mockStreamingRenderer.mock.calls[0]?.[0] as
-      | {
-          content?: string;
-          thinkingContent?: string;
-          contentParts?: unknown[];
-          toolCalls?: unknown[];
-        }
-      | undefined;
-    expect(rendererProps).toMatchObject({
-      content: "",
-      thinkingContent: "先执行图片技能。",
-      suppressProcessFlow: false,
-    });
-    expect(rendererProps?.contentParts).toEqual([
-      { type: "thinking", text: "先执行图片技能。" },
-    ]);
-    expect(rendererProps?.toolCalls).toBeUndefined();
+    expect(mockStreamingRenderer).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("先执行图片技能");
+    expect(container.textContent).not.toContain("已完成思考");
+    expect(container.textContent).not.toContain("已成功提交分镜任务");
     expect(
       container.querySelector(
         '[data-testid="image-workbench-message-preview-task-image-process-flow"]',

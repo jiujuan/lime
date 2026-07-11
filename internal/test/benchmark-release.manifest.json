@@ -92,7 +92,7 @@
       "runner": "npm",
       "requiredForRelease": true,
       "commands": [
-        "npm run smoke:agent-runtime-tool-execution -- --batch coding-current-tools",
+        "npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools",
         "npm run smoke:agent-runtime-current-fixture",
         "npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs"
       ],

@@ -324,19 +324,37 @@ function importedThreadItems() {
   ];
 }
 
-function renderScene(
-  props?: Partial<React.ComponentProps<typeof WorkspaceConversationScene>>,
-) {
+type RenderSceneProps = Partial<
+  React.ComponentProps<typeof WorkspaceConversationScene>
+> &
+  Record<string, unknown>;
+
+function renderScene(props?: RenderSceneProps) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const propsRecord = (props || {}) as Record<string, unknown>;
+  const defaultLandingSurface = {
+    entryBannerVisible: Boolean(propsRecord.entryBannerVisible),
+    entryBannerMessage: propsRecord.entryBannerMessage as string | undefined,
+    onDismissEntryBanner:
+      (propsRecord.onDismissEntryBanner as (() => void) | undefined) ?? vi.fn(),
+    creationReplaySurface:
+      propsRecord.creationReplaySurface === undefined
+        ? null
+        : (propsRecord.creationReplaySurface as never),
+    sceneAppExecutionSummaryCard:
+      propsRecord.sceneAppExecutionSummaryCard as React.ReactNode,
+    pluginHistoryRestoreLandingCard:
+      propsRecord.pluginHistoryRestoreLandingCard as React.ReactNode,
+    serviceSkillExecutionCard:
+      propsRecord.serviceSkillExecutionCard as React.ReactNode,
+    emptyStateProps: {} as never,
+  };
 
   const defaultProps: React.ComponentProps<typeof WorkspaceConversationScene> =
     {
-      entryBannerVisible: false,
-      entryBannerMessage: undefined,
-      onDismissEntryBanner: vi.fn(),
-      creationReplaySurface: null,
+      landingSurface: defaultLandingSurface,
       showChatLayout: true,
       compactChrome: false,
       contextWorkspaceEnabled: false,
@@ -440,8 +458,17 @@ function renderScene(
       hasPendingA2UIForm: false,
     } as any;
 
+  const sceneProps = {
+    ...defaultProps,
+    ...props,
+    landingSurface: {
+      ...defaultLandingSurface,
+      ...((props?.landingSurface as Record<string, unknown> | undefined) ?? {}),
+    },
+  };
+
   act(() => {
-    root.render(<WorkspaceConversationScene {...defaultProps} {...props} />);
+    root.render(<WorkspaceConversationScene {...sceneProps} />);
   });
 
   mountedRoots.push({ root, container });

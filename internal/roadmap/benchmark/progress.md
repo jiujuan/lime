@@ -51,7 +51,7 @@
 | `npm run agent-qc:benchmark-release:checklist`                | 通过结构检查；生成大版本执行清单       | 输出 `.lime/benchmark/runs/2026-07-09-release-summary/benchmark-release-checklist.json`；清单展开 P0 npm gate、release context、P1 dry-run、P1 true-run preflight、planned true-run、release summary、manifest check 和严格 release gate；`stepCount=20`、`readyStepCount=18`、`plannedStepCount=2`。`planned` true-run 不算通过，也不让 `--check` 失败。                                                                                                                                               |
 | `npm run agent-qc:benchmark-release:summary`                  | 通过结构检查；release summary 未 ready | 输出 `.lime/benchmark/runs/2026-07-09-release-runner-include-p0-support/benchmark-release-summary.json`，识别 `p0GateStepCount=0`、`p0GateBlockerCount=10`、`dryRunSuiteCount=2`、`preflightCount=2`、`trueRunTaskCount=2`、`releaseBlockerCount=2`、`preflightBlockerCount=6`、`trueRunBlockerCount=6`、`issueCount=0`；默认 runner 未带 `--include-p0` 时，summary 会明确列出 `verify:local`、contracts、Agent Runtime fixture、GUI smoke、harness 和 Agent QC P0 命令缺失，不能被 P1 evidence 掩盖。 |
 | `npm run agent-qc:benchmark-release:run`                      | 通过默认编排；release summary 未 ready | 输出 `.lime/benchmark/runs/2026-07-09-release-runner/benchmark-release-run.json`；一键执行 context、checklist、Terminal-Bench / DeepSWE fixed slice dry-run、默认首题 preflight、默认首题 fail-closed true-run、summary 和 manifest check。默认不跑 strict gate，因此 P1 blocked evidence 会被收集并继续汇总，不会被误记为 pass。                                                                                                                                                                       |
-| `npm run agent-qc:benchmark-release:run -- --include-p0`      | 已支持；本轮未跑完整 P0                | runner 已能把 manifest 中 `runner=npm` 的 P0 suites 插入到 checklist 和 P1 外部集之间，并给每个 P0 step 写入 JSON result。当前未运行完整 `--include-p0`，因为 `verify:local` 已知被既有 i18n unused key 阻断，`verify:gui-smoke` 尚未作为完整 release evidence 执行；不能用默认 P1 evidence runner 替代 P0 多方面门禁。                                                                                                                                                                                 |
+| `npm run agent-qc:benchmark-release:run -- --include-p0`      | 已支持；本轮未跑完整 release runner P0 | runner 已能把 manifest 中 `runner=npm` 的 P0 suites 插入到 checklist 和 P1 外部集之间，并给每个 P0 step 写入 JSON result。2026-07-10 已独立复验 `verify:local`、`test:contracts`、GUI smoke 和 coding/current-chain 相关测试，但仍未用 release runner 生成完整 `--include-p0` release evidence；正式 RC 不能用默认 P1 evidence runner 替代 P0 多方面门禁。                                                                                                                                                      |
 | `npm run agent-qc:benchmark-release:run -- --min-free-mb <N>` | 已支持 storage preflight               | runner 会在任何 context / checklist / dry-run / P0 step 前检查 output root 所在卷可用空间；默认最低 512MiB。空间不足时不执行任何步骤，输出 `storage_preflight: available_below_minimum` 的结构化 skipped report，避免生成半截 release evidence。                                                                                                                                                                                                                                                        |
 | `npm run agent-qc:benchmark-release:gate`                     | 按预期失败                             | 严格 release gate 会把 `releaseReady=false` 作为非 0 退出；当前失败原因是 P1 adapter 只有 `dry_run_ready`，证明 dry-run 不会误放行大版本。                                                                                                                                                                                                                                                                                                                                                              |
 | `npm run agent-qc:benchmark:check`                            | 通过                                   | Agent QC differential benchmark manifest `valid=true`，无 issues。                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -60,7 +60,7 @@
 | `npm run agent-qc:check`                                      | 通过                                   | Agent QC scenario manifest `valid=true`，13 个 scenario / 8 个 P0；GUI flow manifest `valid=true`，5 个 flow / 4 个 P0。                                                                                                                                                                                                                                                                                                                                                                                |
 | `npm run test:contracts`                                      | 通过                                   | App Server client contract、command contracts、Harness contracts、modality contracts、scripts governance、Electron release workflow、harness cleanup contract 和 docs boundary 均通过。                                                                                                                                                                                                                                                                                                                 |
 | `npm run smoke:agent-runtime-current-fixture`                 | 通过                                   | 先遇到 stale `.lime/electron-fixture-build.lock`，脚本自动清理后重建 renderer / Electron host / app-server sidecar；随后通过 history/cache hydration、stream completion、Electron fixture guard、Claw 热路径、Coding Workbench、approval、Inputbar queue / restore、Plan hydrate、Skills Runtime、Multi-Agent、MCP structuredContent、media reference、Expert Skills、Content Factory 等 current fixture；`liveProviderUsed=false`。                                                                    |
-| `npm run verify:local`                                        | 失败                                   | 阻断点是当前工作树既有 `i18n:unused --check` 大量未引用 key 候选；不是 benchmark 文档、manifest 或新增 release check 直接引入的问题，但仍会阻止完整 L0 门禁通过。                                                                                                                                                                                                                                                                                                                                       |
+| `npm run verify:local`                                        | 通过                                   | 2026-07-10 复跑通过：版本一致性、i18n 结构、i18n unused、eslint、硬编码文案扫描、typecheck、前端全量 106 批次、Rust changed-scope 和 Electron GUI smoke 均完成；前序 i18n unused 阻断已收口，当前 L0 本地门禁恢复可用。                                                                                                                                                                                                                                                                                 |
 | `npm run governance:scripts`                                  | 通过                                   | 新增脚本放在既有 `scripts/agent-qc/` 领域，未新增 `scripts/` 根脚本或一级目录。                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### P1 fixed slice dry-run
@@ -487,21 +487,136 @@ npm run agent-qc:benchmark-release:baseline -- \
 
 该入口会读取 `.lime/benchmark/releases/<version>/benchmark-release-summary.json` 和 `benchmark-release-compare.json`，写出 `benchmark-baseline.json`，并要求 `summary.releaseReady=true`、所有 blocker 计数为 0、compare decision 为 `pass`。当前 P1 adapter 未 ready 前，该入口应失败，不能把 dry-run / blocked evidence、fake-ready true-run evidence 或未覆盖 fixed slice 全量 taskSet 的结果登记成稳定 baseline。
 
+### 2026-07-10 P0 门禁复跑与测试发现修复
+
+本轮继续按“跑测试发现问题后修 current 主链”的口径收口，而不是只增加测试集。前端全量续跑先在 `src/components/agent/chat/workspace/workspaceArticleWorkspaceMetadata.unit.test.ts` 暴露旧 workspace patch raw artifact 命名泄漏：`agentChatHistoryArtifacts.ts` 自己判断 `content-factory-workspace-patch` / `content-factory/workspace-patch` 路径，绕开了 `workspaceArticleWorkspaceMetadata.ts` 这个唯一兼容 helper。修复后该 hook 改为调用 `isWorkspaceArticlePatchArtifactPath()`，旧 raw artifact 命名继续限定在 metadata helper / 内容工厂插件边界。
+
+同轮 `verify:local` 还暴露 `src/lib/governance/asterMigrationBoundary.test.ts` 中 `nativeOverlayProductionSource` 重复声明，导致 eslint fail。已删除重复声明，保留单一 `rustProductionSource(nativeOverlaySource)` 作为 Aster 迁移守卫输入；这属于守卫质量修复，不新增 `agent-compat` 能力。
+
+验证结果：
+
+- `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceMetadata.unit.test.ts" --silent=passed-only --disableConsoleIntercept`：通过，9 tests。
+- `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceMetadata.unit.test.ts" "src/components/agent/chat/workspace/workspaceArticleWorkspaceMessageArtifacts.unit.test.ts" --silent=passed-only --disableConsoleIntercept`：通过，27 tests。
+- `npm test -- --resume`：从原失败点 batch 97 续跑到 106，全部通过。
+- `npx eslint "src/lib/governance/asterMigrationBoundary.test.ts" --max-warnings 0`：通过。
+- `npm run verify:local`：通过。覆盖版本一致性、i18n 结构、i18n unused、eslint、硬编码文案扫描、typecheck、前端全量 106 批次、Rust changed-scope、Electron GUI smoke；GUI smoke 输出 `renderer loaded`、`app-server initialized`、`claw workbench shell ready`、`memory settings ready`。
+- `npm run test:contracts`：通过。`check:protocol-types` 无漂移，App Server client contract 287 checks、command contracts、Harness contracts、modality contracts、scripts governance、Electron release workflow、harness cleanup contract 和 docs boundary 均通过。
+
+这轮完整门禁还再次覆盖了 coding/current-chain 关键链路：`useWorkspaceSendActions` 158 tests、`CodingWorkbenchOutputPanel`、`CodingWorkbenchLogPanel`、`workspaceConversationCodingViews`、App Server `runtime_backend::coding_events::*`、`apply_patch`、`file_read_execution`、`file_search_execution`、`shell_execution`、`native_overlay`、`request_user_input`、`tool_batch` 等 Rust tests 均在 `verify:local` 的前端 / Rust changed-scope 中通过。当前可认为 Lime coding P0 的本地 current-chain 回归恢复为绿色；但它还没有替代外部 DeepSWE / Terminal-Bench true-run。
+
+分类：
+
+- `current`：workspace patch 旧命名识别回到 `workspaceArticleWorkspaceMetadata.ts` 统一 helper；Aster 迁移守卫恢复可 lint；P0 本地门禁、contracts、GUI smoke 和 coding/current-chain 回归均通过。
+- `compat / deprecated`：旧 `content_factory.workspace_patch` 只在 helper / 内容工厂插件边界内兼容读取；`agent-compat` 仍是 Aster 迁移 blocker，不是 current owner。
+- `dead`：没有恢复 Aster `Edit` / `Write` 或旧 raw artifact 命名到生产 hook；未新增 Aster-only 能力。
+
+### 2026-07-10 include-P0 runner 复跑与 current 主链修复
+
+本轮继续执行用户要求的“测试出来有问题也要完善”。带 P0 的 release runner 已完整跑完一次，输出目录为 `.lime/benchmark/runs/2026-07-10-include-p0-rerun-2/`：
+
+```bash
+npm run agent-qc:benchmark-release:run -- \
+  --version "2026-07-10-include-p0-rerun-2" \
+  --output-root ".lime/benchmark/runs/2026-07-10-include-p0-rerun-2" \
+  --include-p0 \
+  --stdout summary \
+  --format json \
+  --check
+```
+
+结果：runner 本身完整结束并写出 `benchmark-release-run.json`、`benchmark-release-summary.json` 和 `benchmark-release-report.md`；`storage=ready`，`includeP0=true`，`strictGate=false`，`23` 个 step 中 `22 passed / 1 failed`。唯一失败是 `lime-p0-gate:npm-01-verify-local`，summary 结构检查仍 `valid=true`，但 `releaseReady=false`，因为：
+
+- P0 blocker：`npm run verify:local` 在 batch 4 `src/components/agent/chat/index.projectRestore.test.tsx` 首条用例 `beforeEach` 超时。
+- P1 release blockers：`terminal-bench-release-slice` 与 `deepswe-fixed-ten` 仍为 `adapterStatus=dry_run_ready`。
+- P1 preflight / true-run blockers：Docker CLI / daemon、`tb` / Harbor runner 和 `datacurve-pier >= 0.3.0` 仍不可用；这与 Terminal-Bench / DeepSWE 官方 runner 要求一致。
+
+该 runner 同时证明其它 P0 / coding P0 步骤已经可被同一 release evidence 根目录收集：
+
+- `lime-p0-gate:npm-02-test-contracts`：通过。
+- `lime-p0-gate:npm-03-smoke-agent-runtime-current-fixture`：通过。
+- `lime-p0-gate:npm-04-verify-gui-smoke`：通过。
+- `lime-p0-gate:npm-05-agent-qc-check`：通过。
+- `coding-workflow-p0:npm-01-smoke-agent-runtime-tool-execution`：通过，写出 `p0/coding-workflow-p0/coding-current-tools/agent-runtime-tool-execution-coding-current-tools.json`。
+- `coding-workflow-p0:npm-02-smoke-agent-runtime-current-fixture`：通过。
+- `coding-workflow-p0:npm-03-test-rust-related`：通过。
+
+本轮从 include-P0 runner 暴露并修复了三个 current 主链 / 门禁稳定性问题：
+
+1. **Task center 初始导航重复 hydrate**：`src/components/agent/chat/workspace/useWorkspaceTaskCenterDraftStateRuntime.ts` 恢复 `(!hasInitialSessionTopic || (initialSessionMessagesCount ?? 0) > 0)` 语义，避免有 topic 但 `messagesCount` 未声明时误当空会话 hydrate，导致 `switchTopic` 重复触发。定向 `index.taskTabs02.test.tsx` 通过，前端全量续跑已越过对应批次。
+2. **P0 step artifact 写入失败会让 runner 丢总报告**：`scripts/agent-qc/benchmark-release-run.mjs` 新增 `writeP0StepResultFile()` 与 `withArtifactWriteFailure()`；P0 step JSON 写入失败现在被结构化标记为 `failed reason=artifact_write_failed`，runner 继续写总报告。`scripts/agent-qc/benchmark-release-run.test.mjs` 相关用例通过。
+3. **right-surface current read method 被误按 truth timeout 处理**：`src/lib/dev-bridge/commandPolicy.ts` 把 `workspaceRightSurface/request`、`workspaceRightSurface/pending/list`、`workspaceRightSurface/pending/consume`、`workspaceRightSurface/pending/dismiss` 纳入 App Server current method timeout profile；`plain-image-intent` Electron fixture 复跑通过，`noInvokeErrors=true`、`noConsoleErrors=true`，证明 `workspaceRightSurface/pending/list` 不再 5 秒超时。
+4. **projectRestore 测试夹具冷加载不稳定**：`src/components/agent/chat/index.testFixtures.tsx` 将 `AgentChatWorkspace` 动态 import 预加载从每条测试的 `beforeEach` 移到 suite 级 `beforeAll`，并给冷加载单独 `120s` 预算；业务用例仍保留原断言和 `60s` 测试超时。该修复不放宽项目恢复行为，只避免并发 release runner 下把 Vite cold transform 算进每条用例 setup。
+
+修复后验证：
+
+- `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario plain-image-intent --prefix claw-chat-current-fixture-plain-image-intent-regression-after-bridge-fix --timeout-ms 180000`：通过，summary 为 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-plain-image-intent-regression-after-bridge-fix-summary.json`。
+- `npm run smoke:agent-runtime-current-fixture`：通过，覆盖 history/cache hydration、Coding Workbench、图片任务、cancel/continue、approval、Inputbar queue/restore、Plan、Skills、Multi-Agent、MCP structuredContent、media reference、Expert Skills 和 Article Editor；`liveProviderUsed=false`。
+- `npx vitest run "src/components/agent/chat/index.projectRestore.test.tsx" --silent=passed-only --disableConsoleIntercept --testTimeout=60000 --hookTimeout=120000`：通过，8 tests。
+- `npm test -- --resume`：已从 batch 4 越过原失败点并继续续跑；最终结果待本轮运行完成后回填。
+
+本轮分类：
+
+- `current`：release runner include-P0 证据链、App Server current method timeout profile、Task center 初始 session hydrate、project restore 测试夹具、Coding Workbench / coding-current-tools P0 artifact。
+- `compat / deprecated`：`agent-compat` 仍只是 Aster 迁移 blocker；DeepSWE / Terminal-Bench 原生 runner 只作为 P1 adapter runtime，不拥有 Lime Agent 运行事实。
+- `dead`：未恢复 Aster `Edit` / `Write` / Aster `Tool` 正向工具面；未把 P1 dry-run / blocked true-run 误标为 release-ready；未新增 mock fallback 来绕过 right-surface timeout。
+
 ### 当前不能宣称完成的部分
 
 - Terminal-Bench 已有 `hello-world` true-run preflight，但当前被 Docker / `tb` runner 环境阻断；DeepSWE 已有 `ytt-jsonpath-query-api` true-run preflight，但当前被 Docker / Pier runner 环境阻断。两者尚未真正通过 Lime App Server / RuntimeCore 执行 Agent turn，也未调用外部 verifier；不能把 dry-run 或 preflight 当作 Agent 能力分数。
-- `npm run verify:local` 已运行但被既有 i18n unused key 阻断，不能宣称完整 L0 release gate 通过。
-- `npm run verify:gui-smoke` 尚未在本轮作为完整 release gate 运行。
-- `npm run agent-qc:benchmark-release:run -- --include-p0` 已有 runner 支持，且 coding P0 artifact 已接入 summary 校验，但本轮仍未执行完整 release P0；正式 RC / release 必须启用，默认 runner 只能作为 P1 evidence 收集闭环。
+- `npm run agent-qc:benchmark-release:run -- --include-p0` 本轮已生成完整 evidence bundle，但该 bundle 在修复前执行，仍包含 `verify:local` 失败 step；修复后还需要复跑一次 include-P0 runner，才能把本轮修复后的 P0 全绿写进 release evidence。
 - `npm run agent-qc:benchmark-release:compare` 和 `npm run agent-qc:benchmark-release:baseline` 已有脚本和单测，但还缺上一稳定版本真实 `benchmark-release-summary.json` 与本版 release-ready summary；正式 RC 需要把 compare / baseline descriptor 写入 release evidence。
 - Storage preflight 只证明 evidence 目录具备最低写入条件；它不是 Agent 能力分数，也不能替代 P0 / P1 true-run。
 - P1 外部 benchmark 已开始 dry-run 证据生成，但未开始真实 Agent execution；P2 仍只完成下载与 manifest 登记。
 - `.lime/benchmark/runs/2026-07-09-initial/` 是本地证据缓存，不进入 Git；正式 release 需要导出 release summary 或把摘要复制到版本化 artifact。
 
+### 2026-07-11 Coding P0 managed runner 与 P0 复验
+
+本轮继续按“测试出来有问题就修 current 主链”的口径推进，而不是只新增测试集。前一次 include-P0 runner 暴露 `coding-workflow-p0` 的第一步依赖外部 `127.0.0.1:3030` DevBridge；这会让 release runner 在干净环境里失败，不能作为每个大版本的稳定门禁。
+
+修复：新增 `scripts/agent-runtime/tool-execution-managed-smoke.mjs`，由脚本自启动真实 Electron Desktop Host / App Server current bridge，在随机 localhost 端口暴露临时 `/health` / `/invoke` proxy，再调用原 `tool-execution-smoke.mjs`。release manifest 的 `coding-workflow-p0` 已切到：
+
+```bash
+npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools
+```
+
+该入口仍验证 Codex-first coding 工具面 `Read`、`apply_patch`、`Glob`、`Grep`、`Bash`，不恢复 Aster `Edit` / `Write` / `Tool` 正向面；原 `smoke:agent-runtime-tool-execution -- --batch coding-current-tools` 只作为手工 DevBridge 调试入口，不作为 release P0 事实源。
+
+同轮修复了 `lime-rs/crates/agent/src/runtime_store_aster_adapter.rs` 的 Rust 编译 blocker：`aster_item_from_runtime_record(...)` 的 `String` 错误现在通过 `runtime_store_error(...)` 映射到 `ThreadStoreError`，只在 Aster durable source lowering compat 边界内修正错误投影，不把 Aster store 扩成 current owner。
+
+已验证：
+
+- `node --check scripts/agent-runtime/tool-execution-managed-smoke.mjs`：通过。
+- `node --check scripts/agent-qc/benchmark-release-coding-p0-artifact.mjs`、`node --check scripts/agent-qc/benchmark-release-run-coding-p0.test.mjs`、`node --check scripts/agent-qc/benchmark-release-summary-coding-p0.test.mjs`：通过。
+- `npx vitest run scripts/agent-qc/benchmark-release-run-coding-p0.test.mjs scripts/agent-qc/benchmark-release-summary-coding-p0.test.mjs --silent=passed-only --disableConsoleIntercept`：通过，4 tests。
+- `npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools --output ".lime/benchmark/runs/2026-07-10-coding-managed-rerun/agent-runtime-tool-execution-coding-current-tools.json" --timeout-ms 300000`：通过，`status=pass`；runtime artifact 证明 `Read` / `apply_patch` / `Glob` / `Grep` / `Bash` 全部 completed，Evidence Pack 存在。
+- `npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs`：通过，覆盖 `agent-runtime`、`app-server`、`aster-core`、`lime-agent`、`lime-scheduler`、`lime-server`、`tool-runtime`。
+- `npm run smoke:agent-runtime-current-fixture`：通过，`liveProviderUsed=false`，覆盖 history/cache hydrate、turn completed 工具收尾、Coding Workbench、Skills Runtime、Multi-Agent、MCP structuredContent、media reference、Expert Skills、Content Factory Article Editor 等 current fixture。
+- `npm run verify:gui-smoke`：通过，真实 Electron smoke 输出 `renderer loaded`、`app-server initialized protocol=appserver.v0 version=1.98.0`、`claw workbench shell ready`、`memory settings ready`；sidecar 构建只剩 `runtime_store_aster_adapter.rs` unused warning。
+
+当前正在复跑 include-P0 release runner，输出目录为 `.lime/benchmark/runs/2026-07-11-include-p0-rerun-5/`：
+
+```bash
+npm run agent-qc:benchmark-release:run -- \
+  --version "2026-07-11-include-p0-rerun-5" \
+  --output-root ".lime/benchmark/runs/2026-07-11-include-p0-rerun-5" \
+  --include-p0 \
+  --stdout summary \
+  --format json \
+  --check
+```
+
+复跑仍在 `lime-p0-gate:npm-01-verify-local` 内部执行，当前已观察到 `run-context.json` 与 `benchmark-release-checklist.json` 写出，后续结果需以 runner 完整结束后的 `benchmark-release-run.json` / `benchmark-release-summary.json` 为准。
+
+本轮分类：
+
+- `current`：managed coding P0 release gate、Electron/App Server current bridge proxy、Codex-first `coding-current-tools` artifact、ThreadStoreError 投影修复、GUI smoke / Agent Runtime current fixture 证据。
+- `compat / deprecated`：原裸 `smoke:agent-runtime-tool-execution` 只保留为手工 DevBridge 调试入口；`agent-compat` / Aster durable source lowering 仍是迁移 blocker，不是 current owner。
+- `dead`：不恢复 Aster `Edit` / `Write` / Aster `Tool` 正向工具面；P1 dry-run / preflight blocked evidence 仍不能作为 release-ready。
+
 ## 下一刀
 
 1. 补齐 Terminal-Bench true-run 环境：安装 / 暴露 Harbor 或 `tb` runner，确保 Docker CLI 和 daemon 可用；随后把 `hello-world` 从 preflight 升级为真实执行，通过 Lime current 主链生成 trajectory，再调用外部 verifier。
 2. 补齐 DeepSWE true-run 环境：安装 / 暴露 `datacurve-pier >= 0.3.0`，确保 Docker CLI 和 daemon 可用；随后把 `ytt-jsonpath-query-api` 从 preflight 升级为真实执行，生成 patch / test log / reward / replay-case；未接 live Provider 前只能使用明确标记的 fixture backend，不伪造 pass。
-3. 处理或隔离 `verify:local` 的既有 i18n unused key 阻断，让 L0 release gate 恢复可用。
-4. 扩大运行门禁：`npm run verify:gui-smoke`，并把 GUI smoke evidence 写入 `.lime/benchmark/runs/<run-id>/`。
-5. 复跑一次带 `--include-p0` 的非 strict release runner，确认 coding P0 artifact 在真实 run 目录中被 summary 识别；若仍被 `verify:local` / GUI smoke 阻断，记录 blocker 而不是跳过。
+3. 修复后复跑一次带 `--include-p0` 的非 strict release runner，确认 `verify:local`、contracts、GUI smoke、coding P0 artifact 在真实 run 目录中全绿；外部 P1 true-run 仍应保持 blocked evidence，不能跳过。
+4. 准备上一稳定版本 `benchmark-release-summary.json` 和 `benchmark-baseline.json`，让 compare / baseline descriptor 进入真实 release evidence。
+5. 将 GUI smoke summary 和 coding-current-tools artifact 复制或汇总进 `.lime/benchmark/runs/<run-id>/` 的 release 证据目录，避免只留在终端日志中。

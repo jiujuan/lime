@@ -55,7 +55,7 @@ export async function submitAgentStreamUserInput(
     runtimeStatusPresentation,
     submittedDraft,
     initialThreadId:
-      env.sessionIdRef.current || `local-thread:${assistantMsgId}`,
+      targetSessionId || env.sessionIdRef.current || `local-thread:${assistantMsgId}`,
     listenerMapRef: env.listenerMapRef,
     setActiveStream: env.setActiveStream,
     setMessages: env.setMessages,

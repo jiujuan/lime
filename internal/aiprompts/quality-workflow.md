@@ -389,7 +389,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 作用：
 
-- 启动或复用 Electron GUI / Desktop Host
+- 启动或复用 Electron GUI / Desktop Host；默认隐藏 Electron smoke 主窗口，避免本地最小 smoke 抢占开发者当前窗口
 - 等待 `DevBridge` 健康检查通过
 - 验证默认 workspace 的准备态可用
 - 验证 `browser runtime` 的启动、状态读取与审计主链可用
@@ -404,6 +404,8 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 - 默认 workspace / 本地工作目录能力是否可用
 
 这类问题 **单靠** `lint`、`typecheck`、`vitest` 无法覆盖。
+
+如需肉眼调试最小 smoke，可显式执行 `LIME_ELECTRON_SMOKE_VISIBLE=1 npm run verify:gui-smoke`；默认隐藏模式仍走真实 Electron Desktop Host，不等同于 browser mirror。
 
 默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "lime-rs/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 App Server `agentSession/turn/start`、App Server `modelProvider/testChat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
 

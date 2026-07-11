@@ -21,6 +21,8 @@ interface HiddenHomeFirstScreen {
 interface ActiveHomeHotpathPendingShell {
   hiddenHomeFirstScreens: HiddenHomeFirstScreen[];
   observer: MutationObserver | null;
+  pendingClearFrameId: number | null;
+  pendingClearTimeoutId: number | null;
   requestId: string;
   resizeHandler: (() => void) | null;
   shell: HTMLElement;
@@ -34,6 +36,10 @@ const REAL_MESSAGE_LIST_SELECTOR = [
   `[data-testid="message-list-frame"]:not(${PENDING_SHELL_SELECTOR})`,
   `[data-testid="message-list"]:not(${PENDING_SHELL_SELECTOR})`,
 ].join(", ");
+const REAL_MESSAGE_CONTENT_SELECTOR = [
+  '[data-testid="message-turn-group"]',
+  "[data-message-role]",
+].join(", ");
 
 let activeShell: ActiveHomeHotpathPendingShell | null = null;
 
@@ -45,8 +51,10 @@ function isHTMLElement(value: Element | null): value is HTMLElement {
   return value instanceof HTMLElement;
 }
 
-function hasRealMessageList(): boolean {
-  return Boolean(document.querySelector(REAL_MESSAGE_LIST_SELECTOR));
+function hasRealMessageListWithContent(): boolean {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>(REAL_MESSAGE_LIST_SELECTOR),
+  ).some((node) => Boolean(node.querySelector(REAL_MESSAGE_CONTENT_SELECTOR)));
 }
 
 function hideHomeFirstScreens(state: ActiveHomeHotpathPendingShell): void {
@@ -122,16 +130,6 @@ function restoreHomeFirstScreens(
 }
 
 function applyShellBounds(shell: HTMLElement): void {
-  const main = document.querySelector("main");
-  const rect = main?.getBoundingClientRect();
-  if (rect && rect.width > 0 && rect.height > 0) {
-    shell.style.left = `${Math.max(0, rect.left)}px`;
-    shell.style.top = `${Math.max(0, rect.top)}px`;
-    shell.style.width = `${rect.width}px`;
-    shell.style.height = `${rect.height}px`;
-    return;
-  }
-
   shell.style.left = "0";
   shell.style.top = "0";
   shell.style.width = "100vw";
@@ -226,11 +224,67 @@ function createPendingShell({
   return shell;
 }
 
-function maybeClearAfterRealMessageList(requestId: string): void {
-  if (activeShell?.requestId !== requestId || !hasRealMessageList()) {
+function cancelScheduledClear(state: ActiveHomeHotpathPendingShell): void {
+  if (state.pendingClearFrameId !== null) {
+    window.cancelAnimationFrame(state.pendingClearFrameId);
+    state.pendingClearFrameId = null;
+  }
+  if (state.pendingClearTimeoutId !== null) {
+    window.clearTimeout(state.pendingClearTimeoutId);
+    state.pendingClearTimeoutId = null;
+  }
+}
+
+function scheduleClearAfterRealMessageList(requestId: string): void {
+  const state = activeShell;
+  if (!state || state.requestId !== requestId) {
     return;
   }
-  clearHomeHotpathPendingShell({ requestId, restoreHome: false });
+  if (
+    state.pendingClearFrameId !== null ||
+    state.pendingClearTimeoutId !== null
+  ) {
+    return;
+  }
+
+  const clearIfStillReady = () => {
+    const latestState = activeShell;
+    if (!latestState || latestState.requestId !== requestId) {
+      return;
+    }
+    latestState.pendingClearFrameId = null;
+    latestState.pendingClearTimeoutId = null;
+    if (!hasRealMessageListWithContent()) {
+      return;
+    }
+    clearHomeHotpathPendingShell({ requestId, restoreHome: false });
+  };
+
+  if (typeof window.requestAnimationFrame === "function") {
+    state.pendingClearFrameId = window.requestAnimationFrame(() => {
+      const latestState = activeShell;
+      if (!latestState || latestState.requestId !== requestId) {
+        return;
+      }
+      latestState.pendingClearFrameId =
+        window.requestAnimationFrame(clearIfStillReady);
+    });
+    return;
+  }
+
+  state.pendingClearTimeoutId = window.setTimeout(clearIfStillReady, 32);
+}
+
+function maybeClearAfterRealMessageList(requestId: string): void {
+  const state = activeShell;
+  if (state?.requestId !== requestId) {
+    return;
+  }
+  if (!hasRealMessageListWithContent()) {
+    cancelScheduledClear(state);
+    return;
+  }
+  scheduleClearAfterRealMessageList(requestId);
 }
 
 export function applyHomeHotpathPendingShell(
@@ -246,6 +300,8 @@ export function applyHomeHotpathPendingShell(
   const state: ActiveHomeHotpathPendingShell = {
     hiddenHomeFirstScreens: [],
     observer: null,
+    pendingClearFrameId: null,
+    pendingClearTimeoutId: null,
     requestId: options.requestId,
     resizeHandler: null,
     shell,
@@ -319,6 +375,7 @@ export function clearHomeHotpathPendingShell({
   if (shell.timeoutId !== null) {
     window.clearTimeout(shell.timeoutId);
   }
+  cancelScheduledClear(shell);
   shell.shell.remove();
   if (restoreHome) {
     restoreHomeFirstScreens(shell.hiddenHomeFirstScreens);
