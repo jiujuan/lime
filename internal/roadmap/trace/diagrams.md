@@ -25,7 +25,7 @@ flowchart LR
     TraceProjector["TraceProjector\nsummary / flame data"]
   end
 
-  subgraph Aster["Aster Backend"]
+  subgraph Agent["Agent Backend"]
     Agent["agent.rs\nreply loop"]
     ApiClient["api_client.rs\nresponse header capture"]
     ReplyParts["reply_parts.rs\nprovider stream decode"]
@@ -51,7 +51,7 @@ sequenceDiagram
   participant R as Renderer
   participant B as Bridge
   participant S as App Server
-  participant A as Aster
+  participant A as Agent
   participant P as Provider/API
   participant T as TraceStore
 
@@ -62,7 +62,7 @@ sequenceDiagram
   S->>T: span app_server.turn started
   S->>T: checkpoint request_received
   S->>A: stream_reply_with_policy
-  A->>T: span aster.reply started
+  A->>T: span agent.reply started
   A->>P: provider request
   A-->>S: provider.request.started
   P-->>A: response headers(request id)
@@ -97,7 +97,7 @@ provider.request.started
 provider.first_text_delta.received
   |
   | server_emit_after_provider_delta_ms
-  |   Lime App Server / Aster 负责：事件映射、投影、emit
+  |   Lime App Server / Agent 负责：事件映射、投影、emit
   v
 app_server_message_delta_emitted
   |

@@ -5,36 +5,16 @@ use std::time::Instant;
 
 use super::get_session_sync_with_history_page;
 use super::session_store_provider_routing::read_session_provider_selector;
-use super::session_store_runtime_projection::{
-    apply_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
-};
+use super::session_store_runtime_projection::apply_runtime_usage_fallback_to_latest_assistant_message;
 use super::session_store_subagent_context::{
     load_child_subagent_sessions, load_subagent_parent_context,
-    should_load_runtime_overlay_for_runtime_detail,
     should_load_subagent_runtime_context_for_runtime_detail,
 };
 use super::session_store_types::SessionDetail;
-use crate::protocol::AgentMessage as RuntimeAgentMessage;
-use crate::runtime_support::load_runtime_snapshot_overlay;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
 };
 use crate::session_execution_runtime_query::read_session_execution_runtime_session_projection;
-use crate::session_runtime_conversation_query::read_runtime_conversation_window;
-
-pub(super) fn apply_current_runtime_conversation(
-    detail: &mut SessionDetail,
-    messages: Option<Vec<RuntimeAgentMessage>>,
-    before_message_id: Option<i64>,
-) {
-    if before_message_id.is_some() {
-        return;
-    }
-
-    if let Some(messages) = messages {
-        detail.messages = messages;
-    }
-}
 
 fn is_session_archived_sync(db: &DbConnection, session_id: &str) -> Result<bool, String> {
     let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
@@ -124,51 +104,7 @@ pub async fn get_runtime_session_detail_with_history_page(
 
     let was_persisted_empty = detail.is_persisted_empty();
 
-    let load_runtime_overlay = history_offset == 0
-        && before_message_id.is_none()
-        && should_load_runtime_overlay_for_runtime_detail(&detail, history_limit);
-
-    let overlay_started_at = Instant::now();
-    let (runtime_messages, runtime_snapshot) = if load_runtime_overlay {
-        let (conversation_result, overlay_result) = tokio::join!(
-            read_runtime_conversation_window(session_id, history_limit, history_offset),
-            load_runtime_snapshot_overlay(session_id),
-        );
-        let runtime_messages = match conversation_result {
-            Ok(messages) => messages,
-            Err(error) => {
-                tracing::warn!(
-                    "[SessionStore] 读取 current runtime conversation 失败，已降级忽略: session_id={}, error={}",
-                    session_id,
-                    error
-                );
-                None
-            }
-        };
-        let overlay = match overlay_result {
-            Ok(overlay) => Some(overlay),
-            Err(error) => {
-                tracing::warn!(
-                    "[SessionStore] 读取 runtime snapshot overlay 失败: session_id={}, error={}",
-                    session_id,
-                    error
-                );
-                None
-            }
-        };
-        (runtime_messages, overlay)
-    } else {
-        (None, None)
-    };
-    let overlay_ms = overlay_started_at.elapsed().as_millis();
-
-    apply_current_runtime_conversation(&mut detail, runtime_messages, before_message_id);
-
-    let has_execution_runtime_overlay = runtime_snapshot
-        .as_ref()
-        .is_some_and(|overlay| overlay.execution_snapshot.latest_turn.is_some());
-    let should_load_execution_runtime_session =
-        load_runtime_overlay && (!was_persisted_empty || has_execution_runtime_overlay);
+    let should_load_execution_runtime_session = !was_persisted_empty;
 
     let usage_fallback_started_at = Instant::now();
     let execution_runtime_session = if should_load_execution_runtime_session {
@@ -214,17 +150,12 @@ pub async fn get_runtime_session_detail_with_history_page(
         session_id,
         execution_runtime_session.as_ref(),
         detail.execution_strategy.clone(),
-        runtime_snapshot
-            .as_ref()
-            .map(|overlay| &overlay.execution_snapshot),
+        None,
         provider_selector,
     );
     let execution_runtime_ms = execution_runtime_started_at.elapsed().as_millis();
 
     let apply_snapshot_started_at = Instant::now();
-    if let Some(overlay) = runtime_snapshot.as_ref() {
-        apply_runtime_snapshot(&mut detail, &overlay.timeline_snapshot);
-    }
     if let Some(runtime) = detail.execution_runtime.as_mut() {
         reconcile_session_execution_runtime_permission_fallback(
             runtime,
@@ -281,7 +212,7 @@ pub async fn get_runtime_session_detail_with_history_page(
             total_ms,
             detail_ms,
             archive_check_ms,
-            overlay_ms,
+            0,
             child_subagents_ms,
             parent_context_ms,
             history_limit,
@@ -297,7 +228,7 @@ pub async fn get_runtime_session_detail_with_history_page(
         session_id,
         total_ms,
         detail_ms,
-        overlay_ms,
+        0,
         usage_fallback_ms,
         execution_runtime_ms,
         apply_snapshot_ms,
@@ -306,7 +237,7 @@ pub async fn get_runtime_session_detail_with_history_page(
         history_limit,
         history_offset,
         before_message_id,
-        load_runtime_overlay,
+        false,
         load_subagent_runtime_context,
         detail.messages.len(),
         detail.turns.len(),

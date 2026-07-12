@@ -15,7 +15,7 @@
 
 实现只进入 current 主链：
 
-- App Server / RuntimeCore / AsterBackend。
+- App Server / RuntimeCore / RuntimeBackend。
 - AgentEvent / ThreadReadModel。
 - AgentUI / PlanRail / TaskRail。
 - current model registry / provider capability。

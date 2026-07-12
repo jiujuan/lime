@@ -234,7 +234,7 @@ AgentRuntimeProfileEvent / ThreadReadModel / EvidenceSummary
 
 ## 8.2 2026-05-10 Board/team 直接写回命令边界审计
 
-- 已审计 current 命令边界：`src/lib/api`、App Server / Electron Desktop Host 命令边界、`agentCommandCatalog.json`、`mockPriorityCommands.ts` 与 `defaultMocks` 均没有可复用的 board/team 直接写回命令；`TaskCreate/TaskList/TaskGet/TaskUpdate` 当前是 aster runtime tool / inventory，不是 legacy desktop facade command。
+- 已审计 current 命令边界：`src/lib/api`、App Server / Electron Desktop Host 命令边界、`agentCommandCatalog.json`、`mockPriorityCommands.ts` 与 `defaultMocks` 均没有可复用的 board/team 直接写回命令；`TaskCreate/TaskList/TaskGet/TaskUpdate` 当前是 agent runtime tool / inventory，不是 legacy desktop facade command。
 - 已确认真实可写事实源仍是 `TaskUpdateTool`：它通过 `resolve_task_board_state` / `persist_task_board_state` 读写 session task board，并在 owner 变化时输出 `ownerChange` / `owner_change` metadata；Agent UI 只消费该结构化 metadata 派生 `work_board` assign/reassign。
 - 已明确不新增临时 UI 本地写回或平行 legacy desktop command。若未来要做无 prompt direct board/team write-back，必须先新增 App Server current method 或 shared task board service，并同步前端网关、Electron / App Server 命令边界、治理目录册与测试 mock，同时解决 runtime `shared_task_list_storage` 与 session `extension_data` 的一致性。
 - 因此 v0.6 标准对齐口径调整为：`work_board` / reassignment 的合规 baseline 是 `Subagents selector -> TaskUpdate prompt/runtime turn -> TaskUpdateTool owner_change source -> Agent UI projection`；无 prompt 直接写回归入 future product command boundary，不再作为本轮 projection 对齐阻塞项。

@@ -400,7 +400,7 @@ impl LocalAppDataSource {
         data_root: impl Into<std::path::PathBuf>,
     ) -> Result<Self, String> {
         crate::agent_runtime_registry::initialize_agent_runtime(db.clone())
-            .map_err(|error| format!("初始化 App Server Channels Aster runtime 失败: {error}"))?;
+            .map_err(|error| format!("初始化 App Server Channels Agent runtime 失败: {error}"))?;
         let config = load_config().map_err(|error| error.to_string())?;
         let logs = std::sync::Arc::new(tokio::sync::RwLock::new(
             logger::create_log_store_from_config(&config.logging),

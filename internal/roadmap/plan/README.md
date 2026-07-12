@@ -13,7 +13,7 @@
 ```text
 Inputbar / 自然语言意图
   -> App Server agentSession/turn/start
-  -> RuntimeCore / AsterBackend
+  -> RuntimeCore / RuntimeBackend
   -> ModelCapabilityResolver / ProviderRequestAdapter
   -> Plan Mode prompt / update_plan tool / proposed_plan parser
   -> plan.delta / plan.final / reasoning.delta / model.effective / turn read model
@@ -31,7 +31,7 @@ Codex 是 Plan 主架构参考；opencode 只作为多 Provider request、reason
 
 本路线图只允许落在 current 主链：
 
-- Rust 后端：`lime-rs/crates/**`，优先 App Server / RuntimeCore / AsterBackend / agent tool owner。
+- Rust 后端：`lime-rs/crates/**`，优先 App Server / RuntimeCore / RuntimeBackend / agent tool owner。
 - 前端：`src/lib/api/agentRuntime*`、`src/lib/api/agentProtocol.ts`、`src/components/agent/chat/**`。
 - 模型事实源：current `model/list`、`modelProvider/*`、`modelProvider/catalog/list`、`modelProvider/fetchModels`，不回退本地旧 catalog。
 - 协议：App Server JSON-RPC、AgentEvent、ThreadReadModel、AgentUI projection、`model.effective`、`reasoning.delta/final`。
@@ -61,7 +61,7 @@ npm run test:contracts
 npm run verify:gui-smoke
 ```
 
-涉及 Rust runtime / AsterBackend 计划事件时先跑受影响 Rust 定向测试，再按风险补全量校验。
+涉及 Rust runtime / RuntimeBackend 计划事件时先跑受影响 Rust 定向测试，再按风险补全量校验。
 
 涉及多模型与 thinking / reasoning 时补：
 

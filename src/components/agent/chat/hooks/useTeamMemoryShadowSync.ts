@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import {
   readTeamMemorySnapshot,
@@ -25,8 +25,8 @@ interface TeamMemoryShadowSyncOptions {
   activeTheme?: string | null;
   sessionId?: string | null;
   selectedTeam?: TeamDefinition | null;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
-  subagentParentContext?: AsterSubagentParentContext | null;
+  childSubagentSessions?: AgentSubagentSessionInfo[];
+  subagentParentContext?: AgentSubagentParentContext | null;
   storage?: TeamMemoryStorageLike | null;
 }
 
@@ -64,7 +64,7 @@ function buildTeamSelectionMemoryContent(params: {
   return lines.length > 0 ? lines.join("\n") : null;
 }
 
-function summarizeSubagentSession(session: AsterSubagentSessionInfo): string {
+function summarizeSubagentSession(session: AgentSubagentSessionInfo): string {
   const status =
     normalizeLine(session.runtime_status) ||
     normalizeLine(session.latest_turn_status) ||
@@ -80,7 +80,7 @@ function summarizeSubagentSession(session: AsterSubagentSessionInfo): string {
 
 function buildSubagentMemoryContent(params: {
   sessionId?: string | null;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
+  childSubagentSessions?: AgentSubagentSessionInfo[];
 }): string | null {
   const sessions = (params.childSubagentSessions || []).filter((session) =>
     normalizeLine(session.name),
@@ -99,7 +99,7 @@ function buildSubagentMemoryContent(params: {
 }
 
 function buildParentContextMemoryContent(
-  context?: AsterSubagentParentContext | null,
+  context?: AgentSubagentParentContext | null,
 ): string | null {
   if (!context?.parent_session_id?.trim()) {
     return null;
@@ -315,7 +315,7 @@ function serializeTeamDefinition(team?: TeamDefinition | null): string {
 }
 
 function serializeSubagentSessions(
-  sessions?: AsterSubagentSessionInfo[],
+  sessions?: AgentSubagentSessionInfo[],
 ): string {
   return JSON.stringify(
     (sessions || []).map((session) => ({
@@ -332,7 +332,7 @@ function serializeSubagentSessions(
 }
 
 function serializeParentContext(
-  context?: AsterSubagentParentContext | null,
+  context?: AgentSubagentParentContext | null,
 ): string {
   if (!context) {
     return "null";

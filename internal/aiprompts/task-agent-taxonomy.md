@@ -52,7 +52,7 @@
 
 **后续新增长时执行能力时，只允许落成 `agent turn`、`subagent turn` 或 `automation job` 三类之一；不允许再造第四类 runtime taxonomy。**
 
-补充迁移边界：旧 `agent_runtime_*`、`automation_*`、`execution_run_*` 这类命令名只允许作为 retired guard、历史 evidence、测试 fixture 或受控迁移面；`lime-rs/src/commands/**` 已删除，不是新的 taxonomy、coordinator 或 runtime 实现目录。本文列出的 `aster_agent_cmd/**`、`automation_cmd.rs`、`execution_run_cmd.rs` 只作为历史锚点和清理参考；新增长时执行、子代理、自动化或执行摘要能力应进入 RuntimeCore / services / App Server protocol，不得恢复旧 wrapper。
+补充迁移边界：旧 `agent_runtime_*`、`automation_*`、`execution_run_*` 这类命令名只允许作为 retired guard、历史 evidence、测试 fixture 或受控迁移面；`lime-rs/src/commands/**` 已删除，不是新的 taxonomy、coordinator 或 runtime 实现目录。新增长时执行、子代理、自动化或执行摘要能力应进入 RuntimeCore / services / App Server protocol，不得恢复旧 wrapper。
 
 补充边界：
 
@@ -85,7 +85,7 @@
 
 - `internal/aiprompts/query-loop.md`
 - App Server `agentSession/turn/start`
-- App Server RuntimeCore / AsterBackend
+- App Server RuntimeCore / RuntimeBackend
 - `lime-rs/crates/agent`
 
 固定规则：
@@ -176,7 +176,7 @@
 
 - `internal/aiprompts/task-agent-taxonomy.md`
 - `internal/aiprompts/query-loop.md`
-- `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs` 现有行为锚点；新协作 runtime 逻辑迁向 RuntimeCore / services
+- `lime-rs/crates/agent/src` 与 `lime-rs/crates/app-server/src` 承接协作 runtime；新逻辑按职责进入 RuntimeCore / services
 - `lime-rs/src/services/automation_service/*`
 - `lime-rs/src/services/execution_tracker_service.rs`
 - `agent_runs`

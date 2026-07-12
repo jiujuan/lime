@@ -61,22 +61,22 @@ export declare function createAgentRuntimeClient({
     request: import("./types").AgentRuntimeResumeThreadRequest,
   ) => Promise<boolean>;
   submitAgentRuntimeTurn: (
-    request: import("./types").AgentRuntimeSubmitTurnRequest,
+    request: import("@/lib/api/appServer").AppServerAgentSessionTurnStartParams,
   ) => Promise<void>;
   createAgentRuntimeSession: (
     workspaceId?: string,
     name?: string,
-    executionStrategy?: import("./types").AsterExecutionStrategy,
+    executionStrategy?: import("./types").AgentExecutionStrategy,
     options?: import("./types").AgentRuntimeCreateSessionOptions,
   ) => Promise<string>;
   deleteAgentRuntimeSession: (sessionId: string) => Promise<void>;
   getAgentRuntimeSession: (
     sessionId: string,
     options?: import("./types").AgentRuntimeGetSessionOptions,
-  ) => Promise<import("./types").AsterSessionDetail>;
+  ) => Promise<import("./types").AgentSessionDetail>;
   listAgentRuntimeSessions: (
     options?: import("./types").AgentRuntimeListSessionsOptions,
-  ) => Promise<import("./types").AsterSessionInfo[]>;
+  ) => Promise<import("./types").AgentSessionInfo[]>;
   updateAgentRuntimeSession: (
     request: import("./types").AgentRuntimeUpdateSessionRequest,
   ) => Promise<void>;
@@ -136,6 +136,6 @@ export declare function createAgentRuntimeClient({
     sessionId: string,
     previewText?: string,
   ) => Promise<string>;
-  initAgentRuntime: () => Promise<import("./types").AgentRuntimeInitStatus>;
+  getRuntimeProviderSelection: () => Promise<import("./types").RuntimeProviderSelection>;
 };
 export type AgentRuntimeClient = ReturnType<typeof createAgentRuntimeClient>;

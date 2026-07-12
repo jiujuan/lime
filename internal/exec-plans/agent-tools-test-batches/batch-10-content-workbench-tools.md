@@ -40,9 +40,9 @@ direct 内容生成工具：
 
 - `current`
   - `lime-rs/src/agent_tools/catalog.rs` 中的 `LIME_CREATE_*_TASK_TOOL_NAME`
-  - `lime-rs/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs`
-  - `lime-rs/src/commands/aster_agent_cmd/tool_runtime/media_cli_bridge.rs`
-  - `lime-rs/src/commands/aster_agent_cmd/tool_runtime/social_tools.rs` 的 `social_generate_cover_image`
+  - `lime-rs/src/commands/agent_cmd/tool_runtime/creation_tools.rs`
+  - `lime-rs/src/commands/agent_cmd/tool_runtime/media_cli_bridge.rs`
+  - `lime-rs/src/commands/agent_cmd/tool_runtime/social_tools.rs` 的 `social_generate_cover_image`
   - `src/components/agent/chat/utils/toolDisplayInfo.ts`
   - `src/components/agent/chat/utils/toolProcessSummary.ts`
   - `src/components/agent/chat/utils/limeTaskProtocolNoise.ts`

@@ -1041,20 +1041,13 @@ export async function runImageCommandScenario({
     inputText: scenarioConfig.routedPrompt,
     providerPreference: traceTurnStart?.providerPreference ?? null,
     modelPreference: traceTurnStart?.modelPreference ?? null,
-    runtimeOptions: traceTurnStart?.runtimeOptions ?? {
-      metadata: {
-        harness: workflowHarness,
-      },
-    },
+    runtimeOptions: traceTurnStart?.runtimeOptions ?? {},
     metadata: traceTurnStart?.metadata ?? null,
-    asterChatRequest: {
-      turn_config: {
-        metadata: {
-          harness:
-            traceTurnStart?.runtimeOptions?.metadata?.harness ??
-            traceTurnStart?.metadata?.harness ??
-            workflowHarness,
-        },
+    runtimeRequest: {
+      metadata: {
+        harness:
+          traceTurnStart?.runtimeRequest?.metadata?.harness ??
+          workflowHarness,
       },
     },
   };
@@ -1137,13 +1130,13 @@ export async function runImageCommandScenario({
       turnId,
       inputText: imageCommandWorkflowTurnStart.inputText,
       hasImageCommandIntentMetadata: JSON.stringify(
-        imageCommandWorkflowTurnStart.asterChatRequest || {},
+        imageCommandWorkflowTurnStart.runtimeRequest || {},
       ).includes("image_command_intent"),
       hasLegacyImageSkillLaunchMetadata: JSON.stringify(
-        imageCommandWorkflowTurnStart.asterChatRequest || {},
+        imageCommandWorkflowTurnStart.runtimeRequest || {},
       ).includes("image_skill_launch"),
       hasImageTaskMetadata: JSON.stringify(
-        imageCommandWorkflowTurnStart.asterChatRequest || {},
+        imageCommandWorkflowTurnStart.runtimeRequest || {},
       ).includes("image_task"),
       providerPreference: imageCommandWorkflowTurnStart.providerPreference,
       modelPreference: imageCommandWorkflowTurnStart.modelPreference,

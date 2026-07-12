@@ -1,6 +1,10 @@
 pub const PROVIDER_EMPTY_STREAM_RETRY_MARKER: &str =
     "Anthropic stream ended without assistant content or tool call";
 
+use super::progress::RuntimeReplyProviderStreamProgress;
+use super::response_content::{
+    provider_stream_response_first_text_delta_chars, RuntimeReplyProviderResponseContent,
+};
 use std::future::Future;
 use std::time::Instant;
 
@@ -14,6 +18,16 @@ pub enum RuntimeReplyProviderSamplingMode {
 pub enum RuntimeReplyProviderSamplingFailureLogLevel {
     Info,
     Warn,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeReplyProviderSamplingStreamItem<Message, Usage, Error> {
+    Item {
+        message: Option<Message>,
+        usage: Option<Usage>,
+    },
+    RetryEmptyFirstContent(Error),
+    Error(Error),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +75,7 @@ impl RuntimeReplyProviderSamplingRequest {
 pub struct RuntimeReplyProviderSamplingSession {
     request: RuntimeReplyProviderSamplingRequest,
     started_at: Instant,
+    progress: RuntimeReplyProviderStreamProgress,
 }
 
 impl RuntimeReplyProviderSamplingSession {
@@ -68,6 +83,7 @@ impl RuntimeReplyProviderSamplingSession {
         Self {
             request,
             started_at: Instant::now(),
+            progress: RuntimeReplyProviderStreamProgress::new(),
         }
     }
 
@@ -81,6 +97,10 @@ impl RuntimeReplyProviderSamplingSession {
 
     pub fn started_at(&self) -> &Instant {
         &self.started_at
+    }
+
+    pub fn stream_progress(&self) -> &RuntimeReplyProviderStreamProgress {
+        &self.progress
     }
 
     pub async fn open_stream<Stream, CompleteOutput, Error, StreamFuture, CompleteFuture>(
@@ -133,6 +153,37 @@ impl RuntimeReplyProviderSamplingSession {
             self.request.model_name,
             self.elapsed_ms()
         );
+    }
+
+    pub fn accept_stream_item<Message, Usage, Error>(
+        &mut self,
+        item: Result<(Option<Message>, Option<Usage>), Error>,
+    ) -> RuntimeReplyProviderSamplingStreamItem<Message, Usage, Error>
+    where
+        Error: std::fmt::Display,
+    {
+        match item {
+            Ok((message, usage)) => {
+                if self.progress.note_first_content(message.is_some()) {
+                    self.log_first_content_decoded();
+                }
+                RuntimeReplyProviderSamplingStreamItem::Item { message, usage }
+            }
+            Err(error) if self.progress.should_retry_empty_first_content(&error) => {
+                self.log_empty_first_content_retry(&error);
+                RuntimeReplyProviderSamplingStreamItem::RetryEmptyFirstContent(error)
+            }
+            Err(error) => RuntimeReplyProviderSamplingStreamItem::Error(error),
+        }
+    }
+
+    pub fn accept_response_text_delta<'a>(
+        &mut self,
+        content: impl IntoIterator<Item = RuntimeReplyProviderResponseContent<'a>>,
+    ) -> Option<usize> {
+        let chars = provider_stream_response_first_text_delta_chars(&mut self.progress, content)?;
+        self.log_first_text_delta_decoded(chars);
+        Some(chars)
     }
 
     fn log_stream_request_start(&self) {
@@ -201,6 +252,16 @@ impl RuntimeReplyProviderSamplingSession {
             self.request.provider_name,
             self.request.model_name,
             self.elapsed_ms()
+        );
+    }
+
+    fn log_first_text_delta_decoded(&self, chars: usize) {
+        tracing::info!(
+            "[ModelProvider][TTFT] first provider text delta decoded: provider={}, model={}, elapsed_ms={}, chars={}",
+            self.request.provider_name,
+            self.request.model_name,
+            self.elapsed_ms(),
+            chars
         );
     }
 }

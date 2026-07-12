@@ -47,8 +47,8 @@ pub(super) fn model_info_from_value(value: &Value) -> ModelInfo {
             Some(value),
             "supports_reasoning_summary_parameter",
         )
-            .or_else(|| bool_field(Some(value), "supports_reasoning_summaries"))
-            .unwrap_or(false),
+        .or_else(|| bool_field(Some(value), "supports_reasoning_summaries"))
+        .unwrap_or(false),
         default_reasoning_summary: string_field(value, "default_reasoning_summary"),
         support_verbosity: bool_field(Some(value), "support_verbosity").unwrap_or(false),
         default_verbosity: string_field(value, "default_verbosity"),

@@ -1,13 +1,13 @@
 import type { MouseEvent } from "react";
 import styled from "styled-components";
 import { CircleAlert, Clock3, LoaderCircle, MoreHorizontal, Pin } from "lucide-react";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 
 type ConversationRuntimeStatus = "running" | "queued" | "waitingAction";
 
 interface AppSidebarConversationRowProps {
-  session: AsterSessionInfo;
+  session: AgentSessionInfo;
   title: string;
   meta: string;
   active: boolean;
@@ -18,10 +18,10 @@ interface AppSidebarConversationRowProps {
   favoriteBadgeLabel: string;
   moreActionsLabel: string;
   openActionMenuLabel: string;
-  onNavigate: (session: AsterSessionInfo) => void;
+  onNavigate: (session: AgentSessionInfo) => void;
   onOpenMenu: (
     event: MouseEvent<HTMLButtonElement>,
-    session: AsterSessionInfo,
+    session: AgentSessionInfo,
   ) => void;
 }
 

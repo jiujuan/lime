@@ -358,19 +358,7 @@ async fn image_command_turn_start_creates_task_from_jsonrpc_metadata() {
                     "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
                     "provider-image",
                     "gpt-image-test",
-                ),
-                "hostOptions": {
-                    "asterChatRequest": {
-                        "message": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
-                        "metadata": image_command_metadata(
-                            &app.workspace_root,
-                            "E2E 图片命令路由测试，请生成一张青柠插画",
-                            "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
-                            "provider-image",
-                            "gpt-image-test",
-                        )
-                    }
-                }
+                )
             },
             "queueIfBusy": true
         }),
@@ -486,13 +474,7 @@ async fn image_command_turn_start_rejects_missing_explicit_provider_before_task_
             },
             "runtimeOptions": {
                 "stream": true,
-                "metadata": metadata,
-                "hostOptions": {
-                    "asterChatRequest": {
-                        "message": raw_text,
-                        "metadata": metadata
-                    }
-                }
+                "metadata": metadata
             },
             "queueIfBusy": true
         }),

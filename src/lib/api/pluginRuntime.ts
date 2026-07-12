@@ -1,8 +1,6 @@
 import { safeInvoke } from "@/lib/dev-bridge";
-import type {
-  AgentRuntimeRespondActionRequest,
-  AgentTurnConfigSnapshot,
-} from "./agentRuntime/types";
+import type { AgentRuntimeRespondActionRequest } from "./agentRuntime/types";
+import type { RuntimeRequest } from "@limecloud/app-server-client";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const PLUGIN_RUNTIME_COMMANDS = {
@@ -160,9 +158,7 @@ export interface PluginRuntimeStartTaskRequest {
   appRootPath?: string;
   runWorker?: boolean;
   workerTimeoutMs?: number;
-  providerPreference?: string;
-  modelPreference?: string;
-  turnConfig?: AgentTurnConfigSnapshot;
+  runtimeRequest?: RuntimeRequest;
   queueIfBusy?: boolean;
   skipPreSubmitResume?: boolean;
   runStartHooks?: boolean;

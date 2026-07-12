@@ -1,4 +1,4 @@
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type {
   ContentPart,
   Message,
@@ -64,7 +64,7 @@ import {
 } from "./agentChatHistoryUsage";
 
 export const hydrateSessionDetailMessages = (
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   topicId: string,
   options: HydrateSessionDetailMessagesOptions = {},
 ): Message[] => {

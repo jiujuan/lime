@@ -12,7 +12,7 @@ Claw 首字可见延迟现在已经不能继续用一个粗粒度 TTFT 指标解
 renderer submit
 -> Electron/App Server JSON-RPC
 -> App Server turn preparation
--> Aster context/tool/provider setup
+-> Agent context/tool/provider setup
 -> provider/API streaming
 -> App Server event projection and emit
 -> renderer event bridge
@@ -63,7 +63,7 @@ Claw Trace 需要提供一套稳定的诊断体系：
 
 ### 3.3 Runtime / 后端开发者
 
-Runtime 开发者需要定位 Aster / provider / tool surface 的耗时。
+Runtime 开发者需要定位 Agent / provider / tool surface 的耗时。
 
 必须支持：
 
@@ -107,7 +107,7 @@ GUI 开发者需要定位 delta 到 paint 的本地耗时。
 
 ## 5. P1 目标
 
-1. Aster provider stream 增加结构化 span：
+1. Agent provider stream 增加结构化 span：
    - provider request started
    - response headers received
    - first stream event decoded
@@ -126,7 +126,7 @@ GUI 开发者需要定位 delta 到 paint 的本地耗时。
 
 ## 6. P2 目标
 
-1. W3C `traceparent / tracestate` 贯穿 renderer -> App Server -> Aster -> provider HTTP headers。
+1. W3C `traceparent / tracestate` 贯穿 renderer -> App Server -> Agent -> provider HTTP headers。
 2. 支持 OpenTelemetry exporter，但默认关闭。
 3. 支持 trace replay / flame chart / timeline UI。
 4. 支持 GUI smoke 自动采集 trace evidence。

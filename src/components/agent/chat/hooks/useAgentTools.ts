@@ -331,7 +331,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
         setSubmittedActionsInFlight((prev) =>
           removeActionsByRequestIds(prev, acknowledgedRequestIds),
         );
-        console.error("[AsterChat] 确认失败:", error);
+        console.error("[AgentChat] 确认失败:", error);
         toast.error(
           error instanceof Error && error.message
             ? error.message
@@ -450,7 +450,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
         toast.success("已重新拉起待处理请求");
         return true;
       } catch (error) {
-        console.error("[AsterChat] 重新拉起请求失败:", error);
+        console.error("[AgentChat] 重新拉起请求失败:", error);
         toast.error(
           error instanceof Error && error.message
             ? error.message

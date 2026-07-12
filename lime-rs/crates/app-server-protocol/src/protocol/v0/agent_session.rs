@@ -788,15 +788,9 @@ pub struct RuntimeOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_preference: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model_preference: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued_turn_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub host_options: Option<serde_json::Value>,
+    pub runtime_request: Option<RuntimeRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_output: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -808,6 +802,120 @@ pub struct RuntimeOptions {
         skip_serializing_if = "Option::is_none"
     )]
     pub output_schema: Option<serde_json::Value>,
+}
+
+impl RuntimeOptions {
+    /// 返回 current turn 的 typed 运行时请求。
+    pub fn runtime_request(&self) -> Option<&RuntimeRequest> {
+        self.runtime_request.as_ref()
+    }
+
+    /// 返回 current turn 执行配置中的运行时元数据。
+    pub fn runtime_metadata(&self) -> Option<&serde_json::Value> {
+        self.runtime_request()
+            .and_then(|request| request.metadata.as_ref())
+    }
+
+    pub fn provider_preference(&self) -> Option<&str> {
+        self.runtime_request()
+            .and_then(|request| request.provider_preference.as_deref())
+    }
+
+    pub fn model_preference(&self) -> Option<&str> {
+        self.runtime_request()
+            .and_then(|request| request.model_preference.as_deref())
+    }
+
+    /// 为 current turn 执行配置提供唯一的可写 owner。
+    pub fn runtime_request_mut(&mut self) -> &mut RuntimeRequest {
+        self.runtime_request.get_or_insert_default()
+    }
+
+    pub fn runtime_metadata_mut(&mut self) -> &mut Option<serde_json::Value> {
+        &mut self.runtime_request_mut().metadata
+    }
+}
+
+/// 由 App Server current turn 主链消费的运行时参数。
+///
+/// 输入、session、turn、event 名和 structured output 已在 `AgentSessionTurnStartParams`
+/// 或 `RuntimeOptions` 顶层表达。本结构只承载 provider lowering 与 turn execution
+/// 所需的显式配置，不能作为任意 host JSON 的逃生通道。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_config: Option<RuntimeProviderConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_preference: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_preference: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_policy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sandbox_policy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_search: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_mode: Option<RuntimeSearchMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_strategy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_continue: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeProviderConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_strategy: Option<RuntimeToolCallStrategy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toolshim_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_capabilities: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeToolCallStrategy {
+    #[default]
+    Native,
+    ToolShim,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeSearchMode {
+    Disabled,
+    #[default]
+    Auto,
+    Required,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

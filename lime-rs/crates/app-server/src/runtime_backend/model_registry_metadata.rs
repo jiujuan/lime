@@ -223,7 +223,7 @@ mod tests {
             &RuntimeModelSelection {
                 provider: "fixture-openai".to_string(),
                 model: "fixture-model".to_string(),
-                source: "host_options_provider_config",
+                source: "runtime_request_provider_config",
                 reasoning_effort: None,
             },
             Some(&SessionProviderConfig {

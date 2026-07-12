@@ -627,6 +627,10 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AgentThreadContentReference",
     "AgentThreadMessageContentPart",
     "RuntimeOptions",
+    "RuntimeRequest",
+    "RuntimeProviderConfig",
+    "RuntimeToolCallStrategy",
+    "RuntimeSearchMode",
     "StructuredOutputContract",
     "AgentEvent",
 ];

@@ -1205,17 +1205,17 @@ mod tests {
         ] {
             assert!(
                 canonical_tool_discovery_name(deleted_name).is_none(),
-                "Aster Write/Edit alias must not be discoverable: {deleted_name}"
+                "Agent Write/Edit alias must not be discoverable: {deleted_name}"
             );
             assert!(
                 !tool_search_exact_match("apply_patch", deleted_name),
-                "Aster Write/Edit alias must not collapse into apply_patch: {deleted_name}"
+                "Agent Write/Edit alias must not collapse into apply_patch: {deleted_name}"
             );
         }
     }
 
     #[test]
-    fn test_aster_task_discovery_profiles_stay_deleted() {
+    fn test_agent_task_discovery_profiles_stay_deleted() {
         for deleted_name in [
             "TaskCreate",
             "TaskCreateTool",
@@ -1235,7 +1235,7 @@ mod tests {
         ] {
             assert!(
                 canonical_tool_discovery_name(deleted_name).is_none(),
-                "Aster Task* alias must not be discoverable: {deleted_name}"
+                "Agent Task* alias must not be discoverable: {deleted_name}"
             );
         }
     }

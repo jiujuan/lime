@@ -1,54 +1,10 @@
 import type {
-  AsterApprovalPolicy,
-  AsterExecutionStrategy,
-  AsterSandboxPolicy,
-  AsterSessionExecutionRuntimeAccessMode,
-  AsterSessionExecutionRuntimePreferences,
-  AsterSessionExecutionRuntimeRecentTeamSelection,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntimeAccessMode,
+  AgentSessionExecutionRuntimePreferences,
+  AgentSessionExecutionRuntimeRecentTeamSelection,
 } from "../agentExecutionRuntime";
 import type { AgentRuntimeResumeActionDecision } from "@limecloud/agent-ui-contracts";
-import type {
-  AutoContinueRequestPayload,
-  ImageInput,
-  RuntimeProviderConfig,
-} from "./sessionTypes";
-
-export type AgentRuntimeWebSearchMode = "disabled" | "auto" | "required";
-
-export interface AgentTurnConfigSnapshot {
-  provider_config?: RuntimeProviderConfig;
-  provider_preference?: string;
-  model_preference?: string;
-  reasoning_effort?: string;
-  thinking_enabled?: boolean;
-  approval_policy?: AsterApprovalPolicy;
-  sandbox_policy?: AsterSandboxPolicy;
-  execution_strategy?: AsterExecutionStrategy;
-  web_search?: boolean;
-  search_mode?: AgentRuntimeWebSearchMode;
-  auto_continue?: AutoContinueRequestPayload;
-  system_prompt?: string;
-  expected_output?: unknown;
-  structured_output?: Record<string, unknown>;
-  output_schema?: unknown;
-  metadata?: Record<string, unknown>;
-}
-
-export interface AgentRuntimeSubmitTurnRequest {
-  message: string;
-  session_id: string;
-  event_name: string;
-  workspace_id?: string;
-  turn_id?: string;
-  images?: ImageInput[];
-  turn_config?: AgentTurnConfigSnapshot;
-  expected_output?: unknown;
-  structured_output?: Record<string, unknown>;
-  output_schema?: unknown;
-  queue_if_busy?: boolean;
-  queued_turn_id?: string;
-  skip_pre_submit_resume?: boolean;
-}
 
 export interface AgentRuntimeCreateSessionOptions {
   runStartHooks?: boolean;
@@ -180,11 +136,11 @@ export interface AgentRuntimeUpdateSessionRequest {
   provider_selector?: string;
   provider_name?: string;
   model_name?: string;
-  execution_strategy?: AsterExecutionStrategy;
+  execution_strategy?: AgentExecutionStrategy;
   archived?: boolean;
-  recent_access_mode?: AsterSessionExecutionRuntimeAccessMode;
-  recent_preferences?: AsterSessionExecutionRuntimePreferences;
-  recent_team_selection?: AsterSessionExecutionRuntimeRecentTeamSelection;
+  recent_access_mode?: AgentSessionExecutionRuntimeAccessMode;
+  recent_preferences?: AgentSessionExecutionRuntimePreferences;
+  recent_team_selection?: AgentSessionExecutionRuntimeRecentTeamSelection;
   article_workspace_selected_object_ref?: Record<string, unknown> | null;
   article_workspace_edited_draft?: Record<string, unknown> | null;
 }

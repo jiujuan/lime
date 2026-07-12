@@ -7,8 +7,8 @@
 ## 1. 抽取原则
 
 1. 先抽公共 RuntimeCore，不先改产品入口。
-2. 先定义 backend-neutral 合同，再迁 Aster 主链。
-3. Aster 只是第一个 `ExecutionBackend`，不能把 Aster DTO 直接抬成公共 DTO。
+2. 先定义 backend-neutral 合同，再迁 Agent 主链。
+3. Agent 只是第一个 `ExecutionBackend`，不能把 Agent DTO 直接抬成公共 DTO。
 4. legacy desktop facade 只允许在迁移期保留参数适配、事件转发和错误映射；不得落回 `lime-rs/src/commands/**` 扩写，也不得把该目录里的 thin facade / stub 当作完成态。
 5. App Server 和 legacy desktop facade 必须调用同一个 RuntimeCore。
 6. 服务层不能依赖 retired desktop host app handle、event emitter 或 state container。
@@ -20,12 +20,12 @@
 | 当前区域 | 判断 | 后续方向 |
 | --- | --- | --- |
 | `RuntimeCore` | `current target` | 公共 session/thread/turn/task/run/action/event/artifact/evidence 事实源。 |
-| `ExecutionBackend` | `current target` | 后端适配接口，Aster 和未来后端都走这里。 |
-| `AsterBackend` | `current target` | 对现有 Aster runtime_turn/tool_runtime 的适配封装。 |
+| `ExecutionBackend` | `current target` | 后端适配接口，Agent 和未来后端都走这里。 |
+| `RuntimeBackend` | `current target` | 对现有 Agent runtime_turn/tool_runtime 的适配封装。 |
 | `lime-rs/crates/agent` | `current reference` | 当前最接近 core 的 crate，后续继续拆公共模型与服务。 |
-| `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | `compat cleanup reference` | Aster backend 历史实现参考，只能用于迁出逻辑；不再作为公共 core 或新 runtime 落点。 |
-| `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | `compat cleanup reference` | Aster tool execution 历史参考，事件需迁到公共 tool facts；不再新增 tool 业务逻辑。 |
-| `lime-rs/src/commands/aster_agent_cmd/command_api/*` | `compat cleanup reference` | legacy desktop command DTO / facade 历史参考；迁出到 RuntimeCore / App Server 后撤注册并删除，不在该目录继续保留委托 facade。 |
+| `lime-rs/src/commands/agent_cmd/runtime_turn.rs` | `compat cleanup reference` | Agent backend 历史实现参考，只能用于迁出逻辑；不再作为公共 core 或新 runtime 落点。 |
+| `lime-rs/src/commands/agent_cmd/tool_runtime/*` | `compat cleanup reference` | Agent tool execution 历史参考，事件需迁到公共 tool facts；不再新增 tool 业务逻辑。 |
+| `lime-rs/src/commands/agent_cmd/command_api/*` | `compat cleanup reference` | legacy desktop command DTO / facade 历史参考；迁出到 RuntimeCore / App Server 后撤注册并删除，不在该目录继续保留委托 facade。 |
 | `lime-rs/src/commands/**` | `compat cleanup` | 旧 Tauri wrapper 清理区；只允许迁出核心逻辑、撤注册、机械编译修复和删除；删不动登记 blocker，不保留 stub / compat wrapper / thin facade。新增后端能力进入 App Server crates / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。 |
 | 前端 `safeInvoke` / `invoke` agent runtime API | `compat client` | Lime Desktop 迁移期继续保留，但可改为 app-server client。 |
 | `app-server-protocol` | `current target` | 定义 wire DTO 和 schema。 |
@@ -47,7 +47,7 @@ flowchart TB
     Facade --> Evidence["EvidenceService"]
 
     Turn --> Backend["ExecutionBackend"]
-    Backend --> Aster["AsterBackend"]
+    Backend --> Agent["RuntimeBackend"]
     Backend --> Future["FutureBackend"]
     Turn --> Tool["ToolRuntimeService"]
     Action --> Policy["Policy / Permission"]
@@ -72,7 +72,7 @@ flowchart TB
 1. 直接持有壳层窗口。
 2. 直接发送 legacy desktop event。
 3. 直接读取 renderer state。
-4. 暴露 Aster 私有 DTO。
+4. 暴露 Agent 私有 DTO。
 
 ### 4.2 `ExecutionBackend`
 
@@ -82,11 +82,11 @@ flowchart TB
 2. 执行具体后端逻辑。
 3. 通过 `RuntimeEventSink` 回传标准事件。
 4. 支持 cancel / resume 的最小合同。
-5. backend host 返回值必须是公共 `RuntimeEvent`，不能把 `lime_agent::AgentEvent`、`AsterChatRequest` 或 legacy desktop DTO 带回 `app-server` 公共合同。
+5. backend host 返回值必须是公共 `RuntimeEvent`，不能把 `lime_agent::AgentEvent`、`AgentChatRequest` 或 legacy desktop DTO 带回 `app-server` 公共合同。
 
 首批 backend：
 
-1. `AsterBackend`：适配现有 Aster runtime。
+1. `RuntimeBackend`：适配现有 Agent runtime。
 2. `MockBackend`：只用于 P1/P2 协议和客户端测试。
 
 ### 4.3 `RuntimeEventSink`
@@ -142,7 +142,7 @@ RuntimeEventSink
 | session/thread/turn/task/run/action ids | RuntimeCore |
 | JSON-RPC wire DTO | app-server-protocol |
 | backend 选择、取消、事件序列 | RuntimeCore |
-| Aster prompt / tool orchestration 细节 | AsterBackend；迁移完成前可参考旧 `aster_agent_cmd`，但不得在 `lime-rs/src/commands/**` 新增逻辑 |
+| Agent prompt / tool orchestration 细节 | RuntimeBackend；迁移完成前可参考旧 `agent_cmd`，但不得在 `lime-rs/src/commands/**` 新增逻辑 |
 | 未来其他执行引擎细节 | 对应 ExecutionBackend |
 | 旧 Lime Agent event payload 解析 | Desktop compat facade |
 | legacy desktop host handle / window event | DesktopHostBridge |
@@ -251,7 +251,7 @@ RuntimeEventSink
 2. 文本扫描：新 runtime 业务逻辑、API adapter、领域 service 不得落回 `lime-rs/src/commands/**`。
 3. contract test：legacy desktop facade 和 App Server 对同一 fixture 产出一致事件。
 4. protocol test：JSON-RPC request / response / notification schema 稳定。
-5. 边界测试：`app-server` 公共后端 contract 不得重新出现 Lime/Aster 私有事件类型。
+5. 边界测试：`app-server` 公共后端 contract 不得重新出现 Lime/Agent 私有事件类型。
 
 ## 9. 完成判定
 

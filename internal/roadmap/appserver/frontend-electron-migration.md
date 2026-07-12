@@ -103,7 +103,7 @@ Electron Desktop Host bridge
   -> App Server JSON-RPC
   -> RuntimeCore
   -> ExecutionBackend
-  -> AsterBackend / future backend
+  -> RuntimeBackend / future backend
 ```
 
 固定约束：

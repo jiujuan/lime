@@ -606,7 +606,7 @@ mod tests {
             },
             session_id: "session-1".to_string(),
             workspace_id: "workspace-1".to_string(),
-            event_name: "aster_stream_session-1".to_string(),
+            event_name: "agent_stream_session-1".to_string(),
             turn_id: Some("turn-1".to_string()),
             system_prompt: Some("保持简洁".to_string()),
             metadata: Some(Map::from_iter([(

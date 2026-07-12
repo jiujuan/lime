@@ -22,7 +22,7 @@ describe("toolProcessSummary", () => {
     await changeLimeLocale("zh-CN");
   });
 
-  it("Aster-only 工作树工具不再提供 current 专用过程文案", () => {
+  it("Agent-only 工作树工具不再提供 current 专用过程文案", () => {
     const enterNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "EnterWorktreeTool",
@@ -42,7 +42,7 @@ describe("toolProcessSummary", () => {
     expect(exitNarrative.summary).not.toBe("已回到主工作区");
   });
 
-  it("Aster-only 配置与工作流工具不再提供 current 专用过程文案", () => {
+  it("Agent-only 配置与工作流工具不再提供 current 专用过程文案", () => {
     const configNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "ConfigTool",
@@ -69,7 +69,7 @@ describe("toolProcessSummary", () => {
         status: "completed",
       }),
     );
-    const deletedAsterNarrative = resolveToolProcessNarrative(
+    const deletedLegacyNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "SleepTool",
         status: "completed",
@@ -79,7 +79,7 @@ describe("toolProcessSummary", () => {
     expect(narrative.preSummary).toBe("先等待一段时间再继续");
     expect(narrative.postSummary).toBe("已完成等待");
     expect(narrative.summary).toBe("已完成等待");
-    expect(deletedAsterNarrative.postSummary).not.toBe("已完成等待");
+    expect(deletedLegacyNarrative.postSummary).not.toBe("已完成等待");
   });
 
   it("应为图片查看工具提供稳定过程文案，避免展示 raw output", () => {
@@ -228,7 +228,7 @@ describe("toolProcessSummary", () => {
     expect(taskStopNarrative.postSummary).toBe("已终止任务 task-123");
   });
 
-  it("Aster-only gated runtime 工具不再保留专用主体，但失败摘要仍要净化", () => {
+  it("Agent-only gated runtime 工具不再保留专用主体，但失败摘要仍要净化", () => {
     const cronCreateNarrative = resolveToolProcessNarrative(
       createToolCall({
         name: "CronCreateTool",

@@ -5,11 +5,11 @@ import {
   buildModelCapabilitySendGateInput,
 } from "@/lib/model/modelCapabilitySendGate";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
   AutoContinueRequestPayload,
-  AgentRuntimeWebSearchMode,
   ImageInput,
+  RuntimeSearchMode,
 } from "@/lib/api/agentRuntime";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
@@ -41,18 +41,18 @@ export interface BuildUserInputSubmitOpOptions {
   queueIfBusy?: boolean;
   skipPreSubmitResume?: boolean;
   requestMetadata?: Record<string, unknown>;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   syncedRecentPreferences?: ChatToolPreferences | null;
   syncedSessionModelPreference?: SessionModelPreference | null;
-  syncedExecutionStrategy?: AsterExecutionStrategy | null;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  syncedExecutionStrategy?: AgentExecutionStrategy | null;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   effectiveAccessMode: AgentAccessMode;
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;
   reasoningEffort?: string;
   webSearch?: boolean;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   thinking?: boolean;
   explicitToolPreferences?: boolean;
   autoContinue?: AutoContinueRequestPayload;

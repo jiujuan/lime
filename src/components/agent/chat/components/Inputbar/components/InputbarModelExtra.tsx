@@ -1,5 +1,5 @@
 import React from "react";
-import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { ChatModelSelector } from "../../ChatModelSelector";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
@@ -13,7 +13,7 @@ interface InputbarModelExtraProps {
   setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   activeTheme?: string;
   onManageProviders?: () => void;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
 }
 
 export const InputbarModelExtra: React.FC<InputbarModelExtraProps> = ({

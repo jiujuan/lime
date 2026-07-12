@@ -157,7 +157,7 @@
         "npm run smoke:agent-runtime-current-fixture",
         "npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs"
       ],
-      "goal": "验证 Lime coding 能力走 Codex-first Thread/Turn/Item、App Server JSON-RPC、tool lifecycle、workspace diff、Evidence Pack 和 replay/regression 主链，而不是依赖 DeepSWE 或 Aster compat 工具面。",
+      "goal": "验证 Lime coding 能力走 Codex-first Thread/Turn/Item、App Server JSON-RPC、tool lifecycle、workspace diff、Evidence Pack 和 replay/regression 主链，而不是依赖 DeepSWE 或 Agent compat 工具面。",
       "verifier": "必须看到 agentSession/turn/start、Read/apply_patch/Glob/Grep/Bash provider request、真实工具执行结果、patch/file 产物、command output、coding event projection、Evidence Pack 导出和失败晋升 replay/regression 的证据；deterministic fixture 必须声明 liveProviderUsed=false，不能伪装成外部 benchmark pass。",
       "evidenceRequired": [
         "provider tool request includes Read/apply_patch/Glob/Grep/Bash",
@@ -183,7 +183,7 @@
         "App Server Evidence Pack missing",
         "mock fallback mistaken as real path",
         "tool_search current registration policy regression",
-        "Aster compat tool surface mistaken as current owner",
+        "Agent compat tool surface mistaken as current owner",
         "test failure not promoted to replay/regression"
       ]
     },

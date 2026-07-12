@@ -1,7 +1,7 @@
 //! Agent 类型定义
 //!
 //! 定义 Agent 模块使用的核心类型
-//! 参考 aster 项目的 Conversation 设计，支持连续对话和工具调用
+//! 参考 agent 项目的 Conversation 设计，支持连续对话和工具调用
 
 use crate::models::provider_type::is_custom_provider_id;
 use serde::{Deserialize, Serialize};

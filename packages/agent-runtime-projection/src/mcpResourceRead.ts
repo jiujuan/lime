@@ -340,7 +340,7 @@ export function validateCodexMcpResourceToolSchema(
       issue(
         "legacy_tool_name",
         `${path}.toolName`,
-        `${toolName} is a legacy Lime/Aster MCP resource tool name; use Codex MCP resource tools instead.`,
+        `${toolName} is a legacy Lime/Agent MCP resource tool name; use Codex MCP resource tools instead.`,
       ),
     ];
   }

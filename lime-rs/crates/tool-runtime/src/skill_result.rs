@@ -163,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    fn preflight_failure_projects_retry_metadata_without_aster() {
+    fn preflight_failure_projects_retry_metadata_without_agent() {
         let error = build_skill_runtime_contract_metadata(&json!({
             "skill": "pdf_read",
             "args": json!({

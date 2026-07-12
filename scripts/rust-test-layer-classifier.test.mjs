@@ -25,7 +25,7 @@ function createFixtureRepo() {
     `
 [workspace]
 members = ["crates/*"]
-exclude = ["crates/aster-rust"]
+exclude = ["crates/agent-rust"]
 `,
   );
   writeFile(
@@ -100,15 +100,15 @@ mod tests {
 `,
   );
   writeFile(
-    "lime-rs/crates/aster-rust/Cargo.toml",
+    "lime-rs/crates/agent-rust/Cargo.toml",
     `
 [package]
-name = "aster-rust"
+name = "agent-rust"
 version = "0.0.0"
 `,
   );
   writeFile(
-    "lime-rs/crates/aster-rust/tests/agent.rs",
+    "lime-rs/crates/agent-rust/tests/agent.rs",
     `
 #[test]
 fn excluded_agent_test() {}
@@ -175,7 +175,7 @@ describe("rust-test-layer-classifier", () => {
       ignoredCount: 1,
       runnableByDefault: true,
     });
-    expect(byFile["lime-rs/crates/aster-rust/tests/agent.rs"]).toMatchObject({
+    expect(byFile["lime-rs/crates/agent-rust/tests/agent.rs"]).toMatchObject({
       layer: "integration",
       cargoScope: "excluded-subcrate",
       ignoredCount: 1,

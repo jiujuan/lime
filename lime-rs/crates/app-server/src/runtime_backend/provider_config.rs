@@ -132,7 +132,7 @@ pub(super) fn initialize_runtime_database(
     };
     crate::agent_runtime_registry::initialize_agent_runtime(db.clone()).map_err(|error| {
         RuntimeCoreError::Backend(format!(
-            "failed to initialize Aster runtime for App Server runtime backend: {error}"
+            "failed to initialize Agent runtime for App Server runtime backend: {error}"
         ))
     })?;
     Ok(db)

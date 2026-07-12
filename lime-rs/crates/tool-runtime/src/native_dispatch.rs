@@ -28,6 +28,9 @@ use crate::view_image::{
 };
 use crate::web_fetch::{runtime_web_fetch_executor_handle, web_fetch_tool_definition};
 use crate::web_search::{runtime_web_search_executor_handle, web_search_tool_definition};
+use crate::workspace_dispatch::{
+    runtime_workspace_dispatch_definitions, runtime_workspace_dispatch_handle,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
@@ -78,41 +81,48 @@ impl RuntimeNativeDispatchSurface {
 
 impl NativeDispatchBuilder {
     pub fn with_standard_tools(self) -> Self {
-        self.register(
-            apply_patch_tool_definition(),
-            runtime_apply_patch_executor_handle(),
-            &["ApplyPatchTool"],
-        )
-        .register(
-            skill_search_tool_definition(),
-            runtime_skill_search_executor_handle(),
-            &["SkillSearchTool"],
-        )
-        .register(
-            sleep_tool_definition(),
-            runtime_sleep_executor_handle(),
-            &[CLOCK_SLEEP_TOOL_NAME],
-        )
-        .register(
-            view_image_tool_definition(),
-            runtime_view_image_executor_handle(),
-            VIEW_IMAGE_LEGACY_ALIASES,
-        )
-        .register(
-            update_plan_definition(),
-            runtime_plan_update_executor_handle(),
-            UPDATE_PLAN_LEGACY_ALIASES,
-        )
-        .register(
-            web_fetch_tool_definition(),
-            runtime_web_fetch_executor_handle(),
-            &["WebFetchTool", "mcp__system__web_fetch"],
-        )
-        .register(
-            web_search_tool_definition(),
-            runtime_web_search_executor_handle(),
-            &["WebSearchTool", "mcp__system__web_search"],
-        )
+        let builder = self
+            .register(
+                apply_patch_tool_definition(),
+                runtime_apply_patch_executor_handle(),
+                &["ApplyPatchTool"],
+            )
+            .register(
+                skill_search_tool_definition(),
+                runtime_skill_search_executor_handle(),
+                &["SkillSearchTool"],
+            )
+            .register(
+                sleep_tool_definition(),
+                runtime_sleep_executor_handle(),
+                &[CLOCK_SLEEP_TOOL_NAME],
+            )
+            .register(
+                view_image_tool_definition(),
+                runtime_view_image_executor_handle(),
+                VIEW_IMAGE_LEGACY_ALIASES,
+            )
+            .register(
+                update_plan_definition(),
+                runtime_plan_update_executor_handle(),
+                UPDATE_PLAN_LEGACY_ALIASES,
+            )
+            .register(
+                web_fetch_tool_definition(),
+                runtime_web_fetch_executor_handle(),
+                &["WebFetchTool", "mcp__system__web_fetch"],
+            )
+            .register(
+                web_search_tool_definition(),
+                runtime_web_search_executor_handle(),
+                &["WebSearchTool", "mcp__system__web_search"],
+            );
+
+        runtime_workspace_dispatch_definitions()
+            .into_iter()
+            .fold(builder, |builder, definition| {
+                builder.register(definition, runtime_workspace_dispatch_handle(), &[])
+            })
     }
 
     pub fn with_memory_store_gateway(self, gateway: Arc<dyn MemoryStoreGateway>) -> Self {
@@ -437,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_native_dispatch_lists_current_stateless_tools() {
+    fn runtime_native_dispatch_lists_current_tools() {
         let names = runtime_native_dispatch_tool_names();
 
         assert_eq!(
@@ -450,6 +460,11 @@ mod tests {
                 UPDATE_PLAN_NAME,
                 WEB_FETCH_TOOL_NAME,
                 WEB_SEARCH_TOOL_NAME,
+                "Read",
+                "Glob",
+                "Grep",
+                "Bash",
+                "PowerShell",
             ]
         );
     }

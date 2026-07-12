@@ -469,7 +469,7 @@ fn build_runtime_options(
                 .map(|value| json!(value))
         });
 
-    let runtime_metadata = json!({
+    let runtime_metadata = json_strip_nulls(json!({
         "source": AUTOMATION_SOURCE,
         "automation_job": {
             "id": job.id,
@@ -499,53 +499,38 @@ fn build_runtime_options(
             "project_root": project_root,
             "output_schema": output_schema,
         },
-    });
+    }));
 
-    let turn_config = json_strip_nulls(json!({
-        "provider_config": provider_config,
-        "provider_preference": provider_preference,
-        "model_preference": model_preference,
-        "reasoning_effort": reasoning_effort,
-        "approval_policy": approval_policy,
-        "sandbox_policy": sandbox_policy,
-        "web_search": web_search,
-        "search_mode": search_mode,
-        "system_prompt": system_prompt,
-        "working_dir": working_dir,
-        "project_root": project_root,
-        "metadata": request_metadata,
-    }));
-    let host_options = json_strip_nulls(json!({
-        "asterChatRequest": {
-            "session_id": session_id,
-            "thread_id": thread_id,
-            "turn_id": turn_id,
-            "workspace_id": job.workspace_id,
-            "provider_config": provider_config,
-            "provider_preference": provider_preference,
-            "model_preference": model_preference,
-            "reasoning_effort": reasoning_effort,
-            "approval_policy": approval_policy,
-            "sandbox_policy": sandbox_policy,
-            "web_search": web_search,
-            "search_mode": search_mode,
-            "system_prompt": system_prompt,
-            "working_dir": working_dir,
-            "project_root": project_root,
-            "metadata": request_metadata,
-            "turn_config": turn_config,
-        }
-    }));
+    let runtime_request = app_server_protocol::RuntimeRequest {
+        provider_config: provider_config
+            .clone()
+            .and_then(|value| serde_json::from_value(value).ok()),
+        provider_preference: provider_preference.clone(),
+        model_preference: model_preference.clone(),
+        reasoning_effort: reasoning_effort.clone(),
+        approval_policy: approval_policy.clone(),
+        sandbox_policy: sandbox_policy.clone(),
+        workspace_id: Some(job.workspace_id.clone()),
+        working_dir: working_dir.clone(),
+        project_root: project_root.clone(),
+        web_search,
+        search_mode: search_mode.as_deref().and_then(|mode| match mode {
+            "disabled" => Some(app_server_protocol::RuntimeSearchMode::Disabled),
+            "auto" => Some(app_server_protocol::RuntimeSearchMode::Auto),
+            "required" => Some(app_server_protocol::RuntimeSearchMode::Required),
+            _ => None,
+        }),
+        system_prompt: system_prompt.clone(),
+        metadata: Some(runtime_metadata),
+        ..app_server_protocol::RuntimeRequest::default()
+    };
 
     Ok(RuntimeOptions {
         capability_id: None,
         stream: true,
         event_name: Some("automation.turn".to_string()),
-        provider_preference,
-        model_preference,
-        metadata: Some(json_strip_nulls(runtime_metadata)),
         queued_turn_id: None,
-        host_options: Some(host_options),
+        runtime_request: Some(runtime_request),
         ..RuntimeOptions::default()
     })
 }
@@ -750,20 +735,20 @@ mod tests {
         }));
 
         let start = build_automation_run_start(job).expect("run start");
-        let metadata = start.runtime_options.metadata.expect("metadata");
-        let host_options = start.runtime_options.host_options.expect("host options");
+        let runtime_request = start
+            .runtime_options
+            .runtime_request
+            .expect("runtime request");
+        let metadata = runtime_request.metadata.as_ref().expect("metadata");
 
         assert_eq!(start.prompt, "生成摘要");
         assert_eq!(start.session_id, "session-job-1");
         assert_eq!(start.thread_id, "thread-job-1");
         assert_eq!(
-            start.runtime_options.provider_preference.as_deref(),
+            runtime_request.provider_preference.as_deref(),
             Some("openai")
         );
-        assert_eq!(
-            start.runtime_options.model_preference.as_deref(),
-            Some("gpt-4.1")
-        );
+        assert_eq!(runtime_request.model_preference.as_deref(), Some("gpt-4.1"));
         assert_eq!(
             metadata
                 .pointer("/turn_config/reasoning_effort")
@@ -782,21 +767,18 @@ mod tests {
                 .and_then(Value::as_str),
             Some("/tmp/workspace")
         );
+        assert_eq!(runtime_request.system_prompt.as_deref(), Some("请求级提示"));
         assert_eq!(
-            host_options
-                .pointer("/asterChatRequest/turn_config/system_prompt")
-                .and_then(Value::as_str),
-            Some("请求级提示")
+            runtime_request.search_mode,
+            Some(app_server_protocol::RuntimeSearchMode::Required)
         );
         assert_eq!(
-            host_options
-                .pointer("/asterChatRequest/turn_config/search_mode")
-                .and_then(Value::as_str),
-            Some("required")
-        );
-        assert_eq!(
-            host_options
-                .pointer("/asterChatRequest/turn_config/metadata/harness/service_skill/id")
+            runtime_request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| {
+                    metadata.pointer("/request_metadata/harness/service_skill/id")
+                })
                 .and_then(Value::as_str),
             Some("daily")
         );
@@ -907,20 +889,18 @@ mod tests {
             Some("job-1")
         );
         assert_eq!(request.input.text, "生成今日摘要");
-        assert_eq!(request.provider_preference.as_deref(), Some("openai"));
-        assert_eq!(request.model_preference.as_deref(), Some("gpt-4.1"));
+        assert_eq!(request.provider_preference(), Some("openai"));
+        assert_eq!(request.model_preference(), Some("gpt-4.1"));
         assert_eq!(
             request
-                .metadata
-                .as_ref()
+                .runtime_metadata()
                 .and_then(|value| value.pointer("/harness/automation_job/session_id"))
                 .and_then(Value::as_str),
             Some("session-job-1")
         );
         assert_eq!(
             request
-                .metadata
-                .as_ref()
+                .runtime_metadata()
                 .and_then(|value| value.pointer("/harness/automation_job/thread_id"))
                 .and_then(Value::as_str),
             Some("thread-job-1")
@@ -929,23 +909,20 @@ mod tests {
             request
                 .runtime_options
                 .as_ref()
-                .and_then(|options| options.host_options.as_ref())
-                .and_then(|value| value.pointer("/asterChatRequest/turn_config/reasoning_effort"))
-                .and_then(Value::as_str),
+                .and_then(|options| options.runtime_request.as_ref())
+                .and_then(|request| request.reasoning_effort.as_deref()),
             Some("high")
         );
         assert_eq!(
             request
-                .metadata
-                .as_ref()
+                .runtime_metadata()
                 .and_then(|value| value.pointer("/turn_config/working_dir"))
                 .and_then(Value::as_str),
             Some("/tmp/workspace/packages/app")
         );
         assert_eq!(
             request
-                .metadata
-                .as_ref()
+                .runtime_metadata()
                 .and_then(|value| value.pointer("/turn_config/project_root"))
                 .and_then(Value::as_str),
             Some("/tmp/workspace")
@@ -954,15 +931,13 @@ mod tests {
             request
                 .runtime_options
                 .as_ref()
-                .and_then(|options| options.host_options.as_ref())
-                .and_then(|value| value.pointer("/asterChatRequest/turn_config/project_root"))
-                .and_then(Value::as_str),
+                .and_then(|options| options.runtime_request.as_ref())
+                .and_then(|request| request.project_root.as_deref()),
             Some("/tmp/workspace")
         );
         assert_eq!(
             request
-                .metadata
-                .as_ref()
+                .runtime_metadata()
                 .and_then(|value| value.pointer("/harness/automation_job/id"))
                 .and_then(Value::as_str),
             Some("job-1")

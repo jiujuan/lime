@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import { buildSessionHistoryMergePlan } from "./sessionHistoryMergeController";
 
@@ -47,8 +47,8 @@ function agentItem(
 }
 
 function detail(
-  overrides: Partial<AsterSessionDetail> = {},
-): AsterSessionDetail {
+  overrides: Partial<AgentSessionDetail> = {},
+): AgentSessionDetail {
   return {
     id: "topic-a",
     created_at: 1,

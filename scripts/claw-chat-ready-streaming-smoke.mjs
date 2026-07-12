@@ -357,36 +357,11 @@ function appServerTurnInputText(params) {
 }
 
 function appServerRuntimeOptions(params) {
-  return params?.runtimeOptions || params?.runtime_options || {};
+  return params?.runtimeOptions || {};
 }
 
-function legacyTurnConfigFromAppServerParams(params) {
-  const runtimeOptions = appServerRuntimeOptions(params);
-  const hostOptions =
-    runtimeOptions.hostOptions || runtimeOptions.host_options || {};
-  const asterChatRequest =
-    hostOptions.asterChatRequest || hostOptions.aster_chat_request || {};
-  const turnConfig =
-    asterChatRequest.turn_config || asterChatRequest.turnConfig || {};
-  return {
-    provider_preference:
-      runtimeOptions.providerPreference ||
-      runtimeOptions.provider_preference ||
-      "",
-    model_preference:
-      runtimeOptions.modelPreference || runtimeOptions.model_preference || "",
-    web_search:
-      turnConfig.web_search ??
-      turnConfig.webSearch ??
-      asterChatRequest.web_search ??
-      asterChatRequest.webSearch,
-    search_mode:
-      turnConfig.search_mode ??
-      turnConfig.searchMode ??
-      asterChatRequest.search_mode ??
-      asterChatRequest.searchMode,
-    metadata: runtimeOptions.metadata,
-  };
+function runtimeRequestFromAppServerParams(params) {
+  return appServerRuntimeOptions(params).runtimeRequest || {};
 }
 
 function appServerTurnEvidenceFromRecord(record) {
@@ -397,9 +372,9 @@ function appServerTurnEvidenceFromRecord(record) {
     turnId: appServerParamTurnId(params),
     eventName: appServerRuntimeOptions(params).eventName || null,
     providerPreference:
-      legacyTurnConfigFromAppServerParams(params).provider_preference,
+      runtimeRequestFromAppServerParams(params).providerPreference || null,
     modelPreference:
-      legacyTurnConfigFromAppServerParams(params).model_preference,
+      runtimeRequestFromAppServerParams(params).modelPreference || null,
   };
 }
 
@@ -1308,12 +1283,8 @@ function normalizeConsoleLine(item) {
 }
 
 function isBenignConsoleError(item) {
-  const text = String(item?.text || "");
-  return (
-    text.includes("[AsterChat] 初始化失败") &&
-    text.includes('命令 "agent_init"') &&
-    text.includes("Failed to fetch (timeout after 30000ms)")
-  );
+  void item;
+  return false;
 }
 
 function composerDomHelperScript() {
@@ -1888,28 +1859,6 @@ async function main() {
       30_000,
     ).catch(() => null)) || null;
   const workspaceId = defaultProject?.id || "default";
-  const agentStatus = await invoke(
-    options,
-    "agent_init",
-    undefined,
-    45_000,
-  ).catch((error) => {
-    if (!hasExplicitProviderPreference) {
-      throw error;
-    }
-    console.warn(
-      `[smoke:claw-chat-ready-streaming] agent_init 超时/失败，但已显式传入 provider/model，继续执行: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    return {
-      provider_configured: true,
-      provider_name: options.providerPreference,
-      provider_selector: options.providerPreference,
-      model_name: options.modelPreference,
-      init_fallback: true,
-    };
-  });
   const providerListResponse = await appServerRpc(
     options,
     APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
@@ -1938,6 +1887,15 @@ async function main() {
   const enabledProviders = Array.isArray(providers)
     ? providers.filter((provider) => providerEnabled(provider))
     : [];
+  const agentStatus = {
+    initialized: true,
+    provider_configured:
+      hasExplicitProviderPreference || enabledProviders.length > 0,
+    provider_name: options.providerPreference || null,
+    provider_selector: options.providerPreference || null,
+    model_name: options.modelPreference || null,
+    source: "modelProvider/list",
+  };
   assert(
     Boolean(agentStatus?.provider_configured) || enabledProviders.length > 0,
     `当前 Agent provider 未配置，无法执行 Claw 流式 smoke: ${JSON.stringify(agentStatus)}`,
@@ -1989,7 +1947,7 @@ async function main() {
         APP_SERVER_METHOD_MODEL_PROVIDER_TEST_CHAT,
         APP_SERVER_METHOD_MODEL_PROVIDER_UI_STATE_READ,
       ],
-      runtimeSelection: "turn_config",
+      runtimeSelection: "runtimeOptions.runtimeRequest",
       backendProviderMutation: false,
       legacyConfigureProviderCommand: "retired-not-invoked",
     },
@@ -2195,20 +2153,20 @@ async function main() {
     );
     const longParams = longSubmit.params || {};
     const longRequest = {
-      session_id: appServerParamSessionId(longParams),
-      turn_id: appServerParamTurnId(longParams),
-      turn_config: legacyTurnConfigFromAppServerParams(longParams),
+      sessionId: appServerParamSessionId(longParams),
+      turnId: appServerParamTurnId(longParams),
+      runtimeRequest: runtimeRequestFromAppServerParams(longParams),
     };
-    const sessionId = String(longRequest.session_id || "");
-    const longTurnId = String(longRequest.turn_id || "");
-    assert(sessionId, "长 turn 缺少 session_id");
-    assert(longTurnId, "长 turn 缺少 turn_id");
+    const sessionId = String(longRequest.sessionId || "");
+    const longTurnId = String(longRequest.turnId || "");
+    assert(sessionId, "长 turn 缺少 sessionId");
+    assert(longTurnId, "长 turn 缺少 turnId");
     submittedSessionId = sessionId;
     submittedLongTurnId = longTurnId;
     summary.sessionId = sessionId;
     summary.longTurnId = longTurnId;
     summary.longSubmitAppServer = appServerTurnEvidenceFromRecord(longSubmit);
-    summary.longSubmitTurnConfig = longRequest.turn_config || null;
+    summary.longSubmitRuntimeRequest = longRequest.runtimeRequest || null;
     summary.longTurnOpenAttempts = [
       await openSessionFromSidebar(page, sessionId),
     ];
@@ -2463,14 +2421,14 @@ async function main() {
     );
     const followParams = followSubmit.params || {};
     const followRequest = {
-      session_id: appServerParamSessionId(followParams),
-      turn_id: appServerParamTurnId(followParams),
-      turn_config: legacyTurnConfigFromAppServerParams(followParams),
+      sessionId: appServerParamSessionId(followParams),
+      turnId: appServerParamTurnId(followParams),
+      runtimeRequest: runtimeRequestFromAppServerParams(followParams),
     };
-    const followSessionId = String(followRequest.session_id || sessionId);
-    const followTurnId = String(followRequest.turn_id || "");
-    assert(followSessionId, "恢复 turn 缺少 session_id");
-    assert(followTurnId, "恢复 turn 缺少 turn_id");
+    const followSessionId = String(followRequest.sessionId || sessionId);
+    const followTurnId = String(followRequest.turnId || "");
+    assert(followSessionId, "恢复 turn 缺少 sessionId");
+    assert(followTurnId, "恢复 turn 缺少 turnId");
     submittedFollowSessionId = followSessionId;
     submittedFollowTurnId = followTurnId;
     summary.followSessionId = followSessionId;
@@ -2478,7 +2436,7 @@ async function main() {
     summary.followUsesOriginalSession = followSessionId === sessionId;
     summary.followSubmitAppServer =
       appServerTurnEvidenceFromRecord(followSubmit);
-    summary.followSubmitTurnConfig = followRequest.turn_config || null;
+    summary.followSubmitRuntimeRequest = followRequest.runtimeRequest || null;
 
     const followCompleted = await waitForCondition(
       "等待恢复 turn 完成",
@@ -2619,14 +2577,14 @@ async function main() {
     );
     const liveWebParams = liveWebSubmit.params || {};
     const liveWebRequest = {
-      session_id: appServerParamSessionId(liveWebParams) || followSessionId,
-      turn_id: appServerParamTurnId(liveWebParams),
-      turn_config: legacyTurnConfigFromAppServerParams(liveWebParams),
+      sessionId: appServerParamSessionId(liveWebParams) || followSessionId,
+      turnId: appServerParamTurnId(liveWebParams),
+      runtimeRequest: runtimeRequestFromAppServerParams(liveWebParams),
     };
-    const liveWebSessionId = String(liveWebRequest.session_id || "");
-    const liveWebTurnId = String(liveWebRequest.turn_id || "");
-    assert(liveWebSessionId, "live WebSearch/WebFetch turn 缺少 session_id");
-    assert(liveWebTurnId, "live WebSearch/WebFetch turn 缺少 turn_id");
+    const liveWebSessionId = String(liveWebRequest.sessionId || "");
+    const liveWebTurnId = String(liveWebRequest.turnId || "");
+    assert(liveWebSessionId, "live WebSearch/WebFetch turn 缺少 sessionId");
+    assert(liveWebTurnId, "live WebSearch/WebFetch turn 缺少 turnId");
     submittedLiveWebSessionId = liveWebSessionId;
     submittedLiveWebTurnId = liveWebTurnId;
     summary.liveWebToolPrompt = LIVE_WEB_TOOL_PROMPT;
@@ -2634,15 +2592,15 @@ async function main() {
     summary.liveWebTurnId = liveWebTurnId;
     summary.liveWebSubmitAppServer =
       appServerTurnEvidenceFromRecord(liveWebSubmit);
-    summary.liveWebSubmitTurnConfig = liveWebRequest.turn_config || null;
-    summary.liveWebSearchMode = liveWebRequest.turn_config?.search_mode || null;
+    summary.liveWebSubmitRuntimeRequest = liveWebRequest.runtimeRequest || null;
+    summary.liveWebSearchMode = liveWebRequest.runtimeRequest?.searchMode || null;
     assert(
-      liveWebRequest.turn_config?.web_search === true,
-      "live WebSearch/WebFetch turn 必须显式提交 web_search=true",
+      liveWebRequest.runtimeRequest?.webSearch === true,
+      "live WebSearch/WebFetch turn 必须显式提交 webSearch=true",
     );
     assert(
-      liveWebRequest.turn_config?.search_mode === "required",
-      'live WebSearch/WebFetch turn 必须显式提交 search_mode="required"',
+      liveWebRequest.runtimeRequest?.searchMode === "required",
+      'live WebSearch/WebFetch turn 必须显式提交 searchMode="required"',
     );
 
     const liveWebCompleted = await waitForCondition(
@@ -2765,24 +2723,24 @@ async function main() {
       threadRead?.model_routing ||
       {};
     const followProviderPreferenceHonored =
-      followRequest.turn_config?.provider_preference === preferredProvider ||
+      followRequest.runtimeRequest?.providerPreference === preferredProvider ||
       latestRuntimeRouting?.selectedProvider === preferredProvider ||
       latestRuntimeRouting?.requestedProvider === preferredProvider;
     const followModelPreferenceHonored =
-      followRequest.turn_config?.model_preference === preferredModel ||
+      followRequest.runtimeRequest?.modelPreference === preferredModel ||
       latestRuntimeRouting?.selectedModel === preferredModel ||
       latestRuntimeRouting?.requestedModel === preferredModel;
     const liveWebProviderPreferenceHonored =
-      liveWebRequest.turn_config?.provider_preference === preferredProvider ||
+      liveWebRequest.runtimeRequest?.providerPreference === preferredProvider ||
       latestRuntimeRouting?.selectedProvider === preferredProvider ||
       latestRuntimeRouting?.requestedProvider === preferredProvider;
     const liveWebModelPreferenceHonored =
-      liveWebRequest.turn_config?.model_preference === preferredModel ||
+      liveWebRequest.runtimeRequest?.modelPreference === preferredModel ||
       latestRuntimeRouting?.selectedModel === preferredModel ||
       latestRuntimeRouting?.requestedModel === preferredModel;
     const liveWebFastResponseRoutingDisabled = Boolean(
-      liveWebRequest.turn_config &&
-      !liveWebRequest.turn_config?.metadata?.harness?.fast_response_routing,
+      liveWebRequest.runtimeRequest &&
+      !liveWebRequest.runtimeRequest?.metadata?.harness?.fast_response_routing,
     );
     summary.followRoutingEvidence = {
       selectedProvider: latestRuntimeRouting?.selectedProvider || null,
@@ -2791,8 +2749,8 @@ async function main() {
       requestedModel: latestRuntimeRouting?.requestedModel || null,
       decisionSource: latestRuntimeRouting?.decisionSource || null,
       note:
-        followRequest.turn_config?.provider_preference ||
-        followRequest.turn_config?.model_preference
+        followRequest.runtimeRequest?.providerPreference ||
+        followRequest.runtimeRequest?.modelPreference
           ? "恢复 turn 显式提交 provider/model。"
           : "恢复 turn 复用 session_default；以 runtime routing_decision 校验 selected/requested provider/model 未漂移。",
     };
@@ -3058,9 +3016,9 @@ async function main() {
           Boolean(recoverySnapshot?.recoveryVisible)),
       recoveryVisibleInGui: Boolean(recoverySnapshot?.recoveryVisible),
       longProviderPreferenceHonored:
-        longRequest.turn_config?.provider_preference === preferredProvider,
+        longRequest.runtimeRequest?.providerPreference === preferredProvider,
       longModelPreferenceHonored:
-        longRequest.turn_config?.model_preference === preferredModel,
+        longRequest.runtimeRequest?.modelPreference === preferredModel,
       followProviderPreferenceHonored,
       followModelPreferenceHonored,
       liveWebProviderPreferenceHonored,
@@ -3072,12 +3030,12 @@ async function main() {
       liveWebRequiredToolOutputsPresent:
         liveWebRequiredReadModelToolOutputsPresent,
       fastResponseRoutingDisabled:
-        !longRequest.turn_config?.metadata?.harness?.fast_response_routing &&
-        !followRequest.turn_config?.metadata?.harness?.fast_response_routing,
+        !longRequest.runtimeRequest?.metadata?.harness?.fast_response_routing &&
+        !followRequest.runtimeRequest?.metadata?.harness?.fast_response_routing,
       liveWebFastResponseRoutingDisabled,
       liveWebExplicitSearchRequired:
-        liveWebRequest.turn_config?.web_search === true &&
-        liveWebRequest.turn_config?.search_mode === "required",
+        liveWebRequest.runtimeRequest?.webSearch === true &&
+        liveWebRequest.runtimeRequest?.searchMode === "required",
       noRuntimeMockFallbackSeen: runtimeMockLines.length === 0,
       noBlockingConsoleErrors: blockingConsoleErrors.length === 0,
     };

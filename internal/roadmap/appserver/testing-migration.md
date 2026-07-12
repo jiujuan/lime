@@ -94,7 +94,7 @@ npm run test:contracts
 
 1. `src/lib/governance/legacySurfaceCatalog.json` 当前也在并行进程 staged 写集，本轮不覆盖；后续需要补脚本级 surface，覆盖 legacy smoke / artifact adapter，并限制 allowed paths 只允许 dead guard、deprecated guard 与历史说明。
 2. 只剩历史命名的 package materializer 只能作为 deprecated adapter 依赖，不得重新进入 current release 证据。
-3. Rust crate 内依赖 host state 的 Aster backend 测试，等 RuntimeCore / ExecutionBackend 解耦后再迁。
+3. Rust crate 内依赖 host state 的 Agent backend 测试，等 RuntimeCore / ExecutionBackend 解耦后再迁。
 4. `lime-rs/src/commands/**` 的剩余 wrapper 清理按命令族分批推进；等待 App Server / Electron Host current 覆盖后删除，不再为它们补新正向用例。
 
 ## 5. 当前验证证据

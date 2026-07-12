@@ -4,7 +4,7 @@ import type { BrowserAssistSessionState, Message } from "../types";
 import { loadTransient, saveTransient } from "../hooks/agentChatStorage";
 import { getScopedStorageKey } from "../hooks/agentChatShared";
 
-const BROWSER_ASSIST_SESSION_STORAGE_PREFIX = "aster_browser_assist_session";
+const BROWSER_ASSIST_SESSION_STORAGE_PREFIX = "agent_browser_assist_session";
 
 export function resolveBrowserAssistSessionScopeKey(
   workspaceId: string | null | undefined,

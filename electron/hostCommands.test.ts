@@ -1427,7 +1427,7 @@ describe("ElectronHostCommands model provider current source", () => {
     expect(request).toHaveBeenCalledWith("modelProvider/list", {});
   });
 
-  it("agent_init 不应把其他 Provider 的模型拼给当前 Provider", async () => {
+  it("get_runtime_provider_selection 不应把其他 Provider 的模型拼给当前 Provider", async () => {
     const userDataDir = await createTempUserDataDir();
     await createHost(userDataDir).invoke("save_config", {
       config: { default_provider: "retired-provider" },
@@ -1465,8 +1465,7 @@ describe("ElectronHostCommands model provider current source", () => {
     });
     const host = createHost(userDataDir, () => undefined, request);
 
-    await expect(host.invoke("agent_init")).resolves.toEqual({
-      initialized: true,
+    await expect(host.invoke("get_runtime_provider_selection")).resolves.toEqual({
       provider_configured: true,
       provider_name: "Lime Hub",
       provider_selector: "lime-hub",

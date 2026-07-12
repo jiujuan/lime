@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSubmitTurnRequestFromAgentOp } from "@/lib/api/agentProtocol";
+import { createAgentSessionTurnStartParamsFromUserInputOp } from "@/lib/api/agentProtocol";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 import { MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX } from "@/lib/model/modelCapabilitySendGate";
 import { buildUserInputSubmitOp } from "./buildUserInputSubmitOp";
@@ -37,7 +37,7 @@ describe("buildUserInputSubmitOp", () => {
         },
       ],
       sessionId: "session-social-1",
-      eventName: "aster_stream_x",
+      eventName: "agent_stream_x",
       workspaceId: "workspace-1",
       turnId: "turn-1",
       systemPrompt: "system",
@@ -92,7 +92,7 @@ describe("buildUserInputSubmitOp", () => {
       type: "user_input",
       text: "继续生成社媒初稿",
       sessionId: "session-social-1",
-      eventName: "aster_stream_x",
+      eventName: "agent_stream_x",
       workspaceId: "workspace-1",
       turnId: "turn-1",
       images: [
@@ -123,7 +123,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "切到发布确认",
       images: [],
       sessionId: "session-social-1",
-      eventName: "aster_stream_y",
+      eventName: "agent_stream_y",
       turnId: "turn-2",
       requestMetadata: {
         harness: {
@@ -194,9 +194,9 @@ describe("buildUserInputSubmitOp", () => {
         run_title: "发布确认",
       },
     });
-    const request = createSubmitTurnRequestFromAgentOp(op);
-    expect(request.turn_config?.thinking_enabled).toBe(true);
-    expect(request.turn_config?.metadata).toEqual({
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expect(request.runtimeOptions?.runtimeRequest?.thinkingEnabled).toBe(true);
+    expect(request.runtimeOptions?.runtimeRequest?.metadata).toEqual({
       harness: {
         gate_key: "publish_confirm",
         run_title: "发布确认",
@@ -215,7 +215,7 @@ describe("buildUserInputSubmitOp", () => {
           },
         ],
         sessionId: "session-image-1",
-        eventName: "aster_stream_image",
+        eventName: "agent_stream_image",
         turnId: "turn-image-1",
         effectiveExecutionStrategy: "react",
         effectiveAccessMode: "current",
@@ -236,7 +236,7 @@ describe("buildUserInputSubmitOp", () => {
         },
       ],
       sessionId: "session-image-unknown",
-      eventName: "aster_stream_image_unknown",
+      eventName: "agent_stream_image_unknown",
       turnId: "turn-image-unknown",
       effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
@@ -258,7 +258,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "继续",
       images: [],
       sessionId: "session-model-pending",
-      eventName: "aster_stream_model_pending",
+      eventName: "agent_stream_model_pending",
       executionRuntime: {
         session_id: "session-model-pending",
         source: "runtime_snapshot",
@@ -284,7 +284,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "继续",
       images: [],
       sessionId: "session-app-server-current",
-      eventName: "aster_stream_app_server_current",
+      eventName: "agent_stream_app_server_current",
       workspaceId: "workspace-current",
       turnId: "turn-current-1",
       executionRuntime: {
@@ -303,10 +303,10 @@ describe("buildUserInputSubmitOp", () => {
       effectiveModel: "mimo-v2.5-pro",
     });
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
 
-    expect(request.turn_config?.provider_preference).toBe("custom-provider");
-    expect(request.turn_config?.model_preference).toBe("mimo-v2.5-pro");
+    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe("custom-provider");
+    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe("mimo-v2.5-pro");
   });
 
   it("provider 发生切换时应同时提交 provider/model 偏好", () => {
@@ -314,7 +314,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "使用翻译服务模型",
       images: [],
       sessionId: "session-translation-1",
-      eventName: "aster_stream_translation",
+      eventName: "agent_stream_translation",
       executionRuntime: {
         session_id: "session-translation-1",
         source: "runtime_snapshot",
@@ -351,7 +351,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "只回答一个字：好",
       images: [],
       sessionId: "session-fast-1",
-      eventName: "aster_stream_fast",
+      eventName: "agent_stream_fast",
       queueIfBusy: true,
       skipPreSubmitResume: true,
       effectiveExecutionStrategy: "react",
@@ -368,7 +368,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "只回答一个字：好",
       images: [],
       sessionId: "session-fast-routing-1",
-      eventName: "aster_stream_fast_routing",
+      eventName: "agent_stream_fast_routing",
       requestMetadata: {
         harness: {
           fast_response_routing: {
@@ -416,7 +416,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "分析这个文件夹",
       images: [],
       sessionId: "session-partial-model",
-      eventName: "aster_stream_partial_model",
+      eventName: "agent_stream_partial_model",
       effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "",
@@ -432,7 +432,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "@Nanobanana Pro 生成一张广州塔春天照片",
       images: [],
       sessionId: "session-image-1",
-      eventName: "aster_stream_image",
+      eventName: "agent_stream_image",
       requestMetadata: {
         harness: {
           image_command_intent: {
@@ -466,10 +466,10 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.providerPreference).toBe("deepseek");
     expect(op.preferences?.modelPreference).toBe("deepseek-v4-pro");
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
-    expect(request.turn_config?.provider_preference).toBe("deepseek");
-    expect(request.turn_config?.model_preference).toBe("deepseek-v4-pro");
-    expect(request.turn_config?.metadata).toMatchObject({
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe("deepseek");
+    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe("deepseek-v4-pro");
+    expect(request.runtimeOptions?.runtimeRequest?.metadata).toMatchObject({
       harness: {
         image_command_intent: {
           image_task: {
@@ -486,7 +486,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "@Nanobanana Pro 生成一张广州塔春天照片",
       images: [],
       sessionId: "session-image-2",
-      eventName: "aster_stream_image_synced",
+      eventName: "agent_stream_image_synced",
       requestMetadata: {
         harness: {
           image_command_intent: {
@@ -529,14 +529,14 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.providerPreference).toBeUndefined();
     expect(op.preferences?.modelPreference).toBeUndefined();
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
-    expect(request.turn_config?.provider_config).toEqual({
-      provider_id: "deepseek",
-      provider_name: "deepseek",
-      model_name: "deepseek-v4-pro",
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expect(request.runtimeOptions?.runtimeRequest?.providerConfig).toEqual({
+      providerId: "deepseek",
+      providerName: "deepseek",
+      modelName: "deepseek-v4-pro",
     });
-    expect(request.turn_config?.provider_preference).toBeUndefined();
-    expect(request.turn_config?.model_preference).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBeUndefined();
   });
 
   it("图片生成命令当前有效模型为图片通道时应退回会话文本模型编排", () => {
@@ -544,7 +544,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
       images: [],
       sessionId: "session-image-agnes",
-      eventName: "aster_stream_image_agnes",
+      eventName: "agent_stream_image_agnes",
       requestMetadata: {
         harness: {
           image_command_intent: {
@@ -581,14 +581,14 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.providerPreference).toBeUndefined();
     expect(op.preferences?.modelPreference).toBeUndefined();
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
-    expect(request.turn_config?.provider_config).toEqual({
-      provider_id: "deepseek",
-      provider_name: "deepseek",
-      model_name: "deepseek-v4-pro",
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expect(request.runtimeOptions?.runtimeRequest?.providerConfig).toEqual({
+      providerId: "deepseek",
+      providerName: "deepseek",
+      modelName: "deepseek-v4-pro",
     });
-    expect(request.turn_config?.provider_preference).toBeUndefined();
-    expect(request.turn_config?.model_preference).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBeUndefined();
   });
 
   it("图片生成命令没有文本模型候选时不应提交图片 provider 作为编排模型", () => {
@@ -596,7 +596,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
       images: [],
       sessionId: "session-image-no-text-model",
-      eventName: "aster_stream_image_no_text",
+      eventName: "agent_stream_image_no_text",
       requestMetadata: {
         harness: {
           image_command_intent: {
@@ -626,18 +626,18 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.providerPreference).toBeUndefined();
     expect(op.preferences?.modelPreference).toBeUndefined();
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
-    expect(request.turn_config?.provider_config).toBeUndefined();
-    expect(request.turn_config?.provider_preference).toBeUndefined();
-    expect(request.turn_config?.model_preference).toBeUndefined();
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expect(request.runtimeOptions?.runtimeRequest?.providerConfig).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBeUndefined();
   });
 
-  it("应同时透传显式搜索开关和搜索模式到 turn_config", () => {
+  it("应同时透传显式搜索开关和搜索模式到 RuntimeRequest", () => {
     const op = buildUserInputSubmitOp({
       content: "请搜索最新 AI 新闻",
       images: [],
       sessionId: "session-search-1",
-      eventName: "aster_stream_search",
+      eventName: "agent_stream_search",
       effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "deepseek",
@@ -649,17 +649,17 @@ describe("buildUserInputSubmitOp", () => {
 
     expect(op.preferences?.webSearch).toBe(true);
     expect(op.preferences?.searchMode).toBe("required");
-    const request = createSubmitTurnRequestFromAgentOp(op);
-    expect(request.turn_config?.web_search).toBe(true);
-    expect(request.turn_config?.search_mode).toBe("required");
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
+    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBe(true);
+    expect(request.runtimeOptions?.runtimeRequest?.searchMode).toBe("required");
   });
 
-  it("应把输入框推理强度透传到 App Server turn_config", () => {
+  it("应把输入框推理强度透传到 App Server RuntimeRequest", () => {
     const op = buildUserInputSubmitOp({
       content: "先深入推理再给出实施计划",
       images: [],
       sessionId: "session-reasoning-effort-1",
-      eventName: "aster_stream_reasoning_effort",
+      eventName: "agent_stream_reasoning_effort",
       effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
       effectiveProviderType: "openai",
@@ -669,17 +669,17 @@ describe("buildUserInputSubmitOp", () => {
 
     expect(op.preferences?.reasoningEffort).toBe("high");
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
 
-    expect(request.turn_config?.reasoning_effort).toBe("high");
+    expect(request.runtimeOptions?.runtimeRequest?.reasoningEffort).toBe("high");
   });
 
-  it("应把未同步的显式搜索和思考开关迁移到 App Server turn_config", () => {
+  it("应把未同步的显式搜索和思考开关迁移到 App Server RuntimeRequest", () => {
     const op = buildUserInputSubmitOp({
       content: "搜索并深度分析今天的 AI 新闻",
       images: [],
       sessionId: "session-search-thinking-1",
-      eventName: "aster_stream_search_thinking",
+      eventName: "agent_stream_search_thinking",
       workspaceId: "workspace-search-thinking",
       requestMetadata: {
         harness: {
@@ -716,19 +716,19 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.thinking).toBe(true);
     expect(op.metadata).toBeUndefined();
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
 
-    expect(request.turn_config?.web_search).toBe(true);
-    expect(request.turn_config?.thinking_enabled).toBe(true);
-    expect(request.turn_config?.metadata).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBe(true);
+    expect(request.runtimeOptions?.runtimeRequest?.thinkingEnabled).toBe(true);
+    expect(request.runtimeOptions?.runtimeRequest?.metadata).toBeUndefined();
   });
 
-  it("应把旧 metadata 显式偏好迁移到 turn_config 并清理旧承载", () => {
+  it("应把旧 metadata 显式偏好迁移到 RuntimeRequest 并清理旧承载", () => {
     const op = buildUserInputSubmitOp({
       content: "启用搜索和思考",
       images: [],
       sessionId: "session-legacy-prefs-1",
-      eventName: "aster_stream_legacy_prefs",
+      eventName: "agent_stream_legacy_prefs",
       requestMetadata: {
         harness: {
           preferences: {
@@ -748,11 +748,11 @@ describe("buildUserInputSubmitOp", () => {
       effectiveModel: "gpt-5.5",
     });
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
 
-    expect(request.turn_config?.web_search).toBe(true);
-    expect(request.turn_config?.thinking_enabled).toBe(true);
-    expect(request.turn_config?.metadata).toEqual({
+    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBe(true);
+    expect(request.runtimeOptions?.runtimeRequest?.thinkingEnabled).toBe(true);
+    expect(request.runtimeOptions?.runtimeRequest?.metadata).toEqual({
       harness: {
         turn_purpose: "content_review",
       },
@@ -764,7 +764,7 @@ describe("buildUserInputSubmitOp", () => {
       content: "整理今天的国际新闻",
       images: [],
       sessionId: "session-news-1",
-      eventName: "aster_stream_news",
+      eventName: "agent_stream_news",
       workspaceId: "workspace-news",
       effectiveExecutionStrategy: "react",
       effectiveAccessMode: "current",
@@ -778,9 +778,9 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.searchMode).toBeUndefined();
     expect(op.metadata).toBeUndefined();
 
-    const request = createSubmitTurnRequestFromAgentOp(op);
+    const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
 
-    expect(request.turn_config?.web_search).toBeUndefined();
-    expect(request.turn_config?.search_mode).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.webSearch).toBeUndefined();
+    expect(request.runtimeOptions?.runtimeRequest?.searchMode).toBeUndefined();
   });
 });

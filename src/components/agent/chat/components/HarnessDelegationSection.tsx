@@ -1,5 +1,5 @@
 import { Bot, Workflow } from "lucide-react";
-import type { AsterSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { HarnessSessionState } from "../utils/harnessState";
@@ -27,7 +27,7 @@ interface HarnessDelegationSectionProps {
   ) => void;
   handleOpenExternalLink: (url: string) => void | Promise<void>;
   realTeamSummary: ChildSubagentSessionSummary;
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  childSubagentSessions: AgentSubagentSessionInfo[];
   onOpenSubagentSession?: (sessionId: string) => void;
 }
 
@@ -187,7 +187,7 @@ function RuntimeSubagentSessionList({
   onOpenSubagentSession,
   handleOpenExternalLink,
 }: {
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  childSubagentSessions: AgentSubagentSessionInfo[];
   onOpenSubagentSession?: (sessionId: string) => void;
   handleOpenExternalLink: (url: string) => void | Promise<void>;
 }) {

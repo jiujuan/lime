@@ -18,8 +18,8 @@ Lime 的 coding 骨架已经不是缺“能不能改文件”的问题；P1-P4 c
 
 | 上游参考能力 | 上游证据 | Lime current 状态 | 缺口判断 |
 | -------------- | -------- | ----------------- | -------- |
-| 统一进程对象 | `core/src/unified_exec/process.rs` 暴露 write / terminate / interrupt / output receiver / state；`tools/runtimes/unified_exec.rs` 把审批、sandbox、network 与 process manager 接在一起。 | `agent_tools::execution::process` 已提供 process snapshot、stdout/stderr delta、有界 retained output、stdin write、interrupt、terminate、status 与本地 process runner；App Server current 已提供 `executionProcess/start`、`writeStdin`、`interrupt`、`terminate`、`status`、`drainOutput` 控制面；no-sandbox shell path 已在 Lime preflight 与 Aster registry permission/safety preflight 之后走 live process；`executionProcess/start` 已收紧为受控 current 入口，workspace sandbox backend required / enforced 时 fail-closed，不再允许 `cwd` 覆盖 policy 判定后的实际工作目录。 | P2-B no-sandbox 路径和 App Server 受控启动已落地；缺口收缩为“command/test 默认执行切到 sandbox-aware process runner/control owner，并接 UI 控制”。 |
-| Head/tail 输出缓冲    | `core/src/unified_exec/head_tail_buffer.rs` 在进程读取阶段限制保留字节，保留头尾并记录 omitted bytes。                                                                                   | `sandbox/output_buffer.rs` 已成为 Aster executor 有界捕获 owner；sandbox executor、Windows restricted token pipe reader 和 embedded Bash 前台执行均先读入 head/tail buffer，再输出 `outputBytes / outputOmittedBytes / outputTruncated` metadata。 | P2-A 第一刀已落地。后续只需随 live process lifecycle 复用同一 buffer 输出 delta，不再把大输出作为当前 blocker。      |
+| 统一进程对象 | `core/src/unified_exec/process.rs` 暴露 write / terminate / interrupt / output receiver / state；`tools/runtimes/unified_exec.rs` 把审批、sandbox、network 与 process manager 接在一起。 | `agent_tools::execution::process` 已提供 process snapshot、stdout/stderr delta、有界 retained output、stdin write、interrupt、terminate、status 与本地 process runner；App Server current 已提供 `executionProcess/start`、`writeStdin`、`interrupt`、`terminate`、`status`、`drainOutput` 控制面；no-sandbox shell path 已在 Lime preflight 与 Agent registry permission/safety preflight 之后走 live process；`executionProcess/start` 已收紧为受控 current 入口，workspace sandbox backend required / enforced 时 fail-closed，不再允许 `cwd` 覆盖 policy 判定后的实际工作目录。 | P2-B no-sandbox 路径和 App Server 受控启动已落地；缺口收缩为“command/test 默认执行切到 sandbox-aware process runner/control owner，并接 UI 控制”。 |
+| Head/tail 输出缓冲    | `core/src/unified_exec/head_tail_buffer.rs` 在进程读取阶段限制保留字节，保留头尾并记录 omitted bytes。                                                                                   | `sandbox/output_buffer.rs` 已成为 Agent executor 有界捕获 owner；sandbox executor、Windows restricted token pipe reader 和 embedded Bash 前台执行均先读入 head/tail buffer，再输出 `outputBytes / outputOmittedBytes / outputTruncated` metadata。 | P2-A 第一刀已落地。后续只需随 live process lifecycle 复用同一 buffer 输出 delta，不再把大输出作为当前 blocker。      |
 | 审批缓存与重试        | `core/src/tools/sandboxing.rs` 有 approval cache、sandbox override、denied-read preservation；`tools/orchestrator.rs` 有 approval -> sandbox -> attempt -> denied retry。                | Lime 有 `ToolExecutionPolicyService` 多来源规则、`action.required`、审批后续跑测试和 sandbox blocked metadata。                                                                                                                                    | 缺“同一命令 approval key 复用 / sandbox denied 后升级重试 / proposed rule amendment”这一条统一执行语义。             |
 | 持久 capability SID   | `windows-sandbox-rs/src/cap.rs` 按 workspace / writable root 持久化 SID，并用 canonical path key 去重。                                                                                  | `restricted_token.rs` 每次运行生成 per-run capability SID，ACL 用 RAII 回滚。                                                                                                                                                                      | 当前更保守，但无法复用 workspace capability；后续做 read deny / extra write root / 长期 Windows 体验时会缺稳定身份。 |
 | TokenDefaultDacl      | `windows-sandbox-rs/src/token.rs` 设置 token default DACL，避免受限 token 创建管道 / IPC 对象失败。                                                                                      | Lime restricted token 只创建 restricted token 并启用 `SeChangeNotifyPrivilege`。                                                                                                                                                                   | PowerShell pipeline、子进程 IPC、部分工具链可能在 Windows 实机上出现非确定性 ACCESS_DENIED。                         |
@@ -37,7 +37,7 @@ Lime 的 coding 骨架已经不是缺“能不能改文件”的问题；P1-P4 c
 
 落点：
 
-- `lime-rs/crates/aster-rust/crates/aster/src/sandbox/**`
+- `lime-rs/crates/agent-rust/crates/agent/src/sandbox/**`
 - `lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs`
 - `lime-rs/crates/app-server/src/runtime/output_refs.rs`
 
@@ -66,7 +66,7 @@ Lime 的 coding 骨架已经不是缺“能不能改文件”的问题；P1-P4 c
 - 已定义 current process owner：start snapshot、stdout/stderr output delta、bounded retained output、stdin write、interrupt、terminate、status、本地 process runner。
 - 已把现有 shell batch bridge 接到 process metadata：`processId / executionProcessStatus / outputBytes / outputOmittedBytes / outputTruncated` 透传到 `tool.output.delta` / `command.output` metadata。
 - 已通过 App Server current JSON-RPC 暴露 `executionProcess/start|writeStdin|interrupt|terminate|status|drainOutput`，并同步 protocol schema、processor、client 与 contract guard。
-- no-sandbox shell path 已接入 live process：先过 `ToolExecutionDecision`，再复用 Aster `ToolRegistry::check_tool_permissions`，且需要 workspace sandbox backend 的命令继续走 Aster sandbox executor。
+- no-sandbox shell path 已接入 live process：先过 `ToolExecutionDecision`，再复用 Agent `ToolRegistry::check_tool_permissions`，且需要 workspace sandbox backend 的命令继续走 Agent sandbox executor。
 - 下一刀把 command/test 默认执行切到 sandbox-aware `LocalExecutionProcessHandle` / execution process control owner，并让 Workbench UI 的停止、输入和状态刷新复用同一 current API。
 
 收益：长任务、用户中断、实时日志、测试服务器、交互式 shell 才能成为产品能力，而不是一次性命令结果。
@@ -77,7 +77,7 @@ Lime 的 coding 骨架已经不是缺“能不能改文件”的问题；P1-P4 c
 
 落点：
 
-- `lime-rs/crates/aster-rust/crates/aster/src/sandbox/restricted_token.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/sandbox/restricted_token.rs`
 - 后续可拆：`sandbox/windows_token.rs`、`sandbox/windows_process.rs`、`sandbox/windows_acl.rs`
 
 动作：

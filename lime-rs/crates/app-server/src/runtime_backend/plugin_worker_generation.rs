@@ -22,11 +22,7 @@ pub(super) async fn prepare_plugin_worker_request(
         return Ok(());
     };
     let config_metadata = current_agent_runtime_config_metadata();
-    let runtime_metadata = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-        .or(request.metadata.as_ref());
+    let runtime_metadata = request.runtime_metadata();
     let soul_style = host_generation_soul_style(config_metadata.as_ref(), runtime_metadata);
     if plan.requests.is_empty() {
         write_host_managed_generation_status(
@@ -99,7 +95,7 @@ async fn generate_outputs(
     runtime_backend.ensure_agent_initialized(&db).await?;
     let requested_selection = request_context::resolve_runtime_model_selection(request)?;
     let effective_requested_selection = selection_with_effective_reasoning(&requested_selection);
-    let host_request = request_context::aster_chat_request_from_request(request);
+    let host_request = request_context::runtime_request_from_request(request);
     let direct_provider_config = direct_provider_config_from_request(
         host_request.as_ref(),
         &effective_requested_selection,
@@ -705,29 +701,28 @@ mod tests {
             },
             runtime_options: Some(RuntimeOptions {
                 stream: true,
-                host_options: Some(json!({
-                    "asterChatRequest": {
-                        "provider_config": {
-                            "provider_id": "fixture-openai",
-                            "provider_name": "openai",
-                            "model_name": "lime-fixture-chat",
-                            "api_key": "fixture-key",
-                            "base_url": base_url,
-                            "tool_call_strategy": "native"
-                        },
-                        "provider_preference": "fixture-openai",
-                        "model_preference": "lime-fixture-chat"
-                    }
-                })),
+                runtime_request: Some(app_server_protocol::RuntimeRequest {
+                    provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                        provider_id: Some("fixture-openai".to_string()),
+                        provider_name: Some("openai".to_string()),
+                        model_name: Some("lime-fixture-chat".to_string()),
+                        api_key: Some("fixture-key".to_string()),
+                        base_url: Some(base_url.to_string()),
+                        tool_call_strategy: Some(
+                            app_server_protocol::RuntimeToolCallStrategy::Native,
+                        ),
+                        ..app_server_protocol::RuntimeProviderConfig::default()
+                    }),
+                    provider_preference: Some("fixture-openai".to_string()),
+                    model_preference: Some("lime-fixture-chat".to_string()),
+                    ..app_server_protocol::RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             expected_output: None,
             structured_output: None,
             output_schema: None,
             event_name: None,
-            provider_preference: None,
-            model_preference: None,
-            metadata: None,
             queued_turn_id: None,
             queue_if_busy: false,
             skip_pre_submit_resume: false,

@@ -3,10 +3,6 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-mod aster_adapter;
-
-pub(crate) use aster_adapter::{to_agent_turn_context, to_aster_turn_context};
-
 pub type AgentTurnContext = agent_protocol::turn_context::TurnContextOverride;
 pub type AgentTurnContextOverride = AgentTurnContext;
 

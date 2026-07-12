@@ -617,15 +617,47 @@ export type AgentAttachment = {
   metadata?: unknown;
 };
 
+export type RuntimeToolCallStrategy = "native" | "tool_shim";
+
+export type RuntimeSearchMode = "disabled" | "auto" | "required";
+
+export type RuntimeProviderConfig = {
+  providerId?: string;
+  providerName?: string;
+  modelName?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  toolCallStrategy?: RuntimeToolCallStrategy;
+  toolshimModel?: string;
+  modelCapabilities?: unknown;
+};
+
+export type RuntimeRequest = {
+  providerConfig?: RuntimeProviderConfig;
+  providerPreference?: string;
+  modelPreference?: string;
+  reasoningEffort?: string;
+  thinkingEnabled?: boolean;
+  approvalPolicy?: string;
+  sandboxPolicy?: string;
+  workspaceId?: string;
+  workingDir?: string;
+  workspaceRoot?: string;
+  projectRoot?: string;
+  webSearch?: boolean;
+  searchMode?: RuntimeSearchMode;
+  executionStrategy?: string;
+  autoContinue?: boolean;
+  systemPrompt?: string;
+  metadata?: unknown;
+};
+
 export type RuntimeOptions = {
   capabilityId?: string;
   stream?: boolean;
   eventName?: string;
-  providerPreference?: string;
-  modelPreference?: string;
-  metadata?: unknown;
   queuedTurnId?: string;
-  hostOptions?: unknown;
+  runtimeRequest?: RuntimeRequest;
   expectedOutput?: unknown;
   structuredOutput?: StructuredOutputContract;
   outputSchema?: unknown;

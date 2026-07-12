@@ -1,7 +1,7 @@
 //! Subagent session DB read model.
 //!
 //! The UI-visible subagent list reads current `agent_sessions` rows directly.
-//! Aster session queries stay out of this path.
+//! Agent session queries stay out of this path.
 
 use lime_core::database::{lock_db, DbConnection};
 use rusqlite::OptionalExtension;

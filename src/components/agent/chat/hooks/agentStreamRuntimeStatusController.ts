@@ -3,7 +3,7 @@ import type {
   AgentThreadItem,
   AgentThreadTurnSummaryItem,
 } from "@/lib/api/agentProtocol";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import { normalizeLegacyRuntimeStatusTitle } from "@/lib/api/agentTextNormalization";
 import type { Message } from "../types";
 import {
@@ -46,7 +46,7 @@ export function buildAgentStreamRuntimeStatusApplyPlan(params: {
 }
 
 export function buildAgentStreamProviderTraceRuntimeStatusApplyPlan(params: {
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   firstRuntimeStatusAt?: number | null;
   stage?: string | null;
   updatedAt: string;

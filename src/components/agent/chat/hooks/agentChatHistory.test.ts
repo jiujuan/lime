@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 
 import {
   appendTextToParts,
@@ -17,7 +17,7 @@ describe("agentChatHistory core hydrate", () => {
   });
 
   it("历史 output_text 以累计快照存储时应恢复为单份正文", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-cumulative-text",
       created_at: 1,
       updated_at: 2,
@@ -181,7 +181,7 @@ describe("agentChatHistory core hydrate", () => {
   });
 
   it("App Server read detail.messages 当前形状应直接恢复用户与助手消息", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-app-server-messages",
       created_at: 1,
       updated_at: 2,
@@ -255,7 +255,7 @@ describe("agentChatHistory core hydrate", () => {
   });
 
   it("App Server read detail.messages 错序时应按 runtime turn 恢复 user -> assistant", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-app-server-messages-out-of-order",
       created_at: 1,
       updated_at: 2,
@@ -361,7 +361,7 @@ describe("agentChatHistory core hydrate", () => {
   });
 
   it("历史 tool_response 应继承同一工具请求参数以恢复文件预览入口", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-history-tool-response-arguments",
       created_at: 1,
       updated_at: 2,
@@ -409,7 +409,7 @@ describe("agentChatHistory core hydrate", () => {
   });
 
   it("App Server read detail.thread_read.thread_items 应恢复 revisioned proposed_plan 历史", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-thread-read-plan-items",
       thread_id: "thread-read-plan-items",
       created_at: 1,
@@ -487,7 +487,7 @@ describe("agentChatHistory core hydrate", () => {
   });
 
   it("App Server thread_read.tool_calls 应合入已恢复助手消息", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-app-server-tool-calls",
       thread_id: "thread-app-server-tool-calls",
       created_at: 1,
@@ -693,7 +693,7 @@ describe("agentChatHistory core hydrate", () => {
         },
       },
     });
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-thread-read-image-tool-calls",
       thread_id: "thread-thread-read-image-tool-calls",
       created_at: 1,
@@ -834,7 +834,7 @@ describe("agentChatHistory core hydrate", () => {
         },
       },
     });
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-history-image-tool",
       thread_id: "thread-history-image-tool",
       created_at: 1,
@@ -908,7 +908,7 @@ describe("agentChatHistory core hydrate", () => {
   });
 
   it("本地历史导入的 detail.items 应按 turn 合入已恢复助手消息", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-codex-import-timeline",
       thread_id: "thread-codex-import-timeline",
       created_at: 1,

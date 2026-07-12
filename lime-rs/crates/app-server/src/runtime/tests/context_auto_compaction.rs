@@ -104,7 +104,10 @@ async fn auto_compacts_before_turn_when_context_limit_is_due() {
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(metadata.clone()),
+                    runtime_request: Some(RuntimeRequest {
+                        metadata: Some(metadata.clone()),
+                        ..RuntimeRequest::default()
+                    }),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -157,7 +160,7 @@ async fn auto_compacts_before_turn_when_context_limit_is_due() {
     let second_metadata = requests[1]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref())
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("second turn metadata");
     assert_eq!(
         second_metadata
@@ -178,7 +181,10 @@ async fn auto_compacts_before_turn_when_context_limit_is_due() {
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(metadata),
+                    runtime_request: Some(RuntimeRequest {
+                        metadata: Some(metadata),
+                        ..RuntimeRequest::default()
+                    }),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,

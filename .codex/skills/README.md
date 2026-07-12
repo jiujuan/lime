@@ -6,7 +6,6 @@
 ## 当前仓库级 skills
 
 - `lime-governance`：治理收口、事实源识别、compat / deprecated 收口
-- `lime-aster-migration`：按 Codex 有则迁、没有则删的口径推进 Aster 迁移，保持优雅命名并同步计划、守卫和验证
 - `lime-design-language`：GUI 设计语言、页面宽度、表面与排版收口
 - `lime-quality-workflow`：GUI 产品工程质量、最低校验路径、交付判断
 - `lime-command-boundary`：Electron IPC、App Server JSON-RPC、legacy adapter、前端网关、mock 同步

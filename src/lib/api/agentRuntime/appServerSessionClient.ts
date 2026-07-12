@@ -11,9 +11,9 @@ import { METHOD_AGENT_SESSION_LIST } from "../../../../packages/app-server-clien
 import type { AgentThreadTurn, AgentThreadTurnStatus } from "../agentProtocol";
 import { projectAppServerSessionReadToThreadReadModel } from "./appServerReadModelProjection";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionDetail,
-  AsterSessionInfo,
+  AgentExecutionStrategy,
+  AgentSessionDetail,
+  AgentSessionInfo,
   AgentRuntimeCreateSessionOptions,
   AgentRuntimeGetSessionOptions,
   AgentRuntimeListSessionsOptions,
@@ -78,7 +78,7 @@ export function createAppServerSessionClient({
   async function createAgentRuntimeSession(
     workspaceId?: string,
     name?: string,
-    executionStrategy?: AsterExecutionStrategy,
+    executionStrategy?: AgentExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string> {
     const sessionScope = normalizeCreateSessionScope(workspaceId, options);
@@ -101,7 +101,7 @@ export function createAppServerSessionClient({
 
   async function listAgentRuntimeSessions(
     options?: AgentRuntimeListSessionsOptions,
-  ): Promise<AsterSessionInfo[]> {
+  ): Promise<AgentSessionInfo[]> {
     const response =
       await appServerClient.request<AppServerAgentSessionListResponse>(
         METHOD_AGENT_SESSION_LIST,
@@ -117,7 +117,7 @@ export function createAppServerSessionClient({
   async function getAgentRuntimeSession(
     sessionId: string,
     options?: AgentRuntimeGetSessionOptions,
-  ): Promise<AsterSessionDetail> {
+  ): Promise<AgentSessionDetail> {
     const response = await appServerClient.readSession(
       appServerSessionReadParamsFromOptions(sessionId, options),
     );
@@ -141,7 +141,7 @@ export function createAppServerSessionClient({
 
   async function archiveManyAgentRuntimeSessions(
     sessionIds: string[],
-  ): Promise<AsterSessionInfo[]> {
+  ): Promise<AgentSessionInfo[]> {
     const response = await appServerClient.archiveManySessions({
       sessionIds: normalizeSessionIds(sessionIds),
     });
@@ -464,7 +464,7 @@ function sessionBusinessObjectRef({
 }: {
   scopeId: string;
   name: string;
-  executionStrategy?: AsterExecutionStrategy;
+  executionStrategy?: AgentExecutionStrategy;
   runStartHooks?: boolean;
   workingDir?: string | null;
   metadata?: Record<string, unknown>;
@@ -615,7 +615,7 @@ function normalizeSessionIds(sessionIds: string[]): string[] {
 
 function appServerSessionOverviewToRuntimeInfo(
   session: AppServerAgentSessionOverview,
-): AsterSessionInfo {
+): AgentSessionInfo {
   return omitUndefined({
     id: session.sessionId,
     thread_id: session.threadId ?? session.sessionId,
@@ -647,7 +647,7 @@ function appServerSessionOverviewToRuntimeInfo(
 
 function appServerSessionReadToRuntimeDetail(
   response: AppServerAgentSessionReadResponse,
-): AsterSessionDetail {
+): AgentSessionDetail {
   const fallbackTimestamp = response.session.updatedAt;
   const title =
     sessionTitleFromBusinessObjectRef(response.session.businessObjectRef) ??
@@ -728,17 +728,17 @@ function agentThreadTurnStatusFromAppServer(
 
 function readSessionDetail(
   response: NormalizedAppServerAgentSessionReadResponse,
-): AsterSessionDetail | null {
+): AgentSessionDetail | null {
   if (!isRecord(response.detail)) {
     return null;
   }
-  const detail = response.detail as Partial<AsterSessionDetail>;
+  const detail = response.detail as Partial<AgentSessionDetail>;
   const fallback = appServerSessionReadToRuntimeDetail(response);
   const detailExecutionRuntime = isRecord(detail.execution_runtime)
     ? detail.execution_runtime
     : isRecord((detail as Record<string, unknown>).executionRuntime)
       ? ((detail as Record<string, unknown>)
-          .executionRuntime as AsterSessionDetail["execution_runtime"])
+          .executionRuntime as AgentSessionDetail["execution_runtime"])
       : detail.execution_runtime === null ||
           (detail as Record<string, unknown>).executionRuntime === null
         ? null
@@ -790,8 +790,8 @@ function readSessionDetail(
 
 function mergeThreadReadDetail(
   detailThreadRead: unknown,
-  fallbackThreadRead: AsterSessionDetail["thread_read"],
-): AsterSessionDetail["thread_read"] {
+  fallbackThreadRead: AgentSessionDetail["thread_read"],
+): AgentSessionDetail["thread_read"] {
   if (!isRecord(detailThreadRead)) {
     return fallbackThreadRead;
   }
@@ -817,7 +817,7 @@ function mergeThreadReadDetail(
       )
         ? detailThreadRead.session_business_object_ref_metadata
         : fallbackThreadRead?.session_business_object_ref_metadata,
-  } as AsterSessionDetail["thread_read"];
+  } as AgentSessionDetail["thread_read"];
 }
 
 function timestampMillis(value: string | undefined): number {
@@ -842,7 +842,7 @@ function positiveInteger(value: unknown): number | undefined {
 
 function executionStrategyFromProtocol(
   value: unknown,
-): AsterExecutionStrategy | undefined {
+): AgentExecutionStrategy | undefined {
   return value === "react" ? "react" : undefined;
 }
 

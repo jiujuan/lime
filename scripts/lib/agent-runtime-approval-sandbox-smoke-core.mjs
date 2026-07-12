@@ -88,7 +88,7 @@ function createTranscriptSteps() {
       },
       sourceRefs: [
         "src/components/agent/chat/projection/agentUiEventProjection.test.ts:676",
-        "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx:7801",
+        "src/components/agent/chat/hooks/useAgentChat.test.tsx:7801",
       ],
     },
     {
@@ -108,9 +108,9 @@ function createTranscriptSteps() {
           fail: "fail",
         },
         warnings: [
-          "[AsterChat] 首个运行时事件静默，已降级切换为会话快照同步: event-a",
-          "[AsterChat] 首个运行时事件暂未到达，已基于提交派发继续等待后续进度: event-a",
-          "[AsterChat] 运行时事件静默，已降级切换为会话快照同步: event-a",
+          "[AgentChat] 首个运行时事件静默，已降级切换为会话快照同步: event-a",
+          "[AgentChat] 首个运行时事件暂未到达，已基于提交派发继续等待后续进度: event-a",
+          "[AgentChat] 运行时事件静默，已降级切换为会话快照同步: event-a",
         ],
         failureMessage: "执行已中断：运行时长时间没有返回新进度，请重试。",
       },

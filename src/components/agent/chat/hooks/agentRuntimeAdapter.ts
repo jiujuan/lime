@@ -1,6 +1,6 @@
 import type { UnlistenFn } from "@/lib/desktop-host/event";
 import {
-  createSubmitTurnRequestFromAgentOp,
+  createAgentSessionTurnStartParamsFromUserInputOp,
   type AgentEvent,
   type AgentOp,
 } from "@/lib/api/agentProtocol";
@@ -15,10 +15,10 @@ import {
   type AgentRuntimeListSessionsOptions,
   type AgentRuntimeReplayedActionRequiredView,
   type AgentRuntimeClient,
-  type AgentRuntimeInitStatus,
-  type AsterExecutionStrategy,
-  type AsterSessionDetail,
-  type AsterSessionInfo,
+  type AgentExecutionStrategy,
+  type AgentSessionDetail,
+  type AgentSessionInfo,
+  type RuntimeProviderSelection,
 } from "@/lib/api/agentRuntime";
 import type { AgentAccessMode } from "./agentChatStorage";
 import type { ActionRequiredScope, ApprovalDecision } from "../types";
@@ -40,27 +40,27 @@ export interface AgentSessionMetadataPatch {
   accessMode?: AgentAccessMode;
   providerType?: string;
   model?: string;
-  executionStrategy?: AsterExecutionStrategy;
+  executionStrategy?: AgentExecutionStrategy;
 }
 
 export interface AgentRuntimeAdapter {
-  init(): Promise<AgentRuntimeInitStatus>;
+  getRuntimeProviderSelection(): Promise<RuntimeProviderSelection>;
   createSession(
     workspaceId?: string,
     name?: string,
-    executionStrategy?: AsterExecutionStrategy,
+    executionStrategy?: AgentExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string>;
   listSessions(
     options?: AgentRuntimeListSessionsOptions,
-  ): Promise<AsterSessionInfo[]>;
+  ): Promise<AgentSessionInfo[]>;
   getSession(
     sessionId: string,
     options?: AgentRuntimeGetSessionOptions,
-  ): Promise<AsterSessionDetail>;
+  ): Promise<AgentSessionDetail>;
   getSessionReadModel(
     sessionId: string,
-  ): Promise<AsterSessionDetail["thread_read"]>;
+  ): Promise<AgentSessionDetail["thread_read"]>;
   replayRequest(
     sessionId: string,
     requestId: string,
@@ -69,7 +69,7 @@ export interface AgentRuntimeAdapter {
   deleteSession(sessionId: string): Promise<void>;
   setSessionExecutionStrategy(
     sessionId: string,
-    executionStrategy: AsterExecutionStrategy,
+    executionStrategy: AgentExecutionStrategy,
   ): Promise<void>;
   setSessionAccessMode?(
     sessionId: string,
@@ -118,7 +118,7 @@ export interface AgentRuntimeAdapterDeps {
     | "generateAgentRuntimeSessionTitle"
     | "getAgentRuntimeSession"
     | "getAgentRuntimeThreadRead"
-    | "initAgentRuntime"
+    | "getRuntimeProviderSelection"
     | "interruptAgentRuntimeTurn"
     | "listAgentRuntimeSessions"
     | "promoteAgentRuntimeQueuedTurn"
@@ -149,11 +149,11 @@ export function createAgentRuntimeAdapter({
   client = createAgentRuntimeClient(),
   listenRuntimeEvent = listenAgentRuntimeEvent,
 }: AgentRuntimeAdapterDeps = {}): AgentRuntimeAdapter {
-  const getSessionInFlight = new Map<string, Promise<AsterSessionDetail>>();
+  const getSessionInFlight = new Map<string, Promise<AgentSessionDetail>>();
 
   return {
-    async init() {
-      return client.initAgentRuntime();
+    async getRuntimeProviderSelection() {
+      return client.getRuntimeProviderSelection();
     },
     async createSession(workspaceId, name, executionStrategy, options) {
       return client.createAgentRuntimeSession(
@@ -247,7 +247,7 @@ export function createAgentRuntimeAdapter({
       switch (op.type) {
         case "user_input":
           await client.submitAgentRuntimeTurn(
-            createSubmitTurnRequestFromAgentOp(op),
+            createAgentSessionTurnStartParamsFromUserInputOp(op),
           );
           return;
         default:

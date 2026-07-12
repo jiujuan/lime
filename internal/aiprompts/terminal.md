@@ -11,7 +11,7 @@
 当前与“terminal”仍相关的能力只剩：
 
 - Windows 启动诊断里的默认 shell 判定
-- Aster runtime 中的 `SessionType::Terminal` 会话类型与相关读模型语义
+- Agent runtime 中的 `SessionType::Terminal` 会话类型与相关读模型语义
 - 与 Agent / 执行工作区相关的 `latest_terminal / recent_terminals` 运行结果摘要字段
 - 文档与治理目录册中的历史痕迹扫描
 
@@ -26,7 +26,7 @@
   - `src/lib/api/terminal.ts`
 - `current`
   - `src/lib/api/serverRuntime.ts`、`crashDiagnostic.ts` 等非终端产品面的运行时诊断入口
-  - Aster runtime 会话读模型里的 `SessionType::Terminal`
+  - Agent runtime 会话读模型里的 `SessionType::Terminal`
   - 执行工作区中的 `latest_terminal / recent_terminals` 运行结果摘要
 
 ## 约束

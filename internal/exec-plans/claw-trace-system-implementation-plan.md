@@ -52,7 +52,7 @@ Trace 诊断必须同时满足两类消费者：
 | S2 Renderer 最小 checkpoint              | completed   | submit / received / applied / flush / first paint 分段                                                                                              | 本地输出链路能生成 summary，不依赖 provider                                                                                                                             |
 | S3 App Server 最小 checkpoint            | completed   | request received / message.delta emitted / terminal checkpoint                                                                                      | 可计算 App Server emit 到 renderer receive 的桥接段                                                                                                                     |
 | S4 Latency Map 与 evidence               | completed   | 更新 SVG，把 provider/API 与 Lime 本地输出拆开                                                                                                      | 图与 trace summary 口径一致                                                                                                                                             |
-| S5 Provider phase 细节                   | completed   | Aster provider first event / first text delta / failed / canceled                                                                                   | provider_wait_ms 与 client_local_ms 分开                                                                                                                                |
+| S5 Provider phase 细节                   | completed   | Agent provider first event / first text delta / failed / canceled                                                                                   | provider_wait_ms 与 client_local_ms 分开                                                                                                                                |
 | S6 Developer 调试闭环                    | completed   | 前端 summary projector、Developer & Labs 开关、compact 导出、support bundle、保留策略                                                               | summary 可区分 provider/API 与客户端本地输出；开启后可导出 compact history；默认关闭；清理不影响 session                                                                |
 | S7 回归闭环                              | completed   | fixture / GUI smoke / contract guard                                                                                                                | current fixture 生成 trace evidence 并通过                                                                                                                              |
 | S8 App Server raw trace store            | completed   | 内部 append-only JSONL、summary-only redaction、session retention、writer 热路径收敛                                                                | 不新增 JSON-RPC；不写 prompt / provider payload / assistant text；同一 trace seq 由 writer 状态递增                                                                     |
@@ -152,14 +152,14 @@ App Server 骨架：
 - `lime-rs/crates/app-server/src/runtime_backend/tool_events.rs`
 - `lime-rs/crates/app-server/src/runtime/tests/turn_lifecycle.rs`
 - `lime-rs/crates/app-server/src/main.rs`
-- S5 provider phase 只进入 `runtime_backend/tool_events.rs` 与 Aster reply loop；不向 `runtime_backend.rs` 追加 trace 逻辑。
+- S5 provider phase 只进入 `runtime_backend/tool_events.rs` 与 Agent reply loop；不向 `runtime_backend.rs` 追加 trace 逻辑。
 
-Aster / agent provider phase：
+Agent / agent provider phase：
 
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/provider_trace.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/mod.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/subagent_handler.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/agents/agent.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/agents/provider_trace.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/agents/mod.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/agents/subagent_handler.rs`
 - `lime-rs/crates/agent/src/protocol.rs`
 - `lime-rs/crates/agent/src/event_converter.rs`
 - `lime-rs/crates/agent/src/lib.rs`
@@ -234,7 +234,7 @@ Aster / agent provider phase：
 - 新增的 Agent UI performance summary 裁剪逻辑放入 `src/lib/crashDiagnosticAgentUiPerformance.ts`，避免继续膨胀诊断主文件。
 - 风险：`crashDiagnostic.ts` 仍承担 clipboard、payload、summary、导出目录等多职责，后续每次接诊断字段都会增加回归成本。
 - 下一次拆分入口：把 clipboard text / platform guide / payload builder 按 `crashDiagnosticClipboard.ts`、`crashDiagnosticPayload.ts`、`crashDiagnosticPlatform.ts` 拆出；退出条件是 `crashDiagnostic.ts` 降到 `800` 行以下，现有 `src/lib/crashDiagnostic.test.ts` 仍通过。
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs` 当前仍约 `9117` 行，远超仓库体量边界。本轮 S20 已先把 provider trace event model 拆到 `agents/provider_trace.rs`，避免继续把 trace schema 堆进中心 reply loop 文件。
+- `lime-rs/crates/agent-rust/crates/agent/src/agents/agent.rs` 当前仍约 `9117` 行，远超仓库体量边界。本轮 S20 已先把 provider trace event model 拆到 `agents/provider_trace.rs`，避免继续把 trace schema 堆进中心 reply loop 文件。
 - 风险：`agent.rs` 仍混合 reply loop、tool orchestration、session state、native tool hook、trace emission 等职责；继续在这里追加 diagnostics 会放大回归面。
 - 下一次拆分入口：优先按 Codex “中心文件只做 dispatch 接线”方式，把 provider loop diagnostics、direct answer response shaping、native tool execution hook 分别拆到 `agents/provider_trace.rs`、`agents/direct_answer.rs`、`agents/native_tool_execution.rs`；退出条件是新增 trace/runtime 逻辑不再直接增长 `agent.rs`。
 - `src/lib/api/agentProtocol.ts` 当前约 `2180` 行，已超过仓库体量边界。本轮 S20 只同步 provider trace request id 字段，没有做协议 parser 拆分。
@@ -273,7 +273,7 @@ S1-S4 完成后才算 Trace 骨架完成：
 
 S5-S7 才处理以下细节：
 
-- Aster provider request / first provider event / first text delta / failed / canceled。
+- Agent provider request / first provider event / first text delta / failed / canceled。
 - W3C `traceparent / tracestate`。
 - OTEL exporter。
 - Developer & Labs trace panel。
@@ -326,7 +326,7 @@ npm run smoke:agent-runtime-current-fixture
   - `agentUiPerformanceTrace` metadata 扩展 `traceId / runId / turnId / serverEvent* / rendererEventReceivedAt`，并能计算 `bridgeDeliveryDeltaMs`。
 - 验证通过：`npx vitest run "src/lib/developerFeatures.test.ts" "src/lib/trace/clawTrace.test.ts" "src/components/agent/chat/hooks/agentStreamPerformanceMetrics.test.ts"`，3 个文件、13 个用例通过。
 - 完成 S2 Renderer 最小 checkpoint 骨架：
-  - `useDeveloperFeatureFlags` 返回独立 `clawTraceEnabled`，经 `AgentChatWorkspace -> useAsterAgentChat -> useAgentStream -> prepared send env` 下传，不复用 Harness。
+  - `useDeveloperFeatureFlags` 返回独立 `clawTraceEnabled`，经 `AgentChatWorkspace -> useAgentChat -> useAgentStream -> prepared send env` 下传，不复用 Harness。
   - 发送准备阶段在 Trace 开启时生成 `traceId / runId / requestId / submittedAt`，并随同一份 request metadata 进入 draft、submit op、request state。
   - `agentSession/event` projection 在 envelope 层补 `server_event_emitted_at` 与 `renderer_event_received_at`，parser 保留这些字段。
   - turn event binding 把 envelope 映射到当前 `performanceTrace`，首个 text delta 指标新增 `serverToRendererDeltaMs / rendererEventReceivedDeltaMs / serverEventDeltaMs`。
@@ -353,7 +353,7 @@ npm run smoke:agent-runtime-current-fixture
 - 验证通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 current Agent Runtime / Claw GUI Electron fixture，`liveProviderUsed=false`。
 - 验证通过：`npm run test:contracts`。为让既有未提交 App Server smoke 变更通过 contract guard，同步更新了 `scripts/check-app-server-client-contract.mjs` 的当前实现字符串；为让 `docs:boundary` 通过，同步修正了插件路线图中的旧内部文档路径引用。
 - 完成 S5 Provider phase trace：
-  - Aster reply loop 在 provider stream 消费点发出 `ProviderTraceEvent`，覆盖 `request_started / first_event_received / first_text_delta_received / failed / canceled`。
+  - Agent reply loop 在 provider stream 消费点发出 `ProviderTraceEvent`，覆盖 `request_started / first_event_received / first_text_delta_received / failed / canceled`。
   - provider request start 放在 MOIM 注入之后，避免把本地 provider 前置准备时间粗暴算进 provider/API wait。
   - `lime_agent::AgentEvent::ProviderTrace` 只携带 provider、model、attempt、elapsed_ms、text_chars、status、failure_category、retryable 等安全 metadata，不记录 prompt、provider payload 或错误全文。
   - `runtime_backend/tool_events.rs` 将 provider trace 映射为 `provider.request.started`、`provider.first_event.received`、`provider.first_text_delta.received`、`provider.failed`、`provider.canceled`。
@@ -538,7 +538,7 @@ npm run smoke:agent-runtime-current-fixture
 - 验证未完成：`npm run typecheck` 运行超过 3 分半仍无输出，手动中断，退出码 `130`；本轮以定向 Vitest、Rust trace test、Electron build smoke、contract guard 和真实 Electron fixture 作为可交付证据。
 - 开始 S17 App Server request span boundary：
   - 决策：参考 Codex `app_server_tracing::request_span + request_fut.instrument(...)` 的职责边界，把 request span 放在 App Server JSON-RPC request dispatch 入口，而不是塞进 runtime event 转换或 trace store writer。
-  - 决策：Lime App Server 当前只有 `tracing` 是一等依赖；`opentelemetry* / tracing-opentelemetry` 主要来自嵌入的 Aster 依赖锁文件。本阶段不把 OTEL 依赖和全局 subscriber 一次性拉进 App Server，先完成 span 边界和 carrier seam，真实 exporter 拆到 S18。
+  - 决策：Lime App Server 当前只有 `tracing` 是一等依赖；`opentelemetry* / tracing-opentelemetry` 主要来自嵌入的 Agent 依赖锁文件。本阶段不把 OTEL 依赖和全局 subscriber 一次性拉进 App Server，先完成 span 边界和 carrier seam，真实 exporter 拆到 S18。
   - 决策：不新增 JSON-RPC top-level `trace` 字段；先复用现有 `agentSession/turn/start.runtimeOptions.metadata.agentUiPerformanceTrace.w3cTraceContext`，保持 S16 的 carrier 合同不漂移。
 - 完成 S17 App Server request span boundary：
   - 新增 `trace_context.rs`，把 W3C `traceparent / tracestate` 校验和归一化从 `runtime/trace.rs` 抽成共用模块；runtime event 装饰与 processor request span 使用同一套合法性规则。
@@ -572,31 +572,31 @@ npm run smoke:agent-runtime-current-fixture
 - 验证通过：`npm run test:contracts`。
 - 验证通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 current Agent Runtime / Claw GUI Electron fixture；`liveProviderUsed=false`。
 - 完成 S19 provider W3C header propagation：
-  - `runtime_backend/request_context.rs` 复用 App Server `trace_context.rs` parser，把合法 `agentUiPerformanceTrace.w3cTraceContext` 投影为 Aster `TurnContextOverride.metadata.w3c_trace_context`；非法 `traceparent` 不进入 turn context。
-  - Aster `session_context.rs` 扩展现有 `RequestCorrelationContext`，读取并归一化 `w3c_trace_context.traceparent / tracestate`；`tracestate` 只在 `traceparent` 合法时传播。
+  - `runtime_backend/request_context.rs` 复用 App Server `trace_context.rs` parser，把合法 `agentUiPerformanceTrace.w3cTraceContext` 投影为 Agent `TurnContextOverride.metadata.w3c_trace_context`；非法 `traceparent` 不进入 turn context。
+  - Agent `session_context.rs` 扩展现有 `RequestCorrelationContext`，读取并归一化 `w3c_trace_context.traceparent / tracestate`；`tracestate` 只在 `traceparent` 合法时传播。
   - `providers/api_client.rs` 继续复用统一 `send_request` header 注入管道，所有 provider HTTP request 自动携带标准 `traceparent / tracestate` header，避免每个 provider 手写。
   - 参考 Codex `inject_span_w3c_trace_headers` 的统一 HTTP header 注入思路；Lime 没有照搬“只从 current OTEL span 注入”，因为 Lime 的 OTLP/subscriber 默认关闭，主路径必须依赖显式 request carrier 才稳定。
-  - 修复 Aster 测试枚举穷尽性：`AgentEvent::ProviderTrace` 在 `tests/agent.rs` 的非业务事件分支中显式忽略，避免 provider trace 事件新增后阻塞测试编译。
-- 验证通过：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server`、`cargo fmt --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" --package aster-core`。
+  - 修复 Agent 测试枚举穷尽性：`AgentEvent::ProviderTrace` 在 `tests/agent.rs` 的非业务事件分支中显式忽略，避免 provider trace 事件新增后阻塞测试编译。
+- 验证通过：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server`、`cargo fmt --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" --package agent-core`。
 - 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server w3c_trace_context -- --nocapture`，5 个 W3C / trace context 相关用例通过。
-- 验证通过：`CARGO_TARGET_DIR="lime-rs/target" cargo test --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" w3c_trace_context -- --nocapture`、`test_request_correlation_headers_injection`、`test_request_correlation_context_rejects_invalid_w3c_traceparent`。
+- 验证通过：`CARGO_TARGET_DIR="lime-rs/target" cargo test --manifest-path "lime-rs/crates/agent-rust/crates/agent/Cargo.toml" w3c_trace_context -- --nocapture`、`test_request_correlation_headers_injection`、`test_request_correlation_context_rejects_invalid_w3c_traceparent`。
 - 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace -- --nocapture`，26 个 trace / OTEL / support bundle / provider phase 用例通过。
 - 验证通过：`npm run test:contracts`。
 - 验证通过：`npm run smoke:agent-runtime-current-fixture`，覆盖 current Agent Runtime / Claw GUI Electron fixture；`liveProviderUsed=false`。
 - 开始 S20 provider request id correlation：
   - 决策：主要参考 Codex `rollout-trace::RawTraceEventPayload::InferenceCompleted/Failed/Cancelled.upstream_request_id` 与 `response-debug-context` 的 header 提取方式；Lime 只接入 provider response header request id，不扩展 cf-ray、auth error、HTTP body 或 provider raw response。
-  - 决策：不修改每个 provider trait 返回类型，先在 Aster 统一 `ApiRequestBuilder::response_post/response_get` 捕获 response headers，再通过 turn task-local 交给 reply loop。
+  - 决策：不修改每个 provider trait 返回类型，先在 Agent 统一 `ApiRequestBuilder::response_post/response_get` 捕获 response headers，再通过 turn task-local 交给 reply loop。
   - 决策：`request_started` 阶段尚未收到 response headers，不填 provider request id；`first_event / first_text_delta / failed / canceled` 可携带已捕获的 provider request id。
   - 决策：只接受长度不超过 256 的 header-safe visible ASCII request id；含空格、控制字符或空值的 header 丢弃。
 - 完成 S20 provider request id correlation：
-  - Aster `session_context.rs` 新增 `ProviderResponseContext` task-local，按优先级提取 `x-request-id / x-oai-request-id / x-openai-request-id / request-id / x-amzn-requestid / x-amz-request-id / x-goog-request-id / x-ms-request-id`。
-  - Aster `providers/api_client.rs` 在 provider HTTP response 返回后记录 response headers；每次 provider request 发送前清空旧 context，避免跨请求泄漏。
-  - Aster `ProviderTraceEvent` 新增 `provider_request_id / provider_request_id_header`，并在 first event、first text、failed、canceled 事件上挂载。
+  - Agent `session_context.rs` 新增 `ProviderResponseContext` task-local，按优先级提取 `x-request-id / x-oai-request-id / x-openai-request-id / request-id / x-amzn-requestid / x-amz-request-id / x-goog-request-id / x-ms-request-id`。
+  - Agent `providers/api_client.rs` 在 provider HTTP response 返回后记录 response headers；每次 provider request 发送前清空旧 context，避免跨请求泄漏。
+  - Agent `ProviderTraceEvent` 新增 `provider_request_id / provider_request_id_header`，并在 first event、first text、failed、canceled 事件上挂载。
   - 参考 Codex 的职责拆分方式，把 provider trace stage/event 和耗时计算从超大 `agent.rs` 移到 `agents/provider_trace.rs`；`agent.rs` 只保留 reply loop 中的事件发射接线。
-  - `lime_agent::AgentEvent::ProviderTrace`、Aster -> Agent event converter、App Server `runtime_backend/tool_events.rs`、trace store safe metrics whitelist、前端 AgentEvent parser 与 App Server event projection 已同步。
+  - `lime_agent::AgentEvent::ProviderTrace`、Agent -> Agent event converter、App Server `runtime_backend/tool_events.rs`、trace store safe metrics whitelist、前端 AgentEvent parser 与 App Server event projection 已同步。
   - App Server fixture backend 与 trace store 测试已断言 request id 进入 RuntimeEvent payload 和 summary-only metrics。
-- 验证通过：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server --package lime-agent`、`cargo fmt --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" --package aster-core`。
-- 验证通过：`CARGO_TARGET_DIR="lime-rs/target" cargo test --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" provider_response_context -- --nocapture`，3 个 request id / provider context 用例通过。
+- 验证通过：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server --package lime-agent`、`cargo fmt --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" --package agent-core`。
+- 验证通过：`CARGO_TARGET_DIR="lime-rs/target" cargo test --manifest-path "lime-rs/crates/agent-rust/crates/agent/Cargo.toml" provider_response_context -- --nocapture`，3 个 request id / provider context 用例通过。
 - 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server provider_trace -- --nocapture`，2 个 provider trace 用例通过。
 - 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_trace -- --nocapture`，协议 crate provider_trace 过滤编译通过。
 - 验证通过：`npx vitest run "src/lib/api/agentProtocol.test.ts" "src/lib/api/agentRuntime/threadClient.test.ts"`，2 个文件、64 个用例通过。
@@ -879,7 +879,7 @@ npm run smoke:agent-runtime-current-fixture
   - 决策：`hostCommands.test.ts` 只保留 Agent App runtime task dispatcher smoke；`runWorker=false` 不查询 UI runtime status、`turnConfig` 透传、host response / cancel / read 细节由 `agentAppRuntimeTaskHost.test.ts` 覆盖。
 - 完成 S40 agent app runtime task host split：
   - 新增 `electron/agentAppRuntimeTaskHost.ts`，承接 Agent App runtime task start/read/cancel/host response，并通过 App Server current `agentSession/turn/start` 等方法收敛。
-  - 新增 `electron/agentAppRuntimeTaskHost.test.ts`，覆盖 `turnConfig` -> `RuntimeOptions.hostOptions.asterChatRequest` 透传、`runWorker=false` 不查询 UI runtime status、start/read/cancel/host response current 投影。
+  - 新增 `electron/agentAppRuntimeTaskHost.test.ts`，覆盖 `turnConfig` -> `RuntimeOptions.hostOptions.agentChatRequest` 透传、`runWorker=false` 不查询 UI runtime status、start/read/cancel/host response current 投影。
   - `electron/hostCommands.ts` 只保留 `agent_app_runtime_*` command dispatch，`hostCommands.test.ts` 只验证分发到 `AgentAppRuntimeTaskHost`。
   - 同步 `scripts/check-app-server-client-contract.mjs`，让 App Server client contract 继续检查 `agent_app_runtime_*` dispatcher case 与新 Host owner。
   - `electron/hostCommands.ts` 从约 `2772` 行降到约 `2221` 行，但仍超过体量边界；下一刀继续拆 voice model / layered design export 等剩余大块。
@@ -929,8 +929,8 @@ npm run smoke:agent-runtime-current-fixture
    - Developer UI 可显式加载 Trace timeline，并从 summary-only events 展示 phase spans、slow segments、缺失 phase、App Server retained-window trace compare、regression evidence 归因报告、手动 regression trend history 和 summary-only regression alert；alert channel 默认关闭，只有 `developer.claw_trace.alert_enabled=true` 时才评估 watch / warning / critical，并把 actionable alert 写入本地 summary-only channel；`alert_notification_enabled` 默认关闭，只在新写入 alert 时通过 Electron Desktop Host 原生 Notification 尝试桌面通知；主窗口 foreground monitor 已能在离开 Developer 设置页后监听本地 compact metric 事件并 debounce 评估 alert，但不查询 App Server trace list/read。
    - support bundle trace opt-in 已通过真实 Electron fixture 证明走 current App Server method，并使用 RuntimeCore 当前 trace root，不再由 support bundle 自己推断 trace store。
 2. 已完成 S18：真实 OTEL exporter / W3C remote parent 接入。App Server request span 已能通过 exporter 继承 renderer carrier 的 trace id / parent span id，生产 OTLP 导出默认关闭、显式环境变量开启。
-3. 已完成 S19：合法 W3C carrier 已从 App Server turn context 透传到 Aster provider HTTP request headers；非法 carrier 不注入，`tracestate` 不单独传播。
-4. 已完成 S20：provider response header request id 已从 Aster 统一 HTTP builder 进入 `ProviderTraceEvent`、RuntimeEvent 和 summary-only trace metrics，方便把本地 trace 与上游 provider 工单 / 后端日志关联。
+3. 已完成 S19：合法 W3C carrier 已从 App Server turn context 透传到 Agent provider HTTP request headers；非法 carrier 不注入，`tracestate` 不单独传播。
+4. 已完成 S20：provider response header request id 已从 Agent 统一 HTTP builder 进入 `ProviderTraceEvent`、RuntimeEvent 和 summary-only trace metrics，方便把本地 trace 与上游 provider 工单 / 后端日志关联。
 5. 已完成 S21：Developer UI 可对 summary-only timeline 做 all / phase / slow filter，并查看选中事件的 safe metrics 详情。
 6. 已完成 S22：Developer UI phase span 可点击定位 span 内事件，并在详情区展示当前 span summary。
 7. 当前 Trace 主链已覆盖：renderer checkpoint、App Server checkpoint、provider phase、summary-only raw trace store、diagnostics read/export、support bundle opt-in、span diagnostics、W3C carrier、App Server request span、OTEL remote parent、provider HTTP header propagation、provider request id correlation 与 Developer drilldown。

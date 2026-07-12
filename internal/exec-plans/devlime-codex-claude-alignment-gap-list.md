@@ -32,8 +32,8 @@
 - 分类：`current gap` / `test gap`
 - 现象：日志里出现过 `messages=1, tools=0`，说明某些入口没有把工具传给 provider request；另一些场景工具已调用但 UI 显示错序。
 - 参考：
-  - Lime：`lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs`
-  - Lime：`lime-rs/crates/aster-rust/crates/aster/src/tools/registry.rs`
+  - Lime：`lime-rs/crates/agent-rust/crates/agent/src/tools/mod.rs`
+  - Lime：`lime-rs/crates/agent-rust/crates/agent/src/tools/registry.rs`
   - Lime：`src/components/agent/chat/hooks/agentStreamCompletionController.ts`
   - Codex：优先查 tool registry、MCP tool call、app-server / protocol 相关实现
 - 期望：
@@ -116,8 +116,8 @@
 - 现象：用户指出 `runtime_policy_test_request` 不能 hard code OpenAI，因为 Lime 是多模型。
 - 参考：
   - provider routing / runtime policy 相关测试
-  - `lime-rs/crates/aster-rust/crates/aster/src/providers/*`
-  - `lime-rs/crates/aster-rust/crates/aster/src/agents/*`
+  - `lime-rs/crates/agent-rust/crates/agent/src/providers/*`
+  - `lime-rs/crates/agent-rust/crates/agent/src/agents/*`
 - 期望：
   - 工具策略由 capability / provider contract / runtime tool surface 决定。
   - 测试覆盖 OpenAI 以外 provider 的缺省、降级、工具暴露场景。
@@ -129,7 +129,7 @@
 - 现象：用户质疑 `code_orchestrated` 策略是否还有意义；如果没有意义应清理。
 - 参考：
   - `internal/exec-plans/upstream-runtime-alignment-plan.md`
-  - `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+  - `lime-rs/src/commands/agent_cmd/runtime_turn.rs`
   - runtime strategy 相关测试
 - 期望：
   - 明确 `code_orchestrated` 是 current、compat 还是 dead。
@@ -148,8 +148,8 @@
   - Claude Code：`src/utils/hooks.ts`
   - Claude Code：`src/utils/hooks/execPromptHook.ts`
   - Claude Code：`src/utils/hooks/execAgentHook.ts`
-  - Lime：`lime-rs/crates/aster-rust/crates/aster/src/skills/*`
-  - Lime：`lime-rs/crates/aster-rust/crates/aster/src/hooks/*`
+  - Lime：`lime-rs/crates/agent-rust/crates/agent/src/skills/*`
+  - Lime：`lime-rs/crates/agent-rust/crates/agent/src/hooks/*`
 - 期望：
   - skill frontmatter 可以声明 hooks。
   - project / plugin hooks 有稳定 bootstrap。
@@ -166,7 +166,7 @@
   - `taskCompleteNotifEnabled / inputNeededNotifEnabled / agentPushNotifEnabled` 无 mobile push control plane。
 - 参考：
   - `internal/exec-plans/upstream-runtime-alignment-progress.md`
-  - `lime-rs/crates/aster-rust/crates/aster/src/tools/config_tool.rs`
+  - `lime-rs/crates/agent-rust/crates/agent/src/tools/config_tool.rs`
   - `lime-rs/src/commands/gateway_channel_cmd.rs`
 - 期望：
   - 先做产品决策：Lime 是否要实现 remote control / mobile push。
@@ -180,8 +180,8 @@
   - `bridge:` remote peer identity / ingress 仍缺宿主底座。
 - 参考：
   - Claude Code：peer address / SendMessage / bridge 相关实现
-  - Lime：`lime-rs/crates/aster-rust/crates/aster/src/tools/agent_control.rs`
-  - Lime：`lime-rs/crates/aster-rust/crates/aster/src/tools/team_tools.rs`
+  - Lime：`lime-rs/crates/agent-rust/crates/agent/src/tools/agent_control.rs`
+  - Lime：`lime-rs/crates/agent-rust/crates/agent/src/tools/team_tools.rs`
 - 期望：
   - 不把 browser connector / ChromeBridge 直接冒充 `bridge:` peer。
   - 若要做 remote peer messaging，先设计 remote session identity + ingress。

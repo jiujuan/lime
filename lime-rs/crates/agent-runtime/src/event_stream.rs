@@ -2,7 +2,7 @@
 //!
 //! Codex 的 current 主链把内部执行事件 materialize 成 Turn / Item 事件后再给
 //! App Server / GUI / Evidence 消费；这里先固定 Lime current projector 契约，
-//! 具体 Aster event 转换只能留在 compat adapter。
+//! 具体 Agent event 转换只能留在 compat adapter。
 
 pub trait EventProjector<SourceEvent, RuntimeEvent> {
     fn project(&mut self, event: SourceEvent) -> Vec<RuntimeEvent>;

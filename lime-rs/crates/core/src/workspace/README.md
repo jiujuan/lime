@@ -4,7 +4,7 @@ Workspace 是 Lime 应用层的概念，用于组织和管理 AI Agent 的工作
 
 ## 概述
 
-Workspace 是对 Aster 框架 `Session.working_dir` 的命名和配置包装，不修改 Aster 框架本身。
+Workspace 是对 Agent 框架 `Session.working_dir` 的命名和配置包装，不修改 Agent 框架本身。
 
 ## 设计原则
 

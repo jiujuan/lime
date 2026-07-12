@@ -1,5 +1,5 @@
 import type { Message } from "../types";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import type {
   AgentPreferenceKeys,
   AgentPreferences,
@@ -16,9 +16,9 @@ export const DEFAULT_AGENT_PROVIDER = "";
 export const DEFAULT_AGENT_MODEL = "";
 export type AgentAccessMode = "read-only" | "current" | "full-access";
 export const DEFAULT_AGENT_ACCESS_MODE: AgentAccessMode = "full-access";
-export const DEFAULT_WORKSPACE_AGENT_EXECUTION_STRATEGY: AsterExecutionStrategy =
+export const DEFAULT_WORKSPACE_AGENT_EXECUTION_STRATEGY: AgentExecutionStrategy =
   "react";
-export const DEFAULT_GLOBAL_AGENT_EXECUTION_STRATEGY: AsterExecutionStrategy =
+export const DEFAULT_GLOBAL_AGENT_EXECUTION_STRATEGY: AgentExecutionStrategy =
   "react";
 export const GLOBAL_PROVIDER_PREF_KEY = "agent_pref_provider_global";
 export const GLOBAL_MODEL_PREF_KEY = "agent_pref_model_global";
@@ -89,7 +89,7 @@ export const loadTransient = <T>(key: string, defaultValue: T): T => {
       }
 
       const parsed = JSON.parse(stored);
-      if (key.startsWith("aster_messages") && Array.isArray(parsed)) {
+      if (key.startsWith("agent_messages") && Array.isArray(parsed)) {
         const normalizedMessages = parsed.map((msg: any) => ({
           ...msg,
           timestamp: new Date(msg.timestamp),
@@ -114,11 +114,11 @@ function isOversizedAgentRestoreState(key: string, stored: string): boolean {
   }
 
   return (
-    key.startsWith("aster_messages_") ||
-    key.startsWith("aster_thread_turns_") ||
-    key.startsWith("aster_thread_items_") ||
-    key.startsWith("aster_session_snapshots_") ||
-    key.startsWith("aster_session_snapshots_persisted_")
+    key.startsWith("agent_messages_") ||
+    key.startsWith("agent_thread_turns_") ||
+    key.startsWith("agent_thread_items_") ||
+    key.startsWith("agent_session_snapshots_") ||
+    key.startsWith("agent_session_snapshots_persisted_")
   );
 }
 
@@ -197,7 +197,7 @@ export const getExecutionStrategyStorageKey = (
     return null;
   }
 
-  return `aster_execution_strategy_${resolvedWorkspaceId}`;
+  return `agent_execution_strategy_${resolvedWorkspaceId}`;
 };
 
 export const getSessionAccessModeKey = (
@@ -206,9 +206,9 @@ export const getSessionAccessModeKey = (
 ): string => {
   const resolvedWorkspaceId = workspaceId?.trim();
   if (!resolvedWorkspaceId) {
-    return `aster_session_access_mode_global_${sessionId}`;
+    return `agent_session_access_mode_global_${sessionId}`;
   }
-  return `aster_session_access_mode_${resolvedWorkspaceId}_${sessionId}`;
+  return `agent_session_access_mode_${resolvedWorkspaceId}_${sessionId}`;
 };
 
 export const getAccessModeStorageKey = (
@@ -219,7 +219,7 @@ export const getAccessModeStorageKey = (
     return null;
   }
 
-  return `aster_access_mode_${resolvedWorkspaceId}`;
+  return `agent_access_mode_${resolvedWorkspaceId}`;
 };
 
 export const normalizeAccessMode = (value: unknown): AgentAccessMode => {
@@ -256,7 +256,7 @@ export const loadSessionAccessMode = (
 
 export const resolvePersistedExecutionStrategy = (
   workspaceId?: string | null,
-): AsterExecutionStrategy => {
+): AgentExecutionStrategy => {
   const storageKey = getExecutionStrategyStorageKey(workspaceId);
   if (!storageKey) {
     return DEFAULT_GLOBAL_AGENT_EXECUTION_STRATEGY;

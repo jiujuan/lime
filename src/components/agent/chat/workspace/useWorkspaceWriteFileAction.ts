@@ -404,7 +404,7 @@ export function useWorkspaceWriteFileAction({
           description: fileName,
           workspaceId: projectId || undefined,
           sessionId: sessionId || undefined,
-          source: "aster-chat",
+          source: "agent-chat",
           correlationId:
             effectiveDocumentVersionId || activeRunVersionId || fileName,
           metadata: baseVersionMetadata,
@@ -421,7 +421,7 @@ export function useWorkspaceWriteFileAction({
             description: `${fileName} 已进入当前版本链`,
             workspaceId: projectId || undefined,
             sessionId: sessionId || undefined,
-            source: "aster-chat",
+            source: "agent-chat",
             correlationId:
               effectiveDocumentVersionId || activeRunVersionId || fileName,
             metadata: baseVersionMetadata,

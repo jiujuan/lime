@@ -201,7 +201,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - `npm run smoke:plugins -- --timeout-ms 720000 --prefix agent-run-renderer-content-factory-run-production-skill-projection-final3 --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/plugins/agent-run-renderer-content-factory-run-production-skill-projection-final3-summary.json` 证明 Host task record gate 修复后，run-production completion ready，且 `article-writer / content-reviewer` 均进入 `invokedSkillNames`，不再出现 `article-w / content-review` partial。
 - `scripts/plugin/apps-smoke.mjs` 随后新增 `contentFactoryActionExpectedSkillsInvoked`，completion E2E 不再只接受“required skills 出现在 prompt/callLog”，必须在完成态 `runtimeProcess.invokedSkillNames` 看到每个 expected skill。
 - `npm run smoke:plugins -- --timeout-ms 720000 --prefix agent-run-renderer-content-factory-run-production-strict-skills --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：失败；failure `.lime/qc/gui-evidence/plugins/agent-run-renderer-content-factory-run-production-strict-skills-failure.json` 显示本轮 run-production 未稳定同时调用 `article-writer / content-reviewer`。这不是脚本假失败，而是“required skills 有时只声明、不一定被真实调用”的产品缺口。
-- `npm run verify:gui-smoke`：执行到 `smoke:claw-chat-ready-streaming` 时失败；前置 `workspace-ready / browser-runtime / site-adapters / Skill Forge / runtime tool surface / @ command registry / plugins` 均通过，失败原因是 Claw smoke 中一次 `aster_agent_init` DevBridge fetch timeout 形成 console error，和本轮 `runtimeProcess` Skill 投影变更无直接耦合。
+- `npm run verify:gui-smoke`：执行到 `smoke:claw-chat-ready-streaming` 时失败；前置 `workspace-ready / browser-runtime / site-adapters / Skill Forge / runtime tool surface / @ command registry / plugins` 均通过，失败原因是 Claw smoke 中一次 `agent_init` DevBridge fetch timeout 形成 console error，和本轮 `runtimeProcess` Skill 投影变更无直接耦合。
 
 2026-05-17 Runtime contract enforcement 增量验证：
 
@@ -211,10 +211,10 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - `npm test -- "src/features/plugin/runtime/agentRuntimeProcess.test.ts"`：通过，证明 Host `runtimeProcess.invokedSkillNames` 继续能消费 Runtime ToolEnd metadata，并过滤流式半截 Skill 名。
 - `node --check "scripts/plugin/apps-smoke.mjs"`：通过，确认 strict smoke 脚本语法仍可执行。
 - `npm run typecheck`：通过。
-- `git diff --check -- "lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs" "internal/roadmap/agentruntime/host-agent-run-ui-sdk.md"`：通过。
+- `git diff --check -- "lime-rs/src/commands/agent_cmd/runtime_turn.rs" "internal/roadmap/agentruntime/host-agent-run-ui-sdk.md"`：通过。
 - `npm run smoke:plugins -- --timeout-ms 720000 --prefix plugin-required-skills-runtime-enforced-run-production --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/plugins/plugin-required-skills-runtime-enforced-run-production-summary.json` 证明 run-production completion ready，完成态 `runtimeProcess.invokedSkillNames=["article-writer","content-reviewer"]`，`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady` 全为 true。
 - `npm run smoke:plugins -- --timeout-ms 720000 --prefix plugin-required-skills-runtime-enforced-only-copy --include-content-factory-completion-e2e --content-factory-action only-copy --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/plugins/plugin-required-skills-runtime-enforced-only-copy-summary.json` 证明 only-copy 在 strict gate 下也能稳定看到 `article-writer / content-reviewer`，且模型、usage、cost、artifact 均 ready。
-- `npm run verify:gui-smoke`：通过；复用已有 headless Tauri，覆盖 workspace ready、browser runtime、site adapters、Skill Forge、runtime tool surface/page、`@` command registry、Plugins、Claw streaming、Knowledge GUI、Design Canvas；此前 Claw `aster_agent_init` timeout 未复现。
+- `npm run verify:gui-smoke`：通过；复用已有 headless Tauri，覆盖 workspace ready、browser runtime、site adapters、Skill Forge、runtime tool surface/page、`@` command registry、Plugins、Claw streaming、Knowledge GUI、Design Canvas；此前 Claw `agent_init` timeout 未复现。
 
 实现结论：`requiredSkills` 已从“写进 prompt / metadata，等待模型自觉调用”推进为 Runtime contract pre-execution；Plugin 仍通过 `plugin_runtime_start_task -> agent_runtime_submit_turn` current 主链进入，不新增 `content_factory_*` 命令，不让内容工厂直连模型 API。
 
@@ -228,7 +228,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - `node --check "scripts/plugin/apps-smoke.mjs"`：通过。
 - `npm run typecheck`：通过。
 - `npm run test:contracts`：通过。
-- `git diff --check -- "lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs" "internal/roadmap/agentruntime/host-agent-run-ui-sdk.md"`：通过。
+- `git diff --check -- "lime-rs/src/commands/agent_cmd/runtime_turn.rs" "internal/roadmap/agentruntime/host-agent-run-ui-sdk.md"`：通过。
 - `npm run smoke:plugins -- --timeout-ms 720000 --prefix plugin-output-contract-materialized-run-strategy --include-content-factory-completion-e2e --content-factory-action run-strategy --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/plugins/plugin-output-contract-materialized-run-strategy-summary.json` 证明 `run-strategy` 完成态 `modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady` 全为 true，`artifactCount=1`，`invokedSkillNames=["article-writer","content-reviewer","user:article-writer"]`，direct runtime snapshot `hasWorkspacePatch=true`。
 - `npm run smoke:plugins -- --timeout-ms 720000 --prefix plugin-output-contract-materialized-run-review --include-content-factory-completion-e2e --content-factory-action run-review --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/plugins/plugin-output-contract-materialized-run-review-summary.json` 证明 `run-review` 完成态全 ready，`artifactCount=1`，`invokedSkillNames=["content-reviewer"]`，direct runtime snapshot `hasWorkspacePatch=true`。
 - `npm run verify:gui-smoke`：通过；复用已有 headless Tauri，覆盖 workspace ready、browser runtime、site adapters、Skill Forge、runtime tool surface/page、`@` command registry、Plugins、Claw streaming、Knowledge GUI、Design Canvas。

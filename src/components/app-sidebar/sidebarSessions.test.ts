@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import {
   buildImportedSidebarSession,
   sortSidebarSessions,
@@ -7,8 +7,8 @@ import {
 
 function session(
   id: string,
-  overrides: Partial<AsterSessionInfo> = {},
-): AsterSessionInfo {
+  overrides: Partial<AgentSessionInfo> = {},
+): AgentSessionInfo {
   return {
     id,
     name: id,
@@ -24,7 +24,7 @@ describe("sidebarSessions", () => {
     const staleShape = {
       name: "旧形状会话",
       archived_at: null,
-    } as unknown as AsterSessionInfo;
+    } as unknown as AgentSessionInfo;
 
     expect(() =>
       sortSidebarSessions([

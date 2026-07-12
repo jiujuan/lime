@@ -108,7 +108,7 @@ mod tests {
         };
 
         let issue = RuntimeReplyProviderWireSupportIssue {
-            provider_backend: Some(RuntimeProviderBackend::AsterCompat),
+            provider_backend: Some(RuntimeProviderBackend::Current),
             provider_name: Some("openai".to_string()),
             model_name: Some("gpt-5.3-codex".to_string()),
             wire_shape: RuntimeReplyProviderRequestWireShape {

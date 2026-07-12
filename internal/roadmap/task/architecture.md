@@ -212,9 +212,9 @@
 
 建议实现时优先落在这些边界：
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/src/commands/agent_cmd/runtime_turn.rs`
   - 生成 `TaskProfile`
-- `lime-rs/src/commands/aster_agent_cmd/request_model_resolution.rs`
+- `lime-rs/src/commands/agent_cmd/request_model_resolution.rs`
   - 生成 `CandidateModelSet`
   - 生成 `RoutingDecision`
 - `src/lib/api/agentExecutionRuntime.ts`

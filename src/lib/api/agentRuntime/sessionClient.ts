@@ -14,9 +14,9 @@ import {
   normalizeThreadReadModel,
 } from "./normalizers";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionDetail,
-  AsterSessionInfo,
+  AgentExecutionStrategy,
+  AgentSessionDetail,
+  AgentSessionInfo,
   AgentRuntimeCreateSessionOptions,
   AgentRuntimeListSessionsOptions,
   AgentRuntimeGetSessionOptions,
@@ -40,8 +40,8 @@ function isTransientSessionReadError(error: unknown): boolean {
 }
 
 function omitUndefinedSessionOptionalFields(
-  detail: AsterSessionDetail,
-): AsterSessionDetail {
+  detail: AgentSessionDetail,
+): AgentSessionDetail {
   if (detail.execution_runtime === undefined) {
     delete detail.execution_runtime;
   }
@@ -81,7 +81,7 @@ export function createSessionClient({
   async function createAgentRuntimeSession(
     workspaceId?: string,
     name?: string,
-    executionStrategy?: AsterExecutionStrategy,
+    executionStrategy?: AgentExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string> {
     const normalizedWorkspaceId = workspaceId?.trim() || undefined;
@@ -101,7 +101,7 @@ export function createSessionClient({
 
   async function listAgentRuntimeSessions(
     options?: AgentRuntimeListSessionsOptions,
-  ): Promise<AsterSessionInfo[]> {
+  ): Promise<AgentSessionInfo[]> {
     const startedAt = Date.now();
     let settled = false;
     const includeArchived = options?.includeArchived === true;
@@ -203,7 +203,7 @@ export function createSessionClient({
   async function getAgentRuntimeSession(
     sessionId: string,
     options?: AgentRuntimeGetSessionOptions,
-  ): Promise<AsterSessionDetail> {
+  ): Promise<AgentSessionDetail> {
     const startedAt = Date.now();
     let settled = false;
     const resumeSessionStartHooks = options?.resumeSessionStartHooks === true;
@@ -284,9 +284,9 @@ export function createSessionClient({
             : {}),
         },
       );
-      const normalizedDetail = detail as AsterSessionDetail | null | undefined;
-      const normalizedSessionDetail: AsterSessionDetail = {
-        ...(detail as AsterSessionDetail),
+      const normalizedDetail = detail as AgentSessionDetail | null | undefined;
+      const normalizedSessionDetail: AgentSessionDetail = {
+        ...(detail as AgentSessionDetail),
         messages: Array.isArray(normalizedDetail?.messages)
           ? normalizedDetail.messages
           : [],
@@ -386,7 +386,7 @@ export function createSessionClient({
 
   async function archiveManyAgentRuntimeSessions(
     sessionIds: string[],
-  ): Promise<AsterSessionInfo[]> {
+  ): Promise<AgentSessionInfo[]> {
     const sessions =
       await appServerSessionClient.archiveManyAgentRuntimeSessions(sessionIds);
     notifyAgentRuntimeSessionsChanged({

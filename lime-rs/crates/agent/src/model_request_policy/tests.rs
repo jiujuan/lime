@@ -483,30 +483,17 @@ fn native_tool_policy_disallowed_tools_follow_codex_model_gates() {
 #[test]
 fn model_request_policy_from_turn_context_reads_runtime_options_first() {
     let context = AgentTurnContext {
-        metadata: HashMap::from([
-            (
-                "aster_chat_request".to_string(),
-                json!({
-                    "harness": {
-                        "model_request_policy": {
-                            "provider_id": "older",
-                            "tool_call_policy": { "supports_parallel_tool_calls": false }
-                        }
+        metadata: HashMap::from([(
+            "runtime_options".to_string(),
+            json!({
+                "harness": {
+                    "model_request_policy": {
+                        "provider_id": "newer",
+                        "tool_call_policy": { "supports_parallel_tool_calls": true }
                     }
-                }),
-            ),
-            (
-                "runtime_options".to_string(),
-                json!({
-                    "harness": {
-                        "model_request_policy": {
-                            "provider_id": "newer",
-                            "tool_call_policy": { "supports_parallel_tool_calls": true }
-                        }
-                    }
-                }),
-            ),
-        ]),
+                }
+            }),
+        )]),
         ..AgentTurnContext::default()
     };
 

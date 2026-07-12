@@ -169,7 +169,7 @@ npm run test:rust:related -- lime-rs/crates/app-server lime-rs/crates/core
   - 通过：`npx vitest run "src/features/experts/expertAgentInstances.test.ts" "src/components/experts/ExpertPlazaPage.test.tsx" "src/components/agent/chat/workspace/useWorkspaceExpertAgentLaunchSyncRuntime.unit.test.tsx" "src/components/AppPageContent.test.tsx"`，4 个文件 / 46 个测试通过。
   - 通过：`npm run typecheck`。
   - 未通过但非本轮写集：`npm run test:related -- src/features/experts/expertAgentInstances.ts src/components/experts/ExpertPlazaPage.tsx src/components/agent/chat/workspace/useWorkspaceExpertAgentLaunchSyncRuntime.ts src/types/page.ts src/components/AppPageContent.tsx` 扩散到 `src/components/agent/chat/index.workbench01.test.tsx`，失败用例为通用工作台轻量预览；该文件不在本计划写集，且 `src/components/agent/chat/workspace/**` 当前已有多处无关脏改动。
-  - 未通过但非本轮写集：`npm run test:contracts` 失败在 App Server / Aster / MCP contract 缺口，缺失文件和字符串集中于 `lime-rs/crates/app-server/**`、`lime-rs/crates/agent/**`、`lime-rs/crates/app-server-protocol/**`、`packages/app-server-client/**`，不涉及本轮专家入口写集。
+  - 未通过但非本轮写集：`npm run test:contracts` 失败在 App Server / Agent / MCP contract 缺口，缺失文件和字符串集中于 `lime-rs/crates/app-server/**`、`lime-rs/crates/agent/**`、`lime-rs/crates/app-server-protocol/**`、`packages/app-server-client/**`，不涉及本轮专家入口写集。
   - 未通过但非本轮写集：`npm run verify:gui-smoke` 的 renderer / Electron host build 阶段通过，App Server warmup 失败于本地 app data YAML：`unknown variant sassy_cute_executor`，当前 repo 搜索未发现该旧值，说明阻塞来自本机数据残留或外部配置，而不是专家入口改动。
 - 当前阶段：P0，下一刀是补 session / memory schema 的 Agent-first 主索引守卫，并把专家广场真实 current project 从导航层显式传入，而不是只依赖 remembered project。
 

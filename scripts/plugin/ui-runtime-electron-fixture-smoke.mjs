@@ -68,8 +68,8 @@ Plugin UI Runtime Electron Fixture Smoke
   APPDATA / LOCALAPPDATA 与 ELECTRON_E2E_USER_DATA_DIR。
   本脚本只证明 pluginUiRuntime/* 的 UI 子进程 start/status/stop 与
   entryUrl iframe surface；它不证明 Agent 对话 turn、tool runtime、evidence
-  或 Claw/Aster 完整执行链。对话 runtime 仍必须回到 agentSession/*
-  -> RuntimeCore -> AsterBackend 主链验证。
+  或 Claw/Agent 完整执行链。对话 runtime 仍必须回到 agentSession/*
+  -> RuntimeCore -> RuntimeBackend 主链验证。
 
 用法:
   node scripts/plugin/ui-runtime-electron-fixture-smoke.mjs

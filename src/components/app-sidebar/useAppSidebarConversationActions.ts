@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import {
   deleteAgentRuntimeSession,
   updateAgentRuntimeSession,
-  type AsterSessionInfo,
+  type AgentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import {
@@ -32,12 +32,12 @@ interface UseAppSidebarConversationActionsParams {
   beginSidebarSessionAction: (sessionId: string) => void;
   clearSidebarSessionAction: (sessionId: string) => void;
   refreshSidebarSessions: () => Promise<void>;
-  renameSidebarSessionOptimistically: (session: AsterSessionInfo) => void;
+  renameSidebarSessionOptimistically: (session: AgentSessionInfo) => void;
   moveSidebarSessionArchiveStateOptimistically: (
-    session: AsterSessionInfo,
+    session: AgentSessionInfo,
   ) => void;
   removeSidebarSessionOptimistically: (sessionId: string) => void;
-  resolveLocalizedSessionTitle: (session: AsterSessionInfo) => string;
+  resolveLocalizedSessionTitle: (session: AgentSessionInfo) => string;
   renameConversationPromptLabel: string;
   renameConversationSuccessLabel: string;
   renameConversationErrorLabel: string;
@@ -52,7 +52,7 @@ function normalizeSidebarPath(value?: string | null): string | null {
 }
 
 function resolveProjectIdForSession(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   projects: SidebarOpenedProjectSummary[],
 ): string | null {
   const sessionWorkspaceId = session.workspace_id?.trim() || null;
@@ -222,7 +222,7 @@ export function useAppSidebarConversationActions({
   ]);
 
   const navigateToConversation = useCallback(
-    (session: AsterSessionInfo) => {
+    (session: AgentSessionInfo) => {
       deferConversationNavigation();
 
       const sessionProjectId = resolveProjectIdForSession(
@@ -297,7 +297,7 @@ export function useAppSidebarConversationActions({
   }, [closeSidebarSearchDialog, navigateToStandaloneConversation]);
 
   const navigateToConversationFromSearch = useCallback(
-    (session: AsterSessionInfo) => {
+    (session: AgentSessionInfo) => {
       closeSidebarSearchDialog();
       recordAgentUiPerformanceMetric("sidebar.conversation.click", {
         sessionId: session.id,
@@ -317,7 +317,7 @@ export function useAppSidebarConversationActions({
   );
 
   const renameConversation = useCallback(
-    async (session: AsterSessionInfo) => {
+    async (session: AgentSessionInfo) => {
       const currentTitle = resolveLocalizedSessionTitle(session);
       const nextTitle = window
         .prompt(renameConversationPromptLabel, currentTitle)
@@ -331,7 +331,7 @@ export function useAppSidebarConversationActions({
         ...session,
         name: nextTitle,
         updated_at: nextUpdatedAt,
-      } satisfies AsterSessionInfo;
+      } satisfies AgentSessionInfo;
       beginSidebarSessionAction(session.id);
       renameSidebarSessionOptimistically(nextSession);
 
@@ -363,13 +363,13 @@ export function useAppSidebarConversationActions({
   );
 
   const toggleSessionArchive = useCallback(
-    async (session: AsterSessionInfo, archived: boolean) => {
+    async (session: AgentSessionInfo, archived: boolean) => {
       const nextUpdatedAt = Math.floor(Date.now() / 1000);
       const nextSession = {
         ...session,
         updated_at: nextUpdatedAt,
         archived_at: archived ? nextUpdatedAt : null,
-      } satisfies AsterSessionInfo;
+      } satisfies AgentSessionInfo;
       beginSidebarSessionAction(session.id);
       moveSidebarSessionArchiveStateOptimistically(nextSession);
 
@@ -395,7 +395,7 @@ export function useAppSidebarConversationActions({
   );
 
   const deleteConversation = useCallback(
-    async (session: AsterSessionInfo) => {
+    async (session: AgentSessionInfo) => {
       const title = resolveLocalizedSessionTitle(session);
       const confirmed = window.confirm(formatDeleteConversationConfirm(title));
       if (!confirmed) {

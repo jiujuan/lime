@@ -1,5 +1,5 @@
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import {
   sanitizeContentPartsForDisplay,
@@ -159,7 +159,7 @@ function buildMessageFromThreadItem(
 }
 
 export function hydrateSessionDetailMessagesFromThreadItems(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   topicId: string,
 ): Message[] {
   const turnOrder = new Map<string, number>();
@@ -550,7 +550,7 @@ export function hydrateSessionDetailMessagesFromThreadItems(
 }
 
 export function collectDetailThreadItems(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
 ): AgentThreadItem[] {
   const seen = new Set<string>();
   const items: AgentThreadItem[] = [];

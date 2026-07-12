@@ -1,13 +1,13 @@
 import type { QueuedTurnSnapshot } from "./queuedTurn";
 import type {
-  AsterSessionExecutionRuntimeCostState,
-  AsterSessionExecutionRuntimeLimitEvent,
-  AsterSessionExecutionRuntimeLimitState,
-  AsterSessionExecutionRuntimeRoutingDecision,
-  AsterSessionExecutionRuntimeTaskProfile,
-  AsterTurnOutputSchemaRuntime,
+  AgentSessionExecutionRuntimeCostState,
+  AgentSessionExecutionRuntimeLimitEvent,
+  AgentSessionExecutionRuntimeLimitState,
+  AgentSessionExecutionRuntimeRoutingDecision,
+  AgentSessionExecutionRuntimeTaskProfile,
+  AgentTurnOutputSchemaRuntime,
 } from "./agentExecutionRuntime";
-import type { AsterExecutionStrategy } from "./agentRuntime/types";
+import type { AgentExecutionStrategy } from "./agentRuntime/types";
 import type {
   AgentActionRequiredQuestion,
   AgentActionRequiredScope,
@@ -322,8 +322,8 @@ export interface AgentEventTurnContext {
   session_id: string;
   thread_id: string;
   turn_id: string;
-  execution_strategy?: AsterExecutionStrategy | null;
-  output_schema_runtime?: AsterTurnOutputSchemaRuntime | null;
+  execution_strategy?: AgentExecutionStrategy | null;
+  output_schema_runtime?: AgentTurnOutputSchemaRuntime | null;
   context_summary?: AgentTurnContextSummary | null;
   approval_policy?: string | null;
   sandbox_policy?: string | null;
@@ -419,66 +419,66 @@ export interface AgentEventRuntimeStatus {
 
 export interface AgentEventTaskProfileResolved {
   type: "task_profile_resolved";
-  task_profile: AsterSessionExecutionRuntimeTaskProfile;
+  task_profile: AgentSessionExecutionRuntimeTaskProfile;
 }
 
 export interface AgentEventCandidateSetResolved {
   type: "candidate_set_resolved";
-  routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+  routing_decision: AgentSessionExecutionRuntimeRoutingDecision;
 }
 
 export interface AgentEventRoutingDecisionMade {
   type: "routing_decision_made";
-  routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+  routing_decision: AgentSessionExecutionRuntimeRoutingDecision;
 }
 
 export interface AgentEventRoutingFallbackApplied {
   type: "routing_fallback_applied";
-  routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+  routing_decision: AgentSessionExecutionRuntimeRoutingDecision;
 }
 
 export interface AgentEventRoutingNotPossible {
   type: "routing_not_possible";
-  routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+  routing_decision: AgentSessionExecutionRuntimeRoutingDecision;
 }
 export interface AgentEventLimitStateUpdated {
   type: "limit_state_updated";
-  limit_state: AsterSessionExecutionRuntimeLimitState;
+  limit_state: AgentSessionExecutionRuntimeLimitState;
 }
 
 export interface AgentEventSingleCandidateOnly {
   type: "single_candidate_only";
-  limit_state: AsterSessionExecutionRuntimeLimitState;
+  limit_state: AgentSessionExecutionRuntimeLimitState;
 }
 
 export interface AgentEventSingleCandidateCapabilityGap {
   type: "single_candidate_capability_gap";
-  limit_state: AsterSessionExecutionRuntimeLimitState;
+  limit_state: AgentSessionExecutionRuntimeLimitState;
 }
 
 export interface AgentEventCostEstimated {
   type: "cost_estimated";
-  cost_state: AsterSessionExecutionRuntimeCostState;
+  cost_state: AgentSessionExecutionRuntimeCostState;
 }
 
 export interface AgentEventCostRecorded {
   type: "cost_recorded";
-  cost_state: AsterSessionExecutionRuntimeCostState;
+  cost_state: AgentSessionExecutionRuntimeCostState;
 }
 
 export interface AgentEventRateLimitHit {
   type: "rate_limit_hit";
-  limit_event: AsterSessionExecutionRuntimeLimitEvent;
+  limit_event: AgentSessionExecutionRuntimeLimitEvent;
 }
 
 export interface AgentEventQuotaLow {
   type: "quota_low";
-  limit_event: AsterSessionExecutionRuntimeLimitEvent;
+  limit_event: AgentSessionExecutionRuntimeLimitEvent;
 }
 
 export interface AgentEventQuotaBlocked {
   type: "quota_blocked";
-  limit_event: AsterSessionExecutionRuntimeLimitEvent;
+  limit_event: AgentSessionExecutionRuntimeLimitEvent;
 }
 
 export interface AgentEventQueueAdded {

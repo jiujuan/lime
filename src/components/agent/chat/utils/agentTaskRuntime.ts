@@ -1,6 +1,6 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
 import type {
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -77,7 +77,7 @@ interface BuildAgentTaskRuntimeCardModelParams {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   queuedTurns?: readonly QueuedTurnSnapshot[];
-  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
   isSending?: boolean;
 }
 
@@ -438,7 +438,7 @@ function resolveCompletedSummary(
 }
 
 function resolveSubtaskStats(
-  childSubagentSessions: readonly AsterSubagentSessionInfo[],
+  childSubagentSessions: readonly AgentSubagentSessionInfo[],
 ): AgentTaskRuntimeSubtaskStats | null {
   if (childSubagentSessions.length === 0) {
     return null;

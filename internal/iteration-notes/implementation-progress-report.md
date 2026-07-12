@@ -6,7 +6,7 @@
 
 ### 1. 研究与分析（任务 #1-#4）✅
 
-通过对比研究 OpenAI Codex 和 aster-rust 框架，完成了 Lime AI Agent 的全面分析，输出了改进研究报告，识别了四大痛点：
+通过对比研究 OpenAI Codex 和 agent-rust 框架，完成了 Lime AI Agent 的全面分析，输出了改进研究报告，识别了四大痛点：
 - 工具调用能力弱
 - 上下文管理差
 - 流式体验不好
@@ -16,9 +16,9 @@
 
 创建了 6 个优先级任务：
 - **P0**: 升级上下文管理为 AI 驱动摘要（进行中）
-- **P1**: 统一对话架构（Aster Agent + Unified Chat）
-- **P2**: 拆分 useAsterAgentChat hook（1200+ 行）
-- **P3**: 工具系统模块化（aster_agent_cmd.rs 2000+ 行）
+- **P1**: 统一对话架构（Agent Agent + Unified Chat）
+- **P2**: 拆分 useAgentChat hook（1200+ 行）
+- **P3**: 工具系统模块化（agent_cmd.rs 2000+ 行）
 - **P4**: 引入 SQ/EQ 异步队列对通信模型
 - **P5**: 多 Agent 协作能力
 
@@ -95,11 +95,11 @@
 
 ### 决策 1: 采用分阶段混合策略
 
-**背景**: aster 框架的上下文管理能力不明确
+**背景**: agent 框架的上下文管理能力不明确
 
 **决策**:
 - 阶段 1: 在 Lime 层实现 AI 摘要（当前）
-- 阶段 2: P1 完成后统一到 aster 框架
+- 阶段 2: P1 完成后统一到 agent 框架
 
 **理由**:
 - 快速交付价值，立即改善用户体验
@@ -150,10 +150,10 @@
 1. **继续 P0 阶段 1**: 完成 session_context_service.rs 改造
 2. **集成真实 LLM**: 替换 mock 实现
 3. **编写集成测试**: 验证 AI 摘要效果
-4. **或者开始 P2**: 拆分 useAsterAgentChat hook（如果 P0 需要等待其他依赖）
+4. **或者开始 P2**: 拆分 useAgentChat hook（如果 P0 需要等待其他依赖）
 
 ## 参考资料
 
 - 研究报告: Lime AI Agent 改进研究报告
 - Codex 架构: SQ/EQ 异步队列对、AI 摘要
-- aster-rust: 渐进式工具响应移除、SubAgentScheduler
+- agent-rust: 渐进式工具响应移除、SubAgentScheduler

@@ -1,5 +1,5 @@
 /**
- * Agent / Aster 现役运行时 API
+ * Agent / Agent 现役运行时 API
  *
  * 仅保留当前仍在维护的进程、会话、流式与交互能力。
  */
@@ -13,46 +13,46 @@ import type {
   AgentThreadTurn,
 } from "../agentProtocol";
 import type {
-  AsterApprovalPolicy,
-  AsterExecutionStrategy,
-  AsterSandboxPolicy,
-  AsterSessionExecutionRuntimeCostState,
-  AsterSessionExecutionRuntimeLimitEvent,
-  AsterSessionExecutionRuntime,
-  AsterSessionExecutionRuntimeAccessMode,
-  AsterSessionExecutionRuntimeLimitState,
-  AsterSessionExecutionRuntimePermissionState,
-  AsterSessionExecutionRuntimePreferences,
-  AsterSessionExecutionRuntimeRecentTeamSelection,
+  AgentApprovalPolicy,
+  AgentExecutionStrategy,
+  AgentSandboxPolicy,
+  AgentSessionExecutionRuntimeCostState,
+  AgentSessionExecutionRuntimeLimitEvent,
+  AgentSessionExecutionRuntime,
+  AgentSessionExecutionRuntimeAccessMode,
+  AgentSessionExecutionRuntimeLimitState,
+  AgentSessionExecutionRuntimePermissionState,
+  AgentSessionExecutionRuntimePreferences,
+  AgentSessionExecutionRuntimeRecentTeamSelection,
 } from "../agentExecutionRuntime";
 import type { QueuedTurnSnapshot } from "../queuedTurn";
 import type { ModelCapabilities } from "@/lib/types/modelRegistry";
 export type { QueuedTurnSnapshot } from "../queuedTurn";
 export type {
-  AsterApprovalPolicy,
-  AsterExecutionStrategy,
-  AsterSandboxPolicy,
-  AsterSessionExecutionRuntimeCostState,
-  AsterSessionExecutionRuntimeLimitEvent,
-  AsterSessionExecutionRuntime,
-  AsterSessionExecutionRuntimeAccessMode,
-  AsterSessionExecutionRuntimeLimitState,
-  AsterSessionExecutionRuntimePermissionState,
-  AsterSessionExecutionRuntimePreferences,
-  AsterSessionExecutionRuntimeRecentTeamRole,
-  AsterSessionExecutionRuntimeRecentTeamSelection,
-  AsterSessionExecutionRuntimeRecentTeamSource,
-  AsterSessionExecutionRuntimeRoutingDecision,
-  AsterSessionExecutionRuntimeSource,
-  AsterSessionExecutionRuntimeTaskProfile,
-  AsterTurnOutputSchemaRuntime,
-  AsterTurnOutputSchemaSource,
-  AsterTurnOutputSchemaStrategy,
+  AgentApprovalPolicy,
+  AgentExecutionStrategy,
+  AgentSandboxPolicy,
+  AgentSessionExecutionRuntimeCostState,
+  AgentSessionExecutionRuntimeLimitEvent,
+  AgentSessionExecutionRuntime,
+  AgentSessionExecutionRuntimeAccessMode,
+  AgentSessionExecutionRuntimeLimitState,
+  AgentSessionExecutionRuntimePermissionState,
+  AgentSessionExecutionRuntimePreferences,
+  AgentSessionExecutionRuntimeRecentTeamRole,
+  AgentSessionExecutionRuntimeRecentTeamSelection,
+  AgentSessionExecutionRuntimeRecentTeamSource,
+  AgentSessionExecutionRuntimeRoutingDecision,
+  AgentSessionExecutionRuntimeSource,
+  AgentSessionExecutionRuntimeTaskProfile,
+  AgentTurnOutputSchemaRuntime,
+  AgentTurnOutputSchemaSource,
+  AgentTurnOutputSchemaStrategy,
 } from "../agentExecutionRuntime";
 export interface AgentRuntimeGeneratedTitleResult {
   title: string;
   sessionId?: string | null;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   usedFallback?: boolean;
   fallbackReason?: string | null;
 }
@@ -64,10 +64,12 @@ export interface ImageInput {
   media_type: string;
 }
 /**
- * Agent runtime 初始化状态
+ * 当前 Provider / Model 选择。
+ *
+ * 这只是 Desktop Host 的配置读取结果；运行时仅由
+ * `agentSession/turn/start` 在 App Server 中初始化。
  */
-export interface AgentRuntimeInitStatus {
-  initialized: boolean;
+export interface RuntimeProviderSelection {
   provider_configured: boolean;
   provider_name?: string;
   provider_selector?: string;
@@ -94,9 +96,9 @@ export interface AutoContinueRequestPayload {
   source?: string;
 }
 /**
- * Aster 会话信息（匹配后端 SessionInfo 结构）
+ * Agent 会话信息（匹配后端 SessionInfo 结构）
  */
-export interface AsterSessionInfo {
+export interface AgentSessionInfo {
   id: string;
   name?: string;
   created_at: number;
@@ -104,7 +106,7 @@ export interface AsterSessionInfo {
   archived_at?: number | null;
   model?: string;
   messages_count?: number;
-  execution_strategy?: AsterExecutionStrategy;
+  execution_strategy?: AgentExecutionStrategy;
   workspace_id?: string;
   working_dir?: string;
   thread_status?: string;
@@ -119,7 +121,7 @@ export interface AgentRuntimeListSessionsOptions {
   workspaceId?: string;
   limit?: number;
 }
-export interface AsterTodoItem {
+export interface AgentTodoItem {
   content: string;
   status: "pending" | "in_progress" | "completed";
   active_form?: string;
@@ -347,10 +349,10 @@ export interface AgentRuntimeThreadReadModel {
   oem_policy?: AgentRuntimeOemPolicySummary | null;
   runtime_summary?: AgentRuntimeSummary | null;
   auxiliary_task_runtime?: Record<string, unknown>[] | null;
-  limit_state?: AsterSessionExecutionRuntimeLimitState | null;
-  cost_state?: AsterSessionExecutionRuntimeCostState | null;
-  permission_state?: AsterSessionExecutionRuntimePermissionState | null;
-  limit_event?: AsterSessionExecutionRuntimeLimitEvent | null;
+  limit_state?: AgentSessionExecutionRuntimeLimitState | null;
+  cost_state?: AgentSessionExecutionRuntimeCostState | null;
+  permission_state?: AgentSessionExecutionRuntimePermissionState | null;
+  limit_event?: AgentSessionExecutionRuntimeLimitEvent | null;
   managed_objective?: ManagedObjective | null;
 }
 export type ManagedObjectiveStatus =
@@ -569,7 +571,7 @@ export interface AgentRuntimeThreadLimeCorePolicyEvaluation {
   askRefs?: string[];
   pendingRefs?: string[];
 }
-export interface AsterSubagentSessionInfo {
+export interface AgentSubagentSessionInfo {
   id: string;
   name: string;
   created_at: number;
@@ -592,7 +594,7 @@ export interface AsterSubagentSessionInfo {
   theme?: string;
   output_contract?: string;
   skill_ids?: string[];
-  skills?: AsterSubagentSkillInfo[];
+  skills?: AgentSubagentSkillInfo[];
   runtime_status?:
     | "idle"
     | "queued"
@@ -619,14 +621,14 @@ export interface AsterSubagentSessionInfo {
   queue_reason?: string;
   retryable_overload?: boolean;
 }
-export interface AsterSubagentSkillInfo {
+export interface AgentSubagentSkillInfo {
   id: string;
   name: string;
   description?: string;
   source?: string;
   directory?: string;
 }
-export interface AsterSubagentParentContext {
+export interface AgentSubagentParentContext {
   parent_session_id: string;
   parent_session_name: string;
   role_hint?: string;
@@ -642,18 +644,18 @@ export interface AsterSubagentParentContext {
   theme?: string;
   output_contract?: string;
   skill_ids?: string[];
-  skills?: AsterSubagentSkillInfo[];
-  sibling_subagent_sessions?: AsterSubagentSessionInfo[];
+  skills?: AgentSubagentSkillInfo[];
+  sibling_subagent_sessions?: AgentSubagentSessionInfo[];
 }
-export interface AsterSessionHistoryCursor {
+export interface AgentSessionHistoryCursor {
   oldest_message_id?: number | null;
   start_index?: number | null;
   loaded_count?: number | null;
 }
 /**
- * Aster 会话详情（匹配后端 SessionDetail 结构）
+ * Agent 会话详情（匹配后端 SessionDetail 结构）
  */
-export interface AsterSessionDetail {
+export interface AgentSessionDetail {
   id: string;
   thread_id?: string;
   name?: string;
@@ -662,21 +664,21 @@ export interface AsterSessionDetail {
   model?: string;
   workspace_id?: string;
   working_dir?: string;
-  execution_strategy?: AsterExecutionStrategy;
-  execution_runtime?: AsterSessionExecutionRuntime | null;
+  execution_strategy?: AgentExecutionStrategy;
+  execution_runtime?: AgentSessionExecutionRuntime | null;
   messages_count?: number;
   history_limit?: number | null;
   history_offset?: number | null;
-  history_cursor?: AsterSessionHistoryCursor | null;
+  history_cursor?: AgentSessionHistoryCursor | null;
   history_truncated?: boolean;
   messages: AgentMessage[];
   turns?: AgentThreadTurn[];
   items?: AgentThreadItem[];
   queued_turns?: QueuedTurnSnapshot[];
   thread_read?: AgentRuntimeThreadReadModel | null;
-  todo_items?: AsterTodoItem[];
-  child_subagent_sessions?: AsterSubagentSessionInfo[];
-  subagent_parent_context?: AsterSubagentParentContext;
+  todo_items?: AgentTodoItem[];
+  child_subagent_sessions?: AgentSubagentSessionInfo[];
+  subagent_parent_context?: AgentSubagentParentContext;
 }
 export type AgentRuntimeHandoffArtifactKind =
   | "plan"
@@ -1211,34 +1213,6 @@ export interface AgentRuntimeReviewDecisionTemplate {
   analysis_artifacts: AgentRuntimeAnalysisArtifact[];
   artifacts: AgentRuntimeReviewDecisionArtifact[];
 }
-export type AgentRuntimeWebSearchMode = "disabled" | "auto" | "required";
-export interface AgentTurnConfigSnapshot {
-  provider_config?: RuntimeProviderConfig;
-  provider_preference?: string;
-  model_preference?: string;
-  reasoning_effort?: string;
-  thinking_enabled?: boolean;
-  approval_policy?: AsterApprovalPolicy;
-  sandbox_policy?: AsterSandboxPolicy;
-  execution_strategy?: AsterExecutionStrategy;
-  web_search?: boolean;
-  search_mode?: AgentRuntimeWebSearchMode;
-  auto_continue?: AutoContinueRequestPayload;
-  system_prompt?: string;
-  metadata?: Record<string, unknown>;
-}
-export interface AgentRuntimeSubmitTurnRequest {
-  message: string;
-  session_id: string;
-  event_name: string;
-  workspace_id?: string;
-  turn_id?: string;
-  images?: ImageInput[];
-  turn_config?: AgentTurnConfigSnapshot;
-  queue_if_busy?: boolean;
-  queued_turn_id?: string;
-  skip_pre_submit_resume?: boolean;
-}
 export interface AgentRuntimeCreateSessionOptions {
   runStartHooks?: boolean;
   workingDir?: string | null;
@@ -1344,11 +1318,11 @@ export interface AgentRuntimeUpdateSessionRequest {
   provider_selector?: string;
   provider_name?: string;
   model_name?: string;
-  execution_strategy?: AsterExecutionStrategy;
+  execution_strategy?: AgentExecutionStrategy;
   archived?: boolean;
-  recent_access_mode?: AsterSessionExecutionRuntimeAccessMode;
-  recent_preferences?: AsterSessionExecutionRuntimePreferences;
-  recent_team_selection?: AsterSessionExecutionRuntimeRecentTeamSelection;
+  recent_access_mode?: AgentSessionExecutionRuntimeAccessMode;
+  recent_preferences?: AgentSessionExecutionRuntimePreferences;
+  recent_team_selection?: AgentSessionExecutionRuntimeRecentTeamSelection;
   article_workspace_selected_object_ref?: Record<string, unknown> | null;
   article_workspace_edited_draft?: Record<string, unknown> | null;
 }
@@ -1832,7 +1806,7 @@ export type AgentToolCapability =
   | "vision";
 export type AgentToolLifecycle = "current" | "compat" | "deprecated";
 export type AgentToolSourceKind =
-  | "aster_builtin"
+  | "agent_builtin"
   | "lime_injected"
   | "browser_compatibility";
 export type AgentToolPermissionPlane =

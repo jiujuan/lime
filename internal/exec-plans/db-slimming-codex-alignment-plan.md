@@ -47,7 +47,7 @@
 - `agent_thread_turns`、`agent_thread_items`：迁移期 timeline projection；目标迁到 Projection DB。
 - `current_timeline` LocalAppDataSource：App Server 读取旧 timeline 的 bridge；目标切到 projection reader。
 - `request_logs/` 文件目录：Telemetry DB 前的迁移来源。
-- `sessions/`、`aster/` runtime 目录：P0 待判定，当前不能继续扩大职责。
+- `sessions/`、`agent/` runtime 目录：P0 待判定，当前不能继续扩大职责。
 
 ### deprecated
 
@@ -55,7 +55,7 @@
 - `agent_thread_items.payload_json` 作为唯一 runtime event truth 或大输出载体。
 - `RequestLogger` 将 request telemetry 作为文件主事实源，而不是 Telemetry DB。
 - `provider_pool_credentials` 继续作为运行时凭证读取源。
-- 无退出条件的 Aster session store 新写入。
+- 无退出条件的 Agent session store 新写入。
 
 ### dead
 
@@ -129,7 +129,7 @@
 
 - `lime-rs/crates/core/src/database/mod.rs`：`DbConnection = Arc<Mutex<Connection>>`，`init_database_with_data_dir(data_dir)` 只创建 `<data_dir>/lime.db`。
 - `lime-rs/crates/core/src/database/schema.rs`：`agent_sessions`、`agent_messages`、`agent_thread_turns`、`agent_thread_items`、`agent_turn_outcomes`、`agent_thread_incidents` 都仍在 Product DB schema 中。
-- `lime-rs/crates/services/src/aster_session_store.rs`：已收口为 current runtime conversation 优先读取；旧 `agent_messages` 只作为 migration 导入源，不再作为产品 fallback。
+- `lime-rs/crates/services/src/agent_session_store.rs`：已收口为 current runtime conversation 优先读取；旧 `agent_messages` 只作为 migration 导入源，不再作为产品 fallback。
 - `lime-rs/crates/core/src/database/dao/agent_timeline.rs`：仍向 `agent_thread_turns` / `agent_thread_items.payload_json` 写迁移期 timeline projection；新写入已通过 `agent_timeline_payload` 限制为 bounded payload，不再把完整大 artifact / tool output 写回 Product DB。
 - `lime-rs/crates/app-server/src/local_data_source/current_timeline.rs`：App Server 仍从旧 timeline 表读 current timeline。
 - `lime-rs/crates/infra/src/telemetry/logger.rs`：request log 仍写 `app_paths::resolve_request_logs_dir()` 文件目录。
@@ -183,7 +183,7 @@
 ### 2026-06-15
 
 - S2 骨架守卫补第一批目录册：新增 `rust-agent-thread-items-payload-json-truth-leak`、`rust-runtime-snapshot-sidecar-ref-boundary-leak`、`rust-runtime-store-hardcoded-platform-path-leak`，覆盖 `agent_thread_items.payload_json` 事实源回流、runtime snapshot / sidecar 裸字段散落、runtime store 硬编码平台路径三类回流面。
-- S3 前置收口：`legacy_message_backfill` 现已幂等化，若 event log 已有部分/全部 JSONL，会补齐缺失事件、修复 Projection DB，再按 `LegacyMessageCleanupPolicy` 处理旧源；默认 `drop-empty-tables` 清旧 `agent_messages` 行、message-only `agent_sessions` 旧壳，并在空表时 drop `agent_messages` / `a2ui_forms`，`retain` 和 `clear-rows` 仍可作为显式覆盖。`aster_session_store` 已不再把旧表作为产品 fallback；新增测试覆盖中断恢复、current timeline 不误删 current session、retain 不清旧源，以及 backfill 后 old rows 确实清空。
+- S3 前置收口：`legacy_message_backfill` 现已幂等化，若 event log 已有部分/全部 JSONL，会补齐缺失事件、修复 Projection DB，再按 `LegacyMessageCleanupPolicy` 处理旧源；默认 `drop-empty-tables` 清旧 `agent_messages` 行、message-only `agent_sessions` 旧壳，并在空表时 drop `agent_messages` / `a2ui_forms`，`retain` 和 `clear-rows` 仍可作为显式覆盖。`agent_session_store` 已不再把旧表作为产品 fallback；新增测试覆盖中断恢复、current timeline 不误删 current session、retain 不清旧源，以及 backfill 后 old rows 确实清空。
 - S3 删除配置接线：App Server CLI 增加 `--legacy-message-cleanup retain|clear-rows|drop-empty-tables`；Electron sidecar 启动默认显式传 `drop-empty-tables`，并支持 `APP_SERVER_LEGACY_MESSAGE_CLEANUP=retain|clear-rows|drop-empty-tables` 启动期覆盖，非法值 fail fast；`packages/app-server-client` 的 `SidecarLaunchConfig` / `stdioSidecar` / `sidecarArgs` 支持同一参数。旧表 drop 仍保留 `drop-empty-tables` 显式覆盖和 `retain` / `clear-rows` 的保守入口。
 - 历史会话 fixture 继续收口：`scripts/electron/session-history-fixture-smoke.mjs` 已移除旧 sidebar GUI archive helper，静态 guard 仅保留 current Electron Desktop Host + App Server JSON-RPC 历史恢复链路；`npm run smoke:agent-session-history-electron-fixture` 已通过，证据见 `.lime/qc/gui-evidence/agent-session-history-electron-fixture/agent-session-history-electron-fixture-summary.json`，`ok=true`、`sidecarRestartReadback=true`、`consoleErrors=[]`。
 - 补齐 `agent_messages` 两条机械测试覆盖：`rust-agent-messages-production-write-leak` 锁生产 transcript 写入，`rust-agent-messages-product-read-fallback-leak` 锁产品读回长期 fallback；两者仍为 `deprecated`，只允许 migration/backfill/export/test fixture、旧 DAO/store 和受控迁移边界。
@@ -250,7 +250,7 @@
 - 会话恢复和发送前确认二次收口：`Topic` 增加 `workingDir` 投影；`mapSessionToTopic`、`upsertTopicFromSessionDetail`、`upsertFreshSessionDraftTopic` 保留 `session.working_dir`；`sessionFinalizeController` 改为 cwd-first 判断，双方都有 cwd 时优先按 cwd 匹配并忽略旧 `workspaceId` shadow 不一致，只有缺少 cwd 时才回退旧 workspace 判断。
 - `useAgentSession` 发送和切换路径同步 cwd-first：`switchTopic` 传入 resolved/runtime/topic workingDir；`ensureSession` 发送前确认先比较 `detail.working_dir` 与当前 `normalizedWorkingDir`，runtime 没有 working_dir 时才比较 `workspace_id`；新建 draft topic 同步写入 `workingDir`，避免历史重开或旧 shadow 把当前项目会话误判为跨 workspace。
 - DB / DAO 盘点结论：当前会话列表 SQL 没有继续用 `workspace_id` 作为归属过滤；`AgentDao::list_session_overviews` 只用 `s.working_dir IN (...)`，`ProjectionStore` 只用 `working_dir IN (...)`，`workspace_id` 仅通过 `LEFT JOIN workspaces w ON w.root_path = s.working_dir` 或 projection 字段作为返回兼容投影。真正未清的是 `agent_sessions.workspace_id`、`projected_sessions.workspace_id`、旧 `agent_messages` / `agent_thread_*` schema 和兼容字段，属于 S4 destructive migration，需要单独确认。
-- 定向验证通过：`npx vitest run "src/components/agent/chat/hooks/sessionFinalizeController.test.ts" "src/components/agent/chat/hooks/agentSessionTopicViewModel.unit.test.ts" "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" --pool=forks --poolOptions.forks.singleFork=true --silent=passed-only --disableConsoleIntercept`（200 tests）、`npx tsc --noEmit --project tsconfig.json --pretty false`、`npm run test:contracts`、`npm run smoke:agent-runtime-current-fixture`、`npm run smoke:agent-session-history-electron-fixture`、`npm run verify:gui-smoke` 均通过。
+- 定向验证通过：`npx vitest run "src/components/agent/chat/hooks/sessionFinalizeController.test.ts" "src/components/agent/chat/hooks/agentSessionTopicViewModel.unit.test.ts" "src/components/agent/chat/hooks/useAgentChat.test.tsx" --pool=forks --poolOptions.forks.singleFork=true --silent=passed-only --disableConsoleIntercept`（200 tests）、`npx tsc --noEmit --project tsconfig.json --pretty false`、`npm run test:contracts`、`npm run smoke:agent-runtime-current-fixture`、`npm run smoke:agent-session-history-electron-fixture`、`npm run verify:gui-smoke` 均通过。
 - Rust / 协议 / 治理验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_list_scope -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server list_agent_sessions -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core list_session_overviews -- --nocapture`、`npm run check:protocol-types`、`npm run governance:legacy-report`、`git diff --check` 均通过；`governance:legacy-report` 边界违规为 0，剩余分类漂移候选仍是既有非 DB 项。
 - Playwright 交互复测通过：`http://127.0.0.1:1420/` 首页可见项目 `Skill Think Keep Audit 20260513`，输入框可输入且发送按钮可用；点击最近对话 `国际新闻整理` 后历史内容可见，包括用户消息 `你帮我整理一下今天的国际新闻` 和 assistant 区域；控制台 error 数量为 0。
 - S4 旧 DAO API 退场第一刀：删除 `agent_session_repository::get_session_with_messages*` 和 `update_latest_assistant_message_usage` 生产 wrapper；`session_store` 明确只通过 `get_session_without_messages` 读取 session metadata，历史窗口只从 `AgentTimelineDao` 读取；`session_store_runtime_detail` 只把 runtime usage 投影到当前 read model，不再写回旧 `agent_messages`。

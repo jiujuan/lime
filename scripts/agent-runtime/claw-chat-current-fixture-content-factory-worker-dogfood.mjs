@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  contentFactoryHostGenerationAsterChatRequest,
+  contentFactoryHostGenerationAgentRuntimeRequest,
   startContentFactoryHostGenerationFixture,
 } from "../lib/content-factory-host-generation-fixture.mjs";
 import {
@@ -69,11 +69,11 @@ export async function runWorkspacePatchWorkerDogfoodTurn({
           text: "通过已安装内容工厂 worker 写一篇完整公众号文章。",
         },
         runtimeOptions: {
-          metadata: buildArticleWorkspaceWorkerMetadata(workspace),
-          hostOptions: {
-            asterChatRequest: contentFactoryHostGenerationAsterChatRequest(
+          runtimeRequest: {
+            ...contentFactoryHostGenerationAgentRuntimeRequest(
               hostGenerationFixture.baseUrl,
             ),
+            metadata: buildArticleWorkspaceWorkerMetadata(workspace),
           },
         },
         queueIfBusy: false,

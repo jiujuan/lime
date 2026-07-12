@@ -13,8 +13,8 @@ Lime 当前已经具备多块基础能力：
 
 1. 输入栏可以把计划模式写入 request metadata：`harness.collaboration_mode.mode = plan`。
 2. App Server 能把 metadata 投影到 turn context。
-3. Aster prompt manager 已有 Plan Mode 指令，要求输出 `<proposed_plan>`。
-4. Aster 已有 Codex-compatible `update_plan` 工具。
+3. Agent prompt manager 已有 Plan Mode 指令，要求输出 `<proposed_plan>`。
+4. Agent 已有 Codex-compatible `update_plan` 工具。
 5. Runtime / read model 已有 `plan.delta` / `plan.final` thread item 投影。
 6. AgentUI 已有计划轨、任务 rail、`<proposed_plan>` 展示和本地实施确认雏形。
 
@@ -231,7 +231,7 @@ Lime 当前已经具备多块基础能力：
 
 | Codex 能力 | 行为 | Lime 对齐方案 |
 | --- | --- | --- |
-| Plan Mode | 协作模式，禁止 mutation，最终输出 `<proposed_plan>` | 使用 `collaboration_mode=plan`，由 Aster prompt 注入严格规则 |
+| Plan Mode | 协作模式，禁止 mutation，最终输出 `<proposed_plan>` | 使用 `collaboration_mode=plan`，由 Agent prompt 注入严格规则 |
 | `update_plan` | checklist/progress 工具，最多一个 `in_progress` | 保留现有 `UpdatePlanTool`，补工具结果到 plan state 的 live 投影 |
 | `<proposed_plan>` | 模型正文中的计划协议块 | 后端流式 parser 拆分 normal text 与 plan text |
 | PlanDelta | 计划内容可流式显示 | 新增 / 补齐 `plan.delta` streaming event |
@@ -254,7 +254,7 @@ Lime 的 Plan 主架构以 Codex 为准，opencode 只作为多 Provider、reaso
 
 ### 9.2 opencode 可复用结论
 
-1. **请求准备必须集中**：opencode 的 request prep 把 system、messages、tools、params、headers、provider options 合并到一个边界，避免组件层关心 provider 差异。Lime 应把同类职责放在 RuntimeCore / AsterBackend 的 request builder 或 provider adapter，不让前端拼私有字段。
+1. **请求准备必须集中**：opencode 的 request prep 把 system、messages、tools、params、headers、provider options 合并到一个边界，避免组件层关心 provider 差异。Lime 应把同类职责放在 RuntimeCore / RuntimeBackend 的 request builder 或 provider adapter，不让前端拼私有字段。
 2. **reasoning 必须是一等 part/event**：opencode 把 AI SDK 的 `reasoning-start / reasoning-delta / reasoning-end` 映射成 LLMEvent，再投影到 session event 和 message content。Lime 也要让 reasoning 走独立事件，而不是混到 `message.delta`。
 3. **providerOptions 是适配层，不是业务协议**：OpenAI 的 `reasoningEffort / reasoningSummary / include`、Anthropic 的 `thinking`、Gemini 的 `thinkingConfig`、OpenAI-compatible 的 `enable_thinking` 都应由 adapter 生成；PlanState 只看到标准化 capability 和 event。
 4. **模型变体即 reasoning 档位**：opencode 用 model variant 表示 low / medium / high / max 等档位。Lime 可以把 reasoning strength 作为 model runtime option，但 UI 要显示“该模型支持哪些档位”和“当前实际使用哪个档位”。
@@ -266,9 +266,9 @@ Lime 的 Plan 主架构以 Codex 为准，opencode 只作为多 Provider、reaso
 
 1. 输入栏计划模式 metadata builder。
 2. App Server `collaboration_mode_from_request`。
-3. Aster `PLAN_COLLABORATION_INSTRUCTION`。
-4. Aster `UpdatePlanTool`。
-5. Aster 完整 `<proposed_plan>` 提取。
+3. Agent `PLAN_COLLABORATION_INSTRUCTION`。
+4. Agent `UpdatePlanTool`。
+5. Agent 完整 `<proposed_plan>` 提取。
 6. App Server `thread_item_projection/plan.rs`。
 7. 前端 `proposedPlan` 工具函数与计划轨恢复。
 8. `planImplementationDecision` / `planComposerDecision` 本地确认逻辑。
@@ -435,11 +435,11 @@ flowchart TB
   RequestBuilder --> AppServerClient[App Server Client]
   AppServerClient --> AppServer[App Server JSON-RPC]
   AppServer --> RuntimeCore[RuntimeCore]
-  RuntimeCore --> AsterBackend[AsterBackend]
-  AsterBackend --> PromptManager[Plan Mode Prompt]
-  AsterBackend --> ToolRegistry[Tool Registry]
+  RuntimeCore --> RuntimeBackend[RuntimeBackend]
+  RuntimeBackend --> PromptManager[Plan Mode Prompt]
+  RuntimeBackend --> ToolRegistry[Tool Registry]
   ToolRegistry --> UpdatePlanTool[update_plan]
-  AsterBackend --> StreamParser[proposed_plan segment parser]
+  RuntimeBackend --> StreamParser[proposed_plan segment parser]
 
   UpdatePlanTool --> PlanEventMapper[Plan Event Mapper]
   StreamParser --> PlanEventMapper
@@ -465,7 +465,7 @@ flowchart TD
   A[用户输入：先给计划，不要执行] --> B[Inputbar 写入 collaboration_mode=plan]
   B --> C[agentSession/turn/start]
   C --> D[App Server 生成 TurnContext]
-  D --> E[Aster 注入 Plan Mode 指令]
+  D --> E[Agent 注入 Plan Mode 指令]
   E --> F[Agent 只读探索]
   F --> G[输出 proposed_plan]
   G --> H[后端拆分 plan.delta]
@@ -516,7 +516,7 @@ sequenceDiagram
   participant UI as AgentUI
   participant AS as App Server
   participant RT as RuntimeCore
-  participant A as AsterBackend
+  participant A as RuntimeBackend
   participant M as Model
 
   U->>UI: 输入“先给方案，不要改”
@@ -544,7 +544,7 @@ sequenceDiagram
 sequenceDiagram
   participant UI as AgentUI
   participant AS as App Server
-  participant A as AsterBackend
+  participant A as RuntimeBackend
   participant T as update_plan
 
   UI->>AS: agentSession/turn/start(execute)
@@ -784,7 +784,7 @@ request builder 合并顺序：
 ### 17.1 Rust 后端
 
 ```text
-lime-rs/crates/aster-rust/crates/aster/src/
+lime-rs/crates/agent-rust/crates/agent/src/
   agents/
     prompt_manager.rs              # Plan Mode 指令注入，保持轻量
     agent.rs                       # 只保留 dispatch，不继续膨胀 parser
@@ -894,7 +894,7 @@ src/components/agent/chat/utils/
 ### 17.5 测试结构
 
 ```text
-lime-rs/crates/aster-rust/crates/aster/src/agents/plan/*_tests.rs
+lime-rs/crates/agent-rust/crates/agent/src/agents/plan/*_tests.rs
 lime-rs/crates/app-server/src/runtime_backend/plan_events_tests.rs
 lime-rs/crates/app-server/src/runtime_backend/model_capability/*_tests.rs
 lime-rs/crates/app-server/src/runtime_backend/reasoning_events_tests.rs
@@ -1003,7 +1003,7 @@ Plan events 需要进入：
 ### 22.1 P0 最小闭环
 
 1. 输入栏显式 Plan Mode 能进入 `collaboration_mode=plan`。
-2. Aster 输出 `<proposed_plan>` 时，后端产生 `plan.delta` 和 `plan.final`。
+2. Agent 输出 `<proposed_plan>` 时，后端产生 `plan.delta` 和 `plan.final`。
 3. 前端 `parseAgentEvent` 能解析 `plan.delta/final`。
 4. UI live 显示计划轨。
 5. `plan.final` 后出现实施确认。
@@ -1046,7 +1046,7 @@ Plan events 需要进入：
 
 ### Phase 1：后端 plan event 化
 
-- 新增 Aster proposed plan streaming parser。
+- 新增 Agent proposed plan streaming parser。
 - 输出 `plan.delta` / `plan.final`。
 - 把 `tool.result(update_plan)` 投影为 plan fact。
 - Rust 定向测试覆盖跨 chunk tag、未闭合 tag、完整 final、工具 plan metadata。

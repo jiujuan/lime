@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import {
   hasRecoverableSilentTurnActivity,
   hasRecoverableTerminalTurnActivity,
 } from "./agentSilentTurnRecovery";
 
 function createDetail(
-  overrides: Partial<AsterSessionDetail> = {},
-): AsterSessionDetail {
+  overrides: Partial<AgentSessionDetail> = {},
+): AgentSessionDetail {
   return {
     id: "session-1",
     created_at: 1_710_000_000,

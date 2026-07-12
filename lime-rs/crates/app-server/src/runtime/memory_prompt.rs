@@ -327,7 +327,7 @@ fn apply_prompt_context_budget_policy(
     default_budget: usize,
 ) {
     let Some(policy) = runtime_options
-        .and_then(|options| options.metadata.as_ref())
+        .and_then(|options| options.runtime_metadata())
         .and_then(prompt_context_budget_policy_from_metadata)
     else {
         return;
@@ -460,27 +460,22 @@ fn memory_summary_root(params: &AgentSessionTurnStartParams) -> Option<MemorySto
 
 fn workspace_root_from_runtime_options(runtime_options: Option<&RuntimeOptions>) -> Option<String> {
     let options = runtime_options?;
-    let host_root = options
-        .host_options
+    let request_root = options
+        .runtime_request
         .as_ref()
-        .and_then(|host_options| host_options.get("asterChatRequest"))
-        .and_then(workspace_root_from_aster_chat_request);
-    host_root
-        .or_else(|| metadata_workspace_root(options.metadata.as_ref()))
+        .and_then(|request| {
+            request
+                .workspace_root
+                .as_deref()
+                .or(request.project_root.as_deref())
+        })
+        .map(ToString::to_string);
+    request_root
+        .or_else(|| metadata_workspace_root(options.runtime_metadata()))
         .and_then(|value| {
             let path = PathBuf::from(&value);
             path.is_absolute().then_some(value)
         })
-}
-
-fn workspace_root_from_aster_chat_request(value: &Value) -> Option<String> {
-    let turn_config = value.get("turn_config").or_else(|| value.get("turnConfig"));
-    string_value_from_candidates(
-        turn_config
-            .into_iter()
-            .flat_map(|config| [config.get("workspace_root"), config.get("workspaceRoot")])
-            .chain([value.get("workspace_root"), value.get("workspaceRoot")]),
-    )
 }
 
 fn metadata_workspace_root(metadata: Option<&Value>) -> Option<String> {
@@ -494,26 +489,11 @@ fn metadata_workspace_root(metadata: Option<&Value>) -> Option<String> {
         "/harness/workspace_root",
         "/harness/projectRoot",
         "/harness/project_root",
-        "/turn_config/workspaceRoot",
-        "/turn_config/workspace_root",
-        "/turnConfig/workspaceRoot",
-        "/turnConfig/projectRoot",
     ];
     pointers
         .iter()
         .find_map(|pointer| metadata.pointer(pointer))
         .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-fn string_value_from_candidates<'a>(
-    values: impl Iterator<Item = Option<&'a Value>>,
-) -> Option<String> {
-    values
-        .flatten()
-        .find_map(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
@@ -547,7 +527,7 @@ pub(in crate::runtime) fn merge_runtime_options_metadata(
     let options = params
         .runtime_options
         .get_or_insert_with(RuntimeOptions::default);
-    let mut metadata = match options.metadata.take() {
+    let mut metadata = match options.runtime_metadata_mut().take() {
         Some(Value::Object(map)) => map,
         Some(existing) => {
             let mut map = Map::new();
@@ -557,7 +537,7 @@ pub(in crate::runtime) fn merge_runtime_options_metadata(
         None => Map::new(),
     };
     metadata.insert(key.to_string(), value);
-    options.metadata = Some(Value::Object(metadata));
+    *options.runtime_metadata_mut() = Some(Value::Object(metadata));
 }
 
 pub(in crate::runtime) fn merge_context_packet_telemetry(
@@ -567,7 +547,7 @@ pub(in crate::runtime) fn merge_context_packet_telemetry(
     let options = params
         .runtime_options
         .get_or_insert_with(RuntimeOptions::default);
-    let mut metadata = match options.metadata.take() {
+    let mut metadata = match options.runtime_metadata_mut().take() {
         Some(Value::Object(map)) => map,
         Some(existing) => {
             let mut map = Map::new();
@@ -581,7 +561,7 @@ pub(in crate::runtime) fn merge_context_packet_telemetry(
         .map(|existing| merge_context_telemetry_values(existing, telemetry.clone()))
         .unwrap_or(telemetry);
     metadata.insert(CONTEXT_PACKET_TELEMETRY_KEY.to_string(), merged);
-    options.metadata = Some(Value::Object(metadata));
+    *options.runtime_metadata_mut() = Some(Value::Object(metadata));
 }
 
 fn merge_context_telemetry_values(existing: Value, next: Value) -> Value {
@@ -850,18 +830,15 @@ mod tests {
     }
 
     #[test]
-    fn workspace_root_prefers_host_options_absolute_root() {
+    fn workspace_root_prefers_runtime_request_absolute_root() {
         let options = RuntimeOptions {
-            host_options: Some(json!({
-                "asterChatRequest": {
-                    "turn_config": {
-                        "workspaceRoot": "/repo"
-                    }
-                }
-            })),
-            metadata: Some(json!({
-                "workspaceRoot": "/metadata-repo"
-            })),
+            runtime_request: Some(app_server_protocol::RuntimeRequest {
+                workspace_root: Some("/repo".to_string()),
+                metadata: Some(json!({
+                    "workspaceRoot": "/metadata-repo"
+                })),
+                ..app_server_protocol::RuntimeRequest::default()
+            }),
             ..RuntimeOptions::default()
         };
 
@@ -874,9 +851,12 @@ mod tests {
     #[test]
     fn workspace_root_rejects_relative_root() {
         let options = RuntimeOptions {
-            metadata: Some(json!({
-                "workspaceRoot": "relative/path"
-            })),
+            runtime_request: Some(app_server_protocol::RuntimeRequest {
+                metadata: Some(json!({
+                    "workspaceRoot": "relative/path"
+                })),
+                ..app_server_protocol::RuntimeRequest::default()
+            }),
             ..RuntimeOptions::default()
         };
 

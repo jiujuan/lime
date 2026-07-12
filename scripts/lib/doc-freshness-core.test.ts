@@ -8,36 +8,30 @@ describe("doc-freshness-core", () => {
       repoRoot: "/tmp/lime",
       specs: [
         {
-          path: "internal/tech/harness/entropy-governance-workflow.md",
+          path: "internal/tech/harness/README.md",
           requiredMentions: [
-            "iteration-roadmap.md",
-            "tooling-roadmap.md",
+            "harness-engine-governance.md",
+            "quality-workflow.md",
             "harness-evals.md",
-            "scripts/report-generated-slop.mjs",
-            "scripts/check-doc-freshness.mjs",
           ],
         },
       ],
       documents: [
         {
-          path: "internal/tech/harness/entropy-governance-workflow.md",
+          path: "internal/tech/harness/README.md",
           content: `
-[Roadmap](iteration-roadmap.md)
-[Tooling](tooling-roadmap.md)
+[Governance](../../aiprompts/harness-engine-governance.md)
+[Quality](../../aiprompts/quality-workflow.md)
 [Evals](../../test/harness-evals.md)
-\`scripts/report-generated-slop.mjs\`
-\`scripts/check-doc-freshness.mjs\`
 `,
         },
       ],
       deletedSurfaceTargets: ["src/lib/api/agentCompat.ts"],
       pathExists: (_absolutePath, repoRelativePath) =>
         [
-          "internal/tech/harness/iteration-roadmap.md",
-          "internal/tech/harness/tooling-roadmap.md",
+          "internal/aiprompts/harness-engine-governance.md",
+          "internal/aiprompts/quality-workflow.md",
           "internal/test/harness-evals.md",
-          "scripts/report-generated-slop.mjs",
-          "scripts/check-doc-freshness.mjs",
         ].includes(repoRelativePath),
     });
 
@@ -52,16 +46,16 @@ describe("doc-freshness-core", () => {
       repoRoot: "/tmp/lime",
       specs: [
         {
-          path: "internal/tech/harness/review-decision-workflow.md",
+          path: "internal/tech/harness/external-analysis-handoff.md",
           requiredMentions: [
-            "external-analysis-handoff.md",
-            "iteration-roadmap.md",
+            "harness-engine-governance.md",
+            "quality-workflow.md",
           ],
         },
       ],
       documents: [
         {
-          path: "internal/tech/harness/review-decision-workflow.md",
+          path: "internal/tech/harness/external-analysis-handoff.md",
           content: `
 [Bad Link](missing-doc.md)
 \`scripts/missing-tool.mjs\`

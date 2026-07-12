@@ -1,34 +1,54 @@
 //! request_user_input 工具桥接
 //!
-//! 将 current request_user_input callback 桥接到 ActionRequiredManager，
+//! 将 current request_user_input callback 桥接到 session-scoped action state，
 //! 通过 elicitation 事件把问题发送到前端并等待用户输入。
 
+use crate::protocol::AgentEvent;
+use agent_protocol::action_required::elicitation_action;
 use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
+use agent_runtime::action_required::ActionRequiredState;
 use agent_runtime::request_user_input::{
     run_request_user_input, RequestUserInputAction, RequestUserInputCallback,
     RequestUserInputGateway, RequestUserInputRequest, RequestUserInputRunRequest,
     DEFAULT_REQUEST_USER_INPUT_TIMEOUT_SECS,
 };
-use aster::ActionRequiredManager;
-use aster::ActionRequiredScope as AsterActionRequiredScope;
-use aster::{current_action_scope, current_session_id};
 use futures::future::BoxFuture;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc::UnboundedSender;
 
-struct AsterActionRequiredGateway;
+struct RuntimeActionRequiredGateway {
+    state: Arc<ActionRequiredState>,
+    event_sender: UnboundedSender<AgentEvent>,
+}
 
-impl RequestUserInputGateway for AsterActionRequiredGateway {
+impl RequestUserInputGateway for RuntimeActionRequiredGateway {
     fn request_user_input<'a>(
         &'a self,
         action: RequestUserInputAction,
     ) -> BoxFuture<'a, anyhow::Result<serde_json::Value>> {
         Box::pin(async move {
-            ActionRequiredManager::global()
-                .request_and_wait_scoped(
-                    to_aster_action_scope(action.scope),
+            let event_sender = self.event_sender.clone();
+            self.state
+                .request_and_wait_with_notification(
+                    action.scope,
                     action.prompt,
                     action.requested_schema,
                     action.timeout,
+                    move |queued| {
+                        let projection = elicitation_action(
+                            queued.id.clone(),
+                            queued.message.clone(),
+                            queued.requested_schema.clone(),
+                            queued.scope.clone(),
+                        );
+                        let _ = event_sender.send(AgentEvent::ActionRequired {
+                            request_id: projection.id,
+                            action_type: projection.action_type,
+                            data: projection.data,
+                            scope: projection.scope,
+                        });
+                    },
                 )
                 .await
         })
@@ -36,15 +56,25 @@ impl RequestUserInputGateway for AsterActionRequiredGateway {
 }
 
 /// 创建 request_user_input 回调
-pub(crate) fn create_request_user_input_callback() -> RequestUserInputCallback {
-    std::sync::Arc::new(|request: RequestUserInputRequest| {
+pub(crate) fn create_request_user_input_callback(
+    state: Arc<ActionRequiredState>,
+    scope: Option<RuntimeActionRequiredScope>,
+    event_sender: UnboundedSender<AgentEvent>,
+) -> RequestUserInputCallback {
+    Arc::new(move |request: RequestUserInputRequest| {
+        let state = Arc::clone(&state);
+        let scope = scope.clone();
+        let event_sender = event_sender.clone();
         Box::pin(async move {
             let run_request = RequestUserInputRunRequest::new(
                 request,
-                resolve_action_scope(),
+                scope,
                 Duration::from_secs(DEFAULT_REQUEST_USER_INPUT_TIMEOUT_SECS),
             );
-            let gateway = AsterActionRequiredGateway;
+            let gateway = RuntimeActionRequiredGateway {
+                state,
+                event_sender,
+            };
 
             match run_request_user_input(&gateway, run_request).await {
                 Ok(response) => response,
@@ -61,73 +91,11 @@ pub(crate) fn create_request_user_input_callback() -> RequestUserInputCallback {
     })
 }
 
-fn to_aster_action_scope(scope: Option<RuntimeActionRequiredScope>) -> AsterActionRequiredScope {
-    scope
-        .map(|scope| AsterActionRequiredScope {
-            session_id: scope.session_id,
-            thread_id: scope.thread_id,
-            turn_id: scope.turn_id,
-        })
-        .unwrap_or_default()
-}
-
-fn project_aster_action_scope(
-    scope: AsterActionRequiredScope,
-) -> Option<RuntimeActionRequiredScope> {
-    RuntimeActionRequiredScope::from_parts(scope.session_id, scope.thread_id, scope.turn_id)
-}
-
-fn resolve_action_scope() -> Option<RuntimeActionRequiredScope> {
-    current_action_scope()
-        .and_then(project_aster_action_scope)
-        .or_else(|| {
-            let session_id = current_session_id();
-            RuntimeActionRequiredScope::from_parts(session_id.clone(), session_id, None)
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use agent_runtime::request_user_input::{RequestUserInputOption, RequestUserInputQuestion};
-    use aster::{with_action_scope, with_session_id};
-
-    #[tokio::test]
-    async fn resolve_action_scope_prefers_runtime_scope() {
-        let scope = AsterActionRequiredScope {
-            session_id: Some("session-1".to_string()),
-            thread_id: Some("thread-1".to_string()),
-            turn_id: Some("turn-1".to_string()),
-        };
-
-        let resolved = with_action_scope(scope, async { resolve_action_scope() }).await;
-
-        assert_eq!(
-            resolved,
-            Some(RuntimeActionRequiredScope {
-                session_id: Some("session-1".to_string()),
-                thread_id: Some("thread-1".to_string()),
-                turn_id: Some("turn-1".to_string()),
-            })
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_action_scope_falls_back_to_session_id() {
-        let resolved = with_session_id(Some("session-2".to_string()), async {
-            resolve_action_scope()
-        })
-        .await;
-
-        assert_eq!(
-            resolved,
-            Some(RuntimeActionRequiredScope {
-                session_id: Some("session-2".to_string()),
-                thread_id: Some("session-2".to_string()),
-                turn_id: None,
-            })
-        );
-    }
+    use std::time::Duration;
 
     #[test]
     fn request_user_input_callback_uses_current_dto() {
@@ -157,5 +125,61 @@ mod tests {
             Some("自动执行")
         );
         assert!(!request.questions[1].multi_select);
+    }
+
+    #[tokio::test]
+    async fn callback_emits_action_and_resumes_matching_pending_request() {
+        let state = Arc::new(ActionRequiredState::default());
+        let scope = RuntimeActionRequiredScope {
+            session_id: Some("session-1".to_string()),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+        };
+        let (event_sender, mut event_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let callback = create_request_user_input_callback(
+            Arc::clone(&state),
+            Some(scope.clone()),
+            event_sender,
+        );
+        let request = RequestUserInputRequest {
+            questions: vec![RequestUserInputQuestion {
+                id: Some("mode".to_string()),
+                question: "请选择执行模式".to_string(),
+                header: Some("mode".to_string()),
+                options: vec![
+                    RequestUserInputOption::with_label("auto", "自动执行"),
+                    RequestUserInputOption::with_label("confirm", "确认后执行"),
+                ],
+                multi_select: false,
+            }],
+        };
+
+        let pending = tokio::spawn(async move { callback(request).await });
+        let event = tokio::time::timeout(Duration::from_secs(1), event_receiver.recv())
+            .await
+            .expect("action event timeout")
+            .expect("action event");
+        let AgentEvent::ActionRequired {
+            request_id,
+            action_type,
+            scope: event_scope,
+            ..
+        } = event
+        else {
+            panic!("expected action_required event");
+        };
+        assert_eq!(action_type, "elicitation");
+        assert_eq!(event_scope, Some(scope.clone()));
+
+        state
+            .submit_response(
+                &request_id,
+                Some(&scope),
+                serde_json::json!({ "answer": "确认后执行" }),
+            )
+            .await
+            .expect("submit response");
+        let response = pending.await.expect("pending callback");
+        assert!(response.is_some());
     }
 }

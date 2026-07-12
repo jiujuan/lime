@@ -1,7 +1,7 @@
 import type { AgentThreadItem } from "../types";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
 } from "@/lib/api/agentRuntime";
 import { isImportedSourceExecutionRuntime } from "./sessionExecutionRuntime";
 import { isImportedSourceMetadata } from "./importedSourceMetadata";
@@ -77,7 +77,7 @@ export function hasImportedRuntimeDetailSignal({
   threadRead,
 }: {
   threadItems?: readonly AgentThreadItem[];
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
 }): boolean {
   return (

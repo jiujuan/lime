@@ -4,7 +4,7 @@
 > 更新时间：2026-06-17
 > Owner：Lime Runtime / Model Registry / App Server / Media Task 主链
 > 参考项目：`/Users/coso/Documents/dev/rust/codex`、本地多协议 LLM runtime 参考实现
-> 关联主链：App Server JSON-RPC、RuntimeCore、`lime-rs/crates/core/src/models/model_registry.rs`、`ModelRegistryService`、media task artifact、Aster adapter
+> 关联主链：App Server JSON-RPC、RuntimeCore、`lime-rs/crates/core/src/models/model_registry.rs`、`ModelRegistryService`、media task artifact、Agent adapter
 
 ## 1. 背景
 
@@ -14,8 +14,8 @@ Lime 已经具备多模型和多模态能力，但这些能力没有被一条统
 
 1. 模型注册表已经包含能力、任务族、输入输出模态、运行时特性、定价和限制。
 2. Provider 配置、API Key、连接测试、模型实时拉取已经收敛到 App Server `modelProvider*` / `modelProviderKey*` / `model/list` 主链。
-3. Agent 对话链路可以通过 Aster 访问 OpenAI、Anthropic、Gemini、Ollama 等 provider。
-4. Aster message model 已支持文本、图片输入、tool call、reasoning / thinking 等内容形态。
+3. Agent 对话链路可以通过 Agent 访问 OpenAI、Anthropic、Gemini、Ollama 等 provider。
+4. Agent message model 已支持文本、图片输入、tool call、reasoning / thinking 等内容形态。
 5. 图片、视频、播报、转写等媒体任务已经通过 `.lime/tasks/<task_type>/*.json` artifact 和 worker 执行链形成任务事实源。
 6. `mediaTaskArtifact/*` 已经包含 `modality_contract_key`、`routing_slot`、`runtime_contract` 等路由上下文。
 
@@ -23,9 +23,9 @@ Lime 已经具备多模型和多模态能力，但这些能力没有被一条统
 
 1. 管理面、运行时、媒体任务、前端类型和执行协议没有同一个强类型事实源。
 2. 模型选择仍主要依赖 provider/model 字符串、`serde_json::Value`、metadata JSON pointer 和兼容字段。
-3. Aster `CredentialBridge` 仍承担过多 provider 映射职责，容易继续长成第二个 runtime。
+3. Agent `CredentialBridge` 仍承担过多 provider 映射职责，容易继续长成第二个 runtime。
 4. 多模态执行存在两套心智：聊天 runtime 支持 image part，媒体任务 runtime 独立拼 provider HTTP 请求。
-5. 新增 provider、新增模态、新增执行协议时，容易在 Provider service、Aster adapter、media worker、前端类型里重复补特判。
+5. 新增 provider、新增模态、新增执行协议时，容易在 Provider service、Agent adapter、media worker、前端类型里重复补特判。
 
 因此需要一条统一的 **Canonical LLM Layer**，把模型目录、路由决策、协议映射、传输、事件流和媒体任务执行收敛到同一套可扩展架构。
 
@@ -71,7 +71,7 @@ Route
 结论：
 
 - Lime 应借鉴 `Protocol + Route + canonical LLMRequest / LLMEvent` 的分层。
-- Lime 需要结合自身 App Server、RuntimeCore、media task、Aster adapter 逐步落地，而不是直接搬 TypeScript 实现。
+- Lime 需要结合自身 App Server、RuntimeCore、media task、Agent adapter 逐步落地，而不是直接搬 TypeScript 实现。
 
 ## 3. 一句话目标
 
@@ -100,7 +100,7 @@ Route
 1. 消除 Rust protocol、前端 TS 类型、runtime JSON、media worker contract 平行维护。
 2. 把 `serde_json::Value` 从模型核心协议中逐步清退到兼容边界。
 3. 把 provider-specific HTTP 拼装收进 protocol mapper。
-4. 把 Aster `CredentialBridge` 降级为 adapter，避免继续承接新业务逻辑。
+4. 把 Agent `CredentialBridge` 降级为 adapter，避免继续承接新业务逻辑。
 5. 用 `ResolvedModelRoute` 替代散落的 provider/model 字符串。
 6. 让 event store、UI、evidence、usage、media task 消费同一套 `LlmEvent`。
 
@@ -109,7 +109,7 @@ Route
 本阶段不做：
 
 1. 不一次性重写所有 provider。
-2. 不废弃 Aster 当前执行链，而是先把它降级为 compat adapter。
+2. 不废弃 Agent 当前执行链，而是先把它降级为 compat adapter。
 3. 不恢复旧 Tauri Provider facade、旧本地模型 catalog 或旧 `get_api_key_providers` 命令族。
 4. 不新增与 App Server JSON-RPC 平级的模型后端。
 5. 不让 Electron main 承接 provider 业务逻辑；Electron 仍只做 Desktop Host bridge。
@@ -145,7 +145,7 @@ Route
 
 ### 6.4 Lime Runtime 维护者
 
-维护 App Server、RuntimeCore、Aster adapter、media runtime。需要：
+维护 App Server、RuntimeCore、Agent adapter、media runtime。需要：
 
 1. 新 provider 接入路径明确。
 2. 新协议 mapper 可测试。
@@ -336,7 +336,7 @@ Route
 2. `ModelInfo / ProviderInfo / EndpointKind / AuthKind / ProtocolKind` schema。
 3. Runtime route resolver 合同。
 4. Canonical `LlmRequest / ContentPart / LlmEvent` 合同。
-5. Aster adapter 边界定义。
+5. Agent adapter 边界定义。
 6. media task `TaskExecutionContract` 合同。
 7. 守卫规则与迁移路线。
 
@@ -379,9 +379,9 @@ Route
 
 只允许委托、适配、投影，不允许继续长新业务逻辑：
 
-1. Aster provider adapter。
+1. Agent provider adapter。
 2. `CredentialBridge -> RuntimeProviderConfig`。
-3. `runtimeOptions.hostOptions.asterChatRequest.provider_config`。
+3. `runtimeOptions.hostOptions.agentChatRequest.provider_config`。
 4. 旧 session metadata 中的 provider/model 字段。
 5. 前端 `src/lib/api/agentRuntime.ts` compat barrel。
 
@@ -435,7 +435,7 @@ Route
                 ▼                              ▼
 ┌─────────────────────────────┐   ┌───────────────────────────────────┐
 │ Provider Protocol Mappers   │   │ Adapters                          │
-│ openai_chat / responses     │   │ Aster adapter / Media executor    │
+│ openai_chat / responses     │   │ Agent adapter / Media executor    │
 │ anthropic / gemini / ...    │   │ Legacy compat projections         │
 └───────────────┬─────────────┘   └───────────────────────────────────┘
                 │
@@ -466,7 +466,7 @@ flowchart TD
   LLMEvent --> Runtime
   Runtime --> ReadModel[ThreadReadModel / Task Artifact / Evidence]
   ReadModel --> UX
-  Route --> Aster[Aster Adapter]
+  Route --> Agent[Agent Adapter]
   Route --> Media[Media Task Executor]
 ```
 
@@ -790,7 +790,7 @@ flowchart TD
 2. 显式图片模型绑定不会被聊天模型覆盖。
 3. unsupported route fail closed，不伪造 task submitted。
 
-### 15.6 Aster adapter 降级
+### 15.6 Agent adapter 降级
 
 要求：
 
@@ -801,7 +801,7 @@ flowchart TD
 
 验收：
 
-1. Aster adapter 可以继续承接当前 Agent 对话执行。
+1. Agent adapter 可以继续承接当前 Agent 对话执行。
 2. 新 protocol mapper 不需要改 runtime provider factory facade / provider_factory compat adapter。
 3. compat 字段有退出条件。
 
@@ -825,7 +825,7 @@ flowchart TD
 1. PRD 中的 `ProviderInfo / ModelInfo / LlmRequest / LlmEvent / ResolvedModelRoute / TaskExecutionContract` 有设计落点。
 2. 明确 current / compat / deprecated / dead 分类。
 3. 明确 App Server JSON-RPC 是唯一新增模型能力入口。
-4. 明确 Aster 和 media worker 的 adapter 边界。
+4. 明确 Agent 和 media worker 的 adapter 边界。
 
 ### 17.2 P1 验收
 
@@ -861,7 +861,7 @@ flowchart TD
 
 | 风险                                  | 影响                 | 缓解                                                           |
 | ------------------------------------- | -------------------- | -------------------------------------------------------------- |
-| 一次性重写过大                        | 破坏现有 Agent 对话  | 先让 Aster 成为 adapter，逐协议迁移。                          |
+| 一次性重写过大                        | 破坏现有 Agent 对话  | 先让 Agent 成为 adapter，逐协议迁移。                          |
 | typed schema 不覆盖所有 provider 参数 | 自定义 provider 受限 | 核心字段 typed，provider_options 保留受控 extension。          |
 | 能力推断不准                          | 错误路由或错误阻断   | 明确 `source=api/registry/inferred/custom`，UI 展示置信来源。  |
 | media worker 巨型文件继续膨胀         | 难维护               | 先拆 image protocol mapper，新增 provider 禁止进 worker 分支。 |
@@ -934,7 +934,7 @@ cargo test --manifest-path "lime-rs/Cargo.toml" -p <affected-crate>
 
 1. RuntimeCore 使用 `ResolvedModelRoute`。
 2. 建立 canonical `LlmEvent`。
-3. Aster adapter 只做投影。
+3. Agent adapter 只做投影。
 
 关键退出条件：
 

@@ -939,10 +939,13 @@ describe("agentRuntime clientFactory", () => {
     });
 
     await client.submitAgentRuntimeTurn({
-      message: "继续",
-      session_id: "session-1",
-      event_name: "event-1",
-      workspace_id: "workspace-1",
+      sessionId: "session-1",
+      input: { text: "继续" },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-1",
+        runtimeRequest: { workspaceId: "workspace-1" },
+      },
     });
 
     expect(appServerClient.startTurn).toHaveBeenCalledWith({
@@ -953,13 +956,8 @@ describe("agentRuntime clientFactory", () => {
       runtimeOptions: {
         stream: true,
         eventName: "event-1",
-        hostOptions: {
-          asterChatRequest: {
-            message: "继续",
-            session_id: "session-1",
-            event_name: "event-1",
-            workspace_id: "workspace-1",
-          },
+        runtimeRequest: {
+          workspaceId: "workspace-1",
         },
       },
     });
@@ -979,9 +977,12 @@ describe("agentRuntime clientFactory", () => {
 
     await expect(
       client.submitAgentRuntimeTurn({
-        message: "继续",
-        session_id: "session-1",
-        event_name: "event-1",
+        sessionId: "session-1",
+        input: { text: "继续" },
+        runtimeOptions: {
+          stream: true,
+          eventName: "event-1",
+        },
       }),
     ).resolves.toBeUndefined();
     await expect(
@@ -999,14 +1000,6 @@ describe("agentRuntime clientFactory", () => {
       runtimeOptions: {
         stream: true,
         eventName: "event-1",
-        hostOptions: {
-          asterChatRequest: {
-            message: "继续",
-            session_id: "session-1",
-            event_name: "event-1",
-            workspace_id: "",
-          },
-        },
       },
     });
     expect(standardRuntimeClient.readThread).toHaveBeenCalledWith({

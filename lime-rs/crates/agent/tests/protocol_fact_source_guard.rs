@@ -2,12 +2,12 @@ use std::fs::{read_dir, read_to_string};
 use std::path::{Path, PathBuf};
 
 const ALLOWED_EVENT_CONVERTER_FILES: &[&str] = &[
-    "crates/agent/src/aster_runtime_projection.rs",
+    "crates/agent/src/agent_runtime_projection.rs",
     "crates/agent/src/event_converter.rs",
 ];
 
 const ALLOWED_RUNTIME_CONVERTER_FILES: &[&str] = &[
-    "crates/agent/src/aster_runtime_projection.rs",
+    "crates/agent/src/agent_runtime_projection.rs",
     "crates/agent/src/event_converter.rs",
 ];
 

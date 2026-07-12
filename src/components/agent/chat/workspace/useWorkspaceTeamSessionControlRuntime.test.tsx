@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import type { AsterSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
 
 import {
   clearAgentUiProjectionEvents,
@@ -45,9 +45,9 @@ const TEAM_CONTROL_UNAVAILABLE_MESSAGE =
   "子任务控制正在迁移到新的运行链路，暂时不能直接操作子任务";
 
 function createSubagentSession(
-  overrides: Partial<AsterSubagentSessionInfo> &
-    Pick<AsterSubagentSessionInfo, "id" | "name">,
-): AsterSubagentSessionInfo {
+  overrides: Partial<AgentSubagentSessionInfo> &
+    Pick<AgentSubagentSessionInfo, "id" | "name">,
+): AgentSubagentSessionInfo {
   return {
     created_at: 1_710_000_000,
     updated_at: 1_710_000_100,

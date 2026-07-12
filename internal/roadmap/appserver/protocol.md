@@ -219,9 +219,9 @@ Request:
 字段规则：
 
 1. `sessionId` / `threadId` 可选；缺省时由 App Server 生成。
-2. 外部 App 已有持久化业务 session，或 Lime legacy desktop facade 需要绑定现有 Aster session 时，可以传入稳定 `sessionId` / `threadId`。
+2. 外部 App 已有持久化业务 session，或 Lime legacy desktop facade 需要绑定现有 Agent session 时，可以传入稳定 `sessionId` / `threadId`。
 3. 同一个 `sessionId` 重复 start 必须返回 `Session already exists`，不能覆盖已有 read model。
-4. `sessionId` / `threadId` 仍是公共协议字段，不允许携带 Aster、legacy desktop command 或数据库私有类型。
+4. `sessionId` / `threadId` 仍是公共协议字段，不允许携带 Agent、legacy desktop command 或数据库私有类型。
 
 Response:
 

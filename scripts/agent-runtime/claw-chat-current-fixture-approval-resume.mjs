@@ -172,12 +172,12 @@ export async function runApprovalRequestFullAccessScenario({
       turnId: backendTurnStart.entry.turnId ?? null,
       inputText: backendTurnStart.entry.inputText ?? null,
       approvalPolicy:
-        backendTurnStart.entry.asterChatRequest?.approval_policy ??
-        backendTurnStart.entry.asterChatRequest?.approvalPolicy ??
+        backendTurnStart.entry.runtimeRequest?.approval_policy ??
+        backendTurnStart.entry.runtimeRequest?.approvalPolicy ??
         null,
       sandboxPolicy:
-        backendTurnStart.entry.asterChatRequest?.sandbox_policy ??
-        backendTurnStart.entry.asterChatRequest?.sandboxPolicy ??
+        backendTurnStart.entry.runtimeRequest?.sandbox_policy ??
+        backendTurnStart.entry.runtimeRequest?.sandboxPolicy ??
         null,
     },
     guiApprovalRequestFullAccessCompleted: guiCompleted,

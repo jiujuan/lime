@@ -1,6 +1,5 @@
 use super::super::request_context::{
-    aster_chat_request_from_request, host_metadata_value, request_workspace_scope,
-    RuntimeSessionScope,
+    host_metadata_value, request_workspace_scope, runtime_request_from_request, RuntimeSessionScope,
 };
 use crate::{ExecutionRequest, RuntimeCoreError};
 use app_server_protocol::MediaTaskArtifactImageCreateParams;
@@ -123,7 +122,7 @@ pub(super) fn parse_image_command_intent(
     };
     let launch = &launch;
     let image_task = &image_task;
-    let host_request = aster_chat_request_from_request(request);
+    let host_request = runtime_request_from_request(request);
     let workspace_scope = request_workspace_scope(request, host_request.as_ref());
     let project_root_path = optional_string(
         image_task,
@@ -245,7 +244,7 @@ fn image_command_metadata(request: &ExecutionRequest) -> Option<(Value, Value, &
         }
     }
     if let Some(host_metadata) =
-        aster_chat_request_from_request(request).and_then(|host| host_metadata_value(&host))
+        runtime_request_from_request(request).and_then(|host| host_metadata_value(&host))
     {
         if let Some((launch, image_task, source)) =
             image_command_metadata_from_value(&host_metadata)
@@ -257,18 +256,7 @@ fn image_command_metadata(request: &ExecutionRequest) -> Option<(Value, Value, &
 }
 
 fn request_metadata_values(request: &ExecutionRequest) -> Vec<&Value> {
-    let mut values = Vec::new();
-    if let Some(value) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-    {
-        values.push(value);
-    }
-    if let Some(value) = request.metadata.as_ref() {
-        values.push(value);
-    }
-    values
+    request.runtime_metadata().into_iter().collect()
 }
 
 fn image_command_metadata_from_value(value: &Value) -> Option<(Value, Value, &'static str)> {

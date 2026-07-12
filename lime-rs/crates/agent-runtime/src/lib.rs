@@ -1,5 +1,8 @@
+pub mod action_required;
 pub mod event_stream;
+pub mod identity;
 pub mod provider_trace;
+pub mod provider_turn;
 pub mod reply_backend;
 pub mod reply_execution;
 pub mod reply_host;
@@ -12,6 +15,7 @@ pub mod reply_stream;
 pub mod request_user_input;
 pub mod runtime_conversation;
 pub mod runtime_queue;
+pub mod runtime_scope;
 pub mod runtime_timeline;
 pub mod runtime_timeline_record;
 pub mod session_config;

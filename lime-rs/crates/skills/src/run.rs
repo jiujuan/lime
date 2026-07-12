@@ -1,7 +1,7 @@
-//! Aster-free Skill 执行器。
+//! Agent-free Skill 执行器。
 //!
 //! 该模块只处理 prompt / workflow 两类 Skill 执行语义；需要子 Agent 或工具转发的
-//! Skill 必须交给 Turn runtime owner，而不是回落到 Aster SkillTool。
+//! Skill 必须交给 Turn runtime owner，而不是回落到 Agent SkillTool。
 
 use crate::{ExecutionCallback, LlmProvider, LoadedSkillDefinition, SkillError};
 use regex::Regex;

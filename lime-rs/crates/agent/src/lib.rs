@@ -1,7 +1,7 @@
 //! Lime Agent Crate
 //!
 //! 包含 Agent 模块中不依赖主 crate 内部模块的纯逻辑部分。
-//! 深耦合部分（runtime_state、Aster 流式桥接）留在主 crate。
+//! 深耦合部分（runtime_state、Agent 流式桥接）留在主 crate。
 
 #![allow(clippy::explicit_counter_loop)]
 #![allow(clippy::unnecessary_map_or)]
@@ -12,12 +12,10 @@
 
 pub mod agent_tools;
 pub mod artifact_protocol;
-mod aster_runtime_projection;
-mod aster_session_store;
 mod credential_bridge;
+mod current_provider_turn;
 mod direct_text_generation;
 pub mod durable_memory_fs;
-mod event_converter;
 mod execution_strategy_compat;
 pub mod filesystem_event_protocol;
 pub mod hooks;
@@ -26,7 +24,6 @@ mod knowledge_builder_skill;
 pub mod lime_session_repository;
 mod live_execution_process;
 mod mcp_bridge;
-mod message_content_adapter;
 mod model_request_policy;
 pub mod native_tools;
 pub mod prompt;
@@ -39,30 +36,21 @@ pub mod provider_runtime_governor;
 pub mod queued_turn;
 mod request_tool_policy;
 mod request_user_input_bridge;
-mod runtime_conversation_aster_adapter;
-mod runtime_facade;
 pub mod runtime_projection_snapshot;
 pub mod runtime_queue;
-mod runtime_snapshot_adapter;
 mod runtime_state;
 mod runtime_state_support;
-mod runtime_store_aster_adapter;
 mod runtime_support;
-mod runtime_timeline_adapter;
-mod session_config_adapter;
 mod session_configuration;
 mod session_execution_runtime;
-mod session_execution_runtime_adapter;
 mod session_execution_runtime_query;
 mod session_record_sql;
-mod session_runtime_conversation_query;
 pub mod session_state_snapshot;
 mod session_store;
 mod session_usage_projection;
 pub mod skill_execution;
 mod subagent_control;
 mod subagent_profiles;
-mod subagent_runtime_adapter;
 pub mod team_runtime_governor;
 pub mod tool_io_offload;
 mod tool_output_truncation;
@@ -149,7 +137,7 @@ pub use runtime_queue::{
     resume_persisted_runtime_queues_on_startup, resume_runtime_queue_if_needed,
     submit_runtime_turn, RuntimeQueueEventEmitter, RuntimeQueueExecutor,
 };
-pub use runtime_state::{AgentRuntimeState, QueuedTurnTask};
+pub use runtime_state::AgentRuntimeState;
 pub use runtime_state_support::{
     is_skill_registered, register_project_skill_from_directory, reload_skills,
 };

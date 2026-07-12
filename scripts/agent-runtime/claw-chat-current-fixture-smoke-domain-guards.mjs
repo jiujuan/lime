@@ -195,7 +195,7 @@ export function registerImageContentAndTeamSmokeGuards({
       "worker_dogfood",
       "contentFactoryArticleWorkspaceWorkerTurnStart",
       "contentFactoryArticleWorkspaceWorkerHostGenerationFixture",
-      "contentFactoryHostGenerationAsterChatRequest",
+      "contentFactoryHostGenerationAgentRuntimeRequest",
       "startContentFactoryHostGenerationFixture",
       "fixture-openai",
       "article-draft-document",

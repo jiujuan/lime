@@ -18,4 +18,4 @@ AI Agent 聊天模块，详见 [chat/README.md](./chat/README.md)
 | `index.tsx`   | AgentChatPage 主组件                                     |
 | `types.ts`    | 类型定义                                                 |
 | `components/` | 子组件（Navbar、Sidebar、MessageList 等）                |
-| `hooks/`      | Hooks（`useAgentChatUnified -> useAsterAgentChat` 唯一主链，旧 compat Hook 已删除） |
+| `hooks/`      | Hooks（`useAgentChatUnified -> useAgentChat` 唯一主链，旧 compat Hook 已删除） |

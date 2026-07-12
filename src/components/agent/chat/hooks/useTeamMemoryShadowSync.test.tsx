@@ -3,8 +3,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readTeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type {
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import { useTeamMemoryShadowSync } from "./useTeamMemoryShadowSync";
@@ -24,8 +24,8 @@ interface HookOptions {
   activeTheme?: string | null;
   sessionId?: string | null;
   selectedTeam?: TeamDefinition | null;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
-  subagentParentContext?: AsterSubagentParentContext | null;
+  childSubagentSessions?: AgentSubagentSessionInfo[];
+  subagentParentContext?: AgentSubagentParentContext | null;
   storage: MemoryStorage;
 }
 

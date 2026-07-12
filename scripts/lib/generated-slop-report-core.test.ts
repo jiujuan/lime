@@ -1409,7 +1409,7 @@ describe("generated-slop-report-core", () => {
       docFreshnessReport: {
         summary: {
           monitoredDocumentCount: 10,
-          existingDocumentCount: 9,
+          existingDocumentCount: 4,
           issueCount: 2,
           missingDocumentCount: 0,
           missingRequiredReferenceCount: 1,
@@ -1420,12 +1420,12 @@ describe("generated-slop-report-core", () => {
         issues: [
           {
             kind: "missing-required-reference",
-            documentPath: "internal/tech/harness/entropy-governance-workflow.md",
+            documentPath: "internal/tech/harness/README.md",
             detail: "harness-evals.md",
           },
           {
             kind: "broken-code-path-reference",
-            documentPath: "internal/tech/harness/tooling-roadmap.md",
+            documentPath: "internal/tech/harness/external-analysis-handoff.md",
             detail: "scripts/missing-tool.mjs",
           },
         ],

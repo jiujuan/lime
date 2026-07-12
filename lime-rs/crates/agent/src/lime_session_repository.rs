@@ -1,7 +1,7 @@
 //! SessionRepository trait 实现
 //!
 //! 实现 thread_store::SessionRepository trait，将会话数据存储到 Lime 的 SQLite 数据库中。
-//! 这是新的存储抽象层，不依赖 Aster。
+//! 这是新的存储抽象层，不依赖 Agent。
 
 use crate::session_record_sql::{
     load_session_record_row_by_id, load_session_record_rows_for_query,

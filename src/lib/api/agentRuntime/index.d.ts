@@ -9,7 +9,7 @@ export {
   generateAgentRuntimeTitleResult,
   generateAgentRuntimeTitle,
   generateAgentRuntimeSessionTitle,
-  initAgentRuntime,
+  getRuntimeProviderSelection,
 } from "./agentClient";
 export {
   createExportClient,

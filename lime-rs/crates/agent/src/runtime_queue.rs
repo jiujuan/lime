@@ -3,11 +3,10 @@ use crate::runtime_support::{
     clear_runtime_queued_turns, enqueue_runtime_turn,
     finish_active_runtime_turn_in_queue_if_matches, list_runtime_queued_turns,
     prepare_runtime_queue_resumption, queued_turn_event_name_from_runtime,
-    queued_turn_runtime_from_task, queued_turn_snapshot_from_runtime,
-    remove_runtime_queued_turn_from_store, runtime_queue_has_active_turn,
-    submit_runtime_turn_to_queue, take_next_runtime_queued_turn,
+    queued_turn_snapshot_from_runtime, remove_runtime_queued_turn_from_store,
+    runtime_queue_has_active_turn, submit_runtime_turn_to_queue, take_next_runtime_queued_turn,
 };
-use crate::{QueuedTurnSnapshot, QueuedTurnTask};
+use crate::QueuedTurnSnapshot;
 use agent_runtime::runtime_queue::{RuntimeQueueSubmitResult, RuntimeQueuedTurn};
 use futures::future::{BoxFuture, FutureExt};
 use serde_json::Value;
@@ -319,7 +318,7 @@ where
 }
 
 pub async fn submit_runtime_turn<C>(
-    queued_task: QueuedTurnTask<Value>,
+    queued_turn: RuntimeQueuedTurn,
     queue_if_busy: bool,
     skip_pre_submit_resume: bool,
     context: C,
@@ -330,7 +329,7 @@ where
     C: Clone + Send + Sync + 'static,
 {
     let submit_started_at = Instant::now();
-    let session_id = queued_task.session_id.clone();
+    let session_id = queued_turn.session_id.clone();
     let resume_started_at = Instant::now();
     let resumed_queue = if skip_pre_submit_resume || runtime_queue_has_active_turn(&session_id)? {
         false
@@ -346,23 +345,21 @@ where
     let resume_ms = resume_started_at.elapsed().as_millis();
 
     let queue_submit_started_at = Instant::now();
-    match submit_runtime_turn_to_queue(queued_turn_runtime_from_task(&queued_task), queue_if_busy)
-        .await?
-    {
+    match submit_runtime_turn_to_queue(queued_turn.clone(), queue_if_busy).await? {
         RuntimeQueueSubmitResult::StartNow => {
             spawn_runtime_turn_task(
                 session_id.clone(),
-                queued_task.event_name,
-                queued_task.queued_turn_id.clone(),
+                queued_turn_event_name_from_runtime(&queued_turn),
+                queued_turn.queued_turn_id.clone(),
                 context,
                 executor,
                 emitter,
-                queued_task.payload,
+                queued_turn.payload,
             );
             tracing::info!(
                 "[AgentRuntime][Queue] submit_runtime_turn accepted: session_id={}, queued_turn_id={}, result=start_now, resumed_queue={}, skip_pre_submit_resume={}, resume_ms={}, queue_submit_ms={}, total_ms={}",
                 session_id,
-                queued_task.queued_turn_id,
+                queued_turn.queued_turn_id,
                 resumed_queue,
                 skip_pre_submit_resume,
                 resume_ms,

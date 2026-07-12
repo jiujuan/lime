@@ -1,11 +1,13 @@
 use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
+use app_server_protocol::{
+    RuntimeProviderConfig, RuntimeRequest, RuntimeSearchMode, RuntimeToolCallStrategy,
+};
 use lime_agent::{
     request_tool_policy_with_additional_required_tools, resolve_request_tool_policy_with_mode,
     RequestToolPolicy, RequestToolPolicyMode, SessionProviderConfig,
 };
 pub(super) use runtime_core::RuntimeModelSelection;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -94,7 +96,7 @@ pub(super) fn resolve_runtime_model_selection(
     }
 
     Err(RuntimeCoreError::Backend(
-        "App Server runtime backend requires provider/model selection. Submit runtimeOptions.providerPreference and runtimeOptions.modelPreference, hostOptions.asterChatRequest.provider_config, or persist a complete session provider/model default.".to_string(),
+        "App Server runtime backend requires provider/model selection. Submit runtimeOptions.runtimeRequest.providerPreference and runtimeOptions.runtimeRequest.modelPreference, runtimeOptions.runtimeRequest.providerConfig, or persist a complete session provider/model default.".to_string(),
     ))
 }
 
@@ -113,24 +115,13 @@ pub(super) fn fast_response_selection_from_profile_model_slot(
 pub(super) fn selection_from_explicit_preferences(
     request: &ExecutionRequest,
 ) -> Option<RuntimeModelSelection> {
-    let provider = non_empty(request.provider_preference.as_deref().or_else(|| {
-        request
-            .runtime_options
-            .as_ref()?
-            .provider_preference
-            .as_deref()
-    }))?;
-    let model = non_empty(request.model_preference.as_deref().or_else(|| {
-        request
-            .runtime_options
-            .as_ref()?
-            .model_preference
-            .as_deref()
-    }))?;
+    let runtime_request = request.runtime_request()?;
+    let provider = non_empty(runtime_request.provider_preference.as_deref())?;
+    let model = non_empty(runtime_request.model_preference.as_deref())?;
     Some(RuntimeModelSelection {
         provider,
         model,
-        source: "runtime_options",
+        source: "runtime_request",
         reasoning_effort: reasoning_effort_from_request(request),
     })
 }
@@ -138,7 +129,7 @@ pub(super) fn selection_from_explicit_preferences(
 pub(super) fn selection_from_host_provider_config(
     request: &ExecutionRequest,
 ) -> Option<RuntimeModelSelection> {
-    let host_request = aster_chat_request_from_request(request)?;
+    let host_request = runtime_request_from_request(request)?;
     let provider_config = host_provider_config(&host_request);
     let provider = non_empty(
         host_provider_preference(&host_request)
@@ -154,7 +145,7 @@ pub(super) fn selection_from_host_provider_config(
     Some(RuntimeModelSelection {
         provider,
         model,
-        source: "host_options_provider_config",
+        source: "runtime_request_provider_config",
         reasoning_effort: host_reasoning_effort(&host_request)
             .or_else(|| reasoning_effort_from_request(request)),
     })
@@ -228,35 +219,17 @@ fn session_default_model(metadata: &Value) -> Option<String> {
 
 pub(super) fn reasoning_effort_from_request(request: &ExecutionRequest) -> Option<String> {
     if let Some(reasoning_effort) =
-        aster_chat_request_from_request(request).and_then(|host| host_reasoning_effort(&host))
+        runtime_request_from_request(request).and_then(|host| host_reasoning_effort(&host))
     {
         return Some(reasoning_effort);
     }
-    [
-        request
-            .runtime_options
-            .as_ref()
-            .and_then(|options| options.metadata.as_ref()),
-        request.metadata.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .find_map(metadata_reasoning_effort)
+    request
+        .runtime_metadata()
+        .and_then(metadata_reasoning_effort)
 }
 
 fn runtime_model_metadata_values(request: &ExecutionRequest) -> Vec<&Value> {
-    let mut values = Vec::new();
-    if let Some(value) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-    {
-        values.push(value);
-    }
-    if let Some(value) = request.metadata.as_ref() {
-        values.push(value);
-    }
-    values
+    request.runtime_metadata().into_iter().collect()
 }
 
 fn metadata_reasoning_effort(metadata: &Value) -> Option<String> {
@@ -268,12 +241,6 @@ fn metadata_reasoning_effort(metadata: &Value) -> Option<String> {
             "/model_reasoning_effort",
             "/modelReasoningEffort",
             "/reasoning/effort",
-            "/turn_config/reasoning_effort",
-            "/turnConfig/reasoningEffort",
-            "/turn_config/model_reasoning_effort",
-            "/turnConfig/modelReasoningEffort",
-            "/turn_config/reasoning/effort",
-            "/turnConfig/reasoning/effort",
             "/harness/reasoning_effort",
             "/harness/reasoningEffort",
             "/harness/model_reasoning_effort",
@@ -316,14 +283,9 @@ pub(super) fn session_scope_from_request(
                 "App Server runtime backend session.threadId is empty".to_string(),
             )
         })?;
-    let turn_id = non_empty(Some(&request.turn.turn_id))
-        .or_else(|| {
-            aster_chat_request_from_request(request)
-                .and_then(|host| non_empty(host.turn_id.as_deref()))
-        })
-        .ok_or_else(|| {
-            RuntimeCoreError::Backend("App Server runtime backend turn.turnId is empty".to_string())
-        })?;
+    let turn_id = non_empty(Some(&request.turn.turn_id)).ok_or_else(|| {
+        RuntimeCoreError::Backend("App Server runtime backend turn.turnId is empty".to_string())
+    })?;
     if let Some(turn_session_id) = non_empty(Some(&request.turn.session_id)) {
         if turn_session_id != session_id {
             return Err(RuntimeCoreError::Backend(format!(
@@ -337,35 +299,22 @@ pub(super) fn session_scope_from_request(
         thread_id,
         turn_id,
         workspace_id: non_empty(request.session.workspace_id.as_deref()).or_else(|| {
-            aster_chat_request_from_request(request)
+            runtime_request_from_request(request)
                 .and_then(|host| non_empty(host.workspace_id.as_deref()))
         }),
     })
 }
 
-pub(super) fn aster_chat_request_from_request(
-    request: &ExecutionRequest,
-) -> Option<AsterChatRequestSnapshot> {
-    request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.host_options.as_ref())
-        .and_then(|host_options| host_options.get("asterChatRequest"))
-        .and_then(|value| serde_json::from_value::<AsterChatRequestSnapshot>(value.clone()).ok())
+pub(super) fn runtime_request_from_request(request: &ExecutionRequest) -> Option<RuntimeRequest> {
+    request.runtime_request().cloned()
 }
 
-fn host_turn_config(host: &AsterChatRequestSnapshot) -> Option<&AgentTurnConfigSnapshot> {
-    host.turn_config.as_ref()
-}
-
-fn host_provider_config(host: &AsterChatRequestSnapshot) -> Option<&ConfigureProviderRequest> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.provider_config.as_ref())
-        .or(host.provider_config.as_ref())
+fn host_provider_config(host: &RuntimeRequest) -> Option<&RuntimeProviderConfig> {
+    host.provider_config.as_ref()
 }
 
 pub(super) fn direct_provider_config_from_request(
-    host_request: Option<&AsterChatRequestSnapshot>,
+    host_request: Option<&RuntimeRequest>,
     selection: &RuntimeModelSelection,
     reasoning_effort: Option<String>,
 ) -> Option<SessionProviderConfig> {
@@ -399,62 +348,48 @@ pub(super) fn direct_provider_config_from_request(
     })
 }
 
-fn host_provider_preference(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.provider_preference.as_deref()))
-        .or_else(|| non_empty(host.provider_preference.as_deref()))
+fn host_provider_preference(host: &RuntimeRequest) -> Option<String> {
+    non_empty(host.provider_preference.as_deref())
 }
 
-fn host_model_preference(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.model_preference.as_deref()))
-        .or_else(|| non_empty(host.model_preference.as_deref()))
+fn host_model_preference(host: &RuntimeRequest) -> Option<String> {
+    non_empty(host.model_preference.as_deref())
 }
 
-pub(super) fn host_reasoning_effort(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.reasoning_effort.as_deref()))
-        .or_else(|| non_empty(host.reasoning_effort.as_deref()))
+pub(super) fn host_reasoning_effort(host: &RuntimeRequest) -> Option<String> {
+    non_empty(host.reasoning_effort.as_deref())
 }
 
-pub(super) fn host_thinking_enabled(host: &AsterChatRequestSnapshot) -> Option<bool> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.thinking_enabled)
-        .or(host.thinking_enabled)
+pub(super) fn host_thinking_enabled(host: &RuntimeRequest) -> Option<bool> {
+    host.thinking_enabled
 }
 
-pub(super) fn host_approval_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.approval_policy.as_deref()))
-        .or_else(|| non_empty(host.approval_policy.as_deref()))
+pub(super) fn host_approval_policy(host: &RuntimeRequest) -> Option<String> {
+    non_empty(host.approval_policy.as_deref())
 }
 
-pub(super) fn host_sandbox_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.sandbox_policy.as_deref()))
-        .or_else(|| non_empty(host.sandbox_policy.as_deref()))
+pub(super) fn host_sandbox_policy(host: &RuntimeRequest) -> Option<String> {
+    non_empty(host.sandbox_policy.as_deref())
 }
 
-fn host_system_prompt(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.system_prompt.as_deref()))
-        .or_else(|| non_empty(host.system_prompt.as_deref()))
+pub(super) fn host_system_prompt(host: &RuntimeRequest) -> Option<String> {
+    non_empty(host.system_prompt.as_deref())
 }
 
-fn host_web_search(host: &AsterChatRequestSnapshot) -> Option<bool> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.web_search)
-        .or(host.web_search)
+fn host_web_search(host: &RuntimeRequest) -> Option<bool> {
+    host.web_search
 }
 
-fn host_request_search_mode(host: &AsterChatRequestSnapshot) -> Option<RequestToolPolicyMode> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.search_mode)
-        .or(host.search_mode)
+fn host_request_search_mode(host: &RuntimeRequest) -> Option<RequestToolPolicyMode> {
+    host.search_mode.map(|mode| match mode {
+        RuntimeSearchMode::Disabled => RequestToolPolicyMode::Disabled,
+        RuntimeSearchMode::Auto => RequestToolPolicyMode::Auto,
+        RuntimeSearchMode::Required => RequestToolPolicyMode::Required,
+    })
 }
 
 pub(super) fn request_tool_policy_from_request(
-    host_request: Option<&AsterChatRequestSnapshot>,
+    host_request: Option<&RuntimeRequest>,
 ) -> RequestToolPolicy {
     let web_search = host_request.and_then(host_web_search);
     let search_mode = host_request.and_then(host_request_search_mode);
@@ -511,13 +446,11 @@ fn fast_response_tool_surface_for_request(
     }
 }
 
-pub(super) fn host_metadata_value(host: &AsterChatRequestSnapshot) -> Option<Value> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.metadata.clone())
-        .or_else(|| host.metadata.clone())
+pub(super) fn host_metadata_value(host: &RuntimeRequest) -> Option<Value> {
+    host.metadata.clone()
 }
 
-fn host_requests_research_web_fetch(host: &AsterChatRequestSnapshot) -> bool {
+fn host_requests_research_web_fetch(host: &RuntimeRequest) -> bool {
     host_metadata_value(host).is_some_and(|metadata| {
         metadata
             .pointer("/harness/research_skill_launch/research_request")
@@ -585,115 +518,6 @@ fn non_empty(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
-}
-
-#[derive(Debug, Deserialize, Default)]
-pub(super) struct AsterChatRequestSnapshot {
-    #[serde(default, alias = "turnConfig")]
-    turn_config: Option<AgentTurnConfigSnapshot>,
-    #[serde(default, alias = "providerConfig")]
-    provider_config: Option<ConfigureProviderRequest>,
-    #[serde(default, alias = "providerPreference")]
-    provider_preference: Option<String>,
-    #[serde(default, alias = "modelPreference")]
-    model_preference: Option<String>,
-    #[serde(default, alias = "reasoningEffort")]
-    reasoning_effort: Option<String>,
-    #[serde(default, alias = "thinkingEnabled")]
-    thinking_enabled: Option<bool>,
-    #[serde(default, alias = "approvalPolicy")]
-    approval_policy: Option<String>,
-    #[serde(default, alias = "sandboxPolicy")]
-    sandbox_policy: Option<String>,
-    #[serde(default, alias = "workspaceId")]
-    workspace_id: Option<String>,
-    #[serde(default, alias = "workingDir")]
-    working_dir: Option<String>,
-    #[serde(default, alias = "workspaceRoot")]
-    workspace_root: Option<String>,
-    #[serde(default, alias = "projectRoot")]
-    project_root: Option<String>,
-    #[serde(default, alias = "webSearch")]
-    web_search: Option<bool>,
-    #[serde(default, alias = "searchMode")]
-    search_mode: Option<RequestToolPolicyMode>,
-    #[serde(default, alias = "systemPrompt")]
-    system_prompt: Option<String>,
-    #[serde(default, alias = "expectedOutput")]
-    expected_output: Option<Value>,
-    #[serde(default, alias = "structuredOutput")]
-    structured_output: Option<Value>,
-    #[serde(default, alias = "outputSchema")]
-    output_schema: Option<Value>,
-    #[serde(default, alias = "turnId")]
-    turn_id: Option<String>,
-    #[serde(default)]
-    metadata: Option<Value>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct AgentTurnConfigSnapshot {
-    #[serde(default, alias = "providerConfig")]
-    provider_config: Option<ConfigureProviderRequest>,
-    #[serde(default, alias = "providerPreference")]
-    provider_preference: Option<String>,
-    #[serde(default, alias = "modelPreference")]
-    model_preference: Option<String>,
-    #[serde(default, alias = "reasoningEffort")]
-    reasoning_effort: Option<String>,
-    #[serde(default, alias = "thinkingEnabled")]
-    thinking_enabled: Option<bool>,
-    #[serde(default, alias = "approvalPolicy")]
-    approval_policy: Option<String>,
-    #[serde(default, alias = "sandboxPolicy")]
-    sandbox_policy: Option<String>,
-    #[serde(default, alias = "webSearch")]
-    web_search: Option<bool>,
-    #[serde(default, alias = "searchMode")]
-    search_mode: Option<RequestToolPolicyMode>,
-    #[serde(default, alias = "systemPrompt")]
-    system_prompt: Option<String>,
-    #[serde(default, alias = "workingDir")]
-    working_dir: Option<String>,
-    #[serde(default, alias = "workspaceRoot")]
-    workspace_root: Option<String>,
-    #[serde(default, alias = "projectRoot")]
-    project_root: Option<String>,
-    #[serde(default, alias = "expectedOutput")]
-    expected_output: Option<Value>,
-    #[serde(default, alias = "structuredOutput")]
-    structured_output: Option<Value>,
-    #[serde(default, alias = "outputSchema")]
-    output_schema: Option<Value>,
-    #[serde(default)]
-    metadata: Option<Value>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct ConfigureProviderRequest {
-    #[serde(default, alias = "providerId")]
-    provider_id: Option<String>,
-    #[serde(default, alias = "providerName")]
-    provider_name: Option<String>,
-    #[serde(default, alias = "modelName")]
-    model_name: Option<String>,
-    #[serde(default, alias = "apiKey")]
-    api_key: Option<String>,
-    #[serde(default, alias = "baseUrl")]
-    base_url: Option<String>,
-    #[serde(default, alias = "toolCallStrategy")]
-    tool_call_strategy: Option<RuntimeToolCallStrategy>,
-    #[serde(default, alias = "toolshimModel")]
-    toolshim_model: Option<String>,
-    #[serde(default, alias = "modelCapabilities")]
-    model_capabilities: Option<Value>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-enum RuntimeToolCallStrategy {
-    Native,
-    ToolShim,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

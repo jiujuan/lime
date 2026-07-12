@@ -80,7 +80,7 @@ describe("agentStreamRequestStartController", () => {
       description: "模型: gpt-5.4 · 策略: react",
       workspaceId: "workspace-a",
       sessionId: "session-a",
-      source: "aster-chat",
+      source: "agent-chat",
       metadata: {
         provider: "openai",
         model: "gpt-5.4",

@@ -73,7 +73,7 @@ export function handleAgentStreamSubmitFailure(
     });
   }
 
-  console.error("[AsterChat] 发送失败:", error);
+  console.error("[AgentChat] 发送失败:", error);
   const errMsg = error instanceof Error ? error.message : String(error);
   const failedRuntimeStatus = buildFailedAgentRuntimeStatus(errMsg, soulCopy);
   observer?.onError?.(errMsg);

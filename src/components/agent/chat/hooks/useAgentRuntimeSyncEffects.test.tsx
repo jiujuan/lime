@@ -360,7 +360,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     };
     const harness = await mountHook({
       runtime,
-      currentTurnEventName: "aster_stream_assistant-1",
+      currentTurnEventName: "agent_stream_assistant-1",
       isSending: true,
       refreshSessionDetail,
       refreshSessionReadModel,
@@ -368,12 +368,12 @@ describe("useAgentRuntimeSyncEffects", () => {
 
     try {
       expect(runtime.listenToTurnEvents).toHaveBeenCalledWith(
-        "aster_stream_assistant-1",
+        "agent_stream_assistant-1",
         expect.any(Function),
       );
 
       await act(async () => {
-        listeners.get("aster_stream_assistant-1")?.({
+        listeners.get("agent_stream_assistant-1")?.({
           payload: {
             type: "runtime_status",
             status: {
@@ -392,7 +392,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       expect(refreshSessionDetail).not.toHaveBeenCalled();
 
       await act(async () => {
-        listeners.get("aster_stream_assistant-1")?.({
+        listeners.get("agent_stream_assistant-1")?.({
           payload: {
             type: "turn.completed",
             turn: {
@@ -415,7 +415,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       expect(refreshSessionDetail).not.toHaveBeenCalled();
 
       await act(async () => {
-        listeners.get("aster_stream_assistant-1")?.({
+        listeners.get("agent_stream_assistant-1")?.({
           payload: {
             type: "turn.failed",
             turn: {
@@ -439,7 +439,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       expect(refreshSessionDetail).not.toHaveBeenCalled();
 
       await act(async () => {
-        listeners.get("aster_stream_assistant-1")?.({
+        listeners.get("agent_stream_assistant-1")?.({
           payload: {
             type: "turn.canceled",
             turn: {
@@ -614,7 +614,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     };
     const harness = await mountHook({
       runtime,
-      currentTurnEventName: "aster_stream_assistant-2",
+      currentTurnEventName: "agent_stream_assistant-2",
       isSending: true,
       refreshSessionDetail,
       refreshSessionReadModel,
@@ -622,7 +622,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
     try {
       await act(async () => {
-        listeners.get("aster_stream_assistant-2")?.({
+        listeners.get("agent_stream_assistant-2")?.({
           payload: {
             type: "text_delta",
             text: "增量内容",
@@ -656,7 +656,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     };
     const harness = await mountHook({
       runtime,
-      currentTurnEventName: "aster_stream_assistant-coalesced",
+      currentTurnEventName: "agent_stream_assistant-coalesced",
       isSending: true,
       refreshSessionDetail,
       refreshSessionReadModel,
@@ -664,7 +664,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
     try {
       await act(async () => {
-        const listener = listeners.get("aster_stream_assistant-coalesced");
+        const listener = listeners.get("agent_stream_assistant-coalesced");
         listener?.({
           payload: {
             type: "runtime_status",
@@ -723,7 +723,7 @@ describe("useAgentRuntimeSyncEffects", () => {
   });
 
   it("App Server turn notification 应通过当前 stream event 触发 read model 刷新", async () => {
-    const eventName = "aster_stream_app-server-p3-126";
+    const eventName = "agent_stream_app-server-p3-126";
     const refreshSessionDetail = vi.fn(async () => true);
     const refreshSessionReadModel = vi.fn(async () => true);
     const appServerClient = createAppServerThreadClientMock();
@@ -796,10 +796,13 @@ describe("useAgentRuntimeSyncEffects", () => {
 
       await act(async () => {
         await threadClient.submitAgentRuntimeTurn({
-          message: "继续",
-          session_id: "session-1",
-          turn_id: "turn-1",
-          event_name: eventName,
+          sessionId: "session-1",
+          turnId: "turn-1",
+          input: { text: "继续" },
+          runtimeOptions: {
+            stream: true,
+            eventName,
+          },
         });
         await Promise.resolve();
       });
@@ -855,7 +858,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     };
     const harness = await mountHook({
       runtime,
-      currentTurnEventName: "aster_stream_assistant-cancel",
+      currentTurnEventName: "agent_stream_assistant-cancel",
       isSending: true,
       refreshSessionDetail,
       refreshSessionReadModel,
@@ -863,7 +866,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
     try {
       await act(async () => {
-        listeners.get("aster_stream_assistant-cancel")?.({
+        listeners.get("agent_stream_assistant-cancel")?.({
           payload: {
             type: "turn.canceled",
             turn: {
@@ -968,7 +971,7 @@ describe("useAgentRuntimeSyncEffects", () => {
       expect(refreshSessionDetail).toHaveBeenCalledTimes(2);
 
       await harness.render({
-        currentTurnEventName: "aster_stream_late-bound",
+        currentTurnEventName: "agent_stream_late-bound",
         isSending: true,
       });
 
@@ -990,7 +993,7 @@ describe("useAgentRuntimeSyncEffects", () => {
 
     const refreshSessionDetail = vi.fn(async () => true);
     const harness = await mountHook({
-      currentTurnEventName: "aster_stream_event-bound",
+      currentTurnEventName: "agent_stream_event-bound",
       isSending: true,
       refreshSessionDetail,
     });

@@ -741,14 +741,17 @@ fn execution_request(metadata: Value) -> ExecutionRequest {
             text: "重新生成配图".to_string(),
             attachments: Vec::new(),
         },
-        runtime_options: None,
+        runtime_options: Some(app_server_protocol::RuntimeOptions {
+            runtime_request: Some(app_server_protocol::RuntimeRequest {
+                metadata: Some(metadata),
+                ..app_server_protocol::RuntimeRequest::default()
+            }),
+            ..app_server_protocol::RuntimeOptions::default()
+        }),
         expected_output: None,
         structured_output: None,
         output_schema: None,
         event_name: None,
-        provider_preference: None,
-        model_preference: None,
-        metadata: Some(metadata),
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,

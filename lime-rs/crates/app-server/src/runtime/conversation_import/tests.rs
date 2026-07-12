@@ -306,57 +306,31 @@ INSERT INTO threads (
 
     let requests = backend.requests.lock().expect("requests mutex poisoned");
     let request = requests.last().expect("recorded request");
-    assert_eq!(request.provider_preference.as_deref(), None);
-    assert_eq!(request.model_preference.as_deref(), None);
+    assert_eq!(request.provider_preference(), None);
+    assert_eq!(request.model_preference(), None);
     let runtime_options = request.runtime_options.as_ref().expect("runtime options");
-    assert_eq!(runtime_options.provider_preference.as_deref(), None);
-    assert_eq!(runtime_options.model_preference.as_deref(), None);
-    assert!(runtime_options
-        .host_options
+    let runtime_request = runtime_options
+        .runtime_request
         .as_ref()
-        .and_then(|value| value.pointer("/asterChatRequest/provider_preference"))
-        .is_none());
-    assert!(runtime_options
-        .host_options
-        .as_ref()
-        .and_then(|value| value.pointer("/asterChatRequest/turn_config/provider_preference"))
-        .is_none());
+        .expect("runtime request");
+    assert_eq!(runtime_request.provider_preference.as_deref(), None);
+    assert_eq!(runtime_request.model_preference.as_deref(), None);
     assert_eq!(
-        runtime_options
-            .host_options
-            .as_ref()
-            .and_then(|value| value.pointer("/asterChatRequest/turn_config/cwd"))
-            .and_then(serde_json::Value::as_str),
+        runtime_request.working_dir.as_deref(),
         Some("/workspace/continue")
     );
+    assert_eq!(runtime_request.reasoning_effort.as_deref(), Some("high"));
     assert_eq!(
-        runtime_options
-            .host_options
-            .as_ref()
-            .and_then(|value| value.pointer("/asterChatRequest/turn_config/reasoning_effort"))
-            .and_then(serde_json::Value::as_str),
-        Some("high")
-    );
-    assert_eq!(
-        runtime_options
-            .host_options
-            .as_ref()
-            .and_then(|value| value.pointer("/asterChatRequest/turn_config/approval_policy"))
-            .and_then(serde_json::Value::as_str),
+        runtime_request.approval_policy.as_deref(),
         Some("on-request")
     );
     assert_eq!(
-        runtime_options
-            .host_options
-            .as_ref()
-            .and_then(|value| value.pointer("/asterChatRequest/turn_config/sandbox_policy"))
-            .and_then(serde_json::Value::as_str),
+        runtime_request.sandbox_policy.as_deref(),
         Some("workspace-write")
     );
     assert_eq!(
         runtime_options
-            .metadata
-            .as_ref()
+            .runtime_metadata()
             .and_then(|value| value.get("memoryMode"))
             .and_then(serde_json::Value::as_str),
         Some("enabled")

@@ -43,7 +43,7 @@
 
 **后续新增状态、历史或遥测能力时，只允许接到 `SessionDetail -> AgentRuntimeThreadReadModel -> RequestLog -> export/history` 这组 current 边界；不允许再造并列状态真相。**
 
-补充迁移边界：会话详情读取 current surface 是 App Server `agentSession/read`；`agent_runtime_get_session` 已退为 `dead / retired guard-only`，不得重新接回生产入口、DevBridge truth、mock priority 或 generated manifest。旧 `agent_runtime_get_thread_read` 与 `agent_runtime_export_*` 只允许作为受控迁移面、retired guard 或历史 evidence，不得承接新业务事实；current 读模型 / 导出必须走 App Server `agentSession/read`、`evidence/export` 与 `agentSession/*/export`。`lime-rs/src/commands/**` 已删除，不是新增状态、历史或遥测实现目录。本文提到的 `aster_agent_cmd/**` 只作为历史锚点和迁移来源；新增状态投影、request telemetry、evidence / replay / review 能力应进入 App Server / RuntimeCore / services / `lime-rs/crates/agent`。旧 telemetry Tauri wrapper 已删除，不得恢复 stub 或 compat wrapper。
+补充迁移边界：会话详情读取 current surface 是 App Server `agentSession/read`；`agent_runtime_get_session` 已退为 `dead / retired guard-only`，不得重新接回生产入口、DevBridge truth、mock priority 或 generated manifest。旧 `agent_runtime_get_thread_read` 与 `agent_runtime_export_*` 只允许作为受控迁移面、retired guard 或历史 evidence，不得承接新业务事实；current 读模型 / 导出必须走 App Server `agentSession/read`、`evidence/export` 与 `agentSession/*/export`。`lime-rs/src/commands/**` 已删除，不是新增状态、历史或遥测实现目录；新增状态投影、request telemetry、evidence / replay / review 能力应进入 App Server / RuntimeCore / services / `lime-rs/crates/agent`。旧 telemetry Tauri wrapper 已删除，不得恢复 stub 或 compat wrapper。
 
 补充边界：
 
@@ -56,7 +56,7 @@
 ### 1. 持久会话与历史事实源
 
 - `lime-rs/crates/agent/src/session_store.rs`
-- `lime-rs/src/agent/aster_agent.rs` 的 `get_runtime_session_detail(...)`
+- `lime-rs/src/agent/agent_agent.rs` 的 `get_runtime_session_detail(...)`
 - `agent_sessions / agent_messages`
 
 当前这里负责：
@@ -197,7 +197,7 @@
 
 ### `compat`
 
-- `internal/roadmap/lime-aster-codex-alignment-roadmap.md`
+- `internal/roadmap/lime-agent-codex-alignment-roadmap.md`
 - `internal/roadmap/reliability/README.md`
 - `internal/roadmap/reliability/*`
 

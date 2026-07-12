@@ -1,4 +1,4 @@
-import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import type {
   AgentEventContextTrace,
   AgentEventModelChange,
@@ -55,15 +55,15 @@ export function buildAgentStreamModelChangePreApplyPlan(
 }
 
 export function applyAgentStreamTurnContextExecutionRuntime(
-  current: AsterSessionExecutionRuntime | null,
+  current: AgentSessionExecutionRuntime | null,
   event: AgentEventTurnContext,
-): AsterSessionExecutionRuntime | null {
+): AgentSessionExecutionRuntime | null {
   return applyTurnContextExecutionRuntime(current, event);
 }
 
 export function applyAgentStreamModelChangeExecutionRuntime(
-  current: AsterSessionExecutionRuntime | null,
+  current: AgentSessionExecutionRuntime | null,
   event: AgentEventModelChange,
-): AsterSessionExecutionRuntime | null {
+): AgentSessionExecutionRuntime | null {
   return applyModelChangeExecutionRuntime(current, event);
 }

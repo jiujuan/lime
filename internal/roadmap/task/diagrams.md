@@ -186,7 +186,7 @@ flowchart LR
     OEMPolicy[OEM routing policy] --> CandidateModelSet
     CandidateModelSet --> RoutingDecision
     LimitState --> RoutingDecision
-    RoutingDecision --> ExecutionRuntime[AsterSessionExecutionRuntime]
+    RoutingDecision --> ExecutionRuntime[AgentSessionExecutionRuntime]
     RoutingDecision --> RequestLog
     LimitState --> RequestLog
     RequestLog --> ThreadRead

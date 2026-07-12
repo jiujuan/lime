@@ -531,7 +531,7 @@ describe("agentSessionScopedStorage", () => {
     const sessionId = "topic-legacy-seconds";
     const nowMs = Date.parse("2026-04-24T00:00:00.000Z");
     const sessionUpdatedAtMs = Date.parse("2026-04-24T00:01:00.000Z");
-    const cacheKey = `aster_session_snapshots_${workspaceId}`;
+    const cacheKey = `agent_session_snapshots_${workspaceId}`;
 
     sessionStorage.setItem(
       cacheKey,
@@ -618,7 +618,7 @@ describe("agentSessionScopedStorage", () => {
       nowMs: nowMs + 10_000,
     });
     const snapshotMap = JSON.parse(
-      sessionStorage.getItem(`aster_session_snapshots_${workspaceId}`) || "{}",
+      sessionStorage.getItem(`agent_session_snapshots_${workspaceId}`) || "{}",
     ) as Record<string, { lastAccessedAt?: number }>;
 
     expect(restored).not.toBeNull();
@@ -647,7 +647,7 @@ describe("agentSessionScopedStorage", () => {
       nowMs: nowMs + 32 * 60 * 1000 + 1,
     });
     const snapshotMap = JSON.parse(
-      sessionStorage.getItem(`aster_session_snapshots_${workspaceId}`) || "{}",
+      sessionStorage.getItem(`agent_session_snapshots_${workspaceId}`) || "{}",
     ) as Record<string, unknown>;
 
     expect(restored).toBeNull();
@@ -707,11 +707,11 @@ describe("agentSessionScopedStorage", () => {
     }
 
     const transientMap = JSON.parse(
-      sessionStorage.getItem(`aster_session_snapshots_${workspaceId}`) || "{}",
+      sessionStorage.getItem(`agent_session_snapshots_${workspaceId}`) || "{}",
     ) as Record<string, unknown>;
     const persistedMap = JSON.parse(
       localStorage.getItem(
-        `aster_session_snapshots_persisted_${workspaceId}`,
+        `agent_session_snapshots_persisted_${workspaceId}`,
       ) || "{}",
     ) as Record<string, unknown>;
 

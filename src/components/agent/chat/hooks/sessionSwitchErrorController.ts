@@ -1,4 +1,4 @@
-import { isAsterSessionNotFoundError } from "@/lib/asterSessionRecovery";
+import { isAgentSessionNotFoundError } from "@/lib/agentSessionRecovery";
 
 export type SessionSwitchErrorKind =
   | "session_not_found"
@@ -38,7 +38,7 @@ export function resolveSessionSwitchErrorAction(params: {
 }): SessionSwitchErrorAction {
   const logContext = buildSessionSwitchErrorLogContext(params);
 
-  if (isAsterSessionNotFoundError(params.error)) {
+  if (isAgentSessionNotFoundError(params.error)) {
     return {
       clearCurrentSnapshot: true,
       kind: "session_not_found",

@@ -1,5 +1,5 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import {
   asHistoryRecord,
   readHistoryString,
@@ -90,7 +90,7 @@ function findTurnUsageInRecords(
 }
 
 export function resolveSessionDetailTurnUsage(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   runtimeTurnId?: string | null,
 ): AgentTokenUsage | undefined {
   return (

@@ -1,7 +1,7 @@
 use super::{RuntimeCore, RuntimeCoreError, RuntimeHostContext};
 use app_server_protocol::{
     AgentInput, AgentSessionReadParams, AgentSessionStartParams, AgentSessionTurnStartParams,
-    BusinessObjectRef, RuntimeOptions,
+    BusinessObjectRef, RuntimeOptions, RuntimeRequest,
 };
 use async_trait::async_trait;
 use lime_gateway::agent_runner::{
@@ -39,9 +39,12 @@ impl GatewayAgentRunner for RuntimeGatewayAgentRunner {
                     },
                     runtime_options: Some(RuntimeOptions {
                         stream: false,
-                        provider_preference: request.provider_preference.clone(),
-                        model_preference: request.model_preference.clone(),
-                        metadata: Some(request.metadata.clone()),
+                        runtime_request: Some(RuntimeRequest {
+                            provider_preference: request.provider_preference.clone(),
+                            model_preference: request.model_preference.clone(),
+                            metadata: Some(request.metadata.clone()),
+                            ..RuntimeRequest::default()
+                        }),
                         ..RuntimeOptions::default()
                     }),
                     queue_if_busy: true,

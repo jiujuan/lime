@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  createSubmitTurnRequestFromAgentOp,
+  createAgentSessionTurnStartParamsFromUserInputOp,
   parseAgentEvent,
 } from "./agentProtocol";
 
 describe("agentProtocol", () => {
-  it("应将 AgentOp.user_input 适配为现有 runtime submit request", () => {
+  it("应将 AgentOp.user_input 投影为 App Server current turn params", () => {
     expect(
-      createSubmitTurnRequestFromAgentOp({
+      createAgentSessionTurnStartParamsFromUserInputOp({
         type: "user_input",
         text: "继续处理这段对话",
         sessionId: "session-1",
-        eventName: "aster_stream_session-1",
+        eventName: "agent_stream_session-1",
         workspaceId: "workspace-1",
         turnId: "turn-1",
         preferences: {
@@ -40,79 +40,79 @@ describe("agentProtocol", () => {
         skipPreSubmitResume: true,
       }),
     ).toEqual({
-      message: "继续处理这段对话",
-      session_id: "session-1",
-      event_name: "aster_stream_session-1",
-      workspace_id: "workspace-1",
-      turn_id: "turn-1",
-      turn_config: {
-        provider_preference: "openai",
-        model_preference: "gpt-5.4",
-        thinking_enabled: true,
-        approval_policy: "on-request",
-        sandbox_policy: "workspace-write",
-        execution_strategy: "react",
-        web_search: false,
-        auto_continue: {
-          enabled: true,
-          fast_mode_enabled: false,
-          continuation_length: 3,
-          sensitivity: 0.6,
-        },
-        system_prompt: "保持简洁",
-        metadata: {
-          harness: {
-            theme: "general",
+      sessionId: "session-1",
+      turnId: "turn-1",
+      input: {
+        text: "继续处理这段对话",
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName: "agent_stream_session-1",
+        queuedTurnId: "queued-1",
+        runtimeRequest: {
+          providerPreference: "openai",
+          modelPreference: "gpt-5.4",
+          thinkingEnabled: true,
+          approvalPolicy: "on-request",
+          sandboxPolicy: "workspace-write",
+          workspaceId: "workspace-1",
+          executionStrategy: "react",
+          webSearch: false,
+          autoContinue: true,
+          systemPrompt: "保持简洁",
+          metadata: {
+            harness: {
+              theme: "general",
+            },
           },
         },
       },
-      queue_if_busy: true,
-      queued_turn_id: "queued-1",
-      skip_pre_submit_resume: true,
+      queueIfBusy: true,
+      skipPreSubmitResume: true,
     });
   });
 
   it("应透传显式联网搜索模式而不是从文本关键词推断", () => {
     expect(
-      createSubmitTurnRequestFromAgentOp({
+      createAgentSessionTurnStartParamsFromUserInputOp({
         type: "user_input",
         text: "请搜索最新 AI 新闻",
         sessionId: "session-search",
-        eventName: "aster_stream_session-search",
+        eventName: "agent_stream_session-search",
         preferences: {
           webSearch: true,
           searchMode: "required",
         },
-      }).turn_config,
+      }).runtimeOptions?.runtimeRequest,
     ).toMatchObject({
-      web_search: true,
-      search_mode: "required",
+      webSearch: true,
+      searchMode: "required",
     });
   });
 
-  it("应把模型推理强度写入 runtime turn_config", () => {
+  it("应把模型推理强度写入 RuntimeRequest", () => {
     expect(
-      createSubmitTurnRequestFromAgentOp({
+      createAgentSessionTurnStartParamsFromUserInputOp({
         type: "user_input",
         text: "继续",
         sessionId: "session-reasoning",
-        eventName: "aster_stream_reasoning",
+        eventName: "agent_stream_reasoning",
         preferences: {
           reasoningEffort: "high",
         },
-      }).turn_config,
+      }).runtimeOptions?.runtimeRequest,
     ).toMatchObject({
-      reasoning_effort: "high",
+      reasoningEffort: "high",
     });
   });
 
-  it("应把编排 provider_config 透传到 runtime turn_config", () => {
+  it("应把编排 provider config 透传到 RuntimeRequest", () => {
     expect(
-      createSubmitTurnRequestFromAgentOp({
+      createAgentSessionTurnStartParamsFromUserInputOp({
         type: "user_input",
         text: "@Nanobanana Pro 生成一张广州塔春天照片",
         sessionId: "session-image-1",
-        eventName: "aster_stream_image",
+        eventName: "agent_stream_image",
         preferences: {
           providerConfig: {
             provider_id: "deepseek",
@@ -120,46 +120,37 @@ describe("agentProtocol", () => {
             model_name: "deepseek-v4-pro",
           },
         },
-      }).turn_config?.provider_config,
+      }).runtimeOptions?.runtimeRequest?.providerConfig,
     ).toEqual({
-      provider_id: "deepseek",
-      provider_name: "deepseek",
-      model_name: "deepseek-v4-pro",
+      providerId: "deepseek",
+      providerName: "deepseek",
+      modelName: "deepseek-v4-pro",
     });
   });
 
-  it("缺少 workspaceId 时不应在 runtime submit request 中生成 workspace_id", () => {
+  it("缺少 workspaceId 时不应生成 runtime workspaceId", () => {
     expect(
-      createSubmitTurnRequestFromAgentOp({
+      createAgentSessionTurnStartParamsFromUserInputOp({
         type: "user_input",
         text: "继续处理这段对话",
         sessionId: "session-1",
-        eventName: "aster_stream_session-1",
+        eventName: "agent_stream_session-1",
         preferences: {
           webSearch: true,
         },
       }),
     ).toEqual({
-      message: "继续处理这段对话",
-      session_id: "session-1",
-      event_name: "aster_stream_session-1",
-      turn_config: {
-        web_search: true,
-        system_prompt: undefined,
-        metadata: undefined,
-        provider_preference: undefined,
-        model_preference: undefined,
-        thinking_enabled: undefined,
-        approval_policy: undefined,
-        sandbox_policy: undefined,
-        execution_strategy: undefined,
-        auto_continue: undefined,
+      sessionId: "session-1",
+      input: {
+        text: "继续处理这段对话",
       },
-      queue_if_busy: undefined,
-      queued_turn_id: undefined,
-      skip_pre_submit_resume: undefined,
-      turn_id: undefined,
-      images: undefined,
+      runtimeOptions: {
+        stream: true,
+        eventName: "agent_stream_session-1",
+        runtimeRequest: {
+          webSearch: true,
+        },
+      },
     });
   });
 
@@ -265,7 +256,7 @@ describe("agentProtocol", () => {
           status: "running",
           provider_request_id: "req-provider-1",
           provider_request_id_header: "x-request-id",
-          runtime_provider_backend: "aster_compat",
+          runtime_provider_backend: "current",
           runtime_provider_selector: "codex",
           runtime_provider_protocol: "responses",
           runtime_provider_active_model: "gpt-4.1",
@@ -282,7 +273,7 @@ describe("agentProtocol", () => {
       status: "running",
       provider_request_id: "req-provider-1",
       provider_request_id_header: "x-request-id",
-      runtime_provider_backend: "aster_compat",
+      runtime_provider_backend: "current",
       runtime_provider_selector: "codex",
       runtime_provider_protocol: "responses",
       runtime_provider_active_model: "gpt-4.1",

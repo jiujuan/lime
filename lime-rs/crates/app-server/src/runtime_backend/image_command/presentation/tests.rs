@@ -2,13 +2,26 @@ use super::*;
 use crate::{ExecutionRequest, RuntimeHostContext};
 use app_server_protocol::{
     AgentInput, AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
+    RuntimeProviderConfig, RuntimeRequest,
 };
 use serde_json::{json, Value};
 
 fn request_for_presentation_test(
-    host_options: Option<Value>,
+    runtime_request: Option<RuntimeRequest>,
     metadata: Option<Value>,
 ) -> ExecutionRequest {
+    let runtime_request = match (runtime_request, metadata) {
+        (Some(mut runtime_request), Some(metadata)) => {
+            runtime_request.metadata = Some(metadata);
+            Some(runtime_request)
+        }
+        (Some(runtime_request), None) => Some(runtime_request),
+        (None, Some(metadata)) => Some(RuntimeRequest {
+            metadata: Some(metadata),
+            ..RuntimeRequest::default()
+        }),
+        (None, None) => None,
+    };
     ExecutionRequest {
         host: RuntimeHostContext::default(),
         session: AgentSession {
@@ -34,23 +47,14 @@ fn request_for_presentation_test(
             attachments: Vec::new(),
         },
         runtime_options: Some(RuntimeOptions {
-            capability_id: None,
             stream: true,
-            event_name: None,
-            provider_preference: None,
-            model_preference: None,
-            metadata,
-            queued_turn_id: None,
-            host_options,
+            runtime_request,
             ..RuntimeOptions::default()
         }),
         event_name: None,
         expected_output: None,
         structured_output: None,
         output_schema: None,
-        provider_preference: None,
-        model_preference: None,
-        metadata: None,
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,
@@ -300,10 +304,8 @@ fn presentation_selection_prefers_text_slot_over_image_runtime_preference() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("agnes".to_string());
-    options.model_preference = Some("agnes-image-2.1-flash".to_string());
-    request.provider_preference = options.provider_preference.clone();
-    request.model_preference = options.model_preference.clone();
+    options.runtime_request_mut().provider_preference = Some("agnes".to_string());
+    options.runtime_request_mut().model_preference = Some("agnes-image-2.1-flash".to_string());
 
     let selection = resolve_presentation_model_selection(&request).expect("selection");
 
@@ -313,21 +315,21 @@ fn presentation_selection_prefers_text_slot_over_image_runtime_preference() {
 }
 
 #[test]
-fn presentation_selection_rejects_image_only_host_config() {
+fn presentation_selection_rejects_image_only_runtime_request_config() {
     let request = request_for_presentation_test(
-        Some(json!({
-            "asterChatRequest": {
-                "provider_config": {
-                    "provider_id": "agnes",
-                    "provider_name": "openai",
-                    "model_name": "agnes-image-2.1-flash",
-                    "api_key": "sk-test",
-                    "base_url": "https://apihub.agnes-ai.com/v1"
-                },
-                "provider_preference": "agnes",
-                "model_preference": "agnes-image-2.1-flash"
-            }
-        })),
+        Some(RuntimeRequest {
+            provider_config: Some(RuntimeProviderConfig {
+                provider_id: Some("agnes".to_string()),
+                provider_name: Some("openai".to_string()),
+                model_name: Some("agnes-image-2.1-flash".to_string()),
+                api_key: Some("sk-test".to_string()),
+                base_url: Some("https://apihub.agnes-ai.com/v1".to_string()),
+                ..RuntimeProviderConfig::default()
+            }),
+            provider_preference: Some("agnes".to_string()),
+            model_preference: Some("agnes-image-2.1-flash".to_string()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
 
@@ -339,21 +341,21 @@ fn presentation_selection_rejects_image_only_host_config() {
 }
 
 #[test]
-fn presentation_selection_keeps_agnes_text_model_without_image_word() {
+fn presentation_selection_keeps_agnes_text_runtime_request_model_without_image_word() {
     let request = request_for_presentation_test(
-        Some(json!({
-            "asterChatRequest": {
-                "provider_config": {
-                    "provider_id": "custom-agnes-provider",
-                    "provider_name": "openai",
-                    "model_name": "agnes-2.0-flash",
-                    "api_key": "sk-test",
-                    "base_url": "https://apihub.agnes-ai.com/v1"
-                },
-                "provider_preference": "custom-agnes-provider",
-                "model_preference": "agnes-2.0-flash"
-            }
-        })),
+        Some(RuntimeRequest {
+            provider_config: Some(RuntimeProviderConfig {
+                provider_id: Some("custom-agnes-provider".to_string()),
+                provider_name: Some("openai".to_string()),
+                model_name: Some("agnes-2.0-flash".to_string()),
+                api_key: Some("sk-test".to_string()),
+                base_url: Some("https://apihub.agnes-ai.com/v1".to_string()),
+                ..RuntimeProviderConfig::default()
+            }),
+            provider_preference: Some("custom-agnes-provider".to_string()),
+            model_preference: Some("agnes-2.0-flash".to_string()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
 
@@ -390,21 +392,21 @@ fn presentation_selection_skips_image_fast_slot_and_uses_base_slot() {
 }
 
 #[test]
-fn presentation_selection_allows_text_host_direct_config() {
+fn presentation_selection_allows_text_runtime_request_direct_config() {
     let request = request_for_presentation_test(
-        Some(json!({
-            "asterChatRequest": {
-                "provider_config": {
-                    "provider_id": "fixture-openai",
-                    "provider_name": "openai",
-                    "model_name": "lime-fixture-chat",
-                    "api_key": "sk-test",
-                    "base_url": "http://127.0.0.1:56599"
-                },
-                "provider_preference": "fixture-openai",
-                "model_preference": "lime-fixture-chat"
-            }
-        })),
+        Some(RuntimeRequest {
+            provider_config: Some(RuntimeProviderConfig {
+                provider_id: Some("fixture-openai".to_string()),
+                provider_name: Some("openai".to_string()),
+                model_name: Some("lime-fixture-chat".to_string()),
+                api_key: Some("sk-test".to_string()),
+                base_url: Some("http://127.0.0.1:56599".to_string()),
+                ..RuntimeProviderConfig::default()
+            }),
+            provider_preference: Some("fixture-openai".to_string()),
+            model_preference: Some("lime-fixture-chat".to_string()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
 
@@ -412,5 +414,5 @@ fn presentation_selection_allows_text_host_direct_config() {
 
     assert_eq!(selection.provider, "fixture-openai");
     assert_eq!(selection.model, "lime-fixture-chat");
-    assert_eq!(selection.source, "host_options_provider_config");
+    assert_eq!(selection.source, "runtime_request_provider_config");
 }

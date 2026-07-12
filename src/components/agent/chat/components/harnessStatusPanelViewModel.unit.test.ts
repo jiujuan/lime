@@ -3,7 +3,7 @@ import type {
   AgentRuntimeToolInventoryCatalogEntry,
   AgentRuntimeToolInventoryNativeEntry,
   AgentRuntimeToolInventoryRuntimeEntry,
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type {
   HarnessActiveFileWrite,
@@ -89,8 +89,8 @@ import {
 } from "./harnessStatusPanelViewModel";
 
 function buildSubagentSession(
-  runtimeStatus: AsterSubagentSessionInfo["runtime_status"],
-): AsterSubagentSessionInfo {
+  runtimeStatus: AgentSubagentSessionInfo["runtime_status"],
+): AgentSubagentSessionInfo {
   return {
     id: `session-${runtimeStatus ?? "unknown"}`,
     name: `Session ${runtimeStatus ?? "unknown"}`,
@@ -150,7 +150,7 @@ function buildCatalogTool(
     profiles: ["core"],
     capabilities: ["workspace_io"],
     lifecycle: "current",
-    source: "aster_builtin",
+    source: "agent_builtin",
     permission_plane: "session_allowlist",
     workspace_default_allow: true,
     execution_warning_policy: "none",

@@ -690,9 +690,6 @@ async function main() {
         if (invokes.some((item) => item.cmd === "workspace_ensure_ready")) {
           return "invoke:workspace_ensure_ready";
         }
-        if (invokes.some((item) => item.cmd === "agent_init")) {
-          return "invoke:agent_init";
-        }
         if (await isComposerReady(page)) {
           return "composer-ready";
         }
@@ -833,9 +830,8 @@ async function main() {
     assert(request, "@配图 current 提交缺少 agentSession/turn/start");
     const params = request.params || {};
     const runtimeOptions = params.runtimeOptions || {};
-    const metadata = runtimeOptions.metadata || {};
-    const asterChatRequest = runtimeOptions.hostOptions?.asterChatRequest || {};
-    const turnConfig = asterChatRequest.turn_config || asterChatRequest;
+    const runtimeRequest = runtimeOptions.runtimeRequest || {};
+    const metadata = runtimeRequest.metadata || {};
     const harness = readNestedObject(metadata, ["harness"]) || metadata;
     const { launch, imageTask } = readImageCommandIntent(metadata);
     const runtimeContract = readNestedObject(imageTask, [
@@ -863,11 +859,11 @@ async function main() {
       `@配图 image_task 合同应为 image_generation，实际为 ${String(contractKey)}`,
     );
     assert(
-      turnConfig.provider_preference == null,
+      runtimeRequest.providerPreference == null,
       "@配图 不应把当前聊天 provider 提交为 request provider_preference",
     );
     assert(
-      turnConfig.model_preference == null,
+      runtimeRequest.modelPreference == null,
       "@配图 不应把当前聊天 model 提交为 request model_preference",
     );
 
@@ -877,15 +873,11 @@ async function main() {
     summary.assertions.chatModelPreferenceSuppressed = true;
     summary.submitRequest = {
       routeMode: "agentSession/turn/start",
-      message: params.input?.text || asterChatRequest.message || null,
+      message: params.input?.text || null,
       sessionId: params.sessionId || null,
       turnId: params.turnId || null,
-      providerPreference:
-        runtimeOptions.providerPreference ??
-        turnConfig.provider_preference ??
-        null,
-      modelPreference:
-        runtimeOptions.modelPreference ?? turnConfig.model_preference ?? null,
+      providerPreference: runtimeRequest.providerPreference ?? null,
+      modelPreference: runtimeRequest.modelPreference ?? null,
       contractKey,
       imagePrompt: imageTask.prompt,
     };

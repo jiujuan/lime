@@ -778,11 +778,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_rejects_aster_backend_for_standalone_binary() {
-        let error = parse_args_from(["--backend", "aster"].map(str::to_string)).expect_err("error");
+    fn parse_args_rejects_runtime_backend_for_standalone_binary() {
+        let error = parse_args_from(["--backend", "agent"].map(str::to_string)).expect_err("error");
 
         assert!(error
             .to_string()
-            .contains("unsupported app-server backend mode: aster"));
+            .contains("unsupported app-server backend mode: agent"));
     }
 }

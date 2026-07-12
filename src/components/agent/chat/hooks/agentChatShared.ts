@@ -1,8 +1,8 @@
 import type {
-  AsterExecutionStrategy,
-  AsterSessionInfo,
+  AgentExecutionStrategy,
+  AgentSessionInfo,
   AutoContinueRequestPayload,
-  AgentRuntimeWebSearchMode,
+  RuntimeSearchMode,
 } from "@/lib/api/agentRuntime";
 import type {
   AgentRuntimeStatus,
@@ -52,7 +52,7 @@ export interface Topic {
   workspaceId?: string | null;
   workingDir?: string | null;
   messagesCount: number;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   status: TaskStatus;
   statusReason?: TaskStatusReason;
   lastPreview: string;
@@ -62,7 +62,7 @@ export interface Topic {
   sourceSessionId: string;
 }
 
-export interface UseAsterAgentChatOptions {
+export interface UseAgentChatOptions {
   systemPrompt?: string;
   clawTraceEnabled?: boolean;
   onWriteFile?: (
@@ -120,7 +120,7 @@ export interface SendMessageOptions {
   modelCapabilitySummary?: ModelCapabilitySummary | null;
   reasoningEffort?: string;
   systemPromptOverride?: string;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   explicitToolPreferences?: boolean;
   targetSessionId?: string;
   skipSessionRestore?: boolean;
@@ -174,7 +174,7 @@ export type SendMessageFn = (
   webSearch?: boolean,
   thinking?: boolean,
   skipUserMessage?: boolean,
-  executionStrategyOverride?: AsterExecutionStrategy,
+  executionStrategyOverride?: AgentExecutionStrategy,
   modelOverride?: string,
   autoContinue?: AutoContinueRequestPayload,
   options?: SendMessageOptions,
@@ -616,7 +616,7 @@ function buildSessionFallbackTitle(createdAt: Date): string {
     : "新任务";
 }
 
-export const mapSessionToTopic = (session: AsterSessionInfo): Topic => {
+export const mapSessionToTopic = (session: AgentSessionInfo): Topic => {
   const updatedAtValue = session.updated_at ?? session.created_at;
   const messagesCount = session.messages_count ?? 0;
   const createdAt = resolveSessionTimestampDate(session.created_at);

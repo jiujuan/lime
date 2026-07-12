@@ -469,13 +469,13 @@ function buildIsolatedRuntimeEnv(tmpRoot) {
   const xdgDataHome = ensureDir(path.join(tmpRoot, "xdg-data"));
   const appData = ensureDir(path.join(tmpRoot, "appdata"));
   const localAppData = ensureDir(path.join(tmpRoot, "local-appdata"));
-  const asterRoot = ensureDir(path.join(tmpRoot, "aster"));
+  const agentRoot = ensureDir(path.join(tmpRoot, "agent"));
   return {
     HOME: home,
     XDG_DATA_HOME: xdgDataHome,
     APPDATA: appData,
     LOCALAPPDATA: localAppData,
-    LIME_ASTER_ROOT: asterRoot,
+    LIME_AGENT_RUNTIME_ROOT: agentRoot,
   };
 }
 

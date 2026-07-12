@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
@@ -45,7 +45,7 @@ describe("createAgentStreamPreparedSendEnv", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setQueuedTurns: noopDispatch<QueuedTurnSnapshot[]>(),
       setPendingActions: noopDispatch<ActionRequired[]>(),
       setWorkspacePathMissing: noopDispatch<WorkspacePathMissingState | null>(),

@@ -319,20 +319,20 @@ beforeEach(async () => {
     },
   });
   mockGetBrowserBackendPolicy.mockResolvedValue({
-    priority: ["aster_compat", "lime_extension_bridge", "cdp_direct"],
+    priority: ["current", "lime_extension_bridge", "cdp_direct"],
     auto_fallback: true,
   });
   mockGetBrowserBackendsStatus.mockResolvedValue({
     policy: {
-      priority: ["aster_compat", "lime_extension_bridge", "cdp_direct"],
+      priority: ["current", "lime_extension_bridge", "cdp_direct"],
       auto_fallback: true,
     },
     bridge_observer_count: 0,
     bridge_control_count: 0,
     running_profile_count: 0,
     cdp_alive_profile_count: 0,
-    aster_native_host_supported: true,
-    aster_native_host_configured: false,
+    agent_native_host_supported: true,
+    agent_native_host_configured: false,
     backends: [],
   });
 });
@@ -554,15 +554,15 @@ describe("ChromeRelaySettings", () => {
     });
     mockGetBrowserBackendsStatus.mockResolvedValue({
       policy: {
-        priority: ["aster_compat", "lime_extension_bridge", "cdp_direct"],
+        priority: ["current", "lime_extension_bridge", "cdp_direct"],
         auto_fallback: true,
       },
       bridge_observer_count: 1,
       bridge_control_count: 1,
       running_profile_count: 1,
       cdp_alive_profile_count: 1,
-      aster_native_host_supported: true,
-      aster_native_host_configured: false,
+      agent_native_host_supported: true,
+      agent_native_host_configured: false,
       backends: [],
     });
 
@@ -615,15 +615,15 @@ describe("ChromeRelaySettings", () => {
   it("默认不再展示扩展桥接诊断详情与能力清单", async () => {
     mockGetBrowserBackendsStatus.mockResolvedValueOnce({
       policy: {
-        priority: ["aster_compat", "lime_extension_bridge", "cdp_direct"],
+        priority: ["current", "lime_extension_bridge", "cdp_direct"],
         auto_fallback: true,
       },
       bridge_observer_count: 1,
       bridge_control_count: 1,
       running_profile_count: 1,
       cdp_alive_profile_count: 1,
-      aster_native_host_supported: true,
-      aster_native_host_configured: false,
+      agent_native_host_supported: true,
+      agent_native_host_configured: false,
       backends: [
         {
           backend: "lime_extension_bridge",
@@ -670,18 +670,18 @@ describe("ChromeRelaySettings", () => {
   it("后端策略页应渲染策略配置与可用性摘要", async () => {
     mockGetBrowserBackendsStatus.mockResolvedValueOnce({
       policy: {
-        priority: ["aster_compat", "lime_extension_bridge", "cdp_direct"],
+        priority: ["current", "lime_extension_bridge", "cdp_direct"],
         auto_fallback: true,
       },
       bridge_observer_count: 0,
       bridge_control_count: 0,
       running_profile_count: 0,
       cdp_alive_profile_count: 0,
-      aster_native_host_supported: true,
-      aster_native_host_configured: false,
+      agent_native_host_supported: true,
+      agent_native_host_configured: false,
       backends: [
         {
-          backend: "aster_compat",
+          backend: "current",
           available: false,
           reason: null,
           capabilities: [],
@@ -708,7 +708,7 @@ describe("ChromeRelaySettings", () => {
       "Capabilities: Waiting for runtime response",
     );
     expect(container.textContent).toContain(
-      "Aster native-host: Not configured",
+      "Agent native-host: Not configured",
     );
     expect(container.textContent).toContain("Platform Support: Yes");
     expect(

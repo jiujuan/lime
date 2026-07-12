@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import {
   listAgentRuntimeSessions,
   updateAgentRuntimeSession,
-  type AsterSessionInfo,
+  type AgentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import { formatDate } from "@/i18n/format";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,7 @@ function formatSessionDate(
   });
 }
 
-function resolveWorkspaceLabel(session: AsterSessionInfo): string | null {
+function resolveWorkspaceLabel(session: AgentSessionInfo): string | null {
   const workspaceId = session.workspace_id?.trim();
   if (workspaceId) {
     return workspaceId;
@@ -62,7 +62,7 @@ function resolveWorkspaceLabel(session: AsterSessionInfo): string | null {
 
 export function ArchivedConversationsSettings() {
   const { t, i18n } = useTranslation("settings");
-  const [sessions, setSessions] = useState<AsterSessionInfo[]>([]);
+  const [sessions, setSessions] = useState<AgentSessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [restoringSessionId, setRestoringSessionId] = useState<string | null>(
@@ -110,7 +110,7 @@ export function ArchivedConversationsSettings() {
   }, [loadArchivedSessions]);
 
   const handleRestore = useCallback(
-    async (session: AsterSessionInfo) => {
+    async (session: AgentSessionInfo) => {
       setRestoringSessionId(session.id);
       try {
         await updateAgentRuntimeSession({

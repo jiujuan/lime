@@ -69,12 +69,12 @@
 
 ### 2.5 Agent 注入事实源
 
-路径：`lime-rs/src/commands/aster_agent_cmd.rs`
+路径：`lime-rs/src/commands/agent_cmd.rs`
 
 负责：
 
 - `tool_search` bridge tool
-- MCP -> Aster extension 注入
+- MCP -> Agent extension 注入
 - workspace tool allowlist
 - runtime tool inventory 命令
 
@@ -105,14 +105,14 @@
 
 ```mermaid
 graph TD
-    UI[前端 / agentRuntime.ts] --> CMD[aster_agent_cmd.rs]
+    UI[前端 / agentRuntime.ts] --> CMD[agent_cmd.rs]
 
     CMD --> CAT[agent_tools/catalog.rs]
     CMD --> EXEC[agent_tools/execution.rs]
     CMD --> INV[agent_tools/inventory.rs]
     CMD --> META[lime_core::tool_calling.rs]
     CMD --> MCP[lime_mcp::manager.rs]
-    CMD --> AGENT[Aster Agent]
+    CMD --> AGENT[Agent Agent]
     TEST[lime-agent test carrier] -. 复用纯逻辑 .-> CAT
     TEST -. 复用纯逻辑 .-> EXEC
     TEST -. 复用纯逻辑 .-> INV
@@ -140,18 +140,18 @@ graph TD
 
 ## 4. 初始化时序图
 
-下面是 Lime 启动 Agent 并把 MCP 工具面注入 Aster 的主链路。
+下面是 Lime 启动 Agent 并把 MCP 工具面注入 Agent 的主链路。
 
 ```mermaid
 sequenceDiagram
     participant UI as 前端
-    participant CMD as aster_agent_init
-    participant STATE as AsterAgentState
+    participant CMD as agent_init
+    participant STATE as AgentState
     participant MCP as McpClientManager
     participant META as lime_core::tool_calling
-    participant EXT as Aster ExtensionManager
+    participant EXT as Agent ExtensionManager
 
-    UI->>CMD: aster_agent_init()
+    UI->>CMD: agent_init()
     CMD->>STATE: init_agent_with_db()
     CMD->>MCP: ensure_lime_mcp_servers_running()
     CMD->>MCP: list_tools()
@@ -202,7 +202,7 @@ flowchart TD
 
 - 这个工具属于哪个产品 surface
 - 是 current 还是 compat
-- 是 Aster builtin、Lime injected 还是 Browser compatibility
+- 是 Agent builtin、Lime injected 还是 Browser compatibility
 
 ## 6.2 上下文层
 
@@ -216,7 +216,7 @@ flowchart TD
 
 ## 6.3 执行层
 
-由 `agent_tools/execution.rs` + Aster `ToolPermissionManager` + workspace sandbox / runtime approval 定义。
+由 `agent_tools/execution.rs` + Agent `ToolPermissionManager` + workspace sandbox / runtime approval 定义。
 
 回答的问题：
 
@@ -238,7 +238,7 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant UI as 前端 / request.metadata
-    participant CMD as aster_agent_cmd.rs
+    participant CMD as agent_cmd.rs
     participant CFG as NativeAgentConfig.tool_execution
     participant EXEC as agent_tools/execution.rs
     participant PERM as ToolPermissionManager
@@ -258,7 +258,7 @@ sequenceDiagram
 
 - `catalog.rs` 仍只定义目录层事实
 - `execution.rs` 独占执行层合并逻辑
-- `aster_agent_cmd.rs` 只负责 orchestration，不再手工散写 permission 模板
+- `agent_cmd.rs` 只负责 orchestration，不再手工散写 permission 模板
 - provenance 也在 `execution.rs` 统一生成，inventory 只消费结果，不再自行推断来源
 
 ---
@@ -302,9 +302,9 @@ Lime 不需要一比一复制 Codex，但要学到这三个原则：
 | Codex                           | Lime 对应实现                                                        |
 | ------------------------------- | -------------------------------------------------------------------- |
 | `DynamicToolSpec.defer_loading` | `x-lime.deferred_loading` + `McpToolDefinition.deferred_loading`     |
-| `thread_dynamic_tools`          | Aster ExtensionManager searchable tools + MCP runtime cache          |
+| `thread_dynamic_tools`          | Agent ExtensionManager searchable tools + MCP runtime cache          |
 | 小常驻工具面                    | `workspace_default_allowed_tool_names(...)`                          |
-| app tool config / approval 分离 | `catalog.rs` + `execution.rs` + workspace sandbox / Aster permission |
+| app tool config / approval 分离 | `catalog.rs` + `execution.rs` + workspace sandbox / Agent permission |
 | persisted permissions profile   | `NativeAgentConfig.tool_execution`                                   |
 | thread/request runtime override | `request.metadata.harness.executionPolicy`                           |
 

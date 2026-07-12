@@ -1,0 +1,195 @@
+/* global process */
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const REPO_ROOT = process.cwd();
+
+function repoPath(path: string): string {
+  return join(REPO_ROOT, path);
+}
+
+function read(path: string): string {
+  return readFileSync(repoPath(path), "utf8");
+}
+
+function filesUnder(path: string): string[] {
+  const root = repoPath(path);
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { recursive: true })
+    .map(String)
+    .map((entry) => join(root, entry))
+    .filter((entry) => statSync(entry).isFile())
+    .map((entry) => relative(REPO_ROOT, entry));
+}
+
+const CURRENT_RUNTIME_CRATES = [
+  "agent-protocol",
+  "agent-runtime",
+  "model-provider",
+  "thread-store",
+  "tool-runtime",
+];
+
+const DELETED_AGENT_PATHS = [
+  "lime-rs/crates/agent/src/agent_runtime_projection.rs",
+  "lime-rs/crates/agent/src/agent_session_store.rs",
+  "lime-rs/crates/agent/src/agent_session_store",
+  "lime-rs/crates/agent/src/event_converter.rs",
+  "lime-rs/crates/agent/src/identity_adapter.rs",
+  "lime-rs/crates/agent/src/message_content_adapter.rs",
+  "lime-rs/crates/agent/src/native_tools/runtime_tool_bridge.rs",
+  "lime-rs/crates/agent/src/runtime_conversation_agent_adapter.rs",
+  "lime-rs/crates/agent/src/runtime_snapshot_adapter.rs",
+  "lime-rs/crates/agent/src/runtime_state/gateway_registration_tests.rs",
+  "lime-rs/crates/agent/src/runtime_store_agent_adapter.rs",
+  "lime-rs/crates/agent/src/runtime_timeline_adapter.rs",
+  "lime-rs/crates/agent/src/session_config_adapter.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime_adapter.rs",
+  "lime-rs/crates/agent/src/session_runtime_conversation_query.rs",
+  "lime-rs/crates/agent/src/session_store_todo_agent_adapter.rs",
+  "lime-rs/crates/agent/src/subagent_runtime_adapter.rs",
+  "lime-rs/crates/agent/src/tools/skill_tool_gate.rs",
+  "lime-rs/crates/agent/src/turn_context_configuration/agent_adapter.rs",
+];
+
+describe("Agent migration boundary", () => {
+  it("agent-compat 必须保持物理删除", () => {
+    expect(existsSync(repoPath("lime-rs/crates/agent-compat"))).toBe(false);
+  });
+
+  it("workspace 与 lime-agent 不得恢复 Agent 依赖", () => {
+    const manifests = [
+      "lime-rs/Cargo.toml",
+      "lime-rs/crates/agent/Cargo.toml",
+      ...CURRENT_RUNTIME_CRATES.map(
+        (crateName) => `lime-rs/crates/${crateName}/Cargo.toml`,
+      ),
+    ];
+    for (const manifest of manifests) {
+      const source = read(manifest);
+      expect(source, manifest).not.toMatch(/^agent\s*=|agent\.workspace/mu);
+      expect(source, manifest).not.toContain("agent-compat");
+    }
+  });
+
+  it("current runtime crates 不得导入 Agent", () => {
+    const files = CURRENT_RUNTIME_CRATES.flatMap((crateName) =>
+      filesUnder(`lime-rs/crates/${crateName}/src`).filter((path) =>
+        path.endsWith(".rs"),
+      ),
+    );
+    const leaks = files.filter((path) =>
+      /\baster::|\buse\s+agent\b|extern\s+crate\s+agent/u.test(read(path)),
+    );
+    expect(leaks).toEqual([]);
+  });
+
+  it("lime-agent 生产源码不得导入 Agent", () => {
+    const files = filesUnder("lime-rs/crates/agent/src").filter((path) =>
+      path.endsWith(".rs"),
+    );
+    const leaks = files.filter((path) =>
+      /\baster::|\buse\s+agent\b|extern\s+crate\s+agent/u.test(read(path)),
+    );
+    expect(leaks).toEqual([]);
+  });
+
+  it("已删除的 lime-agent Agent adapter 不得恢复", () => {
+    expect(
+      DELETED_AGENT_PATHS.filter((path) => existsSync(repoPath(path))),
+    ).toEqual([]);
+    expect(
+      filesUnder("lime-rs/crates/agent/src/request_tool_policy").filter(
+        (path) => /\/agent_[^/]+\.rs$/u.test(path),
+      ),
+    ).toEqual([]);
+  });
+
+  it("provider current owner 必须保留 OpenCode 风格中立 part 与集中 lowering", () => {
+    const source = read("lime-rs/crates/model-provider/src/current_client.rs");
+    expect(source).toContain("pub enum CurrentProviderContent");
+    expect(source).toContain("Image {");
+    expect(source).toContain("ToolCall(CurrentProviderToolCall)");
+    expect(source).toContain("ToolResult(CurrentProviderToolResult)");
+    expect(source).toContain("RuntimeProviderProtocol::Responses");
+    expect(source).toContain("RuntimeProviderProtocol::AnthropicMessages");
+    expect(source).toContain("RuntimeProviderProtocol::ChatCompletions");
+  });
+
+  it("provider turn 必须消费 current provider 与 typed tool executor", () => {
+    const source = read("lime-rs/crates/agent-runtime/src/provider_turn.rs");
+    expect(source).toContain("CurrentProvider");
+    expect(source).toContain("RuntimeToolExecutorHandle");
+    expect(source).not.toContain("agent::");
+  });
+
+  it("MCP current owner 必须是 tool-runtime connection registry", () => {
+    const source = read(
+      "lime-rs/crates/tool-runtime/src/mcp_connection/registry.rs",
+    );
+    expect(source).toContain("pub struct McpConnectionRegistry");
+    expect(source).toContain("pub async fn dispatch");
+    expect(source).not.toContain("agent::");
+  });
+
+  it("request_user_input pending state 必须归属 session/turn current state", () => {
+    const source = read("lime-rs/crates/agent-runtime/src/action_required.rs");
+    const turnSource = read(
+      "lime-rs/crates/agent/src/current_provider_turn.rs",
+    );
+    const bridgeSource = read(
+      "lime-rs/crates/agent/src/request_user_input_bridge.rs",
+    );
+    expect(source).toContain("pub struct ActionRequiredState");
+    expect(source).toContain("pending");
+    expect(source).toContain("submit_response");
+    expect(source).not.toContain("static ACTION_REQUIRED");
+    expect(turnSource).toContain("request_user_input_tool_definition");
+    expect(turnSource).toContain("execute_request_user_input");
+    expect(bridgeSource).toContain("request_and_wait_with_notification");
+    expect(bridgeSource).toContain("AgentEvent::ActionRequired");
+  });
+
+  it("ProjectionStore 必须是唯一 Thread/Turn/Item truth，queue payload 单独持久化", () => {
+    const support = read("lime-rs/crates/agent/src/runtime_support.rs");
+    const projectionStore = read(
+      "lime-rs/crates/app-server/src/runtime/projection_store.rs",
+    );
+    const queueStore = read(
+      "lime-rs/crates/agent-runtime/src/runtime_queue/sqlite.rs",
+    );
+    expect(support).toContain("SqliteRuntimeQueueStore");
+    expect(support).toContain("RuntimeQueueService");
+    expect(support).not.toContain("InMemoryRuntimeStore");
+    expect(support).not.toContain("InMemoryRuntimeQueueStore");
+    expect(support).not.toContain("SqliteRuntimeStore");
+    expect(support).not.toContain("runtime_store_agent_adapter");
+    expect(
+      existsSync(
+        repoPath("lime-rs/crates/thread-store/src/sqlite_runtime_store.rs"),
+      ),
+    ).toBe(false);
+    expect(
+      existsSync(
+        repoPath("lime-rs/crates/thread-store/src/in_memory_runtime_store.rs"),
+      ),
+    ).toBe(false);
+    expect(projectionStore).toContain("pub struct ProjectionStore");
+    expect(projectionStore).toContain("pub fn apply_events");
+    expect(projectionStore).toContain("pub fn read_session_projection");
+    expect(queueStore).toContain(
+      "CREATE TABLE IF NOT EXISTS runtime_queued_turns",
+    );
+  });
+
+  it("架构文档必须明确 Codex 与 OpenCode 的裁决边界", () => {
+    const source = read(
+      "internal/research/refactor/v1/opencode-reference-comparison.md",
+    );
+    expect(source).toContain("Codex 更适合指导 Agent loop");
+    expect(source).toContain("Provider-specific lowering");
+    expect(source).toContain("Model capability");
+    expect(source).toContain("多模态 message part");
+  });
+});

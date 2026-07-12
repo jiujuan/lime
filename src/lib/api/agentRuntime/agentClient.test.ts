@@ -2,23 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 import { createAgentClient } from "./agentClient";
 
 describe("agentRuntime agentClient", () => {
-  it("应代理 runtime 初始化命令并校验返回形态", async () => {
+  it("应读取当前 Provider 选择并校验返回形态", async () => {
     const bridgeInvoke = vi.fn().mockResolvedValueOnce({
-      initialized: true,
       provider_configured: true,
       provider_name: "Anthropic",
       model_name: "claude-sonnet-4-20250514",
     });
     const client = createAgentClient({ bridgeInvoke });
 
-    await expect(client.initAgentRuntime()).resolves.toEqual({
-      initialized: true,
+    await expect(client.getRuntimeProviderSelection()).resolves.toEqual({
       provider_configured: true,
       provider_name: "Anthropic",
       model_name: "claude-sonnet-4-20250514",
     });
 
-    expect(bridgeInvoke).toHaveBeenCalledWith("agent_init");
+    expect(bridgeInvoke).toHaveBeenCalledWith(
+      "get_runtime_provider_selection",
+    );
   });
 
   it("本地标题生成不应触发 bridgeInvoke", async () => {
@@ -35,12 +35,12 @@ describe("agentRuntime agentClient", () => {
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 
-  it("runtime 初始化命令收到错误返回形态时应 fail closed", async () => {
+  it("Provider 选择读取收到错误返回形态时应 fail closed", async () => {
     const bridgeInvoke = vi.fn().mockResolvedValueOnce({ success: true });
     const client = createAgentClient({ bridgeInvoke });
 
-    await expect(client.initAgentRuntime()).rejects.toThrow(
-      "agent_init did not return agent runtime init status",
+    await expect(client.getRuntimeProviderSelection()).rejects.toThrow(
+      "get_runtime_provider_selection did not return runtime provider selection",
     );
   });
 });

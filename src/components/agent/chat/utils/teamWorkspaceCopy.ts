@@ -1,4 +1,4 @@
-import type { AsterSubagentSkillInfo } from "@/lib/api/agentRuntime";
+import type { AgentSubagentSkillInfo } from "@/lib/api/agentRuntime";
 import { STABLE_PROCESSING_LABEL } from "./stableProcessingExperience";
 
 export type TeamWorkspaceDisplayRuntimeStatus =
@@ -137,7 +137,7 @@ export function resolveTeamWorkspaceRoleHintLabel(
 }
 
 export function buildTeamWorkspaceSkillDisplayName(
-  skill: AsterSubagentSkillInfo,
+  skill: AgentSubagentSkillInfo,
 ): string {
   return skill.name;
 }

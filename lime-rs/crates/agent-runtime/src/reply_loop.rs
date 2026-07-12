@@ -1,7 +1,7 @@
 //! Reply loop 的 current Turn 规则骨架。
 //!
 //! 这里只保存 provider/reply loop 的纯状态和退出文案，不引入具体
-//! provider、tool、session store 或 Aster 事件类型。
+//! provider、tool、session store 或 Agent 事件类型。
 
 pub const DEFAULT_MAX_REPLY_TURNS: u32 = 1000;
 pub const MAX_REPLY_TURNS_REACHED_MESSAGE: &str =

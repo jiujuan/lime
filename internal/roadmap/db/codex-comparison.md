@@ -54,7 +54,7 @@ WebSearch / 公开资料补充：
 | Surface | 当前状态 | 分类 | 风险 |
 | --- | --- | --- | --- |
 | `lime.db` | 同时包含产品配置、用户资产、Agent session、message、timeline、reliability、运行追踪 | current Product DB + compat/deprecated runtime tables 混合 | 主库持续膨胀，DB repair 半径过大。 |
-| `agent_messages` | `aster_session_store`、`AgentDao`、`ChatDao` 仍有旧读写；usage/model 统计已退出旧表 fallback | deprecated / migration-source | 如果继续保留产品 fallback，会阻断 DB 瘦身。 |
+| `agent_messages` | `agent_session_store`、`AgentDao`、`ChatDao` 仍有旧读写；usage/model 统计已退出旧表 fallback | deprecated / migration-source | 如果继续保留产品 fallback，会阻断 DB 瘦身。 |
 | `agent_thread_turns / agent_thread_items` | GUI timeline projection 仍在 Product DB | compat projection | 可短期保障 GUI，但不能继续承接完整 transcript truth。 |
 | `agent_thread_items.payload_json` | 仍可能承载较大 runtime payload | deprecated payload carrier | 大输出和完整 event 混进 DB。 |
 | `request_logs/` 文件目录 | request telemetry 文件主链仍存在 | compat / migration-source | 需要迁到 Telemetry DB，避免 evidence 旁路各读各的。 |

@@ -6,13 +6,13 @@ import {
   MoreHorizontal,
   MessageSquarePlus,
 } from "lucide-react";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sidebarConversationGroups";
 import { resolveProjectDisplayName } from "@/components/app-sidebar/sidebarProjectDisplayName";
 
 interface SidebarProjectConversationSection {
   project: SidebarOpenedProjectSummary;
-  sessions: AsterSessionInfo[];
+  sessions: AgentSessionInfo[];
 }
 
 interface AppSidebarProjectConversationGroupsProps {
@@ -22,7 +22,7 @@ interface AppSidebarProjectConversationGroupsProps {
   projectMoreActionsLabel: string;
   formatNewProjectConversationForLabel: (projectName: string) => string;
   formatOpenProjectMenuLabel: (projectName: string) => string;
-  renderConversationRow: (session: AsterSessionInfo) => ReactNode;
+  renderConversationRow: (session: AgentSessionInfo) => ReactNode;
   onCreateConversation: (project: SidebarOpenedProjectSummary) => void;
   onToggleProjectCollapsed: (projectId: string) => void;
   onOpenProjectMenu: (

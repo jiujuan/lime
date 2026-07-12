@@ -10,7 +10,7 @@
 flowchart TB
     User[用户 / 人工审核] --> UI[前端工作台 UI]
     UI --> RuntimeAPI[agent_runtime_* 命令边界]
-    RuntimeAPI --> Runtime[Aster / Lime Runtime]
+    RuntimeAPI --> Runtime[Agent / Lime Runtime]
 
     Runtime --> Prompt[System Prompt / Memory Prompt]
     Runtime --> ToolSurface[Tool Surface / Skills / MCP / Browser]
@@ -46,7 +46,7 @@ sequenceDiagram
     participant U as 用户
     participant F as 前端工作台
     participant C as agent_runtime_submit_turn
-    participant R as Lime / Aster Runtime
+    participant R as Lime / Agent Runtime
     participant T as Tools / Skills / Browser / Bash
     participant W as Workspace / Artifact
     participant E as agent_runtime_export_evidence_pack

@@ -149,6 +149,24 @@ pub struct Usage {
     pub total_tokens: u32,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UsageDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StreamUsage {
+    #[serde(default)]
+    pub prompt_tokens: u32,
+    #[serde(default)]
+    pub completion_tokens: u32,
+    #[serde(default)]
+    pub total_tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<UsageDetails>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseMessage {
     pub role: String,
@@ -182,9 +200,32 @@ pub struct StreamDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<ToolCall>>,
+    pub tool_calls: Option<Vec<StreamToolCallDelta>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+}
+
+/// OpenAI Chat Completions 流式工具调用增量。
+///
+/// 该 DTO 与完整 `ToolCall` 分离：真实 SSE 只会在首块给出 id/name，后续块只给出
+/// index 和 arguments 片段。把它误解为完整工具调用会丢失流式工具续轮。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StreamToolCallDelta {
+    pub index: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub call_type: Option<String>,
+    #[serde(default)]
+    pub function: StreamFunctionCallDelta,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StreamFunctionCallDelta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,7 +242,10 @@ pub struct ChatCompletionChunk {
     pub object: String,
     pub created: u64,
     pub model: String,
+    #[serde(default)]
     pub choices: Vec<StreamChoice>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<StreamUsage>,
 }
 
 #[cfg(test)]
@@ -252,5 +296,17 @@ mod tests {
         let json = serde_json::to_string(&delta).unwrap();
 
         assert!(!json.contains("reasoning_content"));
+    }
+
+    #[test]
+    fn stream_tool_delta_keeps_partial_fields() {
+        let delta: StreamToolCallDelta =
+            serde_json::from_str(r#"{"index":0,"function":{"arguments":"{\"path\":\"src"}}"#)
+                .expect("parse tool delta");
+
+        assert_eq!(delta.index, 0);
+        assert_eq!(delta.id, None);
+        assert_eq!(delta.function.name, None);
+        assert_eq!(delta.function.arguments.as_deref(), Some("{\"path\":\"src"));
     }
 }

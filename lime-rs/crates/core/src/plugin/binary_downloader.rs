@@ -297,8 +297,8 @@ mod tests {
 
     #[test]
     fn test_get_platform_binary_name() {
-        let name = BinaryDownloader::get_platform_binary_name("aster-server");
-        assert!(name.starts_with("aster-server-"));
+        let name = BinaryDownloader::get_platform_binary_name("agent-server");
+        assert!(name.starts_with("agent-server-"));
     }
 
     #[test]

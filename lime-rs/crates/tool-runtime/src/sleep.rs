@@ -175,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn sleep_permission_rejects_aster_free_form_params() {
+    fn sleep_permission_rejects_agent_free_form_params() {
         let result = check_runtime_sleep_permissions(&json!({
             "seconds": 1
         }));

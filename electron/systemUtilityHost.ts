@@ -259,8 +259,8 @@ export class SystemUtilityHost {
       bridge_control_count: 0,
       running_profile_count: 0,
       cdp_alive_profile_count: 0,
-      aster_native_host_supported: false,
-      aster_native_host_configured: false,
+      agent_native_host_supported: false,
+      agent_native_host_configured: false,
       backends: [
         {
           backend: "lime_extension_bridge",

@@ -109,7 +109,7 @@ async fn workspace_sandbox_request_is_handled_by_current_guard() {
 
     let result = execute_runtime_shell_tool(sandbox_request(&params, dir.path().to_path_buf()))
         .await
-        .expect("workspace sandbox shell must not fall back to Aster registry")
+        .expect("workspace sandbox shell must not fall back to Agent registry")
         .expect("workspace sandbox guard should produce a structured tool result");
 
     assert_eq!(result.is_error, Some(true));
@@ -144,7 +144,7 @@ async fn background_request_starts_current_background_process() {
         .get("output_file")
         .and_then(Value::as_str)
         .expect("output file metadata");
-    assert!(!output_file.contains("aster_tasks"));
+    assert!(!output_file.contains("agent_tasks"));
 
     let mut captured = String::new();
     for _ in 0..20 {
@@ -221,7 +221,7 @@ async fn legacy_shell_aliases_are_handled_by_current_owner() {
             dir.path().to_path_buf(),
         ))
         .await
-        .expect("legacy shell alias must not fall back to Aster registry")
+        .expect("legacy shell alias must not fall back to Agent registry")
         .expect("legacy shell alias should execute through current shell owner");
 
         assert_eq!(result.is_error, Some(false), "{tool_name}");
@@ -257,7 +257,7 @@ async fn warning_command_without_full_access_returns_current_guard() {
     .await;
 
     let result = result
-        .expect("known Bash warning must not fall back to Aster registry")
+        .expect("known Bash warning must not fall back to Agent registry")
         .expect("warning guard should produce a structured tool result");
 
     assert_eq!(result.is_error, Some(true));

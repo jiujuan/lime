@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 import {
@@ -18,7 +18,7 @@ describe("agentChatHistory missing user recovery", () => {
   });
 
   it("App Server failed read model 应恢复用户请求并追加失败助手消息", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-app-server-failed-read",
       thread_id: "thread-app-server-failed-read",
       created_at: 1,
@@ -140,7 +140,7 @@ describe("agentChatHistory missing user recovery", () => {
   });
 
   it("后端 messages 只有助手图片轨迹时应从真实 turn 补回用户指令", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-image-history-user-fallback",
       created_at: 1,
       updated_at: 2,
@@ -217,7 +217,7 @@ describe("agentChatHistory missing user recovery", () => {
   });
 
   it("current read model 图片工具历史恢复时应补回前置寒暄", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-image-thread-item-intro",
       thread_id: "thread-image-thread-item-intro",
       created_at: 1,
@@ -297,7 +297,7 @@ describe("agentChatHistory missing user recovery", () => {
   });
 
   it("后端连续两轮只有助手图片轨迹时应按 turn 顺序补回各自用户指令", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-image-history-two-turns",
       created_at: 1,
       updated_at: 2,
@@ -393,7 +393,7 @@ describe("agentChatHistory missing user recovery", () => {
   });
 
   it("后端只缺部分用户图片指令时也应按时间补回缺失轮次", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-image-history-partial-user-gap",
       created_at: 1,
       updated_at: 2,
@@ -499,7 +499,7 @@ describe("agentChatHistory missing user recovery", () => {
   });
 
   it("已完成旧会话压缩水合时应保留工具过程并让最终正文接在工具之后", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-compact-history",
       created_at: 1,
       updated_at: 2,
@@ -603,7 +603,7 @@ describe("agentChatHistory missing user recovery", () => {
   });
 
   it("仍在运行的会话即使请求压缩水合，也应保留工具过程", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-running-history",
       created_at: 1,
       updated_at: 2,

@@ -23,6 +23,83 @@ pub struct RuntimeReplyProviderPlaintextToolUseProgress {
     pub accumulated_arguments: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum RuntimeReplyProviderPlaintextToolUseStreamEvent {
+    Text(String),
+    ToolInputDelta(RuntimeReplyProviderPlaintextToolUseProgress),
+    ToolUse(RuntimeReplyProviderPlaintextToolUse),
+}
+
+#[derive(Debug, Default)]
+pub struct RuntimeReplyProviderPlaintextToolUseStream {
+    pending_text: Option<String>,
+}
+
+impl RuntimeReplyProviderPlaintextToolUseStream {
+    pub fn is_pending(&self) -> bool {
+        self.pending_text.is_some()
+    }
+
+    pub fn push_text(
+        &mut self,
+        text: &str,
+    ) -> Vec<RuntimeReplyProviderPlaintextToolUseStreamEvent> {
+        if let Some(pending_text) = self.pending_text.as_mut() {
+            pending_text.push_str(text);
+            if let Some(tool_use) = provider_stream_plaintext_tool_uses(pending_text) {
+                self.pending_text = None;
+                return vec![RuntimeReplyProviderPlaintextToolUseStreamEvent::ToolUse(
+                    tool_use,
+                )];
+            }
+
+            return provider_stream_plaintext_tool_use_progress(pending_text, text)
+                .map(RuntimeReplyProviderPlaintextToolUseStreamEvent::ToolInputDelta)
+                .into_iter()
+                .collect();
+        }
+
+        if let Some(tool_use) = provider_stream_plaintext_tool_uses(text) {
+            return vec![RuntimeReplyProviderPlaintextToolUseStreamEvent::ToolUse(
+                tool_use,
+            )];
+        }
+
+        let Some(tool_start) = provider_stream_plaintext_tool_use_start(text) else {
+            return vec![RuntimeReplyProviderPlaintextToolUseStreamEvent::Text(
+                text.to_string(),
+            )];
+        };
+        if provider_stream_plaintext_tool_use_is_complete(text) {
+            return vec![RuntimeReplyProviderPlaintextToolUseStreamEvent::Text(
+                text.to_string(),
+            )];
+        }
+
+        let prefix = text[..tool_start].trim();
+        let pending_text = text[tool_start..].to_string();
+        let mut events = Vec::new();
+        if !prefix.is_empty() {
+            events.push(RuntimeReplyProviderPlaintextToolUseStreamEvent::Text(
+                prefix.to_string(),
+            ));
+        }
+        if let Some(progress) =
+            provider_stream_plaintext_tool_use_progress(&pending_text, &pending_text)
+        {
+            events.push(RuntimeReplyProviderPlaintextToolUseStreamEvent::ToolInputDelta(progress));
+        }
+        self.pending_text = Some(pending_text);
+        events
+    }
+
+    pub fn finish(&mut self) -> Option<RuntimeReplyProviderPlaintextToolUseStreamEvent> {
+        self.pending_text
+            .take()
+            .map(RuntimeReplyProviderPlaintextToolUseStreamEvent::Text)
+    }
+}
+
 pub fn provider_stream_plaintext_tool_use_start(text: &str) -> Option<usize> {
     text.find(PROVIDER_STREAM_PLAINTEXT_TOOL_USE_OPEN_MARKER)
 }

@@ -291,8 +291,8 @@ describe("safeListen / safeEmit", () => {
       emit: vi.fn(),
     };
 
-    await expect(safeListen("aster_stream_session-1", vi.fn())).rejects.toThrow(
-      '事件 "aster_stream_session-1" 监听失败',
+    await expect(safeListen("agent_stream_session-1", vi.fn())).rejects.toThrow(
+      '事件 "agent_stream_session-1" 监听失败',
     );
   });
 

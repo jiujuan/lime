@@ -28,8 +28,8 @@
 - `lime-rs/src/services/execution_tracker_service.rs`
 - `lime-rs/src/services/heartbeat_service/mod.rs`
 - `lime-rs/src/services/heartbeat_service/delivery.rs`
-- `lime-rs/src/commands/aster_agent_cmd/mod.rs`
-- `lime-rs/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`
+- `lime-rs/src/commands/agent_cmd/mod.rs`
+- `lime-rs/src/commands/agent_cmd/tool_runtime/subagent_tools.rs`
 - `lime-rs/crates/websocket/src/handlers/rpc_handler.rs`
 - `lime-rs/crates/core/src/database/schema.rs`
 
@@ -124,7 +124,7 @@
 
 ### Lime
 
-- `aster_agent_cmd` 已有较完整的权限与沙箱策略
+- `agent_cmd` 已有较完整的权限与沙箱策略
 - 安全基础不弱，具备差异化潜力
 
 ### 业务影响
@@ -231,7 +231,7 @@
 ## 7. 架构落地约束（防止代码膨胀）
 
 1. **单一追踪事实源**：`agent_runs` 继续作为统一执行摘要表
-2. **能力复用优先**：复用 `HeartbeatService`、`ExecutionTracker`、`aster_agent_cmd` 权限体系
+2. **能力复用优先**：复用 `HeartbeatService`、`ExecutionTracker`、`agent_cmd` 权限体系
 3. **分层扩展**：新增“触发适配层/治理层”，不侵入核心执行引擎
 4. **渐进交付**：每个阶段只做可验证的最小闭环，不并行开大面
 

@@ -24,19 +24,19 @@ describe("agentStreamInactivityController", () => {
       buildAgentStreamFirstEventSilentRecoveryWarning({
         eventName: "event-a",
       }),
-    ).toBe("[AsterChat] 首个运行时事件静默，已降级切换为会话快照同步: event-a");
+    ).toBe("[AgentChat] 首个运行时事件静默，已降级切换为会话快照同步: event-a");
     expect(
       buildAgentStreamFirstEventDeferredWarning({
         eventName: "event-a",
       }),
     ).toBe(
-      "[AsterChat] 首个运行时事件暂未到达，已基于提交派发继续等待后续进度: event-a",
+      "[AgentChat] 首个运行时事件暂未到达，已基于提交派发继续等待后续进度: event-a",
     );
     expect(
       buildAgentStreamInactivitySilentRecoveryWarning({
         eventName: "event-a",
       }),
-    ).toBe("[AsterChat] 运行时事件静默，已降级切换为会话快照同步: event-a");
+    ).toBe("[AgentChat] 运行时事件静默，已降级切换为会话快照同步: event-a");
   });
 
   it("应按首包超时状态选择恢复动作", () => {

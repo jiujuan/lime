@@ -260,11 +260,7 @@ export function summarizeApprovalSessionCacheReadModel(readModel, secondTurnId) 
 }
 
 function approvalCacheHarnessFromTurnStart(entry) {
-  const harness =
-    entry?.runtimeOptions?.metadata?.harness ??
-    entry?.asterChatRequest?.turn_config?.metadata?.harness ??
-    entry?.asterChatRequest?.turnConfig?.metadata?.harness ??
-    {};
+  const harness = entry?.runtimeRequest?.metadata?.harness ?? {};
   return harness && typeof harness === "object" ? harness : {};
 }
 
@@ -276,16 +272,16 @@ export function summarizeApprovalSecondTurnStart(entry) {
   const cache =
     harness.approval_session_cache ?? harness.approvalSessionCache ?? null;
   const cacheKey = cache?.key ?? {};
-  const asterChatRequest = entry?.asterChatRequest ?? {};
+  const runtimeRequest = entry?.runtimeRequest ?? {};
   return sanitizeJson({
     sessionId: entry?.sessionId ?? null,
     threadId: entry?.threadId ?? null,
     turnId: entry?.turnId ?? null,
     inputText: entry?.inputText ?? null,
     approvalPolicy:
-      asterChatRequest?.approval_policy ?? asterChatRequest?.approvalPolicy,
+      runtimeRequest?.approval_policy ?? runtimeRequest?.approvalPolicy,
     sandboxPolicy:
-      asterChatRequest?.sandbox_policy ?? asterChatRequest?.sandboxPolicy,
+      runtimeRequest?.sandbox_policy ?? runtimeRequest?.sandboxPolicy,
     browserAssistEnabled: browserAssist?.enabled ?? null,
     browserAssistProfileKey:
       browserAssist?.profile_key ?? browserAssist?.profileKey ?? null,

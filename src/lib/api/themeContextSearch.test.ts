@@ -142,8 +142,10 @@ describe("themeContextSearch API", () => {
         }),
         runtimeOptions: expect.objectContaining({
           stream: true,
-          providerPreference: "openai-compatible",
-          modelPreference: "gpt-4.1-mini",
+          runtimeRequest: expect.objectContaining({
+            providerPreference: "openai-compatible",
+            modelPreference: "gpt-4.1-mini",
+          }),
         }),
         queueIfBusy: false,
         skipPreSubmitResume: true,
@@ -151,6 +153,13 @@ describe("themeContextSearch API", () => {
     );
 
     const startTurnParams = appServerClient.startTurn.mock.calls[0]?.[0];
+    expect(startTurnParams?.runtimeOptions).not.toHaveProperty(
+      "providerPreference",
+    );
+    expect(startTurnParams?.runtimeOptions).not.toHaveProperty(
+      "modelPreference",
+    );
+    expect(startTurnParams?.runtimeOptions).not.toHaveProperty("metadata");
     const serialized = JSON.stringify(startTurnParams);
     expect(serialized).not.toContain("web_search");
     expect(serialized).not.toContain("webSearch");

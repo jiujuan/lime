@@ -1,10 +1,10 @@
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import { buildQueuedRuntimeStatus } from "./agentStreamSubmitDraft";
 
 export function buildAgentStreamQueuedDraftMessagePatch(params: {
   contentFallback: string;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   queuedMessageText?: string | null;
 }): Pick<Message, "isThinking" | "runtimeStatus"> {
   return {
@@ -18,7 +18,7 @@ export function buildAgentStreamQueuedDraftMessagePatch(params: {
 
 export function buildAgentStreamQueuedDraftStatePlan(params: {
   contentFallback: string;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   queuedMessageText?: string | null;
 }): {
   messagePatch: Pick<Message, "isThinking" | "runtimeStatus">;

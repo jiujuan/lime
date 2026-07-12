@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeThreadReadModel,
-  AsterExecutionStrategy,
-  AsterSessionDetail,
+  AgentExecutionStrategy,
+  AgentSessionDetail,
 } from "@/lib/api/agentRuntime";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
@@ -111,7 +111,7 @@ export function shouldAutoResumeHydratedRuntimeThread(
 }
 
 export function resolveRuntimeThreadStatusFromSessionDetail(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
 ): Topic["status"] | null {
   const status = detail.thread_read?.status?.trim().toLowerCase();
   if (
@@ -144,7 +144,7 @@ export function resolveRuntimeThreadStatusFromSessionDetail(
 }
 
 export function resolveRuntimePreviewFromSessionDetail(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
 ): string | null {
   const queuedPreview =
     detail.queued_turns?.[0]?.message_preview ||
@@ -158,7 +158,7 @@ export function resolveRuntimePreviewFromSessionDetail(
 
 export function mapSessionDetailToTopic(
   sessionId: string,
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   fallbackWorkspaceId: string | null,
 ): Topic {
   const topic = mapSessionToTopic({
@@ -269,7 +269,7 @@ export function upsertFreshSessionDraftTopic(
   topics: Topic[],
   params: {
     createdAt: Date;
-    executionStrategy: AsterExecutionStrategy;
+    executionStrategy: AgentExecutionStrategy;
     sessionId: string;
     sessionName?: string | null;
     workspaceId: string | null | undefined;
@@ -300,7 +300,7 @@ export function upsertFreshSessionDraftTopic(
 export function prependVerifiedSessionTopicFromDetail(
   topics: Topic[],
   sessionId: string,
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   options: { workspaceId?: string | null } = {},
 ): Topic[] {
   if (topics.some((topic) => topic.id === sessionId)) {
@@ -329,7 +329,7 @@ export function prependVerifiedSessionTopicFromDetail(
 export function applyTopicExecutionStrategyToTopics(
   topics: Topic[],
   targetSessionId: string,
-  nextExecutionStrategy: AsterExecutionStrategy,
+  nextExecutionStrategy: AgentExecutionStrategy,
 ): Topic[] {
   return topics.map((topic) =>
     topic.id === targetSessionId

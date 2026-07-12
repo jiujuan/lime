@@ -1,7 +1,5 @@
 use crate::protocol::AgentTokenUsage;
-use crate::runtime_support::{
-    list_runtime_queued_turns, load_runtime_snapshot_overlay, runtime_queue_has_active_turn,
-};
+use crate::runtime_support::{list_runtime_queued_turns, runtime_queue_has_active_turn};
 use crate::session_execution_runtime_query::read_session_execution_runtime_session_projection;
 use crate::team_runtime_governor::snapshot_team_runtime_session;
 #[cfg(test)]
@@ -116,21 +114,8 @@ pub(crate) async fn load_subagent_runtime_status(
     };
     let control_state =
         SubagentControlState::from_extension_data_json(&extension_data_json).unwrap_or_default();
-    let latest_turn: Option<SubagentLatestTurnProjection> = match load_runtime_snapshot_overlay(
-        session_id,
-    )
-    .await
-    {
-        Ok(overlay) => overlay.subagent_latest_turn,
-        Err(error) => {
-            tracing::debug!(
-                "[SubagentControl] 读取 runtime snapshot overlay 失败，按无运行态继续: session_id={}, error={}",
-                session_id,
-                error
-            );
-            None
-        }
-    };
+    // 历史终态由 App Server ProjectionStore 投影；本地 fallback 只判断 live queue。
+    let latest_turn: Option<SubagentLatestTurnProjection> = None;
 
     let queued_turn_count = list_runtime_queued_turns(session_id).await?.len();
     let governor_snapshot = snapshot_team_runtime_session(session_id).await;

@@ -1,9 +1,7 @@
-#[cfg(test)]
-use crate::turn_context_configuration::to_aster_turn_context;
-use crate::turn_context_configuration::{to_agent_turn_context, AgentTurnContext};
+use crate::turn_context_configuration::AgentTurnContext;
 
 pub(crate) fn current_agent_turn_context() -> Option<AgentTurnContext> {
-    aster::current_turn_context().map(to_agent_turn_context)
+    agent_runtime::runtime_scope::current_turn_context()
 }
 
 #[cfg(test)]
@@ -14,5 +12,5 @@ pub(crate) async fn with_agent_turn_context<F>(
 where
     F: std::future::Future,
 {
-    aster::with_turn_context(turn_context.map(to_aster_turn_context), future).await
+    agent_runtime::runtime_scope::with_turn_context(turn_context, future).await
 }

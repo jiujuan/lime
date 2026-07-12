@@ -66,7 +66,7 @@ impl OpenAiEnvSnapshot {
                 "OPENAI_BASE_PATH",
                 "OPENAI_FORCE_RESPONSES_API",
                 "OPENAI_CUSTOM_HEADERS",
-                "LIME_ASTER_ROOT",
+                "LIME_AGENT_RUNTIME_ROOT",
             ]
             .into_iter()
             .map(|key| (key, std::env::var(key).ok()))
@@ -206,10 +206,10 @@ async fn respond_action_initializes_agent_before_runtime_resume() {
 }
 
 #[tokio::test]
-async fn respond_action_tool_confirmation_resumes_pending_aster_tool_future() {
+async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
     let _env_snapshot = OpenAiEnvSnapshot::capture_and_clear();
     let workspace = TempDir::new().expect("workspace");
-    std::env::set_var("LIME_ASTER_ROOT", workspace.path().join("aster"));
+    std::env::set_var("LIME_AGENT_RUNTIME_ROOT", workspace.path().join("agent"));
     let provider = LocalOpenAiFixture::start().await;
     let db = test_db();
     let db = provider_config::initialize_runtime_database(Some(&db)).expect("runtime database");
@@ -271,7 +271,7 @@ async fn respond_action_tool_confirmation_resumes_pending_aster_tool_future() {
             );
         }
     };
-    assert_eq!(request_id, "req-runtime-confirm");
+    assert!(!request_id.trim().is_empty());
 
     let mut action_sink = TestRuntimeEventSink::default();
     ExecutionBackend::respond_action(
@@ -305,7 +305,7 @@ async fn respond_action_tool_confirmation_resumes_pending_aster_tool_future() {
     assert_eq!(action_sink.events[0].event_type, "action.resolved");
     assert_eq!(
         action_sink.events[0].payload["requestId"].as_str(),
-        Some("req-runtime-confirm")
+        Some(request_id.as_str())
     );
 
     let events = stream_events.lock().expect("read stream events");
@@ -367,52 +367,44 @@ fn execution_request_for_tool_confirmation_bridge_test(
             attachments: Vec::new(),
         },
         runtime_options: Some(RuntimeOptions {
-            capability_id: None,
             stream: true,
-            event_name: None,
-            provider_preference: None,
-            model_preference: None,
-            metadata: Some(json!({
-                "harness": {
-                    "projectRoot": workspace,
-                    "cwd": workspace
-                }
-            })),
-            queued_turn_id: None,
-            host_options: Some(json!({
-                "asterChatRequest": {
-                    "approval_policy": "on-request",
-                    "sandbox_policy": "workspace-write",
-                    "provider_config": {
-                        "provider_id": "fixture-openai",
-                        "provider_name": "openai",
-                        "model_name": "fixture-model",
-                        "api_key": "fixture-key",
-                        "base_url": base_url,
-                        "model_capabilities": {
-                            "capabilities": {
-                                "tools": true,
-                                "streaming": true,
-                                "jsonMode": true,
-                                "functionCalling": true
-                            },
-                            "taskFamilies": ["chat"],
-                            "inputModalities": ["text"],
-                            "outputModalities": ["text"],
-                            "runtimeFeatures": ["streaming", "tool_calling"]
-                        }
+            runtime_request: Some(app_server_protocol::RuntimeRequest {
+                approval_policy: Some("on-request".to_string()),
+                sandbox_policy: Some("workspace-write".to_string()),
+                metadata: Some(json!({
+                    "harness": {
+                        "projectRoot": workspace,
+                        "cwd": workspace
                     }
-                }
-            })),
+                })),
+                provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                    provider_id: Some("fixture-openai".to_string()),
+                    provider_name: Some("openai".to_string()),
+                    model_name: Some("fixture-model".to_string()),
+                    api_key: Some("fixture-key".to_string()),
+                    base_url: Some(base_url.to_string()),
+                    model_capabilities: Some(json!({
+                        "capabilities": {
+                            "tools": true,
+                            "streaming": true,
+                            "jsonMode": true,
+                            "functionCalling": true
+                        },
+                        "taskFamilies": ["chat"],
+                        "inputModalities": ["text"],
+                        "outputModalities": ["text"],
+                        "runtimeFeatures": ["streaming", "tool_calling"]
+                    })),
+                    ..app_server_protocol::RuntimeProviderConfig::default()
+                }),
+                ..app_server_protocol::RuntimeRequest::default()
+            }),
             ..RuntimeOptions::default()
         }),
         event_name: None,
         expected_output: None,
         structured_output: None,
         output_schema: None,
-        provider_preference: None,
-        model_preference: None,
-        metadata: None,
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,

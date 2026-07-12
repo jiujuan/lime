@@ -12,9 +12,8 @@ use lime_agent::{
 };
 use serde_json::{json, Value};
 
-use super::request_context::{
-    self, AsterChatRequestSnapshot, RuntimeModelSelection, RuntimeSessionScope,
-};
+use super::request_context::{self, RuntimeModelSelection, RuntimeSessionScope};
+use app_server_protocol::RuntimeRequest;
 
 pub(super) fn workspace_patch_host_tool_plan_from_events(
     events: &[RuntimeEvent],
@@ -25,7 +24,7 @@ pub(super) fn workspace_patch_host_tool_plan_from_events(
 
 pub(super) fn workspace_patch_host_tool_turn_context(
     request: &ExecutionRequest,
-    host_request: Option<&AsterChatRequestSnapshot>,
+    host_request: Option<&RuntimeRequest>,
     scope: &RuntimeSessionScope,
     selection: &RuntimeModelSelection,
     config_metadata: Option<Value>,

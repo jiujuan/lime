@@ -1,7 +1,7 @@
 //! Session execution runtime current DB read model.
 //!
 //! Runtime detail reads provider/model/usage/recent metadata from `agent_sessions`
-//! directly instead of borrowing an Aster `Session`.
+//! directly instead of borrowing an Agent `Session`.
 
 use agent_runtime::session_execution::{
     project_session_execution_runtime_session, SessionExecutionRuntimeSessionSource,

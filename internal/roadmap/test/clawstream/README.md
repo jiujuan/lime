@@ -46,7 +46,7 @@ GUI 和 Electron fixture 如何证明它没有回归？
 | 层级                | current owner                                                 | 说明                                                                                                    |
 | ------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | 架构 invariant      | `internal/research/refactor/v1/thread-turn-item-invariant.md` | 所有场景按 Thread / Turn / Item 填表                                                                    |
-| 质量矩阵            | `internal/research/refactor/v1/quality-fixture-matrix.md`     | 复用 protocol / runtime / projection / GUI / governance 五类证据                                        |
+| 验证工作流          | `internal/aiprompts/quality-workflow.md`                      | 按协议、runtime、projection、GUI、governance 的实际改动选择最小证据集                                  |
 | streaming 正确性    | `internal/aiprompts/claw-streaming-rendering-correctness.md`  | `ContentPart` 保留 `sequence / turnId / itemId / phase / source`                                        |
 | 流畅性目标          | `internal/roadmap/thread/streaming-fluidity-architecture.md`  | overlay live、process boundary commit、terminal commit 分层                                             |
 | contract            | `packages/agent-ui-contracts`                                 | runtime event、terminal、sequence verifier 和 fixture schema                                            |

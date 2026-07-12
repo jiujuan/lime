@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import {
   buildSidebarConversationGroups,
   flattenSidebarConversationGroups,
@@ -8,8 +8,8 @@ import {
 
 function session(
   id: string,
-  overrides: Partial<AsterSessionInfo> = {},
-): AsterSessionInfo {
+  overrides: Partial<AgentSessionInfo> = {},
+): AgentSessionInfo {
   return {
     id,
     name: id,

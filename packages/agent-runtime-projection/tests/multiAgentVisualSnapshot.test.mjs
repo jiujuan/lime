@@ -264,7 +264,7 @@ test("observed GUI snapshot must preserve transcript, roster, graph and worker i
   );
 });
 
-test("legacy Lime/Aster team tool names are rejected before visual projection", () => {
+test("legacy Lime/Agent team tool names are rejected before visual projection", () => {
   const snapshot = extractCodexMultiAgentVisualSnapshot(
     baseInput({
       collabToolCallItems: [

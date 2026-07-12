@@ -101,15 +101,15 @@ describe("desktop-host/core 未注册 mock command", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("Agent Runtime process / Aster residual 默认 mock 被清理后不再伪造成功", async () => {
+  it("Agent Runtime process / Agent residual 默认 mock 被清理后不再伪造成功", async () => {
     for (const command of [
       "agent_get_process_status",
       "agent_start_process",
       "agent_stop_process",
-      "aster_agent_init",
-      "aster_agent_status",
-      "aster_agent_configure_provider",
-      "aster_agent_reset",
+      "agent_init",
+      "agent_status",
+      "agent_configure_provider",
+      "agent_reset",
     ]) {
       await expect(invokeMockOnly(command)).rejects.toThrow(
         `未注册命令 "${command}"`,

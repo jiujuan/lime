@@ -54,7 +54,7 @@ app-server-protocol
 
 Lime 已经具备四类资产：
 
-1. **服务端资产**：`lime-rs`、App Server crate 家族、RuntimeCore、ExecutionBackend、AsterBackend、Tool / Skill / Evidence / Artifact 能力。
+1. **服务端资产**：`lime-rs`、App Server crate 家族、RuntimeCore、ExecutionBackend、RuntimeBackend、Tool / Skill / Evidence / Artifact 能力。
 2. **产品资产**：Claw 工作台、Plugins、content-studio、设置页、模型 / Provider 管理、Knowledge / Skills / Automation。
 3. **前端资产**：Agent timeline、message list、tool process step、runtime strip、artifact card、action request card、projection、ViewModel 和大量回归测试。
 4. **远程入口资产**：消息渠道 runtime、浏览器连接器 / ChromeBridge、Connect deep link、webhook / callback 等入口雏形。

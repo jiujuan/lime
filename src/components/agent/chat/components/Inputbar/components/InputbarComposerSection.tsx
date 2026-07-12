@@ -3,7 +3,7 @@ import { FolderOpen } from "lucide-react";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
 import type { Character } from "@/lib/api/projectMemory";
 import type {
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { MessageImage, MessagePathReference } from "../../../types";
@@ -114,7 +114,7 @@ interface InputbarComposerSectionProps {
   onManageProviders?: () => void;
   reasoningEffort?: ModelReasoningEffortLevel | "";
   setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   showModelControls?: boolean;

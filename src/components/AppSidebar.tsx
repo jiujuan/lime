@@ -31,7 +31,7 @@ import {
   subscribeAppConfigChanged,
 } from "@/lib/api/appConfig";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import {
   DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
   FOOTER_SIDEBAR_NAV_ITEMS,
@@ -181,12 +181,12 @@ export function AppSidebar({
     "未命名对话",
   );
   const resolveLocalizedSessionTitle = useCallback(
-    (session: AsterSessionInfo) =>
+    (session: AgentSessionInfo) =>
       resolveSidebarSessionTitle(session, conversationUntitledLabel),
     [conversationUntitledLabel],
   );
   const formatLocalizedSessionMeta = useCallback(
-    (session: AsterSessionInfo) =>
+    (session: AgentSessionInfo) =>
       formatSidebarSessionMeta(session, {
         locale: i18n.language,
       }),

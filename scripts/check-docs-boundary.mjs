@@ -71,6 +71,11 @@ function fileExists(relativePath) {
   return fs.existsSync(path.join(repoRoot, relativePath));
 }
 
+function isCurrentFile(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  return fs.existsSync(absolutePath) && fs.statSync(absolutePath).isFile();
+}
+
 function readText(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
@@ -90,7 +95,7 @@ function listRepoFiles() {
       ["ls-files", "-co", "--exclude-standard", "-z"],
       { cwd: repoRoot, encoding: "utf8" },
     );
-    return output.split("\0").filter(Boolean);
+    return output.split("\0").filter(isCurrentFile);
   } catch {
     return listFilesRecursively(repoRoot).map(toRelativePath);
   }
@@ -103,7 +108,9 @@ function listTrackedIgnoredInternalFiles() {
       ["ls-files", "-ci", "--exclude-standard", "-z", "internal"],
       { cwd: repoRoot, encoding: "utf8" },
     );
-    return output.split("\0").filter(Boolean);
+    // `git ls-files -ci` 会包含已从工作树删除但尚未提交的路径。文档边界
+    // 只约束当前磁盘上的文件，不能要求恢复已删除的内部文档才能通过检查。
+    return output.split("\0").filter(isCurrentFile);
   } catch {
     return [];
   }
@@ -135,7 +142,7 @@ function listFilesRecursively(directoryPath) {
 
 function shouldScanFile(relativePath) {
   const absolutePath = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolutePath)) {
+  if (!isCurrentFile(relativePath)) {
     return false;
   }
 

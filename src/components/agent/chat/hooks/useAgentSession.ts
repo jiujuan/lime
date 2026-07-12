@@ -11,18 +11,18 @@ import {
 } from "react";
 import { toast } from "sonner";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
-  AsterTodoItem,
+  AgentTodoItem,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
-import { isAsterSessionNotFoundError } from "@/lib/asterSessionRecovery";
+import { isAgentSessionNotFoundError } from "@/lib/agentSessionRecovery";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   mapSessionToTopic,
@@ -258,7 +258,7 @@ interface UseAgentSessionOptions {
   initialTopicsLoadMode: "immediate" | "deferred";
   initialTopicsDeferredDelayMs?: number;
   preserveRestoredMessages: boolean;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   accessMode: AgentAccessMode;
   providerTypeRef: MutableRefObject<string>;
   modelRef: MutableRefObject<string>;
@@ -288,7 +288,7 @@ interface UseAgentSessionOptions {
   ) => void;
   markSessionExecutionStrategySynced: (
     sessionId: string,
-    executionStrategy: AsterExecutionStrategy,
+    executionStrategy: AgentExecutionStrategy,
   ) => void;
   persistSessionAccessMode: (
     sessionId: string,
@@ -297,7 +297,7 @@ interface UseAgentSessionOptions {
   loadSessionAccessMode: (sessionId: string) => AgentAccessMode | null;
   filterSessionsByWorkspace: <T extends { id: string }>(sessions: T[]) => T[];
   setExecutionStrategyState: (
-    executionStrategy: AsterExecutionStrategy,
+    executionStrategy: AgentExecutionStrategy,
   ) => void;
   setAccessModeState: (accessMode: AgentAccessMode) => void;
 }
@@ -467,16 +467,16 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const [threadRead, setThreadRead] =
     useState<AgentRuntimeThreadReadModel | null>(null);
   const [executionRuntime, setExecutionRuntime] =
-    useState<AsterSessionExecutionRuntime | null>(null);
+    useState<AgentSessionExecutionRuntime | null>(null);
   const [sessionWorkingDir, setSessionWorkingDir] = useState<string | null>(
     null,
   );
-  const [todoItems, setTodoItems] = useState<AsterTodoItem[]>([]);
+  const [todoItems, setTodoItems] = useState<AgentTodoItem[]>([]);
   const [childSubagentSessions, setChildSubagentSessions] = useState<
-    AsterSubagentSessionInfo[]
+    AgentSubagentSessionInfo[]
   >([]);
   const [subagentParentContext, setSubagentParentContext] =
-    useState<AsterSubagentParentContext | null>(null);
+    useState<AgentSubagentParentContext | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicsReady, setTopicsReady] = useState(false);
   const [sessionHistoryWindow, setSessionHistoryWindow] =
@@ -516,7 +516,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const sessionHistoryWindowRef = useRef<AgentSessionHistoryWindow | null>(
     sessionHistoryWindow,
   );
-  const executionRuntimeRef = useRef<AsterSessionExecutionRuntime | null>(
+  const executionRuntimeRef = useRef<AgentSessionExecutionRuntime | null>(
     executionRuntime,
   );
   const sessionWorkingDirRef = useRef<string | null>(sessionWorkingDir);
@@ -854,7 +854,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         !isLegacyDefaultProjectId(existingWorkspaceId) &&
         existingWorkspaceId !== resolvedWorkspaceId
       ) {
-        console.warn("[AsterChat] 检测到会话与工作区映射冲突，跳过覆盖", {
+        console.warn("[AgentChat] 检测到会话与工作区映射冲突，跳过覆盖", {
           sessionId,
           existingWorkspaceId,
           currentWorkspaceId: resolvedWorkspaceId,
@@ -1147,7 +1147,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             return;
           }
           topicsListMayBeTruncatedRef.current = false;
-          console.error("[AsterChat] 加载话题失败:", error);
+          console.error("[AgentChat] 加载话题失败:", error);
           logAgentDebug(
             "useAgentSession",
             "listSessions.error",
@@ -1220,7 +1220,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       setTopics(topicList);
     } catch (error) {
       topicsListMayBeTruncatedRef.current = false;
-      console.error("[AsterChat] 加载话题失败:", error);
+      console.error("[AgentChat] 加载话题失败:", error);
       logAgentDebug(
         "useAgentSession",
         "loadTopics.error",
@@ -1378,7 +1378,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           return newSessionId;
         } catch (error) {
           skipAutoRestoreRef.current = false;
-          console.error("[AsterChat] 创建新任务失败:", error);
+          console.error("[AgentChat] 创建新任务失败:", error);
           logAgentDebug(
             "useAgentSession",
             "createFreshSession.error",
@@ -1566,7 +1566,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       detail: Awaited<ReturnType<AgentRuntimeAdapter["getSession"]>>,
       options?: {
         syncSessionId?: boolean;
-        executionStrategyOverride?: AsterExecutionStrategy;
+        executionStrategyOverride?: AgentExecutionStrategy;
         preserveExecutionStrategyOnMissingDetail?: boolean;
         detailMergeMode?: AgentSessionDetailMergeMode;
         localSnapshotOverride?: {
@@ -1804,7 +1804,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
       if (workspaceRestorePlan.shouldReject) {
         console.warn(
-          "[AsterChat] 检测到跨工作区会话恢复，已忽略",
+          "[AgentChat] 检测到跨工作区会话恢复，已忽略",
           workspaceRestorePlan.crossWorkspaceContext ?? {
             currentWorkspaceId: resolvedWorkspaceId,
             knownWorkspaceId: workspaceRestorePlan.knownWorkspaceId,
@@ -1985,7 +1985,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           idleTimeoutMs: SESSION_METADATA_SYNC_IDLE_TIMEOUT_MS,
           minimumDelayMs: SESSION_METADATA_SYNC_DELAY_MS,
           onError: (error) => {
-            console.warn("[AsterChat] 迁移会话 metadata fallback 失败:", error);
+            console.warn("[AgentChat] 迁移会话 metadata fallback 失败:", error);
           },
           onSkipped: (event) => {
             logAgentDebug(
@@ -2072,8 +2072,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         workspaceId,
       });
 
-      console.error("[AsterChat] 切换话题失败:", error);
-      console.error("[AsterChat] 错误详情:", JSON.stringify(error, null, 2));
+      console.error("[AgentChat] 切换话题失败:", error);
+      console.error("[AgentChat] 错误详情:", JSON.stringify(error, null, 2));
       logAgentDebug(
         "useAgentSession",
         "switchTopic.error",
@@ -2730,7 +2730,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           return sessionIdRef.current?.trim() || null;
         } catch (error) {
           if (
-            !isAsterSessionNotFoundError(error) &&
+            !isAgentSessionNotFoundError(error) &&
             !isSessionWorkspaceMismatchError(error)
           ) {
             throw error;
@@ -2809,11 +2809,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           ),
         );
       } catch (error) {
-        if (isAsterSessionNotFoundError(error)) {
+        if (isAgentSessionNotFoundError(error)) {
           persistSessionRestoreCandidate(null);
           return;
         }
-        console.warn("[AsterChat] 后台恢复会话失败:", error);
+        console.warn("[AgentChat] 后台恢复会话失败:", error);
         logAgentDebug(
           "useAgentSession",
           "backgroundRestore.error",
@@ -2848,7 +2848,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         persistSessionAccessMode,
         setAccessModeState,
         onWarn: (error) => {
-          console.warn("[AsterChat] 刷新会话详情失败:", error);
+          console.warn("[AgentChat] 刷新会话详情失败:", error);
         },
       });
     },
@@ -2870,7 +2870,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         targetSessionId,
         applyReadModelSnapshot,
         onWarn: (error) => {
-          console.warn("[AsterChat] 刷新运行态摘要失败:", error);
+          console.warn("[AgentChat] 刷新运行态摘要失败:", error);
         },
       });
     },
@@ -2934,7 +2934,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         }
         return true;
       } catch (error) {
-        console.warn("[AsterChat] 静默 turn 恢复失败:", error);
+        console.warn("[AgentChat] 静默 turn 恢复失败:", error);
         return false;
       }
     },
@@ -3020,7 +3020,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       restoreSource: "auto",
     })
       .catch((error) => {
-        console.warn("[AsterChat] 自动恢复会话失败:", error);
+        console.warn("[AgentChat] 自动恢复会话失败:", error);
         logAgentDebug(
           "useAgentSession",
           "autoRestore.error",
@@ -3166,8 +3166,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           );
         })
         .catch((error) => {
-          if (!isAsterSessionNotFoundError(error)) {
-            console.warn("[AsterChat] 校验当前会话存在性失败:", error);
+          if (!isAgentSessionNotFoundError(error)) {
+            console.warn("[AgentChat] 校验当前会话存在性失败:", error);
             return;
           }
 
@@ -3251,7 +3251,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         ? { allowDetachedSession: true }
         : {}),
     }).catch((error) => {
-      console.warn("[AsterChat] 会话水合失败:", error);
+      console.warn("[AgentChat] 会话水合失败:", error);
       logAgentDebug(
         "useAgentSession",
         "hydrateSession.error",
@@ -3351,7 +3351,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           tNavigation("navigation.sidebar.conversations.delete.success"),
         );
       } catch (error) {
-        console.error("[AsterChat] 删除任务失败:", error);
+        console.error("[AgentChat] 删除任务失败:", error);
         toast.error(
           tNavigation("navigation.sidebar.conversations.delete.error"),
         );
@@ -3384,7 +3384,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           tNavigation("navigation.sidebar.conversations.rename.success"),
         );
       } catch (error) {
-        console.error("[AsterChat] 重命名任务失败:", error);
+        console.error("[AgentChat] 重命名任务失败:", error);
         toast.error(
           tNavigation("navigation.sidebar.conversations.rename.error"),
         );
@@ -3396,7 +3396,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const updateTopicExecutionStrategy = useCallback(
     (
       targetSessionId: string,
-      nextExecutionStrategy: AsterExecutionStrategy,
+      nextExecutionStrategy: AgentExecutionStrategy,
     ) => {
       setTopics((prev) =>
         applyTopicExecutionStrategyToTopics(

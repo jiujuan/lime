@@ -11,7 +11,7 @@
 
 一句话事实源声明：
 
-> 后续所有基础 Prompt、system prompt、subagent prompt、plan prompt、augmentation 顺序与 diagnostics 判断，统一向 `App Server runtime_backend/request_context.rs -> lime_agent prompt modules / TurnInputEnvelope -> aster PromptManager / embedded prompts` 这一条 current 主链收敛。
+> 后续所有基础 Prompt、system prompt、subagent prompt、plan prompt、augmentation 顺序与 diagnostics 判断，统一向 `App Server runtime_backend/request_context/session_config.rs -> lime-agent current_provider_turn -> agent-runtime provider_turn -> model-provider lowering` 这一条 current 主链收敛。
 
 路径边界：`lime-rs/src/**` 已删除；旧 `runtime_turn.rs`、`prompt_context.rs` 只允许从 git history / 执行计划只读参考，不是 current owner。新增 Prompt 能力、augmentation stage、diagnostics 或 provider prompt 组装逻辑应进入 App Server / RuntimeCore / prompt services / `lime-rs/crates/agent`，不能恢复 `lime-rs/src/commands/**` 业务逻辑、compat wrapper 或退场 stub。
 
@@ -26,27 +26,26 @@ lime-rs/crates/app-server/src/runtime_backend/request_context.rs
   -> TurnInputEnvelope 记录 base/final prompt 与 augmentation stages
   -> SessionConfig.system_prompt
 
-aster Agent::prepare_tools_and_prompt(...)
-  -> PromptManager.builder().with_session_prompt(session_prompt)
-  -> Identity（identity.md 或 custom identity）
-  -> Session Context（Lime 组装后的 session prompt）
-  -> Capabilities（capabilities.md + extensions/frontend instructions）
-  -> Additional Instructions / hints / mode guidance
-  -> provider 实际收到的最终 system prompt
+lime-agent::current_provider_turn
+  -> merge_system_prompt_with_request_tool_policy(...)
+  -> agent-runtime::provider_turn
+  -> CurrentProviderRequest.system_prompt
+  -> model-provider lowering
+  -> provider 实际收到的最终 system prompt / instructions / system
 ```
 
 关键事实：
 
 - `TurnInputEnvelope` 里记录的 `base_system_prompt_len / final_system_prompt_len` 只覆盖 Lime 侧的 `session prompt` 片段，不等于 provider 侧最终收到的完整 system prompt 长度。
-- provider 最终 prompt 还会再经过 Aster `PromptManager` 包一层 `Identity + Capabilities + hints`。
-- 因此，排查“Prompt 为什么变长”“Prompt cache 为什么失效”时，不能只看历史 `prompt_context.rs` 锚点，必须先看 App Server request context、`TurnInputEnvelope`、Aster `PromptManager` 和扩展工具面变化。
+- `current_provider_turn` 在开始 provider turn 前合并 request tool policy；随后 `agent-runtime::provider_turn` 只将同一份 `system_prompt` 放入 `CurrentProviderRequest`。
+- 因此，排查“Prompt 为什么变长”“Prompt cache 为什么失效”时，必须先看 App Server session config、runtime agents / skills / plugin / memory / soul context、`TurnInputEnvelope` 和 `current_provider_turn`，而不是已删除 runtime 的 prompt manager 或模板链。
 
 ## 基础 Prompt 的 current 事实源
 
 ### 1. Base Session Prompt 入口
 
 - `lime-rs/crates/app-server/src/runtime_backend/request_context.rs`
-- `lime-rs/crates/agent/src/aster_state_support.rs`
+- `lime-rs/crates/agent/src/agent_state_support.rs`
 - 优先级固定为：
   1. `project prompt`
   2. `session prompt`
@@ -108,44 +107,18 @@ FastChat 固定顺序：
 
 这里的“固定顺序”以 App Server request context 和 `TurnPromptAugmentationStageKind` 为准；文档、前端假设或样板说明不得自行重排。
 
-### 3. Aster 侧最终包装
+### 3. Current provider turn
 
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/reply_parts.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/prompt_manager.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompt_template.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/*.md`
+最终 provider request 由以下 current owner 串联：
 
-当前 provider prompt 的最终结构不是“Lime 直接整段覆盖”，而是：
+- `lime-rs/crates/app-server/src/runtime_backend/request_context/session_config.rs`
+- `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
+- `lime-rs/crates/agent/src/request_tool_policy/policy_config.rs`
+- `lime-rs/crates/agent/src/current_provider_turn.rs`
+- `lime-rs/crates/agent-runtime/src/provider_turn.rs`
+- `lime-rs/crates/model-provider/src/current_client/{lowering,stream,transport}.rs`
 
-1. `identity.md` 或 `AgentIdentity.custom_prompt`
-2. `Session Context`
-   Lime 在 App Server request context 组好的 session prompt 会放在这里
-3. `capabilities.md`
-   由 extensions、frontend instructions、tool 数量、mode 等上下文渲染
-4. 额外指令
-   包括 final output tool prompt、hints、chat mode guidance 等
-
-### 4. Embedded Prompt 文件的 current 用途
-
-`lime-rs/crates/aster-rust/crates/aster/src/prompts` 是 Aster 的嵌入式模板目录，但不是所有文件都在 current 主链里。
-
-当前有明确 runtime 调用点的模板：
-
-- `identity.md`
-- `capabilities.md`
-- `subagent_system.md`
-- `plan.md`
-- `recipe.md`
-- `summarize_oneshot.md`
-- `permission_judge.md`
-
-其中：
-
-- `identity.md + capabilities.md` 是普通主对话最终 prompt 的基础层
-- `subagent_system.md` 是 subagent current prompt
-- `plan.md` 是 planning current prompt
-- `recipe.md` 是 recipe 生成流的 current prompt
-- `summarize_oneshot.md`、`permission_judge.md` 是特定侧链使用的 current 专用 prompt
+`model-provider` 会按 provider protocol 将同一份 `CurrentProviderRequest.system_prompt` lower 为 Chat Completions `system` message、Responses `instructions` 或 Anthropic `system` 字段。没有第二套 prompt manager、模板目录或 retired source adapter 可以改写该事实。
 
 ## Current / Compat / Deprecated 边界
 
@@ -157,26 +130,19 @@ FastChat 固定顺序：
 - `lime-rs/crates/agent/src/request_tool_policy.rs`
 - `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
 - `lime-rs/crates/agent/src/turn_input_envelope.rs`
-- `lime-rs/crates/agent/src/aster_state_support.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/prompt_manager.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/agents/reply_parts.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompt_template.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/identity.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/capabilities.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/subagent_system.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/plan.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/recipe.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/summarize_oneshot.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/permission_judge.md`
+- `lime-rs/crates/app-server/src/runtime_backend/request_context/session_config.rs`
+- `lime-rs/crates/app-server/src/runtime_backend/{agent_skills_context,plugin_activation_context,plugin_runtime_context}.rs`
+- `lime-rs/crates/agent/src/{current_provider_turn,turn_input_envelope}.rs`
+- `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
+- `lime-rs/crates/agent-runtime/src/{session_config,provider_turn}.rs`
+- `lime-rs/crates/model-provider/src/current_client/{lowering,stream,transport}.rs`
 
 ### Compat
 
-以下路径仍保留，但不属于当前基础 Prompt 主链，后续不要继续把新能力长进去：
+以下路径是局部 helper 或历史 evidence，不属于基础 Prompt 主链，后续不要继续把新能力长进去：
 
 - `lime-rs/crates/agent/src/prompt/builder.rs`
 - `lime-rs/crates/agent/src/prompt/templates.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompt/builder.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompt/templates.rs`
 - `internal/aiprompts/query-loop.md`
   这是 Query Loop current 文档，但不是基础 Prompt 逐层拼装的唯一事实源
 - `internal/aiprompts/content-creator.md`
@@ -184,18 +150,9 @@ FastChat 固定顺序：
 
 这些 compat 路径可以继续被读取、测试或保留导出，但不能再被当成“当前 prompt 主链定义处”。
 
-### Deprecated
-
-以下 embedded prompt 文件当前在仓库内没有明确 runtime 调用点，不应再作为新实现参考：
-
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/system.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/system_gpt_4.1.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/desktop_prompt.md`
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/desktop_recipe_instruction.md`
-
 ### 特殊说明
 
-- `lime-rs/crates/aster-rust/crates/aster/src/prompts/mock.md` 目前只看到 `prompt_template.rs` 内部测试覆盖，不属于基础 Prompt current 主链。
+- 已删除 runtime 的 prompt manager、embedded prompt 和 vendor 文件只能作为 git history / 执行计划 evidence，不属于基础 Prompt current 主链。
 - `internal/prd/gongneng/**`、`internal/roadmap/**`、`x-article-export/**` 等功能样板或产品文档，只能消费主链事实，不能反向定义基础 Prompt 顺序。
 
 ## 谁可以定义基础 Prompt，谁只能消费
@@ -206,8 +163,8 @@ FastChat 固定顺序：
 - `lime-rs/crates/agent/src/request_tool_policy.rs`
 - `lime-rs/crates/agent/src/prompt/runtime_agents.rs`
 - `lime-rs/crates/agent/src/turn_input_envelope.rs`
-- `lime-rs/crates/agent/src/aster_state_support.rs`
-- Aster `PromptManager` 与有明确调用点的 embedded templates
+- `lime-rs/crates/agent/src/agent_state_support.rs`
+- `agent-runtime::provider_turn` 与 `model-provider::current_client` 的 request / lowering 边界
 
 只能消费、解释或验证基础 Prompt 的边界：
 
@@ -241,5 +198,5 @@ FastChat 固定顺序：
 
 - Lime 的基础 Prompt 主链不是某一份前端 `systemPrompt`、某一份 PRD，或某个样板包
 - Lime 的基础 Prompt 主链也不是单独某个 builder 文件
-- 真正的 current 主链是 “App Server request context 先组 session prompt，再由 Aster `PromptManager` 包装成最终 provider prompt”
+- 真正的 current 主链是 “App Server request context 先组 session prompt，`lime-agent` 追加 turn policy，`agent-runtime` 生成 provider request，`model-provider` lower 成上游请求”
 - 后续所有 Prompt 相关治理，必须围绕这条主链做减法和收口，而不是再新增平级 builder、平级模板或平级文档解释

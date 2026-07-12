@@ -1,19 +1,20 @@
+use crate::current_provider_turn::stream_current_provider_turn;
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use crate::provider_configuration::{
     configure_model_route_provider_for_session_with_provider, ModelRouteProviderConfiguration,
     SessionProviderConfig,
 };
-use crate::request_tool_policy::{
-    stream_runtime_reply_with_configured_provider, stream_runtime_reply_with_policy,
-    ReplyAttemptError, RequestToolPolicy, StreamReplyExecution,
-};
+use crate::request_tool_policy::{ReplyAttemptError, RequestToolPolicy, StreamReplyExecution};
 use crate::runtime_state::AgentRuntimeState;
 use crate::AgentSessionConfig;
+use agent_runtime::reply_input::RuntimeReplyInput;
 use lime_core::database::DbConnection;
+use model_provider::current_client::CurrentProviderMessage;
 
 pub struct AgentTurnExecutionRequest<'a> {
     pub session_id: &'a str,
-    pub input_text: &'a str,
+    pub input: RuntimeReplyInput,
+    pub initial_messages: Vec<CurrentProviderMessage>,
     pub session_config: AgentSessionConfig,
     pub request_tool_policy: &'a RequestToolPolicy,
     pub provider_configuration: Option<AgentTurnProviderConfiguration<'a>>,
@@ -57,33 +58,28 @@ where
     };
     let cancel_token = agent_state.create_cancel_token(request.session_id).await;
     let session_config = request.session_config;
-    let execution = match configured_provider.as_ref() {
-        Some(configured_provider) => {
-            stream_runtime_reply_with_configured_provider(
-                agent_state,
-                request.input_text,
-                None,
-                session_config,
-                Some(cancel_token),
-                request.request_tool_policy,
-                configured_provider,
-                on_event,
-            )
+    let provider = match configured_provider.as_ref() {
+        Some(configured_provider) => configured_provider.provider(),
+        None => agent_state
+            .provider()
             .await
-        }
-        None => {
-            stream_runtime_reply_with_policy(
-                agent_state,
-                request.input_text,
-                None,
-                session_config,
-                Some(cancel_token),
-                request.request_tool_policy,
-                on_event,
-            )
-            .await
-        }
+            .ok_or_else(|| ReplyAttemptError {
+                message: "Provider is not configured".to_string(),
+                emitted_any: false,
+            })?,
     };
+    let execution = stream_current_provider_turn(
+        agent_state,
+        provider,
+        request.input,
+        request.initial_messages,
+        None,
+        session_config,
+        Some(cancel_token),
+        request.request_tool_policy,
+        on_event,
+    )
+    .await;
     agent_state.remove_cancel_token(request.session_id).await;
     let stream = execution?;
     Ok(AgentTurnExecution {

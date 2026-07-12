@@ -1,7 +1,7 @@
 /**
  * 流式消息渲染组件
  *
- * 参考 aster UI 设计，支持思考内容、工具调用和实时 Markdown 渲染
+ * 参考 agent UI 设计，支持思考内容、工具调用和实时 Markdown 渲染
  * Requirements: 9.3, 9.4
  */
 

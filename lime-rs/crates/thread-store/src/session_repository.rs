@@ -1,6 +1,6 @@
 //! Session Repository trait and DTOs for thread-store.
 //!
-//! 此模块定义不依赖 Aster 的 session 仓储接口和 Lime-owned DTO。
+//! 此模块定义不依赖 Agent 的 session 仓储接口和 Lime-owned DTO。
 //! 实现者可以选择任何存储后端（SQLite、内存、JSON 文件等）。
 
 use crate::ThreadStoreResult;

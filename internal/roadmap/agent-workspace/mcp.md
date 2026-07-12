@@ -70,8 +70,8 @@ MCP 不是普通 tool family。它至少包含四层对象：
 | Tool call execution | 3.3 | `mcpTool/call`、`callWithCaller`、ToolCallDisplay family、MCP dynamic tool classification | 缺 approval mode、progress token、cancel、timeout、large output/offload 的 GUI evidence | tool args/result/error/progress/approval/timeout 全进入 timeline 和 Evidence |
 | Resources | 3.2 | `mcpResource/list/read`、`ListMcpResourcesTool`、`ReadMcpResourceTool`、resource browser | 缺 resource templates、subscribe/list_changed、mime preview/offload、最终引用验证 | URI、mime、preview、blob/text、安全来源、引用、订阅变化全部可回放 |
 | Prompts | 3.1 | `mcpPrompt/list/get`、prompts browser、prompt result schema guard | Prompt 与 composer / skill workflow 未闭环；缺参数表单和来源解释 evidence | prompt template 可选择、补参、预览、插入/运行、回放，且与 Skill 不混淆 |
-| Roots / Workspace boundary | 2.4 | Rust/aster MCP roots 存在；Lime product UI 证据弱 | 缺 roots/list_changed、workspace root 可见性和安全边界 UI | 明确展示哪些 workspace roots 暴露给哪个 server，变更有通知和审计 |
-| Sampling | 1.8 | Rust/aster sampling tests 存在；Lime Agent Workspace product evidence 弱 | 缺 client sampling capability UI、server-initiated sampling approval、prompt visibility | 任何 sampling 请求都需显式可审计，用户知道 server 看到什么上下文 |
+| Roots / Workspace boundary | 2.4 | Rust/agent MCP roots 存在；Lime product UI 证据弱 | 缺 roots/list_changed、workspace root 可见性和安全边界 UI | 明确展示哪些 workspace roots 暴露给哪个 server，变更有通知和审计 |
+| Sampling | 1.8 | Rust/agent sampling tests 存在；Lime Agent Workspace product evidence 弱 | 缺 client sampling capability UI、server-initiated sampling approval、prompt visibility | 任何 sampling 请求都需显式可审计，用户知道 server 看到什么上下文 |
 | Elicitation / HITL | 2.4 | Codex 有强参考；Lime 目前本地 evidence 弱 | 缺 MCP elicitation form/url、decline/cancel、目标域名、安全文本 | form/url elicitation 有审批、表单预览、敏感字段禁止、URL 目标域名提示 |
 | Auth / OAuth / Secrets | 2.5 | API 层可管理 server config；smoke 有 secret redaction | 缺 OAuth login flow、token store、scope、expiry、reauth UI | bearer/OAuth/PKCE、scope、token 存储、过期、撤销和 secret redaction 全可见 |
 | Agent Workspace integration | 3.4 | 动态 MCP tool family、browser MCP、ToolSearch、tool inventory、projection tests | MCP server status 与工具卡、runtime inventory、final evidence 尚未完全同屏 | agent 能解释可见 MCP 来源、选择原因、调用轨迹、结果引用和失败 |

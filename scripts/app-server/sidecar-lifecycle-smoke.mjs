@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { copyElectronAppServerRuntimeLibraries } from "../lib/electron-app-server-assets.mjs";
 import { localAppServerBinaryPath } from "../lib/electron-dev-sidecar.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,6 +55,11 @@ async function main() {
     await mkdir(packagedDir, { recursive: true });
     await copyFile(sourceBinaryPath, packagedBinaryPath);
     await chmod(packagedBinaryPath, 0o755).catch(() => undefined);
+    const runtimeLibraries = await copyElectronAppServerRuntimeLibraries({
+      repoRoot: rootDir,
+      sourceBinary: sourceBinaryPath,
+      destinationDirectory: packagedDir,
+    });
 
     const manifest = {
       version: await readPackageVersion(),
@@ -155,6 +161,7 @@ async function main() {
         `capabilities=${capabilityIds.join(",")}`,
         "backend=unavailable",
         "turn=fail-closed",
+        `runtimeLibraries=${runtimeLibraries.length}`,
         `scheduledRestarts=${scheduledRestarts.length}`,
       ].join(" "),
     );

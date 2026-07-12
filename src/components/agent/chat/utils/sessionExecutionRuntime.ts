@@ -1,13 +1,13 @@
 import { getProviderLabel } from "@/lib/constants/providerMappings";
 import { isLikelyImageGenerationSearchText } from "@/lib/imageGen/providerMatchers";
 import type {
-  AsterSessionExecutionRuntime,
-  AsterSessionExecutionRuntimePreferences,
-  AsterSessionExecutionRuntimeRecentTeamRole,
-  AsterSessionExecutionRuntimeRecentTeamSelection,
-  AsterTurnOutputSchemaRuntime,
+  AgentSessionExecutionRuntime,
+  AgentSessionExecutionRuntimePreferences,
+  AgentSessionExecutionRuntimeRecentTeamRole,
+  AgentSessionExecutionRuntimeRecentTeamSelection,
+  AgentTurnOutputSchemaRuntime,
 } from "@/lib/api/agentExecutionRuntime";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
 import {
@@ -28,8 +28,8 @@ export {
 } from "../projection/sessionExecutionRuntimeProjection";
 
 export function createExecutionRuntimeFromSessionDetail(
-  detail?: Pick<AsterSessionDetail, "execution_runtime"> | null,
-): AsterSessionExecutionRuntime | null {
+  detail?: Pick<AgentSessionDetail, "execution_runtime"> | null,
+): AgentSessionExecutionRuntime | null {
   const runtime = detail?.execution_runtime || null;
   if (!runtime) {
     return null;
@@ -51,7 +51,7 @@ export function createExecutionRuntimeFromSessionDetail(
 export function isImportedSourceExecutionRuntime(
   runtime?:
     | (Pick<
-        AsterSessionExecutionRuntime,
+        AgentSessionExecutionRuntime,
         "provider_selector" | "provider_name" | "model_name"
       > & {
         imported_continuation?: unknown;
@@ -83,7 +83,7 @@ export function isImportedSourceExecutionRuntime(
 export function createSessionModelPreferenceFromExecutionRuntime(
   runtime?:
     | (Pick<
-        AsterSessionExecutionRuntime,
+        AgentSessionExecutionRuntime,
         "provider_selector" | "provider_name" | "model_name"
       > & {
         imported_continuation?: unknown;
@@ -158,12 +158,12 @@ function normalizeRecentPreferenceBoolean(value: unknown): boolean | null {
 
 export function createChatToolPreferencesFromExecutionRuntime(
   runtime?: Pick<
-    AsterSessionExecutionRuntime,
+    AgentSessionExecutionRuntime,
     "recent_preferences" | "execution_strategy"
   > | null,
 ): ChatToolPreferences | null {
   const preferences = runtime?.recent_preferences as
-    | AsterSessionExecutionRuntimePreferences
+    | AgentSessionExecutionRuntimePreferences
     | null
     | undefined;
   if (!preferences) {
@@ -187,14 +187,14 @@ export function createChatToolPreferencesFromExecutionRuntime(
 }
 
 export function createSessionAccessModeFromExecutionRuntime(
-  runtime?: Pick<AsterSessionExecutionRuntime, "recent_access_mode"> | null,
+  runtime?: Pick<AgentSessionExecutionRuntime, "recent_access_mode"> | null,
 ) {
   return createAccessModeFromExecutionRuntime(runtime);
 }
 
 export function createSessionRecentPreferencesFromChatToolPreferences(
   preferences: ChatToolPreferences,
-): AsterSessionExecutionRuntimePreferences {
+): AgentSessionExecutionRuntimePreferences {
   return {
     task: preferences.task,
     subagent: preferences.subagent,
@@ -217,7 +217,7 @@ function normalizeRuntimeSkillIds(
 }
 
 function createTeamRoleDefinitionsFromRuntimeSelection(
-  roles?: AsterSessionExecutionRuntimeRecentTeamRole[] | null,
+  roles?: AgentSessionExecutionRuntimeRecentTeamRole[] | null,
 ) {
   return (roles || [])
     .map((role, index) => {
@@ -237,7 +237,7 @@ function createTeamRoleDefinitionsFromRuntimeSelection(
 }
 
 export function createTeamDefinitionFromExecutionRuntimeRecentTeamSelection(
-  selection?: AsterSessionExecutionRuntimeRecentTeamSelection | null,
+  selection?: AgentSessionExecutionRuntimeRecentTeamSelection | null,
 ): TeamDefinition | null {
   if (!selection || selection.disabled) {
     return null;
@@ -282,7 +282,7 @@ export function createTeamDefinitionFromExecutionRuntimeRecentTeamSelection(
 export function createSessionRecentTeamSelectionFromTeamDefinition(
   team: TeamDefinition | null,
   theme?: string | null,
-): AsterSessionExecutionRuntimeRecentTeamSelection {
+): AgentSessionExecutionRuntimeRecentTeamSelection {
   if (!team) {
     return {
       disabled: true,
@@ -315,7 +315,7 @@ export function createSessionRecentTeamSelectionFromTeamDefinition(
 }
 
 export function getExecutionRuntimeProviderLabel(
-  runtime?: AsterSessionExecutionRuntime | null,
+  runtime?: AgentSessionExecutionRuntime | null,
 ): string | null {
   const providerKey =
     runtime?.provider_selector?.trim() ||
@@ -328,7 +328,7 @@ export function getExecutionRuntimeProviderLabel(
 }
 
 export function getOutputSchemaRuntimeLabel(
-  runtime?: AsterTurnOutputSchemaRuntime | null,
+  runtime?: AgentTurnOutputSchemaRuntime | null,
 ): string | null {
   if (!runtime) {
     return null;
@@ -342,7 +342,7 @@ export function getOutputSchemaRuntimeLabel(
 }
 
 export function getExecutionRuntimeSummaryLabel(
-  runtime?: AsterSessionExecutionRuntime | null,
+  runtime?: AgentSessionExecutionRuntime | null,
 ): string | null {
   const providerLabel = getExecutionRuntimeProviderLabel(runtime);
   const modelLabel = runtime?.model_name?.trim() || null;
@@ -359,7 +359,7 @@ export function getExecutionRuntimeSummaryLabel(
 }
 
 export function getExecutionRuntimeDisplayLabel(
-  runtime?: AsterSessionExecutionRuntime | null,
+  runtime?: AgentSessionExecutionRuntime | null,
   options?: { active?: boolean },
 ): string | null {
   const summaryLabel = getExecutionRuntimeSummaryLabel(runtime);

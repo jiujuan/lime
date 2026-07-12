@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 pub(super) fn runtime_status_events_for_agent_skills(
     request: &ExecutionRequest,
 ) -> Vec<RuntimeEvent> {
-    let host_request = super::request_context::aster_chat_request_from_request(request);
+    let host_request = super::request_context::runtime_request_from_request(request);
     let workspace_scope =
         super::request_context::request_workspace_scope(request, host_request.as_ref());
     let metadata_values = super::skill_runtime_enable::request_metadata_values(request);

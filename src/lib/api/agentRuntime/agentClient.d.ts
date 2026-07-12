@@ -1,6 +1,6 @@
 import type {
   AgentRuntimeGeneratedTitleResult,
-  AgentRuntimeInitStatus,
+  RuntimeProviderSelection,
 } from "./types";
 import { type AgentRuntimeBridgeInvoke } from "./transport";
 export interface AgentRuntimeAgentClientDeps {
@@ -24,7 +24,7 @@ export declare function createAgentClient({
     sessionId: string,
     previewText?: string,
   ) => Promise<string>;
-  initAgentRuntime: () => Promise<AgentRuntimeInitStatus>;
+  getRuntimeProviderSelection: () => Promise<RuntimeProviderSelection>;
 };
 export declare const generateAgentRuntimeTitleResult: (
     request: GenerateAgentRuntimeTitleRequest,
@@ -36,4 +36,4 @@ export declare const generateAgentRuntimeTitleResult: (
     sessionId: string,
     previewText?: string,
   ) => Promise<string>,
-  initAgentRuntime: () => Promise<AgentRuntimeInitStatus>;
+  getRuntimeProviderSelection: () => Promise<RuntimeProviderSelection>;

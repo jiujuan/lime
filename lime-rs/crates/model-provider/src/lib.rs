@@ -1,4 +1,5 @@
 pub mod canonical;
+pub mod current_client;
 pub mod http;
 pub mod provider_stream;
 pub mod runtime_provider;
@@ -13,6 +14,7 @@ use serde_json::Value;
 pub enum ModelProviderProtocol {
     Responses,
     ChatCompletions,
+    AnthropicMessages,
     Custom(String),
 }
 

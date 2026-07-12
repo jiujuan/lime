@@ -310,7 +310,7 @@ async function submitInitialTurn(options, sessionId, workspaceId, provider) {
     message: "请只回复 MO_OK，不要解释。",
     eventName: `managed_objective_continuation_smoke_${turnId}`,
     turnId,
-    turnConfig: {
+    runtimeRequest: {
       providerPreference: provider.providerPreference,
       modelPreference: provider.modelPreference,
       ...(provider.providerConfig

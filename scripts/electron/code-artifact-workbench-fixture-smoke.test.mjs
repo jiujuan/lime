@@ -80,6 +80,8 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain("workbenchAfterRecovery");
     expect(content).toContain("coding-workbench-recovery-submit");
     expect(content).toContain("coding_workbench_recovery");
+    expect(content).toContain("runtimeOptions?.runtimeRequest?.metadata");
+    expect(content).not.toContain("runtimeOptions?.metadata");
     expect(content).toContain("codingRecoveryGuiSubmitted");
     expect(content).toContain("codingRecoveryReachedBackend");
     expect(content).toContain("capturedRecoveryContext");

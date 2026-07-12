@@ -27,7 +27,7 @@ use serde_json::Value;
 use std::path::Path;
 use url::Url;
 
-/// Lime-owned native tool overlay installed on top of the temporary Aster registry.
+/// Lime-owned native tool overlay installed on top of the temporary Agent registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RuntimeNativeToolOverlay {
     ViewImage,
@@ -172,7 +172,7 @@ impl RuntimeNativeToolInstallStep {
         self.registration.turn_context_source()
     }
 
-    pub const fn registers_aster_tool(self) -> bool {
+    pub const fn registers_agent_tool(self) -> bool {
         matches!(
             self.registration.owner(),
             RuntimeNativeToolRegistrationOwner::NativeDispatch
@@ -548,10 +548,10 @@ fn turn_context_allows_web_tools_without_confirmation(
         || turn_context_approval_policy_is_never(turn_context)
 }
 
-/// Temporary allowlist for tools that may still be registered through the Aster registry.
+/// Temporary allowlist for tools that may still be registered through the Agent registry.
 ///
 /// The list is owned here so App Server / GUI inventory and the migration guard have
-/// one current policy source while the reply loop is still being removed from Aster.
+/// one current policy source while the reply loop is still being removed from Agent.
 const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
     "Bash",
     "PowerShell",
@@ -697,7 +697,7 @@ mod tests {
                 RuntimeNativeToolRegistrationOwner::SkillGate => {
                     assert_eq!(step.name(), "Skill");
                     assert!(
-                        !step.registers_aster_tool(),
+                        !step.registers_agent_tool(),
                         "Skill must stay definition-only; execution is owned by the current live hook"
                     );
                 }

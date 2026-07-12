@@ -75,7 +75,7 @@ export function handleToolEndEvent({
       duration,
       workspaceId: resolvedWorkspaceId,
       sessionId: activeSessionId,
-      source: "aster-chat",
+      source: "agent-chat",
       correlationId: data.tool_id,
     });
   }

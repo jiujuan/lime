@@ -65,33 +65,6 @@ pub(crate) fn load_session_record_row_by_id(
         .next())
 }
 
-pub(crate) fn load_all_session_record_rows(
-    conn: &rusqlite::Connection,
-) -> Result<Vec<SessionRecordRow>> {
-    load_session_record_rows_for_query(conn, &SessionListQuery::default())
-}
-
-pub(crate) fn load_session_record_rows_by_types(
-    conn: &rusqlite::Connection,
-    session_types: &[String],
-) -> Result<Vec<SessionRecordRow>> {
-    if session_types.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let placeholders = std::iter::repeat_n("?", session_types.len())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "SELECT {SESSION_RECORD_SELECT_COLUMNS}
-         FROM agent_sessions
-         WHERE session_type IN ({placeholders})
-         ORDER BY updated_at DESC"
-    );
-
-    load_session_record_rows(conn, &sql, rusqlite::params_from_iter(session_types.iter()))
-}
-
 pub(crate) fn load_session_record_rows_for_query(
     conn: &rusqlite::Connection,
     query: &SessionListQuery,
@@ -123,10 +96,7 @@ fn append_limit_offset(sql: &mut String, limit: Option<usize>, offset: Option<us
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        load_all_session_record_rows, load_session_record_row_by_id,
-        load_session_record_rows_by_types, load_session_record_rows_for_query,
-    };
+    use super::{load_session_record_row_by_id, load_session_record_rows_for_query};
     use thread_store::session_repository::SessionListQuery;
 
     fn create_session_record_table(conn: &rusqlite::Connection) {
@@ -215,41 +185,6 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id, "user-old");
-    }
-
-    #[test]
-    fn load_all_session_record_rows_should_order_by_updated_at_desc() {
-        let conn = rusqlite::Connection::open_in_memory().expect("open in-memory db");
-        create_session_record_table(&conn);
-        insert_session_record(&conn, "old", "user", "2026-01-01T00:00:00Z");
-        insert_session_record(&conn, "new", "user", "2026-01-03T00:00:00Z");
-
-        let rows = load_all_session_record_rows(&conn).expect("load rows");
-
-        assert_eq!(
-            rows.into_iter().map(|row| row.id).collect::<Vec<_>>(),
-            vec!["new", "old"]
-        );
-    }
-
-    #[test]
-    fn load_session_record_rows_by_types_should_filter_types_and_order() {
-        let conn = rusqlite::Connection::open_in_memory().expect("open in-memory db");
-        create_session_record_table(&conn);
-        insert_session_record(&conn, "user-old", "user", "2026-01-01T00:00:00Z");
-        insert_session_record(&conn, "hidden", "hidden", "2026-01-02T00:00:00Z");
-        insert_session_record(&conn, "sub-agent", "sub_agent", "2026-01-03T00:00:00Z");
-
-        let rows = load_session_record_rows_by_types(&conn, &["user".into(), "hidden".into()])
-            .expect("load rows by types");
-
-        assert_eq!(
-            rows.into_iter().map(|row| row.id).collect::<Vec<_>>(),
-            vec!["hidden", "user-old"]
-        );
-        assert!(load_session_record_rows_by_types(&conn, &[])
-            .expect("empty type list")
-            .is_empty());
     }
 
     #[test]

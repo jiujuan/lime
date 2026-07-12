@@ -199,7 +199,7 @@ export function createAgentStreamSubmissionLifecycle(
   const pendingTurnKey = createPendingTurnKey();
   const pendingItemKey = createPendingItemKey(pendingTurnKey);
   const requestTurnId = crypto.randomUUID();
-  const eventName = `aster_stream_${assistantMsgId}`;
+  const eventName = `agent_stream_${assistantMsgId}`;
   const turnUserMsg = userMsg
     ? {
         ...userMsg,

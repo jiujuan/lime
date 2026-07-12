@@ -79,7 +79,7 @@ pub(super) async fn generate_image_task_presentation(
     runtime_backend.ensure_agent_initialized(&db).await?;
     let requested_selection = resolve_presentation_model_selection(request)?;
     let effective_requested_selection = selection_with_effective_reasoning(&requested_selection);
-    let host_request = request_context::aster_chat_request_from_request(request);
+    let host_request = request_context::runtime_request_from_request(request);
     let host_selection = request_context::selection_from_host_provider_config(request)
         .map(|selection| selection_with_effective_reasoning(&selection));
     let host_direct_provider_config = host_selection.as_ref().and_then(|selection| {
@@ -176,11 +176,7 @@ pub(super) async fn generate_image_task_presentation(
         }),
     );
 
-    let runtime_metadata = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-        .or(request.metadata.as_ref());
+    let runtime_metadata = request.runtime_metadata();
     let soul_style = image_generation_soul_style(config_metadata.as_ref(), runtime_metadata);
     let system_prompt = append_soul_context_to_system_prompt(
         Some(presentation_system_prompt()),
@@ -366,18 +362,7 @@ fn presentation_text_selection_from_profile_model_slot(
 }
 
 fn metadata_candidates(request: &ExecutionRequest) -> Vec<&Value> {
-    let mut values = Vec::new();
-    if let Some(value) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-    {
-        values.push(value);
-    }
-    if let Some(value) = request.metadata.as_ref() {
-        values.push(value);
-    }
-    values
+    request.runtime_metadata().into_iter().collect()
 }
 
 fn profile_slot_value<'a>(metadata: &'a Value, slot: &str) -> Option<&'a Value> {

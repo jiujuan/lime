@@ -96,8 +96,8 @@ pub fn model_request_policy_from_turn_context(
     [
         "runtime_options",
         "runtimeOptions",
-        "aster_chat_request",
-        "asterChatRequest",
+        "runtime_request",
+        "runtimeRequest",
         "config",
     ]
     .into_iter()
@@ -276,8 +276,8 @@ fn model_request_policy_value(value: &Value) -> Option<&Value> {
             [
                 "runtime_options",
                 "runtimeOptions",
-                "aster_chat_request",
-                "asterChatRequest",
+                "runtime_request",
+                "runtimeRequest",
                 "config",
             ]
             .into_iter()

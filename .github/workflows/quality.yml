@@ -55,6 +55,24 @@ jobs:
 
   # PR 侧保留快速反馈门禁；main / 手动触发继续跑全量前端与 Rust。
 
+  architecture_confirmation:
+    name: Architecture Confirmation
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify architecture confirmation
+        run: npm run governance:architecture-confirmation
+
   integrity:
     name: Integrity
     runs-on: ubuntu-latest
@@ -311,6 +329,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - changed
+      - architecture_confirmation
       - integrity
       - frontend
       - frontend_full
@@ -325,6 +344,7 @@ jobs:
         shell: bash
         run: |
           CHANGED_COUNT='${{ needs.changed.outputs.changed_count }}'
+          ARCHITECTURE_CONFIRMATION_RESULT='${{ needs.architecture_confirmation.result }}'
           DOCS_ONLY='${{ needs.changed.outputs.docs_only }}'
           BRIDGE_REASONS='${{ needs.changed.outputs.bridge_reasons }}'
           INTEGRITY_RESULT='${{ needs.integrity.result }}'
@@ -372,6 +392,7 @@ jobs:
           fi
 
           echo "changed_count: ${CHANGED_COUNT}"
+          echo "architecture_confirmation: ${ARCHITECTURE_CONFIRMATION_RESULT}"
           echo "docs_only   : ${DOCS_ONLY}"
           echo "bridge_reasons: ${BRIDGE_REASONS}"
           echo "integrity   : ${INTEGRITY_RESULT}"
@@ -387,13 +408,17 @@ jobs:
           FAILURE_REASON=""
           NEXT_ACTION="No extra action required."
 
-          if [[ "${DOCS_ONLY}" == 'true' ]]; then
+          if [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" && "${ARCHITECTURE_CONFIRMATION_RESULT}" != "success" ]]; then
+            SUMMARY_NOTE="Architecture confirmation is required for every pull request."
+            FINAL_STATUS="failed"
+            FAILURE_REASON="architecture confirmation failed"
+          elif [[ "${DOCS_ONLY}" == 'true' ]]; then
             SUMMARY_NOTE="Only docs/markdown changes detected -> quality checks not required."
             NEXT_ACTION="No action required for docs-only changes."
           else
             SUMMARY_NOTE="Quality checks evaluated against changed areas."
 
-            if [[ "${INTEGRITY_REQUIRED}" == 'true' || "${FALLBACK}" == 'true' || "${WORKFLOW}" == 'true' ]]; then
+            if [[ -z "${FAILURE_REASON}" && ("${INTEGRITY_REQUIRED}" == 'true' || "${FALLBACK}" == 'true' || "${WORKFLOW}" == 'true') ]]; then
               if [[ "${INTEGRITY_RESULT}" != 'success' ]]; then
                 FINAL_STATUS="failed"
                 FAILURE_REASON="integrity failed"
@@ -459,6 +484,8 @@ jobs:
             if [[ -n "${FAILURE_REASON}" ]]; then
               if [[ "${FAILURE_REASON}" == "integrity failed" ]]; then
                 NEXT_ACTION='Run `npm run verify:app-version` and sync package / Cargo / Electron version files.'
+              elif [[ "${FAILURE_REASON}" == "architecture confirmation failed" ]]; then
+                NEXT_ACTION='Complete the architecture section in the PR description and update `internal/aiprompts/architecture.md` when the change is major.'
               elif [[ "${FAILURE_REASON}" == "frontend quick failed" ]]; then
                 NEXT_ACTION='Run `npm run lint && npm run typecheck && node scripts/check-vitest-layer-budget.mjs --max-component-candidates 30 && npm run test:unit && npm run test:contract` to reproduce the frontend quick failure locally.'
               elif [[ "${FAILURE_REASON}" == "frontend full failed" ]]; then
@@ -498,6 +525,7 @@ jobs:
             echo
             echo "| Gate | Required | Result |"
             echo "| --- | --- | --- |"
+            echo "| architecture_confirmation | PR only | ${ARCHITECTURE_CONFIRMATION_RESULT} |"
             echo "| integrity | ${INTEGRITY_REQUIRED} | ${INTEGRITY_RESULT} |"
             echo "| frontend_quick | ${FRONTEND_QUICK_REQUIRED} | ${FRONTEND_RESULT} |"
             echo "| frontend_full | ${MAIN_FULL_REQUIRED} | ${FRONTEND_FULL_RESULT} |"
@@ -522,7 +550,7 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ "${DOCS_ONLY}" == 'true' ]]; then
+          if [[ "${DOCS_ONLY}" == 'true' && -z "${FAILURE_REASON}" ]]; then
             echo "${SUMMARY_NOTE}"
             exit 0
           fi

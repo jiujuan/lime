@@ -47,10 +47,8 @@ const SKIPPED_FILE_SUFFIXES = [
   ".spec.tsx",
 ];
 const DEFAULT_TOOL_SURFACE_PATHS = [
-  "lime-rs/src/agent_tools",
-  "lime-rs/src/commands/aster_agent_cmd/tool_runtime.rs",
-  "lime-rs/src/commands/aster_agent_cmd/tool_runtime",
-  "lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
+  "lime-rs/crates/agent/src/agent_tools",
+  "lime-rs/crates/tool-runtime/src",
 ];
 
 export function managedObjectiveForbiddenSurfaceTokens() {

@@ -169,13 +169,6 @@ function assertCurrentRustTestSpecs(testSpecs) {
           value.includes("services::runtime_skill_binding_service"),
         ),
     },
-    {
-      label: "commands::aster_agent_cmd::workspace_skill_binding_prompt",
-      matches: ({ testFilter, expectedTests }) =>
-        [testFilter, ...expectedTests].some((value) =>
-          value.includes("commands::aster_agent_cmd::workspace_skill_binding_prompt"),
-        ),
-    },
   ];
   const retiredMatches = testSpecs.flatMap((testSpec) =>
     retiredPatterns
@@ -429,7 +422,7 @@ function writeRuntimeTranscript(cargoResults) {
       missingRegistrationProvenance:
         "covered: unregistered workspace Skill packages are ignored by app-server registered discovery.",
       retiredRustSurface:
-        "excluded: removed lime package, capability_draft_service, runtime_skill_binding_service and Aster command prompt tests are rejected by the smoke matrix guard.",
+        "excluded: removed lime package, capability_draft_service, runtime_skill_binding_service and Agent command prompt tests are rejected by the smoke matrix guard.",
     },
   };
   assertRuntimeTranscriptHasSkillToolGateEvidence(transcript);

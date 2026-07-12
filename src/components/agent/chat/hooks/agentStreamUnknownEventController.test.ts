@@ -13,7 +13,7 @@ describe("agentStreamUnknownEventController", () => {
         eventType: "runtime_projection_bootstrap",
       }),
     ).toBe(
-      "[AsterChat] 收到未识别的运行时事件，已保留流活跃态: event-a · runtime_projection_bootstrap",
+      "[AgentChat] 收到未识别的运行时事件，已保留流活跃态: event-a · runtime_projection_bootstrap",
     );
   });
 
@@ -38,7 +38,7 @@ describe("agentStreamUnknownEventController", () => {
       eventType: "runtime_projection_bootstrap",
       shouldWarn: true,
       warningMessage:
-        "[AsterChat] 收到未识别的运行时事件，已保留流活跃态: event-a · runtime_projection_bootstrap",
+        "[AgentChat] 收到未识别的运行时事件，已保留流活跃态: event-a · runtime_projection_bootstrap",
     });
 
     expect(
@@ -90,6 +90,18 @@ describe("agentStreamUnknownEventController", () => {
       }),
     ).toEqual({
       eventType: "turn.accepted",
+      shouldWarn: false,
+      warningMessage: null,
+    });
+
+    expect(
+      resolveAgentStreamUnknownEventPlan({
+        eventName: "event-a",
+        eventType: "runtime_event",
+        warnedEventTypes: new Set(),
+      }),
+    ).toEqual({
+      eventType: "runtime_event",
       shouldWarn: false,
       warningMessage: null,
     });

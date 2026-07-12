@@ -11,7 +11,7 @@ import {
 } from "./appServerRuntimeBoundary.testSupport";
 
 describe("app-server backend mode boundary", () => {
-  it("App Server 不应恢复独立 backend_mode=aster", () => {
+  it("App Server 不应恢复独立 backend_mode=agent", () => {
     const runtimeFactory = readFileSync(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_factory.rs"),
       "utf8",
@@ -26,12 +26,12 @@ describe("app-server backend mode boundary", () => {
     );
 
     expect(runtimeFactory).toContain('"runtime" => Ok(Self::Runtime)');
-    expect(runtimeFactory).not.toMatch(/["']aster["']\s*=>\s*Ok/u);
+    expect(runtimeFactory).not.toMatch(/["']agent["']\s*=>\s*Ok/u);
     expect(daemonBackend).toContain(
-      'assert!(SidecarBackendMode::parse("aster").is_err());',
+      'assert!(SidecarBackendMode::parse("agent").is_err());',
     );
-    expect(electronHost).not.toContain('normalized === "aster"');
-    expect(electronHost).not.toContain("APP_SERVER_BACKEND_MODE=aster");
+    expect(electronHost).not.toContain('normalized === "agent"');
+    expect(electronHost).not.toContain("APP_SERVER_BACKEND_MODE=agent");
   });
 
   it("ExternalBackend 只能保留为显式 override 或受控 fixture", () => {

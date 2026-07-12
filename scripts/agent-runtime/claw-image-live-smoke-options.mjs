@@ -232,7 +232,7 @@ export function createLiveRuntimeEnv() {
   const localAppData = path.join(tempRoot, "local-app-data");
   const roamingAppData = path.join(tempRoot, "roaming-app-data");
   const electronUserDataDir = path.join(tempRoot, "electron-user-data");
-  const asterRoot = path.join(tempRoot, "aster");
+  const agentRoot = path.join(tempRoot, "agent");
   for (const dir of [
     home,
     xdgConfigHome,
@@ -240,7 +240,7 @@ export function createLiveRuntimeEnv() {
     localAppData,
     roamingAppData,
     electronUserDataDir,
-    asterRoot,
+    agentRoot,
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -257,7 +257,7 @@ export function createLiveRuntimeEnv() {
       XDG_DATA_HOME: xdgDataHome,
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
-      LIME_ASTER_ROOT: asterRoot,
+      LIME_AGENT_RUNTIME_ROOT: agentRoot,
     },
   };
 }

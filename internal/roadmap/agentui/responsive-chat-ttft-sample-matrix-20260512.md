@@ -16,7 +16,7 @@
 | AgentUI 可见 routing / TTFT / fallback reason | Playwright 复核打开 Harness：`agent-thread-reliability-panel` 与 `agent-thread-reliability-routing-evidence` 均存在；面板显示 selected provider/model、首个可见 / 思考 / 正文、decision reason 与 fallback chain | 已闭环 |
 | 路线图图像同步最新结论 | `agentui-stream-latency-map-20260509.svg` v15 指向 App Server stream append 热路径收缩：external append 单锁、文本 delta schema fast-path、事件类型归一复用、批内 terminal guard、校验上下文引用复用、文本 delta 跳过大输出 / checkpoint 通用 helper、事件入库 move、终态 turn 早返回、current fixture smoke 与 live TTFT 剩余缺口 | 已闭环 |
 | 多 provider 真实样本矩阵 | `--preset agentui-responsive-chat-ttft` 退出码 `0`；`additional first-text samples needed=0`；`8 / 11` 个 latency group 有 first-text 基线，`3` 个 error-only group 保留为 fallback evidence | 已达标 |
-| 工具流 panic 防回归 | Aster OpenAI-compatible stream parser 已覆盖 `choices: []` usage chunk 与空 `data:` heartbeat；namespace tool / native alias / contracts / GUI tool surface / Playwright MCP 均已复测 | 已达标 |
+| 工具流 panic 防回归 | Agent OpenAI-compatible stream parser 已覆盖 `choices: []` usage chunk 与空 `data:` heartbeat；namespace tool / native alias / contracts / GUI tool surface / Playwright MCP 均已复测 | 已达标 |
 
 结论：工程主链与产品证据链仍保持闭环。2026-06-14 复核发现“首字又慢”不应再只归因于 provider/model：App Server current event append 在每个流式事件上复制并重放整段 turn 历史，长会话 / 长输出会把 `turn.started -> first message.delta` 之间的同步 CPU / 内存开销放大。该回归已通过九刀收缩修复：移除每事件无条件 `stored.events.clone()`；纯 `message.delta / message.delta_batch / message.batch` 不再为每个 token 构造全量状态机上下文；文本 delta 只走轻量 payload / schemaVersion fast-path，不再构造通用 AgentUI runtime event JSON 并跑 `jsonschema`，且 fast-path 先于 coding payload 分支返回；`event_store` 每条事件只做一次 event class 归一化并复用给 sequence、policy、tool lifecycle、text delta 与 terminal 判断；`append_external_runtime_events` 从每批两次 state mutex 收敛为一次写锁，并把终态 turn 判断从每事件扫描降到每批一次；批内 terminal 检查从 pending events 线性扫描改成布尔 guard，且同一工具 / 动作事件的校验上下文按引用复用，不再在 sequence verifier 与 tool lifecycle verifier 之间重复 clone；文本 delta 不再进入大输出归档判断和 file checkpoint snapshot 通用 helper；批处理完成后只克隆一份返回给 JSON-RPC 通知，原始 `AgentEvent` 直接 move 进 `stored.events`；空批或已终态 turn 直接早返回空事件，避免 late stream 继续分配和遍历。需要跨事件状态机校验时，上下文仍保留工具、动作、patch、命令、测试、权限、sandbox 与 turn 终态事件，不夹带大量文本历史。
 
@@ -59,12 +59,12 @@
 
 ## 2026-05-29 追加复测
 
-本轮复测源于模型切换后真实 GUI 报错：`runtime turn 后台任务 panic: index out of bounds: the len is 0 but the index is 0`。定位到 OpenAI-compatible stream 兼容网关会在工具参数流中发送 `choices: []` 的 usage / heartbeat / 尾包；Aster 旧 parser 在工具流内直接读取 `choices[0]`，导致正在生成工具输入时 panic。
+本轮复测源于模型切换后真实 GUI 报错：`runtime turn 后台任务 panic: index out of bounds: the len is 0 but the index is 0`。定位到 OpenAI-compatible stream 兼容网关会在工具参数流中发送 `choices: []` 的 usage / heartbeat / 尾包；Agent 旧 parser 在工具流内直接读取 `choices[0]`，导致正在生成工具输入时 panic。
 
 处理结果：
 
-- `lime-rs/crates/aster-rust/crates/aster/src/providers/formats/openai.rs`：生产路径不再直接 `choices[0]`；空 `choices` 只保留 usage 并继续等待 tool chunk；空 `data:` heartbeat 跳过；空 content 的结束包带 usage 时继续向上产出 usage。
-- `lime-rs/src/commands/aster_agent_cmd/request_model_resolution/tests.rs`：OpenAI-compatible provider fixture 改为中性 provider/model/host，移除真实外部 URL 与固定第三方 provider 名。
+- `lime-rs/crates/agent-rust/crates/agent/src/providers/formats/openai.rs`：生产路径不再直接 `choices[0]`；空 `choices` 只保留 usage 并继续等待 tool chunk；空 `data:` heartbeat 跳过；空 content 的结束包带 usage 时继续向上产出 usage。
+- `lime-rs/src/commands/agent_cmd/request_model_resolution/tests.rs`：OpenAI-compatible provider fixture 改为中性 provider/model/host，移除真实外部 URL 与固定第三方 provider 名。
 - `agentui-stream-latency-map-20260509.svg`：更新到 v7，图上同时标注工具流 panic 修复、TTFT 矩阵、contracts、GUI / Playwright MCP 复测和剩余全量 GUI smoke 阻塞。
 
 追加验证：
@@ -72,11 +72,11 @@
 | 检查 | 结果 |
 | --- | --- |
 | `responsive_chat_provider_filter_keeps_openai_compatible_provider_named_codex` | 通过 |
-| Aster `test_streaming_tool_call_ignores_empty_choices_usage_chunks_until_finish` | 通过 |
-| Aster `streaming_tool_call` 过滤 | 4 passed |
-| Aster `response_to_message` 过滤 | 22 passed |
-| Aster `namespace` 过滤 | 9 passed |
-| Aster `categorize_tool_requests` 过滤 | 7 passed |
+| Agent `test_streaming_tool_call_ignores_empty_choices_usage_chunks_until_finish` | 通过 |
+| Agent `streaming_tool_call` 过滤 | 4 passed |
+| Agent `response_to_message` 过滤 | 22 passed |
+| Agent `namespace` 过滤 | 9 passed |
+| Agent `categorize_tool_requests` 过滤 | 7 passed |
 | `npm run test:contracts` | 通过 |
 | `node scripts/agentui-ttft-sample-matrix.mjs --preset agentui-responsive-chat-ttft --format markdown --limit-groups 12` | pass；11 groups；8 first-text baseline；3 fallback-only；need=0 |
 | `npm run bridge:health -- --timeout-ms 120000` | 通过 |
@@ -87,7 +87,7 @@
 剩余缺口：
 
 - `npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000 --interval-ms 1000` 未全绿：前置 workspace / browser runtime / site adapters / Skill Forge 前端与多段 Rust 定向通过，但聚合流程在 `smoke:agent-service-skill-entry` 的 `tools::skill_tool_gate::tests::` 段超过 330s 后被脚本清理。
-- 本机磁盘剩余约 2.9GiB，`/tmp/lime-aster-target` 约 11GiB，`lime-rs/target` 约 121GiB，且当时存在其它 Cargo / Clippy 构建进程。全量 GUI smoke 需要释放 target/磁盘或等待构建结束后复跑。
+- 本机磁盘剩余约 2.9GiB，`/tmp/lime-agent-target` 约 11GiB，`lime-rs/target` 约 121GiB，且当时存在其它 Cargo / Clippy 构建进程。全量 GUI smoke 需要释放 target/磁盘或等待构建结束后复跑。
 
 ## 可复跑导出工具
 

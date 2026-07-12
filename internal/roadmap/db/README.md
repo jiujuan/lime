@@ -56,7 +56,7 @@ Lime 当前的风险不是“用了 SQLite”，而是 `lime.db` 同时承担了
 1. `agent_messages` 作为 migration/backfill/export/test fixture 输入；不保留长期兼容读取，目标删除。当前产品读取面已收口到 metadata / timeline-only，旧消息只剩迁移、导出和受控测试路径。
 2. 把 `agent_thread_items.payload_json` 当唯一 runtime event truth。
 3. 把 request telemetry、高频 runtime event、大输出继续塞入 `lime.db`。
-4. 无退出条件的 Aster session store 存储语义。
+4. 无退出条件的 Agent session store 存储语义。
 
 ### dead
 

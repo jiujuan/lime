@@ -1,6 +1,6 @@
 //! Workspace 管理器
 //!
-//! 提供 Workspace 的 CRUD 操作和与 Aster Session 的关联。
+//! 提供 Workspace 的 CRUD 操作和与 Agent Session 的关联。
 
 use super::types::{Workspace, WorkspaceId, WorkspaceSettings, WorkspaceType, WorkspaceUpdate};
 use crate::database::DbConnection;

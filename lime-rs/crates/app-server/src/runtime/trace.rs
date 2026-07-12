@@ -31,8 +31,7 @@ pub(super) fn trace_context_for_turn(
     let metadata = stored
         .turn_runtime_options
         .get(turn_id)?
-        .metadata
-        .as_ref()?;
+        .runtime_metadata()?;
     let trace = TRACE_METADATA_KEYS
         .iter()
         .filter_map(|key| metadata.get(*key))

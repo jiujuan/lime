@@ -433,6 +433,7 @@ impl ExecutionBackend for ApprovalCancelRespondTerminalBackend {
                 "requestId": "approval-cancel-1",
                 "actionId": "approval-cancel-1",
                 "actionType": "tool_confirmation",
+                "actionKind": "permission_preflight",
                 "availableDecisions": ["allow_once", "decline", "cancel"],
                 "toolCallId": "approval-tool-1",
                 "toolName": "BrowserControl",

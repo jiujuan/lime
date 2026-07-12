@@ -67,8 +67,14 @@ pub struct AnthropicMessagesRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnthropicUsage {
+    #[serde(default)]
     pub input_tokens: u32,
+    #[serde(default)]
     pub output_tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_creation_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +119,8 @@ pub struct AnthropicMessageStart {
     pub msg_type: String,
     pub role: String,
     pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<AnthropicUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

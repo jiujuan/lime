@@ -667,7 +667,7 @@ fn retry_runtime_options(
 ) -> RuntimeOptions {
     let mut runtime_options = runtime_options.unwrap_or_default();
     let mut metadata = runtime_options
-        .metadata
+        .runtime_metadata_mut()
         .take()
         .filter(Value::is_object)
         .unwrap_or_else(|| json!({}));
@@ -684,7 +684,7 @@ fn retry_runtime_options(
         object.insert("workflowRetry".to_string(), retry.clone());
         object.insert("workflow_retry".to_string(), retry);
     }
-    runtime_options.metadata = Some(metadata);
+    *runtime_options.runtime_metadata_mut() = Some(metadata);
     runtime_options
 }
 

@@ -1,4 +1,4 @@
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type {
   Artifact,
   ArtifactStatus,
@@ -117,9 +117,9 @@ function readHistoryArtifactSummaries(
 }
 
 function collectHistoryArtifactSummaries(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
 ): HistoryArtifactSummary[] {
-  const detailRecord = detail as AsterSessionDetail & {
+  const detailRecord = detail as AgentSessionDetail & {
     artifacts?: unknown;
     threadRead?: unknown;
   };
@@ -329,7 +329,7 @@ function historyMessageTextFromArtifacts(artifacts: Artifact[]): string {
 }
 
 export function hydrateSessionDetailMessagesFromArtifacts(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   topicId: string,
 ): Message[] {
   const artifacts = mergeArtifacts(

@@ -120,7 +120,7 @@ fn queued_turn_snapshot(
     let runtime_metadata = stored
         .turn_runtime_options
         .get(&turn.turn_id)
-        .and_then(|options| options.metadata.as_ref());
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata);
     let message_text = input
         .as_ref()
         .map(|input| input.text.trim().to_string())

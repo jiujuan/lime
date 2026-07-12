@@ -1,6 +1,6 @@
 import type {
   AutoContinueRequestPayload,
-  AsterExecutionStrategy,
+  AgentExecutionStrategy,
 } from "@/lib/api/agentRuntime";
 import type { MessageImage } from "../types";
 import type { SendMessageOptions } from "./agentChatShared";
@@ -14,7 +14,7 @@ interface SendAgentStreamMessageOptions {
   webSearch?: boolean;
   thinking?: boolean;
   skipUserMessage?: boolean;
-  executionStrategyOverride?: AsterExecutionStrategy;
+  executionStrategyOverride?: AgentExecutionStrategy;
   modelOverride?: string;
   autoContinue?: AutoContinueRequestPayload;
   systemPrompt?: string;

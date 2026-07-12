@@ -30,14 +30,14 @@ Lime 当前不是没有 skills，而是缺少一条 Agent 回合内的 **skills 
 
 ### 2.1 Lime 现状
 
-1. Agent 初始化会把 Lime skills 加载到 aster-rust `global_registry`，代码注释甚至写着“使 AI 能够自动发现和调用这些 Skills”，但同一初始化路径又用 `LimeSkillTool` 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。见：
-   - `lime-rs/crates/agent/src/aster_state.rs`
-   - `lime-rs/crates/agent/src/aster_state_support.rs`
+1. Agent 初始化会把 Lime skills 加载到 agent-rust `global_registry`，代码注释甚至写着“使 AI 能够自动发现和调用这些 Skills”，但同一初始化路径又用 `LimeSkillTool` 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。见：
+   - `lime-rs/crates/agent/src/agent_state.rs`
+   - `lime-rs/crates/agent/src/agent_state_support.rs`
    - `lime-rs/crates/agent/src/tools/skill_tool_gate.rs`
 2. `LimeSkillTool` 的 current 目标是安全 gate：未启用 session access 时拒绝执行；启用后再按 allowlist 裁剪。这保证安全，但没有提供“自然发现、自然选择、按需读取正文”的体验。
 3. `lime-rs/crates/skills/src/skill_loader.rs` 已能解析 `SKILL.md`、`allowed_tools`、`when_to_use`、workflow 等字段，但 `load_skills_from_directory` 只按目录直接扫描一级 skill，缺少 Codex 那种 per cwd / per config snapshot、禁用规则、路径 alias、预算渲染和隐式索引。
 4. `lime-rs/crates/skills/src/skill_matcher.rs` 只有关键词式 `when_to_use_config` 匹配，且没有成为 Agent turn 的 current 决策入口；它更像未接主链的辅助器。
-5. `lime-rs/crates/aster-rust/crates/aster/src/agents/skills_extension.rs` 有 `loadSkill` 工具和简版 instructions，但这仍是 extension 内部能力，不等于 Lime App Server runtime 的统一事实源。
+5. `lime-rs/crates/agent-rust/crates/agent/src/agents/skills_extension.rs` 有 `loadSkill` 工具和简版 instructions，但这仍是 extension 内部能力，不等于 Lime App Server runtime 的统一事实源。
 6. 产品目录 current 是 `SkillCatalog.entries`，负责首页、输入区、slash、技能中心等 UI 可发现性；但它不等于 Agent Skills runtime。把产品目录当执行事实源会继续造成“UI 能看到，Agent 不自然用”的假入口。
 
 ### 2.2 Codex 关键机制
@@ -58,7 +58,7 @@ Codex 的体验来自几层协同，而不是某一个“Skill 工具”：
 | `lime-rs/crates/services/src/skill_service.rs` | `current` | 技能安装、管理、检查、本地/远程包 UI 数据源 |
 | `lime-rs/crates/skills/src/skill_loader.rs` | `current`，但需收敛 | 作为 Agent Skills metadata / body parser 的基础；需要补 snapshot、scope、policy 和预算渲染 |
 | `LimeSkillTool` session gate | `current` | 继续作为执行安全边界；不再承担发现和选择职责 |
-| `global_registry` 全局注册 | `compat` | 短期继续给 aster SkillTool / extension 使用；中期收口到 per-session snapshot + registry adapter |
+| `global_registry` 全局注册 | `compat` | 短期继续给 agent SkillTool / extension 使用；中期收口到 per-session snapshot + registry adapter |
 | `SkillMatcher` 关键词匹配 | `compat` | 可作为候选排序信号之一，不再单独决定是否执行 |
 | `skills_extension` 简版 instructions / `loadSkill` | `compat` | 可复用读取能力，但 current owner 应迁到 App Server Agent runtime |
 | 单功能 `@搜索/@配图/...` 首刀硬编码 skill | `deprecated` 趋势 | 保留产品入口，但首刀选择应回到统一 Agent Skills Runtime，不继续为每个 skill 单独堆特殊规则 |
@@ -413,7 +413,7 @@ npm run test:contracts
 5. catalog-bound selection 会在 system prompt 注入对应 `<selected_skill_instructions>`，因此从 scene / ServiceSkill 入口进入的回合也会按需读取对应 `SKILL.md`，不再只看到轻量 metadata。
 6. `skill_runtime_enable` 在没有合法 `workspace_skill_runtime_enable` 时，会把 catalog-bound selection 与显式 selection 的结果一起写入 turn-scoped `set_skill_tool_session_allowed_skills(...)`；unknown metadata 保持 fail-closed。
 7. workspace runtime enable 仍保持最高优先级：如果本 turn 已带合法 `workspace_skill_runtime_enable`，只使用 source allowlist，不混入 `$skill` 或 catalog-bound selection。
-8. selected skill 的 manifest `allowed_tools` 会投影到 Aster `TurnContextOverride.metadata.tool_scope.allowed_tools`，复用现有 Aster tool-scope 过滤能力，对当前 turn 已有工具面做收窄；不反向启用未在当前 runtime surface 中注册或未由 request policy 启用的工具。
+8. selected skill 的 manifest `allowed_tools` 会投影到 Agent `TurnContextOverride.metadata.tool_scope.allowed_tools`，复用现有 Agent tool-scope 过滤能力，对当前 turn 已有工具面做收窄；不反向启用未在当前 runtime surface 中注册或未由 request policy 启用的工具。
 9. 未新增 App Server JSON-RPC method，未恢复 legacy runtime，未写 `allow_model_skills`，继续走 `agentSession/turn/start` current 主链。
 
 已验证：
@@ -592,7 +592,7 @@ npm run verify:gui-smoke
 | `AgentSkillSnapshot` / metadata render / selector / body reader / runtime enable / telemetry | `current` | Agent turn 内 skills 自然发现、选择、读取、授权和审计的唯一主链 |
 | `SkillCatalog.entries.skillLocator` | `current` | 产品入口到 runtime selector 的稳定 locator，不读取 body、不执行 skill |
 | `LimeSkillTool` session gate | `current` | 执行安全边界，默认 fail-closed，仅接收 selector / runtime enable 的 allowlist |
-| `global_registry` / aster skills extension / 旧 `loadSkill` 风格入口 | `compat` | 只保留存量适配，不作为新增业务逻辑事实源 |
+| `global_registry` / agent skills extension / 旧 `loadSkill` 风格入口 | `compat` | 只保留存量适配，不作为新增业务逻辑事实源 |
 | `SkillMatcher` 单独关键词决策 | `compat` | 只能作为排序 / 候选信号，不单独触发 body read 或执行授权 |
 | 单功能硬编码 `Skill(name)` 首刀 | `deprecated` | 不继续扩张；入口应只写 structured launch metadata |
 | 生产路径绕过 snapshot / selector / `LimeSkillTool` gate 直接读写或执行 skill | `dead / forbidden` | 由 `agentSkillsRuntimeBoundary.test.ts` 守卫防回流 |
@@ -2325,7 +2325,7 @@ npm run smoke:agent-runtime-current-fixture
 
 1. `scripts/agent-runtime/skills-runtime-fixture-scenario.mjs` 新增专家场景：`code-literature` 专家声明 `skill:capability-report`，但 fixture 仍强制经过 `skill_search -> skill_body_read -> skill_gate_decision -> Skill`。
 2. `claw-chat-current-fixture-smoke.mjs` 新增 `--scenario expert-skills-runtime`，通过真实 Electron Desktop Host + App Server JSON-RPC 创建专家会话、启动专家 turn、导出 Evidence Pack、从侧栏打开专家 session 并验证 GUI 完成态。
-3. expert metadata 同时写入 `runtimeOptions.metadata`、top-level `metadata` 与 `asterChatRequest.turn_config.metadata`，锁住专家身份与 `skillRefs` 能到达 App Server current turn start。
+3. expert metadata 同时写入 `runtimeOptions.metadata`、top-level `metadata` 与 `agentChatRequest.turn_config.metadata`，锁住专家身份与 `skillRefs` 能到达 App Server current turn start。
 4. deterministic external backend 新增三类专家证据：
    - `expert_declared_skill_refs`：专家声明的 `skillRefs`。
    - `expert_selected_skill`：本轮 selector 实际选中的 `project:capability-report`。

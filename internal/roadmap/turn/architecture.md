@@ -27,8 +27,8 @@
 | Product Surface | 收集用户输入和 UI 上下文 | Chat / Claw / Plugin / Automation 输入 | submit request | Frontend |
 | Frontend Runtime Gateway | 调用 current App Server API，绑定 request id 和 session id | submit request | accepted / stream subscription | `src/lib/api/agentRuntime/*` |
 | Runtime Control Plane | 创建 session/thread/turn，排队、中断、恢复 | submit / interrupt / respond | turn lifecycle | App Server RuntimeCore |
-| Execution Loop | 调模型、调工具、处理 retry / synthesis | turn input snapshot | runtime agent events | `lime-rs/crates/agent` / Aster |
-| Item Projector | 把 provider message、tool request、tool response 映射为 item lifecycle | provider / tool events | `item.*` events | Aster `TurnItemRuntimeProjector` |
+| Execution Loop | 调模型、调工具、处理 retry / synthesis | turn input snapshot | runtime agent events | `lime-rs/crates/agent` / Agent |
+| Item Projector | 把 provider message、tool request、tool response 映射为 item lifecycle | provider / tool events | `item.*` events | Agent `TurnItemRuntimeProjector` |
 | Event Log | 持久化 canonical event stream | runtime events | session jsonl / replay input | App Server |
 | Read Model | 聚合 turn、item、tool、message、action 状态 | event log / live events | ThreadReadModel | App Server |
 | AgentUI Projection | 把 read model / live event 投成 UI events | AgentEvent / ThreadReadModel | projection store | Frontend |
@@ -195,8 +195,8 @@ payload.metadata
 | OpenAI Responses function_call | `call_id -> tool_call_id`，function name -> `tool_name` |
 | OpenAI hosted web_search | `ResponseItem::WebSearchCall` -> `tool_call` item，metadata 标记 hosted |
 | Anthropic-style tool_use | `id -> tool_call_id`，input -> arguments |
-| Aster MessageContent::ToolRequest | 创建或更新 `tool_call` item |
-| Aster MessageContent::ToolResponse | complete/fail 同一 `tool_call_id` item |
+| Agent MessageContent::ToolRequest | 创建或更新 `tool_call` item |
+| Agent MessageContent::ToolResponse | complete/fail 同一 `tool_call_id` item |
 | Codex import rollout item | 直接导入为 turn item，legacy event 只派生 |
 
 ## 6. WebSearch / WebFetch 目标行为

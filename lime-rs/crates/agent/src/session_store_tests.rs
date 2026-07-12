@@ -2,29 +2,19 @@ use super::session_store_history_visibility::load_user_visible_message_flags_fro
 use super::session_store_message_projection::{
     convert_agent_messages_with_history_eviction, convert_user_visible_agent_messages_with_flags,
 };
-use super::session_store_runtime_projection::{
-    apply_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
-};
+use super::session_store_runtime_projection::apply_runtime_usage_fallback_to_latest_assistant_message;
 use super::session_store_subagent_context::{
-    should_load_runtime_overlay_for_runtime_detail,
     should_load_subagent_runtime_context_for_runtime_detail, SubagentPresentationProjection,
     SubagentSessionProjection,
 };
 use super::*;
 use crate::protocol::AgentMessage as RuntimeAgentMessage;
 use crate::subagent_control::SubagentTurnStatus;
-use agent_runtime::runtime_conversation::{
-    project_runtime_conversation_window, RuntimeConversationMessageSource,
-};
 use chrono::{Duration, Utc};
 use lime_core::agent::types::{FunctionCall, ImageUrl, ToolCall};
 use lime_core::database::{schema, DbConnection};
 use std::ffi::OsString;
 use std::sync::{Arc, Mutex, OnceLock};
-use thread_store::runtime_snapshot::{
-    RuntimeSessionSnapshotRecord, RuntimeThreadSnapshotRecord, RuntimeTurnSnapshotRecord,
-    RuntimeTurnStatusRecord,
-};
 
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -244,92 +234,6 @@ fn insert_legacy_agent_message(
     )?;
 
     Ok(())
-}
-
-#[test]
-fn should_load_runtime_overlay_for_full_history() {
-    let detail = build_detail_with_turn_status(AgentThreadTurnStatus::Completed);
-
-    assert!(should_load_runtime_overlay(&detail, None));
-}
-
-#[test]
-fn should_skip_runtime_overlay_for_completed_limited_history() {
-    let detail = build_detail_with_turn_status(AgentThreadTurnStatus::Completed);
-
-    assert!(!should_load_runtime_overlay(&detail, Some(80)));
-}
-
-#[test]
-fn should_load_runtime_overlay_for_running_limited_history() {
-    let detail = build_detail_with_turn_status(AgentThreadTurnStatus::Running);
-
-    assert!(should_load_runtime_overlay(&detail, Some(80)));
-}
-
-#[test]
-fn should_skip_runtime_overlay_for_stale_running_limited_history() {
-    let now = Utc::now();
-    let detail = build_detail_with_turn_status_updated_at(
-        AgentThreadTurnStatus::Running,
-        now - Duration::hours(2),
-    );
-
-    assert!(!should_load_runtime_overlay_at(&detail, Some(80), now));
-}
-
-#[test]
-fn should_probe_runtime_overlay_for_empty_limited_history() {
-    let detail = build_empty_runtime_detail();
-
-    assert!(detail.is_persisted_empty());
-    assert!(should_load_runtime_overlay_for_runtime_detail(
-        &detail,
-        Some(20)
-    ));
-}
-
-#[test]
-fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
-    let now = Utc::now();
-    let mut detail = build_detail_with_turn_status(AgentThreadTurnStatus::Aborted);
-    let thread_id = detail.thread_id.clone();
-    let turn_id = detail.turns[0].id.clone();
-    let runtime_turn = RuntimeTurnSnapshotRecord {
-        id: turn_id.clone(),
-        session_id: detail.id.clone(),
-        thread_id: thread_id.clone(),
-        status: RuntimeTurnStatusRecord::Running,
-        input_text: Some("测试".to_string()),
-        error_message: None,
-        context_override: None,
-        output_schema_runtime: None,
-        created_at: now,
-        started_at: Some(now),
-        completed_at: None,
-        updated_at: now,
-    };
-    let snapshot_record = RuntimeSessionSnapshotRecord {
-        session_id: detail.id.clone(),
-        threads: vec![RuntimeThreadSnapshotRecord {
-            id: thread_id,
-            session_id: detail.id.clone(),
-            working_dir: std::path::PathBuf::from("/tmp/lime-runtime-overlay-test"),
-            created_at: now,
-            updated_at: now,
-            metadata: Default::default(),
-            turns: vec![runtime_turn],
-            items: Vec::new(),
-        }],
-    };
-
-    let runtime_projection =
-        crate::runtime_snapshot_adapter::project_runtime_snapshot_record(&snapshot_record);
-    apply_runtime_snapshot(&mut detail, &runtime_projection);
-
-    assert_eq!(detail.turns.len(), 1);
-    assert_eq!(detail.turns[0].id, turn_id);
-    assert_eq!(detail.turns[0].status, AgentThreadTurnStatus::Aborted);
 }
 
 #[test]
@@ -1474,74 +1378,6 @@ async fn get_runtime_session_detail_should_use_empty_persisted_fast_path() {
     assert!(detail.execution_runtime.is_none());
     assert!(detail.child_subagent_sessions.is_empty());
     assert!(detail.subagent_parent_context.is_none());
-}
-
-#[test]
-fn apply_current_runtime_conversation_should_read_current_store_messages() {
-    let mut detail = build_empty_runtime_detail();
-    let source = |role: &str, text: &str, user_visible: bool| RuntimeConversationMessageSource {
-        message: RuntimeAgentMessage {
-            id: None,
-            role: role.to_string(),
-            content: vec![RuntimeAgentMessageContent::Text {
-                text: text.to_string(),
-            }],
-            timestamp: 0,
-            usage: None,
-        },
-        user_visible,
-    };
-
-    super::session_store_runtime_detail::apply_current_runtime_conversation(
-        &mut detail,
-        Some(project_runtime_conversation_window(
-            [
-                source("user", "第一条用户消息", true),
-                source("assistant", "第一条助手消息", true),
-                source("assistant", "内部续跑消息", false),
-                source("user", "第二条用户消息", true),
-            ],
-            Some(2),
-            0,
-        )),
-        None,
-    );
-
-    assert_eq!(detail.messages.len(), 2);
-    assert_eq!(detail.messages[0].role, "assistant");
-    assert!(detail.messages[0].content.iter().any(|part| {
-        matches!(part, RuntimeAgentMessageContent::Text { text } if text == "第一条助手消息")
-    }));
-    assert_eq!(detail.messages[1].role, "user");
-    assert!(detail.messages[1].content.iter().any(|part| {
-        matches!(part, RuntimeAgentMessageContent::Text { text } if text == "第二条用户消息")
-    }));
-
-    super::session_store_runtime_detail::apply_current_runtime_conversation(
-        &mut detail,
-        Some(project_runtime_conversation_window(
-            [
-                source("user", "第一条用户消息", true),
-                source("assistant", "第一条助手消息", true),
-                source("assistant", "内部续跑消息", false),
-                source("user", "第二条用户消息", true),
-            ],
-            Some(1),
-            1,
-        )),
-        None,
-    );
-    assert_eq!(detail.messages.len(), 1);
-    assert!(detail.messages[0].content.iter().any(|part| {
-        matches!(part, RuntimeAgentMessageContent::Text { text } if text == "第一条助手消息")
-    }));
-
-    super::session_store_runtime_detail::apply_current_runtime_conversation(
-        &mut detail,
-        None,
-        None,
-    );
-    assert_eq!(detail.messages.len(), 1);
 }
 
 #[test]

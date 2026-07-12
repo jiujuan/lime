@@ -8,7 +8,7 @@ import {
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import { FileInput, MessageSquarePlus } from "lucide-react";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import type { AgentBackgroundSessionRuntimeSnapshot } from "@/components/agent/chat";
 import {
   resolveUnfinishedSessionProjection,
@@ -37,7 +37,7 @@ import { resolveSidebarFloatingMenuPosition } from "@/components/app-sidebar/sid
 
 interface AppSidebarConversationShelfProps {
   openedProjects?: SidebarOpenedProjectSummary[];
-  recentSessions: AsterSessionInfo[];
+  recentSessions: AgentSessionInfo[];
   currentSessionId?: string | null;
   activeAgentStreaming?: boolean;
   backgroundAgentSessionRuntime?: AgentBackgroundSessionRuntimeSnapshot | null;
@@ -46,10 +46,10 @@ interface AppSidebarConversationShelfProps {
   actionSessionId: string | null;
   onCreateConversation: (project?: SidebarOpenedProjectSummary) => void;
   onImportConversation?: (project?: SidebarOpenedProjectSummary) => void;
-  onNavigateToConversation: (session: AsterSessionInfo) => void;
-  onRenameConversation?: (session: AsterSessionInfo) => void;
-  onDeleteConversation?: (session: AsterSessionInfo) => void;
-  onToggleArchive: (session: AsterSessionInfo, archived: boolean) => void;
+  onNavigateToConversation: (session: AgentSessionInfo) => void;
+  onRenameConversation?: (session: AgentSessionInfo) => void;
+  onDeleteConversation?: (session: AgentSessionInfo) => void;
+  onToggleArchive: (session: AgentSessionInfo, archived: boolean) => void;
   onToggleProjectPin?: (project: SidebarOpenedProjectSummary) => void;
   onRevealProject?: (project: SidebarOpenedProjectSummary) => void;
   onCreateProjectWorktree?: (project: SidebarOpenedProjectSummary) => void;
@@ -107,7 +107,7 @@ function normalizeSidebarRuntimeStatus(value?: string | null): string | null {
   return normalized === "cancelled" ? "canceled" : normalized;
 }
 
-function hasTerminalSidebarRuntimeStatus(session: AsterSessionInfo): boolean {
+function hasTerminalSidebarRuntimeStatus(session: AgentSessionInfo): boolean {
   const threadStatus = normalizeSidebarRuntimeStatus(session.thread_status);
   const latestTurnStatus = normalizeSidebarRuntimeStatus(
     session.latest_turn_status,
@@ -120,7 +120,7 @@ function hasTerminalSidebarRuntimeStatus(session: AsterSessionInfo): boolean {
 }
 
 function resolveBackgroundSidebarRuntimeStatus(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   backgroundAgentSessionRuntime?: AgentBackgroundSessionRuntimeSnapshot | null,
 ): AgentUnfinishedSessionStatus | null {
   const backgroundSessionId = backgroundAgentSessionRuntime?.sessionId.trim();
@@ -151,7 +151,7 @@ function compareSessionTimeDesc(left?: number, right?: number): number {
   return rightValue - leftValue;
 }
 
-function sortSessionsForShelf(sessions: AsterSessionInfo[]) {
+function sortSessionsForShelf(sessions: AgentSessionInfo[]) {
   return [...sessions].sort((left, right) => {
     const updatedAtComparison = compareSessionTimeDesc(
       left.updated_at,
@@ -316,12 +316,12 @@ export function AppSidebarConversationShelf({
     "未命名对话",
   );
   const resolveLocalizedSessionTitle = useCallback(
-    (session: AsterSessionInfo) =>
+    (session: AgentSessionInfo) =>
       resolveSidebarSessionTitle(session, conversationUntitledLabel),
     [conversationUntitledLabel],
   );
   const formatLocalizedSessionMeta = useCallback(
-    (session: AsterSessionInfo) =>
+    (session: AgentSessionInfo) =>
       formatSidebarSessionMeta(session, {
         locale: i18n.language,
       }),
@@ -386,7 +386,7 @@ export function AppSidebarConversationShelf({
   }, [menuState, projectMenuState]);
 
   const openConversationMenu = useCallback(
-    (event: MouseEvent<HTMLButtonElement>, session: AsterSessionInfo) => {
+    (event: MouseEvent<HTMLButtonElement>, session: AgentSessionInfo) => {
       event.stopPropagation();
       const rect = event.currentTarget.getBoundingClientRect();
       setMenuState({
@@ -420,7 +420,7 @@ export function AppSidebarConversationShelf({
     [],
   );
 
-  const toggleFavoriteSession = useCallback((session: AsterSessionInfo) => {
+  const toggleFavoriteSession = useCallback((session: AgentSessionInfo) => {
     setFavoriteSessionIds((current) => {
       const exists = current.includes(session.id);
       const next = exists
@@ -563,7 +563,7 @@ export function AppSidebarConversationShelf({
     ),
   };
 
-  const renderConversationRow = (session: AsterSessionInfo) => {
+  const renderConversationRow = (session: AgentSessionInfo) => {
     const active = currentSessionId === session.id;
     const title = resolveLocalizedSessionTitle(session);
     const runtimeProjection = resolveUnfinishedSessionProjection(session);

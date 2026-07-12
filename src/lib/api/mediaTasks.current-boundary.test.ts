@@ -56,7 +56,6 @@ const RETIRED_MEDIA_TASK_FILES = [
   "lime-rs/src/dev_bridge/dispatcher.rs",
   "lime-rs/src/commands/mod.rs",
   "lime-rs/src/commands/media_task_cmd.rs",
-  "lime-rs/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs",
   "lime-rs/src/dev_bridge/dispatcher/media_tasks.rs",
 ];
 

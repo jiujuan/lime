@@ -57,7 +57,7 @@
 
 | 表 | 分类 | 当前证据 | 目标 |
 | --- | --- | --- | --- |
-| `agent_sessions` | projection / metadata | schema 中包含 session metadata、token 累计、recipe、provider、archive 等；`aster_session_store`、`AgentDao`、`current_timeline` 都读写 | 长期压成 Product DB session metadata 或 projection ref；runtime 状态进入 Projection DB |
+| `agent_sessions` | projection / metadata | schema 中包含 session metadata、token 累计、recipe、provider、archive 等；`agent_session_store`、`AgentDao`、`current_timeline` 都读写 | 长期压成 Product DB session metadata 或 projection ref；runtime 状态进入 Projection DB |
 | `agent_thread_turns` | projection | `AgentTimelineDao::create_turn / upsert_turn / update_turn_status` 写入 | 迁到 Projection DB，可由 Event Log replay |
 | `agent_thread_items` | projection / move | `AgentTimelineDao::upsert_item` 写 `payload_json` | projection 只保留摘要和 refs；完整 event 和大输出进入 Event Log / Sidecar |
 | `agent_turn_outcomes` | projection | reliability outcome read model | 迁到 Projection DB |
@@ -70,7 +70,7 @@
 
 | 表 / 路径 | 分类 | 当前证据 | 退出条件 |
 | --- | --- | --- | --- |
-| `agent_messages` | deprecated / migration-source | `aster_session_store` 已收口为 current runtime store 读写，旧表只在 `legacy_conversation` migration helper 中读取；`agent_session_repository` / `session_store` 产品读面已切到 metadata / timeline-only；`AgentDao`、`ChatDao` 仍保留 deprecated migration/export 读写实现；`websocket` 旧 sessions RPC 和 `SessionContextService` 已不再作为产品 fallback；usage/model 统计已退出旧表 fallback | Event Log 接管 transcript；旧数据 backfill/export 后默认清 legacy rows / message-only session shells，支持配置保留或空表 drop；旧表读写路径删除留到 S4，不保留长期兼容读取或产品 fallback |
+| `agent_messages` | deprecated / migration-source | `agent_session_store` 已收口为 current runtime store 读写，旧表只在 `legacy_conversation` migration helper 中读取；`agent_session_repository` / `session_store` 产品读面已切到 metadata / timeline-only；`AgentDao`、`ChatDao` 仍保留 deprecated migration/export 读写实现；`websocket` 旧 sessions RPC 和 `SessionContextService` 已不再作为产品 fallback；usage/model 统计已退出旧表 fallback | Event Log 接管 transcript；旧数据 backfill/export 后默认清 legacy rows / message-only session shells，支持配置保留或空表 drop；旧表读写路径删除留到 S4，不保留长期兼容读取或产品 fallback |
 | `provider_pool_credentials` | deprecated | `startup_migrations` 清空；`api_key_provider_service.rs` 注释说明旧凭证池退役 | 确认迁移和守卫后删除 schema / migration 写回 |
 | `general_chat_sessions` | deprecated / migration-only | 只在 `general_chat_migration.rs` 和 `app_paths` user signal 中出现 | 迁移完成并确认无运行时读取后归档 |
 | `general_chat_messages` | deprecated / migration-only | 只在 general chat migration 测试 / 迁移中出现 | 同上 |
@@ -81,7 +81,7 @@
 
 | 写入点 | 当前写入 | 分类 | 证据 |
 | --- | --- | --- | --- |
-| `services/src/aster_session_store.rs` + `services/src/aster_session_store/*` | `agent_sessions` metadata 更新；`runtime_conversation` 写 current runtime store；`legacy_conversation` 只读旧 `agent_messages` 迁移输入 | current metadata writer + migration-only loader | 继续收缩旧表白名单；新 runtime transcript 不再以 `agent_messages` 为 truth |
+| `services/src/agent_session_store.rs` + `services/src/agent_session_store/*` | `agent_sessions` metadata 更新；`runtime_conversation` 写 current runtime store；`legacy_conversation` 只读旧 `agent_messages` 迁移输入 | current metadata writer + migration-only loader | 继续收缩旧表白名单；新 runtime transcript 不再以 `agent_messages` 为 truth |
 | `core/src/database/dao/agent.rs` | `INSERT INTO agent_sessions`、`INSERT INTO agent_messages`、history query / truncation / archive | deprecated writer / migration loader | 仅用于 backfill/export；产品层不得再 direct 调用旧消息 API；P1 后不得承接新 runtime truth，迁移完成后退场 |
 | `core/src/database/dao/chat.rs` | 复用 `agent_sessions / agent_messages` 存 chat | deprecated / migration-only | General chat legacy path，需随旧消息迁移处理，不保留长期 fallback |
 | `services/src/session_context_service.rs` | 只保留 current session 存在性和模式检查；不再从旧 `agent_messages` 拉消息上下文 | current-compatible / no-product-fallback | 证明 general chat 旧上下文不会再从旧消息表读回 |
@@ -115,7 +115,7 @@
 | `<data-root>/runtime/projection_1.sqlite` | `app-server/src/runtime/projection_store.rs` | current Projection DB | 独立 SQLite 文件，已建 `projected_sessions / projected_turns / projected_items / projection_watermarks` | 后续补 repair 和 read path 切换 |
 | `request_logs/` | `app_paths::resolve_request_logs_dir` | compat / move | `RequestLogger::new` | 迁 Telemetry DB |
 | `sessions/` | `core/src/session_files/storage.rs` | compat / P0待判 | `resolve_sessions_dir()` | 判定是否 runtime transcript 残留 |
-| `aster/` | `agent/src/aster_runtime_support.rs` | compat / P0待判 | `resolve_aster_dir()` | 不承接新 runtime truth |
+| `agent/` | `agent/src/agent_runtime_support.rs` | compat / P0待判 | `resolve_agent_dir()` | 不承接新 runtime truth |
 | `logs/` | `core/src/logger.rs`、`app-server/local_data_source/diagnostics.rs` | current log root | `resolve_logs_dir()` | log 可保留，不能当 transcript truth |
 | `<workspace-root>/.lime/` | workspace runtime / harness / task artifact | current sidecar | `resolve_workspace_runtime_agents_path`、前端 / app-server tests | 只保存 workspace-owned artifact/checkpoint |
 | temp/cache | OS API | not durable | PRD 约束 | 不保存 durable fact |
@@ -130,7 +130,7 @@ DELETE FROM agent_messages
 agent_thread_items.*payload_json
 resolve_request_logs_dir
 resolve_sessions_dir
-resolve_aster_dir
+resolve_agent_dir
 read_to_string(.*runtime/events
 lime-rs/src/commands
 lime-rs/src/services

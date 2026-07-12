@@ -12,7 +12,7 @@
 ## 当前原则
 
 1. 先完成骨架，再填细节。
-2. 不新增平行 planner；只扩展 App Server / RuntimeCore / AsterBackend / AgentUI current 主链。
+2. 不新增平行 planner；只扩展 App Server / RuntimeCore / RuntimeBackend / AgentUI current 主链。
 3. 不恢复 `lime-rs/src/**`、旧 Tauri wrapper、旧 `agent_runtime_*` 生产事实源或 mock fallback。
 4. Plan facts 与 reasoning facts 分层：`plan.delta/final` 驱动计划轨，`reasoning.delta/final` 只进过程层。
 5. 多模型能力走标准化 resolver / adapter，不让前端业务组件拼 Provider 私有字段。
@@ -38,7 +38,7 @@
 
 ### P1：后端事件主链
 
-- [x] Aster `<proposed_plan>` 流式 parser 输出 `plan.delta/final`。
+- [x] Agent `<proposed_plan>` 流式 parser 输出 `plan.delta/final`。
 - [x] `tool.result(update_plan)` 统一投影为 `plan.final` 或等价 plan fact。
 - [x] `thinking_delta` 标准化为 `reasoning.delta`。
 - [x] reasoning start / end / final 映射为标准 runtime events。
@@ -95,7 +95,7 @@
 
 ### P5：provider-native reasoning metadata 保真
 
-- [x] Aster `ThinkingContent.signature` 投影到 `ItemRuntimePayload::Reasoning.metadata.provider_metadata.signature`。
+- [x] Agent `ThinkingContent.signature` 投影到 `ItemRuntimePayload::Reasoning.metadata.provider_metadata.signature`。
 - [x] `ItemRuntimePayload::Reasoning.metadata` 透传到 `AgentThreadItemPayload::Reasoning.metadata`。
 - [x] App Server thread read model 合并 reasoning item payload 中的 `metadata.provider_metadata`。
 - [x] App Server thread read model 合并标准 `reasoning.final` payload 中的 `providerMetadata / provider_metadata`。
@@ -411,8 +411,8 @@
     - 结果：通过，1 个测试；覆盖标准 `reasoning.final` payload 中的 `providerMetadata` 进入历史 thread item metadata，并标记 completed。
   - `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_thinking_delta_emits_reasoning_lifecycle_events`
     - 结果：通过，1 个测试；确认 `reasoning.started/delta/final/ended` lifecycle 事件序列保持稳定。
-  - `CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core test_project_message_emits_reasoning_summary_runtime_item`
-    - 结果：通过，1 个测试；覆盖 Aster projector 将 thinking signature 保真投影到 reasoning metadata。显式设置 `CARGO_TARGET_DIR`，未生成 `lime-rs/crates/aster-rust/target`。
+  - `CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core test_project_message_emits_reasoning_summary_runtime_item`
+    - 结果：通过，1 个测试；覆盖 Agent projector 将 thinking signature 保真投影到 reasoning metadata。显式设置 `CARGO_TARGET_DIR`，未生成 `lime-rs/crates/agent-rust/target`。
   - `npx vitest run "src/components/agent/chat/utils/planState.unit.test.ts" "src/components/agent/chat/utils/modelReasoningState.unit.test.ts" "src/lib/api/agentRuntime/appServerReadModelProjection.test.ts" --silent=passed-only --disableConsoleIntercept`
     - 结果：通过，3 个文件 21 个测试；覆盖 current read model `thread_items` metadata 保留、历史 reasoning metadata 不污染 PlanState、ReasoningState 历史水合完成态 / 运行态。
   - `npx eslint "src/lib/api/agentRuntime/types.ts" "src/components/agent/chat/utils/planState.unit.test.ts" "src/components/agent/chat/utils/modelReasoningState.unit.test.ts" "src/lib/api/agentRuntime/appServerReadModelProjection.test.ts" --max-warnings 0`

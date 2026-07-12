@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import type {
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -36,7 +36,7 @@ import { measureMessageListComputation } from "./messageListPerformance";
 
 interface UseMessageListTimelineStateOptions {
   activePendingA2UISource: PendingA2UISource | null;
-  childSubagentSessions: readonly AsterSubagentSessionInfo[];
+  childSubagentSessions: readonly AgentSubagentSessionInfo[];
   currentTurnId: string | null;
   expandedHistoricalTimelineKeys: Set<string>;
   focusedTimelineItemId: string | null;

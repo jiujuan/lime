@@ -813,7 +813,7 @@ async function runLive(options) {
   });
   const taskId = options.taskId || `plugin-connector-outbox-runtime-${stamp}`;
   const turnId = `connector-outbox-${stamp}`;
-  const eventName = `aster_stream_${sessionId}_${turnId}`;
+  const eventName = `agent_stream_${sessionId}_${turnId}`;
   const idempotencyKey = `${options.connectorId}-${options.action}-${stamp}`;
   const expectedToolName = toolNameFor(options.connectorId, options.action);
 
@@ -836,7 +836,7 @@ async function runLive(options) {
     ].join(" "),
     eventName,
     turnId,
-    turnConfig: {
+    runtimeRequest: {
       providerPreference: providerPreference.providerPreference,
       modelPreference: providerPreference.modelPreference,
       metadata: buildLiveMetadata(options, taskId, idempotencyKey),

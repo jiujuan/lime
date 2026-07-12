@@ -828,11 +828,11 @@ export async function bindGuiWorkspaceAndModelPreferences(
         JSON.stringify({ providerType: provider, model }),
       );
       window.localStorage.setItem(
-        `aster_execution_strategy_${workspaceId}`,
+        `agent_execution_strategy_${workspaceId}`,
         JSON.stringify("react"),
       );
       window.localStorage.setItem(
-        `aster_access_mode_${workspaceId}`,
+        `agent_access_mode_${workspaceId}`,
         JSON.stringify("full-access"),
       );
       window.localStorage.setItem(

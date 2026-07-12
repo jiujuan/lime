@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from "react";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSessionExecutionRuntime,
-  AsterTodoItem,
-  AsterSubagentSessionInfo,
+  AgentSessionExecutionRuntime,
+  AgentTodoItem,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
 import type {
@@ -29,10 +29,10 @@ export interface WorkspaceTaskRailRuntimeInput {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   threadItems?: readonly AgentThreadItem[];
-  todoItems?: readonly AsterTodoItem[];
+  todoItems?: readonly AgentTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
-  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  executionRuntime?: AgentSessionExecutionRuntime | null;
+  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
   providerType?: string | null;
   model?: string | null;
   accessMode?: GeneralWorkbenchTaskRailContextInput["accessMode"];
@@ -52,10 +52,10 @@ export interface WorkspaceTaskRailProps {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   threadItems?: readonly AgentThreadItem[];
-  todoItems?: readonly AsterTodoItem[];
+  todoItems?: readonly AgentTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
-  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  executionRuntime?: AgentSessionExecutionRuntime | null;
+  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
   providerType?: string | null;
   model?: string | null;
   accessMode?: GeneralWorkbenchTaskRailContextInput["accessMode"];

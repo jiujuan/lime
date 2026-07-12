@@ -1,6 +1,6 @@
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem } from "../types";
 import { isImportedSourceProcessItem } from "../utils/importedSourceProcess";
@@ -308,7 +308,7 @@ function resolveSourceConsistencyStatus({
 }
 
 function resolveSubtaskStats(
-  childSubagentSessions: readonly AsterSubagentSessionInfo[] | undefined,
+  childSubagentSessions: readonly AgentSubagentSessionInfo[] | undefined,
 ) {
   return (childSubagentSessions ?? []).reduce(
     (stats, session) => {
@@ -648,7 +648,7 @@ export function buildGeneralWorkbenchTaskRailRuntimeContext({
   context?: GeneralWorkbenchTaskRailContextInput;
   threadRead?: AgentRuntimeThreadReadModel | null;
   threadItems?: readonly AgentThreadItem[];
-  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
 }): GeneralWorkbenchTaskRailContextInput | undefined {
   if (
     !context &&

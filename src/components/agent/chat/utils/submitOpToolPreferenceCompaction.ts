@@ -1,4 +1,4 @@
-import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 
 const HARNESS_THINKING_PREFERENCE_KEYS = [
@@ -21,7 +21,7 @@ const HARNESS_SUBAGENT_PREFERENCE_KEYS = [
 
 interface CompactSubmitOpToolPreferencesOptions {
   requestMetadata?: Record<string, unknown>;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   syncedRecentPreferences?: ChatToolPreferences | null;
   requestedWebSearch?: boolean;
   requestedThinking?: boolean;
@@ -120,7 +120,7 @@ function readHarnessPreferenceFromRequestMetadata(
 }
 
 function readRuntimePreference(
-  preferences: AsterSessionExecutionRuntime["recent_preferences"] | undefined,
+  preferences: AgentSessionExecutionRuntime["recent_preferences"] | undefined,
   keys: readonly string[],
 ): boolean | null {
   if (!isPlainRecord(preferences)) {
@@ -151,7 +151,7 @@ function shouldSubmitRequestPreference(
 }
 
 function knownRuntimePreference(
-  executionRuntime: AsterSessionExecutionRuntime | null | undefined,
+  executionRuntime: AgentSessionExecutionRuntime | null | undefined,
   syncedRecentPreferences: ChatToolPreferences | null | undefined,
   keys: readonly string[],
   syncedKey: "webSearch" | "thinking",

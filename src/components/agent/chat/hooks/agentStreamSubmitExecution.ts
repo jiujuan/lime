@@ -1,11 +1,11 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
-  AsterExecutionStrategy,
-  AgentRuntimeWebSearchMode,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
   AutoContinueRequestPayload,
   QueuedTurnSnapshot,
+  RuntimeSearchMode,
 } from "@/lib/api/agentRuntime";
 import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime";
 import { modelRegistryApi } from "@/lib/api/modelRegistry";
@@ -61,7 +61,7 @@ interface ExecuteAgentStreamSubmitOptions {
   getWorkspaceIdForSubmit: () => string | undefined;
   getSyncedSessionExecutionStrategy: (
     sessionId: string,
-  ) => AsterExecutionStrategy | null;
+  ) => AgentExecutionStrategy | null;
   getSyncedSessionRecentPreferences?: (
     sessionId: string,
   ) => ChatToolPreferences | null;
@@ -72,11 +72,11 @@ interface ExecuteAgentStreamSubmitOptions {
   expectingQueue: boolean;
   effectiveProviderType: string;
   effectiveModel: string;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   modelOverride?: string;
   reasoningEffort?: string;
   webSearch?: boolean;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   thinking?: boolean;
   explicitToolPreferences?: boolean;
   autoContinue?: AutoContinueRequestPayload;
@@ -87,7 +87,7 @@ interface ExecuteAgentStreamSubmitOptions {
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   syncedSessionModelPreference?: SessionModelPreference | null;
   eventName: string;
   requestTurnId: string;
@@ -133,7 +133,7 @@ interface ExecuteAgentStreamSubmitOptions {
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setExecutionRuntime: Dispatch<
-    SetStateAction<AsterSessionExecutionRuntime | null>
+    SetStateAction<AgentSessionExecutionRuntime | null>
   >;
   soulCopy?: SoulInteractionCopy;
 }
@@ -160,10 +160,9 @@ async function resolveSubmitModelPolicy(options: {
     };
 
     return {
-      modelCapabilitySummary:
-        !shouldResolveMediaCapability
-          ? undefined
-          : resolveModelCapabilitySummaryForSelection(selection),
+      modelCapabilitySummary: !shouldResolveMediaCapability
+        ? undefined
+        : resolveModelCapabilitySummaryForSelection(selection),
       modelRequestPolicyMetadata:
         resolveModelRequestPolicyMetadataForSelection(selection),
     };
@@ -338,7 +337,8 @@ export async function executeAgentStreamSubmit(
       removeQueuedDraftMessages: callbacks.removeQueuedDraftMessages,
       clearActiveStreamIfMatch: callbacks.clearActiveStreamIfMatch,
       upsertQueuedTurn: callbacks.upsertQueuedTurn,
-      removeQueuedTurnsFromProjection: callbacks.removeQueuedTurnsFromProjection,
+      removeQueuedTurnsFromProjection:
+        callbacks.removeQueuedTurnsFromProjection,
     },
     appendThinkingToParts,
     setMessages,

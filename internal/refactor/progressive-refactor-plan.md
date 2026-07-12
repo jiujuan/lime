@@ -10,7 +10,7 @@
 
 - **整体目标**：五个膨胀机制（轴 A-E）全部被机械守卫锁死 + 存量超线文件进入只减不增通道。
 - **Y% 计算**：轴 A/B/C 各 25%（机制消除），轴 D/E 各 10%，轴 F 护栏 5%。存量文件拆了多少**不计入主口径**（它是轴 B/C 的验收副产品），仅在进度日志记录。
-- **当前状态（2026-06-18 复核 + R-32 第六刀）**：约 **76%**。轴 A **25/25**（codegen + re-export + 守卫入链 test:contracts 全闭环）、轴 B ≈20/25（runtime/processor domain 化，aster 未动）、轴 C ≈14/25（守卫齐 + 状态分层进行中，AgentChatWorkspace 持续只减不增）、轴 D ≈8/10、轴 E ≈7/10、轴 F **5/5**（基线刷新 + 守卫恢复绿）。
+- **当前状态（2026-06-18 复核 + R-32 第六刀）**：约 **76%**。轴 A **25/25**（codegen + re-export + 守卫入链 test:contracts 全闭环）、轴 B ≈20/25（runtime/processor domain 化，agent 未动）、轴 C ≈14/25（守卫齐 + 状态分层进行中，AgentChatWorkspace 持续只减不增）、轴 D ≈8/10、轴 E ≈7/10、轴 F **5/5**（基线刷新 + 守卫恢复绿）。
 
 ---
 
@@ -80,11 +80,11 @@
 1. `processor/mod.rs`（2444 行）仍偏大，dispatch 接线可进一步按 domain 分组（非阻塞，登记为 R-20 尾项）。
 2. domain 子模块中仍有个别超线（`projection_store.rs` 1357 行等），交由 R-60 棘轮持续约束。
 
-### R-21 aster `agents/agent.rs`（8230 行）按相同模式子模块化
+### R-21 agent `agents/agent.rs`（8230 行）按相同模式子模块化
 
 **状态**：proposed（R-20 已完成、手法已验证可套用；这是轴 B 当前主要剩余缺口）
-**前提确认**：aster-rust 已完全自有化（无上游同步顾虑，见证据底座轴 E），可放心动结构。
-**方向**：`agent/lifecycle.rs`、`agent/tool_dispatch.rs`、`agent/stream.rs` 等；`cargo test`（aster 子 workspace）收口。直接复用 R-20 在 `runtime/`、`processor/` 上验证过的 domain 下放手法。
+**前提确认**：agent-rust 已完全自有化（无上游同步顾虑，见证据底座轴 E），可放心动结构。
+**方向**：`agent/lifecycle.rs`、`agent/tool_dispatch.rs`、`agent/stream.rs` 等；`cargo test`（agent 子 workspace）收口。直接复用 R-20 在 `runtime/`、`processor/` 上验证过的 domain 下放手法。
 
 ---
 
@@ -135,7 +135,7 @@
 - `AgentChatWorkspace.tsx` 继续瘦身（7215 → 7172 行）。
 - 第三刀验证：`npx eslint "src/components/agent/chat/AgentChatWorkspace.tsx" "src/components/agent/chat/hooks/useWorkspaceWorkbenchRequests.ts" "src/components/agent/chat/hooks/useWorkspaceWorkbenchRequests.test.tsx" --max-warnings 0` 通过；`npm test -- "src/components/agent/chat/hooks/useWorkspaceWorkbenchRequests.test.tsx" "src/components/agent/chat/hooks/useBrowserWorkspaceHomeHint.test.tsx" "src/components/agent/chat/hooks/useFileManagerSidebar.test.tsx" "src/components/agent/chat/hooks/usePathReferences.test.tsx"` 通过（18 tests）。
 - `npm run governance:file-size` 当前失败，但失败来自本轮外 Rust 写集：`lime-rs/crates/app-server/src/runtime/conversation_import/codex/events.rs` 新文件 1048 行超 800，以及 `lime-rs/crates/app-server/src/runtime/thread_item_projection.rs` 839→981 超基线；本轮前端主文件仍下降，未新增前端体量违例。该 Rust 体量漂移应单独回到 R-60/轴 B 处理，不在本刀顺手修。
-- 旧 `AsterProviderConfig.force_responses_api` 字段漂移已回到模型运行时主线处理，后续以 `ResolvedModelRoute.protocol` / `AsterProviderProtocol` 为唯一协议事实源；当前 `verify:gui-smoke` 阻塞点是本机磁盘空间耗尽，不再是该字段编译漂移。
+- 旧 `RuntimeProviderConfig.force_responses_api` 字段漂移已回到模型运行时主线处理，后续以 `ResolvedModelRoute.protocol` / `RuntimeProviderProtocol` 为唯一协议事实源；当前 `verify:gui-smoke` 阻塞点是本机磁盘空间耗尽，不再是该字段编译漂移。
 - 第四刀把 scene app 人工复核状态、模板缓存、quick review、灵感保存、Skill 沉淀与推荐信号订阅从 `AgentChatWorkspace.tsx` 抽到 `workspace/useSceneAppReviewDecisionRuntime.ts`。
 - 新增 `useSceneAppReviewDecisionRuntime.test.tsx` 覆盖模板导出复用、快捷复核保存、手动保存刷新、灵感状态重算和 Skill 沉淀跳转。
 - `AgentChatWorkspace.tsx` 继续瘦身（7172 → 6921 行），`RuntimeReviewDecisionDialog` 只保留 runtime 接线。

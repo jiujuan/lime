@@ -3490,6 +3490,131 @@ describe("agentStreamRuntimeHandler", () => {
     );
   });
 
+  it("最终正文后收到 reasoning.final 归档时不应误判缺少最终答复", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-reasoning-final-archive",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-12T07:07:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const requestState = {
+      accumulatedContent: "",
+      hasFinalAnswerRequiredProcessBoundary: false,
+      hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const onComplete = vi.fn();
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnsFromProjection: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      observer: { onComplete },
+      eventName: "agent-runtime-reasoning-final-archive",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-reasoning-final-archive",
+      activeSessionId: "session-reasoning-final-archive",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "你好",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_delta",
+        text: "先理解用户问候。",
+        sequence: 1,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "你好！有什么我可以帮你的吗？",
+        sequence: 2,
+        turn_id: "turn-reasoning-final-archive",
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_final",
+        text: "已完成问候意图分析。",
+        sequence: 3,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "reasoning_ended",
+        status: "completed",
+        sequence: 4,
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        sequence: 5,
+        turn: {
+          id: "turn-reasoning-final-archive",
+          thread_id: "thread-reasoning-final-archive",
+          prompt_text: "你好",
+          status: "completed",
+          started_at: "2026-07-12T07:07:00.000Z",
+          completed_at: "2026-07-12T07:07:05.000Z",
+          created_at: "2026-07-12T07:07:00.000Z",
+          updated_at: "2026-07-12T07:07:05.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.content).toBe("你好！有什么我可以帮你的吗？");
+    expect(messages[0]?.runtimeStatus).toBeUndefined();
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(onComplete).toHaveBeenCalledWith("你好！有什么我可以帮你的吗？");
+    expect(mockToast.error).not.toHaveBeenCalledWith(
+      "模型未输出最终答复，请重试",
+    );
+  });
+
   it("收到空 turn_completed 但已有真实产物信号时应软完成而不是等待 turn_completed", () => {
     let messages: Message[] = [
       {
@@ -6178,7 +6303,7 @@ describe("agentStreamRuntimeHandler", () => {
       data: {
         type: "error",
         message:
-          "[AsterAgent][TTFT] provider stream request failed before body: provider=openai, model=gpt-5.5, elapsed_ms=8517, error=Server error: Server error (503 Service Unavailable): Service temporarily unavailable",
+          "[Agent][TTFT] provider stream request failed before body: provider=openai, model=gpt-5.5, elapsed_ms=8517, error=Server error: Server error (503 Service Unavailable): Service temporarily unavailable",
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",

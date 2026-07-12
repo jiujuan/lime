@@ -322,7 +322,7 @@ lime-rs/src/services/artifact_prompt_service.rs
 src/features/experts/expertRuntimeBinding.ts
 src/components/experts/ExpertPlazaPage.tsx
 src/components/agent/chat/experts/ExpertInfoPanel.tsx
-lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_metadata.rs
+lime-rs/src/commands/agent_cmd/runtime_turn/request_metadata.rs
 ```
 
 当前落地状态：
@@ -347,7 +347,7 @@ lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_metadata.rs
 
 1. `internal/roadmap/memory/make-next-generation-more-like-me.md`
 2. `lime-rs/src/services/memory_profile_prompt_service.rs`
-3. `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+3. `lime-rs/src/commands/agent_cmd/runtime_turn.rs`
 4. `src/lib/api/memoryRuntimeTypes.ts`
 5. `src/components/settings-v2/general/memory/index.tsx`
 6. `src/components/settings-v2/account/profile/index.tsx`

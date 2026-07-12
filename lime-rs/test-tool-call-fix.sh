@@ -9,7 +9,7 @@ echo "========================================"
 echo ""
 
 echo "1. 运行 openai 格式相关的单元测试..."
-cd crates/aster-rust/crates/aster
+cd crates/agent-rust/crates/agent
 cargo test --lib providers::formats::openai::tests -- --nocapture
 
 echo ""

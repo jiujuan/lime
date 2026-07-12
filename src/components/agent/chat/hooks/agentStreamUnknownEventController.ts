@@ -6,6 +6,8 @@ export interface AgentStreamUnknownEventPlan {
 
 const LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION = "lime-profile-0.4.0";
 const SILENT_CURRENT_LIFECYCLE_EVENT_TYPES = new Set([
+  "runtime_event",
+  "runtime.event",
   "turn.accepted",
   "turn_accepted",
 ]);
@@ -14,7 +16,7 @@ export function buildAgentStreamUnknownEventWarningMessage(params: {
   eventName: string;
   eventType: string;
 }): string {
-  return `[AsterChat] 收到未识别的运行时事件，已保留流活跃态: ${params.eventName} · ${params.eventType}`;
+  return `[AgentChat] 收到未识别的运行时事件，已保留流活跃态: ${params.eventName} · ${params.eventType}`;
 }
 
 export function resolveAgentStreamUnknownEventPlan(params: {

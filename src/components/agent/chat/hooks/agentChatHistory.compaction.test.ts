@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 
 import {
   hydrateSessionDetailMessages,
@@ -8,7 +8,7 @@ import {
 
 describe("agentChatHistory compaction and previews", () => {
   it("分页历史消息应使用历史窗口绝对位置生成稳定 ID", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-page",
       created_at: 1,
       updated_at: 2,
@@ -39,7 +39,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("Cursor 分页历史消息应优先使用游标起始位置生成稳定 ID", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-cursor-page",
       created_at: 1,
       updated_at: 2,
@@ -78,7 +78,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("应兼容 reasoning 字段的历史恢复格式", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-2",
       created_at: 1,
       updated_at: 2,
@@ -108,7 +108,7 @@ describe("agentChatHistory compaction and previews", () => {
   it("历史恢复时应去重 reasoning delta 与 final 的同文 thinking", () => {
     const thinkingText =
       "采用暖色调，聚焦阳光穿透树叶的光斑与远处高楼轮廓。";
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-reasoning-duplicate",
       created_at: 1,
       updated_at: 2,
@@ -139,7 +139,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("应在历史恢复时清理 assistant 正文中的工具协议残留", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-protocol-cleanup",
       created_at: 1,
       updated_at: 2,
@@ -197,7 +197,7 @@ describe("agentChatHistory compaction and previews", () => {
         },
       },
     });
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-history-json-image",
       created_at: 1,
       updated_at: 2,
@@ -283,7 +283,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("应从历史 assistant 消息恢复 token usage", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-usage",
       created_at: 1,
       updated_at: 2,
@@ -313,7 +313,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("assistant 消息自身没有 usage 时应从同 turn read model 恢复", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-turn-usage",
       created_at: 1,
       updated_at: 2,
@@ -361,7 +361,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("thread item 图片任务草稿应从同 turn read model 恢复 token usage", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-thread-item-image-usage",
       created_at: 1,
       updated_at: 2,
@@ -405,7 +405,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("合并相邻 assistant 历史消息时也应保留最后一条 usage", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-adjacent-usage",
       created_at: 1,
       updated_at: 2,
@@ -460,7 +460,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("相邻 assistant 都带 thinking 时不应盲合并，避免跨轮思考串味", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-adjacent-thinking",
       created_at: 1,
       updated_at: 2,
@@ -502,7 +502,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("应从历史 tool_response 恢复图片任务预览，并保留同一任务的连续 assistant 轨迹", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-history-image-task-preview",
       created_at: 1,
       updated_at: 2,
@@ -580,7 +580,7 @@ describe("agentChatHistory compaction and previews", () => {
   });
 
   it("应从历史 tool_response 恢复视频任务预览，并保留视频结果地址与时长信息", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-history-video-task-preview",
       created_at: 1,
       updated_at: 2,

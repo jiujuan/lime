@@ -275,8 +275,8 @@ npm run smoke:reopen-running-turn-cdp-gate -- --cdp-port 9239 --timeout-ms 18000
 本轮新增 / 复跑的代码级证据：
 
 - `npx vitest run "src/components/agent/chat/projection/unfinishedSessionProjection.test.ts" "src/components/agent/chat/hooks/agentChatShared.test.ts" "src/components/app-sidebar/AppSidebarConversationRow.test.tsx" "src/components/agent/chat/utils/taskCenterTabs.test.ts"`：通过，64 tests。
-- `npx vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" -t "首页后台恢复运行候选"`：通过，1 focused test，证明 `background` presentation 只触发 `homeBackgroundRecovery`，不写前台 `sessionId / messages / threadRead`。
-- `npx vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx"`：通过，185 tests；新增 focused test 后该文件为 186 tests，需在最终验证中复跑完整文件。
+- `npx vitest run "src/components/agent/chat/hooks/useAgentChat.test.tsx" -t "首页后台恢复运行候选"`：通过，1 focused test，证明 `background` presentation 只触发 `homeBackgroundRecovery`，不写前台 `sessionId / messages / threadRead`。
+- `npx vitest run "src/components/agent/chat/hooks/useAgentChat.test.tsx"`：通过，185 tests；新增 focused test 后该文件为 186 tests，需在最终验证中复跑完整文件。
 - `npx vitest run "scripts/agent-runtime/agent-session-recovery-cdp-gate.test.mjs"`：通过，3 tests，守住 CDP Gate B 骨架必须使用真实 Electron、`chromium.connectOverCDP`、`app_server_handle_json_lines`、`agentSession/list/read`，且不启用 live Provider 或 mock backend。
 - `node "scripts/agent-runtime/agent-session-recovery-cdp-gate.mjs" --cdp-port 9239 --timeout-ms 180000 --prefix agent-session-recovery-cdp-gate-skeleton`：通过，Gate B skeleton；见 `.lime/cdp-evidence/agent-session-recovery-cdp-gate-skeleton-summary.json`。
 - `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server session_list_projection --lib`：通过，8 tests；证明 list overview 对 running / stale running / terminal 的投影同源。

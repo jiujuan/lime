@@ -65,7 +65,7 @@ Lime 当前最大问题不是功能不足，而是功能已经很多，却缺少
    `type/status/taskKind/source/failureCategory/reasonCode` 等 profile 字段必须是稳定协议值，不能按语言环境变化；用户可见标题、说明、错误提示、按钮和空态只能在 AgentUI / GUI projection 层通过 key-based i18n 渲染。Runtime 可以携带 `message` 作为诊断事实，但不能把中文或英文展示文案当成状态机、测试断言或跨模块 join 条件。
 
 7. **Chat、Claw、Plugin、Automation 都只是 runtime surface。**
-   完整 AI 能力只能向 AgentRuntime facts 收敛；内容工厂这类 App 不能把 `LIME_GATEWAY_*`、模型 API 或嵌入通用 Chat 当成 Agent 能力边界。App 内 `lime.agent` / `lime.workflow` 必须通过 Plugin Runtime Surface 复用 Aster / Claw / Skills / Tools / Evidence 主链，详见 [./app-surface-runtime.md](./app-surface-runtime.md)。
+   完整 AI 能力只能向 AgentRuntime facts 收敛；内容工厂这类 App 不能把 `LIME_GATEWAY_*`、模型 API 或嵌入通用 Chat 当成 Agent 能力边界。App 内 `lime.agent` / `lime.workflow` 必须通过 Plugin Runtime Surface 复用 Agent / Claw / Skills / Tools / Evidence 主链，详见 [./app-surface-runtime.md](./app-surface-runtime.md)。
 
 8. **Claw 能力要 catalog 化复用，不复制实现。**
    `@配图`、`@搜索`、`@研报`、`@读PDF` 等已实现能力要从 Chat 入口抽象为 typed capability；Chat `@命令` 和 Plugin task 只是不同行为入口，不能为 App 复制一套 `*_skill_launch.rs`。

@@ -95,7 +95,7 @@ Plugin 不只复用 UI runtime start/status/stop，而是复用 Agent turn runti
 
 退出条件：
 
-1. task facade 携带 `RuntimeOptions.hostOptions.asterChatRequest` 和 `turn_config`。
+1. task facade 携带 typed `RuntimeOptions.runtimeRequest`。
 2. turn 经 `agentSession/turn/start` 进入 RuntimeCore。
 3. turn 携带 active permission profile，工具执行不绕过 Sandbox Manager。
 4. `agentSession/event`、`agentSession/read` 和 evidence 回流可验证。

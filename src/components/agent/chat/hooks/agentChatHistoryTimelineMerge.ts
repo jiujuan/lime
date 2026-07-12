@@ -1,4 +1,4 @@
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import { mergeAdjacentAssistantMessages } from "./agentChatHistoryAdjacentMerge";
 import { contentPartContainsProcess } from "./agentChatHistoryProcess";
@@ -30,7 +30,7 @@ export function hasHistoryAssistantProcessGap(messages: Message[]): boolean {
 
 export function mergeMissingUserMessagesFromTimeline(
   messages: Message[],
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   topicId: string,
 ): Message[] {
   const buildFallbackUserSignature = (message: Message): string =>

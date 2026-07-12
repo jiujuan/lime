@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AsterSessionExecutionRuntimeRecentTeamSelection } from "@/lib/api/agentExecutionRuntime";
+import type { AgentSessionExecutionRuntimeRecentTeamSelection } from "@/lib/api/agentExecutionRuntime";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { WorkspaceSettings } from "@/types/workspace";
 import type { TeamDefinition } from "../utils/teamDefinitions";
@@ -50,7 +50,7 @@ function areSameSelectedTeam(
 }
 
 function serializeRuntimeSelection(
-  selection?: AsterSessionExecutionRuntimeRecentTeamSelection | null,
+  selection?: AgentSessionExecutionRuntimeRecentTeamSelection | null,
 ): string {
   if (!selection) {
     return "runtime:none";
@@ -94,7 +94,7 @@ interface SelectedTeamPreferenceSessionSyncOptions {
 interface UseSelectedTeamPreferenceOptions {
   projectSettings?: WorkspaceSettings | null;
   onPersistSelectedTeam?: (team: TeamDefinition | null) => void | Promise<void>;
-  runtimeSelection?: AsterSessionExecutionRuntimeRecentTeamSelection | null;
+  runtimeSelection?: AgentSessionExecutionRuntimeRecentTeamSelection | null;
   sessionSync?: SelectedTeamPreferenceSessionSyncOptions;
   shadowSnapshot?: TeamMemorySnapshot | null;
   allowPersistedThemeFallback?: boolean;

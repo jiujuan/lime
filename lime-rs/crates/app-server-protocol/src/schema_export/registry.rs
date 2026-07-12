@@ -785,6 +785,10 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentThreadContentReference>("AgentThreadContentReference"),
         typed_schema::<AgentThreadMessageContentPart>("AgentThreadMessageContentPart"),
         typed_schema::<RuntimeOptions>("RuntimeOptions"),
+        typed_schema::<RuntimeRequest>("RuntimeRequest"),
+        typed_schema::<RuntimeProviderConfig>("RuntimeProviderConfig"),
+        typed_schema::<RuntimeToolCallStrategy>("RuntimeToolCallStrategy"),
+        typed_schema::<RuntimeSearchMode>("RuntimeSearchMode"),
         typed_schema::<StructuredOutputContract>("StructuredOutputContract"),
         typed_schema::<AgentEvent>("AgentEvent"),
     ]

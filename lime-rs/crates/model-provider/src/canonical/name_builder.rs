@@ -357,7 +357,7 @@ mod tests {
             Some("anthropic/claude-sonnet-4".to_string())
         );
         assert_eq!(
-            map_to_canonical_model("databricks", "aster-claude-4-sonnet-bedrock", r),
+            map_to_canonical_model("databricks", "agent-claude-4-sonnet-bedrock", r),
             Some("anthropic/claude-sonnet-4".to_string())
         );
         assert_eq!(
@@ -389,7 +389,7 @@ mod tests {
 
         // === OpenAI O-series ===
         assert_eq!(
-            map_to_canonical_model("databricks", "aster-o1", r),
+            map_to_canonical_model("databricks", "agent-o1", r),
             Some("openai/o1".to_string())
         );
         assert_eq!(
@@ -397,7 +397,7 @@ mod tests {
             Some("openai/o3".to_string())
         );
         assert_eq!(
-            map_to_canonical_model("databricks", "headless-aster-o3-mini", r),
+            map_to_canonical_model("databricks", "headless-agent-o3-mini", r),
             Some("openai/o3-mini".to_string())
         );
 
@@ -439,7 +439,7 @@ mod tests {
             Some("qwen/qwen-2.5-72b-instruct".to_string())
         );
         assert_eq!(
-            map_to_canonical_model("databricks", "aster-qwen-2-5-72b-instruct", r),
+            map_to_canonical_model("databricks", "agent-qwen-2-5-72b-instruct", r),
             Some("qwen/qwen-2.5-72b-instruct".to_string())
         );
 
@@ -473,7 +473,7 @@ mod tests {
             Some("cohere/command-r-plus-08".to_string())
         );
         assert_eq!(
-            map_to_canonical_model("databricks", "aster-command-r-08", r),
+            map_to_canonical_model("databricks", "agent-command-r-08", r),
             Some("cohere/command-r-08".to_string())
         );
 

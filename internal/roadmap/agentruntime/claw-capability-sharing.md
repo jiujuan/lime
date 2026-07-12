@@ -6,7 +6,7 @@
 
 ## 1. 背景
 
-Lime Claw 已经有大量可用能力：配图、封面、海报、视频、搜索、深搜、研报、竞品、站点搜索、读 PDF、总结、翻译、分析、转写、链接解析、网页、PPT、表单、发布等。这些能力在后端并不是普通 prompt，而是通过 `request_metadata`、skill launch guard、tool permission、runtime contract、artifact/evidence 主链进入 Aster runtime。
+Lime Claw 已经有大量可用能力：配图、封面、海报、视频、搜索、深搜、研报、竞品、站点搜索、读 PDF、总结、翻译、分析、转写、链接解析、网页、PPT、表单、发布等。这些能力在后端并不是普通 prompt，而是通过 `request_metadata`、skill launch guard、tool permission、runtime contract、artifact/evidence 主链进入 Agent runtime。
 
 当前共享困难不是能力缺失，而是入口形态过于贴近 Chat / Claw：
 

@@ -344,20 +344,20 @@ function buildFastResponseMetadata() {
   };
 }
 
-function buildTurnConfig(options) {
-  const turnConfig = {
+function buildRuntimeRequest(options) {
+  const runtimeRequest = {
     metadata: buildFastResponseMetadata(),
-    search_mode: "disabled",
-    web_search: false,
-    thinking_enabled: false,
+    searchMode: "disabled",
+    webSearch: false,
+    thinkingEnabled: false,
   };
 
   if (options.mode === "request-override") {
-    turnConfig.provider_preference = options.providerPreference;
-    turnConfig.model_preference = options.modelPreference;
+    runtimeRequest.providerPreference = options.providerPreference;
+    runtimeRequest.modelPreference = options.modelPreference;
   }
 
-  return turnConfig;
+  return runtimeRequest;
 }
 
 function latestTurnStatus(threadRead) {
@@ -589,7 +589,7 @@ async function runSample(options, workspaceId, sampleIndex) {
     elapsedMs: Date.now() - sampleStartedAt,
   });
   const turnId = `agentui-ttft-${options.mode}-${stamp}`;
-  const eventName = `aster_stream_${sessionId}_${turnId}`;
+  const eventName = `agent_stream_${sessionId}_${turnId}`;
 
   await startAgentSessionTurnCurrent(options, {
     message: options.message,
@@ -597,7 +597,7 @@ async function runSample(options, workspaceId, sampleIndex) {
     workspaceId,
     eventName,
     turnId,
-    turnConfig: buildTurnConfig(options),
+    runtimeRequest: buildRuntimeRequest(options),
     skipPreSubmitResume: true,
   });
   trace(options, "turn-started", {

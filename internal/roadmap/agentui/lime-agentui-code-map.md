@@ -66,7 +66,7 @@ flowchart TB
 | `src/lib/api/agentRuntime/index.ts` | agent runtime API 统一导出 | session、thread、export、subagent、site、media client |
 | `src/lib/api/agentRuntime/sessionClient.ts` | create/list/get/update session | `getAgentRuntimeSession(sessionId, { historyLimit, historyOffset, historyBeforeMessageId })`；有 `runtimeGetSession.slow` 日志 |
 | `src/lib/api/agentRuntime/threadClient.ts` | submit、interrupt、compact、resume、respond action、queue 操作、thread read | `submitAgentRuntimeTurn`、`respondAgentRuntimeAction`、`getAgentRuntimeThreadRead` |
-| `src/lib/api/agentRuntime/types.ts` | DTO 类型 | `AsterSessionDetail`、`AgentRuntimeThreadReadModel`、`AgentRuntimeSubmitTurnRequest`、history cursor |
+| `src/lib/api/agentRuntime/types.ts` | DTO 类型 | `AgentSessionDetail`、`AgentRuntimeThreadReadModel`、`AgentRuntimeSubmitTurnRequest`、history cursor |
 | `src/lib/api/agentProtocol.ts` | AgentEvent 类型和兼容 normalizer | `turn_started`、`text_delta`、`thinking_delta`、`tool_start/end`、`artifact_snapshot`、`runtime_status`、queue、subagent、current terminal；legacy `done/final_done` fail-closed |
 | `src/lib/api/agentTextNormalization.ts` | legacy 文本与 item normalizer | 兼容旧事件/旧 item | 继续收口 compat，不新增旧形态 |
 
@@ -83,13 +83,13 @@ flowchart TB
 | 文件 | 当前职责 | AgentUI 相关能力 |
 | --- | --- | --- |
 | `src/lib/api/agentRuntime/*` + Electron Desktop Host / App Server JSON-RPC | AgentUI current command gateway | submit、interrupt、compact、resume、get session、thread read、file checkpoint、evidence/review export |
-| `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | legacy `agent_runtime_*` cleanup reference | 迁移期兼容入口定位；迁出后删除，不作为新增能力入口 |
-| `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | turn orchestration cleanup reference | 现有行为锚点；新执行编排应进入 RuntimeCore / ExecutionBackend |
-| `lime-rs/src/commands/aster_agent_cmd/session_runtime.rs` | session runtime cleanup reference | sidebar/session summary 和 tab 管理的迁移来源；新读写进入 App Server / RuntimeCore |
-| `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs` | subagent cleanup reference | team/capsule 子代理状态迁移来源；新实现进入 runtime service / `lime-rs/crates/agent` |
-| `lime-rs/src/commands/aster_agent_cmd/action_runtime.rs` | action response cleanup reference | HITL、权限确认、用户输入请求迁移来源；新 action 合同进入 App Server protocol |
-| `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | tool cleanup reference | browser、workspace、service skill、media、mcp、subagent、site 的历史工具锚点；新工具事实进入 RuntimeCore/tool services |
-| `lime-rs/src/commands/aster_agent_cmd/dto.rs` | DTO cleanup reference | `AgentRuntimeSessionDetail`、history cursor、thread_read 投影迁移来源；公共 DTO 进入 protocol / `lime-rs/crates/agent` |
+| `lime-rs/src/commands/agent_cmd/command_api/runtime_api.rs` | legacy `agent_runtime_*` cleanup reference | 迁移期兼容入口定位；迁出后删除，不作为新增能力入口 |
+| `lime-rs/src/commands/agent_cmd/runtime_turn.rs` | turn orchestration cleanup reference | 现有行为锚点；新执行编排应进入 RuntimeCore / ExecutionBackend |
+| `lime-rs/src/commands/agent_cmd/session_runtime.rs` | session runtime cleanup reference | sidebar/session summary 和 tab 管理的迁移来源；新读写进入 App Server / RuntimeCore |
+| `lime-rs/src/commands/agent_cmd/subagent_runtime.rs` | subagent cleanup reference | team/capsule 子代理状态迁移来源；新实现进入 runtime service / `lime-rs/crates/agent` |
+| `lime-rs/src/commands/agent_cmd/action_runtime.rs` | action response cleanup reference | HITL、权限确认、用户输入请求迁移来源；新 action 合同进入 App Server protocol |
+| `lime-rs/src/commands/agent_cmd/tool_runtime/*` | tool cleanup reference | browser、workspace、service skill、media、mcp、subagent、site 的历史工具锚点；新工具事实进入 RuntimeCore/tool services |
+| `lime-rs/src/commands/agent_cmd/dto.rs` | DTO cleanup reference | `AgentRuntimeSessionDetail`、history cursor、thread_read 投影迁移来源；公共 DTO 进入 protocol / `lime-rs/crates/agent` |
 
 `agent_runtime_get_session` 当前关键行为：
 
@@ -108,7 +108,7 @@ flowchart TB
 | `lime-rs/crates/agent/src/runtime_queue.rs` | turn queue、resume、queue event | queue/capsule/task layer 的事实源 |
 | `lime-rs/crates/agent/src/session_store.rs` | session detail、messages、turns、items、todo、runtime overlay、subagent context | old session restore、history pagination、thread_read 的底层事实源 |
 | `lime-rs/crates/agent/src/session_query.rs` | parent/child/cascade 查询 | team/subagent 视图 |
-| `lime-rs/crates/agent/src/event_converter.rs` | Aster event -> Lime runtime event | text/thinking/tool/artifact/status 的协议生成点 |
+| `lime-rs/crates/agent/src/event_converter.rs` | Agent event -> Lime runtime event | text/thinking/tool/artifact/status 的协议生成点 |
 | `lime-rs/crates/agent/src/protocol_projection.rs` | current projection 入口 | 新 UI 应优先跟 current projection 对齐 |
 | `lime-rs/crates/agent/src/runtime_projection_snapshot.rs` | runtime summary snapshot | tab/capsule/sidebar summary 可复用 |
 | `lime-rs/crates/agent/src/session_execution_runtime.rs` | execution runtime/cost/limit/routing | provider/model/cost/context usage UI |

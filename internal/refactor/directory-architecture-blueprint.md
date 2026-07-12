@@ -121,7 +121,7 @@ lime-rs/crates/
 │   └── src/local_data_source/    # 既有先例，保持
 ├── services/                     # 按 lib.rs 已有四类落成物理分组（T2）
 ├── core/                         # 只减不增（R-50 抗膨胀），T2 拆纯类型 crate
-└── aster-rust/                   # 自有化 fork，独立子 workspace，内部同样 domain 子模块化
+└── agent-rust/                   # 自有化 fork，独立子 workspace，内部同样 domain 子模块化
 ```
 
 **核心不变量**：`protocol/v0/<domain>.rs` ↔ `processor/<domain>.rs` ↔ `runtime/<domain>.rs` ↔ 生成的 TS `<domain>` 类型，**四层共用同一套 domain 切分**，加一个能力时四层各落一个同名位置。
@@ -159,7 +159,7 @@ packages/
 
 - 协议 TS 生成上线（R-10），processor/runtime domain 化开跑（R-20），前端 import 方向 lint + 状态分层样板成立（R-30/31/32），网关收敛（R-40），棘轮上线（R-60）。
 - **T1 不做目录大搬家**：`domains/` 物理目录可以等——R-30 的 lint 规则按现有路径先把方向锁死，R-32 抽出的 viewmodel/commands 直接按 § 1.1 形态新建，新代码先长成目标形状。
-- **进度（2026-06-17）**：R-10/R-20/R-30/R-40/R-60 已落地，§ 6 前五项达标或接近；T1 剩余主项为 R-32（`AgentChatWorkspace` 拆分）与 R-21（aster `agent.rs`）。
+- **进度（2026-06-17）**：R-10/R-20/R-30/R-40/R-60 已落地，§ 6 前五项达标或接近；T1 剩余主项为 R-32（`AgentChatWorkspace` 拆分）与 R-21（agent `agent.rs`）。
 - 退出标志：§ 6 验收指标前四项达标。
 
 ### T2（3-9 个月）：结构归位——存量迁移到目标结构

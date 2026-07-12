@@ -31,8 +31,8 @@ import {
   materializeCloudReleasePackageCache,
 } from "./content-factory-current-turn-fixtures.mjs";
 import {
-  contentFactoryHostGenerationAsterChatRequest,
-  contentFactoryLiveHostGenerationAsterChatRequest,
+  contentFactoryHostGenerationAgentRuntimeRequest,
+  contentFactoryLiveHostGenerationAgentRuntimeRequest,
   startContentFactoryHostGenerationFixture,
 } from "../lib/content-factory-host-generation-fixture.mjs";
 import { localAppServerBinaryPath } from "../lib/electron-dev-sidecar.mjs";
@@ -297,29 +297,28 @@ function turnRuntimeOptions({
   sessionId,
   workspaceId,
   fixtureBaseUrl,
-  liveAsterChatRequest,
+  liveRuntimeRequest,
 }) {
-  const runtimeOptions = {
-    stream: true,
-    metadata: pluginActivationMetadata(sessionId, workspaceId),
-  };
+  const metadata = pluginActivationMetadata(sessionId, workspaceId);
+  const runtimeOptions = { stream: true };
   if (fixtureBaseUrl) {
-    runtimeOptions.hostOptions = {
-      asterChatRequest:
-        contentFactoryHostGenerationAsterChatRequest(fixtureBaseUrl),
-    };
-  } else if (liveAsterChatRequest) {
-    runtimeOptions.hostOptions = {
-      asterChatRequest: liveAsterChatRequest,
-    };
+    runtimeOptions.runtimeRequest =
+      contentFactoryHostGenerationAgentRuntimeRequest(fixtureBaseUrl);
+  } else if (liveRuntimeRequest) {
+    runtimeOptions.runtimeRequest = liveRuntimeRequest;
   }
+  runtimeOptions.runtimeRequest = {
+    ...runtimeOptions.runtimeRequest,
+    workspaceId,
+    metadata,
+  };
   return runtimeOptions;
 }
 
 function buildLiveHostGeneration(options) {
   if (!options.liveProvider) return null;
   const apiKey = process.env[options.liveApiKeyEnv]?.trim();
-  const asterChatRequest = contentFactoryLiveHostGenerationAsterChatRequest({
+  const runtimeRequest = contentFactoryLiveHostGenerationAgentRuntimeRequest({
     providerId: options.liveProviderId,
     providerName: options.liveProviderName,
     model: options.liveModel,
@@ -327,7 +326,7 @@ function buildLiveHostGeneration(options) {
     baseUrl: options.liveBaseUrl,
   });
   return {
-    asterChatRequest,
+    runtimeRequest,
     summary: {
       provider: options.liveProviderId,
       providerName: options.liveProviderName,
@@ -1113,7 +1112,7 @@ async function runSmoke(options) {
           sessionId,
           workspaceId,
           fixtureBaseUrl: hostGenerationFixture?.baseUrl,
-          liveAsterChatRequest: liveHostGeneration?.asterChatRequest,
+          liveRuntimeRequest: liveHostGeneration?.runtimeRequest,
         }),
         queueIfBusy: false,
         skipPreSubmitResume: false,

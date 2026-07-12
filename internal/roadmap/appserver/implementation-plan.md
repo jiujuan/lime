@@ -21,7 +21,7 @@
 | P0 | 文档和公共边界冻结 | 本目录 PRD / 架构 / 协议 / 图纸 / 实施计划 | 团队对 RuntimeCore / ExecutionBackend / HostBridge 无歧义。 |
 | P1 | codex-rs app-server-style crate 家族骨架 | `app-server*` 六个 crate、protocol DTO、transport 空壳 | crate 命名和依赖方向与 codex-rs app-server 家族一致。 |
 | P2 | RuntimeCore / ExecutionBackend | `RuntimeCore`、`ExecutionBackend`、`RuntimeEventSink`、`RuntimeHostContext`、`MockBackend` | MockBackend 可通过公共事件跑通最小 session/turn。 |
-| P3 | AsterBackend adapter | Aster backend adapter、事件转换、cancel 桥 | 一个 Aster turn 可通过 RuntimeCore 跑通。 |
+| P3 | RuntimeBackend adapter | Agent backend adapter、事件转换、cancel 桥 | 一个 Agent turn 可通过 RuntimeCore 跑通。 |
 | P4 | App Server 接入 RuntimeCore | JSON-RPC router、stdio transport、server request processor | App Server 不直接拼 runtime，只调用 RuntimeCore。 |
 | P5 | Lime Desktop Host bridge / compat projection | Electron Desktop Host bridge、legacy desktop projection、DesktopEventSink | Desktop 主路径不回退；旧 command name 如需临时存在，只投影到 current 边界并有退出条件。 |
 | P6 | content-studio 试点 | Electron main client、sidecar 管理、业务对象绑定 | content-studio 可通过 App Server 发起 Agent session。 |
@@ -38,7 +38,7 @@
 1. 新增 `internal/roadmap/appserver/`。
 2. 固定 App Server 是跨 App Agent runtime current 服务边界。
 3. 固定 `RuntimeCore / ExecutionBackend / HostBridge / Protocol` 四层切分。
-4. 固定 Aster 只是第一个 backend adapter。
+4. 固定 Agent 只是第一个 backend adapter。
 5. 固定 stdio JSON-RPC 为第一 transport。
 
 退出条件：
@@ -69,7 +69,7 @@
 1. 六个 crate 可独立编译。
 2. 依赖方向为 protocol <- transport/client/server，server 不反向污染 protocol。
 3. 不依赖 retired desktop host crates。
-4. 不出现 Aster 私有 DTO。
+4. 不出现 Agent 私有 DTO。
 
 ## 5. P2：RuntimeCore / ExecutionBackend
 
@@ -94,23 +94,23 @@
 3. App Server 未来只调用 RuntimeCore。
 4. `TestEventSink` 能收集 deterministic events。
 
-## 6. P3：AsterBackend adapter
+## 6. P3：RuntimeBackend adapter
 
 目标：
 
-让现有 Aster runtime 作为 backend adapter 接入 RuntimeCore。
+让现有 Agent runtime 作为 backend adapter 接入 RuntimeCore。
 
 建议工作：
 
-1. 把 `runtime_turn` 中 host-independent 的 orchestration 收进 `AsterBackend`。
-2. 把 Aster 私有事件转换为公共 runtime events。
+1. 把 `runtime_turn` 中 host-independent 的 orchestration 收进 `RuntimeBackend`。
+2. 把 Agent 私有事件转换为公共 runtime events。
 3. 把取消 token / runtime queue 接入 backend 合同。
 4. 先接最小 submit / cancel / event stream。
 
 退出条件：
 
-1. 一个 Aster turn 可通过 RuntimeCore 执行。
-2. Aster 私有 DTO 不进入 App Server 协议。
+1. 一个 Agent turn 可通过 RuntimeCore 执行。
+2. Agent 私有 DTO 不进入 App Server 协议。
 3. cancel 能终止 active turn 并发出 terminal event。
 4. 定向 Rust 测试覆盖 start / cancel / event stream。
 
@@ -138,10 +138,10 @@
 2. `turn/start` 返回 accepted。
 3. 同步 backend events 随 request response 后追加为 `agentSession/event` notification。
 4. 外部 runtime events 可通过 outbound channel 写出 stdio JSONL。
-5. legacy desktop Aster host 可通过轻量 `AppServerEventBridge` 追加外部事件，不持有完整 App Server。
+5. legacy desktop Agent host 可通过轻量 `AppServerEventBridge` 追加外部事件，不持有完整 App Server。
 6. fixture 覆盖 request / response / notification。
 7. standalone `app-server` 只能启动 host-independent backend。
-8. legacy desktop Aster host 只能通过 host bridge 注入，不进入 protocol / router / standalone CLI。
+8. legacy desktop Agent host 只能通过 host bridge 注入，不进入 protocol / router / standalone CLI。
 9. 不新增或恢复 `lime-rs/src/commands/**` 中的 App Server JSON-RPC command wrapper。
 
 ## 7. P6：content-studio 试点

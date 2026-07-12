@@ -24,7 +24,7 @@ pub(in crate::runtime) fn runtime_event_from_request_metadata(
     let previous_release_id = json_string(role_switch, &["previous_release_id"]);
     let switched_at = json_string(role_switch, &["switched_at"]);
     let source = json_string(role_switch, &["source"])
-        .unwrap_or_else(|| "runtime_options.metadata.harness.expert_role_switch".to_string());
+        .unwrap_or_else(|| "runtime_request.metadata.harness.expert_role_switch".to_string());
 
     let mut harness = Map::new();
     if let Some(expert) = metadata.pointer("/harness/expert").cloned() {
@@ -48,7 +48,7 @@ pub(in crate::runtime) fn runtime_event_from_request_metadata(
     payload.insert(
         "metadata".to_string(),
         json!({
-            "source": "runtime_options.metadata",
+            "source": "runtime_request.metadata",
             "harness": Value::Object(harness),
         }),
     );

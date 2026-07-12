@@ -53,8 +53,8 @@ Purpose:
   Launch a real Electron Desktop Host with an explicit App Server external
   backend fixture, then invoke the Plugin task facade commands through the
   Electron preload bridge. The fixture backend records the App Server runtime
-  requests it receives so this smoke can prove the facade preserved
-  RuntimeOptions.hostOptions.asterChatRequest and turn_config.
+  requests it receives so this smoke can prove the facade preserved the typed
+  RuntimeOptions.runtimeRequest.
 
 Target path:
   Frontend -> Electron Desktop Host IPC -> App Server JSON-RPC
@@ -415,24 +415,24 @@ async function invokePluginRuntimeLifecycle(page) {
           input: { topic: "Plugin runtime Electron fixture" },
           expectedOutput: { markdown: true },
           eventName,
-          providerPreference: "fixture-provider",
-          modelPreference: "fixture-model",
           queueIfBusy: true,
           skipPreSubmitResume: false,
           metadata: {
             source: "plugin-runtime-electron-fixture",
           },
-          turnConfig: {
-            provider_config: {
-              provider_name: "fixture-provider",
-              model_name: "fixture-model",
+          runtimeRequest: {
+            providerConfig: {
+              providerName: "fixture-provider",
+              modelName: "fixture-model",
             },
-            system_prompt: "You are running inside an Electron fixture.",
-            reasoning_effort: "low",
-            approval_policy: "never",
-            sandbox_policy: "workspace-write",
-            web_search: false,
-            execution_strategy: "fixture",
+            providerPreference: "fixture-provider",
+            modelPreference: "fixture-model",
+            systemPrompt: "You are running inside an Electron fixture.",
+            reasoningEffort: "low",
+            approvalPolicy: "never",
+            sandboxPolicy: "workspace-write",
+            webSearch: false,
+            executionStrategy: "fixture",
             metadata: {
               turn_source: "plugin",
               fixture: true,
@@ -545,9 +545,7 @@ function assertBackendLedger(ledgerEntries) {
     (entry) => entry.kind === "actionRespond",
   );
   const turnCancel = ledgerEntries.find((entry) => entry.kind === "turnCancel");
-  const asterChatRequest =
-    turnStart?.request?.runtimeOptions?.hostOptions?.asterChatRequest;
-  const turnConfig = asterChatRequest?.turn_config;
+  const runtimeRequest = turnStart?.request?.runtimeOptions?.runtimeRequest;
 
   assert(
     turnStart?.request?.session?.sessionId === SESSION_ID,
@@ -561,24 +559,18 @@ function assertBackendLedger(ledgerEntries) {
     turnStart?.request?.runtimeOptions?.eventName === EVENT_NAME,
     "turnStart eventName mismatch",
   );
-  assert(asterChatRequest, "turnStart missing hostOptions.asterChatRequest");
+  assert(runtimeRequest, "turnStart missing runtimeRequest");
   assert(
-    asterChatRequest.session_id === SESSION_ID &&
-      asterChatRequest.turn_id === TURN_ID,
-    "asterChatRequest session / turn mismatch",
-  );
-  assert(turnConfig, "asterChatRequest missing turn_config mirror");
-  assert(
-    turnConfig.provider_config?.provider_name === "fixture-provider",
-    "turn_config.provider_config was not preserved",
+    runtimeRequest.providerConfig?.providerName === "fixture-provider",
+    "runtimeRequest.providerConfig was not preserved",
   );
   assert(
-    turnConfig.system_prompt === "You are running inside an Electron fixture.",
-    "turn_config.system_prompt was not preserved",
+    runtimeRequest.systemPrompt === "You are running inside an Electron fixture.",
+    "runtimeRequest.systemPrompt was not preserved",
   );
   assert(
-    asterChatRequest.provider_preference === "fixture-provider" &&
-      asterChatRequest.model_preference === "fixture-model",
+    runtimeRequest.providerPreference === "fixture-provider" &&
+      runtimeRequest.modelPreference === "fixture-model",
     "provider/model preference was not preserved",
   );
   assert(

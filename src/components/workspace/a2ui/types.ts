@@ -484,7 +484,7 @@ export interface DataModelUpdate {
   contents: unknown[];
 }
 
-/** 当前消息信封（与 aster-rust flatten 对齐） */
+/** 当前消息信封（与 agent-rust flatten 对齐） */
 export type ServerMessage =
   | ({ version: string } & { createSurface: CreateSurface })
   | ({ version: string } & { updateComponents: UpdateComponents })

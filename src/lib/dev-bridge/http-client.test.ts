@@ -621,7 +621,6 @@ describe("http-client", () => {
   });
 
   it("启动关键真相命令应保留更长超时窗口，避免冷启动误判后端不可用", () => {
-    expect(resolveBridgeRequestTimeoutMs("agent_init")).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("workspace_ensure_ready")).toBe(30000);
     expect(
       resolveBridgeRequestTimeoutMs("workspace_ensure_default_ready"),
@@ -1208,7 +1207,7 @@ describe("http-client", () => {
       MockEventSource as unknown as typeof EventSource,
     );
 
-    const unlistenPromise = listenViaHttpEvent("aster_stream_test", vi.fn());
+    const unlistenPromise = listenViaHttpEvent("agent_stream_test", vi.fn());
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(unlistenPromise).resolves.toEqual(expect.any(Function));
@@ -1242,7 +1241,7 @@ describe("http-client", () => {
       MockEventSource as unknown as typeof EventSource,
     );
 
-    const unlistenPromise = listenViaHttpEvent("aster_stream_test", vi.fn());
+    const unlistenPromise = listenViaHttpEvent("agent_stream_test", vi.fn());
     await vi.advanceTimersByTimeAsync(0);
     const source = MockEventSource.instances[0]!;
     source.readyState = 1;
@@ -1283,7 +1282,7 @@ describe("http-client", () => {
       MockEventSource as unknown as typeof EventSource,
     );
 
-    const unlistenPromise = listenViaHttpEvent("aster_stream_test", vi.fn());
+    const unlistenPromise = listenViaHttpEvent("agent_stream_test", vi.fn());
     await vi.advanceTimersByTimeAsync(1_800);
 
     expect(MockEventSource.instances).toHaveLength(1);
@@ -1402,7 +1401,7 @@ describe("http-client", () => {
       MockEventSource as unknown as typeof EventSource,
     );
 
-    const unlistenPromise = listenViaHttpEvent("aster_stream_test", vi.fn());
+    const unlistenPromise = listenViaHttpEvent("agent_stream_test", vi.fn());
     await vi.advanceTimersByTimeAsync(0);
     expect(MockEventSource.instances).toHaveLength(1);
 

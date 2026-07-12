@@ -6253,10 +6253,10 @@ export type ModelRefSource =
   | "direct_provider_config"
   | "explicit"
   | "fallback"
-  | "host_options"
   | "oem_policy"
   | "profile_slot"
   | "runtime_options"
+  | "runtime_request"
   | "session_default"
   | "task";
 
@@ -6966,14 +6966,42 @@ export interface RuntimeOptions {
   capabilityId?: null | string;
   eventName?: null | string;
   expectedOutput?: unknown;
-  hostOptions?: unknown;
-  metadata?: unknown;
-  modelPreference?: null | string;
   outputSchema?: unknown;
-  providerPreference?: null | string;
   queuedTurnId?: null | string;
+  runtimeRequest?: RuntimeRequest | null;
   stream?: boolean;
   structuredOutput?: StructuredOutputContract | null;
+}
+
+export interface RuntimeProviderConfig {
+  apiKey?: null | string;
+  baseUrl?: null | string;
+  modelCapabilities?: unknown;
+  modelName?: null | string;
+  providerId?: null | string;
+  providerName?: null | string;
+  toolCallStrategy?: RuntimeToolCallStrategy | null;
+  toolshimModel?: null | string;
+}
+
+export interface RuntimeRequest {
+  approvalPolicy?: null | string;
+  autoContinue?: boolean | null;
+  executionStrategy?: null | string;
+  metadata?: unknown;
+  modelPreference?: null | string;
+  projectRoot?: null | string;
+  providerConfig?: RuntimeProviderConfig | null;
+  providerPreference?: null | string;
+  reasoningEffort?: null | string;
+  sandboxPolicy?: null | string;
+  searchMode?: RuntimeSearchMode | null;
+  systemPrompt?: null | string;
+  thinkingEnabled?: boolean | null;
+  webSearch?: boolean | null;
+  workingDir?: null | string;
+  workspaceId?: null | string;
+  workspaceRoot?: null | string;
 }
 
 export interface RuntimeResumeActionDecision {
@@ -6994,6 +7022,10 @@ export interface RuntimeResumeContract {
   sessionId: string;
   turnId: string;
 }
+
+export type RuntimeSearchMode = "auto" | "disabled" | "required";
+
+export type RuntimeToolCallStrategy = "native" | "tool_shim";
 
 export interface ServerCapabilities {
   agentSession: boolean;

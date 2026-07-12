@@ -10,7 +10,7 @@ const LEGACY_APP_DATA_DIR_NAME: &str = "proxycast";
 const LEGACY_HOME_DIR_NAME: &str = ".proxycast";
 const COMPAT_HOME_DIR_NAME: &str = ".lime";
 const APP_SERVER_DATA_DIR_NAME: &str = "app-server";
-const ASTER_RUNTIME_OVERRIDE_ENV: &str = "LIME_ASTER_ROOT";
+const AGENT_RUNTIME_OVERRIDE_ENV: &str = "LIME_AGENT_RUNTIME_ROOT";
 const DATABASE_FILE_NAME: &str = "lime.db";
 const LEGACY_DATABASE_FILE_NAME: &str = "proxycast.db";
 const MIGRATION_MARKER_FILE: &str = ".migration_completed";
@@ -120,13 +120,13 @@ pub fn resolve_skills_dir() -> Result<PathBuf, String> {
     resolve_home_skills_dir()
 }
 
-pub fn resolve_aster_dir() -> Result<PathBuf, String> {
-    if let Some(root) = resolve_aster_dir_override() {
+pub fn resolve_agent_dir() -> Result<PathBuf, String> {
+    if let Some(root) = resolve_agent_dir_override() {
         fs::create_dir_all(&root)
-            .map_err(|error| format!("无法创建 Aster 运行时目录 {}: {error}", root.display()))?;
+            .map_err(|error| format!("无法创建 Agent 运行时目录 {}: {error}", root.display()))?;
         return Ok(root);
     }
-    resolve_runtime_subdir("aster")
+    resolve_runtime_subdir("agent")
 }
 
 pub fn resolve_project_skills_dir() -> Option<PathBuf> {
@@ -323,8 +323,8 @@ fn fallback_runtime_subdir(subdir: &str) -> PathBuf {
     fallback_app_data_dir().join(subdir)
 }
 
-fn resolve_aster_dir_override() -> Option<PathBuf> {
-    std::env::var(ASTER_RUNTIME_OVERRIDE_ENV)
+fn resolve_agent_dir_override() -> Option<PathBuf> {
+    std::env::var(AGENT_RUNTIME_OVERRIDE_ENV)
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -475,14 +475,14 @@ fn resolve_default_project_dir_from_roots(
 }
 
 #[cfg(test)]
-fn resolve_aster_dir_from_roots(
+fn resolve_agent_dir_from_roots(
     preferred_root: &Path,
     legacy_root: &Path,
 ) -> Result<PathBuf, String> {
     resolve_subdir_with_legacy_copy_from_source_roots(
         preferred_root,
         &[legacy_root.to_path_buf()],
-        "aster",
+        "agent",
     )
 }
 
@@ -1076,17 +1076,17 @@ mod tests {
     }
 
     #[test]
-    fn resolve_aster_dir_copies_legacy_runtime_directories() {
+    fn resolve_agent_dir_copies_legacy_runtime_directories() {
         let temp = tempdir().unwrap();
         let preferred_root = temp.path().join("appdata").join("lime");
         let legacy_root = temp.path().join("home").join(".lime");
-        let legacy_aster_dir = legacy_root.join("aster").join("state").join("logs");
-        fs::create_dir_all(&legacy_aster_dir).unwrap();
-        fs::write(legacy_aster_dir.join("runtime.log"), "legacy runtime").unwrap();
+        let legacy_agent_dir = legacy_root.join("agent").join("state").join("logs");
+        fs::create_dir_all(&legacy_agent_dir).unwrap();
+        fs::write(legacy_agent_dir.join("runtime.log"), "legacy runtime").unwrap();
 
-        let resolved = resolve_aster_dir_from_roots(&preferred_root, &legacy_root).unwrap();
+        let resolved = resolve_agent_dir_from_roots(&preferred_root, &legacy_root).unwrap();
 
-        assert_eq!(resolved, preferred_root.join("aster"));
+        assert_eq!(resolved, preferred_root.join("agent"));
         assert_eq!(
             fs::read_to_string(resolved.join("state").join("logs").join("runtime.log")).unwrap(),
             "legacy runtime"

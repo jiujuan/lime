@@ -1,4 +1,4 @@
-import type { AsterSessionExecutionRuntimeRoutingDecision } from "./agentExecutionRuntime";
+import type { AgentSessionExecutionRuntimeRoutingDecision } from "./agentExecutionRuntime";
 import type {
   AgentActionRequiredScope,
   AgentToolExecutionResult,
@@ -12,7 +12,7 @@ import type {
 
 export function routingDecisionFromEvent(
   event: Record<string, unknown>,
-): AsterSessionExecutionRuntimeRoutingDecision {
+): AgentSessionExecutionRuntimeRoutingDecision {
   const routingDecision =
     (event.routing_decision as Record<string, unknown> | undefined) ||
     (event.routingDecision as Record<string, unknown> | undefined) ||
@@ -30,7 +30,7 @@ export function routingDecisionFromEvent(
       merged[targetKey] = event[sourceKey];
     }
   }
-  return merged as unknown as AsterSessionExecutionRuntimeRoutingDecision;
+  return merged as unknown as AgentSessionExecutionRuntimeRoutingDecision;
 }
 
 export function normalizeActionRequiredScope(

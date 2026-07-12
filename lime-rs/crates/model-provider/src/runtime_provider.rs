@@ -6,6 +6,7 @@ use crate::ModelProviderProtocol;
 pub enum RuntimeProviderProtocol {
     ChatCompletions,
     Responses,
+    AnthropicMessages,
 }
 
 impl RuntimeProviderProtocol {
@@ -17,6 +18,7 @@ impl RuntimeProviderProtocol {
         match self {
             Self::ChatCompletions => ModelProviderProtocol::ChatCompletions,
             Self::Responses => ModelProviderProtocol::Responses,
+            Self::AnthropicMessages => ModelProviderProtocol::AnthropicMessages,
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Reply stream 的 current envelope contract。
 //!
 //! 该类型只描述 runtime reply stream 如何携带 current event 或边界诊断，
-//! 不绑定 Aster `AgentEvent`，也不反向依赖 lime-agent 的协议实现。
+//! 不绑定 Agent `AgentEvent`，也不反向依赖 lime-agent 的协议实现。
 
 use crate::runtime_timeline::{
     project_runtime_timeline_item, RuntimeTimelineItemPayloadSource, RuntimeTimelineItemProjection,

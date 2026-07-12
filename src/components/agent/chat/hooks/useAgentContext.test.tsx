@@ -184,7 +184,7 @@ describe("useAgentContext", () => {
     expect(harness.getValue().accessMode).toBe("full-access");
     expect(
       JSON.parse(
-        localStorage.getItem("aster_access_mode_workspace-default-access") ||
+        localStorage.getItem("agent_access_mode_workspace-default-access") ||
           "null",
       ),
     ).toBe("full-access");
@@ -209,7 +209,7 @@ describe("useAgentContext", () => {
     expect(
       JSON.parse(
         localStorage.getItem(
-          "aster_execution_strategy_workspace-code-runtime",
+          "agent_execution_strategy_workspace-code-runtime",
         ) || "null",
       ),
     ).toBe("react");
@@ -284,7 +284,7 @@ describe("useAgentContext", () => {
     ).toBe("react");
     expect(
       JSON.parse(
-        localStorage.getItem("aster_execution_strategy_workspace-1") || "null",
+        localStorage.getItem("agent_execution_strategy_workspace-1") || "null",
       ),
     ).toBe("react");
 
@@ -302,7 +302,7 @@ describe("useAgentContext", () => {
     expect(mockSetSessionExecutionStrategy).not.toHaveBeenCalled();
     expect(
       JSON.parse(
-        localStorage.getItem("aster_execution_strategy_workspace-shadow") ||
+        localStorage.getItem("agent_execution_strategy_workspace-shadow") ||
           "null",
       ),
     ).toBe("react");

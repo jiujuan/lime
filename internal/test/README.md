@@ -96,7 +96,7 @@ internal/tests/
 | [harness-evals.md](harness-evals.md)                                                     | Harness eval 任务集与 runner | Replay 样本、grader、nightly 摘要                        |
 | [test-cases/converter-tests.md](test-cases/converter-tests.md)                           | 转换器测试用例               | OpenAI ↔ Claude 转换                                     |
 | [test-cases/provider-tests.md](test-cases/provider-tests.md)                             | Provider 测试用例            | API Key Provider、协议转换和 API 调用                    |
-| [test-cases/agent-tests.md](test-cases/agent-tests.md)                                   | Agent 测试用例               | Aster Agent 集成                                         |
+| [test-cases/agent-tests.md](test-cases/agent-tests.md)                                   | Agent 测试用例               | Agent Agent 集成                                         |
 
 ## 快速开始
 
@@ -232,7 +232,7 @@ npm run lint
 | 协议转换      | OpenAI ↔ Claude 转换正确性           | [converter-tests.md](test-cases/converter-tests.md) |
 | Provider 系统 | API Key Provider、协议转换、API 调用 | [provider-tests.md](test-cases/provider-tests.md)   |
 | 退役凭证入口  | 旧凭证 HTTP API 保持下线             | [integration-tests.md](integration-tests.md)        |
-| Aster Agent   | 流式响应、工具调用                   | [agent-tests.md](test-cases/agent-tests.md)         |
+| Agent Agent   | 流式响应、工具调用                   | [agent-tests.md](test-cases/agent-tests.md)         |
 
 ## 测试原则
 

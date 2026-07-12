@@ -135,7 +135,8 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                metadata: Some(json!({
+                runtime_request: Some(app_server_protocol::RuntimeRequest {
+                    metadata: Some(json!({
                     "system_prompt": "base prompt",
                     "harness": {
                         "model_request_policy": {
@@ -144,7 +145,9 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
                             }
                         }
                     }
-                })),
+                    })),
+                    ..app_server_protocol::RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,
@@ -163,7 +166,7 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
     let metadata = requests[1]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref())
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("runtime metadata");
     let compaction_context = metadata
         .get(crate::runtime::memory_prompt::SESSION_COMPACTION_PROMPT_CONTEXT_KEY)

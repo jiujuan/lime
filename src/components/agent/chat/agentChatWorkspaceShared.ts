@@ -2,7 +2,7 @@ import {
   normalizeThemeType,
   type ThemeType,
 } from "@/lib/workspace/workbenchContract";
-import type { AsterSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
 import type { ProjectType } from "@/lib/api/project";
 
 export function normalizeInitialTheme(value?: string): ThemeType {
@@ -13,7 +13,7 @@ export function deriveCurrentSessionRuntimeStatus(params: {
   isSending: boolean;
   queuedTurnCount: number;
   turns: Array<{ status: string }>;
-}): AsterSubagentSessionInfo["runtime_status"] | undefined {
+}): AgentSubagentSessionInfo["runtime_status"] | undefined {
   if (
     params.isSending ||
     params.turns.some((turn) => turn.status === "running")
@@ -39,7 +39,7 @@ export function deriveCurrentSessionRuntimeStatus(params: {
 
 export function deriveLatestTurnRuntimeStatus(
   turns: Array<{ status: string }>,
-): AsterSubagentSessionInfo["runtime_status"] | undefined {
+): AgentSubagentSessionInfo["runtime_status"] | undefined {
   switch (turns[turns.length - 1]?.status) {
     case "queued":
       return "queued";

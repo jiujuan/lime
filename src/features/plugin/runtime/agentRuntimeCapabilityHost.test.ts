@@ -223,12 +223,12 @@ describe("AgentRuntimeCapabilityHost", () => {
       turnId: "turn-standard",
       input: { projectId: "project-1" },
       expectedOutput: { artifactKind: "content_batch" },
-      turnConfig: {
-        provider_config: {
-          provider_name: "anthropic",
-          model_name: "claude-sonnet-4",
+      runtimeRequest: {
+        providerConfig: {
+          providerName: "anthropic",
+          modelName: "claude-sonnet-4",
         },
-        sandbox_policy: "workspace-write",
+        sandboxPolicy: "workspace-write",
       },
     });
     const snapshot = await sdk.agent.getTask(started.taskId);
@@ -245,16 +245,12 @@ describe("AgentRuntimeCapabilityHost", () => {
         sessionId: "session-standard",
         turnId: "turn-standard",
         runtimeOptions: expect.objectContaining({
-          hostOptions: {
-            asterChatRequest: expect.objectContaining({
-              turn_config: expect.objectContaining({
-                provider_config: {
-                  provider_name: "anthropic",
-                  model_name: "claude-sonnet-4",
-                },
-              }),
-            }),
-          },
+          runtimeRequest: expect.objectContaining({
+            providerConfig: {
+              providerName: "anthropic",
+              modelName: "claude-sonnet-4",
+            },
+          }),
         }),
       }),
     );
@@ -384,22 +380,22 @@ describe("AgentRuntimeCapabilityHost", () => {
       expectedOutput: { artifactKind: "content_table" },
       tools: ["image_generation"],
       humanReview: true,
-      providerPreference: "deepseek",
-      modelPreference: "deepseek-v4-flash",
-      turnConfig: {
-        provider_config: {
-          provider_id: "deepseek",
-          provider_name: "deepseek",
-          model_name: "deepseek-v4-flash",
+      runtimeRequest: {
+        providerConfig: {
+          providerId: "deepseek",
+          providerName: "deepseek",
+          modelName: "deepseek-v4-flash",
         },
-        reasoning_effort: "high",
-        thinking_enabled: true,
-        approval_policy: "on-request",
-        sandbox_policy: "workspace-write",
-        execution_strategy: "react",
-        web_search: true,
-        search_mode: "required",
-        system_prompt: "保留 Plugin 的 Claw 运行时提示",
+        providerPreference: "deepseek",
+        modelPreference: "deepseek-v4-flash",
+        reasoningEffort: "high",
+        thinkingEnabled: true,
+        approvalPolicy: "on-request",
+        sandboxPolicy: "workspace-write",
+        executionStrategy: "react",
+        webSearch: true,
+        searchMode: "required",
+        systemPrompt: "保留 Plugin 的 Claw 运行时提示",
         metadata: {
           harness: {
             source: "plugin",
@@ -440,21 +436,21 @@ describe("AgentRuntimeCapabilityHost", () => {
         taskKind: "content.scenario_planning",
         capabilityHints: ["image_generation"],
         humanReview: true,
-        providerPreference: "deepseek",
-        modelPreference: "deepseek-v4-flash",
-        turnConfig: expect.objectContaining({
-          provider_config: expect.objectContaining({
-            provider_id: "deepseek",
-            model_name: "deepseek-v4-flash",
+        runtimeRequest: expect.objectContaining({
+          providerConfig: expect.objectContaining({
+            providerId: "deepseek",
+            modelName: "deepseek-v4-flash",
           }),
-          reasoning_effort: "high",
-          thinking_enabled: true,
-          approval_policy: "on-request",
-          sandbox_policy: "workspace-write",
-          execution_strategy: "react",
-          web_search: true,
-          search_mode: "required",
-          system_prompt: "保留 Plugin 的 Claw 运行时提示",
+          providerPreference: "deepseek",
+          modelPreference: "deepseek-v4-flash",
+          reasoningEffort: "high",
+          thinkingEnabled: true,
+          approvalPolicy: "on-request",
+          sandboxPolicy: "workspace-write",
+          executionStrategy: "react",
+          webSearch: true,
+          searchMode: "required",
+          systemPrompt: "保留 Plugin 的 Claw 运行时提示",
         }),
         queueIfBusy: true,
         skipPreSubmitResume: true,

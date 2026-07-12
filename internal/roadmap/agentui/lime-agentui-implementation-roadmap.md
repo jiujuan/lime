@@ -47,7 +47,7 @@ Warp runtime fact sources
 - `src/components/agent/chat/hooks/useAgentSession.ts`
 - `src/components/agent/chat/components/MessageList.tsx`
 - `src/lib/api/agentRuntime/sessionClient.ts`
-- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
+- `lime-rs/src/commands/agent_cmd/command_api/runtime_api.rs`
 
 验收：
 

@@ -150,23 +150,23 @@ export function buildContentFactoryHostGenerationFixtureMarkdown(body) {
   ].join("\n");
 }
 
-export function contentFactoryHostGenerationAsterChatRequest(baseUrl) {
+export function contentFactoryHostGenerationAgentRuntimeRequest(baseUrl) {
   return {
-    provider_config: {
-      provider_id: PROVIDER_ID,
-      provider_name: PROVIDER_NAME,
-      model_name: DEFAULT_FIXTURE_MODEL,
-      api_key: DEFAULT_FIXTURE_API_KEY,
-      base_url: baseUrl,
-      tool_call_strategy: "native",
+    providerConfig: {
+      providerId: PROVIDER_ID,
+      providerName: PROVIDER_NAME,
+      modelName: DEFAULT_FIXTURE_MODEL,
+      apiKey: DEFAULT_FIXTURE_API_KEY,
+      baseUrl: baseUrl,
+      toolCallStrategy: "native",
     },
-    provider_preference: PROVIDER_ID,
-    model_preference: DEFAULT_FIXTURE_MODEL,
-    reasoning_effort: "low",
+    providerPreference: PROVIDER_ID,
+    modelPreference: DEFAULT_FIXTURE_MODEL,
+    reasoningEffort: "low",
   };
 }
 
-export function contentFactoryLiveHostGenerationAsterChatRequest({
+export function contentFactoryLiveHostGenerationAgentRuntimeRequest({
   providerId,
   providerName = "openai",
   model,
@@ -185,17 +185,17 @@ export function contentFactoryLiveHostGenerationAsterChatRequest({
     );
   }
   return {
-    provider_config: {
-      provider_id: normalizedProviderId,
-      provider_name: normalizedProviderName,
-      model_name: normalizedModel,
-      api_key: normalizedApiKey,
-      ...(normalizedBaseUrl ? { base_url: normalizedBaseUrl } : {}),
-      tool_call_strategy: "native",
+    providerConfig: {
+      providerId: normalizedProviderId,
+      providerName: normalizedProviderName,
+      modelName: normalizedModel,
+      apiKey: normalizedApiKey,
+      ...(normalizedBaseUrl ? { baseUrl: normalizedBaseUrl } : {}),
+      toolCallStrategy: "native",
     },
-    provider_preference: normalizedProviderId,
-    model_preference: normalizedModel,
-    reasoning_effort: normalizeText(reasoningEffort) || "low",
+    providerPreference: normalizedProviderId,
+    modelPreference: normalizedModel,
+    reasoningEffort: normalizeText(reasoningEffort) || "low",
   };
 }
 

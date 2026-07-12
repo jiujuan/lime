@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { ActionRequired, Message } from "../types";
@@ -233,7 +233,7 @@ describe("agentStreamResumeBinding", () => {
     };
     const listenerMapRef = {
       current: new Map<string, () => void>([
-        ["aster_stream_assistant-1", liveUnlisten],
+        ["agent_stream_assistant-1", liveUnlisten],
       ]),
     };
     const messages = { current: [] as Message[] };
@@ -242,7 +242,7 @@ describe("agentStreamResumeBinding", () => {
     const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
-      current: null as AsterSessionExecutionRuntime | null,
+      current: null as AgentSessionExecutionRuntime | null,
     };
     const currentTurnId = { current: null as string | null };
     let isSending = true;
@@ -290,7 +290,7 @@ describe("agentStreamResumeBinding", () => {
     expect(cleanup).toBeNull();
     expect(runtime.listenToTurnEvents).not.toHaveBeenCalled();
     expect(runtime.resumeThread).not.toHaveBeenCalled();
-    expect(listenerMapRef.current.get("aster_stream_assistant-1")).toBe(
+    expect(listenerMapRef.current.get("agent_stream_assistant-1")).toBe(
       liveUnlisten,
     );
     expect(activeStreamState.current).toBeNull();
@@ -312,7 +312,7 @@ describe("agentStreamResumeBinding", () => {
     const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
-      current: null as AsterSessionExecutionRuntime | null,
+      current: null as AgentSessionExecutionRuntime | null,
     };
     const currentTurnId = { current: null as string | null };
     let isSending = false;
@@ -325,7 +325,7 @@ describe("agentStreamResumeBinding", () => {
 
     rememberLocallyStartedAgentStreamBinding({
       assistantMsgId: "assistant-local-1",
-      eventName: "aster_stream_assistant-local-1",
+      eventName: "agent_stream_assistant-local-1",
       sessionId: "local-session-1",
       turnId: "local-turn-1",
     });
@@ -386,7 +386,7 @@ describe("agentStreamResumeBinding", () => {
     const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
-      current: null as AsterSessionExecutionRuntime | null,
+      current: null as AgentSessionExecutionRuntime | null,
     };
     const currentTurnId = { current: null as string | null };
     let isSending = false;
@@ -399,7 +399,7 @@ describe("agentStreamResumeBinding", () => {
 
     rememberLocallyInterruptedAgentStreamBinding({
       assistantMsgId: "assistant-interrupted-1",
-      eventName: "aster_stream_interrupted-1",
+      eventName: "agent_stream_interrupted-1",
       sessionId: "interrupted-session-1",
       turnId: "interrupted-turn-1",
     });
@@ -465,7 +465,7 @@ describe("agentStreamResumeBinding", () => {
     const queuedTurns = { current: [] as QueuedTurnSnapshot[] };
     const pendingActions = { current: [] as ActionRequired[] };
     const executionRuntime = {
-      current: null as AsterSessionExecutionRuntime | null,
+      current: null as AgentSessionExecutionRuntime | null,
     };
     const currentTurnId = { current: null as string | null };
     let isSending = false;

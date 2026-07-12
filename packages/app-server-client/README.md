@@ -119,7 +119,7 @@ invent a separate task read protocol. Apps that need task projections should
 derive them from the returned session, turns, and runtime events until App
 Server exposes a dedicated current method.
 
-This package does not import Lime Rust crates, Tauri commands, Aster DTOs, or
+This package does not import Lime Rust crates, Tauri commands, Agent DTOs, or
 renderer UI code. Electron apps should use it from main / preload boundaries and
 project events into their own renderer state.
 

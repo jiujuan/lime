@@ -115,7 +115,7 @@ opencode 不参与本 invariant。opencode 只在 `ContentPart / ModelCapability
 | --- | --- |
 | `current` | `lime-rs/crates/**`、App Server JSON-RPC、RuntimeCore / agent、ProjectionStore、read model、`src/lib/api/*`、GUI projection |
 | `current legacy-name` | `agentSession/*` 现有 v0 protocol namespace |
-| `compat / controlled residual` | `src/lib/api/agentRuntime.ts` thin barrel、Aster controlled adapter、DevBridge legacy policy |
+| `compat / controlled residual` | `src/lib/api/agentRuntime.ts` thin barrel、Agent controlled adapter、DevBridge legacy policy |
 | `test-only / retired guard` | `agent_runtime_*` 负向测试、contract guard、fixture |
 | `dead / forbidden-to-restore` | `lime-rs/src/**`、旧 Tauri command wrapper、旧 `agent_runtime_*` production surface、生产 mock fallback |
 

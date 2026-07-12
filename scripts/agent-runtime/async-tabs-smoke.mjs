@@ -21,7 +21,7 @@ function runVitest(label, args) {
 
 function main() {
   runVitest("刷新恢复与后台队列自动续跑", [
-    "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx",
+    "src/components/agent/chat/hooks/useAgentChat.test.tsx",
     "-t",
     "页面刷新恢复到排队会话时应自动恢复后台执行|切换到 running thread_read 时只恢复线程|切换话题时应恢复后端返回的排队项",
   ]);

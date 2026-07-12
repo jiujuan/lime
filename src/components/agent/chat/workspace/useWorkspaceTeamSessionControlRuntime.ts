@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { AsterSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
 import {
   isTeamWorkspaceActiveStatus,
   type TeamWorkspaceControlSummary,
@@ -23,7 +23,7 @@ function throwTeamSubagentControlUnavailable(message: string): never {
 
 interface UseWorkspaceTeamSessionControlRuntimeParams {
   sessionId?: string | null;
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  childSubagentSessions: AgentSubagentSessionInfo[];
   liveRuntimeBySessionId: Record<string, TeamWorkspaceLiveRuntimeState>;
   stopSending: () => Promise<void>;
 }

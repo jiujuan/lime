@@ -62,7 +62,7 @@ test("read_mcp_resource requires server and uri and rejects legacy input fields"
   );
 });
 
-test("legacy Lime/Aster MCP resource names fail closed before projection", () => {
+test("legacy Lime/Agent MCP resource names fail closed before projection", () => {
   assert.deepEqual(
     validateCodexMcpResourceToolSchema({
       toolName: "ReadMcpResourceTool",

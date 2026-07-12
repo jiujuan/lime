@@ -51,7 +51,7 @@ export interface ActivityLog {
   error?: string; // 错误信息
   workspaceId?: string; // 项目工作区ID
   sessionId?: string; // 会话ID
-  source?: "aster-chat"; // 日志来源
+  source?: "agent-chat"; // 日志来源
   correlationId?: string; // 关联ID（如 tool_id/request_id）
 }
 

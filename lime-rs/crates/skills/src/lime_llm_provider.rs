@@ -25,7 +25,7 @@ use crate::{LlmProvider, SkillError};
 /// Lime LLM Provider
 ///
 /// 使用 API Key Provider 选择凭证并调用 LLM API。
-/// 实现 aster-rust 定义的 LlmProvider trait。
+/// 实现 agent-rust 定义的 LlmProvider trait。
 pub struct LimeLlmProvider {
     /// API Key Provider 服务
     api_key_service: Arc<ApiKeyProviderService>,

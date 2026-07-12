@@ -28,7 +28,6 @@ export type DevBridgeCommandTimeoutProfile =
  * 测试夹具只能通过 invokeMockOnly，不能由生产 invoke 自动回退 mock。
  */
 const bridgeTruthCommands = new Set<string>([
-  "agent_init",
   "open_external_url",
   "open_update_window",
   "start_oem_cloud_oauth_callback_bridge",
@@ -107,7 +106,6 @@ const devBridgeReadRetryCommands = new Set<string>([
 ]);
 
 const devBridgeStartupTruthCommands = new Set([
-  "agent_init",
   "workspace_ensure_ready",
   "workspace_ensure_default_ready",
 ]);
@@ -278,7 +276,7 @@ const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
 
 const bridgeTruthEventPrefixes = [
   "voice-model-download-progress",
-  "aster_stream_",
+  "agent_stream_",
   "agent_subagent_status:",
   "agent_subagent_stream:",
   "embedded-browser-view-",

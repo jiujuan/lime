@@ -1,4 +1,4 @@
-use super::{raw_string_field, string_field, AgentEvent, StoredSession};
+use super::{string_field, AgentEvent, StoredSession};
 use app_server_protocol::{
     AgentSessionActionScope, AgentSessionApprovalDecision, AgentSessionTurnStartParams,
     RuntimeOptions,
@@ -86,8 +86,9 @@ pub(super) fn remove_session(cache: &mut SessionApprovalCache, session_id: &str)
 pub(super) fn apply_hint_to_turn_start(
     cache: &SessionApprovalCache,
     params: &mut AgentSessionTurnStartParams,
+    session_workspace_id: Option<&str>,
 ) -> Option<SessionApprovalCacheEntry> {
-    let key = key_from_runtime_options(params.runtime_options.as_ref())?;
+    let key = key_from_runtime_options(params.runtime_options.as_ref(), session_workspace_id)?;
     let entry = cache
         .get(&params.session_id)?
         .iter()
@@ -98,7 +99,8 @@ pub(super) fn apply_hint_to_turn_start(
     let runtime_options = params
         .runtime_options
         .get_or_insert_with(RuntimeOptions::default);
-    let metadata = runtime_options.metadata.get_or_insert_with(|| json!({}));
+    let runtime_request = runtime_options.runtime_request.as_mut()?;
+    let metadata = runtime_request.metadata.get_or_insert_with(|| json!({}));
     let metadata_object = ensure_object(metadata);
     let harness = ensure_nested_object(metadata_object, "harness");
     harness.insert(CACHE_METADATA_KEY.to_string(), entry_metadata(&entry));
@@ -175,28 +177,19 @@ fn key_from_action_required_event(event: &AgentEvent) -> Option<SessionApprovalC
     )
 }
 
-fn key_from_runtime_options(options: Option<&RuntimeOptions>) -> Option<SessionApprovalCacheKey> {
+fn key_from_runtime_options(
+    options: Option<&RuntimeOptions>,
+    session_workspace_id: Option<&str>,
+) -> Option<SessionApprovalCacheKey> {
     let options = options?;
-    let host_options = options.host_options.as_ref()?;
-    let host_request = host_options.get("asterChatRequest")?;
-    let metadata = host_metadata(host_request).or(options.metadata.as_ref())?;
-    let workspace_id = raw_string_field(host_request, &["workspace_id", "workspaceId"])
-        .or_else(|| metadata_string_from_pointers(metadata, &["/workspaceId", "/workspace_id"]));
-    let working_dir = host_request_string(
-        host_request,
-        &[
-            "/turn_config/workingDir",
-            "/turn_config/working_dir",
-            "/turnConfig/workingDir",
-            "/turnConfig/workingDirectory",
-            "/workingDir",
-            "/working_dir",
-            "/workingDirectory",
-            "/working_directory",
-            "/cwd",
-        ],
-    )
-    .or_else(|| {
+    let runtime_request = options.runtime_request.as_ref()?;
+    let metadata = runtime_request.metadata.as_ref()?;
+    let workspace_id = runtime_request
+        .workspace_id
+        .clone()
+        .or_else(|| metadata_string_from_pointers(metadata, &["/workspaceId", "/workspace_id"]))
+        .or_else(|| normalize_string(session_workspace_id));
+    let working_dir = runtime_request.working_dir.clone().or_else(|| {
         metadata_string_from_pointers(
             metadata,
             &[
@@ -213,36 +206,25 @@ fn key_from_runtime_options(options: Option<&RuntimeOptions>) -> Option<SessionA
             ],
         )
     });
-    let project_root = host_request_string(
-        host_request,
-        &[
-            "/turn_config/projectRoot",
-            "/turn_config/project_root",
-            "/turn_config/workspaceRoot",
-            "/turn_config/workspace_root",
-            "/turnConfig/projectRoot",
-            "/turnConfig/workspaceRoot",
-            "/projectRoot",
-            "/project_root",
-            "/workspaceRoot",
-            "/workspace_root",
-        ],
-    )
-    .or_else(|| {
-        metadata_string_from_pointers(
-            metadata,
-            &[
-                "/workspaceRoot",
-                "/workspace_root",
-                "/projectRoot",
-                "/project_root",
-                "/harness/workspaceRoot",
-                "/harness/workspace_root",
-                "/harness/projectRoot",
-                "/harness/project_root",
-            ],
-        )
-    });
+    let project_root = runtime_request
+        .project_root
+        .clone()
+        .or_else(|| runtime_request.workspace_root.clone())
+        .or_else(|| {
+            metadata_string_from_pointers(
+                metadata,
+                &[
+                    "/workspaceRoot",
+                    "/workspace_root",
+                    "/projectRoot",
+                    "/project_root",
+                    "/harness/workspaceRoot",
+                    "/harness/workspace_root",
+                    "/harness/projectRoot",
+                    "/harness/project_root",
+                ],
+            )
+        });
     let contract_key = contract_key_from_metadata(metadata)?;
     let scope = scope_from_parts(
         contract_key.clone(),
@@ -255,8 +237,8 @@ fn key_from_runtime_options(options: Option<&RuntimeOptions>) -> Option<SessionA
     key_from_parts(
         ACTION_KIND_PERMISSION_PREFLIGHT.to_string(),
         "browser_control".to_string(),
-        raw_string_field(host_request, &["approval_policy", "approvalPolicy"])?,
-        raw_string_field(host_request, &["sandbox_policy", "sandboxPolicy"])?,
+        runtime_request.approval_policy.clone()?,
+        runtime_request.sandbox_policy.clone()?,
         contract_key,
         scope,
     )
@@ -360,22 +342,6 @@ fn contract_key_from_metadata(metadata: &Value) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-}
-
-fn host_metadata(host_request: &Value) -> Option<&Value> {
-    host_request
-        .pointer("/turn_config/metadata")
-        .or_else(|| host_request.pointer("/turnConfig/metadata"))
-        .or_else(|| host_request.get("metadata"))
-}
-
-fn host_request_string(host_request: &Value, pointers: &[&str]) -> Option<String> {
-    pointers.iter().find_map(|pointer| {
-        host_request
-            .pointer(pointer)
-            .and_then(Value::as_str)
-            .and_then(|value| normalize_string(Some(value)))
-    })
 }
 
 fn metadata_string_from_pointers(metadata: &Value, pointers: &[&str]) -> Option<String> {
@@ -525,5 +491,46 @@ fn scope_metadata(scope: &SessionApprovalCacheScope) -> Value {
 fn insert_optional_string(object: &mut Map<String, Value>, key: &str, value: Option<&String>) {
     if let Some(value) = value {
         object.insert(key.to_string(), Value::String(value.clone()));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_server_protocol::RuntimeRequest;
+
+    #[test]
+    fn runtime_cache_key_uses_session_workspace_when_request_omits_it() {
+        let metadata = json!({
+            "harness": {
+                "browser_launch_url": "https://example.com/approval-session-cache",
+                "browser_assist": {
+                    "runtime_contract": {
+                        "contract_key": "browser_control"
+                    }
+                }
+            }
+        });
+        let options = RuntimeOptions {
+            runtime_request: Some(RuntimeRequest {
+                approval_policy: Some("on-request".to_string()),
+                sandbox_policy: Some("workspace-write".to_string()),
+                metadata: Some(metadata),
+                ..RuntimeRequest::default()
+            }),
+            ..RuntimeOptions::default()
+        };
+
+        let key = key_from_runtime_options(Some(&options), Some("workspace-permission"))
+            .expect("browser control cache key");
+
+        assert_eq!(
+            key.scope.workspace_id.as_deref(),
+            Some("workspace-permission")
+        );
+        assert_eq!(
+            key.scope.network_host.as_deref(),
+            Some("https://example.com")
+        );
     }
 }

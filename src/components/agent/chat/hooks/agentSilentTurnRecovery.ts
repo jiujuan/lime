@@ -1,4 +1,4 @@
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 
 const SILENT_TURN_RECOVERY_GRACE_MS = 15_000;
@@ -59,7 +59,7 @@ function isTerminalTurnStatus(status: unknown): boolean {
 }
 
 export function hasRecoverableTerminalTurnActivity(
-  detail: Pick<AsterSessionDetail, "turns">,
+  detail: Pick<AgentSessionDetail, "turns">,
   requestStartedAt: number,
   promptText: string,
   turnId?: string | null,
@@ -98,7 +98,7 @@ export function hasRecoverableTerminalTurnActivity(
 }
 
 export function hasRecoverableSilentTurnActivity(
-  detail: Pick<AsterSessionDetail, "turns" | "items" | "queued_turns">,
+  detail: Pick<AgentSessionDetail, "turns" | "items" | "queued_turns">,
   requestStartedAt: number,
   promptText: string,
 ): boolean {

@@ -43,8 +43,8 @@ mod session_store_subagent_context;
 mod session_store_subagent_projection;
 #[path = "session_store_subagent_query.rs"]
 mod session_store_subagent_query;
-#[path = "session_store_todo_aster_adapter.rs"]
-mod session_store_todo_aster_adapter;
+#[path = "session_store_todo_projection.rs"]
+mod session_store_todo_projection;
 #[path = "session_store_types.rs"]
 mod session_store_types;
 
@@ -62,14 +62,13 @@ use self::session_store_runtime_projection::build_runtime_session_info;
 use self::session_store_subagent_context::{
     apply_runtime_status_to_child_subagent_session, build_child_subagent_session_summaries,
     build_child_subagent_session_summary, build_subagent_parent_context,
-    resolve_child_subagent_runtime_status_from_turns, should_load_runtime_overlay,
-    should_load_runtime_overlay_at, should_load_subagent_runtime_context,
+    resolve_child_subagent_runtime_status_from_turns, should_load_subagent_runtime_context,
     ChildSubagentRuntimeTurnProjection,
 };
 pub use self::session_store_subagent_context::{
     ChildSubagentRuntimeStatus, ChildSubagentSession, SubagentParentContext,
 };
-use self::session_store_todo_aster_adapter::load_session_todo_items_from_conn;
+use self::session_store_todo_projection::load_session_todo_items_from_conn;
 use self::session_store_types::{
     normalize_optional_nonempty_body, normalize_optional_text, CreateSessionRecordInput,
 };

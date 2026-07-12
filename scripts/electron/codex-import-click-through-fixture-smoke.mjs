@@ -335,12 +335,8 @@ function summarizeBackendLedger(backendLedger, sessionId) {
     backendTurnId: backendTurnStart?.request?.turn?.turnId ?? null,
     backendInputText: backendTurnStart?.request?.input?.text ?? null,
     backendMetadataImported:
-      backendRuntimeOptions?.metadata?.imported === true ||
-      backendRuntimeOptions?.hostOptions?.asterChatRequest?.turn_config
-        ?.metadata?.imported === true,
-    backendCwd:
-      backendRuntimeOptions?.hostOptions?.asterChatRequest?.turn_config?.cwd ??
-      null,
+      backendRuntimeOptions?.runtimeRequest?.metadata?.imported === true,
+    backendCwd: backendRuntimeOptions?.runtimeRequest?.workingDir ?? null,
     backendSessionMatches:
       backendTurnStart?.request?.session?.sessionId === sessionId,
   };

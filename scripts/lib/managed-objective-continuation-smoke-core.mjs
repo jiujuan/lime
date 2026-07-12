@@ -110,8 +110,6 @@ export function providerRuntimeName(provider) {
   return String(
     provider?.runtime_provider_name ||
       provider?.runtimeProviderName ||
-      provider?.aster_provider_name ||
-      provider?.asterProviderName ||
       provider?.type ||
       provider?.provider_type ||
       provider?.providerType ||
@@ -392,29 +390,6 @@ export async function readAgentSessionDetailCurrent(
   };
 }
 
-function normalizeTurnConfig(turnConfig = {}) {
-  const config =
-    turnConfig && typeof turnConfig === "object" && !Array.isArray(turnConfig)
-      ? turnConfig
-      : {};
-  return {
-    providerPreference:
-      config.providerPreference ?? config.provider_preference ?? undefined,
-    modelPreference:
-      config.modelPreference ?? config.model_preference ?? undefined,
-    providerConfig:
-      config.providerConfig ?? config.provider_config ?? undefined,
-    approvalPolicy:
-      config.approvalPolicy ?? config.approval_policy ?? undefined,
-    sandboxPolicy: config.sandboxPolicy ?? config.sandbox_policy ?? undefined,
-    metadata: config.metadata ?? undefined,
-    executionStrategy:
-      config.executionStrategy ?? config.execution_strategy ?? undefined,
-    webSearch: config.webSearch ?? config.web_search ?? undefined,
-    searchMode: config.searchMode ?? config.search_mode ?? undefined,
-  };
-}
-
 function compactRecord(record) {
   return Object.fromEntries(
     Object.entries(record).filter(([, value]) => value !== undefined),
@@ -429,41 +404,20 @@ export async function startAgentSessionTurnCurrent(
     message,
     eventName,
     turnId,
-    turnConfig = {},
+    runtimeRequest = {},
     queueIfBusy,
     queuedTurnId,
     skipPreSubmitResume = true,
   },
 ) {
-  const normalizedConfig = normalizeTurnConfig(turnConfig);
-  const asterChatRequest = compactRecord({
-    message,
-    session_id: sessionId,
-    workspace_id: workspaceId,
-    event_name: eventName,
-    turn_id: turnId,
-    provider_preference: normalizedConfig.providerPreference,
-    model_preference: normalizedConfig.modelPreference,
-    provider_config: normalizedConfig.providerConfig,
-    approval_policy: normalizedConfig.approvalPolicy,
-    sandbox_policy: normalizedConfig.sandboxPolicy,
-    metadata: normalizedConfig.metadata,
-    execution_strategy: normalizedConfig.executionStrategy,
-    web_search: normalizedConfig.webSearch,
-    search_mode: normalizedConfig.searchMode,
-    queue_if_busy: queueIfBusy,
-    queued_turn_id: queuedTurnId,
-  });
   const runtimeOptions = compactRecord({
     stream: true,
     eventName,
-    providerPreference: normalizedConfig.providerPreference,
-    modelPreference: normalizedConfig.modelPreference,
-    metadata: normalizedConfig.metadata,
     queuedTurnId,
-    hostOptions: {
-      asterChatRequest,
-    },
+    runtimeRequest: compactRecord({
+      workspaceId,
+      ...runtimeRequest,
+    }),
   });
   return invokeAppServerMethod(
     options,

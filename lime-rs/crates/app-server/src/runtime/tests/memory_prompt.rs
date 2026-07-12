@@ -89,13 +89,10 @@ async fn start_turn_injects_workspace_memory_summary_context() {
             .with_memory_store_read_response(Ok(read_response("Prefer concise answers.\n", false))),
     );
     let runtime_options = Some(RuntimeOptions {
-        host_options: Some(json!({
-            "asterChatRequest": {
-                "turn_config": {
-                    "workspaceRoot": "/tmp/workspace-memory"
-                }
-            }
-        })),
+        runtime_request: Some(RuntimeRequest {
+            workspace_root: Some("/tmp/workspace-memory".to_string()),
+            ..RuntimeRequest::default()
+        }),
         ..RuntimeOptions::default()
     });
 
@@ -109,7 +106,7 @@ async fn start_turn_injects_workspace_memory_summary_context() {
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref())
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("runtime metadata");
     let context = metadata
         .get(MEMORY_PROMPT_CONTEXT_KEY)
@@ -190,7 +187,7 @@ async fn start_turn_skips_empty_memory_summary() {
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref());
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata);
     assert!(metadata
         .and_then(|metadata| metadata.get(MEMORY_PROMPT_CONTEXT_KEY))
         .is_none());
@@ -213,7 +210,7 @@ async fn start_turn_does_not_block_when_memory_summary_read_fails() {
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref());
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata);
     assert!(metadata
         .and_then(|metadata| metadata.get(MEMORY_PROMPT_CONTEXT_KEY))
         .is_none());
@@ -239,7 +236,7 @@ async fn start_turn_rejects_secret_like_memory_summary_packet() {
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref())
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("runtime metadata");
     let telemetry = &metadata[CONTEXT_PACKET_TELEMETRY_KEY];
     assert_eq!(telemetry["admittedCount"].as_u64(), Some(0));
@@ -269,7 +266,7 @@ async fn start_turn_rejects_secret_like_memory_summary_without_sidecar() {
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref())
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("runtime metadata");
     let context = metadata
         .get(MEMORY_PROMPT_CONTEXT_KEY)

@@ -189,7 +189,7 @@ runtime:
 
 ### 宿主工具请求
 
-`hostToolRequests` 是 worker 产物里的通用受控工具请求，不是内容工厂私有搜索协议。适用场景是：worker 需要宿主调用已注册的 Aster 工具来补齐证据，但插件不能直接获得宿主凭证、Electron IPC、Provider key 或工具 registry。
+`hostToolRequests` 是 worker 产物里的通用受控工具请求，不是内容工厂私有搜索协议。适用场景是：worker 需要宿主调用已注册的 Agent 工具来补齐证据，但插件不能直接获得宿主凭证、Electron IPC、Provider key 或工具 registry。
 
 推荐 worker 在 workspace patch 对象的 `source` 中声明：
 
@@ -213,7 +213,7 @@ runtime:
 
 固定规则：
 
-- 宿主只执行当前 Aster registry 已注册并允许的工具；不得在 App Server 里新增一套 `WebSearch` / `WebFetch` 私有实现。
+- 宿主只执行当前 Agent registry 已注册并允许的工具；不得在 App Server 里新增一套 `WebSearch` / `WebFetch` 私有实现。
 - 工具事件统一标记 `source=workspace_patch_host_tool_requests`，并把 `workflowKey` 原样写入事件 metadata，便于审计和历史恢复。
 - 工具结果必须回填为 `hostToolEvidence / hostToolStatus`；WebSearch 兼容场景可额外保留 `searchEvidence / hostSearchEvidence / hostSearchStatus` 给历史文章 artifact 读取。
 - workflow step、工具事件和 hook progress 只进入 read model、artifact metadata、evidence pack 和 JSONL 审计，不作为右侧工作区固定 UI 面板。

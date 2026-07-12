@@ -89,7 +89,7 @@ const TRANSIENT_SNAPSHOT_TTL_MS = 10 * 60 * 1000;
 const PERSISTED_SNAPSHOT_TTL_MS = 12 * 60 * 60 * 1000;
 const SNAPSHOT_STALE_GRACE_MS = 2 * 60 * 1000;
 const PERSISTED_SNAPSHOT_STALE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
-const SNAPSHOT_INDEX_STORAGE_SUFFIX = "aster_session_snapshots_index";
+const SNAPSHOT_INDEX_STORAGE_SUFFIX = "agent_session_snapshots_index";
 
 interface AgentSessionCachedSnapshotTrimLimits {
   maxMessages: number;
@@ -711,7 +711,7 @@ export function loadAgentSessionCachedSnapshot(
   options: LoadAgentSessionCachedSnapshotOptions = {},
 ): AgentSessionCachedSnapshot | null {
   const nowMs = options.nowMs ?? Date.now();
-  const cacheKey = getScopedStorageKey(workspaceId, "aster_session_snapshots");
+  const cacheKey = getScopedStorageKey(workspaceId, "agent_session_snapshots");
   const snapshotMap = loadTransient<Record<string, unknown>>(cacheKey, {});
   const transientSnapshot = normalizeCachedSnapshotRecord(
     snapshotMap[sessionId],
@@ -734,7 +734,7 @@ export function loadAgentSessionCachedSnapshot(
 
   const persistedCacheKey = getScopedStorageKey(
     workspaceId,
-    "aster_session_snapshots_persisted",
+    "agent_session_snapshots_persisted",
   );
   const persistedSnapshotMap = loadPersisted<Record<string, unknown>>(
     persistedCacheKey,
@@ -767,7 +767,7 @@ export function clearAgentSessionCachedSnapshot(
   workspaceId: string,
   sessionId: string,
 ): void {
-  const cacheKey = getScopedStorageKey(workspaceId, "aster_session_snapshots");
+  const cacheKey = getScopedStorageKey(workspaceId, "agent_session_snapshots");
   removeCachedSnapshotRecord(
     workspaceId,
     cacheKey,
@@ -778,7 +778,7 @@ export function clearAgentSessionCachedSnapshot(
 
   const persistedCacheKey = getScopedStorageKey(
     workspaceId,
-    "aster_session_snapshots_persisted",
+    "agent_session_snapshots_persisted",
   );
   removeCachedSnapshotRecord(
     workspaceId,
@@ -797,10 +797,10 @@ export function saveAgentSessionCachedSnapshot(
   options: SaveAgentSessionCachedSnapshotOptions = {},
 ): void {
   const nowMs = options.nowMs ?? Date.now();
-  const cacheKey = getScopedStorageKey(workspaceId, "aster_session_snapshots");
+  const cacheKey = getScopedStorageKey(workspaceId, "agent_session_snapshots");
   const persistedCacheKey = getScopedStorageKey(
     workspaceId,
-    "aster_session_snapshots_persisted",
+    "agent_session_snapshots_persisted",
   );
   const currentMap = loadTransient<Record<string, unknown>>(cacheKey, {});
   const persistedMap = loadPersisted<Record<string, unknown>>(
@@ -924,18 +924,18 @@ export function getAgentSessionScopedKeys(
   workspaceId: string,
 ): AgentSessionScopedKeys {
   return {
-    currentSessionKey: getScopedStorageKey(workspaceId, "aster_curr_sessionId"),
-    messagesKey: getScopedStorageKey(workspaceId, "aster_messages"),
+    currentSessionKey: getScopedStorageKey(workspaceId, "agent_curr_sessionId"),
+    messagesKey: getScopedStorageKey(workspaceId, "agent_messages"),
     persistedSessionKey: getScopedStorageKey(
       workspaceId,
-      "aster_last_sessionId",
+      "agent_last_sessionId",
     ),
     sessionSnapshotsKey: getScopedStorageKey(
       workspaceId,
-      "aster_session_snapshots",
+      "agent_session_snapshots",
     ),
-    turnsKey: getScopedStorageKey(workspaceId, "aster_thread_turns"),
-    itemsKey: getScopedStorageKey(workspaceId, "aster_thread_items"),
-    currentTurnKey: getScopedStorageKey(workspaceId, "aster_curr_turnId"),
+    turnsKey: getScopedStorageKey(workspaceId, "agent_thread_turns"),
+    itemsKey: getScopedStorageKey(workspaceId, "agent_thread_items"),
+    currentTurnKey: getScopedStorageKey(workspaceId, "agent_curr_turnId"),
   };
 }

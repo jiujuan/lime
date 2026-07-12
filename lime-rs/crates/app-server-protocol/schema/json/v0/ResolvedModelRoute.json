@@ -227,10 +227,10 @@
         "direct_provider_config",
         "explicit",
         "fallback",
-        "host_options",
         "oem_policy",
         "profile_slot",
         "runtime_options",
+        "runtime_request",
         "session_default",
         "task"
       ],

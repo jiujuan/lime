@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import {
   formatSidebarSessionMeta,
   resolveSidebarSessionTitle,
@@ -8,8 +8,8 @@ import {
 const NOW_MS = Date.UTC(2026, 4, 10, 12, 0, 0);
 
 function buildSession(
-  overrides: Partial<AsterSessionInfo> = {},
-): AsterSessionInfo {
+  overrides: Partial<AgentSessionInfo> = {},
+): AgentSessionInfo {
   return {
     id: "session-1",
     name: "最近会话",

@@ -2,13 +2,13 @@ import { normalizeLegacyToolSurfaceName } from "../agentTextNormalization";
 import { normalizeQueuedTurnSnapshots } from "../queuedTurn";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
 } from "./types";
 
 export function normalizeSubagentSessionInfo(
-  session: AsterSubagentSessionInfo,
-): AsterSubagentSessionInfo {
+  session: AgentSubagentSessionInfo,
+): AgentSubagentSessionInfo {
   return {
     ...session,
     origin_tool: normalizeLegacyToolSurfaceName(session.origin_tool),
@@ -16,8 +16,8 @@ export function normalizeSubagentSessionInfo(
 }
 
 export function normalizeSubagentParentContext(
-  context?: AsterSubagentParentContext | null,
-): AsterSubagentParentContext | undefined {
+  context?: AgentSubagentParentContext | null,
+): AgentSubagentParentContext | undefined {
   if (!context) {
     return undefined;
   }

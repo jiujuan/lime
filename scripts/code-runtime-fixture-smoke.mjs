@@ -523,20 +523,19 @@ function appServerEvidenceSummary(evidenceExport) {
   };
 }
 
-function buildAsterChatRequest({
+function buildRuntimeRequest({
   fixture,
-  message,
-  sessionId,
   turnId,
   workspaceId,
 }) {
-  const turnConfig = {
-    provider_config: fixture.provider.providerConfig,
-    provider_preference: fixture.provider.providerName,
-    model_preference: fixture.provider.modelPreference,
-    approval_policy: "never",
-    sandbox_policy: "danger-full-access",
-    execution_strategy: "react",
+  return {
+    providerConfig: fixture.provider.providerConfig,
+    providerPreference: fixture.provider.providerPreference,
+    modelPreference: fixture.provider.modelPreference,
+    approvalPolicy: "never",
+    sandboxPolicy: "danger-full-access",
+    workspaceId,
+    executionStrategy: "react",
     metadata: {
       harness: {
         access_mode: "full-access",
@@ -547,22 +546,6 @@ function buildAsterChatRequest({
         },
       },
     },
-  };
-  return {
-    message,
-    session_id: sessionId,
-    event_name: `code_runtime_fixture_${turnId}`,
-    provider_config: turnConfig.provider_config,
-    provider_preference: fixture.provider.providerPreference,
-    model_preference: turnConfig.model_preference,
-    approval_policy: turnConfig.approval_policy,
-    sandbox_policy: turnConfig.sandbox_policy,
-    workspace_id: workspaceId,
-    execution_strategy: turnConfig.execution_strategy,
-    metadata: turnConfig.metadata,
-    turn_config: turnConfig,
-    turn_id: turnId,
-    queue_if_busy: false,
   };
 }
 
@@ -713,10 +696,8 @@ async function runSmoke(options) {
     const turnId = `code-runtime-fixture-${Date.now()}-${process.pid}`;
     const turnMessage =
       "请修复这个 TypeScript fixture，让 greeting() 返回 Hello Lime Runtime，然后运行一个最小校验命令。";
-    const asterChatRequest = buildAsterChatRequest({
+    const runtimeRequest = buildRuntimeRequest({
       fixture,
-      message: turnMessage,
-      sessionId,
       turnId,
       workspaceId,
     });
@@ -731,11 +712,8 @@ async function runSmoke(options) {
         },
         runtimeOptions: {
           stream: true,
-          eventName: asterChatRequest.event_name,
-          metadata: asterChatRequest.metadata,
-          hostOptions: {
-            asterChatRequest,
-          },
+          eventName: `code_runtime_fixture_${turnId}`,
+          runtimeRequest,
         },
         queueIfBusy: false,
         skipPreSubmitResume: true,

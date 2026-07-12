@@ -3,9 +3,15 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+mod in_memory;
+mod sqlite;
+
+pub use in_memory::InMemoryRuntimeQueueStore;
+pub use sqlite::SqliteRuntimeQueueStore;
+
 pub type RuntimeQueueResult<T> = Result<T, String>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeQueuedTurn {
     pub queued_turn_id: String,
     pub session_id: String,
@@ -319,144 +325,6 @@ impl RuntimeQueueService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::future::{ready, FutureExt};
-
-    #[derive(Default)]
-    struct InMemoryRuntimeQueueStore {
-        queued_turns: Mutex<Vec<RuntimeQueuedTurn>>,
-    }
-
-    impl InMemoryRuntimeQueueStore {
-        fn new() -> Self {
-            Self::default()
-        }
-    }
-
-    impl RuntimeQueueStore for InMemoryRuntimeQueueStore {
-        fn enqueue_turn(
-            &self,
-            queued_turn: RuntimeQueuedTurn,
-        ) -> BoxFuture<'_, RuntimeQueueResult<RuntimeQueuedTurn>> {
-            match self.queued_turns.lock() {
-                Ok(mut queued_turns) => queued_turns.push(queued_turn.clone()),
-                Err(error) => error.into_inner().push(queued_turn.clone()),
-            }
-            ready(Ok(queued_turn)).boxed()
-        }
-
-        fn list_queued_turns<'a>(
-            &'a self,
-            session_id: &'a str,
-        ) -> BoxFuture<'a, RuntimeQueueResult<Vec<RuntimeQueuedTurn>>> {
-            let queued_turns = match self.queued_turns.lock() {
-                Ok(queued_turns) => queued_turns
-                    .iter()
-                    .filter(|queued_turn| queued_turn.session_id == session_id)
-                    .cloned()
-                    .collect(),
-                Err(error) => error
-                    .into_inner()
-                    .iter()
-                    .filter(|queued_turn| queued_turn.session_id == session_id)
-                    .cloned()
-                    .collect(),
-            };
-            ready(Ok(queued_turns)).boxed()
-        }
-
-        fn list_queued_turn_session_ids(&self) -> BoxFuture<'_, RuntimeQueueResult<Vec<String>>> {
-            let mut session_ids = match self.queued_turns.lock() {
-                Ok(queued_turns) => queued_turns
-                    .iter()
-                    .map(|queued_turn| queued_turn.session_id.clone())
-                    .collect::<Vec<_>>(),
-                Err(error) => error
-                    .into_inner()
-                    .iter()
-                    .map(|queued_turn| queued_turn.session_id.clone())
-                    .collect::<Vec<_>>(),
-            };
-            session_ids.sort();
-            session_ids.dedup();
-            ready(Ok(session_ids)).boxed()
-        }
-
-        fn remove_queued_turn<'a>(
-            &'a self,
-            queued_turn_id: &'a str,
-        ) -> BoxFuture<'a, RuntimeQueueResult<Option<RuntimeQueuedTurn>>> {
-            let removed = match self.queued_turns.lock() {
-                Ok(mut queued_turns) => queued_turns
-                    .iter()
-                    .position(|queued_turn| queued_turn.queued_turn_id == queued_turn_id)
-                    .map(|index| queued_turns.remove(index)),
-                Err(error) => {
-                    let mut queued_turns = error.into_inner();
-                    queued_turns
-                        .iter()
-                        .position(|queued_turn| queued_turn.queued_turn_id == queued_turn_id)
-                        .map(|index| queued_turns.remove(index))
-                }
-            };
-            ready(Ok(removed)).boxed()
-        }
-
-        fn take_next_queued_turn<'a>(
-            &'a self,
-            session_id: &'a str,
-        ) -> BoxFuture<'a, RuntimeQueueResult<Option<RuntimeQueuedTurn>>> {
-            let next = match self.queued_turns.lock() {
-                Ok(mut queued_turns) => queued_turns
-                    .iter()
-                    .position(|queued_turn| queued_turn.session_id == session_id)
-                    .map(|index| queued_turns.remove(index)),
-                Err(error) => {
-                    let mut queued_turns = error.into_inner();
-                    queued_turns
-                        .iter()
-                        .position(|queued_turn| queued_turn.session_id == session_id)
-                        .map(|index| queued_turns.remove(index))
-                }
-            };
-            ready(Ok(next)).boxed()
-        }
-
-        fn clear_queued_turns<'a>(
-            &'a self,
-            session_id: &'a str,
-        ) -> BoxFuture<'a, RuntimeQueueResult<Vec<RuntimeQueuedTurn>>> {
-            let cleared = match self.queued_turns.lock() {
-                Ok(mut queued_turns) => {
-                    let mut cleared = Vec::new();
-                    let mut retained = Vec::new();
-                    for queued_turn in queued_turns.drain(..) {
-                        if queued_turn.session_id == session_id {
-                            cleared.push(queued_turn);
-                        } else {
-                            retained.push(queued_turn);
-                        }
-                    }
-                    *queued_turns = retained;
-                    cleared
-                }
-                Err(error) => {
-                    let mut queued_turns = error.into_inner();
-                    let mut cleared = Vec::new();
-                    let mut retained = Vec::new();
-                    for queued_turn in queued_turns.drain(..) {
-                        if queued_turn.session_id == session_id {
-                            cleared.push(queued_turn);
-                        } else {
-                            retained.push(queued_turn);
-                        }
-                    }
-                    *queued_turns = retained;
-                    cleared
-                }
-            };
-            ready(Ok(cleared)).boxed()
-        }
-    }
 
     fn queued_turn(session_id: &str, queued_turn_id: &str, created_at: i64) -> RuntimeQueuedTurn {
         RuntimeQueuedTurn {

@@ -1,4 +1,4 @@
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import {
   hasRunningSessionOverviewActivity,
   type ThreadReadActivityOptions,
@@ -62,7 +62,7 @@ function timestampToDate(value?: number): Date {
 }
 
 function resolveUnfinishedStatus(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   options: ThreadReadActivityOptions = {},
 ): AgentUnfinishedSessionStatus | null {
   const threadStatus = normalizeRuntimeStatus(session.thread_status);
@@ -122,7 +122,7 @@ function resolveUnfinishedActionLabel(
 }
 
 export function resolveUnfinishedSessionProjection(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   options: ThreadReadActivityOptions = {},
 ): AgentUnfinishedSessionProjection | null {
   const sessionId = session.id?.trim();
@@ -163,7 +163,7 @@ export function resolveUnfinishedSessionProjection(
 }
 
 export function selectMostRecentUnfinishedSessionProjection(
-  sessions: AsterSessionInfo[],
+  sessions: AgentSessionInfo[],
   options: ThreadReadActivityOptions = {},
 ): AgentUnfinishedSessionProjection | null {
   const candidates = sessions

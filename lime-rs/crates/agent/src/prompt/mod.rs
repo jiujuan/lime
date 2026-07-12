@@ -1,6 +1,6 @@
 //! System Prompt 模块
 //!
-//! 为 Aster Agent 提供 System Prompt 配置
+//! 为 Agent Agent 提供 System Prompt 配置
 //! 提供模块化的提示词组件
 //!
 //! ## 模块结构

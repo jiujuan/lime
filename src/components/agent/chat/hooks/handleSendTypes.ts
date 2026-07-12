@@ -1,5 +1,5 @@
 import type { AssistantDraftState, SlashSkillRequest } from "./agentChatShared";
-import type { AgentRuntimeWebSearchMode } from "@/lib/api/agentRuntime";
+import type { RuntimeSearchMode } from "@/lib/api/agentRuntime";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import type { InterruptedInputDraftSnapshot } from "./agentStreamInputRestoreTypes";
@@ -25,7 +25,7 @@ export interface HandleSendOptions {
   modelOverride?: string;
   reasoningEffort?: string;
   systemPromptOverride?: string;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   explicitToolPreferences?: boolean;
   assistantDraft?: AssistantDraftState;
   targetSessionId?: string;

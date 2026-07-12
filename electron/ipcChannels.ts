@@ -12,7 +12,7 @@ export const IPC_DEEP_LINK_GET_CURRENT_CHANNEL = "app:deep-link:get-current";
 export const ELECTRON_HOST_COMMANDS = [
   "app_server_handle_json_lines",
   "app_server_drain_events",
-  "agent_init",
+  "get_runtime_provider_selection",
   "sync_tray_model_shortcuts",
   "take_pending_skill_package_open_requests",
   "embedded_browser_view_mount",
@@ -118,7 +118,7 @@ export type ElectronAppServerCommand =
   (typeof ELECTRON_APP_SERVER_COMMANDS)[number];
 
 export const ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS = [
-  "agent_init",
+  "get_runtime_provider_selection",
   "plugin_get_ui_runtime_status",
   "plugin_start_ui_runtime",
   "plugin_stop_ui_runtime",

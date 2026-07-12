@@ -3,7 +3,7 @@ use super::mcp_bridges;
 use super::provider_config::current_agent_runtime_config_metadata;
 use super::provider_config::initialize_runtime_database;
 use super::request_context::{
-    aster_chat_request_from_request, resolve_runtime_model_selection,
+    resolve_runtime_model_selection, runtime_request_from_request,
     selection_with_effective_reasoning, session_scope_from_request, RuntimeModelSelection,
 };
 use super::tool_events;
@@ -51,7 +51,7 @@ pub(super) async fn prepare_runtime_worker_artifact_events(
     )
     .await?;
 
-    let host_request = aster_chat_request_from_request(request);
+    let host_request = runtime_request_from_request(request);
     let scope = session_scope_from_request(request)?;
     let selection = resolve_runtime_model_selection(request)
         .map(|selection| selection_with_effective_reasoning(&selection))

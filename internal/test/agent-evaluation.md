@@ -4,7 +4,7 @@
 
 ## 概述
 
-Lime 集成了 Aster Agent，需要专门的评估体系来确保 Agent 行为的正确性和稳定性。本指南基于 Anthropic 官方评估指南和 Orchids Bridge 项目的实践经验。
+Lime 集成了 Agent Agent，需要专门的评估体系来确保 Agent 行为的正确性和稳定性。本指南基于 Anthropic 官方评估指南和 Orchids Bridge 项目的实践经验。
 
 ## 核心概念
 

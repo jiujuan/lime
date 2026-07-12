@@ -1,4 +1,4 @@
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { ContentPart, Message } from "../types";
 import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 import { extractThinkingContentFromParts } from "./agentChatHistoryPrimitives";
@@ -136,7 +136,7 @@ export const compactHistoricalRestoreMessages = (
     });
 
 export const shouldCompactCompletedSessionHistory = (
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
 ): boolean => {
   const historyLimit =
     typeof detail.history_limit === "number" &&

@@ -536,22 +536,13 @@ export async function runEventReadProbe(page, options, requestLog) {
       runtimeOptions: {
         stream: true,
         eventName,
-        providerPreference: FIXTURE_PROVIDER,
-        modelPreference: FIXTURE_MODEL,
-        metadata: {
-          harness: {
-            source: "smoke:claw-chat-current-fixture:event-read-probe",
-          },
-        },
-        hostOptions: {
-          asterChatRequest: {
-            message: EVENT_READ_PROBE_PROMPT,
-            session_id: SESSION_ID,
-            event_name: eventName,
-            provider_preference: FIXTURE_PROVIDER,
-            model_preference: FIXTURE_MODEL,
-            turn_id: EVENT_READ_PROBE_TURN_ID,
-            turn_config: null,
+        runtimeRequest: {
+          providerPreference: FIXTURE_PROVIDER,
+          modelPreference: FIXTURE_MODEL,
+          metadata: {
+            harness: {
+              source: "smoke:claw-chat-current-fixture:event-read-probe",
+            },
           },
         },
       },

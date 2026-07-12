@@ -1,4 +1,4 @@
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 
 export type SlashCommandSupport = "supported" | "unsupported";
 export type SlashCommandKind = "local_action" | "prompt_action" | "info";
@@ -27,7 +27,7 @@ export interface SlashCommandStatusSnapshot {
   currentTurnId: string | null;
   providerType: string;
   model: string;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   queuedTurnsCount: number;
   isSending: boolean;
 }

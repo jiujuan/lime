@@ -47,7 +47,7 @@ interface RefreshAgentSessionDetailOptions {
   ) => void;
   markSessionExecutionStrategySynced: (
     sessionId: string,
-    executionStrategy: import("@/lib/api/agentRuntime").AsterExecutionStrategy,
+    executionStrategy: import("@/lib/api/agentRuntime").AgentExecutionStrategy,
   ) => void;
   persistSessionAccessMode?: (
     sessionId: string,

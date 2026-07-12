@@ -86,7 +86,7 @@ describe("managed-objective-guardrails-core", () => {
     const repoRoot = createTempRepo();
     writeFile(
       repoRoot,
-      "lime-rs/src/agent_tools/catalog.rs",
+      "lime-rs/crates/agent/src/agent_tools/catalog.rs",
       'const TOOL: &str = "agent_runtime_set_objective";\n',
     );
     writeFile(
@@ -97,7 +97,7 @@ describe("managed-objective-guardrails-core", () => {
 
     expect(scanManagedObjectiveToolSurfaceCommands({ repoRoot })).toEqual([
       {
-        relativePath: "lime-rs/src/agent_tools/catalog.rs",
+        relativePath: "lime-rs/crates/agent/src/agent_tools/catalog.rs",
         token: "agent_runtime_set_objective",
       },
     ]);

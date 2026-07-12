@@ -2618,9 +2618,6 @@ test("builds turn start requests with runtime queue flags", () => {
     runtimeOptions: {
       capabilityId: "draft.write",
       stream: true,
-      hostOptions: {
-        adapter: "desktop",
-      },
     },
     queueIfBusy: true,
     skipPreSubmitResume: true,
@@ -2632,7 +2629,6 @@ test("builds turn start requests with runtime queue flags", () => {
   assert.equal(turn.params.queueIfBusy, true);
   assert.equal(turn.params.skipPreSubmitResume, true);
   assert.equal(turn.params.runtimeOptions.capabilityId, "draft.write");
-  assert.equal(turn.params.runtimeOptions.hostOptions.adapter, "desktop");
   assert.equal(isAgentSessionTurnStartRequest(turn), true);
   assert.equal(agentSessionTurnStartRequest(turn)?.params.input.text, "draft");
   assert.equal(

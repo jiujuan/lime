@@ -40,7 +40,7 @@
 - 能走真实 Electron Desktop Host 和 App Server 就必须走真实链路；浏览器镜像入口暂不支持的原生壳能力只能使用显式测试夹具，并在结论里标为 `test-only / fixture`，不能作为 GUI 主路径交付证据
 - 通过 Electron CDP 连接真实窗口时，先断言 `window.__LIME_ELECTRON__ === true` 且 `window.electronAPI.invoke` 存在；随后从页面内读取 `localStorage.lime_invoke_trace_buffer_v1`，确认关键动作的 `transport` 为 `electron-ipc`，并能看到 `app_server_handle_json_lines` 中的 current JSON-RPC method。不要只以页面文本或 DevBridge `/health` 成功作为主路径证据
 - `lime_invoke_trace_buffer_v1` 可能包含 `save_config` / provider 配置的脱敏不足字段。汇报和落库 evidence 时只保留 method、transport、status、sessionId、turnId、marker、必要片段；不要粘贴完整 config、API key、token、provider secret 或用户私密 prompt
-- `lime_invoke_trace_buffer_v1` 中的 `agentSession/turn/start` 是 renderer 发给 App Server 的请求预览，只证明前端、Electron IPC 与 App Server JSON-RPC 主链；它不是 Runtime backend 完成 session config / final prompt 拼装后的模型请求。不要用其中的 `runtimeOptions.hostOptions.asterChatRequest.system_prompt` 判断 Soul prompt 是否最终生效
+- `lime_invoke_trace_buffer_v1` 中的 `agentSession/turn/start` 是 renderer 发给 App Server 的请求预览，只证明前端、Electron IPC 与 App Server JSON-RPC 主链；它不是 Runtime backend 完成 session config / final prompt 拼装后的模型请求。不要用其中的 `runtimeOptions.runtimeRequest.systemPrompt` 判断 Soul prompt 是否最终生效
 - `APP_SERVER_BACKEND_MODE=external` 适合证明 GUI、read model、Electron IPC 和 current JSON-RPC 链路，但会绕过 `RuntimeBackend::handle_turn_start` 中的 `session_config_from_request` / session prompt 拼装，因此不能作为 Soul 最终 prompt 注入证据
 - Soul / AI 个性最终 prompt 只能通过 Rust prompt 单测或 `APP_SERVER_BACKEND_MODE=runtime` + 本地 OpenAI-compatible provider fixture 证明；provider fixture evidence 只保存 marker booleans，例如 `hasInteractionSoul`、`hasMemorySoulSchema`、`profileId`、`stylePackId`、`hasSurfaceContracts`，不得保存完整 `system_prompt`、provider request / response 或用户私密 prompt
 - `verify:gui-smoke` 默认启动真实 Electron Desktop Host 但隐藏主窗口，避免本地最小 smoke 抢占开发者当前窗口；这仍属于真实 Electron fixture 证据，不是 browser mirror
@@ -255,7 +255,7 @@ Runtime prompt 层的允许证据：
 
 Runtime prompt 层的禁止证据：
 
-- renderer trace 中的 `runtimeOptions.hostOptions.asterChatRequest.system_prompt`
+- renderer trace 中的 `runtimeOptions.runtimeRequest.systemPrompt`
 - `APP_SERVER_BACKEND_MODE=external` 下的 GUI 成功
 - 仅凭 assistant 输出“看起来像某种风格”
 - 保存或粘贴完整 `system_prompt` / provider request / provider response / API key / 用户私密 prompt
@@ -323,7 +323,7 @@ Runtime prompt 层的禁止证据：
 4. 同时确认主线程 current 工具面包含 `SendUserMessage`，且 tool display 不会退回通用图标或泛化文案
 5. 如果页面当前走的是显式测试夹具，也要确认 fixture inventory 与 tool display 仍显示同一组工具，而不是只出现一部分协作工具或退回通用图标；生产 GUI 路径不能靠 fixture 通过
 6. 如果页面同时展示 MCP bridge 工具，确认 current 命名为 `mcp__<server>__<tool>`，对应 extension surface key 为 `mcp__<server>`；若仍出现裸 `server__tool`、混合前缀或 extension/tool 各自一套命名，判定为协议漂移
-7. 如出现缺失、重复图标或文案回退，优先检查 App Server tool catalog / RuntimeCore 注册、Aster backend tool registry、`src/lib/desktop-host/` 测试夹具与 `toolDisplayInfo.ts` 是否同步；不要把旧 Tauri / Rust facade registry 当 current owner
+7. 如出现缺失、重复图标或文案回退，优先检查 App Server tool catalog / RuntimeCore 注册、Agent backend tool registry、`src/lib/desktop-host/` 测试夹具与 `toolDisplayInfo.ts` 是否同步；不要把旧 Tauri / Rust facade registry 当 current owner
 
 ### Claw 计划模式与计划轨验证
 

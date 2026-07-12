@@ -1049,7 +1049,7 @@ function buildCodeRuntimeSseBody(
   payloads = buildCodeRuntimeStreamEvents(),
 ) {
   const runtimeEventNames = eventNames.filter((eventName) =>
-    eventName.startsWith("aster_stream_"),
+    eventName.startsWith("agent_stream_"),
   );
   const messages = runtimeEventNames.flatMap((eventName) =>
     payloads.map((payload) => formatBridgeSseMessage(eventName, payload)),
@@ -1134,7 +1134,7 @@ function buildCodeRuntimeEventSourceFixtureScript(eventsUrl) {
         this.dispatchEvent(openEvent);
 
         const runtimeEventNames = subscribedEvents.filter((eventName) =>
-          eventName.startsWith("aster_stream_"),
+          eventName.startsWith("agent_stream_"),
         );
         const queueModeEnabled = Boolean(
           window.__limeCodeRuntimeQueueModeEnabled,
@@ -1421,28 +1421,12 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
         const turnParams = params && typeof params === "object" ? params : {};
         const submitRequest = {
           message: turnParams.input?.text ?? "",
-          session_id: turnParams.sessionId,
-          event_name: turnParams.runtimeOptions?.eventName,
-          workspace_id:
-            turnParams.runtimeOptions?.hostOptions?.asterChatRequest
-              ?.workspace_id,
-          turn_id: turnParams.turnId,
-          turn_config: {
-            provider_preference: turnParams.runtimeOptions?.providerPreference,
-            model_preference: turnParams.runtimeOptions?.modelPreference,
-            metadata: turnParams.runtimeOptions?.metadata,
-            execution_strategy:
-              turnParams.runtimeOptions?.hostOptions?.asterChatRequest
-                ?.execution_strategy,
-            web_search:
-              turnParams.runtimeOptions?.hostOptions?.asterChatRequest
-                ?.web_search,
-            search_mode:
-              turnParams.runtimeOptions?.hostOptions?.asterChatRequest
-                ?.search_mode,
-          },
-          queue_if_busy: turnParams.queueIfBusy,
-          queued_turn_id: turnParams.runtimeOptions?.queuedTurnId,
+          sessionId: turnParams.sessionId,
+          eventName: turnParams.runtimeOptions?.eventName,
+          turnId: turnParams.turnId,
+          runtimeRequest: turnParams.runtimeOptions?.runtimeRequest ?? {},
+          queueIfBusy: turnParams.queueIfBusy,
+          queuedTurnId: turnParams.runtimeOptions?.queuedTurnId,
           appServerParams: turnParams,
         };
         submitTurnRequests.push(submitRequest);
@@ -1532,7 +1516,7 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
     }
 
     const runtimeEventNames = eventNames.filter((eventName) =>
-      eventName.startsWith("aster_stream_"),
+      eventName.startsWith("agent_stream_"),
     );
     const ssePayloads =
       runtimeEventNames.length > 0 && mainRuntimeSseSent
@@ -1639,22 +1623,6 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
             model_count: 1,
             is_syncing: false,
             last_error: null,
-          },
-        }),
-      });
-      return;
-    }
-    if (command === "agent_init") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: {
-            initialized: true,
-            provider_configured: true,
-            provider_name: CODE_FIXTURE_PROVIDER_ID,
-            provider_selector: CODE_FIXTURE_PROVIDER_ID,
-            model_name: CODE_FIXTURE_MODEL_ID,
           },
         }),
       });
@@ -2518,14 +2486,14 @@ function isExpectedApprovalResponseRequest(request) {
 }
 
 function isExpectedPlainCodeRuntimeSubmitRequest(request) {
-  const harnessMetadata = request?.turn_config?.metadata?.harness;
+  const harnessMetadata = request?.runtimeRequest?.metadata?.harness;
   return (
     request?.message === PROMPT_TEXT &&
     !String(request?.message || "")
       .trim()
       .startsWith("@代码") &&
-    request?.session_id === CODE_FIXTURE_SESSION_ID &&
-    request?.turn_config?.metadata?.harness?.code_command === undefined &&
+    request?.sessionId === CODE_FIXTURE_SESSION_ID &&
+    request?.runtimeRequest?.metadata?.harness?.code_command === undefined &&
     harnessMetadata?.fast_response_routing === undefined
   );
 }
@@ -2536,9 +2504,9 @@ function isExpectedPlainCodeRuntimeQueuedSubmitRequest(request) {
     !String(request?.message || "")
       .trim()
       .startsWith("@代码") &&
-    request?.session_id === CODE_FIXTURE_SESSION_ID &&
-    request?.queue_if_busy === true &&
-    request?.turn_config?.metadata?.harness?.code_command === undefined
+    request?.sessionId === CODE_FIXTURE_SESSION_ID &&
+    request?.queueIfBusy === true &&
+    request?.runtimeRequest?.metadata?.harness?.code_command === undefined
   );
 }
 

@@ -555,6 +555,3 @@ pub fn reconcile_session_execution_runtime_permission_fallback(
         routing_decision.selected_model = Some(session_model_name);
     }
 }
-
-#[cfg(test)]
-mod tests;

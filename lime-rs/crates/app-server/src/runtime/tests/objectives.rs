@@ -1,6 +1,24 @@
 use super::support::*;
 use super::*;
 
+fn fixture_runtime_request() -> RuntimeRequest {
+    RuntimeRequest {
+        provider_config: Some(RuntimeProviderConfig {
+            provider_id: Some("fixture-provider".to_string()),
+            provider_name: Some("openai".to_string()),
+            model_name: Some("fixture-model".to_string()),
+            api_key: Some("fixture-key".to_string()),
+            base_url: Some("http://127.0.0.1:65535".to_string()),
+            ..RuntimeProviderConfig::default()
+        }),
+        provider_preference: Some("fixture-provider".to_string()),
+        model_preference: Some("fixture-model".to_string()),
+        approval_policy: Some("never".to_string()),
+        sandbox_policy: Some("read-only".to_string()),
+        ..RuntimeRequest::default()
+    }
+}
+
 #[tokio::test]
 async fn objective_continue_fails_closed_when_pending_requests_exist() {
     let session_id = "sess_objective_continue";
@@ -110,7 +128,7 @@ async fn objective_continue_fails_closed_when_pending_requests_exist() {
 }
 
 #[tokio::test]
-async fn objective_continue_uses_host_provider_config_without_runtime_explicit_preferences() {
+async fn objective_continue_uses_runtime_request_provider_config_without_explicit_preferences() {
     let session_id = "sess_objective_continue_provider_config";
     let mut persisted = empty_agent_session_read_response(session_id);
     persisted.session.workspace_id = Some("workspace-main".to_string());
@@ -141,25 +159,7 @@ async fn objective_continue_uses_host_provider_config_without_runtime_explicit_p
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                provider_preference: Some("fixture-provider".to_string()),
-                model_preference: Some("fixture-model".to_string()),
-                host_options: Some(json!({
-                    "asterChatRequest": {
-                        "turnConfig": {
-                            "providerConfig": {
-                                "provider_id": "fixture-provider",
-                                "provider_name": "openai",
-                                "model_name": "fixture-model",
-                                "api_key": "fixture-key",
-                                "base_url": "http://127.0.0.1:65535"
-                            },
-                            "providerPreference": "fixture-provider",
-                            "modelPreference": "fixture-model",
-                            "approvalPolicy": "never",
-                            "sandboxPolicy": "read-only"
-                        }
-                    }
-                })),
+                runtime_request: Some(fixture_runtime_request()),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,
@@ -187,45 +187,35 @@ async fn objective_continue_uses_host_provider_config_without_runtime_explicit_p
         .expect("test backend requests mutex poisoned");
     assert_eq!(requests.len(), 2);
     let continuation_request = &requests[1];
-    assert_eq!(continuation_request.provider_preference, None);
-    assert_eq!(continuation_request.model_preference, None);
+    assert_eq!(
+        continuation_request.provider_preference(),
+        Some("fixture-provider")
+    );
+    assert_eq!(
+        continuation_request.model_preference(),
+        Some("fixture-model")
+    );
     let runtime_options = continuation_request
         .runtime_options
         .as_ref()
         .expect("runtime options");
-    assert_eq!(runtime_options.provider_preference, None);
-    assert_eq!(runtime_options.model_preference, None);
-    let host_options = runtime_options.host_options.as_ref().expect("host options");
+    let runtime_request = runtime_options
+        .runtime_request
+        .as_ref()
+        .expect("runtime request");
     assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/provider_config/base_url")
-            .and_then(serde_json::Value::as_str),
+        runtime_request
+            .provider_config
+            .as_ref()
+            .and_then(|provider_config| provider_config.base_url.as_deref()),
         Some("http://127.0.0.1:65535")
     );
     assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/turn_config/provider_config/base_url")
-            .and_then(serde_json::Value::as_str),
-        Some("http://127.0.0.1:65535")
-    );
-    assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/turn_config/provider_preference")
-            .and_then(serde_json::Value::as_str),
+        runtime_request.provider_preference.as_deref(),
         Some("fixture-provider")
     );
-    assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/turn_config/approval_policy")
-            .and_then(serde_json::Value::as_str),
-        Some("never")
-    );
-    assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/turn_config/sandbox_policy")
-            .and_then(serde_json::Value::as_str),
-        Some("read-only")
-    );
+    assert_eq!(runtime_request.approval_policy.as_deref(), Some("never"));
+    assert_eq!(runtime_request.sandbox_policy.as_deref(), Some("read-only"));
 }
 
 #[tokio::test]
@@ -263,25 +253,7 @@ async fn managed_objective_auto_continuation_submits_current_turn_after_terminal
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                provider_preference: Some("fixture-provider".to_string()),
-                model_preference: Some("fixture-model".to_string()),
-                host_options: Some(json!({
-                    "asterChatRequest": {
-                        "turnConfig": {
-                            "providerConfig": {
-                                "provider_id": "fixture-provider",
-                                "provider_name": "openai",
-                                "model_name": "fixture-model",
-                                "api_key": "fixture-key",
-                                "base_url": "http://127.0.0.1:65535"
-                            },
-                            "providerPreference": "fixture-provider",
-                            "modelPreference": "fixture-model",
-                            "approvalPolicy": "never",
-                            "sandboxPolicy": "read-only"
-                        }
-                    }
-                })),
+                runtime_request: Some(fixture_runtime_request()),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,
@@ -320,42 +292,30 @@ async fn managed_objective_auto_continuation_submits_current_turn_after_terminal
     let auto_request = &requests[1];
     assert_eq!(auto_request.session.session_id, "sess_objective_auto_allow");
     assert_eq!(auto_request.queue_if_busy, false);
-    assert_eq!(auto_request.provider_preference, None);
-    assert_eq!(auto_request.model_preference, None);
+    assert_eq!(auto_request.provider_preference(), Some("fixture-provider"));
+    assert_eq!(auto_request.model_preference(), Some("fixture-model"));
     let runtime_options = auto_request
         .runtime_options
         .as_ref()
         .expect("runtime options");
-    assert_eq!(runtime_options.provider_preference, None);
-    assert_eq!(runtime_options.model_preference, None);
-    let host_options = runtime_options.host_options.as_ref().expect("host options");
+    let runtime_request = runtime_options
+        .runtime_request
+        .as_ref()
+        .expect("runtime request");
     assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/provider_config/base_url")
-            .and_then(serde_json::Value::as_str),
+        runtime_request
+            .provider_config
+            .as_ref()
+            .and_then(|provider_config| provider_config.base_url.as_deref()),
         Some("http://127.0.0.1:65535")
     );
     assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/turn_config/provider_config/base_url")
-            .and_then(serde_json::Value::as_str),
-        Some("http://127.0.0.1:65535")
-    );
-    assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/turn_config/provider_preference")
-            .and_then(serde_json::Value::as_str),
+        runtime_request.provider_preference.as_deref(),
         Some("fixture-provider")
     );
-    assert_eq!(
-        host_options
-            .pointer("/asterChatRequest/turn_config/approval_policy")
-            .and_then(serde_json::Value::as_str),
-        Some("never")
-    );
+    assert_eq!(runtime_request.approval_policy.as_deref(), Some("never"));
     let managed_objective = auto_request
-        .metadata
-        .as_ref()
+        .runtime_metadata()
         .and_then(|metadata| metadata.pointer("/harness/managed_objective"))
         .expect("managed objective metadata");
     assert_eq!(
@@ -425,8 +385,7 @@ async fn managed_objective_auto_continuation_stops_at_budget_after_auto_turn() {
         .expect("test backend requests mutex poisoned");
     assert_eq!(requests.len(), 2);
     assert!(requests[1]
-        .metadata
-        .as_ref()
+        .runtime_metadata()
         .and_then(|metadata| metadata.pointer("/harness/managed_objective/auto_continuation_guard"))
         .is_some());
 }
@@ -616,15 +575,18 @@ async fn managed_objective_auto_continuation_submits_and_budget_limits_on_curren
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                provider_preference: Some("fixture-provider".to_string()),
-                model_preference: Some("fixture-model".to_string()),
-                metadata: Some(json!({
-                    "harness": {
-                        "managed_objective_smoke": {
-                            "source": "unit"
+                runtime_request: Some(RuntimeRequest {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    metadata: Some(json!({
+                        "harness": {
+                            "managed_objective_smoke": {
+                                "source": "unit"
+                            }
                         }
-                    }
-                })),
+                    })),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,

@@ -24,19 +24,17 @@ fn runtime_config() -> RuntimeProviderConfig {
 
 #[test]
 fn provider_handle_projects_runtime_config_without_provider_trait() {
-    let handle = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    )
-    .with_capabilities(RuntimeReplyProviderCapabilities {
-        supports_streaming: true,
-        supports_embeddings: false,
-        active_model_name: Some("gpt-5.3-codex".to_string()),
-    });
+    let handle =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current)
+            .with_capabilities(RuntimeReplyProviderCapabilities {
+                supports_streaming: true,
+                supports_embeddings: false,
+                active_model_name: Some("gpt-5.3-codex".to_string()),
+            });
 
     assert_eq!(handle.provider_name(), "openai");
     assert_eq!(handle.model_name(), "gpt-5.3-codex");
-    assert_eq!(handle.backend, RuntimeProviderBackend::AsterCompat);
+    assert_eq!(handle.backend, RuntimeProviderBackend::Current);
     assert_eq!(
         handle.identity.protocol,
         Some(ModelProviderProtocol::Responses)
@@ -46,25 +44,20 @@ fn provider_handle_projects_runtime_config_without_provider_trait() {
 
 #[test]
 fn provider_handle_projects_provider_trace_metadata_without_provider_trait() {
-    let handle = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    )
-    .with_capabilities(RuntimeReplyProviderCapabilities {
-        supports_streaming: true,
-        supports_embeddings: false,
-        active_model_name: Some("gpt-5.3-codex-active".to_string()),
-    });
+    let handle =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current)
+            .with_capabilities(RuntimeReplyProviderCapabilities {
+                supports_streaming: true,
+                supports_embeddings: false,
+                active_model_name: Some("gpt-5.3-codex-active".to_string()),
+            });
     let mut event = ProviderTraceEvent::request_started("", "", 1);
 
     apply_runtime_provider_metadata(&mut event, Some(&handle));
 
     assert_eq!(event.provider, "openai");
     assert_eq!(event.model, "gpt-5.3-codex");
-    assert_eq!(
-        event.runtime_provider_backend.as_deref(),
-        Some("aster_compat")
-    );
+    assert_eq!(event.runtime_provider_backend.as_deref(), Some("current"));
     assert_eq!(event.runtime_provider_selector.as_deref(), Some("codex"));
     assert_eq!(
         event.runtime_provider_protocol.as_deref(),
@@ -78,10 +71,8 @@ fn provider_handle_projects_provider_trace_metadata_without_provider_trait() {
 
 #[test]
 fn provider_trace_metadata_keeps_existing_provider_and_model() {
-    let handle = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    );
+    let handle =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current);
     let mut event = ProviderTraceEvent::request_started("anthropic", "claude", 1);
 
     handle
@@ -90,10 +81,7 @@ fn provider_trace_metadata_keeps_existing_provider_and_model() {
 
     assert_eq!(event.provider, "anthropic");
     assert_eq!(event.model, "claude");
-    assert_eq!(
-        event.runtime_provider_backend.as_deref(),
-        Some("aster_compat")
-    );
+    assert_eq!(event.runtime_provider_backend.as_deref(), Some("current"));
 }
 
 #[test]
@@ -131,7 +119,7 @@ fn provider_response_event_contract_carries_response_items_without_turn_owner() 
 }
 
 #[test]
-fn provider_response_content_projects_text_notification_and_tool_delta_without_aster_message() {
+fn provider_response_content_projects_text_notification_and_tool_delta_without_agent_message() {
     assert_eq!(
         provider_stream_response_text_chars([
             RuntimeReplyProviderResponseContent::text("  "),
@@ -192,6 +180,279 @@ fn provider_response_content_keeps_mixed_tool_delta_messages_fail_closed() {
 }
 
 #[test]
+fn provider_direct_answer_policy_strips_structured_tool_requests_without_agent_message() {
+    assert!(provider_stream_direct_answer_should_bypass_tool_execution(
+        true, false,
+    ));
+    assert!(!provider_stream_direct_answer_should_bypass_tool_execution(
+        true, true,
+    ));
+    assert!(!provider_stream_direct_answer_should_bypass_tool_execution(
+        false, false,
+    ));
+    assert!(provider_stream_direct_answer_should_strip_response_content(
+        RuntimeReplyProviderResponseContent::structured_tool_request(),
+    ));
+    assert!(
+        !provider_stream_direct_answer_should_strip_response_content(
+            RuntimeReplyProviderResponseContent::text("answer"),
+        )
+    );
+    assert!(
+        !provider_stream_direct_answer_should_strip_response_content(
+            RuntimeReplyProviderResponseContent::Other,
+        )
+    );
+}
+
+#[test]
+fn provider_response_route_prioritizes_provider_stream_side_channels() {
+    let notification = provider_stream_notification_text(
+        RuntimeReplyProviderStreamEvent::NOTIFICATION_KIND_SAFETY_BUFFERING,
+        json!({"type": "response.in_progress"}),
+        Vec::new(),
+    );
+
+    let route = provider_stream_response_route(
+        [RuntimeReplyProviderResponseContent::tool_input_delta(
+            "call-1",
+            Some("apply_patch"),
+            "{\"patch\"",
+            Some("{\"patch\""),
+            Some("openai"),
+        )],
+        true,
+        false,
+    );
+    assert!(matches!(
+        route,
+        RuntimeReplyProviderResponseRoute::ToolInputDeltaEvents(events)
+            if matches!(
+                events.as_slice(),
+                [RuntimeReplyResponseEvent::ToolCallInputDelta { call_id, .. }]
+                    if call_id == "call-1"
+            )
+    ));
+
+    assert!(matches!(
+        provider_stream_response_route(
+            [
+                RuntimeReplyProviderResponseContent::text("plain"),
+                RuntimeReplyProviderResponseContent::system_notification(notification.as_str()),
+            ],
+            true,
+            false,
+        ),
+        RuntimeReplyProviderResponseRoute::Notification
+    ));
+    assert!(matches!(
+        provider_stream_response_route(
+            [
+                RuntimeReplyProviderResponseContent::text("answer"),
+                RuntimeReplyProviderResponseContent::structured_tool_request(),
+            ],
+            true,
+            false,
+        ),
+        RuntimeReplyProviderResponseRoute::DirectAnswer
+    ));
+    assert!(matches!(
+        provider_stream_response_route(
+            [
+                RuntimeReplyProviderResponseContent::text("answer"),
+                RuntimeReplyProviderResponseContent::structured_tool_request(),
+            ],
+            true,
+            true,
+        ),
+        RuntimeReplyProviderResponseRoute::ToolExecution
+    ));
+}
+
+#[test]
+fn provider_response_outcome_tracks_progress_model_change_and_route_without_agent_loop() {
+    let mut session = RuntimeReplyProviderResponseSession::new();
+    let notification = provider_stream_notification_text(
+        RuntimeReplyProviderStreamEvent::NOTIFICATION_KIND_SAFETY_BUFFERING,
+        json!({"type": "response.in_progress"}),
+        Vec::new(),
+    );
+
+    let first = session.accept_response(
+        Some([
+            RuntimeReplyProviderResponseContent::text("  hello "),
+            RuntimeReplyProviderResponseContent::system_notification(notification.as_str()),
+        ]),
+        Some("gpt-worker"),
+        Some(RuntimeReplyProviderLeadWorkerModels::new(
+            "gpt-lead",
+            "gpt-worker",
+        )),
+        false,
+        true,
+    );
+
+    assert!(first.first_event_received);
+    assert_eq!(first.first_text_delta_chars, Some(5));
+    assert_eq!(
+        first.model_change,
+        Some(RuntimeReplyProviderModelChange {
+            model: "gpt-worker".to_string(),
+            mode: RuntimeReplyProviderModelChangeMode::Worker,
+        })
+    );
+    assert!(matches!(
+        first.route,
+        Some(RuntimeReplyProviderResponseRoute::Notification)
+    ));
+    assert!(session.stream_progress().first_event_seen());
+
+    let second = session.accept_response(
+        Some([RuntimeReplyProviderResponseContent::text("second")]),
+        Some("gpt-lead"),
+        Some(RuntimeReplyProviderLeadWorkerModels::new(
+            "gpt-lead",
+            "gpt-worker",
+        )),
+        false,
+        false,
+    );
+
+    assert!(!second.first_event_received);
+    assert_eq!(second.first_text_delta_chars, None);
+    assert_eq!(
+        second.model_change,
+        Some(RuntimeReplyProviderModelChange {
+            model: "gpt-lead".to_string(),
+            mode: RuntimeReplyProviderModelChangeMode::Lead,
+        })
+    );
+    assert!(matches!(
+        second.route,
+        Some(RuntimeReplyProviderResponseRoute::ToolExecution)
+    ));
+}
+
+#[test]
+fn provider_response_outcome_keeps_usage_only_event_without_response_route() {
+    let mut session = RuntimeReplyProviderResponseSession::new();
+
+    let outcome = session.accept_response(
+        Option::<[RuntimeReplyProviderResponseContent<'_>; 0]>::None,
+        Some("gpt-other"),
+        Some(RuntimeReplyProviderLeadWorkerModels::new(
+            "gpt-lead",
+            "gpt-worker",
+        )),
+        true,
+        false,
+    );
+
+    assert!(outcome.first_event_received);
+    assert_eq!(outcome.first_text_delta_chars, None);
+    assert_eq!(
+        outcome.model_change,
+        Some(RuntimeReplyProviderModelChange {
+            model: "gpt-other".to_string(),
+            mode: RuntimeReplyProviderModelChangeMode::Unknown,
+        })
+    );
+    assert_eq!(outcome.route, None);
+}
+
+#[test]
+fn provider_sampling_session_accepts_response_text_delta_once_without_agent_loop() {
+    let request =
+        RuntimeReplyProviderSamplingRequest::new("openai", "gpt-5-codex", 1, 0, 32, None, true);
+    let mut session = RuntimeReplyProviderSamplingSession::start(request);
+
+    assert_eq!(
+        session.accept_response_text_delta([
+            RuntimeReplyProviderResponseContent::text("  "),
+            RuntimeReplyProviderResponseContent::text(" hello "),
+        ],),
+        Some(5),
+    );
+    assert!(session.stream_progress().first_text_delta_seen());
+    assert_eq!(
+        session.accept_response_text_delta([RuntimeReplyProviderResponseContent::text("second")],),
+        None,
+    );
+}
+
+#[test]
+fn plaintext_tool_use_stream_projects_split_chunks_without_agent_message_state() {
+    let mut stream = RuntimeReplyProviderPlaintextToolUseStream::default();
+
+    let first = stream.push_text("Before <tool_use name=\"WebSearch\">{\"query\":\"");
+    assert!(stream.is_pending());
+    assert!(matches!(
+        first.as_slice(),
+        [
+            RuntimeReplyProviderPlaintextToolUseStreamEvent::Text(prefix),
+            RuntimeReplyProviderPlaintextToolUseStreamEvent::ToolInputDelta(progress),
+        ] if prefix == "Before"
+            && progress.tool_name.as_deref() == Some("WebSearch")
+            && progress.delta == "{\"query\":\""
+    ));
+
+    let second = stream.push_text("rust\"}</tool_use>");
+    assert!(!stream.is_pending());
+    assert!(matches!(
+        second.as_slice(),
+        [RuntimeReplyProviderPlaintextToolUseStreamEvent::ToolUse(tool_use)]
+            if tool_use.prefix.is_empty()
+                && tool_use.tool_calls.len() == 1
+                && tool_use.tool_calls[0].name == "WebSearch"
+                && tool_use.tool_calls[0].arguments.as_ref()
+                    == Some(&serde_json::Map::from_iter([(
+                        "query".to_string(),
+                        json!("rust"),
+                    )]))
+    ));
+}
+
+#[test]
+fn plaintext_tool_use_stream_keeps_plain_text_and_flushes_incomplete_markup() {
+    let mut stream = RuntimeReplyProviderPlaintextToolUseStream::default();
+
+    assert_eq!(
+        stream.push_text("plain answer"),
+        vec![RuntimeReplyProviderPlaintextToolUseStreamEvent::Text(
+            "plain answer".to_string()
+        )]
+    );
+
+    stream.push_text("<tool_use name=\"WebSearch\">{\"query\":");
+    assert_eq!(
+        stream.finish(),
+        Some(RuntimeReplyProviderPlaintextToolUseStreamEvent::Text(
+            "<tool_use name=\"WebSearch\">{\"query\":".to_string()
+        ))
+    );
+    assert!(!stream.is_pending());
+}
+
+#[test]
+fn plaintext_tool_use_stream_normalizes_inline_search_call() {
+    let mut stream = RuntimeReplyProviderPlaintextToolUseStream::default();
+
+    let events = stream.push_text("<Search query=\"codex runtime\" />");
+
+    assert!(matches!(
+        events.as_slice(),
+        [RuntimeReplyProviderPlaintextToolUseStreamEvent::ToolUse(tool_use)]
+            if tool_use.tool_calls.len() == 1
+                && tool_use.tool_calls[0].name == "WebSearch"
+                && tool_use.tool_calls[0].arguments.as_ref()
+                    == Some(&serde_json::Map::from_iter([(
+                        "query".to_string(),
+                        json!("codex runtime"),
+                    )]))
+    ));
+}
+
+#[test]
 fn provider_stream_response_context_extracts_request_id_without_reqwest() {
     let context = provider_stream_response_context_from_header_pairs([
         ("content-type", "application/json"),
@@ -226,7 +487,7 @@ fn provider_stream_response_context_rejects_empty_long_or_non_visible_ids() {
 }
 
 #[test]
-fn provider_sampling_request_selects_streaming_mode_without_aster_agent() {
+fn provider_sampling_request_selects_streaming_mode_without_agent_agent() {
     let request = RuntimeReplyProviderSamplingRequest::new(
         "openai",
         "gpt-5-codex",
@@ -250,7 +511,7 @@ fn provider_sampling_request_selects_streaming_mode_without_aster_agent() {
 }
 
 #[test]
-fn provider_sampling_request_selects_non_streaming_mode_without_aster_agent() {
+fn provider_sampling_request_selects_non_streaming_mode_without_agent_agent() {
     let request =
         RuntimeReplyProviderSamplingRequest::new("openai", "gpt-5-codex", 1, 0, 32, None, false);
 
@@ -261,7 +522,7 @@ fn provider_sampling_request_selects_non_streaming_mode_without_aster_agent() {
 }
 
 #[tokio::test]
-async fn provider_sampling_session_runs_streaming_branch_without_aster_agent() {
+async fn provider_sampling_session_runs_streaming_branch_without_agent_agent() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
@@ -295,7 +556,7 @@ async fn provider_sampling_session_runs_streaming_branch_without_aster_agent() {
 }
 
 #[tokio::test]
-async fn provider_sampling_session_runs_non_streaming_branch_without_aster_agent() {
+async fn provider_sampling_session_runs_non_streaming_branch_without_agent_agent() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
@@ -341,6 +602,43 @@ fn provider_empty_first_content_retry_marker_is_current_policy() {
     assert!(!provider_stream_should_retry_empty_first_content(
         false,
         "different provider error"
+    ));
+}
+
+#[test]
+fn provider_sampling_session_accepts_stream_item_and_retry_outcome_without_agent_stream() {
+    let request =
+        RuntimeReplyProviderSamplingRequest::new("anthropic", "claude", 1, 0, 32, None, true);
+    let mut session = RuntimeReplyProviderSamplingSession::start(request);
+
+    let retry = session.accept_stream_item::<String, (), _>(Err(
+        "Anthropic stream ended without assistant content or tool call",
+    ));
+    assert!(matches!(
+        retry,
+        RuntimeReplyProviderSamplingStreamItem::RetryEmptyFirstContent(_)
+    ));
+    assert!(!session.stream_progress().first_content_seen());
+
+    let item = session.accept_stream_item::<String, usize, &'static str>(Ok((
+        Some("hello".to_string()),
+        Some(42),
+    )));
+    assert_eq!(
+        item,
+        RuntimeReplyProviderSamplingStreamItem::Item {
+            message: Some("hello".to_string()),
+            usage: Some(42),
+        }
+    );
+    assert!(session.stream_progress().first_content_seen());
+
+    let error_after_content = session.accept_stream_item::<String, (), _>(Err(
+        "Anthropic stream ended without assistant content or tool call",
+    ));
+    assert!(matches!(
+        error_after_content,
+        RuntimeReplyProviderSamplingStreamItem::Error(_)
     ));
 }
 
@@ -479,6 +777,23 @@ fn provider_stream_should_omit_image_input_combines_model_and_turn_policy() {
         Some(true),
         Some(&runtime_metadata)
     ));
+}
+
+#[test]
+fn provider_stream_image_omission_notices_are_owned_by_model_provider() {
+    assert_eq!(provider_stream_omitted_message_images_notice(0), None);
+    assert_eq!(provider_stream_omitted_tool_result_images_notice(0), None);
+    assert!(!provider_stream_should_warn_omitted_provider_images(0));
+
+    assert_eq!(
+        provider_stream_omitted_message_images_notice(2).as_deref(),
+        Some("[系统提示] 这条历史消息包含 2 张图片，但当前模型不支持图片输入；图片已在发送给模型前省略。")
+    );
+    assert_eq!(
+        provider_stream_omitted_tool_result_images_notice(3).as_deref(),
+        Some("[系统提示] 这个工具结果包含 3 张图片，但当前模型不支持图片输入；图片已在发送给模型前省略。")
+    );
+    assert!(provider_stream_should_warn_omitted_provider_images(5));
 }
 
 #[test]
@@ -650,7 +965,7 @@ fn provider_stream_notification_text_round_trips_current_prefix() {
     );
 
     assert!(text.starts_with(PROVIDER_STREAM_EVENT_NOTIFICATION_PREFIX));
-    assert!(!text.contains("__aster_provider_stream_event__"));
+    assert!(!text.contains("__runtime_provider_stream_event__"));
 
     let payload =
         provider_stream_notification_payload_from_text(&text).expect("notification payload");
@@ -668,7 +983,7 @@ fn provider_stream_notification_text_round_trips_current_prefix() {
         json!(SAFETY_BUFFERING_ENABLED_HEADER)
     );
     assert!(provider_stream_notification_payload_from_text(
-        "__aster_provider_stream_event__:{\"eventKind\":\"legacy\"}"
+        "__runtime_provider_stream_event__:{\"eventKind\":\"legacy\"}"
     )
     .is_none());
     assert!(provider_stream_has_notification_text([text.as_str()]));
@@ -677,7 +992,7 @@ fn provider_stream_notification_text_round_trips_current_prefix() {
 }
 
 #[test]
-fn provider_stream_plaintext_tool_uses_extracts_xml_blocks_without_aster_message() {
+fn provider_stream_plaintext_tool_uses_extracts_xml_blocks_without_agent_message() {
     let parsed = provider_stream_plaintext_tool_uses(
         "我先做只读验证。\n\
         <tool_use name=\"mcp__system__shell\">{\"command\":\"pwd\"}</tool_use>\n\
@@ -773,10 +1088,8 @@ fn provider_stream_plaintext_tool_use_progress_tracks_split_xml_block() {
 
 #[test]
 fn stream_request_carries_current_provider_handle() {
-    let handle = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    );
+    let handle =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current);
     let request = RuntimeReplyStreamRequest::new(
         "session-1",
         RuntimeReplyInputKind::UserMessage,
@@ -787,7 +1100,7 @@ fn stream_request_carries_current_provider_handle() {
     assert_eq!(request.session_id, "session-1");
     assert_eq!(
         request.provider_backend(),
-        Some(RuntimeProviderBackend::AsterCompat)
+        Some(RuntimeProviderBackend::Current)
     );
     assert_eq!(request.provider_name(), Some("openai"));
     assert_eq!(request.model_name(), Some("gpt-5.3-codex"));
@@ -795,10 +1108,8 @@ fn stream_request_carries_current_provider_handle() {
 
 #[test]
 fn provider_stream_start_accepts_matching_handle() {
-    let handle = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    );
+    let handle =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current);
     let request = RuntimeReplyStreamRequest::new(
         "session-1",
         RuntimeReplyInputKind::UserMessage,
@@ -817,7 +1128,7 @@ fn provider_stream_start_accepts_matching_handle() {
     assert_eq!(trace.message_chars, 42);
     assert_eq!(
         trace.provider_backend,
-        Some(RuntimeProviderBackend::AsterCompat)
+        Some(RuntimeProviderBackend::Current)
     );
     assert_eq!(trace.provider_name, Some("openai"));
     assert_eq!(trace.model_name, Some("gpt-5.3-codex"));
@@ -825,10 +1136,8 @@ fn provider_stream_start_accepts_matching_handle() {
 
 #[test]
 fn provider_stream_start_rejects_missing_handle() {
-    let expected = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    );
+    let expected =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current);
     let request =
         RuntimeReplyStreamRequest::new("session-1", RuntimeReplyInputKind::UserMessage, 42, None);
 
@@ -842,15 +1151,13 @@ fn provider_stream_start_rejects_missing_handle() {
 
 #[test]
 fn provider_stream_start_rejects_mismatched_handle() {
-    let expected = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    );
+    let expected =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current);
     let mut other_config = runtime_config();
     other_config.provider_name = "anthropic".to_string();
     other_config.model_name = "claude-sonnet-4.5".to_string();
     let actual =
-        RuntimeReplyProviderHandle::from_config(&other_config, RuntimeProviderBackend::AsterCompat);
+        RuntimeReplyProviderHandle::from_config(&other_config, RuntimeProviderBackend::Current);
     let request = RuntimeReplyStreamRequest::new(
         "session-1",
         RuntimeReplyInputKind::UserMessage,
@@ -915,7 +1222,7 @@ fn stream_event_projects_safety_buffering_payload_from_response_event() {
         42,
         Some(RuntimeReplyProviderHandle::from_config(
             &runtime_config(),
-            RuntimeProviderBackend::AsterCompat,
+            RuntimeProviderBackend::Current,
         )),
     );
     let response_event = json!({
@@ -970,7 +1277,7 @@ fn stream_event_projects_safety_buffering_payload_from_notification_payload() {
         42,
         Some(RuntimeReplyProviderHandle::from_config(
             &runtime_config(),
-            RuntimeProviderBackend::AsterCompat,
+            RuntimeProviderBackend::Current,
         )),
     );
     let payload = json!({
@@ -1039,7 +1346,7 @@ fn stream_event_ignores_false_safety_buffering_response_field() {
         42,
         Some(RuntimeReplyProviderHandle::from_config(
             &runtime_config(),
-            RuntimeProviderBackend::AsterCompat,
+            RuntimeProviderBackend::Current,
         )),
     );
     let response_event = json!({
@@ -1150,10 +1457,8 @@ fn stream_request_accepts_responses_lite_wire_for_current_backend() {
 
 #[test]
 fn stream_request_accepts_responses_lite_wire_for_openai_responses_compat() {
-    let handle = RuntimeReplyProviderHandle::from_config(
-        &runtime_config(),
-        RuntimeProviderBackend::AsterCompat,
-    );
+    let handle =
+        RuntimeReplyProviderHandle::from_config(&runtime_config(), RuntimeProviderBackend::Current);
     let request = RuntimeReplyStreamRequest::new(
         "session-1",
         RuntimeReplyInputKind::UserMessage,
@@ -1181,8 +1486,7 @@ fn stream_request_accepts_responses_lite_wire_for_openai_responses_compat() {
 fn stream_request_rejects_responses_lite_wire_for_chat_compat() {
     let mut config = runtime_config();
     config.protocol = Some(RuntimeProviderProtocol::ChatCompletions);
-    let handle =
-        RuntimeReplyProviderHandle::from_config(&config, RuntimeProviderBackend::AsterCompat);
+    let handle = RuntimeReplyProviderHandle::from_config(&config, RuntimeProviderBackend::Current);
     let request = RuntimeReplyStreamRequest::new(
         "session-1",
         RuntimeReplyInputKind::UserMessage,
@@ -1209,7 +1513,7 @@ fn stream_request_rejects_responses_lite_wire_for_chat_compat() {
 
     assert_eq!(
         issue.provider_backend,
-        Some(RuntimeProviderBackend::AsterCompat)
+        Some(RuntimeProviderBackend::Current)
     );
     assert_eq!(issue.provider_name.as_deref(), Some("openai"));
     assert_eq!(issue.model_name.as_deref(), Some("gpt-5.3-codex"));
@@ -1290,4 +1594,94 @@ fn reasoning_output_wire_shape_omits_none_summary_and_unsupported_verbosity() {
 
     assert_eq!(wire_shape.reasoning_summary, None);
     assert_eq!(wire_shape.text_verbosity, None);
+}
+
+#[test]
+fn provider_token_usage_calculates_total_when_provider_omits_it() {
+    let usage = RuntimeReplyProviderTokenUsage::new(Some(11), Some(7), None);
+
+    assert_eq!(usage.input_tokens, Some(11));
+    assert_eq!(usage.output_tokens, Some(7));
+    assert_eq!(usage.total_tokens, Some(18));
+}
+
+#[test]
+fn provider_usage_combines_token_and_cache_counts() {
+    let first = RuntimeReplyProviderUsage::new(
+        "gpt-5.3-codex".to_string(),
+        RuntimeReplyProviderTokenUsage {
+            input_tokens: Some(10),
+            output_tokens: None,
+            total_tokens: None,
+            cached_input_tokens: Some(3),
+            cache_creation_input_tokens: None,
+        },
+    );
+    let second = RuntimeReplyProviderUsage::new(
+        "worker-model".to_string(),
+        RuntimeReplyProviderTokenUsage::new(Some(2), Some(5), Some(9))
+            .with_cached_input_tokens(Some(4))
+            .with_cache_creation_input_tokens(Some(1)),
+    );
+
+    let combined = first.combine_with(&second);
+
+    assert_eq!(combined.model, "gpt-5.3-codex");
+    assert_eq!(combined.usage.input_tokens, Some(12));
+    assert_eq!(combined.usage.output_tokens, Some(5));
+    assert_eq!(combined.usage.total_tokens, Some(9));
+    assert_eq!(combined.usage.cached_input_tokens, Some(7));
+    assert_eq!(combined.usage.cache_creation_input_tokens, Some(1));
+}
+
+#[test]
+fn provider_message_outputs_attach_usage_to_first_message() {
+    let outputs = provider_stream_message_outputs(["first", "second"], None, Some(42));
+
+    assert_eq!(
+        outputs,
+        vec![
+            RuntimeReplyProviderMessageOutput::Message {
+                message: "first",
+                usage: Some(42),
+            },
+            RuntimeReplyProviderMessageOutput::Message {
+                message: "second",
+                usage: None,
+            },
+        ]
+    );
+}
+
+#[test]
+fn provider_message_outputs_flush_pending_message_when_usage_has_no_message() {
+    let outputs = provider_stream_message_outputs(Vec::<&str>::new(), Some("pending"), Some(7));
+
+    assert_eq!(
+        outputs,
+        vec![RuntimeReplyProviderMessageOutput::Message {
+            message: "pending",
+            usage: Some(7),
+        }]
+    );
+}
+
+#[test]
+fn provider_message_outputs_emit_usage_only_when_message_is_absent() {
+    let outputs = provider_stream_message_outputs(Vec::<&str>::new(), None, Some(5));
+
+    assert_eq!(outputs, vec![RuntimeReplyProviderMessageOutput::Usage(5)]);
+}
+
+#[test]
+fn provider_single_message_output_keeps_direct_answer_usage_attached() {
+    let outputs = provider_stream_single_message_output("answer", Some(3));
+
+    assert_eq!(
+        outputs,
+        vec![RuntimeReplyProviderMessageOutput::Message {
+            message: "answer",
+            usage: Some(3),
+        }]
+    );
 }

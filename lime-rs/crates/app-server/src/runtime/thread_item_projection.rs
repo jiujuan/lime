@@ -776,7 +776,7 @@ fn expert_profile_switch_metadata(event: &AgentEvent, role_switch: &Value) -> Va
             "expert_role_switch": role_switch.clone(),
         })),
     );
-    metadata.insert("source".to_string(), json!("runtime_options.metadata"));
+    metadata.insert("source".to_string(), json!("runtime_request.metadata"));
     Value::Object(metadata)
 }
 

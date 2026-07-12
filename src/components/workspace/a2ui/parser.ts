@@ -313,7 +313,7 @@ function parseJsonLines(jsonStr: string): unknown[] | null {
  * 支持三类格式：
  * 1. 完整 A2UI 响应
  * 2. 简化表单格式（type: 'form'）
- * 3. 官方/aster-rust 的 JSON / JSONL 消息流
+ * 3. 官方/agent-rust 的 JSON / JSONL 消息流
  */
 export function parseA2UIJson(jsonStr: string): A2UIResponse | null {
   try {

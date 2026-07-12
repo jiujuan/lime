@@ -102,7 +102,7 @@ impl RuntimeCore {
                 stored
                     .turn_runtime_options
                     .get(&turn.turn_id)
-                    .and_then(|options| options.metadata.clone())
+                    .and_then(|options| options.runtime_metadata().cloned())
                     .map(|metadata| (turn.turn_id.clone(), metadata))
             })
             .collect::<BTreeMap<_, _>>();

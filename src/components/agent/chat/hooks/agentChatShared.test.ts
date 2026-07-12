@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import {
   buildLiveTaskSnapshot,
@@ -82,7 +82,7 @@ describe("agentChatShared", () => {
     const malformedSession = {
       id: "session-missing-time",
       messages_count: 0,
-    } as Partial<AsterSessionInfo> as AsterSessionInfo;
+    } as Partial<AgentSessionInfo> as AgentSessionInfo;
     const topic = mapSessionToTopic(malformedSession);
 
     expect(topic.title).toBe("新任务");

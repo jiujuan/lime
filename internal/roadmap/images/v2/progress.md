@@ -60,7 +60,7 @@
   - 前端 protocol、App Server event stream、Agent stream handler 均不再解析 / 处理该旧事件。
   - 新增守卫确认生产源码不再包含旧 unavailable 事件。
 - 收口当前 provider 重构的两个编译断点：
-  - `AsterAgentState::credential_bridge()` 去重，保留单一 current accessor。
+  - `AgentState::credential_bridge()` 去重，保留单一 current accessor。
   - `direct_text_generation` 从 `request_tool_policy` 模块引用 provider-aware stream helper，不再要求 crate root 暴露旧 façade。
 
 验证：
@@ -249,7 +249,7 @@ UI 验证：
 
 - `ImageCommandWorkflow` 的 presentation 预算从过短的快路径提升到 `45s`，避免真实文本模型冷启动 / 排队时过早发 `image_task.presentation.unavailable`。
 - `turn.completed` 携带 presentation 文本模型 usage，历史和 token footer 能从真实 turn 终态读取用量。
-- `services` 中已迁出的 `aster_session_store` 不再作为 current module 暴露，`lime-agent` 作为 current owner 暴露会话存储，保证 Rust workspace 能构建当前 App Server。
+- `services` 中已迁出的 `agent_session_store` 不再作为 current module 暴露，`lime-agent` 作为 current owner 暴露会话存储，保证 Rust workspace 能构建当前 App Server。
 
 live 输入：
 
@@ -273,7 +273,7 @@ live 结果：
 
 JSONL / 审计证据：
 
-- presentation 模型请求：`$HOME/Library/Application Support/lime/aster/state/logs/llm_request.1.jsonl`，runtime context 为 `sess_8541091911564f4cb2f975262b87ac50:image-presentation:61042753-1838-426a-8ffa-10e6dbe5693e`，模型 `agnes-2.0-flash`，`tool_surface=direct_answer`。
+- presentation 模型请求：`$HOME/Library/Application Support/lime/agent/state/logs/llm_request.1.jsonl`，runtime context 为 `sess_8541091911564f4cb2f975262b87ac50:image-presentation:61042753-1838-426a-8ffa-10e6dbe5693e`，模型 `agnes-2.0-flash`，`tool_surface=direct_answer`。
 - session event log：`$HOME/Library/Application Support/lime/app-server/runtime/events/sessions/session_sess_8541091911564f4cb2f975262b87ac50.jsonl`，包含 `message.created`、`image_task.presentation.generated`、`tool.started`、`tool.ended`、`turn.completed`，其中 `turn.completed.usage.input_tokens=1097`、`output_tokens=70`。
 - image worker task log：`.lime/task-logs/61276cc0-2254-4756-9df7-55d5a4bfd29d/attempt_1.jsonl`，事件序列为 `worker_loaded -> task_queued -> task_running -> request_slot_started -> request_slot_succeeded -> task_succeeded`。
 
@@ -342,7 +342,7 @@ GUI 证据：
 
 - `@配图` 和普通画图意图的图片任务、图片预览、JSONL 审计均已跑通，但聊天区仍缺少图片生成前的自然引导和完成后的自然 caption。
 - 诊断发现 App Server presentation 请求已经正确命中文本 Provider，Provider 也返回了 `assistant_intro / completion_caption` JSON。
-- 根因是 `ImageCommandWorkflow` 给 direct text generation 注入了 structured-output schema，同时 direct generation 禁用工具；Aster 因此反复要求模型调用 `StructuredOutput`，直到 presentation timeout，导致 GUI 收到 `image_task.presentation.unavailable`。
+- 根因是 `ImageCommandWorkflow` 给 direct text generation 注入了 structured-output schema，同时 direct generation 禁用工具；Agent 因此反复要求模型调用 `StructuredOutput`，直到 presentation timeout，导致 GUI 收到 `image_task.presentation.unavailable`。
 
 已完成：
 
@@ -875,7 +875,7 @@ JSONL 审计：
 - `npx vitest run "src/hooks/useAppNavigation.test.tsx"` 通过，13 个测试。
 - `npx vitest run "src/components/AppPageContent.test.tsx" --testNamePattern "agent 页面|pending navigation|newChatAt"` 通过，15 个测试。
 - `npx vitest run "src/components/AppSidebar.conversations.test.tsx" --testNamePattern "点击已有会话|工作区|standalone|workspace-only|initialSessionId|历史会话"` 通过，3 个测试。
-- `npx vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" --testNamePattern "刷新后话题列表暂未包含恢复候选|首页新会话|页面刷新恢复"` 通过，19 个测试。
+- `npx vitest run "src/components/agent/chat/hooks/useAgentChat.test.tsx" --testNamePattern "刷新后话题列表暂未包含恢复候选|首页新会话|页面刷新恢复"` 通过，19 个测试。
 - `npx vitest run "src/components/agent/chat/hooks/agentSessionState.test.ts"` 通过，22 个测试。
 - `npx vitest run "src/components/agent/chat/workspace/useTaskCenterDraftSendRuntime.unit.test.ts"` 通过，10 个测试。
 - `npx vitest run "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx"` 通过，157 个测试。
@@ -978,7 +978,7 @@ JSONL 审计：
 
 背景：
 
-- live `@配图` 曾出现 `image_task_presentation_unavailable`，原因是图片 presentation 的受控文本生成同时禁用工具面又注入 `output_schema`，Aster 反复按 StructuredOutput 纠偏，最终超时，聊天里只剩轻卡 / 占位，前置思考和引导文字丢失。
+- live `@配图` 曾出现 `image_task_presentation_unavailable`，原因是图片 presentation 的受控文本生成同时禁用工具面又注入 `output_schema`，Agent 反复按 StructuredOutput 纠偏，最终超时，聊天里只剩轻卡 / 占位，前置思考和引导文字丢失。
 - 内容工厂 Article Workspace action 曾报错：`Plugin worker output artifact kind is unsupported by runtime contract: requested=creator.workspace_patch, declared=content_factory.workspace_patch`。
 - `content_factory.workspace_patch` 是 current canonical kind；`creator.workspace_patch` 只能作为内容工厂历史别名在边界归一，不允许全局放宽 runtime contract。
 - WebSearch 复核采用官方资料方向：JSON-RPC 请求 / 响应继续按 `jsonrpc/method/params/id/result/error` 严格关联；Electron renderer 仍通过 preload 暴露的受控 API 进入 `ipcRenderer.invoke + ipcMain.handle`；GUI 证据优先验证用户可见行为；schema 演进使用显式兼容边界，避免把旧值重新定义成新的全局 truth。
@@ -1175,10 +1175,10 @@ JSONL 审计：
 - `npx tsc --noEmit --project tsconfig.renderer.json --pretty false` 通过。
 - `npm run verify:gui-smoke` 通过；renderer smoke build、Electron host build、App Server sidecar、renderer loaded、app-server initialized、Claw workbench shell ready、memory settings ready。
 - `git diff --check -- <touched current files>` 通过。
-- `npm run test:contracts` 仍失败在当前脏工作树的大范围 App Server / Agent Runtime / MCP contract 缺口，包括 `processor/mod.rs` 缺 capability / artifact / fileSystem / evidence dispatch、`aster_backend.rs` 已删除、tool inventory current method 缺失、Aster flow smoke 契约缺失和 MCP runtime methods 缺失；这些不是本 checkpoint 的 `@配图` fail-closed / 去重写集直接引入。
+- `npm run test:contracts` 仍失败在当前脏工作树的大范围 App Server / Agent Runtime / MCP contract 缺口，包括 `processor/mod.rs` 缺 capability / artifact / fileSystem / evidence dispatch、`runtime_backend.rs` 已删除、tool inventory current method 缺失、Agent flow smoke 契约缺失和 MCP runtime methods 缺失；这些不是本 checkpoint 的 `@配图` fail-closed / 去重写集直接引入。
 
 剩余风险：
 
 - 旧事件字符串仅保留在 `claw-image-live-smoke.test.mjs` 的负向 guard 中，用于防止生产源码重新出现；生产路径扫描已确认 `mod.rs / agentProtocol.ts / appServerEventStream.ts / agentStreamRuntimeHandler.ts` 不包含旧 `presentation.unavailable` 半成功事件。
 - 本轮没有继续扩大到全量 `npm run verify:local`；当前主风险已由 Rust 定向测试、前端 guard、renderer typecheck、真实 Electron + live Provider smoke，以及 GUI smoke 覆盖。
-- 合并前仍必须单独收口 `test:contracts` 的 App Server / Aster / MCP contract 主线，不能把本 checkpoint 的图片 live / GUI smoke 通过误读为全仓库契约已绿。
+- 合并前仍必须单独收口 `test:contracts` 的 App Server / Agent / MCP contract 主线，不能把本 checkpoint 的图片 live / GUI smoke 通过误读为全仓库契约已绿。

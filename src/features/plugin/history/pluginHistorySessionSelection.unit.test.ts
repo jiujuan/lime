@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import type { PluginMarketplaceViewItem } from "../marketplace/pluginMarketplaceViewModel";
 import { buildPluginHistorySessionSelectionModel } from "./pluginHistorySessionSelection";
 
@@ -17,7 +17,7 @@ function session(
   id: string,
   metadata: Record<string, unknown> | null,
   updatedAt: number,
-): AsterSessionInfo {
+): AgentSessionInfo {
   return {
     id,
     name: `${id} title`,

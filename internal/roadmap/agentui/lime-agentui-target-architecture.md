@@ -47,8 +47,8 @@ flowchart TB
   CommandGateway --> ArtifactServices[Artifact Services]
   CommandGateway --> EvidenceServices[Evidence / Review Services]
 
-  RuntimeQueue --> Aster[Aster Agent Runtime]
-  Aster --> Events[AgentEvent stream]
+  RuntimeQueue --> Agent[Agent Agent Runtime]
+  Agent --> Events[AgentEvent stream]
   Events --> Protocol
   Events --> TimelineRecorder
   Events --> ConversationState[前端 messages / contentParts]

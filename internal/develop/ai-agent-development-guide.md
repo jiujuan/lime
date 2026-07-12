@@ -386,10 +386,10 @@ pub struct TokenUsage {
 // 推荐边界：
 // - 会话 / turn / action：`src/lib/api/agentRuntime.ts`
 // - 流式协议：`src/lib/api/agentProtocol.ts`
-// - 前端主链：`useAgentChatUnified -> useAsterAgentChat`
+// - 前端主链：`useAgentChatUnified -> useAgentChat`
 // - 已删除旧入口：`useAgentChat`、`useAgentStore`
 
-const chat = useAsterAgentChat({
+const chat = useAgentChat({
   workspaceId,
   systemPrompt,
 });

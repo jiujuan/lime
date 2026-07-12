@@ -2,7 +2,7 @@ import type {
   AgentThreadItem,
   AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import {
   buildFailedAgentMessageContent,
@@ -29,7 +29,7 @@ import { mergeImageWorkbenchPreview } from "./agentChatHistoryProcess";
 import { resolveSessionDetailTurnUsage } from "./agentChatHistoryUsage";
 import { contentPartMetadataFromThreadToolItem } from "./agentChatHistoryReasoning";
 
-function isImportedHistorySession(detail: AsterSessionDetail): boolean {
+function isImportedHistorySession(detail: AgentSessionDetail): boolean {
   const runtime = detail.execution_runtime;
   const runtimeRecord =
     runtime && typeof runtime === "object" && !Array.isArray(runtime)
@@ -58,7 +58,7 @@ function isImportedHistorySession(detail: AsterSessionDetail): boolean {
 }
 
 function findLatestFailedRuntimeTurnId(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
 ): string | null {
   const threadReadTurns = [...(detail.thread_read?.turns || [])].reverse();
   const failedThreadReadTurn = threadReadTurns.find(
@@ -78,7 +78,7 @@ function findLatestFailedRuntimeTurnId(
 }
 
 function findLatestFailedRuntimeErrorItem(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   turnId: string | null,
 ): Extract<AgentThreadItem, { type: "error" }> | null {
   const errorItems = (detail.items || []).filter(
@@ -106,7 +106,7 @@ function findLatestFailedRuntimeErrorItem(
 }
 
 function findLatestFailedRuntimeTurn(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   turnId: string | null,
 ): AgentThreadTurn | null {
   if (turnId) {
@@ -125,7 +125,7 @@ function findLatestFailedRuntimeTurn(
 }
 
 export function hydrateFailedRuntimeReadModelMessage(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   topicId: string,
 ): Message | null {
   if (isImportedHistorySession(detail)) {
@@ -332,14 +332,14 @@ function historyToolCallFromThreadToolCall(
 }
 
 function resolveThreadReadToolCallUsage(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   runtimeTurnId: string,
 ): Message["usage"] {
   return resolveSessionDetailTurnUsage(detail, runtimeTurnId);
 }
 
 function collectThreadToolItemsById(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
 ): Map<string, AgentThreadItem> {
   const itemsById = new Map<string, AgentThreadItem>();
   for (const item of [
@@ -362,7 +362,7 @@ function collectThreadToolItemsById(
 }
 
 export function hydrateSessionDetailMessagesFromThreadReadToolCalls(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   topicId: string,
 ): Message[] {
   const rawToolCalls = detail.thread_read?.tool_calls || [];

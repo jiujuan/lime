@@ -144,8 +144,7 @@ function main() {
     "src/components/agent/chat/utils/sessionExecutionRuntime.ts";
   const executionRuntimeProjectionPath =
     "src/components/agent/chat/projection/sessionExecutionRuntimeProjection.ts";
-  // 旧 backend `lime-rs/src/commands/aster_agent_cmd/run_metadata/request_metadata.rs`
-  // 已随 `lime-rs/src/**` 整目录在 2026-06-10 删除；harness metadata 的 backend 事实源
+  // 旧 backend 已随 `lime-rs/src/**` 整目录在 2026-06-10 删除；harness metadata 的 backend 事实源
   // 现在落在 `lime-rs/crates/agent/src/session_execution_runtime.rs` 等 crate 模块，
   // 字段映射的写法不再是 `("frontKey","backKey")` 元组，本脚本只继续守住前端约束。
 

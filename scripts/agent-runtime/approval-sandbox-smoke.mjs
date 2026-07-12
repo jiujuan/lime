@@ -549,23 +549,23 @@ async function runPermissionDecisionFlow(
     },
   });
   const turnId = `qc-approval-${decision}-${Date.now()}-${process.pid}`;
-  const eventName = `aster_stream_${sessionId}_${turnId}`;
+  const eventName = `agent_stream_${sessionId}_${turnId}`;
   const submittedPolicies = {
     approvalPolicy: APPROVAL_POLICY,
     sandboxPolicy: SANDBOX_POLICY,
   };
 
-  const turnConfig = {
-    execution_strategy: submittedStrategy,
-    approval_policy: APPROVAL_POLICY,
-    sandbox_policy: SANDBOX_POLICY,
+  const runtimeRequest = {
+    executionStrategy: submittedStrategy,
+    approvalPolicy: APPROVAL_POLICY,
+    sandboxPolicy: SANDBOX_POLICY,
     metadata: buildRuntimeContractMetadata(),
   };
   if (providerPreference?.providerPreference) {
-    turnConfig.provider_preference = providerPreference.providerPreference;
+    runtimeRequest.providerPreference = providerPreference.providerPreference;
   }
   if (providerPreference?.modelPreference) {
-    turnConfig.model_preference = providerPreference.modelPreference;
+    runtimeRequest.modelPreference = providerPreference.modelPreference;
   }
 
   await startAgentSessionTurnCurrent(options, {
@@ -575,7 +575,7 @@ async function runPermissionDecisionFlow(
     workspaceId,
     eventName,
     turnId,
-    turnConfig,
+    runtimeRequest,
     skipPreSubmitResume: true,
   });
 

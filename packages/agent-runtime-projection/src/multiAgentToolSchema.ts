@@ -210,7 +210,7 @@ export function validateCodexMultiAgentToolSchema(
       issue(
         "legacy_tool_name",
         `${path}.toolName`,
-        `${toolName} is a legacy Lime/Aster team tool name; use Codex v2 multi-agent tools instead.`,
+        `${toolName} is a legacy Lime/Agent team tool name; use Codex v2 multi-agent tools instead.`,
       ),
     ];
   }

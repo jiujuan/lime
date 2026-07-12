@@ -420,16 +420,10 @@ fn collect_runtime_execution_policy_layers<'a>(
         layers,
     );
 
-    [
-        "runtime_options",
-        "runtimeOptions",
-        "aster_chat_request",
-        "asterChatRequest",
-        "metadata",
-    ]
-    .into_iter()
-    .filter_map(|key| object.get(key))
-    .for_each(|nested| collect_runtime_execution_policy_layers(nested, layers));
+    ["runtime_options", "runtimeOptions", "metadata"]
+        .into_iter()
+        .filter_map(|key| object.get(key))
+        .for_each(|nested| collect_runtime_execution_policy_layers(nested, layers));
 }
 
 fn push_named_policy_layer<'a>(
@@ -460,8 +454,6 @@ fn find_persisted_tool_execution_policy_value(value: &JsonValue) -> Option<&Json
         "nativeAgent",
         "runtime_options",
         "runtimeOptions",
-        "aster_chat_request",
-        "asterChatRequest",
         "metadata",
     ]
     .into_iter()

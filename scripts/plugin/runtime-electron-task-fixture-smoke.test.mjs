@@ -62,8 +62,8 @@ describe("plugin runtime Electron task fixture smoke guard", () => {
     expect(content).toContain('"action.required"');
     expect(content).toContain('"action.resolved"');
     expect(content).toContain('"turn.canceled"');
-    expect(content).toContain("hostOptionsAsterChatRequestSeen");
-    expect(content).toContain("turnConfigMirrorSeen");
+    expect(content).toContain("runtimeRequestSeen");
+    expect(content).toContain("runtimeRequestProviderConfigSeen");
     expect(content).toContain("async function waitForBackendKinds(");
     expect(content).toContain("await waitForBackendKinds(backendLogPath, options)");
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "mock"');

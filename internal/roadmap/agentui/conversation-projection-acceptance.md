@@ -123,7 +123,7 @@
 普通 projection 改动：
 
 ```bash
-npm test -- "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx"
+npm test -- "src/components/agent/chat/hooks/useAgentChat.test.tsx"
 npm test -- "src/components/agent/chat/components/MessageList.test.tsx"
 ```
 

@@ -14,7 +14,7 @@ const KNOWLEDGE_MATCHERS = [
   prefix("scripts/knowledge-"),
   prefix("scripts/knowledge/"),
   prefix("lime-rs/crates/knowledge/"),
-  exact("lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs"),
+  exact("lime-rs/src/commands/agent_cmd/runtime_turn.rs"),
   exact("lime-rs/src/dev_bridge/dispatcher.rs"),
   exact("lime-rs/src/dev_bridge/dispatcher/files.rs"),
   exact("lime-rs/src/skills/default_skills.rs"),

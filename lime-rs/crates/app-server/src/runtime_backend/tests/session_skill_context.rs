@@ -29,9 +29,9 @@ Use concise language.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -80,9 +80,9 @@ fn session_config_appends_plugin_activation_metadata_to_system_prompt() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -173,9 +173,9 @@ Use article workflow rules.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -199,7 +199,7 @@ Use article workflow rules.
 }
 
 #[test]
-fn session_config_keeps_selected_skill_allowed_tools_inside_aster_skill_runtime() {
+fn session_config_keeps_selected_skill_allowed_tools_inside_agent_skill_runtime() {
     let workspace = TempDir::new().expect("workspace");
     let skill_dir = workspace.path().join(".agents/skills/writer");
     std::fs::create_dir_all(&skill_dir).expect("skill dir");
@@ -233,9 +233,9 @@ Use concise language.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -254,7 +254,7 @@ Use concise language.
     let turn_context = config.turn_context.expect("turn context");
     assert!(
         turn_context.metadata.get("tool_scope").is_none(),
-        "App Server must not duplicate Aster Skill allowed-tools as a main-turn scope"
+        "App Server must not duplicate Agent Skill allowed-tools as a main-turn scope"
     );
 }
 
@@ -305,9 +305,9 @@ Use evidence.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -363,9 +363,9 @@ Use concise language.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -412,9 +412,9 @@ Use concise language.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());

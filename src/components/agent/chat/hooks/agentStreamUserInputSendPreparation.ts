@@ -1,6 +1,6 @@
 import type {
-  AgentRuntimeWebSearchMode,
-  AsterExecutionStrategy,
+  AgentExecutionStrategy,
+  RuntimeSearchMode,
 } from "@/lib/api/agentRuntime";
 import type {
   AssistantDraftState,
@@ -49,10 +49,10 @@ interface PrepareAgentStreamUserInputSendOptions {
   content: string;
   images: MessageImage[];
   webSearch?: boolean;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   thinking?: boolean;
   skipUserMessage: boolean;
-  executionStrategyOverride?: AsterExecutionStrategy;
+  executionStrategyOverride?: AgentExecutionStrategy;
   modelOverride?: string;
   autoContinue?: import("@/lib/api/agentRuntime").AutoContinueRequestPayload;
   systemPrompt?: string;
@@ -64,10 +64,10 @@ export interface PreparedAgentStreamUserInputSend {
   content: string;
   images: MessageImage[];
   webSearch?: boolean;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   thinking?: boolean;
   skipUserMessage: boolean;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;

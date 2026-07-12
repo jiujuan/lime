@@ -1,6 +1,6 @@
 import type {
-  AsterSessionExecutionRuntime,
-  AsterSessionExecutionRuntimeSource,
+  AgentSessionExecutionRuntime,
+  AgentSessionExecutionRuntimeSource,
 } from "@/lib/api/agentExecutionRuntime";
 import type {
   AgentEventModelChange,
@@ -10,10 +10,10 @@ import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 import { normalizeHarnessSessionMode } from "../utils/harnessSessionMode";
 
 function mergeExecutionRuntime(
-  current: AsterSessionExecutionRuntime | null,
-  updates: Partial<AsterSessionExecutionRuntime>,
-  source: AsterSessionExecutionRuntimeSource,
-): AsterSessionExecutionRuntime | null {
+  current: AgentSessionExecutionRuntime | null,
+  updates: Partial<AgentSessionExecutionRuntime>,
+  source: AgentSessionExecutionRuntimeSource,
+): AgentSessionExecutionRuntime | null {
   const sessionId = updates.session_id || current?.session_id;
   const providerSelector =
     updates.provider_selector ?? current?.provider_selector ?? null;
@@ -92,9 +92,9 @@ function mergeExecutionRuntime(
 }
 
 export function applyTurnContextExecutionRuntime(
-  current: AsterSessionExecutionRuntime | null,
+  current: AgentSessionExecutionRuntime | null,
   event: AgentEventTurnContext,
-): AsterSessionExecutionRuntime | null {
+): AgentSessionExecutionRuntime | null {
   const outputSchemaRuntime = event.output_schema_runtime || null;
   return mergeExecutionRuntime(
     current,
@@ -112,9 +112,9 @@ export function applyTurnContextExecutionRuntime(
 }
 
 export function applyModelChangeExecutionRuntime(
-  current: AsterSessionExecutionRuntime | null,
+  current: AgentSessionExecutionRuntime | null,
   event: AgentEventModelChange,
-): AsterSessionExecutionRuntime | null {
+): AgentSessionExecutionRuntime | null {
   return mergeExecutionRuntime(
     current,
     {

@@ -15,7 +15,7 @@
 
 ## 覆盖工具
 
-native 注册事实源：`lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs`
+native 注册事实源：`lime-rs/crates/agent-rust/crates/agent/src/tools/mod.rs`
 
 - `Read`
 - `Write`

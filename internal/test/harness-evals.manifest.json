@@ -37,7 +37,7 @@
       "description": "固定一条可在 CI 和 nightly 中稳定运行的 replay fixture，先验证 grader 合同与样本结构，而不是等真实工作区样本才能开始。",
       "upstream": {
         "codex": "沿用 Codex evidence-first 的 replay / grader 形状。",
-        "aster": "沿用 Aster runtime / thread / turn 的会话事实边界。",
+        "agent": "沿用 Agent runtime / thread / turn 的会话事实边界。",
         "lime": "把样本、脚本和摘要统一落在 Lime 仓库 current 主线。"
       },
       "cases": [
@@ -65,7 +65,7 @@
       "description": "把工作区导出的高价值 replay case 提升为仓库 current 样本，用于固定回归入口与 nightly 趋势对比。",
       "upstream": {
         "codex": "沿用 Codex 把真实失败沉淀为 replay 资产的做法。",
-        "aster": "继续复用 Aster runtime 导出的 thread / turn / evidence 边界。",
+        "agent": "继续复用 Agent runtime 导出的 thread / turn / evidence 边界。",
         "lime": "由 Lime 持有 promotion 命令、repo fixture 目录与 current manifest。"
       },
       "cases": []
@@ -78,7 +78,7 @@
       "description": "扫描当前工作区 `.lime/harness/sessions/*/replay`，把真实会话导出的 replay case 接进固定摘要格式。",
       "upstream": {
         "codex": "参考 Codex 把真实失败沉淀为 replay / eval 样本的习惯。",
-        "aster": "复用 Aster session runtime 导出的 thread / turn 上下文。",
+        "agent": "复用 Agent session runtime 导出的 thread / turn 上下文。",
         "lime": "让 Lime 的 handoff bundle 与 evidence pack 成为 eval 的事实源。"
       },
       "cases": [

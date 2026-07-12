@@ -69,13 +69,7 @@ function normalizeApprovalNetworkHost(value) {
 }
 
 function approvalRequestResumeHostMetadata() {
-  return (
-    asterChatRequest?.turn_config?.metadata ??
-    asterChatRequest?.turnConfig?.metadata ??
-    asterChatRequest?.metadata ??
-    input.request?.runtimeOptions?.metadata ??
-    {}
-  );
+  return runtimeRequest?.metadata ?? {};
 }
 
 function approvalRequestResumeScope() {
@@ -97,8 +91,8 @@ function approvalRequestResumeScope() {
     browserAssist?.targetUrl ??
     commandMatch?.[0];
   const workspaceId = normalizeApprovalScopeString(
-    asterChatRequest?.workspace_id ??
-      asterChatRequest?.workspaceId ??
+    runtimeRequest?.workspace_id ??
+      runtimeRequest?.workspaceId ??
       metadata?.workspace_id ??
       metadata?.workspaceId ??
       harness?.workspace_id ??
@@ -107,10 +101,10 @@ function approvalRequestResumeScope() {
       input.request?.session?.workspace_id,
   );
   const workingDirHash = hashApprovalScopeValue(
-    asterChatRequest?.workingDir ??
-      asterChatRequest?.working_dir ??
-      asterChatRequest?.workingDirectory ??
-      asterChatRequest?.working_directory ??
+    runtimeRequest?.workingDir ??
+      runtimeRequest?.working_dir ??
+      runtimeRequest?.workingDirectory ??
+      runtimeRequest?.working_directory ??
       metadata?.workingDir ??
       metadata?.working_dir ??
       harness?.workingDir ??
@@ -118,10 +112,10 @@ function approvalRequestResumeScope() {
       harness?.cwd,
   );
   const projectRootHash = hashApprovalScopeValue(
-    asterChatRequest?.projectRoot ??
-      asterChatRequest?.project_root ??
-      asterChatRequest?.workspaceRoot ??
-      asterChatRequest?.workspace_root ??
+    runtimeRequest?.projectRoot ??
+      runtimeRequest?.project_root ??
+      runtimeRequest?.workspaceRoot ??
+      runtimeRequest?.workspace_root ??
       metadata?.projectRoot ??
       metadata?.project_root ??
       metadata?.workspaceRoot ??

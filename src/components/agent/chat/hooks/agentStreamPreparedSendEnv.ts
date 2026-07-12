@@ -1,8 +1,8 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type {
@@ -34,7 +34,7 @@ export interface AgentStreamPreparedSendEnv {
     promptText: string,
     options?: { requireTerminal?: boolean; turnId?: string | null },
   ) => Promise<boolean>;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   accessMode: AgentAccessMode;
   providerTypeRef: MutableRefObject<string>;
   modelRef: MutableRefObject<string>;
@@ -50,7 +50,7 @@ export interface AgentStreamPreparedSendEnv {
   ) => SessionModelPreference | null;
   getSyncedSessionExecutionStrategy: (
     sessionId: string,
-  ) => AsterExecutionStrategy | null;
+  ) => AgentExecutionStrategy | null;
   getSyncedSessionRecentPreferences?: (
     sessionId: string,
   ) => ChatToolPreferences | null;
@@ -62,7 +62,7 @@ export interface AgentStreamPreparedSendEnv {
     fileName: string,
     context?: import("../types").WriteArtifactContext,
   ) => void;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   clawTraceEnabled: boolean;
   soulCopy?: SoulInteractionCopy;
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
@@ -73,7 +73,7 @@ export interface AgentStreamPreparedSendEnv {
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setExecutionRuntime: Dispatch<
-    SetStateAction<AsterSessionExecutionRuntime | null>
+    SetStateAction<AgentSessionExecutionRuntime | null>
   >;
   setQueuedTurns: Dispatch<SetStateAction<QueuedTurnSnapshot[]>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;

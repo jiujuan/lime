@@ -582,7 +582,7 @@ describe("managed-objective-continuation-smoke-core", () => {
         message: "请只回复 OK",
         eventName: "event-current",
         turnId: "turn-current",
-        turnConfig: {
+        runtimeRequest: {
           providerPreference: "fixture-provider",
           modelPreference: "fixture-model",
           approvalPolicy: "never",
@@ -678,22 +678,13 @@ describe("managed-objective-continuation-smoke-core", () => {
         },
         runtimeOptions: {
           eventName: "event-current",
-          providerPreference: "fixture-provider",
-          modelPreference: "fixture-model",
-          metadata: { source: "test" },
-          hostOptions: {
-            asterChatRequest: {
-              message: "请只回复 OK",
-              session_id: "session-current",
-              workspace_id: "workspace-current",
-              event_name: "event-current",
-              turn_id: "turn-current",
-              provider_preference: "fixture-provider",
-              model_preference: "fixture-model",
-              approval_policy: "never",
-              sandbox_policy: "read-only",
-              metadata: { source: "test" },
-            },
+          runtimeRequest: {
+            workspaceId: "workspace-current",
+            providerPreference: "fixture-provider",
+            modelPreference: "fixture-model",
+            approvalPolicy: "never",
+            sandboxPolicy: "read-only",
+            metadata: { source: "test" },
           },
         },
         skipPreSubmitResume: true,

@@ -1,4 +1,4 @@
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 
 export interface SidebarOpenedProjectSummary {
   id: string;
@@ -9,17 +9,17 @@ export interface SidebarOpenedProjectSummary {
 
 export interface SidebarConversationProjectSection {
   project: SidebarOpenedProjectSummary;
-  sessions: AsterSessionInfo[];
+  sessions: AgentSessionInfo[];
 }
 
 interface BuildSidebarConversationGroupsParams {
-  sessions: AsterSessionInfo[];
+  sessions: AgentSessionInfo[];
   openedProjects: SidebarOpenedProjectSummary[];
 }
 
 interface SidebarConversationGroups {
   projectSections: SidebarConversationProjectSection[];
-  standaloneSessions: AsterSessionInfo[];
+  standaloneSessions: AgentSessionInfo[];
 }
 
 function normalizeId(value?: string | null): string | null {
@@ -33,7 +33,7 @@ function normalizePath(value?: string | null): string | null {
 }
 
 function sessionBelongsToProject(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   project: SidebarOpenedProjectSummary,
 ): boolean {
   if (normalizeId(session.workspace_id) === normalizeId(project.id)) {
@@ -95,7 +95,7 @@ export function buildSidebarConversationGroups({
 export function flattenSidebarConversationGroups({
   projectSections,
   standaloneSessions,
-}: SidebarConversationGroups): AsterSessionInfo[] {
+}: SidebarConversationGroups): AgentSessionInfo[] {
   return [
     ...projectSections.flatMap((section) => section.sessions),
     ...standaloneSessions,

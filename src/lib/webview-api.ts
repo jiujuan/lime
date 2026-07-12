@@ -285,7 +285,7 @@ export interface BrowserConnectorInstallResult {
 export type BrowserConnectorGuideMode = "extension" | "cdp";
 
 export type BrowserBackendType =
-  | "aster_compat"
+  | "current"
   | "lime_extension_bridge"
   | "cdp_direct";
 
@@ -307,8 +307,8 @@ export interface BrowserBackendsStatusSnapshot {
   bridge_control_count: number;
   running_profile_count: number;
   cdp_alive_profile_count: number;
-  aster_native_host_supported: boolean;
-  aster_native_host_configured: boolean;
+  agent_native_host_supported: boolean;
+  agent_native_host_configured: boolean;
   backends: BrowserBackendStatusItem[];
 }
 
@@ -717,7 +717,7 @@ function isOptionalNullableString(value: unknown): boolean {
 
 function isBrowserBackendType(value: unknown): value is BrowserBackendType {
   return (
-    value === "aster_compat" ||
+    value === "current" ||
     value === "lime_extension_bridge" ||
     value === "cdp_direct"
   );
@@ -977,8 +977,8 @@ function isBrowserBackendsStatusSnapshot(
     isFiniteNumber(value.bridge_control_count) &&
     isFiniteNumber(value.running_profile_count) &&
     isFiniteNumber(value.cdp_alive_profile_count) &&
-    typeof value.aster_native_host_supported === "boolean" &&
-    typeof value.aster_native_host_configured === "boolean" &&
+    typeof value.agent_native_host_supported === "boolean" &&
+    typeof value.agent_native_host_configured === "boolean" &&
     Array.isArray(value.backends) &&
     value.backends.every(isBrowserBackendStatusItem)
   );

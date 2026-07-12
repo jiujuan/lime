@@ -34,7 +34,7 @@ const serialTestFileOrder = [
   "scripts/lib/harness-eval-history-record.test.ts",
   "src/components/agent/chat/index.test.tsx",
   "src/components/agent/chat/index.projectRestore.test.tsx",
-  "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx",
+  "src/components/agent/chat/hooks/useAgentChat.test.tsx",
   "src/components/workspace/WorkbenchPage.test.tsx",
   "src/components/agent/chat/components/HarnessStatusPanel.test.tsx",
   "src/components/agent/chat/components/ThemeWorkbenchSidebar.test.tsx",

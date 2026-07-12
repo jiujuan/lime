@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
-import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 import type { Message, MessageImage } from "../types";
 import {
@@ -70,7 +70,7 @@ describe("agentStreamUserInputSendPreparation", () => {
     providerType?: string;
     model?: string;
     reasoningEffort?: string;
-    executionRuntime?: AsterSessionExecutionRuntime | null;
+    executionRuntime?: AgentSessionExecutionRuntime | null;
   }): AgentStreamUserInputSendPreparationEnv {
     let messages: Message[] = [];
     let isSending = false;

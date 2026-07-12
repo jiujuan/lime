@@ -1,7 +1,7 @@
 //! Reply backend 的 current execution contract。
 //!
 //! 该模块描述 Turn reply backend 如何消费已 materialize 的 current start request，
-//! 不绑定 Aster `Agent::reply`、provider trait 或事件 source。
+//! 不绑定 Agent `Agent::reply`、provider trait 或事件 source。
 
 use crate::reply_host::{
     RuntimeReplyStartError, RuntimeReplyStartRequest, RuntimeReplyStartResult, RuntimeReplyStream,

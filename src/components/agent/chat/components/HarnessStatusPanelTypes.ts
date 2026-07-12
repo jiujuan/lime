@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import type {
   AgentRuntimeThreadReadModel,
   AgentRuntimeToolInventory,
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
@@ -52,7 +52,7 @@ export interface HarnessStatusPanelProps {
   onRevealPath?: (path: string) => Promise<void>;
   onOpenPath?: (path: string) => Promise<void>;
   onOpenFileCheckpoints?: () => void;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
+  childSubagentSessions?: AgentSubagentSessionInfo[];
   onOpenSubagentSession?: (sessionId: string) => void;
   toolInventory?: AgentRuntimeToolInventory | null;
   toolInventoryLoading?: boolean;

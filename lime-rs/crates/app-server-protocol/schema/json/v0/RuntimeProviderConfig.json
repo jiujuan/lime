@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "RuntimeToolCallStrategy": {
+      "enum": [
+        "native",
+        "tool_shim"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "apiKey": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "baseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modelCapabilities": true,
+    "modelName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "providerName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "toolCallStrategy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeToolCallStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "toolshimModel": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "RuntimeProviderConfig",
+  "type": "object"
+}

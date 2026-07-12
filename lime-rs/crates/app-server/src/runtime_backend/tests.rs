@@ -150,9 +150,21 @@ impl McpAppDataSource for TestMcpAutostartDataSource {
 
 pub(super) fn request_for_test(
     message: &str,
-    host_options: Option<Value>,
+    runtime_request: Option<app_server_protocol::RuntimeRequest>,
     metadata: Option<Value>,
 ) -> ExecutionRequest {
+    let runtime_request = match (runtime_request, metadata) {
+        (Some(mut runtime_request), Some(metadata)) => {
+            runtime_request.metadata = Some(metadata);
+            Some(runtime_request)
+        }
+        (Some(runtime_request), None) => Some(runtime_request),
+        (None, Some(metadata)) => Some(app_server_protocol::RuntimeRequest {
+            metadata: Some(metadata),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
+        (None, None) => None,
+    };
     ExecutionRequest {
         host: RuntimeHostContext::default(),
         session: AgentSession {
@@ -178,23 +190,14 @@ pub(super) fn request_for_test(
             attachments: Vec::new(),
         },
         runtime_options: Some(RuntimeOptions {
-            capability_id: None,
             stream: true,
-            event_name: None,
-            provider_preference: None,
-            model_preference: None,
-            metadata,
-            queued_turn_id: None,
-            host_options,
+            runtime_request,
             ..RuntimeOptions::default()
         }),
         event_name: None,
         expected_output: None,
         structured_output: None,
         output_schema: None,
-        provider_preference: None,
-        model_preference: None,
-        metadata: None,
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,

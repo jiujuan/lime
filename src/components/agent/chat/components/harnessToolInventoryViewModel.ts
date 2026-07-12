@@ -130,8 +130,8 @@ export function formatToolSourceKindLabel(
   value: AgentToolSourceKind | string,
 ): string {
   switch (value) {
-    case "aster_builtin":
-      return "Aster 内置";
+    case "agent_builtin":
+      return "Agent 内置";
     case "lime_injected":
       return "Lime 注入";
     case "browser_compatibility":

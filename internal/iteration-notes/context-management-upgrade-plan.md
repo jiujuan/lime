@@ -13,16 +13,16 @@
    - 只有 `max_turns`、`system_prompt`、`include_context_trace`
    - 没有暴露 token 限制、压缩策略等配置
 
-3. **aster 框架能力未接入**
-   - aster 有渐进式工具响应移除能力
-   - aster 支持 AI 摘要
+3. **agent 框架能力未接入**
+   - agent 有渐进式工具响应移除能力
+   - agent 支持 AI 摘要
    - Lime 未正确配置和使用这些能力
 
 ## 改进方案
 
 ### 阶段 1：扩展 SessionConfigBuilder
 
-在 `lime-rs/crates/agent/src/aster_state_support.rs` 中扩展 `SessionConfigBuilder`：
+在 `lime-rs/crates/agent/src/agent_state_support.rs` 中扩展 `SessionConfigBuilder`：
 
 ```rust
 pub struct SessionConfigBuilder {
@@ -69,9 +69,9 @@ async fn create_summary_with_ai(
 }
 ```
 
-### 阶段 3：集成到 Aster Agent 初始化
+### 阶段 3：集成到 Agent Agent 初始化
 
-在 `aster_agent_cmd.rs` 中配置上下文压缩：
+在 `agent_cmd.rs` 中配置上下文压缩：
 
 ```rust
 let session_config = SessionConfigBuilder::new(&session_id)
@@ -102,7 +102,7 @@ let session_config = SessionConfigBuilder::new(&session_id)
 2. ⬜ 扩展 SessionConfigBuilder
 3. ⬜ 实现 AI 摘要生成逻辑
 4. ⬜ 改造 session_context_service.rs
-5. ⬜ 集成到 aster_agent_cmd.rs
+5. ⬜ 集成到 agent_cmd.rs
 6. ⬜ 编写单元测试
 7. ⬜ 进行集成测试
 8. ⬜ 性能优化和调优

@@ -13,7 +13,7 @@
 
 Lime 不从零重写，也不把 Codex 或 opencode 当作可直接覆盖的产品形态。Codex 是 Agent 工程主原点，opencode 只作为多模型、多模态能力代数参照，Lime 是桌面 GUI 产品。
 
-本目录的最高准则是 Codex-first：除多模型 / 多模态的 provider、capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，其余命名、架构、实现和测试护栏都尽量按 Codex 对齐。Lime 当前存在的不合理命名、旧 `Aster` / `agent_runtime_*` 残留、临时 projection 或旧 UI 状态机不是 current 续命理由；后续每一刀应先判断如何向 Codex 的 Thread / Turn / Item、app-server、core runtime、event materialization、tool lifecycle、history hydrate 和 TUI fixture 收敛。
+本目录的最高准则是 Codex-first：除多模型 / 多模态的 provider、capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，其余命名、架构、实现和测试护栏都尽量按 Codex 对齐。Lime 当前存在的不合理命名、旧 `Agent` / `agent_runtime_*` 残留、临时 projection 或旧 UI 状态机不是 current 续命理由；后续每一刀应先判断如何向 Codex 的 Thread / Turn / Item、app-server、core runtime、event materialization、tool lifecycle、history hydrate 和 TUI fixture 收敛。
 
 本目录回答的问题是：
 

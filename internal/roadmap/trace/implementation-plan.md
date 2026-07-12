@@ -8,7 +8,7 @@
 ```text
 P0 体系冻结与首字分段
 -> P1 App Server / renderer 最小 trace
--> P2 Aster provider phase trace
+-> P2 Agent provider phase trace
 -> P3 Developer UI / support bundle
 -> P4 W3C trace context / OTEL 可选出口
 -> P5 GUI smoke / regression evidence
@@ -69,11 +69,11 @@ npm run test:contracts
 3. Renderer 已保留 `server_event_emitted_at / renderer_event_received_at / trace_id / run_id / request_id`，可计算 bridge delivery。
 4. `fastResponseRouting.ts` 已收敛默认 slot/resolver/status/reasoning 到结构化 routing profile，metadata 携带 `profile_id` 便于 trace/diagnostic 关联。
 
-## 4. P2：Aster Provider Phase Trace
+## 4. P2：Agent Provider Phase Trace
 
 目标：
 
-1. Aster reply loop 将 provider request / first event / first text delta 转为结构化 `ProviderTrace`。
+1. Agent reply loop 将 provider request / first event / first text delta 转为结构化 `ProviderTrace`。
 2. direct answer no-tools 路径继续保留 MOIM skip 日志，并在 provider call 前记录 request start。
 3. provider failed / canceled 时输出 `provider.failed` / `provider.canceled` 诊断事件。
 4. App Server 从现有 event 映射 trace vocabulary，计算 `provider_wait_ms` 不再依赖正文或 renderer 反推。
@@ -81,13 +81,13 @@ npm run test:contracts
 最低测试：
 
 ```bash
-cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core direct_answer
-cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core provider_trace
+cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core direct_answer
+cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core provider_trace
 ```
 
 当前进度：
 
-1. `aster::agents::ProviderTraceEvent` 已覆盖 `request_started / first_event_received / first_text_delta_received / failed / canceled`。
+1. `agent::agents::ProviderTraceEvent` 已覆盖 `request_started / first_event_received / first_text_delta_received / failed / canceled`。
 2. `lime_agent::AgentEvent::ProviderTrace` 透传安全 metadata：provider、model、attempt、elapsed_ms、text_chars、status、failure_category，不写 prompt / provider payload。
 3. `ProviderTraceEvent` 已透传 provider response header request id：`provider_request_id / provider_request_id_header`，只作为安全 scalar 进入 RuntimeEvent 和 trace store metrics，不写 provider body。
 4. `runtime_backend/tool_events.rs` 已映射到 `provider.request.started`、`provider.first_event.received`、`provider.first_text_delta.received`、`provider.failed`、`provider.canceled`。
@@ -267,7 +267,7 @@ npm run smoke:agent-runtime-current-fixture
 目标：
 
 1. 兼容 `traceparent / tracestate`。
-2. renderer -> App Server -> Aster -> provider HTTP headers 可传递 trace context。
+2. renderer -> App Server -> Agent -> provider HTTP headers 可传递 trace context。
 3. OpenTelemetry exporter 可选，默认 off。
 4. 上游 provider request id 与本地 trace 关联。
 
@@ -284,8 +284,8 @@ npm run smoke:agent-runtime-current-fixture
 2. App Server request span 已完成：`app_server.request` server span 记录安全 scalar trace/session 字段，不记录 prompt、assistant delta、provider payload、raw JSONL 或 `tracestate`。
 3. OpenTelemetry remote parent 已完成：`otel_trace.rs` 将合法 W3C carrier 设置为 OTEL remote parent，request trace 测试 exporter 已证明导出 span 继承 renderer trace id / parent span id。
 4. OTLP exporter 入口已完成：默认关闭；仅在 `APP_SERVER_OTEL_EXPORTER=otlp`、`OTEL_TRACES_EXPORTER=otlp`、`OTEL_EXPORTER_OTLP_ENDPOINT` 或 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 显式配置时安装。
-5. App Server -> Aster -> provider HTTP headers 已完成：`request_context.rs` 将合法 carrier 投影为 `w3c_trace_context`，Aster `session_context.rs` 从 turn context 读取并归一化，`api_client.rs` 在统一 provider HTTP request builder 上注入 `traceparent / tracestate`。
-6. 上游 provider request id 关联已完成：Aster `api_client.rs` 从 provider response headers 捕获 request id，`ProviderTraceEvent` 透传到 App Server RuntimeEvent，trace store 仅在 summary-only metrics 中保存 `provider_request_id / provider_request_id_header`。
+5. App Server -> Agent -> provider HTTP headers 已完成：`request_context.rs` 将合法 carrier 投影为 `w3c_trace_context`，Agent `session_context.rs` 从 turn context 读取并归一化，`api_client.rs` 在统一 provider HTTP request builder 上注入 `traceparent / tracestate`。
+6. 上游 provider request id 关联已完成：Agent `api_client.rs` 从 provider response headers 捕获 request id，`ProviderTraceEvent` 透传到 App Server RuntimeEvent，trace store 仅在 summary-only metrics 中保存 `provider_request_id / provider_request_id_header`。
 7. Codex 参考点：对齐 `rollout-trace` 的 `upstream_request_id` 思路和 `response-debug-context` 的 header-only 提取边界；Lime 不记录 provider response body、prompt、assistant delta 或 `tracestate`。
 
 ## 7. P5：回归证据

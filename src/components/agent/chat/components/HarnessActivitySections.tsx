@@ -1,4 +1,4 @@
-import type { AsterSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
 import type { HarnessSessionState } from "../utils/harnessState";
 import type {
   FileDisplayMode,
@@ -34,7 +34,7 @@ interface HarnessActivitySectionsProps {
   groupedFileEvents: FileEventGroup[];
   openPreview: (request: FilePreviewRequest) => void | Promise<void>;
   realTeamSummary: ChildSubagentSessionSummary;
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  childSubagentSessions: AgentSubagentSessionInfo[];
   onOpenSubagentSession?: (sessionId: string) => void;
   environment: HarnessEnvironmentSummary;
 }

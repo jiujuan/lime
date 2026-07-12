@@ -1,6 +1,6 @@
 //! Reply start 前的 current session metadata 准备规则。
 //!
-//! 这里不持有 provider/backend 具体实现；Aster 只能在 compat adapter 内消费这些
+//! 这里不持有 provider/backend 具体实现；Agent 只能在 compat adapter 内消费这些
 //! current metadata。
 
 use crate::session_config::AgentSessionConfig;

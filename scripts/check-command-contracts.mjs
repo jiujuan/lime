@@ -296,14 +296,14 @@ const retiredAgentRuntimeObjectiveContinuationGatewayCommands = new Set([
   "agent_runtime_continue_objective",
   "agent_runtime_audit_objective",
 ]);
-const retiredAgentRuntimeProcessAsterRustCommands = new Set([
+const retiredAgentRuntimeProcessRustCommands = new Set([
   "agent_start_process",
   "agent_stop_process",
   "agent_get_process_status",
-  "aster_agent_init",
-  "aster_agent_status",
-  "aster_agent_configure_provider",
-  "aster_agent_reset",
+  "agent_init",
+  "agent_status",
+  "agent_configure_provider",
+  "agent_reset",
 ]);
 const retiredAgentRuntimeExportRustCommands = new Set([
   "agent_runtime_export_analysis_handoff",
@@ -510,7 +510,7 @@ const retiredAgentRuntimeRustCommands = new Set([
   ...retiredAgentRuntimeCoreCurrentBridgeRustCommands,
   ...retiredAgentRuntimeCheckpointQueueReplayRustCommands,
   ...retiredAgentRuntimeCompactObjectiveRustCommands,
-  ...retiredAgentRuntimeProcessAsterRustCommands,
+  ...retiredAgentRuntimeProcessRustCommands,
   ...retiredAgentRuntimeExportRustCommands,
 ]);
 const currentFileBrowserDesktopHostShellCommands = new Set([
@@ -739,7 +739,6 @@ const currentElectronHostRequiredCommands = new Set([
   ...currentSkillDesktopHostShellCommands,
   ...currentLayeredDesignDesktopHostShellCommands,
   ...currentFileBrowserDesktopHostShellCommands,
-  "agent_init",
   "plugin_launch_shell",
   "plugin_select_directory",
   "plugin_get_ui_runtime_status",
@@ -1588,11 +1587,11 @@ function collectProductionBridgeGuardFailures() {
       source: electronSystemUtilityHostSource,
     },
   ]) {
-    if (source.includes('"aster_compat"')) {
+    if (source.includes('"current"')) {
       failures.push({
         file: sourcePath,
-        message: "Electron 设置页诊断 facade 不能恢复 legacy Aster 浏览器后端",
-        token: '"aster_compat"',
+        message: "Electron 设置页诊断 facade 不能恢复 legacy Agent 浏览器后端",
+        token: '"current"',
       });
     }
     if (source.includes("auto_fallback: true")) {
@@ -2949,11 +2948,6 @@ function collectRetiredVoiceInputConfigFacadeSourceFailures() {
       message:
         "已收敛到 app config current 网关的旧 Voice Input config 命令不能回到 Rust DevBridge voice dispatcher",
     },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/runtime_turn/bootstrap.rs",
-      message:
-        "Aster Config tool 可以读取 voice config service / 内部 helper，不能继续调用旧 Voice Input config Tauri command wrapper",
-    },
   ];
 
   for (const source of restrictedSources) {
@@ -3473,6 +3467,15 @@ function collectCurrentLayeredDesignDesktopHostShellSourceFailures() {
 
 function collectRetiredAgentRuntimeRustSourceFailures() {
   const failures = [];
+  const retiredCommandsRoot = "lime-rs/src/commands";
+  if (fs.existsSync(path.join(repoRoot, retiredCommandsRoot))) {
+    failures.push({
+      file: retiredCommandsRoot,
+      message:
+        "旧 Tauri command tree 已删除；Agent runtime 只能经 App Server JSON-RPC 进入 current 主链",
+      token: retiredCommandsRoot,
+    });
+  }
   const restrictedSources = [
     {
       path: "lime-rs/src/app/runner.rs",
@@ -3482,80 +3485,13 @@ function collectRetiredAgentRuntimeRustSourceFailures() {
     {
       path: "lime-rs/src/dev_bridge/dispatcher/agent_sessions.rs",
       message:
-        "Agent Runtime session CRUD / public subagent facade / core current bridge / checkpoint queue replay / compact objective / process Aster 旧入口已撤下，不能回到 Rust DevBridge dispatcher",
+        "Agent Runtime session CRUD / public subagent facade / core current bridge / checkpoint queue replay / compact objective / process Agent 旧入口已撤下，不能回到 Rust DevBridge dispatcher",
     },
     {
       path: "lime-rs/src/dev_bridge/dispatcher/providers.rs",
       message:
-        "Agent Runtime process/Aster 旧 DevBridge provider dispatcher 已撤下，不能恢复旧 Rust DevBridge dispatcher",
-      commands: retiredAgentRuntimeProcessAsterRustCommands,
-    },
-    {
-      path: "lime-rs/src/commands/agent_cmd.rs",
-      message:
-        "Agent process 旧 Tauri wrapper 已撤下，不能在 agent_cmd.rs 恢复可调用 Rust wrapper",
-      commands: retiredAgentRuntimeProcessAsterRustCommands,
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/action_runtime.rs",
-      message:
-        "Agent Runtime delete session / respond action 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
-      commands: [
-        "agent_runtime_delete_session",
-        "agent_runtime_respond_action",
-      ],
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/command_api/session_api.rs",
-      message:
-        "Agent Runtime session CRUD 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/command_api/subagent_api.rs",
-      message:
-        "Agent Runtime public subagent 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
-      commands: retiredAgentRuntimeSubagentRustCommands,
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/command_api.rs",
-      message:
-        "Agent Runtime session CRUD / public subagent / core current bridge / checkpoint queue replay / compact objective / process Aster 旧 Tauri wrapper 已撤下，不能在 command_api.rs 重新导出 legacy wrapper",
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/mod.rs",
-      message:
-        "Agent Runtime session CRUD / public subagent / core current bridge / checkpoint queue replay / compact objective / process Aster 旧 Tauri wrapper 已撤下，不能在 aster_agent_cmd/mod.rs 重新导出 legacy wrapper",
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/command_api/provider_api.rs",
-      message:
-        "Aster provider/status/reset 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
-      commands: retiredAgentRuntimeProcessAsterRustCommands,
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/command_api/objective_api.rs",
-      message:
-        "Agent Runtime objective 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
-      commands: retiredAgentRuntimeCompactObjectiveRustCommands,
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/command_api/objective_audit.rs",
-      message:
-        "Agent Runtime objective audit 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
-      commands: retiredAgentRuntimeCompactObjectiveRustCommands,
-    },
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
-      message:
-        "Agent Runtime session read / core current bridge / checkpoint queue replay / compact resume / export residual 旧 Tauri wrapper 已撤下，不能在 runtime_api.rs 恢复 legacy wrapper",
-      commands: [
-        "agent_runtime_get_session",
-        ...retiredAgentRuntimeCoreCurrentBridgeRustCommands,
-        ...retiredAgentRuntimeCheckpointQueueReplayRustCommands,
-        "agent_runtime_compact_session",
-        "agent_runtime_resume_thread",
-        ...retiredAgentRuntimeExportRustCommands,
-      ],
+        "Agent Runtime process 旧 DevBridge provider dispatcher 已撤下，不能恢复旧 Rust DevBridge dispatcher",
+      commands: retiredAgentRuntimeProcessRustCommands,
     },
   ];
 
@@ -4023,7 +3959,6 @@ function collectRetiredMediaTaskArtifactFacadeSourceFailures() {
 
   for (const retiredPath of [
     "lime-rs/src/commands/media_task_cmd.rs",
-    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs",
     "lime-rs/src/dev_bridge/dispatcher/media_tasks.rs",
   ]) {
     if (fs.existsSync(path.join(repoRoot, retiredPath))) {
@@ -4053,11 +3988,6 @@ function collectRetiredMediaTaskArtifactFacadeSourceFailures() {
 function collectRetiredVideoGenerationPromptSourceFailures() {
   const failures = [];
   const restrictedSources = [
-    {
-      path: "lime-rs/src/commands/aster_agent_cmd/video_skill_launch.rs",
-      message:
-        "Video skill launch 必须走 video_generate -> App Server mediaTaskArtifact/video/* current 主链，不能提示模型回退旧 video generation facade",
-    },
     {
       path: "lime-rs/resources/default-skills/video_generate/SKILL.md",
       message:
@@ -5017,8 +4947,8 @@ function main() {
         capabilityDraftCommands.has(command),
     ),
   );
-  const retiredAgentRuntimeProcessAsterSurfaceLeaks = new Set(
-    [...retiredAgentRuntimeProcessAsterRustCommands].filter(
+  const retiredAgentRuntimeProcessSurfaceLeaks = new Set(
+    [...retiredAgentRuntimeProcessRustCommands].filter(
       (command) =>
         registeredCommands.has(command) ||
         bridgeTruthCommands.has(command) ||
@@ -5659,11 +5589,11 @@ function main() {
     );
   }
 
-  if (retiredAgentRuntimeProcessAsterSurfaceLeaks.size > 0) {
+  if (retiredAgentRuntimeProcessSurfaceLeaks.size > 0) {
     hasError = true;
     printCommandGroup(
-      "已退役的 Agent Runtime process / Aster side-effect facade 不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
-      retiredAgentRuntimeProcessAsterSurfaceLeaks,
+      "已退役的 Agent Runtime process side-effect facade 不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAgentRuntimeProcessSurfaceLeaks,
     );
   }
 

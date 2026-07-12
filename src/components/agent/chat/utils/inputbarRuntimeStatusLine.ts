@@ -1,7 +1,7 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type {
@@ -54,7 +54,7 @@ interface BuildInputbarRuntimeStatusLineModelParams {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   queuedTurns?: readonly QueuedTurnSnapshot[];
-  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
   isSending?: boolean;
 }
 
@@ -205,7 +205,7 @@ function resolveFallbackStatus(params: {
 }
 
 function resolveSubtaskStats(
-  childSubagentSessions: readonly AsterSubagentSessionInfo[],
+  childSubagentSessions: readonly AgentSubagentSessionInfo[],
 ): AgentTaskRuntimeSubtaskStats | null {
   if (childSubagentSessions.length === 0) {
     return null;

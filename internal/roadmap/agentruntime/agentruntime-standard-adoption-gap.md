@@ -30,7 +30,7 @@ AgentRuntime 标准正好把这些能力定义成 execution facts：
 
 | Plugin 需求 | AgentRuntime 对应能力 | 对内容工厂的意义 |
 | --- | --- | --- |
-| 不跳回通用 Chat，也不直连模型 API | `submit_turn / create_task / start_task` control plane | App 提交业务 task，后端进入同一 Aster / Claw / Skills 主链。 |
+| 不跳回通用 Chat，也不直连模型 API | `submit_turn / create_task / start_task` control plane | App 提交业务 task，后端进入同一 Agent / Claw / Skills 主链。 |
 | 展示 Claw 式思考、执行、工具、流式输出 | `model.* / reasoning.* / tool.* / run.status / process.*` events | Host Run UI 可按事件流渲染过程，App 不解析聊天正文。 |
 | 使用 Skills 而不是 prompt 暗示 | `tool.catalog.resolved / tool.started / tool.result` 与 capability refs | required Skills 必须成为 runtime facts，完成态可验证 invoked skills。 |
 | 模型选择、Token、费用 | `task.profile.resolved / routing.* / cost.* / limit.changed / quota.*` | 模型下拉只是 preference；真正选择和消耗由 runtime 解释。 |

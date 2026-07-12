@@ -38,7 +38,7 @@
     {
       "id": "agent-compat-gateway",
       "classification": "dead-candidate",
-      "description": "已删除的 Agent / Aster compat API 网关",
+      "description": "已删除的 Agent / Agent compat API 网关",
       "targets": ["src/lib/api/agentCompat.ts"],
       "allowedPaths": []
     },
@@ -336,13 +336,6 @@
       "targets": [
         "lime-rs/crates/core/src/plugin/examples/credential_monitor.rs"
       ],
-      "allowedPaths": []
-    },
-    {
-      "id": "agent-legacy-hook-entry",
-      "classification": "dead-candidate",
-      "description": "旧 Agent Chat Hook 入口",
-      "targets": ["src/components/agent/chat/hooks/useAgentChat.ts"],
       "allowedPaths": []
     },
     {
@@ -2945,18 +2938,6 @@
       ]
     },
     {
-      "id": "agent-legacy-stream-action-helpers",
-      "classification": "dead-candidate",
-      "description": "已零引用的旧 Aster stream/action helper 回流",
-      "allowedPaths": [],
-      "patterns": [
-        "sendAsterMessageStream(",
-        "confirmAsterAction(",
-        "submitAsterElicitationResponse(",
-        "stopAsterSession("
-      ]
-    },
-    {
       "id": "frontend-browser-preflight-legacy-tokens",
       "classification": "dead-candidate",
       "description": "前端不允许恢复旧浏览器 preflight 状态机、状态原因与顶栏兼容 props，当前统一收口到 browser requirement metadata + browser-runtime handoff",
@@ -2979,19 +2960,6 @@
         "onPrepareBrowserTaskPreflight",
         "maybeStartBrowserTaskPreflight",
         "handlePermissionResponseWithBrowserPreflight"
-      ]
-    },
-    {
-      "id": "aster-session-helper-direct-usage",
-      "classification": "dead-candidate",
-      "description": "已零引用的前端 direct Aster session helper 回流",
-      "allowedPaths": [],
-      "patterns": [
-        "createAsterSession(",
-        "listAsterSessions(",
-        "getAsterSession(",
-        "deleteAsterSession(",
-        "renameAsterSession("
       ]
     },
     {
@@ -3473,7 +3441,9 @@
       "description": "AI 图片生成 runtime 不允许继续扩散新的 useImageGen 主入口，当前只允许 Claw 工作台复用",
       "patterns": ["useImageGen({"],
       "includePathPrefixes": ["src/components"],
-      "allowedPaths": ["src/components/agent/chat/AgentChatWorkspace.tsx"]
+      "allowedPaths": [
+        "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchProviderRuntime.ts"
+      ]
     },
     {
       "id": "image-generation-runtime-barrel-imports",
@@ -4435,7 +4405,7 @@
       "patterns": [
         "pub mod theme_context_cmd;",
         "commands::theme_context_cmd::",
-        "aster_agent_theme_context_search"
+        "agent_theme_context_search"
       ],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
@@ -5218,8 +5188,8 @@
         "lime-rs/crates/core/src/database/dao/agent.rs",
         "lime-rs/crates/core/src/database/dao/chat.rs",
         "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
-        "lime-rs/crates/agent/src/aster_session_store/legacy_conversation.rs",
-        "lime-rs/crates/agent/src/aster_session_store_tests.rs"
+        "lime-rs/crates/agent/src/agent_session_store/legacy_conversation.rs",
+        "lime-rs/crates/agent/src/agent_session_store_tests.rs"
       ]
     },
     {
@@ -5286,6 +5256,7 @@
         "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
         "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
         "lime-rs/crates/app-server/src/runtime/session_media_reader.rs",
+        "lime-rs/crates/app-server/src/runtime/session_media_refs.rs",
         "lime-rs/crates/app-server/src/runtime/session_hydration.rs"
       ]
     },
@@ -5377,7 +5348,7 @@
       "patterns": ["TodoState::from_extension_data(", "TodoState::new("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
-        "lime-rs/crates/aster-rust/crates/aster/src/session/extension_data.rs"
+        "lime-rs/crates/agent-rust/crates/agent/src/session/extension_data.rs"
       ]
     },
     {
@@ -5390,7 +5361,7 @@
       ],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
-        "lime-rs/crates/aster-rust/crates/aster/src/session/extension_data.rs"
+        "lime-rs/crates/agent-rust/crates/agent/src/session/extension_data.rs"
       ]
     },
     {
@@ -5581,7 +5552,7 @@
       "patterns": ["SessionManager::delete_session("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
-        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
+        "lime-rs/crates/agent-rust/crates/agent/src/session/update.rs"
       ]
     },
     {
@@ -5597,7 +5568,7 @@
       "classification": "dead-candidate",
       "description": "命令层不再 direct 解析 subagent metadata，统一向 lime_agent 读取边界收敛",
       "patterns": ["resolve_subagent_session_metadata("],
-      "includePathPrefixes": ["lime-rs/src/commands/aster_agent_cmd"],
+      "includePathPrefixes": ["lime-rs/src/commands/agent_cmd"],
       "allowedPaths": []
     },
     {
@@ -5717,17 +5688,17 @@
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-runtime-snapshot-helper-leak",
+      "id": "rust-agent-runtime-snapshot-helper-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Lime 业务层 direct Aster runtime snapshot helper 回流",
+      "description": "已零引用的 Lime 业务层 direct Agent runtime snapshot helper 回流",
       "patterns": ["load_session_runtime_snapshot("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-runtime-store-leak",
+      "id": "rust-agent-runtime-store-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Lime 业务层 direct Aster shared runtime store 回流",
+      "description": "已零引用的 Lime 业务层 direct Agent shared runtime store 回流",
       "patterns": [
         "shared_thread_runtime_store(",
         "initialize_shared_thread_runtime_store(",
@@ -5737,78 +5708,78 @@
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-runtime-store-public-require-api-leak",
+      "id": "rust-agent-runtime-store-public-require-api-leak",
       "classification": "dead-candidate",
-      "description": "Aster runtime support 重新对 crate 外暴露 require_aster_thread_runtime_store",
-      "patterns": ["pub fn require_aster_thread_runtime_store("],
+      "description": "Agent runtime support 重新对 crate 外暴露 require_agent_thread_runtime_store",
+      "patterns": ["pub fn require_agent_thread_runtime_store("],
       "includePathPrefixes": [
-        "lime-rs/crates/agent/src/aster_runtime_support.rs"
+        "lime-rs/crates/agent/src/agent_runtime_support.rs"
       ],
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-runtime-init-return-store-api-leak",
+      "id": "rust-agent-runtime-init-return-store-api-leak",
       "classification": "dead-candidate",
-      "description": "Aster runtime 启动初始化 API 重新向 crate 外返回 runtime store",
+      "description": "Agent runtime 启动初始化 API 重新向 crate 外返回 runtime store",
       "patterns": [
-        "pub fn initialize_aster_thread_runtime_store() -> Result<Arc<dyn ThreadRuntimeStore>, String>"
+        "pub fn initialize_agent_thread_runtime_store() -> Result<Arc<dyn ThreadRuntimeStore>, String>"
       ],
       "includePathPrefixes": [
-        "lime-rs/crates/agent/src/aster_runtime_support.rs"
+        "lime-rs/crates/agent/src/agent_runtime_support.rs"
       ],
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-runtime-public-legacy-init-helper-leak",
+      "id": "rust-agent-runtime-public-legacy-init-helper-leak",
       "classification": "dead-candidate",
-      "description": "Aster runtime support 重新对 crate 外暴露旧 initialize_aster_thread_runtime_store helper",
-      "patterns": ["pub fn initialize_aster_thread_runtime_store("],
+      "description": "Agent runtime support 重新对 crate 外暴露旧 initialize_agent_thread_runtime_store helper",
+      "patterns": ["pub fn initialize_agent_thread_runtime_store("],
       "includePathPrefixes": [
-        "lime-rs/crates/agent/src/aster_runtime_support.rs"
+        "lime-rs/crates/agent/src/agent_runtime_support.rs"
       ],
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-runtime-snapshot-root-export-leak",
+      "id": "rust-agent-runtime-snapshot-root-export-leak",
       "classification": "dead-candidate",
-      "description": "lime-agent crate 根重新暴露 load_aster_runtime_snapshot helper",
-      "patterns": ["load_aster_runtime_snapshot"],
+      "description": "lime-agent crate 根重新暴露 load_agent_runtime_snapshot helper",
+      "patterns": ["load_agent_runtime_snapshot"],
       "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-runtime-queue-service-leak",
+      "id": "rust-agent-runtime-queue-service-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Lime 业务层 direct Aster shared runtime queue service 回流",
+      "description": "已零引用的 Lime 业务层 direct Agent shared runtime queue service 回流",
       "patterns": [],
       "regexPatterns": ["(?<!require_)shared_session_runtime_queue_service\\("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
-      "id": "rust-aster-path-root-env-leak",
+      "id": "rust-agent-path-root-env-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Lime 业务层 direct ASTER_PATH_ROOT 环境变量处理回流",
-      "patterns": ["\"ASTER_PATH_ROOT\""],
+      "description": "已零引用的 Lime 业务层 direct AGENT_RUNTIME_PATH_ROOT 环境变量处理回流",
+      "patterns": ["\"AGENT_RUNTIME_PATH_ROOT\""],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
-        "lime-rs/crates/aster-rust/crates/aster/src/config/paths.rs",
-        "lime-rs/crates/aster-rust/crates/aster/tests/acp_integration_test.rs"
+        "lime-rs/crates/agent-rust/crates/agent/src/config/paths.rs",
+        "lime-rs/crates/agent-rust/crates/agent/tests/acp_integration_test.rs"
       ]
     },
     {
-      "id": "rust-aster-global-session-store-leak",
+      "id": "rust-agent-global-session-store-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Aster 全局 session store 注册回流到统一 runtime support 边界之外",
+      "description": "已零引用的 Agent 全局 session store 注册回流到统一 runtime support 边界之外",
       "patterns": ["set_global_session_store("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
-      "id": "rust-hardcoded-aster-runtime-path-leak",
+      "id": "rust-hardcoded-agent-runtime-path-leak",
       "classification": "dead-candidate",
-      "description": "已零引用的 Lime 业务层硬编码 legacy aster runtime 路径回流",
-      "patterns": ["join(\".lime\").join(\"aster\")", "~/.lime/aster"],
+      "description": "已零引用的 Lime 业务层硬编码 legacy agent runtime 路径回流",
+      "patterns": ["join(\".lime\").join(\"agent\")", "~/.lime/agent"],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },

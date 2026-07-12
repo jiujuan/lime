@@ -202,7 +202,7 @@ describe("BrowserRuntimeDebugPanel", () => {
         success: true,
         attempts: [
           {
-            backend: "aster_compat",
+            backend: "current",
             success: true,
             message: "执行成功",
           },

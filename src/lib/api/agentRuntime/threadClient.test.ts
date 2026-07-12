@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   AppServerRpcError,
+  type AppServerAgentSessionTurnStartParams,
   type AppServerRequestResult,
 } from "@/lib/api/appServer";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
@@ -16,7 +17,6 @@ import {
 } from "./appServerEventStream";
 import {
   appServerActionRespondParamsFromRequest,
-  appServerTurnStartParamsFromRequest,
   createThreadClient,
   projectAppServerAgentEventPayload,
   type AgentRuntimeAppServerClient,
@@ -29,7 +29,6 @@ import type {
   AgentRuntimeFileCheckpointListResult,
   AgentRuntimeFileCheckpointRestoreResult,
   AgentRuntimeFileCheckpointSummary,
-  AgentRuntimeSubmitTurnRequest,
 } from "./types";
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -40,6 +39,54 @@ vi.mock("@/lib/dev-bridge", () => ({
 vi.mock("@/lib/api/appServerBridgeAvailability", () => ({
   isAppServerBridgeAvailable: vi.fn(),
 }));
+
+function turnStartParams({
+  sessionId = "session-1",
+  turnId,
+  text = "生成草稿",
+  eventName,
+  runtimeRequest,
+  queueIfBusy,
+  queuedTurnId,
+  skipPreSubmitResume,
+  attachments,
+  expectedOutput,
+  structuredOutput,
+  outputSchema,
+}: {
+  sessionId?: string;
+  turnId?: string;
+  text?: string;
+  eventName: string;
+  runtimeRequest?: Record<string, unknown>;
+  queueIfBusy?: boolean;
+  queuedTurnId?: string;
+  skipPreSubmitResume?: boolean;
+  attachments?: AppServerAgentSessionTurnStartParams["input"]["attachments"];
+  expectedOutput?: unknown;
+  structuredOutput?: Record<string, unknown>;
+  outputSchema?: unknown;
+}): AppServerAgentSessionTurnStartParams {
+  return {
+    sessionId,
+    ...(turnId ? { turnId } : {}),
+    input: {
+      text,
+      ...(attachments ? { attachments } : {}),
+    },
+    runtimeOptions: {
+      stream: true,
+      eventName,
+      ...(queuedTurnId ? { queuedTurnId } : {}),
+      ...(runtimeRequest ? { runtimeRequest } : {}),
+      ...(expectedOutput !== undefined ? { expectedOutput } : {}),
+      ...(structuredOutput ? { structuredOutput } : {}),
+      ...(outputSchema !== undefined ? { outputSchema } : {}),
+    },
+    ...(queueIfBusy ? { queueIfBusy } : {}),
+    ...(skipPreSubmitResume ? { skipPreSubmitResume } : {}),
+  };
+}
 
 function appServerClientMock(): AgentRuntimeAppServerClient {
   return {
@@ -808,22 +855,32 @@ describe("agentRuntime threadClient", () => {
       isAppServerTurnLifecycleAvailable: () => true,
     });
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "agentSession/event/session-1",
-      workspace_id: "workspace-1",
-      turn_id: "turn-1",
-      images: [{ data: "data:image/png;base64,abc", media_type: "image/png" }],
-      turn_config: {
-        provider_preference: "deepseek",
-        model_preference: "deepseek-v4-flash",
-        metadata: { source: "chat" },
-      },
-      queue_if_busy: true,
-      queued_turn_id: "queued-1",
-      skip_pre_submit_resume: true,
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({
+        sessionId: "session-1",
+        turnId: "turn-1",
+        eventName: "agentSession/event/session-1",
+        queueIfBusy: true,
+        queuedTurnId: "queued-1",
+        skipPreSubmitResume: true,
+        attachments: [
+          {
+            kind: "image",
+            uri: "data:image/png;base64,abc",
+            metadata: {
+              mediaType: "image/png",
+              index: 0,
+            },
+          },
+        ],
+        runtimeRequest: {
+          providerPreference: "deepseek",
+          modelPreference: "deepseek-v4-flash",
+          workspaceId: "workspace-1",
+          metadata: { source: "chat" },
+        },
+      }),
+    );
 
     expect(appServerClient.startTurn).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -844,34 +901,25 @@ describe("agentRuntime threadClient", () => {
       runtimeOptions: {
         stream: true,
         eventName: "agentSession/event/session-1",
-        providerPreference: "deepseek",
-        modelPreference: "deepseek-v4-flash",
-        metadata: { source: "chat" },
         queuedTurnId: "queued-1",
-        hostOptions: {
-          asterChatRequest: {
-            message: "生成草稿",
-            session_id: "session-1",
-            event_name: "agentSession/event/session-1",
-            images: [
-              {
-                data: "data:image/png;base64,abc",
-                media_type: "image/png",
-              },
-            ],
-            provider_preference: "deepseek",
-            model_preference: "deepseek-v4-flash",
-            workspace_id: "workspace-1",
-            metadata: { source: "chat" },
-            turn_id: "turn-1",
-            queue_if_busy: true,
-            queued_turn_id: "queued-1",
-          },
+        runtimeRequest: {
+          providerPreference: "deepseek",
+          modelPreference: "deepseek-v4-flash",
+          workspaceId: "workspace-1",
+          metadata: { source: "chat" },
         },
       },
       queueIfBusy: true,
       skipPreSubmitResume: true,
     });
+    const startTurnParams = appServerClient.startTurn.mock.calls[0]?.[0];
+    expect(startTurnParams?.runtimeOptions).not.toHaveProperty(
+      "providerPreference",
+    );
+    expect(startTurnParams?.runtimeOptions).not.toHaveProperty(
+      "modelPreference",
+    );
+    expect(startTurnParams?.runtimeOptions).not.toHaveProperty("metadata");
     expect(invokeCommand).not.toHaveBeenCalled();
   });
 
@@ -887,12 +935,13 @@ describe("agentRuntime threadClient", () => {
     });
 
     await expect(
-      client.submitAgentRuntimeTurn({
-        message: "生成草稿",
-        session_id: "session-1",
-        event_name: "agentSession/event/session-1",
-        turn_id: "turn-1",
-      }),
+      client.submitAgentRuntimeTurn(
+        turnStartParams({
+          sessionId: "session-1",
+          turnId: "turn-1",
+          eventName: "agentSession/event/session-1",
+        }),
+      ),
     ).resolves.toBeUndefined();
     await expect(
       client.interruptAgentRuntimeTurn({
@@ -926,15 +975,6 @@ describe("agentRuntime threadClient", () => {
       runtimeOptions: {
         stream: true,
         eventName: "agentSession/event/session-1",
-        hostOptions: {
-          asterChatRequest: {
-            message: "生成草稿",
-            session_id: "session-1",
-            event_name: "agentSession/event/session-1",
-            workspace_id: "",
-            turn_id: "turn-1",
-          },
-        },
       },
     });
     expect(standardRuntimeClient.cancelTurn).toHaveBeenCalledWith({
@@ -966,11 +1006,9 @@ describe("agentRuntime threadClient", () => {
       invokeCommand,
     });
 
-    await client.submitAgentRuntimeTurn({
-      message: "整理新闻",
-      session_id: "session-1",
-      event_name: "event-1",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "整理新闻", sessionId: "session-1", eventName: "event-1" }),
+    );
 
     expect(appServerClient.startTurn).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -980,54 +1018,69 @@ describe("agentRuntime threadClient", () => {
       runtimeOptions: {
         stream: true,
         eventName: "event-1",
-        hostOptions: {
-          asterChatRequest: {
-            message: "整理新闻",
-            session_id: "session-1",
-            event_name: "event-1",
-            workspace_id: "",
-          },
-        },
       },
     });
     expect(invokeCommand).not.toHaveBeenCalled();
   });
 
-  it("App Server submit 应通过 hostOptions 无损携带 Claw/Aster 原始请求快照", () => {
-    const request: AgentRuntimeSubmitTurnRequest = {
-      message: "继续执行完整 Claw 链路",
-      session_id: "session-claw",
-      event_name: "aster_stream_claw",
-      workspace_id: "workspace-claw",
-      turn_id: "turn-claw",
-      images: [
+  it("App Server submit 参数将 Turn 输入与 current runtime 配置分离", () => {
+    const expectedOutput = {
+      artifactKind: "content_batch",
+      outputFormat: {
+        type: "json_schema",
+        schema: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+            },
+          },
+          required: ["items"],
+        },
+        maxValidationRetries: 2,
+      },
+    };
+    const structuredOutput = expectedOutput.outputFormat;
+    const outputSchema = structuredOutput.schema;
+    const params = turnStartParams({
+      sessionId: "session-claw",
+      turnId: "turn-claw",
+      text: "继续执行完整 Claw 链路",
+      eventName: "agent_stream_claw",
+      queueIfBusy: true,
+      queuedTurnId: "queued-claw",
+      skipPreSubmitResume: true,
+      expectedOutput,
+      structuredOutput,
+      outputSchema,
+      attachments: [
         {
-          data: "data:image/png;base64,claw",
-          media_type: "image/png",
+          kind: "image",
+          uri: "data:image/png;base64,claw",
+          metadata: {
+            mediaType: "image/png",
+            index: 0,
+          },
         },
       ],
-      turn_config: {
-        provider_config: {
-          provider_id: "deepseek",
-          provider_name: "deepseek",
-          model_name: "deepseek-v4-pro",
+      runtimeRequest: {
+        providerConfig: {
+          providerId: "deepseek",
+          providerName: "deepseek",
+          modelName: "deepseek-v4-pro",
         },
-        provider_preference: "deepseek",
-        model_preference: "deepseek-v4-pro",
-        reasoning_effort: "high",
-        thinking_enabled: true,
-        approval_policy: "on-request",
-        sandbox_policy: "workspace-write",
-        execution_strategy: "react",
-        web_search: true,
-        search_mode: "required",
-        auto_continue: {
-          enabled: true,
-          fast_mode_enabled: false,
-          continuation_length: 2,
-          sensitivity: 0.5,
-        },
-        system_prompt: "保留 Claw 原始系统提示",
+        providerPreference: "deepseek",
+        modelPreference: "deepseek-v4-pro",
+        reasoningEffort: "high",
+        thinkingEnabled: true,
+        approvalPolicy: "on-request",
+        sandboxPolicy: "workspace-write",
+        workspaceId: "workspace-claw",
+        webSearch: true,
+        searchMode: "required",
+        executionStrategy: "react",
+        autoContinue: true,
+        systemPrompt: "保留 Claw 原始系统提示",
         metadata: {
           harness: {
             source: "claw",
@@ -1037,32 +1090,9 @@ describe("agentRuntime threadClient", () => {
           },
         },
       },
-      expected_output: {
-        artifactKind: "content_batch",
-        output_format: {
-          type: "json_schema",
-          schema: {
-            type: "object",
-            properties: {
-              items: {
-                type: "array",
-              },
-            },
-            required: ["items"],
-          },
-          max_validation_retries: 2,
-        },
-      },
-      queue_if_busy: true,
-      queued_turn_id: "queued-claw",
-      skip_pre_submit_resume: true,
-    } satisfies AgentRuntimeSubmitTurnRequest;
-    const turnConfig = request.turn_config;
-    if (!turnConfig) {
-      throw new Error("turn_config should be defined for Claw requests");
-    }
+    });
 
-    expect(appServerTurnStartParamsFromRequest(request)).toEqual({
+    expect(params).toEqual({
       sessionId: "session-claw",
       turnId: "turn-claw",
       input: {
@@ -1080,12 +1110,9 @@ describe("agentRuntime threadClient", () => {
       },
       runtimeOptions: {
         stream: true,
-        eventName: "aster_stream_claw",
-        providerPreference: "deepseek",
-        modelPreference: "deepseek-v4-pro",
-        metadata: turnConfig.metadata,
+        eventName: "agent_stream_claw",
         queuedTurnId: "queued-claw",
-        expectedOutput: request.expected_output,
+        expectedOutput,
         structuredOutput: {
           type: "json_schema",
           schema: {
@@ -1097,7 +1124,7 @@ describe("agentRuntime threadClient", () => {
             },
             required: ["items"],
           },
-          max_validation_retries: 2,
+          maxValidationRetries: 2,
         },
         outputSchema: {
           type: "object",
@@ -1108,73 +1135,31 @@ describe("agentRuntime threadClient", () => {
           },
           required: ["items"],
         },
-        hostOptions: {
-          asterChatRequest: {
-            message: "继续执行完整 Claw 链路",
-            session_id: "session-claw",
-            event_name: "aster_stream_claw",
-            images: [
-              {
-                data: "data:image/png;base64,claw",
-                media_type: "image/png",
-              },
-            ],
-            provider_config: {
-              provider_id: "deepseek",
-              provider_name: "deepseek",
-              model_name: "deepseek-v4-pro",
-            },
-            provider_preference: "deepseek",
-            model_preference: "deepseek-v4-pro",
-            reasoning_effort: "high",
-            thinking_enabled: true,
-            approval_policy: "on-request",
-            sandbox_policy: "workspace-write",
-            workspace_id: "workspace-claw",
-            web_search: true,
-            search_mode: "required",
-            execution_strategy: "react",
-            auto_continue: {
-              enabled: true,
-              fast_mode_enabled: false,
-              continuation_length: 2,
-              sensitivity: 0.5,
-            },
-            system_prompt: "保留 Claw 原始系统提示",
-            expected_output: request.expected_output,
-            structured_output: {
-              type: "json_schema",
-              schema: {
-                type: "object",
-                properties: {
-                  items: {
-                    type: "array",
-                  },
-                },
-                required: ["items"],
-              },
-              max_validation_retries: 2,
-            },
-            output_schema: {
-              type: "object",
-              properties: {
-                items: {
-                  type: "array",
-                },
-              },
-              required: ["items"],
-            },
-            metadata: {
-              harness: {
-                source: "claw",
-                workspace_skill_runtime_enable: {
-                  source: "manual_session_enable",
-                },
+        runtimeRequest: {
+          providerConfig: {
+            providerId: "deepseek",
+            providerName: "deepseek",
+            modelName: "deepseek-v4-pro",
+          },
+          providerPreference: "deepseek",
+          modelPreference: "deepseek-v4-pro",
+          reasoningEffort: "high",
+          thinkingEnabled: true,
+          approvalPolicy: "on-request",
+          sandboxPolicy: "workspace-write",
+          workspaceId: "workspace-claw",
+          webSearch: true,
+          searchMode: "required",
+          executionStrategy: "react",
+          autoContinue: true,
+          systemPrompt: "保留 Claw 原始系统提示",
+          metadata: {
+            harness: {
+              source: "claw",
+              workspace_skill_runtime_enable: {
+                source: "manual_session_enable",
               },
             },
-            turn_id: "turn-claw",
-            queue_if_busy: true,
-            queued_turn_id: "queued-claw",
           },
         },
       },
@@ -1235,15 +1220,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-1",
+      "agent_stream_message-1",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_message-1",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-1" }),
+    );
 
     expect(listener).toHaveBeenCalledWith({
       payload: expect.objectContaining({
@@ -1320,15 +1303,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_reasoning-1",
+      "agent_stream_reasoning-1",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_reasoning-1",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_reasoning-1" }),
+    );
 
     expect(listener).toHaveBeenCalledWith({
       payload: expect.objectContaining({
@@ -1430,15 +1411,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_ordered",
+      "agent_stream_ordered",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_ordered",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_ordered" }),
+    );
 
     expect(
       listener.mock.calls.map(([event]) => event.payload.event_id),
@@ -1646,15 +1625,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_web_tools",
+      "agent_stream_web_tools",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "验证网页搜索渲染",
-      session_id: "session-web-tools",
-      event_name: "aster_stream_web_tools",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "验证网页搜索渲染", sessionId: "session-web-tools", eventName: "agent_stream_web_tools" }),
+    );
 
     expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
       "text_delta",
@@ -1728,15 +1705,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-orphan",
+      "agent_stream_message-orphan",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_message-orphan",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-orphan" }),
+    );
 
     expect(listener).not.toHaveBeenCalled();
     unlisten();
@@ -1796,15 +1771,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-fanout",
+      "agent_stream_message-fanout",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_message-fanout",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-fanout" }),
+    );
 
     expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
       "tool_start",
@@ -1853,16 +1826,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_missing-turn",
+      "agent_stream_missing-turn",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      turn_id: "turn-request",
-      event_name: "aster_stream_missing-turn",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-request", eventName: "agent_stream_missing-turn" }),
+    );
 
     expect(listener).toHaveBeenCalledWith({
       payload: expect.objectContaining({
@@ -1985,15 +1955,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-drain",
+      "agent_stream_message-drain",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_message-drain",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-drain" }),
+    );
 
     await vi.waitFor(() => {
       expect(listener).toHaveBeenCalledWith({
@@ -2203,16 +2171,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_drain_ordered",
+      "agent_stream_drain_ordered",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      turn_id: "turn-drain-ordered",
-      event_name: "aster_stream_drain_ordered",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-drain-ordered", eventName: "agent_stream_drain_ordered" }),
+    );
 
     await vi.waitFor(() => {
       expect(
@@ -2266,15 +2231,12 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_pending",
+      "agent_stream_pending",
       listener,
     );
-    const submitPromise = client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      turn_id: "turn-pending",
-      event_name: "aster_stream_pending",
-    });
+    const submitPromise = client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-pending", eventName: "agent_stream_pending" }),
+    );
 
     await vi.waitFor(() => {
       expect(appServerClient.drainEvents).toHaveBeenCalledWith(1);
@@ -2414,15 +2376,12 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_real_turn",
+      "agent_stream_real_turn",
       listener,
     );
-    const submitPromise = client.submitAgentRuntimeTurn({
-      message: "继续输出",
-      session_id: "session-1",
-      turn_id: "pending-turn-local",
-      event_name: "aster_stream_real_turn",
-    });
+    const submitPromise = client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "继续输出", sessionId: "session-1", turnId: "pending-turn-local", eventName: "agent_stream_real_turn" }),
+    );
 
     await vi.waitFor(() => {
       expect(listener).toHaveBeenCalledWith({
@@ -2539,15 +2498,12 @@ describe("agentRuntime threadClient", () => {
 
       const listener = vi.fn();
       const unlisten = await listenAgentRuntimeEvent(
-        "aster_stream_fast_first",
+        "agent_stream_fast_first",
         listener,
       );
-      const submitPromise = client.submitAgentRuntimeTurn({
-        message: "生成草稿",
-        session_id: "session-1",
-        turn_id: "turn-fast-first",
-        event_name: "aster_stream_fast_first",
-      });
+      const submitPromise = client.submitAgentRuntimeTurn(
+        turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-fast-first", eventName: "agent_stream_fast_first" }),
+      );
 
       await Promise.resolve();
       expect(appServerClient.drainEvents).toHaveBeenCalledTimes(1);
@@ -2704,15 +2660,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-drain-completed",
+      "agent_stream_message-drain-completed",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_message-drain-completed",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-drain-completed" }),
+    );
 
     await vi.waitFor(() => {
       expect(listener).toHaveBeenCalledWith({
@@ -2808,15 +2762,13 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-drain-legacy-final-done",
+      "agent_stream_message-drain-legacy-final-done",
       listener,
     );
 
-    await client.submitAgentRuntimeTurn({
-      message: "生成草稿",
-      session_id: "session-1",
-      event_name: "aster_stream_message-drain-legacy-final-done",
-    });
+    await client.submitAgentRuntimeTurn(
+      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-drain-legacy-final-done" }),
+    );
 
     await vi.waitFor(() => {
       expect(listener).toHaveBeenCalledWith({
@@ -2895,17 +2847,14 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-error",
+      "agent_stream_message-error",
       listener,
     );
 
     await expect(
-      client.submitAgentRuntimeTurn({
-        message: "生成草稿",
-        session_id: "session-1",
-        turn_id: "turn-1",
-        event_name: "aster_stream_message-error",
-      }),
+      client.submitAgentRuntimeTurn(
+        turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-1", eventName: "agent_stream_message-error" }),
+      ),
     ).rejects.toThrow("external backend crashed after partial output");
 
     expect(listener).toHaveBeenCalledWith({
@@ -3016,7 +2965,7 @@ describe("agentRuntime threadClient", () => {
     });
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_cancel",
+      "agent_stream_cancel",
       listener,
     );
 
@@ -3024,7 +2973,7 @@ describe("agentRuntime threadClient", () => {
       client.interruptAgentRuntimeTurn({
         session_id: "session-1",
         turn_id: "turn-1",
-        event_name: "aster_stream_cancel",
+        event_name: "agent_stream_cancel",
       }),
     ).resolves.toBe(true);
 
@@ -3313,7 +3262,7 @@ describe("agentRuntime threadClient", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-1",
+      "agent_stream_message-1",
       listener,
     );
 
@@ -3322,7 +3271,7 @@ describe("agentRuntime threadClient", () => {
       request_id: "req-1",
       action_type: "ask_user",
       confirmed: true,
-      event_name: "aster_stream_message-1",
+      event_name: "agent_stream_message-1",
     });
 
     expect(listener).toHaveBeenCalledWith({
@@ -3372,7 +3321,7 @@ describe("agentRuntime threadClient", () => {
       request_id: "req-1",
       action_type: "tool_confirmation",
       decision: "allow_for_session",
-      event_name: "aster_stream_message-1",
+      event_name: "agent_stream_message-1",
       action_scope: {
         session_id: "session-1",
         thread_id: "thread-1",
@@ -3385,7 +3334,7 @@ describe("agentRuntime threadClient", () => {
       requestId: "req-1",
       actionType: "tool_confirmation",
       decision: "allow_for_session",
-      eventName: "aster_stream_message-1",
+      eventName: "agent_stream_message-1",
       actionScope: {
         sessionId: "session-1",
         threadId: "thread-1",
@@ -3473,10 +3422,10 @@ describe("agentRuntime threadClient", () => {
 
   it("request projection 应在未传可选项时保持精简 App Server 参数", () => {
     expect(
-      appServerTurnStartParamsFromRequest({
-        message: "继续",
-        session_id: "session-1",
-        event_name: "agentSession/event/session-1",
+      turnStartParams({
+        text: "继续",
+        sessionId: "session-1",
+        eventName: "agentSession/event/session-1",
       }),
     ).toEqual({
       sessionId: "session-1",
@@ -3486,14 +3435,6 @@ describe("agentRuntime threadClient", () => {
       runtimeOptions: {
         stream: true,
         eventName: "agentSession/event/session-1",
-        hostOptions: {
-          asterChatRequest: {
-            message: "继续",
-            session_id: "session-1",
-            event_name: "agentSession/event/session-1",
-            workspace_id: "",
-          },
-        },
       },
     });
 

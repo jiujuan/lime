@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 use super::{
     host_approval_policy, host_metadata_value, host_sandbox_policy, host_thinking_enabled,
-    host_turn_config, json_pointer_string, non_empty, request_tool_policy_from_request,
-    request_workspace_scope, AsterChatRequestSnapshot, RuntimeModelSelection, RuntimeSessionScope,
+    json_pointer_string, non_empty, request_tool_policy_from_request, request_workspace_scope,
+    RuntimeModelSelection, RuntimeRequest, RuntimeSessionScope,
 };
 
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
@@ -23,7 +23,7 @@ const TRACE_METADATA_KEYS: &[&str] = &["agentUiPerformanceTrace", "agent_ui_perf
 
 pub(in crate::runtime_backend) fn turn_context_from_request(
     request: &ExecutionRequest,
-    host_request: Option<&AsterChatRequestSnapshot>,
+    host_request: Option<&RuntimeRequest>,
     scope: &RuntimeSessionScope,
     selection: &RuntimeModelSelection,
     config_metadata: Option<Value>,
@@ -49,19 +49,11 @@ pub(in crate::runtime_backend) fn turn_context_from_request(
         }),
     );
     if let Some(host_metadata) = host_request.and_then(host_metadata_value) {
-        metadata.insert("aster_chat_request".to_string(), host_metadata);
+        metadata.insert("runtime_request".to_string(), host_metadata);
     }
     if request_tool_policy_from_request(host_request).allows_web_search() {
         metadata.insert("web_search_enabled".to_string(), json!(true));
         metadata.insert("webSearchEnabled".to_string(), json!(true));
-    }
-    if let Some(runtime_metadata) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.clone())
-        .or_else(|| request.metadata.clone())
-    {
-        metadata.insert("runtime_options".to_string(), runtime_metadata);
     }
     if let Some(w3c_trace_context) = w3c_trace_context_metadata_from_request(request) {
         metadata.insert("w3c_trace_context".to_string(), w3c_trace_context);
@@ -99,18 +91,10 @@ pub(in crate::runtime_backend) fn turn_context_from_request(
 }
 
 fn w3c_trace_context_metadata_from_request(request: &ExecutionRequest) -> Option<Value> {
-    [
-        request
-            .runtime_options
-            .as_ref()
-            .and_then(|options| options.metadata.as_ref()),
-        request.metadata.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .filter_map(Value::as_object)
-    .filter_map(w3c_trace_context_metadata)
-    .next()
+    request
+        .runtime_metadata()
+        .and_then(Value::as_object)
+        .and_then(w3c_trace_context_metadata)
 }
 
 fn w3c_trace_context_metadata(metadata: &serde_json::Map<String, Value>) -> Option<Value> {
@@ -148,16 +132,9 @@ fn merge_lime_runtime_metadata(metadata: &mut HashMap<String, Value>, patch: Val
 }
 
 fn lime_runtime_context_policy_from_request(request: &ExecutionRequest) -> Option<Value> {
-    [
-        request
-            .runtime_options
-            .as_ref()
-            .and_then(|options| options.metadata.as_ref()),
-        request.metadata.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .find_map(lime_runtime_context_policy_from_metadata)
+    request
+        .runtime_metadata()
+        .and_then(lime_runtime_context_policy_from_metadata)
 }
 
 fn lime_runtime_context_policy_from_metadata(metadata: &Value) -> Option<Value> {
@@ -257,7 +234,7 @@ fn lime_runtime_context_policy_from_metadata(metadata: &Value) -> Option<Value> 
 
 fn output_schema_from_request(
     request: &ExecutionRequest,
-    host_request: Option<&AsterChatRequestSnapshot>,
+    _host_request: Option<&RuntimeRequest>,
 ) -> Option<Value> {
     request
         .output_schema
@@ -287,26 +264,15 @@ fn output_schema_from_request(
                 output_schema_from_expected_output(options.expected_output.as_ref())
             })
         })
-        .or_else(|| host_request.and_then(host_output_schema).cloned())
 }
 
 fn collaboration_mode_from_request(
     request: &ExecutionRequest,
-    host_request: Option<&AsterChatRequestSnapshot>,
+    host_request: Option<&RuntimeRequest>,
 ) -> Option<String> {
     host_request
-        .and_then(host_turn_config)
-        .and_then(|turn_config| collaboration_mode_from_metadata(turn_config.metadata.as_ref()))
-        .or_else(|| {
-            host_request.and_then(|host| collaboration_mode_from_metadata(host.metadata.as_ref()))
-        })
-        .or_else(|| {
-            request
-                .runtime_options
-                .as_ref()
-                .and_then(|options| collaboration_mode_from_metadata(options.metadata.as_ref()))
-        })
-        .or_else(|| collaboration_mode_from_metadata(request.metadata.as_ref()))
+        .and_then(|host| collaboration_mode_from_metadata(host.metadata.as_ref()))
+        .or_else(|| collaboration_mode_from_metadata(request.runtime_metadata()))
 }
 
 fn collaboration_mode_from_metadata(metadata: Option<&Value>) -> Option<String> {
@@ -320,8 +286,6 @@ fn collaboration_mode_from_metadata(metadata: Option<&Value>) -> Option<String> 
             "/harness/collaborationMode/mode",
             "/harness/collaboration_mode",
             "/harness/collaborationMode",
-            "/turn_config/collaboration_mode",
-            "/turnConfig/collaborationMode",
         ],
     )
     .map(|value| match value.as_str() {
@@ -339,39 +303,6 @@ fn positive_i64_field(value: &Value, keys: &[&str]) -> Option<i64> {
                 .or_else(|| field.as_u64().and_then(|value| i64::try_from(value).ok()))
                 .filter(|value| *value > 0)
         })
-}
-
-fn host_output_schema(host: &AsterChatRequestSnapshot) -> Option<&Value> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.output_schema.as_ref())
-        .or_else(|| {
-            host_turn_config(host)
-                .and_then(|turn_config| turn_config.structured_output.as_ref())
-                .and_then(output_schema_from_structured_output_value)
-        })
-        .or_else(|| {
-            host_turn_config(host)
-                .and_then(|turn_config| turn_config.expected_output.as_ref())
-                .and_then(output_schema_from_expected_output_value)
-        })
-        .or(host.output_schema.as_ref())
-        .or_else(|| {
-            host.structured_output
-                .as_ref()
-                .and_then(output_schema_from_structured_output_value)
-        })
-        .or_else(|| {
-            host.expected_output
-                .as_ref()
-                .and_then(output_schema_from_expected_output_value)
-        })
-}
-
-fn output_schema_from_structured_output_value(value: &Value) -> Option<&Value> {
-    value
-        .get("schema")
-        .or_else(|| value.get("outputSchema"))
-        .or_else(|| value.get("output_schema"))
 }
 
 fn output_schema_from_expected_output(value: Option<&Value>) -> Option<Value> {

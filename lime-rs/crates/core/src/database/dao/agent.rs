@@ -71,7 +71,7 @@ fn history_content_json_projection_sql() -> String {
 /// 解析消息内容 JSON，支持多种格式
 ///
 /// 支持的格式：
-/// 1. Aster 格式: `[{"Text":"..."}, {"ToolRequest":...}]`
+/// 1. Agent 格式: `[{"Text":"..."}, {"ToolRequest":...}]`
 /// 2. Lime 纯文本: `"string"`
 /// 3. Lime Parts: `[{"type":"text","text":"..."}]`
 fn parse_message_content(content_json: &str) -> MessageContent {
@@ -277,7 +277,7 @@ fn parse_content_parts_from_json_with_depth(
 fn parse_content_part_item(value: &serde_json::Value) -> Option<ContentPart> {
     let obj = value.as_object()?;
 
-    // Aster 格式: {"Text":"..."} 或 {"Text":{"text":"..."}}
+    // Agent 格式: {"Text":"..."} 或 {"Text":{"text":"..."}}
     if let Some(text) = obj.get("Text").and_then(|v| v.as_str()) {
         return Some(ContentPart::Text {
             text: text.to_string(),
@@ -1425,7 +1425,7 @@ impl AgentDao {
         let cached_input_tokens: Option<u32> = row.get(8)?;
         let cache_creation_input_tokens: Option<u32> = row.get(9)?;
 
-        // 解析 JSON - 支持 Aster 与 Lime 两类历史格式。
+        // 解析 JSON - 支持 Agent 与 Lime 两类历史格式。
         let content = parse_message_content(&content_json);
         let tool_calls: Option<Vec<ToolCall>> = parse_tool_calls(tool_calls_json.as_deref());
 
@@ -1677,9 +1677,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_tool_calls_should_parse_aster_tool_request_shape() {
+    fn parse_tool_calls_should_parse_agent_tool_request_shape() {
         let legacy = r#"[{"id":"call_324","toolCall":{"status":"success","value":{"name":"Skill","arguments":{"skill":"user:canvas-design"}}}}]"#;
-        let result = parse_tool_calls(Some(legacy)).expect("应能解析 aster toolRequest 结构");
+        let result = parse_tool_calls(Some(legacy)).expect("应能解析 agent toolRequest 结构");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, "call_324");

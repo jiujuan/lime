@@ -135,7 +135,7 @@ sequenceDiagram
     participant Host as Electron Desktop Host Bridge
     participant Rpc as App Server JSON-RPC
     participant Service as RuntimeCore
-    participant Backend as AsterBackend
+    participant Backend as RuntimeBackend
     participant Sink as DesktopEventSink
 
     FE->>Host: app_server_handle_json_lines(agentSession/turn/start)

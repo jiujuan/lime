@@ -626,8 +626,6 @@ function turnStartTraceTurnId(entry) {
   return (
     entry?.turnId ??
     entry?.turn_id ??
-    entry?.runtimeOptions?.hostOptions?.asterChatRequest?.turn_id ??
-    entry?.runtimeOptions?.hostOptions?.asterChatRequest?.turnId ??
     null
   );
 }
@@ -636,7 +634,6 @@ function turnStartTraceText(entry) {
   return (
     entry?.text ??
     entry?.inputText ??
-    entry?.runtimeOptions?.hostOptions?.asterChatRequest?.message ??
     null
   );
 }
@@ -1063,22 +1060,13 @@ async function startRunningTurnForSpec(page, requestLog, spec) {
       runtimeOptions: {
         stream: true,
         eventName,
-        providerPreference: FIXTURE_PROVIDER,
-        modelPreference: FIXTURE_MODEL,
-        metadata: {
-          harness: {
-            source: "smoke:reopen-running-turn-cdp-gate:multi-running",
-          },
-        },
-        hostOptions: {
-          asterChatRequest: {
-            message: spec.prompt,
-            session_id: spec.sessionId,
-            event_name: eventName,
-            provider_preference: FIXTURE_PROVIDER,
-            model_preference: FIXTURE_MODEL,
-            turn_id: turnId,
-            turn_config: null,
+        runtimeRequest: {
+          providerPreference: FIXTURE_PROVIDER,
+          modelPreference: FIXTURE_MODEL,
+          metadata: {
+            harness: {
+              source: "smoke:reopen-running-turn-cdp-gate:multi-running",
+            },
           },
         },
       },

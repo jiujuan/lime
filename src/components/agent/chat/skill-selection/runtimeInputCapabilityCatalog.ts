@@ -6,7 +6,7 @@ import {
   type SkillCatalog,
   type SkillCatalogCommandEntry,
 } from "@/lib/api/skillCatalog";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import {
   INPUTBAR_BUILTIN_COMMANDS,
@@ -18,7 +18,7 @@ import {
 
 export interface RuntimeMentionAgentTurnRoute {
   commandKey: string;
-  executionStrategy?: AsterExecutionStrategy;
+  executionStrategy?: AgentExecutionStrategy;
 }
 
 export interface RuntimeInputCapabilityCatalog {

@@ -24,7 +24,7 @@ const agentCompatRestrictedPatterns = [
       "**/useAgentChat.*",
     ],
     message:
-      "useAgentChat 属于零引用 compat Hook，请改用 useAgentChatUnified 或 useAsterAgentChat；仅兼容回归测试允许引用。",
+      "useAgentChat 属于零引用 compat Hook，请改用 useAgentChatUnified 或 useAgentChat；仅兼容回归测试允许引用。",
   },
   {
     group: [
@@ -34,7 +34,7 @@ const agentCompatRestrictedPatterns = [
       "**/agentStore.*",
     ],
     message:
-      "agentStore 属于零引用遗留状态容器，请改用 useAgentChatUnified / useAsterAgentChat；仅兼容回归测试允许引用。",
+      "agentStore 属于零引用遗留状态容器，请改用 useAgentChatUnified / useAgentChat；仅兼容回归测试允许引用。",
   },
 ];
 
@@ -65,7 +65,7 @@ const generalChatRestrictedPaths = [
     name: "@/components/general-chat",
     importNames: ["useChat"],
     message:
-      "general-chat 的 useChat 属于旧路径，请优先使用 useAgentChatUnified / useAsterAgentChat 或当前现役聊天入口。",
+      "general-chat 的 useChat 属于旧路径，请优先使用 useAgentChatUnified / useAgentChat 或当前现役聊天入口。",
   },
   {
     name: "@/components/general-chat",
@@ -83,18 +83,18 @@ const generalChatRestrictedPaths = [
     name: "@/components/general-chat/hooks",
     importNames: ["useChat"],
     message:
-      "general-chat/hooks/useChat 属于旧路径，请优先使用 useAgentChatUnified / useAsterAgentChat 或当前现役聊天入口。",
+      "general-chat/hooks/useChat 属于旧路径，请优先使用 useAgentChatUnified / useAgentChat 或当前现役聊天入口。",
   },
   {
     name: "@/components/general-chat/hooks",
     importNames: ["useSession", "useStreaming"],
     message:
-      "general-chat/hooks 下的 useSession/useStreaming 属于兼容实现，请优先接入 useAgentChatUnified / useAsterAgentChat / agent_runtime_*。",
+      "general-chat/hooks 下的 useSession/useStreaming 属于兼容实现，请优先接入 useAgentChatUnified / useAgentChat / agent_runtime_*。",
   },
   {
     name: "@/components/general-chat/hooks/useChat",
     message:
-      "general-chat/hooks/useChat 属于旧路径，请优先使用 useAgentChatUnified / useAsterAgentChat 或当前现役聊天入口。",
+      "general-chat/hooks/useChat 属于旧路径，请优先使用 useAgentChatUnified / useAgentChat 或当前现役聊天入口。",
   },
   {
     name: "@/components/general-chat/GeneralChatPage",
@@ -383,7 +383,7 @@ const generalChatRestrictedPaths = [
   {
     name: "@/stores/agentStore",
     message:
-      "agentStore 属于零引用遗留状态容器，请改用现役 useAgentChatUnified / useAsterAgentChat 链路。",
+      "agentStore 属于零引用遗留状态容器，请改用现役 useAgentChatUnified / useAgentChat 链路。",
   },
   {
     name: "@/stores",
@@ -395,7 +395,7 @@ const generalChatRestrictedPaths = [
       "usePendingActions",
     ],
     message:
-      "agentStore 相关导出属于零引用遗留状态容器，请改用现役 useAgentChatUnified / useAsterAgentChat 链路。",
+      "agentStore 相关导出属于零引用遗留状态容器，请改用现役 useAgentChatUnified / useAgentChat 链路。",
   },
   {
     name: "@/lib/api/agentCompat",
@@ -406,31 +406,29 @@ const generalChatRestrictedPaths = [
     name: "@/lib/api/agent",
     importNames: ["sendAgentMessage", "sendAgentMessageStream"],
     message:
-      "agent.ts 已删除；旧 Agent 发送 API 请改用 submitAgentRuntimeTurn() 或 useAsterAgentChat().sendMessage()。",
+      "agent.ts 已删除；旧 Agent 发送 API 请改用 submitAgentRuntimeTurn() 或 useAgentChat().sendMessage()。",
   },
   {
     name: "@/lib/api/agentRuntime",
     importNames: deprecatedAgentRuntimeHelperNames,
     message:
-      "agentRuntime 中这些旧命名 helper 只允许留在兼容层或兼容测试；业务层请改用 agent_runtime_* 对应 API 或 useAsterAgentChat。",
+      "agentRuntime 中这些旧命名 helper 只允许留在兼容层或兼容测试；业务层请改用 agent_runtime_* 对应 API 或 useAgentChat。",
   },
   {
     name: "@/hooks/useUnifiedChat",
     message:
-      "useUnifiedChat 已删除；Agent 工作台请改用 useAgentChatUnified / useAsterAgentChat，旧 General/Creator 路径如需恢复，必须基于 agent_runtime_* 重新设计。",
+      "useUnifiedChat 已删除；Agent 工作台请改用 useAgentChatUnified / useAgentChat，旧 General/Creator 路径如需恢复，必须基于 agent_runtime_* 重新设计。",
   },
   {
     name: "@/lib/api/agent",
     importNames: [
-      "initasterAgent",
-      "getasterAgentStatus",
-      "resetasterAgent",
-      "createasterSession",
-      "sendasterMessage",
-      "listasterProviders",
+      "initagent",
+      "getagentStatus",
+      "resetagent",
+      "listruntimeProviders",
     ],
     message:
-      "agent.ts 已删除；旧 aster 命名 API 请改用现役 Aster API 或 Provider 配置流程。",
+      "agent.ts 已删除；旧 agent 命名 API 请改用现役 Agent API 或 Provider 配置流程。",
   },
 ];
 
@@ -486,7 +484,7 @@ const agentRuntimeCommandSelectors = [
 ].map((command) => ({
   selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
   message:
-    "agent runtime 命令只允许集中放在 `src/lib/api/agentRuntime` 网关目录；旧 agent_/aster_ 命令已废弃，禁止在业务模块直接扩散。",
+    "agent runtime 命令只允许集中放在 `src/lib/api/agentRuntime` 网关目录；旧 agent_/agent_ 命令已废弃，禁止在业务模块直接扩散。",
 }));
 
 const projectGatewayCommandSelectors = [

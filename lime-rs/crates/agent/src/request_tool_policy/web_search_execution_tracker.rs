@@ -223,41 +223,4 @@ impl WebSearchExecutionTracker {
             .collect::<Vec<_>>()
             .join("; ")
     }
-
-    pub(crate) fn has_attempts(&self) -> bool {
-        !self.ordered_tool_ids.is_empty()
-    }
-
-    pub(crate) fn completed_attempt_count_for_policy(&self, policy: &RequestToolPolicy) -> usize {
-        self.ordered_tool_ids
-            .iter()
-            .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
-            .filter(|record| {
-                policy.matches_any_allowed_tool(&record.tool_name) && record.success.is_some()
-            })
-            .count()
-    }
-
-    pub(crate) fn successful_attempt_count_for_policy(&self, policy: &RequestToolPolicy) -> usize {
-        self.ordered_tool_ids
-            .iter()
-            .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
-            .filter(|record| {
-                policy.matches_any_allowed_tool(&record.tool_name)
-                    && record.success.unwrap_or(false)
-            })
-            .count()
-    }
-
-    pub(crate) fn has_successful_required_attempt(&self, policy: &RequestToolPolicy) -> bool {
-        policy.required_tools.iter().all(|required_tool| {
-            self.ordered_tool_ids
-                .iter()
-                .filter_map(|tool_id| self.attempts_by_id.get(tool_id))
-                .any(|record| {
-                    is_same_tool(&record.tool_name, required_tool)
-                        && record.success.unwrap_or(false)
-                })
-        })
-    }
 }

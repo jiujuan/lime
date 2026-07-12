@@ -60,7 +60,7 @@ async fn start_turn_projects_media_attachment_reference_into_context_telemetry()
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref())
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
         .expect("runtime metadata");
     let context = metadata
         .get(MEDIA_PROMPT_CONTEXT_KEY)
@@ -117,7 +117,7 @@ async fn start_turn_does_not_project_inline_data_uri_media_context() {
     let metadata = requests[0]
         .runtime_options
         .as_ref()
-        .and_then(|options| options.metadata.as_ref());
+        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata);
 
     assert!(metadata
         .and_then(|metadata| metadata.get(MEDIA_PROMPT_CONTEXT_KEY))

@@ -1,10 +1,10 @@
 # Agent 测试用例
 
-> Aster Agent 集成的测试用例
+> Agent Agent 集成的测试用例
 
 ## 概述
 
-Agent 测试验证 Aster Agent 在 Lime 中的集成，包括：
+Agent 测试验证 Agent Agent 在 Lime 中的集成，包括：
 - 基础对话功能
 - 流式响应
 - 工具调用
@@ -326,14 +326,14 @@ async fn test_concurrent_requests() {
 ## 测试辅助函数
 
 ```rust
-async fn create_test_agent_state() -> AsterAgentState {
-    let config = AsterConfig {
+async fn create_test_agent_state() -> AgentState {
+    let config = AgentConfig {
         model: "test-model".into(),
         api_key: "test-key".into(),
         ..Default::default()
     };
     
-    AsterAgentState::new(config).await.unwrap()
+    AgentState::new(config).await.unwrap()
 }
 
 async fn create_temp_file(content: &str) -> TempFile {

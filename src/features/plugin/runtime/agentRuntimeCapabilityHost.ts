@@ -69,9 +69,7 @@ type RuntimeAgentTaskRequest = PluginTaskRequest & {
   metadata?: Record<string, unknown>;
   sessionId?: string;
   workspaceId?: string;
-  providerPreference?: string;
-  modelPreference?: string;
-  turnConfig?: PluginRuntimeStartTaskRequest["turnConfig"];
+  runtimeRequest?: PluginRuntimeStartTaskRequest["runtimeRequest"];
   queueIfBusy?: boolean;
   skipPreSubmitResume?: boolean;
   runStartHooks?: boolean;
@@ -106,6 +104,10 @@ async function rejectMissingWorkspaceId(): Promise<string> {
 
 function readRuntimeRequest(input: PluginTaskRequest): RuntimeAgentTaskRequest {
   return input as RuntimeAgentTaskRequest;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeTaskLookup(
@@ -259,6 +261,17 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
         retryAttempt: retry?.retryAttempt,
       },
     };
+    const turnRuntimeRequest = {
+      ...runtimeRequest.runtimeRequest,
+      workspaceId:
+        runtimeRequest.runtimeRequest?.workspaceId ?? resolvedWorkspaceId,
+      metadata: {
+        ...(isRecord(runtimeRequest.runtimeRequest?.metadata)
+          ? runtimeRequest.runtimeRequest.metadata
+          : {}),
+        ...metadata,
+      },
+    };
     const taskId =
       normalizeString(runtimeRequest.taskId) ??
       (this.ensureSession ? createRuntimeTaskId() : undefined);
@@ -296,9 +309,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       humanReview: runtimeRequest.humanReview,
       eventName: normalizeString(runtimeRequest.eventName),
       turnId: normalizeString(runtimeRequest.turnId),
-      providerPreference: runtimeRequest.providerPreference,
-      modelPreference: runtimeRequest.modelPreference,
-      turnConfig: runtimeRequest.turnConfig,
+      runtimeRequest: turnRuntimeRequest,
       queueIfBusy: runtimeRequest.queueIfBusy,
       skipPreSubmitResume: runtimeRequest.skipPreSubmitResume,
       runStartHooks: runtimeRequest.runStartHooks,

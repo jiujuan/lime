@@ -8,7 +8,7 @@
 
 本目录定义 App Server 的产品、架构、协议和迁移路线。
 
-App Server 是 Lime AI Agent Runtime 的服务化边界。它不是把现有 `aster_agent_cmd` 原样包一层，而是先把可复用公共部分抽成 host-agnostic `RuntimeCore`，再把 Aster、未来更多执行后端、桌面壳和独立 App 都接到这条公共服务层上。
+App Server 是 Lime AI Agent Runtime 的服务化边界。它不是把现有 `agent_cmd` 原样包一层，而是先把可复用公共部分抽成 host-agnostic `RuntimeCore`，再把 Agent、未来更多执行后端、桌面壳和独立 App 都接到这条公共服务层上。
 
 本路线图参考 `/Users/coso/Documents/dev/rust/codex` 时，只参考其中 `codex-rs` 的 App Server / protocol / client / daemon / Rust runtime 分层：独立 protocol crate、server processor、client facade、transport/lifecycle、`initialize -> initialized` 门禁、`<resource>/<method>` RPC 命名、bounded event / backpressure 和 daemon 生命周期。该仓库是 Codex CLI 版本代码，不包含 Codex App 前端实现；不得把它当作 Codex App UI、Electron shell、托盘、Dock、updater 或桌面产品交互的参考来源。
 
@@ -39,7 +39,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 | ------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `current`           | `internal/roadmap/appserver/*`                                                  | App Server 路线图、PRD、架构和协议规划。                                                                                       |
 | `current target`    | `RuntimeCore`                                                                   | 跨 App、跨执行后端复用的公共 runtime service 层。                                                                              |
-| `current target`    | `ExecutionBackend`                                                              | Aster 和未来更多执行后端的适配接口。                                                                                           |
+| `current target`    | `ExecutionBackend`                                                              | Agent 和未来更多执行后端的适配接口。                                                                                           |
 | `current reference` | `lime-rs/crates/agent`                                                          | 当前最接近 runtime core 的 crate，后续继续拆公共模型与服务。                                                                   |
 | `current bridge`    | `src/lib/dev-bridge/safeInvoke.ts`、HTTP client、`app_server_handle_json_lines` | Lime Desktop renderer 进入 Electron Desktop Host / App Server JSON-RPC 的 current 传输、可用性探测和事件监听边界。             |
 | `current client`    | Lime Desktop / content-studio / 更多独立 App 的 app-server client               | 独立 App 只通过协议消费 runtime，不直接 import Lime 内部实现。                                                                 |
@@ -80,7 +80,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 4. 逐步把 legacy desktop command glue 迁出或下线；确需临时兼容时只能在 App Server / Electron Desktop Host current 边界内投影，不能在 `lime-rs/src/commands/**` 保留 thin facade。
 5. 统一 session / thread / turn / task / tool / action / artifact / evidence facts。
 6. 让未来 App 只接入 App Server Client 和 Capability SDK，不复制 runtime 逻辑。
-7. 让 Aster 作为第一个 `ExecutionBackend` 接入，为后续更多执行后端留出清晰接口。
+7. 让 Agent 作为第一个 `ExecutionBackend` 接入，为后续更多执行后端留出清晰接口。
 
 ## 5. 非目标
 
@@ -92,7 +92,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 4. 不新增第二套 tool runtime、skill runtime、workspace runtime。
 5. 不在 App 侧用 UI-only state 模拟 Agent 执行成功。
 6. 不一次性迁完所有 legacy desktop commands；但 `lime-rs/src/commands/**` 只允许作为清理区处理，不再新增实现、stub、compat wrapper 或 thin facade。
-7. 不把 `Aster`、`runtime_turn.rs` 或 legacy desktop command DTO 直接定义成公共协议。
+7. 不把 `Agent`、`runtime_turn.rs` 或 legacy desktop command DTO 直接定义成公共协议。
 
 ## 6. 当前执行顺序
 
@@ -100,7 +100,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 P0 路线图与公共边界冻结
 -> P1 codex-rs app-server-style crate 家族骨架
 -> P2 RuntimeCore / ExecutionBackend 接口
--> P3 AsterBackend adapter
+-> P3 RuntimeBackend adapter
 -> P4 App Server 接入 RuntimeCore
 -> P5 Lime Desktop Host bridge / compat facade
 -> P6 content-studio app-server client
@@ -113,12 +113,12 @@ P0 路线图与公共边界冻结
 
 下一刀固定为：
 
-**先建立 codex-rs app-server-style crate 家族和公共 runtime 边界，不先把 Aster 直接塞进协议。**
+**先建立 codex-rs app-server-style crate 家族和公共 runtime 边界，不先把 Agent 直接塞进协议。**
 
 原因：
 
 1. crate 边界先稳定，后续公共代码才不会继续散在壳层。
-2. `RuntimeCore / ExecutionBackend` 先定义清楚，Aster 才能作为 adapter 接入，而不是绑死公共层。
+2. `RuntimeCore / ExecutionBackend` 先定义清楚，Agent 才能作为 adapter 接入，而不是绑死公共层。
 3. 协议只暴露 session / turn / event / action / artifact / evidence 等稳定事实，不暴露具体 backend。
 4. 完整 tool / artifact / evidence 迁移应跟随 runtime core facts，而不是先做壳层包装。
 

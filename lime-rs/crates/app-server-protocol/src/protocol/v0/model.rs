@@ -176,7 +176,7 @@ pub enum ModelRefSource {
     Explicit,
     #[default]
     RuntimeOptions,
-    HostOptions,
+    RuntimeRequest,
     ProfileSlot,
     SessionDefault,
     Task,

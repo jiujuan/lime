@@ -57,7 +57,7 @@ sequenceDiagram
     participant Policy as Permission Control
     participant Core as RuntimeCore
     participant Sandbox as Sandbox Manager
-    participant Backend as AsterBackend
+    participant Backend as RuntimeBackend
     participant Projection as Headless Projection
 
     UI->>Adapter: submit(input, workspace, model)
@@ -98,7 +98,7 @@ sequenceDiagram
     Runtime->>Client: agentSession/start(appId, businessObjectRef)
     Client->>Server: agentSession/start
     Server-->>Client: session
-    Runtime->>Client: agentSession/turn/start(hostOptions, turnConfig)
+    Runtime->>Client: agentSession/turn/start(runtimeRequest)
     Client->>Server: turn/start
     Server->>Policy: resolve permission profile
     Policy-->>Server: active profile

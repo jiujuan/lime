@@ -9,8 +9,8 @@ import {
 } from "react";
 import { toast } from "sonner";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
   AgentRuntimeThreadReadModel,
   AutoContinueRequestPayload,
   QueuedTurnSnapshot,
@@ -129,7 +129,7 @@ interface UseAgentStreamOptions {
   ) => Promise<boolean>;
   sessionIdRef: MutableRefObject<string | null>;
   sessionId?: string | null;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   accessMode: AgentAccessMode;
   providerTypeRef: MutableRefObject<string>;
   modelRef: MutableRefObject<string>;
@@ -139,7 +139,7 @@ interface UseAgentStreamOptions {
   ) => SessionModelPreference | null;
   getSyncedSessionExecutionStrategy: (
     sessionId: string,
-  ) => AsterExecutionStrategy | null;
+  ) => AgentExecutionStrategy | null;
   getSyncedSessionRecentPreferences?: (
     sessionId: string,
   ) => ChatToolPreferences | null;
@@ -158,7 +158,7 @@ interface UseAgentStreamOptions {
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setExecutionRuntime: Dispatch<
-    SetStateAction<AsterSessionExecutionRuntime | null>
+    SetStateAction<AgentSessionExecutionRuntime | null>
   >;
   threadBusy: boolean;
   currentTurnId?: string | null;
@@ -169,7 +169,7 @@ interface UseAgentStreamOptions {
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   onRestoreInterruptedInput?: (request: InterruptedInputRestoreRequest) => void;
-  executionRuntime: AsterSessionExecutionRuntime | null;
+  executionRuntime: AgentSessionExecutionRuntime | null;
   clawTraceEnabled?: boolean;
   allowRecoveredStreamBinding?: boolean;
   soulCopy?: SoulInteractionCopy;
@@ -412,7 +412,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       })
       .catch((error) => {
         recoveredBindingAttemptKeyRef.current = null;
-        console.error("[AsterChat] 绑定运行中会话失败:", error);
+        console.error("[AgentChat] 绑定运行中会话失败:", error);
       });
 
     return () => {
@@ -452,7 +452,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       webSearch?: boolean,
       _thinking?: boolean,
       skipUserMessage = false,
-      executionStrategyOverride?: AsterExecutionStrategy,
+      executionStrategyOverride?: AgentExecutionStrategy,
       modelOverride?: string,
       autoContinue?: AutoContinueRequestPayload,
       options?: SendMessageOptions,
@@ -506,7 +506,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         error: () => undefined,
       },
       onInterruptError: (error) => {
-        console.error("[AsterChat] 停止失败:", error);
+        console.error("[AgentChat] 停止失败:", error);
       },
     });
     submittedDraftFallbackRef.current = null;
@@ -538,7 +538,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
           error: (message) => toast.error(message),
         },
         onError: (error) => {
-          console.error("[AsterChat] 移除排队消息失败:", error);
+          console.error("[AgentChat] 移除排队消息失败:", error);
         },
       });
     },
@@ -578,7 +578,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       });
     } catch (error) {
       const compactionError = normalizeAgentStreamCompactionError(error);
-      console.error("[AsterChat] 压缩上下文失败:", compactionError);
+      console.error("[AgentChat] 压缩上下文失败:", compactionError);
       if (!compactionError.alreadyNotified) {
         toast.error(compactionError.message);
       }
@@ -608,7 +608,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         error: (message) => toast.error(message),
       },
       onError: (error) => {
-        console.error("[AsterChat] 恢复线程执行失败:", error);
+        console.error("[AgentChat] 恢复线程执行失败:", error);
       },
     });
   }, [refreshSessionReadModel, runtime, sessionIdRef]);
@@ -632,7 +632,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
           error: (message) => toast.error(message),
         },
         onError: (error) => {
-          console.error("[AsterChat] 立即执行排队消息失败:", error);
+          console.error("[AgentChat] 立即执行排队消息失败:", error);
         },
       });
     },

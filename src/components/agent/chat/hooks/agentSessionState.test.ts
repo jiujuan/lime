@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   buildHydratedAgentSessionSnapshot,
@@ -64,7 +64,7 @@ describe("agentSessionState", () => {
       provider_name: "openai",
       model_name: "gpt-5.4-mini",
       source: "session",
-    } satisfies AsterSessionExecutionRuntime;
+    } satisfies AgentSessionExecutionRuntime;
 
     const snapshot = createEmptyAgentSessionSnapshot({
       executionRuntime: runtime,
@@ -564,7 +564,7 @@ describe("agentSessionState", () => {
       provider_name: "openai",
       model_name: "gpt-5.4-mini",
       source: "session",
-    } satisfies AsterSessionExecutionRuntime;
+    } satisfies AgentSessionExecutionRuntime;
     const detail = {
       id: "topic-1",
       created_at: 1700000000,
@@ -582,7 +582,7 @@ describe("agentSessionState", () => {
           position: 1,
         },
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-1",
@@ -628,7 +628,7 @@ describe("agentSessionState", () => {
       updated_at: 1700000001,
       working_dir: " /workspace/runtime-cwd ",
       messages: [],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-with-working-dir",
@@ -719,7 +719,7 @@ describe("agentSessionState", () => {
           content: [{ type: "text", text: "内容已保存到项目目录。" }],
         },
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-1",
@@ -831,7 +831,7 @@ describe("agentSessionState", () => {
           content: [{ type: "text", text: "T30 Pro 和 T90 有什么区别呢" }],
         },
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-search",
@@ -940,7 +940,7 @@ describe("agentSessionState", () => {
           },
         ],
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-tool-read",
@@ -1040,7 +1040,7 @@ describe("agentSessionState", () => {
           content: [{ type: "text", text: "继续保存文章" }],
         },
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-1",
@@ -1121,7 +1121,7 @@ describe("agentSessionState", () => {
           content: [{ type: "text", text: "导出这篇文章" }],
         },
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-earlier-tail",
@@ -1185,7 +1185,7 @@ describe("agentSessionState", () => {
           },
         } as Partial<AgentThreadItem>),
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-with-auxiliary-turn",

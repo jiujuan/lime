@@ -26,7 +26,7 @@ function createFixtureRepo() {
     `
 [workspace]
 members = ["crates/*"]
-exclude = ["crates/aster-rust"]
+exclude = ["crates/agent-rust"]
 `,
   );
   writeFile(
@@ -54,10 +54,10 @@ version = "0.0.0"
 `,
   );
   writeFile(
-    "lime-rs/crates/aster-rust/Cargo.toml",
+    "lime-rs/crates/agent-rust/Cargo.toml",
     `
 [package]
-name = "aster-rust"
+name = "agent-rust"
 version = "0.0.0"
 `,
   );
@@ -150,27 +150,27 @@ describe("run-rust-layer unit helpers", () => {
     const repoRoot = createFixtureRepo();
     try {
       fs.mkdirSync(
-        path.join(repoRoot, "lime-rs/vendor/aster-rust/crates/aster/src"),
+        path.join(repoRoot, "lime-rs/vendor/agent-rust/crates/agent/src"),
         { recursive: true },
       );
       fs.writeFileSync(
         path.join(
           repoRoot,
-          "lime-rs/vendor/aster-rust/crates/aster/src/agent.rs",
+          "lime-rs/vendor/agent-rust/crates/agent/src/agent.rs",
         ),
         "",
       );
 
       expect(
         resolveRustPathSelection(
-          ["lime-rs/vendor/aster-rust/crates/aster/src/agent.rs"],
+          ["lime-rs/vendor/agent-rust/crates/agent/src/agent.rs"],
           { repoRoot },
         ),
       ).toMatchObject({
         errors: [],
-        rustPaths: ["lime-rs/vendor/aster-rust/crates/aster/src/agent.rs"],
+        rustPaths: ["lime-rs/vendor/agent-rust/crates/agent/src/agent.rs"],
         workspaceReasons: [
-          "lime-rs/vendor/aster-rust/crates/aster/src/agent.rs (vendored Rust dependency)",
+          "lime-rs/vendor/agent-rust/crates/agent/src/agent.rs (vendored Rust dependency)",
         ],
         workspaceWide: true,
       });
@@ -183,7 +183,7 @@ describe("run-rust-layer unit helpers", () => {
     const repoRoot = createFixtureRepo();
     try {
       const selection = resolveRustPathSelection(
-        ["lime-rs/crates/aster-rust/src/lib.rs"],
+        ["lime-rs/crates/agent-rust/src/lib.rs"],
         { repoRoot },
       );
       expect(selection.errors.join("\n")).toContain("workspace exclude");
@@ -200,13 +200,13 @@ describe("run-rust-layer unit helpers", () => {
         resolveRustPathSelection(
           [
             "lime-rs/Cargo.lock",
-            "lime-rs/crates/aster-rust/Cargo.lock",
+            "lime-rs/crates/agent-rust/Cargo.lock",
           ],
           { repoRoot },
         ),
       ).toMatchObject({
         rustPaths: ["lime-rs/Cargo.lock"],
-        skippedPaths: ["lime-rs/crates/aster-rust/Cargo.lock"],
+        skippedPaths: ["lime-rs/crates/agent-rust/Cargo.lock"],
         workspaceWide: true,
       });
     } finally {
@@ -218,13 +218,13 @@ describe("run-rust-layer unit helpers", () => {
     const repoRoot = createFixtureRepo();
     try {
       expect(
-        resolveRustPathSelection(["lime-rs/crates/aster-rust/Cargo.lock"], {
+        resolveRustPathSelection(["lime-rs/crates/agent-rust/Cargo.lock"], {
           repoRoot,
         }),
       ).toMatchObject({
         errors: [],
         rustPaths: [],
-        skippedPaths: ["lime-rs/crates/aster-rust/Cargo.lock"],
+        skippedPaths: ["lime-rs/crates/agent-rust/Cargo.lock"],
         packages: [],
       });
     } finally {

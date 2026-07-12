@@ -422,7 +422,7 @@ mod tests {
                     retry_request
                         .runtime_options
                         .as_ref()
-                        .and_then(|options| options.metadata.as_ref())
+                        .and_then(app_server_protocol::RuntimeOptions::runtime_metadata)
                         .and_then(|metadata| metadata.get("workflowRetry"))
                         .and_then(|retry| retry.get("stepId"))
                         .and_then(serde_json::Value::as_str),

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { MessagePathReference } from "../../types";
 import type { Character } from "@/lib/api/projectMemory";
 import type {
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import { InputbarComposerSection } from "./components/InputbarComposerSection";
@@ -73,7 +73,7 @@ interface InputbarProps extends SkillSelectionSourceProps {
   setModel?: (model: string) => void;
   reasoningEffort?: ModelReasoningEffortLevel | "";
   setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   accessMode?: AgentAccessMode;
   setAccessMode?: (mode: AgentAccessMode) => void;
   toolStates?: Partial<InputbarToolStates>;

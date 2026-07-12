@@ -324,6 +324,9 @@ fn host_value(host: RuntimeHostContext) -> serde_json::Value {
 }
 
 fn start_turn_request_value(request: ExecutionRequest) -> serde_json::Value {
+    let provider_preference = request.provider_preference().map(str::to_string);
+    let model_preference = request.model_preference().map(str::to_string);
+    let metadata = request.runtime_metadata().cloned();
     json!({
         "host": host_value(request.host),
         "session": request.session,
@@ -331,9 +334,9 @@ fn start_turn_request_value(request: ExecutionRequest) -> serde_json::Value {
         "input": request.input,
         "runtimeOptions": request.runtime_options,
         "eventName": request.event_name,
-        "providerPreference": request.provider_preference,
-        "modelPreference": request.model_preference,
-        "metadata": request.metadata,
+        "providerPreference": provider_preference,
+        "modelPreference": model_preference,
+        "metadata": metadata,
         "queuedTurnId": request.queued_turn_id,
         "queueIfBusy": request.queue_if_busy,
         "skipPreSubmitResume": request.skip_pre_submit_resume,
@@ -351,6 +354,7 @@ fn cancel_turn_request_value(request: CancelExecutionRequest) -> serde_json::Val
 fn action_respond_request_value(request: ActionRespondRequest) -> serde_json::Value {
     let decision = request.decision.map(|decision| decision.as_str());
     let decision_scope = request.decision.map(|decision| decision.scope());
+    let metadata = request.runtime_metadata().cloned();
     json!({
         "host": host_value(request.host),
         "session": request.session,
@@ -362,7 +366,7 @@ fn action_respond_request_value(request: ActionRespondRequest) -> serde_json::Va
         "confirmed": request.confirmed,
         "response": request.response,
         "userData": request.user_data,
-        "metadata": request.metadata,
+        "metadata": metadata,
         "eventName": request.event_name,
         "actionScope": request.action_scope,
     })

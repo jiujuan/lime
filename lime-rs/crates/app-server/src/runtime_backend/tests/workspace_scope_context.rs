@@ -1,20 +1,18 @@
 use super::*;
+use app_server_protocol::{RuntimeRequest, RuntimeSearchMode};
 
 #[test]
-fn request_working_dir_uses_host_turn_config_absolute_directory() {
+fn request_working_dir_uses_typed_runtime_request_absolute_directory() {
     let workspace = TempDir::new().expect("create workspace");
     let request = request_for_test(
         "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "turn_config": {
-                    "working_dir": workspace.path().to_string_lossy()
-                }
-            }
-        })),
+        Some(RuntimeRequest {
+            working_dir: Some(workspace.path().to_string_lossy().into_owned()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
 
     let working_dir = request_workspace_scope(&request, host_request.as_ref())
         .working_dir
@@ -24,42 +22,16 @@ fn request_working_dir_uses_host_turn_config_absolute_directory() {
 }
 
 #[test]
-fn request_working_dir_prefers_turn_config_over_host_top_level() {
-    let top_level_workspace = TempDir::new().expect("create top-level workspace");
-    let turn_workspace = TempDir::new().expect("create turn workspace");
-    let request = request_for_test(
-        "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "working_dir": top_level_workspace.path().to_string_lossy(),
-                "turn_config": {
-                    "working_dir": turn_workspace.path().to_string_lossy()
-                }
-            }
-        })),
-        None,
-    );
-    let host_request = aster_chat_request_from_request(&request);
-
-    let working_dir = request_workspace_scope(&request, host_request.as_ref())
-        .working_dir
-        .expect("working dir");
-
-    assert_eq!(working_dir, turn_workspace.path());
-}
-
-#[test]
 fn request_working_dir_rejects_relative_directory() {
     let request = request_for_test(
         "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "working_dir": "relative-workspace"
-            }
-        })),
+        Some(RuntimeRequest {
+            working_dir: Some("relative-workspace".to_string()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
 
     assert!(request_workspace_scope(&request, host_request.as_ref())
         .working_dir
@@ -74,17 +46,14 @@ fn request_workspace_scope_keeps_project_root_and_working_dir_distinct() {
     std::fs::create_dir_all(&nested).expect("create nested");
     let request = request_for_test(
         "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "projectRoot": repo.to_string_lossy(),
-                "turnConfig": {
-                    "workingDir": nested.to_string_lossy()
-                }
-            }
-        })),
+        Some(RuntimeRequest {
+            project_root: Some(repo.to_string_lossy().into_owned()),
+            working_dir: Some(nested.to_string_lossy().into_owned()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
 
     let scope = request_workspace_scope(&request, host_request.as_ref());
 
@@ -93,17 +62,18 @@ fn request_workspace_scope_keeps_project_root_and_working_dir_distinct() {
 }
 
 #[test]
-fn request_workspace_scope_falls_back_to_project_root_when_working_dir_missing() {
+fn request_workspace_scope_falls_back_to_typed_project_root_when_working_dir_missing() {
     let workspace = TempDir::new().expect("create workspace");
     let request = request_for_test(
         "hello",
+        Some(RuntimeRequest {
+            workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
+            ..RuntimeRequest::default()
+        }),
         None,
-        Some(json!({
-            "workspaceRoot": workspace.path().to_string_lossy()
-        })),
     );
-
-    let scope = request_workspace_scope(&request, None);
+    let host_request = runtime_request_from_request(&request);
+    let scope = request_workspace_scope(&request, host_request.as_ref());
 
     assert_eq!(scope.working_dir.as_deref(), Some(workspace.path()));
     assert_eq!(scope.project_root.as_deref(), Some(workspace.path()));
@@ -118,19 +88,16 @@ fn session_config_merges_turn_prompt_runtime_agents_and_tool_policy() {
     std::fs::write(&runtime_agents_path, "- 工作区动态指令").expect("write runtime agents");
     let request = request_for_test(
         "需要联网核实最新信息",
-        Some(json!({
-            "asterChatRequest": {
-                "turn_config": {
-                    "system_prompt": "请求级系统提示",
-                    "working_dir": workspace.path().to_string_lossy(),
-                    "web_search": true,
-                    "search_mode": "required"
-                }
-            }
-        })),
+        Some(RuntimeRequest {
+            system_prompt: Some("请求级系统提示".to_string()),
+            working_dir: Some(workspace.path().to_string_lossy().into_owned()),
+            web_search: Some(true),
+            search_mode: Some(RuntimeSearchMode::Required),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("scope");
     let selection = RuntimeModelSelection {
         provider: "openai".to_string(),
@@ -177,17 +144,14 @@ fn session_config_merges_hierarchical_runtime_agents_layers() {
     .expect("write nested local runtime agents");
     let request = request_for_test(
         "请按项目规则处理",
-        Some(json!({
-            "asterChatRequest": {
-                "turn_config": {
-                    "system_prompt": "请求级系统提示",
-                    "working_dir": nested.to_string_lossy()
-                }
-            }
-        })),
+        Some(RuntimeRequest {
+            system_prompt: Some("请求级系统提示".to_string()),
+            working_dir: Some(nested.to_string_lossy().into_owned()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("scope");
     let selection = RuntimeModelSelection {
         provider: "openai".to_string(),
@@ -245,18 +209,15 @@ fn session_config_uses_explicit_project_root_for_runtime_agents_boundary() {
     .expect("write nested local runtime agents");
     let request = request_for_test(
         "请按项目规则处理",
-        Some(json!({
-            "asterChatRequest": {
-                "projectRoot": repo.to_string_lossy(),
-                "turnConfig": {
-                    "systemPrompt": "请求级系统提示",
-                    "workingDir": nested.to_string_lossy()
-                }
-            }
-        })),
+        Some(RuntimeRequest {
+            project_root: Some(repo.to_string_lossy().into_owned()),
+            system_prompt: Some("请求级系统提示".to_string()),
+            working_dir: Some(nested.to_string_lossy().into_owned()),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("scope");
     let selection = RuntimeModelSelection {
         provider: "openai".to_string(),
@@ -307,22 +268,17 @@ fn session_config_uses_explicit_project_root_for_runtime_agents_boundary() {
 }
 
 #[test]
-fn host_turn_config_reasoning_and_thinking_are_preserved() {
+fn typed_runtime_request_reasoning_and_thinking_are_preserved() {
     let request = request_for_test(
         "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "reasoning_effort": "low",
-                "thinking_enabled": false,
-                "turn_config": {
-                    "reasoning_effort": "high",
-                    "thinking_enabled": true
-                }
-            }
-        })),
+        Some(RuntimeRequest {
+            reasoning_effort: Some("high".to_string()),
+            thinking_enabled: Some(true),
+            ..RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request).expect("host request");
+    let host_request = runtime_request_from_request(&request).expect("host request");
 
     assert_eq!(
         host_reasoning_effort(&host_request).as_deref(),

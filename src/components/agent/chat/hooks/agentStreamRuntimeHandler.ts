@@ -943,9 +943,15 @@ export function handleTurnStreamEvent({
       break;
 
     case "reasoning_started":
-    case "reasoning_final":
       noteFinalAnswerRequiredProcessBoundary(sequenceFromAgentEvent(data));
       commitRenderedTextBeforeProcessPart();
+      activateStream();
+      break;
+
+    case "reasoning_final":
+      // App Server may persist a completed reasoning summary after final text.
+      // It is archival metadata, not a new boundary that requires another reply.
+      noteProcessEventSequence(sequenceFromAgentEvent(data));
       activateStream();
       break;
 

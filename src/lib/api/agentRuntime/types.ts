@@ -1,30 +1,31 @@
 /**
- * Agent / Aster 现役运行时 API
+ * Agent / Agent 现役运行时 API
  *
  * 仅保留当前仍在维护的进程、会话、流式与交互能力。
  */
 
 export type { QueuedTurnSnapshot } from "../queuedTurn";
+export type { RuntimeSearchMode } from "@limecloud/app-server-client";
 export type {
-  AsterApprovalPolicy,
-  AsterExecutionStrategy,
-  AsterSandboxPolicy,
-  AsterSessionExecutionRuntimeCostState,
-  AsterSessionExecutionRuntimeLimitEvent,
-  AsterSessionExecutionRuntime,
-  AsterSessionExecutionRuntimeAccessMode,
-  AsterSessionExecutionRuntimeLimitState,
-  AsterSessionExecutionRuntimePermissionState,
-  AsterSessionExecutionRuntimePreferences,
-  AsterSessionExecutionRuntimeRecentTeamRole,
-  AsterSessionExecutionRuntimeRecentTeamSelection,
-  AsterSessionExecutionRuntimeRecentTeamSource,
-  AsterSessionExecutionRuntimeRoutingDecision,
-  AsterSessionExecutionRuntimeSource,
-  AsterSessionExecutionRuntimeTaskProfile,
-  AsterTurnOutputSchemaRuntime,
-  AsterTurnOutputSchemaSource,
-  AsterTurnOutputSchemaStrategy,
+  AgentApprovalPolicy,
+  AgentExecutionStrategy,
+  AgentSandboxPolicy,
+  AgentSessionExecutionRuntimeCostState,
+  AgentSessionExecutionRuntimeLimitEvent,
+  AgentSessionExecutionRuntime,
+  AgentSessionExecutionRuntimeAccessMode,
+  AgentSessionExecutionRuntimeLimitState,
+  AgentSessionExecutionRuntimePermissionState,
+  AgentSessionExecutionRuntimePreferences,
+  AgentSessionExecutionRuntimeRecentTeamRole,
+  AgentSessionExecutionRuntimeRecentTeamSelection,
+  AgentSessionExecutionRuntimeRecentTeamSource,
+  AgentSessionExecutionRuntimeRoutingDecision,
+  AgentSessionExecutionRuntimeSource,
+  AgentSessionExecutionRuntimeTaskProfile,
+  AgentTurnOutputSchemaRuntime,
+  AgentTurnOutputSchemaSource,
+  AgentTurnOutputSchemaStrategy,
 } from "../agentExecutionRuntime";
 
 export type * from "./sessionTypes";

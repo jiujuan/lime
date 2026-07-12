@@ -1,8 +1,7 @@
 //! Provider reply stream 的 current contract。
 //!
 //! 该模块只描述 Lime runtime 侧可传递的 provider handle 和 stream request，
-//! 不持有具体 provider trait object。Aster-backed provider 只能作为 compat backend
-//! 被 adapter 包在内部，不能把 Aster 类型暴露给 current 调用面。
+//! 不持有具体 provider trait object，不能把具体 client 类型暴露给 current 调用面。
 
 use crate::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use crate::safety::{
@@ -15,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 mod failure;
 mod image_input;
+mod message_output;
 mod model_change;
 mod notification;
 mod plaintext_tool_use;
@@ -24,8 +24,10 @@ mod response_content;
 mod response_context;
 mod response_event;
 mod sampling;
+mod sampling_output;
 mod text_delta;
 mod tool_input_delta;
+mod usage;
 
 pub use agent_protocol::provider_trace::{
     ProviderTraceEvent as RuntimeReplyProviderTraceEvent,
@@ -42,8 +44,14 @@ pub use image_input::{
     provider_stream_input_modality_policy_allows_image_input,
     provider_stream_input_modality_policy_from_metadata,
     provider_stream_metadata_allows_image_input, provider_stream_model_supports_image_input,
-    provider_stream_should_omit_image_input, RuntimeReplyProviderImageInputPolicy,
+    provider_stream_omitted_message_images_notice,
+    provider_stream_omitted_tool_result_images_notice, provider_stream_should_omit_image_input,
+    provider_stream_should_warn_omitted_provider_images, RuntimeReplyProviderImageInputPolicy,
     PROVIDER_IMAGE_INPUT_POLICY_METADATA_CAMEL_KEY, PROVIDER_IMAGE_INPUT_POLICY_METADATA_KEY,
+};
+pub use message_output::{
+    provider_stream_message_outputs, provider_stream_single_message_output,
+    RuntimeReplyProviderMessageOutput,
 };
 pub use model_change::{
     provider_stream_model_change, RuntimeReplyProviderModelChange,
@@ -58,7 +66,8 @@ pub use plaintext_tool_use::{
     provider_stream_plaintext_tool_use_is_complete, provider_stream_plaintext_tool_use_progress,
     provider_stream_plaintext_tool_use_start, provider_stream_plaintext_tool_uses,
     RuntimeReplyProviderPlaintextToolCall, RuntimeReplyProviderPlaintextToolUse,
-    RuntimeReplyProviderPlaintextToolUseProgress, PROVIDER_STREAM_PLAINTEXT_TOOL_USE_PROVIDER,
+    RuntimeReplyProviderPlaintextToolUseProgress, RuntimeReplyProviderPlaintextToolUseStream,
+    RuntimeReplyProviderPlaintextToolUseStreamEvent, PROVIDER_STREAM_PLAINTEXT_TOOL_USE_PROVIDER,
 };
 pub use poll::{
     provider_stream_cancel_poll_interval, provider_stream_event_poll, provider_stream_timeout_poll,
@@ -67,8 +76,14 @@ pub use poll::{
 };
 pub use progress::RuntimeReplyProviderStreamProgress;
 pub use response_content::{
-    provider_stream_response_has_notification_text, provider_stream_response_text_chars,
-    provider_stream_response_tool_input_delta_events, RuntimeReplyProviderResponseContent,
+    provider_stream_direct_answer_should_bypass_tool_execution,
+    provider_stream_direct_answer_should_strip_response_content,
+    provider_stream_response_first_text_delta_chars,
+    provider_stream_response_has_notification_text, provider_stream_response_outcome,
+    provider_stream_response_route, provider_stream_response_text_chars,
+    provider_stream_response_tool_input_delta_events, RuntimeReplyProviderLeadWorkerModels,
+    RuntimeReplyProviderResponseContent, RuntimeReplyProviderResponseOutcome,
+    RuntimeReplyProviderResponseRoute, RuntimeReplyProviderResponseSession,
 };
 pub use response_context::{
     provider_stream_response_context_from_header_pairs, RuntimeReplyProviderResponseContext,
@@ -79,25 +94,29 @@ pub use response_event::{
 pub use sampling::{
     provider_stream_should_retry_empty_first_content, RuntimeReplyProviderSamplingFailureLogLevel,
     RuntimeReplyProviderSamplingMode, RuntimeReplyProviderSamplingRequest,
-    RuntimeReplyProviderSamplingSession, PROVIDER_EMPTY_STREAM_RETRY_MARKER,
+    RuntimeReplyProviderSamplingSession, RuntimeReplyProviderSamplingStreamItem,
+    PROVIDER_EMPTY_STREAM_RETRY_MARKER,
+};
+pub use sampling_output::{
+    provider_stream_open_sampled_message_outputs, provider_stream_sampled_message_outputs,
+    RuntimeReplyProviderPlaintextMessageNormalizer, RuntimeReplyProviderSampledMessageStream,
 };
 pub use text_delta::provider_stream_first_text_delta_chars;
 pub use tool_input_delta::{
     provider_stream_tool_input_delta_events, RuntimeReplyProviderToolInputDelta,
 };
+pub use usage::{RuntimeReplyProviderTokenUsage, RuntimeReplyProviderUsage};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeProviderBackend {
     Current,
-    AsterCompat,
 }
 
 impl RuntimeProviderBackend {
     pub fn as_wire_str(self) -> &'static str {
         match self {
             Self::Current => "current",
-            Self::AsterCompat => "aster_compat",
         }
     }
 }
@@ -248,6 +267,7 @@ fn model_provider_protocol_wire_value(protocol: &ModelProviderProtocol) -> Strin
     match protocol {
         ModelProviderProtocol::Responses => "responses".to_string(),
         ModelProviderProtocol::ChatCompletions => "chat_completions".to_string(),
+        ModelProviderProtocol::AnthropicMessages => "anthropic_messages".to_string(),
         ModelProviderProtocol::Custom(value) => value.clone(),
     }
 }
@@ -428,17 +448,12 @@ fn provider_supports_request_wire_shape(
         return false;
     };
 
-    match provider.backend {
-        RuntimeProviderBackend::Current => true,
-        RuntimeProviderBackend::AsterCompat => {
-            provider.identity.provider_name == "openai"
-                && provider
-                    .identity
-                    .protocol
-                    .as_ref()
-                    .is_some_and(ModelProviderProtocol::uses_responses_api)
-        }
-    }
+    provider.identity.provider_name == "openai"
+        && provider
+            .identity
+            .protocol
+            .as_ref()
+            .is_some_and(ModelProviderProtocol::uses_responses_api)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -708,5 +723,7 @@ impl RuntimeReplyReasoningOutputPolicy {
     }
 }
 
+#[cfg(test)]
+mod sampling_output_tests;
 #[cfg(test)]
 mod tests;

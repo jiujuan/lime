@@ -10,7 +10,7 @@
 在 session_context_service.rs 中实现 AI 驱动的摘要，作为立即可用的改进。
 
 ### 阶段 2：架构统一（P1 完成后）
-将 general 模式迁移到 aster 框架，统一上下文管理策略。
+将 general 模式迁移到 agent 框架，统一上下文管理策略。
 
 ## 阶段 1 实施细节
 
@@ -218,13 +218,13 @@ impl SessionContextService {
 ## 后续优化（阶段 2）
 
 在 P1 任务完成后：
-1. 将 general 模式迁移到 aster 框架
+1. 将 general 模式迁移到 agent 框架
 2. 统一 agent 和 general 的上下文管理
-3. 利用 aster 的渐进式工具响应移除能力
+3. 利用 agent 的渐进式工具响应移除能力
 4. 实现更智能的上下文压缩策略
 
 ## 参考资料
 
 - 研究报告：Lime AI Agent 改进研究报告
 - Codex 上下文压缩：AI 摘要 + 保留最近消息
-- aster 上下文管理：渐进式工具响应移除 + 摘要
+- agent 上下文管理：渐进式工具响应移除 + 摘要

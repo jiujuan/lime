@@ -303,7 +303,7 @@ npm run agent-qc:benchmark-release:gate
 
 ### Coding Workflow P0 门禁
 
-新增 `coding-workflow-p0` release suite，并把它加入 `releasePolicy.releaseVerdictRequires`。对应 Agent QC 场景为 `coding-workflow-current-chain`，风险等级 `P0`，覆盖 `L1-contract-bridge`、`L2-agent-runtime`、`L3-product-surface` 和 `L4-behavior-eval`。release P0 当前使用 Codex-first `coding-current-tools` batch，而不是旧 `safe-core-tools` 的 Aster `Edit` / `Write` 工具面。
+新增 `coding-workflow-p0` release suite，并把它加入 `releasePolicy.releaseVerdictRequires`。对应 Agent QC 场景为 `coding-workflow-current-chain`，风险等级 `P0`，覆盖 `L1-contract-bridge`、`L2-agent-runtime`、`L3-product-surface` 和 `L4-behavior-eval`。release P0 当前使用 Codex-first `coding-current-tools` batch，而不是旧 `safe-core-tools` 的 Agent `Edit` / `Write` 工具面。
 
 这条 P0 的事实源不是 DeepSWE / SWE-bench，而是 Lime 自己的 Codex-first 主链：
 
@@ -338,16 +338,16 @@ npm run smoke:agent-runtime-tool-execution -- \
 
 结果：更早暴露 current native gateway 注册问题，错误为 `Native tool tool_search is not allowed by tool-runtime current registration policy`。根因是 App Server 会按 current gateway 注册 `tool_search`，但 `tool-runtime` registration allowlist 漏掉了这个 Codex-current native tool。
 
-修复：`lime-rs/crates/tool-runtime/src/native_overlay.rs` 已把 `tool_search` 纳入 current registration allowlist，并补 `runtime_native_tool_registration_policy_matches_allowlist` 断言。该修复属于 `current` owner，不在 `agent-compat` 增加业务逻辑，也不恢复 Aster 工具面。
+修复：`lime-rs/crates/tool-runtime/src/native_overlay.rs` 已把 `tool_search` 纳入 current registration allowlist，并补 `runtime_native_tool_registration_policy_matches_allowlist` 断言。该修复属于 `current` owner，不在 `agent-compat` 增加业务逻辑，也不恢复 Agent 工具面。
 
-修复后再次复跑旧 `safe-core-tools`，命令写出 `.lime/benchmark/runs/2026-07-10-coding-p0-rerun/agent-runtime-tool-execution-safe-core-tools.json`。结果已经通过 `tool-inventory` 并命中 localhost fixture provider，证明 `tool_search` 注册策略问题进入运行时；新的失败集中在 `Edit` / `Write` 不在 current provider request 和 runtime surface 中。按 Aster 迁移规则，这不是要恢复 Aster `Edit` / `Write`，而是将 release coding P0 切到 `coding-current-tools`，验证 `Read`、`apply_patch`、`Glob`、`Grep`、`Bash` 和 App Server coding lifecycle。
+修复后再次复跑旧 `safe-core-tools`，命令写出 `.lime/benchmark/runs/2026-07-10-coding-p0-rerun/agent-runtime-tool-execution-safe-core-tools.json`。结果已经通过 `tool-inventory` 并命中 localhost fixture provider，证明 `tool_search` 注册策略问题进入运行时；新的失败集中在 `Edit` / `Write` 不在 current provider request 和 runtime surface 中。按 Agent 迁移规则，这不是要恢复 Agent `Edit` / `Write`，而是将 release coding P0 切到 `coding-current-tools`，验证 `Read`、`apply_patch`、`Glob`、`Grep`、`Bash` 和 App Server coding lifecycle。
 
 验证状态：
 
 - `cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime runtime_native_tool_registration_policy_matches_allowlist --lib`：通过，确认 `tool_search` 已进入 current registration allowlist。
 - `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend_registers_current_gateway_tools_in_agent_registry --lib`：通过，确认 App Server current native gateway 能注册 `tool_search` 到 agent registry。
 - `npm run agent-qc:benchmark-release:checklist -- --version "2026-07-10-coding-p0-gate" ... --check`：通过，生成 checklist 中 `coding-workflow-p0` 展开 3 个 ready step。后续已把第一步从旧 `safe-core-tools` 切换为 Codex-first `coding-current-tools`。
-- `npm run test:rust:related -- lime-rs/crates/tool-runtime/src/native_overlay.rs`：已触发 `tool-runtime`、`lime-agent`、`app-server` 等反向依赖测试；`app-server` 单测输出中 coding lifecycle、Evidence Pack、tool lifecycle 相关用例已通过，但最终被当前脏树中的 `aster-core` / `agent-compat` 既有失败阻断，失败集中在旧 Aster prompt / registry / provider / recipe / bash 测试，不是本轮 `tool_search` current owner 修改引入。
+- `npm run test:rust:related -- lime-rs/crates/tool-runtime/src/native_overlay.rs`：已触发 `tool-runtime`、`lime-agent`、`app-server` 等反向依赖测试；`app-server` 单测输出中 coding lifecycle、Evidence Pack、tool lifecycle 相关用例已通过，但最终被当前脏树中的 `agent-core` / `agent-compat` 既有失败阻断，失败集中在旧 Agent prompt / registry / provider / recipe / bash 测试，不是本轮 `tool_search` current owner 修改引入。
 
 随后新增并执行 `coding-current-tools` batch，目标工具改为 Codex-first `Read`、`apply_patch`、`Glob`、`Grep`、`Bash`。第一次运行写出 `.lime/benchmark/runs/2026-07-10-coding-current-tools/agent-runtime-tool-execution-coding-current-tools.json`：provider request 已包含全部 target tools，`apply_patch` 实际修改并新增了 fixture 文件，说明 coding P0 已触达真实工具链；但 run 失败在 App Server current tool lifecycle，`agentSession/read` 报 `tool_args_without_start`，导致 `Read` 后续工具结果没有完成投影。
 
@@ -366,7 +366,7 @@ npm run smoke:agent-runtime-tool-execution -- \
 
 结果：通过，`status=pass`，session 为 `sess_2d5feeda30b748aab72e153fcc3ac852`，turn 为 `tool-execution-1783645238774-42833`。provider request 和 runtime inventory 均包含 `Read`、`apply_patch`、`Glob`、`Grep`、`Bash`；5 个 target tools 全部 `completed`；`apply_patch` 修改并新增 fixture 文件，`Glob` / `Grep` / `Bash` 均有输出；Evidence Pack 成功导出，`evidencePackMentionsCodingExecution=true`。
 
-同时把 `smoke:agent-runtime-tool-execution` 的裸命令默认 batch 从旧 `safe-core-tools` 切到 `coding-current-tools`。旧 `safe-core-tools` 仍可显式调用用于历史排障，但不再作为默认 current 工具烟测，避免 Aster `Edit` / `Write` dead 工具面继续误导 release evidence。
+同时把 `smoke:agent-runtime-tool-execution` 的裸命令默认 batch 从旧 `safe-core-tools` 切到 `coding-current-tools`。旧 `safe-core-tools` 仍可显式调用用于历史排障，但不再作为默认 current 工具烟测，避免 Agent `Edit` / `Write` dead 工具面继续误导 release evidence。
 
 2026-07-10 继续收口 release artifact 契约：`benchmark-release:run -- --include-p0` 现在会对 `coding-workflow-p0` 的 `smoke:agent-runtime-tool-execution -- --batch coding-current-tools` 自动注入稳定输出路径：
 
@@ -445,7 +445,7 @@ P0 step result 仍写在 `<output-root>/p0/coding-workflow-p0/01-smoke-agent-run
 
 - `current`：MCP structuredContent 从 App Server current event -> Agent protocol parser -> Agent Stream timeline / read model -> `InlineToolProcessStep` / Agent Chat GUI 的真实展示链已恢复；同轮聚合也证明 Coding Workbench P0 GUI fixture 仍通过。
 - `compat / deprecated`：未新增 `agent-compat` owner；外部 DeepSWE / Terminal-Bench true-run adapter 仍停留在 `dry_run_ready` / blocked evidence，不能作为 release-ready。
-- `dead`：本轮没有新增 Aster-only 能力删除；仅在用户确认后删除本地生成缓存 `.lime/cargo-target` 以恢复 fixture 运行空间，该目录不是版本化源码事实源。
+- `dead`：本轮没有新增 Agent-only 能力删除；仅在用户确认后删除本地生成缓存 `.lime/cargo-target` 以恢复 fixture 运行空间，该目录不是版本化源码事实源。
 
 新增版本对比入口：
 
@@ -491,14 +491,14 @@ npm run agent-qc:benchmark-release:baseline -- \
 
 本轮继续按“跑测试发现问题后修 current 主链”的口径收口，而不是只增加测试集。前端全量续跑先在 `src/components/agent/chat/workspace/workspaceArticleWorkspaceMetadata.unit.test.ts` 暴露旧 workspace patch raw artifact 命名泄漏：`agentChatHistoryArtifacts.ts` 自己判断 `content-factory-workspace-patch` / `content-factory/workspace-patch` 路径，绕开了 `workspaceArticleWorkspaceMetadata.ts` 这个唯一兼容 helper。修复后该 hook 改为调用 `isWorkspaceArticlePatchArtifactPath()`，旧 raw artifact 命名继续限定在 metadata helper / 内容工厂插件边界。
 
-同轮 `verify:local` 还暴露 `src/lib/governance/asterMigrationBoundary.test.ts` 中 `nativeOverlayProductionSource` 重复声明，导致 eslint fail。已删除重复声明，保留单一 `rustProductionSource(nativeOverlaySource)` 作为 Aster 迁移守卫输入；这属于守卫质量修复，不新增 `agent-compat` 能力。
+同轮 `verify:local` 还暴露 `src/lib/governance/agentMigrationBoundary.test.ts` 中 `nativeOverlayProductionSource` 重复声明，导致 eslint fail。已删除重复声明，保留单一 `rustProductionSource(nativeOverlaySource)` 作为 Agent 迁移守卫输入；这属于守卫质量修复，不新增 `agent-compat` 能力。
 
 验证结果：
 
 - `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceMetadata.unit.test.ts" --silent=passed-only --disableConsoleIntercept`：通过，9 tests。
 - `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceMetadata.unit.test.ts" "src/components/agent/chat/workspace/workspaceArticleWorkspaceMessageArtifacts.unit.test.ts" --silent=passed-only --disableConsoleIntercept`：通过，27 tests。
 - `npm test -- --resume`：从原失败点 batch 97 续跑到 106，全部通过。
-- `npx eslint "src/lib/governance/asterMigrationBoundary.test.ts" --max-warnings 0`：通过。
+- `npx eslint "src/lib/governance/agentMigrationBoundary.test.ts" --max-warnings 0`：通过。
 - `npm run verify:local`：通过。覆盖版本一致性、i18n 结构、i18n unused、eslint、硬编码文案扫描、typecheck、前端全量 106 批次、Rust changed-scope、Electron GUI smoke；GUI smoke 输出 `renderer loaded`、`app-server initialized`、`claw workbench shell ready`、`memory settings ready`。
 - `npm run test:contracts`：通过。`check:protocol-types` 无漂移，App Server client contract 287 checks、command contracts、Harness contracts、modality contracts、scripts governance、Electron release workflow、harness cleanup contract 和 docs boundary 均通过。
 
@@ -506,9 +506,9 @@ npm run agent-qc:benchmark-release:baseline -- \
 
 分类：
 
-- `current`：workspace patch 旧命名识别回到 `workspaceArticleWorkspaceMetadata.ts` 统一 helper；Aster 迁移守卫恢复可 lint；P0 本地门禁、contracts、GUI smoke 和 coding/current-chain 回归均通过。
-- `compat / deprecated`：旧 `content_factory.workspace_patch` 只在 helper / 内容工厂插件边界内兼容读取；`agent-compat` 仍是 Aster 迁移 blocker，不是 current owner。
-- `dead`：没有恢复 Aster `Edit` / `Write` 或旧 raw artifact 命名到生产 hook；未新增 Aster-only 能力。
+- `current`：workspace patch 旧命名识别回到 `workspaceArticleWorkspaceMetadata.ts` 统一 helper；Agent 迁移守卫恢复可 lint；P0 本地门禁、contracts、GUI smoke 和 coding/current-chain 回归均通过。
+- `compat / deprecated`：旧 `content_factory.workspace_patch` 只在 helper / 内容工厂插件边界内兼容读取；`agent-compat` 仍是 Agent 迁移 blocker，不是 current owner。
+- `dead`：没有恢复 Agent `Edit` / `Write` 或旧 raw artifact 命名到生产 hook；未新增 Agent-only 能力。
 
 ### 2026-07-10 include-P0 runner 复跑与 current 主链修复
 
@@ -557,8 +557,8 @@ npm run agent-qc:benchmark-release:run -- \
 本轮分类：
 
 - `current`：release runner include-P0 证据链、App Server current method timeout profile、Task center 初始 session hydrate、project restore 测试夹具、Coding Workbench / coding-current-tools P0 artifact。
-- `compat / deprecated`：`agent-compat` 仍只是 Aster 迁移 blocker；DeepSWE / Terminal-Bench 原生 runner 只作为 P1 adapter runtime，不拥有 Lime Agent 运行事实。
-- `dead`：未恢复 Aster `Edit` / `Write` / Aster `Tool` 正向工具面；未把 P1 dry-run / blocked true-run 误标为 release-ready；未新增 mock fallback 来绕过 right-surface timeout。
+- `compat / deprecated`：`agent-compat` 仍只是 Agent 迁移 blocker；DeepSWE / Terminal-Bench 原生 runner 只作为 P1 adapter runtime，不拥有 Lime Agent 运行事实。
+- `dead`：未恢复 Agent `Edit` / `Write` / Agent `Tool` 正向工具面；未把 P1 dry-run / blocked true-run 误标为 release-ready；未新增 mock fallback 来绕过 right-surface timeout。
 
 ### 当前不能宣称完成的部分
 
@@ -579,9 +579,9 @@ npm run agent-qc:benchmark-release:run -- \
 npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools
 ```
 
-该入口仍验证 Codex-first coding 工具面 `Read`、`apply_patch`、`Glob`、`Grep`、`Bash`，不恢复 Aster `Edit` / `Write` / `Tool` 正向面；原 `smoke:agent-runtime-tool-execution -- --batch coding-current-tools` 只作为手工 DevBridge 调试入口，不作为 release P0 事实源。
+该入口仍验证 Codex-first coding 工具面 `Read`、`apply_patch`、`Glob`、`Grep`、`Bash`，不恢复 Agent `Edit` / `Write` / `Tool` 正向面；原 `smoke:agent-runtime-tool-execution -- --batch coding-current-tools` 只作为手工 DevBridge 调试入口，不作为 release P0 事实源。
 
-同轮修复了 `lime-rs/crates/agent/src/runtime_store_aster_adapter.rs` 的 Rust 编译 blocker：`aster_item_from_runtime_record(...)` 的 `String` 错误现在通过 `runtime_store_error(...)` 映射到 `ThreadStoreError`，只在 Aster durable source lowering compat 边界内修正错误投影，不把 Aster store 扩成 current owner。
+同轮修复了 `lime-rs/crates/agent/src/runtime_store_agent_adapter.rs` 的 Rust 编译 blocker：`agent_item_from_runtime_record(...)` 的 `String` 错误现在通过 `runtime_store_error(...)` 映射到 `ThreadStoreError`，只在 Agent durable source lowering compat 边界内修正错误投影，不把 Agent store 扩成 current owner。
 
 已验证：
 
@@ -589,9 +589,9 @@ npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-too
 - `node --check scripts/agent-qc/benchmark-release-coding-p0-artifact.mjs`、`node --check scripts/agent-qc/benchmark-release-run-coding-p0.test.mjs`、`node --check scripts/agent-qc/benchmark-release-summary-coding-p0.test.mjs`：通过。
 - `npx vitest run scripts/agent-qc/benchmark-release-run-coding-p0.test.mjs scripts/agent-qc/benchmark-release-summary-coding-p0.test.mjs --silent=passed-only --disableConsoleIntercept`：通过，4 tests。
 - `npm run smoke:agent-runtime-tool-execution:managed -- --batch coding-current-tools --output ".lime/benchmark/runs/2026-07-10-coding-managed-rerun/agent-runtime-tool-execution-coding-current-tools.json" --timeout-ms 300000`：通过，`status=pass`；runtime artifact 证明 `Read` / `apply_patch` / `Glob` / `Grep` / `Bash` 全部 completed，Evidence Pack 存在。
-- `npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs`：通过，覆盖 `agent-runtime`、`app-server`、`aster-core`、`lime-agent`、`lime-scheduler`、`lime-server`、`tool-runtime`。
+- `npm run test:rust:related -- lime-rs/crates/app-server/src/runtime_backend/coding_events.rs lime-rs/crates/app-server/src/runtime/event_store.rs lime-rs/crates/tool-runtime/src/native_overlay.rs`：通过，覆盖 `agent-runtime`、`app-server`、`agent-core`、`lime-agent`、`lime-scheduler`、`lime-server`、`tool-runtime`。
 - `npm run smoke:agent-runtime-current-fixture`：通过，`liveProviderUsed=false`，覆盖 history/cache hydrate、turn completed 工具收尾、Coding Workbench、Skills Runtime、Multi-Agent、MCP structuredContent、media reference、Expert Skills、Content Factory Article Editor 等 current fixture。
-- `npm run verify:gui-smoke`：通过，真实 Electron smoke 输出 `renderer loaded`、`app-server initialized protocol=appserver.v0 version=1.98.0`、`claw workbench shell ready`、`memory settings ready`；sidecar 构建只剩 `runtime_store_aster_adapter.rs` unused warning。
+- `npm run verify:gui-smoke`：通过，真实 Electron smoke 输出 `renderer loaded`、`app-server initialized protocol=appserver.v0 version=1.98.0`、`claw workbench shell ready`、`memory settings ready`；sidecar 构建只剩 `runtime_store_agent_adapter.rs` unused warning。
 
 当前正在复跑 include-P0 release runner，输出目录为 `.lime/benchmark/runs/2026-07-11-include-p0-rerun-5/`：
 
@@ -610,8 +610,8 @@ npm run agent-qc:benchmark-release:run -- \
 本轮分类：
 
 - `current`：managed coding P0 release gate、Electron/App Server current bridge proxy、Codex-first `coding-current-tools` artifact、ThreadStoreError 投影修复、GUI smoke / Agent Runtime current fixture 证据。
-- `compat / deprecated`：原裸 `smoke:agent-runtime-tool-execution` 只保留为手工 DevBridge 调试入口；`agent-compat` / Aster durable source lowering 仍是迁移 blocker，不是 current owner。
-- `dead`：不恢复 Aster `Edit` / `Write` / Aster `Tool` 正向工具面；P1 dry-run / preflight blocked evidence 仍不能作为 release-ready。
+- `compat / deprecated`：原裸 `smoke:agent-runtime-tool-execution` 只保留为手工 DevBridge 调试入口；`agent-compat` / Agent durable source lowering 仍是迁移 blocker，不是 current owner。
+- `dead`：不恢复 Agent `Edit` / `Write` / Agent `Tool` 正向工具面；P1 dry-run / preflight blocked evidence 仍不能作为 release-ready。
 
 ## 下一刀
 

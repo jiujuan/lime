@@ -195,7 +195,7 @@ describe("useAgentStreamController", () => {
       act(() => {
         harness.getValue().setActiveStream({
           assistantMsgId: "assistant-controller-1",
-          eventName: "aster_stream_assistant-controller-1",
+          eventName: "agent_stream_assistant-controller-1",
           sessionId: "controller-session-1",
           turnId: "controller-turn-1",
         });

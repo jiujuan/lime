@@ -158,15 +158,15 @@ beforeEach(async () => {
   });
   mockGetBrowserBackendsStatus.mockResolvedValue({
     policy: {
-      priority: ["aster_compat", "lime_extension_bridge", "cdp_direct"],
+      priority: ["current", "lime_extension_bridge", "cdp_direct"],
       auto_fallback: true,
     },
     bridge_observer_count: 1,
     bridge_control_count: 1,
     running_profile_count: 1,
     cdp_alive_profile_count: 1,
-    aster_native_host_supported: true,
-    aster_native_host_configured: false,
+    agent_native_host_supported: true,
+    agent_native_host_configured: false,
     backends: [],
   });
   mockInstallBrowserConnectorExtension.mockResolvedValue({

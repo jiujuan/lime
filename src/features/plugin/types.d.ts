@@ -1108,39 +1108,6 @@ export interface PluginTaskKnowledgeBinding {
 export type PluginApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted";
 export type PluginSandboxPolicy = "read-only" | "workspace-write" | "danger-full-access";
 export type PluginExecutionStrategy = "react";
-export type PluginWebSearchMode = "disabled" | "auto" | "required";
-export interface PluginProviderConfig {
-    provider_id?: string;
-    provider_name: string;
-    model_name: string;
-    api_key?: string;
-    base_url?: string;
-    model_capabilities?: Record<string, unknown>;
-    tool_call_strategy?: "native" | "tool_shim";
-    toolshim_model?: string;
-}
-export interface PluginAutoContinueRequest {
-    enabled: boolean;
-    fast_mode_enabled: boolean;
-    continuation_length: number;
-    sensitivity: number;
-    source?: string;
-}
-export interface PluginTurnConfigSnapshot {
-    provider_config?: PluginProviderConfig;
-    provider_preference?: string;
-    model_preference?: string;
-    reasoning_effort?: string;
-    thinking_enabled?: boolean;
-    approval_policy?: PluginApprovalPolicy;
-    sandbox_policy?: PluginSandboxPolicy;
-    execution_strategy?: PluginExecutionStrategy;
-    web_search?: boolean;
-    search_mode?: PluginWebSearchMode;
-    auto_continue?: PluginAutoContinueRequest;
-    system_prompt?: string;
-    metadata?: Record<string, unknown>;
-}
 export interface PluginTaskRequest {
     title: string;
     prompt?: string;
@@ -1154,9 +1121,7 @@ export interface PluginTaskRequest {
     queueIfBusy?: boolean;
     skipPreSubmitResume?: boolean;
     runStartHooks?: boolean;
-    providerPreference?: string;
-    modelPreference?: string;
-    turnConfig?: PluginTurnConfigSnapshot;
+    runtimeRequest?: RuntimeRequest;
     input?: unknown;
     expectedOutput?: unknown;
     knowledge?: PluginTaskKnowledgeBinding[];
@@ -1290,3 +1255,4 @@ export interface PluginProvenanceQuery {
     entryKey?: string;
     workflowRunId?: string;
 }
+import type { RuntimeRequest } from "@limecloud/app-server-client";

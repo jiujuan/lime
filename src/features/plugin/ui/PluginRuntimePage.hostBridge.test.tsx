@@ -562,12 +562,9 @@ describe("PluginRuntimePage Host Bridge", () => {
       expect.objectContaining({
         sessionId: "plugin-session-1",
         runtimeOptions: expect.objectContaining({
-          hostOptions: {
-            asterChatRequest: expect.objectContaining({
-              workspace_id: "workspace-1",
-              turn_config: expect.any(Object),
-            }),
-          },
+          runtimeRequest: expect.objectContaining({
+            workspaceId: "workspace-1",
+          }),
         }),
       }),
     );

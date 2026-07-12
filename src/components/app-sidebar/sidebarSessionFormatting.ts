@@ -1,4 +1,4 @@
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import { formatDate, formatRelativeTime } from "@/i18n/format";
 import { isAssistantRuntimeErrorDisplayText } from "@/components/agent/chat/utils/messageDisplaySanitizer";
 
@@ -71,14 +71,14 @@ function formatSidebarSessionTime(
 }
 
 export function formatSidebarSessionMeta(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   options: SidebarSessionMetaOptions = {},
 ): string {
   return formatSidebarSessionTime(session.updated_at, options.locale);
 }
 
 export function resolveSidebarSessionTitle(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   fallbackTitle: string,
 ): string {
   const title = session.name?.trim() || "";

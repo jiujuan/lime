@@ -46,7 +46,7 @@ Lime 的卡顿来源通常不是单点：
 当前优先覆盖了以下链路：
 
 - `chat_send_message`
-- `send_message_with_aster`
+- `send_message_with_agent`
 - `launch_browser_session_global`
 - `mcpTool/call`
 - `mcpServer/start`
@@ -77,7 +77,7 @@ LIME_PROFILE=trace LIME_ELECTRON_OPEN_DEVTOOLS=1 APP_SERVER_BIN=/abs/path/to/app
 重点查看：
 
 - `chat_send_message`
-- `send_message_with_aster`
+- `send_message_with_agent`
 - `launch_browser_session_global`
 - `mcpTool/call`
 

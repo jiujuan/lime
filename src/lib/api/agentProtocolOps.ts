@@ -1,11 +1,12 @@
+import { createRuntimeRequest } from "@limecloud/app-server-client";
+import type { AppServerAgentSessionTurnStartParams } from "./appServer";
 import type {
-  AsterApprovalPolicy,
-  AgentRuntimeSubmitTurnRequest,
-  AgentRuntimeWebSearchMode,
-  AsterExecutionStrategy,
-  AsterSandboxPolicy,
+  AgentApprovalPolicy,
+  AgentExecutionStrategy,
+  AgentSandboxPolicy,
   AutoContinueRequestPayload,
   ImageInput,
+  RuntimeSearchMode,
   RuntimeProviderConfig,
 } from "./agentRuntime/types";
 
@@ -16,10 +17,10 @@ export interface AgentUserPreferences {
   reasoningEffort?: string;
   thinking?: boolean;
   webSearch?: boolean;
-  searchMode?: AgentRuntimeWebSearchMode;
-  approvalPolicy?: AsterApprovalPolicy;
-  sandboxPolicy?: AsterSandboxPolicy;
-  executionStrategy?: AsterExecutionStrategy;
+  searchMode?: RuntimeSearchMode;
+  approvalPolicy?: AgentApprovalPolicy;
+  sandboxPolicy?: AgentSandboxPolicy;
+  executionStrategy?: AgentExecutionStrategy;
   autoContinue?: AutoContinueRequestPayload;
 }
 
@@ -70,39 +71,61 @@ export type AgentOp =
   | AgentConfigUpdateOp
   | AgentShutdownOp;
 
-export function createSubmitTurnRequestFromAgentOp(
+export function createAgentSessionTurnStartParamsFromUserInputOp(
   op: AgentUserInputOp,
-): AgentRuntimeSubmitTurnRequest {
+): AppServerAgentSessionTurnStartParams {
   const preferences = op.preferences;
 
-  return {
-    message: op.text,
-    session_id: op.sessionId,
-    event_name: op.eventName,
-    ...(op.workspaceId ? { workspace_id: op.workspaceId } : {}),
-    turn_id: op.turnId,
-    images: op.images,
-    turn_config: {
-      ...(preferences?.providerConfig
-        ? { provider_config: preferences.providerConfig }
-        : {}),
-      provider_preference: preferences?.providerPreference,
-      model_preference: preferences?.modelPreference,
-      reasoning_effort: preferences?.reasoningEffort?.trim() || undefined,
-      thinking_enabled: preferences?.thinking,
-      approval_policy: preferences?.approvalPolicy,
-      sandbox_policy: preferences?.sandboxPolicy,
-      execution_strategy: preferences?.executionStrategy,
-      web_search: preferences?.webSearch,
-      ...(preferences?.searchMode
-        ? { search_mode: preferences.searchMode }
-        : {}),
-      auto_continue: preferences?.autoContinue,
-      system_prompt: op.systemPrompt,
-      metadata: op.metadata,
+  return omitUndefined({
+    sessionId: op.sessionId,
+    turnId: op.turnId,
+    input: omitUndefined({
+      text: op.text,
+      attachments: appServerAttachmentsFromImages(op.images),
+    }),
+    runtimeOptions: omitUndefined({
+      stream: true,
+      eventName: op.eventName,
+      queuedTurnId: op.queuedTurnId,
+      runtimeRequest: createRuntimeRequest({
+        providerConfig: preferences?.providerConfig,
+        providerPreference: preferences?.providerPreference,
+        modelPreference: preferences?.modelPreference,
+        reasoningEffort: preferences?.reasoningEffort?.trim(),
+        thinkingEnabled: preferences?.thinking,
+        approvalPolicy: preferences?.approvalPolicy,
+        sandboxPolicy: preferences?.sandboxPolicy,
+        workspaceId: op.workspaceId,
+        webSearch: preferences?.webSearch,
+        searchMode: preferences?.searchMode,
+        executionStrategy: preferences?.executionStrategy,
+        autoContinue: preferences?.autoContinue?.enabled,
+        systemPrompt: op.systemPrompt,
+        metadata: op.metadata,
+      }),
+    }),
+    queueIfBusy: op.queueIfBusy,
+    skipPreSubmitResume: op.skipPreSubmitResume,
+  });
+}
+
+function appServerAttachmentsFromImages(images?: ImageInput[]) {
+  if (!images?.length) {
+    return undefined;
+  }
+
+  return images.map((image, index) => ({
+    kind: "image",
+    uri: image.data,
+    metadata: {
+      mediaType: image.media_type,
+      index,
     },
-    queue_if_busy: op.queueIfBusy,
-    queued_turn_id: op.queuedTurnId,
-    skip_pre_submit_resume: op.skipPreSubmitResume,
-  };
+  }));
+}
+
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as T;
 }

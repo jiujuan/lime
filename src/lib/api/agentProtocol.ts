@@ -3,4 +3,4 @@ export type * from "./agentProtocolEventTypes";
 export type * from "./agentProtocolOps";
 
 export { parseAgentEvent } from "./agentProtocolEventParser";
-export { createSubmitTurnRequestFromAgentOp } from "./agentProtocolOps";
+export { createAgentSessionTurnStartParamsFromUserInputOp } from "./agentProtocolOps";

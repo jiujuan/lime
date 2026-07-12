@@ -1,6 +1,6 @@
 //! Agent session record projection.
 //!
-//! This module owns session row semantics without a direct Aster dependency.
+//! This module owns session row semantics without a direct Agent dependency.
 //! Runtime-specific crates may project these records into their own DTOs, but
 //! the database row rules should stay here.
 

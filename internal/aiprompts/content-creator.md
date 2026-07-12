@@ -22,7 +22,7 @@
      ↓
 统一收口到 useAgentChatUnified / App Server `agentSession/turn/start`
      ↓
-第一条消息时注入 systemPrompt → 发送到 Aster Agent
+第一条消息时注入 systemPrompt → 发送到 Agent Agent
      ↓
 AI 返回带 <write_file> 标签的响应
      ↓
@@ -48,7 +48,7 @@ src/
 │   └── agent/chat/
 │       ├── hooks/
 │       │   ├── index.ts             # useAgentChatUnified 统一入口
-│       │   └── useAsterAgentChat.ts # 现役 Aster 聊天主 Hook
+│       │   └── useAgentChat.ts # 现役 Agent 聊天主 Hook
 │       ├── components/
 │       │   └── StreamingRenderer.tsx # 流式渲染与标签解析
 │       ├── workspace/
@@ -122,7 +122,7 @@ export function parseAIResponse(
 - `write_file` - 完整的文件写入
 - `pending_write_file` - 流式传输中的文件写入
 
-### 3. useAgentChatUnified / useAsterAgentChat - systemPrompt 注入
+### 3. useAgentChatUnified / useAgentChat - systemPrompt 注入
 
 在发送第一条消息时注入 systemPrompt，并通过现役 runtime adapter 提交到 App Server `agentSession/turn/start`。
 
@@ -135,14 +135,14 @@ interface UseAgentChatOptions {
 }
 
 export function useAgentChatUnified(options: UseAgentChatUnifiedOptions) {
-  return useAsterAgentChat(options);
+  return useAgentChat(options);
 }
 ```
 
 现役事实源：
 
 - 统一入口：`src/components/agent/chat/hooks/index.ts`
-- 底层实现：`src/components/agent/chat/hooks/useAsterAgentChat.ts`
+- 底层实现：`src/components/agent/chat/hooks/useAgentChat.ts`
 - 首条 system prompt 拼装：`buildUserInputSubmitOp.ts` / `agentStream*`
 
 ### 4. StreamingRenderer.tsx - 流式渲染
@@ -213,9 +213,9 @@ const handleWriteFile = useWorkspaceWriteFileAction(...);
 - 根级旧 Hook `src/hooks/usePosterWorkflow.ts`、`src/hooks/useMultiPlatformExport.ts` 已删除，不应回流
 - 海报 workflow 孤岛 `src/components/content-creator/workflows/poster/**` 与 `src/lib/workspace/workbenchPoster.ts` 已删除，不应回流
 
-### Aster 框架限制
+### Agent 框架限制
 
-Aster 框架当前现役主链会把 Lime 组装好的 session prompt 通过 `SessionConfig.system_prompt` 传给 Aster `PromptManager`，再包成最终 provider prompt；这里保留的“首条消息注入”描述只用于解释历史工作台时期的画布联动背景，不再代表仓库当前基础 Prompt 主链：
+Agent 框架当前现役主链会把 Lime 组装好的 session prompt 通过 `SessionConfig.system_prompt` 传给 Agent `PromptManager`，再包成最终 provider prompt；这里保留的“首条消息注入”描述只用于解释历史工作台时期的画布联动背景，不再代表仓库当前基础 Prompt 主链：
 
 - 在第一条用户消息前注入 systemPrompt
 - 后续消息不再注入（避免重复）
@@ -230,6 +230,5 @@ Aster 框架当前现役主链会把 Lime 组装好的 session prompt 通过 `Se
 
 ## 相关文档
 
-- [aster-integration.md](aster-integration.md) - Aster 框架集成
 - [components.md](components.md) - 组件系统
 - [hooks.md](hooks.md) - React Hooks

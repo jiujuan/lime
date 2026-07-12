@@ -61,8 +61,8 @@ function compactApprovalRecordVisible(snapshot) {
 
 function turnStartApprovalPolicy(turnStart) {
   return (
-    turnStart?.asterChatRequest?.approval_policy ??
-    turnStart?.asterChatRequest?.approvalPolicy ??
+    turnStart?.runtimeRequest?.approval_policy ??
+    turnStart?.runtimeRequest?.approvalPolicy ??
     turnStart?.approvalPolicy ??
     turnStart?.approval_policy ??
     null
@@ -71,8 +71,8 @@ function turnStartApprovalPolicy(turnStart) {
 
 function turnStartSandboxPolicy(turnStart) {
   return (
-    turnStart?.asterChatRequest?.sandbox_policy ??
-    turnStart?.asterChatRequest?.sandboxPolicy ??
+    turnStart?.runtimeRequest?.sandbox_policy ??
+    turnStart?.runtimeRequest?.sandboxPolicy ??
     turnStart?.sandboxPolicy ??
     turnStart?.sandbox_policy ??
     null

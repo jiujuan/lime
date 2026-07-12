@@ -304,16 +304,13 @@ mod tests {
     #[test]
     fn provider_trace_event_attaches_runtime_provider_metadata() {
         let event = ProviderTraceEvent::request_started("", "", 1).with_runtime_provider_metadata(
-            Some("aster_compat".to_string()),
+            Some("current".to_string()),
             Some("codex".to_string()),
             Some("responses".to_string()),
             Some("gpt-4.1".to_string()),
         );
 
-        assert_eq!(
-            event.runtime_provider_backend.as_deref(),
-            Some("aster_compat")
-        );
+        assert_eq!(event.runtime_provider_backend.as_deref(), Some("current"));
         assert_eq!(event.runtime_provider_selector.as_deref(), Some("codex"));
         assert_eq!(
             event.runtime_provider_protocol.as_deref(),

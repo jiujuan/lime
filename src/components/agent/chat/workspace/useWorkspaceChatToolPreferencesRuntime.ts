@@ -6,8 +6,8 @@ import {
   type SetStateAction,
 } from "react";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
 } from "@/lib/api/agentRuntime";
 import {
   alignChatToolPreferencesWithExecutionStrategy,
@@ -21,10 +21,10 @@ interface UseWorkspaceChatToolPreferencesRuntimeParams {
   activeTheme: string;
   chatToolPreferences: ChatToolPreferences;
   executionRuntime?: Pick<
-    AsterSessionExecutionRuntime,
+    AgentSessionExecutionRuntime,
     "recent_preferences" | "execution_strategy"
   > | null;
-  executionStrategy?: AsterExecutionStrategy | null;
+  executionStrategy?: AgentExecutionStrategy | null;
   sessionId?: string | null;
   setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
   syncChatToolPreferencesSource: (
@@ -53,7 +53,7 @@ export function resolveFallbackSessionRecentPreferences({
   executionStrategy,
 }: {
   activeTheme: string;
-  executionStrategy?: AsterExecutionStrategy | null;
+  executionStrategy?: AgentExecutionStrategy | null;
 }): ChatToolPreferences {
   return {
     ...alignChatToolPreferencesWithExecutionStrategy(

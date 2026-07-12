@@ -75,6 +75,10 @@ impl RequestToolPolicy {
     pub fn matches_any_allowed_tool(&self, tool_name: &str) -> bool {
         matches_tool_list(tool_name, &self.allowed_tools)
     }
+
+    pub(crate) fn matches_any_disallowed_tool(&self, tool_name: &str) -> bool {
+        matches_tool_list(tool_name, &self.disallowed_tools)
+    }
 }
 
 pub fn request_tool_policy_with_additional_required_tools(

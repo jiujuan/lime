@@ -2674,7 +2674,7 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.patterns).toEqual(["useImageGen({"]);
     expect(monitor?.includePathPrefixes).toEqual(["src/components"]);
     expect(monitor?.allowedPaths).toEqual([
-      "src/components/agent/chat/AgentChatWorkspace.tsx",
+      "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchProviderRuntime.ts",
     ]);
   });
 
@@ -3481,8 +3481,8 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/core/src/database/dao/agent.rs",
       "lime-rs/crates/core/src/database/dao/chat.rs",
       "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
-      "lime-rs/crates/agent/src/aster_session_store/legacy_conversation.rs",
-      "lime-rs/crates/agent/src/aster_session_store_tests.rs",
+      "lime-rs/crates/agent/src/agent_session_store/legacy_conversation.rs",
+      "lime-rs/crates/agent/src/agent_session_store_tests.rs",
     ]);
   });
 
@@ -3624,6 +3624,7 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
       "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
       "lime-rs/crates/app-server/src/runtime/session_media_reader.rs",
+      "lime-rs/crates/app-server/src/runtime/session_media_refs.rs",
       "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
     ]);
     expect(monitor?.patterns).toEqual([

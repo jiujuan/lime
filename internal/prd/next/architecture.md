@@ -96,7 +96,7 @@ flowchart TB
     end
 
     subgraph Backends["Execution Backends"]
-        Aster["AsterBackend"]
+        Agent["RuntimeBackend"]
         FutureBackend["Future Backend"]
     end
 
@@ -150,7 +150,7 @@ flowchart TB
     SecretPort --> SecretManager
     ObservePort --> OTel
     Session --> BackendPort
-    BackendPort --> Aster
+    BackendPort --> Agent
     BackendPort --> FutureBackend
     Session --> Tool
     Tool --> PermissionProfile
@@ -315,7 +315,7 @@ flowchart TD
 | Client Infrastructure Adapters | 本地文件、SQLite / local store、OS keychain、本地日志、内存缓存 | 多租户队列、分布式锁、对象存储、k8s 调度 |
 | Server Infrastructure Adapters | Redis、Postgres、S3 / OSS、queue、Docker / Kubernetes、Secret Manager、OpenTelemetry | UI 状态、端侧缓存、直接访问用户本机文件 |
 | RuntimeCore | session / turn / event / action / artifact / evidence facts | 具体后端私有循环、App 业务对象 UI、具体基础设施 SDK |
-| ExecutionBackend | Aster / 后续执行引擎适配 | 公共协议、App lifecycle、UI projection |
+| ExecutionBackend | Agent / 后续执行引擎适配 | 公共协议、App lifecycle、UI projection |
 
 ## 4. 数据事实源
 

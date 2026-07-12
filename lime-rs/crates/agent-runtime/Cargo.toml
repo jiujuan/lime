@@ -15,11 +15,14 @@ agent-protocol.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 model-provider.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thread-store.workspace = true
 tool-runtime.workspace = true
+tokio.workspace = true
 tokio-util.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 chrono.workspace = true

@@ -23,19 +23,19 @@ async fn queue_session_controls_use_current_runtime_core_read_model() {
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                provider_preference: Some("fixture-provider".to_string()),
-                model_preference: Some("fixture-model".to_string()),
-                host_options: Some(json!({
-                    "asterChatRequest": {
-                        "provider_config": {
-                            "provider_id": "fixture-provider",
-                            "provider_name": "openai",
-                            "model_name": "fixture-model",
-                            "api_key": "fixture-key",
-                            "base_url": "http://127.0.0.1:65535"
-                        }
-                    }
-                })),
+                runtime_request: Some(RuntimeRequest {
+                    provider_config: Some(RuntimeProviderConfig {
+                        provider_id: Some("fixture-provider".to_string()),
+                        provider_name: Some("openai".to_string()),
+                        model_name: Some("fixture-model".to_string()),
+                        api_key: Some("fixture-key".to_string()),
+                        base_url: Some("http://127.0.0.1:65535".to_string()),
+                        ..RuntimeProviderConfig::default()
+                    }),
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,
@@ -461,7 +461,8 @@ async fn read_session_projects_queued_turn_input_snapshot() {
                 }],
             },
             runtime_options: Some(RuntimeOptions {
-                metadata: Some(json!({
+                runtime_request: Some(RuntimeRequest {
+                    metadata: Some(json!({
                     "path_references": [
                         {
                             "path": "/project/report.md",
@@ -482,7 +483,9 @@ async fn read_session_projects_queued_turn_input_snapshot() {
                         "skillKey": "code-review",
                         "skillName": "Code Review"
                     }
-                })),
+                    })),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: true,
@@ -657,23 +660,17 @@ async fn resume_queued_turn_preserves_runtime_options_for_backend() {
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                provider_preference: Some("fixture-provider".to_string()),
-                model_preference: Some("fixture-model".to_string()),
-                metadata: Some(json!({
-                    "expert": {
-                        "expertId": "code-literature",
-                        "skillRefs": ["skill:code-review", "skill:local:capability-report"]
-                    }
-                })),
-                host_options: Some(json!({
-                    "asterChatRequest": {
-                        "metadata": {
-                            "expert": {
-                                "skillRefs": ["skill:code-review", "skill:local:capability-report"]
-                            }
+                runtime_request: Some(RuntimeRequest {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    metadata: Some(json!({
+                        "expert": {
+                            "expertId": "code-literature",
+                            "skillRefs": ["skill:code-review", "skill:local:capability-report"]
                         }
-                    }
-                })),
+                    })),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: true,
@@ -712,21 +709,17 @@ async fn resume_queued_turn_preserves_runtime_options_for_backend() {
         .find(|request| request.turn.turn_id == "turn_queued")
         .expect("resumed queued request");
     assert_eq!(
-        resumed_request.provider_preference.as_deref(),
+        resumed_request.provider_preference(),
         Some("fixture-provider")
     );
-    assert_eq!(
-        resumed_request.model_preference.as_deref(),
-        Some("fixture-model")
-    );
+    assert_eq!(resumed_request.model_preference(), Some("fixture-model"));
     assert_eq!(
         resumed_request.queued_turn_id.as_deref(),
         Some("turn_queued")
     );
     assert_eq!(
         resumed_request
-            .metadata
-            .as_ref()
+            .runtime_metadata()
             .and_then(|metadata| metadata.pointer("/expert/skillRefs/1"))
             .and_then(serde_json::Value::as_str),
         Some("skill:local:capability-report")
@@ -735,10 +728,9 @@ async fn resume_queued_turn_preserves_runtime_options_for_backend() {
         resumed_request
             .runtime_options
             .as_ref()
-            .and_then(|options| options.host_options.as_ref())
-            .and_then(|host_options| {
-                host_options.pointer("/asterChatRequest/metadata/expert/skillRefs/0")
-            })
+            .and_then(|options| options.runtime_request.as_ref())
+            .and_then(|runtime_request| runtime_request.metadata.as_ref())
+            .and_then(|metadata| metadata.pointer("/expert/skillRefs/0"))
             .and_then(serde_json::Value::as_str),
         Some("skill:code-review")
     );
@@ -935,19 +927,19 @@ async fn resume_queued_turn_restores_queue_when_backend_fails_before_emit() {
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                provider_preference: Some("fixture-provider".to_string()),
-                model_preference: Some("fixture-model".to_string()),
-                host_options: Some(json!({
-                    "asterChatRequest": {
-                        "provider_config": {
-                            "provider_id": "fixture-provider",
-                            "provider_name": "openai",
-                            "model_name": "fixture-model",
-                            "api_key": "fixture-key",
-                            "base_url": "http://127.0.0.1:65535"
-                        }
-                    }
-                })),
+                runtime_request: Some(RuntimeRequest {
+                    provider_config: Some(RuntimeProviderConfig {
+                        provider_id: Some("fixture-provider".to_string()),
+                        provider_name: Some("openai".to_string()),
+                        model_name: Some("fixture-model".to_string()),
+                        api_key: Some("fixture-key".to_string()),
+                        base_url: Some("http://127.0.0.1:65535".to_string()),
+                        ..RuntimeProviderConfig::default()
+                    }),
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,
@@ -966,8 +958,11 @@ async fn resume_queued_turn_restores_queue_when_backend_fails_before_emit() {
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                provider_preference: Some("fixture-provider".to_string()),
-                model_preference: Some("fixture-model".to_string()),
+                runtime_request: Some(RuntimeRequest {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: true,

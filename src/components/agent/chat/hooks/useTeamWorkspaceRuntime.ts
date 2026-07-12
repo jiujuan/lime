@@ -6,8 +6,8 @@ import {
   type AgentRuntimeEventSource,
 } from "@/lib/api/agentRuntimeEvents";
 import type {
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import {
   buildTeamWorkspaceSessionFingerprint,
@@ -42,8 +42,8 @@ interface UseTeamWorkspaceRuntimeOptions {
   currentSessionRuntimeStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionLatestTurnStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionQueuedTurnCount?: number;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
-  subagentParentContext?: AsterSubagentParentContext | null;
+  childSubagentSessions?: AgentSubagentSessionInfo[];
+  subagentParentContext?: AgentSubagentParentContext | null;
 }
 
 interface UseTeamWorkspaceRuntimeResult {

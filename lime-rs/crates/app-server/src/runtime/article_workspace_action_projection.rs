@@ -14,7 +14,7 @@ pub(super) fn article_workspace_actions_from_turn_runtime_options(
         .iter()
         .filter_map(|turn| {
             let runtime_options = stored.turn_runtime_options.get(&turn.turn_id)?;
-            let metadata = runtime_options.metadata.as_ref()?;
+            let metadata = runtime_options.runtime_metadata()?;
             article_workspace_action_from_metadata(stored, turn, metadata)
         })
         .collect()

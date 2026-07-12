@@ -2031,7 +2031,7 @@ async function runSmoke(options) {
       message: scenario.prompt,
       eventName,
       turnId,
-      turnConfig: {
+      runtimeRequest: {
         providerPreference: fixture.provider.providerPreference,
         modelPreference: fixture.provider.modelPreference,
         providerConfig: fixture.provider.providerConfig,

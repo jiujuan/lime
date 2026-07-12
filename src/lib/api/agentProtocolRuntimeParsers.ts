@@ -1,11 +1,11 @@
 import { normalizeQueuedTurnSnapshot } from "./queuedTurn";
 import { normalizeLegacyRuntimeStatusTitle } from "./agentTextNormalization";
 import type {
-  AsterSessionExecutionRuntimeCostState,
-  AsterSessionExecutionRuntimeLimitEvent,
-  AsterSessionExecutionRuntimeLimitState,
-  AsterSessionExecutionRuntimeTaskProfile,
-  AsterTurnOutputSchemaRuntime,
+  AgentSessionExecutionRuntimeCostState,
+  AgentSessionExecutionRuntimeLimitEvent,
+  AgentSessionExecutionRuntimeLimitState,
+  AgentSessionExecutionRuntimeTaskProfile,
+  AgentTurnOutputSchemaRuntime,
 } from "./agentExecutionRuntime";
 import { normalizeExecutionStrategyToReact } from "./agentRuntime/executionStrategyCompat";
 import type {
@@ -41,7 +41,7 @@ export function parseAgentRuntimeEvent(
         ),
         output_schema_runtime:
           (event.output_schema_runtime as
-            | AsterTurnOutputSchemaRuntime
+            | AgentTurnOutputSchemaRuntime
             | null
             | undefined) || null,
         context_summary:
@@ -277,8 +277,8 @@ export function parseAgentRuntimeEvent(
       return {
         type: "task_profile_resolved",
         task_profile:
-          (event.task_profile as AsterSessionExecutionRuntimeTaskProfile) ||
-          (event.taskProfile as AsterSessionExecutionRuntimeTaskProfile),
+          (event.task_profile as AgentSessionExecutionRuntimeTaskProfile) ||
+          (event.taskProfile as AgentSessionExecutionRuntimeTaskProfile),
       };
     case "candidate_set_resolved":
       return {
@@ -304,57 +304,57 @@ export function parseAgentRuntimeEvent(
       return {
         type: "limit_state_updated",
         limit_state:
-          (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
-          (event.limitState as AsterSessionExecutionRuntimeLimitState),
+          (event.limit_state as AgentSessionExecutionRuntimeLimitState) ||
+          (event.limitState as AgentSessionExecutionRuntimeLimitState),
       };
     case "single_candidate_only":
       return {
         type: "single_candidate_only",
         limit_state:
-          (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
-          (event.limitState as AsterSessionExecutionRuntimeLimitState),
+          (event.limit_state as AgentSessionExecutionRuntimeLimitState) ||
+          (event.limitState as AgentSessionExecutionRuntimeLimitState),
       };
     case "single_candidate_capability_gap":
       return {
         type: "single_candidate_capability_gap",
         limit_state:
-          (event.limit_state as AsterSessionExecutionRuntimeLimitState) ||
-          (event.limitState as AsterSessionExecutionRuntimeLimitState),
+          (event.limit_state as AgentSessionExecutionRuntimeLimitState) ||
+          (event.limitState as AgentSessionExecutionRuntimeLimitState),
       };
     case "cost_estimated":
       return {
         type: "cost_estimated",
         cost_state:
-          (event.cost_state as AsterSessionExecutionRuntimeCostState) ||
-          (event.costState as AsterSessionExecutionRuntimeCostState),
+          (event.cost_state as AgentSessionExecutionRuntimeCostState) ||
+          (event.costState as AgentSessionExecutionRuntimeCostState),
       };
     case "cost_recorded":
       return {
         type: "cost_recorded",
         cost_state:
-          (event.cost_state as AsterSessionExecutionRuntimeCostState) ||
-          (event.costState as AsterSessionExecutionRuntimeCostState),
+          (event.cost_state as AgentSessionExecutionRuntimeCostState) ||
+          (event.costState as AgentSessionExecutionRuntimeCostState),
       };
     case "rate_limit_hit":
       return {
         type: "rate_limit_hit",
         limit_event:
-          (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
-          (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
+          (event.limit_event as AgentSessionExecutionRuntimeLimitEvent) ||
+          (event.limitEvent as AgentSessionExecutionRuntimeLimitEvent),
       };
     case "quota_low":
       return {
         type: "quota_low",
         limit_event:
-          (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
-          (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
+          (event.limit_event as AgentSessionExecutionRuntimeLimitEvent) ||
+          (event.limitEvent as AgentSessionExecutionRuntimeLimitEvent),
       };
     case "quota_blocked":
       return {
         type: "quota_blocked",
         limit_event:
-          (event.limit_event as AsterSessionExecutionRuntimeLimitEvent) ||
-          (event.limitEvent as AsterSessionExecutionRuntimeLimitEvent),
+          (event.limit_event as AgentSessionExecutionRuntimeLimitEvent) ||
+          (event.limitEvent as AgentSessionExecutionRuntimeLimitEvent),
       };
     case "queue_added": {
       const queuedTurn = normalizeQueuedTurnSnapshot(event.queued_turn);

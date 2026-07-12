@@ -316,7 +316,7 @@ function createTempRuntimeEnv() {
   const localAppData = path.join(tempRoot, "local-app-data");
   const roamingAppData = path.join(tempRoot, "roaming-app-data");
   const electronUserDataDir = path.join(tempRoot, "electron-user-data");
-  const asterRoot = path.join(tempRoot, "aster");
+  const agentRoot = path.join(tempRoot, "agent");
   const backendPath = path.join(tempRoot, "code-artifact-backend.mjs");
   const backendLedgerPath = path.join(tempRoot, "code-artifact-backend.jsonl");
 
@@ -326,7 +326,7 @@ function createTempRuntimeEnv() {
     localAppData,
     roamingAppData,
     electronUserDataDir,
-    asterRoot,
+    agentRoot,
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -344,7 +344,7 @@ function createTempRuntimeEnv() {
       XDG_DATA_HOME: xdgDataHome,
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
-      LIME_ASTER_ROOT: asterRoot,
+      LIME_AGENT_RUNTIME_ROOT: agentRoot,
     },
   };
 }
@@ -367,13 +367,13 @@ if (ledgerPath) {
     providerPreference: input.request?.providerPreference,
     modelPreference: input.request?.modelPreference,
     runtimeOptions: input.request?.runtimeOptions,
-    requestMetadata: input.request?.runtimeOptions?.metadata,
+    requestMetadata: input.request?.runtimeOptions?.runtimeRequest?.metadata,
     recordedAt: new Date().toISOString()
   }) + "\\n");
 }
 
 if (input.kind === "turnStart") {
-  const requestMetadata = input.request?.runtimeOptions?.metadata || {};
+  const requestMetadata = input.request?.runtimeOptions?.runtimeRequest?.metadata || {};
   const isRecoveryTurn = requestMetadata.harness?.coding_workbench_recovery?.schemaVersion === "coding-workbench-recovery/v1";
   const inputText = String(input.request?.input?.text || "");
   const isCodingPrompt = inputText.includes("coding-target.test.ts") || isRecoveryTurn;
@@ -608,9 +608,7 @@ function findCodingRecoveryTurnStart(messages) {
     )
     .find((message) => {
       const metadata =
-        message?.params?.runtimeOptions?.metadata ||
-        message?.params?.runtime_options?.metadata ||
-        {};
+        message?.params?.runtimeOptions?.runtimeRequest?.metadata || {};
       const harness = metadata.harness || {};
       return (
         harness.coding_workbench_recovery?.schemaVersion ===
@@ -1490,35 +1488,18 @@ async function createCodeArtifactSession(page, options, workspaceId) {
     runtimeOptions: {
       stream: true,
       eventName: `code_artifact_workbench_${TURN_ID}`,
-      providerPreference: "fixture-provider",
-      modelPreference: "fixture-model",
-      metadata: {
-        source: "code-artifact-workbench-electron-fixture",
-      },
-      hostOptions: {
-        asterChatRequest: {
-          message: USER_PROMPT,
-          session_id: SESSION_ID,
-          turn_id: TURN_ID,
-          event_name: `code_artifact_workbench_${TURN_ID}`,
-          provider_preference: "fixture-provider",
-          model_preference: "fixture-model",
-          provider_config: {
-            provider_name: "fixture-provider",
-            model_name: "fixture-model",
-          },
-          turn_config: {
-            provider_config: {
-              provider_name: "fixture-provider",
-              model_name: "fixture-model",
-            },
-            approval_policy: "never",
-            sandbox_policy: "workspace-write",
-            execution_strategy: "react",
-            metadata: {
-              source: "code-artifact-workbench-electron-fixture",
-            },
-          },
+      runtimeRequest: {
+        providerPreference: "fixture-provider",
+        modelPreference: "fixture-model",
+        providerConfig: {
+          providerName: "fixture-provider",
+          modelName: "fixture-model",
+        },
+        approvalPolicy: "never",
+        sandboxPolicy: "workspace-write",
+        executionStrategy: "react",
+        metadata: {
+          source: "code-artifact-workbench-electron-fixture",
         },
       },
     },
@@ -2463,8 +2444,7 @@ async function clickCodingWorkbenchRecovery(page, options) {
     };
     if (recoveryTurnStart) {
       const metadata =
-        recoveryTurnStart.params?.runtimeOptions?.metadata ||
-        recoveryTurnStart.params?.runtime_options?.metadata ||
+        recoveryTurnStart.params?.runtimeOptions?.runtimeRequest?.metadata ||
         {};
       const recovery = metadata.harness?.coding_workbench_recovery || null;
       return sanitizeJson({
@@ -2841,8 +2821,7 @@ async function run() {
       collectTraceJsonRpcMessages(traceMessages),
     );
     const traceRecoveryMetadata =
-      traceRecoveryTurnStart?.params?.runtimeOptions?.metadata ||
-      traceRecoveryTurnStart?.params?.runtime_options?.metadata ||
+      traceRecoveryTurnStart?.params?.runtimeOptions?.runtimeRequest?.metadata ||
       {};
     const traceRecoveryContext =
       traceRecoveryMetadata.harness?.coding_workbench_recovery || null;

@@ -287,7 +287,7 @@ pub struct Workspace {
     pub name: String,
     /// Workspace 类型
     pub workspace_type: WorkspaceType,
-    /// 根目录路径（对应 Aster Session.working_dir）
+    /// 根目录路径（对应 Agent Session.working_dir）
     pub root_path: PathBuf,
     /// 是否为默认 workspace
     pub is_default: bool,

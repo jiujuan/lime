@@ -109,15 +109,15 @@ describe("PluginRuntimeTaskHost", () => {
           expectedOutput: { contentFactoryWorkspacePatch: true },
           eventName: "plugin_runtime:content-factory-app:task-1",
           turnId: "turn-1",
-          providerPreference: "anthropic",
-          modelPreference: "claude-sonnet-4",
           queueIfBusy: true,
           skipPreSubmitResume: false,
           metadata: { source: "host-test" },
-          turnConfig: {
-            provider_config: { provider_name: "anthropic" },
-            reasoning_effort: "medium",
-            sandbox_policy: "workspace-write",
+          runtimeRequest: {
+            providerConfig: { providerName: "anthropic" },
+            providerPreference: "anthropic",
+            modelPreference: "claude-sonnet-4",
+            reasoningEffort: "medium",
+            sandboxPolicy: "workspace-write",
             metadata: { turn_source: "plugin" },
           },
         },
@@ -156,27 +156,17 @@ describe("PluginRuntimeTaskHost", () => {
         runtimeOptions: expect.objectContaining({
           stream: true,
           eventName: "plugin_runtime:content-factory-app:task-1",
-          providerPreference: "anthropic",
-          modelPreference: "claude-sonnet-4",
           queuedTurnId: "plugin-queued-task-1",
-          metadata: {
-            source: "host-test",
-            turn_source: "plugin",
-          },
-          hostOptions: {
-            asterChatRequest: expect.objectContaining({
-              session_id: "session-1",
-              turn_id: "turn-1",
-              workspace_id: "workspace-1",
-              provider_preference: "anthropic",
-              model_preference: "claude-sonnet-4",
-              provider_config: { provider_name: "anthropic" },
-              queued_turn_id: "plugin-queued-task-1",
-              turn_config: expect.objectContaining({
-                provider_config: { provider_name: "anthropic" },
-              }),
-            }),
-          },
+          runtimeRequest: expect.objectContaining({
+            workspaceId: "workspace-1",
+            providerPreference: "anthropic",
+            modelPreference: "claude-sonnet-4",
+            providerConfig: { providerName: "anthropic" },
+            metadata: {
+              source: "host-test",
+              turn_source: "plugin",
+            },
+          }),
         }),
       }),
     );

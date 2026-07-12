@@ -107,18 +107,18 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       },
       eventName: "plugin_runtime:content-factory-app:task-1",
       turnId: "turn-1",
-      providerPreference: "anthropic",
-      modelPreference: "claude-sonnet-4",
       queueIfBusy: true,
       skipPreSubmitResume: false,
       metadata: { source: "plugin-test" },
-      turnConfig: {
-        provider_config: {
-          provider_name: "anthropic",
-          model_name: "claude-sonnet-4",
+      runtimeRequest: {
+        providerConfig: {
+          providerName: "anthropic",
+          modelName: "claude-sonnet-4",
         },
-        reasoning_effort: "medium",
-        sandbox_policy: "workspace-write",
+        providerPreference: "anthropic",
+        modelPreference: "claude-sonnet-4",
+        reasoningEffort: "medium",
+        sandboxPolicy: "workspace-write",
         metadata: { turn_source: "plugin" },
       },
     });
@@ -133,8 +133,6 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       runtimeOptions: expect.objectContaining({
         stream: true,
         eventName: "plugin_runtime:content-factory-app:task-1",
-        providerPreference: "anthropic",
-        modelPreference: "claude-sonnet-4",
         queuedTurnId: "plugin-queued-task-1",
         expectedOutput: {
           artifactKind: "content_batch",
@@ -174,67 +172,20 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
           },
           required: ["items"],
         },
-        metadata: {
-          source: "plugin-test",
-          turn_source: "plugin",
-        },
-        hostOptions: {
-          asterChatRequest: expect.objectContaining({
-            session_id: "session-1",
-            turn_id: "turn-1",
-            workspace_id: "workspace-1",
-            provider_preference: "anthropic",
-            model_preference: "claude-sonnet-4",
-            provider_config: {
-              provider_name: "anthropic",
-              model_name: "claude-sonnet-4",
-            },
-            queued_turn_id: "plugin-queued-task-1",
-            expected_output: {
-              artifactKind: "content_batch",
-              outputFormat: {
-                type: "json_schema",
-                schema: {
-                  type: "object",
-                  properties: {
-                    items: {
-                      type: "array",
-                    },
-                  },
-                  required: ["items"],
-                },
-                maxValidationRetries: 2,
-              },
-            },
-            structured_output: {
-              type: "json_schema",
-              schema: {
-                type: "object",
-                properties: {
-                  items: {
-                    type: "array",
-                  },
-                },
-                required: ["items"],
-              },
-              maxValidationRetries: 2,
-            },
-            output_schema: {
-              type: "object",
-              properties: {
-                items: {
-                  type: "array",
-                },
-              },
-              required: ["items"],
-            },
-            turn_config: expect.objectContaining({
-              provider_config: {
-                provider_name: "anthropic",
-                model_name: "claude-sonnet-4",
-              },
-            }),
-          }),
+        runtimeRequest: {
+          workspaceId: "workspace-1",
+          providerPreference: "anthropic",
+          modelPreference: "claude-sonnet-4",
+          providerConfig: {
+            providerName: "anthropic",
+            modelName: "claude-sonnet-4",
+          },
+          reasoningEffort: "medium",
+          sandboxPolicy: "workspace-write",
+          metadata: {
+            source: "plugin-test",
+            turn_source: "plugin",
+          },
         },
       }),
       queueIfBusy: true,

@@ -1,4 +1,4 @@
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import type {
   AgentContextTraceStep as ContextTraceStep,
   AgentRuntimeStatusMetadata,
@@ -49,7 +49,7 @@ export function buildSoulRuntimeStatusMetadata(
 }
 
 export function buildInitialAgentRuntimeStatus(options: {
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   skipUserMessage?: boolean;
   soulCopy?: SoulInteractionCopy;
 }): AgentRuntimeStatus {
@@ -71,7 +71,7 @@ export function buildInitialAgentRuntimeStatus(options: {
 }
 
 export function buildWaitingAgentRuntimeStatus(options: {
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   soulCopy?: SoulInteractionCopy;
 }): AgentRuntimeStatus {
   void options.executionStrategy;

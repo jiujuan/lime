@@ -4,67 +4,26 @@ export const DOC_FRESHNESS_SPECS = [
   {
     path: "internal/tech/harness/README.md",
     requiredMentions: [
-      "iteration-roadmap.md",
-      "review-decision-workflow.md",
-      "tooling-roadmap.md",
-      "entropy-governance-workflow.md",
-    ],
-  },
-  {
-    path: "internal/tech/harness/iteration-roadmap.md",
-    requiredMentions: [
-      "review-decision-workflow.md",
-      "tooling-roadmap.md",
-      "entropy-governance-workflow.md",
-      "scripts/report-generated-slop.mjs",
-      "scripts/check-doc-freshness.mjs",
-    ],
-  },
-  {
-    path: "internal/tech/harness/tooling-roadmap.md",
-    requiredMentions: [
+      "harness-engine-governance.md",
+      "state-history-telemetry.md",
+      "quality-workflow.md",
       "harness-evals.md",
-      "scripts/report-generated-slop.mjs",
-      "scripts/check-doc-freshness.mjs",
-    ],
-  },
-  {
-    path: "internal/tech/harness/entropy-governance-workflow.md",
-    requiredMentions: [
-      "iteration-roadmap.md",
-      "tooling-roadmap.md",
-      "harness-evals.md",
-      "scripts/report-generated-slop.mjs",
-      "scripts/check-doc-freshness.mjs",
-    ],
-  },
-  {
-    path: "internal/tech/harness/review-decision-workflow.md",
-    requiredMentions: [
-      "external-analysis-handoff.md",
-      "iteration-roadmap.md",
     ],
   },
   {
     path: "internal/tech/harness/external-analysis-handoff.md",
     requiredMentions: [
-      "iteration-roadmap.md",
-      "review-decision-workflow.md",
-      "tooling-roadmap.md",
-    ],
-  },
-  {
-    path: "internal/tech/harness/implementation-blueprint.md",
-    requiredMentions: [
-      "harness-evals.md",
-      "scripts/report-generated-slop.mjs",
+      "harness-engine-governance.md",
+      "state-history-telemetry.md",
+      "quality-workflow.md",
+      "scripts/harness/analysis-brief.mjs",
     ],
   },
   {
     path: "internal/test/harness-evals.md",
     requiredMentions: [
-      "tooling-roadmap.md",
-      "entropy-governance-workflow.md",
+      "harness-engine-governance.md",
+      "quality-workflow.md",
       "scripts/report-generated-slop.mjs",
       "scripts/check-doc-freshness.mjs",
     ],

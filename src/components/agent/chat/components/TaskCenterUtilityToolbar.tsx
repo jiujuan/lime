@@ -36,9 +36,9 @@ import { cn } from "@/lib/utils";
 import { agentText } from "./harnessPanelText";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSessionExecutionRuntime,
-  AsterTodoItem,
-  AsterSubagentSessionInfo,
+  AgentSessionExecutionRuntime,
+  AgentTodoItem,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type {
   ActionRequired,
@@ -83,10 +83,10 @@ interface TaskCenterUtilityToolbarProps {
     pendingActions?: readonly ActionRequired[];
     submittedActionsInFlight?: readonly ActionRequired[];
     threadItems?: readonly AgentThreadItem[];
-    todoItems?: readonly AsterTodoItem[];
+    todoItems?: readonly AgentTodoItem[];
     threadRead?: AgentRuntimeThreadReadModel | null;
-    executionRuntime?: AsterSessionExecutionRuntime | null;
-    childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+    executionRuntime?: AgentSessionExecutionRuntime | null;
+    childSubagentSessions?: readonly AgentSubagentSessionInfo[];
     context?: GeneralWorkbenchTaskRailContextInput;
     providerType?: string | null;
     model?: string | null;

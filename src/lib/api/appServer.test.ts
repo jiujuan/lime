@@ -1425,9 +1425,6 @@ describe("App Server API", () => {
       },
       runtimeOptions: {
         stream: true,
-        hostOptions: {
-          adapter: "desktop",
-        },
       },
       queueIfBusy: true,
       skipPreSubmitResume: true,
@@ -1452,9 +1449,6 @@ describe("App Server API", () => {
               },
               runtimeOptions: {
                 stream: true,
-                hostOptions: {
-                  adapter: "desktop",
-                },
               },
               queueIfBusy: true,
               skipPreSubmitResume: true,

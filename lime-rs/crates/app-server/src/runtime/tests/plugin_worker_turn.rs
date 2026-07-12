@@ -1,9 +1,20 @@
 use super::support::*;
 use super::*;
+use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+
+fn runtime_options_with_metadata(metadata: Value) -> RuntimeOptions {
+    RuntimeOptions {
+        runtime_request: Some(RuntimeRequest {
+            metadata: Some(metadata),
+            ..RuntimeRequest::default()
+        }),
+        ..RuntimeOptions::default()
+    }
+}
 
 struct TurnCompletedHostGenerationBackend {
     requests: Mutex<Vec<ExecutionRequest>>,
@@ -112,10 +123,9 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(article_workspace_action_metadata()),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(
+                    article_workspace_action_metadata(),
+                )),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -254,10 +264,9 @@ async fn plugin_activation_turn_uses_regular_agent_backend() {
                     text: "@写文章 写一篇关于 AI Agent 工作流的公众号文章".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(article_generation_metadata_with_locale("en-US")),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(
+                    article_generation_metadata_with_locale("en-US"),
+                )),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -282,8 +291,7 @@ async fn plugin_activation_turn_uses_regular_agent_backend() {
     );
     assert!(
         requests[0]
-            .metadata
-            .as_ref()
+            .runtime_metadata()
             .and_then(|metadata| metadata.pointer("/harness/plugin_activation"))
             .is_some(),
         "plugin activation context must be preserved for the Agent prompt layer"
@@ -393,10 +401,9 @@ async fn article_workspace_worker_blocks_cloud_release_without_verified_signatur
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(article_workspace_action_metadata()),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(
+                    article_workspace_action_metadata(),
+                )),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -467,12 +474,9 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(article_workspace_action_metadata_with_output_kind(
-                        "other.workspace_patch",
-                    )),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(
+                    article_workspace_action_metadata_with_output_kind("other.workspace_patch"),
+                )),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -549,10 +553,9 @@ async fn article_workspace_worker_fails_closed_when_output_artifact_kind_is_miss
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(article_workspace_action_metadata_without_output_kind()),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(
+                    article_workspace_action_metadata_without_output_kind(),
+                )),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -614,10 +617,9 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(article_workspace_action_metadata()),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(
+                    article_workspace_action_metadata(),
+                )),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -772,10 +774,9 @@ async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(article_workspace_action_metadata()),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(
+                    article_workspace_action_metadata(),
+                )),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },

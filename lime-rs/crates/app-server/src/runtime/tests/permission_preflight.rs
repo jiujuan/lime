@@ -717,23 +717,17 @@ fn browser_control_runtime_options_for_target(
     });
     RuntimeOptions {
         stream: true,
-        event_name: Some(format!("aster_stream_{}_{}", session_id, turn_id)),
-        metadata: Some(metadata.clone()),
-        host_options: Some(json!({
-            "asterChatRequest": {
-                "message": "打开浏览器并执行需要权限的操作",
-                "session_id": session_id,
-                "workspace_id": "workspace-permission",
-                "workingDir": working_dir,
-                "projectRoot": project_root,
-                "event_name": format!("aster_stream_{}_{}", session_id, turn_id),
-                "turn_id": turn_id,
-                "approval_policy": "on-request",
-                "sandbox_policy": "workspace-write",
-                "metadata": metadata,
-                "execution_strategy": "react"
-            }
-        })),
+        event_name: Some(format!("agent_stream_{}_{}", session_id, turn_id)),
+        runtime_request: Some(RuntimeRequest {
+            workspace_id: Some("workspace-permission".to_string()),
+            working_dir: Some(working_dir.to_string()),
+            project_root: Some(project_root.to_string()),
+            approval_policy: Some("on-request".to_string()),
+            sandbox_policy: Some("workspace-write".to_string()),
+            metadata: Some(metadata),
+            execution_strategy: Some("react".to_string()),
+            ..RuntimeRequest::default()
+        }),
         ..RuntimeOptions::default()
     }
 }

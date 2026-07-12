@@ -9,7 +9,7 @@ import {
   Pin,
   Trash2,
 } from "lucide-react";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sidebarConversationGroups";
 import { resolveProjectDisplayName } from "@/components/app-sidebar/sidebarProjectDisplayName";
 
@@ -18,7 +18,7 @@ export const CONVERSATION_MENU_APPROX_HEIGHT = 252;
 export const CONVERSATION_MENU_VIEWPORT_MARGIN = 12;
 
 export type ConversationMenuState = {
-  session: AsterSessionInfo;
+  session: AgentSessionInfo;
   top: number;
   left: number;
 } | null;
@@ -54,12 +54,12 @@ interface AppSidebarConversationMenusProps {
   conversationMenuState: ConversationMenuState;
   projectMenuState: ProjectMenuState;
   favoriteSessionIds: readonly string[];
-  resolveSessionTitle: (session: AsterSessionInfo) => string;
+  resolveSessionTitle: (session: AgentSessionInfo) => string;
   onCloseMenus: () => void;
-  onToggleFavoriteSession: (session: AsterSessionInfo) => void;
-  onRenameConversation?: (session: AsterSessionInfo) => void;
-  onDeleteConversation?: (session: AsterSessionInfo) => void;
-  onToggleArchive: (session: AsterSessionInfo, archived: boolean) => void;
+  onToggleFavoriteSession: (session: AgentSessionInfo) => void;
+  onRenameConversation?: (session: AgentSessionInfo) => void;
+  onDeleteConversation?: (session: AgentSessionInfo) => void;
+  onToggleArchive: (session: AgentSessionInfo, archived: boolean) => void;
   onToggleProjectPin?: (project: SidebarOpenedProjectSummary) => void;
   onRevealProject?: (project: SidebarOpenedProjectSummary) => void;
   onCreateProjectWorktree?: (project: SidebarOpenedProjectSummary) => void;

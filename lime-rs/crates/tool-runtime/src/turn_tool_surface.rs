@@ -36,7 +36,7 @@ pub const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: &[&str] = &[
 ];
 pub const SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES: &[&str] = &["Skill", "ToolSearch"];
 pub const SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES: &[&str] = &["SendMessage", "ListPeers"];
-pub const RUNTIME_TOOL_SURFACE_POWERSHELL_ENV: &str = "ASTER_USE_POWERSHELL_TOOL";
+pub const RUNTIME_TOOL_SURFACE_POWERSHELL_ENV: &str = "AGENT_USE_POWERSHELL_TOOL";
 
 pub const DIRECT_ANSWER_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合应优先直接回答。除非信息明显不足或用户明确要求，否则不要调用工具，也不要把简单回复扩展成多阶段流程。";
 pub const LOCAL_WORKSPACE_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合只允许使用本地工作区工具。先用最少的侦查动作定位关键文件，优先小范围目录/文件列表与精确搜索；通常先控制在 3 到 6 次工具调用内拿到关键证据，只有前一步明确暴露新线索时再继续深入。若需要连续侦查，请把相互独立的读取/搜索收敛成一批，并在同一条回复里一起发起 2 到 4 个彼此独立的只读工具调用，让运行时并行执行；先完成这一批，再直接输出 1 到 2 句用户可见的结论正文，说明已经确认了什么、还缺什么、为什么还要继续，不要额外输出“阶段结论”标题，再决定是否继续下一批。如果用户消息里已经点名绝对路径、仓库根或具体文件，就把这些显式路径当作本回合唯一优先入口；第一批只围绕这些路径展开，不要先扫描当前默认工作区或无关目录。读取文件时聚焦与问题直接相关的入口、注册表、配置和代码片段，避免重复枚举大目录、避免一次性展开超长目录或整文件全文，也不要把大段原文直接抄回最终回答，改用结论加文件路径。";

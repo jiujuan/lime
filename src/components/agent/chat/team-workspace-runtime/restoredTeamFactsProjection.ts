@@ -1,7 +1,7 @@
 import type { AgentSubagentRuntimeStatus } from "@/lib/api/agentProtocol";
 import type {
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { AgentUiProjectionEvent } from "@limecloud/agent-ui-contracts";
 import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";
@@ -29,8 +29,8 @@ export interface RestoredTeamFactsProjectionParams {
   currentSessionRuntimeStatus?: AgentSubagentRuntimeStatus | null;
   currentSessionLatestTurnStatus?: AgentSubagentRuntimeStatus | null;
   currentSessionQueuedTurnCount?: number;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
-  subagentParentContext?: AsterSubagentParentContext | null;
+  childSubagentSessions?: AgentSubagentSessionInfo[];
+  subagentParentContext?: AgentSubagentParentContext | null;
   timestamp?: string;
   sequence?: number;
 }
@@ -64,7 +64,7 @@ function normalizeStatus(
 }
 
 function fromChildSession(
-  session: AsterSubagentSessionInfo,
+  session: AgentSubagentSessionInfo,
 ): RestoredTeamFactSession | null {
   const id = normalizeText(session.id);
   if (!id) {

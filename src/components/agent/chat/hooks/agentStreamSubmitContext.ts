@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
@@ -24,8 +24,8 @@ interface ResolveAgentStreamSubmitContextOptions {
   ) => ChatToolPreferences | null;
   getSyncedSessionExecutionStrategy: (
     sessionId: string,
-  ) => AsterExecutionStrategy | null;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  ) => AgentExecutionStrategy | null;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   assistantDraft?: AssistantDraftState;
   expectingQueue: boolean;
   targetSessionId?: string;

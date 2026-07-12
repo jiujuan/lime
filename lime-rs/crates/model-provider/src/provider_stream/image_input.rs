@@ -6,8 +6,8 @@ pub const PROVIDER_IMAGE_INPUT_POLICY_METADATA_CAMEL_KEY: &str = "imageInputPoli
 const MODEL_REQUEST_POLICY_METADATA_KEYS: [&str; 5] = [
     "runtime_options",
     "runtimeOptions",
-    "aster_chat_request",
-    "asterChatRequest",
+    "runtime_request",
+    "runtimeRequest",
     "config",
 ];
 
@@ -78,6 +78,32 @@ pub fn provider_stream_should_omit_image_input(
 ) -> bool {
     model_supports_image_input == Some(false)
         || provider_stream_image_input_policy_disables_provider_images(runtime_metadata)
+}
+
+pub fn provider_stream_omitted_message_images_notice(removed_images: usize) -> Option<String> {
+    if removed_images == 0 {
+        return None;
+    }
+
+    Some(format!(
+        "[系统提示] 这条历史消息包含 {} 张图片，但当前模型不支持图片输入；图片已在发送给模型前省略。",
+        removed_images
+    ))
+}
+
+pub fn provider_stream_omitted_tool_result_images_notice(removed_images: usize) -> Option<String> {
+    if removed_images == 0 {
+        return None;
+    }
+
+    Some(format!(
+        "[系统提示] 这个工具结果包含 {} 张图片，但当前模型不支持图片输入；图片已在发送给模型前省略。",
+        removed_images
+    ))
+}
+
+pub fn provider_stream_should_warn_omitted_provider_images(removed_images: usize) -> bool {
+    removed_images > 0
 }
 
 pub fn provider_stream_input_modality_policy_from_metadata(metadata: &Value) -> Option<&Value> {

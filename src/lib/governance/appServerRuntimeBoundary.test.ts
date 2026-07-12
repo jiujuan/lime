@@ -5,19 +5,19 @@ import {
   AGENT_PROVIDER_CONFIGURATION_BOUNDARY,
   AGENT_SESSION_CONFIGURATION_BOUNDARY,
   AGENT_TURN_CONTEXT_CONFIGURATION_BOUNDARY,
-  ALLOWED_ASTER_COUPLING_OWNER_FILES,
+  ALLOWED_AGENT_COUPLING_OWNER_FILES,
   APP_SERVER_SRC_DIR,
-  ASTER_COUPLING_SNIPPETS,
-  ASTER_EXECUTION_SNIPPETS,
-  ASTER_PROVIDER_CONFIGURATION_SNIPPETS,
-  ASTER_SKILL_EXECUTION_SNIPPETS,
+  AGENT_COUPLING_SNIPPETS,
+  AGENT_EXECUTION_SNIPPETS,
+  AGENT_PROVIDER_CONFIGURATION_SNIPPETS,
+  AGENT_SKILL_EXECUTION_SNIPPETS,
   IMAGE_COMMAND_MAIN,
   IMAGE_COMMAND_SPLIT_MODULES,
   AGENT_SESSION_EXECUTION_RUNTIME_MAIN,
   AGENT_SESSION_EXECUTION_RUNTIME_OWNER_MODULES,
-  KNOWN_OUT_OF_BOUND_ASTER_BASELINE,
-  KNOWN_OUT_OF_BOUND_ASTER_COUPLING_FILES,
-  KNOWN_OUT_OF_BOUND_ASTER_EXECUTION_FILES,
+  KNOWN_OUT_OF_BOUND_AGENT_BASELINE,
+  KNOWN_OUT_OF_BOUND_AGENT_COUPLING_FILES,
+  KNOWN_OUT_OF_BOUND_AGENT_EXECUTION_FILES,
   LOCAL_DATA_SOURCE_SKILLS_DIR,
   PLUGIN_WORKER_TURN_MAIN,
   PLUGIN_WORKER_TURN_SPLIT_MODULES,
@@ -46,30 +46,30 @@ import {
 } from "./appServerRuntimeBoundary.testSupport";
 
 describe("app-server runtime boundary", () => {
-  it("App Server 生产代码不应新增未登记的 Aster 直接耦合", () => {
+  it("App Server 生产代码不应新增未登记的 Agent 直接耦合", () => {
     const unregistered = collectRustFiles(APP_SERVER_SRC_DIR)
       .map((file) => ({
         path: repoRelative(file),
         source: productionSource(file),
       }))
       .filter(({ source }) =>
-        ASTER_COUPLING_SNIPPETS.some((snippet) => source.includes(snippet)),
+        AGENT_COUPLING_SNIPPETS.some((snippet) => source.includes(snippet)),
       )
       .filter(
         ({ path }) =>
-          !ALLOWED_ASTER_COUPLING_OWNER_FILES.has(path) &&
-          !KNOWN_OUT_OF_BOUND_ASTER_COUPLING_FILES.has(path),
+          !ALLOWED_AGENT_COUPLING_OWNER_FILES.has(path) &&
+          !KNOWN_OUT_OF_BOUND_AGENT_COUPLING_FILES.has(path),
       )
       .map(({ path }) => path);
 
     expect(
       unregistered,
-      "新增 Aster 直接耦合前必须先迁到 lime-agent / runtime-core / 已登记 runtime_backend 子边界；已知越界文件只能减少，不能增加",
+      "新增 Agent 直接耦合前必须先迁到 lime-agent / runtime-core / 已登记 runtime_backend 子边界；已知越界文件只能减少，不能增加",
     ).toEqual([]);
   });
 
-  it("已登记的 App Server 顶层 Aster 越界白名单只能减少，不能增长", () => {
-    const increases = KNOWN_OUT_OF_BOUND_ASTER_BASELINE.flatMap(
+  it("已登记的 App Server 顶层 Agent 越界白名单只能减少，不能增长", () => {
+    const increases = KNOWN_OUT_OF_BOUND_AGENT_BASELINE.flatMap(
       ({ path, snippets }) => {
         const fullPath = join(REPO_ROOT, path);
         const source = existsSync(fullPath) ? productionSource(fullPath) : "";
@@ -87,29 +87,29 @@ describe("app-server runtime boundary", () => {
 
     expect(
       increases,
-      "已知越界面是迁移负债，不是扩展许可；新增 Aster 状态、provider 配置或 Skill 执行调用前必须先迁到 runtime backend / lime-agent / runtime-core",
+      "已知越界面是迁移负债，不是扩展许可；新增 Agent 状态、provider 配置或 Skill 执行调用前必须先迁到 runtime backend / lime-agent / runtime-core",
     ).toEqual([]);
   });
 
-  it("App Server 顶层 Aster 越界白名单必须登记到治理路线图", () => {
+  it("App Server 顶层 Agent 越界白名单必须登记到治理路线图", () => {
     const roadmap = readFileSync(
       join(REPO_ROOT, RUNTIME_BOUNDARY_ROADMAP),
       "utf8",
     );
     const missing = [
-      ...KNOWN_OUT_OF_BOUND_ASTER_COUPLING_FILES,
-      ...KNOWN_OUT_OF_BOUND_ASTER_EXECUTION_FILES,
+      ...KNOWN_OUT_OF_BOUND_AGENT_COUPLING_FILES,
+      ...KNOWN_OUT_OF_BOUND_AGENT_EXECUTION_FILES,
     ].filter((path) => !roadmap.includes(path));
 
     expect(
       missing,
-      "新增 App Server 顶层 Aster 越界白名单时，必须同步登记原因、分类和退出条件",
+      "新增 App Server 顶层 Agent 越界白名单时，必须同步登记原因、分类和退出条件",
     ).toEqual([]);
   });
 
-  it("LocalAppDataSource skills 层不应直接触碰 Aster 状态或 reload API", () => {
+  it("LocalAppDataSource skills 层不应直接触碰 Agent 状态或 reload API", () => {
     const forbiddenSnippets = [
-      "AsterAgentState",
+      "AgentState",
       "lime_agent::reload_lime_skills",
       "reload_lime_skills(",
     ];
@@ -125,17 +125,17 @@ describe("app-server runtime boundary", () => {
 
     expect(
       offenders,
-      "LocalAppDataSource skills 层只能通知 App Server skill_registry 边界，不得直接触碰 Aster 状态或 lime_agent reload API",
+      "LocalAppDataSource skills 层只能通知 App Server skill_registry 边界，不得直接触碰 Agent 状态或 lime_agent reload API",
     ).toEqual([]);
   });
 
-  it("App Server 只能通过 agent runtime registry 初始化 Aster runtime", () => {
+  it("App Server 只能通过 agent runtime registry 初始化 Agent runtime", () => {
     const offenders = collectRustFiles(APP_SERVER_SRC_DIR)
       .map((file) => ({
         path: repoRelative(file),
         source: productionSource(file),
       }))
-      .filter(({ source }) => source.includes("initialize_aster_runtime("))
+      .filter(({ source }) => source.includes("initialize_agent_runtime("))
       .map(({ path }) => path)
       .filter(
         (path) =>
@@ -144,41 +144,41 @@ describe("app-server runtime boundary", () => {
 
     expect(
       offenders,
-      "Aster runtime 初始化只能停留在 App Server agent_runtime_registry 边界；数据源、processor 或 runtime backend 不得重新 direct import lime_agent::initialize_aster_runtime",
+      "Agent runtime 初始化只能停留在 App Server agent_runtime_registry 边界；数据源、processor 或 runtime backend 不得重新 direct import lime_agent::initialize_agent_runtime",
     ).toEqual([]);
   });
 
-  it("App Server 不应新增 runtime_backend 之外的 Aster 回合执行链", () => {
+  it("App Server 不应新增 runtime_backend 之外的 Agent 回合执行链", () => {
     const unregistered = collectRustFiles(APP_SERVER_SRC_DIR)
       .map((file) => ({
         path: repoRelative(file),
         source: productionSource(file),
       }))
       .filter(({ source }) =>
-        ASTER_EXECUTION_SNIPPETS.some((snippet) => source.includes(snippet)),
+        AGENT_EXECUTION_SNIPPETS.some((snippet) => source.includes(snippet)),
       )
       .filter(
         ({ path }) =>
           path !== "lime-rs/crates/app-server/src/runtime_backend.rs" &&
           !path.startsWith("lime-rs/crates/app-server/src/runtime_backend/") &&
-          !KNOWN_OUT_OF_BOUND_ASTER_EXECUTION_FILES.has(path),
+          !KNOWN_OUT_OF_BOUND_AGENT_EXECUTION_FILES.has(path),
       )
       .map(({ path }) => path);
 
     expect(
       unregistered,
-      "App Server 不应在 runtime_backend 之外继续复制 Aster provider 配置或 stream_reply 执行流；新增同类执行面必须先迁入 runtime backend / lime-agent / runtime-core",
+      "App Server 不应在 runtime_backend 之外继续复制 Agent provider 配置或 stream_reply 执行流；新增同类执行面必须先迁入 runtime backend / lime-agent / runtime-core",
     ).toEqual([]);
   });
 
-  it("App Server provider adapter 不应直接配置 Aster provider", () => {
+  it("App Server provider adapter 不应直接配置 Agent provider", () => {
     const offenders = collectRustFiles(APP_SERVER_SRC_DIR)
       .map((file) => ({
         path: repoRelative(file),
         source: productionSource(file),
       }))
       .flatMap(({ path, source }) =>
-        ASTER_PROVIDER_CONFIGURATION_SNIPPETS.filter((snippet) =>
+        AGENT_PROVIDER_CONFIGURATION_SNIPPETS.filter((snippet) =>
           source.includes(snippet),
         ).map((snippet) => ({ path, snippet })),
       );
@@ -217,14 +217,14 @@ describe("app-server runtime boundary", () => {
     ).toEqual([]);
   });
 
-  it("App Server 不应直接复制 Aster Skill prompt/workflow 执行器", () => {
+  it("App Server 不应直接复制 Agent Skill prompt/workflow 执行器", () => {
     const offenders = collectRustFiles(APP_SERVER_SRC_DIR)
       .map((file) => ({
         path: repoRelative(file),
         source: productionSource(file),
       }))
       .filter(({ source }) =>
-        ASTER_SKILL_EXECUTION_SNIPPETS.some((snippet) =>
+        AGENT_SKILL_EXECUTION_SNIPPETS.some((snippet) =>
           source.includes(snippet),
         ),
       )
@@ -236,7 +236,7 @@ describe("app-server runtime boundary", () => {
     ).toEqual([]);
   });
 
-  it("Knowledge Builder App Server adapter 不应直接持有 Aster 状态", () => {
+  it("Knowledge Builder App Server adapter 不应直接持有 Agent 状态", () => {
     const adapter = readFileSync(
       join(
         REPO_ROOT,
@@ -246,7 +246,7 @@ describe("app-server runtime boundary", () => {
     );
 
     expect(adapter).toContain("KnowledgeBuilderSkillRunner");
-    expect(adapter).not.toContain("AsterAgentState");
+    expect(adapter).not.toContain("AgentState");
     expect(adapter).not.toContain("run_knowledge_builder_skill");
   });
 
@@ -509,8 +509,8 @@ describe("app-server runtime boundary", () => {
       "fn merge_cumulative_text(",
     ].filter((snippet) => threadItemProjection.includes(snippet));
     const returnedAgentSessionRuntimeResponsibilities = [
-      "fn project_aster_session_execution_runtime_session(",
-      "fn project_aster_session_execution_runtime_snapshot(",
+      "fn project_agent_session_execution_runtime_session(",
+      "fn project_agent_session_execution_runtime_snapshot(",
       "fn build_agent_turn_context(",
       "fn read_agent_tool_inventory(",
       "fn configure_model_route_provider_for_session(",
@@ -609,7 +609,7 @@ describe("app-server runtime boundary", () => {
     ).toEqual([]);
   });
 
-  it("App Server 主 turn 执行不应直接调用 Aster streaming loop", () => {
+  it("App Server 主 turn 执行不应直接调用 Agent streaming loop", () => {
     const runtimeBackend = productionSource(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend.rs"),
     );
@@ -655,14 +655,14 @@ describe("app-server runtime boundary", () => {
     expect(agentProviderConfiguration).not.toContain("mark_healthy(");
   });
 
-  it("App Server 不应直接构造 Aster SessionConfig", () => {
+  it("App Server 不应直接构造 Agent SessionConfig", () => {
     const offenders = collectRustFiles(APP_SERVER_SRC_DIR)
       .map((file) => ({
         path: repoRelative(file),
         source: productionSource(file),
       }))
       .flatMap(({ path, source }) =>
-        ["SessionConfigBuilder", "aster::agents::SessionConfig"]
+        ["SessionConfigBuilder", "agent::agents::SessionConfig"]
           .filter((snippet) => source.includes(snippet))
           .map((snippet) => ({ path, snippet })),
       );
@@ -683,18 +683,18 @@ describe("app-server runtime boundary", () => {
 
     expect(agentSessionConfiguration).toContain("AgentSessionConfigurationRequest");
     expect(agentSessionConfiguration).toContain("build_agent_session_config");
-    expect(agentSessionConfiguration).not.toContain("aster::agents::SessionConfig");
-    expect(agentSessionConfigAdapter).toContain("to_aster_session_config");
-    expect(agentSessionConfigAdapter).toContain("aster::SessionConfig");
+    expect(agentSessionConfiguration).not.toContain("agent::agents::SessionConfig");
+    expect(agentSessionConfigAdapter).toContain("to_agent_session_config");
+    expect(agentSessionConfigAdapter).toContain("agent::SessionConfig");
     expect(appServerAdapter).toContain("build_agent_session_config");
     expect(appServerAdapter).toContain("AgentSessionConfigurationRequest");
     expect(
       offenders,
-      "Aster SessionConfig 构造属于 lime-agent session_configuration 边界；App Server request_context 只能准备 prompt / turn_context 投影并调用 façade",
+      "Agent SessionConfig 构造属于 lime-agent session_configuration 边界；App Server request_context 只能准备 prompt / turn_context 投影并调用 façade",
     ).toEqual([]);
   });
 
-  it("App Server 不应直接引用 Aster TurnContext 类型", () => {
+  it("App Server 不应直接引用 Agent TurnContext 类型", () => {
     const forbiddenSnippets = ["TurnContextOverride", "TurnOutputSchemaSource"];
     const offenders = collectRustFiles(APP_SERVER_SRC_DIR)
       .map((file) => ({
@@ -731,7 +731,7 @@ describe("app-server runtime boundary", () => {
     expect(imagePresentationAdapter).toContain("set_agent_turn_user_visible_input_text");
     expect(
       offenders,
-      "Aster TurnContextOverride / TurnOutputSchemaSource 属于 lime-agent turn_context_configuration 边界；App Server 只能准备投影数据并调用 façade",
+      "Agent TurnContextOverride / TurnOutputSchemaSource 属于 lime-agent turn_context_configuration 边界；App Server 只能准备投影数据并调用 façade",
     ).toEqual([]);
   });
 
@@ -791,7 +791,7 @@ describe("app-server runtime boundary", () => {
     expect(executionAdapter).not.toContain("PlannedToolExecution {");
   });
 
-  it("App Server 受控文本生成 adapter 不应重新复制 Aster streaming loop", () => {
+  it("App Server 受控文本生成 adapter 不应重新复制 Agent streaming loop", () => {
     const pluginWorkerAdapter = {
       path: "lime-rs/crates/app-server/src/runtime_backend/plugin_worker_generation.rs",
       source: readFileSync(
@@ -870,7 +870,7 @@ describe("app-server runtime boundary", () => {
     ).toEqual([]);
   });
 
-  it("App Server native tool adapter 不应重新实现 Aster Tool surface", () => {
+  it("App Server native tool adapter 不应重新实现 Agent Tool surface", () => {
     const nativeToolAdapter = productionSource(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend/native_tools.rs"),
     );
@@ -923,7 +923,7 @@ describe("app-server runtime boundary", () => {
     expect(nativeToolAdapter).not.toContain("create_image_tools");
   });
 
-  it("App Server tool inventory 不应直接读取 Aster tool registry", () => {
+  it("App Server tool inventory 不应直接读取 Agent tool registry", () => {
     const appServerAdapter = productionSource(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs"),
     );
@@ -957,11 +957,11 @@ describe("app-server runtime boundary", () => {
     expect(appServerAdapter).not.toContain("AgentToolInventoryBuildInput");
     expect(
       forbiddenSnippets,
-      "Aster tool registry / extension snapshot 语义属于 lime-agent agent_tools::inventory；App Server tool_inventory 只能合并 AppDataSource MCP snapshot 并投影 read-model",
+      "Agent tool registry / extension snapshot 语义属于 lime-agent agent_tools::inventory；App Server tool_inventory 只能合并 AppDataSource MCP snapshot 并投影 read-model",
     ).toEqual([]);
   });
 
-  it("App Server execution process 不应直接注册 Aster shell tools", () => {
+  it("App Server execution process 不应直接注册 Agent shell tools", () => {
     const appServerExecutionProcess = productionSource(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/execution_process.rs"),
     );
@@ -979,7 +979,7 @@ describe("app-server runtime boundary", () => {
       "ToolRegistry",
       "ToolContext",
       "check_tool_permissions",
-      "aster::tools",
+      "agent::tools",
     ].filter((snippet) => appServerExecutionProcess.includes(snippet));
 
     expect(agentToolOrchestrator).toContain("check_shell_tool_permissions");
@@ -993,7 +993,7 @@ describe("app-server runtime boundary", () => {
     expect(appServerExecutionProcess).not.toContain("check_shell_tool_permissions");
     expect(
       forbiddenSnippets,
-      "Aster shell tool registry 属于 lime-agent tool_orchestrator；shell permission 属于 tool-runtime；App Server execution_process 只能做 process control / read-model 投影和委托预检",
+      "Agent shell tool registry 属于 lime-agent tool_orchestrator；shell permission 属于 tool-runtime；App Server execution_process 只能做 process control / read-model 投影和委托预检",
     ).toEqual([]);
   });
 });

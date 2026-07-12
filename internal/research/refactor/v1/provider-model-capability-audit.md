@@ -241,7 +241,7 @@ sequenceDiagram
 - `lime-rs/crates/agent/src/agent_tools/**`
 - `src/lib/governance/appServerRuntimeBoundary.test.ts`
 - `src/lib/governance/appServerRuntimeBoundary.testSupport.ts`
-- `src/lib/governance/asterMigrationBoundary.test.ts`
+- `src/lib/governance/agentMigrationBoundary.test.ts`
 
 ## 10. 第三十六刀完成状态与下一刀判定
 

@@ -322,49 +322,49 @@ export function buildAssertionContext({
   const expertRuntimeTurnStartForAssertions = isExpertPanelSkillsRuntimeScenario
     ? expertPanelSkillsRuntimeTurnStart
     : expertSkillsRuntimeTurnStart;
-  const asterChatRequest =
+  const runtimeRequest =
     (isPlanScenario
-      ? planTurnStart?.asterChatRequest
+      ? planTurnStart?.runtimeRequest
       : isGoalScenario
-        ? goalTurnStart?.asterChatRequest
+        ? goalTurnStart?.runtimeRequest
         : isImageCommandScenario
-          ? imageCommandTurnStart?.asterChatRequest
+          ? imageCommandTurnStart?.runtimeRequest
           : isInputbarRichRestoreScenario
-            ? inputbarRichRestoreTurnStart?.asterChatRequest
+            ? inputbarRichRestoreTurnStart?.runtimeRequest
             : isInputbarPendingSteerScenario
-              ? inputbarPendingSteerActiveTurnStart?.asterChatRequest
+              ? inputbarPendingSteerActiveTurnStart?.runtimeRequest
               : isWebToolsRenderingScenario
-                ? webToolsRenderingTurnStart?.asterChatRequest
+                ? webToolsRenderingTurnStart?.runtimeRequest
                 : isReasoningFirstVisibleScenario
-                  ? reasoningFirstVisibleTurnStart?.asterChatRequest
+                  ? reasoningFirstVisibleTurnStart?.runtimeRequest
                   : isLiveTailCommitScenario
-                    ? liveTailCommitTurnStart?.asterChatRequest
+                    ? liveTailCommitTurnStart?.runtimeRequest
                     : isElectronResizeReflowScenario
-                      ? electronResizeReflowTurnStart?.asterChatRequest
+                      ? electronResizeReflowTurnStart?.runtimeRequest
                       : isApprovalRequestResumeScenario ||
                           isApprovalRequestDecisionScenario
-                        ? approvalRequestResumeTurnStart?.asterChatRequest
+                        ? approvalRequestResumeTurnStart?.runtimeRequest
                         : isApprovalRequestFullAccessScenario
-                          ? approvalRequestFullAccessTurnStart?.asterChatRequest
+                          ? approvalRequestFullAccessTurnStart?.runtimeRequest
                         : isTerminalCanceledAfterAnswerScenario
-                          ? terminalCanceledAfterAnswerTurnStart?.asterChatRequest
+                          ? terminalCanceledAfterAnswerTurnStart?.runtimeRequest
                           : isTerminalFailedAfterAnswerScenario
-                            ? terminalFailedAfterAnswerTurnStart?.asterChatRequest
+                            ? terminalFailedAfterAnswerTurnStart?.runtimeRequest
                             : isMcpStructuredContentScenario
-                              ? mcpStructuredContentTurnStart?.asterChatRequest
+                              ? mcpStructuredContentTurnStart?.runtimeRequest
                               : isMediaReferenceScenario
-                                ? mediaReferenceTurnStart?.asterChatRequest
+                                ? mediaReferenceTurnStart?.runtimeRequest
                                 : isMultiAgentTeamScenario
-                                  ? multiAgentTeamTurnStart?.asterChatRequest
+                                  ? multiAgentTeamTurnStart?.runtimeRequest
                                   : isSkillsRuntimeScenario
-                                    ? skillsRuntimeTurnStart?.asterChatRequest
+                                    ? skillsRuntimeTurnStart?.runtimeRequest
                                     : isAnyExpertSkillsRuntimeScenario
-                                      ? expertRuntimeTurnStartForAssertions?.asterChatRequest
+                                      ? expertRuntimeTurnStartForAssertions?.runtimeRequest
                                       : isContentFactoryArticleWorkspaceScenario
                                         ? {}
                                         : isHomeHotpathScenario
-                                          ? homeHotpathTurnStart?.asterChatRequest
-                                          : newsTurnStart?.asterChatRequest) ??
+                                          ? homeHotpathTurnStart?.runtimeRequest
+                                          : newsTurnStart?.runtimeRequest) ??
     {};
   const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
   const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
@@ -382,19 +382,11 @@ export function buildAssertionContext({
     ? manualEnableRuntimeMetadata.bindings[0]
     : null;
   const expertRuntimeMetadata =
-    expertRuntimeTurnStartForAssertions?.runtimeOptions?.metadata?.expert ??
-    expertRuntimeTurnStartForAssertions?.asterChatRequest?.turn_config?.metadata
-      ?.expert ??
-    expertRuntimeTurnStartForAssertions?.asterChatRequest?.turnConfig?.metadata
-      ?.expert ??
+    expertRuntimeTurnStartForAssertions?.runtimeRequest?.metadata?.expert ??
     {};
   const expertHarnessMetadata =
-    expertRuntimeTurnStartForAssertions?.runtimeOptions?.metadata?.harness
+    expertRuntimeTurnStartForAssertions?.runtimeRequest?.metadata?.harness
       ?.expert ??
-    expertRuntimeTurnStartForAssertions?.asterChatRequest?.turn_config?.metadata
-      ?.harness?.expert ??
-    expertRuntimeTurnStartForAssertions?.asterChatRequest?.turnConfig?.metadata
-      ?.harness?.expert ??
     {};
   const rawExpertHarnessSkillRefs =
     expertHarnessMetadata?.skill_refs ?? expertHarnessMetadata?.skillRefs ?? [];
@@ -405,9 +397,8 @@ export function buildAssertionContext({
     ? EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF
     : EXPERT_SKILLS_RUNTIME_SKILL_REF;
   const collaborationMode =
-    asterChatRequest?.turn_config?.metadata?.harness?.collaboration_mode
-      ?.mode ??
-    asterChatRequest?.turnConfig?.metadata?.harness?.collaborationMode?.mode ??
+    runtimeRequest?.metadata?.harness?.collaboration_mode?.mode ??
+    runtimeRequest?.metadata?.harness?.collaborationMode?.mode ??
     (isPlanScenario
       ? (planTurnStart?.runtimeOptions?.metadata?.harness?.collaboration_mode
           ?.mode ??
@@ -572,7 +563,7 @@ export function buildAssertionContext({
     isContentFactoryInlineImageArticleWorkspaceScenario,
     isAnyExpertSkillsRuntimeScenario,
     expertRuntimeTurnStartForAssertions,
-    asterChatRequest,
+    runtimeRequest,
     hasCancelPhase,
     goalHarness,
     goalObjectiveText,

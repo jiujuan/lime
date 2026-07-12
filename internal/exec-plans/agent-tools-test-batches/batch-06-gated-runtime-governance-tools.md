@@ -37,13 +37,13 @@ runtime / platform / callback：
 
 建议认领：
 
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/registry.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/config_tool.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/cron_tools.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/remote_trigger_tool.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/worktree_tools.rs`
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/lsp.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/mod.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/registry.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/config_tool.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/cron_tools.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/remote_trigger_tool.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/worktree_tools.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/lsp.rs`
 - `src/components/agent/chat/utils/toolDisplayInfo.ts`
 - `src/components/agent/chat/components/MessageList.test.tsx`
 

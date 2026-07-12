@@ -1,7 +1,6 @@
 import {
   AppServerClient,
   type AppServerAgentSessionActionReplayResponse,
-  type AppServerAgentAttachment,
   type AppServerAgentSessionFileCheckpointDetail,
   type AppServerAgentSessionFileCheckpointDiffResponse,
   type AppServerAgentSessionFileCheckpointListResponse,
@@ -49,7 +48,6 @@ import type {
   AgentRuntimeRespondActionRequest,
   AgentRuntimeRestoreFileCheckpointRequest,
   AgentRuntimeResumeThreadRequest,
-  AgentRuntimeSubmitTurnRequest,
   AgentRuntimeThreadReadModel,
 } from "./types";
 import type { AgentRuntimeCapabilityManifest } from "@limecloud/agent-ui-contracts";
@@ -119,31 +117,29 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
     : null;
 
   async function submitAgentRuntimeTurn(
-    request: AgentRuntimeSubmitTurnRequest,
+    request: AppServerAgentSessionTurnStartParams,
   ): Promise<void> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
     const route = appServerEventRouter?.register({
-      eventName: request.event_name,
-      sessionId: request.session_id,
-      turnId: request.turn_id,
+      eventName: request.runtimeOptions?.eventName ?? undefined,
+      sessionId: request.sessionId,
+      turnId: request.turnId ?? undefined,
     });
     try {
-      const result = await standardRuntimeClient.startTurn(
-        appServerTurnStartParamsFromRequest(request),
-      );
+      const result = await standardRuntimeClient.startTurn(request);
       if (route) {
         route.publish(result.notifications);
       } else {
         publishAppServerAgentSessionNotifications(
-          request.event_name,
+          request.runtimeOptions?.eventName ?? undefined,
           result.notifications,
         );
       }
     } catch (error) {
       publishAppServerRpcErrorNotifications(error, {
-        eventName: request.event_name,
-        sessionId: request.session_id,
-        turnId: request.turn_id,
+        eventName: request.runtimeOptions?.eventName ?? undefined,
+        sessionId: request.sessionId,
+        turnId: request.turnId ?? undefined,
       });
       throw error;
     }
@@ -959,41 +955,6 @@ export {
   publishAppServerAgentSessionNotifications,
 } from "./appServerEventStream";
 
-export function appServerTurnStartParamsFromRequest(
-  request: AgentRuntimeSubmitTurnRequest,
-): AppServerAgentSessionTurnStartParams {
-  const structuredOutput = structuredOutputFromRequest(request);
-  const outputSchema = outputSchemaFromRequest(request, structuredOutput);
-  return omitUndefined({
-    sessionId: request.session_id,
-    turnId: request.turn_id,
-    input: omitUndefined({
-      text: request.message,
-      attachments: appServerAttachmentsFromImages(request.images),
-    }),
-    runtimeOptions: omitUndefined({
-      stream: true,
-      eventName: request.event_name,
-      providerPreference: request.turn_config?.provider_preference,
-      modelPreference: request.turn_config?.model_preference,
-      metadata: request.turn_config?.metadata,
-      queuedTurnId: request.queued_turn_id,
-      expectedOutput: request.expected_output,
-      structuredOutput,
-      outputSchema,
-      hostOptions: {
-        asterChatRequest: appServerAsterChatRequestFromRequest(
-          request,
-          structuredOutput,
-          outputSchema,
-        ),
-      },
-    }),
-    queueIfBusy: request.queue_if_busy,
-    skipPreSubmitResume: request.skip_pre_submit_resume,
-  });
-}
-
 function appServerTurnCancelParamsFromRequest(
   request: AgentRuntimeInterruptTurnRequest,
 ): AppServerAgentSessionTurnCancelParams {
@@ -1069,129 +1030,6 @@ function agentRuntimeReplayedActionFromAppServer(
         })
       : undefined,
   });
-}
-
-function appServerAsterChatRequestFromRequest(
-  request: AgentRuntimeSubmitTurnRequest,
-  structuredOutput?: Record<string, unknown>,
-  outputSchema?: unknown,
-): Record<string, unknown> {
-  return omitUndefined({
-    message: request.message,
-    session_id: request.session_id,
-    event_name: request.event_name,
-    images: request.images,
-    provider_config: request.turn_config?.provider_config,
-    provider_preference: request.turn_config?.provider_preference,
-    model_preference: request.turn_config?.model_preference,
-    reasoning_effort: request.turn_config?.reasoning_effort,
-    thinking_enabled: request.turn_config?.thinking_enabled,
-    approval_policy: request.turn_config?.approval_policy,
-    sandbox_policy: request.turn_config?.sandbox_policy,
-    workspace_id: request.workspace_id ?? "",
-    web_search: request.turn_config?.web_search,
-    search_mode: request.turn_config?.search_mode,
-    execution_strategy: request.turn_config?.execution_strategy,
-    auto_continue: request.turn_config?.auto_continue,
-    system_prompt: request.turn_config?.system_prompt,
-    expected_output: request.expected_output,
-    structured_output:
-      structuredOutput ??
-      request.structured_output ??
-      request.turn_config?.structured_output,
-    output_schema:
-      outputSchema ??
-      request.output_schema ??
-      request.turn_config?.output_schema,
-    metadata: request.turn_config?.metadata,
-    turn_id: request.turn_id,
-    queue_if_busy: request.queue_if_busy,
-    queued_turn_id: request.queued_turn_id,
-  });
-}
-
-function structuredOutputFromRequest(
-  request: AgentRuntimeSubmitTurnRequest,
-): Record<string, unknown> | undefined {
-  if (isRecord(request.turn_config?.structured_output)) {
-    return request.turn_config.structured_output;
-  }
-  if (isRecord(request.structured_output)) {
-    return request.structured_output;
-  }
-  const fromExpectedOutput = expectedOutputStructuredOutput(
-    request.expected_output,
-  );
-  return fromExpectedOutput ?? undefined;
-}
-
-function outputSchemaFromRequest(
-  request: AgentRuntimeSubmitTurnRequest,
-  structuredOutput?: Record<string, unknown>,
-): unknown {
-  if (request.output_schema !== undefined) {
-    return request.output_schema;
-  }
-  if (request.turn_config?.output_schema !== undefined) {
-    return request.turn_config.output_schema;
-  }
-  if (structuredOutput?.schema !== undefined) {
-    return structuredOutput.schema;
-  }
-  return expectedOutputOutputSchema(request.expected_output);
-}
-
-function expectedOutputStructuredOutput(
-  expectedOutput: unknown,
-): Record<string, unknown> | undefined {
-  if (!isRecord(expectedOutput)) {
-    return undefined;
-  }
-  const outputFormat = isRecord(expectedOutput.outputFormat)
-    ? expectedOutput.outputFormat
-    : isRecord(expectedOutput.output_format)
-      ? expectedOutput.output_format
-      : undefined;
-  if (outputFormat) {
-    return outputFormat;
-  }
-  if (
-    expectedOutput.schema !== undefined ||
-    expectedOutput.outputSchema !== undefined ||
-    expectedOutput.output_schema !== undefined
-  ) {
-    return expectedOutput;
-  }
-  return undefined;
-}
-
-function expectedOutputOutputSchema(expectedOutput: unknown): unknown {
-  const structuredOutput = expectedOutputStructuredOutput(expectedOutput);
-  if (!structuredOutput) {
-    return undefined;
-  }
-  return (
-    structuredOutput.schema ??
-    structuredOutput.outputSchema ??
-    structuredOutput.output_schema
-  );
-}
-
-function appServerAttachmentsFromImages(
-  images?: AgentRuntimeSubmitTurnRequest["images"],
-): AppServerAgentAttachment[] | undefined {
-  if (!images?.length) {
-    return undefined;
-  }
-
-  return images.map((image, index) => ({
-    kind: "image",
-    uri: image.data,
-    metadata: {
-      mediaType: image.media_type,
-      index,
-    },
-  }));
 }
 
 function appServerActionScopeFromRequest(

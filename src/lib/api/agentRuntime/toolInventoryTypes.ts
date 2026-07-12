@@ -15,7 +15,7 @@ export type AgentToolCapability =
 export type AgentToolLifecycle = "current" | "compat" | "deprecated";
 
 export type AgentToolSourceKind =
-  | "aster_builtin"
+  | "agent_builtin"
   | "lime_injected"
   | "browser_compatibility";
 

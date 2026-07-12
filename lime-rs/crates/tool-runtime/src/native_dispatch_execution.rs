@@ -4,8 +4,8 @@ use crate::native_overlay::{
     RuntimeNativePermissionDecision,
 };
 use crate::tool_executor::{
-    RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutionRequest,
-    RuntimeToolTurnContext,
+    turn_context_has_tool_approval, RuntimeToolExecutionContext, RuntimeToolExecutionContextInput,
+    RuntimeToolExecutionRequest, RuntimeToolTurnContext,
 };
 use crate::tool_result_projection::{
     runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
@@ -33,22 +33,25 @@ fn runtime_native_dispatch_error(message: impl Into<String>) -> ErrorData {
 pub async fn execute_runtime_native_dispatch_tool(
     request: RuntimeNativeDispatchToolRequest<'_>,
 ) -> Option<RuntimeNativeDispatchToolResult> {
-    let overlay = runtime_native_tool_overlay_for_dispatch_name(request.tool_name)?;
     let dispatch = runtime_native_dispatch();
     let canonical_tool_name = dispatch.canonical_name(request.tool_name)?.to_string();
 
-    match check_runtime_native_tool_permissions(
-        overlay,
-        request.params,
-        &request.working_directory,
-        request.turn_context,
-    ) {
-        RuntimeNativePermissionDecision::Allow => {}
-        RuntimeNativePermissionDecision::Deny(message) => {
-            return Some(Err(runtime_native_dispatch_error(message)));
-        }
-        RuntimeNativePermissionDecision::Ask(message) => {
-            return Some(Err(runtime_native_dispatch_error(message)));
+    if let Some(overlay) = runtime_native_tool_overlay_for_dispatch_name(request.tool_name) {
+        match check_runtime_native_tool_permissions(
+            overlay,
+            request.params,
+            &request.working_directory,
+            request.turn_context,
+        ) {
+            RuntimeNativePermissionDecision::Allow => {}
+            RuntimeNativePermissionDecision::Deny(message) => {
+                return Some(Err(runtime_native_dispatch_error(message)));
+            }
+            RuntimeNativePermissionDecision::Ask(message) => {
+                if !turn_context_has_tool_approval(request.turn_context) {
+                    return Some(Err(runtime_native_dispatch_error(message)));
+                }
+            }
         }
     }
 
@@ -99,7 +102,7 @@ mod tests {
     #[tokio::test]
     async fn unknown_tool_returns_none_for_registry_fallback() {
         let result = execute_runtime_native_dispatch_tool(RuntimeNativeDispatchToolRequest {
-            tool_name: "Bash",
+            tool_name: "missing_tool",
             params: &json!({ "command": "echo hi" }),
             working_directory: PathBuf::from("."),
             session_id: "session-native-dispatch-1".to_string(),
@@ -109,6 +112,26 @@ mod tests {
         .await;
 
         assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn workspace_tool_executes_through_current_dispatch() {
+        let result = execute_runtime_native_dispatch_tool(RuntimeNativeDispatchToolRequest {
+            tool_name: "Bash",
+            params: &json!({ "command": "printf current-dispatch" }),
+            working_directory: std::env::current_dir().expect("current directory"),
+            session_id: "session-native-dispatch-workspace".to_string(),
+            cancel_token: None,
+            turn_context: None,
+        })
+        .await
+        .expect("workspace tool is dispatch-backed")
+        .expect("workspace tool execution");
+
+        assert_eq!(result.is_error, Some(false));
+        assert!(serde_json::to_string(&result)
+            .expect("serialize result")
+            .contains("current-dispatch"));
     }
 
     #[tokio::test]

@@ -4,9 +4,9 @@ use super::*;
 fn session_config_appends_soul_context_from_config_metadata() {
     let mut request = request_for_test("hello", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -79,9 +79,9 @@ fn session_config_appends_persona_context_from_request_metadata_to_soul_prompt()
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());

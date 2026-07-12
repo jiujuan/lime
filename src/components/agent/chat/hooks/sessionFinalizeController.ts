@@ -1,4 +1,4 @@
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 
 export interface CrossWorkspaceSessionRestoreContext {
@@ -121,10 +121,10 @@ export function buildSessionWorkspaceRestorePlan(params: {
 }
 
 export function resolveShadowSessionExecutionStrategyFallback(params: {
-  persistedExecutionStrategy?: AsterExecutionStrategy | null;
-  runtimeExecutionStrategy?: AsterExecutionStrategy | null;
-  topicExecutionStrategy?: AsterExecutionStrategy | null;
-}): AsterExecutionStrategy | null {
+  persistedExecutionStrategy?: AgentExecutionStrategy | null;
+  runtimeExecutionStrategy?: AgentExecutionStrategy | null;
+  topicExecutionStrategy?: AgentExecutionStrategy | null;
+}): AgentExecutionStrategy | null {
   if (params.runtimeExecutionStrategy || params.topicExecutionStrategy) {
     return null;
   }
@@ -132,11 +132,11 @@ export function resolveShadowSessionExecutionStrategyFallback(params: {
 }
 
 export function resolveSessionExecutionStrategyOverride(params: {
-  defaultExecutionStrategy?: AsterExecutionStrategy;
-  runtimeExecutionStrategy?: AsterExecutionStrategy | null;
-  shadowExecutionStrategyFallback?: AsterExecutionStrategy | null;
-  topicExecutionStrategy?: AsterExecutionStrategy | null;
-}): AsterExecutionStrategy {
+  defaultExecutionStrategy?: AgentExecutionStrategy;
+  runtimeExecutionStrategy?: AgentExecutionStrategy | null;
+  shadowExecutionStrategyFallback?: AgentExecutionStrategy | null;
+  topicExecutionStrategy?: AgentExecutionStrategy | null;
+}): AgentExecutionStrategy {
   return normalizeExecutionStrategy(
     params.runtimeExecutionStrategy ||
       params.topicExecutionStrategy ||

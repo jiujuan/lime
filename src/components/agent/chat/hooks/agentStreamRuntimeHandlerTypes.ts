@@ -5,8 +5,8 @@ import type {
   AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { ActionRequired, Message } from "../types";
@@ -110,7 +110,7 @@ export interface HandleTurnStreamEventOptions {
   assistantMsgId: string;
   activeSessionId: string;
   resolvedWorkspaceId: string;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   surfaceThinkingDeltas?: boolean;
   preserveAssistantContent?: string | null;
   assistantFallbackContent?: string | null;
@@ -134,7 +134,7 @@ export interface HandleTurnStreamEventOptions {
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setExecutionRuntime: Dispatch<
-    SetStateAction<AsterSessionExecutionRuntime | null>
+    SetStateAction<AgentSessionExecutionRuntime | null>
   >;
   setIsSending: Dispatch<SetStateAction<boolean>>;
   soulCopy?: SoulInteractionCopy;

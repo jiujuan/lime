@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildContentFactoryHostGenerationFixtureMarkdown,
-  contentFactoryHostGenerationAsterChatRequest,
-  contentFactoryLiveHostGenerationAsterChatRequest,
+  contentFactoryHostGenerationAgentRuntimeRequest,
+  contentFactoryLiveHostGenerationAgentRuntimeRequest,
 } from "./content-factory-host-generation-fixture.mjs";
 
 function providerBody(prompt) {
@@ -59,26 +59,26 @@ describe("content factory host generation fixture", () => {
     expect(first.split(/\n\s*\n/).length).toBeGreaterThanOrEqual(6);
   });
 
-  it("生成 Direct provider request 时只指向本地 fixture", () => {
-    const request = contentFactoryHostGenerationAsterChatRequest(
+  it("生成 RuntimeRequest 时只指向本地 fixture", () => {
+    const request = contentFactoryHostGenerationAgentRuntimeRequest(
       "http://127.0.0.1:41234",
     );
 
     expect(request).toMatchObject({
-      provider_config: {
-        provider_id: "fixture-openai",
-        provider_name: "openai",
-        model_name: "lime-fixture-chat",
-        api_key: "fixture-key",
-        base_url: "http://127.0.0.1:41234",
+      providerConfig: {
+        providerId: "fixture-openai",
+        providerName: "openai",
+        modelName: "lime-fixture-chat",
+        apiKey: "fixture-key",
+        baseUrl: "http://127.0.0.1:41234",
       },
-      provider_preference: "fixture-openai",
-      model_preference: "lime-fixture-chat",
+      providerPreference: "fixture-openai",
+      modelPreference: "lime-fixture-chat",
     });
   });
 
-  it("生成 live Direct provider request 时使用显式 provider config", () => {
-    const request = contentFactoryLiveHostGenerationAsterChatRequest({
+  it("生成 live RuntimeRequest 时使用显式 provider config", () => {
+    const request = contentFactoryLiveHostGenerationAgentRuntimeRequest({
       providerId: "agnes",
       providerName: "openai",
       model: "agnes-chat-live",
@@ -87,17 +87,17 @@ describe("content factory host generation fixture", () => {
     });
 
     expect(request).toMatchObject({
-      provider_config: {
-        provider_id: "agnes",
-        provider_name: "openai",
-        model_name: "agnes-chat-live",
-        api_key: "sk-live-secret",
-        base_url: "https://apihub.agnes-ai.com/v1",
-        tool_call_strategy: "native",
+      providerConfig: {
+        providerId: "agnes",
+        providerName: "openai",
+        modelName: "agnes-chat-live",
+        apiKey: "sk-live-secret",
+        baseUrl: "https://apihub.agnes-ai.com/v1",
+        toolCallStrategy: "native",
       },
-      provider_preference: "agnes",
-      model_preference: "agnes-chat-live",
-      reasoning_effort: "low",
+      providerPreference: "agnes",
+      modelPreference: "agnes-chat-live",
+      reasoningEffort: "low",
     });
     expect(JSON.stringify(request)).not.toContain("fixture-openai");
     expect(JSON.stringify(request)).not.toContain("lime-fixture-chat");

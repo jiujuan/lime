@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import type { AgentI18nKey } from "@/i18n/agentResources";
 import { buildAgentUiCollaborationPayloadMetadata } from "@limecloud/agent-runtime-projection";
 import type {
-  AsterSessionExecutionRuntime,
-  AsterSubagentSessionInfo,
+  AgentSessionExecutionRuntime,
+  AgentSubagentSessionInfo,
   AgentRuntimeFileCheckpointThreadSummary,
 } from "@/lib/api/agentRuntime";
 
@@ -22,11 +22,10 @@ interface AgentRuntimeStripProps {
   toolPreferences: ChatToolPreferences;
   runtimeToolAvailability?: RuntimeToolAvailability | null;
   harnessState: HarnessSessionState;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
+  childSubagentSessions?: AgentSubagentSessionInfo[];
   variant?: "standalone" | "embedded";
   isSending?: boolean;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
-  isExecutionRuntimeActive?: boolean;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   runtimeStatusTitle?: string | null;
   selectedTeamLabel?: string | null;
   selectedTeamSummary?: string | null;
@@ -63,7 +62,6 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
   variant = "standalone",
   isSending = false,
   executionRuntime = null,
-  isExecutionRuntimeActive = false,
   runtimeStatusTitle = null,
   selectedTeamLabel = null,
   selectedTeamSummary = null,
@@ -259,7 +257,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         label: translate("agentChat.runtimeStrip.status.outputSchema", {
           label: outputSchemaLabel,
         }),
-        tone: isExecutionRuntimeActive ? "secondary" : "outline",
+        tone: isSending ? "secondary" : "outline",
       });
     }
 
@@ -403,7 +401,6 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     harnessState,
     hasRuntimeWorkbenchSignals,
     hasReasoningSignal,
-    isExecutionRuntimeActive,
     isSending,
     queuedTeamSessions,
     reasoningRunStatus,

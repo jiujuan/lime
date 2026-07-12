@@ -138,10 +138,10 @@ onOpenArtifact(artifactRef)
 避免：
 
 ```text
-raw Aster DTO
+raw Agent DTO
 legacy command payload
 Electron IPC response
-hostOptions.asterChatRequest
+runtimeOptions.runtimeRequest
 workspace store object
 raw permission profile
 sandbox backend object

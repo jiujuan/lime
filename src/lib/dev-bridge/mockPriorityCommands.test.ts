@@ -17,7 +17,6 @@ describe("mockPriorityCommands", () => {
       "download_update",
       "open_update_window",
       "workspace_list",
-      "agent_init",
       "agent_runtime_get_tool_inventory",
       "plugin_list_installed",
       "plugin_start_ui_runtime",
@@ -59,14 +58,14 @@ describe("mockPriorityCommands", () => {
   });
 
   it("模型与运行时真相命令在浏览器模式下禁止静默退回 mock", () => {
-    expect(shouldDisallowMockFallbackInBrowser("agent_init")).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("aster_agent_status")).toBe(
+    expect(shouldDisallowMockFallbackInBrowser("agent_init")).toBe(false);
+    expect(shouldDisallowMockFallbackInBrowser("agent_status")).toBe(
       false,
     );
     expect(
-      shouldDisallowMockFallbackInBrowser("aster_agent_configure_provider"),
+      shouldDisallowMockFallbackInBrowser("agent_configure_provider"),
     ).toBe(false);
-    expect(shouldDisallowMockFallbackInBrowser("aster_agent_reset")).toBe(
+    expect(shouldDisallowMockFallbackInBrowser("agent_reset")).toBe(
       false,
     );
     expect(shouldDisallowMockFallbackInBrowser("agent_start_process")).toBe(
@@ -339,7 +338,7 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockEventFallbackInBrowser("voice-model-download-progress"),
     ).toBe(true);
     expect(
-      shouldDisallowMockEventFallbackInBrowser("aster_stream_session-1"),
+      shouldDisallowMockEventFallbackInBrowser("agent_stream_session-1"),
     ).toBe(true);
     expect(
       shouldDisallowMockEventFallbackInBrowser(

@@ -2,7 +2,7 @@ import type React from "react";
 import type { Artifact } from "@/lib/artifact/types";
 import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import type {
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -38,7 +38,7 @@ export interface MessageListProps {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   queuedTurns?: readonly QueuedTurnSnapshot[];
-  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
   sessionHistoryWindow?: {
     loadedMessages: number;
     totalMessages: number;

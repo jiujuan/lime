@@ -1,6 +1,6 @@
 //! Subagent session read-model projection.
 //!
-//! Aster extension data stays at the adapter boundary; this module owns the
+//! Agent extension data stays at the adapter boundary; this module owns the
 //! Lime read-model rules for subagent presentation metadata.
 
 use serde::Deserialize;

@@ -47,8 +47,7 @@ export class PluginRuntimeTaskHost {
       readString(request, "sessionId") ?? `plugin-runtime-${nowMs}`;
     const turnId = readString(request, "turnId") ?? `plugin-turn-${nowMs}`;
     const eventName =
-      readString(request, "eventName") ??
-      `plugin_runtime:${appId}:${taskId}`;
+      readString(request, "eventName") ?? `plugin_runtime:${appId}:${taskId}`;
     const queueIfBusy = readBoolean(request, "queueIfBusy") ?? true;
     const skipPreSubmitResume =
       readBoolean(request, "skipPreSubmitResume") ?? false;
@@ -58,60 +57,18 @@ export class PluginRuntimeTaskHost {
       readString(request, "appRootPath") ??
       undefined;
     const explicitRunWorker = readBoolean(request, "runWorker");
-    const turnConfig =
-      readRecord(request, "turnConfig") ??
-      readRecord(request, "turn_config") ??
-      {};
+    const requestedRuntimeRequest = readRecord(request, "runtimeRequest");
     const metadata = {
       ...(readRecord(request, "metadata") ?? {}),
-      ...(readRecord(turnConfig, "metadata") ?? {}),
+      ...(readRecord(requestedRuntimeRequest, "metadata") ?? {}),
     };
     const message = buildPluginRuntimeTaskMessage(request);
-    const providerPreference =
-      readString(request, "providerPreference") ??
-      readString(request, "provider_preference") ??
-      readString(turnConfig, "providerPreference") ??
-      readString(turnConfig, "provider_preference");
-    const modelPreference =
-      readString(request, "modelPreference") ??
-      readString(request, "model_preference") ??
-      readString(turnConfig, "modelPreference") ??
-      readString(turnConfig, "model_preference");
     const queuedTurnId = `plugin-queued-${taskId}`;
-    const hostOptions = {
-      asterChatRequest: {
-        message,
-        session_id: sessionId,
-        event_name: eventName,
-        images: null,
-        provider_config:
-          turnConfig.providerConfig ?? turnConfig.provider_config ?? null,
-        provider_preference: providerPreference,
-        model_preference: modelPreference,
-        reasoning_effort:
-          turnConfig.reasoningEffort ?? turnConfig.reasoning_effort ?? null,
-        thinking_enabled:
-          turnConfig.thinkingEnabled ?? turnConfig.thinking_enabled ?? null,
-        approval_policy:
-          turnConfig.approvalPolicy ?? turnConfig.approval_policy ?? null,
-        sandbox_policy:
-          turnConfig.sandboxPolicy ?? turnConfig.sandbox_policy ?? null,
-        project_id: null,
-        workspace_id: workspaceId,
-        web_search: turnConfig.webSearch ?? turnConfig.web_search ?? null,
-        search_mode: turnConfig.searchMode ?? turnConfig.search_mode ?? null,
-        execution_strategy:
-          turnConfig.executionStrategy ?? turnConfig.execution_strategy ?? null,
-        auto_continue:
-          turnConfig.autoContinue ?? turnConfig.auto_continue ?? null,
-        system_prompt:
-          turnConfig.systemPrompt ?? turnConfig.system_prompt ?? null,
-        metadata,
-        turn_id: turnId,
-        queue_if_busy: queueIfBusy,
-        queued_turn_id: queuedTurnId,
-        turn_config: turnConfig,
-      },
+    const runtimeRequest = {
+      ...requestedRuntimeRequest,
+      workspaceId:
+        readString(requestedRuntimeRequest, "workspaceId") ?? workspaceId,
+      metadata,
     };
     const workerConfig = await this.#resolveWorkerConfig({
       appId,
@@ -135,11 +92,8 @@ export class PluginRuntimeTaskHost {
         runtimeOptions: {
           stream: true,
           eventName,
-          providerPreference: providerPreference ?? undefined,
-          modelPreference: modelPreference ?? undefined,
-          metadata,
           queuedTurnId,
-          hostOptions,
+          runtimeRequest,
         },
         queueIfBusy,
         skipPreSubmitResume,
@@ -392,11 +346,15 @@ export class PluginRuntimeTaskHost {
     return {
       status: workerResult.status,
       artifactKind:
-        workerResult.status === "completed" ? workerResult.artifactKind : undefined,
+        workerResult.status === "completed"
+          ? workerResult.artifactKind
+          : undefined,
       errorCode:
         workerResult.status === "failed" ? workerResult.errorCode : undefined,
       errorMessage:
-        workerResult.status === "failed" ? workerResult.errorMessage : undefined,
+        workerResult.status === "failed"
+          ? workerResult.errorMessage
+          : undefined,
       runtimeEventCount: workerResult.runtimeEvents.length,
       appendedEventCount: appended.events?.length ?? 0,
     };

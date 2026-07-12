@@ -43,7 +43,7 @@ impl ConfiguredSessionProvider {
         self.config
     }
 
-    pub(crate) fn reply_provider(&self) -> ConfiguredReplyProvider {
+    pub(crate) fn provider(&self) -> ConfiguredReplyProvider {
         self.provider.clone()
     }
 }
@@ -83,6 +83,7 @@ async fn configure_provider_for_session(
         let runtime_config =
             session_provider_config_to_runtime_provider_config(&config, request.session_id);
         let provider = install_provider_for_session(&runtime_config).await?;
+        agent_state.set_provider(provider.clone()).await;
         return Ok(ConfiguredSessionProvider { config, provider });
     }
 
@@ -95,6 +96,7 @@ async fn configure_provider_for_session(
     runtime_config.protocol = runtime_provider_protocol_from_route_protocol(request.route_protocol);
 
     let provider = install_provider_for_session(&runtime_config).await?;
+    agent_state.set_provider(provider.clone()).await;
     if let Err(error) = agent_state
         .credential_bridge()
         .record_usage(request.db, &runtime_config.credential_uuid)
@@ -185,6 +187,9 @@ fn model_provider_protocol_from_route_protocol(
             Some(model_provider::ModelProviderProtocol::Responses)
         }
         ProtocolKind::OpenaiChat => Some(model_provider::ModelProviderProtocol::ChatCompletions),
+        ProtocolKind::AnthropicMessages => {
+            Some(model_provider::ModelProviderProtocol::AnthropicMessages)
+        }
         _ => None,
     }
 }
@@ -198,6 +203,9 @@ fn runtime_provider_protocol_from_model_provider_protocol(
         }
         Some(model_provider::ModelProviderProtocol::ChatCompletions) => {
             Some(RuntimeProviderProtocol::ChatCompletions)
+        }
+        Some(model_provider::ModelProviderProtocol::AnthropicMessages) => {
+            Some(RuntimeProviderProtocol::AnthropicMessages)
         }
         Some(model_provider::ModelProviderProtocol::Custom(_)) | None => None,
     }
@@ -242,6 +250,9 @@ fn route_protocol_from_model_provider_protocol(
         Some(model_provider::ModelProviderProtocol::ChatCompletions) => {
             Some(ProtocolKind::OpenaiChat)
         }
+        Some(model_provider::ModelProviderProtocol::AnthropicMessages) => {
+            Some(ProtocolKind::AnthropicMessages)
+        }
         Some(model_provider::ModelProviderProtocol::Custom(_)) | None => None,
     }
 }
@@ -266,7 +277,7 @@ mod tests {
         );
         assert_eq!(
             model_provider_protocol_from_route_protocol(Some(ProtocolKind::AnthropicMessages)),
-            None
+            Some(model_provider::ModelProviderProtocol::AnthropicMessages)
         );
     }
 
@@ -286,7 +297,7 @@ mod tests {
         );
         assert_eq!(
             runtime_provider_protocol_from_route_protocol(Some(ProtocolKind::AnthropicMessages)),
-            None
+            Some(RuntimeProviderProtocol::AnthropicMessages)
         );
     }
 
@@ -294,7 +305,6 @@ mod tests {
     fn non_openai_route_protocols_do_not_invent_runtime_adapter_protocol() {
         for protocol in [
             ProtocolKind::OpenaiImages,
-            ProtocolKind::AnthropicMessages,
             ProtocolKind::GeminiGenerateContent,
             ProtocolKind::OllamaChat,
             ProtocolKind::Fal,
@@ -331,7 +341,10 @@ mod tests {
 
         assert_eq!(runtime_config.provider_name, "anthropic");
         assert_eq!(runtime_config.model_name, "claude-sonnet-4-5");
-        assert_eq!(runtime_config.protocol, None);
+        assert_eq!(
+            runtime_config.protocol,
+            Some(RuntimeProviderProtocol::AnthropicMessages)
+        );
         assert_eq!(
             route_protocol_from_session_provider_config(&config),
             Some(ProtocolKind::AnthropicMessages)

@@ -19,8 +19,8 @@ import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 import { buildWorkspaceConversationCodingViews } from "./workspaceConversationCodingViews";
 import type {
-  AsterSessionExecutionRuntime,
-  AsterTodoItem,
+  AgentSessionExecutionRuntime,
+  AgentTodoItem,
 } from "@/lib/api/agentRuntime";
 import type { CodingWorkbenchRecoveryContext } from "./codingWorkbenchRecovery";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
@@ -146,10 +146,10 @@ export interface WorkspaceConversationMessageListRuntime {
   messages: ConversationScenePresentationParams["messageList"]["messages"];
   turns: ConversationScenePresentationParams["messageList"]["turns"];
   threadItems: ConversationScenePresentationParams["messageList"]["threadItems"];
-  todoItems?: AsterTodoItem[];
+  todoItems?: AgentTodoItem[];
   currentTurnId: ConversationScenePresentationParams["messageList"]["currentTurnId"];
   threadRead: ConversationScenePresentationParams["messageList"]["threadRead"];
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   pendingActions: NonNullable<
     ConversationScenePresentationParams["messageList"]["pendingActions"]
   >;

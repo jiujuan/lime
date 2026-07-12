@@ -356,24 +356,24 @@ npm run smoke:agent-session-history-electron-fixture
 2026-06-19 本轮追加 WebFetch 工具回灌清洗后复测：
 
 ```bash
-cargo fmt --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" --check
-cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core web_fetch -- --nocapture
-git diff --check -- "lime-rs/crates/aster-rust/crates/aster/src/tools/web.rs"
+cargo fmt --manifest-path "lime-rs/crates/agent-rust/crates/agent/Cargo.toml" --check
+cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core web_fetch -- --nocapture
+git diff --check -- "lime-rs/crates/agent-rust/crates/agent/src/tools/web.rs"
 ```
 
 结果：
 
 - `cargo fmt`：通过。
-- `aster-core web_fetch`：`10 passed`，新增覆盖默认 WebFetch 按 prompt 选取相关片段、HTML 文本抽取移除 `head/style/script/meta` 噪音，以及剥离内联 `style/class/data/aria` 属性噪音。
+- `agent-core web_fetch`：`10 passed`，新增覆盖默认 WebFetch 按 prompt 选取相关片段、HTML 文本抽取移除 `head/style/script/meta` 噪音，以及剥离内联 `style/class/data/aria` 属性噪音。
 - `git diff --check`：通过。
 
 2026-06-19 本轮追加连续 user turn 边界修复、MOIM agent-only 注入和 live smoke 断言修复后复测：
 
 ```bash
-cargo fmt --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" --check
-cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core conversation::tests -- --nocapture
-cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core agents::moim::tests -- --nocapture
-cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core web_fetch -- --nocapture
+cargo fmt --manifest-path "lime-rs/crates/agent-rust/crates/agent/Cargo.toml" --check
+cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core conversation::tests -- --nocapture
+cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core agents::moim::tests -- --nocapture
+cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core web_fetch -- --nocapture
 node --check "scripts/claw-chat-ready-streaming-smoke.mjs"
 npm run smoke:agent-runtime-current-fixture
 npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
@@ -383,11 +383,11 @@ npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 
 - `conversation::tests`：`13 passed`，新增覆盖连续普通 user turn 不合并，避免停止 / 恢复后下一轮 `@搜索` 与上一轮恢复指令串话。
 - `agents::moim::tests`：`3 passed`，覆盖 MOIM 作为 `agent_only()` 独立消息注入，不再依赖 user merge，也不污染用户可见原文。
-- `aster-core web_fetch`：`10 passed`。
+- `agent-core web_fetch`：`10 passed`。
 - `node --check scripts/claw-chat-ready-streaming-smoke.mjs`：通过，恢复结果可见断言语法有效。
 - `npm run smoke:agent-runtime-current-fixture`：通过，`liveProviderUsed=false`，继续覆盖 current fixture、Claw cancel-then-continue 和 Electron fixture guard。
 - `npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000`：通过，真实 provider `custom-cb381b4f-d2fa-4eff-ba22-c867c38ba8d3 / gpt-5.5`，session `sess_de695aeb9194426f9d25f44a47ea3e83`，live web turn `2aaec918-d251-4c20-9f53-20bf068d4846`；`liveWebTurnCompleted=true`、`liveWebSearchCompleted=true`、`liveWebFetchCompleted=true`、`liveWebRequiredToolEventOrderValid=true`、`noRuntimeMockFallbackSeen=true`、`noBlockingConsoleErrors=true`。
-- request log 复核：`~/Library/Application Support/lime/aster/state/logs/llm_request.2.jsonl` 的 `last_user_preview` 只包含当前 `@搜索...WebSearch...WebFetch...` 指令，没有拼接上一轮“复原完成”；WebFetch preview 为新华网正文片段，不再含 `mask-image/wp-block/data:image/aria-label`。
+- request log 复核：`~/Library/Application Support/lime/agent/state/logs/llm_request.2.jsonl` 的 `last_user_preview` 只包含当前 `@搜索...WebSearch...WebFetch...` 指令，没有拼接上一轮“复原完成”；WebFetch preview 为新华网正文片段，不再含 `mask-image/wp-block/data:image/aria-label`。
 
 2026-06-19 本轮追加 WebSearch / WebFetch 展开态分组后复测：
 
@@ -652,15 +652,15 @@ npm run test:contracts
 2026-06-19 本轮追加 WebFetch 内容 helper 拆分后复测：
 
 ```bash
-cargo fmt --manifest-path "lime-rs/crates/aster-rust/crates/aster/Cargo.toml" --check
-cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core web_fetch -- --nocapture
-git diff --check -- "lime-rs/crates/aster-rust/crates/aster/src/tools/web.rs" "lime-rs/crates/aster-rust/crates/aster/src/tools/web_fetch_content.rs" "lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs" "internal/roadmap/turn/implementation-plan.md" "internal/roadmap/turn/test-cases.md"
+cargo fmt --manifest-path "lime-rs/crates/agent-rust/crates/agent/Cargo.toml" --check
+cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core web_fetch -- --nocapture
+git diff --check -- "lime-rs/crates/agent-rust/crates/agent/src/tools/web.rs" "lime-rs/crates/agent-rust/crates/agent/src/tools/web_fetch_content.rs" "lime-rs/crates/agent-rust/crates/agent/src/tools/mod.rs" "internal/roadmap/turn/implementation-plan.md" "internal/roadmap/turn/test-cases.md"
 ```
 
 结果：
 
 - `cargo fmt`：通过。
-- `aster-core web_fetch`：`11 passed`，WebFetch HTML 清洗、正文抽取、默认相关片段过滤和动态片段过滤测试已迁入 `web_fetch_content.rs`，redirect / permission / creation 测试继续留在 `web.rs`。
+- `agent-core web_fetch`：`11 passed`，WebFetch HTML 清洗、正文抽取、默认相关片段过滤和动态片段过滤测试已迁入 `web_fetch_content.rs`，redirect / permission / creation 测试继续留在 `web.rs`。
 - `git diff --check`：通过。
 
 2026-06-21 本轮追加 StreamingRenderer 显示层 sequence 排序后复测：

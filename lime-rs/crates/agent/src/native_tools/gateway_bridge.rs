@@ -84,11 +84,7 @@ mod tests {
     ) -> RuntimeGatewayToolExecutionRegistry {
         let registry = RuntimeGatewayToolExecutionRegistry::default();
         for registration in registrations {
-            registry.register(
-                registration
-                    .gateway_execution()
-                    .expect("gateway registration"),
-            );
+            registry.register(registration.into_gateway_execution());
         }
         registry
     }

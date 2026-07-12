@@ -55,7 +55,7 @@
     ],
     "activeSubagents": [],
     "recentArtifacts": [
-      "internal/tech/harness/implementation-blueprint.md",
+      "internal/tech/harness/README.md",
       ".lime/artifacts/thread-1/report.artifact.json",
       ".lime/harness/sessions/fixture-session-minimal-pending-request/handoff/handoff.md"
     ],

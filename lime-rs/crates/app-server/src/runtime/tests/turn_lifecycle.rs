@@ -1,6 +1,16 @@
 use super::support::*;
 use super::*;
 
+fn runtime_options_with_metadata(metadata: serde_json::Value) -> RuntimeOptions {
+    RuntimeOptions {
+        runtime_request: Some(app_server_protocol::RuntimeRequest {
+            metadata: Some(metadata),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
+        ..RuntimeOptions::default()
+    }
+}
+
 struct StreamingCallbackOrderBackend {
     observed_events: Arc<Mutex<Vec<String>>>,
 }
@@ -403,8 +413,7 @@ async fn trace_metadata_is_attached_to_runtime_events() {
                     text: "hello".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(json!({
+                runtime_options: Some(runtime_options_with_metadata(json!({
                         "agentUiPerformanceTrace": {
                             "requestId": "request_trace",
                             "runId": "run_trace",
@@ -419,9 +428,7 @@ async fn trace_metadata_is_attached_to_runtime_events() {
                             },
                             "workspaceId": "default"
                         }
-                    })),
-                    ..RuntimeOptions::default()
-                }),
+                    }))),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -496,8 +503,7 @@ async fn invalid_w3c_trace_context_is_not_propagated_to_runtime_events() {
                     text: "hello".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(json!({
+                runtime_options: Some(runtime_options_with_metadata(json!({
                         "agentUiPerformanceTrace": {
                             "requestId": "request_invalid_w3c",
                             "runId": "run_invalid_w3c",
@@ -508,9 +514,7 @@ async fn invalid_w3c_trace_context_is_not_propagated_to_runtime_events() {
                                 "tracestate": "vendor=value"
                             }
                         }
-                    })),
-                    ..RuntimeOptions::default()
-                }),
+                    }))),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -554,21 +558,18 @@ async fn provider_trace_events_keep_provider_wait_separate_from_message_delta() 
                     text: "hello".to_string(),
                     attachments: Vec::new(),
                 },
-                runtime_options: Some(RuntimeOptions {
-                    metadata: Some(json!({
-                        "agentUiPerformanceTrace": {
-                            "requestId": "request_provider_trace",
-                            "runId": "run_provider_trace",
-                            "sessionId": "sess_provider_trace",
-                            "source": "agent-chat",
-                            "submittedAt": 1_710_000_000_000i64,
-                            "traceId": "trace_provider_trace",
-                            "turnId": "turn_provider_trace",
-                            "workspaceId": "default"
-                        }
-                    })),
-                    ..RuntimeOptions::default()
-                }),
+                runtime_options: Some(runtime_options_with_metadata(json!({
+                    "agentUiPerformanceTrace": {
+                        "requestId": "request_provider_trace",
+                        "runId": "run_provider_trace",
+                        "sessionId": "sess_provider_trace",
+                        "source": "agent-chat",
+                        "submittedAt": 1_710_000_000_000i64,
+                        "traceId": "trace_provider_trace",
+                        "turnId": "turn_provider_trace",
+                        "workspaceId": "default"
+                    }
+                }))),
                 queue_if_busy: false,
                 skip_pre_submit_resume: false,
             },
@@ -647,21 +648,18 @@ async fn trace_events_are_appended_to_raw_trace_store_without_payload_text() {
                 text: "hello raw prompt must not be stored".to_string(),
                 attachments: Vec::new(),
             },
-            runtime_options: Some(RuntimeOptions {
-                metadata: Some(json!({
-                    "agentUiPerformanceTrace": {
-                        "requestId": "request_raw_trace",
-                        "runId": "run_raw_trace",
-                        "sessionId": "sess_raw_trace",
-                        "source": "agent-chat",
-                        "submittedAt": 1_710_000_000_000i64,
-                        "traceId": "trace_raw_trace",
-                        "turnId": "turn_raw_trace",
-                        "workspaceId": "default"
-                    }
-                })),
-                ..RuntimeOptions::default()
-            }),
+            runtime_options: Some(runtime_options_with_metadata(json!({
+                "agentUiPerformanceTrace": {
+                    "requestId": "request_raw_trace",
+                    "runId": "run_raw_trace",
+                    "sessionId": "sess_raw_trace",
+                    "source": "agent-chat",
+                    "submittedAt": 1_710_000_000_000i64,
+                    "traceId": "trace_raw_trace",
+                    "turnId": "turn_raw_trace",
+                    "workspaceId": "default"
+                }
+            }))),
             queue_if_busy: false,
             skip_pre_submit_resume: false,
         },
@@ -1151,12 +1149,6 @@ async fn start_turn_allows_visible_capability_id() {
                 runtime_options: Some(RuntimeOptions {
                     capability_id: Some("content.draft.generate".to_string()),
                     stream: false,
-                    event_name: None,
-                    provider_preference: None,
-                    model_preference: None,
-                    metadata: None,
-                    queued_turn_id: None,
-                    host_options: None,
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -1208,12 +1200,6 @@ async fn start_turn_allows_session_scoped_capability_id() {
                 runtime_options: Some(RuntimeOptions {
                     capability_id: Some("session.draft.write".to_string()),
                     stream: false,
-                    event_name: None,
-                    provider_preference: None,
-                    model_preference: None,
-                    metadata: None,
-                    queued_turn_id: None,
-                    host_options: None,
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -1263,12 +1249,6 @@ async fn start_turn_rejects_hidden_capability_id_without_persisting_turn() {
                 runtime_options: Some(RuntimeOptions {
                     capability_id: Some("content.draft.generate".to_string()),
                     stream: false,
-                    event_name: None,
-                    provider_preference: None,
-                    model_preference: None,
-                    metadata: None,
-                    queued_turn_id: None,
-                    host_options: None,
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -1344,12 +1324,6 @@ async fn start_turn_rejects_readiness_only_capability_id_without_persisting_turn
                 runtime_options: Some(RuntimeOptions {
                     capability_id: Some("content.readiness.check".to_string()),
                     stream: false,
-                    event_name: None,
-                    provider_preference: None,
-                    model_preference: None,
-                    metadata: None,
-                    queued_turn_id: None,
-                    host_options: None,
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,

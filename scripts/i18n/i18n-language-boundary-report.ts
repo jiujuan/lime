@@ -76,7 +76,7 @@ const SKIP_SEGMENTS = [
   "/src/i18n/resources/",
   "/src/i18n/legacy-patch/",
   "/lime-rs/target/",
-  "/lime-rs/crates/aster-rust/",
+  "/lime-rs/crates/agent-rust/",
   "/target/",
 ];
 

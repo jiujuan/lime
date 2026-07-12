@@ -14,7 +14,7 @@ const EXCLUDED_RUST_FILES = new Set([
   "lime-rs/crates/agent/src/tool_permissions.rs",
   "lime-rs/crates/agent/src/shell_security.rs",
 ]);
-const EXCLUDED_RUST_DIRS = new Set(["target", "aster-rust"]);
+const EXCLUDED_RUST_DIRS = new Set(["target", "agent-rust"]);
 
 function collectRustFiles(dir: string): string[] {
   const entries = readdirSync(dir);

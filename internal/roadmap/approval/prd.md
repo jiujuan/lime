@@ -272,7 +272,7 @@ flowchart LR
 
 - 始终中文沟通；用户可见文案必须进入五语言 i18n。
 - 先读后写，不回滚用户或并行 Agent 的脏改动。
-- Codex-first：approval 语义对齐 Codex-rs turn-scoped pending waiter 与 decision resume，不沿用 Aster 或旧 GUI 临时语义。
+- Codex-first：approval 语义对齐 Codex-rs turn-scoped pending waiter 与 decision resume，不沿用 Agent 或旧 GUI 临时语义。
 - 无兼容包袱时直接替换旧实现，不新增 compat 包装。
 - 长程任务默认通过 Plan 前置确认需求；Plan 确认后不因普通执行步骤频繁打断用户。
 - 授权策略属于 runtime/thread/session 配置，不能下沉到 A2UI schema 或消息流卡片局部状态。

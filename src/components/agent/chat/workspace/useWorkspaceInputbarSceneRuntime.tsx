@@ -97,7 +97,6 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   soulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
   soulArtifactVoiceEnabledForTurn: boolean;
   onSoulArtifactVoiceEnabledForTurnChange: (enabled: boolean) => void;
-  isExecutionRuntimeActive: GeneralWorkbenchDialogParams["isExecutionRuntimeActive"];
   removeQueuedTurn: InputbarParams["onRemoveQueuedTurn"];
   generalWorkbenchEntryPrompt: InputbarPresentationParams["generalWorkbenchEntryPrompt"];
   handleRestartGeneralWorkbenchEntryPrompt: InputbarPresentationParams["onRestartGeneralWorkbenchEntryPrompt"];
@@ -176,7 +175,6 @@ export function useWorkspaceInputbarSceneRuntime({
   soulArtifactVoiceGenerationBrief,
   soulArtifactVoiceEnabledForTurn,
   onSoulArtifactVoiceEnabledForTurnChange,
-  isExecutionRuntimeActive,
   removeQueuedTurn,
   generalWorkbenchEntryPrompt,
   handleRestartGeneralWorkbenchEntryPrompt,
@@ -436,7 +434,6 @@ export function useWorkspaceInputbarSceneRuntime({
         runtimeToolAvailability,
         isSending,
         executionRuntime: sessionExecutionRuntime,
-        isExecutionRuntimeActive,
         runtimeStatusTitle: activeRuntimeStatusTitle,
         selectedTeamRoleCount:
           generalWorkbenchHarnessPanelBaseProps.selectedTeamRoles?.length || 0,

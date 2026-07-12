@@ -74,7 +74,7 @@
 - 有时序图
 - 有流程图
 - 有 current / compat / dead-candidate 分类
-- 有 Codex / Aster / Lime 对照
+- 有 Codex / Agent / Lime 对照
 
 ---
 
@@ -92,7 +92,7 @@
 ## Phase F：执行权限事实源收口（本轮完成）
 
 - [x] 新增 `lime-rs/crates/agent/src/agent_tools/execution.rs`
-- [x] 把 workspace execution permission 模板从 `aster_agent_cmd.rs` 收回 `agent_tools` 边界
+- [x] 把 workspace execution permission 模板从 `agent_cmd.rs` 收回 `agent_tools` 边界
 - [x] 统一 `bash` / `Task` warning gate 语义
 - [x] 把 execution profile 暴露到 inventory / `agentRuntime.ts`
 - [x] 补齐 `execution.rs` 与 inventory 的定向测试
@@ -123,7 +123,7 @@
   - `agent_tools::catalog::tests::...`
   - `agent_tools::inventory::tests::...`
 - **主包降级为编译检查**：`lime` 主包测试会触发超大链接；在当前环境磁盘仅余约 `4.4Gi` 时，优先做 `cargo check` / 定向编译验证
-- **边界说明**：若后续 CI 或本地磁盘空间恢复，应追加一次 `lime` 主包的完整定向测试，把 `catalog.rs` / `inventory.rs` / `aster_agent_cmd.rs` 新增测试全部实跑
+- **边界说明**：若后续 CI 或本地磁盘空间恢复，应追加一次 `lime` 主包的完整定向测试，把 `catalog.rs` / `inventory.rs` / `agent_cmd.rs` 新增测试全部实跑
 
 ### 推荐命令
 
@@ -170,7 +170,7 @@ npm run governance:legacy-report
 本轮已完成：
 
 - `workspace allowlist` / `parameter restriction` / `warning gate` / `sandbox profile` 已有统一 execution 事实源
-- `aster_agent_cmd.rs` 已从手工 permission 模板拼装降级为 orchestration
+- `agent_cmd.rs` 已从手工 permission 模板拼装降级为 orchestration
 - inventory 已能审计 execution profile
 - `NativeAgentConfig.tool_execution` 已承接 persisted policy
 - `request.metadata.harness.executionPolicy` 已承接 runtime session override

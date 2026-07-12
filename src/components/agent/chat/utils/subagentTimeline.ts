@@ -1,5 +1,5 @@
 import type { AgentThreadItem, AgentThreadTurn } from "../types";
-import type { AsterSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
 import { sortThreadItems } from "./threadTimelineView";
 
 type SyntheticSubagentItem = Extract<
@@ -10,7 +10,7 @@ type SyntheticSubagentItem = Extract<
 interface BuildRealSubagentTimelineItemsOptions {
   threadId?: string | null;
   turns: AgentThreadTurn[];
-  childSessions: AsterSubagentSessionInfo[];
+  childSessions: AgentSubagentSessionInfo[];
 }
 
 function resolveTimestampMs(value?: string | null): number | null {
@@ -23,7 +23,7 @@ function resolveTimestampMs(value?: string | null): number | null {
 }
 
 function resolveChildSubagentItemStatus(
-  status?: AsterSubagentSessionInfo["runtime_status"],
+  status?: AgentSubagentSessionInfo["runtime_status"],
 ): SyntheticSubagentItem["status"] {
   switch (status) {
     case "completed":
@@ -40,7 +40,7 @@ function resolveChildSubagentItemStatus(
 }
 
 function resolveChildSubagentStatusLabel(
-  status?: AsterSubagentSessionInfo["runtime_status"],
+  status?: AgentSubagentSessionInfo["runtime_status"],
 ): string {
   switch (status) {
     case "queued":
@@ -61,7 +61,7 @@ function resolveChildSubagentStatusLabel(
 
 function resolveParentTurnIdForChildSession(
   turns: AgentThreadTurn[],
-  childSession: AsterSubagentSessionInfo,
+  childSession: AgentSubagentSessionInfo,
 ): string | null {
   if (turns.length === 0) {
     return null;

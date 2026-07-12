@@ -10,8 +10,7 @@ impl ExecutionBackend for ExpertRoleSwitchBackend {
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
         let role_switch = request
-            .metadata
-            .as_ref()
+            .runtime_metadata()
             .and_then(|metadata| metadata.pointer("/harness/expert_role_switch"))
             .expect("role switch metadata");
         assert_eq!(role_switch["kind"], "expert_profile_switch");
@@ -64,7 +63,8 @@ async fn read_session_projects_thread_expert_role_switch_metadata_into_items_and
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                metadata: Some(json!({
+                runtime_request: Some(RuntimeRequest {
+                    metadata: Some(json!({
                     "expert": {
                         "expertId": "copywriter",
                         "releaseId": "copywriter-release-1"
@@ -85,7 +85,9 @@ async fn read_session_projects_thread_expert_role_switch_metadata_into_items_and
                             "switched_at": "2026-07-05T10:00:00.000Z"
                         }
                     }
-                })),
+                    })),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,

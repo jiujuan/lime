@@ -142,6 +142,6 @@ mod tests {
             SidecarBackendMode::parse("external").expect("mode"),
             SidecarBackendMode::External
         );
-        assert!(SidecarBackendMode::parse("aster").is_err());
+        assert!(SidecarBackendMode::parse("agent").is_err());
     }
 }

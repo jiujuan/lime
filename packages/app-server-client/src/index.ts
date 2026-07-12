@@ -1,4 +1,5 @@
 export * from "./protocol.js";
+export * from "./runtime-request.js";
 export * from "./request-client.js";
 export * from "./request-client-methods.js";
 export * from "./connection.js";

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import {
   buildSessionRecentPreferencesBackfillKey,
   resolveFallbackSessionRecentPreferences,
@@ -20,7 +20,7 @@ const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 function runtimeWithPreferences(
   preferences: ChatToolPreferences,
 ): Pick<
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   "recent_preferences" | "execution_strategy"
 > {
   return {

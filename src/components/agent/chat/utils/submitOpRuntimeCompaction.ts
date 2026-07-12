@@ -1,7 +1,7 @@
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
-  AsterSessionExecutionRuntimeRecentTeamSelection,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
+  AgentSessionExecutionRuntimeRecentTeamSelection,
   RuntimeProviderConfig,
 } from "@/lib/api/agentRuntime";
 import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
@@ -445,7 +445,7 @@ function createComparableRequestTeamSelection(
 }
 
 function createComparableRuntimeTeamSelection(
-  selection?: AsterSessionExecutionRuntimeRecentTeamSelection | null,
+  selection?: AgentSessionExecutionRuntimeRecentTeamSelection | null,
 ): Record<string, unknown> | null {
   if (!selection || selection.disabled) {
     return null;
@@ -473,11 +473,11 @@ function createComparableRuntimeTeamSelection(
 
 export interface BuildSubmitOpRuntimeCompactionOptions {
   requestMetadata?: Record<string, unknown>;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   syncedRecentPreferences?: ChatToolPreferences | null;
   syncedSessionModelPreference?: SessionModelPreference | null;
-  syncedExecutionStrategy?: AsterExecutionStrategy | null;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  syncedExecutionStrategy?: AgentExecutionStrategy | null;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;
@@ -501,7 +501,7 @@ function resolveImageOrchestrationProviderConfig(params: {
   effectiveProviderType: string;
   effectiveModel: string;
   syncedSessionModelPreference?: SessionModelPreference | null;
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
 }): RuntimeProviderConfig | undefined {
   const candidates = [
     {

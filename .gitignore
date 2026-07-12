@@ -77,12 +77,13 @@ internal/exec-plans/*
 !internal/exec-plans/mcp-modernization-progress.md
 !internal/exec-plans/plan-runtime-implementation-progress.md
 !internal/exec-plans/approval-hitl-decision-model-plan.md
-!internal/exec-plans/aster-phase6-provider-reply-backend-plan.md
 !internal/exec-plans/browser-runtime-right-surface-plan.md
 !internal/exec-plans/projectthread-first-plan.md
 !internal/exec-plans/soul-style-output-surface-convergence-plan.md
 !internal/exec-plans/clawstream-codex-derived-guardrail-plan.md
 !internal/exec-plans/clawstream-s1-p0-implementation-plan.md
+!internal/exec-plans/current-runtime-convergence-progress.md
+!internal/exec-plans/refactor-v2-research.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/long-term/
@@ -104,8 +105,6 @@ internal/roadmap/db/**
 !internal/roadmap/coding/
 internal/roadmap/coding/**
 !internal/roadmap/coding/*.md
-!internal/roadmap/astermigration/
-!internal/roadmap/astermigration/**
 !internal/roadmap/workflow/
 !internal/roadmap/workflow/**
 !internal/roadmap/turn/
@@ -228,6 +227,8 @@ internal/tech/
 internal/tech/*
 !internal/tech/plugin/
 !internal/tech/plugin/*.md
+!internal/tech/harness/
+!internal/tech/harness/*.md
 internal/knowledge
 !internal/knowledge/
 internal/knowledge/*
@@ -238,6 +239,8 @@ internal/research/**
 !internal/research/refactor/
 !internal/research/refactor/v1/
 !internal/research/refactor/v1/**
+!internal/research/refactor/v2/
+!internal/research/refactor/v2/**
 !internal/research/workbech/
 !internal/research/workbech/*.md
 
@@ -279,9 +282,6 @@ nul
 !.codex/skills/lime-governance/
 .codex/skills/lime-governance/*
 !.codex/skills/lime-governance/SKILL.md
-!.codex/skills/lime-aster-migration/
-.codex/skills/lime-aster-migration/*
-!.codex/skills/lime-aster-migration/SKILL.md
 !.codex/skills/lime-quality-workflow/
 .codex/skills/lime-quality-workflow/*
 !.codex/skills/lime-quality-workflow/SKILL.md

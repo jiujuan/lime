@@ -4,7 +4,7 @@
 
 当前 Lime 的执行入口分散在多个模块：
 
-- `aster_agent_cmd.rs`（通用 Agent 对话）
+- `agent_cmd.rs`（通用 Agent 对话）
 - `skill_exec_cmd.rs`（Skill 执行）
 - `heartbeat_service/mod.rs`（定时任务/心跳执行）
 
@@ -31,7 +31,7 @@
 
 ### 2.2 非目标（Not in Scope）
 
-1. 不重构 Aster 执行引擎
+1. 不重构 Agent 执行引擎
 2. 不重做前端大页面
 3. 不在首期迁移历史数据
 4. 不引入复杂事件总线或新中间件框架
@@ -133,7 +133,7 @@ with_run(ctx, RunSource::Skill, Some("pptx"), Some(session_id), async {
 - `source_ref = skill_name`
 - `session_id = 当前执行会话 id`
 
-## 7.2 `aster_agent_cmd.rs`
+## 7.2 `agent_cmd.rs`
 
 做法：
 
@@ -191,7 +191,7 @@ with_run(ctx, RunSource::Skill, Some("pptx"), Some(session_id), async {
 
 ### Phase C：接入 Chat 与 Heartbeat（2-4 天）
 
-1. 接入 `aster_agent_cmd.rs`
+1. 接入 `agent_cmd.rs`
 2. 接入 `heartbeat_service/mod.rs`
 3. 增加跨入口一致性测试
 

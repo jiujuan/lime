@@ -1329,14 +1329,14 @@ mod tests {
     #[test]
     fn daemon_settings_reject_unsupported_backend_mode_before_launch_resolution() {
         let settings = DaemonSettings {
-            backend_mode: Some("aster".to_string()),
+            backend_mode: Some("agent".to_string()),
             ..DaemonSettings::default()
         };
         let error = SidecarBinaryPathOptions::default()
             .with_daemon_settings(&settings)
             .expect_err("unsupported backend");
 
-        assert!(error.contains("unsupported app-server backend mode: aster"));
+        assert!(error.contains("unsupported app-server backend mode: agent"));
     }
 
     #[test]

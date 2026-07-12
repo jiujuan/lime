@@ -217,7 +217,7 @@ function approvalPolicySourcesFromArguments(
     args,
     objectValue(args, ["policy", "permissionPolicy", "permission_policy"]),
     objectValue(args, ["turnConfig", "turn_config"]),
-    objectValue(args, ["hostOptions", "host_options"]),
+    objectValue(args, ["runtimeRequest", "runtime_request"]),
   ];
 }
 

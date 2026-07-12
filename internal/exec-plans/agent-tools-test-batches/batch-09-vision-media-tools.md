@@ -4,7 +4,7 @@
 
 本批次覆盖本地图片查看、图片结果回传和模型可见图片 content block。它和 Batch 01 的文件读取有交集，但风险不同：`Read` 可以读取图片路径并给出文本化输出，`view_image` 则应该把图片作为结构化 image content 传给模型，同时在前端只展示过程摘要和可展开预览，不能把 base64 或工具内部 raw output 当成正文。
 
-Codex 当前做法是让图片以结构化 content item 进入请求 / 工具结果，例如 `input_image` / `FunctionCallOutputContentItem::InputImage`，而不是让 UI 或模型从普通文本里猜 base64。Lime 已经在 Rust 侧实现相近链路：`view_image` 输出 `model_visible_image` 和 `image_url` metadata，Aster agent 会把它转换成 model-visible image content，并从 structured content 里移除传输用 `image_url`。
+Codex 当前做法是让图片以结构化 content item 进入请求 / 工具结果，例如 `input_image` / `FunctionCallOutputContentItem::InputImage`，而不是让 UI 或模型从普通文本里猜 base64。Lime 已经在 Rust 侧实现相近链路：`view_image` 输出 `model_visible_image` 和 `image_url` metadata，Agent agent 会把它转换成 model-visible image content，并从 structured content 里移除传输用 `image_url`。
 
 参考优先级：
 
@@ -26,18 +26,18 @@ Codex 当前做法是让图片以结构化 content item 进入请求 / 工具结
 事实源声明：Vision / Media current 主路径只允许向 `view_image` native tool + model-visible image content + 前端 inline process 展示收敛。
 
 - `current`
-  - `lime-rs/crates/aster-rust/crates/aster/src/tools/view_image.rs`
-  - `lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs` 中注册的 `ViewImageTool`
-  - `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs` 中 model-visible image content 转换
+  - `lime-rs/crates/agent-rust/crates/agent/src/tools/view_image.rs`
+  - `lime-rs/crates/agent-rust/crates/agent/src/tools/mod.rs` 中注册的 `ViewImageTool`
+  - `lime-rs/crates/agent-rust/crates/agent/src/agents/agent.rs` 中 model-visible image content 转换
   - `src/components/agent/chat/hooks/agentChatToolResult.ts` 中图片结果归一化
   - `src/components/agent/chat/components/InlineToolProcessStep.tsx` 中图片预览
 - `compat`
   - `ViewImage` / `ViewImageTool` 展示别名，仅用于归一到 `view_image`
 - `deprecated`
-  - `lime-rs/crates/aster-rust/crates/aster/src/tools/analyze_image.rs`
+  - `lime-rs/crates/agent-rust/crates/agent/src/tools/analyze_image.rs`
   - `lime-rs/src/agent_tools/execution.rs` 中 `analyze_image` 执行策略残留
 - `dead-candidate`
-  - `analyze_image` 没有 catalog entry，也未在 Aster `register_all_tools` 注册；`Agent::list_tools` 测试要求它继续留在 legacy hidden surface 外，不应作为新入口修复。
+  - `analyze_image` 没有 catalog entry，也未在 Agent `register_all_tools` 注册；`Agent::list_tools` 测试要求它继续留在 legacy hidden surface 外，不应作为新入口修复。
 
 ## 当前认领写集
 
@@ -63,7 +63,7 @@ Codex 当前做法是让图片以结构化 content item 进入请求 / 工具结
 
 `git status --short` 显示当前工作区已有大量并行改动；本批次只在上述窄写集内夹写。相关已改文件包括：
 
-- `lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs`
+- `lime-rs/crates/agent-rust/crates/agent/src/tools/mod.rs`
 - `src/components/agent/chat/components/InlineToolProcessStep.tsx`
 - `src/components/agent/chat/components/StreamingRenderer.test.tsx`
 - `src/components/agent/chat/components/messageListItemProjection.unit.test.ts`
@@ -104,9 +104,9 @@ npx prettier --check "internal/exec-plans/agent-tools-test-batches/README.md" "i
 Rust 定向验证建议：
 
 ```bash
-CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core view_image -- --nocapture
-CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core test_native_tool_result_to_call_tool_result_attaches_model_visible_image -- --nocapture
-CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/aster-rust/Cargo.toml" -p aster-core test_list_tools_excludes_legacy_agent_control_surface -- --nocapture
+CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core view_image -- --nocapture
+CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core test_native_tool_result_to_call_tool_result_attaches_model_visible_image -- --nocapture
+CARGO_TARGET_DIR="/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/target" cargo test --manifest-path "lime-rs/crates/agent-rust/Cargo.toml" -p agent-core test_list_tools_excludes_legacy_agent_control_surface -- --nocapture
 ```
 
 GUI / Playwright：本批次先用 deterministic projection + renderer DOM 测试锁住顺序和预览；如后续要做截图对齐，应复用 `cross-agent-screenshot-alignment-prompt.md`，用包含 `view_image` 的 fixture turn 做 Chrome 证据。

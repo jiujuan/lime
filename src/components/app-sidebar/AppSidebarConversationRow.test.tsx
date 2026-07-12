@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import { AppSidebarConversationRow } from "./AppSidebarConversationRow";
 
 function renderRow(
@@ -10,7 +10,7 @@ function renderRow(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root: Root = createRoot(container);
-  const session: AsterSessionInfo = {
+  const session: AgentSessionInfo = {
     id: "session-1",
     name: "运行中会话",
     created_at: 1780847000,

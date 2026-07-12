@@ -2,13 +2,12 @@ use super::status::agent_turn_is_terminal;
 use super::*;
 use app_server_protocol::*;
 use chrono::Utc;
-use serde_json::json;
 
 #[derive(Default)]
 struct RuntimeContinuationPreferences {
     provider_preference: Option<String>,
     model_preference: Option<String>,
-    provider_config: Option<serde_json::Value>,
+    provider_config: Option<RuntimeProviderConfig>,
     approval_policy: Option<String>,
     sandbox_policy: Option<String>,
     execution_strategy: Option<String>,
@@ -21,21 +20,6 @@ fn normalized_optional_string(value: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn runtime_provider_config_from_host_options(
-    host_options: &serde_json::Value,
-) -> Option<serde_json::Value> {
-    let aster_request = host_options.get("asterChatRequest")?;
-    aster_request
-        .pointer("/turn_config/provider_config")
-        .or_else(|| aster_request.pointer("/turn_config/providerConfig"))
-        .or_else(|| aster_request.pointer("/turnConfig/provider_config"))
-        .or_else(|| aster_request.pointer("/turnConfig/providerConfig"))
-        .or_else(|| aster_request.get("provider_config"))
-        .or_else(|| aster_request.get("providerConfig"))
-        .filter(|value| value.is_object())
-        .cloned()
-}
-
 impl RuntimeContinuationPreferences {
     fn has_any_context(&self) -> bool {
         self.provider_preference.is_some()
@@ -44,44 +28,6 @@ impl RuntimeContinuationPreferences {
             || self.approval_policy.is_some()
             || self.sandbox_policy.is_some()
             || self.execution_strategy.is_some()
-    }
-
-    fn with_fallback(mut self, fallback: RuntimeContinuationPreferences) -> Self {
-        if self.provider_preference.is_none() {
-            self.provider_preference = fallback.provider_preference;
-        }
-        if self.model_preference.is_none() {
-            self.model_preference = fallback.model_preference;
-        }
-        if self.provider_config.is_none() {
-            self.provider_config = fallback.provider_config;
-        }
-        if self.approval_policy.is_none() {
-            self.approval_policy = fallback.approval_policy;
-        }
-        if self.sandbox_policy.is_none() {
-            self.sandbox_policy = fallback.sandbox_policy;
-        }
-        if self.execution_strategy.is_none() {
-            self.execution_strategy = fallback.execution_strategy;
-        }
-        self
-    }
-
-    fn provider_preference_for_runtime_options(&self) -> Option<String> {
-        if self.provider_config.is_some() {
-            None
-        } else {
-            self.provider_preference.clone()
-        }
-    }
-
-    fn model_preference_for_runtime_options(&self) -> Option<String> {
-        if self.provider_config.is_some() {
-            None
-        } else {
-            self.model_preference.clone()
-        }
     }
 }
 
@@ -120,66 +66,22 @@ fn continuation_runtime_preferences_from_read(
     }
 }
 
-fn runtime_string_from_host_options(
-    host_options: &serde_json::Value,
-    turn_config_keys: &[&str],
-    flat_keys: &[&str],
-) -> Option<String> {
-    let aster_request = host_options.get("asterChatRequest")?;
-    aster_request
-        .get("turn_config")
-        .or_else(|| aster_request.get("turnConfig"))
-        .and_then(|turn_config| string_field_from_value(turn_config, turn_config_keys))
-        .or_else(|| string_field_from_value(aster_request, flat_keys))
-}
-
-fn build_objective_continuation_host_options(
-    message: &str,
-    session_id: &str,
-    event_name: &str,
+fn build_objective_continuation_runtime_request(
     workspace_id: &str,
-    turn_id: &str,
-    queued_turn_id: &str,
     metadata: &serde_json::Value,
     runtime_preferences: &RuntimeContinuationPreferences,
-) -> serde_json::Value {
-    let turn_config = json!({
-        "provider_config": runtime_preferences.provider_config.clone(),
-        "provider_preference": runtime_preferences.provider_preference.clone(),
-        "model_preference": runtime_preferences.model_preference.clone(),
-        "reasoning_effort": null,
-        "approval_policy": runtime_preferences.approval_policy.clone(),
-        "sandbox_policy": runtime_preferences.sandbox_policy.clone(),
-        "metadata": metadata.clone(),
-        "execution_strategy": runtime_preferences.execution_strategy.clone(),
-    });
-    json!({
-        "asterChatRequest": {
-            "message": message,
-            "session_id": session_id,
-            "event_name": event_name,
-            "images": null,
-            "provider_config": runtime_preferences.provider_config.clone(),
-            "provider_preference": runtime_preferences.provider_preference.clone(),
-            "model_preference": runtime_preferences.model_preference.clone(),
-            "reasoning_effort": null,
-            "thinking_enabled": null,
-            "approval_policy": runtime_preferences.approval_policy.clone(),
-            "sandbox_policy": runtime_preferences.sandbox_policy.clone(),
-            "project_id": null,
-            "workspace_id": workspace_id,
-            "web_search": null,
-            "search_mode": null,
-            "execution_strategy": runtime_preferences.execution_strategy.clone(),
-            "auto_continue": null,
-            "system_prompt": null,
-            "metadata": metadata,
-            "turn_id": turn_id,
-            "queue_if_busy": false,
-            "queued_turn_id": queued_turn_id,
-            "turn_config": turn_config,
-        }
-    })
+) -> RuntimeRequest {
+    RuntimeRequest {
+        provider_config: runtime_preferences.provider_config.clone(),
+        provider_preference: runtime_preferences.provider_preference.clone(),
+        model_preference: runtime_preferences.model_preference.clone(),
+        approval_policy: runtime_preferences.approval_policy.clone(),
+        sandbox_policy: runtime_preferences.sandbox_policy.clone(),
+        workspace_id: Some(workspace_id.to_string()),
+        execution_strategy: runtime_preferences.execution_strategy.clone(),
+        metadata: Some(metadata.clone()),
+        ..RuntimeRequest::default()
+    }
 }
 
 impl RuntimeCore {
@@ -202,55 +104,31 @@ impl RuntimeCore {
         let stored = state.sessions.get(session_id)?;
         stored.turns.iter().rev().find_map(|turn| {
             let runtime_options = stored.turn_runtime_options.get(&turn.turn_id)?;
-            let host_preferences = runtime_options
-                .host_options
+            let request_preferences = runtime_options
+                .runtime_request
                 .as_ref()
-                .map(|host_options| RuntimeContinuationPreferences {
-                    provider_preference: runtime_string_from_host_options(
-                        host_options,
-                        &["provider_preference", "providerPreference"],
-                        &["provider_preference", "providerPreference"],
+                .map(|runtime_request| RuntimeContinuationPreferences {
+                    provider_preference: normalized_optional_string(
+                        runtime_request.provider_preference.as_deref(),
                     ),
-                    model_preference: runtime_string_from_host_options(
-                        host_options,
-                        &["model_preference", "modelPreference"],
-                        &["model_preference", "modelPreference"],
+                    model_preference: normalized_optional_string(
+                        runtime_request.model_preference.as_deref(),
                     ),
-                    provider_config: runtime_provider_config_from_host_options(host_options),
-                    approval_policy: runtime_string_from_host_options(
-                        host_options,
-                        &["approval_policy", "approvalPolicy"],
-                        &["approval_policy", "approvalPolicy"],
+                    provider_config: runtime_request.provider_config.clone(),
+                    approval_policy: normalized_optional_string(
+                        runtime_request.approval_policy.as_deref(),
                     ),
-                    sandbox_policy: runtime_string_from_host_options(
-                        host_options,
-                        &["sandbox_policy", "sandboxPolicy"],
-                        &["sandbox_policy", "sandboxPolicy"],
+                    sandbox_policy: normalized_optional_string(
+                        runtime_request.sandbox_policy.as_deref(),
                     ),
-                    execution_strategy: runtime_string_from_host_options(
-                        host_options,
-                        &["execution_strategy", "executionStrategy"],
-                        &["execution_strategy", "executionStrategy"],
+                    execution_strategy: normalized_optional_string(
+                        runtime_request.execution_strategy.as_deref(),
                     ),
                 })
                 .unwrap_or_default();
-            let runtime_preferences = RuntimeContinuationPreferences {
-                provider_preference: normalized_optional_string(
-                    runtime_options.provider_preference.as_deref(),
-                ),
-                model_preference: normalized_optional_string(
-                    runtime_options.model_preference.as_deref(),
-                ),
-                provider_config: runtime_options
-                    .host_options
-                    .as_ref()
-                    .and_then(runtime_provider_config_from_host_options),
-                approval_policy: None,
-                sandbox_policy: None,
-                execution_strategy: None,
-            };
-            let preferences = host_preferences.with_fallback(runtime_preferences);
-            preferences.has_any_context().then_some(preferences)
+            request_preferences
+                .has_any_context()
+                .then_some(request_preferences)
         })
     }
 
@@ -342,17 +220,8 @@ impl RuntimeCore {
                     &policy,
                 );
                 let runtime_preferences = self.resolve_continuation_runtime_preferences(&read);
-                let runtime_provider_preference =
-                    runtime_preferences.provider_preference_for_runtime_options();
-                let runtime_model_preference =
-                    runtime_preferences.model_preference_for_runtime_options();
-                let host_options = build_objective_continuation_host_options(
-                    &message,
-                    session_id,
-                    &event_name,
+                let runtime_request = build_objective_continuation_runtime_request(
                     &workspace_id,
-                    &turn_id,
-                    &queued_turn_id,
                     &metadata,
                     &runtime_preferences,
                 );
@@ -377,11 +246,8 @@ impl RuntimeCore {
                             capability_id: None,
                             stream: true,
                             event_name: Some(event_name),
-                            provider_preference: runtime_provider_preference,
-                            model_preference: runtime_model_preference,
-                            metadata: Some(metadata),
                             queued_turn_id: Some(queued_turn_id.clone()),
-                            host_options: Some(host_options),
+                            runtime_request: Some(runtime_request),
                             ..app_server_protocol::RuntimeOptions::default()
                         }),
                         queue_if_busy: false,
@@ -472,7 +338,7 @@ impl RuntimeCore {
             let Some(metadata) = stored
                 .turn_runtime_options
                 .get(&turn.turn_id)
-                .and_then(|options| options.metadata.as_ref())
+                .and_then(|options| options.runtime_metadata())
             else {
                 continue;
             };
@@ -635,16 +501,8 @@ impl RuntimeCore {
         let event_name = crate::objective::managed_objective_event_name(&objective);
         let metadata = crate::objective::managed_objective_continuation_metadata(&objective);
         let runtime_preferences = self.resolve_continuation_runtime_preferences(&read);
-        let runtime_provider_preference =
-            runtime_preferences.provider_preference_for_runtime_options();
-        let runtime_model_preference = runtime_preferences.model_preference_for_runtime_options();
-        let host_options = build_objective_continuation_host_options(
-            &message,
-            &session_id,
-            &event_name,
+        let runtime_request = build_objective_continuation_runtime_request(
             &workspace_id,
-            &turn_id,
-            &queued_turn_id,
             &metadata,
             &runtime_preferences,
         );
@@ -662,11 +520,8 @@ impl RuntimeCore {
                         capability_id: None,
                         stream: true,
                         event_name: Some(event_name),
-                        provider_preference: runtime_provider_preference,
-                        model_preference: runtime_model_preference,
-                        metadata: Some(metadata),
                         queued_turn_id: Some(queued_turn_id.clone()),
-                        host_options: Some(host_options),
+                        runtime_request: Some(runtime_request),
                         ..app_server_protocol::RuntimeOptions::default()
                     }),
                     queue_if_busy: false,

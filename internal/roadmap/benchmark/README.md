@@ -25,7 +25,7 @@
    DeepSWE / SWE-bench 只能证明公开 coding 任务表现；Lime 每个大版本必须先证明自己的 Codex-first coding 主链：`agentSession/turn/start`、Read / `apply_patch` / Glob / Grep / Bash、command / file_changed lifecycle、workspace diff、`evidence/export`、Thread / Turn / Item projection、GUI Coding Workbench 和失败 replay/regression 晋升。
 
 7. **Benchmark 方案必须受 refactor v1 约束。**
-   `internal/research/refactor/v1` 是 coding / tool / runtime benchmark 的架构基线：Thread 管历史与 evidence，Turn 管执行和 tool lifecycle，Item 管 message / tool / artifact 投影。任何测试集或 release gate 只能证明这条主链，不能把 Aster compat、mock fallback 或外部 benchmark dry-run 当作 current 能力。
+   `internal/research/refactor/v1` 是 coding / tool / runtime benchmark 的架构基线：Thread 管历史与 evidence，Turn 管执行和 tool lifecycle，Item 管 message / tool / artifact 投影。任何测试集或 release gate 只能证明这条主链，不能把 Agent compat、mock fallback 或外部 benchmark dry-run 当作 current 能力。
 
 ## 2. 文档索引
 
@@ -124,7 +124,7 @@ Release Candidate / Model Candidate / Runtime Candidate
 
 第一阶段已经完成：P0 release gate 已映射到现有 `agent-qc` / `harness` 命令；`coding-workflow-p0` 已作为独立 required suite 接入 release verdict；`internal/test/benchmark-release.manifest.json` 已固定 P1 fixed slice；Terminal-Bench / Harbor 和 DeepSWE fixed 10 都已能通过 `npm run agent-qc:benchmark:dry-run` 批量生成 Lime 证据形状。
 
-本轮按 coding P0 smoke 暴露并修复了一个 current 主链问题：`smoke:agent-runtime-tool-execution -- --batch safe-core-tools` 命中了 App Server native gateway 注册 `tool_search` 时被 `tool-runtime` current registration policy 拒绝的问题。修复落在 `lime-rs/crates/tool-runtime/src/native_overlay.rs` 的 current allowlist，不在 `agent-compat` 续命；后续 release P0 改由 Codex-first `coding-current-tools` batch 验证 `Read` / `apply_patch` / `Glob` / `Grep` / `Bash`，避免把 Aster `Edit` / `Write` 旧工具面当 current。该问题证明 benchmark 不是只新增测试集，失败必须进入修复、验证和回归沉淀。
+本轮按 coding P0 smoke 暴露并修复了一个 current 主链问题：`smoke:agent-runtime-tool-execution -- --batch safe-core-tools` 命中了 App Server native gateway 注册 `tool_search` 时被 `tool-runtime` current registration policy 拒绝的问题。修复落在 `lime-rs/crates/tool-runtime/src/native_overlay.rs` 的 current allowlist，不在 `agent-compat` 续命；后续 release P0 改由 Codex-first `coding-current-tools` batch 验证 `Read` / `apply_patch` / `Glob` / `Grep` / `Bash`，避免把 Agent `Edit` / `Write` 旧工具面当 current。该问题证明 benchmark 不是只新增测试集，失败必须进入修复、验证和回归沉淀。
 
 Terminal-Bench / Harbor 的 `hello-world` 已新增 true-run preflight：
 

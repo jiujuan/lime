@@ -4,7 +4,7 @@
 
 ## 架构说明
 
-Lime 的 Skills 集成基于 aster-rust 框架的 `SkillTool`：
+Lime 的 Skills 集成基于 agent-rust 框架的 `SkillTool`：
 
 ```
 用户消息 → AI Agent → SkillTool → global_registry → 执行 Skill
@@ -14,10 +14,10 @@ Lime 的 Skills 集成基于 aster-rust 框架的 `SkillTool`：
 ```
 
 关键组件：
-- `AsterAgentState::load_lime_skills()` - 启动时加载 Skills
-- `AsterAgentState::reload_lime_skills()` - 安装/卸载后刷新
-- `aster::skills::global_registry()` - 全局 Skill 注册表
-- `aster::skills::SkillTool` - AI 调用 Skills 的工具
+- `AgentState::load_lime_skills()` - 启动时加载 Skills
+- `AgentState::reload_lime_skills()` - 安装/卸载后刷新
+- `agent::skills::global_registry()` - 全局 Skill 注册表
+- `agent::skills::SkillTool` - AI 调用 Skills 的工具
 
 ## 前置条件
 
@@ -60,8 +60,8 @@ cd lime && npm run dev
 3. 打开开发者工具（Cmd+Option+I），查看控制台日志
 
 4. **预期结果**：
-   - 日志中应显示 `[AsterAgent] 成功加载 1 个 Lime Skills 到 global_registry`
-   - 日志中应显示 `[AsterAgent] 已注册 Skill: user:test-greeting`
+   - 日志中应显示 `[Agent] 成功加载 1 个 Lime Skills 到 global_registry`
+   - 日志中应显示 `[Agent] 已注册 Skill: user:test-greeting`
 
 ### 场景 2：AI 自动调用 Skill
 

@@ -1,4 +1,4 @@
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import { isGeneralResearchTheme } from "./generalAgentPrompt";
 
 export interface ChatToolPreferences {
@@ -9,7 +9,7 @@ export interface ChatToolPreferences {
 }
 
 export function isPlanExecutionStrategy(
-  executionStrategy?: AsterExecutionStrategy | null,
+  executionStrategy?: AgentExecutionStrategy | null,
 ): boolean {
   void executionStrategy;
   return false;
@@ -17,7 +17,7 @@ export function isPlanExecutionStrategy(
 
 export function alignChatToolPreferencesWithExecutionStrategy(
   preferences: ChatToolPreferences,
-  executionStrategy?: AsterExecutionStrategy | null,
+  executionStrategy?: AgentExecutionStrategy | null,
 ): ChatToolPreferences {
   void executionStrategy;
   return preferences;

@@ -353,11 +353,11 @@ function runtimeOptions() {
   return request.runtimeOptions ?? request.runtime_options ?? {};
 }
 
-function asterChatRequest() {
-  return runtimeOptions().hostOptions?.asterChatRequest ?? null;
+function runtimeRequest() {
+  return runtimeOptions().runtimeRequest ?? runtimeOptions().runtime_request ?? null;
 }
 
-const chatRequest = asterChatRequest();
+const requestConfig = runtimeRequest();
 writeLog({
   kind,
   sessionId: sessionId(),
@@ -367,10 +367,10 @@ writeLog({
   providerPreference: request.providerPreference ?? null,
   modelPreference: request.modelPreference ?? null,
   metadata: request.metadata ?? null,
-  hostOptionsAsterChatRequestSeen: Boolean(chatRequest),
-  turnConfigMirrorSeen: Boolean(chatRequest?.turn_config),
-  turnConfigProviderName: chatRequest?.turn_config?.provider_config?.provider_name ?? null,
-  turnConfigModel: chatRequest?.turn_config?.provider_config?.model ?? null,
+  runtimeRequestSeen: Boolean(requestConfig),
+  runtimeRequestProviderConfigSeen: Boolean(requestConfig?.providerConfig),
+  runtimeRequestProviderName: requestConfig?.providerConfig?.providerName ?? null,
+  runtimeRequestModelName: requestConfig?.providerConfig?.modelName ?? null,
   requestId: request.requestId ?? null,
   actionType: request.actionType ?? null,
   confirmed: request.confirmed ?? null,
@@ -822,27 +822,25 @@ function pageHtml() {
               actionRequestId: REQUEST_ID
             },
             eventName: EVENT_NAME,
-            providerPreference: "fixture-provider",
-            modelPreference: "fixture-model",
             queueIfBusy: true,
             skipPreSubmitResume: false,
             metadata: {
               smoke: "plugin-runtime-electron-sdk-fixture",
               source: "iframe-sdk"
             },
-            turnConfig: {
-              provider_config: {
-                provider_name: "fixture-provider",
-                model: "fixture-model"
+            runtimeRequest: {
+              providerConfig: {
+                providerName: "fixture-provider",
+                modelName: "fixture-model"
               },
-              system_prompt: "Plugin SDK fixture system prompt",
-              reasoning_effort: "medium",
-              approval_policy: "on-request",
-              sandbox_policy: "workspace-write",
-              web_search: false,
-              execution_strategy: "plugin_sdk_fixture",
+              systemPrompt: "Plugin SDK fixture system prompt",
+              reasoningEffort: "medium",
+              approvalPolicy: "on-request",
+              sandboxPolicy: "workspace-write",
+              webSearch: false,
+              executionStrategy: "plugin_sdk_fixture",
               metadata: {
-                fixture_turn_config: true
+                fixtureRuntimeRequest: true
               }
             }
           }
@@ -1464,12 +1462,12 @@ function summarizeBackendLog(entries) {
     missingBackendKinds: REQUIRED_BACKEND_KINDS.filter(
       (kind) => !backendKindsSeen.includes(kind),
     ),
-    hostOptionsAsterChatRequestSeen: Boolean(
-      turnStart?.hostOptionsAsterChatRequestSeen,
+    runtimeRequestSeen: Boolean(turnStart?.runtimeRequestSeen),
+    runtimeRequestProviderConfigSeen: Boolean(
+      turnStart?.runtimeRequestProviderConfigSeen,
     ),
-    turnConfigMirrorSeen: Boolean(turnStart?.turnConfigMirrorSeen),
-    turnConfigProviderName: turnStart?.turnConfigProviderName ?? null,
-    turnConfigModel: turnStart?.turnConfigModel ?? null,
+    runtimeRequestProviderName: turnStart?.runtimeRequestProviderName ?? null,
+    runtimeRequestModelName: turnStart?.runtimeRequestModelName ?? null,
     startSessionId: turnStart?.sessionId ?? null,
     startTurnId: turnStart?.turnId ?? null,
     actionRequestId: actionRespond?.requestId ?? null,
@@ -1965,20 +1963,20 @@ function assertSdkLifecycleResult(result, backendSummary) {
     `external backend 未收到: ${backendSummary.missingBackendKinds.join(", ")}`,
   );
   assert(
-    backendSummary.hostOptionsAsterChatRequestSeen,
-    "turnStart 未携带 RuntimeOptions.hostOptions.asterChatRequest",
+    backendSummary.runtimeRequestSeen,
+    "turnStart 未携带 RuntimeOptions.runtimeRequest",
   );
   assert(
-    backendSummary.turnConfigMirrorSeen,
-    "turnStart 未携带 turn_config 镜像",
+    backendSummary.runtimeRequestProviderConfigSeen,
+    "turnStart 未携带 RuntimeRequest.providerConfig",
   );
   assert(
-    backendSummary.turnConfigProviderName === "fixture-provider",
-    "turn_config provider_config.provider_name 未抵达 backend",
+    backendSummary.runtimeRequestProviderName === "fixture-provider",
+    "RuntimeRequest.providerConfig.providerName 未抵达 backend",
   );
   assert(
-    backendSummary.turnConfigModel === "fixture-model",
-    "turn_config provider_config.model 未抵达 backend",
+    backendSummary.runtimeRequestModelName === "fixture-model",
+    "RuntimeRequest.providerConfig.modelName 未抵达 backend",
   );
   assert(
     backendSummary.startSessionId === result.taskLifecycle?.startTask?.sessionId,

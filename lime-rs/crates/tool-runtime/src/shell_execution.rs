@@ -12,7 +12,7 @@ use crate::subprocess::{
     wrap_powershell_command_for_utf8,
 };
 use crate::tool_definition::RuntimeToolDefinition;
-use crate::tool_executor::RuntimeToolTurnContext;
+use crate::tool_executor::{turn_context_has_tool_approval, RuntimeToolTurnContext};
 use crate::tool_result_projection::{
     runtime_tool_result_to_call_tool_result, RuntimeToolResultParts,
 };
@@ -375,11 +375,12 @@ fn shell_permission_decision(
 fn turn_context_allows_shell_without_confirmation(
     turn_context: Option<&RuntimeToolTurnContext>,
 ) -> bool {
-    turn_context.is_some_and(|context| {
-        policy_is_full_access(context.approval_policy.as_deref())
-            || policy_is_full_access(context.sandbox_policy.as_deref())
-            || context_metadata_is_full_access(&context.metadata)
-    })
+    turn_context_has_tool_approval(turn_context)
+        || turn_context.is_some_and(|context| {
+            policy_is_full_access(context.approval_policy.as_deref())
+                || policy_is_full_access(context.sandbox_policy.as_deref())
+                || context_metadata_is_full_access(&context.metadata)
+        })
 }
 
 fn policy_is_full_access(policy: Option<&str>) -> bool {
@@ -443,7 +444,7 @@ async fn execute_background_shell(
     mut environment: HashMap<String, String>,
 ) -> Result<CallToolResult, ErrorData> {
     let task_id = Uuid::new_v4().to_string();
-    let output_directory = std::env::temp_dir().join("agent_tasks");
+    let output_directory = std::env::temp_dir().join("tool-runtime").join("background");
     tokio::fs::create_dir_all(&output_directory)
         .await
         .map_err(|error| {
@@ -684,7 +685,7 @@ fn workspace_sandbox_shell_result(
     working_directory: &Path,
 ) -> CallToolResult {
     error_result_with_metadata(
-        "workspace sandbox shell execution is not implemented in the current shell owner; refusing to fall back to the legacy Aster sandbox stub",
+        "workspace sandbox shell execution is not implemented in the current shell owner; refusing to fall back to the legacy Agent sandbox stub",
         HashMap::from([
             (
                 "execution_surface".to_string(),
@@ -713,7 +714,7 @@ fn shell_requires_confirmation_result(
     approval_message: String,
 ) -> CallToolResult {
     error_result_with_metadata(
-        "current shell execution requires explicit approval; refusing to fall back to the legacy Aster registry for Bash/PowerShell",
+        "current shell execution requires explicit approval; refusing to fall back to the legacy Agent registry for Bash/PowerShell",
         HashMap::from([
             (
                 "execution_surface".to_string(),

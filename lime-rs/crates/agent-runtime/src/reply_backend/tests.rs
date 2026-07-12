@@ -20,7 +20,7 @@ impl RuntimeReplyBackend<()> for FailingReplyBackend {
 }
 
 #[test]
-fn reply_backend_contract_is_aster_free() {
+fn reply_backend_contract_is_agent_free() {
     use crate::reply_input::RuntimeReplyInput;
     use crate::reply_request::RuntimeReplyRequest;
     use crate::session_config::SessionConfigBuilder;
@@ -98,7 +98,7 @@ fn backend_start_maps_provider_wire_support_issue_to_start_error() {
             toolshim: false,
             toolshim_model: None,
         },
-        backend: RuntimeProviderBackend::AsterCompat,
+        backend: RuntimeProviderBackend::Current,
         capabilities: RuntimeReplyProviderCapabilities::default(),
     };
     let model_request_policy = RuntimeReplyModelRequestPolicy::new(
@@ -129,7 +129,7 @@ fn backend_start_maps_provider_wire_support_issue_to_start_error() {
 
     assert_eq!(
         issue.provider_backend,
-        Some(RuntimeProviderBackend::AsterCompat)
+        Some(RuntimeProviderBackend::Current)
     );
     assert_eq!(error.message, RuntimeReplyProviderWireSupportIssue::MESSAGE);
     assert!(error.emitted_any);
@@ -431,7 +431,7 @@ fn backend_start_prepare_run_maps_wire_support_issue() {
             toolshim: false,
             toolshim_model: None,
         },
-        backend: RuntimeProviderBackend::AsterCompat,
+        backend: RuntimeProviderBackend::Current,
         capabilities: RuntimeReplyProviderCapabilities::default(),
     };
     let model_request_policy = RuntimeReplyModelRequestPolicy::new(
@@ -464,7 +464,7 @@ fn backend_start_prepare_run_maps_wire_support_issue() {
         .expect("wire support issue");
     assert_eq!(
         issue.provider_backend,
-        Some(RuntimeProviderBackend::AsterCompat)
+        Some(RuntimeProviderBackend::Current)
     );
     assert_eq!(
         error.into_start_error().message,

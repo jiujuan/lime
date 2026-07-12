@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 
 import {
   hydrateSessionDetailMessages,
@@ -8,7 +8,7 @@ import {
 
 describe("agentChatHistory imported Codex timeline", () => {
   it("timeline 已有工具过程时不应再注入 thread_read.tool_calls 兼容摘要", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-timeline-tool-read-summary",
       thread_id: "thread-timeline-tool-read-summary",
       created_at: 1,
@@ -117,7 +117,7 @@ describe("agentChatHistory imported Codex timeline", () => {
   });
 
   it("本地历史导入的 reasoning 不应被 thread_read 工具摘要覆盖", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-codex-import-thread-read",
       thread_id: "thread-codex-import-thread-read",
       created_at: 1,
@@ -248,7 +248,7 @@ describe("agentChatHistory imported Codex timeline", () => {
   });
 
   it("本地历史导入会话不应把旧失败 turn 冒充为当前处理失败", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-imported-failed-history",
       thread_id: "thread-imported-failed-history",
       created_at: 1,
@@ -329,7 +329,7 @@ describe("agentChatHistory imported Codex timeline", () => {
   });
 
   it("camelCase 本地历史导入会话同样不应把旧失败 turn 冒充为当前处理失败", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-imported-failed-history-camel",
       thread_id: "thread-imported-failed-history-camel",
       created_at: 1,
@@ -409,7 +409,7 @@ describe("agentChatHistory imported Codex timeline", () => {
   });
 
   it("App Server thread_read.tool_calls 与 artifact summary 同时存在时仍应保留工具过程", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-app-server-tool-artifact",
       thread_id: "thread-app-server-tool-artifact",
       created_at: 1,
@@ -545,7 +545,7 @@ describe("agentChatHistory imported Codex timeline", () => {
   });
 
   it("应清理仅用于内部展示的图片占位文本", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-image-placeholder",
       created_at: 1,
       updated_at: 2,
@@ -588,7 +588,7 @@ describe("agentChatHistory imported Codex timeline", () => {
   });
 
   it("应从本地历史导入消息的顶层附件恢复图片并保留用户文本", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-imported-attachment",
       created_at: 1,
       updated_at: 2,
@@ -650,7 +650,7 @@ describe("agentChatHistory imported Codex timeline", () => {
   });
 
   it("本地历史导入消息同时包含 content image 和 attachment 时不应重复展示图片", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-imported-attachment-dedupe",
       created_at: 1,
       updated_at: 2,

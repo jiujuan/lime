@@ -16,6 +16,24 @@ const desktopHostAliasPatterns = [
   ["^@/lib/desktop-host/plugin-global-shortcut$", "plugin-global-shortcut.ts"],
 ];
 
+const workspaceAliasSpecs = [
+  [
+    "@limecloud/app-server-client",
+    "packages/app-server-client/src/browser.ts",
+  ],
+  [
+    "@limecloud/agent-runtime-client/sessionGateway",
+    "packages/agent-runtime-client/src/sessionGateway.ts",
+  ],
+  ["@limecloud/agent-runtime-client", "packages/agent-runtime-client/src/index.ts"],
+  ["@limecloud/agent-ui-contracts", "packages/agent-ui-contracts/src/index.ts"],
+  [
+    "@limecloud/agent-runtime-projection",
+    "packages/agent-runtime-projection/src/index.ts",
+  ],
+  ["@limecloud/agent-runtime-ui", "packages/agent-runtime-ui/src/index.ts"],
+];
+
 function toFileUrl(filePath) {
   return pathToFileURL(filePath).href;
 }
@@ -28,6 +46,10 @@ export function createVitestSmokeConfig(rootDir) {
   const aliasSpecs = desktopHostAliasPatterns.map(([pattern, target]) => ({
     pattern,
     replacement: path.join(desktopHostDir, target),
+  }));
+  const workspaceAliases = workspaceAliasSpecs.map(([find, target]) => ({
+    find,
+    replacement: path.join(rootDir, target),
   }));
 
   fs.writeFileSync(
@@ -46,6 +68,7 @@ export function createVitestSmokeConfig(rootDir) {
       )};\n` +
       `const rootDir = ${JSON.stringify(rootDir)};\n` +
       `const aliasSpecs = ${JSON.stringify(aliasSpecs)};\n` +
+      `const workspaceAliases = ${JSON.stringify(workspaceAliases)};\n` +
       `export default defineConfig({\n` +
       `  root: rootDir,\n` +
       `  cacheDir: ${JSON.stringify(cacheDir)},\n` +
@@ -54,6 +77,7 @@ export function createVitestSmokeConfig(rootDir) {
       `  resolve: { alias: [\n` +
       `    { find: "@", replacement: path.resolve(rootDir, "src") },\n` +
       `    ...aliasSpecs.map((entry) => ({ find: new RegExp(entry.pattern), replacement: entry.replacement })),\n` +
+      `    ...workspaceAliases,\n` +
       `  ] },\n` +
       `  test: {\n` +
       `    globals: true,\n` +

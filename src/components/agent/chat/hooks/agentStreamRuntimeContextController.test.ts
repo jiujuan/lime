@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import {
   applyAgentStreamModelChangeExecutionRuntime,
   applyAgentStreamTurnContextExecutionRuntime,
@@ -58,7 +58,7 @@ describe("agentStreamRuntimeContextController", () => {
   });
 
   it("应构造 model change 前置计划并保留当前 turn 状态", () => {
-    const current: AsterSessionExecutionRuntime = {
+    const current: AgentSessionExecutionRuntime = {
       session_id: "session-a",
       provider_selector: null,
       provider_name: "deepseek",

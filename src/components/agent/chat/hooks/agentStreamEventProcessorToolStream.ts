@@ -67,7 +67,7 @@ export function handleToolStartEvent({
       description: truncateForLog(data.arguments || "等待工具结果"),
       workspaceId: resolvedWorkspaceId,
       sessionId: activeSessionId,
-      source: "aster-chat",
+      source: "agent-chat",
       correlationId: data.tool_id,
       metadata: {
         toolId: data.tool_id,
@@ -245,7 +245,7 @@ export function handleToolInputDeltaEvent({
       description: progressDescription,
       workspaceId: resolvedWorkspaceId,
       sessionId: activeSessionId,
-      source: "aster-chat",
+      source: "agent-chat",
       correlationId: data.tool_id,
       metadata: {
         toolId: data.tool_id,

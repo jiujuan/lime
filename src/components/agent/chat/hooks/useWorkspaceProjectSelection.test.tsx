@@ -139,7 +139,7 @@ describe("useWorkspaceProjectSelection", () => {
 
   it("首页新会话请求存在同标签当前会话时也不应自动恢复旧会话", () => {
     sessionStorage.setItem(
-      "aster_curr_sessionId_global",
+      "agent_curr_sessionId_global",
       JSON.stringify("session-running"),
     );
     const harness = mountHook({
@@ -158,7 +158,7 @@ describe("useWorkspaceProjectSelection", () => {
 
   it("首页新会话请求存在项目选择但当前会话只在 global scope 时也不应自动恢复旧会话", () => {
     sessionStorage.setItem(
-      "aster_curr_sessionId_global",
+      "agent_curr_sessionId_global",
       JSON.stringify("session-running"),
     );
     const harness = mountHook({

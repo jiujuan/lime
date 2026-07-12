@@ -47,7 +47,7 @@ src/lib/api/projectGit.ts                                         # 前端网关
 
 **结论**：拆 8000 行为 4 个 2000 行文件不解决问题；要改的是**注册模式**——按 domain 把 handler 和 RuntimeCore 方法下放到 `runtime/<domain>.rs` + 注册表/宏接线，让新增方法默认不触碰中心文件。
 
-> **【2026-06-17 复核】** 已落地：`runtime.rs` **8105 → 588 行**（仅结构体 + 接线），实现下放到 `runtime/` 52 个 domain 子模块；`processor.rs` 单文件 → `processor/` 目录 24 个 domain 模块（`mod.rs` 2444 行做 dispatch）；`runtime/tests.rs` 4428 行已下放到 `runtime/tests/*.rs` 各 domain。新增方法的标准写集不再撑大中心文件。剩余：`processor/mod.rs` 仍偏大、aster `agent.rs`（R-21）未动。
+> **【2026-06-17 复核】** 已落地：`runtime.rs` **8105 → 588 行**（仅结构体 + 接线），实现下放到 `runtime/` 52 个 domain 子模块；`processor.rs` 单文件 → `processor/` 目录 24 个 domain 模块（`mod.rs` 2444 行做 dispatch）；`runtime/tests.rs` 4428 行已下放到 `runtime/tests/*.rs` 各 domain。新增方法的标准写集不再撑大中心文件。剩余：`processor/mod.rs` 仍偏大、agent `agent.rs`（R-21）未动。
 
 ---
 
@@ -104,7 +104,7 @@ import { buildInstalledAppPreview } from "@/features/plugin/install/installedApp
 - `lime-rs/crates/services/` 32 个 service 平铺，`lib.rs` 注释里按依赖分了四类但目录结构不体现；`model_registry_service.rs` 4689 行内含多协议（OpenAI/Anthropic/Gemini/Ollama）抓取 + 缓存 + 校验。
 - 重复定义实例：模型注册类型在 `lime_core::models::model_registry`（20+ 类型）与 `services/model_registry_service.rs`（`ProviderModelsCachePayload` 等缓存类型）两处维护；config 在 `core/config/types.rs` 与 `runtime.rs` 的 executor context builder 两套。
 
-**aster-rust 定位（附带结论）**：fork 自 `astercloud/aster-rust` v0.27.2，已无 .git/submodule/上游 remote，**完全自有化**，不在外层 workspace members（`exclude` + path 依赖引入）。其 `agents/agent.rs` 8206 行（Agent 执行主循环）、`scheduler/types.rs` 5617 行（类型堆叠）适用与轴 B 相同的模块化策略，无上游同步顾虑。
+**agent-rust 定位（附带结论）**：fork 自 `agentcloud/agent-rust` v0.27.2，已无 .git/submodule/上游 remote，**完全自有化**，不在外层 workspace members（`exclude` + path 依赖引入）。其 `agents/agent.rs` 8206 行（Agent 执行主循环）、`scheduler/types.rs` 5617 行（类型堆叠）适用与轴 B 相同的模块化策略，无上游同步顾虑。
 
 ---
 

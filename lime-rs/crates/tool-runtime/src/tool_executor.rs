@@ -86,6 +86,15 @@ pub struct RuntimeToolExecutionRequest<'a> {
 
 pub type RuntimeToolTurnContext = agent_protocol::turn_context::TurnContextOverride;
 
+pub const TOOL_APPROVAL_GRANTED_METADATA_KEY: &str = "tool_approval_granted";
+
+pub fn turn_context_has_tool_approval(turn_context: Option<&RuntimeToolTurnContext>) -> bool {
+    turn_context
+        .and_then(|context| context.metadata.get(TOOL_APPROVAL_GRANTED_METADATA_KEY))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 pub type RuntimeToolExecutionFuture<'a> = Pin<
     Box<
         dyn Future<Output = Result<RuntimeToolExecutionResult, RuntimeToolExecutionError>>
@@ -312,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_tool_context_keeps_execution_inputs_without_aster_types() {
+    fn runtime_tool_context_keeps_execution_inputs_without_agent_types() {
         let metadata = HashMap::from([("sandboxBackend".to_string(), json!("seatbelt"))]);
         let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
             working_directory: PathBuf::from("/tmp/workspace"),

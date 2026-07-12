@@ -203,9 +203,11 @@ export interface AgentTurnStartPayload {
     capabilityId: string;
     workflowId?: string;
     modelId?: string;
-    modelPreference?: string;
     permissionMode: AgentPermissionMode;
-    providerPreference?: string;
+    runtimeRequest: {
+      modelPreference?: string;
+      providerPreference?: string;
+    };
     requiredCapabilities: AgentSharedCapabilityId[];
     capabilityHints: AgentSharedCapabilityId[];
   };
@@ -676,9 +678,11 @@ export function buildAgentTurnStartPayload(input: AgentTurnStartPayloadInput): A
       capabilityId: input.capabilityId ?? "content.draft.generate",
       workflowId: input.workflowId,
       modelId: input.modelId,
-      modelPreference: input.modelPreference ?? input.modelId,
       permissionMode: input.permissionMode ?? "ask",
-      providerPreference: input.providerPreference,
+      runtimeRequest: {
+        modelPreference: input.modelPreference ?? input.modelId,
+        providerPreference: input.providerPreference,
+      },
       requiredCapabilities: toolPolicy.requiredCapabilities,
       capabilityHints: toolPolicy.capabilityHints,
     },

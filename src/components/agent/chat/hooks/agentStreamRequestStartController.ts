@@ -1,5 +1,5 @@
 import type {
-  AsterExecutionStrategy,
+  AgentExecutionStrategy,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime";
 import {
@@ -32,7 +32,7 @@ export interface AgentStreamRequestStartParams {
   activeSessionId: string;
   autoContinue?: AutoContinueRequestPayload;
   content: string;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   effectiveModel: string;
   effectiveProviderType: string;
   eventName: string;
@@ -48,7 +48,7 @@ interface AgentStreamRequestStartPayloadParams {
   activeSessionId: string;
   autoContinue?: AutoContinueRequestPayload;
   content: string;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   effectiveModel: string;
   effectiveProviderType: string;
   eventName: string;
@@ -88,7 +88,7 @@ export function buildAgentStreamRequestStartActivityLog(
     description: `模型: ${params.effectiveModel} · 策略: ${params.effectiveExecutionStrategy}`,
     workspaceId: params.resolvedWorkspaceId,
     sessionId: params.activeSessionId,
-    source: "aster-chat",
+    source: "agent-chat",
     metadata: {
       provider: mapProviderName(params.effectiveProviderType),
       model: params.effectiveModel,

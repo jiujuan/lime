@@ -32,7 +32,7 @@ flowchart TD
     D --> E["RuntimeCore"]
     E --> F["Session / Thread / Turn / Run"]
     F --> G["ExecutionBackend"]
-    G --> H["AsterBackend / FutureBackend"]
+    G --> H["RuntimeBackend / FutureBackend"]
     H --> I["Tool / Skill / Workspace / Memory / Policy"]
     I --> J["Runtime Events"]
     J --> K["Snapshots / Read Models"]
@@ -49,8 +49,8 @@ flowchart TD
     C -- 是 --> D["抽 HostBridge / context / event sink"]
     C -- 否 --> E["判断公共 core 还是 backend"]
     D --> E
-    E --> F{"是否 Aster 私有逻辑?"}
-    F -- 是 --> G["收进 AsterBackend"]
+    E --> F{"是否 Agent 私有逻辑?"}
+    F -- 是 --> G["收进 RuntimeBackend"]
     F -- 否 --> H["下沉 RuntimeCore"]
     G --> I["legacy desktop facade 改为委托 RuntimeCore"]
     H --> I
@@ -70,7 +70,7 @@ flowchart TD
 flowchart LR
     P0["P0 公共边界冻结"] --> P1["P1 app-server crate 家族"]
     P1 --> P2["P2 RuntimeCore / ExecutionBackend"]
-    P2 --> P3["P3 AsterBackend"]
+    P2 --> P3["P3 RuntimeBackend"]
     P3 --> P4["P4 App Server 接入 core"]
     P4 --> P5["P5 Desktop Host bridge"]
     P5 --> P6["P6 content-studio client"]

@@ -861,7 +861,7 @@ mod tests {
         ] {
             assert!(
                 tool_catalog_entry(deleted_tool_name).is_none(),
-                "deleted Aster tool alias should not resolve: {deleted_tool_name}"
+                "deleted Agent tool alias should not resolve: {deleted_tool_name}"
             );
         }
     }

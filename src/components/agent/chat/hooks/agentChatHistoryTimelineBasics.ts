@@ -2,7 +2,7 @@ import type {
   AgentThreadItem,
   AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import { sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
 import {
@@ -41,7 +41,7 @@ export function isAuxiliaryHistoryTurn(turn: AgentThreadTurn) {
 }
 
 export function hydrateSessionDetailMessagesFromTurns(
-  detail: AsterSessionDetail,
+  detail: AgentSessionDetail,
   topicId: string,
 ): Message[] {
   const messages = (detail.turns || [])

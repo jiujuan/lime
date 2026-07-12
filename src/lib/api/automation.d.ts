@@ -1,8 +1,8 @@
 import type { AgentRun } from "@/lib/api/executionRun";
 import type { BrowserStreamMode } from "@/lib/webview-api";
 import type {
-  AsterApprovalPolicy,
-  AsterSandboxPolicy,
+  AgentApprovalPolicy,
+  AgentSandboxPolicy,
 } from "@/lib/api/agentRuntime";
 export type TaskSchedule =
   | {
@@ -78,8 +78,8 @@ export interface AgentTurnAutomationPayload {
   system_prompt?: string | null;
   web_search: boolean;
   content_id?: string | null;
-  approval_policy?: AsterApprovalPolicy | null;
-  sandbox_policy?: AsterSandboxPolicy | null;
+  approval_policy?: AgentApprovalPolicy | null;
+  sandbox_policy?: AgentSandboxPolicy | null;
   request_metadata?: AutomationRequestMetadata | null;
 }
 export interface BrowserSessionAutomationPayload {

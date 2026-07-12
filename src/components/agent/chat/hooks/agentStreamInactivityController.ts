@@ -19,19 +19,19 @@ export type AgentStreamInactivityTimeoutAction =
 export function buildAgentStreamFirstEventSilentRecoveryWarning(params: {
   eventName: string;
 }): string {
-  return `[AsterChat] 首个运行时事件静默，已降级切换为会话快照同步: ${params.eventName}`;
+  return `[AgentChat] 首个运行时事件静默，已降级切换为会话快照同步: ${params.eventName}`;
 }
 
 export function buildAgentStreamFirstEventDeferredWarning(params: {
   eventName: string;
 }): string {
-  return `[AsterChat] 首个运行时事件暂未到达，已基于提交派发继续等待后续进度: ${params.eventName}`;
+  return `[AgentChat] 首个运行时事件暂未到达，已基于提交派发继续等待后续进度: ${params.eventName}`;
 }
 
 export function buildAgentStreamInactivitySilentRecoveryWarning(params: {
   eventName: string;
 }): string {
-  return `[AsterChat] 运行时事件静默，已降级切换为会话快照同步: ${params.eventName}`;
+  return `[AgentChat] 运行时事件静默，已降级切换为会话快照同步: ${params.eventName}`;
 }
 
 export function resolveAgentStreamFirstEventTimeoutAction(params: {

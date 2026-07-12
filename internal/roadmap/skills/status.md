@@ -57,7 +57,7 @@ expert.skillRefs
 | `smoke:expert-skills-live-gate` | `current / read-only evidence gate` | 日常只读门禁；缺 live summary 返回 `pending_live_provider` |
 | `smoke:expert-skills-live-runner` | `current / gated live validation runner` | 真实 live 验收入口骨架；默认阻断，显式授权才处理 live summary 或执行 Provider turn |
 | `service-skill:*` | `compat / product service` | 不在 App Server 内静默当成本地 `SKILL.md` 执行 |
-| `global_registry` / aster extension `loadSkill` | `compat` | 存量适配，不作为新增事实源 |
+| `global_registry` / agent extension `loadSkill` | `compat` | 存量适配，不作为新增事实源 |
 | 单功能硬编码 `Skill(name)` 首刀 | `deprecated` | 不继续扩张 |
 | 绕过 snapshot / selector / `LimeSkillTool` gate 的执行路径 | `dead / forbidden` | 禁止回流 |
 

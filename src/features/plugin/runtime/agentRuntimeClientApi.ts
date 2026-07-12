@@ -45,32 +45,19 @@ export function createPluginRuntimeCapabilityApiFromClient(
       const eventName =
         normalizeString(request.eventName) ??
         `plugin_runtime:${request.appId}:${taskId}`;
-      const turnConfig = isRecord(request.turnConfig)
-        ? request.turnConfig
-        : {};
-      const providerPreference =
-        normalizeString(request.providerPreference) ??
-        readString(turnConfig, "providerPreference") ??
-        readString(turnConfig, "provider_preference");
-      const modelPreference =
-        normalizeString(request.modelPreference) ??
-        readString(turnConfig, "modelPreference") ??
-        readString(turnConfig, "model_preference");
       const queueIfBusy = request.queueIfBusy ?? true;
       const queuedTurnId = `plugin-queued-${taskId}`;
       const message = buildPluginRuntimeTaskMessage(request);
       const metadata = {
         ...(request.metadata ?? {}),
-        ...(isRecord(turnConfig.metadata) ? turnConfig.metadata : {}),
+        ...(isRecord(request.runtimeRequest?.metadata)
+          ? request.runtimeRequest.metadata
+          : {}),
       };
-      const structuredOutput = structuredOutputContractFromRequest(
-        request.expectedOutput,
-        turnConfig,
-      );
+      const structuredOutput = structuredOutputContractFromRequest(request.expectedOutput);
       const outputSchema = outputSchemaFromStructuredOutput(
         structuredOutput,
         request.expectedOutput,
-        turnConfig,
       );
       const startParams: AgentSessionTurnStartParams = omitUndefined({
         sessionId,
@@ -82,32 +69,15 @@ export function createPluginRuntimeCapabilityApiFromClient(
         runtimeOptions: omitUndefined({
           stream: true,
           eventName,
-          providerPreference,
-          modelPreference,
-          metadata,
           queuedTurnId,
           expectedOutput: request.expectedOutput,
           structuredOutput,
           outputSchema,
-          hostOptions: {
-            asterChatRequest: buildPluginAsterChatRequest({
-              request,
-              sessionId,
-              taskId,
-              turnId: normalizeString(request.turnId),
-              eventName,
-              message,
-              turnConfig,
-              providerPreference,
-              modelPreference,
-              metadata,
-              expectedOutput: request.expectedOutput,
-              structuredOutput,
-              outputSchema,
-              queueIfBusy,
-              queuedTurnId,
-            }),
-          },
+          runtimeRequest: mergePluginRuntimeRequest(
+            request.runtimeRequest,
+            request.workspaceId,
+            metadata,
+          ),
         }),
         queueIfBusy,
         skipPreSubmitResume: request.skipPreSubmitResume,
@@ -184,58 +154,15 @@ export function createPluginRuntimeCapabilityApiFromClient(
   };
 }
 
-function buildPluginAsterChatRequest(params: {
-  request: PluginRuntimeStartTaskRequest;
-  sessionId: string;
-  taskId: string;
-  turnId?: string;
-  eventName: string;
-  message: string;
-  turnConfig: Record<string, unknown>;
-  providerPreference?: string;
-  modelPreference?: string;
-  metadata: Record<string, unknown>;
-  expectedOutput?: unknown;
-  structuredOutput?: StructuredOutputContract;
-  outputSchema?: unknown;
-  queueIfBusy: boolean;
-  queuedTurnId: string;
-}): Record<string, unknown> {
-  const { request, turnConfig } = params;
+function mergePluginRuntimeRequest(
+  runtimeRequest: PluginRuntimeStartTaskRequest["runtimeRequest"],
+  workspaceId: string | undefined,
+  metadata: Record<string, unknown>,
+): PluginRuntimeStartTaskRequest["runtimeRequest"] {
   return {
-    message: params.message,
-    session_id: params.sessionId,
-    event_name: params.eventName,
-    images: null,
-    provider_config:
-      turnConfig.providerConfig ?? turnConfig.provider_config ?? null,
-    provider_preference: params.providerPreference,
-    model_preference: params.modelPreference,
-    reasoning_effort:
-      turnConfig.reasoningEffort ?? turnConfig.reasoning_effort ?? null,
-    thinking_enabled:
-      turnConfig.thinkingEnabled ?? turnConfig.thinking_enabled ?? null,
-    approval_policy:
-      turnConfig.approvalPolicy ?? turnConfig.approval_policy ?? null,
-    sandbox_policy:
-      turnConfig.sandboxPolicy ?? turnConfig.sandbox_policy ?? null,
-    project_id: null,
-    workspace_id: request.workspaceId ?? "",
-    web_search: turnConfig.webSearch ?? turnConfig.web_search ?? null,
-    search_mode: turnConfig.searchMode ?? turnConfig.search_mode ?? null,
-    execution_strategy:
-      turnConfig.executionStrategy ?? turnConfig.execution_strategy ?? null,
-    auto_continue:
-      turnConfig.autoContinue ?? turnConfig.auto_continue ?? null,
-    system_prompt: turnConfig.systemPrompt ?? turnConfig.system_prompt ?? null,
-    metadata: params.metadata,
-    expected_output: params.expectedOutput,
-    structured_output: params.structuredOutput,
-    output_schema: params.outputSchema,
-    turn_id: params.turnId,
-    queue_if_busy: params.queueIfBusy,
-    queued_turn_id: params.queuedTurnId,
-    turn_config: turnConfig,
+    ...runtimeRequest,
+    workspaceId: runtimeRequest?.workspaceId ?? workspaceId,
+    metadata,
   };
 }
 
@@ -349,7 +276,11 @@ function sessionReadToLegacy(
 }
 
 function readThreadReadPayload(response: AgentSessionReadResponse): unknown {
-  return threadReadFromAgentSessionRead(response) ?? response.detail ?? sessionReadToLegacy(response);
+  return (
+    threadReadFromAgentSessionRead(response) ??
+    response.detail ??
+    sessionReadToLegacy(response)
+  );
 }
 
 function threadReadFromAgentSessionRead(
@@ -383,32 +314,7 @@ function readString(
 
 function structuredOutputContractFromRequest(
   expectedOutput: unknown,
-  turnConfig: Record<string, unknown>,
 ): StructuredOutputContract | undefined {
-  const explicit = recordValue(turnConfig, "structuredOutput") ??
-    recordValue(turnConfig, "structured_output");
-  if (explicit) {
-    return omitUndefined({
-      type: readString(explicit, "type"),
-      schemaRef:
-        readString(explicit, "schemaRef") ?? readString(explicit, "schema_ref"),
-      schema:
-        explicit.schema ??
-        explicit.outputSchema ??
-        explicit.output_schema,
-      maxValidationRetries: readNumber(
-        explicit,
-        "maxValidationRetries",
-        "max_validation_retries",
-      ),
-      failureSubtype:
-        readString(explicit, "failureSubtype") ??
-        readString(explicit, "failure_subtype"),
-      materializer: explicit.materializer,
-      metadata: explicit.metadata,
-    });
-  }
-
   const outputFormat = expectedOutputOutputFormat(expectedOutput);
   if (!outputFormat) {
     return undefined;
@@ -441,17 +347,16 @@ function structuredOutputContractFromRequest(
 function outputSchemaFromStructuredOutput(
   structuredOutput: StructuredOutputContract | undefined,
   expectedOutput: unknown,
-  turnConfig: Record<string, unknown>,
 ): unknown {
-  const direct = turnConfig.outputSchema ?? turnConfig.output_schema;
-  if (direct !== undefined) {
-    return direct;
-  }
   if (structuredOutput?.schema !== undefined) {
     return structuredOutput.schema;
   }
   const outputFormat = expectedOutputOutputFormat(expectedOutput);
-  return outputFormat?.schema ?? outputFormat?.outputSchema ?? outputFormat?.output_schema;
+  return (
+    outputFormat?.schema ??
+    outputFormat?.outputSchema ??
+    outputFormat?.output_schema
+  );
 }
 
 function expectedOutputOutputFormat(

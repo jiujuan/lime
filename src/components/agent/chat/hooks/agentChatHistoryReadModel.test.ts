@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import { hydrateSessionDetailMessagesFromThreadReadToolCalls } from "./agentChatHistoryReadModel";
 
 describe("agentChatHistoryReadModel", () => {
@@ -34,7 +34,7 @@ describe("agentChatHistoryReadModel", () => {
           },
         ],
       },
-    } as unknown as AsterSessionDetail;
+    } as unknown as AgentSessionDetail;
 
     const messages = hydrateSessionDetailMessagesFromThreadReadToolCalls(
       detail,
@@ -96,7 +96,7 @@ describe("agentChatHistoryReadModel", () => {
           },
         ],
       },
-    } as unknown as AsterSessionDetail;
+    } as unknown as AgentSessionDetail;
 
     const messages = hydrateSessionDetailMessagesFromThreadReadToolCalls(
       detail,

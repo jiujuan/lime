@@ -76,7 +76,6 @@ fn app_server_public_backend_contract_must_use_runtime_events() {
         crate_root.join("src/capability.rs"),
         crate_root.join("src/lib.rs"),
         crate_root.join("src/runtime.rs"),
-        crate_root.join("src/runtime_backend_adapter.rs"),
         crate_root.join("src/runtime_factory.rs"),
     ];
 
@@ -100,7 +99,7 @@ fn app_server_public_backend_contract_must_use_runtime_events() {
     assert_eq!(
         offenders,
         Vec::<String>::new(),
-        "app-server 公共后端边界只能暴露 RuntimeEvent；Lime/Aster 私有事件转换必须留在 Desktop compat adapter"
+        "app-server 公共后端边界只能暴露 RuntimeEvent；Lime/Agent 私有事件转换必须留在 Desktop compat adapter"
     );
 }
 

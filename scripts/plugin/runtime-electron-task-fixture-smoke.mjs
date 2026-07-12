@@ -206,7 +206,7 @@ function createTempRuntimeEnv() {
   const electronUserDataDir = ensureDir(
     path.join(tempRoot, "electron-user-data"),
   );
-  const asterRoot = ensureDir(path.join(tempRoot, "aster"));
+  const agentRoot = ensureDir(path.join(tempRoot, "agent"));
 
   return {
     tempRoot,
@@ -217,7 +217,7 @@ function createTempRuntimeEnv() {
       XDG_DATA_HOME: xdgDataHome,
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
-      LIME_ASTER_ROOT: asterRoot,
+      LIME_AGENT_RUNTIME_ROOT: agentRoot,
     },
   };
 }
@@ -348,23 +348,21 @@ async function runTaskLifecycleFromPage(page) {
           },
           eventName,
           turnId,
-          providerPreference: "fixture-provider",
-          modelPreference: "fixture-model",
           queueIfBusy: true,
           skipPreSubmitResume: false,
           metadata: {
             smoke: "plugin-runtime-electron-task-fixture",
           },
-          turnConfig: {
-            provider_config: {
-              provider_name: "fixture-provider",
-              model: "fixture-model",
+          runtimeRequest: {
+            providerConfig: {
+              providerName: "fixture-provider",
+              modelName: "fixture-model",
             },
-            system_prompt: "Plugin task fixture system prompt",
-            reasoning_effort: "medium",
-            sandbox_policy: "workspace-write",
+            systemPrompt: "Plugin task fixture system prompt",
+            reasoningEffort: "medium",
+            sandboxPolicy: "workspace-write",
             metadata: {
-              fixture_turn_config: true,
+              fixtureRuntimeRequest: true,
             },
           },
         },
@@ -457,10 +455,10 @@ function summarizeBackendLog(entries) {
     missingBackendKinds: REQUIRED_BACKEND_KINDS.filter(
       (kind) => !backendKindsSeen.includes(kind),
     ),
-    hostOptionsAsterChatRequestSeen: Boolean(
-      turnStart?.hostOptionsAsterChatRequestSeen,
+    runtimeRequestSeen: Boolean(turnStart?.runtimeRequestSeen),
+    runtimeRequestProviderConfigSeen: Boolean(
+      turnStart?.runtimeRequestProviderConfigSeen,
     ),
-    turnConfigMirrorSeen: Boolean(turnStart?.turnConfigMirrorSeen),
     startSessionId: turnStart?.sessionId ?? null,
     startTurnId: turnStart?.turnId ?? null,
     actionRequestId: actionRespond?.requestId ?? null,
@@ -539,12 +537,12 @@ function assertTaskLifecycleResult(result, backendSummary) {
     `external backend 未收到: ${backendSummary.missingBackendKinds.join(", ")}`,
   );
   assert(
-    backendSummary.hostOptionsAsterChatRequestSeen,
-    "turnStart 未携带 RuntimeOptions.hostOptions.asterChatRequest",
+    backendSummary.runtimeRequestSeen,
+    "turnStart 未携带 RuntimeOptions.runtimeRequest",
   );
   assert(
-    backendSummary.turnConfigMirrorSeen,
-    "turnStart 未携带 turn_config 镜像",
+    backendSummary.runtimeRequestProviderConfigSeen,
+    "turnStart 未携带 RuntimeRequest.providerConfig",
   );
   assert(
     backendSummary.startSessionId === SESSION_ID,
@@ -599,8 +597,8 @@ function runtimeOptions() {
   return request.runtimeOptions ?? request.runtime_options ?? {};
 }
 
-function asterChatRequest() {
-  return runtimeOptions().hostOptions?.asterChatRequest ?? null;
+function runtimeRequest() {
+  return runtimeOptions().runtimeRequest ?? runtimeOptions().runtime_request ?? null;
 }
 
 writeLog({
@@ -611,10 +609,9 @@ writeLog({
   eventName: request.eventName ?? null,
   providerPreference: request.providerPreference ?? null,
   modelPreference: request.modelPreference ?? null,
-  hostOptionsAsterChatRequestSeen: Boolean(asterChatRequest()),
-  turnConfigMirrorSeen: Boolean(asterChatRequest()?.turn_config),
-  asterChatRequestSessionId: asterChatRequest()?.session_id ?? null,
-  asterChatRequestTurnId: asterChatRequest()?.turn_id ?? null,
+  runtimeRequestSeen: Boolean(runtimeRequest()),
+  runtimeRequestProviderConfigSeen: Boolean(runtimeRequest()?.providerConfig),
+  runtimeRequestWorkspaceId: runtimeRequest()?.workspaceId ?? null,
   requestId: request.requestId ?? null,
   actionType: request.actionType ?? null,
   confirmed: request.confirmed ?? null,

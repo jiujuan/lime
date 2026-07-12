@@ -62,7 +62,7 @@ export default defineConfig(({ command, mode }) => {
           find: "@limecloud/app-server-client",
           replacement: path.resolve(
             __dirname,
-            "./packages/app-server-client/src/index.ts",
+            "./packages/app-server-client/src/browser.ts",
           ),
         },
         {

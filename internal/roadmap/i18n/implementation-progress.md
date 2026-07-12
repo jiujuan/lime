@@ -683,14 +683,14 @@ benchmark 摘要：
 本轮继续完成：
 
 - 新增 `internal/roadmap/i18n/response-language-injection-evaluation.md`，把 PRD P2 的 “AI response language 设置与 request metadata 注入” 先落成 Query Loop 边界评估，避免直接复用 UI `Config.language`。
-- 读回 `internal/aiprompts/query-loop.md`、`internal/aiprompts/commands.md`、`src/components/agent/chat/utils/harnessRequestMetadata.ts`、`src/components/agent/chat/workspace/workspaceSendHelpers.ts`、`lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/crates/agent/src/turn_input_envelope.rs`，确认正确扩展点是 `request_metadata.harness.*`、`runtime_turn.rs` prompt augmentation 与 `TurnInputEnvelope` 快照。
+- 读回 `internal/aiprompts/query-loop.md`、`internal/aiprompts/commands.md`、`src/components/agent/chat/utils/harnessRequestMetadata.ts`、`src/components/agent/chat/workspace/workspaceSendHelpers.ts`、`lime-rs/src/commands/agent_cmd/runtime_turn.rs` 与 `lime-rs/crates/agent/src/turn_input_envelope.rs`，确认正确扩展点是 `request_metadata.harness.*`、`runtime_turn.rs` prompt augmentation 与 `TurnInputEnvelope` 快照。
 - 结论收紧为：current 写入命名应使用 `agent_response_language`，不要写泛名 `language`；`response_language` 最多作为短期兼容读取 alias；`Config.language`、Browser Environment `Accept-Language`、Artifact / media `target_language` 与 ASR `language` 均不能直接复用。
 - `src/components/agent/chat/utils/harnessRequestMetadata.ts` 已给 `BuildHarnessRequestMetadataOptions` 增加 `agentResponseLanguage?: string | null`，并在 harness metadata 中 current 写入 `agent_response_language`。
 - `buildHarnessRequestMetadata()` 会兼容读取已有 `agent_response_language` / `agentResponseLanguage` / `response_language` / `responseLanguage`，但不会写入泛名 `language`，也不会从 UI locale 自动派生。
 - `src/components/agent/chat/utils/harnessRequestMetadata.test.ts` 新增回归，锁住显式 `agentResponseLanguage` 优先级、alias 兼容和 current snake_case 写入。
 - `src/components/settings-v2/general/appearance/index.tsx` 新增“回复语言”表单块，持久化到 `workspace_preferences.agent_response_language`；`AgentChatWorkspace` / `useWorkspaceSendActions` / `workspaceSendHelpers` / `useServiceModelsConfig` 全链路消费同一偏好并写入 `request_metadata.harness.agent_response_language`。
 - `src/lib/api/appConfigTypes.ts` 与 `lime-rs/crates/core/src/config/types.rs` 已同步新增 `workspace_preferences.agent_response_language`，并将 workspace preferences schema_version 升到 3；Rust roundtrip 测试覆盖该字段。
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 新增 `ResponseLanguage` prompt stage，并把 `request_metadata.harness.agent_response_language` 注入到 system prompt；`lime-rs/crates/agent/src/turn_input_envelope.rs` 同步阶段枚举。
+- `lime-rs/src/commands/agent_cmd/runtime_turn.rs` 新增 `ResponseLanguage` prompt stage，并把 `request_metadata.harness.agent_response_language` 注入到 system prompt；`lime-rs/crates/agent/src/turn_input_envelope.rs` 同步阶段枚举。
 - `runtime_turn.rs` 新增 response language helper tests，覆盖显式 locale 与 `auto` 两条路径，确认 prompt 约束不会退回到 UI locale 派生。
 - `lime-rs/crates/agent/src/session_execution_runtime.rs` 继续把 `harness.agent_response_language` 投影进 `recent_response_language`，让 evidence / replay / review 继续沿 `SessionExecutionRuntime` 这条现成 runtime 事实链观察该偏好。
 - 下一刀实现顺序调整为：继续评估是否把 `agent_response_language` 暴露到更多设置入口，或者转去收紧其它 P2/P3 主缺口；避免继续扩散 schema。
@@ -825,7 +825,7 @@ benchmark 摘要：
 - `npm run i18n:check` 通过。
 - `npm run typecheck` 通过。
 - `git diff --check` 通过。
-- `npm run verify:local` 已重新跑到 Rust 单测阶段，但当前工作区仍有 4 个与本刀无关的 Rust 失败：`commands::aster_agent_cmd::tool_runtime::connector_tools::tests::plugin_connector_fixture_executes_host_managed_mutation`、`commands::skill_cmd::tests::test_rename_user_local_skill_dir_moves_skill_directory`、`commands::skill_cmd::tests::test_replace_user_local_skill_package_replaces_existing_tree`、`dev_bridge::dispatcher::tests::skill_execution_catalog_commands_are_bridged`；这些失败不来自本次 i18n 资源修复，暂不在本刀扩大写集。
+- `npm run verify:local` 已重新跑到 Rust 单测阶段，但当前工作区仍有 4 个与本刀无关的 Rust 失败：`commands::agent_cmd::tool_runtime::connector_tools::tests::plugin_connector_fixture_executes_host_managed_mutation`、`commands::skill_cmd::tests::test_rename_user_local_skill_dir_moves_skill_directory`、`commands::skill_cmd::tests::test_replace_user_local_skill_package_replaces_existing_tree`、`dev_bridge::dispatcher::tests::skill_execution_catalog_commands_are_bridged`；这些失败不来自本次 i18n 资源修复，暂不在本刀扩大写集。
 
 ## 2026-05-26：P2 media task content / ASR language 边界回归
 

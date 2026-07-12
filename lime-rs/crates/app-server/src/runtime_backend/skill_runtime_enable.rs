@@ -66,7 +66,7 @@ pub(super) fn clear_workspace_skill_runtime_enable(session_id: &str) -> SkillRun
 }
 
 fn selected_agent_skill_names_from_request(request: &ExecutionRequest) -> Vec<String> {
-    let host_request = super::request_context::aster_chat_request_from_request(request);
+    let host_request = super::request_context::runtime_request_from_request(request);
     let workspace_scope =
         super::request_context::request_workspace_scope(request, host_request.as_ref());
     super::agent_skills_context::selected_agent_skill_names_for_turn(
@@ -88,41 +88,7 @@ pub(super) fn workspace_skill_runtime_enable_sources(
 }
 
 pub(super) fn request_metadata_values(request: &ExecutionRequest) -> Vec<&Value> {
-    let mut values = Vec::new();
-    if let Some(metadata) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-    {
-        values.push(metadata);
-    }
-    if let Some(metadata) = request.metadata.as_ref() {
-        values.push(metadata);
-    }
-    if let Some(host_options) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.host_options.as_ref())
-    {
-        collect_host_metadata_values(host_options, &mut values);
-    }
-    values
-}
-
-fn collect_host_metadata_values<'a>(host_options: &'a Value, values: &mut Vec<&'a Value>) {
-    let Some(aster_chat_request) = host_options.get("asterChatRequest") else {
-        return;
-    };
-    if let Some(metadata) = aster_chat_request
-        .get("turn_config")
-        .or_else(|| aster_chat_request.get("turnConfig"))
-        .and_then(|turn_config| turn_config.get("metadata"))
-    {
-        values.push(metadata);
-    }
-    if let Some(metadata) = aster_chat_request.get("metadata") {
-        values.push(metadata);
-    }
+    request.runtime_metadata().into_iter().collect()
 }
 
 fn workspace_skill_runtime_enable_value(metadata: &Value) -> Option<&Value> {

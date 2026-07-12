@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { AgentThreadTurn, Message } from "../types";
 import { buildHydratedAgentSessionSnapshot } from "./agentSessionState";
 
@@ -86,7 +86,7 @@ describe("agentSessionState local snapshot hydrate", () => {
           content: [{ type: "text", text: "把文章保存到项目里" }],
         },
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-restore",
@@ -121,7 +121,7 @@ describe("agentSessionState local snapshot hydrate", () => {
           content: [{ type: "text", text: "把文章保存到项目里" }],
         },
       ],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-history-target",
@@ -228,7 +228,7 @@ describe("agentSessionState local snapshot hydrate", () => {
       ],
       items: [],
       queued_turns: [],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-image-lemonade",
@@ -306,7 +306,7 @@ describe("agentSessionState local snapshot hydrate", () => {
       turns: [],
       items: [],
       queued_turns: [],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-skill-history-target",
@@ -410,7 +410,7 @@ describe("agentSessionState local snapshot hydrate", () => {
       turns: [],
       items: [],
       queued_turns: [],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-service-skill-history-target",
@@ -509,7 +509,7 @@ describe("agentSessionState local snapshot hydrate", () => {
       turns: [],
       items: [],
       queued_turns: [],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-detached-skill-history-target",

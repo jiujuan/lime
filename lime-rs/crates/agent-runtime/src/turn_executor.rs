@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Turn provider 配置。
 ///
 /// 这是 current runtime 侧的 provider route 事实源；具体 provider runtime 注入由下游
-/// adapter 负责，不在调用方重新拼 Aster session 配置。
+/// adapter 负责，不在调用方重新拼 Agent session 配置。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TurnProviderConfiguration {
     /// 已解析的 provider route

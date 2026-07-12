@@ -1,4 +1,4 @@
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import type { PluginMarketplaceViewItem } from "../marketplace/pluginMarketplaceViewModel";
 
 export type PluginHistorySessionCandidateSource =
@@ -26,7 +26,7 @@ export interface PluginHistorySessionSelectionModel {
 
 export interface BuildPluginHistorySessionSelectionModelParams {
   item: PluginMarketplaceViewItem;
-  sessions: readonly AsterSessionInfo[];
+  sessions: readonly AgentSessionInfo[];
   maxCandidates?: number;
 }
 
@@ -90,7 +90,7 @@ function readPluginActivationRecord(
 }
 
 function buildCandidateFromMetadata(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
 ): Omit<PluginHistorySessionCandidate, "key" | "title" | "updatedAt" | "messagesCount"> | null {
   const metadata = asRecord(session.session_business_object_ref_metadata);
   const historyRestore = readHistoryRestoreRecord(metadata);
@@ -120,7 +120,7 @@ function buildCandidateFromMetadata(
   };
 }
 
-function fallbackTitle(session: AsterSessionInfo): string {
+function fallbackTitle(session: AgentSessionInfo): string {
   return session.name?.trim() || session.id;
 }
 

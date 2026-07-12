@@ -8,7 +8,7 @@
 Lime 的长期边界固定为：
 
 - Lime 产品层：Preview Artifact Contract、ArtifactDocument、Workbench、renderer、export、source UX。
-- App Server / RuntimeCore / Aster：thread、turn、item、event、tool、output schema、approval、evidence。
+- App Server / RuntimeCore / Agent：thread、turn、item、event、tool、output schema、approval、evidence。
 - services crates：文件、文档、任务、知识库等 domain 服务。
 - Electron Desktop Host：窗口、系统 shell、预览独立窗口、sidecar、IPC。
 - Blueprint：可选长周期规划模块，不是 artifact 或 preview 的根抽象。

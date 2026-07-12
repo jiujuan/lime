@@ -5,7 +5,7 @@ import type {
   AgentThreadItem,
   AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Message } from "../types";
 import { buildAgentTextDeltaContentPartMetadata } from "../utils/contentPartTimeline";
@@ -110,7 +110,7 @@ interface CreateAgentStreamRuntimeHandlerActionsOptions {
   assistantMsgId: string;
   callbacks: StreamLifecycleCallbacks;
   content: string;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   eventName: string;
   getThreadItems?: () => readonly AgentThreadItem[];
   observer?: StreamObserver;

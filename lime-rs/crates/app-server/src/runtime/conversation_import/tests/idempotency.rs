@@ -379,15 +379,14 @@ async fn committing_same_codex_thread_after_restart_reuses_projected_session() {
         .expect("continue imported session after restart");
     let requests = backend.requests.lock().expect("requests mutex poisoned");
     let request = requests.last().expect("recorded continuation request");
-    assert_eq!(request.provider_preference.as_deref(), None);
-    assert_eq!(request.model_preference.as_deref(), None);
+    assert_eq!(request.provider_preference(), None);
+    assert_eq!(request.model_preference(), None);
     assert_eq!(
         request
             .runtime_options
             .as_ref()
-            .and_then(|options| options.host_options.as_ref())
-            .and_then(|value| value.pointer("/asterChatRequest/turn_config/cwd"))
-            .and_then(serde_json::Value::as_str),
+            .and_then(|options| options.runtime_request.as_ref())
+            .and_then(|runtime_request| runtime_request.working_dir.as_deref()),
         Some("/workspace/restarted")
     );
 }

@@ -102,7 +102,7 @@ memory store folder
 当前保留：
 
 - App Server `agentSession/compact`
-- RuntimeCore / Aster shared compaction core
+- RuntimeCore / Agent shared compaction core
 - summary cache / overflow compaction 的运行时治理边界
 
 固定规则：

@@ -1,7 +1,7 @@
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import type {
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import {
   buildTeamDefinitionSummary,
@@ -16,7 +16,7 @@ import {
 import { resolveUserFacingToolDisplayLabel } from "./utils/toolDisplayInfo";
 
 export type TeamWorkspaceRuntimeStatus =
-  AsterSubagentSessionInfo["runtime_status"];
+  AgentSubagentSessionInfo["runtime_status"];
 export type TeamWorkspaceResolvedRuntimeStatus =
   | TeamWorkspaceRuntimeStatus
   | "not_found";
@@ -489,8 +489,8 @@ function buildExecutionSummarySnapshots(params: {
   currentSessionRuntimeStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionLatestTurnStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionQueuedTurnCount?: number;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
-  subagentParentContext?: AsterSubagentParentContext | null;
+  childSubagentSessions?: AgentSubagentSessionInfo[];
+  subagentParentContext?: AgentSubagentParentContext | null;
 }) {
   const snapshots = new Map<string, TeamWorkspaceRuntimeSessionSnapshot>();
   const currentSessionId = params.currentSessionId?.trim();
@@ -552,8 +552,8 @@ export function summarizeTeamWorkspaceExecution(params: {
   currentSessionRuntimeStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionLatestTurnStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionQueuedTurnCount?: number;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
-  subagentParentContext?: AsterSubagentParentContext | null;
+  childSubagentSessions?: AgentSubagentSessionInfo[];
+  subagentParentContext?: AgentSubagentParentContext | null;
   liveRuntimeBySessionId?: Record<string, TeamWorkspaceLiveRuntimeState>;
 }): TeamWorkspaceExecutionSummary {
   const snapshots = buildExecutionSummarySnapshots(params);

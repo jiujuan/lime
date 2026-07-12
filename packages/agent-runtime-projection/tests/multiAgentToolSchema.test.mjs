@@ -105,7 +105,7 @@ test("message, wait, interrupt and list contracts match Codex v2 guardrails", ()
   );
 });
 
-test("legacy Lime/Aster team tool names fail closed before projection", () => {
+test("legacy Lime/Agent team tool names fail closed before projection", () => {
   assert.deepEqual(
     validateCodexMultiAgentToolSchema({
       toolName: "TeamCreate",

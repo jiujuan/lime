@@ -57,7 +57,7 @@ governance/file-size-baseline.json
     "excludePatterns": ["**/*_test.rs", "**/tests/**"],
     "oversizedFrozen": [
       {
-        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs",
+        "path": "lime-rs/crates/agent-rust/crates/agent/src/agents/agent.rs",
         "lines": 8206,
         "comment": "待拆分（R-05）"
       },

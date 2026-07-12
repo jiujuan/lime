@@ -2128,7 +2128,6 @@ export function AgentChatWorkspace({
     soulArtifactVoiceGenerationBrief,
     soulArtifactVoiceEnabledForTurn,
     onSoulArtifactVoiceEnabledForTurnChange: setSoulArtifactVoiceEnabledForTurn,
-    isExecutionRuntimeActive: Boolean(activeExecutionRuntime),
     removeQueuedTurn,
     generalWorkbenchEntryPrompt,
     handleRestartGeneralWorkbenchEntryPrompt,

@@ -9,14 +9,10 @@ export function sanitizeBackendLedgerForEvidence(backendLedger) {
   return backendLedger.map((entry) => {
     if (entry?.kind === "turnStart") {
       const runtimeHarness =
-        entry.runtimeOptions?.metadata?.harness ??
-        entry.asterChatRequest?.turn_config?.metadata?.harness ??
-        entry.asterChatRequest?.turnConfig?.metadata?.harness ??
+        entry.runtimeRequest?.metadata?.harness ??
         {};
       const expert =
-        entry.runtimeOptions?.metadata?.expert ??
-        entry.asterChatRequest?.turn_config?.metadata?.expert ??
-        entry.asterChatRequest?.turnConfig?.metadata?.expert ??
+        entry.runtimeRequest?.metadata?.expert ??
         {};
       const harnessExpert =
         runtimeHarness?.expert && typeof runtimeHarness.expert === "object"
@@ -185,14 +181,11 @@ export function summarizeBackendLedger(backendLedger) {
     latestTurnEmitTimes.length >= 2
       ? Math.max(...latestTurnEmitTimes) - Math.min(...latestTurnEmitTimes)
       : 0;
-  const asterChatRequest = latestTurnStart?.asterChatRequest ?? null;
+  const runtimeRequest = latestTurnStart?.runtimeRequest ?? null;
   const collaborationMode =
-    asterChatRequest?.turn_config?.metadata?.harness?.collaboration_mode
+    runtimeRequest?.metadata?.harness?.collaboration_mode
       ?.mode ??
-    asterChatRequest?.turnConfig?.metadata?.harness?.collaborationMode?.mode ??
-    latestTurnStart?.runtimeOptions?.metadata?.harness?.collaboration_mode
-      ?.mode ??
-    latestTurnStart?.runtimeOptions?.metadata?.harness?.collaborationMode
+    runtimeRequest?.metadata?.harness?.collaborationMode
       ?.mode ??
     null;
   return {
@@ -212,12 +205,12 @@ export function summarizeBackendLedger(backendLedger) {
           inputText: latestTurnStart.inputText,
           providerPreference: latestTurnStart.providerPreference,
           modelPreference: latestTurnStart.modelPreference,
-          searchMode: asterChatRequest?.search_mode ?? null,
+          searchMode: runtimeRequest?.searchMode ?? null,
           webSearch: Object.prototype.hasOwnProperty.call(
-            asterChatRequest || {},
-            "web_search",
+            runtimeRequest || {},
+            "webSearch",
           )
-            ? asterChatRequest.web_search
+            ? runtimeRequest.webSearch
             : null,
           collaborationMode,
         })
@@ -232,13 +225,8 @@ export function summarizeBackendLedger(backendLedger) {
 }
 
 export function readHarnessMetadataFromTurnStart(turnStart) {
-  const asterChatRequest = turnStart?.asterChatRequest ?? {};
-  return (
-    asterChatRequest?.turn_config?.metadata?.harness ??
-    asterChatRequest?.turnConfig?.metadata?.harness ??
-    turnStart?.runtimeOptions?.metadata?.harness ??
-    {}
-  );
+  const runtimeRequest = turnStart?.runtimeRequest ?? {};
+  return runtimeRequest?.metadata?.harness ?? {};
 }
 
 export function readWorkspaceSkillRuntimeEnableFromTurnStart(turnStart) {

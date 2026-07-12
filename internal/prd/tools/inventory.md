@@ -4,7 +4,7 @@
 
 ## 1.1 Core surface
 
-### Aster built-ins 与 current surface
+### Agent built-ins 与 current surface
 
 - `Read`
 - `Write`
@@ -79,7 +79,7 @@
 - `mcp__lime-browser__*`
 
 它不是一个单独真实工具，而是一组 browser runtime tools 的聚合入口。  
-参考 Aster `chrome_mcp/tools.rs`，当前浏览器工具定义为 **17 个**。
+参考 Agent `chrome_mcp/tools.rs`，当前浏览器工具定义为 **17 个**。
 
 ### Browser Assist 总数
 
@@ -200,7 +200,7 @@ const snapshot = await getAgentRuntimeToolInventory({
 
 1. **静态目录里一共有多少工具？**
 2. **当前 surface 下哪些是默认允许的？**
-3. **Aster runtime registry 里实际注册了哪些工具？**
+3. **Agent runtime registry 里实际注册了哪些工具？**
 4. **哪些 runtime tools 没被 catalog 覆盖？**
 5. **当前有哪些 extension surfaces？**
 6. **哪些 extension tools 处于 deferred / loaded / visible？**

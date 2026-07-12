@@ -9,7 +9,6 @@ use crate::MockBackend;
 use crate::RuntimeBackend;
 use crate::RuntimeCore;
 use crate::UnavailableBackend;
-use crate::{RuntimeBackendAdapter, RuntimeBackendHost, RuntimeBackendProcessControlCapabilities};
 use lime_core::database::DbConnection;
 use std::sync::Arc;
 use thiserror::Error;
@@ -215,64 +214,6 @@ impl AppServerRuntimeFactory {
             capability_source,
         ))
     }
-    pub fn runtime_adapter_core(host: Arc<dyn RuntimeBackendHost>) -> RuntimeCore {
-        RuntimeCore::with_backend(Arc::new(RuntimeBackendAdapter::new(host)))
-    }
-    pub fn runtime_adapter_core_with_execution_process_server(
-        host: Arc<dyn RuntimeBackendHost>,
-        execution_process: ExecutionProcessServer,
-    ) -> RuntimeCore {
-        RuntimeCore::with_backend(Arc::new(RuntimeBackendAdapter::new_with_process_control(
-            host,
-            RuntimeBackendProcessControlCapabilities::shared_execution_process_server(),
-        )))
-        .with_execution_process_server(execution_process)
-    }
-    pub fn runtime_adapter_core_with_capability_source(
-        host: Arc<dyn RuntimeBackendHost>,
-        capability_source: Arc<dyn CapabilitySource>,
-    ) -> RuntimeCore {
-        RuntimeCore::with_backend_and_capability_source(
-            Arc::new(RuntimeBackendAdapter::new(host)),
-            capability_source,
-        )
-    }
-    pub fn runtime_adapter_core_with_sources(
-        host: Arc<dyn RuntimeBackendHost>,
-        capability_source: Arc<dyn CapabilitySource>,
-        artifact_content_provider: Arc<dyn ArtifactContentProvider>,
-    ) -> RuntimeCore {
-        RuntimeCore::with_backend_capability_source_and_artifact_content_provider(
-            Arc::new(RuntimeBackendAdapter::new(host)),
-            capability_source,
-            artifact_content_provider,
-        )
-    }
-    pub fn runtime_adapter_core_with_sources_and_evidence_export_provider(
-        host: Arc<dyn RuntimeBackendHost>,
-        capability_source: Arc<dyn CapabilitySource>,
-        artifact_content_provider: Arc<dyn ArtifactContentProvider>,
-        evidence_export_provider: Arc<dyn EvidenceExportProvider>,
-    ) -> RuntimeCore {
-        RuntimeCore::with_backend_capability_source_artifact_content_provider_and_evidence_export_provider(
-            Arc::new(RuntimeBackendAdapter::new(host)),
-            capability_source,
-            artifact_content_provider,
-            evidence_export_provider,
-        )
-    }
-    pub fn runtime_adapter_app_server(host: Arc<dyn RuntimeBackendHost>) -> AppServer {
-        AppServer::with_runtime(Self::runtime_adapter_core(host))
-    }
-    pub fn runtime_adapter_app_server_with_execution_process_server(
-        host: Arc<dyn RuntimeBackendHost>,
-        execution_process: ExecutionProcessServer,
-    ) -> AppServer {
-        AppServer::with_runtime(Self::runtime_adapter_core_with_execution_process_server(
-            host,
-            execution_process,
-        ))
-    }
 }
 
 #[cfg(test)]
@@ -280,20 +221,8 @@ mod tests {
     use super::*;
     use crate::CapabilityInventoryRecord;
     use crate::CapabilityInventorySource;
-    use crate::RuntimeBackendActionRespondRequest;
-    use crate::RuntimeBackendActionRespondResult;
-    use crate::RuntimeBackendCancelRequest;
-    use crate::RuntimeBackendCancelResult;
-    use crate::RuntimeBackendSubmitRequest;
-    use crate::RuntimeBackendSubmitResult;
-    use crate::RuntimeCoreError;
-    use crate::RuntimeHostContext;
-    use app_server_protocol::AgentInput;
-    use app_server_protocol::AgentSessionStartParams;
-    use app_server_protocol::AgentSessionTurnStartParams;
     use app_server_protocol::CapabilityDescriptor;
     use app_server_protocol::CapabilityListParams;
-    use async_trait::async_trait;
 
     #[test]
     fn backend_mode_is_explicit_for_standalone_binary() {
@@ -318,8 +247,8 @@ mod tests {
             AppServerBackendMode::Unavailable
         );
 
-        let error = AppServerBackendMode::parse("aster").expect_err("unsupported mode");
-        assert_eq!(error.value(), "aster");
+        let error = AppServerBackendMode::parse("agent").expect_err("unsupported mode");
+        assert_eq!(error.value(), "agent");
     }
 
     #[test]
@@ -483,76 +412,5 @@ mod tests {
         assert_eq!(matched.capabilities.len(), 1);
         assert_eq!(matched.capabilities[0].id, "content.draft.generate");
         assert!(unmatched.capabilities.is_empty());
-    }
-    struct FactoryProcessControlHost;
-    #[async_trait]
-    impl RuntimeBackendHost for FactoryProcessControlHost {
-        async fn submit_turn(
-            &self,
-            request: RuntimeBackendSubmitRequest,
-        ) -> Result<RuntimeBackendSubmitResult, RuntimeCoreError> {
-            assert_eq!(
-                request.process_control,
-                RuntimeBackendProcessControlCapabilities::shared_execution_process_server()
-            );
-            Ok(RuntimeBackendSubmitResult::default())
-        }
-
-        async fn cancel_turn(
-            &self,
-            _request: RuntimeBackendCancelRequest,
-        ) -> Result<RuntimeBackendCancelResult, RuntimeCoreError> {
-            Ok(RuntimeBackendCancelResult::default())
-        }
-
-        async fn respond_action(
-            &self,
-            _request: RuntimeBackendActionRespondRequest,
-        ) -> Result<RuntimeBackendActionRespondResult, RuntimeCoreError> {
-            Ok(RuntimeBackendActionRespondResult::default())
-        }
-    }
-    #[tokio::test]
-    async fn runtime_factory_can_share_execution_process_owner_with_runtime_core() {
-        let execution_process = ExecutionProcessServer::default();
-        let runtime = AppServerRuntimeFactory::runtime_adapter_core_with_execution_process_server(
-            Arc::new(FactoryProcessControlHost),
-            execution_process.clone(),
-        );
-
-        assert!(runtime.execution_process_server().is_some());
-
-        let session = runtime
-            .start_session(AgentSessionStartParams {
-                session_id: None,
-                thread_id: None,
-                app_id: "content-studio".to_string(),
-                workspace_id: Some("default".to_string()),
-                business_object_ref: None,
-                locale: None,
-            })
-            .expect("session")
-            .session;
-
-        runtime
-            .start_turn(
-                AgentSessionTurnStartParams {
-                    session_id: session.session_id,
-                    turn_id: None,
-                    input: AgentInput {
-                        text: "draft".to_string(),
-                        attachments: Vec::new(),
-                    },
-                    runtime_options: None,
-                    queue_if_busy: false,
-                    skip_pre_submit_resume: false,
-                },
-                RuntimeHostContext {
-                    client_name: Some("test-client".to_string()),
-                    client_version: None,
-                },
-            )
-            .await
-            .expect("turn");
     }
 }

@@ -79,7 +79,7 @@ export function buildCommonAssertions(context) {
     appServerRequestMethods,
     guiTurnStartReachedBackend,
     backendLedger,
-    asterChatRequest,
+    runtimeRequest,
     isCancelOnlyScenario,
     isCancelThenContinueScenario,
     isPlanScenario,
@@ -262,10 +262,10 @@ export function buildCommonAssertions(context) {
       );
     }),
     newsRequestDidNotForceRequiredSearch:
-      asterChatRequest?.search_mode !== "required",
+      runtimeRequest?.search_mode !== "required",
     newsRequestDidNotPassLegacyWebSearchFlag:
       !Object.prototype.hasOwnProperty.call(
-        asterChatRequest || {},
+        runtimeRequest || {},
         "web_search",
       ),
     guiUserMessageVisible: isCancelOnlyScenario

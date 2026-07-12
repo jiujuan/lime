@@ -800,16 +800,16 @@ fn request_with_metadata(metadata: Value) -> ExecutionRequest {
         },
         runtime_options: Some(RuntimeOptions {
             stream: true,
-            metadata: Some(metadata),
+            runtime_request: Some(app_server_protocol::RuntimeRequest {
+                metadata: Some(metadata),
+                ..app_server_protocol::RuntimeRequest::default()
+            }),
             ..RuntimeOptions::default()
         }),
         expected_output: None,
         structured_output: None,
         output_schema: None,
         event_name: None,
-        provider_preference: None,
-        model_preference: None,
-        metadata: None,
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,

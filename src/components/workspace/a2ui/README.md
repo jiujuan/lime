@@ -109,7 +109,7 @@ AI 响应中使用 `\`\`\`a2ui` 代码块包裹 JSON：
 
 ## 相关项目
 
-- `aster-a2ui`: Rust 实现的 A2UI 协议库（位于 aster-rust 框架）
+- `agent-a2ui`: Rust 实现的 A2UI 协议库（位于 agent-rust 框架）
 
 ## 依赖关系
 

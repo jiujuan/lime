@@ -44,7 +44,7 @@ impl PaneActionWorkerTurn {
     }
 
     pub(super) fn from_plugin_activation_request(request: &ExecutionRequest) -> Option<Self> {
-        let metadata = request.metadata.as_ref()?;
+        let metadata = request.runtime_metadata()?;
         let activation = metadata
             .pointer("/harness/plugin_activation")
             .or_else(|| metadata.pointer("/harness/pluginActivation"))
@@ -159,7 +159,7 @@ impl PaneActionWorkerTurn {
     }
 
     fn resolve_pane_action_request(request: &ExecutionRequest) -> PaneActionWorkerTurnResolution {
-        let Some(metadata) = request.metadata.as_ref() else {
+        let Some(metadata) = request.runtime_metadata() else {
             return PaneActionWorkerTurnResolution::Ignore;
         };
         let Some(plugin) = metadata.get("plugin").or_else(|| metadata.get("plugin")) else {
@@ -283,7 +283,7 @@ impl PaneActionWorkerTurn {
     fn resolve_article_workspace_action_request(
         request: &ExecutionRequest,
     ) -> PaneActionWorkerTurnResolution {
-        let Some(metadata) = request.metadata.as_ref() else {
+        let Some(metadata) = request.runtime_metadata() else {
             return PaneActionWorkerTurnResolution::Ignore;
         };
         if !is_article_workspace_surface(metadata) {
@@ -703,7 +703,7 @@ fn worker_rejection_from_values(
     error_code: &'static str,
     error_message: impl Into<String>,
 ) -> PaneActionWorkerRejection {
-    let metadata = request.metadata.as_ref();
+    let metadata = request.runtime_metadata();
     PaneActionWorkerRejection {
         app_id: json_string(plugin, &["app_id", "appId"]),
         action_key: action.and_then(|action| json_string(action, &["key"])),
@@ -756,7 +756,7 @@ pub(super) fn validate_worker_turn_runtime_contract(
 }
 
 pub(super) fn runtime_locale(request: &ExecutionRequest) -> Option<String> {
-    let metadata = request.metadata.as_ref();
+    let metadata = request.runtime_metadata();
     json_string_from_optional_value(
         metadata,
         &[

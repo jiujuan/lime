@@ -1,8 +1,8 @@
 import type {
-  AsterApprovalPolicy,
-  AsterSandboxPolicy,
-  AsterSessionExecutionRuntime,
-  AsterSessionExecutionRuntimeAccessMode,
+  AgentApprovalPolicy,
+  AgentSandboxPolicy,
+  AgentSessionExecutionRuntime,
+  AgentSessionExecutionRuntimeAccessMode,
 } from "@/lib/api/agentRuntime";
 import {
   normalizeAccessMode,
@@ -10,8 +10,8 @@ import {
 } from "../hooks/agentChatStorage";
 
 export interface AgentAccessRuntimePolicies {
-  approvalPolicy: AsterApprovalPolicy;
-  sandboxPolicy: AsterSandboxPolicy;
+  approvalPolicy: AgentApprovalPolicy;
+  sandboxPolicy: AgentSandboxPolicy;
 }
 
 export function createRuntimePoliciesFromAccessMode(
@@ -39,8 +39,8 @@ export function createRuntimePoliciesFromAccessMode(
 }
 
 export function createAccessModeFromRuntimePolicies(
-  approvalPolicy?: AsterApprovalPolicy | string | null,
-  sandboxPolicy?: AsterSandboxPolicy | string | null,
+  approvalPolicy?: AgentApprovalPolicy | string | null,
+  sandboxPolicy?: AgentSandboxPolicy | string | null,
 ): AgentAccessMode | null {
   const normalizedApprovalPolicy =
     typeof approvalPolicy === "string" ? approvalPolicy.trim() : "";
@@ -68,7 +68,7 @@ export function createAccessModeFromRuntimePolicies(
 }
 
 function normalizeExecutionRuntimeAccessMode(
-  value?: AsterSessionExecutionRuntimeAccessMode | string | null,
+  value?: AgentSessionExecutionRuntimeAccessMode | string | null,
 ): AgentAccessMode | null {
   if (value === "read-only" || value === "current" || value === "full-access") {
     return value;
@@ -77,7 +77,7 @@ function normalizeExecutionRuntimeAccessMode(
 }
 
 export function createAccessModeFromExecutionRuntime(
-  runtime?: Pick<AsterSessionExecutionRuntime, "recent_access_mode"> | null,
+  runtime?: Pick<AgentSessionExecutionRuntime, "recent_access_mode"> | null,
 ): AgentAccessMode | null {
   return normalizeExecutionRuntimeAccessMode(runtime?.recent_access_mode);
 }

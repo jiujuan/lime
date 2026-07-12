@@ -229,7 +229,7 @@ function createTempRuntimeEnv() {
   const electronUserDataDir = ensureDir(
     path.join(tempRoot, "electron-user-data"),
   );
-  const asterRoot = ensureDir(path.join(tempRoot, "aster"));
+  const agentRoot = ensureDir(path.join(tempRoot, "agent"));
   const appDataDir = ensureDir(
     resolveTempPreferredDataDir({
       home,
@@ -249,7 +249,7 @@ function createTempRuntimeEnv() {
       XDG_DATA_HOME: xdgDataHome,
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
-      LIME_ASTER_ROOT: asterRoot,
+      LIME_AGENT_RUNTIME_ROOT: agentRoot,
     },
   };
 }
@@ -716,8 +716,6 @@ const html = \`<!doctype html>
             idempotencyKey: "plugin-runtime-sdk-electron-fixture",
             sessionId,
             workspaceId,
-            providerPreference: "fixture-provider",
-            modelPreference: "fixture-model",
             queueIfBusy: true,
             skipPreSubmitResume: false,
             input: {
@@ -728,17 +726,19 @@ const html = \`<!doctype html>
               artifactKind: "markdown",
               actionRequestId: requestId,
             },
-            turnConfig: {
-              provider_config: {
-                provider_name: "fixture-provider",
-                model: "fixture-model",
+            runtimeRequest: {
+              providerConfig: {
+                providerName: "fixture-provider",
+                modelName: "fixture-model",
               },
-              system_prompt: "Plugin SDK Electron fixture system prompt",
-              reasoning_effort: "medium",
-              approval_policy: "never",
-              sandbox_policy: "workspace-write",
-              web_search: false,
-              execution_strategy: "fixture",
+              providerPreference: "fixture-provider",
+              modelPreference: "fixture-model",
+              systemPrompt: "Plugin SDK Electron fixture system prompt",
+              reasoningEffort: "medium",
+              approvalPolicy: "never",
+              sandboxPolicy: "workspace-write",
+              webSearch: false,
+              executionStrategy: "fixture",
               metadata: {
                 source: "plugin-runtime-sdk-electron-fixture",
               },
@@ -908,8 +908,8 @@ function runtimeOptions() {
   return request.runtimeOptions ?? request.runtime_options ?? {};
 }
 
-function asterChatRequest() {
-  return runtimeOptions().hostOptions?.asterChatRequest ?? null;
+function runtimeRequest() {
+  return runtimeOptions().runtimeRequest ?? runtimeOptions().runtime_request ?? null;
 }
 
 writeLog({
@@ -918,17 +918,10 @@ writeLog({
   turnId: readTurnId(),
   inputText: request.input?.text ?? null,
   eventName: request.eventName ?? null,
-  providerPreference: request.providerPreference ?? null,
-  modelPreference: request.modelPreference ?? null,
-  hostOptionsAsterChatRequestSeen: Boolean(asterChatRequest()),
-  turnConfigMirrorSeen: Boolean(asterChatRequest()?.turn_config),
-  asterChatRequestSessionId: asterChatRequest()?.session_id ?? null,
-  asterChatRequestTurnId: asterChatRequest()?.turn_id ?? null,
-  turnConfigProviderName:
-    asterChatRequest()?.turn_config?.provider_config?.provider_name ?? null,
-  turnConfigModel:
-    asterChatRequest()?.turn_config?.provider_config?.model ?? null,
-  turnConfigSystemPrompt: asterChatRequest()?.turn_config?.system_prompt ?? null,
+  runtimeRequestSeen: Boolean(runtimeRequest()),
+  runtimeRequestProviderName: runtimeRequest()?.providerConfig?.providerName ?? null,
+  runtimeRequestModel: runtimeRequest()?.providerConfig?.modelName ?? null,
+  runtimeRequestSystemPrompt: runtimeRequest()?.systemPrompt ?? null,
   requestId: request.requestId ?? null,
   actionType: request.actionType ?? null,
   confirmed: request.confirmed ?? null,
@@ -1030,15 +1023,12 @@ function summarizeBackendLog(entries) {
     missingBackendKinds: REQUIRED_BACKEND_KINDS.filter(
       (kind) => !backendKindsSeen.includes(kind),
     ),
-    hostOptionsAsterChatRequestSeen: Boolean(
-      turnStart?.hostOptionsAsterChatRequestSeen,
-    ),
-    turnConfigMirrorSeen: Boolean(turnStart?.turnConfigMirrorSeen),
+    runtimeRequestSeen: Boolean(turnStart?.runtimeRequestSeen),
     startSessionId: turnStart?.sessionId ?? null,
     startTurnId: turnStart?.turnId ?? null,
-    turnConfigProviderName: turnStart?.turnConfigProviderName ?? null,
-    turnConfigModel: turnStart?.turnConfigModel ?? null,
-    turnConfigSystemPrompt: turnStart?.turnConfigSystemPrompt ?? null,
+    runtimeRequestProviderName: turnStart?.runtimeRequestProviderName ?? null,
+    runtimeRequestModel: turnStart?.runtimeRequestModel ?? null,
+    runtimeRequestSystemPrompt: turnStart?.runtimeRequestSystemPrompt ?? null,
     actionRequestId: actionRespond?.requestId ?? null,
     actionConfirmed: actionRespond?.confirmed ?? null,
     cancelTurnId: turnCancel?.turnId ?? null,
@@ -1294,12 +1284,8 @@ function assertSdkSmokeResult(result, backendSummary) {
     `external backend 未收到: ${backendSummary.missingBackendKinds.join(", ")}`,
   );
   assert(
-    backendSummary.hostOptionsAsterChatRequestSeen,
-    "turnStart 未携带 RuntimeOptions.hostOptions.asterChatRequest",
-  );
-  assert(
-    backendSummary.turnConfigMirrorSeen,
-    "turnStart 未携带 turn_config 镜像",
+    backendSummary.runtimeRequestSeen,
+    "turnStart 未携带 RuntimeOptions.runtimeRequest",
   );
   assert(
     backendSummary.startSessionId === SESSION_ID,
@@ -1310,13 +1296,13 @@ function assertSdkSmokeResult(result, backendSummary) {
     "external backend turnStart turnId 不正确",
   );
   assert(
-    backendSummary.turnConfigProviderName === "fixture-provider",
-    "external backend turn_config provider_name 不正确",
+    backendSummary.runtimeRequestProviderName === "fixture-provider",
+    "external backend runtimeRequest providerName 不正确",
   );
   assert(
-    backendSummary.turnConfigSystemPrompt ===
+    backendSummary.runtimeRequestSystemPrompt ===
       "Plugin SDK Electron fixture system prompt",
-    "external backend turn_config system_prompt 不正确",
+    "external backend runtimeRequest systemPrompt 不正确",
   );
   assert(
     backendSummary.actionRequestId === REQUEST_ID,

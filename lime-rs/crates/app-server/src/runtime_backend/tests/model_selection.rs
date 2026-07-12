@@ -4,10 +4,8 @@ use super::*;
 fn explicit_runtime_preferences_win() {
     let mut request = request_for_test("hello", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("deepseek".to_string());
-    options.model_preference = Some("deepseek-chat".to_string());
-    request.provider_preference = options.provider_preference.clone();
-    request.model_preference = options.model_preference.clone();
+    options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
+    options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     assert_eq!(
@@ -15,7 +13,7 @@ fn explicit_runtime_preferences_win() {
         RuntimeModelSelection {
             provider: "deepseek".to_string(),
             model: "deepseek-chat".to_string(),
-            source: "runtime_options",
+            source: "runtime_request",
             reasoning_effort: None,
         }
     );
@@ -44,8 +42,8 @@ fn fast_response_fast_slot_can_override_default_runtime_preferences() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("deepseek".to_string());
-    options.model_preference = Some("deepseek-chat".to_string());
+    options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
+    options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
 
     let selection =
         fast_response_selection_from_profile_model_slot(&request).expect("fast selection");
@@ -85,8 +83,8 @@ fn runtime_model_selection_prefers_fast_slot_for_fast_response_turn() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("deepseek".to_string());
-    options.model_preference = Some("deepseek-chat".to_string());
+    options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
+    options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
 
     let selection = resolve_runtime_model_selection(&request).expect("selection");
 
@@ -147,8 +145,8 @@ fn fast_response_without_complete_fast_slot_keeps_explicit_preferences() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("deepseek".to_string());
-    options.model_preference = Some("deepseek-chat".to_string());
+    options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
+    options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
 
     assert!(fast_response_selection_from_profile_model_slot(&request).is_none());
 
@@ -161,20 +159,20 @@ fn fast_response_without_complete_fast_slot_keeps_explicit_preferences() {
 fn host_provider_config_without_direct_credentials_stays_database_backed() {
     let request = request_for_test(
         "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "provider_config": {
-                    "provider_id": "database-openai",
-                    "provider_name": "openai",
-                    "model_name": "gpt-4.1"
-                },
-                "provider_preference": "database-openai",
-                "model_preference": "gpt-4.1"
-            }
-        })),
+        Some(app_server_protocol::RuntimeRequest {
+            provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                provider_id: Some("database-openai".to_string()),
+                provider_name: Some("openai".to_string()),
+                model_name: Some("gpt-4.1".to_string()),
+                ..app_server_protocol::RuntimeProviderConfig::default()
+            }),
+            provider_preference: Some("database-openai".to_string()),
+            model_preference: Some("gpt-4.1".to_string()),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let selection = selection_from_host_provider_config(&request).expect("selection");
 
     let direct_config = direct_provider_config_from_request(
@@ -186,7 +184,7 @@ fn host_provider_config_without_direct_credentials_stays_database_backed() {
     assert!(direct_config.is_none());
     assert_eq!(selection.provider, "database-openai");
     assert_eq!(selection.model, "gpt-4.1");
-    assert_eq!(selection.source, "host_options_provider_config");
+    assert_eq!(selection.source, "runtime_request_provider_config");
 }
 
 #[test]
@@ -228,24 +226,24 @@ fn imported_session_current_provider_selector_remains_session_default_route() {
 fn direct_host_provider_config_allows_localhost_fixture_without_database_provider() {
     let request = request_for_test(
         "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "provider_config": {
-                    "provider_id": "fixture-openai",
-                    "provider_name": "openai",
-                    "model_name": "lime-fixture-chat",
-                    "api_key": "fixture-key",
-                    "base_url": "http://127.0.0.1:56599",
-                    "tool_call_strategy": "native"
-                },
-                "provider_preference": "fixture-openai",
-                "model_preference": "lime-fixture-chat",
-                "reasoning_effort": "high"
-            }
-        })),
+        Some(app_server_protocol::RuntimeRequest {
+            provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                provider_id: Some("fixture-openai".to_string()),
+                provider_name: Some("openai".to_string()),
+                model_name: Some("lime-fixture-chat".to_string()),
+                api_key: Some("fixture-key".to_string()),
+                base_url: Some("http://127.0.0.1:56599".to_string()),
+                tool_call_strategy: Some(app_server_protocol::RuntimeToolCallStrategy::Native),
+                ..app_server_protocol::RuntimeProviderConfig::default()
+            }),
+            provider_preference: Some("fixture-openai".to_string()),
+            model_preference: Some("lime-fixture-chat".to_string()),
+            reasoning_effort: Some("high".to_string()),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let selection = selection_from_host_provider_config(&request).expect("selection");
 
     let direct_config = direct_provider_config_from_request(
@@ -271,19 +269,17 @@ fn direct_host_provider_config_allows_localhost_fixture_without_database_provide
 }
 
 #[test]
-fn runtime_options_metadata_reasoning_flows_to_selection_and_turn_context() {
-    let mut request = request_for_test(
+fn typed_runtime_reasoning_flows_to_selection_and_turn_context() {
+    let request = request_for_test(
         "hello",
+        Some(app_server_protocol::RuntimeRequest {
+            provider_preference: Some("openai".to_string()),
+            model_preference: Some("gpt-4.1".to_string()),
+            reasoning_effort: Some("medium".to_string()),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
         None,
-        Some(json!({
-            "turn_config": {
-                "reasoning_effort": "medium"
-            }
-        })),
     );
-    let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     assert_eq!(selection.reasoning_effort.as_deref(), Some("medium"));
@@ -312,8 +308,8 @@ fn model_request_policy_reasoning_default_flows_to_selection_and_turn_context() 
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     assert_eq!(selection.reasoning_effort.as_deref(), Some("high"));
@@ -343,8 +339,8 @@ fn explicit_reasoning_effort_wins_over_model_request_policy_default() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
 
@@ -370,8 +366,8 @@ fn model_request_policy_context_flows_to_lime_runtime_metadata() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
@@ -440,8 +436,8 @@ fn fast_response_lime_runtime_keeps_context_policy_and_auto_compact_override() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
@@ -494,8 +490,8 @@ fn valid_w3c_trace_context_flows_to_turn_context_metadata() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
@@ -529,8 +525,8 @@ fn invalid_w3c_trace_context_is_not_forwarded_to_turn_context() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
@@ -553,8 +549,8 @@ fn runtime_options_expected_output_schema_flows_to_turn_context() {
     });
     let mut request = request_for_test("hello", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
     options.expected_output = Some(json!({
         "artifactKind": "content_batch",
         "outputFormat": {
@@ -577,19 +573,17 @@ fn runtime_options_expected_output_schema_flows_to_turn_context() {
 }
 
 #[test]
-fn metadata_reasoning_aliases_flow_to_selection_and_turn_context() {
-    let mut request = request_for_test(
+fn typed_runtime_reasoning_is_used_without_metadata_aliases() {
+    let request = request_for_test(
         "hello",
+        Some(app_server_protocol::RuntimeRequest {
+            provider_preference: Some("openai".to_string()),
+            model_preference: Some("gpt-4.1-mini".to_string()),
+            reasoning_effort: Some("low".to_string()),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
         None,
-        Some(json!({
-            "turnConfig": {
-                "modelReasoningEffort": "low"
-            }
-        })),
     );
-    let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1-mini".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     assert_eq!(selection.reasoning_effort.as_deref(), Some("low"));
@@ -616,8 +610,8 @@ fn inputbar_plan_mode_metadata_flows_to_turn_context_collaboration_mode() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
@@ -631,28 +625,25 @@ fn inputbar_plan_mode_metadata_flows_to_turn_context_collaboration_mode() {
 fn planning_collaboration_mode_alias_is_normalized_to_plan() {
     let mut request = request_for_test(
         "先规划",
-        Some(json!({
-            "asterChatRequest": {
-                "provider_preference": "openai",
-                "model_preference": "gpt-4.1",
-                "turn_config": {
-                    "metadata": {
-                        "harness": {
-                            "collaborationMode": {
-                                "mode": "planning"
-                            }
-                        }
+        Some(app_server_protocol::RuntimeRequest {
+            provider_preference: Some("openai".to_string()),
+            model_preference: Some("gpt-4.1".to_string()),
+            metadata: Some(json!({
+                "harness": {
+                    "collaborationMode": {
+                        "mode": "planning"
                     }
                 }
-            }
-        })),
+            })),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
         None,
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
     let turn_context =
@@ -666,8 +657,8 @@ fn planning_collaboration_mode_alias_is_normalized_to_plan() {
 fn injected_tool_execution_config_flows_to_turn_context_metadata() {
     let mut request = request_for_test("hello", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1-mini".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1-mini".to_string());
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
 
@@ -704,8 +695,8 @@ fn injected_tool_execution_config_flows_to_turn_context_metadata() {
 fn injected_workspace_sandbox_config_flows_to_turn_context_metadata() {
     let mut request = request_for_test("hello", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1-mini".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1-mini".to_string());
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");
 
@@ -747,14 +738,18 @@ fn injected_workspace_sandbox_config_flows_to_turn_context_metadata() {
 #[test]
 fn top_level_request_metadata_reasoning_is_used_when_runtime_metadata_omits_it() {
     let mut request = request_for_test("hello", None, Some(json!({ "trace": "runtime-only" })));
-    request.metadata = Some(json!({
+    request
+        .runtime_options
+        .get_or_insert_default()
+        .runtime_request_mut()
+        .metadata = Some(json!({
         "harness": {
             "modelReasoningEffort": "high"
         }
     }));
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
 
@@ -762,36 +757,26 @@ fn top_level_request_metadata_reasoning_is_used_when_runtime_metadata_omits_it()
 }
 
 #[test]
-fn turn_config_provider_config_and_reasoning_override_host_top_level() {
+fn runtime_request_provider_config_and_reasoning_are_typed() {
     let request = request_for_test(
         "hello",
-        Some(json!({
-            "asterChatRequest": {
-                "reasoning_effort": "low",
-                "provider_config": {
-                    "provider_id": "top-openai",
-                    "provider_name": "openai",
-                    "model_name": "top-model",
-                    "api_key": "top-key",
-                    "base_url": "http://127.0.0.1:56598"
-                },
-                "turn_config": {
-                    "reasoning_effort": "high",
-                    "provider_config": {
-                        "provider_id": "turn-openai",
-                        "provider_name": "openai",
-                        "model_name": "turn-model",
-                        "api_key": "turn-key",
-                        "base_url": "http://127.0.0.1:56599",
-                        "tool_call_strategy": "tool_shim",
-                        "toolshim_model": "turn-toolshim-model"
-                    }
-                }
-            }
-        })),
+        Some(app_server_protocol::RuntimeRequest {
+            reasoning_effort: Some("high".to_string()),
+            provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                provider_id: Some("turn-openai".to_string()),
+                provider_name: Some("openai".to_string()),
+                model_name: Some("turn-model".to_string()),
+                api_key: Some("turn-key".to_string()),
+                base_url: Some("http://127.0.0.1:56599".to_string()),
+                tool_call_strategy: Some(app_server_protocol::RuntimeToolCallStrategy::ToolShim),
+                toolshim_model: Some("turn-toolshim-model".to_string()),
+                ..app_server_protocol::RuntimeProviderConfig::default()
+            }),
+            ..app_server_protocol::RuntimeRequest::default()
+        }),
         None,
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let selection = selection_from_host_provider_config(&request).expect("selection");
     let direct_config = direct_provider_config_from_request(
         host_request.as_ref(),

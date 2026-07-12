@@ -434,6 +434,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
   it("covers approval decline and cancel decision semantics through current action/respond", () => {
     const content = readSmokeScript();
+    const backendScript = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-backend-script.mjs",
+      "utf8",
+    );
 
     expect(content).toContain("approval-request-resume");
     expect(content).toContain("approval-request-decline");
@@ -469,6 +473,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("approvalRequestCancelNoToolExecuted");
     expect(content).toContain("readModelApprovalRequestCancelCanceled");
     expect(content).toContain("APPROVAL_REQUEST_DECISION_ASSERTION_KEYS");
+    expect(backendScript).toContain(
+      "input.request?.runtimeOptions?.runtimeRequest",
+    );
+    expect(backendScript).not.toContain(
+      "input.request?.runtimeOptions?.hostOptions",
+    );
   });
 
   it("keeps full-access approval out of prompts, records, and action/respond", () => {

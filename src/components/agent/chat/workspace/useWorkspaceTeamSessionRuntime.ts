@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type {
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import { useTeamWorkspaceRuntime } from "../hooks";
 import {
@@ -23,8 +23,8 @@ interface UseWorkspaceTeamSessionRuntimeParams {
   queuedTurnCount: number;
   isSending: boolean;
   subagentEnabled: boolean;
-  childSubagentSessions: AsterSubagentSessionInfo[];
-  subagentParentContext: AsterSubagentParentContext | null;
+  childSubagentSessions: AgentSubagentSessionInfo[];
+  subagentParentContext: AgentSubagentParentContext | null;
 }
 
 export function useWorkspaceTeamSessionRuntime({

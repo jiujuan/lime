@@ -708,7 +708,7 @@ mod tests {
             ],
             "meta": {
                 "exit_code": 1,
-                "output_file": "/tmp/aster_tasks/task-1.log"
+                "output_file": "/tmp/agent_tasks/task-1.log"
             }
         });
 
@@ -716,7 +716,7 @@ mod tests {
         assert_eq!(metadata.get("exit_code"), Some(&serde_json::json!(1)));
         assert_eq!(
             metadata.get("output_file"),
-            Some(&serde_json::json!("/tmp/aster_tasks/task-1.log"))
+            Some(&serde_json::json!("/tmp/agent_tasks/task-1.log"))
         );
     }
 

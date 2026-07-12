@@ -154,9 +154,9 @@ describe("browserAssistSession", () => {
     );
     expect(
       resolveBrowserAssistSessionStorageKey("project-a", "session-a"),
-    ).toBe("aster_browser_assist_session_session-a_project-a");
+    ).toBe("agent_browser_assist_session_session-a_project-a");
     expect(resolveBrowserAssistSessionStorageKey("project-a", null)).toBe(
-      "aster_browser_assist_session_active_project-a",
+      "agent_browser_assist_session_active_project-a",
     );
   });
 

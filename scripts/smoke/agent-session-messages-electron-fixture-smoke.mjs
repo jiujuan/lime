@@ -495,19 +495,10 @@ async function runSessionMessagesFixture(page, options) {
         },
         runtimeOptions: {
           eventName: "agent-session-messages-electron-fixture",
-          hostOptions: {
-            asterChatRequest: {
-              session_id: sessionId,
-              turn_id: turnId,
-              prompt: userText,
-              provider_name: "fixture-provider",
-              model_name: "fixture-model",
-              turn_config: {
-                provider_config: {
-                  provider_name: "fixture-provider",
-                  model_name: "fixture-model",
-                },
-              },
+          runtimeRequest: {
+            providerConfig: {
+              providerName: "fixture-provider",
+              modelName: "fixture-model",
             },
           },
         },

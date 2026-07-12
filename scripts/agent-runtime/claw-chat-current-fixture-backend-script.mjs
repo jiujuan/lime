@@ -186,7 +186,7 @@ const ledgerPath = process.argv[2];
 const cancelSignalPath = process.argv[3];
 const mediaReferenceSourcePath = ${JSON.stringify(mediaReferenceSourcePath)};
 const input = JSON.parse(readFileSync(0, "utf8"));
-const asterChatRequest = input.request?.runtimeOptions?.hostOptions?.asterChatRequest;
+const runtimeRequest = input.request?.runtimeOptions?.runtimeRequest;
 
 ${renderApprovalRequestResumeHelpersScript()}
 
@@ -238,8 +238,8 @@ export function currentThreadId() {
 export function currentTurnId() {
   return input.request?.turn?.turnId ??
     input.request?.turn?.turn_id ??
-    asterChatRequest?.turn_id ??
-    asterChatRequest?.turnId ??
+    runtimeRequest?.turn_id ??
+    runtimeRequest?.turnId ??
     "";
 }
 
@@ -247,12 +247,12 @@ export function summarizeRequestInput(request) {
   const attachments = Array.isArray(request?.input?.attachments)
     ? request.input.attachments
     : [];
-  const asterImages = Array.isArray(
-    request?.runtimeOptions?.hostOptions?.asterChatRequest?.images,
+  const agentImages = Array.isArray(
+    request?.runtimeOptions?.runtimeRequest?.images,
   )
-    ? request.runtimeOptions.hostOptions.asterChatRequest.images
+    ? request.runtimeOptions.runtimeRequest.images
     : [];
-  const runtimeMetadata = request?.runtimeOptions?.metadata ?? {};
+  const runtimeMetadata = request?.runtimeOptions?.runtimeRequest?.metadata ?? {};
   const harnessMetadata = runtimeMetadata?.harness ?? {};
   const pathReferences = Array.isArray(runtimeMetadata?.path_references)
     ? runtimeMetadata.path_references
@@ -271,11 +271,11 @@ export function summarizeRequestInput(request) {
     textLength: typeof request?.input?.text === "string"
       ? request.input.text.length
       : 0,
-    attachmentCount: attachments.length + asterImages.length,
+    attachmentCount: attachments.length + agentImages.length,
     imageAttachmentCount:
       attachments.filter((attachment) =>
         String(attachment?.mediaType ?? attachment?.media_type ?? "").startsWith("image/")
-      ).length + asterImages.length,
+      ).length + agentImages.length,
     fileReferenceCount: fileReferences.length,
     fileReferenceNames: fileReferences
       .map((reference) => reference?.name)
@@ -324,7 +324,7 @@ appendLedgerEntry({
     providerPreference: input.request?.providerPreference,
     modelPreference: input.request?.modelPreference,
     runtimeOptions: input.request?.runtimeOptions,
-    asterChatRequest,
+    runtimeRequest,
     ...actionRespondSummary
 });
 
@@ -481,19 +481,8 @@ if (input.kind === "turnStart") {
     };
   }
   function approvalSessionCacheFromRequest() {
-    const runtimeHarness = input.request?.runtimeOptions?.metadata?.harness ?? {};
-    const hostHarness =
-      asterChatRequest?.turn_config?.metadata?.harness ??
-      asterChatRequest?.turnConfig?.metadata?.harness ??
-      asterChatRequest?.metadata?.harness ??
-      {};
-    return (
-      runtimeHarness.approval_session_cache ??
-      runtimeHarness.approvalSessionCache ??
-      hostHarness.approval_session_cache ??
-      hostHarness.approvalSessionCache ??
-      null
-    );
+    const harness = runtimeRequest?.metadata?.harness ?? {};
+    return harness.approval_session_cache ?? harness.approvalSessionCache ?? null;
   }
   function approvalSessionCacheEvents() {
     const cache = approvalSessionCacheFromRequest();

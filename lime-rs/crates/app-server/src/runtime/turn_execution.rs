@@ -45,6 +45,27 @@ fn runtime_event_is_turn_terminal(event_type: &str) -> bool {
     )
 }
 
+fn app_server_action_resolved_event(request: &ActionRespondRequest) -> RuntimeEvent {
+    let mut payload = json!({
+        "backend": "runtime_core",
+        "source": "runtime_preflight",
+        "requestId": request.request_id,
+        "actionId": request.request_id,
+        "actionType": request.action_type,
+        "confirmed": request.confirmed,
+        "response": request.response,
+        "userData": request.user_data,
+        "scope": request.action_scope,
+    });
+    if let Some(decision) = request.decision {
+        if let Some(object) = payload.as_object_mut() {
+            object.insert("decision".to_string(), json!(decision.as_str()));
+            object.insert("decisionScope".to_string(), json!(decision.scope()));
+        }
+    }
+    RuntimeEvent::new("action.resolved", payload)
+}
+
 impl RuntimeEventSink for CollectingRuntimeEventSink {
     fn emit(&mut self, event: RuntimeEvent) -> Result<(), RuntimeCoreError> {
         self.events.push(event);
@@ -329,9 +350,14 @@ impl RuntimeCore {
                 .state
                 .lock()
                 .expect("runtime core state mutex poisoned");
+            let session_workspace_id = state
+                .sessions
+                .get(&params.session_id)
+                .and_then(|stored| stored.session.workspace_id.as_deref());
             super::approval_cache::apply_hint_to_turn_start(
                 &state.session_approval_cache,
                 &mut params,
+                session_workspace_id,
             )
         };
 
@@ -443,7 +469,7 @@ impl RuntimeCore {
             });
         }
 
-        let (session, previous_session, turn) = {
+        let (session, previous_session, turn, provider_history) = {
             let mut state = self
                 .state
                 .lock()
@@ -476,7 +502,16 @@ impl RuntimeCore {
             }
             stored.turns.push(turn.clone());
 
-            (stored.session.clone(), previous_session, turn)
+            let provider_history = super::provider_history::provider_history(
+                stored,
+                self.output_snapshot_store.as_ref(),
+            );
+            (
+                stored.session.clone(),
+                previous_session,
+                turn,
+                provider_history,
+            )
         };
 
         let runtime_options = params.runtime_options.clone();
@@ -499,18 +534,6 @@ impl RuntimeCore {
             output_schema: runtime_options
                 .as_ref()
                 .and_then(|options| options.output_schema.clone()),
-            provider_preference: params
-                .runtime_options
-                .as_ref()
-                .and_then(|options| options.provider_preference.clone()),
-            model_preference: params
-                .runtime_options
-                .as_ref()
-                .and_then(|options| options.model_preference.clone()),
-            metadata: params
-                .runtime_options
-                .as_ref()
-                .and_then(|options| options.metadata.clone()),
             queued_turn_id: params
                 .runtime_options
                 .as_ref()
@@ -542,7 +565,7 @@ impl RuntimeCore {
                 }),
             ))?;
             if let Some(event) = super::expert_role_switch::runtime_event_from_request_metadata(
-                request.metadata.as_ref(),
+                request.runtime_metadata(),
             ) {
                 sink.emit(event)?;
             }
@@ -574,7 +597,11 @@ impl RuntimeCore {
                     Ok(true) => Ok(()),
                     Ok(false) => {
                         self.backend
-                            .start_turn(request.clone(), &mut backend_sink)
+                            .start_turn_with_provider_history(
+                                request.clone(),
+                                provider_history.clone(),
+                                &mut backend_sink,
+                            )
                             .await
                     }
                     Err(error) => Err(error),
@@ -609,7 +636,7 @@ impl RuntimeCore {
         } else {
             let mut sink = CollectingRuntimeEventSink::default();
             if let Some(event) = super::expert_role_switch::runtime_event_from_request_metadata(
-                request.metadata.as_ref(),
+                request.runtime_metadata(),
             ) {
                 sink.emit(event)?;
             }
@@ -641,7 +668,11 @@ impl RuntimeCore {
                     Ok(true) => Ok(()),
                     Ok(false) => {
                         self.backend
-                            .start_turn(request.clone(), &mut backend_sink)
+                            .start_turn_with_provider_history(
+                                request.clone(),
+                                provider_history.clone(),
+                                &mut backend_sink,
+                            )
                             .await
                     }
                     Err(error) => Err(error),
@@ -876,7 +907,12 @@ impl RuntimeCore {
             .as_ref()
             .and_then(|scope| scope.turn_id.clone());
         let request_id = params.request_id.clone();
-        let (session, turn_snapshot, cancel_denied_permission_action) = {
+        let (
+            session,
+            turn_snapshot,
+            cancel_denied_permission_action,
+            app_server_owned_permission_action,
+        ) = {
             let state = self
                 .state
                 .lock()
@@ -909,10 +945,16 @@ impl RuntimeCore {
                     &request_id,
                     decision.is_some_and(AgentSessionApprovalDecision::is_cancel),
                 );
+            let app_server_owned_permission_action =
+                super::permission_state_projection::is_runtime_preflight_action(
+                    stored,
+                    &request_id,
+                );
             (
                 stored.session.clone(),
                 turn,
                 cancel_denied_permission_action,
+                app_server_owned_permission_action,
             )
         };
 
@@ -943,25 +985,27 @@ impl RuntimeCore {
         }
 
         let mut sink = CollectingRuntimeEventSink::default();
-        self.backend
-            .respond_action(
-                ActionRespondRequest {
-                    host: host.clone(),
-                    session: session.clone(),
-                    turn: turn_snapshot.clone(),
-                    request_id: request_id.clone(),
-                    action_type: params.action_type,
-                    decision,
-                    confirmed,
-                    response: params.response,
-                    user_data: params.user_data,
-                    metadata: params.metadata,
-                    event_name: params.event_name,
-                    action_scope: params.action_scope,
-                },
-                &mut sink,
-            )
-            .await?;
+        let action_response = ActionRespondRequest {
+            host: host.clone(),
+            session: session.clone(),
+            turn: turn_snapshot.clone(),
+            request_id: request_id.clone(),
+            action_type: params.action_type,
+            decision,
+            confirmed,
+            response: params.response,
+            user_data: params.user_data,
+            metadata: params.metadata,
+            event_name: params.event_name,
+            action_scope: params.action_scope,
+        };
+        if app_server_owned_permission_action {
+            sink.emit(app_server_action_resolved_event(&action_response))?;
+        } else {
+            self.backend
+                .respond_action(action_response, &mut sink)
+                .await?;
+        }
         let backend_cancel_requested = decision
             .is_some_and(AgentSessionApprovalDecision::is_cancel)
             && turn_snapshot

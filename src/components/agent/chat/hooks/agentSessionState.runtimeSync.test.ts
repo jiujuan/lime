@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem, Message } from "../types";
 import { buildHydratedAgentSessionSnapshot } from "./agentSessionState";
 import {
@@ -93,7 +93,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
         status: "completed",
         active_turn_id: null,
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-app-server-detail",
@@ -192,7 +192,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
         status: "waiting_request",
         active_turn_id: "turn-runtime-sync",
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-runtime-sync",
@@ -263,7 +263,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
         status: "completed",
         active_turn_id: "turn-runtime-sync-terminal",
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-runtime-sync-terminal",
@@ -347,7 +347,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
         status: "completed",
         active_turn_id: turnId,
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-runtime-sync-terminal-interrupted",
@@ -436,7 +436,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
         status: "completed",
         active_turn_id: turnId,
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-runtime-sync-items-terminal",
@@ -540,7 +540,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
           },
         ],
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-runtime-sync-detached-canceled",
@@ -621,7 +621,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
         status: "canceled",
         active_turn_id: undefined,
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-runtime-sync-items-canceled",
@@ -719,7 +719,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
           },
         ],
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-runtime-sync-thread-read-canceled",
@@ -769,7 +769,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
 
     rememberLocallyInterruptedAgentStreamBinding({
       assistantMsgId: "local-interrupted-assistant",
-      eventName: "aster_stream_local-interrupted-binding",
+      eventName: "agent_stream_local-interrupted-binding",
       sessionId: topicId,
     });
 
@@ -818,7 +818,7 @@ describe("agentSessionState runtimeSync detail refresh", () => {
         status: "running",
         active_turn_id: turnId,
       },
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId,

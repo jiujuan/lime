@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import {
   createAgentSessionReadModelSnapshot,
   refreshAgentSessionDetailState,
@@ -50,7 +50,7 @@ describe("agentSessionRefresh", () => {
   it("刷新 detail 时应应用 detail 并把 legacy executionStrategy 归一后同步", async () => {
     const applySessionDetail = vi.fn();
     const markSynced = vi.fn();
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-1",
       messages: [],
       created_at: 1,
@@ -97,7 +97,7 @@ describe("agentSessionRefresh", () => {
     const markSynced = vi.fn();
     const persistSessionAccessMode = vi.fn();
     const setAccessModeState = vi.fn();
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-1",
       messages: [],
       created_at: 1,

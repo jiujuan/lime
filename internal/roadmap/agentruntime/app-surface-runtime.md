@@ -2,7 +2,7 @@
 
 > 状态：in progress
 > 更新时间：2026-05-16
-> 作用：定义 Plugin 如何作为 AgentRuntime 的业务 surface 复用 Lime Agent / Claw / Aster 主链，而不是把 App 做成模型 API 壳或 Chat UI 旁路。
+> 作用：定义 Plugin 如何作为 AgentRuntime 的业务 surface 复用 Lime Agent / Claw / Agent 主链，而不是把 App 做成模型 API 壳或 Chat UI 旁路。
 
 ## 1. 一句话结论
 
@@ -16,7 +16,7 @@ Content Factory / Plugin
   -> Host Bridge / Capability Bridge
   -> Plugin Runtime Surface
   -> AgentRuntime control plane
-  -> Aster / lime_agent / Skills / Tools / MCP / Browser / Evidence
+  -> Agent / lime_agent / Skills / Tools / MCP / Browser / Evidence
   -> Plugin task events / artifacts / evidence write-back
 ```
 
@@ -128,7 +128,7 @@ Plugin 不再只抽象 `lime.agent / lime.workflow` 两个入口。完整 Lime A
 App form state
   -> lime.agent.startTask / lime.workflow.start
   -> Plugin Runtime Surface
-  -> Aster runtime turn
+  -> Agent runtime turn
   -> Claw capability / Skill / Tool execution
   -> PluginTaskStreamEvent
   -> App review

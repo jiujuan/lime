@@ -51,6 +51,7 @@ export const IMAGE_COMMAND_SPLIT_MODULES = [
 export const RUNTIME_CORE_MAIN = "lime-rs/crates/app-server/src/runtime.rs";
 export const RUNTIME_CORE_OWNER_MODULES = [
   "lime-rs/crates/app-server/src/runtime/context_compaction.rs",
+  "lime-rs/crates/app-server/src/runtime/execution_request.rs",
   "lime-rs/crates/app-server/src/runtime/model_providers.rs",
   "lime-rs/crates/app-server/src/runtime/read_model.rs",
   "lime-rs/crates/app-server/src/runtime/session_control.rs",
@@ -129,7 +130,7 @@ export const AGENT_SESSION_CONFIGURATION_BOUNDARY =
 export const AGENT_TURN_CONTEXT_CONFIGURATION_BOUNDARY =
   "lime-rs/crates/agent/src/turn_context_configuration.rs";
 export const RUNTIME_BOUNDARY_ROADMAP =
-  "internal/roadmap/appserver/app-server-aster-runtime-boundary-governance.md";
+  "internal/roadmap/appserver/app-server-agent-runtime-boundary-governance.md";
 export const EXTERNAL_BACKEND_SCAN_DIRS = [
   "electron",
   "packages/app-server-client",
@@ -138,7 +139,7 @@ export const EXTERNAL_BACKEND_SCAN_DIRS = [
   "lime-rs/crates/app-server-daemon/src",
 ];
 
-export const ALLOWED_ASTER_COUPLING_OWNER_FILES = new Set([
+export const ALLOWED_AGENT_COUPLING_OWNER_FILES = new Set([
   "lime-rs/crates/app-server/src/agent_runtime_registry.rs",
   "lime-rs/crates/app-server/src/runtime_backend.rs",
   "lime-rs/crates/app-server/src/runtime_backend/action_response.rs",
@@ -152,37 +153,37 @@ export const ALLOWED_ASTER_COUPLING_OWNER_FILES = new Set([
   "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs",
 ]);
 
-export const KNOWN_OUT_OF_BOUND_ASTER_COUPLING_FILES = new Set<string>();
-export const KNOWN_OUT_OF_BOUND_ASTER_EXECUTION_FILES = new Set<string>();
+export const KNOWN_OUT_OF_BOUND_AGENT_COUPLING_FILES = new Set<string>();
+export const KNOWN_OUT_OF_BOUND_AGENT_EXECUTION_FILES = new Set<string>();
 
-export const ASTER_COUPLING_SNIPPETS = [
-  "use aster::",
-  "aster::",
-  "AsterAgentState",
-  "initialize_aster_runtime(",
+export const AGENT_COUPLING_SNIPPETS = [
+  "use agent::",
+  "agent::",
+  "AgentState",
+  "initialize_agent_runtime(",
 ];
 
-export const ASTER_EXECUTION_SNIPPETS = [
+export const AGENT_EXECUTION_SNIPPETS = [
   "stream_reply_with_policy(",
   ".configure_provider(",
   "configure_provider_from_pool(",
   "provider_config_from_pool(",
 ];
 
-export const ASTER_PROVIDER_CONFIGURATION_SNIPPETS = [
+export const AGENT_PROVIDER_CONFIGURATION_SNIPPETS = [
   ".configure_provider(",
   "configure_provider_from_pool(",
   "provider_config_from_pool(",
   "provider_config_with_route_protocol(",
-  "AsterProviderProtocol",
   "RuntimeProviderProtocol",
-  "aster_provider_protocol_from_route",
+  "RuntimeProviderProtocol",
   "runtime_provider_protocol_from_route",
-  "route_protocol_from_aster_protocol",
+  "runtime_provider_protocol_from_route",
+  "route_protocol_from_agent_protocol",
   "route_protocol_from_runtime_protocol",
 ];
 
-export const ASTER_SKILL_EXECUTION_SNIPPETS = [
+export const AGENT_SKILL_EXECUTION_SNIPPETS = [
   "execute_skill_prompt(",
   "execute_skill_workflow(",
   "SkillPromptExecution",
@@ -233,7 +234,7 @@ export const ALLOWED_EXTERNAL_BACKEND_LAUNCH_FILES = new Set([
   "scripts/smoke/agent-session-messages-electron-fixture-smoke.test.mjs",
 ]);
 
-export const KNOWN_OUT_OF_BOUND_ASTER_BASELINE: Array<{
+export const KNOWN_OUT_OF_BOUND_AGENT_BASELINE: Array<{
   path: string;
   snippets: Record<string, number>;
 }> = [];

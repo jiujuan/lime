@@ -4,6 +4,7 @@ import {
   type AppServerAgentSessionReadResponse,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
+import { createRuntimeRequest } from "@limecloud/app-server-client";
 
 const CONTEXT_SEARCH_SESSION_PREFIX = "__lime_theme_context_search__";
 const DEFAULT_APP_ID = "desktop";
@@ -173,27 +174,13 @@ export async function searchThemeContextWithAppServer(
     },
     runtimeOptions: {
       stream: true,
-      providerPreference: providerType,
-      modelPreference: model,
-      metadata,
-      hostOptions: {
-        asterChatRequest: {
-          message: prompt,
-          session_id: sessionId,
-          workspace_id: workspaceId,
-          provider_preference: providerType,
-          model_preference: model,
-          system_prompt: systemPrompt,
-          turn_id: turnId,
-          metadata,
-          turn_config: {
-            provider_preference: providerType,
-            model_preference: model,
-            system_prompt: systemPrompt,
-            metadata,
-          },
-        },
-      },
+      runtimeRequest: createRuntimeRequest({
+        workspaceId,
+        providerPreference: providerType,
+        modelPreference: model,
+        systemPrompt,
+        metadata,
+      }),
     },
     queueIfBusy: false,
     skipPreSubmitResume: true,
@@ -257,10 +244,7 @@ function extractAttemptsSummary(
 ): string | undefined {
   for (let index = notifications.length - 1; index >= 0; index -= 1) {
     const event = eventFromNotification(notifications[index]);
-    if (
-      event?.turnId !== turnId ||
-      event.type !== "turn.completed"
-    ) {
+    if (event?.turnId !== turnId || event.type !== "turn.completed") {
       continue;
     }
     const payload = asRecord(event.payload);

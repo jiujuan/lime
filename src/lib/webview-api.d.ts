@@ -252,7 +252,7 @@ export interface BrowserConnectorInstallResult {
 }
 export type BrowserConnectorGuideMode = "extension" | "cdp";
 export type BrowserBackendType =
-  | "aster_compat"
+  | "current"
   | "lime_extension_bridge"
   | "cdp_direct";
 export interface BrowserBackendPolicy {
@@ -271,8 +271,8 @@ export interface BrowserBackendsStatusSnapshot {
   bridge_control_count: number;
   running_profile_count: number;
   cdp_alive_profile_count: number;
-  aster_native_host_supported: boolean;
-  aster_native_host_configured: boolean;
+  agent_native_host_supported: boolean;
+  agent_native_host_configured: boolean;
   backends: BrowserBackendStatusItem[];
 }
 export interface BrowserActionRequest {

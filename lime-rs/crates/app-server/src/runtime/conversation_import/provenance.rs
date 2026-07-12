@@ -3,7 +3,7 @@ use crate::runtime::timestamp;
 use app_server_protocol::{
     ConversationImportFidelitySummary, ConversationImportSourceClient,
     ConversationImportSourceProvenance, ConversationImportSourceStatus, ImportedThreadSummary,
-    RuntimeOptions,
+    RuntimeOptions, RuntimeRequest,
 };
 use serde_json::{json, Value};
 
@@ -53,45 +53,19 @@ impl ImportProvenance {
         let model = self.model.clone();
         let reasoning_effort = self.reasoning_effort.clone();
         let approval_policy = metadata_string(self.metadata.as_ref(), "approvalPolicy");
-        let approvals_reviewer = metadata_string(self.metadata.as_ref(), "approvalsReviewer");
-        let sandbox_policy = metadata_value(self.metadata.as_ref(), "sandboxPolicy");
-        let service_tier = metadata_string(self.metadata.as_ref(), "serviceTier");
-        let collaboration_mode = metadata_string(self.metadata.as_ref(), "collaborationMode");
-        let personality = metadata_value(self.metadata.as_ref(), "personality");
+        let sandbox_policy = metadata_string(self.metadata.as_ref(), "sandboxPolicy");
         RuntimeOptions {
-            provider_preference: self.model_provider.clone(),
-            model_preference: self.model.clone(),
-            metadata: Some(metadata.clone()),
-            host_options: Some(compact_json(json!({
-                "asterChatRequest": {
-                    "project_root": cwd.clone(),
-                    "cwd": cwd.clone(),
-                    "provider_preference": model_provider.clone(),
-                    "model_preference": model.clone(),
-                    "reasoning_effort": reasoning_effort.clone(),
-                    "approval_policy": approval_policy.clone(),
-                    "approvals_reviewer": approvals_reviewer.clone(),
-                    "sandbox_policy": sandbox_policy.clone(),
-                    "service_tier": service_tier.clone(),
-                    "collaboration_mode": collaboration_mode.clone(),
-                    "personality": personality.clone(),
-                    "metadata": metadata.clone(),
-                    "turn_config": {
-                        "project_root": cwd.clone(),
-                        "cwd": cwd,
-                        "provider_preference": model_provider.clone(),
-                        "model_preference": model,
-                        "reasoning_effort": reasoning_effort,
-                        "approval_policy": approval_policy,
-                        "approvals_reviewer": approvals_reviewer,
-                        "sandbox_policy": sandbox_policy,
-                        "service_tier": service_tier,
-                        "collaboration_mode": collaboration_mode,
-                        "personality": personality,
-                        "metadata": metadata,
-                    }
-                }
-            }))),
+            runtime_request: Some(RuntimeRequest {
+                provider_preference: model_provider,
+                model_preference: model,
+                reasoning_effort,
+                approval_policy,
+                sandbox_policy,
+                working_dir: cwd.clone(),
+                project_root: cwd,
+                metadata: Some(metadata),
+                ..RuntimeRequest::default()
+            }),
             ..RuntimeOptions::default()
         }
     }

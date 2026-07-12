@@ -6,7 +6,7 @@ import {
 } from "@/lib/api/appServer";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/threadClient";
@@ -70,7 +70,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
 
     await registerAgentStreamTurnEventBinding({
       runtime,
-      eventName: "aster_stream_tail-recovery",
+      eventName: "agent_stream_tail-recovery",
       requestState,
       attemptSilentTurnRecovery,
       skipUserMessage: false,
@@ -114,7 +114,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
       setExecutionRuntime:
-        noopDispatch<AsterSessionExecutionRuntime | null>(),
+        noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: setIsSending as never,
     });
 
@@ -150,7 +150,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       },
     );
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
-      "aster_stream_tail-recovery",
+      "agent_stream_tail-recovery",
     );
     expect(disposeListener).toHaveBeenCalled();
     expect(setIsSending).toHaveBeenCalledWith(false);
@@ -181,7 +181,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
 
     await registerAgentStreamTurnEventBinding({
       runtime,
-      eventName: "aster_stream_tail-recovery-rearm",
+      eventName: "agent_stream_tail-recovery-rearm",
       requestState,
       attemptSilentTurnRecovery,
       skipUserMessage: false,
@@ -225,7 +225,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
       setExecutionRuntime:
-        noopDispatch<AsterSessionExecutionRuntime | null>(),
+        noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -265,7 +265,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       },
     );
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
-      "aster_stream_tail-recovery-rearm",
+      "agent_stream_tail-recovery-rearm",
     );
     expect(disposeListener).toHaveBeenCalled();
   });

@@ -4,7 +4,7 @@ import type {
   AgentEventArtifactSnapshot,
   AgentEventContextTrace,
 } from "@/lib/api/agentProtocol";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import type {
   ActionRequired,
   ApprovalDecision,
@@ -159,7 +159,7 @@ export function handleActionRequiredEvent({
   data: AgentEventActionRequired;
   eventName: string;
   actionLoggedKeys: Set<string>;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   runtime: AgentRuntimeAdapter;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
 }) {
@@ -193,7 +193,7 @@ export function handleActionRequiredEvent({
         `类型: ${actionData.actionType}`,
       workspaceId: resolvedWorkspaceId,
       sessionId: activeSessionId,
-      source: "aster-chat",
+      source: "agent-chat",
       correlationId: actionData.requestId,
       metadata: {
         actionType: actionData.actionType,

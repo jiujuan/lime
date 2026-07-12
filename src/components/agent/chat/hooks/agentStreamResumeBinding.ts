@@ -6,8 +6,8 @@ import {
 } from "@/lib/api/agentProtocol";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { ActionRequired, Message } from "../types";
@@ -62,7 +62,7 @@ interface BindRecoveredAgentStreamThreadOptions {
     textDelta: string,
   ) => MessageParts;
   clearActiveStreamIfMatch: (eventName: string) => boolean;
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   getMessages?: () => readonly Message[];
   getThreadItems?: () => readonly AgentThreadItem[];
   listenerMapRef: MutableRefObject<Map<string, () => void>>;
@@ -76,7 +76,7 @@ interface BindRecoveredAgentStreamThreadOptions {
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setExecutionRuntime: Dispatch<
-    SetStateAction<AsterSessionExecutionRuntime | null>
+    SetStateAction<AgentSessionExecutionRuntime | null>
   >;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setPendingActions: Dispatch<SetStateAction<ActionRequired[]>>;
@@ -160,7 +160,7 @@ export function rememberLocallyStartedAgentStreamBinding(
 ): void {
   const sessionId = normalizeNonEmpty(stream?.sessionId);
   const eventName = normalizeNonEmpty(stream?.eventName);
-  if (!sessionId || !eventName?.startsWith("aster_stream_")) {
+  if (!sessionId || !eventName?.startsWith("agent_stream_")) {
     return;
   }
 
@@ -689,7 +689,7 @@ export async function bindRecoveredAgentStreamThread(
       });
     });
   } catch (error) {
-    console.error("[AsterChat] 恢复运行中会话事件监听失败:", error);
+    console.error("[AgentChat] 恢复运行中会话事件监听失败:", error);
     clearActiveStreamIfMatch(target.eventName);
     return null;
   }
@@ -698,7 +698,7 @@ export async function bindRecoveredAgentStreamThread(
   void runtime
     .resumeThread(target.sessionId, target.turnId)
     .catch((error) => {
-      console.error("[AsterChat] 恢复运行中会话执行失败:", error);
+      console.error("[AgentChat] 恢复运行中会话执行失败:", error);
     })
     .finally(() => {
       void refreshSessionReadModel(target.sessionId);

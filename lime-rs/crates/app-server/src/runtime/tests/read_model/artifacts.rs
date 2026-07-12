@@ -1243,7 +1243,8 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                metadata: Some(json!({
+                runtime_request: Some(app_server_protocol::RuntimeRequest {
+                    metadata: Some(json!({
                     "plugin": {
                         "source": "right_surface_article_workspace",
                         "app_id": "content-factory-app",
@@ -1273,7 +1274,9 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
                         "source": "threadRead",
                         "action_key": "regenerate"
                     }
-                })),
+                    })),
+                    ..app_server_protocol::RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,

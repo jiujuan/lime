@@ -8,7 +8,7 @@ import {
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { ActionRequired, Message } from "../types";
@@ -87,7 +87,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -107,7 +107,7 @@ describe("agentStreamTurnEventBinding", () => {
           title: "发送请求",
           sessionId: "session-1",
           workspaceId: "workspace-1",
-          source: "aster-chat",
+          source: "agent-chat",
         }),
       ]),
     );
@@ -189,7 +189,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -281,7 +281,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: setIsSending as never,
     });
 
@@ -377,7 +377,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -469,7 +469,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: setIsSending as never,
     });
 
@@ -578,7 +578,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: setIsSending as never,
     });
 
@@ -702,7 +702,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -775,7 +775,7 @@ describe("agentStreamTurnEventBinding", () => {
 
     await registerAgentStreamTurnEventBinding({
       runtime,
-      eventName: "aster_stream_runtime-error",
+      eventName: "agent_stream_runtime-error",
       requestState,
       skipUserMessage: false,
       effectiveProviderType: "openai",
@@ -815,7 +815,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending,
     });
 
@@ -854,7 +854,7 @@ describe("agentStreamTurnEventBinding", () => {
       title: "当前处理失败",
     });
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
-      "aster_stream_runtime-error",
+      "agent_stream_runtime-error",
     );
     expect(disposeListener).toHaveBeenCalled();
     expect(setIsSending).toHaveBeenCalledWith(false);
@@ -942,7 +942,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -1025,7 +1025,7 @@ describe("agentStreamTurnEventBinding", () => {
 
     await registerAgentStreamTurnEventBinding({
       runtime,
-      eventName: "aster_stream_running-read-model",
+      eventName: "agent_stream_running-read-model",
       requestState,
       attemptSilentTurnRecovery,
       skipUserMessage: false,
@@ -1068,7 +1068,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: setIsSending as never,
     });
 
@@ -1205,7 +1205,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -1291,7 +1291,7 @@ describe("agentStreamTurnEventBinding", () => {
 
     await registerAgentStreamTurnEventBinding({
       runtime,
-      eventName: "aster_stream_message-app-server",
+      eventName: "agent_stream_message-app-server",
       requestState,
       skipUserMessage: false,
       effectiveProviderType: "openai",
@@ -1333,7 +1333,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -1403,7 +1403,7 @@ describe("agentStreamTurnEventBinding", () => {
     ]);
     expect(streamActivated).toBe(true);
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
-      "aster_stream_message-app-server",
+      "agent_stream_message-app-server",
     );
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
@@ -1457,7 +1457,7 @@ describe("agentStreamTurnEventBinding", () => {
 
     await registerAgentStreamTurnEventBinding({
       runtime,
-      eventName: "aster_stream_message-app-server-web-tools",
+      eventName: "agent_stream_message-app-server-web-tools",
       requestState,
       skipUserMessage: false,
       effectiveProviderType: "openai",
@@ -1503,7 +1503,7 @@ describe("agentStreamTurnEventBinding", () => {
       setThreadItems: setThreadItems as never,
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 
@@ -1663,7 +1663,7 @@ describe("agentStreamTurnEventBinding", () => {
       "tool_call",
     ]);
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
-      "aster_stream_message-app-server-web-tools",
+      "agent_stream_message-app-server-web-tools",
     );
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
@@ -1715,7 +1715,7 @@ describe("agentStreamTurnEventBinding", () => {
 
     await registerAgentStreamTurnEventBinding({
       runtime,
-      eventName: "aster_stream_message-app-server-cancel",
+      eventName: "agent_stream_message-app-server-cancel",
       requestState,
       skipUserMessage: false,
       effectiveProviderType: "openai",
@@ -1760,7 +1760,7 @@ describe("agentStreamTurnEventBinding", () => {
         currentTurnId =
           typeof value === "function" ? value(currentTurnId) : value;
       },
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: (value) => {
         isSending = typeof value === "function" ? value(isSending) : value;
       },
@@ -1809,7 +1809,7 @@ describe("agentStreamTurnEventBinding", () => {
     expect(currentTurnId).toBe("turn-app-server-cancel");
     expect(isSending).toBe(false);
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
-      "aster_stream_message-app-server-cancel",
+      "agent_stream_message-app-server-cancel",
     );
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });

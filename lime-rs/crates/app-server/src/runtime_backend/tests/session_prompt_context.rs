@@ -1,4 +1,5 @@
 use super::*;
+use app_server_protocol::{RuntimeRequest, RuntimeSearchMode};
 
 #[test]
 fn session_config_appends_memory_context_to_system_prompt() {
@@ -19,9 +20,9 @@ fn session_config_appends_memory_context_to_system_prompt() {
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -70,9 +71,9 @@ Full body should not be rendered.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -109,7 +110,7 @@ fn fast_response_with_default_auto_search_uses_compact_tool_surface() {
             }
         })),
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
     assert!(!should_defer_tool_surface_for_fast_response(
@@ -124,11 +125,10 @@ fn fast_response_with_default_auto_search_uses_compact_tool_surface() {
 fn fast_response_with_required_search_keeps_full_tool_surface_preparation() {
     let request = request_for_test(
         "帮我快速说明 TTFT 优化重点",
-        Some(json!({
-            "asterChatRequest": {
-                "search_mode": "required"
-            }
-        })),
+        Some(RuntimeRequest {
+            search_mode: Some(RuntimeSearchMode::Required),
+            ..RuntimeRequest::default()
+        }),
         Some(json!({
             "harness": {
                 "fast_response_routing": {
@@ -138,7 +138,7 @@ fn fast_response_with_required_search_keeps_full_tool_surface_preparation() {
             }
         })),
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
     assert_eq!(policy.search_mode, RequestToolPolicyMode::Required);
@@ -154,11 +154,10 @@ fn fast_response_with_required_search_keeps_full_tool_surface_preparation() {
 fn fast_response_with_explicit_search_disabled_can_defer_tool_surface_preparation() {
     let request = request_for_test(
         "帮我快速说明 TTFT 优化重点",
-        Some(json!({
-            "asterChatRequest": {
-                "web_search": false
-            }
-        })),
+        Some(RuntimeRequest {
+            web_search: Some(false),
+            ..RuntimeRequest::default()
+        }),
         Some(json!({
             "harness": {
                 "fast_response_routing": {
@@ -168,7 +167,7 @@ fn fast_response_with_explicit_search_disabled_can_defer_tool_surface_preparatio
             }
         })),
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
     assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
@@ -200,7 +199,7 @@ fn fast_response_with_plugin_activation_keeps_tool_surface_preparation() {
             }
         })),
     );
-    let host_request = aster_chat_request_from_request(&request);
+    let host_request = runtime_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
     assert!(!should_defer_tool_surface_for_fast_response(
@@ -238,11 +237,10 @@ Full body should not be rendered.
     .expect("skill file");
     let mut request = request_for_test(
         "帮我快速说明 TTFT 优化重点",
-        Some(json!({
-            "asterChatRequest": {
-                "web_search": false
-            }
-        })),
+        Some(RuntimeRequest {
+            web_search: Some(false),
+            ..RuntimeRequest::default()
+        }),
         Some(json!({
             "harness": {
                 "workspace_root": workspace.path().to_string_lossy(),
@@ -260,9 +258,9 @@ Full body should not be rendered.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
@@ -350,11 +348,10 @@ Full body should not be rendered.
     .expect("skill file");
     let mut request = request_for_test(
         "帮我快速说明 TTFT 优化重点",
-        Some(json!({
-            "asterChatRequest": {
-                "webSearch": true
-            }
-        })),
+        Some(RuntimeRequest {
+            web_search: Some(true),
+            ..RuntimeRequest::default()
+        }),
         Some(json!({
             "harness": {
                 "workspace_root": workspace.path().to_string_lossy(),
@@ -372,9 +369,9 @@ Full body should not be rendered.
         })),
     );
     let options = request.runtime_options.as_mut().expect("runtime options");
-    options.provider_preference = Some("openai".to_string());
-    options.model_preference = Some("gpt-4.1".to_string());
-    let host_request = aster_chat_request_from_request(&request);
+    options.runtime_request_mut().provider_preference = Some("openai".to_string());
+    options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    let host_request = runtime_request_from_request(&request);
     let scope = session_scope_from_request(&request).expect("session scope");
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());

@@ -166,7 +166,7 @@ fn no_auth_provider_name_from_protocol(protocol: &ProtocolKind) -> Option<&'stat
 fn model_ref_source(source: &str) -> ModelRefSource {
     match source {
         "runtime_options" => ModelRefSource::RuntimeOptions,
-        "host_options_provider_config" => ModelRefSource::HostOptions,
+        "runtime_request_provider_config" => ModelRefSource::RuntimeRequest,
         "profile_model_slot" => ModelRefSource::ProfileSlot,
         "session_default" => ModelRefSource::SessionDefault,
         "direct_provider_config" => ModelRefSource::DirectProviderConfig,
@@ -380,7 +380,7 @@ mod tests {
         let selection = RuntimeModelSelection {
             provider: "fixture-openai".to_string(),
             model: "fixture-model".to_string(),
-            source: "host_options_provider_config",
+            source: "runtime_request_provider_config",
             reasoning_effort: None,
         };
         let task_request = build_model_task_request(ModelTaskRequestInput {
@@ -388,7 +388,7 @@ mod tests {
             source: ModelTaskSource::AgentTurn,
             provider_id: Some(selection.provider.clone()),
             model_id: Some(selection.model.clone()),
-            model_ref_source: ModelRefSource::HostOptions,
+            model_ref_source: ModelRefSource::RuntimeRequest,
             modality_contract_key: Some("chat".to_string()),
             routing_slot: Some("coding".to_string()),
             task_families: vec!["chat".to_string(), "vision_understanding".to_string()],

@@ -16,7 +16,7 @@ sequenceDiagram
   participant API as threadClient
   participant Cmd as agent_runtime_submit_turn
   participant Queue as runtime_queue
-  participant RT as Aster Runtime
+  participant RT as Agent Runtime
   participant State as Frontend State
   participant UI as MessageList / StreamingRenderer
 
@@ -83,7 +83,7 @@ sequenceDiagram
   Store-->>Cmd: messages tail + turns + items
   Cmd->>Projection: build thread_read + queue snapshots + cursor
   Projection-->>Cmd: session detail
-  Cmd-->>API: AsterSessionDetail
+  Cmd-->>API: AgentSessionDetail
   API-->>Hook: normalized detail
   Hook->>ML: hydrate messages first
   ML-->>U: stable recent history visible
@@ -141,7 +141,7 @@ sequenceDiagram
   participant Hook as useAgentSession
   participant API as threadClient
   participant Cmd as agent_runtime_submit_turn
-  participant RT as Aster Runtime
+  participant RT as Agent Runtime
   participant State as Frontend State
   participant UI as Process / Capsule
 
@@ -166,7 +166,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant RT as Aster Runtime
+  participant RT as Agent Runtime
   participant Bind as AgentEvent Binding
   participant State as Frontend State
   participant UI as Action Card / Input A2UI
@@ -196,7 +196,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant RT as Aster Runtime / Tool
+  participant RT as Agent Runtime / Tool
   participant Bind as AgentEvent Binding
   participant Timeline as AgentTimelineRecorder
   participant ArtifactSvc as Artifact Services

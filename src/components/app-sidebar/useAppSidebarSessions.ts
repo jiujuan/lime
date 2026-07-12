@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
   listAgentRuntimeSessions,
-  type AsterSessionInfo,
+  type AgentSessionInfo,
   type AgentRuntimeSessionsChangedDetail,
 } from "@/lib/api/agentRuntime";
 import {
@@ -55,9 +55,9 @@ interface UseAppSidebarSessionsParams {
 }
 
 function mergeSidebarSessions(
-  sessionGroups: AsterSessionInfo[][],
-): AsterSessionInfo[] {
-  const sessionsById = new Map<string, AsterSessionInfo>();
+  sessionGroups: AgentSessionInfo[][],
+): AgentSessionInfo[] {
+  const sessionsById = new Map<string, AgentSessionInfo>();
   sessionGroups.flat().forEach((session) => {
     sessionsById.set(session.id, session);
   });
@@ -73,9 +73,9 @@ function buildSidebarSessionLoadRequests(params: {
   limit: number;
   projectIds: string[];
   projectCwds: string[];
-}): Array<Promise<AsterSessionInfo[]>> {
+}): Array<Promise<AgentSessionInfo[]>> {
   const { limit, projectIds, projectCwds } = params;
-  const requests: Array<Promise<AsterSessionInfo[]>> = [
+  const requests: Array<Promise<AgentSessionInfo[]>> = [
     listAgentRuntimeSessions({
       limit,
     }),
@@ -135,11 +135,11 @@ export function useAppSidebarSessions({
   activeAgentStreaming = false,
   conversationUntitledLabel,
 }: UseAppSidebarSessionsParams) {
-  const sidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
-  const optimisticSidebarSessionsRef = useRef<Map<string, AsterSessionInfo>>(
+  const sidebarSessionsRef = useRef<AgentSessionInfo[]>([]);
+  const optimisticSidebarSessionsRef = useRef<Map<string, AgentSessionInfo>>(
     new Map(),
   );
-  const [sidebarSessions, setSidebarSessions] = useState<AsterSessionInfo[]>(
+  const [sidebarSessions, setSidebarSessions] = useState<AgentSessionInfo[]>(
     [],
   );
   const [sidebarSessionsHasMore, setSidebarSessionsHasMore] = useState(false);
@@ -751,7 +751,7 @@ export function useAppSidebarSessions({
   }, []);
 
   const renameSidebarSessionOptimistically = useCallback(
-    (nextSession: AsterSessionInfo) => {
+    (nextSession: AgentSessionInfo) => {
       if (optimisticSidebarSessionsRef.current.has(nextSession.id)) {
         optimisticSidebarSessionsRef.current.set(nextSession.id, nextSession);
       }
@@ -767,7 +767,7 @@ export function useAppSidebarSessions({
   );
 
   const moveSidebarSessionArchiveStateOptimistically = useCallback(
-    (nextSession: AsterSessionInfo) => {
+    (nextSession: AgentSessionInfo) => {
       if (optimisticSidebarSessionsRef.current.has(nextSession.id)) {
         optimisticSidebarSessionsRef.current.set(nextSession.id, nextSession);
       }

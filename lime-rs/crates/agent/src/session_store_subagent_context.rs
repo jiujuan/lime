@@ -15,7 +15,7 @@ use crate::subagent_control::SubagentTurnStatus;
 use crate::subagent_control::{load_subagent_runtime_status, SubagentRuntimeStatus};
 use crate::subagent_profiles::SubagentSkillSummary;
 
-const RUNTIME_OVERLAY_ACTIVE_WINDOW_SECS: i64 = 30 * 60;
+const RUNTIME_ACTIVITY_ACTIVE_WINDOW_SECS: i64 = 30 * 60;
 
 fn is_recent_runtime_timestamp(value: &str, now: DateTime<Utc>) -> bool {
     let Ok(timestamp) = DateTime::parse_from_rfc3339(value) else {
@@ -24,7 +24,7 @@ fn is_recent_runtime_timestamp(value: &str, now: DateTime<Utc>) -> bool {
     let age_secs = now
         .signed_duration_since(timestamp.with_timezone(&Utc))
         .num_seconds();
-    age_secs <= RUNTIME_OVERLAY_ACTIVE_WINDOW_SECS
+    age_secs <= RUNTIME_ACTIVITY_ACTIVE_WINDOW_SECS
 }
 
 fn has_recent_runtime_activity_at(detail: &SessionDetail, now: DateTime<Utc>) -> bool {
@@ -37,25 +37,6 @@ fn has_recent_runtime_activity_at(detail: &SessionDetail, now: DateTime<Utc>) ->
     })
 }
 
-pub(crate) fn should_load_runtime_overlay_at(
-    detail: &SessionDetail,
-    history_limit: Option<usize>,
-    now: DateTime<Utc>,
-) -> bool {
-    if history_limit.is_none() {
-        return true;
-    }
-
-    has_recent_runtime_activity_at(detail, now)
-}
-
-pub(crate) fn should_load_runtime_overlay(
-    detail: &SessionDetail,
-    history_limit: Option<usize>,
-) -> bool {
-    should_load_runtime_overlay_at(detail, history_limit, Utc::now())
-}
-
 pub(crate) fn should_load_subagent_runtime_context(
     detail: &SessionDetail,
     history_limit: Option<usize>,
@@ -65,13 +46,6 @@ pub(crate) fn should_load_subagent_runtime_context(
     }
 
     history_limit.is_none() || has_recent_runtime_activity_at(detail, Utc::now())
-}
-
-pub(crate) fn should_load_runtime_overlay_for_runtime_detail(
-    detail: &SessionDetail,
-    history_limit: Option<usize>,
-) -> bool {
-    detail.is_persisted_empty() || should_load_runtime_overlay(detail, history_limit)
 }
 
 pub(crate) fn should_load_subagent_runtime_context_for_runtime_detail(

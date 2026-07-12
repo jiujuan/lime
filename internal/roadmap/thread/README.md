@@ -213,7 +213,7 @@ npm run test:contracts
    - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/agentSessionRefresh.test.ts" "src/components/agent/chat/hooks/agentSessionState.runtimeSync.test.ts" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.test.tsx"`
    - 结果：`3 files / 26 tests passed`。
 2. 发送与 provider 边界回归通过：
-   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" "src/components/agent/chat/utils/clawWorkspaceProviderSelection.test.ts"`
+   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAgentChat.test.tsx" "src/components/agent/chat/utils/clawWorkspaceProviderSelection.test.ts"`
    - 结果：`2 files / 186 tests passed`。
    - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.test.ts" "src/components/agent/chat/utils/buildUserInputSubmitOp.test.ts" "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts"`
    - 结果：`3 files / 50 tests passed`。
@@ -247,7 +247,7 @@ Phase 2 完成口径：
    - 定向命令：`./node_modules/.bin/vitest run "src/components/agent/chat/hooks/agentSessionTimelineMergePolicy.test.ts" "src/components/agent/chat/hooks/agentSessionState.runtimeSync.test.ts" "src/components/agent/chat/hooks/agentSessionRefresh.test.ts" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.test.tsx"`
    - 结果：`4 files / 31 tests passed`。
 3. Agent Chat 主路径回归：
-   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.test.ts" "src/components/agent/chat/utils/buildUserInputSubmitOp.test.ts" "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts"`
+   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAgentChat.test.tsx" "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.test.ts" "src/components/agent/chat/utils/buildUserInputSubmitOp.test.ts" "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts"`
    - 结果：`4 files / 230 tests passed`。
 4. Phase 4 GUI / Electron evidence：
    - `npm run smoke:agent-session-history-electron-fixture`
@@ -332,7 +332,7 @@ Phase 2 完成口径：
    - 前端自然语言输入不按“今天 / 新闻 / 价格 / 最新”等正文关键词写入 `searchMode=required`；默认由 App Server / Runtime 暴露 `search_mode=auto` 工具面，模型按 tool choice auto 自行选择。
 4. 2026-07-02 已重新执行的贴边界验证：
    - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/agentSessionTimelineMergePolicy.test.ts" "src/components/agent/chat/hooks/agentSessionState.runtimeSync.test.ts" "src/components/agent/chat/hooks/agentSessionRefresh.test.ts" "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.test.tsx"`：`4 files / 31 tests passed`。
-   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.test.ts" "src/components/agent/chat/utils/buildUserInputSubmitOp.test.ts" "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts"`：`4 files / 230 tests passed`。
+   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAgentChat.test.tsx" "src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.test.ts" "src/components/agent/chat/utils/buildUserInputSubmitOp.test.ts" "src/components/agent/chat/utils/submitOpRuntimeCompaction.test.ts"`：`4 files / 230 tests passed`。
    - `./node_modules/.bin/vitest run "src/components/agent/chat/utils/generalAgentPrompt.test.ts" "src/components/agent/chat/utils/fastResponseRouting.test.ts" "src/components/agent/chat/utils/buildUserInputSubmitOp.test.ts"`：`3 files / 34 tests passed`。
    - `./node_modules/.bin/vitest run "src/components/agent/chat/utils/generalAgentPrompt.test.ts" "src/components/agent/chat/utils/fastResponseRouting.test.ts" "src/components/agent/chat/utils/modelThemePolicy.test.ts" "src/components/agent/chat/utils/clawWorkspaceProviderSelection.test.ts"`：`4 files / 34 tests passed`。
    - `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy::policy_config`：`10 tests passed`。
@@ -428,10 +428,10 @@ Phase 2 完成口径：
    - Electron 输入不走 Vitest `related` 依赖图，改为直接运行相邻 `*.test.*` 文件；例如 `electron/hostCommands.ts` 解析到 `electron/hostCommands.test.ts`。
    - `scripts/lib/run-vitest-smart.unit.test.mjs` 覆盖前端 related 排除 Electron、Electron 源码相邻测试、Electron 测试文件直跑三条分支。
 2. i18n 污染修复：
-   - `useAsterAgentChat.testUtils.tsx` 在共享 `beforeEach` 中显式 `changeLimeLocale("zh-CN")`。
+   - `useAgentChat.testUtils.tsx` 在共享 `beforeEach` 中显式 `changeLimeLocale("zh-CN")`。
    - 空最终答复错误仍走 key-based i18n；测试夹具只固定中文断言环境，不把生产逻辑回退成硬编码中文。
 3. 验证：
-   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" --testNamePattern "turn_completed 前未收到正文" --bail=1`：`1 test passed`。
+   - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/useAgentChat.test.tsx" --testNamePattern "turn_completed 前未收到正文" --bail=1`：`1 test passed`。
    - `./node_modules/.bin/vitest run "scripts/lib/run-vitest-smart.unit.test.mjs"`：`10 tests passed`。
    - `npm run test:related -- electron/hostCommands.ts --bail=1`：`electron/hostCommands.test.ts`，`54 tests passed`。
    - `npm run test:related -- src/components/agent/chat/hooks/agentSessionState.ts src/components/agent/chat/hooks/agentSessionRefresh.ts src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts --bail=1`：`31 files / 396 tests passed`。
@@ -468,7 +468,7 @@ Phase 2 完成口径：
    - `StreamingRenderer.webSearch.test.tsx` 覆盖多次 WebSearch 拆成独立过程组，后续搜索不出现在前一个组。
    - `agentThreadGrouping.test.ts` 覆盖外置 timeline 中连续 WebSearch、WebSearch + WebFetch 后再次 WebSearch，以及内容工厂 WebSearch 都按调用边界拆组。
    - `messageListItemProjection.timeline.unit.test.ts` 覆盖运行中工具 timeline 不再把已提交导语挪到搜索过程后。
-   - `useAsterAgentChat.test.tsx` 覆盖 active streaming 期间不执行 `missingSessionVerify`，terminal 后再校验缺失会话。
+   - `useAgentChat.test.tsx` 覆盖 active streaming 期间不执行 `missingSessionVerify`，terminal 后再校验缺失会话。
    - `AppSidebar.conversations.test.tsx` 覆盖 active streaming 期间当前 session metadata 更新不会触发最近对话 `listSessions`，终态后只排一次刷新。
    - `agentStreamRuntimeHandler.unit.test.ts` / `agentStreamRuntimeStatusController.test.ts` 覆盖 provider trace 早于首字时的等待态补位，以及后续真实 `runtime_status` 覆盖补位状态。
 

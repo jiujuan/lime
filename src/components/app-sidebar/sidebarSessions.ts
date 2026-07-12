@@ -1,4 +1,4 @@
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import type { ConversationImportThreadCommitResponse } from "@/lib/api/conversationImport";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
 import { resolveSidebarSessionTitle } from "./sidebarSessionFormatting";
@@ -12,11 +12,11 @@ export function buildSidebarSessionRequestLimit(
 }
 
 export function splitSidebarSessionResult(params: {
-  sessions: AsterSessionInfo[];
+  sessions: AgentSessionInfo[];
   visibleCount: number;
   pageSize: number;
 }): {
-  sessions: AsterSessionInfo[];
+  sessions: AgentSessionInfo[];
   hasMore: boolean;
 } {
   const { sessions, visibleCount, pageSize } = params;
@@ -28,7 +28,7 @@ export function splitSidebarSessionResult(params: {
 }
 
 export function hasCachedSidebarSessionEntry(
-  sessions: AsterSessionInfo[],
+  sessions: AgentSessionInfo[],
   sessionId?: string | null,
 ): boolean {
   const normalizedSessionId = sessionId?.trim();
@@ -52,8 +52,8 @@ function compareSidebarSessionIdAsc(left?: string, right?: string): number {
 }
 
 export function sortSidebarSessions(
-  sessions: AsterSessionInfo[],
-): AsterSessionInfo[] {
+  sessions: AgentSessionInfo[],
+): AgentSessionInfo[] {
   return sessions
     .filter((session) => !isAuxiliaryAgentSessionId(session.id))
     .sort((left, right) => {
@@ -78,10 +78,10 @@ export function sortSidebarSessions(
 }
 
 export function buildVisibleSidebarSessions(params: {
-  sessions: AsterSessionInfo[];
+  sessions: AgentSessionInfo[];
   currentSessionId?: string | null;
   limit: number;
-}): AsterSessionInfo[] {
+}): AgentSessionInfo[] {
   const { sessions, currentSessionId, limit } = params;
   if (limit <= 0) {
     return [];
@@ -115,7 +115,7 @@ export function normalizeSidebarSearchText(value: string): string {
 }
 
 export function matchesSidebarSessionTitle(
-  session: AsterSessionInfo,
+  session: AgentSessionInfo,
   normalizedQuery: string,
   fallbackTitle: string,
 ): boolean {
@@ -141,7 +141,7 @@ function parseTimestampSeconds(value?: string | null): number | null {
 
 export function buildImportedSidebarSession(
   response: ConversationImportThreadCommitResponse,
-): AsterSessionInfo {
+): AgentSessionInfo {
   const createdAt =
     parseTimestampSeconds(response.session.createdAt) ??
     parseTimestampSeconds(response.thread.createdAt) ??

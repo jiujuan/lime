@@ -1,15 +1,12 @@
 [workspace]
 members = ["crates/*"]
 exclude = [
-  "crates/aster",
-  "crates/aster-models",
-  "vendor/aster-rust",
   "crates/credential",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "1.99.0"
+version = "1.100.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -50,10 +47,6 @@ app-server-transport = { path = "crates/app-server-transport" }
 patch-apply = { path = "crates/patch-apply" }
 voice-core = { path = "crates/voice-core" }
 document-preview = { path = "crates/document-preview" }
-# Agent compat staging - temporary alias for remaining Aster-shaped adapters.
-# 退出条件：Phase 6 完成后删除该 alias 和 crates/agent-compat*。
-aster = { package = "aster-core", path = "crates/agent-compat" }
-
 # 序列化
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

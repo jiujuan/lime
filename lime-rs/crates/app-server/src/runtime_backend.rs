@@ -53,6 +53,7 @@ use lime_agent::{
 };
 use lime_core::database::DbConnection;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
+use model_provider::current_client::CurrentProviderMessage;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -62,8 +63,8 @@ mod request_context;
 pub(crate) use provider_config::current_agent_runtime_config_metadata;
 use provider_config::{initialize_runtime_database, model_effective_event_from_runtime};
 use request_context::{
-    aster_chat_request_from_request, direct_provider_config_from_request,
-    request_tool_policy_from_request, resolve_runtime_model_selection,
+    direct_provider_config_from_request, request_tool_policy_from_request,
+    resolve_runtime_model_selection, runtime_request_from_request,
     selection_with_effective_reasoning, session_config_from_request, session_scope_from_request,
     should_defer_tool_surface_for_fast_response, should_use_compact_tool_surface_for_fast_response,
 };
@@ -151,6 +152,16 @@ impl RuntimeBackend {
         request: ExecutionRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
+        self.handle_turn_start_with_provider_history(request, Vec::new(), sink)
+            .await
+    }
+
+    async fn handle_turn_start_with_provider_history(
+        &self,
+        request: ExecutionRequest,
+        provider_history: Vec<CurrentProviderMessage>,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
         let session_scope = session_scope_from_request(&request)?;
         if image_command::handle_image_command_turn_if_present(
             Some(self),
@@ -163,7 +174,7 @@ impl RuntimeBackend {
         {
             return Ok(());
         }
-        let host_request = aster_chat_request_from_request(&request);
+        let host_request = runtime_request_from_request(&request);
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
         let defer_tool_surface =
             should_defer_tool_surface_for_fast_response(&request, &request_tool_policy);
@@ -275,7 +286,10 @@ impl RuntimeBackend {
             &self.agent_state,
             AgentTurnExecutionRequest {
                 session_id: &session_scope.session_id,
-                input_text: &request.input.text,
+                input: crate::runtime::provider_history::reply_input_from_agent_input(
+                    &request.input,
+                ),
+                initial_messages: provider_history,
                 session_config,
                 request_tool_policy: &request_tool_policy,
                 provider_configuration: Some(AgentTurnProviderConfiguration {
@@ -395,6 +409,16 @@ impl ExecutionBackend for RuntimeBackend {
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
         self.handle_turn_start(request, sink).await
+    }
+
+    async fn start_turn_with_provider_history(
+        &self,
+        request: ExecutionRequest,
+        provider_history: Vec<CurrentProviderMessage>,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.handle_turn_start_with_provider_history(request, provider_history, sink)
+            .await
     }
 
     async fn cancel_turn(

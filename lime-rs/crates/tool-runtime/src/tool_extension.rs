@@ -38,6 +38,23 @@ impl RuntimeExtensionConfig {
                 .any(|tool| tool == tool_name)
     }
 
+    pub fn is_tool_available(&self, tool_name: &str) -> bool {
+        self.available_tools.is_empty() || self.available_tools.iter().any(|tool| tool == tool_name)
+    }
+
+    pub fn deferred_loading(&self) -> bool {
+        self.deferred_loading
+    }
+
+    pub fn allowed_caller(&self) -> Option<&str> {
+        self.allowed_caller.as_deref()
+    }
+
+    pub fn is_caller_allowed(&self, caller: &str) -> bool {
+        self.allowed_caller()
+            .is_none_or(|required| required == caller)
+    }
+
     pub fn has_tools(&self) -> bool {
         !self.available_tools.is_empty()
     }

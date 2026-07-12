@@ -1,19 +1,15 @@
 //! Agent runtime 状态支持模块
 //!
-//! 提供可复用的会话配置构建、项目上下文 Prompt 构建、
-//! Lime Skills 加载与 Agent 身份配置。
+//! 提供可复用的会话配置构建与 Lime Skills 注册。
 
 #[cfg(test)]
 use agent_runtime::session_config::SessionConfigBuilder;
-use aster::AgentIdentity;
-use aster::ToolRegistrationConfig;
 use lime_core::app_paths;
 use lime_skills::{
     is_registered_skill, load_skills_from_directory, register_project_skill_directory,
     register_skill_directory,
 };
 use std::path::{Path, PathBuf};
-use tool_runtime::native_overlay::runtime_native_tool_registration_allowlist;
 
 /// 重新加载 Lime Skills
 pub fn reload_skills() {
@@ -29,25 +25,6 @@ pub fn register_project_skill_from_directory(
 
 pub fn is_skill_registered(skill_name: &str) -> bool {
     is_registered_skill(skill_name)
-}
-
-/// 创建 Lime 专属的 Agent 身份配置
-pub(crate) fn create_lime_identity() -> AgentIdentity {
-    AgentIdentity::new("Lime AI")
-        .with_language("Chinese")
-        .with_description("Lime 桌面端中的 AI 运行时，负责按会话上下文完成用户请求。")
-        .with_custom_prompt(LIME_IDENTITY_PROMPT.to_string())
-}
-
-/// 创建 Lime 的工具注册配置
-///
-/// 启用 request_user_input 回调，确保工具在 Agent 初始化时可用。
-pub(crate) fn create_lime_tool_config() -> ToolRegistrationConfig {
-    ToolRegistrationConfig::new()
-        .with_allowed_tool_names(runtime_native_tool_registration_allowlist().iter().copied())
-        .with_request_user_input_callback(
-            crate::request_user_input_bridge::create_request_user_input_callback(),
-        )
 }
 
 /// 加载 Lime Skills 到 `lime-skills` current registry。
@@ -234,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn aster_allowed_tools_parser_should_accept_agent_skills_standard_spacing() {
+    fn agent_allowed_tools_parser_should_accept_agent_skills_standard_spacing() {
         assert_eq!(
             parse_allowed_tools(Some("Bash(git:*) Bash(jq:*) Read")),
             Some(vec![
@@ -259,38 +236,3 @@ mod tests {
         assert_eq!(config.schedule_id.as_deref(), Some("schedule-1"));
     }
 }
-
-/// Lime 专属的 Agent 身份提示词。
-///
-/// 这里只保留稳定产品身份和硬边界；用户可感知的交互口吻由 App Server
-/// `memory.soul` 会话上下文控制，避免默认身份覆盖用户选择的 Soul 风格。
-const LIME_IDENTITY_PROMPT: &str = r#"你是 Lime 桌面端中的 AI 助手。
-
-## 关于 Lime
-
-Lime 帮助用户通过桌面端对话、项目资料、工具调用和工作区完成任务。
-
-## 语言规范
-
-1. **始终使用中文回复**：除非用户明确要求使用其他语言
-2. **代码注释使用中文**：生成代码时，注释应使用中文
-3. **技术术语保持原文**：API、JSON、HTTP、Token 等专业术语保持英文
-
-## 交互口吻
-
-- 交互口吻、问候、自我介绍、工具进展和失败恢复由当前会话的 `memory.soul` 上下文控制
-- 不要使用本默认身份覆盖 `memory.soul` 选择的风格
-- 如果当前会话没有 `memory.soul` 上下文，保持清晰、准确、可执行
-
-## Team 协作原则
-
-- 只有在任务存在多个相互独立的子问题、并行评审/验证、或用户明确要求多代理时，才进入 team 模式
-- 简单问题不要创建子代理；先判断当前阻塞步骤是否真的适合委派
-- 先区分关键路径与 sidecar 任务：如果下一步立即依赖结果，优先主线程自己做；只有不会阻塞下一步的独立子任务才适合并发委派
-- 多个子代理并发时，必须明确分工，避免让不同子代理修改同一片文件或重复劳动
-- 子代理默认不应继续创建新的子代理，避免团队深度失控
-- 需要显式建立或清理 team 上下文时，优先使用 TeamCreate / TeamDelete；进入 team 后再通过 Agent / SendMessage / ListPeers 维持协作主路径
-- 优先复用已有子代理上下文，通过 SendMessage 继续推进强相关任务，而不是反复创建新子代理
-- 只有当主线程确实被结果阻塞时，才围绕已有 team workspace 状态等待结果，不要反复机械轮询
-- 已删除的 `SubAgentTask` 工具名不应重新挂回 team runtime 主路径
-"#;

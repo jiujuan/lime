@@ -1,4 +1,4 @@
-import type { AgentRuntimeWebSearchMode } from "@/lib/api/agentRuntime";
+import type { RuntimeSearchMode } from "@/lib/api/agentRuntime";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 
 export const AGENT_FAST_RESPONSE_MODE_STORAGE_KEY =
@@ -54,7 +54,7 @@ export const FAST_RESPONSE_REASONING_EFFORT =
 export interface AgentFastResponseRoutingDecision {
   enabled: boolean;
   reason: AgentFastResponseRoutingReason;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   label?: string;
   profileId?: string;
   reasoningEffort?: string;
@@ -75,7 +75,7 @@ interface ResolveAgentFastResponseRoutingOptions {
   sourceText: string;
   imagesCount: number;
   toolPreferences: ChatToolPreferences;
-  searchMode?: AgentRuntimeWebSearchMode;
+  searchMode?: RuntimeSearchMode;
   effectiveWebSearch?: boolean;
   hasExplicitProviderOverride?: boolean;
   hasExplicitModelOverride?: boolean;
@@ -124,8 +124,8 @@ function isPlainFirstTurnTextCandidate(
 }
 
 function normalizeSearchMode(
-  mode?: AgentRuntimeWebSearchMode | null,
-): AgentRuntimeWebSearchMode | null {
+  mode?: RuntimeSearchMode | null,
+): RuntimeSearchMode | null {
   return mode === "disabled" || mode === "auto" || mode === "required"
     ? mode
     : null;
@@ -183,14 +183,14 @@ function normalizeString(value: unknown): string | null {
 }
 
 export function resolveAgentFastResponseSearchMode(params: {
-  searchMode?: AgentRuntimeWebSearchMode | null;
+  searchMode?: RuntimeSearchMode | null;
   effectiveWebSearch?: boolean;
-}): AgentRuntimeWebSearchMode | null {
+}): RuntimeSearchMode | null {
   return normalizeSearchMode(params.searchMode);
 }
 
 function hasHeavyToolPreference(params: {
-  searchMode?: AgentRuntimeWebSearchMode | null;
+  searchMode?: RuntimeSearchMode | null;
   toolPreferences: ChatToolPreferences;
 }): boolean {
   return Boolean(

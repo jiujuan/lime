@@ -276,7 +276,7 @@ Claude Code 在 `src/remote/sdkMessageAdapter.ts` 明确把一部分事件当成
 
 ### 5.5 缺少最终回收面
 
-`AsterSessionExecutionRuntime` 当前更多还是会话与偏好快照，还没有把下面这些作为稳定事实暴露给前端：
+`AgentSessionExecutionRuntime` 当前更多还是会话与偏好快照，还没有把下面这些作为稳定事实暴露给前端：
 
 - `task_profile`
 - `routing_decision`

@@ -1,39 +1,39 @@
 import type { AgentTurnContextSummary } from "./agentProtocol";
 
-export type AsterExecutionStrategy = "react";
-export type AsterApprovalPolicy =
+export type AgentExecutionStrategy = "react";
+export type AgentApprovalPolicy =
   | "never"
   | "on-request"
   | "on-failure"
   | "untrusted";
-export type AsterSandboxPolicy =
+export type AgentSandboxPolicy =
   | "read-only"
   | "workspace-write"
   | "danger-full-access";
-export type AsterSessionExecutionRuntimeAccessMode =
+export type AgentSessionExecutionRuntimeAccessMode =
   | "read-only"
   | "current"
   | "full-access";
 
-export type AsterSessionExecutionRuntimeSource =
+export type AgentSessionExecutionRuntimeSource =
   | "session"
   | "runtime_snapshot"
   | "turn_context"
   | "model_change";
 
-export interface AsterSessionExecutionRuntimePreferences {
+export interface AgentSessionExecutionRuntimePreferences {
   webSearch?: boolean;
   thinking?: boolean;
   task: boolean;
   subagent: boolean;
 }
 
-export type AsterSessionExecutionRuntimeRecentTeamSource =
+export type AgentSessionExecutionRuntimeRecentTeamSource =
   | "builtin"
   | "custom"
   | "ephemeral";
 
-export interface AsterSessionExecutionRuntimeRecentTeamRole {
+export interface AgentSessionExecutionRuntimeRecentTeamRole {
   id?: string | null;
   label?: string | null;
   summary?: string | null;
@@ -42,19 +42,19 @@ export interface AsterSessionExecutionRuntimeRecentTeamRole {
   skillIds?: string[] | null;
 }
 
-export interface AsterSessionExecutionRuntimeRecentTeamSelection {
+export interface AgentSessionExecutionRuntimeRecentTeamSelection {
   disabled: boolean;
   theme?: string | null;
   preferredTeamPresetId?: string | null;
   selectedTeamId?: string | null;
-  selectedTeamSource?: AsterSessionExecutionRuntimeRecentTeamSource | null;
+  selectedTeamSource?: AgentSessionExecutionRuntimeRecentTeamSource | null;
   selectedTeamLabel?: string | null;
   selectedTeamDescription?: string | null;
   selectedTeamSummary?: string | null;
-  selectedTeamRoles?: AsterSessionExecutionRuntimeRecentTeamRole[] | null;
+  selectedTeamRoles?: AgentSessionExecutionRuntimeRecentTeamRole[] | null;
 }
 
-export interface AsterSessionExecutionRuntimeTaskProfile {
+export interface AgentSessionExecutionRuntimeTaskProfile {
   kind: string;
   source: string;
   traits?: string[];
@@ -72,7 +72,7 @@ export interface AsterSessionExecutionRuntimeTaskProfile {
   entrySource?: string | null;
 }
 
-export interface AsterSessionExecutionRuntimeRoutingDecision {
+export interface AgentSessionExecutionRuntimeRoutingDecision {
   routingMode: string;
   decisionSource: string;
   decisionReason: string;
@@ -91,7 +91,7 @@ export interface AsterSessionExecutionRuntimeRoutingDecision {
   routingAttempts?: Record<string, unknown>[];
 }
 
-export interface AsterSessionExecutionRuntimeLimitState {
+export interface AgentSessionExecutionRuntimeLimitState {
   status: string;
   singleCandidateOnly: boolean;
   providerLocked: boolean;
@@ -102,7 +102,7 @@ export interface AsterSessionExecutionRuntimeLimitState {
   notes?: string[];
 }
 
-export interface AsterSessionExecutionRuntimeCostState {
+export interface AgentSessionExecutionRuntimeCostState {
   status: string;
   estimatedCostClass?: string | null;
   inputPerMillion?: number | null;
@@ -118,7 +118,7 @@ export interface AsterSessionExecutionRuntimeCostState {
   cacheCreationInputTokens?: number | null;
 }
 
-export interface AsterSessionExecutionRuntimePermissionState {
+export interface AgentSessionExecutionRuntimePermissionState {
   status: "not_required" | "declared_only" | "requires_confirmation" | string;
   requiredProfileKeys?: string[];
   askProfileKeys?: string[];
@@ -137,24 +137,24 @@ export interface AsterSessionExecutionRuntimePermissionState {
   notes?: string[];
 }
 
-export interface AsterSessionExecutionRuntimeLimitEvent {
+export interface AgentSessionExecutionRuntimeLimitEvent {
   eventKind: string;
   message: string;
   retryable: boolean;
 }
 
-export type AsterTurnOutputSchemaSource = "session" | "turn";
+export type AgentTurnOutputSchemaSource = "session" | "turn";
 
-export type AsterTurnOutputSchemaStrategy = "native" | "final_output_tool";
+export type AgentTurnOutputSchemaStrategy = "native" | "final_output_tool";
 
-export interface AsterTurnOutputSchemaRuntime {
-  source: AsterTurnOutputSchemaSource;
-  strategy: AsterTurnOutputSchemaStrategy;
+export interface AgentTurnOutputSchemaRuntime {
+  source: AgentTurnOutputSchemaSource;
+  strategy: AgentTurnOutputSchemaStrategy;
   providerName?: string | null;
   modelName?: string | null;
 }
 
-export interface AsterSessionExecutionRuntime {
+export interface AgentSessionExecutionRuntime {
   session_id: string;
   provider_selector?: string | null;
   provider_name?: string | null;
@@ -162,9 +162,9 @@ export interface AsterSessionExecutionRuntime {
   source_client?: string | null;
   imported_continuation?: Record<string, unknown> | null;
   imported_thread_settings?: Record<string, unknown> | null;
-  execution_strategy?: AsterExecutionStrategy | null;
-  output_schema_runtime?: AsterTurnOutputSchemaRuntime | null;
-  source: AsterSessionExecutionRuntimeSource;
+  execution_strategy?: AgentExecutionStrategy | null;
+  output_schema_runtime?: AgentTurnOutputSchemaRuntime | null;
+  source: AgentSessionExecutionRuntimeSource;
   mode?: string | null;
   latest_turn_id?: string | null;
   latest_turn_status?:
@@ -178,18 +178,18 @@ export interface AsterSessionExecutionRuntime {
     | "not_found"
     | null;
   context_summary?: AgentTurnContextSummary | null;
-  recent_access_mode?: AsterSessionExecutionRuntimeAccessMode | null;
-  recent_preferences?: AsterSessionExecutionRuntimePreferences | null;
-  recent_team_selection?: AsterSessionExecutionRuntimeRecentTeamSelection | null;
+  recent_access_mode?: AgentSessionExecutionRuntimeAccessMode | null;
+  recent_preferences?: AgentSessionExecutionRuntimePreferences | null;
+  recent_team_selection?: AgentSessionExecutionRuntimeRecentTeamSelection | null;
   recent_theme?: string | null;
   recent_session_mode?: "default" | "general_workbench" | string | null;
   recent_gate_key?: string | null;
   recent_run_title?: string | null;
   recent_content_id?: string | null;
-  task_profile?: AsterSessionExecutionRuntimeTaskProfile | null;
-  routing_decision?: AsterSessionExecutionRuntimeRoutingDecision | null;
-  limit_state?: AsterSessionExecutionRuntimeLimitState | null;
-  cost_state?: AsterSessionExecutionRuntimeCostState | null;
-  permission_state?: AsterSessionExecutionRuntimePermissionState | null;
-  limit_event?: AsterSessionExecutionRuntimeLimitEvent | null;
+  task_profile?: AgentSessionExecutionRuntimeTaskProfile | null;
+  routing_decision?: AgentSessionExecutionRuntimeRoutingDecision | null;
+  limit_state?: AgentSessionExecutionRuntimeLimitState | null;
+  cost_state?: AgentSessionExecutionRuntimeCostState | null;
+  permission_state?: AgentSessionExecutionRuntimePermissionState | null;
+  limit_event?: AgentSessionExecutionRuntimeLimitEvent | null;
 }

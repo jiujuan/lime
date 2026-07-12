@@ -117,18 +117,7 @@ fn provider_requires_enabled_api_key(provider: &ProviderWithKeys) -> bool {
 }
 
 fn metadata_candidates(request: &ExecutionRequest) -> Vec<&Value> {
-    let mut values = Vec::new();
-    if let Some(value) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-    {
-        values.push(value);
-    }
-    if let Some(value) = request.metadata.as_ref() {
-        values.push(value);
-    }
-    values
+    request.runtime_metadata().into_iter().collect()
 }
 
 fn is_supported_builtin_runtime_provider(provider: &str) -> bool {

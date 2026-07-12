@@ -25,6 +25,7 @@ mod diagnostics;
 mod event_log;
 mod event_store;
 mod evidence_provider;
+mod execution_request;
 mod expert_role_switch;
 mod exports;
 mod file_checkpoint_projection;
@@ -65,6 +66,7 @@ mod projection_status;
 mod projection_store;
 #[cfg(test)]
 mod projection_store_tests;
+pub(crate) mod provider_history;
 mod read_model;
 mod read_model_turn_usage;
 mod right_surface;
@@ -131,6 +133,7 @@ pub use event_log::EventLogRecord;
 pub use event_log::EventLogWriter;
 pub use evidence_provider::BasicEvidenceExportProvider;
 pub use evidence_provider::NoopEvidenceExportProvider;
+pub use execution_request::ExecutionRequest;
 pub use output_refs::FilesystemOutputSnapshotStore;
 pub use output_refs::NoopOutputSnapshotStore;
 pub use output_refs::OutputSnapshotReadRequest;
@@ -174,6 +177,7 @@ use chrono::Utc;
 use lime_browser_runtime::{BrowserProfileScope, BrowserRuntimeManager};
 use lime_infra::telemetry::RequestLog;
 use lime_infra::telemetry::TelemetryStore;
+use model_provider::current_client::CurrentProviderMessage;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -314,25 +318,6 @@ pub struct RuntimeCoreOutput<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExecutionRequest {
-    pub host: RuntimeHostContext,
-    pub session: AgentSession,
-    pub turn: AgentTurn,
-    pub input: app_server_protocol::AgentInput,
-    pub runtime_options: Option<app_server_protocol::RuntimeOptions>,
-    pub expected_output: Option<serde_json::Value>,
-    pub structured_output: Option<app_server_protocol::StructuredOutputContract>,
-    pub output_schema: Option<serde_json::Value>,
-    pub event_name: Option<String>,
-    pub provider_preference: Option<String>,
-    pub model_preference: Option<String>,
-    pub metadata: Option<serde_json::Value>,
-    pub queued_turn_id: Option<String>,
-    pub queue_if_busy: bool,
-    pub skip_pre_submit_resume: bool,
-}
-
-#[derive(Debug, Clone)]
 pub struct CancelExecutionRequest {
     pub host: RuntimeHostContext,
     pub session: AgentSession,
@@ -353,6 +338,12 @@ pub struct ActionRespondRequest {
     pub metadata: Option<serde_json::Value>,
     pub event_name: Option<String>,
     pub action_scope: Option<AgentSessionActionScope>,
+}
+
+impl ActionRespondRequest {
+    pub fn runtime_metadata(&self) -> Option<&serde_json::Value> {
+        self.metadata.as_ref()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -377,6 +368,15 @@ pub trait ExecutionBackend: Send + Sync {
         request: ExecutionRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError>;
+
+    async fn start_turn_with_provider_history(
+        &self,
+        request: ExecutionRequest,
+        _provider_history: Vec<CurrentProviderMessage>,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.start_turn(request, sink).await
+    }
 
     async fn cancel_turn(
         &self,

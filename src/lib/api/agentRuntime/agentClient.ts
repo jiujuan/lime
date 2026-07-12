@@ -1,6 +1,6 @@
 import type {
   AgentRuntimeGeneratedTitleResult,
-  AgentRuntimeInitStatus,
+  RuntimeProviderSelection,
 } from "./types";
 import {
   invokeAgentRuntimeBridge,
@@ -27,12 +27,11 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
-function isAgentRuntimeInitStatus(
+function isRuntimeProviderSelection(
   value: unknown,
-): value is AgentRuntimeInitStatus {
+): value is RuntimeProviderSelection {
   return (
     isRecord(value) &&
-    typeof value.initialized === "boolean" &&
     typeof value.provider_configured === "boolean" &&
     isOptionalString(value.provider_name) &&
     isOptionalString(value.provider_selector) &&
@@ -40,12 +39,12 @@ function isAgentRuntimeInitStatus(
   );
 }
 
-function assertAgentRuntimeInitStatus(
+function assertRuntimeProviderSelection(
   command: string,
   value: unknown,
-): asserts value is AgentRuntimeInitStatus {
-  if (!isAgentRuntimeInitStatus(value)) {
-    throw new Error(`${command} did not return agent runtime init status`);
+): asserts value is RuntimeProviderSelection {
+  if (!isRuntimeProviderSelection(value)) {
+    throw new Error(`${command} did not return runtime provider selection`);
   }
 }
 
@@ -127,10 +126,10 @@ export function createAgentClient({
     });
   }
 
-  async function initAgentRuntime(): Promise<AgentRuntimeInitStatus> {
-    const command = "agent_init";
+  async function getRuntimeProviderSelection(): Promise<RuntimeProviderSelection> {
+    const command = "get_runtime_provider_selection";
     const result = await bridgeInvoke<unknown>(command);
-    assertAgentRuntimeInitStatus(command, result);
+    assertRuntimeProviderSelection(command, result);
     return result;
   }
 
@@ -138,7 +137,7 @@ export function createAgentClient({
     generateAgentRuntimeTitleResult,
     generateAgentRuntimeTitle,
     generateAgentRuntimeSessionTitle,
-    initAgentRuntime,
+    getRuntimeProviderSelection,
   };
 }
 
@@ -146,5 +145,5 @@ export const {
   generateAgentRuntimeTitleResult,
   generateAgentRuntimeTitle,
   generateAgentRuntimeSessionTitle,
-  initAgentRuntime,
+  getRuntimeProviderSelection,
 } = createAgentClient();

@@ -185,19 +185,22 @@ describe("Agent API 治理护栏", () => {
     });
 
     await submitAgentRuntimeTurn({
-      message: "runtime hello",
-      session_id: "session-runtime",
-      event_name: "event-runtime",
-      workspace_id: "workspace-runtime",
-      turn_config: {
-        execution_strategy: "react",
-        provider_config: {
-          provider_id: "provider-runtime",
-          provider_name: "Provider Runtime",
-          model_name: "model-runtime",
-        },
-        metadata: {
-          source: "hook-facade",
+      sessionId: "session-runtime",
+      input: { text: "runtime hello" },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-runtime",
+        runtimeRequest: {
+          workspaceId: "workspace-runtime",
+          executionStrategy: "react",
+          providerConfig: {
+            providerId: "provider-runtime",
+            providerName: "Provider Runtime",
+            modelName: "model-runtime",
+          },
+          metadata: {
+            source: "hook-facade",
+          },
         },
       },
     });
@@ -210,24 +213,16 @@ describe("Agent API 治理护栏", () => {
       runtimeOptions: {
         stream: true,
         eventName: "event-runtime",
-        metadata: {
-          source: "hook-facade",
-        },
-        hostOptions: {
-          asterChatRequest: {
-            message: "runtime hello",
-            session_id: "session-runtime",
-            event_name: "event-runtime",
-            workspace_id: "workspace-runtime",
-            execution_strategy: "react",
-            provider_config: {
-              provider_id: "provider-runtime",
-              provider_name: "Provider Runtime",
-              model_name: "model-runtime",
-            },
-            metadata: {
-              source: "hook-facade",
-            },
+        runtimeRequest: {
+          workspaceId: "workspace-runtime",
+          executionStrategy: "react",
+          providerConfig: {
+            providerId: "provider-runtime",
+            providerName: "Provider Runtime",
+            modelName: "model-runtime",
+          },
+          metadata: {
+            source: "hook-facade",
           },
         },
       },
@@ -245,17 +240,20 @@ describe("Agent API 治理护栏", () => {
     });
 
     await submitAgentRuntimeTurn({
-      message: "查一下今天的汇率",
-      session_id: "session-runtime-search",
-      event_name: "event-runtime-search",
-      workspace_id: "workspace-runtime-search",
-      queue_if_busy: true,
-      queued_turn_id: "queued-turn-1",
-      skip_pre_submit_resume: true,
-      turn_config: {
-        execution_strategy: "react",
-        web_search: true,
+      sessionId: "session-runtime-search",
+      input: { text: "查一下今天的汇率" },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-runtime-search",
+        queuedTurnId: "queued-turn-1",
+        runtimeRequest: {
+          workspaceId: "workspace-runtime-search",
+          executionStrategy: "react",
+          webSearch: true,
+        },
       },
+      queueIfBusy: true,
+      skipPreSubmitResume: true,
     });
 
     expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START, {
@@ -267,17 +265,10 @@ describe("Agent API 治理护栏", () => {
         stream: true,
         eventName: "event-runtime-search",
         queuedTurnId: "queued-turn-1",
-        hostOptions: {
-          asterChatRequest: {
-            message: "查一下今天的汇率",
-            session_id: "session-runtime-search",
-            event_name: "event-runtime-search",
-            workspace_id: "workspace-runtime-search",
-            queue_if_busy: true,
-            queued_turn_id: "queued-turn-1",
-            execution_strategy: "react",
-            web_search: true,
-          },
+        runtimeRequest: {
+          workspaceId: "workspace-runtime-search",
+          executionStrategy: "react",
+          webSearch: true,
         },
       },
       queueIfBusy: true,
@@ -296,16 +287,19 @@ describe("Agent API 治理护栏", () => {
     });
 
     await submitAgentRuntimeTurn({
-      message: "请继续",
-      session_id: "session-runtime-preference",
-      event_name: "event-runtime-preference",
-      workspace_id: "workspace-runtime-preference",
-      turn_config: {
-        provider_preference: "custom-provider",
-        model_preference: "gpt-5.3-codex",
-        thinking_enabled: true,
-        approval_policy: "on-request",
-        sandbox_policy: "workspace-write",
+      sessionId: "session-runtime-preference",
+      input: { text: "请继续" },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-runtime-preference",
+        runtimeRequest: {
+          workspaceId: "workspace-runtime-preference",
+          providerPreference: "custom-provider",
+          modelPreference: "gpt-5.3-codex",
+          thinkingEnabled: true,
+          approvalPolicy: "on-request",
+          sandboxPolicy: "workspace-write",
+        },
       },
     });
 
@@ -317,20 +311,13 @@ describe("Agent API 治理护栏", () => {
       runtimeOptions: {
         stream: true,
         eventName: "event-runtime-preference",
-        providerPreference: "custom-provider",
-        modelPreference: "gpt-5.3-codex",
-        hostOptions: {
-          asterChatRequest: {
-            message: "请继续",
-            session_id: "session-runtime-preference",
-            event_name: "event-runtime-preference",
-            workspace_id: "workspace-runtime-preference",
-            provider_preference: "custom-provider",
-            model_preference: "gpt-5.3-codex",
-            thinking_enabled: true,
-            approval_policy: "on-request",
-            sandbox_policy: "workspace-write",
-          },
+        runtimeRequest: {
+          workspaceId: "workspace-runtime-preference",
+          providerPreference: "custom-provider",
+          modelPreference: "gpt-5.3-codex",
+          thinkingEnabled: true,
+          approvalPolicy: "on-request",
+          sandboxPolicy: "workspace-write",
         },
       },
     });
@@ -418,7 +405,7 @@ describe("Agent API 治理护栏", () => {
       confirmed: true,
       response: '{"answer":"继续"}',
       user_data: { answer: "继续" },
-      event_name: "aster_stream_session-runtime",
+      event_name: "agent_stream_session-runtime",
     });
 
     expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND, {
@@ -428,7 +415,7 @@ describe("Agent API 治理护栏", () => {
       confirmed: true,
       response: '{"answer":"继续"}',
       userData: { answer: "继续" },
-      eventName: "aster_stream_session-runtime",
+      eventName: "agent_stream_session-runtime",
     });
   });
 
@@ -1766,7 +1753,7 @@ describe("Agent API 治理护栏", () => {
             profiles: ["core"],
             capabilities: ["execution"],
             lifecycle: "current",
-            source: "aster_builtin",
+            source: "agent_builtin",
             permission_plane: "parameter_restricted",
             workspace_default_allow: false,
             execution_warning_policy: "shell_command_risk",
@@ -1782,7 +1769,7 @@ describe("Agent API 治理护栏", () => {
             name: "bash",
             description: "workspace bash",
             catalog_entry_name: "bash",
-            catalog_source: "aster_builtin",
+            catalog_source: "agent_builtin",
             catalog_lifecycle: "current",
             catalog_permission_plane: "parameter_restricted",
             catalog_workspace_default_allow: false,

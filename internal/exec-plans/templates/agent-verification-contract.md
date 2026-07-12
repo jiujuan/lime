@@ -215,7 +215,20 @@ Supervisor 不判断：
 下一刀：
 ```
 
-## 11. 最小示例
+## 11. 架构图确认
+
+先对照 `internal/aiprompts/architecture.md` 判断是否属于重大架构变更。满足新增/删除/move crate 或 package、改变跨层 owner/数据流/协议/read model/provider/tool owner、改变 Electron Host/Forge/交付门禁任一项时，必须填写：
+
+```text
+架构影响：
+架构图已更新：<章节/路径，或“不适用：原因”>
+责任开发者确认：<姓名或账号>，<YYYY-MM-DD>
+确认内容：已核对目录归属、数据流、依赖方向、协议边界和验证门禁。
+```
+
+每个 PR 都必须声明本次为重大或非重大架构变更；架构敏感路径只能声明重大。Quality workflow 的 `governance:architecture-confirmation` 会验证 PR 描述、变更范围与上述字段。没有责任开发者确认的重大变更不得标记完成或进入 release evidence。
+
+## 12. 最小示例
 
 ```text
 预算标签：budget:tight

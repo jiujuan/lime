@@ -206,7 +206,7 @@ describe("electron/ipcChannels", () => {
 
   it("App Server truth bridge 命令由 Desktop Host 投影，不走原始 JSONL 通道", () => {
     expect([...ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS].sort()).toEqual([
-      "agent_init",
+      "get_runtime_provider_selection",
       "get_default_provider",
       "get_local_skills_for_app",
       "plugin_get_ui_runtime_status",

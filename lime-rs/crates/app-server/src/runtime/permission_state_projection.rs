@@ -65,6 +65,27 @@ pub(super) fn should_cancel_denied_permission_action(
         .is_some()
 }
 
+pub(super) fn is_runtime_preflight_action(stored: &StoredSession, request_id: &str) -> bool {
+    latest_permission_request(stored)
+        .and_then(|event| {
+            (event_request_id(&event.payload).as_deref() == Some(request_id)).then_some(event)
+        })
+        .is_some_and(|event| {
+            string_field(&event.payload, &["backend"]).as_deref() == Some("runtime_core")
+                && explicit_confirmation_source(&event.payload).as_deref()
+                    == Some("runtime_preflight")
+        })
+}
+
+fn explicit_confirmation_source(payload: &Value) -> Option<String> {
+    string_field(payload, &["confirmationSource", "confirmation_source"]).or_else(|| {
+        payload
+            .get("permission_state")
+            .or_else(|| payload.pointer("/data/permission_state"))
+            .and_then(|state| string_field(state, &["confirmationSource", "confirmation_source"]))
+    })
+}
+
 fn latest_permission_request(stored: &StoredSession) -> Option<&AgentEvent> {
     stored.events.iter().rev().find(|event| {
         event.event_type == "action.required"

@@ -38,7 +38,7 @@ flowchart TB
   Queue -->|忙碌且 steer| Steer[注入当前 turn 或 pending input]
 
   StartTurn --> EarlyStatus[尽早发 runtime_status preparing/routing]
-  EarlyStatus --> Runtime[Aster Agent Runtime]
+  EarlyStatus --> Runtime[Agent Agent Runtime]
   Runtime --> Events[turn_started / thinking_delta / text_delta / tool / artifact / action_required]
   Events --> FrontendReducer[handleTurnStreamEvent 更新前端状态]
   FrontendReducer --> UI[Conversation / Process / Task / Artifact UI]

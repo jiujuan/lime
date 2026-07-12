@@ -38,7 +38,7 @@ pub fn build_agent_session_config(request: AgentSessionConfigurationRequest) -> 
 
 /// 会话配置构建器。
 ///
-/// 该 builder 只生成 Lime current session config；Aster SessionConfig 转换必须留在
+/// 该 builder 只生成 Lime current session config；Agent SessionConfig 转换必须留在
 /// lime-agent 的 session_config_adapter 兼容边界。
 pub struct SessionConfigBuilder {
     id: String,

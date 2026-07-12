@@ -43,12 +43,12 @@ Lime 当前不直接把“真实模型重放平台”一次做完，而是先固
 | 层次         | 作用                                                                  | 当前落点                                                        |
 | ------------ | --------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `codex-rs`   | 提供 replay / grader / evidence-first 的形状参照                      | manifest 中的 replay case 四件套与评分原则                      |
-| `aster-rust` | 提供 thread / turn / runtime / telemetry 的事实边界                   | `input.json` 中的 session / thread / turn / runtimeContext 结构 |
+| Lime current runtime | 提供 thread / turn / runtime / telemetry 的事实边界                  | `input.json` 中的 session / thread / turn / runtimeContext 结构 |
 | `lime`       | 持有产品层 handoff bundle、evidence pack、workspace `.lime/` 样本目录 | runner、fixture、nightly 摘要与工作区发现逻辑                   |
 
 一句话：
 
-**Codex 决定评估形状，Aster 决定运行时事实边界，Lime 负责把 replay case、grader 和 nightly 摘要落到 current 主链。**
+**Codex 决定评估形状；Lime current runtime 决定运行时事实边界；Lime 负责把 replay case、grader 和 nightly 摘要落到 current 主链。**
 
 ## 当前任务集
 
@@ -284,9 +284,9 @@ Trend 报告至少还要回答：
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
 | [agent-evaluation.md](agent-evaluation.md)                                                       | 解释评估原则、pass@k / pass^k、grader 类型             |
 | [testing-strategy-2026.md](testing-strategy-2026.md)                                             | 解释为什么 eval 工程化排在 smoke 之后                  |
-| [../tech/harness/implementation-blueprint.md](../tech/harness/implementation-blueprint.md)       | 解释 `P3-2 Eval runner` 在 Harness 主线中的位置        |
-| [../tech/harness/tooling-roadmap.md](../tech/harness/tooling-roadmap.md)                         | 解释 runner、nightly、trend 的后续工具面               |
-| [../tech/harness/entropy-governance-workflow.md](../tech/harness/entropy-governance-workflow.md) | 解释 trend 怎样回挂到 cleanup / governance 建议        |
+| [../tech/harness/README.md](../tech/harness/README.md)                                            | 固定 Harness Engine 的导出链与 current runtime owner   |
+| [../aiprompts/harness-engine-governance.md](../aiprompts/harness-engine-governance.md)            | 固定 evidence/replay/analysis/review 的唯一事实源      |
+| [../aiprompts/quality-workflow.md](../aiprompts/quality-workflow.md)                              | 固定 runner、nightly、trend 与 Gate B 的验证层级        |
 | `scripts/harness/eval-runner.mjs`                                                                | 当前唯一的 runner 入口                                 |
 | `scripts/harness/eval-trend-report.mjs`                                                          | 当前 trend 聚合与 nightly 趋势出口                     |
 | `scripts/report-generated-slop.mjs`                                                              | 当前 cleanup/slop 聚合与治理建议入口                   |

@@ -17,7 +17,7 @@ updated: 2026-06-09
 - Provider metadata：`modelProvider/list/read/create/update/delete`
 - API Key：`modelProviderKey/create/update/delete/next`
 - Runtime 选择：`agentSession/turn/start.params.runtimeOptions.providerPreference` / `modelPreference`
-- Runtime 取 key：`RuntimeBackend -> AsterAgentState -> CredentialBridge -> ApiKeyProviderService -> api_key_providers / api_keys`
+- Runtime 取 key：`RuntimeBackend -> AgentState -> CredentialBridge -> ApiKeyProviderService -> api_key_providers / api_keys`
 
 但现状仍有两个架构风险：
 

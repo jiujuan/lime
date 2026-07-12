@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   buildMessageGroupsProjection,
@@ -139,7 +139,7 @@ describe("agentSessionState WebTools hydrate", () => {
         } as Partial<AgentThreadItem>),
       ],
       queued_turns: [],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId: "topic-web-tools-hydrate",
@@ -345,7 +345,7 @@ describe("agentSessionState WebTools hydrate", () => {
         } as Partial<AgentThreadItem>),
       ],
       queued_turns: [],
-    } satisfies AsterSessionDetail;
+    } satisfies AgentSessionDetail;
 
     const result = buildHydratedAgentSessionSnapshot({
       topicId,

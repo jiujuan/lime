@@ -93,7 +93,7 @@ fn auto_compaction_decision(
     runtime_options: Option<&RuntimeOptions>,
     events: &[AgentEvent],
 ) -> Option<AutoCompactionDecision> {
-    let metadata = runtime_options.and_then(|options| options.metadata.as_ref())?;
+    let metadata = runtime_options.and_then(|options| options.runtime_metadata())?;
     if !auto_compact_enabled(metadata) {
         return None;
     }
@@ -227,8 +227,8 @@ fn model_request_policy_value(value: &Value) -> Option<&Value> {
             [
                 "runtime_options",
                 "runtimeOptions",
-                "aster_chat_request",
-                "asterChatRequest",
+                "runtime_request",
+                "runtimeRequest",
                 "config",
             ]
             .into_iter()
@@ -321,18 +321,21 @@ mod tests {
 
     fn runtime_options_with_context_limit(limit: u64) -> RuntimeOptions {
         RuntimeOptions {
-            metadata: Some(json!({
-                "request_metadata": {
-                    "harness": {
-                        "model_request_policy": {
-                            "context_policy": {
-                                "model_context_window": 120_000,
-                                "auto_compact_token_limit": limit
+            runtime_request: Some(app_server_protocol::RuntimeRequest {
+                metadata: Some(json!({
+                    "request_metadata": {
+                        "harness": {
+                            "model_request_policy": {
+                                "context_policy": {
+                                    "model_context_window": 120_000,
+                                    "auto_compact_token_limit": limit
+                                }
                             }
                         }
                     }
-                }
-            })),
+                })),
+                ..app_server_protocol::RuntimeRequest::default()
+            }),
             ..RuntimeOptions::default()
         }
     }

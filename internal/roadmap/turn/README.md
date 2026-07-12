@@ -85,7 +85,7 @@ AgentThreadItem / ItemRuntime 是事实源
 后续继续演进的主路径：
 
 1. `lime-rs/crates/agent/src/protocol.rs` 中的 `AgentEvent::ItemStarted / ItemUpdated / ItemCompleted`。
-2. Aster `ItemRuntime / ItemRuntimePayload / ItemStatus`。
+2. Agent `ItemRuntime / ItemRuntimePayload / ItemStatus`。
 3. App Server current event log：`turn.started`、`item.started`、`item.updated`、`item.completed`、`turn.completed`。
 4. ThreadReadModel 对 `turn_id + item.id/tool_call_id + sequence` 的聚合。
 5. 前端 `threadItemProjection` 对 `tool_call` item 的渲染。

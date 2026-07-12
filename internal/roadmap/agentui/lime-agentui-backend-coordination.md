@@ -34,8 +34,8 @@ flowchart TB
   Cmd --> Subagent[subagent_runtime.rs]
 
   Turn --> Queue[runtime_queue.rs]
-  Queue --> Aster[Aster Runtime]
-  Aster --> Converter[event_converter.rs]
+  Queue --> Agent[Agent Runtime]
+  Agent --> Converter[event_converter.rs]
   Converter --> Events[AgentEvent stream]
   Converter --> Timeline[AgentTimelineRecorder]
 

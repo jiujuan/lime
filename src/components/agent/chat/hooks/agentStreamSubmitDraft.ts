@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { Message, MessageImage } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
@@ -28,7 +28,7 @@ export function buildQueuedMessagePreview(content: string): string {
 }
 
 export function buildQueuedRuntimeStatus(
-  executionStrategy: AsterExecutionStrategy,
+  executionStrategy: AgentExecutionStrategy,
   content: string,
 ) {
   return {
@@ -56,7 +56,7 @@ interface PrepareAgentStreamSubmitDraftOptions {
   requestMetadata?: Record<string, unknown>;
   messagePurpose?: Message["purpose"];
   capabilityRoute?: InputCapabilitySendRoute;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   soulCopy?: SoulInteractionCopy;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setIsSending: Dispatch<SetStateAction<boolean>>;

@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { ActionRequired, Message } from "../types";
@@ -107,7 +107,7 @@ describe("agentStreamUserInputSubmission", () => {
           currentTurnId = value;
         },
       ),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setQueuedTurns: createStateSetter(
         () => queuedTurns,
         (value) => {

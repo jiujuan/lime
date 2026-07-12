@@ -170,7 +170,6 @@ function createDefaultProps(overrides: HookPropsOverrides = {}): HookProps {
     soulArtifactVoiceGenerationBrief: null,
     soulArtifactVoiceEnabledForTurn: true,
     onSoulArtifactVoiceEnabledForTurnChange: noop,
-    isExecutionRuntimeActive: false,
     removeQueuedTurn: noop,
     generalWorkbenchEntryPrompt: null,
     handleRestartGeneralWorkbenchEntryPrompt: noop,

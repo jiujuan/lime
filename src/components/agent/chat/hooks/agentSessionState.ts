@@ -1,14 +1,14 @@
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
-  AsterSubagentParentContext,
-  AsterSubagentSessionInfo,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
+  AgentSubagentParentContext,
+  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
-  AsterTodoItem,
+  AgentTodoItem,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import { normalizeQueuedTurnSnapshots } from "@/lib/api/queuedTurn";
-import { resolveRestorableSessionId } from "@/lib/asterSessionRecovery";
+import { resolveRestorableSessionId } from "@/lib/agentSessionRecovery";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import type { Topic } from "./agentChatShared";
 import type { AgentSessionCachedSnapshot } from "./agentSessionScopedStorage";
@@ -58,10 +58,10 @@ export interface AgentSessionSnapshot {
   currentTurnId: string | null;
   queuedTurns: QueuedTurnSnapshot[];
   threadRead: AgentRuntimeThreadReadModel | null;
-  executionRuntime: AsterSessionExecutionRuntime | null;
-  todoItems: AsterTodoItem[];
-  childSubagentSessions: AsterSubagentSessionInfo[];
-  subagentParentContext: AsterSubagentParentContext | null;
+  executionRuntime: AgentSessionExecutionRuntime | null;
+  todoItems: AgentTodoItem[];
+  childSubagentSessions: AgentSubagentSessionInfo[];
+  subagentParentContext: AgentSubagentParentContext | null;
 }
 
 export type { AgentSessionDetailMergeMode } from "./agentSessionTimelineMergePolicy";
@@ -364,7 +364,7 @@ function markInterruptedThreadItems(
 }
 
 export function createEmptyAgentSessionSnapshot(options?: {
-  executionRuntime?: AsterSessionExecutionRuntime | null;
+  executionRuntime?: AgentSessionExecutionRuntime | null;
   workingDir?: string | null;
 }): AgentSessionSnapshot {
   return {
@@ -713,8 +713,8 @@ interface BuildHydratedAgentSessionSnapshotOptions {
   currentMessages: Message[];
   currentThreadTurns: AgentThreadTurn[];
   currentThreadItems: AgentThreadItem[];
-  currentExecutionRuntime: AsterSessionExecutionRuntime | null;
-  currentExecutionStrategy: AsterExecutionStrategy;
+  currentExecutionRuntime: AgentSessionExecutionRuntime | null;
+  currentExecutionStrategy: AgentExecutionStrategy;
   topics: Topic[];
   localSnapshotOverride?: {
     sessionId: string;
@@ -723,7 +723,7 @@ interface BuildHydratedAgentSessionSnapshotOptions {
     threadItems: AgentThreadItem[];
   } | null;
   syncSessionId?: boolean;
-  executionStrategyOverride?: AsterExecutionStrategy;
+  executionStrategyOverride?: AgentExecutionStrategy;
   preserveExecutionStrategyOnMissingDetail?: boolean;
   detailMergeMode?: AgentSessionDetailMergeMode;
 }
@@ -731,7 +731,7 @@ interface BuildHydratedAgentSessionSnapshotOptions {
 export function buildHydratedAgentSessionSnapshot(
   options: BuildHydratedAgentSessionSnapshotOptions,
 ): {
-  executionStrategy: AsterExecutionStrategy;
+  executionStrategy: AgentExecutionStrategy;
   snapshot: AgentSessionSnapshot;
 } {
   const {

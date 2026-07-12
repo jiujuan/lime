@@ -72,7 +72,6 @@ function renderDialog(
           source: "session",
           execution_strategy: "react",
         }}
-        isExecutionRuntimeActive={true}
         runtimeStatusTitle={null}
         selectedTeamRoleCount={0}
         harnessState={createHarnessState()}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 
 import { hydrateSessionDetailMessages } from "./agentChatHistory";
 import { mergeThreadItemReasoningIntoMessages } from "./agentChatHistoryReasoning";
@@ -99,7 +99,7 @@ describe("agentChatHistoryThreadItems", () => {
           },
         ],
       },
-    } as unknown as AsterSessionDetail;
+    } as unknown as AgentSessionDetail;
 
     const messages = mergeThreadItemReasoningIntoMessages(
       hydrateSessionDetailMessages(detail, "history-replay-visual-session"),

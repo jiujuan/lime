@@ -1257,7 +1257,7 @@ async function seedAgentResultForKnowledgeCapture(page, options) {
     ({ projectId, message }) => {
       const now = new Date().toISOString();
       sessionStorage.setItem(
-        `aster_messages_${projectId}`,
+        `agent_messages_${projectId}`,
         JSON.stringify([
           {
             id: message.id,
@@ -1267,11 +1267,11 @@ async function seedAgentResultForKnowledgeCapture(page, options) {
           },
         ]),
       );
-      sessionStorage.removeItem(`aster_curr_sessionId_${projectId}`);
-      sessionStorage.removeItem(`aster_last_sessionId_${projectId}`);
-      sessionStorage.removeItem(`aster_thread_turns_${projectId}`);
-      sessionStorage.removeItem(`aster_thread_items_${projectId}`);
-      sessionStorage.removeItem(`aster_curr_turnId_${projectId}`);
+      sessionStorage.removeItem(`agent_curr_sessionId_${projectId}`);
+      sessionStorage.removeItem(`agent_last_sessionId_${projectId}`);
+      sessionStorage.removeItem(`agent_thread_turns_${projectId}`);
+      sessionStorage.removeItem(`agent_thread_items_${projectId}`);
+      sessionStorage.removeItem(`agent_curr_turnId_${projectId}`);
     },
     {
       projectId: options.projectId,

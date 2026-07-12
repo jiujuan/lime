@@ -6,8 +6,8 @@ import {
   type AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
 import type {
-  AsterExecutionStrategy,
-  AsterSessionExecutionRuntime,
+  AgentExecutionStrategy,
+  AgentSessionExecutionRuntime,
   AutoContinueRequestPayload,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -157,7 +157,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
   skipUserMessage: boolean;
   effectiveProviderType: string;
   effectiveModel: string;
-  effectiveExecutionStrategy: AsterExecutionStrategy;
+  effectiveExecutionStrategy: AgentExecutionStrategy;
   systemPrompt?: string;
   thinking?: boolean;
   content: string;
@@ -208,7 +208,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setExecutionRuntime: Dispatch<
-    SetStateAction<AsterSessionExecutionRuntime | null>
+    SetStateAction<AgentSessionExecutionRuntime | null>
   >;
   setIsSending: Dispatch<SetStateAction<boolean>>;
   soulCopy?: SoulInteractionCopy;

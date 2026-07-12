@@ -3,8 +3,8 @@ import type {
   AutomationRequestMetadata,
 } from "@/lib/api/automation";
 import type {
-  AsterApprovalPolicy,
-  AsterSandboxPolicy,
+  AgentApprovalPolicy,
+  AgentSandboxPolicy,
 } from "@/lib/api/agentRuntime";
 
 export interface AutomationThreadLineage {
@@ -17,8 +17,8 @@ export interface BuildAgentTurnAutomationPayloadParams {
   systemPrompt?: string | null;
   webSearch: boolean;
   contentId?: string | null;
-  approvalPolicy?: AsterApprovalPolicy | null;
-  sandboxPolicy?: AsterSandboxPolicy | null;
+  approvalPolicy?: AgentApprovalPolicy | null;
+  sandboxPolicy?: AgentSandboxPolicy | null;
   requestMetadata?: AutomationRequestMetadata | null;
   lineage?: AutomationThreadLineage | null;
   missingLineageMessage: string;

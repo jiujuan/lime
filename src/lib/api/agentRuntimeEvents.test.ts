@@ -114,11 +114,11 @@ describe("agentRuntimeEvents API", () => {
 
     const listener = vi.fn();
     const unlisten = await listenAgentRuntimeEvent(
-      "aster_stream_message-1",
+      "agent_stream_message-1",
       listener,
     );
 
-    publishAgentRuntimeEvent("aster_stream_message-1", {
+    publishAgentRuntimeEvent("agent_stream_message-1", {
       type: "text_delta",
       text: "App Server delta",
     });
@@ -131,7 +131,7 @@ describe("agentRuntimeEvents API", () => {
     });
 
     unlisten();
-    publishAgentRuntimeEvent("aster_stream_message-1", {
+    publishAgentRuntimeEvent("agent_stream_message-1", {
       type: "text_delta",
       text: "ignored",
     });

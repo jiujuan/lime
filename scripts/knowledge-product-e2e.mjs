@@ -381,9 +381,9 @@ async function collectAgentPageDiagnostics(page) {
         Object.keys(window.sessionStorage)
           .filter(
             (key) =>
-              key.startsWith("aster_messages_") ||
-              key.startsWith("aster_curr_sessionId_") ||
-              key.startsWith("aster_last_sessionId_"),
+              key.startsWith("agent_messages_") ||
+              key.startsWith("agent_curr_sessionId_") ||
+              key.startsWith("agent_last_sessionId_"),
           )
           .map((key) => [key, window.sessionStorage.getItem(key)]),
       );
@@ -699,7 +699,7 @@ async function run() {
       ({ nextProjectId, message }) => {
         const now = new Date().toISOString();
         sessionStorage.setItem(
-          `aster_messages_${nextProjectId}`,
+          `agent_messages_${nextProjectId}`,
           JSON.stringify([
             {
               id: message.id,
@@ -709,11 +709,11 @@ async function run() {
             },
           ]),
         );
-        sessionStorage.removeItem(`aster_curr_sessionId_${nextProjectId}`);
-        sessionStorage.removeItem(`aster_last_sessionId_${nextProjectId}`);
-        sessionStorage.removeItem(`aster_thread_turns_${nextProjectId}`);
-        sessionStorage.removeItem(`aster_thread_items_${nextProjectId}`);
-        sessionStorage.removeItem(`aster_curr_turnId_${nextProjectId}`);
+        sessionStorage.removeItem(`agent_curr_sessionId_${nextProjectId}`);
+        sessionStorage.removeItem(`agent_last_sessionId_${nextProjectId}`);
+        sessionStorage.removeItem(`agent_thread_turns_${nextProjectId}`);
+        sessionStorage.removeItem(`agent_thread_items_${nextProjectId}`);
+        sessionStorage.removeItem(`agent_curr_turnId_${nextProjectId}`);
       },
       { nextProjectId: projectId, message: AGENT_RESULT },
     );

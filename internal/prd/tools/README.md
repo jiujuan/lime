@@ -4,19 +4,19 @@
 
 ## 1. 背景
 
-当前 Lime 的工具体系已经不只是单一的 Aster native tools，还同时包含：
+当前 Lime 的工具体系已经不只是单一的 Agent native tools，还同时包含：
 
-- Aster 默认内置工具
+- Agent 默认内置工具
 - Lime 注入工具
 - Workbench 专属工具
 - Browser Assist 兼容工具面
 - Lime MCP runtime tools
-- Aster ExtensionManager 注入后的 prefixed tools
+- Agent ExtensionManager 注入后的 prefixed tools
 
 这套能力本身已经接近 Tool Calling 2.0，但过去存在两个核心问题：
 
 1. **工具事实源分裂**
-   - MCP schema metadata、Aster runtime registry、Lime 注入 extension、provider 转换层分别做了解析
+   - MCP schema metadata、Agent runtime registry、Lime 注入 extension、provider 转换层分别做了解析
    - 同一个字段（如 `deferred_loading` / `allowed_callers` / `input_examples`）在多处重复解释
 
 2. **权限平面混杂**
@@ -47,7 +47,7 @@ Lime 实际已经具备这些能力：
 - `deferred_loading`
 - `allowed_callers`
 - `input_examples`
-- MCP -> Aster extension 注入
+- MCP -> Agent extension 注入
 
 真正的问题不是缺能力，而是：
 
@@ -64,7 +64,7 @@ Lime 实际已经具备这些能力：
 - **native 工具目录事实源**：`lime-rs/crates/agent/src/agent_tools/catalog.rs`
 - **执行权限事实源**：`lime-rs/crates/agent/src/agent_tools/execution.rs`
 - **MCP runtime 工具事实源**：`lime-rs/crates/mcp/src/manager.rs`
-- **Aster 注入工具面事实源**：`lime-rs/crates/agent` + App Server `RuntimeBackend`
+- **Agent 注入工具面事实源**：`lime-rs/crates/agent` + App Server `RuntimeBackend`
 - **工具库存 / 审计快照事实源**：`lime-rs/crates/agent/src/agent_tools/inventory.rs`
 - **工具库存读取入口**：App Server JSON-RPC `agentSession/toolInventory/read`
 
@@ -110,7 +110,7 @@ Lime 实际已经具备这些能力：
 
 `lime-rs/crates/agent/src/agent_tools/catalog.rs` 已升级为完整目录，覆盖：
 
-- Aster built-ins
+- Agent built-ins
 - Lime 注入工具
 - Workbench 工具面
 - Browser Assist 兼容前缀
@@ -163,7 +163,7 @@ Lime 实际已经具备这些能力：
 
 结果：
 
-- `aster_agent_cmd.rs` 不再手工拼整段 `ToolPermission` 模板
+- 旧命令层不再手工拼整段 `ToolPermission` 模板
 - execution 层事实源从命令层 if/else 收回 `agent_tools` 边界
 - inventory 现在可直接审计 `execution_warning_policy` / `execution_restriction_profile` / `execution_sandbox_profile`
 - `agentSession/toolInventory/read` 可通过 `metadata` 观察 runtime override 后的 effective profile
@@ -229,7 +229,7 @@ Lime 实际已经具备这些能力：
 
 ### 4.1 Core surface
 
-- **Aster built-ins 与 current tool surface**  
+- **Agent built-ins 与 current tool surface**
   `Read` / `Write` / `Edit` / `Glob` / `Grep` / `Bash` / `LSP` / `Skill` / `TaskCreate` / `TaskList` / `TaskGet` / `TaskUpdate` / `TaskOutput` / `TaskStop` / `NotebookEdit` / `EnterPlanMode` / `ExitPlanMode` / `EnterWorktree` / `ExitWorktree` / `WebFetch` / `WebSearch` / `AskUserQuestion` / `SendUserMessage`
 
 - **Lime injected current tools**  
@@ -265,8 +265,8 @@ Lime 实际已经具备这些能力：
 
 - `mcp__lime-browser__*`
 
-但它实际映射到 Aster browser runtime 的一组 prefixed tools。  
-参考 Aster 的 `chrome_mcp/tools.rs`，当前浏览器工具定义为 **17 个**。
+但它实际映射到 Agent browser runtime 的一组 prefixed tools。
+参考 Agent 的 `chrome_mcp/tools.rs`，当前浏览器工具定义为 **17 个**。
 
 - **Browser Assist surface catalog total**：27 个
 - **Workbench + Browser Assist 全量 surface**：35 个
@@ -300,7 +300,7 @@ MCP 在 Lime 里仍然是独立运行时：
 - prompt/resource
 - runtime list/search/call
 
-但一旦进入 Agent，会通过 Aster `ExtensionManager` 统一挂接。  
+但一旦进入 Agent，会通过 Agent `ExtensionManager` 统一挂接。
 这样模型只面对一个工具宇宙，不需要理解两套完全不同的上下文协议。
 
 ### 5.3 权限终于能分层

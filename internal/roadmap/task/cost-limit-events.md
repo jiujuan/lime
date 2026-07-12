@@ -123,7 +123,7 @@
 
 1. runtime turn metadata
 2. RequestLog / request telemetry
-3. `AsterSessionExecutionRuntime`
+3. `AgentSessionExecutionRuntime`
 4. `thread_read`
 5. evidence pack
 

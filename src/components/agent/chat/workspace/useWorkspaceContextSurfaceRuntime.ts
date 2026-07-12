@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { ProjectMemory } from "@/lib/api/projectMemory";
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
@@ -14,7 +14,7 @@ import {
 } from "../utils/harnessState";
 import { buildRealSubagentTimelineItems } from "../utils/subagentTimeline";
 import { mergeThreadItems } from "../utils/threadTimelineView";
-import type { AsterTodoItem } from "@/lib/api/agentRuntime";
+import type { AgentTodoItem } from "@/lib/api/agentRuntime";
 import {
   resolveHarnessRuntimeVisible,
   shouldBuildFullThreadTimeline,
@@ -25,7 +25,7 @@ import { hasRunningThreadReadActivity } from "./workspaceSceneSessionProjection"
 
 interface UseWorkspaceContextSurfaceRuntimeParams {
   activeTheme: string;
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  childSubagentSessions: AgentSubagentSessionInfo[];
   generalHarnessEntryEnabled: boolean;
   isSending: boolean;
   layoutMode: LayoutMode;
@@ -42,7 +42,7 @@ interface UseWorkspaceContextSurfaceRuntimeParams {
   threadId?: string | null;
   threadItems: AgentThreadItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  todoItems: AsterTodoItem[];
+  todoItems: AgentTodoItem[];
   turns: AgentThreadTurn[];
   workspaceHarnessEnabled: boolean;
 }
@@ -157,7 +157,7 @@ function useWorkspaceHarnessStateRuntime({
   harnessShellState: ReturnType<typeof deriveHarnessSessionShellState>;
   messages: Message[];
   pendingActions: ActionRequired[];
-  todoItems: AsterTodoItem[];
+  todoItems: AgentTodoItem[];
 }): HarnessSessionState {
   return useMemo(
     () =>
@@ -204,7 +204,7 @@ function useWorkspaceContextTimelineRuntime({
   threadItems,
   turns,
 }: {
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  childSubagentSessions: AgentSubagentSessionInfo[];
   harnessRuntimeVisible: boolean;
   layoutMode: LayoutMode;
   sessionId?: string | null;

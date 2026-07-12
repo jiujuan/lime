@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
-  AsterSessionExecutionRuntime,
+  AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
@@ -161,7 +161,7 @@ describe("agentStreamSubmitExecution", () => {
         setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
         setCurrentTurnId: noopDispatch<string | null>(),
         setExecutionRuntime:
-          noopDispatch<AsterSessionExecutionRuntime | null>(),
+          noopDispatch<AgentSessionExecutionRuntime | null>(),
       }),
     ).rejects.toThrow(MODEL_SELECTION_REQUIRED_ERROR_MESSAGE);
 
@@ -260,7 +260,7 @@ describe("agentStreamSubmitExecution", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
     });
 
     expect(registerListener).toHaveBeenCalledTimes(1);
@@ -368,7 +368,7 @@ describe("agentStreamSubmitExecution", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
     });
 
     expect(ensureSession).toHaveBeenCalledWith({
@@ -484,7 +484,7 @@ describe("agentStreamSubmitExecution", () => {
         setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
         setCurrentTurnId: noopDispatch<string | null>(),
         setExecutionRuntime:
-          noopDispatch<AsterSessionExecutionRuntime | null>(),
+          noopDispatch<AgentSessionExecutionRuntime | null>(),
       }),
     ).rejects.toThrow(`${MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX}:`);
 
@@ -608,7 +608,7 @@ describe("agentStreamSubmitExecution", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
     });
 
     expect(submitOp).toHaveBeenCalledTimes(1);
@@ -773,7 +773,7 @@ describe("agentStreamSubmitExecution", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
     });
 
     expect(submitOp).toHaveBeenCalledTimes(1);
@@ -884,7 +884,7 @@ describe("agentStreamSubmitExecution", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
     });
 
     expect(setAgentRuntimeObjectiveMock).toHaveBeenCalledTimes(1);

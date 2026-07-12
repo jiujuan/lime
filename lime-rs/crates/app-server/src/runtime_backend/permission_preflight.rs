@@ -1,12 +1,13 @@
 use super::request_context::{
     host_approval_policy, host_metadata_value, host_sandbox_policy, request_workspace_scope,
-    AsterChatRequestSnapshot, RuntimeSessionScope,
+    RuntimeSessionScope,
 };
 use crate::runtime::approval_cache::{
     approval_scope_payload_from_parts, metadata_has_session_approval_cache_hit,
     session_approval_cache_hit_payload,
 };
 use crate::runtime::{ExecutionRequest, RuntimeEvent};
+use app_server_protocol::RuntimeRequest;
 use serde_json::{json, Value};
 
 const APPROVAL_ON_REQUEST: &str = "on-request";
@@ -20,7 +21,7 @@ pub(super) enum PermissionPreflightOutcome {
 
 pub(super) fn browser_control_permission_event(
     request: &ExecutionRequest,
-    host_request: Option<&AsterChatRequestSnapshot>,
+    host_request: Option<&RuntimeRequest>,
     scope: &RuntimeSessionScope,
 ) -> Option<PermissionPreflightOutcome> {
     let host_request = host_request?;
@@ -30,9 +31,8 @@ pub(super) fn browser_control_permission_event(
         return None;
     }
 
-    let request_metadata = request.metadata.as_ref();
     let host_metadata = host_metadata_value(host_request);
-    let metadata = host_metadata.as_ref().or(request_metadata)?;
+    let metadata = host_metadata.as_ref()?;
     let contract = metadata.pointer("/harness/browser_assist/runtime_contract")?;
     if contract.get("contract_key").and_then(Value::as_str) != Some(BROWSER_CONTROL_CONTRACT) {
         return None;
@@ -70,11 +70,8 @@ pub(super) fn browser_control_permission_event(
         Some(metadata),
     );
 
-    if metadata_has_session_approval_cache_hit(request_metadata)
-        || metadata_has_session_approval_cache_hit(host_metadata.as_ref())
-    {
-        let cache = session_approval_cache_hit_payload(request_metadata)
-            .or_else(|| session_approval_cache_hit_payload(host_metadata.as_ref()));
+    if metadata_has_session_approval_cache_hit(host_metadata.as_ref()) {
+        let cache = session_approval_cache_hit_payload(host_metadata.as_ref());
         return Some(PermissionPreflightOutcome::Cached(RuntimeEvent::new(
             "action.resolved",
             json!({
@@ -98,6 +95,8 @@ pub(super) fn browser_control_permission_event(
     Some(PermissionPreflightOutcome::Required(RuntimeEvent::new(
         "action.required",
         json!({
+            "backend": "runtime_core",
+            "source": "runtime_preflight",
             "requestId": request_id,
             "actionId": request_id,
             "actionType": "tool_confirmation",
@@ -150,21 +149,12 @@ mod tests {
                 }
             }
         });
-        let host_request: AsterChatRequestSnapshot = serde_json::from_value(json!({
-            "message": "打开浏览器",
-            "session_id": "session-cache",
-            "turn_id": "turn-2",
-            "approval_policy": "on-request",
-            "sandbox_policy": "workspace-write",
-            "metadata": {
-                "harness": {
-                    "browser_assist": {
-                        "runtime_contract": contract
-                    }
-                }
-            }
-        }))
-        .expect("host request");
+        let host_request = RuntimeRequest {
+            approval_policy: Some("on-request".to_string()),
+            sandbox_policy: Some("workspace-write".to_string()),
+            metadata: Some(metadata.clone()),
+            ..RuntimeRequest::default()
+        };
         let request = ExecutionRequest {
             host: RuntimeHostContext::default(),
             session: AgentSession {
@@ -194,9 +184,6 @@ mod tests {
             structured_output: None,
             output_schema: None,
             event_name: None,
-            provider_preference: None,
-            model_preference: None,
-            metadata: Some(metadata),
             queued_turn_id: None,
             queue_if_busy: false,
             skip_pre_submit_resume: true,

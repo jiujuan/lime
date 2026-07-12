@@ -1,5 +1,5 @@
 use super::{RuntimeCore, RuntimeCoreError};
-use app_server_protocol::{AgentSession, RuntimeOptions};
+use app_server_protocol::{AgentSession, RuntimeOptions, RuntimeRequest};
 use serde_json::{json, Map, Value};
 
 const IMPORTED_CONVERSATION_KIND: &str = "conversation.import";
@@ -44,77 +44,28 @@ fn default_runtime_options_for_session(session: &AgentSession) -> Option<Runtime
         &[imported_continuation, thread_settings, Some(metadata)],
         &["effort", "reasoningEffort", "reasoning_effort"],
     );
-    let reasoning_summary = value_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &["summary", "reasoningSummary", "reasoning_summary"],
-    );
     let approval_policy = string_alias_from_sources(
         &[imported_continuation, thread_settings, Some(metadata)],
         &["approvalPolicy", "approval_policy"],
     );
-    let approvals_reviewer = string_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &["approvalsReviewer", "approvals_reviewer"],
-    );
-    let sandbox_policy = value_alias_from_sources(
+    let sandbox_policy = string_alias_from_sources(
         &[imported_continuation, thread_settings, Some(metadata)],
         &["sandboxPolicy", "sandbox_policy"],
     );
-    let active_permission_profile = value_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &["activePermissionProfile", "active_permission_profile"],
-    );
-    let service_tier = string_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &["serviceTier", "service_tier"],
-    );
-    let collaboration_mode = string_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &["collaborationMode", "collaboration_mode"],
-    );
-    let personality = value_alias_from_sources(
-        &[imported_continuation, thread_settings, Some(metadata)],
-        &["personality"],
-    );
-
-    let host_options = compact_json(json!({
-        "asterChatRequest": {
-            "session_id": session.session_id,
-            "workspace_id": session.workspace_id,
-            "project_root": cwd,
-            "cwd": cwd,
-            "reasoning_effort": reasoning_effort,
-            "approval_policy": approval_policy,
-            "approvals_reviewer": approvals_reviewer,
-            "sandbox_policy": sandbox_policy,
-            "service_tier": service_tier,
-            "collaboration_mode": collaboration_mode,
-            "personality": personality,
-            "metadata": continuation_metadata(metadata, thread_settings, imported_continuation),
-            "turn_config": {
-                "project_root": cwd,
-                "cwd": cwd,
-                "reasoning_effort": reasoning_effort,
-                "reasoning_summary": reasoning_summary,
-                "approval_policy": approval_policy,
-                "approvals_reviewer": approvals_reviewer,
-                "sandbox_policy": sandbox_policy,
-                "active_permission_profile": active_permission_profile,
-                "service_tier": service_tier,
-                "collaboration_mode": collaboration_mode,
-                "personality": personality,
-                "metadata": continuation_metadata(metadata, thread_settings, imported_continuation)
-            }
-        }
-    }));
+    let continuation_metadata =
+        continuation_metadata(metadata, thread_settings, imported_continuation);
 
     Some(RuntimeOptions {
-        metadata: Some(continuation_metadata(
-            metadata,
-            thread_settings,
-            imported_continuation,
-        )),
-        host_options: Some(host_options),
+        runtime_request: Some(RuntimeRequest {
+            workspace_id: session.workspace_id.clone(),
+            working_dir: cwd.clone(),
+            project_root: cwd,
+            reasoning_effort,
+            approval_policy,
+            sandbox_policy,
+            metadata: Some(continuation_metadata),
+            ..RuntimeRequest::default()
+        }),
         ..RuntimeOptions::default()
     })
 }
@@ -131,15 +82,42 @@ pub(super) fn merge_with_request_options(
         capability_id: request.capability_id.or(defaults.capability_id),
         stream: request.stream || defaults.stream,
         event_name: request.event_name.or(defaults.event_name),
-        provider_preference: request.provider_preference.or(defaults.provider_preference),
-        model_preference: request.model_preference.or(defaults.model_preference),
-        metadata: merge_json_objects(defaults.metadata, request.metadata),
         queued_turn_id: request.queued_turn_id.or(defaults.queued_turn_id),
-        host_options: merge_json_objects(defaults.host_options, request.host_options),
+        runtime_request: merge_runtime_requests(defaults.runtime_request, request.runtime_request),
         expected_output: request.expected_output.or(defaults.expected_output),
         structured_output: request.structured_output.or(defaults.structured_output),
         output_schema: request.output_schema.or(defaults.output_schema),
     }
+}
+
+fn merge_runtime_requests(
+    defaults: Option<RuntimeRequest>,
+    request: Option<RuntimeRequest>,
+) -> Option<RuntimeRequest> {
+    let (defaults, request) = match (defaults, request) {
+        (Some(defaults), Some(request)) => (defaults, request),
+        (defaults, request) => return request.or(defaults),
+    };
+
+    Some(RuntimeRequest {
+        provider_config: request.provider_config.or(defaults.provider_config),
+        provider_preference: request.provider_preference.or(defaults.provider_preference),
+        model_preference: request.model_preference.or(defaults.model_preference),
+        reasoning_effort: request.reasoning_effort.or(defaults.reasoning_effort),
+        thinking_enabled: request.thinking_enabled.or(defaults.thinking_enabled),
+        approval_policy: request.approval_policy.or(defaults.approval_policy),
+        sandbox_policy: request.sandbox_policy.or(defaults.sandbox_policy),
+        workspace_id: request.workspace_id.or(defaults.workspace_id),
+        working_dir: request.working_dir.or(defaults.working_dir),
+        workspace_root: request.workspace_root.or(defaults.workspace_root),
+        project_root: request.project_root.or(defaults.project_root),
+        web_search: request.web_search.or(defaults.web_search),
+        search_mode: request.search_mode.or(defaults.search_mode),
+        execution_strategy: request.execution_strategy.or(defaults.execution_strategy),
+        auto_continue: request.auto_continue.or(defaults.auto_continue),
+        system_prompt: request.system_prompt.or(defaults.system_prompt),
+        metadata: merge_json_objects(defaults.metadata, request.metadata),
+    })
 }
 
 fn continuation_metadata(
@@ -180,18 +158,6 @@ fn string_alias_from_sources(sources: &[Option<&Value>], keys: &[&str]) -> Optio
         .iter()
         .filter_map(|source| *source)
         .find_map(|source| string_alias(source, keys))
-}
-
-fn value_alias_from_sources(sources: &[Option<&Value>], keys: &[&str]) -> Option<Value> {
-    sources
-        .iter()
-        .filter_map(|source| *source)
-        .find_map(|source| {
-            keys.iter()
-                .find_map(|key| source.get(*key))
-                .filter(|value| !value.is_null())
-                .cloned()
-        })
 }
 
 fn merge_json_objects(defaults: Option<Value>, request: Option<Value>) -> Option<Value> {

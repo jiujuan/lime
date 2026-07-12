@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import {
   resolveUnfinishedSessionProjection,
   selectMostRecentUnfinishedSessionProjection,
@@ -9,8 +9,8 @@ const BASE_NOW_MS = 1780847600 * 1000;
 
 function session(
   id: string,
-  overrides: Partial<AsterSessionInfo> = {},
-): AsterSessionInfo {
+  overrides: Partial<AgentSessionInfo> = {},
+): AgentSessionInfo {
   return {
     id,
     name: id,

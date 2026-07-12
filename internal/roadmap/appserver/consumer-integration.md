@@ -86,7 +86,7 @@ app-server-client
 不包含：
 
 1. Rust 源码。
-2. Aster 私有类型。
+2. Agent 私有类型。
 3. Lime Desktop legacy desktop command facade。
 4. App 业务 UI。
 5. `lime-rs/src/commands/**` 中的旧 Tauri wrapper、compat stub 或退场 tombstone。
@@ -368,7 +368,7 @@ server 返回：
 | 代码                            | 位置                    | 分发                     |
 | ------------------------------- | ----------------------- | ------------------------ |
 | RuntimeCore                     | Lime Rust workspace     | 不直接给 App import。    |
-| ExecutionBackend / AsterBackend | Lime Rust workspace     | 不直接给 App import。    |
+| ExecutionBackend / RuntimeBackend | Lime Rust workspace     | 不直接给 App import。    |
 | app-server-protocol Rust DTO    | Lime Rust workspace     | 生成 schema / TS types。 |
 | `app-server-client`             | Lime 发布的 npm package | 独立 App 依赖。          |
 | `app-server` binary             | Lime release artifact   | 独立 App 打包。          |
@@ -409,4 +409,4 @@ content-studio 集成完成不是“能找到 Lime 源码”，而是：
 3. Electron main 能 spawn / initialize / cancel / shutdown。
 4. renderer 只消费业务投影。
 5. App 不 import Lime Rust crate。
-6. App 不复制 RuntimeCore / ExecutionBackend / AsterBackend。
+6. App 不复制 RuntimeCore / ExecutionBackend / RuntimeBackend。

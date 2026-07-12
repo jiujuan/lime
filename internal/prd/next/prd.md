@@ -146,7 +146,7 @@
 
 1. App Server 是 Agent session / turn / event / action / artifact / evidence 的默认入口。
 2. RuntimeCore 是公共 runtime facts 的 owner。
-3. ExecutionBackend 负责 Aster 和未来执行引擎适配。
+3. ExecutionBackend 负责 Agent 和未来执行引擎适配。
 4. legacy desktop facade 只做 compat 委托。
 5. 独立 App 不直接链接 Lime Rust workspace。
 

@@ -463,11 +463,13 @@ fn agent_session_turn_start_request_matches_protocol_fixture_shape() {
                     capability_id: Some("draft.write".to_string()),
                     stream: true,
                     event_name: Some("plugin_runtime:app:task".to_string()),
-                    provider_preference: Some("deepseek".to_string()),
-                    model_preference: Some("deepseek-v4-flash".to_string()),
-                    metadata: Some(json!({ "taskId": "task-1" })),
                     queued_turn_id: Some("queued-turn-1".to_string()),
-                    host_options: Some(json!({ "adapter": "desktop" })),
+                    runtime_request: Some(RuntimeRequest {
+                        provider_preference: Some("deepseek".to_string()),
+                        model_preference: Some("deepseek-v4-flash".to_string()),
+                        metadata: Some(json!({ "taskId": "task-1" })),
+                        ..RuntimeRequest::default()
+                    }),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: true,
@@ -500,14 +502,13 @@ fn agent_session_turn_start_request_matches_protocol_fixture_shape() {
                     "capabilityId": "draft.write",
                     "stream": true,
                     "eventName": "plugin_runtime:app:task",
-                    "providerPreference": "deepseek",
-                    "modelPreference": "deepseek-v4-flash",
-                    "metadata": {
-                        "taskId": "task-1"
-                    },
                     "queuedTurnId": "queued-turn-1",
-                    "hostOptions": {
-                        "adapter": "desktop"
+                    "runtimeRequest": {
+                        "providerPreference": "deepseek",
+                        "modelPreference": "deepseek-v4-flash",
+                        "metadata": {
+                            "taskId": "task-1"
+                        }
                     }
                 },
                 "queueIfBusy": true,

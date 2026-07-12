@@ -21,7 +21,8 @@ async fn export_evidence_pack_includes_context_fragment_summary_from_turn_metada
                 attachments: Vec::new(),
             },
             runtime_options: Some(RuntimeOptions {
-                metadata: Some(json!({
+                runtime_request: Some(RuntimeRequest {
+                    metadata: Some(json!({
                     "context_packet_telemetry": {
                         "schema": "context_packet_assembly.v1",
                         "packetCount": 2,
@@ -76,7 +77,9 @@ async fn export_evidence_pack_includes_context_fragment_summary_from_turn_metada
                             }
                         ]
                     }
-                })),
+                    })),
+                    ..RuntimeRequest::default()
+                }),
                 ..RuntimeOptions::default()
             }),
             queue_if_busy: false,

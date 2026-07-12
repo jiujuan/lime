@@ -289,7 +289,7 @@ export type MessagePreviewTarget =
 /**
  * 内容片段类型（用于交错显示）
  *
- * 参考 aster 框架的 MessageContent 设计：
+ * 参考 agent 框架的 MessageContent 设计：
  * - text: 文本内容片段
  * - thinking: 推理内容片段（DeepSeek R1 等模型）
  * - tool_use: 工具调用（包含状态和结果）

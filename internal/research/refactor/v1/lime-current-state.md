@@ -91,7 +91,7 @@ flowchart TB
 | API gateway | `src/lib/api/*` 与 `src/lib/api/agentRuntime/*` 已经成为主入口 | 需要继续阻止页面和普通 Hook 绕过 gateway 直接拼协议 |
 | Desktop Host | Electron 负责 IPC、sidecar、窗口、updater、桌面壳能力 | 必须持续防止 Electron 变成第二后端 |
 | App Server | JSON-RPC 是后端 current 入口 | method definition、scope、schema、dispatch 需要更集中 |
-| Runtime | `runtime/*`、`runtime-core`、`lime-agent` 承接 turn/tool/context/model | 需要继续把 Aster details 收缩到 agent/runtime adapter 边界 |
+| Runtime | `runtime/*`、`runtime-core`、`lime-agent` 承接 turn/tool/context/model | 需要继续把 Agent details 收缩到 agent/runtime adapter 边界 |
 | Projection | ProjectionStore / read_model 已形成读模型 | 需要把 `Item` 作为第一语义，而不是组件临时 shape |
 | Evidence | evidence / handoff / replay / analysis / review 已经走 App Server export | 需要持续绑定 session/thread/turn/item 和 request telemetry |
 
@@ -156,7 +156,7 @@ flowchart LR
     end
 
     subgraph Excluded[controlled excluded]
-        Aster[crates/aster / crates/aster-models / vendor/aster-rust]
+        Agent[crates/agent / crates/agent-models / vendor/agent-rust]
         Credential[crates/credential]
     end
 
@@ -177,7 +177,7 @@ flowchart LR
 | `current` | `lime-rs/crates/agent`、`agent-protocol`、`agent-runtime` | Agent runtime、turn execution、tool、context、projection adapter |
 | `current` | `lime-rs/crates/runtime-core` | provider-neutral LLM protocol、runtime primitives |
 | `current` | `model-provider`、`mcp`、`tool-runtime`、`thread-store`、`media-runtime`、`browser-runtime`、`skills` | 多模型、工具、线程、媒体、浏览器、技能领域 owner |
-| `compat / controlled adapter` | `vendor/aster-rust`、workspace dependency `aster` | 受控 runtime adapter，不是新业务 owner |
+| `compat / controlled adapter` | `vendor/agent-rust`、workspace dependency `agent` | 受控 runtime adapter，不是新业务 owner |
 | `dead / deleted / forbidden-to-restore` | `lime-rs/src/**`、`lime-rs/src/commands/**` | 当前文件系统不存在，不得恢复旧 Tauri wrapper |
 
 体量风险：
@@ -302,7 +302,7 @@ flowchart TB
 | `current` | `runtime-core/src/llm_protocol/**`、`model-provider`、`modelProvider/*` | 多模型 / 多模态 runtime 事实源 |
 | `compat / controlled residual` | `src/lib/api/agentRuntime.ts` | 外部业务模块进入分域 client 的 compat barrel |
 | `compat / controlled residual` | `src/lib/dev-bridge/commandPolicy.ts` 中 legacy command policy | 只允许 fail closed、迁移记录、负向 guard，不承接业务事实 |
-| `compat / controlled residual` | Aster vendor dependency / App Server runtime adapter | 只作为受控 adapter，不是新增业务 owner |
+| `compat / controlled residual` | Agent vendor dependency / App Server runtime adapter | 只作为受控 adapter，不是新增业务 owner |
 | `test-only / retired guard` | `agent_runtime_*` 字符串在 contract、negative tests、mock policy tests 中出现 | 只证明旧路未回流，不是 production truth |
 | `dead / deleted / forbidden-to-restore` | `lime-rs/src/**`、`lime-rs/src/commands/**` | 当前文件系统不存在，不能恢复 bootstrap、runner、Tauri wrapper、stub 或 compat facade |
 | `dead` | 旧 `agent_runtime_*` production command surface | 不得重新接回 Electron Host、App Server current、DevBridge truth、mock fallback |
@@ -317,7 +317,7 @@ flowchart TB
 | Protocol-first | Codex `common.rs` 用宏集中定义 request、response、scope、notification | Lime v0 domain 文件、`method_names.rs`、schema export、processor/client 分散 | 缺单一 method definition registry | P0：新增能力先走 method definition metadata，不一次性重命名协议 |
 | Request serialization scope | Codex `ClientRequestSerializationScope` 覆盖 global/thread/process/fs-watch/mcp oauth | Lime 有 turn queue、processor、timeout profile，但无统一声明式 scope | 请求并发语义容易散落到 UI、client 或 runtime lock | P0：把 serialization scope 纳入 method metadata，先覆盖 turn/process/MCP/oauth/fs-watch 类 method |
 | App Server processor | Codex app-server processor 薄分发到 domain | Lime `processor/*` 已分 domain，`dispatch.rs` 692 行 | 中心 dispatch 接近预警，仍需防回涨 | P1：processor 只接线，业务进入 `runtime/**` 或 domain crate |
-| Core runtime | Codex `core/session`、`core/tasks` 承接 turn loop、tool、context | Lime `runtime/*`、`runtime-core`、`lime-agent` 已承接 | Aster details 和 App Server adapter 边界仍需持续收缩 | P1：新 runtime 逻辑先进 `lime-agent` / RuntimeCore / domain 子模块 |
+| Core runtime | Codex `core/session`、`core/tasks` 承接 turn loop、tool、context | Lime `runtime/*`、`runtime-core`、`lime-agent` 已承接 | Agent details 和 App Server adapter 边界仍需持续收缩 | P1：新 runtime 逻辑先进 `lime-agent` / RuntimeCore / domain 子模块 |
 | Event materialization | Codex `event_mapping.rs` 把 core event 变成 notification 和 ThreadItem | Lime `LlmEvent -> RuntimeEvent -> ProjectionStore/read_model -> GUI` 已存在 | materialization 命名和边界不够硬 | P0：固定 provider wire -> LLMEvent -> RuntimeEvent -> Item projection |
 | Tool / approval / sandbox | Codex tool lifecycle 和 approval/sandbox 是控制面 | Lime `tool-runtime`、`agent/src/*tool*`、Desktop Host permission、action panels | Lime 工具更多，UI 展示容易膨胀 | P1：shell/MCP/web/patch/browser/artifact/approval 分 domain projection |
 | Context / compaction | Codex bounded context fragment 和 compaction 是 runtime 能力 | Lime `turn_input_envelope`、memory prompt、context_compaction、sidecar/evidence | 多模态和 workspace metadata 易超预算 | P1：bounded fragment + sidecar/reference policy |
@@ -347,7 +347,7 @@ flowchart TB
 | Tool / approval / sandbox | 工具种类丰富，UI 展示和权限可能混在一起 | tool lifecycle、approval action、Desktop Host 权限分层 |
 | Context / compaction | memory、context、sidecar 已存在 | 建 bounded fragment 和 sidecar reference 规则 |
 | Plugin / skills / MCP | 当前已有 Plugin、skills、MCP current 主链 | manifest、installed state、skill metadata、MCP binding 分层治理 |
-| Aster adapter | 仍作为 controlled adapter 存在 | 只允许减少直接耦合，不允许扩大 App Server 顶层 turn loop |
+| Agent adapter | 仍作为 controlled adapter 存在 | 只允许减少直接耦合，不允许扩大 App Server 顶层 turn loop |
 
 ### P2：多模态和实时能力深化
 

@@ -32,15 +32,15 @@
 
 当前 Lime 的 Query Loop 统一按下面这条链理解：
 
-`agentSession/turn/start -> RuntimeCore turn_execution -> AsterBackend -> TurnInputEnvelope -> runtime_queue -> stream_reply_once -> timeline / artifact / memory -> agentSession/read thread_read -> evidence/export / agentSession/*/export`
+`agentSession/turn/start -> RuntimeCore turn_execution -> RuntimeBackend -> TurnInputEnvelope -> runtime_queue -> stream_reply_once -> timeline / artifact / memory -> agentSession/read thread_read -> evidence/export / agentSession/*/export`
 
 这条主链意味着：
 
 1. **统一入口是 App Server `agentSession/turn/start`**
-   其他 `@` 命令、`/scene`、图片/素材/站点搜索等场景，只允许在提交前补 `runtimeOptions.metadata` / `hostOptions.asterChatRequest` 中的 harness metadata，不能绕开 App Server turn start 另建第二条执行链。旧 `agent_runtime_submit_turn` 只能作为前端 compat request 形状或 retired guard，不再是 current 主入口。
+   其他 `@` 命令、`/scene`、图片/素材/站点搜索等场景，只允许在提交前补 `runtimeOptions.runtimeRequest.metadata`，不能绕开 App Server turn start 另建第二条执行链。旧 `agent_runtime_submit_turn` 只能作为前端 compat request 形状或 retired guard，不再是 current 主入口。
 
-2. **RuntimeCore `turn_execution` 与 AsterBackend 是当前组包主边界**
-   App Server 负责 session/turn lifecycle、runtime options、事件与读模型；AsterBackend / `lime-rs/crates/agent` 继续承接 Claw 原链里的 provider 解析、workspace 解析、execution profile、request tool policy、prompt augmentation、sandbox、preload、turn state。旧 `runtime_turn.rs` 只允许作为 git history / 执行计划参考。
+2. **RuntimeCore `turn_execution` 与 RuntimeBackend 是当前组包主边界**
+   App Server 负责 session/turn lifecycle、runtime options、事件与读模型；RuntimeBackend / `lime-rs/crates/agent` 继续承接 Claw 原链里的 provider 解析、workspace 解析、execution profile、request tool policy、prompt augmentation、sandbox、preload、turn state。旧 `runtime_turn.rs` 只允许作为 git history / 执行计划参考。
 
 3. **`TurnInputEnvelope` 是当前 turn 输入快照**
    它记录最终 system prompt、history source、provider routing、tool policy、continuation、turn context metadata，不允许下游再各自重组另一份“真实输入”。
@@ -80,8 +80,8 @@
   - 将旧 UI request 形状投影到 App Server `agentSession/turn/start`、`agentSession/turn/cancel`、`agentSession/action/respond`
 - `lime-rs/crates/app-server/src/runtime/turn_execution.rs`
   - RuntimeCore turn lifecycle、queue、action respond 与 backend dispatch
-- `lime-rs/crates/app-server/src/aster_backend.rs`
-  - App Server 到 Aster / Claw backend host 的当前适配层
+- `lime-rs/crates/app-server/src/runtime_backend.rs`
+  - App Server 到 Agent / Claw backend host 的当前适配层
 - App Server `agentSession/read`
 
 这里的固定规则：
@@ -93,9 +93,9 @@
 
 ### 2. turn 归一化与输入组装
 
-- App Server `RuntimeOptions` / `hostOptions.asterChatRequest`
+- App Server `RuntimeOptions.runtimeRequest`
 - `lime-rs/crates/app-server/src/runtime/turn_execution.rs`
-- `lime-rs/crates/app-server/src/aster_backend.rs`
+- `lime-rs/crates/app-server/src/runtime_backend.rs`
 - `lime-rs/crates/agent/src/turn_input_envelope.rs`
 
 当前组包边界负责的关键步骤：
@@ -131,10 +131,10 @@
 - approval / sandbox policy
 - turn context metadata
 
-后续如果一个改动说不清应该落在 App Server turn execution / AsterBackend 还是 `TurnInputEnvelope`，先判断它属于：
+后续如果一个改动说不清应该落在 App Server turn execution / RuntimeBackend 还是 `TurnInputEnvelope`，先判断它属于：
 
 - **协议与 session/turn lifecycle**：落 App Server protocol / RuntimeCore turn execution
-- **Claw 原链组包逻辑**：落 AsterBackend / `lime-rs/crates/agent`
+- **Claw 原链组包逻辑**：落 RuntimeBackend / `lime-rs/crates/agent`
 - **turn 输入快照字段**：落 `turn_input_envelope.rs`
 
 ### 3. queue 与恢复
@@ -178,7 +178,7 @@
 ### 5. 流式执行与主回合副作用
 
 - `lime-rs/crates/app-server/src/runtime/turn_execution.rs`
-- `lime-rs/crates/app-server/src/aster_backend.rs`
+- `lime-rs/crates/app-server/src/runtime_backend.rs`
 
 主回合执行当前固定通过：
 
@@ -228,7 +228,7 @@
 它们当前的正确角色是：
 
 1. 前端发送边界写入结构化 `request_metadata.harness.*`
-2. RuntimeCore / AsterBackend 在提交前归一化 metadata 与 prompt
+2. RuntimeCore / RuntimeBackend 在提交前归一化 metadata 与 prompt
 3. Agent 首刀按系统提示走 skill / tool / service skill 主链
 
 不允许回流成：
@@ -246,7 +246,7 @@
 - App Server `agentSession/turn/cancel`
 - App Server `agentSession/action/respond`
 - RuntimeCore `turn_execution`
-- AsterBackend / `lime-rs/crates/agent` Claw 原链适配
+- RuntimeBackend / `lime-rs/crates/agent` Claw 原链适配
 - `TurnInputEnvelope`
 - `runtime_queue.rs`
 - `lime-rs/crates/agent` 工具 catalog / request tool policy
@@ -256,17 +256,15 @@
 
 ### `compat`
 
-- `internal/roadmap/lime-aster-codex-alignment-roadmap.md`
-- `lime-rs/src/commands/agent_cmd.rs::agent_generate_title`
+- `internal/roadmap/lime-agent-codex-alignment-roadmap.md`
 
 这份历史档案与专用命令仍可保留各自职责，但不再承担 Query Loop 唯一事实源职责。
 `agent_generate_title` 属于专用一次性会话能力：允许显式拼自己的临时 `SessionConfig`，但不能参与 submit turn、runtime queue 或 evidence 真相定义。
 它允许为本地 auxiliary session 附带最小 `lime_runtime` metadata，用于记录 `task_profile / routing_decision / cost_state` 一类辅助任务分类事实；必要时也可以把该 auxiliary session 的 `execution_runtime` 诊断快照回传到命令结果，但这份快照只服务该一次性会话自己的诊断与可观测性，不进入 current Query Loop 的 thread / turn 真相。
-当前命令层允许保留的原始执行面只剩 `action_runtime` current 恢复链与 `agent_generate_title` 受控 compat 一次性命令。旧 `persona_cmd` wrapper 已删除；persona 生成语义若继续保留，应通过 runtime auxiliary service / App Server current 边界承接。旧 `aster_agent_theme_context_search` 已下线，主题上下文搜索 current 事实源是 `src/lib/api/themeContextSearch.ts -> App Server agentSession/start + agentSession/turn/start + agentSession/read`。
+当前命令层允许保留的原始执行面只剩 `action_runtime` current 恢复链与 `agent_generate_title` 受控 compat 一次性命令。旧 `persona_cmd` wrapper 已删除；persona 生成语义若继续保留，应通过 runtime auxiliary service / App Server current 边界承接。旧 `agent_theme_context_search` 已下线，主题上下文搜索 current 事实源是 `src/lib/api/themeContextSearch.ts -> App Server agentSession/start + agentSession/turn/start + agentSession/read`。
 
 ### `dead`
 
-- `lime-rs/src/commands/theme_context_cmd.rs::aster_agent_theme_context_search`
 
 旧主题上下文搜索 Tauri 命令不得重新注册到 legacy desktop facade；如果后续继续增强主题上下文搜索，只能扩展 App Server current session turn 网关与 RuntimeCore/backend。
 

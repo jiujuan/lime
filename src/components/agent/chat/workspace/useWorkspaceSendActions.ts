@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 import type {
-  AgentRuntimeWebSearchMode,
   AutoContinueRequestPayload,
+  RuntimeSearchMode,
 } from "@/lib/api/agentRuntime";
 import type { InstalledPluginState } from "@/features/plugin/types";
 import { getOrCreateDefaultProject } from "@/lib/api/project";
@@ -280,7 +280,7 @@ interface UseWorkspaceSendActionsParams {
   contentId?: string | null;
   browserAssistProfileKey?: string | null;
   browserAssistPreferredBackend?:
-    | "aster_compat"
+    | "current"
     | "lime_extension_bridge"
     | "cdp_direct"
     | null;
@@ -348,7 +348,7 @@ interface WorkspaceResolvedSendState {
   browserRequirementForSend: GeneralWorkbenchSendBoundaryState["browserRequirementMatch"];
   effectiveToolPreferences: ChatToolPreferences;
   effectiveWebSearch?: boolean;
-  effectiveSearchMode?: AgentRuntimeWebSearchMode;
+  effectiveSearchMode?: RuntimeSearchMode;
   submissionPreviewKey: string | null;
 }
 
@@ -524,11 +524,7 @@ export function useWorkspaceSendActions({
     }
 
     return messages;
-  }, [
-    messages,
-    runtimeTeamDispatchPreviewMessages,
-    submissionPreviewMessages,
-  ]);
+  }, [messages, runtimeTeamDispatchPreviewMessages, submissionPreviewMessages]);
 
   useEffect(() => {
     clearRuntimeTeamDispatchPreview();

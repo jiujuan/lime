@@ -1,6 +1,6 @@
 import type {
   AgentRuntimeThreadReadModel,
-  AsterSubagentSessionInfo,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type { ActionRequired } from "../types";
@@ -158,7 +158,7 @@ export function resolveApprovalRiskLabelKey(
 }
 
 export function resolveSubagentRuntimeStatusLabel(
-  status?: AsterSubagentSessionInfo["runtime_status"],
+  status?: AgentSubagentSessionInfo["runtime_status"],
 ): string {
   switch (status) {
     case "queued":
@@ -178,7 +178,7 @@ export function resolveSubagentRuntimeStatusLabel(
 }
 
 export function resolveSubagentRuntimeStatusVariant(
-  status?: AsterSubagentSessionInfo["runtime_status"],
+  status?: AgentSubagentSessionInfo["runtime_status"],
 ): HarnessStatusBadgeVariant {
   switch (status) {
     case "running":
@@ -221,7 +221,7 @@ export function resolveFriendlyToolLabel(value?: string): string | null {
 }
 
 export function summarizeChildSubagentSessions(
-  sessions: AsterSubagentSessionInfo[],
+  sessions: AgentSubagentSessionInfo[],
 ): ChildSubagentSessionSummary {
   const running = sessions.filter(
     (session) => session.runtime_status === "running",

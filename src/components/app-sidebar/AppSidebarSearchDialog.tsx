@@ -5,7 +5,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
 import { Modal } from "@/components/Modal";
 import {
   SidebarSearchBody,
@@ -50,19 +50,19 @@ interface AppSidebarSearchDialogProps {
     current: HTMLInputElement | null;
   };
   copy: AppSidebarSearchDialogCopy;
-  sessions: AsterSessionInfo[];
+  sessions: AgentSessionInfo[];
   currentProjectId?: string | null;
   currentSessionId?: string | null;
   hasQuery: boolean;
   hasMoreResults: boolean;
   loading: boolean;
   loadingMore: boolean;
-  resolveSessionTitle: (session: AsterSessionInfo) => string;
-  formatSessionMeta: (session: AsterSessionInfo) => string;
+  resolveSessionTitle: (session: AgentSessionInfo) => string;
+  formatSessionMeta: (session: AgentSessionInfo) => string;
   onClose: () => void;
   onQueryChange: (query: string) => void;
   onCreateConversation: () => void;
-  onResultClick: (session: AsterSessionInfo) => void;
+  onResultClick: (session: AgentSessionInfo) => void;
   onShowMore: () => void;
 }
 

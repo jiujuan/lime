@@ -48,22 +48,21 @@ describe("plugin runtime Electron fixture smoke guard", () => {
     expect(content).toContain('"agentSession/turn/cancel"');
   });
 
-  it("locks Claw/Aster hostOptions and turn_config parity evidence", () => {
+  it("locks typed runtime request evidence", () => {
     const content = readSmokeScript();
 
-    expect(content).toContain("turnConfig: {");
-    expect(content).toContain("provider_config");
-    expect(content).toContain("system_prompt");
-    expect(content).toContain("reasoning_effort");
-    expect(content).toContain("approval_policy");
-    expect(content).toContain("sandbox_policy");
-    expect(content).toContain("web_search");
-    expect(content).toContain("execution_strategy");
-    expect(content).toContain("hostOptions?.asterChatRequest");
-    expect(content).toContain("asterChatRequest?.turn_config");
-    expect(content).toContain("turnConfig.provider_config");
-    expect(content).toContain("asterChatRequest.provider_preference");
-    expect(content).toContain("asterChatRequest.model_preference");
+    expect(content).toContain("runtimeRequest: {");
+    expect(content).toContain("providerConfig");
+    expect(content).toContain("systemPrompt");
+    expect(content).toContain("reasoningEffort");
+    expect(content).toContain("approvalPolicy");
+    expect(content).toContain("sandboxPolicy");
+    expect(content).toContain("webSearch");
+    expect(content).toContain("executionStrategy");
+    expect(content).toContain("runtimeOptions?.runtimeRequest");
+    expect(content).toContain("runtimeRequest.providerConfig");
+    expect(content).toContain("runtimeRequest.providerPreference");
+    expect(content).toContain("runtimeRequest.modelPreference");
   });
 
   it("does not use legacy runtime commands or mock fallback as success evidence", () => {

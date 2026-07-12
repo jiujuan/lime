@@ -6,7 +6,7 @@
 
 ## 1. 目标
 
-当前 `agent_runtime_submit_turn` 已经能进入 Aster / lime_agent 主链，但它的调用形态和事件消费更贴近 Chat / Claw。Plugin 需要完整 Agent 能力时，不应直接调用 Chat 专用命令，也不应新建平行 runtime；应新增后端 facade，把 App task 映射到同一 AgentRuntime control plane。
+当前 `agent_runtime_submit_turn` 已经能进入 Agent / lime_agent 主链，但它的调用形态和事件消费更贴近 Chat / Claw。Plugin 需要完整 Agent 能力时，不应直接调用 Chat 专用命令，也不应新建平行 runtime；应新增后端 facade，把 App task 映射到同一 AgentRuntime control plane。
 
 目标结构：
 
@@ -156,9 +156,9 @@ best-effort 事件：
 
 负责 Plugin 的运行时任务 facade，但不实现 Agent loop。
 
-### `aster_agent_cmd`
+### `agent_cmd`
 
-继续承载 current AgentRuntime command 和 Aster 集成，但逐步把 Chat 专用输入外壳与共享 runtime submit 分离。
+继续承载 current AgentRuntime command 和 Agent 集成，但逐步把 Chat 专用输入外壳与共享 runtime submit 分离。
 
 ## 8. 实施阶段
 

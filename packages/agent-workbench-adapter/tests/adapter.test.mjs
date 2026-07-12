@@ -244,7 +244,8 @@ test("builds a lime.agent turn payload with capability policy", () => {
   });
 
   assert.equal(payload.runtimeOptions.capabilityId, "content.draft.generate");
-  assert.equal(payload.runtimeOptions.modelPreference, "gpt-4.1-mini");
+  assert.equal(payload.runtimeOptions.runtimeRequest.modelPreference, "gpt-4.1-mini");
+  assert.equal(payload.runtimeOptions.runtimeRequest.providerPreference, "openai");
   assert.deepEqual(payload.runtimeOptions.requiredCapabilities, ["lime.capability.image.generate"]);
   assert.deepEqual(payload.metadata.capabilityHints, ["lime.capability.cover.generate"]);
   assert.equal(payload.toolPolicy.metadata.capabilityContracts.length, 2);

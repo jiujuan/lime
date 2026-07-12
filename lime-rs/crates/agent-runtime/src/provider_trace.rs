@@ -1,7 +1,7 @@
 //! Provider trace 的 current Turn lifecycle。
 //!
 //! 这里只记录 provider request attempt 的时间点和首事件状态，不绑定具体
-//! provider 实现、Aster error 或 session context DTO。
+//! provider 实现、Agent error 或 session context DTO。
 
 use std::time::Instant;
 

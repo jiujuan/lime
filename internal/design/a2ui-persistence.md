@@ -142,7 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_a2ui_forms_session ON a2ui_forms(session_id);
    - 添加 `initialFormData` prop（从后端加载）
    - 添加 `onFormChange` 回调（防抖保存）
 
-2. **useAgentChatUnified / useAsterAgentChat Hook**
+2. **useAgentChatUnified / useAgentChat Hook**
    - `switchTopic` 时加载该会话的所有 A2UI 表单数据
    - 将表单数据与消息关联
 
@@ -179,7 +179,7 @@ CREATE INDEX IF NOT EXISTS idx_a2ui_forms_session ON a2ui_forms(session_id);
 
 1. 添加 API 调用函数
 2. 修改 A2UIRenderer 支持数据持久化
-3. 修改 useAgentChatUnified / useAsterAgentChat 加载表单数据
+3. 修改 useAgentChatUnified / useAgentChat 加载表单数据
 
 ### Phase 4: 测试和优化
 

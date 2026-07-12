@@ -9,9 +9,9 @@
 2. **先读对应文档再改代码** - 尤其是命令边界、GUI 主路径、迁移收口、Provider 与凭证
 3. **GUI 改动优先看质量链路** - Lime 是 GUI 桌面产品，先看 `quality-workflow.md` 与 `playwright-e2e.md`
 4. **新旧并存问题先看治理文档** - 避免在 compat / deprecated 路径上继续长新表面
-5. **Agent 重构默认 Codex-first** - 除多模型 / 多模态 provider capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，Thread / Turn / Item、App Server、runtime、tool lifecycle、MCP、Skills、Multi-Agent、history hydrate、projection、测试护栏和命名默认按 `/Users/coso/Documents/dev/rust/codex` 收敛；Aster 迁移按“Codex 有则迁、Codex 没有则删”判定
-6. **新增命名不要加品牌前缀** - 新程序、目录、crate/package、Electron IPC channel、App Server 方法、API 网关、类型、模块和脚本默认使用简洁领域名，不要加 `Lime` / `lime_` / `lime-`，也不要把 `aster_*` / `agent_runtime_*` 带入 current API；Aster 简洁命名可作为品味参考，只有对外品牌、历史兼容或生态固定命名才例外，并在计划里说明
-7. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力先落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC 和桌面壳能力，不是第二套后端或业务 adapter；旧 `agent_runtime_*` / Aster 命令只允许作为 retired guard、历史 evidence 或受控迁移残留
+5. **Agent 重构默认 Codex-first** - 除多模型 / 多模态 provider capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，Thread / Turn / Item、App Server、runtime、tool lifecycle、MCP、Skills、Multi-Agent、history hydrate、projection、测试护栏和命名默认按 `/Users/coso/Documents/dev/rust/codex` 收敛；已退役 runtime 没有迁移路线，能力缺口只能在 current owner 重建
+6. **新增命名不要加品牌前缀** - 新程序、目录、crate/package、Electron IPC channel、App Server 方法、API 网关、类型、模块和脚本默认使用简洁领域名，不要加 `Lime` / `lime_` / `lime-`，也不要把已退役 runtime 名称或 `agent_runtime_*` 带入 current API；只有对外品牌、历史兼容或生态固定命名才例外，并在计划里说明
+7. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力先落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC 和桌面壳能力，不是第二套后端或业务 adapter；旧 `agent_runtime_*` 只允许作为 retired guard / 历史 evidence，已退役 runtime 不得恢复为受控迁移残留
 8. `lime-rs/src/**` 已删除，不得恢复 - 业务逻辑、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力一律进入 `lime-rs/crates/**` 下的 App Server / RuntimeCore / services / core / agent / 协议 client crates，桌面壳能力进 Electron Desktop Host
 9. `lime-rs/src/commands/**` 已删除，不得恢复旧 wrapper - 该目录不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub；新增后端能力进 App Server crates / RuntimeCore / services，桌面壳能力进 Electron Desktop Host
 10. 超过 `1000` 行的非生成代码先拆分 - 接近 `800` 行进入预警；触碰前优先按领域、职责、数据边界或协议边界拆小，并复用项目已有模块化模式；无法本轮拆分时，必须在执行计划登记 blocker、风险和退出条件，不继续追加新业务逻辑
@@ -64,7 +64,6 @@
 - `services.md` - Rust 服务层
 - `server.md` - HTTP Server 与接口边界
 - `mcp.md` - MCP 服务器与工具管理
-- `aster-integration.md` - Aster Agent 集成
 
 ### Provider 与数据
 
@@ -99,7 +98,7 @@
 - **做网页登录态访问 / 网页导出 / Markdown 落盘场景**：先读 `web-browser-scene-skill.md`
 - **改 Workspace / GUI 壳 / 主路径**：先读 `workspace.md`、`quality-workflow.md`、`playwright-e2e.md`
 - **做迁移 / 收口 / 去兼容层**：先读 `governance.md`
-- **做 Aster 迁移**：先读 `governance.md` 与 `../roadmap/astermigration/`；按 `/Users/coso/Documents/dev/rust/codex` 对照，Codex 有的迁到 Lime current 并接入真实前后端主链，Codex 没有的 Aster-only 能力直接删并补 forbidden-to-restore 守卫
+- **发现已退役 runtime 路径或能力缺口**：先读 `governance.md`；其实现已删除且禁止恢复，按 `/Users/coso/Documents/dev/rust/codex` 在 current owner 重建缺口，不存在独立迁移路线图
 - **多个 Agent / 终端同跑一个任务**：先读 `parallel-agent-collaboration.md`，再声明本轮写集
 - **改 handoff / evidence pack / replay / review / HarnessStatusPanel**：先读 `state-history-telemetry.md`，再看 `harness-engine-governance.md` 与 `governance.md`
 - **改 Provider / 凭证加载 / Token 刷新**：先读 `providers.md`、`credential-pool.md`

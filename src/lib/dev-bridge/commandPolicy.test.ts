@@ -85,9 +85,9 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("agent_start_process")).toBe(false);
     expect(isBridgeTruthCommand("agent_stop_process")).toBe(false);
     expect(isBridgeTruthCommand("agent_get_process_status")).toBe(false);
-    expect(isBridgeTruthCommand("aster_agent_status")).toBe(false);
-    expect(isBridgeTruthCommand("aster_agent_configure_provider")).toBe(false);
-    expect(isBridgeTruthCommand("aster_agent_reset")).toBe(false);
+    expect(isBridgeTruthCommand("agent_status")).toBe(false);
+    expect(isBridgeTruthCommand("agent_configure_provider")).toBe(false);
+    expect(isBridgeTruthCommand("agent_reset")).toBe(false);
     expect(isBridgeTruthCommand("agent_runtime_interrupt_turn")).toBe(false);
     expect(isBridgeTruthCommand("agent_runtime_respond_action")).toBe(false);
     expect(isBridgeTruthCommand("agent_runtime_get_thread_read")).toBe(false);
@@ -204,14 +204,14 @@ describe("commandPolicy", () => {
     }
   });
 
-  it("P9 process / Aster residual 已退役，不再作为 DevBridge policy surface", () => {
+  it("P9 process / Agent residual 已退役，不再作为 DevBridge policy surface", () => {
     for (const command of [
       "agent_start_process",
       "agent_stop_process",
       "agent_get_process_status",
-      "aster_agent_status",
-      "aster_agent_configure_provider",
-      "aster_agent_reset",
+      "agent_status",
+      "agent_configure_provider",
+      "agent_reset",
     ]) {
       expect(isBridgeTruthCommand(command)).toBe(false);
       expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
@@ -300,9 +300,7 @@ describe("commandPolicy", () => {
   });
 
   it("集中声明 DevBridge 超时、冷却绕过和读命令重试策略", () => {
-    expect(resolveDevBridgeCommandTimeoutProfile("agent_init")).toBe(
-      "startup-truth",
-    );
+    expect(resolveDevBridgeCommandTimeoutProfile("agent_init")).toBe("default");
     expect(
       resolveDevBridgeCommandTimeoutProfile("agent_runtime_get_session"),
     ).toBe("default");
@@ -764,7 +762,7 @@ describe("commandPolicy", () => {
   });
 
   it("集中声明运行时真相事件前缀", () => {
-    expect(isBridgeTruthEvent("aster_stream_session-1")).toBe(true);
+    expect(isBridgeTruthEvent("agent_stream_session-1")).toBe(true);
     expect(isBridgeTruthEvent("agent_subagent_status:session-1")).toBe(true);
     expect(isBridgeTruthEvent("embedded-browser-view-state")).toBe(true);
     expect(isBridgeTruthEvent("embedded-browser-view-load-failed")).toBe(true);

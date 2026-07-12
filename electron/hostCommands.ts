@@ -170,8 +170,8 @@ export class ElectronHostCommands {
         return await this.#fileShellHost.getFileIconDataUrl(args);
       case "start_oem_cloud_oauth_callback_bridge":
         return await this.#startOemCloudOAuthCallbackBridge();
-      case "agent_init":
-        return await this.#initAgentRuntime();
+      case "get_runtime_provider_selection":
+        return await this.#getRuntimeProviderSelection();
       case "get_default_provider":
         return await this.#getDefaultProvider();
       case "workspace_list":
@@ -368,8 +368,7 @@ export class ElectronHostCommands {
     });
   }
 
-  async #initAgentRuntime(): Promise<{
-    initialized: true;
+  async #getRuntimeProviderSelection(): Promise<{
     provider_configured: boolean;
     provider_name?: string;
     provider_selector?: string;
@@ -410,7 +409,6 @@ export class ElectronHostCommands {
       readString(selectedModel, "modelId");
 
     return {
-      initialized: true,
       provider_configured: selectedProvider
         ? isConfiguredProvider(selectedProvider)
         : false,

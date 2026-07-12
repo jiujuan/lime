@@ -39,7 +39,7 @@ Agent 聊天界面的 UI 组件集合。
 
 ### ToolCallDisplay
 
-参考 aster UI 设计，提供完整的工具调用可视化：
+参考 agent UI 设计，提供完整的工具调用可视化：
 
 - **状态指示器**：pending/running/completed/failed 四种状态
 - **工具描述**：根据工具类型和参数生成人性化描述

@@ -653,7 +653,7 @@ interface BuildWorkspaceRequestMetadataOptions {
   } | null;
   browserAssistProfileKey?: string | null;
   browserAssistPreferredBackend?:
-    | "aster_compat"
+    | "current"
     | "lime_extension_bridge"
     | "cdp_direct"
     | null;

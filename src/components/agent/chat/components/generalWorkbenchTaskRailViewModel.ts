@@ -1,8 +1,8 @@
 import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type {
   AgentRuntimeThreadReadModel,
-  AsterTodoItem,
-  AsterSubagentSessionInfo,
+  AgentTodoItem,
+  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type { Message, MessageTaskPreview } from "../types";
 import type {
@@ -342,7 +342,7 @@ function buildPlanItems(
 }
 
 function normalizeTodoStatus(
-  status: AsterTodoItem["status"],
+  status: AgentTodoItem["status"],
 ): GeneralWorkbenchTaskRailItemStatus {
   if (status === "completed") {
     return "completed";
@@ -394,7 +394,7 @@ function buildPlanStatePlanItems(
 }
 
 function buildTodoPlanItems(
-  todoItems: readonly AsterTodoItem[] | undefined,
+  todoItems: readonly AgentTodoItem[] | undefined,
   t: MinimalTranslate,
 ): GeneralWorkbenchTaskRailPlanItem[] {
   return (todoItems ?? [])
@@ -424,7 +424,7 @@ function buildRecoveredPlanItems({
   workflowSteps: GeneralWorkbenchWorkflowStepInput[];
   messages: Message[];
   planState?: AgentPlanState;
-  todoItems?: readonly AsterTodoItem[];
+  todoItems?: readonly AgentTodoItem[];
   t: MinimalTranslate;
 }): GeneralWorkbenchTaskRailPlanItem[] {
   const workflowPlanItems = buildPlanItems(workflowSteps, t);
@@ -829,9 +829,9 @@ export function buildGeneralWorkbenchTaskRailProjection({
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   threadItems?: readonly AgentThreadItem[];
-  todoItems?: readonly AsterTodoItem[];
+  todoItems?: readonly AgentTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
   context?: GeneralWorkbenchTaskRailContextInput;
   t?: MinimalTranslate;
 }): GeneralWorkbenchTaskRailProjection {

@@ -20,7 +20,7 @@
 
 固定原则：
 
-1. projection 先服务现有 `useAsterAgentChat` public API，不一次性改穿所有调用方。
+1. projection 先服务现有 `useAgentChat` public API，不一次性改穿所有调用方。
 2. store 只做 UI projection，不成为 runtime fact source。
 3. 每一刀必须能解释它如何降低首屏、首字、旧会话或 MessageList 的排查复杂度。
 4. 与 Warp 事实源冲突时，以 `internal/roadmap/warp` 为准。
@@ -75,7 +75,7 @@
 
 1. store 类型与 selector helper。
 2. session / stream / queue / render / diagnostics 初始 slice。
-3. `useAsterAgentChat` 内部适配层。
+3. `useAgentChat` 内部适配层。
 
 暂不改：
 
@@ -85,7 +85,7 @@
 
 ### 验收
 
-1. `useAsterAgentChat` 对外返回 shape 不变。
+1. `useAgentChat` 对外返回 shape 不变。
 2. selector 只在对应切片变化时触发。
 3. store action 不写 runtime contract、artifact graph、evidence export。
 4. 新增测试证明无关切片更新不触发订阅者。

@@ -1,5 +1,183 @@
 {
   "$defs": {
+    "RuntimeProviderConfig": {
+      "properties": {
+        "apiKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modelCapabilities": true,
+        "modelName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "toolCallStrategy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeToolCallStrategy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "toolshimModel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RuntimeRequest": {
+      "description": "由 App Server current turn 主链消费的运行时参数。\n\n输入、session、turn、event 名和 structured output 已在 `AgentSessionTurnStartParams`\n或 `RuntimeOptions` 顶层表达。本结构只承载 provider lowering 与 turn execution\n所需的显式配置，不能作为任意 host JSON 的逃生通道。",
+      "properties": {
+        "approvalPolicy": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "autoContinue": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "executionStrategy": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "modelPreference": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeProviderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "providerPreference": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "reasoningEffort": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sandboxPolicy": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "searchMode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeSearchMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "systemPrompt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "thinkingEnabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "webSearch": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "workingDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RuntimeSearchMode": {
+      "enum": [
+        "auto",
+        "disabled",
+        "required"
+      ],
+      "type": "string"
+    },
+    "RuntimeToolCallStrategy": {
+      "enum": [
+        "native",
+        "tool_shim"
+      ],
+      "type": "string"
+    },
     "StructuredOutputContract": {
       "properties": {
         "failureSubtype": {
@@ -50,25 +228,21 @@
       ]
     },
     "expectedOutput": true,
-    "hostOptions": true,
-    "metadata": true,
-    "modelPreference": {
-      "type": [
-        "null",
-        "string"
-      ]
-    },
     "outputSchema": true,
-    "providerPreference": {
-      "type": [
-        "null",
-        "string"
-      ]
-    },
     "queuedTurnId": {
       "type": [
         "null",
         "string"
+      ]
+    },
+    "runtimeRequest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeRequest"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "stream": {

@@ -7,7 +7,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { updateProject } from "@/lib/api/project";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import { notifyProjectRuntimeAgentsGuide } from "@/components/workspace/services/runtimeAgentsGuideService";
 import type {
@@ -45,14 +45,14 @@ interface UseAgentContextOptions {
   workspaceId: string;
   sessionIdRef: MutableRefObject<string | null>;
   topicsUpdaterRef: MutableRefObject<
-    | ((sessionId: string, executionStrategy: AsterExecutionStrategy) => void)
+    | ((sessionId: string, executionStrategy: AgentExecutionStrategy) => void)
     | null
   >;
   sendMessageRef: MutableRefObject<SendMessageFn | null>;
   runtime: {
     setSessionExecutionStrategy: (
       sessionId: string,
-      executionStrategy: AsterExecutionStrategy,
+      executionStrategy: AgentExecutionStrategy,
     ) => Promise<void>;
     setSessionAccessMode?: (
       sessionId: string,
@@ -94,7 +94,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
     ModelReasoningEffortLevel | ""
   >("");
   const [executionStrategy, setExecutionStrategyState] =
-    useState<AsterExecutionStrategy>(() =>
+    useState<AgentExecutionStrategy>(() =>
       resolvePersistedExecutionStrategy(workspaceId),
     );
   const [accessMode, setAccessModeState] = useState<AgentAccessMode>(() =>
@@ -124,10 +124,10 @@ export function useAgentContext(options: UseAgentContextOptions) {
     new Map<string, SessionModelPreference>(),
   );
   const pendingSessionExecutionStrategySyncRef = useRef(
-    new Map<string, AsterExecutionStrategy>(),
+    new Map<string, AgentExecutionStrategy>(),
   );
   const syncedSessionExecutionStrategyRef = useRef(
-    new Map<string, AsterExecutionStrategy>(),
+    new Map<string, AgentExecutionStrategy>(),
   );
   const pendingSessionAccessModeSyncRef = useRef(
     new Map<string, AgentAccessMode>(),
@@ -217,7 +217,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
   const markSessionExecutionStrategySynced = useCallback(
     (
       targetSessionId: string,
-      targetExecutionStrategy: AsterExecutionStrategy,
+      targetExecutionStrategy: AgentExecutionStrategy,
     ) => {
       const trimmedSessionId = targetSessionId.trim();
       if (!trimmedSessionId) {
@@ -256,7 +256,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
   );
 
   const getSyncedSessionExecutionStrategy = useCallback(
-    (targetSessionId: string): AsterExecutionStrategy | null => {
+    (targetSessionId: string): AgentExecutionStrategy | null => {
       const trimmedSessionId = targetSessionId.trim();
       if (!trimmedSessionId) {
         return null;
@@ -316,7 +316,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
             );
           })
           .catch((error) => {
-            console.warn("[AsterChat] 回写会话 provider/model 失败:", error);
+            console.warn("[AgentChat] 回写会话 provider/model 失败:", error);
           });
       });
     },
@@ -475,7 +475,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
   const scheduleSessionExecutionStrategySync = useCallback(
     (
       targetSessionId: string,
-      targetExecutionStrategy: AsterExecutionStrategy,
+      targetExecutionStrategy: AgentExecutionStrategy,
     ) => {
       const trimmedSessionId = targetSessionId.trim();
       if (!trimmedSessionId) {
@@ -512,7 +512,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
             );
           })
           .catch((error) => {
-            console.warn("[AsterChat] 更新会话执行策略失败:", error);
+            console.warn("[AgentChat] 更新会话执行策略失败:", error);
           });
       });
     },
@@ -520,7 +520,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
   );
 
   const setExecutionStrategy = useCallback(
-    (nextStrategy: AsterExecutionStrategy) => {
+    (nextStrategy: AgentExecutionStrategy) => {
       const normalized = normalizeExecutionStrategy(nextStrategy);
       setExecutionStrategyState(normalized);
 
@@ -557,7 +557,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
 
         void syncAccessMode(trimmedSessionId, latestAccessMode).catch(
           (error) => {
-            console.warn("[AsterChat] 更新会话 accessMode 失败:", error);
+            console.warn("[AgentChat] 更新会话 accessMode 失败:", error);
           },
         );
       });

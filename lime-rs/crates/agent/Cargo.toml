@@ -16,9 +16,6 @@ lime-skills.workspace = true
 model-provider.workspace = true
 thread-store.workspace = true
 tool-runtime.workspace = true
-# Aster runtime compat layer.
-# 退出条件：current turn executor / provider stream 接管后移除。
-aster.workspace = true
 rmcp.workspace = true
 serde.workspace = true
 serde_json.workspace = true

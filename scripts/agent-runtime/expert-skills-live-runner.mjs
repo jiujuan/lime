@@ -673,7 +673,7 @@ async function executeLiveRuntime(options) {
     message: options.prompt,
     eventName,
     turnId,
-    turnConfig: {
+    runtimeRequest: {
       providerPreference: provider.providerPreference,
       modelPreference: provider.modelPreference,
       approvalPolicy: "never",

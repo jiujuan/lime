@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 
 import { hydrateSessionDetailMessages } from "./agentChatHistory";
 
 describe("agentChatHistory timeline fallback", () => {
   it("应从历史消息的 thinking 字段恢复完整思考过程", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-1",
       created_at: 1,
       updated_at: 2,
@@ -53,7 +53,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("后端 detail.messages 为空但 timeline 有用户与助手消息时应恢复对话", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-timeline-only",
       created_at: 1,
       updated_at: 2,
@@ -123,7 +123,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("历史 timeline agent_message 只有 content 字段时仍应恢复最终正文", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-timeline-content-final",
       created_at: 1,
       updated_at: 2,
@@ -213,7 +213,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("历史 timeline agent_message 只有 media contentParts 时仍应恢复引用", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-timeline-media-final",
       created_at: 1,
       updated_at: 2,
@@ -299,7 +299,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("历史 plan item 应恢复为 proposed_plan 且 update_plan tool_call 不应恢复为消息工具卡", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-update-plan-history",
       created_at: 1,
       updated_at: 2,
@@ -414,7 +414,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("App Server 历史 turn 缺少旧 prompt_text 字段时不应中断会话恢复", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-missing-legacy-text",
       created_at: 1,
       updated_at: 2,
@@ -463,7 +463,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("App Server 历史只有 artifact summary 时应恢复产物消息", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-artifact-only",
       thread_id: "session-artifact-only-thread",
       created_at: 1,
@@ -533,7 +533,7 @@ describe("agentChatHistory timeline fallback", () => {
           },
         ],
       } as never,
-    } as AsterSessionDetail & { artifacts: unknown[] };
+    } as AgentSessionDetail & { artifacts: unknown[] };
 
     const messages = hydrateSessionDetailMessages(
       detail,
@@ -570,7 +570,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("历史应恢复文章 artifact document 且隐藏 workspace patch", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-article-workspace-artifacts",
       thread_id: "session-article-workspace-artifacts-thread",
       created_at: 1,
@@ -698,7 +698,7 @@ describe("agentChatHistory timeline fallback", () => {
           ],
         },
       } as never,
-    } as AsterSessionDetail & { artifacts: unknown[] };
+    } as AgentSessionDetail & { artifacts: unknown[] };
 
     const messages = hydrateSessionDetailMessages(
       detail,
@@ -734,7 +734,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("历史恢复不应把 commentary 阶段消息合并进最终正文", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-commentary-final",
       created_at: 1,
       updated_at: 2,
@@ -837,7 +837,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("历史恢复应把旧无 phase turn 中最后一条 agent_message 作为最终正文", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-legacy-unphased-final",
       created_at: 1,
       updated_at: 2,
@@ -962,7 +962,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("后端 detail.messages 有正文时仍应从 timeline 恢复 Skill、思考与用户输入", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-skill-timeline-process",
       created_at: 1,
       updated_at: 2,
@@ -1107,7 +1107,7 @@ describe("agentChatHistory timeline fallback", () => {
   });
 
   it("后端 detail.messages 和 timeline 消息都为空时应从真实 turn 恢复用户请求", () => {
-    const detail: AsterSessionDetail = {
+    const detail: AgentSessionDetail = {
       id: "session-turn-only",
       created_at: 1,
       updated_at: 2,
