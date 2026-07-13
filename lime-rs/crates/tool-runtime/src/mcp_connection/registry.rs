@@ -1,5 +1,5 @@
-use super::McpConnection;
-use crate::tool_extension::RuntimeExtensionConfig;
+use super::{McpConnection, McpStepSnapshot};
+use crate::tool_extension::{RuntimeExtensionConfig, RuntimeToolCaller};
 use rmcp::model::{
     CallToolRequestParam, CallToolResult, ErrorCode, ErrorData, GetPromptResult, InitializeResult,
     Prompt, ServerInfo, ServerNotification, Tool,
@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 
@@ -54,10 +55,11 @@ impl McpConnectionEntry {
     }
 }
 
+const DEFAULT_TOOL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);
+
 #[derive(Default)]
 pub struct McpConnectionRegistry {
     connections: Mutex<HashMap<String, McpConnectionEntry>>,
-    loaded_deferred_tools: Mutex<HashSet<String>>,
 }
 
 impl McpConnectionRegistry {
@@ -152,7 +154,25 @@ impl McpConnectionRegistry {
         &self,
         connection_name: Option<&str>,
     ) -> Result<Vec<Tool>, ServiceError> {
-        let loaded_deferred_tools = self.loaded_deferred_tools.lock().await.clone();
+        Ok(self
+            .step_snapshot(
+                connection_name,
+                RuntimeToolCaller::assistant(),
+                HashSet::new(),
+                DEFAULT_TOOL_DISCOVERY_TIMEOUT,
+            )
+            .await
+            .tools()
+            .to_vec())
+    }
+
+    pub async fn step_snapshot(
+        &self,
+        connection_name: Option<&str>,
+        caller: RuntimeToolCaller,
+        selected_deferred_tools: HashSet<String>,
+        discovery_timeout: Duration,
+    ) -> McpStepSnapshot {
         let connections = {
             let entries = self.connections.lock().await;
             entries
@@ -167,40 +187,13 @@ impl McpConnectionRegistry {
                 })
                 .collect::<Vec<_>>()
         };
-
-        let mut tools = Vec::new();
-        for (name, config, connection) in connections {
-            let connection = connection.lock().await;
-            let mut page = connection
-                .list_tools(None, CancellationToken::default())
-                .await?;
-            loop {
-                for tool in page.tools {
-                    let prefixed_name = format!("{name}__{}", tool.name);
-                    let visible = config.is_tool_exposed_by_default(&tool.name)
-                        || loaded_deferred_tools.contains(&prefixed_name);
-                    if config.is_tool_available(&tool.name) && visible {
-                        tools.push(Tool {
-                            name: prefixed_name.into(),
-                            description: tool.description,
-                            input_schema: tool.input_schema,
-                            annotations: tool.annotations,
-                            output_schema: tool.output_schema,
-                            icons: tool.icons,
-                            title: tool.title,
-                            meta: tool.meta,
-                        });
-                    }
-                }
-                let Some(cursor) = page.next_cursor else {
-                    break;
-                };
-                page = connection
-                    .list_tools(Some(cursor), CancellationToken::default())
-                    .await?;
-            }
-        }
-        Ok(tools)
+        McpStepSnapshot::capture(
+            connections,
+            selected_deferred_tools,
+            caller,
+            discovery_timeout,
+        )
+        .await
     }
 
     pub async fn dispatch(
@@ -227,14 +220,7 @@ impl McpConnectionRegistry {
                 None,
             ));
         }
-        if config.deferred_loading()
-            && !config.is_tool_exposed_by_default(&tool_name)
-            && !self
-                .loaded_deferred_tools
-                .lock()
-                .await
-                .contains(tool_call.name.as_ref())
-        {
+        if config.deferred_loading() && !config.is_tool_exposed_by_default(&tool_name) {
             return Err(ErrorData::new(
                 ErrorCode::RESOURCE_NOT_FOUND,
                 format!(

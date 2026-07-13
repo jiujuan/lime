@@ -15,12 +15,15 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[derive(Clone)]
 pub struct McpBridgeClient {
     service: Arc<RunningService<RoleClient, LimeMcpClient>>,
     handler: Arc<LimeMcpClient>,
     server_info: Option<InitializeResult>,
-    timeout: Duration,
+    request_timeout: Duration,
+    tool_timeout: Duration,
 }
 
 impl McpBridgeClient {
@@ -28,12 +31,14 @@ impl McpBridgeClient {
         service: Arc<RunningService<RoleClient, LimeMcpClient>>,
         handler: Arc<LimeMcpClient>,
         server_info: Option<InitializeResult>,
+        tool_timeout: Duration,
     ) -> Self {
         Self {
             service,
             handler,
             server_info,
-            timeout: Duration::from_secs(60),
+            request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            tool_timeout,
         }
     }
 
@@ -59,6 +64,7 @@ impl McpBridgeClient {
                     extensions,
                 }),
                 cancel_token,
+                self.request_timeout,
             )
             .await?;
 
@@ -84,6 +90,7 @@ impl McpBridgeClient {
                     extensions,
                 }),
                 cancel_token,
+                self.request_timeout,
             )
             .await?;
 
@@ -107,6 +114,7 @@ impl McpBridgeClient {
                     extensions,
                 }),
                 cancel_token,
+                self.request_timeout,
             )
             .await?;
 
@@ -134,6 +142,7 @@ impl McpBridgeClient {
                     extensions,
                 }),
                 cancel_token,
+                self.tool_timeout,
             )
             .await?;
 
@@ -157,6 +166,7 @@ impl McpBridgeClient {
                     extensions,
                 }),
                 cancel_token,
+                self.request_timeout,
             )
             .await?;
 
@@ -188,6 +198,7 @@ impl McpBridgeClient {
                     extensions,
                 }),
                 cancel_token,
+                self.request_timeout,
             )
             .await?;
 
@@ -201,6 +212,7 @@ impl McpBridgeClient {
         &self,
         request: ClientRequest,
         cancel_token: CancellationToken,
+        timeout: Duration,
     ) -> Result<ServerResult, ServiceError> {
         let handle = self
             .service
@@ -214,7 +226,7 @@ impl McpBridgeClient {
             result = handle.rx => {
                 result.map_err(|_e| ServiceError::TransportClosed)?
             }
-            _ = tokio::time::sleep(self.timeout) => {
+            _ = tokio::time::sleep(timeout) => {
                 let _ = peer.send_notification(
                     CancelledNotification {
                         params: CancelledNotificationParam {
@@ -226,7 +238,7 @@ impl McpBridgeClient {
                     }
                     .into(),
                 ).await;
-                Err(ServiceError::Timeout{timeout: self.timeout})
+                Err(ServiceError::Timeout{timeout})
             }
             _ = cancel_token.cancelled() => {
                 let _ = peer.send_notification(

@@ -91,6 +91,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         traceId: "plugin-trace-current-thread",
         taskKind: request.taskKind,
         sessionId: request.sessionId ?? "session-current",
+        threadId: "thread-current",
         turnId: "turn-current",
         eventName: `plugin_runtime:${request.appId}:plugin-task-current-thread`,
         status: "accepted" as const,
@@ -152,36 +153,43 @@ describe("AgentRuntimeCapabilityHost", () => {
       readThread: vi.fn(async () => ({
         id: 2,
         result: {
-          session: {
+          thread: {
+            archived: false,
+            createdAtMs: 1_747_267_200_000,
             sessionId: "session-standard",
             threadId: "thread-standard",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "completed" as const,
-            createdAt: "2026-05-15T00:00:00.000Z",
-            updatedAt: "2026-05-15T00:00:02.000Z",
-          },
-          turns: [
-            {
+            status: { type: "active" as const },
+            turnsView: "full" as const,
+            updatedAtMs: 1_747_267_202_000,
+            turns: [{
+              createdAtMs: 1_747_267_200_000,
               turnId: "turn-standard",
               sessionId: "session-standard",
               threadId: "thread-standard",
-              status: "completed" as const,
-            },
-          ],
-          detail: {
-            thread_read: {
-              session_id: "session-standard",
-              profile_status: "completed",
-              artifacts: [
-                {
-                  item_id: "artifact-standard",
-                  path: ".lime/artifacts/standard.json",
-                  title: "标准任务产物",
-                  status: "completed",
+              updatedAtMs: 1_747_267_202_000,
+              items: [{
+                itemId: "artifact-standard",
+                threadId: "thread-standard",
+                turnId: "turn-standard",
+                sessionId: "session-standard",
+                ordinal: 1,
+                sequence: 1,
+                createdAtMs: 1_747_267_200_000,
+                updatedAtMs: 1_747_267_202_000,
+                status: "completed" as const,
+                kind: "extension" as const,
+                payload: {
+                  type: "extension" as const,
+                  data: {
+                    path: ".lime/artifacts/standard.json",
+                    title: "标准任务产物",
+                  },
                 },
-              ],
-            },
+              }],
+              itemsView: "full" as const,
+              status: "inProgress" as const,
+              queue: { state: "running" as const },
+            }],
           },
         },
         response: { jsonrpc: "2.0", id: 2, result: {} },
@@ -255,7 +263,8 @@ describe("AgentRuntimeCapabilityHost", () => {
       }),
     );
     expect(runtimeClient.readThread).toHaveBeenCalledWith({
-      sessionId: "session-standard",
+      threadId: "thread-standard",
+      turnsView: "full",
     });
     expect(runtimeClient.cancelTurn).toHaveBeenCalledWith({
       sessionId: "session-standard",
@@ -273,7 +282,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       turnId: "turn-standard",
     });
     expect(snapshot).toMatchObject({
-      status: "succeeded",
+      status: "running",
       events: expect.arrayContaining([
         expect.objectContaining({
           type: "artifact:created",
@@ -295,6 +304,7 @@ describe("AgentRuntimeCapabilityHost", () => {
           traceId: `plugin-trace-${startCounter}`,
           taskKind: request.taskKind,
           sessionId: request.sessionId ?? "session-1",
+          threadId: `thread-${startCounter}`,
           turnId: `turn-${startCounter}`,
           eventName: `plugin_runtime:${request.appId}:plugin-task-${startCounter}`,
           status: "accepted" as const,
@@ -347,7 +357,8 @@ describe("AgentRuntimeCapabilityHost", () => {
       cancelTask: vi.fn(async (request) => ({
         appId: request.appId,
         taskId: request.taskId,
-        sessionId: request.sessionId,
+        sessionId: "session-1",
+        threadId: request.threadId,
         cancelled: true,
         status: "cancelled" as const,
       })),
@@ -518,7 +529,7 @@ describe("AgentRuntimeCapabilityHost", () => {
     expect(api.cancelTask).toHaveBeenCalledWith({
       appId: "content-factory-app",
       taskId: "plugin-task-1",
-      sessionId: "session-1",
+      threadId: "thread-1",
       turnId: "turn-1",
     });
     expect(api.submitHostResponse).toHaveBeenCalledWith({
@@ -582,6 +593,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         traceId: "plugin-trace-persisted",
         taskKind: request.taskKind,
         sessionId: "session-persisted",
+        threadId: "thread-persisted",
         turnId: "turn-persisted",
         eventName: `plugin_runtime:${request.appId}:plugin-task-persisted`,
         status: "accepted" as const,
@@ -675,7 +687,7 @@ describe("AgentRuntimeCapabilityHost", () => {
     expect(api.getTask).toHaveBeenCalledWith({
       appId: "content-factory-app",
       taskId: "plugin-task-persisted",
-      sessionId: "session-persisted",
+      threadId: "thread-persisted",
     });
     expect(restored).toMatchObject({
       taskId: "plugin-task-persisted",
@@ -712,7 +724,7 @@ describe("AgentRuntimeCapabilityHost", () => {
     });
   });
 
-  it("getTask 携带 sessionId 时可直接 replay 未持久化的 runtime task", async () => {
+  it("getTask 缺少 canonical threadId 时 fail closed", async () => {
     const api = {
       startTask: vi.fn(),
       getTask: vi.fn(async (request) => ({
@@ -788,36 +800,9 @@ describe("AgentRuntimeCapabilityHost", () => {
       sessionId: "session-direct-replay",
     });
 
-    expect(api.getTask).toHaveBeenCalledWith({
-      appId: "content-factory-app",
-      taskId: "plugin-task-direct-replay",
-      sessionId: "session-direct-replay",
-    });
-    expect(restored).toMatchObject({
-      taskId: "plugin-task-direct-replay",
-      sessionId: "session-direct-replay",
-      turnId: "turn-direct-replay",
-      workspaceId: "workspace-1",
-      title: "恢复内容批次",
-      taskKind: "content.copy.generate",
-      expectedOutput: { artifactKind: "content_batch" },
-      status: "succeeded",
-      events: expect.arrayContaining([
-        expect.objectContaining({
-          type: "artifact:created",
-          payload: expect.objectContaining({
-            contentFactoryWorkspacePatch: expect.objectContaining({
-              contentBatch: { count: 20 },
-            }),
-          }),
-        }),
-      ]),
-    });
-    expect(stream).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "artifact:created" }),
-      ]),
-    );
+    expect(api.getTask).not.toHaveBeenCalled();
+    expect(restored).toBeNull();
+    expect(stream).toEqual([]);
   });
 
   it("在主 App 侧封装 Claw 式运行过程，包含模型、Token、费用和 Skill", async () => {
@@ -829,6 +814,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         traceId: "plugin-trace-process",
         taskKind: request.taskKind,
         sessionId: "session-process",
+        threadId: "thread-process",
         turnId: "turn-process",
         eventName: `plugin_runtime:${request.appId}:plugin-task-process`,
         status: "accepted" as const,
@@ -1003,6 +989,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         traceId: "plugin-trace-artifact-replay",
         taskKind: request.taskKind,
         sessionId: "session-artifact-replay",
+        threadId: "thread-artifact-replay",
         turnId: "turn-artifact-replay",
         eventName: `plugin_runtime:${request.appId}:plugin-task-artifact-replay`,
         status: "accepted" as const,
@@ -1024,27 +1011,36 @@ describe("AgentRuntimeCapabilityHost", () => {
           },
         ],
         threadRead: {
-          session_id: request.sessionId,
-          profile_status: "completed",
-          artifacts: [
-            {
-              item_id: "artifact-item-1",
-              path: ".lime/artifacts/content-batch.json",
-              title: "内容批次",
+          threadId: "thread-artifact-replay",
+          sessionId: request.sessionId,
+          turns: [{
+            items: [{
+              itemId: "artifact-item-1",
+              threadId: "thread-artifact-replay",
+              turnId: "turn-artifact-replay",
+              sessionId: request.sessionId,
+              ordinal: 1,
+              sequence: 1,
+              createdAtMs: 1_747_267_200_000,
+              updatedAtMs: 1_747_267_203_000,
               status: "completed",
-              completed_at: "2026-05-15T00:00:03.000Z",
-              metadata: {
-                artifactDocument: {
-                  blocks: [
-                    {
+              kind: "extension",
+              metadata: {},
+              payload: {
+                type: "extension",
+                data: {
+                  path: ".lime/artifacts/content-batch.json",
+                  title: "内容批次",
+                  artifactDocument: {
+                    blocks: [{
                       content:
                         '```json\n{"contentFactoryWorkspacePatch":{"kind":"content_batch","contentBatch":{"count":20,"items":[{"title":"突出"一擦即净"的视觉感"}]}}}\n```',
-                    },
-                  ],
+                    }],
+                  },
                 },
               },
-            },
-          ],
+            }],
+          }],
         },
       })),
       cancelTask: vi.fn(async (request) => ({
@@ -1121,6 +1117,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         traceId: "plugin-trace-tool-replay",
         taskKind: request.taskKind,
         sessionId: "session-tool-replay",
+        threadId: "thread-tool-replay",
         turnId: "turn-tool-replay",
         eventName: `plugin_runtime:${request.appId}:plugin-task-tool-replay`,
         status: "accepted" as const,
@@ -1142,21 +1139,28 @@ describe("AgentRuntimeCapabilityHost", () => {
           },
         ],
         threadRead: {
-          session_id: request.sessionId,
-          profile_status: "completed",
-          thread_read: {
-            tool_calls: [
-              {
-                id: "web-fetch-call-1",
-                tool_name: "WebFetch",
-                status: "completed",
-                success: true,
-                output_preview: "fetched https://example.com",
-                turn_id: "turn-tool-replay",
-                timestamp: "2026-05-15T00:00:01.000Z",
+          threadId: "thread-tool-replay",
+          sessionId: request.sessionId,
+          turns: [{
+            items: [{
+              itemId: "web-fetch-call-1",
+              threadId: "thread-tool-replay",
+              turnId: "turn-tool-replay",
+              sessionId: request.sessionId,
+              ordinal: 1,
+              sequence: 1,
+              createdAtMs: 1_747_267_200_000,
+              updatedAtMs: 1_747_267_201_000,
+              status: "completed",
+              kind: "tool",
+              payload: {
+                type: "tool",
+                call_id: "web-fetch-call-1",
+                name: "WebFetch",
+                output: { text: "fetched https://example.com" },
               },
-            ],
-          },
+            }],
+          }],
         },
       })),
       cancelTask: vi.fn(async (request) => ({
@@ -1219,6 +1223,103 @@ describe("AgentRuntimeCapabilityHost", () => {
           message: "工具 WebFetch 已回写：fetched https://example.com",
         }),
       ]),
+    );
+  });
+
+  it("持久化 state 与 lookup threadId 冲突时 fail closed", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: "plugin-task-conflict",
+        traceId: "plugin-trace-conflict",
+        taskKind: request.taskKind,
+        sessionId: "session-conflict",
+        threadId: "thread-canonical",
+        turnId: "turn-conflict",
+        eventName: "plugin_runtime:conflict",
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+      submitHostResponse: vi.fn(),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      api,
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
+    const started = await sdk.agent.startTask({
+      taskKind: "content.copy.generate",
+      sessionId: "session-conflict",
+    });
+
+    await expect(
+      sdk.agent.getTask({
+        taskId: started.taskId,
+        threadId: "thread-other",
+      }),
+    ).rejects.toThrow("lookup threadId conflicts with persisted state");
+    expect(api.getTask).not.toHaveBeenCalled();
+  });
+
+  it("cancelTask 遇到 not_running 不伪报取消成功", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: "plugin-task-not-running",
+        traceId: "plugin-trace-not-running",
+        taskKind: request.taskKind,
+        sessionId: "session-not-running",
+        threadId: "thread-not-running",
+        turnId: "turn-not-running",
+        eventName: "plugin_runtime:not-running",
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: "session-not-running",
+        threadId: "thread-not-running",
+        cancelled: false,
+        status: "not_running" as const,
+      })),
+      submitHostResponse: vi.fn(),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      api,
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
+    const started = await sdk.agent.startTask({
+      taskKind: "content.copy.generate",
+      sessionId: "session-not-running",
+    });
+    const result = await sdk.agent.cancelTask(started.taskId);
+
+    expect(result.status).toBe("running");
+    expect(result.cancelledAt).toBeUndefined();
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "task:status", status: "running" }),
+      ]),
+    );
+    expect(result.events).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "task:cancelled" })]),
     );
   });
 });

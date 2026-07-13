@@ -8,10 +8,12 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 mod registry;
+mod step_snapshot;
 
 pub use registry::{
     McpConnectionCall, McpConnectionHandle, McpConnectionRegistry, McpConnectionSummary,
 };
+pub use step_snapshot::McpStepSnapshot;
 
 pub type McpConnectionError = rmcp::ServiceError;
 

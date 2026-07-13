@@ -21,6 +21,7 @@ export interface RuntimeTaskState {
   taskId: string;
   traceId: string;
   sessionId: string;
+  threadId: string;
   turnId: string;
   workspaceId: string;
   taskKind: string;
@@ -76,6 +77,7 @@ function isRuntimeTaskState(value: unknown): value is RuntimeTaskState {
     typeof value.taskId === "string" &&
     typeof value.traceId === "string" &&
     typeof value.sessionId === "string" &&
+    typeof value.threadId === "string" &&
     typeof value.turnId === "string" &&
     typeof value.workspaceId === "string" &&
     typeof value.taskKind === "string" &&
@@ -155,6 +157,7 @@ function buildStartEvent(state: RuntimeTaskState): PluginTaskStreamEvent {
     message: "Lime AgentRuntime 已接收 Plugin 任务。",
     payload: {
       sessionId: state.sessionId,
+      threadId: state.threadId,
       turnId: state.turnId,
     },
   };
@@ -197,38 +200,87 @@ function readRecordString(
 function readThreadReadArtifacts(
   threadRead: unknown,
 ): Record<string, unknown>[] {
-  if (!isRecord(threadRead) || !Array.isArray(threadRead.artifacts)) {
-    return [];
-  }
-  return threadRead.artifacts.filter(isRecord);
+  return canonicalThreadItems(threadRead).flatMap((item) => {
+    const payload = isRecord(item.payload) ? item.payload : null;
+    if (!payload) {
+      return [];
+    }
+    const type = readRecordString(payload, "type");
+    if (type !== "file" && type !== "media" && type !== "extension") {
+      return [];
+    }
+    const metadata = isRecord(item.metadata) ? item.metadata : {};
+    const data = type === "extension" && isRecord(payload.data) ? payload.data : {};
+    return [
+      {
+        id: readRecordString(item, "itemId"),
+        item_id: readRecordString(item, "itemId"),
+        path:
+          readRecordString(payload, "path") ??
+          readRecordString(payload, "uri") ??
+          readRecordString(data, "path"),
+        title:
+          readRecordString(data, "title") ??
+          readRecordString(payload, "path") ??
+          readRecordString(payload, "uri"),
+        status: readRecordString(item, "status"),
+        metadata: { ...metadata, ...data },
+        createdAtMs: item.createdAtMs,
+        updatedAtMs: item.updatedAtMs,
+        completedAtMs: item.completedAtMs,
+        payload,
+      },
+    ];
+  });
 }
 
 function readThreadReadToolCalls(
   threadRead: unknown,
 ): Record<string, unknown>[] {
-  if (!isRecord(threadRead)) {
-    return [];
-  }
-  const nestedThreadRead =
-    (isRecord(threadRead.thread_read) && threadRead.thread_read) ||
-    (isRecord(threadRead.threadRead) && threadRead.threadRead) ||
-    null;
-  return [
-    ...readRecordArray(threadRead, "tool_calls"),
-    ...readRecordArray(threadRead, "toolCalls"),
-    ...(nestedThreadRead
-      ? readRecordArray(nestedThreadRead, "tool_calls")
-      : []),
-    ...(nestedThreadRead ? readRecordArray(nestedThreadRead, "toolCalls") : []),
-  ];
+  return canonicalThreadItems(threadRead).flatMap((item) => {
+    const payload = isRecord(item.payload) ? item.payload : null;
+    if (!payload) {
+      return [];
+    }
+    const type = readRecordString(payload, "type");
+    if (
+      type !== "tool" &&
+      type !== "mcpToolCall" &&
+      type !== "collabAgentToolCall"
+    ) {
+      return [];
+    }
+    const output = isRecord(payload.output) ? payload.output : undefined;
+    return [
+      {
+        id: readRecordString(payload, "call_id"),
+        tool_name:
+          readRecordString(payload, "name") ??
+          readRecordString(payload, "tool_name") ??
+          readRecordString(payload, "operation"),
+        status: readRecordString(item, "status"),
+        output: output?.structuredContent ?? output?.text,
+        error: output?.error,
+        success:
+          item.status === "completed"
+            ? true
+            : item.status === "failed"
+              ? false
+              : undefined,
+        updatedAtMs: item.updatedAtMs,
+        item,
+      },
+    ];
+  });
 }
 
-function readRecordArray(
-  value: Record<string, unknown>,
-  key: string,
-): Record<string, unknown>[] {
-  const item = value[key];
-  return Array.isArray(item) ? item.filter(isRecord) : [];
+function canonicalThreadItems(threadRead: unknown): Record<string, unknown>[] {
+  if (!isRecord(threadRead) || !Array.isArray(threadRead.turns)) {
+    return [];
+  }
+  return threadRead.turns.flatMap((turn) =>
+    isRecord(turn) && Array.isArray(turn.items) ? turn.items.filter(isRecord) : [],
+  );
 }
 
 function readRecordBoolean(

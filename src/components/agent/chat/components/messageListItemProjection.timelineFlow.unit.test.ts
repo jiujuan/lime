@@ -6,6 +6,68 @@ import {
 } from "./messageListItemProjection.testHarness";
 
 describe("messageListItemProjection timeline flow", () => {
+  it("终态 canonical 审批只由 timeline 持有，移除消息侧重复副本", () => {
+    const message: Message = {
+      id: "assistant-terminal-approval",
+      role: "assistant",
+      content: "审批已拒绝，继续使用无浏览器路径。",
+      timestamp: new Date("2026-07-13T05:00:00.000Z"),
+      actionRequests: [
+        {
+          requestId: "approval-terminal",
+          actionType: "tool_confirmation",
+          status: "submitted",
+          prompt: "允许访问浏览器吗？",
+        },
+      ],
+      contentParts: [
+        {
+          type: "action_required",
+          actionRequired: {
+            requestId: "approval-terminal",
+            actionType: "tool_confirmation",
+            status: "submitted",
+            prompt: "允许访问浏览器吗？",
+          },
+        },
+        { type: "text", text: "审批已拒绝，继续使用无浏览器路径。" },
+      ],
+    };
+
+    const projection = buildProjection(message, [
+      {
+        id: "canonical-approval-item",
+        type: "approval_request",
+        turn_id: "turn-terminal-approval",
+        sequence: 2,
+        request_id: "approval-terminal",
+        action_type: "tool_confirmation",
+        prompt: "允许访问浏览器吗？",
+        response: { decision: "decline" },
+        status: "completed",
+        started_at: "2026-07-13T04:59:00.000Z",
+        completed_at: "2026-07-13T04:59:30.000Z",
+        updated_at: "2026-07-13T04:59:30.000Z",
+      },
+    ] as never);
+
+    const approvalParts = projection.rendererContentParts?.filter(
+      (
+        part,
+      ): part is Extract<
+        NonNullable<Message["contentParts"]>[number],
+        { type: "action_required" }
+      > => part.type === "action_required",
+    );
+    expect(approvalParts).toHaveLength(1);
+    expect(approvalParts?.[0]?.actionRequired.requestId).toBe(
+      "approval-terminal",
+    );
+    expect(projection.rendererActionRequests).toEqual([]);
+    expect(projection.primaryActionRequests).toBeUndefined();
+    expect(projection.primaryTimeline).toBeNull();
+  });
+
   it("历史 timeline 的审批和问答应按顺序进入交错过程", () => {
     const message: Message = {
       id: "assistant-history-actions",

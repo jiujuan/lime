@@ -4,11 +4,12 @@ import {
   type AgentRuntimeClientOptions as BaseAgentRuntimeClientOptions,
   type AgentRuntimeClientSubscription,
   type AgentRuntimeEventListener,
+  type CanonicalThreadEventListener,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
   type AgentSessionEventNotification,
-  type AgentSessionReadParams,
-  type AgentSessionReadResponse,
+  type ThreadReadParams,
+  type ThreadReadResponse,
   type AgentSessionToolInventoryReadParams,
   type AgentSessionToolInventoryReadResponse,
   type AgentSessionTurnCancelParams,
@@ -23,6 +24,8 @@ import {
   type JsonRpcMessage,
   type StructuredOutputContract,
   agentSessionEventNotification,
+  agentSessionMediaReadEventNotification,
+  canonicalThreadEventNotification,
 } from "@limecloud/app-server-client";
 
 export type { StructuredOutputContract };
@@ -48,6 +51,7 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
   readonly connection: AppServerConnection;
   readonly #base: BaseAppServerAgentRuntimeClient;
   readonly #listeners = new Set<AgentRuntimeEventListener>();
+  readonly #canonicalListeners = new Set<CanonicalThreadEventListener>();
   readonly #eventPipeline: AgentRuntimeEventPipeline;
   readonly #pendingNextEvents: AgentSessionEventNotification[] = [];
 
@@ -89,9 +93,9 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
   }
 
   async readThread(
-    params: AgentSessionReadParams,
+    params: ThreadReadParams,
     options?: AppServerRequestOptions,
-  ): Promise<AppServerRequestResult<AgentSessionReadResponse>> {
+  ): Promise<AppServerRequestResult<ThreadReadResponse>> {
     return await this.#base.readThread(params, options);
   }
 
@@ -120,6 +124,17 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     };
   }
 
+  subscribeCanonicalEvents(
+    listener: CanonicalThreadEventListener,
+  ): AgentRuntimeClientSubscription {
+    this.#canonicalListeners.add(listener);
+    return {
+      unsubscribe: () => {
+        this.#canonicalListeners.delete(listener);
+      },
+    };
+  }
+
   async dispatchEvent(message: JsonRpcMessage): Promise<boolean> {
     const notification = agentSessionEventNotification(message);
     if (!notification) {
@@ -132,13 +147,29 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
   async #dispatchNotification(
     notification: AgentSessionEventNotification,
   ): Promise<AgentRuntimeEventPipelineResult> {
+    const canonicalEvent = canonicalThreadEventNotification(notification);
+    if (!canonicalEvent) {
+      if (!agentSessionMediaReadEventNotification(notification)) {
+        return { accepted: false, reason: "dropped" };
+      }
+      for (const listener of this.#listeners) {
+        await listener(notification.params.event, notification);
+      }
+      return {
+        accepted: true,
+        notification,
+        notifications: [notification],
+      };
+    }
     const pipelineResult = await this.#eventPipeline.process(notification);
     if (!pipelineResult.accepted) {
       return pipelineResult;
     }
     for (const notification of pipelineResult.notifications) {
-      for (const listener of this.#listeners) {
-        await listener(notification.params.event, notification);
+      const event = canonicalThreadEventNotification(notification);
+      if (!event) continue;
+      for (const listener of this.#canonicalListeners) {
+        await listener(event, notification);
       }
     }
     return pipelineResult;

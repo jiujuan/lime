@@ -353,13 +353,13 @@ function buildProviderDescriptor({ baseUrl, model, apiKey }) {
     modelPreference: model,
     source: "localhost-fixture",
     providerConfig: {
-      provider_id: "fixture-openai",
-      provider_name: "openai",
-      model_name: model,
-      api_key: apiKey,
-      base_url: baseUrl,
-      tool_call_strategy: "native",
-      model_capabilities: {
+      providerId: "fixture-openai",
+      providerName: "openai",
+      modelName: model,
+      apiKey,
+      baseUrl,
+      toolCallStrategy: "native",
+      modelCapabilities: {
         capabilities: {
           vision: true,
           tools: true,

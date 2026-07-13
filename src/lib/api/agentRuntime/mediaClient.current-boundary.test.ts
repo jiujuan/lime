@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -28,17 +28,6 @@ const PUBLIC_AGENT_RUNTIME_SURFACES = [
 
 function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
-}
-
-function expectRetiredMediaClientTopLevelExportsAbsent(source: string): void {
-  expect(source).not.toContain("export const {");
-  expect(source).not.toContain("export declare const");
-  for (const symbol of MEDIA_TASK_SYMBOLS) {
-    expect(source).not.toContain(`export const ${symbol}`);
-    expect(source).not.toContain(`export declare const ${symbol}`);
-    expect(source).not.toContain(`export function ${symbol}`);
-    expect(source).not.toContain(`export declare function ${symbol}`);
-  }
 }
 
 function importSpecifiersFrom(source: string, modulePath: string): string[] {
@@ -89,18 +78,13 @@ describe("agentRuntime mediaClient current boundary", () => {
     }
   });
 
-  it("agentRuntime mediaClient 保持 fail-closed compat，不应重新调用旧 bridge 命令", () => {
-    const source = readRepoFile("src/lib/api/agentRuntime/mediaClient.ts");
-    const declarations = readRepoFile(
-      "src/lib/api/agentRuntime/mediaClient.d.ts",
-    );
-
-    expect(source).toContain("createRetiredMediaTaskCommandError");
-    expect(source).toContain("src/lib/api/mediaTasks.ts App Server current");
-    expect(source).not.toContain("bridgeInvoke(");
-    expect(source).not.toContain("safeInvoke(");
-    expectRetiredMediaClientTopLevelExportsAbsent(source);
-    expectRetiredMediaClientTopLevelExportsAbsent(declarations);
+  it("agentRuntime mediaClient 已删除且不得恢复", () => {
+    expect(
+      existsSync(resolve(cwd(), "src/lib/api/agentRuntime/mediaClient.ts")),
+    ).toBe(false);
+    expect(
+      existsSync(resolve(cwd(), "src/lib/api/agentRuntime/mediaClient.d.ts")),
+    ).toBe(false);
   });
 
   it("agentRuntime 公共聚合入口不再暴露 retired mediaClient surface", () => {

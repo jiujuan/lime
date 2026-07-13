@@ -1,6 +1,6 @@
 use super::codex::{self, events::ImportedRuntimeEvent, ImportedTimelineItem};
 use super::commit_events::{
-    enrich_imported_runtime_event_payload,
+    enrich_imported_runtime_event_payload, lower_imported_runtime_events_for_commit,
     materialize_imported_runtime_events_for_default_projection, ImportedRuntimeEventNormalizer,
     ImportedRuntimeEventProjectionSelector, ImportedRuntimeEventProjectionSummary,
 };
@@ -159,18 +159,18 @@ fn clear_existing_imported_session(
     core: &RuntimeCore,
     session_id: &str,
 ) -> Result<(), RuntimeCoreError> {
-    {
-        let mut state = core
-            .state
-            .lock()
-            .expect("runtime core state mutex poisoned");
-        state.sessions.remove(session_id);
-    }
+    let mut state = core
+        .state
+        .lock()
+        .expect("runtime core state mutex poisoned");
     if let Some(projection_store) = core.projection_store.as_ref() {
         projection_store
-            .clear_session(session_id)
+            .delete_session_data(session_id)
             .map_err(RuntimeCoreError::Backend)?;
     }
+    super::super::approval_cache::remove_session(&mut state.session_approval_cache, session_id);
+    state.sessions.remove(session_id);
+    drop(state);
     if let Some(event_log_writer) = core.event_log_writer.as_ref() {
         event_log_writer
             .clear_session(session_id)
@@ -430,14 +430,19 @@ fn append_imported_turns(
             stored.turns.push(turn);
         }
 
-        let events: Vec<RuntimeEvent> = imported_turn
-            .materialized_events
+        let materialized_events = lower_imported_runtime_events_for_commit(
+            &imported_turn.materialized_events,
+            session_id,
+            &thread_id,
+            &turn_id,
+        );
+        let events: Vec<RuntimeEvent> = materialized_events
             .into_iter()
             .map(|event| {
-                RuntimeEvent::new(
-                    event.event_type,
-                    enrich_imported_runtime_event_payload(event.payload),
-                )
+                let (event_type, payload) = event
+                    .into_runtime()
+                    .expect("commit lowering must remove source-local imported tool drafts");
+                RuntimeEvent::new(event_type, enrich_imported_runtime_event_payload(payload))
             })
             .collect();
         core.append_runtime_events(session_id, &thread_id, Some(&turn_id), events)?;
@@ -508,8 +513,8 @@ fn persist_imported_runtime_event_sidecar(
                 serde_json::to_string(&json!({
                     "turnIndex": turn_index,
                     "eventIndex": event_index,
-                    "eventType": event.event_type,
-                    "payload": event.payload.clone(),
+                    "eventType": event.event_type(),
+                    "payload": event.sidecar_payload(),
                 }))
                 .map_err(|error| {
                     RuntimeCoreError::Backend(format!(

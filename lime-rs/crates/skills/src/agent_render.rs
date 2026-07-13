@@ -174,10 +174,13 @@ fn render_skill_body_with_references(body: &AgentSkillBody) -> String {
 
 fn render_skill_line(skill: &AgentSkillMetadata) -> String {
     let mut parts = Vec::new();
-    let display_name = if skill.display_name == skill.name {
+    let display_name = if skill.interface.display_name == skill.name {
         String::new()
     } else {
-        format!(" display=`{}`", normalize_inline_text(&skill.display_name))
+        format!(
+            " display=`{}`",
+            normalize_inline_text(&skill.interface.display_name)
+        )
     };
     parts.push(format!(
         "- `{}`{} scope={} path=`{}`",
@@ -191,20 +194,20 @@ fn render_skill_line(skill: &AgentSkillMetadata) -> String {
     if !description.is_empty() {
         parts.push(format!("desc={description}"));
     }
-    if let Some(when_to_use) = skill.when_to_use.as_ref() {
+    if let Some(when_to_use) = skill.policy.when_to_use.as_ref() {
         let when_to_use = truncate_text(when_to_use, WHEN_TO_USE_MAX_CHARS);
         if !when_to_use.is_empty() {
             parts.push(format!("when={when_to_use}"));
         }
     }
-    if let Some(argument_hint) = skill.argument_hint.as_ref() {
+    if let Some(argument_hint) = skill.interface.argument_hint.as_ref() {
         let argument_hint = truncate_text(argument_hint, 80);
         if !argument_hint.is_empty() {
             parts.push(format!("args={argument_hint}"));
         }
     }
-    if !skill.allowed_tools.is_empty() {
-        parts.push(format!("declared_tools={}", skill.allowed_tools.join(",")));
+    if !skill.capabilities.is_empty() {
+        parts.push(format!("declared_tools={}", skill.capabilities.join(",")));
     }
 
     format!("{}。\n", parts.join("; "))
@@ -267,7 +270,11 @@ pub fn contains_selected_agent_skill_body_prompt(system_prompt: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AgentSkillBodyLocator, AgentSkillMetadata, AgentSkillScope};
+    use crate::{
+        AgentSkillAuthority, AgentSkillBodyLocator, AgentSkillDependencies, AgentSkillInterface,
+        AgentSkillMetadata, AgentSkillPolicy, AgentSkillScope, AgentSkillSource,
+        AgentSkillToolDependency,
+    };
     use std::path::PathBuf;
 
     #[test]
@@ -359,16 +366,34 @@ mod tests {
         when_to_use: Option<&str>,
     ) -> AgentSkillMetadata {
         AgentSkillMetadata {
+            skill_id: format!("project:{name}"),
             name: name.to_string(),
-            display_name: display_name.to_string(),
             description: description.to_string(),
             scope: AgentSkillScope::Project,
-            source: "project".to_string(),
+            source: AgentSkillSource::Project,
+            authority: AgentSkillAuthority::Workspace,
+            enabled: true,
+            interface: AgentSkillInterface {
+                display_name: display_name.to_string(),
+                execution_mode: "prompt".to_string(),
+                provider: None,
+                model: None,
+                argument_hint: None,
+            },
+            dependencies: AgentSkillDependencies {
+                tools: vec![AgentSkillToolDependency {
+                    dependency_type: "runtime_tool".to_string(),
+                    value: "Read".to_string(),
+                    required: true,
+                }],
+            },
+            policy: AgentSkillPolicy {
+                allow_implicit_invocation: true,
+                when_to_use: when_to_use.map(ToString::to_string),
+            },
+            capabilities: vec!["Read".to_string()],
             directory: PathBuf::from(format!("/tmp/skills/{name}")),
             skill_file_path: PathBuf::from(format!("/tmp/skills/{name}/SKILL.md")),
-            allowed_tools: vec!["Read".to_string()],
-            argument_hint: None,
-            when_to_use: when_to_use.map(ToString::to_string),
         }
     }
 }

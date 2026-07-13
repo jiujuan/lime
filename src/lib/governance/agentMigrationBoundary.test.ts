@@ -53,6 +53,17 @@ const DELETED_AGENT_PATHS = [
   "lime-rs/crates/agent/src/turn_context_configuration/agent_adapter.rs",
 ];
 
+const DELETED_THREAD_STORE_PATHS = [
+  "lime-rs/crates/thread-store/src/conversation_transcript.rs",
+  "lime-rs/crates/thread-store/src/history_search.rs",
+  "lime-rs/crates/thread-store/src/in_memory_runtime_store.rs",
+  "lime-rs/crates/thread-store/src/legacy_conversation.rs",
+  "lime-rs/crates/thread-store/src/runtime_status_item.rs",
+  "lime-rs/crates/thread-store/src/runtime_store.rs",
+  "lime-rs/crates/thread-store/src/session_insights.rs",
+  "lime-rs/crates/thread-store/src/sqlite_runtime_store.rs",
+];
+
 describe("Agent migration boundary", () => {
   it("agent-compat 必须保持物理删除", () => {
     expect(existsSync(repoPath("lime-rs/crates/agent-compat"))).toBe(false);
@@ -165,16 +176,9 @@ describe("Agent migration boundary", () => {
     expect(support).not.toContain("InMemoryRuntimeQueueStore");
     expect(support).not.toContain("SqliteRuntimeStore");
     expect(support).not.toContain("runtime_store_agent_adapter");
-    expect(
-      existsSync(
-        repoPath("lime-rs/crates/thread-store/src/sqlite_runtime_store.rs"),
-      ),
-    ).toBe(false);
-    expect(
-      existsSync(
-        repoPath("lime-rs/crates/thread-store/src/in_memory_runtime_store.rs"),
-      ),
-    ).toBe(false);
+    for (const path of DELETED_THREAD_STORE_PATHS) {
+      expect(existsSync(repoPath(path)), path).toBe(false);
+    }
     expect(projectionStore).toContain("pub struct ProjectionStore");
     expect(projectionStore).toContain("pub fn apply_events");
     expect(projectionStore).toContain("pub fn read_session_projection");

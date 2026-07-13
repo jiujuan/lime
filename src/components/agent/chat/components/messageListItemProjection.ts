@@ -81,6 +81,7 @@ import {
 } from "./messageListItemProjectionHelpers";
 import { resolveMessageListItemArtifactProjection } from "./messageListItemProjectionArtifacts";
 import type { ResolveMessageListItemProjectionOptions } from "./messageListItemProjectionTypes";
+import type { Message } from "../types";
 
 export function resolveMessageListItemProjection({
   activeCurrentTurnId,
@@ -244,12 +245,49 @@ export function resolveMessageListItemProjection({
       rawTimelineItems,
       shouldNormalizeInactiveRunningWebRetrieval,
     );
+  const terminalApprovalRequestIds = new Set(
+    (timelineItemsForDisplay || [])
+      .filter(
+        (item) =>
+          item.type === "approval_request" &&
+          (item.status === "completed" || item.status === "failed"),
+      )
+      .map((item) => item.request_id),
+  );
+  const filterTerminalApprovalActionRequests = (
+    actionRequests: Message["actionRequests"],
+  ): Message["actionRequests"] => {
+    if (!actionRequests?.length || terminalApprovalRequestIds.size === 0) {
+      return actionRequests;
+    }
+    return actionRequests.filter(
+      (request) =>
+        request.actionType !== "tool_confirmation" ||
+        !terminalApprovalRequestIds.has(request.requestId),
+    );
+  };
+  const filteredDisplayContentParts = displayContentParts?.filter(
+    (part) =>
+      part.type !== "action_required" ||
+      part.actionRequired.actionType !== "tool_confirmation" ||
+      !terminalApprovalRequestIds.has(part.actionRequired.requestId),
+  );
+  const filteredActionRequests = filterTerminalApprovalActionRequests(
+    message.actionRequests,
+  );
+  const messageWithoutTerminalApprovalDuplicates =
+    terminalApprovalRequestIds.size > 0
+      ? {
+          ...message,
+          actionRequests: filteredActionRequests,
+          contentParts: filteredDisplayContentParts,
+        }
+      : message;
   const isTerminalRuntimeFailure =
     message.role === "assistant" && message.runtimeStatus?.phase === "failed";
   const hasMeaningfulAssistantTextContentPart = Boolean(
     displayContentParts?.some(
-      (part) =>
-        part.type === "text" && !isTrivialAssistantFinalText(part.text),
+      (part) => part.type === "text" && !isTrivialAssistantFinalText(part.text),
     ),
   );
   const hasUserVisibleRuntimeFailureAnswer =
@@ -307,7 +345,7 @@ export function resolveMessageListItemProjection({
       hasRunningWebRetrievalPart);
   const messageContentPartsOwnInlineProcessFlow =
     message.role === "assistant" &&
-    hasInlineProcessContentParts(message, {
+    hasInlineProcessContentParts(messageWithoutTerminalApprovalDuplicates, {
       displayContent,
       timelineItems: timelineItemsForDisplay,
     });
@@ -336,7 +374,7 @@ export function resolveMessageListItemProjection({
             !message.thinkingContent?.trim()
               ? displayContent
               : undefined,
-          existingContentParts: displayContentParts,
+          existingContentParts: filteredDisplayContentParts,
           items: timelineItemsForDisplay,
         })
       : undefined;
@@ -365,10 +403,13 @@ export function resolveMessageListItemProjection({
           parts: hideFinalAnswerContentPartsWhileRunning(
             mergeStreamingOverlayContentParts(
               timelineInlineContentParts ||
-                filterConversationDisplayContentParts(displayContentParts, {
-                  includeProcessFlow: includeInlineProcessFlow,
-                  preserveToolUseParts: !hasProcessTimelineItems,
-                }),
+                filterConversationDisplayContentParts(
+                  filteredDisplayContentParts,
+                  {
+                    includeProcessFlow: includeInlineProcessFlow,
+                    preserveToolUseParts: !hasProcessTimelineItems,
+                  },
+                ),
               shouldHideAssistantTextWhileRunning
                 ? null
                 : streamingFinalTextOverlay,
@@ -383,7 +424,7 @@ export function resolveMessageListItemProjection({
               hasActiveTimelineTurn ||
               !hasPersistedReasoningTimeline),
         })
-      : displayContentParts;
+      : filteredDisplayContentParts;
   const conversationContentParts =
     message.role === "assistant"
       ? normalizeInlineThinkingContentParts(ensuredConversationContentParts)
@@ -403,7 +444,7 @@ export function resolveMessageListItemProjection({
     contentParts: conversationContentParts,
     thinkingContent: conversationThinkingContent,
     toolCalls: conversationToolCalls,
-    actionRequests: message.actionRequests,
+    actionRequests: filteredActionRequests,
   });
   const shouldLetInlineProcessOwnActiveTurn =
     timeline !== null &&
@@ -517,7 +558,7 @@ export function resolveMessageListItemProjection({
   ];
   const timelineActionRequests = inlineProcessCoverage.actionRequestCounts.size
     ? undefined
-    : message.actionRequests;
+    : filteredActionRequests;
   const primaryActionRequests =
     visiblePrimaryTimelineItems.length > 0 ? timelineActionRequests : undefined;
   const trailingActionRequests =
@@ -581,12 +622,13 @@ export function resolveMessageListItemProjection({
   const shouldUseRuntimeFailureFallbackText =
     !shouldSuppressDuplicatedFailureText &&
     shouldBackfillEmptyRuntimeFailureText;
-  const runtimeFailureFallbackActionContent = shouldUseRuntimeFailureFallbackText
-    ? resolveRuntimeFailureFallbackAssistantText(
-        message,
-        sanitizedRawActionContent,
-      )
-    : "";
+  const runtimeFailureFallbackActionContent =
+    shouldUseRuntimeFailureFallbackText
+      ? resolveRuntimeFailureFallbackAssistantText(
+          message,
+          sanitizedRawActionContent,
+        )
+      : "";
   const actionContent = shouldSuppressDuplicatedFailureText
     ? ""
     : shouldUseRuntimeFailureFallbackText
@@ -627,7 +669,7 @@ export function resolveMessageListItemProjection({
     !focusedTimelineItemId &&
     !includeInlineProcessFlow &&
     !hasNonTextConversationContentParts &&
-    !((message.actionRequests || []).length > 0) &&
+    !((filteredActionRequests || []).length > 0) &&
     !actionContent.includes("```a2ui") &&
     actionContent.length >
       MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD &&
@@ -657,13 +699,15 @@ export function resolveMessageListItemProjection({
     ? actionContent
     : shouldUseRuntimeFailureSanitizedText
       ? actionContent
-    : shouldCollapseLongHistoricalMessage ||
-        shouldFlattenHistoricalAssistantContent
-      ? rendererContent
-      : usesProcessSeparatedFinalText
-        ? actionContent
-        : actionContent ||
-          (shouldHideAssistantTextWhileRunning ? "" : visibleRawDisplayContent);
+      : shouldCollapseLongHistoricalMessage ||
+          shouldFlattenHistoricalAssistantContent
+        ? rendererContent
+        : usesProcessSeparatedFinalText
+          ? actionContent
+          : actionContent ||
+            (shouldHideAssistantTextWhileRunning
+              ? ""
+              : visibleRawDisplayContent);
   const rendererRawContent = sanitizeProjectedMessageText(
     message,
     rawRendererRawContent,
@@ -696,8 +740,8 @@ export function resolveMessageListItemProjection({
   const rendererThinkingContent = shouldCollapseLongHistoricalMessage
     ? undefined
     : rendererHasProvenanceThinkingContentPart
-    ? undefined
-    : conversationThinkingContent;
+      ? undefined
+      : conversationThinkingContent;
   const rendererToolCalls =
     shouldCollapseLongHistoricalMessage ||
     hasInlineToolUseContentPart(rendererConversationContentParts)
@@ -706,7 +750,7 @@ export function resolveMessageListItemProjection({
   const rendererActionRequests =
     shouldCollapseLongHistoricalMessage || shouldSuppressRendererProcessFlow
       ? undefined
-      : message.actionRequests;
+      : filteredActionRequests;
   const rendererMarkdownRenderMode =
     shouldCollapseLongHistoricalMessage ||
     shouldFlattenHistoricalAssistantContent

@@ -1,5 +1,6 @@
 use super::super::*;
 
+use serde_json::Value;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(in crate::runtime::tests) struct CompletedBackend;
@@ -87,64 +88,6 @@ impl ExecutionBackend for ProviderTraceBackend {
         sink.emit(RuntimeEvent::new(
             "message.delta",
             json!({ "text": "你好！有什么可以帮你的吗？" }),
-        ))?;
-        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
-    }
-
-    async fn cancel_turn(
-        &self,
-        _request: CancelExecutionRequest,
-        _sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        Ok(())
-    }
-
-    async fn respond_action(
-        &self,
-        _request: ActionRespondRequest,
-        _sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        Ok(())
-    }
-}
-
-pub(in crate::runtime::tests) struct ToolReadModelBackend;
-
-#[async_trait]
-impl ExecutionBackend for ToolReadModelBackend {
-    async fn start_turn(
-        &self,
-        _request: ExecutionRequest,
-        sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
-        sink.emit(RuntimeEvent::new(
-            "tool.started",
-            json!({
-                "toolName": "WebFetch",
-            }),
-        ))?;
-        sink.emit(RuntimeEvent::new(
-            "tool.result",
-            json!({
-                "toolName": "WebFetch",
-                "output": "fetched https://example.com",
-            }),
-        ))?;
-        sink.emit(RuntimeEvent::new(
-            "tool.started",
-            json!({
-                "toolCallId": "search-call-1",
-                "toolName": "WebSearch",
-            }),
-        ))?;
-        sink.emit(RuntimeEvent::new(
-            "tool.result",
-            json!({
-                "toolCallId": "search-call-1",
-                "toolName": "WebSearch",
-                "outputPreview": "search results",
-            }),
         ))?;
         sink.emit(RuntimeEvent::new("turn.completed", json!({})))
     }
@@ -416,16 +359,19 @@ pub(in crate::runtime::tests) struct ApprovalCancelRespondTerminalBackend {
 impl ExecutionBackend for ApprovalCancelRespondTerminalBackend {
     async fn start_turn(
         &self,
-        _request: ExecutionRequest,
+        request: ExecutionRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
         sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
         sink.emit(RuntimeEvent::new(
-            "tool.started",
-            json!({
-                "toolCallId": "approval-tool-1",
-                "toolName": "BrowserControl",
-            }),
+            "item.started",
+            approval_tool_item_payload(
+                &request.session.session_id,
+                &request.session.thread_id,
+                &request.turn.turn_id,
+                "inProgress",
+                None,
+            ),
         ))?;
         sink.emit(RuntimeEvent::new(
             "action.required",
@@ -459,6 +405,11 @@ impl ExecutionBackend for ApprovalCancelRespondTerminalBackend {
         request: ActionRespondRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
+        let turn = request.turn.as_ref().ok_or_else(|| {
+            RuntimeCoreError::Backend(
+                "approval terminal test backend requires a canonical turn".to_string(),
+            )
+        })?;
         sink.emit(RuntimeEvent::new(
             "action.resolved",
             json!({
@@ -471,13 +422,14 @@ impl ExecutionBackend for ApprovalCancelRespondTerminalBackend {
             }),
         ))?;
         sink.emit(RuntimeEvent::new(
-            "tool.failed",
-            json!({
-                "toolCallId": "approval-tool-1",
-                "toolName": "BrowserControl",
-                "error": "用户已取消",
-                "status": "failed",
-            }),
+            "item.completed",
+            approval_tool_item_payload(
+                &request.session.session_id,
+                &request.session.thread_id,
+                &turn.turn_id,
+                "failed",
+                Some("用户已取消"),
+            ),
         ))?;
         sink.emit(RuntimeEvent::new(
             "turn.canceled",
@@ -487,6 +439,39 @@ impl ExecutionBackend for ApprovalCancelRespondTerminalBackend {
             }),
         ))
     }
+}
+
+fn approval_tool_item_payload(
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    status: &str,
+    error: Option<&str>,
+) -> Value {
+    let terminal = status != "inProgress";
+    json!({
+        "item": {
+            "sessionId": session_id,
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "itemId": "item_approval-tool-1",
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1,
+            "updatedAtMs": 1,
+            "completedAtMs": terminal.then_some(1),
+            "kind": "tool",
+            "status": status,
+            "payload": {
+                "type": "tool",
+                "call_id": "approval-tool-1",
+                "name": "BrowserControl",
+                "arguments": [],
+                "output": terminal.then(|| json!({ "error": error })),
+            },
+            "metadata": {},
+        }
+    })
 }
 
 pub(in crate::runtime::tests) struct TurnCompletedRecordingBackend {

@@ -28,6 +28,14 @@ export interface AppServerClient {
   listSessions(
     params?: protocol.AgentSessionListParams,
   ): protocol.JsonRpcRequest;
+  readThread(params: protocol.ThreadReadParams): protocol.JsonRpcRequest;
+  listThreads(params?: protocol.ThreadListParams): protocol.JsonRpcRequest;
+  listThreadTurns(
+    params: protocol.ThreadTurnsListParams,
+  ): protocol.JsonRpcRequest;
+  listThreadItems(
+    params: protocol.ThreadItemsListParams,
+  ): protocol.JsonRpcRequest;
   updateSession(
     params: protocol.AgentSessionUpdateParams,
   ): protocol.JsonRpcRequest;

@@ -1,8 +1,22 @@
+mod extraction;
+mod presentation;
+
+use super::super::canonical_tool::canonical_tool_or_side_channel;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::ArtifactSummary;
 use app_server_protocol::EvidencePackArtifact;
+use extraction::{
+    browser_action_status_from_candidates, browser_candidate_values,
+    browser_confirmation_request_id, event_status_label, first_bool, first_string,
+    first_string_list, first_u64, has_any_key, infer_action_from_tool_name,
+    infer_browser_artifact_kind, infer_executor_from_tool_name, is_browser_artifact_kind,
+    is_browser_record, is_empty_browser_start_event, tool_name_from_value,
+};
+use presentation::{
+    browser_action_item_value, browser_artifact_title, count_entries, increment_count,
+    item_dedupe_key,
+};
 use serde_json::json;
-use serde_json::Map;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -164,8 +178,11 @@ fn collect_browser_action_items(
 }
 
 fn browser_action_item_from_event(event: &AgentEvent) -> Option<BrowserActionItem> {
-    let candidates = browser_candidate_values(&event.payload);
-    let tool_name = tool_name_from_event(event);
+    let tool = canonical_tool_or_side_channel(event)?;
+    let canonical_value = tool.as_ref().map(|tool| tool.evidence_value());
+    let payload = canonical_value.as_ref().unwrap_or(&event.payload);
+    let candidates = browser_candidate_values(payload);
+    let tool_name = tool_name_from_value(payload);
     let action = first_string(&candidates, &["action", "operation"])
         .or_else(|| infer_action_from_tool_name(tool_name.as_deref()));
     let artifact_kind = first_string(
@@ -210,8 +227,12 @@ fn browser_action_item_from_event(event: &AgentEvent) -> Option<BrowserActionIte
         return None;
     }
 
-    let status = browser_action_status_from_candidates(&candidates)
-        .unwrap_or_else(|| event_status_label(event.event_type.as_str()).to_string());
+    let status = browser_action_status_from_candidates(&candidates).unwrap_or_else(|| {
+        tool.as_ref()
+            .map(|tool| tool.status_label())
+            .unwrap_or_else(|| event_status_label(event.event_type.as_str()))
+            .to_string()
+    });
     let success = first_bool(&candidates, &["success", "ok"]);
     let observation_available = first_bool(
         &candidates,
@@ -295,7 +316,7 @@ fn browser_action_item_from_event(event: &AgentEvent) -> Option<BrowserActionIte
             ],
         )
         .or_else(|| Some(event.event_id.clone())),
-        confirmation_request_id: browser_confirmation_request_id(&event.payload),
+        confirmation_request_id: browser_confirmation_request_id(payload),
         control_mode: first_string(&candidates, &["controlMode", "control_mode"]),
         lifecycle_state: first_string(&candidates, &["lifecycleState", "lifecycle_state"]),
         human_reason: first_string(&candidates, &["humanReason", "human_reason"]),
@@ -504,489 +525,4 @@ fn browser_action_item_from_artifact(artifact: &ArtifactSummary) -> Option<Brows
         observation_available,
         screenshot_available,
     })
-}
-
-fn browser_candidate_values(value: &Value) -> Vec<&Value> {
-    let mut candidates = Vec::new();
-    push_candidate(value, &mut candidates);
-    for path in [
-        &["metadata"][..],
-        &["arguments"][..],
-        &["action_required"][..],
-        &["actionRequired"][..],
-        &["action_required", "arguments"][..],
-        &["actionRequired", "arguments"][..],
-        &["payload"][..],
-        &["payload", "browser_action_trace"][..],
-        &["payload", "browserActionTrace"][..],
-        &["payload", "browser_action"][..],
-        &["payload", "browserAction"][..],
-        &["payload", "action_required"][..],
-        &["payload", "actionRequired"][..],
-        &["result"][..],
-        &["result", "browser_action_trace"][..],
-        &["result", "browserActionTrace"][..],
-        &["result", "action_required"][..],
-        &["result", "actionRequired"][..],
-        &["result", "action_required", "arguments"][..],
-        &["result", "actionRequired", "arguments"][..],
-        &["result", "metadata"][..],
-        &["result", "data"][..],
-        &["result", "data", "browser_action_trace"][..],
-        &["result", "data", "browserActionTrace"][..],
-        &["result", "data", "action_required"][..],
-        &["result", "data", "actionRequired"][..],
-        &["result", "data", "action_required", "arguments"][..],
-        &["result", "data", "actionRequired", "arguments"][..],
-        &["result", "data", "browser_session"][..],
-        &["result", "data", "browserSession"][..],
-        &["result", "data", "browser_snapshot"][..],
-        &["result", "data", "browserSnapshot"][..],
-        &["result", "browser_session"][..],
-        &["result", "browserSession"][..],
-        &["result", "browser_snapshot"][..],
-        &["result", "browserSnapshot"][..],
-        &["result", "page_info"][..],
-        &["result", "pageInfo"][..],
-        &["data"][..],
-        &["data", "browser_action_trace"][..],
-        &["data", "browserActionTrace"][..],
-        &["data", "action_required"][..],
-        &["data", "actionRequired"][..],
-        &["data", "action_required", "arguments"][..],
-        &["data", "actionRequired", "arguments"][..],
-        &["data", "browser_session"][..],
-        &["data", "browserSession"][..],
-        &["data", "browser_snapshot"][..],
-        &["data", "browserSnapshot"][..],
-        &["data", "page_info"][..],
-        &["data", "pageInfo"][..],
-        &["page_info"][..],
-        &["pageInfo"][..],
-        &["browser_action"][..],
-        &["browserAction"][..],
-        &["browser_action_trace"][..],
-        &["browserActionTrace"][..],
-        &["browser_session"][..],
-        &["browserSession"][..],
-        &["browser_snapshot"][..],
-        &["browserSnapshot"][..],
-        &["item"][..],
-        &["item", "payload"][..],
-        &["item", "payload", "browser_action_trace"][..],
-        &["item", "payload", "browserActionTrace"][..],
-        &["item", "payload", "metadata"][..],
-        &["item", "payload", "arguments"][..],
-        &["item", "payload", "result"][..],
-        &["item", "payload", "result", "browser_action_trace"][..],
-        &["item", "payload", "result", "browserActionTrace"][..],
-        &["item", "payload", "result", "metadata"][..],
-        &["item", "payload", "result", "data"][..],
-        &["item", "payload", "result", "data", "browser_action_trace"][..],
-        &["item", "payload", "result", "data", "browserActionTrace"][..],
-        &["item", "payload", "result", "data", "browser_session"][..],
-        &["item", "payload", "result", "data", "browserSession"][..],
-        &["item", "payload", "result", "data", "browser_snapshot"][..],
-        &["item", "payload", "result", "data", "browserSnapshot"][..],
-        &["item", "payload", "result", "browser_session"][..],
-        &["item", "payload", "result", "browserSession"][..],
-        &["item", "payload", "result", "browser_snapshot"][..],
-        &["item", "payload", "result", "browserSnapshot"][..],
-        &["item", "payload", "result", "page_info"][..],
-        &["item", "payload", "result", "pageInfo"][..],
-    ] {
-        if let Some(candidate) = value_at_path(value, path) {
-            push_candidate(candidate, &mut candidates);
-        }
-    }
-    candidates
-}
-
-fn push_candidate<'a>(value: &'a Value, candidates: &mut Vec<&'a Value>) {
-    if value.is_object()
-        && !candidates
-            .iter()
-            .any(|candidate| std::ptr::eq(*candidate, value))
-    {
-        candidates.push(value);
-    }
-}
-
-fn value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
-    let mut current = value;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    Some(current)
-}
-
-fn is_browser_record(
-    candidates: &[&Value],
-    tool_name: Option<&str>,
-    action: Option<&str>,
-    artifact_kind: Option<&str>,
-) -> bool {
-    tool_name.is_some_and(|tool_name| tool_name.to_ascii_lowercase().contains("browser"))
-        || action.is_some_and(is_browser_action)
-        || artifact_kind.is_some_and(is_browser_artifact_kind)
-        || has_any_key(
-            candidates,
-            &[
-                "browserSessionId",
-                "browser_session_id",
-                "browser_session",
-                "browserSession",
-                "browser_action",
-                "browserAction",
-                "browser_action_trace",
-                "browserActionTrace",
-                "action_required",
-                "actionRequired",
-                "browser_snapshot",
-                "browserSnapshot",
-            ],
-        )
-}
-
-fn is_empty_browser_start_event(
-    event_type: &str,
-    candidates: &[&Value],
-    artifact_path: Option<&str>,
-) -> bool {
-    matches!(event_type, "tool.started" | "item.started")
-        && artifact_path.is_none()
-        && !has_any_key(
-            candidates,
-            &[
-                "browserSessionId",
-                "browser_session_id",
-                "sessionId",
-                "session_id",
-                "targetId",
-                "target_id",
-                "browser_action",
-                "browserAction",
-                "browser_session",
-                "browserSession",
-                "browser_snapshot",
-                "browserSnapshot",
-            ],
-        )
-}
-
-fn tool_name_from_event(event: &AgentEvent) -> Option<String> {
-    first_string(
-        &browser_candidate_values(&event.payload),
-        &["toolName", "tool_name", "name"],
-    )
-}
-
-fn browser_confirmation_request_id(value: &Value) -> Option<String> {
-    for path in [
-        &["action_required", "requestId"][..],
-        &["action_required", "request_id"][..],
-        &["actionRequired", "requestId"][..],
-        &["actionRequired", "request_id"][..],
-        &["browser_action_trace", "requestId"][..],
-        &["browser_action_trace", "request_id"][..],
-        &["browserActionTrace", "requestId"][..],
-        &["browserActionTrace", "request_id"][..],
-        &["payload", "action_required", "requestId"][..],
-        &["payload", "action_required", "request_id"][..],
-        &["payload", "browser_action_trace", "requestId"][..],
-        &["payload", "browser_action_trace", "request_id"][..],
-        &["result", "action_required", "requestId"][..],
-        &["result", "action_required", "request_id"][..],
-        &["result", "browser_action_trace", "requestId"][..],
-        &["result", "browser_action_trace", "request_id"][..],
-        &["result", "data", "action_required", "requestId"][..],
-        &["result", "data", "action_required", "request_id"][..],
-        &["result", "data", "browser_action_trace", "requestId"][..],
-        &["result", "data", "browser_action_trace", "request_id"][..],
-        &["data", "action_required", "requestId"][..],
-        &["data", "action_required", "request_id"][..],
-        &["data", "browser_action_trace", "requestId"][..],
-        &["data", "browser_action_trace", "request_id"][..],
-    ] {
-        if let Some(value) = value_at_path(value, path).and_then(value_string) {
-            return Some(value);
-        }
-    }
-    None
-}
-
-fn infer_action_from_tool_name(tool_name: Option<&str>) -> Option<String> {
-    let normalized = tool_name?.trim().to_ascii_lowercase();
-    if normalized.contains("navigate") {
-        Some("navigate".to_string())
-    } else if normalized.contains("click") {
-        Some("click".to_string())
-    } else if normalized.contains("snapshot") || normalized.contains("observe") {
-        Some("read_page".to_string())
-    } else {
-        None
-    }
-}
-
-fn infer_executor_from_tool_name(tool_name: Option<&str>) -> Option<String> {
-    let normalized = tool_name?.trim().to_ascii_lowercase();
-    if normalized.contains("mcp__lime-browser__") {
-        Some("mcp__lime-browser".to_string())
-    } else if normalized.contains("browser") {
-        Some("browser".to_string())
-    } else {
-        None
-    }
-}
-
-fn infer_browser_artifact_kind(
-    action: Option<&str>,
-    candidates: &[&Value],
-    tool_name: Option<&str>,
-) -> Option<String> {
-    if tool_name.is_some_and(|tool_name| tool_name.to_ascii_lowercase().contains("snapshot"))
-        || action
-            .is_some_and(|action| matches!(action, "read_page" | "get_page_info" | "get_page_text"))
-        || has_any_key(
-            candidates,
-            &["page_info", "pageInfo", "markdown", "screenshot"],
-        )
-    {
-        return Some("browser_snapshot".to_string());
-    }
-    if action.is_some_and(is_browser_action)
-        || has_any_key(candidates, &["browserSessionId", "browser_session_id"])
-    {
-        return Some("browser_session".to_string());
-    }
-    None
-}
-
-fn is_browser_action(action: &str) -> bool {
-    matches!(
-        action.trim(),
-        "navigate"
-            | "read_page"
-            | "get_page_info"
-            | "get_page_text"
-            | "read_console_messages"
-            | "read_network_requests"
-            | "click"
-            | "type"
-            | "form_input"
-            | "submit"
-            | "select"
-            | "check"
-            | "uncheck"
-            | "press"
-            | "drag"
-            | "drop"
-            | "upload"
-            | "file_upload"
-            | "download"
-            | "javascript"
-            | "execute_javascript"
-            | "scroll"
-            | "find"
-    )
-}
-
-fn is_browser_artifact_kind(kind: &str) -> bool {
-    matches!(kind.trim(), "browser_session" | "browser_snapshot")
-}
-
-fn first_string(candidates: &[&Value], keys: &[&str]) -> Option<String> {
-    for candidate in candidates {
-        for key in keys {
-            if let Some(value) = candidate.get(*key).and_then(value_string) {
-                return Some(value);
-            }
-        }
-    }
-    None
-}
-
-fn first_bool(candidates: &[&Value], keys: &[&str]) -> Option<bool> {
-    for candidate in candidates {
-        for key in keys {
-            if let Some(value) = candidate.get(*key).and_then(Value::as_bool) {
-                return Some(value);
-            }
-        }
-    }
-    None
-}
-
-fn first_string_list(candidates: &[&Value], keys: &[&str]) -> Vec<String> {
-    let mut values = Vec::new();
-    for candidate in candidates {
-        for key in keys {
-            let Some(value) = candidate.get(*key) else {
-                continue;
-            };
-            match value {
-                Value::Array(items) => {
-                    for item in items {
-                        if let Some(text) = value_string(item) {
-                            push_unique_string(&mut values, text);
-                        }
-                    }
-                }
-                _ => {
-                    if let Some(text) = value_string(value) {
-                        push_unique_string(&mut values, text);
-                    }
-                }
-            }
-        }
-    }
-    values
-}
-
-fn push_unique_string(values: &mut Vec<String>, value: String) {
-    if !values.iter().any(|existing| existing == &value) {
-        values.push(value);
-    }
-}
-
-fn first_u64(candidates: &[&Value], keys: &[&str]) -> Option<u64> {
-    for candidate in candidates {
-        for key in keys {
-            if let Some(value) = candidate.get(*key).and_then(Value::as_u64) {
-                return Some(value);
-            }
-        }
-    }
-    None
-}
-
-fn has_any_key(candidates: &[&Value], keys: &[&str]) -> bool {
-    candidates
-        .iter()
-        .any(|candidate| keys.iter().any(|key| candidate.get(*key).is_some()))
-}
-
-fn value_string(value: &Value) -> Option<String> {
-    value
-        .as_str()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn browser_action_status_from_candidates(candidates: &[&Value]) -> Option<String> {
-    first_string(candidates, &["status"]).or_else(|| {
-        first_string(candidates, &["type"]).and_then(|event_type| match event_type.trim() {
-            "command_completed" => Some("completed".to_string()),
-            "command_failed" => Some("failed".to_string()),
-            "command_started" => Some("started".to_string()),
-            _ => None,
-        })
-    })
-}
-
-fn event_status_label(event_type: &str) -> &'static str {
-    match event_type {
-        "tool.failed" => "failed",
-        "item.completed" | "tool.result" => "completed",
-        "item.started" | "item.updated" | "tool.started" => "started",
-        "action.required" => "pending",
-        "action.resolved" => "completed",
-        _ => "recorded",
-    }
-}
-
-fn increment_count(counts: &mut BTreeMap<String, usize>, key: &str) {
-    *counts.entry(key.to_string()).or_insert(0) += 1;
-}
-
-fn count_entries(counts: BTreeMap<String, usize>, key_name: &str) -> Vec<Value> {
-    counts
-        .into_iter()
-        .map(|(key, count)| {
-            let mut value = Map::new();
-            value.insert(key_name.to_string(), json!(key));
-            value.insert("count".to_string(), json!(count));
-            Value::Object(value)
-        })
-        .collect()
-}
-
-fn browser_action_item_value(item: BrowserActionItem) -> Value {
-    let mut value = Map::new();
-    insert_optional(&mut value, "artifact_path", item.artifact_path);
-    value.insert("artifact_kind".to_string(), json!(item.artifact_kind));
-    insert_optional(&mut value, "tool_name", item.tool_name);
-    insert_optional(&mut value, "action", item.action);
-    insert_optional(&mut value, "action_id", item.action_id);
-    value.insert("status".to_string(), json!(item.status));
-    if let Some(success) = item.success {
-        value.insert("success".to_string(), json!(success));
-    }
-    insert_optional(&mut value, "session_id", item.session_id);
-    insert_optional(&mut value, "target_id", item.target_id);
-    insert_optional(&mut value, "tab_id", item.tab_id);
-    insert_optional(&mut value, "profile_key", item.profile_key);
-    insert_optional(&mut value, "backend", item.backend);
-    insert_optional(&mut value, "request_id", item.request_id);
-    insert_optional(
-        &mut value,
-        "confirmation_request_id",
-        item.confirmation_request_id,
-    );
-    insert_optional(&mut value, "control_mode", item.control_mode);
-    insert_optional(&mut value, "lifecycle_state", item.lifecycle_state);
-    insert_optional(&mut value, "human_reason", item.human_reason);
-    insert_optional(&mut value, "thread_id", item.thread_id);
-    insert_optional(&mut value, "turn_id", item.turn_id);
-    insert_optional(&mut value, "content_id", item.content_id);
-    insert_optional(&mut value, "executor", item.executor);
-    if !item.evidence_refs.is_empty() {
-        value.insert("evidence_refs".to_string(), json!(item.evidence_refs));
-    }
-    insert_optional(&mut value, "last_url", item.last_url);
-    insert_optional(&mut value, "title", item.title);
-    if let Some(attempt_count) = item.attempt_count {
-        value.insert("attempt_count".to_string(), json!(attempt_count));
-    }
-    value.insert(
-        "observation_available".to_string(),
-        json!(item.observation_available),
-    );
-    value.insert(
-        "screenshot_available".to_string(),
-        json!(item.screenshot_available),
-    );
-    Value::Object(value)
-}
-
-fn insert_optional(value: &mut Map<String, Value>, key: &str, item: Option<String>) {
-    if let Some(item) = item {
-        value.insert(key.to_string(), json!(item));
-    }
-}
-
-fn browser_artifact_title(item: &BrowserActionItem) -> String {
-    match item.artifact_kind.as_str() {
-        "browser_snapshot" => item
-            .title
-            .clone()
-            .unwrap_or_else(|| "Browser snapshot".to_string()),
-        "browser_session" => item
-            .session_id
-            .as_ref()
-            .map(|session_id| format!("Browser session {session_id}"))
-            .unwrap_or_else(|| "Browser session".to_string()),
-        _ => item.artifact_kind.clone(),
-    }
-}
-
-fn item_dedupe_key(item: &BrowserActionItem, fallback: &str) -> String {
-    format!(
-        "{}:{}:{}:{}",
-        item.artifact_kind,
-        item.artifact_path.as_deref().unwrap_or_default(),
-        item.request_id.as_deref().unwrap_or(fallback),
-        item.action.as_deref().unwrap_or_default()
-    )
 }

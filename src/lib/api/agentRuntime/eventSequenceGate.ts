@@ -1,7 +1,5 @@
 import {
   AgentRuntimeEventPipeline,
-  withEvent,
-  type AgentRuntimeEventAdapter,
   type AgentRuntimeSequenceVerifierMode,
 } from "@limecloud/agent-runtime-client/sessionGateway";
 import {
@@ -9,6 +7,7 @@ import {
   type AppServerAgentEvent,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
+import { providerTraceStageFromEventType } from "./appServerEventPayloadUtils";
 
 type GateResult =
   | { kind: "accepted"; notifications: AppServerJsonRpcNotification[] }
@@ -19,81 +18,6 @@ const gates = new Map<string, AgentRuntimeEventPipeline>();
 type SequenceGateNotification = Parameters<
   AgentRuntimeEventPipeline["processSync"]
 >[0];
-
-const currentCompatibilityAdapter: AgentRuntimeEventAdapter = ({
-  notification,
-  event,
-}) => {
-  const payload = normalizeRecord(event.payload);
-  const toolCallId = payload
-    ? readString(payload, "tool_id", "tool_call_id", "toolId", "toolCallId")
-    : undefined;
-  const actionId = payload
-    ? readString(
-        payload,
-        "action_id",
-        "actionId",
-        "requestId",
-        "id",
-        "request_id",
-      )
-    : undefined;
-  if (!toolCallId && !actionId) {
-    return;
-  }
-  return withEvent(notification, {
-    ...event,
-    payload: {
-      ...(payload ?? {}),
-      ...(toolCallId ? { toolCallId, tool_id: toolCallId } : {}),
-      ...(actionId ? { actionId, request_id: actionId } : {}),
-    },
-  });
-};
-
-const currentToolCompletedFanoutAdapter: AgentRuntimeEventAdapter = ({
-  notification,
-  event,
-}) => {
-  if (event.type !== "tool.completed" && event.type !== "tool.complete") {
-    return;
-  }
-  const payload = normalizeRecord(event.payload) ?? {};
-  const toolCallId =
-    readString(
-      payload,
-      "toolCallId",
-      "tool_call_id",
-      "toolId",
-      "tool_id",
-      "id",
-    ) ?? event.eventId;
-  const startedEvent = withEvent(notification, {
-    ...event,
-    eventId: `${event.eventId}:started`,
-    type: "tool.started",
-    payload: {
-      ...payload,
-      type: "tool_start",
-      toolCallId,
-      tool_id: toolCallId,
-      tool_name: readString(payload, "tool_name", "toolName", "name") ?? "",
-    },
-  });
-  const resultEvent = withEvent(notification, {
-    ...event,
-    eventId: `${event.eventId}:result`,
-    sequence: event.sequence + 1,
-    type: "tool.result",
-    payload: {
-      ...payload,
-      type: "tool_end",
-      toolCallId,
-      tool_id: toolCallId,
-    },
-  });
-  return [startedEvent, resultEvent];
-};
 
 export function resetAgentRuntimeEventSequenceGatesForTests(): void {
   gates.clear();
@@ -167,6 +91,12 @@ function processNotification(
   if (!event) {
     return { kind: "ignored" };
   }
+  if (
+    !hasCanonicalEvent(notification) &&
+    isCurrentNonThreadSideChannelEvent(event.type)
+  ) {
+    return { kind: "accepted", notifications: [notification] };
+  }
   const gate = gateFor(gateScope, eventName, event.sessionId, mode);
   const result = gate.processSync(
     notification as unknown as SequenceGateNotification,
@@ -179,6 +109,9 @@ function processNotification(
     };
   }
   if (result.reason === "dropped") {
+    if (isCanonicalResolvedApproval(notification)) {
+      return { kind: "accepted", notifications: [notification] };
+    }
     return { kind: "ignored" };
   }
   const violations = gate.getViolations();
@@ -201,6 +134,43 @@ function processNotification(
   };
 }
 
+function isCurrentNonThreadSideChannelEvent(eventType: string): boolean {
+  return (
+    providerTraceStageFromEventType(eventType) !== undefined ||
+    eventType === "runtime.status" ||
+    eventType === "image_task.presentation.generated" ||
+    eventType === "image_task.created" ||
+    eventType === "image_task.parameters.required" ||
+    eventType === "image_task_parameters_required" ||
+    eventType === "media.read.chunk" ||
+    eventType === "media.read.completed"
+  );
+}
+
+function hasCanonicalEvent(
+  notification: AppServerJsonRpcNotification,
+): boolean {
+  return normalizeRecord(notification.params)?.canonicalEvent != null;
+}
+
+function isCanonicalResolvedApproval(
+  notification: AppServerJsonRpcNotification,
+): boolean {
+  const params = normalizeRecord(notification.params);
+  const event = normalizeRecord(params?.event);
+  const canonicalEvent = normalizeRecord(params?.canonicalEvent);
+  const item = normalizeRecord(canonicalEvent?.params);
+  const payload = normalizeRecord(item?.payload);
+  return (
+    readString(event ?? {}, "type") === "action.resolved" &&
+    readString(canonicalEvent ?? {}, "method") === "item/updated" &&
+    readString(payload ?? {}, "type") === "approval" &&
+    ["completed", "failed", "interrupted", "cancelled"].includes(
+      readString(item ?? {}, "status") ?? "",
+    )
+  );
+}
+
 function gateFor(
   gateScope: string,
   eventName: string,
@@ -212,10 +182,6 @@ function gateFor(
   if (!gate) {
     gate = new AgentRuntimeEventPipeline({
       sequenceVerifierMode: mode,
-      adapters: [
-        currentCompatibilityAdapter,
-        currentToolCompletedFanoutAdapter,
-      ],
     });
     gates.set(key, gate);
   }

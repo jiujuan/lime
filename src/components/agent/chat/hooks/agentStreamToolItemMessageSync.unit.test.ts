@@ -4,7 +4,7 @@ import type { Message } from "../types";
 import {
   mergeToolCallStateFromItem,
   stringifyThreadItemToolArguments,
-  syncExistingMessageToolCallFromThreadItem,
+  syncMessageToolCallFromThreadItem,
   toolCallStateFromThreadItem,
 } from "./agentStreamToolItemMessageSync";
 
@@ -115,7 +115,7 @@ describe("agentStreamToolItemMessageSync", () => {
     expect(merged.progress).toBeUndefined();
   });
 
-  it("应只同步已有工具卡，不从 thread item 隐式新建 message 工具卡", () => {
+  it("应由 canonical thread item 直接创建 message 工具卡", () => {
     let messages: Message[] = [
       {
         id: "assistant-1",
@@ -130,14 +130,33 @@ describe("agentStreamToolItemMessageSync", () => {
       },
     );
 
-    syncExistingMessageToolCallFromThreadItem({
+    syncMessageToolCallFromThreadItem({
       assistantMsgId: "assistant-1",
       item: buildToolItem(),
       setMessages: setMessages as never,
     });
 
-    expect(messages[0]?.toolCalls).toBeUndefined();
-    expect(messages[0]?.contentParts).toBeUndefined();
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-1",
+      name: "web_search",
+      status: "completed",
+      result: {
+        success: true,
+        output: "搜索完成",
+      },
+    });
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
+      type: "tool_use",
+      metadata: {
+        source: "item_lifecycle",
+        sequence: 2,
+        turnId: "turn-1",
+      },
+      toolCall: {
+        id: "tool-1",
+        status: "completed",
+      },
+    });
   });
 
   it("应同步已有 toolCalls 与 contentParts 中的工具卡", () => {
@@ -179,7 +198,7 @@ describe("agentStreamToolItemMessageSync", () => {
       },
     );
 
-    syncExistingMessageToolCallFromThreadItem({
+    syncMessageToolCallFromThreadItem({
       assistantMsgId: "assistant-1",
       item: buildToolItem({ sequence: 5 }),
       setMessages: setMessages as never,

@@ -122,12 +122,15 @@ impl ProjectionStore {
         let tx = conn
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
+        let mut applied = 0;
         for event in events {
-            apply_event_in_tx(&tx, event)?;
+            if apply_event_in_tx(&tx, event)? {
+                applied += 1;
+            }
         }
         tx.commit()
             .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
-        Ok(events.len())
+        Ok(applied)
     }
 
     pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
@@ -140,6 +143,26 @@ impl ProjectionStore {
         tx.commit()
             .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
         Ok(())
+    }
+
+    pub(super) fn delete_session_data(&self, session_id: &str) -> Result<bool, String> {
+        self.ensure_canonical_thread_store()?;
+        let mut conn = Connection::open(&self.path)
+            .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
+        let deleted_canonical = tx
+            .execute(
+                "DELETE FROM canonical_threads WHERE session_id = ?1",
+                params![session_id],
+            )
+            .map_err(|error| format!("无法清理 canonical_threads: {error}"))?
+            > 0;
+        clear_session_in_tx(&tx, session_id)?;
+        tx.commit()
+            .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
+        Ok(deleted_canonical)
     }
 
     pub fn repair_session(&self, session_id: &str, events: &[AgentEvent]) -> Result<usize, String> {
@@ -159,12 +182,15 @@ impl ProjectionStore {
             .transaction()
             .map_err(|error| format!("无法开始 Projection DB 事务: {error}"))?;
         clear_session_in_tx(&tx, session_id)?;
+        let mut applied = 0;
         for event in events {
-            apply_event_in_tx(&tx, event)?;
+            if apply_event_in_tx(&tx, event)? {
+                applied += 1;
+            }
         }
         tx.commit()
             .map_err(|error| format!("无法提交 Projection DB 事务: {error}"))?;
-        Ok(events.len())
+        Ok(applied)
     }
 
     pub fn read_session_projection(
@@ -1145,13 +1171,100 @@ fn query_projected_first_user_message(
         .and_then(|payload| session_title::first_user_message_from_runtime_payload(&payload)))
 }
 
-fn apply_event_in_tx(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
+fn apply_event_in_tx(conn: &Connection, event: &AgentEvent) -> Result<bool, String> {
+    let existing_event = conn
+        .query_row(
+            "SELECT session_id, sequence, thread_id, turn_id, item_type,
+                    payload_summary_json, created_at
+             FROM projected_items WHERE event_id = ?1 LIMIT 1",
+            params![event.event_id.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("无法检查 Projection DB 重复事件: {error}"))?;
+    if let Some((
+        existing_session_id,
+        existing_sequence,
+        existing_thread_id,
+        existing_turn_id,
+        existing_event_type,
+        existing_payload_summary,
+        existing_timestamp,
+    )) = existing_event
+    {
+        let incoming_thread_id = event
+            .thread_id
+            .as_deref()
+            .unwrap_or(event.session_id.as_str());
+        let same_identity =
+            existing_session_id == event.session_id && existing_sequence == event.sequence as i64;
+        let same_content = existing_thread_id == incoming_thread_id
+            && existing_turn_id == event.turn_id
+            && existing_event_type == event.event_type
+            && existing_payload_summary == bounded_payload_summary(&event.payload)
+            && existing_timestamp == event.timestamp;
+        if same_identity && same_content {
+            tracing::debug!(
+                session_id = %event.session_id,
+                event_id = %event.event_id,
+                sequence = event.sequence,
+                "忽略已物化的重复 projection event"
+            );
+            return Ok(false);
+        }
+        return Err(format!(
+            "Projection event identity collision: event_id={} existing_session={} existing_sequence={} incoming_session={} incoming_sequence={}",
+            event.event_id,
+            existing_session_id,
+            existing_sequence,
+            event.session_id,
+            event.sequence,
+        ));
+    }
+
+    let last_sequence = conn
+        .query_row(
+            "SELECT last_sequence FROM projection_watermarks WHERE session_id = ?1",
+            params![event.session_id.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|error| format!("无法读取 Projection DB watermark: {error}"))?;
+    if let Some(last_sequence) = last_sequence {
+        if event.sequence == last_sequence.max(0) as u64 {
+            return Err(format!(
+                "Projection sequence collision: session_id={} sequence={} event_id={}",
+                event.session_id, event.sequence, event.event_id
+            ));
+        }
+        if event.sequence < last_sequence.max(0) as u64 {
+            tracing::warn!(
+                session_id = %event.session_id,
+                event_id = %event.event_id,
+                sequence = event.sequence,
+                last_sequence,
+                "丢弃 sequence 落后的 projection event"
+            );
+            return Ok(false);
+        }
+    }
+
     upsert_projected_session(conn, event)?;
     apply_projected_queue_event(conn, event)?;
     upsert_projected_turn(conn, event)?;
     insert_projected_item(conn, event)?;
     upsert_watermark(conn, event)?;
-    Ok(())
+    Ok(true)
 }
 
 fn apply_projected_queue_event(conn: &Connection, event: &AgentEvent) -> Result<(), String> {

@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
+import { requestChatHostOpenPath } from "@/components/agent/chat/host/chatHostCapabilities";
 import { cn } from "@/lib/utils";
 import {
   ensureProjectWorkspace,
@@ -351,7 +351,7 @@ export function InputbarProjectContextBar({
     }
     setActionState("folder");
     try {
-      const selectedPath = await openDialog({
+      const selectedPath = await requestChatHostOpenPath({
         directory: true,
         multiple: false,
         title: copy.selectFolderDialogTitle,

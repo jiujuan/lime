@@ -9,7 +9,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentChatUnified } from "./hooks";
-import type { InterruptedInputRestoreRequest } from "./hooks/agentStreamInputRestoreTypes";
 import { useFileManagerSidebar } from "./hooks/useFileManagerSidebar";
 import { usePathReferences } from "./hooks/usePathReferences";
 import { useWorkspaceWorkbenchRequests } from "./hooks/useWorkspaceWorkbenchRequests";
@@ -19,8 +18,6 @@ import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
 import { useSoulInteractionCopy } from "@/hooks/useSoulInteractionCopy";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
-import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
-import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
 import {
   type CanvasState as GeneralCanvasState,
@@ -31,12 +28,10 @@ import {
   createImageGenerationTaskArtifact,
   getMediaTaskArtifact,
 } from "@/lib/api/mediaTasks";
-import { logAgentDebug } from "@/lib/agentDebug";
 import { type Character } from "@/lib/api/projectMemory";
 import type { WriteArtifactContext } from "./types";
 import {
   isSpecializedWorkbenchTheme,
-  type LayoutMode,
   type ThemeType,
 } from "@/lib/workspace/workbenchContract";
 import { normalizeProjectId } from "./utils/topicProjectResolution";
@@ -46,7 +41,6 @@ import { useWorkbenchStore } from "@/stores/useWorkbenchStore";
 import { useWorkspaceHarnessInventoryRuntime } from "./workspace/useWorkspaceHarnessInventoryRuntime";
 import { useWorkspaceCanvasSceneRuntime } from "./workspace/useWorkspaceCanvasSceneRuntime";
 import { useWorkspaceCanvasMessageSyncRuntime } from "./workspace/useWorkspaceCanvasMessageSyncRuntime";
-import { useWorkspaceConversationCompositionRuntime } from "./workspace/useWorkspaceConversationCompositionRuntime";
 import { useWorkspaceInputbarSceneRuntime } from "./workspace/useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceNavigationActions } from "./workspace/useWorkspaceNavigationActions";
 import { useWorkspaceArtifactActionRuntime } from "./workspace/useWorkspaceArtifactActionRuntime";
@@ -80,15 +74,10 @@ import { useWorkspaceOpenedProjectsRuntime } from "./workspace/useWorkspaceOpene
 import { useWorkspaceProjectContentRuntime } from "./workspace/useWorkspaceProjectContentRuntime";
 import { useWorkspaceHealthRuntime } from "./workspace/useWorkspaceHealthRuntime";
 import { useWorkspaceDefaultProjectAliasRuntime } from "./workspace/useWorkspaceDefaultProjectAliasRuntime";
-import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
-import { renderWorkspaceFileManagerSidebarRuntime } from "./workspace/WorkspaceFileManagerSidebarRuntime";
 import { GENERAL_WORKBENCH_HISTORY_PAGE_SIZE } from "./workspace/generalWorkbenchHelpers";
 import { normalizeInitialTheme } from "./agentChatWorkspaceShared";
 import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
-import type {
-  AgentInitialInputCapabilityParams,
-  SkillScaffoldDraft,
-} from "@/types/page";
+import type { SkillScaffoldDraft } from "@/types/page";
 import type { ExpertSkillsManageOptions } from "./experts/ExpertSkillsSection";
 import { resolveEffectiveInitialInputCapability } from "./utils/inputCapabilityBootstrap";
 import { resolveAgentChatWorkspaceShellViewModel } from "./agentChatWorkspaceShellViewModel";
@@ -97,8 +86,6 @@ import { useWorkspaceShellChromeRuntime } from "./workspace/useWorkspaceShellChr
 import { resolveWorkspaceEntryLoadDeferral } from "./workspace/workspaceEntryLoadDeferral";
 import { resolveBrowserRuntimeNavigationFromSiteSkill } from "./workspace/workspaceBrowserRuntimeNavigation";
 import { useWorkspaceContextSurfaceRuntime } from "./workspace/useWorkspaceContextSurfaceRuntime";
-import { useWorkspaceRightSurfaceCompositionRuntime } from "./workspace/useWorkspaceRightSurfaceCompositionRuntime";
-import { useWorkspaceRightSurfaceExpertPanelRuntime } from "./workspace/useWorkspaceRightSurfaceExpertPanelRuntime";
 import {
   createRestoredInteractiveMessageSnapshot,
   resolveReadOnlyInteractiveMessageIds,
@@ -114,7 +101,6 @@ import { useWorkspaceClassicClawSidebarRuntime } from "./workspace/useWorkspaceC
 import { useWorkspaceChatToolPreferencesRuntime } from "./workspace/useWorkspaceChatToolPreferencesRuntime";
 import { useWorkspaceSkillDirectoryRuntime } from "./workspace/useWorkspaceSkillDirectoryRuntime";
 import { useWorkspaceArtifactSurfaceRuntime } from "./workspace/useWorkspaceArtifactSurfaceRuntime";
-import { useWorkspaceHomeRecoveryRuntime } from "./workspace/useWorkspaceHomeRecoveryRuntime";
 import { useWorkspaceArtifactCanvasRuntime } from "./workspace/useWorkspaceArtifactCanvasRuntime";
 import { useWorkspaceExpertSkillPanelRuntime } from "./workspace/useWorkspaceExpertSkillPanelRuntime";
 import { useWorkspaceTeamMemoryRuntime } from "./workspace/useWorkspaceTeamMemoryRuntime";
@@ -130,6 +116,8 @@ import { useWorkspacePersistenceRuntime } from "./workspace/useWorkspacePersiste
 import { useWorkspaceHarnessNavigationRuntime } from "./workspace/useWorkspaceHarnessNavigationRuntime";
 import { useWorkspaceEntryProjectionRuntime } from "./workspace/useWorkspaceEntryProjectionRuntime";
 import { useWorkspacePendingInputRuntime } from "./workspace/useWorkspacePendingInputRuntime";
+import { useAgentChatWorkspaceLocalDisplayState } from "./workspace/useAgentChatWorkspaceLocalDisplayState";
+import { useAgentChatWorkspaceSceneComposition } from "./workspace/useAgentChatWorkspaceSceneComposition";
 import {
   GENERAL_BROWSER_ASSIST_PROFILE_KEY,
   NOOP_SET_CHAT_MESSAGES,
@@ -203,40 +191,54 @@ export function AgentChatWorkspace({
   const shouldAutoCollapseClassicClawSidebar = agentEntry === "claw";
   const defaultTopicSidebarVisible =
     showChatPanel && !shouldAutoCollapseClassicClawSidebar;
-  const [showSidebar, setShowSidebar] = useState(
-    () => defaultTopicSidebarVisible,
-  );
-  const [input, setInput] = useState("");
+  const shouldBootstrapCanvasOnEntry =
+    Boolean(contentId) && isSpecializedWorkbenchTheme(normalizedEntryTheme);
+  const shouldKeepNewTaskHomeSessionRestoreDisabled =
+    agentEntry === "new-task" && !contentId;
+  const {
+    activeTheme,
+    artifactPreviewSize,
+    canvasWorkbenchLayoutMode,
+    creationMode,
+    effectiveEntryBannerMessage,
+    entryBannerVisible,
+    expertInfoPanelCollapsed,
+    handleCollapseTopicSidebarForFileManager,
+    handleInputRestoreRequestHandled,
+    handleRestoreInterruptedInput,
+    input,
+    inputbarObjectiveModeEnabled,
+    inputRestoreRequest,
+    layoutMode,
+    runtimeInitialInputCapability,
+    selectedText,
+    setActiveTheme,
+    setArtifactPreviewSize,
+    setCanvasWorkbenchLayoutMode,
+    setCreationMode,
+    setEntryBannerVisible,
+    setExpertInfoPanelCollapsed,
+    setInput,
+    setInputbarObjectiveModeEnabled,
+    setLayoutMode,
+    setRuntimeEntryBannerMessage,
+    setRuntimeInitialInputCapability,
+    setSelectedText,
+    setShowSidebar,
+    showSidebar,
+  } = useAgentChatWorkspaceLocalDisplayState({
+    defaultTopicSidebarVisible,
+    entryBannerMessage,
+    initialCreationMode,
+    normalizedEntryTheme,
+    shouldBootstrapCanvasOnEntry,
+  });
   const {
     pathReferences,
     addPathReferences: handleAddPathReferences,
     removePathReference: handleRemovePathReference,
     clearPathReferences: handleClearPathReferences,
   } = usePathReferences();
-  const [inputRestoreRequest, setInputRestoreRequest] =
-    useState<InterruptedInputRestoreRequest | null>(null);
-  const handleRestoreInterruptedInput = useCallback(
-    (request: InterruptedInputRestoreRequest) => {
-      logAgentDebug("AgentChatWorkspace", "inputRestoreRequest.received", {
-        draftImageCount: request.draft.images?.length ?? 0,
-        draftPathReferenceCount: request.draft.pathReferences?.length ?? 0,
-        draftTextLength: request.draft.text.trim().length,
-        hasCapabilityRoute: Boolean(request.draft.inputCapabilityRoute),
-        reason: request.reason,
-        requestId: request.requestId,
-      });
-      setInputRestoreRequest(request);
-    },
-    [],
-  );
-  const handleInputRestoreRequestHandled = useCallback((requestId: string) => {
-    setInputRestoreRequest((current) =>
-      current?.requestId === requestId ? null : current,
-    );
-  }, []);
-  const handleCollapseTopicSidebarForFileManager = useCallback(() => {
-    setShowSidebar(false);
-  }, []);
   const fileManagerSidebar = useFileManagerSidebar({
     onCollapseTopicSidebar: handleCollapseTopicSidebarForFileManager,
   });
@@ -275,27 +277,6 @@ export function AgentChatWorkspace({
     },
     [_onNavigate],
   );
-  const [runtimeInitialInputCapability, setRuntimeInitialInputCapability] =
-    useState<AgentInitialInputCapabilityParams>();
-  const [runtimeEntryBannerMessage, setRuntimeEntryBannerMessage] = useState<
-    string | null
-  >(null);
-  const [selectedText, setSelectedText] = useState("");
-  const effectiveEntryBannerMessage =
-    runtimeEntryBannerMessage?.trim() || entryBannerMessage;
-  const [entryBannerVisible, setEntryBannerVisible] = useState(
-    Boolean(effectiveEntryBannerMessage),
-  );
-  const shouldBootstrapCanvasOnEntry =
-    Boolean(contentId) && isSpecializedWorkbenchTheme(normalizedEntryTheme);
-  const shouldKeepNewTaskHomeSessionRestoreDisabled =
-    agentEntry === "new-task" && !contentId;
-
-  // 内容创作相关状态
-  const [activeTheme, setActiveTheme] = useState<string>(normalizedEntryTheme);
-  const [creationMode, setCreationMode] = useState<CreationMode>(
-    initialCreationMode ?? "guided",
-  );
   const {
     activeSessionIdRef,
     chatToolPreferenceSessionSync,
@@ -316,8 +297,6 @@ export function AgentChatWorkspace({
       previous.subagent ? previous : { ...previous, subagent: true },
     );
   }, [setChatToolPreferences]);
-  const [inputbarObjectiveModeEnabled, setInputbarObjectiveModeEnabled] =
-    useState(false);
   const {
     projectId,
     shouldDisableSessionRestore,
@@ -348,12 +327,6 @@ export function AgentChatWorkspace({
     shouldKeepNewTaskHomeSessionRestoreDisabled && !normalizedInitialSessionId
       ? "background"
       : "foreground";
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>(
-    shouldBootstrapCanvasOnEntry ? "canvas" : "chat",
-  );
-  const [expertInfoPanelCollapsed, setExpertInfoPanelCollapsed] = useState(
-    () => layoutMode !== "chat",
-  );
   const {
     shouldPreserveEntryThemeOnHome,
     shouldPreserveBlankHomeSurface,
@@ -587,12 +560,6 @@ export function AgentChatWorkspace({
   // 判断是否为内容创作模式
   const isSpecializedThemeMode = isSpecializedWorkbenchTheme(activeTheme);
 
-  // Artifact 预览状态
-  const [artifactPreviewSize, setArtifactPreviewSize] = useState<
-    "mobile" | "tablet" | "desktop"
-  >("desktop");
-  const [canvasWorkbenchLayoutMode, setCanvasWorkbenchLayoutMode] =
-    useState<CanvasWorkbenchLayoutMode>("split");
   const workbenchRequests = useWorkspaceWorkbenchRequests();
 
   // 跳转到技能主页面
@@ -2289,8 +2256,8 @@ export function AgentChatWorkspace({
     switchToReadySession: originalSwitchTopic,
     upsertTaskCenterOpenTab,
   });
-  const { expertInfoPanelProps, expertInfoPanelVisible, hasExpertInfoPanel } =
-    useWorkspaceRightSurfaceExpertPanelRuntime({
+  const workspaceSceneNode = useAgentChatWorkspaceSceneComposition({
+    expertPanel: {
       canOpenSkillsManage: Boolean(_onNavigate),
       combinedSkillsLoading,
       effectiveThreadItems,
@@ -2309,347 +2276,326 @@ export function AgentChatWorkspace({
       serviceSkills,
       setExpertInfoPanelCollapsed,
       workspaceSkillBindings,
-    });
-  const {
-    canvasWorkbenchRootPath,
-    generalWorkbenchSidebarNode,
-    handleToggleCanvasFromRightSurface,
-    rightSurfaceChrome,
-    sceneDisplayMessagesWithArticleWorkspaceArtifact,
-  } = useWorkspaceRightSurfaceCompositionRuntime({
-    articleEditor: {
-      activeArticleWorkspace: rightSurfaceLocalState.activeArticleWorkspace,
-      canvasState,
-      contentId,
-      currentImageWorkbenchState,
-      imageWorkbenchSessionKey,
-      messages,
-      projectId,
-      runtimeWorkspaceId,
-      sceneDisplayMessages,
-      sceneIsPreparingSend,
-      sceneIsSending,
-      sceneSessionId,
-      sceneThreadRead,
-      setCanvasState,
-      setChatMessages,
-      shouldDeferWorkspaceAuxiliaryLoads,
-      shouldHideCurrentSessionContent,
-      shouldRestoreImageTasksFromWorkspace,
-      updateCurrentImageWorkbenchState,
     },
-    bindArticleEditorRightSurface,
-    chrome: {
-      showHarnessToggle,
-      hasExpertInfoPanel,
-      expertInfoPanelVisible,
-      harnessPendingCount,
-      harnessAttentionLevel,
-      harnessToggleLabel,
-      suppressHarnessChrome: suppressHomeNavbarUtilityActions,
+    rightSurface: {
+      articleEditor: {
+        activeArticleWorkspace: rightSurfaceLocalState.activeArticleWorkspace,
+        canvasState,
+        contentId,
+        currentImageWorkbenchState,
+        imageWorkbenchSessionKey,
+        messages,
+        projectId,
+        runtimeWorkspaceId,
+        sceneDisplayMessages,
+        sceneIsPreparingSend,
+        sceneIsSending,
+        sceneSessionId,
+        sceneThreadRead,
+        setCanvasState,
+        setChatMessages,
+        shouldDeferWorkspaceAuxiliaryLoads,
+        shouldHideCurrentSessionContent,
+        shouldRestoreImageTasksFromWorkspace,
+        updateCurrentImageWorkbenchState,
+      },
+      bindArticleEditorRightSurface,
+      chrome: {
+        showHarnessToggle,
+        harnessPendingCount,
+        harnessAttentionLevel,
+        harnessToggleLabel,
+        suppressHarnessChrome: suppressHomeNavbarUtilityActions,
+      },
+      coordinator: {
+        bindRightSurfacePendingActions,
+        browserAssistLaunching,
+        browserAssistSessionRef,
+        browserAssistSessionState,
+        clawTraceEnabled,
+        currentBrowserAssistScopeKey,
+        expertInfoPanelCollapsed,
+        handleToggleCanvas,
+        harnessPendingCount,
+        localState: rightSurfaceLocalState,
+        pluginRuntimeContext: workspacePluginRuntimeContext.context,
+        preferredServiceSkillResultFileTarget,
+        runtimeWorkspaceId,
+        sceneIsPreparingSend,
+        sceneIsSending,
+        sceneLayoutMode,
+        sceneSessionId,
+        sessionId,
+        showHarnessToggle,
+        suppressHomeNavbarUtilityActions,
+        taskCenterHomeHotpathActive:
+          shouldRenderTaskCenterEmbeddedHome ||
+          Boolean(taskCenterDraftSendRequest || homePendingPreviewRequest),
+        setExpertInfoPanelCollapsed,
+        setHarnessPanelVisible,
+        setLayoutMode,
+      },
+      host: {
+        generalWorkbenchHarnessPanelBaseProps,
+        harnessState,
+        preferredServiceSkillResultFileTarget,
+        runtimeWorkspaceId,
+        sceneSessionId,
+        onOpenArticlePreviewArtifact: openWorkspaceArtifactInWorkbench,
+        onOpenBrowserRuntimeForBrowserAssist:
+          handleOpenBrowserRuntimeForBrowserAssist,
+        onOpenServiceSkillResultFile: handleOpenServiceSkillResultFile,
+        handleSendRef,
+        restoreInput: setInput,
+        setLayoutMode,
+      },
+      imageSlot: {
+        contentId,
+        handleImageWorkbenchCommand,
+        projectId,
+        setLayoutMode,
+      },
+      projectRootPath: project?.rootPath,
+      renderGeneralWorkbenchSidebarNode,
+      sessionWorkingDir,
     },
-    coordinator: {
-      bindRightSurfacePendingActions,
-      browserAssistLaunching,
-      browserAssistSessionRef,
-      browserAssistSessionState,
-      clawTraceEnabled,
-      currentBrowserAssistScopeKey,
-      expertInfoPanelCollapsed,
-      expertInfoPanelVisible,
-      handleToggleCanvas,
-      harnessPendingCount,
-      hasExpertInfoPanel,
-      localState: rightSurfaceLocalState,
-      pluginRuntimeContext: workspacePluginRuntimeContext.context,
-      preferredServiceSkillResultFileTarget,
-      runtimeWorkspaceId,
-      sceneIsPreparingSend,
-      sceneIsSending,
-      sceneLayoutMode,
-      sceneSessionId,
-      sessionId,
-      showHarnessToggle,
-      suppressHomeNavbarUtilityActions,
-      taskCenterHomeHotpathActive:
-        shouldRenderTaskCenterEmbeddedHome ||
-        Boolean(taskCenterDraftSendRequest || homePendingPreviewRequest),
-      setExpertInfoPanelCollapsed,
-      setHarnessPanelVisible,
-      setLayoutMode,
-    },
-    host: {
-      expertInfoPanelProps,
-      generalWorkbenchHarnessPanelBaseProps,
-      harnessState,
-      preferredServiceSkillResultFileTarget,
-      runtimeWorkspaceId,
-      sceneSessionId,
-      onOpenArticlePreviewArtifact: openWorkspaceArtifactInWorkbench,
-      onOpenBrowserRuntimeForBrowserAssist:
-        handleOpenBrowserRuntimeForBrowserAssist,
-      onOpenServiceSkillResultFile: handleOpenServiceSkillResultFile,
-      handleSendRef,
-      restoreInput: setInput,
-      setLayoutMode,
-    },
-    imageSlot: {
-      contentId,
-      handleImageWorkbenchCommand,
-      projectId,
-      setLayoutMode,
-    },
-    projectRootPath: project?.rootPath,
-    renderGeneralWorkbenchSidebarNode,
-    sessionWorkingDir,
-  });
-  const { homeRecoverySession, handleResumeHomeRecoverySession } =
-    useWorkspaceHomeRecoveryRuntime({
+    homeRecovery: {
       onBackgroundSessionRuntimeChange,
       onNavigate: _onNavigate,
       onOpenTaskTopic: handleOpenTaskTopic,
       onResumeRecentSession: handleResumeRecentSession,
       projectId,
       recentSessionTopic,
-    });
-  const conversationSceneRuntime = useWorkspaceConversationCompositionRuntime({
-    landing: {
-      accessMode,
-      activeTheme,
-      artifacts,
-      browserAssistLoading: browserAssistLaunching,
-      chatToolPreferences: effectiveChatToolPreferences,
-      contentId,
-      creationMode,
-      creationReplaySurface: initialCreationReplaySurface,
-      defaultCuratedTaskReferenceEntries,
-      defaultCuratedTaskReferenceMemoryIds,
-      emptyStateDisabled: sceneIsPreparingSend || sceneIsSending,
-      emptyStateIsLoading: sceneIsPreparingSend || sceneIsSending,
-      emptyStateSendOnPointerDown: true,
-      entryBannerMessage: effectiveEntryBannerMessage,
-      entryBannerVisible,
-      fileManagerOpen: fileManagerSidebar.fileManagerOpen,
-      generalCanvasContent: generalCanvasState.content,
-      handleSendFromEmptyState,
-      homeRecoverySession,
-      initialInputCapability: effectiveInitialInputCapability,
-      input,
-      inputbarScene,
-      inputRestoreRequest,
-      lockTheme,
-      model,
-      objectiveEnabled: inputbarObjectiveModeEnabled,
-      onAddPathReferences: handleAddPathReferences,
-      onClearPathReferences: handleClearPathReferences,
-      onDismissEntryBanner: navigationActions.handleDismissEntryBanner,
-      onInputRestoreRequestHandled: handleInputRestoreRequestHandled,
-      onLaunchBrowserAssist: handleOpenBrowserRuntimeForBrowserAssist,
-      onManageProviders: navigationActions.handleManageProviders,
-      onNavigateToSettings: handleNavigateToSkillSettings,
-      onObjectiveEnabledChange: setInputbarObjectiveModeEnabled,
-      onOpenProjectConversation: handleOpenProjectConversation,
-      onPluginSuggestionsNeeded: handlePluginSuggestionsNeeded,
-      onProjectChange: navigationActions.handleProjectChange,
-      onRecommendationClick: handleRecommendationClick,
-      onRefreshSkills: handleRefreshSkills,
-      onRemovePathReference: handleRemovePathReference,
-      onResumeRecentSession: handleResumeHomeRecoverySession,
-      onSelectServiceSkill:
-        workspaceServiceSkillEntryActions.handleServiceSkillSelect,
-      onStopSending: stopSending,
-      onToggleFileManager: fileManagerSidebar.fileManagerAvailable
-        ? fileManagerSidebar.toggleFileManagerSidebar
-        : undefined,
-      openedProjects,
-      pathReferences,
-      pluginHistoryRestoreLandingCard: workspacePluginHistoryRestoreLandingCard,
-      pluginSuggestions: workspacePluginInputSuggestions,
-      pluginSuggestionsError:
-        workspacePluginRuntimeContext.error?.message ?? null,
-      pluginSuggestionsLoading: workspacePluginRuntimeContext.loading,
-      projectCharacters: projectMemory?.characters || [],
-      projectConversationGroups,
-      projectId: projectId ?? null,
-      providerType,
-      reasoningEffort,
-      recentSessionActionLabel,
-      recentSessionSummary: recentSessionTopic?.lastPreview ?? null,
-      recentSessionTitle: recentSessionTopic?.title ?? null,
-      resolvedCanvasState,
-      sceneAppExecutionSummaryCard,
-      serviceSkillExecutionCard,
-      serviceSkillGroups: activeTheme === "general" ? serviceSkillGroups : [],
-      serviceSkills: activeTheme === "general" ? serviceSkills : [],
-      sessionId: sceneSessionId,
-      setAccessMode,
-      setActiveTheme,
-      setChatToolPreferences,
-      setCreationMode,
-      setInput,
-      setModel,
-      setProviderType,
-      setReasoningEffort,
-      skills,
-      skillsLoading: combinedSkillsLoading,
-      selectedText,
-      suppressRecentSessionRecovery:
-        sceneMessageListEmptyStateVariant === "task-center",
     },
-    messageList: {
-      actions: {
-        onA2UISubmit: handleMessageA2UISubmit,
-        onArtifactClick: handleWorkspaceArtifactClick,
-        onCodeBlockClick: handleCodeBlockClick,
-        onDeleteMessage: deleteMessage,
-        onEditMessage: editMessage,
-        onFileClick: handleWorkspaceFileClick,
-        onInterruptCurrentTurn: stopSending,
-        onLoadFullHistory: () => {
-          void loadFullSessionHistory();
-        },
-        onOpenArtifactFromTimeline: handleOpenArtifactFromTimeline,
-        onOpenMessagePreview: handleOpenMessagePreview,
-        onOpenSavedSiteContent: handleOpenSavedSiteContent,
-        onOpenSubagentSession: handleOpenSubagentSession,
-        onOpenUrlPreview: handleOpenUrlPreview,
-        onPermissionResponse: handlePermissionResponse,
-        onPromoteQueuedTurn: promoteQueuedTurn,
-        onReplayPendingRequest: replayPendingAction,
-        onResumeThread: resumeThread,
-        onSaveMessageAsKnowledge: handleSaveMessageAsKnowledge,
-        onSaveMessageAsSkill: handleSaveMessageAsSkill,
-        onWriteFile: handleWriteFile,
-      },
-      collapseCodeBlocks: shouldCollapseCodeBlocks,
-      emptyStateVariant: sceneMessageListEmptyStateVariant,
-      focus: {
-        focusedTimelineItemId: workbenchRequests.focusedTimelineItemId,
-        timelineFocusRequestKey: workbenchRequests.timelineFocusRequestKey,
-      },
-      input: {
-        quoteInput: input,
-        onQuoteInputChange: setInput,
-      },
-      pendingPromotedA2UIActionRequest,
-      projection: {
-        currentTurnId: sceneCurrentTurnId,
-        executionRuntime: sceneExecutionRuntime,
-        isSending: sceneIsSending,
-        messages: sceneDisplayMessagesWithArticleWorkspaceArtifact,
-        pendingActions: scenePendingActions,
-        queuedTurns: sceneQueuedTurns,
-        sessionHistoryWindow,
-        submittedActionsInFlight: sceneSubmittedActionsInFlight,
-        threadItems: sceneThreadItems,
-        threadRead: sceneThreadRead,
-        todoItems,
-        turns: sceneTurns,
-      },
-      provider: {
+    conversation: {
+      landing: {
         accessMode,
+        activeTheme,
+        artifacts,
+        browserAssistLoading: browserAssistLaunching,
+        chatToolPreferences: effectiveChatToolPreferences,
+        contentId,
+        creationMode,
+        creationReplaySurface: initialCreationReplaySurface,
+        defaultCuratedTaskReferenceEntries,
+        defaultCuratedTaskReferenceMemoryIds,
+        emptyStateDisabled: sceneIsPreparingSend || sceneIsSending,
+        emptyStateIsLoading: sceneIsPreparingSend || sceneIsSending,
+        emptyStateSendOnPointerDown: true,
+        entryBannerMessage: effectiveEntryBannerMessage,
+        entryBannerVisible,
+        fileManagerOpen: fileManagerSidebar.fileManagerOpen,
+        generalCanvasContent: generalCanvasState.content,
+        handleSendFromEmptyState,
+        initialInputCapability: effectiveInitialInputCapability,
+        input,
+        inputbarScene,
+        inputRestoreRequest,
+        lockTheme,
         model,
+        objectiveEnabled: inputbarObjectiveModeEnabled,
+        onAddPathReferences: handleAddPathReferences,
+        onClearPathReferences: handleClearPathReferences,
+        onDismissEntryBanner: navigationActions.handleDismissEntryBanner,
+        onInputRestoreRequestHandled: handleInputRestoreRequestHandled,
+        onLaunchBrowserAssist: handleOpenBrowserRuntimeForBrowserAssist,
+        onManageProviders: navigationActions.handleManageProviders,
+        onNavigateToSettings: handleNavigateToSkillSettings,
+        onObjectiveEnabledChange: setInputbarObjectiveModeEnabled,
+        onOpenProjectConversation: handleOpenProjectConversation,
+        onPluginSuggestionsNeeded: handlePluginSuggestionsNeeded,
+        onProjectChange: navigationActions.handleProjectChange,
+        onRecommendationClick: handleRecommendationClick,
+        onRefreshSkills: handleRefreshSkills,
+        onRemovePathReference: handleRemovePathReference,
+        onSelectServiceSkill:
+          workspaceServiceSkillEntryActions.handleServiceSkillSelect,
+        onStopSending: stopSending,
+        onToggleFileManager: fileManagerSidebar.fileManagerAvailable
+          ? fileManagerSidebar.toggleFileManagerSidebar
+          : undefined,
+        openedProjects,
+        pathReferences,
+        pluginHistoryRestoreLandingCard:
+          workspacePluginHistoryRestoreLandingCard,
+        pluginSuggestions: workspacePluginInputSuggestions,
+        pluginSuggestionsError:
+          workspacePluginRuntimeContext.error?.message ?? null,
+        pluginSuggestionsLoading: workspacePluginRuntimeContext.loading,
+        projectCharacters: projectMemory?.characters || [],
+        projectConversationGroups,
+        projectId: projectId ?? null,
         providerType,
         reasoningEffort,
+        recentSessionActionLabel,
+        recentSessionSummary: recentSessionTopic?.lastPreview ?? null,
+        recentSessionTitle: recentSessionTopic?.title ?? null,
+        resolvedCanvasState,
+        sceneAppExecutionSummaryCard,
+        serviceSkillExecutionCard,
+        serviceSkillGroups: activeTheme === "general" ? serviceSkillGroups : [],
+        serviceSkills: activeTheme === "general" ? serviceSkills : [],
+        sessionId: sceneSessionId,
+        setAccessMode,
+        setActiveTheme,
+        setChatToolPreferences,
+        setCreationMode,
+        setInput,
+        setModel,
+        setProviderType,
+        setReasoningEffort,
+        skills,
+        skillsLoading: combinedSkillsLoading,
+        selectedText,
+        suppressRecentSessionRecovery:
+          sceneMessageListEmptyStateVariant === "task-center",
       },
-      refreshSessionReadModel,
-      sceneSessionId,
-      shouldCollapseCodeBlock: shouldCollapseCodeBlockInChat,
+      messageList: {
+        actions: {
+          onA2UISubmit: handleMessageA2UISubmit,
+          onArtifactClick: handleWorkspaceArtifactClick,
+          onCodeBlockClick: handleCodeBlockClick,
+          onDeleteMessage: deleteMessage,
+          onEditMessage: editMessage,
+          onFileClick: handleWorkspaceFileClick,
+          onInterruptCurrentTurn: stopSending,
+          onLoadFullHistory: () => {
+            void loadFullSessionHistory();
+          },
+          onOpenArtifactFromTimeline: handleOpenArtifactFromTimeline,
+          onOpenMessagePreview: handleOpenMessagePreview,
+          onOpenSavedSiteContent: handleOpenSavedSiteContent,
+          onOpenSubagentSession: handleOpenSubagentSession,
+          onOpenUrlPreview: handleOpenUrlPreview,
+          onPermissionResponse: handlePermissionResponse,
+          onPromoteQueuedTurn: promoteQueuedTurn,
+          onReplayPendingRequest: replayPendingAction,
+          onResumeThread: resumeThread,
+          onSaveMessageAsKnowledge: handleSaveMessageAsKnowledge,
+          onSaveMessageAsSkill: handleSaveMessageAsSkill,
+          onWriteFile: handleWriteFile,
+        },
+        collapseCodeBlocks: shouldCollapseCodeBlocks,
+        emptyStateVariant: sceneMessageListEmptyStateVariant,
+        focus: {
+          focusedTimelineItemId: workbenchRequests.focusedTimelineItemId,
+          timelineFocusRequestKey: workbenchRequests.timelineFocusRequestKey,
+        },
+        input: {
+          quoteInput: input,
+          onQuoteInputChange: setInput,
+        },
+        pendingPromotedA2UIActionRequest,
+        projection: {
+          currentTurnId: sceneCurrentTurnId,
+          executionRuntime: sceneExecutionRuntime,
+          isSending: sceneIsSending,
+          pendingActions: scenePendingActions,
+          queuedTurns: sceneQueuedTurns,
+          sessionHistoryWindow,
+          submittedActionsInFlight: sceneSubmittedActionsInFlight,
+          threadItems: sceneThreadItems,
+          threadRead: sceneThreadRead,
+          todoItems,
+          turns: sceneTurns,
+        },
+        provider: {
+          accessMode,
+          model,
+          providerType,
+          reasoningEffort,
+        },
+        refreshSessionReadModel,
+        sceneSessionId,
+        shouldCollapseCodeBlock: shouldCollapseCodeBlockInChat,
+      },
+      scene: {
+        navbarContextVariant:
+          agentEntry === "claw" || shouldUseBrowserWorkspaceHomeChrome
+            ? "task-center"
+            : "default",
+        navigationActions,
+        inputbarScene,
+        canvasScene,
+        handleSendFromEmptyState,
+        shellChromeRuntime,
+        currentImageWorkbenchActive: currentImageWorkbenchState.active,
+        browserWorkbenchOpenRequest:
+          workbenchRequests.browserWorkbenchOpenRequest,
+        onBrowserWorkbenchOpenRequestHandled:
+          workbenchRequests.handleBrowserWorkbenchOpenRequestHandled,
+        canvasWorkbenchPreviewOpenRequest:
+          workbenchRequests.canvasWorkbenchPreviewOpenRequest,
+        onCanvasWorkbenchPreviewOpenRequestHandled:
+          workbenchRequests.handleCanvasWorkbenchPreviewOpenRequestHandled,
+        projectId: projectId ?? null,
+        openedProjects,
+        onCloseProject: handleCloseOpenedProject,
+        deferWorkspaceListLoad: shouldUseBrowserWorkspaceHomeChrome,
+        projectRootPath: project?.rootPath || null,
+        contextWorkspaceEnabled: contextWorkspace.generalWorkbenchEnabled,
+        activeTheme,
+        contentId,
+        taskCenterTabsNode: shouldRenderTaskCenterTabStrip
+          ? taskCenterTabsNode
+          : browserWorkspaceHomeTabsNode,
+        suppressNavbarUtilityActions: suppressHomeNavbarUtilityActions,
+        topBarChrome,
+        onBackToProjectManagement,
+        fromResources,
+        handleBackHome,
+        isRestoringSession: sceneIsRestoringSession,
+        sessionId: sceneSessionId,
+        syncStatus,
+        pendingA2UIForm: effectivePendingA2UIForm,
+        pendingA2UISource: effectivePendingA2UISource,
+        a2uiSubmissionNotice,
+        handlePendingA2UISubmit,
+        hideInlineStepProgress,
+        isSpecializedThemeMode,
+        hasMessages,
+        steps: EMPTY_WORKSPACE_WORKFLOW_STEPS,
+        activityLogs: generalWorkbenchActivityLogs,
+        creationTaskEvents:
+          generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
+        currentStepIndex: HIDDEN_WORKSPACE_WORKFLOW_STEP_INDEX,
+        goToStep: ignoreHiddenWorkspaceWorkflowStepClick,
+        layoutMode: sceneLayoutMode,
+        isThemeWorkbench,
+        settledWorkbenchArtifacts,
+        resolvedCanvasState,
+        taskFiles,
+        selectedFileId,
+        handleHarnessLoadFilePreview,
+        setCanvasWorkbenchLayoutMode,
+        workspacePathMissing: Boolean(workspacePathMissing),
+        workspaceHealthError,
+      },
     },
-    scene: {
-      navbarContextVariant:
-        agentEntry === "claw" || shouldUseBrowserWorkspaceHomeChrome
-          ? "task-center"
-          : "default",
-      navigationActions,
-      inputbarScene,
-      canvasScene,
-      handleSendFromEmptyState,
-      shellChromeRuntime,
-      currentImageWorkbenchActive: currentImageWorkbenchState.active,
-      browserWorkbenchOpenRequest:
-        workbenchRequests.browserWorkbenchOpenRequest,
-      onBrowserWorkbenchOpenRequestHandled:
-        workbenchRequests.handleBrowserWorkbenchOpenRequestHandled,
-      canvasWorkbenchPreviewOpenRequest:
-        workbenchRequests.canvasWorkbenchPreviewOpenRequest,
-      onCanvasWorkbenchPreviewOpenRequestHandled:
-        workbenchRequests.handleCanvasWorkbenchPreviewOpenRequestHandled,
-      projectId: projectId ?? null,
-      openedProjects,
-      onCloseProject: handleCloseOpenedProject,
-      deferWorkspaceListLoad: shouldUseBrowserWorkspaceHomeChrome,
-      projectRootPath: project?.rootPath || null,
-      canvasWorkbenchRootPath,
-      contextWorkspaceEnabled: contextWorkspace.generalWorkbenchEnabled,
-      activeTheme,
-      contentId,
-      taskCenterTabsNode: shouldRenderTaskCenterTabStrip
-        ? taskCenterTabsNode
-        : browserWorkspaceHomeTabsNode,
-      suppressNavbarUtilityActions: suppressHomeNavbarUtilityActions,
-      topBarChrome,
-      onBackToProjectManagement,
-      fromResources,
-      handleBackHome,
-      rightSurfaceChrome,
-      isRestoringSession: sceneIsRestoringSession,
-      sessionId: sceneSessionId,
-      syncStatus,
-      pendingA2UIForm: effectivePendingA2UIForm,
-      pendingA2UISource: effectivePendingA2UISource,
-      a2uiSubmissionNotice,
-      handlePendingA2UISubmit,
-      handleToggleCanvas: handleToggleCanvasFromRightSurface,
-      hideInlineStepProgress,
-      isSpecializedThemeMode,
-      hasMessages,
-      steps: EMPTY_WORKSPACE_WORKFLOW_STEPS,
-      activityLogs: generalWorkbenchActivityLogs,
-      creationTaskEvents:
-        generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
-      currentStepIndex: HIDDEN_WORKSPACE_WORKFLOW_STEP_INDEX,
-      goToStep: ignoreHiddenWorkspaceWorkflowStepClick,
-      layoutMode: sceneLayoutMode,
+    fileManager: {
+      fileManagerSidebar,
+      initialDirectory: project?.rootPath || null,
+      onAddPathReferences: handleAddPathReferences,
+      onImportAsKnowledge: inputbarScene.onImportPathReferenceAsKnowledge,
+      onInstallSkillPackage: _onNavigate
+        ? handleInstallSkillPackageFromFileManager
+        : undefined,
+      onOpenWorkspaceFile: (absolutePath) => {
+        void openProjectFilePreviewInCanvas({
+          absolutePath,
+        });
+      },
+    },
+    shell: {
+      compactChrome: shellChromeRuntime.isWorkspaceCompactChrome,
       isThemeWorkbench,
-      settledWorkbenchArtifacts,
-      resolvedCanvasState,
-      taskFiles,
-      selectedFileId,
-      handleHarnessLoadFilePreview,
-      setCanvasWorkbenchLayoutMode,
-      workspacePathMissing: Boolean(workspacePathMissing),
-      workspaceHealthError,
-    },
-  });
-
-  const fileManagerNode = renderWorkspaceFileManagerSidebarRuntime({
-    fileManagerSidebar,
-    initialDirectory: project?.rootPath || null,
-    onAddPathReferences: handleAddPathReferences,
-    onImportAsKnowledge: inputbarScene.onImportPathReferenceAsKnowledge,
-    onInstallSkillPackage: _onNavigate
-      ? handleInstallSkillPackageFromFileManager
-      : undefined,
-    onOpenWorkspaceFile: (absolutePath) => {
-      void openProjectFilePreviewInCanvas({
-        absolutePath,
-      });
+      showGeneralWorkbenchLeftExpandButton,
+      onExpandGeneralWorkbenchSidebar: handleExpandGeneralWorkbenchSidebar,
     },
   });
   return (
     <>
-      <WorkspaceShellScene
-        compactChrome={shellChromeRuntime.isWorkspaceCompactChrome}
-        isThemeWorkbench={isThemeWorkbench}
-        generalWorkbenchSidebarNode={generalWorkbenchSidebarNode}
-        showGeneralWorkbenchLeftExpandButton={
-          showGeneralWorkbenchLeftExpandButton
-        }
-        onExpandGeneralWorkbenchSidebar={handleExpandGeneralWorkbenchSidebar}
-        fileManagerNode={fileManagerNode}
-        mainAreaNode={conversationSceneRuntime.mainAreaNode}
-      />
+      {workspaceSceneNode}
       <AutomationJobDialog
         open={workspaceServiceSkillEntryActions.automationDialogOpen}
         mode="create"

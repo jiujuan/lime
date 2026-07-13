@@ -1,11 +1,44 @@
 use std::collections::BTreeMap;
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use serde_json::Value;
 
 use super::*;
 
-struct FakeBackend;
+#[derive(Default)]
+struct FakeBackend {
+    events: Mutex<Vec<String>>,
+    fail_preparation_for: Option<String>,
+    resolved_agent_ids: Option<Vec<String>>,
+}
+
+impl FakeBackend {
+    fn failing_preparation(agent_id: &str) -> Self {
+        Self {
+            events: Mutex::new(Vec::new()),
+            fail_preparation_for: Some(agent_id.to_string()),
+            resolved_agent_ids: None,
+        }
+    }
+
+    fn broadcasting(agent_ids: &[&str]) -> Self {
+        Self {
+            events: Mutex::new(Vec::new()),
+            fail_preparation_for: None,
+            resolved_agent_ids: Some(
+                agent_ids
+                    .iter()
+                    .map(|agent_id| (*agent_id).to_string())
+                    .collect(),
+            ),
+        }
+    }
+
+    fn events(&self) -> Vec<String> {
+        self.events.lock().expect("events lock").clone()
+    }
+}
 
 #[async_trait]
 impl CollabAgentExecutionBackend for FakeBackend {
@@ -24,10 +57,31 @@ impl CollabAgentExecutionBackend for FakeBackend {
         &self,
         request: SendInputRequest,
     ) -> CollabAgentSurfaceResult<SendInputResponse> {
+        self.events
+            .lock()
+            .expect("events lock")
+            .push(format!("send:{}", request.id));
         Ok(SendInputResponse {
             submission_id: format!("submitted-{}", request.id),
             extra: BTreeMap::new(),
         })
+    }
+
+    async fn ensure_agent_loaded(
+        &self,
+        current_session_id: &str,
+        agent_id: &str,
+    ) -> CollabAgentSurfaceResult<()> {
+        self.events
+            .lock()
+            .expect("events lock")
+            .push(format!("prepare:{current_session_id}:{agent_id}"));
+        if self.fail_preparation_for.as_deref() == Some(agent_id) {
+            return Err(CollabAgentSurfaceError::execution_failed(format!(
+                "failed to restore agent {agent_id}"
+            )));
+        }
+        Ok(())
     }
 
     async fn normalize_send_target(
@@ -43,13 +97,19 @@ impl CollabAgentExecutionBackend for FakeBackend {
         _session_id: &str,
         canonical_target: &str,
     ) -> CollabAgentSurfaceResult<Vec<ResolvedCollabSendTarget>> {
-        Ok(vec![ResolvedCollabSendTarget {
-            display_name: canonical_target.to_string(),
-            agent_id: canonical_target.to_string(),
-            routing_target: canonical_target.to_string(),
-            delivery_kind: ResolvedCollabSendTargetKind::Agent,
-            wrap_as_teammate_message: false,
-        }])
+        Ok(self
+            .resolved_agent_ids
+            .clone()
+            .unwrap_or_else(|| vec![canonical_target.to_string()])
+            .into_iter()
+            .map(|agent_id| ResolvedCollabSendTarget {
+                display_name: agent_id.clone(),
+                routing_target: agent_id.clone(),
+                agent_id,
+                delivery_kind: ResolvedCollabSendTargetKind::Agent,
+                wrap_as_teammate_message: false,
+            })
+            .collect())
     }
 
     async fn resolve_local_peer_target(
@@ -146,7 +206,7 @@ async fn executes_spawn_agent_with_current_projection() {
             "name": "Scout"
         }),
         "session-1",
-        &FakeBackend,
+        &FakeBackend::default(),
     )
     .await
     .expect("spawn output");
@@ -158,6 +218,7 @@ async fn executes_spawn_agent_with_current_projection() {
 
 #[tokio::test]
 async fn executes_send_message_with_current_projection() {
+    let backend = FakeBackend::default();
     let output = execute_collab_send_message(
         serde_json::json!({
             "to": "worker",
@@ -165,7 +226,7 @@ async fn executes_send_message_with_current_projection() {
             "message": "hello"
         }),
         "lead",
-        &FakeBackend,
+        &backend,
     )
     .await
     .expect("send output");
@@ -176,6 +237,69 @@ async fn executes_send_message_with_current_projection() {
         output.metadata["target"],
         Value::String("worker".to_string())
     );
+    assert_eq!(backend.events(), vec!["prepare:lead:worker", "send:worker"]);
+}
+
+#[tokio::test]
+async fn prepares_all_graph_recipients_before_delivering_mailbox_messages() {
+    let backend = FakeBackend::broadcasting(&["worker-a", "worker-b"]);
+    execute_collab_send_message(
+        serde_json::json!({
+            "to": "*",
+            "summary": "status",
+            "message": "report"
+        }),
+        "lead",
+        &backend,
+    )
+    .await
+    .expect("broadcast output");
+
+    assert_eq!(
+        backend.events(),
+        vec![
+            "prepare:lead:worker-a",
+            "prepare:lead:worker-b",
+            "send:worker-a",
+            "send:worker-b",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn recovery_failure_prevents_partial_mailbox_delivery() {
+    let backend = FakeBackend::failing_preparation("worker");
+    let error = execute_collab_send_message(
+        serde_json::json!({
+            "to": "worker",
+            "summary": "retry",
+            "message": "continue"
+        }),
+        "lead",
+        &backend,
+    )
+    .await
+    .expect_err("recovery failure");
+
+    assert_eq!(error.message(), "failed to restore agent worker");
+    assert_eq!(backend.events(), vec!["prepare:lead:worker"]);
+}
+
+#[tokio::test]
+async fn cross_session_local_peer_bypasses_agent_graph_recovery() {
+    let backend = FakeBackend::default();
+    execute_collab_send_message(
+        serde_json::json!({
+            "to": "uds:peer-1",
+            "message": "hello"
+        }),
+        "lead",
+        &backend,
+    )
+    .await
+    .expect("local peer output");
+
+    assert_eq!(backend.events(), vec!["send:peer-1"]);
 }
 
 #[tokio::test]

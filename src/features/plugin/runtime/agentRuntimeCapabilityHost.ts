@@ -116,6 +116,10 @@ function normalizeTaskLookup(
   return typeof task === "string" ? { taskId: task } : task;
 }
 
+function threadIdFromLookup(lookup: PluginTaskLookup): string | undefined {
+  return normalizeString(lookup.threadId);
+}
+
 export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private readonly delegate: CapabilityHost;
   private readonly appId: string;
@@ -315,6 +319,12 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       runStartHooks: runtimeRequest.runStartHooks,
       metadata,
     });
+    const threadId = normalizeString(result.threadId);
+    if (!threadId) {
+      throw new Error(
+        "Plugin runtime startTask did not return a canonical threadId",
+      );
+    }
     const state: RuntimeTaskState = {
       appId: result.appId,
       appVersion: this.appVersion,
@@ -324,6 +334,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       taskId: result.taskId,
       traceId: result.traceId,
       sessionId: result.sessionId,
+      threadId,
       turnId: result.turnId,
       workspaceId,
       taskKind: result.taskKind,
@@ -349,14 +360,20 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     const state =
       this.tasks.get(lookup.taskId) ??
       this.loadPersistedRuntimeTaskState(lookup.taskId);
-    const sessionId = state?.sessionId ?? normalizeString(lookup.sessionId);
-    if (!sessionId) {
+    const lookupThreadId = threadIdFromLookup(lookup);
+    if (state?.threadId && lookupThreadId && state.threadId !== lookupThreadId) {
+      throw new Error(
+        `Plugin task ${lookup.taskId} lookup threadId conflicts with persisted state`,
+      );
+    }
+    const threadId = state?.threadId ?? lookupThreadId;
+    if (!threadId) {
       return null;
     }
     const snapshot = await this.api.getTask({
       appId: state?.appId ?? this.appId,
       taskId: state?.taskId ?? lookup.taskId,
-      sessionId,
+      threadId,
     });
     const nextState =
       state ??
@@ -382,7 +399,11 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     snapshot: PluginRuntimeTaskSnapshot,
   ): Promise<RuntimeTaskState> {
     const taskKind = normalizeString(lookup.taskKind) ?? "plugin.task";
-    const sessionId = normalizeString(lookup.sessionId) ?? snapshot.sessionId;
+    const sessionId = snapshot.sessionId;
+    const threadId = normalizeString(snapshot.threadId);
+    if (!threadId) {
+      throw new Error("Plugin task snapshot is missing canonical threadId");
+    }
     const workspaceId =
       normalizeString(lookup.workspaceId) ??
       normalizeString(this.workspaceId) ??
@@ -400,6 +421,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       taskId: lookup.taskId,
       traceId: normalizeString(lookup.traceId) ?? lookup.taskId,
       sessionId,
+      threadId,
       turnId:
         normalizeString(lookup.turnId) ??
         readLatestTurnId(snapshot.threadRead) ??
@@ -421,30 +443,51 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   ): Promise<PluginTaskRecord> {
     const taskId = normalizeTaskLookup(taskLookup).taskId;
     const state = await this.requireTask(taskId);
-    await this.api.cancelTask({
+    const cancelResult = await this.api.cancelTask({
       appId: state.appId,
       taskId: state.taskId,
-      sessionId: state.sessionId,
+      threadId: state.threadId,
       turnId: state.turnId,
     });
-    const cancelled: PluginRuntimeTaskSnapshot = {
+    if (
+      cancelResult.threadId !== state.threadId ||
+      cancelResult.sessionId !== state.sessionId
+    ) {
+      throw new Error(
+        `Plugin task ${taskId} cancel result conflicts with persisted identity`,
+      );
+    }
+    const snapshot: PluginRuntimeTaskSnapshot = {
       appId: state.appId,
       taskId: state.taskId,
-      sessionId: state.sessionId,
+      sessionId: cancelResult.sessionId,
+      threadId: cancelResult.threadId,
       status: "thread_read_available",
-      taskStatus: "cancelled",
-      taskEvents: [
-        {
-          id: `${taskId}:cancelled`,
-          eventType: "task:cancelled",
-          status: "cancelled",
-          message: "已向 Lime AgentRuntime 请求取消任务。",
-          occurredAt: this.now(),
-        },
-      ],
-      threadRead: null,
+      taskStatus: cancelResult.status,
+      taskEvents: cancelResult.cancelled
+        ? [
+            {
+              id: `${taskId}:cancelled`,
+              eventType: "task:cancelled",
+              status: "cancelled",
+              message: "已向 Lime AgentRuntime 请求取消任务。",
+              occurredAt: this.now(),
+            },
+          ]
+        : [
+            {
+              id: `${taskId}:not-running`,
+              eventType: "task:status",
+              status: "not_running",
+              message: "任务当前未运行，未发送取消请求。",
+              occurredAt: this.now(),
+            },
+          ],
+      threadRead: state.latestSnapshot?.threadRead ?? null,
     };
-    return buildTaskRecord(state, cancelled);
+    state.latestSnapshot = snapshot;
+    await this.persistRuntimeTaskState(state);
+    return buildTaskRecord(state, snapshot);
   }
 
   private async retryRuntimeTask(
@@ -473,10 +516,8 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       AgentRuntimeRespondActionRequest["action_scope"]
     > = {
       session_id: input.actionScope?.sessionId ?? state.sessionId,
+      thread_id: input.actionScope?.threadId ?? state.threadId,
     };
-    if (input.actionScope?.threadId) {
-      actionScope.thread_id = input.actionScope.threadId;
-    }
     if (input.actionScope?.turnId || state.turnId) {
       actionScope.turn_id = input.actionScope?.turnId ?? state.turnId;
     }

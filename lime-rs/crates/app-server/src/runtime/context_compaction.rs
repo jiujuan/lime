@@ -2,6 +2,7 @@ use super::sidecar_store::{
     session_scoped_relative_path, SidecarRef, SidecarStore, SidecarWriteRequest,
 };
 use super::RuntimeCoreError;
+use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload};
 use app_server_protocol::{AgentEvent, AgentSession, AgentTurn};
 use chrono::{SecondsFormat, Utc};
 use serde_json::{json, Value};
@@ -165,12 +166,17 @@ fn event_summary_line(event: &AgentEvent) -> Option<String> {
         "message.delta" | "message.delta_batch" | "message.batch" => {
             payload_text(&event.payload).map(|text| format!("Assistant: {text}"))
         }
-        "tool.started" => payload_string(&event.payload, &["toolName", "tool_name", "name"])
-            .map(|name| format!("Tool started: {name}")),
-        "tool.result" | "tool.completed" => {
-            payload_string(&event.payload, &["toolName", "tool_name", "name"])
-                .map(|name| format!("Tool completed: {name}"))
-        }
+        "item.started" => canonical_tool(event).map(|(name, _)| format!("Tool started: {name}")),
+        "item.completed" => canonical_tool(event).and_then(|(name, status)| {
+            let state = match status {
+                ItemStatus::Completed => "completed",
+                ItemStatus::Failed => "failed",
+                ItemStatus::Interrupted => "interrupted",
+                ItemStatus::Cancelled => "cancelled",
+                ItemStatus::Pending | ItemStatus::InProgress => return None,
+            };
+            Some(format!("Tool {state}: {name}"))
+        }),
         "turn.completed" => Some("Turn completed.".to_string()),
         "turn.failed" => Some(format!(
             "Turn failed: {}",
@@ -180,6 +186,14 @@ fn event_summary_line(event: &AgentEvent) -> Option<String> {
         _ => None,
     }
     .map(|line| truncate_chars(&line, 500))
+}
+
+fn canonical_tool(event: &AgentEvent) -> Option<(String, ItemStatus)> {
+    let item = serde_json::from_value::<ThreadItem>(event.payload.get("item")?.clone()).ok()?;
+    let ThreadItemPayload::Tool { name, .. } = item.payload else {
+        return None;
+    };
+    Some((name, item.status))
 }
 
 fn payload_text(payload: &Value) -> Option<String> {
@@ -235,7 +249,49 @@ fn safe_id_part(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_protocol::{
+        ItemId, ItemKind, ItemStatus, SessionId, ThreadId, ToolArgument, ToolOutput, TurnId,
+    };
     use app_server_protocol::{AgentSessionStatus, AgentTurnStatus};
+
+    fn tool_event(sequence: u64, event_type: &str, status: ItemStatus) -> AgentEvent {
+        let item = ThreadItem {
+            session_id: SessionId::new("sess"),
+            thread_id: ThreadId::new("thread"),
+            turn_id: TurnId::new("turn_1"),
+            item_id: ItemId::new("call-read"),
+            sequence,
+            ordinal: 1,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            completed_at_ms: status.is_terminal().then_some(2),
+            kind: ItemKind::Tool,
+            status,
+            payload: ThreadItemPayload::Tool {
+                call_id: "call-read".to_string(),
+                name: "Read".to_string(),
+                arguments: vec![ToolArgument {
+                    name: "path".to_string(),
+                    value: "README.md".to_string(),
+                }],
+                output: Some(ToolOutput {
+                    text: Some("contents".to_string()),
+                    ..ToolOutput::default()
+                }),
+            },
+            metadata: Value::Null,
+        };
+        AgentEvent {
+            event_id: format!("evt-{sequence}"),
+            sequence,
+            session_id: "sess".to_string(),
+            thread_id: Some("thread".to_string()),
+            turn_id: Some("turn_1".to_string()),
+            event_type: event_type.to_string(),
+            timestamp: "now".to_string(),
+            payload: json!({ "item": item }),
+        }
+    }
 
     #[test]
     fn compaction_artifact_does_not_claim_memory_write() {
@@ -275,5 +331,50 @@ mod tests {
         assert_eq!(artifact.artifact["policy"]["historyRewrite"], false);
         assert_eq!(artifact.artifact["policy"]["longTermMemoryWrite"], false);
         assert!(artifact.summary.contains("User: hello"));
+    }
+
+    #[test]
+    fn tool_summary_uses_canonical_nested_thread_item() {
+        assert_eq!(
+            event_summary_line(&tool_event(1, "item.started", ItemStatus::InProgress)),
+            Some("Tool started: Read".to_string())
+        );
+        for (sequence, status, expected) in [
+            (2, ItemStatus::Completed, "Tool completed: Read"),
+            (3, ItemStatus::Failed, "Tool failed: Read"),
+            (4, ItemStatus::Interrupted, "Tool interrupted: Read"),
+            (5, ItemStatus::Cancelled, "Tool cancelled: Read"),
+        ] {
+            assert_eq!(
+                event_summary_line(&tool_event(sequence, "item.completed", status)),
+                Some(expected.to_string())
+            );
+        }
+        assert_eq!(
+            event_summary_line(&tool_event(6, "item.completed", ItemStatus::InProgress)),
+            None
+        );
+    }
+
+    #[test]
+    fn raw_tool_events_do_not_enter_compaction_summary() {
+        for event_type in [
+            "tool.started",
+            "tool.result",
+            "tool.failed",
+            "tool.completed",
+        ] {
+            let event = AgentEvent {
+                event_id: format!("evt-{event_type}"),
+                sequence: 1,
+                session_id: "sess".to_string(),
+                thread_id: Some("thread".to_string()),
+                turn_id: Some("turn_1".to_string()),
+                event_type: event_type.to_string(),
+                timestamp: "now".to_string(),
+                payload: json!({ "toolName": "Read" }),
+            };
+            assert_eq!(event_summary_line(&event), None, "{event_type}");
+        }
     }
 }

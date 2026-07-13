@@ -1,7 +1,9 @@
 use super::{
+    canonical_tool::{canonical_tool, is_retired_raw_tool_lifecycle},
     metadata_string, nested_metadata_string, nested_metadata_value, push_unique,
     push_value_strings, value_string,
 };
+use agent_protocol::ItemStatus;
 use app_server_protocol::AgentEvent;
 use serde_json::{json, Map, Value};
 
@@ -42,26 +44,14 @@ struct CodingEvidenceSummary {
 pub(super) fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
     let mut summary = CodingEvidenceSummary::default();
     for event in events {
+        if is_retired_raw_tool_lifecycle(&event.event_type) {
+            continue;
+        }
         collect_common_coding_refs(&mut summary, event);
-        collect_tool_identity(&mut summary, event);
+        if let Some(tool) = canonical_tool(event) {
+            collect_canonical_tool(&mut summary, event, &tool);
+        }
         match event.event_type.as_str() {
-            "tool.started" => {
-                summary.tool_call_count += 1;
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
-            "tool.result" | "tool.failed" => {
-                summary.completed_tool_call_count += 1;
-                if let Some(tool_call_id) = tool_call_id_from_event(event) {
-                    push_unique(&mut summary.completed_tool_call_ids, tool_call_id.clone());
-                    if event.event_type == "tool.failed" {
-                        push_unique(&mut summary.failed_tool_call_ids, tool_call_id);
-                    }
-                }
-                if event.event_type == "tool.failed" {
-                    summary.failed_tool_call_count += 1;
-                }
-                push_unique(&mut summary.source_event_ids, event.event_id.clone());
-            }
             "file.changed" => {
                 summary.file_change_count += 1;
                 push_unique(&mut summary.source_event_ids, event.event_id.clone());
@@ -169,57 +159,34 @@ pub(super) fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
     })
 }
 
-fn collect_tool_identity(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {
-    match event.event_type.as_str() {
-        "tool.started" | "tool.args" | "tool.args.delta" | "tool.input.delta"
-        | "tool.output.delta" | "tool.result" | "tool.failed" | "patch.started"
-        | "patch.applied" | "patch.failed" | "file.changed" | "command.started"
-        | "command.output" | "command.exited" => {}
-        _ => return,
+fn collect_canonical_tool(
+    summary: &mut CodingEvidenceSummary,
+    event: &AgentEvent,
+    tool: &super::canonical_tool::CanonicalTool,
+) {
+    push_unique(&mut summary.tool_names, tool.name.clone());
+    push_unique(&mut summary.tool_call_ids, tool.call_id.clone());
+    push_unique(&mut summary.source_event_ids, event.event_id.clone());
+
+    if event.event_type == "item.started" {
+        summary.tool_call_count += 1;
+        return;
     }
 
-    collect_tool_identity_fields(summary, &event.payload);
-    for key in [
-        "metadata",
-        "runtimeEvent",
-        "item",
-        "result",
-        "structuredContent",
-        "toolProcessFacts",
-        "tool_process_facts",
-    ] {
-        if let Some(value) = event.payload.get(key) {
-            collect_tool_identity_fields(summary, value);
+    summary.completed_tool_call_count += 1;
+    push_unique(&mut summary.completed_tool_call_ids, tool.call_id.clone());
+    if tool.status == ItemStatus::Failed {
+        summary.failed_tool_call_count += 1;
+        push_unique(&mut summary.failed_tool_call_ids, tool.call_id.clone());
+    }
+    if let Some(output) = &tool.output {
+        if let Some(output_ref) = &output.output_ref {
+            push_unique(&mut summary.output_refs, output_ref.clone());
+        }
+        if let Some(structured_content) = &output.structured_content {
+            collect_coding_ref_fields(summary, structured_content);
         }
     }
-    if let Some(result) = event.payload.get("result") {
-        for key in [
-            "metadata",
-            "structuredContent",
-            "toolProcessFacts",
-            "tool_process_facts",
-        ] {
-            if let Some(value) = result.get(key) {
-                collect_tool_identity_fields(summary, value);
-            }
-        }
-    }
-}
-
-fn collect_tool_identity_fields(summary: &mut CodingEvidenceSummary, value: &Value) {
-    push_value_strings(&mut summary.tool_names, value, &["toolName", "tool_name"]);
-    push_value_strings(
-        &mut summary.tool_call_ids,
-        value,
-        &["toolCallId", "tool_call_id", "toolId", "tool_id"],
-    );
-}
-
-fn tool_call_id_from_event(event: &AgentEvent) -> Option<String> {
-    metadata_string(
-        Some(&event.payload),
-        &["toolCallId", "tool_call_id", "toolId", "tool_id"],
-    )
 }
 
 fn collect_action_correlation(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {
@@ -443,5 +410,99 @@ fn push_value_string_arrays(target: &mut Vec<String>, value: &Value, keys: &[&st
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_tool_lifecycle_does_not_affect_coding_summary() {
+        let summary = coding_evidence_summary(&[AgentEvent {
+            event_id: "raw-tool-result".to_string(),
+            sequence: 1,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: "tool.result".to_string(),
+            timestamp: "2026-07-13T00:00:00Z".to_string(),
+            payload: json!({
+                "toolCallId": "raw-call",
+                "toolName": "Bash",
+                "outputRef": "output://raw"
+            }),
+        }]);
+
+        assert_eq!(summary["toolCallCount"], 0);
+        assert_eq!(summary["completedToolCallCount"], 0);
+        assert_eq!(summary["toolCallIds"], json!([]));
+        assert_eq!(summary["outputRefs"], json!([]));
+        assert_eq!(summary["sourceEventIds"], json!([]));
+    }
+
+    #[test]
+    fn failed_canonical_tool_completion_projects_failed_evidence() {
+        let summary = coding_evidence_summary(&[AgentEvent {
+            event_id: "canonical-tool-failed".to_string(),
+            sequence: 1,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: "item.completed".to_string(),
+            timestamp: "2026-07-13T00:00:00Z".to_string(),
+            payload: json!({
+                "item": {
+                    "sessionId": "session-1",
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "itemId": "different-item-id",
+                    "sequence": 1,
+                    "ordinal": 1,
+                    "createdAtMs": 1,
+                    "updatedAtMs": 2,
+                    "completedAtMs": 2,
+                    "kind": "tool",
+                    "status": "failed",
+                    "payload": {
+                        "type": "tool",
+                        "call_id": "canonical-failed-call",
+                        "name": "Bash",
+                        "arguments": [],
+                        "output": {
+                            "error": "exit 1",
+                            "outputRef": "output://failed"
+                        }
+                    },
+                    "metadata": {}
+                }
+            }),
+        }]);
+
+        assert_eq!(summary["completedToolCallCount"], 1);
+        assert_eq!(summary["failedToolCallCount"], 1);
+        assert_eq!(summary["toolCallIds"], json!(["canonical-failed-call"]));
+        assert_eq!(
+            summary["failedToolCallIds"],
+            json!(["canonical-failed-call"])
+        );
+        assert_eq!(summary["outputRefs"], json!(["output://failed"]));
+    }
+
+    #[test]
+    fn tool_output_delta_keeps_non_lifecycle_coding_refs() {
+        let summary = coding_evidence_summary(&[AgentEvent {
+            event_id: "tool-output-delta".to_string(),
+            sequence: 1,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: "tool.output.delta".to_string(),
+            timestamp: "2026-07-13T00:00:00Z".to_string(),
+            payload: json!({ "outputRef": "output://delta" }),
+        }]);
+
+        assert_eq!(summary["outputRefs"], json!(["output://delta"]));
+        assert_eq!(summary["toolCallCount"], 0);
     }
 }

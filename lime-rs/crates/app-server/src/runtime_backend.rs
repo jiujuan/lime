@@ -46,6 +46,7 @@ use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
+use agent_runtime::action_required::{ActionTerminalStatus, PendingActionRestoreOutcome};
 use async_trait::async_trait;
 use lime_agent::{
     run_agent_turn_with_policy, AgentRuntimeState, AgentTurnExecutionRequest,
@@ -442,8 +443,58 @@ impl ExecutionBackend for RuntimeBackend {
     ) -> Result<(), RuntimeCoreError> {
         let db = initialize_runtime_database(self.db.as_ref())?;
         self.ensure_agent_initialized(&db).await?;
-        action_response::handle_action_response(&self.agent_state, &request).await?;
-        sink.emit(action_response::action_resolved_event(&request))
+        action_response::validate_action_scope(&request)?;
+        if !self
+            .agent_state
+            .contains_pending_action(&request.request_id)
+            .await
+        {
+            let descriptor = request.pending_action_descriptor.clone().ok_or_else(|| {
+                action_response_error("action_descriptor_invalid", &request.request_id)
+            })?;
+            let outcomes = self
+                .agent_state
+                .restore_pending_action_descriptors([descriptor])
+                .await;
+            match outcomes.as_slice() {
+                [PendingActionRestoreOutcome::Restored]
+                | [PendingActionRestoreOutcome::AlreadyPresent] => {}
+                [PendingActionRestoreOutcome::Expired] => {
+                    return Err(action_response_error("action_expired", &request.request_id));
+                }
+                [PendingActionRestoreOutcome::Terminal] => {
+                    let code = match self
+                        .agent_state
+                        .terminal_action_status(&request.request_id)
+                        .await
+                    {
+                        Some(ActionTerminalStatus::NotResumable) => "action_not_resumable",
+                        Some(ActionTerminalStatus::ContinuationClosed) => {
+                            "action_continuation_closed"
+                        }
+                        Some(ActionTerminalStatus::Expired) => "action_expired",
+                        Some(ActionTerminalStatus::Canceled) => "action_canceled",
+                        Some(ActionTerminalStatus::Resolved) => "action_already_resolved",
+                        None => "action_terminal",
+                    };
+                    return Err(action_response_error(code, &request.request_id));
+                }
+                [PendingActionRestoreOutcome::Invalid] | _ => {
+                    return Err(action_response_error(
+                        "action_descriptor_invalid",
+                        &request.request_id,
+                    ));
+                }
+            }
+        }
+        match action_response::handle_action_response(&self.agent_state, &request).await? {
+            action_response::ActionResponseOutcome::Resolved => {
+                sink.emit(action_response::action_resolved_event(&request))
+            }
+            action_response::ActionResponseOutcome::Canceled => {
+                sink.emit(action_response::action_canceled_event(&request))
+            }
+        }
     }
 
     async fn read_tool_inventory(
@@ -488,6 +539,13 @@ impl ExecutionBackend for RuntimeBackend {
         worker_request: &mut Value,
     ) -> Result<(), RuntimeCoreError> {
         plugin_worker_generation::prepare_plugin_worker_request(self, request, worker_request).await
+    }
+}
+
+fn action_response_error(code: &str, request_id: &str) -> RuntimeCoreError {
+    RuntimeCoreError::ActionResponse {
+        code: code.to_string(),
+        request_id: request_id.to_string(),
     }
 }
 

@@ -1,4 +1,41 @@
 use super::*;
+use serde_json::Value;
+
+fn canonical_browser_tool_event(event_type: &str, payload: Value) -> RuntimeEvent {
+    let call_id = payload["toolCallId"].as_str().expect("tool call id");
+    let name = payload["toolName"].as_str().unwrap_or("browser");
+    let output = payload.get("result").map(|result| {
+        json!({
+            "structuredContent": result,
+        })
+    });
+    RuntimeEvent::new(
+        event_type,
+        json!({
+            "item": {
+                "sessionId": "browser-session",
+                "threadId": "browser-thread",
+                "turnId": "browser-turn",
+                "itemId": call_id,
+                "sequence": 1,
+                "ordinal": 1,
+                "createdAtMs": 1,
+                "updatedAtMs": 2,
+                "completedAtMs": (event_type == "item.completed").then_some(2),
+                "kind": "tool",
+                "status": if event_type == "item.completed" { "completed" } else { "inProgress" },
+                "payload": {
+                    "type": "tool",
+                    "call_id": call_id,
+                    "name": name,
+                    "arguments": [],
+                    "output": output,
+                },
+                "metadata": {}
+            }
+        }),
+    )
+}
 
 #[tokio::test]
 async fn export_evidence_pack_includes_browser_session_and_snapshot_artifacts() {
@@ -32,14 +69,14 @@ async fn export_evidence_pack_includes_browser_session_and_snapshot_artifacts() 
         "sess_browser_evidence",
         Some("turn_browser_evidence"),
         vec![
-            RuntimeEvent::new(
-                "tool.started",
+            canonical_browser_tool_event(
+                "item.started",
                 json!({
                     "toolCallId": "browser_tool_navigate_1"
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
+            canonical_browser_tool_event(
+                "item.completed",
                 json!({
                     "toolCallId": "browser_tool_navigate_1",
                     "toolName": "mcp__lime-browser__navigate",
@@ -385,15 +422,15 @@ async fn export_evidence_pack_indexes_pending_browser_action_confirmation() {
         "sess_browser_pending_action",
         Some("turn_browser_pending_action"),
         vec![
-            RuntimeEvent::new(
-                "tool.started",
+            canonical_browser_tool_event(
+                "item.started",
                 json!({
                     "toolCallId": "browser_tool_click_1",
                     "toolName": "mcp__lime-browser__click"
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
+            canonical_browser_tool_event(
+                "item.completed",
                 json!({
                     "toolCallId": "browser_tool_click_1",
                     "toolName": "mcp__lime-browser__click",

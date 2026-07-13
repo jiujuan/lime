@@ -138,6 +138,12 @@ App Server 是 Renderer、Electron、CLI、Plugin 与 runtime 的唯一跨应用
 
 状态模型与 Codex 对齐：Thread 是会话上下文，Turn 是一次执行，Item 是可恢复的输入、输出、工具或审批活动。`ProjectionStore` 和 repository/read model 是 GUI 读取的唯一持久化真相；queue payload、stream buffer 与 renderer cache 不得反向成为事实源。
 
+canonical 持久化的 current owner 是 App Server `ProjectionStore` 对 `thread_store::ThreadStore` 的直接 SQLite 实现。typed `ThreadHistoryChangeSet`、Thread/Turn/Item 表、sequence collision、rollback/remove、opaque cursor、archive 和 metadata patch 必须在同一事务边界完成；不得增加 `RuntimeStore` 适配层、第二个 transcript 数据库或 renderer 持久化副本。旧 `thread-store::runtime_store`、`session_repository` 与 AgentSession read path 属于待 S2e 迁出的 `deprecated` surface。
+
+session start 返回成功前必须先在 ProjectionStore 建立 empty canonical Thread，再把 session 暴露到 RuntimeCore 内存状态；SQLite 失败不得留下 memory-only session。canonical `session_id` 与 `thread_id` 均为唯一 identity，跨 RuntimeCore 重启也不得一对多。显式 session delete 与 import replace 必须先在同一 SQLite 事务删除 canonical/projected 数据，再移除内存状态；GUI、AgentSession adapter 和首事件 lazy create 都不能充当 empty Thread fallback。首事件 ensure 只保留为防御式幂等边界，不再拥有 Thread 创建时点。
+
+action-required/approval 的 live continuation 归 `agent-runtime` session/turn scoped pending state；可持久化恢复事实归 RuntimeCore `StoredSession.events`。`agentSession/action/respond` 必须先从 current `action.required` 事件恢复 canonical action type 与 session/thread/turn scope，再校验 caller 参数；不得信任 caller type、从 presentation/read-model JSON 二次解析、或让 RuntimeBackend 回读 AppDataSource。重启后只能恢复 typed descriptor，不能伪造原 oneshot；无 continuation 时返回结构化 `action_not_resumable` 且不得写 `action.resolved`。ask-user/elicitation 的否定响应必须消费 waiter 并投影 `action.canceled`。
+
 ### 6.3 Provider 与工具组
 
 | Crate | 职责 |
@@ -148,6 +154,8 @@ App Server 是 Renderer、Electron、CLI、Plugin 与 runtime 的唯一跨应用
 | `skills` | skill discovery、读取与运行时集成。 |
 | `patch-apply` | 受控 patch 应用领域能力。 |
 | `browser-runtime`、`media-runtime`、`voice-core` | 浏览器、媒体、语音等独立 runtime domain。 |
+
+canonical Tool display contract 是 `ThreadItemPayload::{Tool,McpToolCall,CollabAgentToolCall}` 加 `ToolOutput`；call identity、arguments、structured content、duration、truncation、output reference 与 error 必须是 typed 字段，不能藏在 metadata 或由 Renderer 解析文本。Approval Item 的 ordered `available_decisions` 与 resolution 使用 Codex 同义的 `Approved`、`ApprovedForSession`、`Denied`、`Abort`、`TimedOut`；pending 只由 Item status 表达，此时 `decision = null`。GUI 只允许显式 lower 为 `allow_once`、`allow_for_session`、`decline`、`cancel`，不得从 scope 反推丢失的 decision。`requestId` 是审批 identity，`actionId` 只能作为缺少 request identity 时的退场 fallback；ask-user/MCP elicitation 可以 terminal 且 `decision = null`，Turn 使用 `Resolved` 表达已回答。
 
 Provider request 只能按以下方向流动：
 
@@ -163,10 +171,22 @@ typed runtime request
 
 ```text
 model-visible definition
+  -> RuntimeTool（definition + exposure + executor）
+  -> ToolCall（turn/call/environment identity）
   -> tool-runtime permission and dispatch
-  -> normalized result
+  -> ToolLifecycleEmitter（started/completed）
+  -> NormalizedToolOutput
+  -> model transcript + host event projection
   -> RuntimeEvent and Thread/Turn/Item projection
 ```
+
+current provider 不得绕过 `RuntimeTool::execute_call` 直接调用 executor，也不得在 provider loop、lime-agent adapter 或 App Server 重复计时、归一化或合成 start/end。host emitter 负责把同一 lifecycle 直接投影为 canonical `item.started/item.completed`，并保证 `ItemStarted -> ActionRequired -> ItemCompleted` 的确定性顺序。执行上下文必须显式绑定 typed call/turn identity，current turn executor 必须持有已校验的 canonical thread identity；approval 和 request-user-input 不得从松散 metadata 反推 scope。`AgentEvent::ToolStart/ToolEnd`、App Server raw start/result mapper、image-command raw lifecycle、live `tool.args` 与 imported raw Tool product wire 均为 `dead / deleted / forbidden-to-restore`。conversation import 只允许在 Codex source parser 输入边界读取 rollout JSON，并立即归一化为 source-local `ImportedToolDraft`；selector、lifecycle normalizer、budget 与 commit lowering 均只消费 typed phase/call/arguments/output/source metadata。terminal-only、incomplete 和重复 lifecycle 必须在 draft 层确定性补齐或幂等忽略，随后在真实 session/thread/turn identity 边界 lowering 为 canonical Item。raw Tool intermediate 绝不得进入 normalizer 之后的链路、`StoredSession`、event log、ProjectionStore、read model、notification 或 GUI。
+
+Provider history、context compaction 与 evidence/export 也属于 canonical Tool 的生产 consumer：它们只允许从 nested `ThreadItemPayload::{Tool,McpToolCall,CollabAgentToolCall}` 读取 call identity、ItemStatus、arguments、metadata、structured output、output reference 与 MCP server identity。非 lifecycle 的领域 side-channel 可以按显式 allowlist 保留，但 raw `tool.started/result/failed/completed` 不得影响 transcript、摘要、统计、browser evidence 或 artifact 提取，只能存在于入口拒绝守卫、负向测试和历史 evidence。
+
+大型工具输出的唯一正文来源同样是 nested `ToolOutput`。App Server 可以在 append 边界把过长 `text` 截为 preview，并把完整内容写入 `tool_output` sidecar；nested output 必须回写稳定 `outputRef + truncated`，outer event 只保留 `outputBytes/outputSnapshotFile/sidecarRef` 等持久投影，不能从 outer `output/result/runtimeEvent` 反向恢复正文。Tool、MCP 与 Collab 使用同一 sidecar owner；raw `tool_end` 与 raw Tool lifecycle 一并在 EventStore normalization 前 fail-closed。
+
+图片任务的 GUI media projection 只消费 `item.completed` 中 completed `ThreadItemPayload::Tool`：tool identity 来自 typed call/name，任务 owner facts 来自 `item.metadata`，结构化响应来自 `ToolOutput.structured_content`。只有 `normalized_status=succeeded` 且图片拥有可校验 sidecar reference 时才生成 final media content part；pending、非 terminal、失败、无 sidecar 或 raw Tool event 必须 fail closed。异步 worker 的最终结果继续由 media task store read owner enrich，不得把“任务创建完成”误报为“图片生成完成”。
 
 ### 6.4 领域与基础设施组
 
@@ -188,22 +208,30 @@ model-visible definition
 Renderer
   -> Electron preload / Desktop Host
   -> app_server_handle_json_lines
-  -> App Server JSON-RPC initialize + agentSession/*
+  -> App Server JSON-RPC initialize + current Thread/Turn commands
   -> RuntimeCore / agent-runtime
   -> model-provider and tool-runtime
   -> RuntimeEvent
   -> ProjectionStore / thread-store
-  -> agentSession/read + notifications + evidence/export
+  -> canonical Thread/Turn/Item read model + notifications + evidence/export
   -> Renderer projection / GUI
 ```
 
 Codex app-server 的核心约束在 Lime 中保持不变：先初始化连接；以 Thread 开始或恢复会话；以 Turn 驱动一次执行；以 Item 和 notification 报告过程；以明确 terminal turn 状态结束；从持久化 read model 恢复历史。任何 UI、Plugin 或桌面入口都必须进入这条主链。
 
+canonical read edge 使用 `thread/read`、`thread/list`、`thread/turns/list` 与 `thread/items/list`，由 App Server handler 直接查询 `ThreadStore` 并返回 Thread/Turn/ThreadItem DTO 和 store-owned opaque cursor，不经过 AgentSession fallback。`thread/list.includeArchived=false` 只返回 active thread，`true` 返回 active 与 archived thread；过滤和 cursor 顺序必须由 store 在同一查询边界完成。携带单一 `threadId` 的 read method 由 protocol catalog 声明 Thread scope + shared-read access；App Server request serialization 必须消费该 metadata，不能在 handler、client 或 GUI 另建并发策略。`agentSession/read` 只允许作为迁移期 presentation adapter，store 错误必须显式失败；退出条件是 S5 GUI consumer 全量切到 canonical read edge。
+
 ### 7.1 事件与完成态
 
+- canonical live event 的 current contract 是 `CanonicalThreadEventNotification::{Thread, Turn, Item}`，只携带完整、可校验的 canonical entity。Rust/TypeScript client 必须优先解码该事件，GUI 与后续 package 只能向 typed event + read model 收敛。
+- 现阶段 canonical event 仍通过既有 App Server JSON-RPC notification envelope 传输；envelope 中的 raw `event`、`typedEvent` 和 legacy lifecycle DTO 属于 `deprecated` 迁移面，不是第二事实源，不得新增 consumer、字段推断或业务逻辑。
+- 非 Thread 领域通知只能通过集中 allowlist 绕过 canonical sequence gate。当前允许 provider diagnostic、`runtime.status` 与 `image_task.presentation.generated/created/parameters.required`；它们只承载诊断或媒体任务展示，不得表达或修补 Thread/Turn/Item lifecycle。未知 raw event 与 raw Thread lifecycle 必须继续 fail-closed。
+- 只有 production producer 全量发出 canonical entity、package/Renderer consumer 全量迁移、负向守卫覆盖旧 surface 后，S6 才能删除 raw lifecycle envelope；在此之前每个 slice 必须记录剩余 producer/consumer，不能把 optional canonical field 当作完成证据。
 - `turn.completed`、失败、取消和中断是产品一等终态。
 - 工具、审批、消息和产物是 Item/RuntimeEvent 的可投影活动，不是 renderer 私有日志。
 - `request_user_input`/approval 由 session/turn scoped pending state 承接，不能建立进程全局单例。
+- deprecated raw `action.required` 边界只能透传 runtime `data.availableDecisions`，不得在 App Server 或 Renderer 固定补一套按钮列表；退出条件仍是 GUI 全量消费 canonical Item/server request。
+- canonical event log 的 gap、regression、equal-sequence divergence、malformed/unterminated tail 必须在 App Server repair 边界 fail-closed；只有可审计的尾部损坏允许按 `last_valid_offset` 截断并重建 ProjectionStore。
 - Evidence、replay、analysis、review 与 GUI 从 App Server `evidence/export`、`agentSession/*/export`、read model 和 notification 消费同一事实源。
 
 ### 7.2 Plugin、Skills 与 MCP
@@ -227,8 +255,9 @@ gateway 构造它；`threadClient` 只负责转发、通知路由与 read-model 
 | `hostOptions` | dead / deleted | 不在 current turn 协议中；不得作为宿主扩展、provider route、tool policy、workspace、session context 或任意 runtime JSON escape hatch 恢复。 |
 
 前端不会持有或修补 Thread/Turn/Item 真相。输入发送后，用户消息、流式增量、终态、
-工具活动和历史恢复均从 App Server notification 与 `agentSession/read` 的 read model
-投影到 UI；固定 timeout、renderer cache 或 host payload 不能合成完成态。
+工具活动和历史恢复均从 App Server notification 与 canonical Thread read model 投影到 UI；
+`agentSession/read` 仅是迁移期 presentation adapter，固定 timeout、renderer cache 或 host payload
+不能合成完成态。
 
 一次跨层命令改动必须同时更新：
 

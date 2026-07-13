@@ -2,11 +2,11 @@ use super::base_item;
 use super::compact_json;
 use super::event_metadata;
 use super::StoredSession;
+use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload, ToolOutput};
 use app_server_protocol::AgentEvent;
 use runtime_core::runtime_media_part_from_reference;
 use runtime_core::RuntimeMediaPartInput;
 use serde_json::json;
-use serde_json::Map;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -41,33 +41,47 @@ pub(super) fn upsert_from_event(
 }
 
 fn item_from_event(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
-    let payload = tool_payload(event)?;
-    let metadata = tool_result_metadata(payload)?;
-    if !is_image_task_result(payload, metadata) {
+    let tool = completed_tool(event)?;
+    let metadata = &tool.metadata;
+    let response = structured_response(&tool.output);
+    let record = object_field(metadata, &["record"])
+        .or_else(|| response.and_then(|value| object_field(value, &["record"])))?;
+    if !is_image_task_result(&tool.name, metadata, response, record) {
         return None;
     }
 
-    let record = metadata.get("record")?;
     let record_with_result;
     let record = if record.get("result").is_some() {
         record
-    } else if let Some(result) = metadata.get("result").filter(|value| value.is_object()) {
+    } else if let Some(result) = object_field(metadata, &["result"])
+        .or_else(|| response.and_then(|value| object_field(value, &["result"])))
+    {
         record_with_result = record_with_result_field(record, result);
         &record_with_result
     } else {
         record
     };
-    let task_id = task_id(metadata, record)?;
+    let task_id = task_id(metadata, response, record)?;
     let task_type = string_field(metadata, &["task_type", "taskType"])
+        .or_else(|| response.and_then(|value| string_field(value, &["task_type", "taskType"])))
         .or_else(|| string_field(record, &["task_type", "taskType"]))
         .unwrap_or_else(|| "image_generate".to_string());
     let normalized_status = string_field(
         metadata,
         &["normalized_status", "normalizedStatus", "status"],
     )
-    .or_else(|| string_field(record, &["normalized_status", "normalizedStatus", "status"]))
-    .unwrap_or_else(|| "succeeded".to_string());
-    let artifact_path = string_field(metadata, &["artifact_path", "artifactPath"]);
+    .or_else(|| {
+        response.and_then(|value| {
+            string_field(value, &["normalized_status", "normalizedStatus", "status"])
+        })
+    })
+    .or_else(|| string_field(record, &["normalized_status", "normalizedStatus", "status"]))?;
+    if normalized_status != "succeeded" {
+        return None;
+    }
+    let artifact_path = string_field(metadata, &["artifact_path", "artifactPath"]).or_else(|| {
+        response.and_then(|value| string_field(value, &["artifact_path", "artifactPath"]))
+    });
     let item = item_from_task_record_with_source(
         stored,
         MediaTaskRecordProjectionInput {
@@ -83,7 +97,7 @@ fn item_from_event(stored: &StoredSession, event: &AgentEvent) -> Option<Value> 
         },
         EVENT_OWNER_FACTS_SOURCE,
         Some(event),
-        Some(payload),
+        Some((&tool.call_id, &tool.name)),
     )?;
     Some(item)
 }
@@ -100,7 +114,7 @@ fn item_from_task_record_with_source(
     input: MediaTaskRecordProjectionInput<'_>,
     source: &str,
     source_event: Option<&AgentEvent>,
-    tool_payload: Option<&Value>,
+    tool_identity: Option<(&str, &str)>,
 ) -> Option<Value> {
     if input.task_type != "image_generate" {
         return None;
@@ -148,7 +162,7 @@ fn item_from_task_record_with_source(
     let metadata = item_metadata(
         &event,
         source,
-        tool_payload,
+        tool_identity,
         input.record,
         input.task_id,
         input.task_type,
@@ -170,27 +184,37 @@ fn item_from_task_record_with_source(
     ))
 }
 
-fn tool_payload(event: &AgentEvent) -> Option<&Value> {
-    match event.event_type.as_str() {
-        "tool.result" => Some(&event.payload),
-        "item.completed" => {
-            let item = event.payload.get("item").unwrap_or(&event.payload);
-            let payload = item.get("payload").unwrap_or(item);
-            if item_kind(item, payload).as_deref() == Some("tool_call") {
-                Some(payload)
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
+struct CompletedTool {
+    metadata: Value,
+    call_id: String,
+    name: String,
+    output: ToolOutput,
 }
 
-fn tool_result_metadata(payload: &Value) -> Option<&Value> {
-    payload
-        .get("result")
-        .and_then(|result| result.get("metadata"))
-        .or_else(|| payload.get("metadata"))
+fn completed_tool(event: &AgentEvent) -> Option<CompletedTool> {
+    if event.event_type != "item.completed" {
+        return None;
+    }
+    let item = serde_json::from_value::<ThreadItem>(event.payload.get("item")?.clone()).ok()?;
+    if item.status != ItemStatus::Completed {
+        return None;
+    }
+    let ThreadItemPayload::Tool {
+        call_id,
+        name,
+        output: Some(output),
+        ..
+    } = item.payload
+    else {
+        return None;
+    };
+
+    Some(CompletedTool {
+        metadata: item.metadata,
+        call_id,
+        name,
+        output,
+    })
 }
 
 fn record_with_result_field(record: &Value, result: &Value) -> Value {
@@ -201,16 +225,26 @@ fn record_with_result_field(record: &Value, result: &Value) -> Value {
     value
 }
 
-fn is_image_task_result(payload: &Value, metadata: &Value) -> bool {
-    let tool_name = string_field(payload, &["toolName", "tool_name", "name"]);
-    if tool_name.as_deref() == Some(IMAGE_TASK_TOOL_NAME) {
+fn structured_response(output: &ToolOutput) -> Option<&Value> {
+    let content = output.structured_content.as_ref()?.as_object()?;
+    content
+        .get("response")
+        .filter(|value| value.is_object())
+        .or_else(|| Some(output.structured_content.as_ref()?))
+}
+
+fn is_image_task_result(
+    tool_name: &str,
+    metadata: &Value,
+    response: Option<&Value>,
+    record: &Value,
+) -> bool {
+    if tool_name == IMAGE_TASK_TOOL_NAME {
         return true;
     }
-    let task_type = string_field(metadata, &["task_type", "taskType"]).or_else(|| {
-        metadata
-            .get("record")
-            .and_then(|record| string_field(record, &["task_type", "taskType"]))
-    });
+    let task_type = string_field(metadata, &["task_type", "taskType"])
+        .or_else(|| response.and_then(|value| string_field(value, &["task_type", "taskType"])))
+        .or_else(|| string_field(record, &["task_type", "taskType"]));
     task_type.as_deref() == Some("image_generate")
 }
 
@@ -273,15 +307,22 @@ fn infer_image_mime_type(value: &str) -> Option<String> {
     None
 }
 
-fn task_id(metadata: &Value, record: &Value) -> Option<String> {
+fn task_id(metadata: &Value, response: Option<&Value>, record: &Value) -> Option<String> {
     string_field(metadata, &["task_id", "taskId", "id"])
+        .or_else(|| response.and_then(|value| string_field(value, &["task_id", "taskId", "id"])))
         .or_else(|| string_field(record, &["task_id", "taskId", "id"]))
+}
+
+fn object_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a Value> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find(|value| value.is_object())
 }
 
 fn item_metadata(
     event: &AgentEvent,
     source: &str,
-    payload: Option<&Value>,
+    tool_identity: Option<(&str, &str)>,
     record: &Value,
     task_id: &str,
     task_type: &str,
@@ -299,45 +340,14 @@ fn item_metadata(
     if let Some(artifact_path) = artifact_path {
         object.insert("artifact_path".to_string(), json!(artifact_path));
     }
-    if let Some(payload) = payload {
-        copy_string_field(
-            object,
-            "tool_call_id",
-            payload,
-            &["toolCallId", "tool_call_id"],
-        );
-        copy_string_field(
-            object,
-            "tool_name",
-            payload,
-            &["toolName", "tool_name", "name"],
-        );
+    if let Some((call_id, name)) = tool_identity {
+        object.insert("tool_call_id".to_string(), json!(call_id));
+        object.insert("tool_name".to_string(), json!(name));
     }
     if let Some(result) = record.get("result").cloned() {
         object.insert("media_task_result".to_string(), result);
     }
     Value::Object(object.clone())
-}
-
-fn copy_string_field(
-    target: &mut Map<String, Value>,
-    target_key: &str,
-    source: &Value,
-    keys: &[&str],
-) {
-    if let Some(value) = string_field(source, keys) {
-        target.insert(target_key.to_string(), Value::String(value));
-    }
-}
-
-fn item_kind(item: &Value, payload: &Value) -> Option<String> {
-    string_field(payload, &["type", "kind"])
-        .or_else(|| string_field(item, &["type", "kind"]))
-        .map(|value| value.trim().to_ascii_lowercase())
-        .and_then(|value| match value.as_str() {
-            "toolcall" | "tool_call" => Some("tool_call".to_string()),
-            _ => None,
-        })
 }
 
 fn non_inline_string_field(value: &Value, keys: &[&str]) -> Option<String> {
@@ -372,6 +382,7 @@ fn is_inline_media_uri(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_protocol::{ItemId, ItemKind, SessionId, ThreadId, TurnId};
     use app_server_protocol::AgentSession;
     use app_server_protocol::AgentSessionStatus;
 
@@ -395,53 +406,90 @@ mod tests {
         }
     }
 
-    fn tool_result_event(payload: Value) -> AgentEvent {
+    fn canonical_tool_event(
+        item_status: ItemStatus,
+        normalized_status: &str,
+        record: Value,
+    ) -> AgentEvent {
+        let payload = ThreadItemPayload::Tool {
+            call_id: "tool-image-1".to_string(),
+            name: IMAGE_TASK_TOOL_NAME.to_string(),
+            arguments: Vec::new(),
+            output: Some(ToolOutput {
+                text: Some("image task finished".to_string()),
+                structured_content: Some(json!({
+                    "response": {
+                        "success": normalized_status == "succeeded",
+                        "task_id": "task-image-1",
+                        "task_type": "image_generate",
+                        "normalized_status": normalized_status,
+                        "record": record,
+                    }
+                })),
+                ..ToolOutput::default()
+            }),
+        };
+        let item = ThreadItem {
+            session_id: SessionId::new("session-1"),
+            thread_id: ThreadId::new("thread-1"),
+            turn_id: TurnId::new("turn-1"),
+            item_id: ItemId::new("tool-image-1"),
+            sequence: 7,
+            ordinal: 7,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            completed_at_ms: item_status.is_terminal().then_some(2),
+            kind: ItemKind::Tool,
+            status: item_status,
+            payload,
+            metadata: json!({
+                "task_id": "task-image-1",
+                "task_type": "image_generate",
+                "normalized_status": normalized_status,
+                "artifact_path": ".lime/tasks/image_generate/task-image-1.json",
+            }),
+        };
         AgentEvent {
             event_id: "evt-tool-image-result".to_string(),
             sequence: 7,
             session_id: "session-1".to_string(),
             thread_id: Some("thread-1".to_string()),
             turn_id: Some("turn-1".to_string()),
-            event_type: "tool.result".to_string(),
+            event_type: "item.completed".to_string(),
             timestamp: "2026-07-07T00:00:01.000Z".to_string(),
-            payload,
+            payload: json!({"item": item}),
         }
     }
 
-    #[test]
-    fn image_task_tool_result_projects_sidecar_owner_facts_to_media_content_part() {
-        let stored = stored_session(vec![tool_result_event(json!({
-            "toolCallId": "tool-image-1",
-            "toolName": IMAGE_TASK_TOOL_NAME,
+    fn image_record_with_sidecar() -> Value {
+        json!({
+            "task_type": "image_generate",
             "result": {
-                "success": true,
-                "metadata": {
-                    "task_id": "task-image-1",
-                    "task_type": "image_generate",
-                    "normalized_status": "succeeded",
-                    "artifact_path": ".lime/tasks/image_generate/task-image-1.json",
-                    "record": {
-                        "task_type": "image_generate",
-                        "result": {
-                            "images": [{
-                                "url": "data:image/png;base64,ZmFrZQ==",
-                                "caption": "青柠封面图",
-                                "sidecarRef": {
-                                    "ref": "sidecar://media/image-1",
-                                    "kind": "media",
-                                    "relativePath": "sessions/session-1/media/image-1.png",
-                                    "bytes": 4,
-                                    "sha256": "sha256:abcd",
-                                    "contentStatus": "available",
-                                    "uri": "sidecar://media/image-1",
-                                    "mimeType": "image/png"
-                                }
-                            }]
-                        }
+                "images": [{
+                    "url": "data:image/png;base64,ZmFrZQ==",
+                    "caption": "青柠封面图",
+                    "sidecarRef": {
+                        "ref": "sidecar://media/image-1",
+                        "kind": "media",
+                        "relativePath": "sessions/session-1/media/image-1.png",
+                        "bytes": 4,
+                        "sha256": "sha256:abcd",
+                        "contentStatus": "available",
+                        "uri": "sidecar://media/image-1",
+                        "mimeType": "image/png"
                     }
-                }
+                }]
             }
-        }))]);
+        })
+    }
+
+    #[test]
+    fn completed_image_tool_projects_typed_sidecar_and_owner_facts() {
+        let stored = stored_session(vec![canonical_tool_event(
+            ItemStatus::Completed,
+            "succeeded",
+            image_record_with_sidecar(),
+        )]);
 
         let mut items = HashMap::new();
         upsert_from_event(&stored, &stored.events[0], &mut items);
@@ -468,6 +516,7 @@ mod tests {
             .is_none());
         assert_eq!(item["metadata"]["source"], "media_task_result_owner_facts");
         assert_eq!(item["metadata"]["tool_call_id"], "tool-image-1");
+        assert_eq!(item["metadata"]["tool_name"], IMAGE_TASK_TOOL_NAME);
 
         let projected = super::super::thread_items_from_events(&stored);
         assert!(projected.iter().any(|item| {
@@ -480,27 +529,114 @@ mod tests {
     }
 
     #[test]
-    fn image_task_tool_result_without_sidecar_ref_does_not_project_media_part() {
-        let stored = stored_session(vec![tool_result_event(json!({
-            "toolName": IMAGE_TASK_TOOL_NAME,
-            "result": {
-                "metadata": {
-                    "task_id": "task-image-1",
-                    "task_type": "image_generate",
-                    "record": {
-                        "result": {
-                            "images": [{
-                                "url": "https://example.test/image.png"
-                            }]
-                        }
-                    }
+    fn completed_image_tool_without_sidecar_does_not_project_media_part() {
+        let stored = stored_session(vec![canonical_tool_event(
+            ItemStatus::Completed,
+            "succeeded",
+            json!({
+                "task_type": "image_generate",
+                "result": {
+                    "images": [{"url": "https://example.test/image.png"}]
                 }
-            }
-        }))]);
+            }),
+        )]);
 
         let mut items = HashMap::new();
         upsert_from_event(&stored, &stored.events[0], &mut items);
 
         assert!(items.is_empty());
+    }
+
+    #[test]
+    fn non_terminal_or_pending_image_tool_does_not_project_final_media() {
+        let events = [
+            canonical_tool_event(
+                ItemStatus::InProgress,
+                "succeeded",
+                image_record_with_sidecar(),
+            ),
+            canonical_tool_event(
+                ItemStatus::Completed,
+                "pending",
+                image_record_with_sidecar(),
+            ),
+        ];
+
+        for event in events {
+            let stored = stored_session(vec![event]);
+            let mut items = HashMap::new();
+            upsert_from_event(&stored, &stored.events[0], &mut items);
+            assert!(items.is_empty());
+        }
+    }
+
+    #[test]
+    fn retired_raw_tool_result_does_not_project_media() {
+        let stored = stored_session(vec![AgentEvent {
+            event_id: "raw-tool-result".to_string(),
+            sequence: 7,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: "tool.result".to_string(),
+            timestamp: "2026-07-07T00:00:01.000Z".to_string(),
+            payload: json!({
+                "toolCallId": "tool-image-1",
+                "toolName": IMAGE_TASK_TOOL_NAME,
+                "result": {
+                    "metadata": {
+                        "task_id": "task-image-1",
+                        "task_type": "image_generate",
+                        "normalized_status": "succeeded",
+                        "record": image_record_with_sidecar(),
+                    }
+                }
+            }),
+        }]);
+
+        let mut items = HashMap::new();
+        upsert_from_event(&stored, &stored.events[0], &mut items);
+
+        assert!(items.is_empty());
+        assert!(super::super::thread_items_from_events(&stored).is_empty());
+    }
+
+    #[test]
+    fn materializer_keeps_current_tool_side_channels_and_rejects_retired_classes() {
+        let event_types = [
+            "tool.progress",
+            "tool.output.delta",
+            "tool.started",
+            "tool.result",
+            "tool.failed",
+            "tool.completed",
+            "tool.input.delta",
+        ];
+        let events = event_types
+            .iter()
+            .enumerate()
+            .map(|(index, event_type)| AgentEvent {
+                event_id: format!("tool-event-{index}"),
+                sequence: index as u64 + 1,
+                session_id: "session-1".to_string(),
+                thread_id: Some("thread-1".to_string()),
+                turn_id: Some("turn-1".to_string()),
+                event_type: (*event_type).to_string(),
+                timestamp: format!("2026-07-07T00:00:{index:02}Z"),
+                payload: json!({
+                    "toolCallId": format!("call-{index}"),
+                    "toolName": "rg",
+                }),
+            })
+            .collect::<Vec<_>>();
+
+        let changes = super::super::materialize_events(&events, "session-1", "thread-1")
+            .expect("materialize current tool side channels");
+
+        assert_eq!(changes.changed_items.len(), 2);
+        assert!(changes
+            .changed_items
+            .iter()
+            .all(|item| matches!(item.payload, ThreadItemPayload::Tool { .. })));
     }
 }

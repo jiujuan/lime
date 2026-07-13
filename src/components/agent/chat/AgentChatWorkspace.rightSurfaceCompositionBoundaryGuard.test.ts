@@ -16,10 +16,34 @@ describe("AgentChatWorkspace right surface composition boundary", () => {
       ),
       "utf8",
     );
+    const sceneCompositionSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneComposition.tsx",
+      ),
+      "utf8",
+    );
 
     expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceSceneComposition({",
+    );
+    expect(workspaceSource).not.toContain(
       "useWorkspaceRightSurfaceCompositionRuntime({",
     );
+    expect(sceneCompositionSource).toContain(
+      "useWorkspaceRightSurfaceCompositionRuntime({",
+    );
+    expect(sceneCompositionSource).toContain(
+      "useWorkspaceRightSurfaceExpertPanelRuntime(expertPanel)",
+    );
+    expect(sceneCompositionSource).toContain(
+      "useWorkspaceHomeRecoveryRuntime(homeRecovery)",
+    );
+    expect(sceneCompositionSource).toContain(
+      "renderWorkspaceFileManagerSidebarRuntime(fileManager)",
+    );
+    expect(sceneCompositionSource).toContain("<WorkspaceShellScene");
+    expect(sceneCompositionSource.split("\n").length).toBeLessThan(180);
     expect(ownerSource.split("\n").length).toBeLessThan(160);
     for (const retiredWorkspaceRightSurfaceGlue of [
       "useWorkspaceArticleEditorImageSlotRuntime(",

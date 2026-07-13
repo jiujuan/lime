@@ -26,6 +26,48 @@ impl RuntimeEventSink for TestSink {
     }
 }
 
+fn canonical_tool_item(events: &[RuntimeEvent], event_type: &str) -> ThreadItem {
+    let event = events
+        .iter()
+        .find(|event| event.event_type == event_type)
+        .unwrap_or_else(|| panic!("missing {event_type}"));
+    serde_json::from_value(event.payload["item"].clone())
+        .unwrap_or_else(|error| panic!("invalid canonical tool item: {error}"))
+}
+
+fn tool_argument<'a>(item: &'a ThreadItem, name: &str) -> Option<&'a str> {
+    let ThreadItemPayload::Tool { arguments, .. } = &item.payload else {
+        return None;
+    };
+    arguments
+        .iter()
+        .find(|argument| argument.name == name)
+        .map(|argument| argument.value.as_str())
+}
+
+fn assert_matching_tool_identity(started: &ThreadItem, completed: &ThreadItem) {
+    assert_eq!(started.item_id, completed.item_id);
+    assert_eq!(started.session_id, completed.session_id);
+    assert_eq!(started.thread_id, completed.thread_id);
+    assert_eq!(started.turn_id, completed.turn_id);
+    let ThreadItemPayload::Tool {
+        call_id: started_call_id,
+        ..
+    } = &started.payload
+    else {
+        panic!("started item must be a tool");
+    };
+    let ThreadItemPayload::Tool {
+        call_id: completed_call_id,
+        ..
+    } = &completed.payload
+    else {
+        panic!("completed item must be a tool");
+    };
+    assert_eq!(started.item_id.as_str(), started_call_id);
+    assert_eq!(started_call_id, completed_call_id);
+}
+
 #[derive(Default)]
 struct ImageCommandTestDataSource {
     params: Mutex<Vec<MediaTaskArtifactImageCreateParams>>,
@@ -153,10 +195,9 @@ async fn image_command_workflow_fails_closed_without_runtime_presentation() {
             .collect::<Vec<_>>(),
         vec![
             "runtime.status",
-            "tool.started",
-            "tool.args",
+            "item.started",
             "image_task.create_failed",
-            "tool.failed",
+            "item.completed",
             "turn.completed"
         ]
     );
@@ -247,14 +288,35 @@ async fn image_command_workflow_fails_closed_without_runtime_presentation() {
         create_tasks_failed.payload["status"].as_str(),
         Some("failed")
     );
-    let tool_started = sink
-        .events
-        .iter()
-        .find(|event| event.event_type == "tool.started")
-        .expect("tool started");
+    let tool_started = canonical_tool_item(&sink.events, "item.started");
+    let tool_completed = canonical_tool_item(&sink.events, "item.completed");
+    assert_matching_tool_identity(&tool_started, &tool_completed);
+    assert_eq!(tool_started.status, ItemStatus::InProgress);
+    assert_eq!(tool_completed.status, ItemStatus::Failed);
+    assert_eq!(tool_started.session_id.as_str(), "session-1");
+    assert_eq!(tool_started.thread_id.as_str(), "thread-1");
+    assert_eq!(tool_started.turn_id.as_str(), "turn-1");
     assert_eq!(
-        tool_started.payload["toolName"].as_str(),
-        Some(LIME_CREATE_IMAGE_TASK_TOOL_NAME)
+        tool_argument(&tool_started, "prompt"),
+        Some("画一张广州夏天的图")
+    );
+    let ThreadItemPayload::Tool { name, output, .. } = &tool_completed.payload else {
+        panic!("completed item must be a tool");
+    };
+    assert_eq!(name, LIME_CREATE_IMAGE_TASK_TOOL_NAME);
+    assert_eq!(
+        output.as_ref().and_then(|output| output.error.as_deref()),
+        Some(
+            "Image command presentation generation skipped because runtime backend is unavailable"
+        )
+    );
+    assert!(output
+        .as_ref()
+        .and_then(|output| output.duration_ms)
+        .is_some());
+    assert_eq!(
+        tool_completed.metadata["reasonCode"].as_str(),
+        Some("image_task_presentation_runtime_unavailable")
     );
     let turn_completed = sink
         .events
@@ -320,7 +382,8 @@ async fn image_command_workflow_uses_existing_presentation_without_runtime_backe
     assert!(event_types.contains(&"message.delta"));
     assert!(event_types.contains(&"image_task.presentation.generated"));
     assert!(event_types.contains(&"image_task.created"));
-    assert!(event_types.contains(&"tool.result"));
+    assert!(event_types.contains(&"item.started"));
+    assert!(event_types.contains(&"item.completed"));
     assert!(event_types.contains(&"turn.completed"));
     assert!(
         !event_types.contains(&"image_task.presentation.unavailable"),
@@ -330,6 +393,28 @@ async fn image_command_workflow_uses_existing_presentation_without_runtime_backe
         !event_types.contains(&"image_task.create_failed"),
         "existing presentation should not fail closed before task creation"
     );
+    let tool_started = canonical_tool_item(&sink.events, "item.started");
+    let tool_completed = canonical_tool_item(&sink.events, "item.completed");
+    assert_matching_tool_identity(&tool_started, &tool_completed);
+    assert_eq!(tool_started.status, ItemStatus::InProgress);
+    assert_eq!(tool_completed.status, ItemStatus::Completed);
+    assert_eq!(
+        tool_argument(&tool_started, "prompt"),
+        Some("画一张广州夏天的图")
+    );
+    let ThreadItemPayload::Tool { output, .. } = &tool_completed.payload else {
+        panic!("completed item must be a tool");
+    };
+    let output = output.as_ref().expect("completed tool output");
+    assert!(output.error.is_none());
+    assert!(output.duration_ms.is_some());
+    assert!(output
+        .text
+        .as_deref()
+        .is_some_and(|text| text.contains("image_generate")));
+    assert!(output.structured_content.is_some());
+    assert_eq!(tool_completed.metadata["success"].as_bool(), Some(true));
+    assert!(tool_completed.metadata["task_id"].is_string());
     let presentation_event = sink
         .events
         .iter()
@@ -351,8 +436,7 @@ async fn image_command_workflow_uses_existing_presentation_without_runtime_backe
 }
 
 #[tokio::test]
-async fn image_command_workflow_runtime_presentation_unavailable_emits_tool_started_before_failed()
-{
+async fn image_command_workflow_runtime_presentation_unavailable_emits_canonical_tool_lifecycle() {
     let workspace = TempDir::new().expect("workspace");
     let request = request_with_metadata(json!({
         "harness": {
@@ -397,15 +481,15 @@ async fn image_command_workflow_runtime_presentation_unavailable_emits_tool_star
         .collect::<Vec<_>>();
     let tool_started_index = event_types
         .iter()
-        .position(|event_type| *event_type == "tool.started")
-        .expect("tool.started");
-    let tool_failed_index = event_types
+        .position(|event_type| *event_type == "item.started")
+        .expect("item.started");
+    let tool_completed_index = event_types
         .iter()
-        .position(|event_type| *event_type == "tool.failed")
-        .expect("tool.failed");
+        .position(|event_type| *event_type == "item.completed")
+        .expect("item.completed");
     assert!(
-        tool_started_index < tool_failed_index,
-        "tool.failed must have a matching started event first"
+        tool_started_index < tool_completed_index,
+        "terminal tool item must have a matching started item first"
     );
     assert!(event_types.contains(&"image_task.create_failed"));
     assert!(
@@ -433,7 +517,7 @@ async fn image_command_workflow_runtime_presentation_unavailable_emits_tool_star
 }
 
 #[test]
-fn image_command_create_failed_emits_tool_started_before_failed() {
+fn image_command_create_failed_emits_canonical_tool_lifecycle() {
     let workspace = TempDir::new().expect("workspace");
     let request = request_with_metadata(json!({
         "harness": {
@@ -476,15 +560,15 @@ fn image_command_create_failed_emits_tool_started_before_failed() {
         .collect::<Vec<_>>();
     let tool_started_index = event_types
         .iter()
-        .position(|event_type| *event_type == "tool.started")
-        .expect("tool.started");
-    let tool_failed_index = event_types
+        .position(|event_type| *event_type == "item.started")
+        .expect("item.started");
+    let tool_completed_index = event_types
         .iter()
-        .position(|event_type| *event_type == "tool.failed")
-        .expect("tool.failed");
+        .position(|event_type| *event_type == "item.completed")
+        .expect("item.completed");
     assert!(
-        tool_started_index < tool_failed_index,
-        "tool.failed must have a matching started event first"
+        tool_started_index < tool_completed_index,
+        "terminal tool item must have a matching started item first"
     );
     assert!(event_types.contains(&"image_task.create_failed"));
     let failure_event = sink
@@ -496,20 +580,44 @@ fn image_command_create_failed_emits_tool_started_before_failed() {
         failure_event.payload["reasonCode"].as_str(),
         Some("image_task_create_failed")
     );
-    let tool_failed = sink
-        .events
-        .iter()
-        .find(|event| event.event_type == "tool.failed")
-        .expect("tool failed");
+    let tool_started = canonical_tool_item(&sink.events, "item.started");
+    let tool_completed = canonical_tool_item(&sink.events, "item.completed");
+    assert_matching_tool_identity(&tool_started, &tool_completed);
+    assert_eq!(tool_completed.status, ItemStatus::Failed);
     assert_eq!(
-        tool_failed.payload["failureCategory"].as_str(),
+        tool_argument(&tool_completed, "prompt"),
+        Some("画一张广州夏天的图")
+    );
+    assert_eq!(
+        tool_completed.metadata["reasonCode"].as_str(),
         Some("image_task_create_failed")
     );
+    let ThreadItemPayload::Tool { output, .. } = &tool_completed.payload else {
+        panic!("completed item must be a tool");
+    };
+    assert_eq!(
+        output.as_ref().and_then(|output| output.error.as_deref()),
+        Some("fixture create failure")
+    );
+    assert!(output
+        .as_ref()
+        .and_then(|output| output.duration_ms)
+        .is_some());
 }
 
 #[test]
 fn image_command_task_created_turn_completed_includes_presentation_usage() {
     let mut sink = TestSink::default();
+    let scope = RuntimeSessionScope {
+        session_id: "session-usage".to_string(),
+        thread_id: "thread-usage".to_string(),
+        turn_id: "turn-usage".to_string(),
+        workspace_id: None,
+    };
+    let params = MediaTaskArtifactImageCreateParams {
+        prompt: "从花城汇看广州塔的春天照片".to_string(),
+        ..MediaTaskArtifactImageCreateParams::default()
+    };
     let usage = AgentTokenUsage {
         input_tokens: 31_000,
         output_tokens: 0,
@@ -533,8 +641,15 @@ fn image_command_task_created_turn_completed_includes_presentation_usage() {
         ..MediaTaskArtifactResponse::default()
     };
 
-    emit_task_created("tool-image-usage", response.clone(), &mut sink)
-        .expect("task created events");
+    emit_task_created(
+        &scope,
+        &tool_call_id(&scope),
+        &params,
+        1,
+        response.clone(),
+        &mut sink,
+    )
+    .expect("task created events");
     emit_task_created_turn_completed(
         response.task_id.as_str(),
         response.artifact_path.as_str(),

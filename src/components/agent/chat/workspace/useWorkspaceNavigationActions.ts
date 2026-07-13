@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
-import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
+import { requestChatHostOpenPath } from "../host/chatHostCapabilities";
 import { updateProject as updateProjectById } from "@/lib/api/project";
 import { notifyProjectRuntimeAgentsGuide } from "@/components/workspace/services/runtimeAgentsGuideService";
 import type {
@@ -93,7 +93,10 @@ export function useWorkspaceNavigationActions({
   );
 
   const handleSelectWorkspaceDirectory = useCallback(async () => {
-    const newPath = await openDialog({ directory: true, multiple: false });
+    const newPath = await requestChatHostOpenPath({
+      directory: true,
+      multiple: false,
+    });
     if (!newPath) {
       return;
     }

@@ -68,12 +68,31 @@ async fn runtime_backend_image_command_short_circuits_before_chat_model_routing(
         event_types,
         vec![
             "runtime.status",
-            "tool.started",
-            "tool.args",
+            "item.started",
             "image_task.create_failed",
-            "tool.failed",
+            "item.completed",
             "turn.completed"
         ]
+    );
+    let started_item = &sink
+        .events
+        .iter()
+        .find(|event| event.event_type == "item.started")
+        .expect("canonical tool item started")
+        .payload["item"];
+    let completed_item = &sink
+        .events
+        .iter()
+        .find(|event| event.event_type == "item.completed")
+        .expect("canonical tool item completed")
+        .payload["item"];
+    assert_eq!(started_item["itemId"], completed_item["itemId"]);
+    assert_eq!(started_item["itemId"], started_item["payload"]["call_id"]);
+    assert_eq!(started_item["status"], "inProgress");
+    assert_eq!(completed_item["status"], "failed");
+    assert_eq!(
+        completed_item["payload"]["output"]["error"].as_str(),
+        Some("App Server image command workflow requires AppDataSource")
     );
     assert_eq!(
         sink.events
@@ -106,12 +125,12 @@ async fn runtime_backend_image_command_short_circuits_before_chat_model_routing(
 }
 
 #[tokio::test]
-async fn respond_action_emits_resolved_fact_with_action_identity() {
+async fn respond_action_without_pending_waiter_fails_closed() {
     let backend = RuntimeBackend::new();
     let request = request_for_test("hello", None, None);
     let mut sink = TestRuntimeEventSink::default();
 
-    ExecutionBackend::respond_action(
+    let error = ExecutionBackend::respond_action(
         &backend,
         ActionRespondRequest {
             host: RuntimeHostContext::default(),
@@ -130,21 +149,19 @@ async fn respond_action_emits_resolved_fact_with_action_identity() {
                 thread_id: Some("thread-1".to_string()),
                 turn_id: Some("turn-1".to_string()),
             }),
+            pending_action_descriptor: None,
         },
         &mut sink,
     )
     .await
-    .expect("denied ask_user action should emit a resolved fact");
+    .expect_err("missing pending waiter must fail closed");
 
-    assert_eq!(sink.events.len(), 1);
-    let event = &sink.events[0];
-    assert_eq!(event.event_type, "action.resolved");
-    assert_eq!(event.payload["requestId"].as_str(), Some("ask-1"));
-    assert_eq!(event.payload["actionId"].as_str(), Some("ask-1"));
-    assert_eq!(event.payload["actionType"].as_str(), Some("ask_user"));
-    assert_eq!(event.payload["confirmed"].as_bool(), Some(false));
-    assert!(event.payload.get("decision").is_none());
-    assert_eq!(event.payload["scope"]["turnId"].as_str(), Some("turn-1"));
+    assert!(matches!(
+        error,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_descriptor_invalid" && request_id == "ask-1"
+    ));
+    assert!(sink.events.is_empty());
 }
 
 #[tokio::test]
@@ -208,6 +225,28 @@ async fn runtime_backend_mcp_autostart_failure_does_not_block_turn_preflight() {
     let app_data_source: Arc<dyn AppDataSource> = data_source.clone();
 
     mcp_bridges::start_enabled_lime_mcp_servers_if_needed(app_data_source).await;
+
+    assert_eq!(data_source.started_servers(), vec!["context7".to_string()]);
+}
+
+#[tokio::test]
+async fn runtime_backend_mcp_autostart_timeout_does_not_block_turn_preflight() {
+    let data_source = Arc::new(
+        TestMcpAutostartDataSource::new(vec![json!({
+            "name": "context7",
+            "enabled_lime": true,
+            "is_running": false
+        })])
+        .with_hanging_start(),
+    );
+    let app_data_source: Arc<dyn AppDataSource> = data_source.clone();
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        mcp_bridges::start_enabled_lime_mcp_servers_if_needed(app_data_source),
+    )
+    .await
+    .expect("MCP auto-start timeout should return control to turn preflight");
 
     assert_eq!(data_source.started_servers(), vec!["context7".to_string()]);
 }

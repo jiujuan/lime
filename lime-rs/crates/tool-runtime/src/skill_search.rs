@@ -254,17 +254,22 @@ fn skill_search_output(
 fn skill_search_result_value(result: &AgentSkillSearchResult) -> Value {
     let skill = &result.skill;
     json!({
+        "skillId": skill.stable_id(),
         "name": skill.name,
-        "displayName": skill.display_name,
+        "displayName": skill.interface.display_name,
         "description": skill.description,
         "scope": skill.scope.as_label(),
-        "source": skill.source,
+        "source": skill.source.as_label(),
+        "authority": skill.authority.as_label(),
+        "enabled": skill.enabled,
         "directory": path_string(&skill.directory),
         "skillFilePath": path_string(&skill.skill_file_path),
         "locator": skill_locator_value(skill),
-        "declaredTools": skill.allowed_tools,
-        "argumentHint": skill.argument_hint,
-        "whenToUse": skill.when_to_use,
+        "declaredTools": skill.capabilities,
+        "dependencies": skill.dependencies,
+        "executionMode": skill.interface.execution_mode,
+        "argumentHint": skill.interface.argument_hint,
+        "whenToUse": skill.policy.when_to_use,
         "score": result.score,
         "matchedTerms": result.matched_terms,
         "reason": result.reason,
@@ -273,7 +278,9 @@ fn skill_search_result_value(result: &AgentSkillSearchResult) -> Value {
 
 fn skill_locator_value(skill: &AgentSkillMetadata) -> Value {
     json!({
-        "source": skill.scope.as_label(),
+        "skillId": skill.stable_id(),
+        "source": skill.source.as_label(),
+        "authority": skill.authority.as_label(),
         "name": skill.name,
         "directory": path_string(&skill.directory),
         "skillFilePath": path_string(&skill.skill_file_path),
@@ -356,6 +363,8 @@ mod tests {
             .iter()
             .find(|result| result["name"] == "research")
             .expect("research result should exist");
+        assert_eq!(research["skillId"], "project:research");
+        assert_eq!(research["locator"]["skillId"], "project:research");
         assert_eq!(research["displayName"], "Research");
         let expected_skill_file = skills_root
             .join("research")

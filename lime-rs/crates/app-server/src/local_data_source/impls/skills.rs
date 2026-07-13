@@ -17,7 +17,7 @@ impl SkillAppDataSource for LocalAppDataSource {
     async fn list_management_skills(
         &self,
         params: SkillManagementListParams,
-    ) -> Result<SkillListResponse, RuntimeCoreError> {
+    ) -> Result<SkillManagementListResponse, RuntimeCoreError> {
         skills::management::list_management_skills(self.db.clone(), params)
             .await
             .map_err(data_error)

@@ -1,6 +1,7 @@
 use super::sidecar_store::{
     session_scoped_relative_path, SidecarRef, SidecarStore, SidecarWriteRequest,
 };
+use agent_protocol::{ThreadItem, ThreadItemPayload};
 use app_server_protocol::{AgentEvent, ArtifactContentStatus, ArtifactSummary};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -154,7 +155,7 @@ pub(super) fn normalize_large_output_payload(
     event_type: &str,
     payload: Value,
 ) -> NormalizedOutputPayload {
-    if !is_tool_terminal_event(event_type) {
+    if !is_tool_terminal_payload(event_type, &payload) {
         return NormalizedOutputPayload {
             payload,
             output_blob: None,
@@ -167,7 +168,13 @@ pub(super) fn normalize_large_output_payload(
             output_blob: None,
         };
     };
-    let Some(output) = largest_tool_output(&object) else {
+    let Some(canonical_tool) = canonical_terminal_tool_from_map(&object) else {
+        return NormalizedOutputPayload {
+            payload: Value::Object(object),
+            output_blob: None,
+        };
+    };
+    let Some(output) = canonical_tool.text.clone() else {
         return NormalizedOutputPayload {
             payload: Value::Object(object),
             output_blob: None,
@@ -181,18 +188,13 @@ pub(super) fn normalize_large_output_payload(
     }
 
     let preview = truncate_chars(&output, TOOL_OUTPUT_PREVIEW_CHARS);
-    let output_ref = output_ref_from_payload(&object).unwrap_or_else(|| {
-        let tool_call_id = payload_string_from_map(
-            &object,
-            &["toolCallId", "tool_call_id", "toolId", "tool_id"],
-        )
-        .unwrap_or_else(|| "tool".to_string());
+    let output_ref = canonical_tool.output_ref.clone().unwrap_or_else(|| {
         stable_scope_id(
             "output:runtime",
-            format!("{tool_call_id}:{output}").as_str(),
+            format!("{}:{output}", canonical_tool.call_id).as_str(),
         )
     });
-    let ref_ids = merge_ref_ids(&object, &output_ref);
+    let ref_ids = vec![output_ref.clone()];
 
     object.insert("outputRef".to_string(), Value::String(output_ref.clone()));
     object.insert(
@@ -205,9 +207,7 @@ pub(super) fn normalize_large_output_payload(
         "outputBytes".to_string(),
         Value::Number(serde_json::Number::from(output.len())),
     );
-    truncate_output_field(&mut object, &preview);
-    truncate_result_output_field(&mut object, &preview);
-    truncate_runtime_event_result_output_field(&mut object, &preview);
+    normalize_canonical_tool_output(&mut object, &preview, &output_ref);
 
     let byte_len = output.len();
     NormalizedOutputPayload {
@@ -223,6 +223,7 @@ pub(super) fn normalize_large_output_payload(
 }
 
 pub(super) fn record_output_blob(event: &AgentEvent, output: OutputBlob) -> OutputBlobRecord {
+    let canonical_tool_call_id = canonical_terminal_tool(&event.payload).map(|tool| tool.call_id);
     OutputBlobRecord {
         output_ref: output.output_ref,
         ref_ids: output.ref_ids,
@@ -234,10 +235,7 @@ pub(super) fn record_output_blob(event: &AgentEvent, output: OutputBlob) -> Outp
         turn_id: event.turn_id.clone(),
         event_type: event.event_type.clone(),
         timestamp: event.timestamp.clone(),
-        tool_call_id: payload_string(
-            &event.payload,
-            &["toolCallId", "tool_call_id", "toolId", "tool_id"],
-        ),
+        tool_call_id: canonical_tool_call_id,
         command_id: payload_string(&event.payload, &["commandId", "command_id"]),
         snapshot_file: None,
         sidecar_ref: None,
@@ -329,7 +327,7 @@ pub(super) fn output_record_from_read_model(value: &Value) -> Option<OutputBlobR
     Some(OutputBlobRecord {
         output_ref,
         ref_ids: string_array_field(value, &["refIds", "ref_ids"]),
-        content: payload_string(value, &["content", "output"]),
+        content: payload_string(value, &["content"]),
         preview: payload_string(value, &["preview", "outputPreview", "output_preview"])
             .unwrap_or_default(),
         byte_len: value
@@ -346,7 +344,7 @@ pub(super) fn output_record_from_read_model(value: &Value) -> Option<OutputBlobR
             .unwrap_or_default(),
         turn_id: payload_string(value, &["turnId", "turn_id"]),
         event_type: payload_string(value, &["eventType", "event_type"])
-            .unwrap_or_else(|| "tool.result".to_string()),
+            .unwrap_or_else(|| "item.completed".to_string()),
         timestamp: payload_string(value, &["timestamp", "updatedAt", "updated_at"])
             .unwrap_or_default(),
         tool_call_id: payload_string(value, &["toolCallId", "tool_call_id"]),
@@ -357,12 +355,31 @@ pub(super) fn output_record_from_read_model(value: &Value) -> Option<OutputBlobR
 }
 
 pub(super) fn output_record_from_event(event: &AgentEvent) -> Option<OutputBlobRecord> {
-    if !is_tool_terminal_event(event.event_type.as_str()) {
+    if !is_tool_terminal_payload(event.event_type.as_str(), &event.payload) {
         return None;
     }
     let Value::Object(mut value) = event.payload.clone() else {
         return None;
     };
+    if let Some(tool) = canonical_terminal_tool_from_map(&value) {
+        value.insert("toolCallId".to_string(), Value::String(tool.call_id));
+        if let Some(output_ref) = tool.output_ref {
+            value
+                .entry("outputRef".to_string())
+                .or_insert_with(|| Value::String(output_ref.clone()));
+            value
+                .entry("refIds".to_string())
+                .or_insert_with(|| Value::Array(vec![Value::String(output_ref)]));
+        }
+        if let Some(text) = tool.text {
+            value
+                .entry("outputPreview".to_string())
+                .or_insert_with(|| Value::String(text.clone()));
+            value
+                .entry("outputBytes".to_string())
+                .or_insert_with(|| Value::Number(serde_json::Number::from(text.len())));
+        }
+    }
     value.insert("eventId".to_string(), Value::String(event.event_id.clone()));
     value.insert(
         "sequence".to_string(),
@@ -469,100 +486,71 @@ fn output_sidecar_ref_from_value(value: &Value) -> Option<SidecarRef> {
         .and_then(|value| serde_json::from_value(value).ok())
 }
 
-fn is_tool_terminal_event(event_type: &str) -> bool {
-    matches!(event_type, "tool.result" | "tool.failed" | "tool_end")
+#[derive(Debug, Clone)]
+struct CanonicalTerminalTool {
+    call_id: String,
+    text: Option<String>,
+    output_ref: Option<String>,
 }
 
-fn largest_tool_output(object: &Map<String, Value>) -> Option<String> {
-    [
-        payload_string_from_map(object, &["output"]),
-        nested_result_output(object),
-        nested_runtime_event_result_output(object),
-    ]
-    .into_iter()
-    .flatten()
-    .max_by_key(|value| value.chars().count())
+fn is_tool_terminal_payload(event_type: &str, payload: &Value) -> bool {
+    event_type == "item.completed" && canonical_terminal_tool(payload).is_some()
 }
 
-fn output_ref_from_payload(object: &Map<String, Value>) -> Option<String> {
-    payload_string_from_map(
-        object,
-        &[
-            "outputRef",
-            "output_ref",
-            "contentRef",
-            "content_ref",
-            "refId",
-            "ref_id",
-        ],
-    )
-    .or_else(|| {
-        object
-            .get("refIds")
-            .or_else(|| object.get("ref_ids"))
-            .and_then(Value::as_array)
-            .and_then(|values| values.iter().find_map(value_string))
+fn canonical_terminal_tool(payload: &Value) -> Option<CanonicalTerminalTool> {
+    canonical_terminal_tool_from_map(payload.as_object()?)
+}
+
+fn canonical_terminal_tool_from_map(object: &Map<String, Value>) -> Option<CanonicalTerminalTool> {
+    let item = serde_json::from_value::<ThreadItem>(object.get("item")?.clone()).ok()?;
+    if !item.status.is_terminal() {
+        return None;
+    }
+    let (call_id, output) = match item.payload {
+        ThreadItemPayload::Tool {
+            call_id, output, ..
+        }
+        | ThreadItemPayload::McpToolCall {
+            call_id, output, ..
+        }
+        | ThreadItemPayload::CollabAgentToolCall {
+            call_id, output, ..
+        } => (call_id, output),
+        _ => return None,
+    };
+    let output = output?;
+    Some(CanonicalTerminalTool {
+        call_id,
+        text: output.text,
+        output_ref: output.output_ref,
     })
 }
 
-fn merge_ref_ids(object: &Map<String, Value>, output_ref: &str) -> Vec<String> {
-    let mut refs = object
-        .get("refIds")
-        .or_else(|| object.get("ref_ids"))
-        .and_then(Value::as_array)
-        .map(|values| values.iter().filter_map(value_string).collect::<Vec<_>>())
-        .unwrap_or_default();
-    refs.push(output_ref.to_string());
-    dedupe_non_empty(refs)
-}
-
-fn truncate_output_field(object: &mut Map<String, Value>, preview: &str) {
-    if object.get("output").and_then(Value::as_str).is_some() {
-        object.insert("output".to_string(), Value::String(preview.to_string()));
+fn normalize_canonical_tool_output(
+    object: &mut Map<String, Value>,
+    preview: &str,
+    output_ref: &str,
+) {
+    if let Some(item) = object.get_mut("item") {
+        normalize_canonical_item_output(item, preview, output_ref);
     }
 }
 
-fn truncate_result_output_field(object: &mut Map<String, Value>, preview: &str) {
-    let Some(result) = object.get_mut("result").and_then(Value::as_object_mut) else {
-        return;
-    };
-    if result.get("output").and_then(Value::as_str).is_some() {
-        result.insert("output".to_string(), Value::String(preview.to_string()));
-    }
-}
-
-fn truncate_runtime_event_result_output_field(object: &mut Map<String, Value>, preview: &str) {
-    let Some(runtime_event) = object
-        .get_mut("runtimeEvent")
+fn normalize_canonical_item_output(item: &mut Value, preview: &str, output_ref: &str) {
+    let Some(output) = item
+        .get_mut("payload")
+        .and_then(Value::as_object_mut)
+        .and_then(|payload| payload.get_mut("output"))
         .and_then(Value::as_object_mut)
     else {
         return;
     };
-    let Some(result) = runtime_event
-        .get_mut("result")
-        .and_then(Value::as_object_mut)
-    else {
-        return;
-    };
-    if result.get("output").and_then(Value::as_str).is_some() {
-        result.insert("output".to_string(), Value::String(preview.to_string()));
-    }
-}
-
-fn nested_result_output(object: &Map<String, Value>) -> Option<String> {
-    object
-        .get("result")
-        .and_then(Value::as_object)
-        .and_then(|result| payload_string_from_map(result, &["output"]))
-}
-
-fn nested_runtime_event_result_output(object: &Map<String, Value>) -> Option<String> {
-    object
-        .get("runtimeEvent")
-        .and_then(Value::as_object)
-        .and_then(|runtime_event| runtime_event.get("result"))
-        .and_then(Value::as_object)
-        .and_then(|result| payload_string_from_map(result, &["output"]))
+    output.insert("text".to_string(), Value::String(preview.to_string()));
+    output.insert(
+        "outputRef".to_string(),
+        Value::String(output_ref.to_string()),
+    );
+    output.insert("truncated".to_string(), Value::Bool(true));
 }
 
 fn payload_string_from_map(object: &Map<String, Value>, keys: &[&str]) -> Option<String> {
@@ -603,18 +591,6 @@ fn value_string(value: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn dedupe_non_empty(values: Vec<String>) -> Vec<String> {
-    let mut deduped = Vec::new();
-    for value in values {
-        let value = value.trim();
-        if value.is_empty() || deduped.iter().any(|existing| existing == value) {
-            continue;
-        }
-        deduped.push(value.to_string());
-    }
-    deduped
-}
-
 fn truncate_chars(value: &str, max_chars: usize) -> String {
     let mut output = String::new();
     for (index, character) in value.chars().enumerate() {
@@ -641,65 +617,4 @@ fn stable_hash(value: &str) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn normalizes_large_tool_result_output_to_refs_and_preview() {
-        let output = "x".repeat(MAX_INLINE_TOOL_OUTPUT_CHARS + 1);
-        let normalized = normalize_large_output_payload(
-            "tool.result",
-            json!({
-                "toolCallId": "tool-large",
-                "result": {
-                    "success": true,
-                    "output": output,
-                },
-                "runtimeEvent": {
-                    "type": "tool_end",
-                    "tool_id": "tool-large",
-                    "result": {
-                        "success": true,
-                        "output": "x".repeat(MAX_INLINE_TOOL_OUTPUT_CHARS + 1),
-                    }
-                }
-            }),
-        );
-        let payload = normalized.payload;
-
-        let object = payload.as_object().expect("payload object");
-        assert!(object
-            .get("outputRef")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("output:runtime:")));
-        assert_eq!(
-            object.get("outputTruncated").and_then(Value::as_bool),
-            Some(true)
-        );
-        assert!(object
-            .get("outputPreview")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.chars().count() <= TOOL_OUTPUT_PREVIEW_CHARS + 1));
-        assert!(object
-            .get("result")
-            .and_then(Value::as_object)
-            .and_then(|result| result.get("output"))
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.chars().count() <= TOOL_OUTPUT_PREVIEW_CHARS + 1));
-        assert!(object
-            .get("runtimeEvent")
-            .and_then(Value::as_object)
-            .and_then(|runtime_event| runtime_event.get("result"))
-            .and_then(Value::as_object)
-            .and_then(|result| result.get("output"))
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.chars().count() <= TOOL_OUTPUT_PREVIEW_CHARS + 1));
-        let output_blob = normalized.output_blob.expect("output blob");
-        assert_eq!(output_blob.content, output);
-        assert!(output_blob
-            .ref_ids
-            .iter()
-            .any(|value| value == &output_blob.output_ref));
-    }
-}
+mod tests;

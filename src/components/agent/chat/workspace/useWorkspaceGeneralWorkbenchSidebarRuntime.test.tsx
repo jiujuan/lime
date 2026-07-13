@@ -11,6 +11,7 @@ import { useWorkspaceGeneralWorkbenchSidebarRuntime } from "./useWorkspaceGenera
 const mockExecutionRunGet = vi.hoisted(() => vi.fn());
 const mockExecutionRunListGeneralWorkbenchHistory = vi.hoisted(() => vi.fn());
 const mockSkillGetDetail = vi.hoisted(() => vi.fn());
+const mockListExecutableSkills = vi.hoisted(() => vi.fn());
 const mockReadWorkflow = vi.hoisted(() => vi.fn());
 const mockCancelWorkflow = vi.hoisted(() => vi.fn());
 const mockRetryWorkflow = vi.hoisted(() => vi.fn());
@@ -25,6 +26,17 @@ vi.mock("@/lib/api/executionRun", () => ({
 vi.mock("@/lib/api/skill-execution", () => ({
   skillExecutionApi: {
     getSkillDetail: mockSkillGetDetail,
+    listExecutableSkills: mockListExecutableSkills,
+  },
+  resolveExecutableSkillId: (
+    skills: Array<{ skill_id: string; name: string }>,
+    reference: string,
+  ) => {
+    const exact = skills.filter((skill) => skill.skill_id === reference);
+    if (exact.length === 1) return exact[0].skill_id;
+    if (exact.length > 1) return null;
+    const byName = skills.filter((skill) => skill.name === reference);
+    return byName.length === 1 ? byName[0].skill_id : null;
   },
 }));
 
@@ -129,6 +141,7 @@ describe("useWorkspaceGeneralWorkbenchSidebarRuntime", () => {
     });
     mockExecutionRunGet.mockResolvedValue(null);
     mockSkillGetDetail.mockResolvedValue(null);
+    mockListExecutableSkills.mockResolvedValue([]);
     mockReadWorkflow.mockResolvedValue({
       result: {
         sessionId: "session-general-1",
@@ -193,11 +206,114 @@ describe("useWorkspaceGeneralWorkbenchSidebarRuntime", () => {
         await Promise.resolve();
       });
 
-      expect(mockExecutionRunListGeneralWorkbenchHistory).not.toHaveBeenCalled();
+      expect(
+        mockExecutionRunListGeneralWorkbenchHistory,
+      ).not.toHaveBeenCalled();
       expect(mockSkillGetDetail).not.toHaveBeenCalled();
+      expect(mockListExecutableSkills).not.toHaveBeenCalled();
       expect(mockReadWorkflow).not.toHaveBeenCalled();
       expect(harness.getValue().generalWorkbenchHistoryLoading).toBe(false);
       expect(harness.getValue().generalWorkbenchHistoryHasMore).toBe(false);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("应通过 typed catalog 将唯一 Skill name 解析为 stable id 后读取详情", async () => {
+    mockListExecutableSkills.mockResolvedValue([
+      { skill_id: "project:content_post", name: "content_post" },
+    ]);
+    const harness = mountHook({
+      sidebarVisible: true,
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          content: "/content_post 写一篇新品稿",
+          timestamp: new Date("2026-03-24T14:00:00.000Z"),
+        },
+      ],
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockListExecutableSkills).toHaveBeenCalledTimes(1);
+      expect(mockSkillGetDetail).toHaveBeenCalledWith("project:content_post");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("后端 source_ref 已是 stable id 时应精确读取同一 Skill", async () => {
+    mockListExecutableSkills.mockResolvedValue([
+      { skill_id: "user:content_post", name: "content_post" },
+      { skill_id: "project:content_post", name: "content_post" },
+    ]);
+    const harness = mountHook({
+      sidebarVisible: true,
+      themeWorkbenchBackendRunState: {
+        run_state: "auto_running",
+        current_gate_key: "write_mode",
+        queue_items: [
+          {
+            run_id: "run-stable-skill",
+            title: "生成社媒初稿",
+            gate_key: "write_mode",
+            status: "running",
+            source: "skill",
+            source_ref: "user:content_post",
+            started_at: "2026-03-24T14:00:00.000Z",
+          },
+        ],
+        latest_terminal: null,
+        updated_at: "2026-03-24T14:00:01.000Z",
+      } as GeneralWorkbenchRunState,
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockSkillGetDetail).toHaveBeenCalledWith("user:content_post");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("Skill name 跨 scope 重名时应 fail closed", async () => {
+    mockListExecutableSkills.mockResolvedValue([
+      { skill_id: "project:content_post", name: "content_post" },
+      { skill_id: "user:content_post", name: "content_post" },
+    ]);
+    const harness = mountHook({
+      sidebarVisible: true,
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          content: "/content_post 写一篇新品稿",
+          timestamp: new Date("2026-03-24T14:00:00.000Z"),
+        },
+      ],
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockListExecutableSkills).toHaveBeenCalledTimes(1);
+      expect(mockSkillGetDetail).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }

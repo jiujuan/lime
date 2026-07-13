@@ -881,7 +881,66 @@ impl RuntimeCore {
         params: AgentSessionActionRespondParams,
         host: RuntimeHostContext,
     ) -> Result<RuntimeCoreOutput<AgentSessionActionRespondResponse>, RuntimeCoreError> {
-        let decision = match params.action_type {
+        self.ensure_current_session_hydrated(&params.session_id)
+            .await?;
+        let request_id = params.request_id.clone();
+        let (session, turn_snapshot, pending_action_identity, pending_action_descriptor) = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get(&params.session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
+            let pending_action_identity =
+                pending_action_descriptor::identity_from_stored_session(stored, &request_id)
+                    .ok_or_else(|| RuntimeCoreError::ActionResponse {
+                        code: "action_not_found".to_string(),
+                        request_id: request_id.clone(),
+                    })?;
+            let turn_id = pending_action_identity
+                .scope
+                .turn_id
+                .as_deref()
+                .expect("pending action identity always has complete scope");
+            let turn = stored
+                .turns
+                .iter()
+                .find(|turn| turn.turn_id == turn_id)
+                .expect("pending action identity always references a waiting turn")
+                .clone();
+            let pending_action_descriptor =
+                pending_action_descriptor::from_stored_session(stored, &request_id);
+            (
+                stored.session.clone(),
+                Some(turn),
+                pending_action_identity,
+                pending_action_descriptor,
+            )
+        };
+        if params.action_type != pending_action_identity.action_type {
+            return Err(RuntimeCoreError::ActionResponse {
+                code: "action_type_mismatch".to_string(),
+                request_id,
+            });
+        }
+        match params.action_scope.as_ref() {
+            None => {
+                return Err(RuntimeCoreError::ActionResponse {
+                    code: "action_scope_missing".to_string(),
+                    request_id,
+                });
+            }
+            Some(scope) if scope != &pending_action_identity.scope => {
+                return Err(RuntimeCoreError::ActionResponse {
+                    code: "action_scope_mismatch".to_string(),
+                    request_id,
+                });
+            }
+            Some(_) => {}
+        }
+        let decision = match pending_action_identity.action_type {
             AgentSessionActionType::ToolConfirmation => Some(params.decision.ok_or_else(|| {
                 RuntimeCoreError::Backend(
                     "tool_confirmation action/respond requires decision".to_string(),
@@ -902,17 +961,7 @@ impl RuntimeCore {
             .unwrap_or_else(|| params.confirmed.unwrap_or(false));
         let workflow_resume_audit_events =
             workflow_resume_audit_events_from_action_response(&params, decision, confirmed);
-        let action_turn_id = params
-            .action_scope
-            .as_ref()
-            .and_then(|scope| scope.turn_id.clone());
-        let request_id = params.request_id.clone();
-        let (
-            session,
-            turn_snapshot,
-            cancel_denied_permission_action,
-            app_server_owned_permission_action,
-        ) = {
+        let (cancel_denied_permission_action, app_server_owned_permission_action) = {
             let state = self
                 .state
                 .lock()
@@ -921,17 +970,6 @@ impl RuntimeCore {
                 .sessions
                 .get(&params.session_id)
                 .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
-            let turn = match action_turn_id.as_deref() {
-                Some(turn_id) => Some(
-                    stored
-                        .turns
-                        .iter()
-                        .find(|turn| turn.turn_id == turn_id)
-                        .ok_or_else(|| RuntimeCoreError::TurnNotActive(turn_id.to_string()))?
-                        .clone(),
-                ),
-                None => None,
-            };
             if let Some(decision) = decision {
                 super::approval_decision_contract::validate_tool_confirmation_decision(
                     stored,
@@ -951,8 +989,6 @@ impl RuntimeCore {
                     &request_id,
                 );
             (
-                stored.session.clone(),
-                turn,
                 cancel_denied_permission_action,
                 app_server_owned_permission_action,
             )
@@ -998,6 +1034,7 @@ impl RuntimeCore {
             metadata: params.metadata,
             event_name: params.event_name,
             action_scope: params.action_scope,
+            pending_action_descriptor,
         };
         if app_server_owned_permission_action {
             sink.emit(app_server_action_resolved_event(&action_response))?;

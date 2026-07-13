@@ -1,17 +1,19 @@
 import {
   agentSessionEventNotification,
+  canonicalThreadEventNotification,
   type AgentEvent,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
   type AgentSessionEventNotification,
-  type AgentSessionReadParams,
-  type AgentSessionReadResponse,
+  type ThreadReadParams,
+  type ThreadReadResponse,
   type AgentSessionToolInventoryReadParams,
   type AgentSessionToolInventoryReadResponse,
   type AgentSessionTurnCancelParams,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
   type AgentSessionTurnStartResponse,
+  type CanonicalThreadEventNotification,
   type EvidenceExportParams,
   type EvidenceExportResponse,
   type JsonRpcMessage,
@@ -28,6 +30,11 @@ export type AgentEventListener = (
 ) => void | Promise<void>;
 
 export type AgentRuntimeEventListener = AgentEventListener;
+
+export type CanonicalThreadEventListener = (
+  event: CanonicalThreadEventNotification,
+  notification: AgentSessionEventNotification,
+) => void | Promise<void>;
 
 export type AgentRuntimeClientOptions = {
   request?: AppServerRequestOptions;
@@ -51,9 +58,9 @@ export interface AgentRuntimeClient {
     options?: AppServerRequestOptions,
   ): Promise<AppServerRequestResult<AgentSessionActionRespondResponse>>;
   readThread(
-    params: AgentSessionReadParams,
+    params: ThreadReadParams,
     options?: AppServerRequestOptions,
-  ): Promise<AppServerRequestResult<AgentSessionReadResponse>>;
+  ): Promise<AppServerRequestResult<ThreadReadResponse>>;
   readToolInventory(
     params?: AgentSessionToolInventoryReadParams,
     options?: AppServerRequestOptions,
@@ -65,12 +72,16 @@ export interface AgentRuntimeClient {
   subscribeEvents(
     listener: AgentRuntimeEventListener,
   ): AgentRuntimeClientSubscription;
+  subscribeCanonicalEvents(
+    listener: CanonicalThreadEventListener,
+  ): AgentRuntimeClientSubscription;
   dispatchEvent(message: JsonRpcMessage): Promise<boolean>;
   nextEvent(timeoutMs?: number): Promise<AgentSessionEventNotification>;
 }
 
 export class AppServerAgentEventRouter {
   #listeners = new Set<AgentEventListener>();
+  #canonicalListeners = new Set<CanonicalThreadEventListener>();
 
   subscribe(listener: AgentEventListener): () => void {
     this.#listeners.add(listener);
@@ -79,10 +90,23 @@ export class AppServerAgentEventRouter {
     };
   }
 
+  subscribeCanonical(listener: CanonicalThreadEventListener): () => void {
+    this.#canonicalListeners.add(listener);
+    return () => {
+      this.#canonicalListeners.delete(listener);
+    };
+  }
+
   async dispatch(message: JsonRpcMessage): Promise<boolean> {
     const notification = agentSessionEventNotification(message);
     if (!notification) {
       return false;
+    }
+    const canonicalEvent = canonicalThreadEventNotification(notification);
+    if (canonicalEvent) {
+      for (const listener of this.#canonicalListeners) {
+        await listener(canonicalEvent, notification);
+      }
     }
     for (const listener of this.#listeners) {
       await listener(notification.params.event, notification);
@@ -136,10 +160,10 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
   }
 
   async readThread(
-    params: AgentSessionReadParams,
+    params: ThreadReadParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<AgentSessionReadResponse>> {
-    return await this.connection.readSession(
+  ): Promise<AppServerRequestResult<ThreadReadResponse>> {
+    return await this.connection.readThread(
       params,
       mergeRequestOptions(this.defaultRequestOptions, options),
     );
@@ -169,6 +193,13 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     listener: AgentRuntimeEventListener,
   ): AgentRuntimeClientSubscription {
     const unsubscribe = this.eventRouter.subscribe(listener);
+    return { unsubscribe };
+  }
+
+  subscribeCanonicalEvents(
+    listener: CanonicalThreadEventListener,
+  ): AgentRuntimeClientSubscription {
+    const unsubscribe = this.eventRouter.subscribeCanonical(listener);
     return { unsubscribe };
   }
 

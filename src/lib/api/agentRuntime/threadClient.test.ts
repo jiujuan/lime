@@ -3,6 +3,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   AppServerRpcError,
   type AppServerAgentSessionTurnStartParams,
+  type AppServerJsonRpcNotification,
   type AppServerRequestResult,
 } from "@/lib/api/appServer";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
@@ -18,10 +19,10 @@ import {
 import {
   appServerActionRespondParamsFromRequest,
   createThreadClient,
-  projectAppServerAgentEventPayload,
   type AgentRuntimeAppServerClient,
   type AgentRuntimeLifecycleClient,
 } from "./threadClient";
+import { projectRawAppServerAgentEventPayloadForTests as projectAppServerAgentEventPayload } from "./appServerEventPayloadProjection";
 import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AgentRuntimeFileCheckpointDetail,
@@ -88,6 +89,246 @@ function turnStartParams({
   };
 }
 
+function canonicalAgentEventMock(
+  defaultValue: unknown,
+): ReturnType<typeof vi.fn> {
+  const mock = vi.fn();
+  const resolve = mock.mockResolvedValue.bind(mock);
+  const resolveOnce = mock.mockResolvedValueOnce.bind(mock);
+  mock.mockResolvedValue = ((value: unknown) =>
+    resolve(withCanonicalAgentEvents(value))) as typeof mock.mockResolvedValue;
+  mock.mockResolvedValueOnce = ((value: unknown) =>
+    resolveOnce(
+      withCanonicalAgentEvents(value),
+    )) as typeof mock.mockResolvedValueOnce;
+  return mock.mockResolvedValue(defaultValue);
+}
+
+function withCanonicalAgentEvents(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(withCanonicalAgentEventNotification);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.notifications)) {
+    return value;
+  }
+  return {
+    ...record,
+    notifications: record.notifications.map(
+      withCanonicalAgentEventNotification,
+    ),
+  };
+}
+
+function withCanonicalAgentEventNotification(notification: unknown): unknown {
+  if (!notification || typeof notification !== "object") {
+    return notification;
+  }
+  const record = notification as Record<string, unknown>;
+  const params = record.params as Record<string, unknown> | undefined;
+  const event = params?.event as Record<string, unknown> | undefined;
+  if (
+    record.method !== APP_SERVER_METHOD_AGENT_SESSION_EVENT ||
+    !params ||
+    !event ||
+    params.canonicalEvent
+  ) {
+    return notification;
+  }
+  const canonicalEvent = canonicalEventFromRawFixture(event);
+  if (!canonicalEvent) {
+    return notification;
+  }
+  return {
+    ...record,
+    params: {
+      ...params,
+      canonicalEvent,
+    },
+  };
+}
+
+function canonicalEventFromRawFixture(event: Record<string, unknown>): unknown {
+  const eventId = String(event.eventId ?? event.event_id ?? "event");
+  const sequence = Number(event.sequence ?? 0);
+  const sessionId = String(event.sessionId ?? event.session_id ?? "session");
+  const threadId = String(event.threadId ?? event.thread_id ?? "thread");
+  const turnId = String(event.turnId ?? event.turn_id ?? "turn");
+  const eventType = String(event.type ?? "runtime.event");
+  const timestamp = String(event.timestamp ?? "1970-01-01T00:00:00.000Z");
+  const updatedAtMs = Date.parse(timestamp);
+  const payload =
+    event.payload && typeof event.payload === "object"
+      ? (event.payload as Record<string, unknown>)
+      : {};
+
+  if (
+    eventType.startsWith("provider.") ||
+    eventType === "runtime.status" ||
+    eventType.startsWith("image_task") ||
+    eventType.startsWith("media.read.")
+  ) {
+    return undefined;
+  }
+
+  if (eventType.startsWith("thread.")) {
+    return {
+      method: "thread/updated",
+      params: {
+        sessionId,
+        threadId,
+        status: { type: "active" },
+        createdAtMs: updatedAtMs,
+        updatedAtMs,
+        archived: false,
+      },
+    };
+  }
+
+  if (eventType.startsWith("turn.")) {
+    const status = eventType.endsWith("completed")
+      ? "completed"
+      : eventType.endsWith("failed")
+        ? "failed"
+        : eventType.endsWith("canceled") || eventType.endsWith("cancelled")
+          ? "interrupted"
+          : "inProgress";
+    return {
+      method: "turn/updated",
+      params: {
+        turnId,
+        threadId,
+        sessionId,
+        status,
+        queue: { type: "admitted" },
+        itemsView: "full",
+        items: [],
+        createdAtMs: updatedAtMs,
+        updatedAtMs,
+        ...(status === "completed" ||
+        status === "failed" ||
+        status === "interrupted"
+          ? { completedAtMs: updatedAtMs }
+          : {}),
+        ...(status === "failed"
+          ? {
+              error: {
+                message:
+                  typeof payload.message === "string"
+                    ? payload.message
+                    : "App Server turn failed",
+              },
+            }
+          : {}),
+      },
+    };
+  }
+
+  const rawItem =
+    payload.item && typeof payload.item === "object"
+      ? (payload.item as Record<string, unknown>)
+      : undefined;
+  const toolCallId = String(
+    payload.toolCallId ??
+      payload.tool_call_id ??
+      payload.toolId ??
+      payload.tool_id ??
+      eventId,
+  );
+  const actionId = String(
+    payload.actionId ??
+      payload.action_id ??
+      payload.requestId ??
+      payload.request_id ??
+      eventId,
+  );
+  const rawItemType = String(rawItem?.type ?? "");
+  const kind = eventType.startsWith("tool.")
+    ? "tool"
+    : eventType.startsWith("action.")
+      ? "approval"
+      : rawItemType === "reasoning"
+        ? "reasoning"
+        : "agentMessage";
+  const itemId = String(
+    rawItem?.id ??
+      (kind === "tool" ? toolCallId : kind === "approval" ? actionId : eventId),
+  );
+  const status =
+    eventType.endsWith("result") ||
+    eventType.endsWith("completed") ||
+    eventType.endsWith("resolved")
+      ? "completed"
+      : eventType.endsWith("failed")
+        ? "failed"
+        : eventType.endsWith("canceled") || eventType.endsWith("cancelled")
+          ? "cancelled"
+          : eventType.endsWith("required")
+            ? "pending"
+            : "inProgress";
+  const canonicalPayload =
+    kind === "tool"
+      ? {
+          type: "tool",
+          name: String(payload.toolName ?? payload.tool_name ?? "tool"),
+          output: payload.output == null ? undefined : String(payload.output),
+        }
+      : kind === "approval"
+        ? {
+            type: "approval",
+            request_id: String(
+              payload.requestId ?? payload.request_id ?? actionId,
+            ),
+            action: {
+              kind: String(
+                payload.actionType ?? payload.action_type ?? "unknown",
+              ),
+              description: String(
+                payload.prompt ?? payload.message ?? payload.reason ?? "",
+              ),
+            },
+            scope: "once",
+            ...(status === "pending"
+              ? {
+                  available_decisions: ["approved", "denied", "abort"],
+                }
+              : {
+                  decision:
+                    payload.approved === false || payload.confirmed === false
+                      ? "denied"
+                      : "approved",
+                }),
+          }
+        : kind === "reasoning"
+          ? { type: "reasoning", summary: [String(rawItem?.text ?? "")] }
+          : { type: "agentMessage", text: String(payload.text ?? "") };
+
+  return {
+    method: "item/updated",
+    params: {
+      itemId,
+      threadId,
+      turnId,
+      sessionId,
+      ordinal: sequence,
+      sequence,
+      kind,
+      status,
+      payload: canonicalPayload,
+      createdAtMs: updatedAtMs,
+      updatedAtMs,
+      ...(status === "completed" ||
+      status === "failed" ||
+      status === "cancelled"
+        ? { completedAtMs: updatedAtMs }
+        : {}),
+    },
+  };
+}
+
 function appServerClientMock(): AgentRuntimeAppServerClient {
   return {
     readSession: vi.fn().mockResolvedValue({
@@ -120,8 +361,26 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    startTurn: vi.fn().mockResolvedValue({}),
-    cancelTurn: vi.fn().mockResolvedValue({}),
+    readThread: vi.fn().mockResolvedValue({
+      id: 2,
+      result: {
+        thread: {
+          archived: false,
+          createdAtMs: 100,
+          sessionId: "session-1",
+          status: { type: "active" },
+          threadId: "thread-1",
+          turns: [],
+          turnsView: "full",
+          updatedAtMs: 200,
+        },
+      },
+      response: { id: 2, result: {} },
+      messages: [],
+      notifications: [],
+    }),
+    startTurn: canonicalAgentEventMock({}),
+    cancelTurn: canonicalAgentEventMock({}),
     replayAction: vi.fn().mockResolvedValue({
       id: 1,
       result: {
@@ -230,8 +489,8 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
-    respondAction: vi.fn().mockResolvedValue({}),
-    drainEvents: vi.fn().mockResolvedValue([]),
+    respondAction: canonicalAgentEventMock({}),
+    drainEvents: canonicalAgentEventMock([]),
     listAgentSessionFileCheckpoints: vi.fn().mockResolvedValue({
       id: 1,
       result: appServerCheckpointList,
@@ -987,14 +1246,36 @@ describe("agentRuntime threadClient", () => {
       actionType: "ask_user",
       confirmed: true,
     });
-    expect(standardRuntimeClient.readThread).toHaveBeenCalledWith({
+    expect(appServerClient.readSession).toHaveBeenCalledWith({
       sessionId: "session-1",
     });
     expect(appServerClient.startTurn).not.toHaveBeenCalled();
     expect(appServerClient.cancelTurn).not.toHaveBeenCalled();
     expect(appServerClient.respondAction).not.toHaveBeenCalled();
-    expect(appServerClient.readSession).not.toHaveBeenCalled();
+    expect(standardRuntimeClient.readThread).not.toHaveBeenCalled();
     expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("canonical thread read 应使用 hydrated threadId 和 full turns view", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createThreadClient({
+      appServerClient,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(client.readAgentRuntimeThread(" thread-1 ")).resolves.toEqual(
+      expect.objectContaining({
+        thread: expect.objectContaining({ threadId: "thread-1" }),
+      }),
+    );
+    expect(appServerClient.readThread).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      turnsView: "full",
+    });
+    expect(appServerClient.readSession).not.toHaveBeenCalled();
+    await expect(client.readAgentRuntimeThread(" ")).rejects.toThrow(
+      "threadId is required",
+    );
   });
 
   it("浏览器 DevBridge 可用时 submit 应允许进入 App Server JSON-RPC", async () => {
@@ -1007,7 +1288,11 @@ describe("agentRuntime threadClient", () => {
     });
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "整理新闻", sessionId: "session-1", eventName: "event-1" }),
+      turnStartParams({
+        text: "整理新闻",
+        sessionId: "session-1",
+        eventName: "event-1",
+      }),
     );
 
     expect(appServerClient.startTurn).toHaveBeenCalledWith({
@@ -1225,7 +1510,11 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-1" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_message-1",
+      }),
     );
 
     expect(listener).toHaveBeenCalledWith({
@@ -1308,7 +1597,11 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_reasoning-1" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_reasoning-1",
+      }),
     );
 
     expect(listener).toHaveBeenCalledWith({
@@ -1416,7 +1709,11 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_ordered" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_ordered",
+      }),
     );
 
     expect(
@@ -1630,16 +1927,20 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "验证网页搜索渲染", sessionId: "session-web-tools", eventName: "agent_stream_web_tools" }),
+      turnStartParams({
+        text: "验证网页搜索渲染",
+        sessionId: "session-web-tools",
+        eventName: "agent_stream_web_tools",
+      }),
     );
 
     expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
       "text_delta",
-      "tool_start",
-      "tool_end",
+      "item_started",
+      "item_completed",
       "item_updated",
-      "tool_start",
-      "tool_end",
+      "item_started",
+      "item_completed",
       "item_completed",
       "turn_completed",
     ]);
@@ -1710,14 +2011,18 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-orphan" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_message-orphan",
+      }),
     );
 
     expect(listener).not.toHaveBeenCalled();
     unlisten();
   });
 
-  it("App Server submit 应消费 runtime-client pipeline fan-out 后投递多个前端 stream event", async () => {
+  it("App Server submit 不应把缺少 started 的 tool terminal 合成多个前端事件", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
       id: 1,
@@ -1776,16 +2081,14 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-fanout" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_message-fanout",
+      }),
     );
 
-    expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
-      "tool_start",
-      "tool_end",
-    ]);
-    expect(listener.mock.calls.map(([event]) => event.payload.tool_id)).toEqual(
-      ["tool-fanout", "tool-fanout"],
-    );
+    expect(listener).not.toHaveBeenCalled();
     unlisten();
   });
 
@@ -1831,7 +2134,12 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-request", eventName: "agent_stream_missing-turn" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        turnId: "turn-request",
+        eventName: "agent_stream_missing-turn",
+      }),
     );
 
     expect(listener).toHaveBeenCalledWith({
@@ -1960,7 +2268,11 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-drain" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_message-drain",
+      }),
     );
 
     await vi.waitFor(() => {
@@ -2176,7 +2488,12 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-drain-ordered", eventName: "agent_stream_drain_ordered" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        turnId: "turn-drain-ordered",
+        eventName: "agent_stream_drain_ordered",
+      }),
     );
 
     await vi.waitFor(() => {
@@ -2235,7 +2552,12 @@ describe("agentRuntime threadClient", () => {
       listener,
     );
     const submitPromise = client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-pending", eventName: "agent_stream_pending" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        turnId: "turn-pending",
+        eventName: "agent_stream_pending",
+      }),
     );
 
     await vi.waitFor(() => {
@@ -2380,7 +2702,12 @@ describe("agentRuntime threadClient", () => {
       listener,
     );
     const submitPromise = client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "继续输出", sessionId: "session-1", turnId: "pending-turn-local", eventName: "agent_stream_real_turn" }),
+      turnStartParams({
+        text: "继续输出",
+        sessionId: "session-1",
+        turnId: "pending-turn-local",
+        eventName: "agent_stream_real_turn",
+      }),
     );
 
     await vi.waitFor(() => {
@@ -2502,7 +2829,12 @@ describe("agentRuntime threadClient", () => {
         listener,
       );
       const submitPromise = client.submitAgentRuntimeTurn(
-        turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-fast-first", eventName: "agent_stream_fast_first" }),
+        turnStartParams({
+          text: "生成草稿",
+          sessionId: "session-1",
+          turnId: "turn-fast-first",
+          eventName: "agent_stream_fast_first",
+        }),
       );
 
       await Promise.resolve();
@@ -2665,7 +2997,11 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-drain-completed" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_message-drain-completed",
+      }),
     );
 
     await vi.waitFor(() => {
@@ -2767,7 +3103,11 @@ describe("agentRuntime threadClient", () => {
     );
 
     await client.submitAgentRuntimeTurn(
-      turnStartParams({ text: "生成草稿", sessionId: "session-1", eventName: "agent_stream_message-drain-legacy-final-done" }),
+      turnStartParams({
+        text: "生成草稿",
+        sessionId: "session-1",
+        eventName: "agent_stream_message-drain-legacy-final-done",
+      }),
     );
 
     await vi.waitFor(() => {
@@ -2790,7 +3130,7 @@ describe("agentRuntime threadClient", () => {
 
   it("App Server submit error 前的 notification 应先投递到当前前端 stream event", async () => {
     const appServerClient = appServerClientMock();
-    const notifications = [
+    const notifications = withCanonicalAgentEvents([
       {
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         params: {
@@ -2825,7 +3165,7 @@ describe("agentRuntime threadClient", () => {
           },
         },
       },
-    ];
+    ]) as AppServerJsonRpcNotification[];
     const response = {
       id: 1,
       error: {
@@ -2853,7 +3193,12 @@ describe("agentRuntime threadClient", () => {
 
     await expect(
       client.submitAgentRuntimeTurn(
-        turnStartParams({ text: "生成草稿", sessionId: "session-1", turnId: "turn-1", eventName: "agent_stream_message-error" }),
+        turnStartParams({
+          text: "生成草稿",
+          sessionId: "session-1",
+          turnId: "turn-1",
+          eventName: "agent_stream_message-error",
+        }),
       ),
     ).rejects.toThrow("external backend crashed after partial output");
 
@@ -3495,6 +3840,18 @@ describe("agentRuntime threadClient", () => {
               },
             },
           },
+          canonicalEvent: {
+            method: "turn/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              status: "inProgress",
+              createdAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+              startedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+              updatedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+            },
+          },
         },
       }),
     ).toMatchObject({
@@ -3502,7 +3859,7 @@ describe("agentRuntime threadClient", () => {
       turn: {
         id: "turn-1",
         thread_id: "thread-1",
-        prompt_text: "整理今天的国际新闻",
+        prompt_text: "",
         status: "running",
       },
       event_id: "evt-turn-started",
@@ -4090,11 +4447,27 @@ describe("agentRuntime threadClient", () => {
             eventId: "evt-failed",
             sequence: 5,
             sessionId: "session-1",
+            threadId: "session-1",
             turnId: "turn-1",
             type: "turn.failed",
             timestamp: "2026-06-06T00:00:04.000Z",
             payload: {
               message: "standalone app-server backend is not configured",
+            },
+          },
+          canonicalEvent: {
+            method: "turn/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "session-1",
+              turnId: "turn-1",
+              status: "failed",
+              error: {
+                message: "standalone app-server backend is not configured",
+              },
+              createdAtMs: Date.parse("2026-06-06T00:00:04.000Z"),
+              completedAtMs: Date.parse("2026-06-06T00:00:04.000Z"),
+              updatedAtMs: Date.parse("2026-06-06T00:00:04.000Z"),
             },
           },
         },
@@ -4120,6 +4493,7 @@ describe("agentRuntime threadClient", () => {
             eventId: "evt-completed",
             sequence: 6,
             sessionId: "session-1",
+            threadId: "session-1",
             turnId: "turn-1",
             type: "turn.completed",
             timestamp: "2026-06-06T00:00:05.000Z",
@@ -4129,6 +4503,18 @@ describe("agentRuntime threadClient", () => {
                 inputTokens: 10,
                 outputTokens: 5,
               },
+            },
+          },
+          canonicalEvent: {
+            method: "turn/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "session-1",
+              turnId: "turn-1",
+              status: "completed",
+              createdAtMs: Date.parse("2026-06-06T00:00:05.000Z"),
+              completedAtMs: Date.parse("2026-06-06T00:00:05.000Z"),
+              updatedAtMs: Date.parse("2026-06-06T00:00:05.000Z"),
             },
           },
         },
@@ -4159,11 +4545,24 @@ describe("agentRuntime threadClient", () => {
             eventId: "evt-canceled",
             sequence: 7,
             sessionId: "session-1",
+            threadId: "session-1",
             turnId: "turn-1",
             type: "turn.canceled",
             timestamp: "2026-06-06T00:00:06.000Z",
             payload: {
               reason: "user_cancelled",
+            },
+          },
+          canonicalEvent: {
+            method: "turn/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "session-1",
+              turnId: "turn-1",
+              status: "interrupted",
+              createdAtMs: Date.parse("2026-06-06T00:00:06.000Z"),
+              completedAtMs: Date.parse("2026-06-06T00:00:06.000Z"),
+              updatedAtMs: Date.parse("2026-06-06T00:00:06.000Z"),
             },
           },
         },
@@ -4715,7 +5114,7 @@ describe("agentRuntime threadClient", () => {
 
     expect(actionRequiredPayload).toMatchObject({
       type: "action_required",
-      request_id: "approval-1",
+      request_id: "claw_request_turn_1",
       action_type: "tool_confirmation",
       tool_name: "exec_command",
       arguments: {
@@ -4730,7 +5129,7 @@ describe("agentRuntime threadClient", () => {
     });
     expect(parseAgentEvent(actionRequiredPayload)).toMatchObject({
       type: "action_required",
-      request_id: "approval-1",
+      request_id: "claw_request_turn_1",
       tool_name: "exec_command",
       arguments: {
         command: "npm test",
@@ -4763,7 +5162,7 @@ describe("agentRuntime threadClient", () => {
 
     expect(actionResolvedPayload).toMatchObject({
       type: "action_resolved",
-      request_id: "approval-1",
+      request_id: "claw_request_turn_1",
       action_type: "tool_confirmation",
       approved: true,
       feedback: "继续",
@@ -4776,7 +5175,7 @@ describe("agentRuntime threadClient", () => {
     });
     expect(parseAgentEvent(actionResolvedPayload)).toMatchObject({
       type: "action_resolved",
-      request_id: "approval-1",
+      request_id: "claw_request_turn_1",
       approved: true,
       feedback: "继续",
     });

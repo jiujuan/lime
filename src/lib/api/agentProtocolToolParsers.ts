@@ -60,6 +60,19 @@ function normalizeHookEntries(value: unknown):
   return entries.length > 0 ? entries : undefined;
 }
 
+function readActionRequestId(
+  event: Record<string, unknown>,
+  actionData: Record<string, unknown>,
+): string {
+  return (
+    pickStringField(event, "request_id", "requestId") ??
+    pickStringField(actionData, "request_id", "requestId") ??
+    pickStringField(event, "action_id", "actionId", "id") ??
+    pickStringField(actionData, "action_id", "actionId", "id") ??
+    ""
+  );
+}
+
 function parseAgentHookLifecycleEvent(
   type: string,
   event: Record<string, unknown>,
@@ -365,17 +378,7 @@ export function parseAgentToolEvent(
     case "action_required": {
       const actionData =
         (event.data as Record<string, unknown> | undefined) || {};
-      const requestId =
-        (event.action_id as string | undefined) ||
-        (event.actionId as string | undefined) ||
-        (event.requestId as string | undefined) ||
-        (actionData.action_id as string | undefined) ||
-        (actionData.actionId as string | undefined) ||
-        (actionData.requestId as string | undefined) ||
-        (actionData.id as string | undefined) ||
-        (event.request_id as string | undefined) ||
-        (actionData.request_id as string | undefined) ||
-        "";
+      const requestId = readActionRequestId(event, actionData);
       const actionType =
         (event.action_type as string | undefined) ||
         (event.actionType as string | undefined) ||
@@ -417,17 +420,7 @@ export function parseAgentToolEvent(
     case "action_resolved": {
       const actionData =
         (event.data as Record<string, unknown> | undefined) || {};
-      const requestId =
-        (event.action_id as string | undefined) ||
-        (event.actionId as string | undefined) ||
-        (event.requestId as string | undefined) ||
-        (actionData.action_id as string | undefined) ||
-        (actionData.actionId as string | undefined) ||
-        (actionData.requestId as string | undefined) ||
-        (actionData.id as string | undefined) ||
-        (event.request_id as string | undefined) ||
-        (actionData.request_id as string | undefined) ||
-        "";
+      const requestId = readActionRequestId(event, actionData);
       const actionType =
         (event.action_type as string | undefined) ||
         (actionData.action_type as string | undefined) ||

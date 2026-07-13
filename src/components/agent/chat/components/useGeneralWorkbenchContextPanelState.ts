@@ -6,7 +6,7 @@ import {
   type DragEvent,
   type RefObject,
 } from "react";
-import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
+import { requestChatHostOpenPath } from "../host/chatHostCapabilities";
 import { toast } from "sonner";
 import {
   buildGeneralWorkbenchActiveContextItems,
@@ -208,7 +208,7 @@ export function useGeneralWorkbenchContextPanelState({
     }
 
     try {
-      const selected = await openDialog({
+      const selected = await requestChatHostOpenPath({
         multiple: false,
         directory: false,
       });

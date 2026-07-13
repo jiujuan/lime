@@ -36,6 +36,10 @@ pub const METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT: &str =
     "agentSession/reviewDecisionTemplate/export";
 pub const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE: &str = "agentSession/reviewDecision/save";
 pub const METHOD_AGENT_SESSION_LIST: &str = "agentSession/list";
+pub const METHOD_THREAD_READ: &str = "thread/read";
+pub const METHOD_THREAD_LIST: &str = "thread/list";
+pub const METHOD_THREAD_TURNS_LIST: &str = "thread/turns/list";
+pub const METHOD_THREAD_ITEMS_LIST: &str = "thread/items/list";
 pub const METHOD_AGENT_SESSION_UPDATE: &str = "agentSession/update";
 pub const METHOD_AGENT_SESSION_ARCHIVE_MANY: &str = "agentSession/archiveMany";
 pub const METHOD_AGENT_SESSION_DELETE: &str = "agentSession/delete";

@@ -26,9 +26,9 @@ impl RuntimeCore {
         &self,
         params: AgentSessionReadParams,
     ) -> Result<SessionLoadContext, RuntimeCoreError> {
-        if let Some(mut context) = self.load_runtime_core_session(&params)? {
+        if let Some(mut context) = self.load_runtime_core_session(&params).await? {
             if should_prefer_projection_history_read(&context, &params) {
-                if let Some(mut projection_context) = self.load_projection_session(&params)? {
+                if let Some(mut projection_context) = self.load_projection_session(&params).await? {
                     self.enrich_session_load_context_with_media_task_results(
                         &mut projection_context,
                     )
@@ -40,7 +40,7 @@ impl RuntimeCore {
                 .await;
             return Ok(context);
         }
-        if let Some(mut context) = self.load_projection_session(&params)? {
+        if let Some(mut context) = self.load_projection_session(&params).await? {
             self.enrich_session_load_context_with_media_task_results(&mut context)
                 .await;
             return Ok(context);
@@ -53,7 +53,7 @@ impl RuntimeCore {
         Err(RuntimeCoreError::SessionNotFound(params.session_id))
     }
 
-    fn load_runtime_core_session(
+    async fn load_runtime_core_session(
         &self,
         params: &AgentSessionReadParams,
     ) -> Result<Option<SessionLoadContext>, RuntimeCoreError> {
@@ -69,11 +69,21 @@ impl RuntimeCore {
         };
         let workflow_audit_events =
             self.read_workflow_audit_events_for_session(&params.session_id)?;
-        let detail = read_model::runtime_session_read_detail_with_options(
-            &stored,
-            read_model::ReadDetailOptions::from_params(params),
-            &workflow_audit_events,
-        );
+        let detail = match self.projection_store.as_deref() {
+            Some(projection_store) => read_model::runtime_session_read_detail_from_thread_store(
+                &stored,
+                read_model::ReadDetailOptions::from_params(params),
+                &workflow_audit_events,
+                projection_store,
+            )
+            .await
+            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?,
+            None => read_model::runtime_session_read_detail_with_options(
+                &stored,
+                read_model::ReadDetailOptions::from_params(params),
+                &workflow_audit_events,
+            ),
+        };
         let response = AgentSessionReadResponse {
             session: stored.session.clone(),
             turns: stored.turns.clone(),
@@ -86,7 +96,7 @@ impl RuntimeCore {
         }))
     }
 
-    fn load_projection_session(
+    async fn load_projection_session(
         &self,
         params: &AgentSessionReadParams,
     ) -> Result<Option<SessionLoadContext>, RuntimeCoreError> {
@@ -116,13 +126,17 @@ impl RuntimeCore {
         } else {
             Vec::new()
         };
-        Ok(Some(projection_load_context(
-            projection,
-            events,
-            params,
-            workflow_audit_events,
-            projection_usage_events,
-        )))
+        Ok(Some(
+            projection_load_context(
+                projection,
+                events,
+                params,
+                workflow_audit_events,
+                projection_usage_events,
+                projection_store,
+            )
+            .await?,
+        ))
     }
 
     async fn load_app_data_session(
@@ -205,13 +219,14 @@ fn detail_array_is_empty(detail: &Value, key: &str) -> bool {
         .map_or(true, Vec::is_empty)
 }
 
-pub(in crate::runtime) fn projection_load_context(
+pub(in crate::runtime) async fn projection_load_context(
     projection: ProjectionReadSession,
     events: Vec<AgentEvent>,
     params: &AgentSessionReadParams,
     workflow_audit_events: Vec<AgentEvent>,
     projection_usage_events: Vec<AgentEvent>,
-) -> SessionLoadContext {
+    projection_store: &super::ProjectionStore,
+) -> Result<SessionLoadContext, RuntimeCoreError> {
     let stored = StoredSession {
         session: projection.session.clone(),
         turns: projection.turns.clone(),
@@ -228,13 +243,23 @@ pub(in crate::runtime) fn projection_load_context(
                 .filter(|event| is_turn_completed_usage_event(event))
                 .cloned(),
         );
-        projection_summary_detail(&stored, &projection, params, &usage_events)
+        projection_summary_detail(
+            &stored,
+            &projection,
+            params,
+            &usage_events,
+            projection_store,
+        )
+        .await?
     } else {
-        read_model::runtime_session_read_detail_with_options(
+        read_model::runtime_session_read_detail_from_thread_store(
             &stored,
             read_model::ReadDetailOptions::from_params(params),
             &workflow_audit_events,
+            projection_store,
         )
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?
     };
     if let Some(detail_object) = detail.as_object_mut() {
         detail_object.insert(
@@ -255,26 +280,31 @@ pub(in crate::runtime) fn projection_load_context(
         turns: stored.turns.clone(),
         detail: Some(detail),
     };
-    SessionLoadContext {
+    Ok(SessionLoadContext {
         response,
         stored,
         workflow_audit_events,
-    }
+    })
 }
 
-fn projection_summary_detail(
+async fn projection_summary_detail(
     stored: &StoredSession,
     projection: &ProjectionReadSession,
     params: &AgentSessionReadParams,
     usage_events: &[AgentEvent],
-) -> serde_json::Value {
+    projection_store: &super::ProjectionStore,
+) -> Result<serde_json::Value, RuntimeCoreError> {
     let messages = projection.messages.clone();
     let process_detail = projection_process_detail(stored, projection);
     let process_thread_read = process_detail
         .as_ref()
         .and_then(|detail| detail.get("thread_read"))
         .and_then(Value::as_object);
-    let items = process_detail_array(process_detail.as_ref(), "items");
+    let items = Value::Array(
+        read_model::canonical_items_from_thread_store(projection_store, stored)
+            .await
+            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?,
+    );
     let thread_items = items.clone();
     let artifacts = process_detail_array(process_detail.as_ref(), "artifacts");
     let outputs = process_detail_array(process_detail.as_ref(), "outputs");
@@ -394,7 +424,7 @@ fn projection_summary_detail(
         "article_workspace_actions",
     );
     merge_process_thread_read_value(&mut detail, process_thread_read, "articleWorkspaceActions");
-    detail
+    Ok(detail)
 }
 
 fn is_turn_completed_usage_event(event: &AgentEvent) -> bool {

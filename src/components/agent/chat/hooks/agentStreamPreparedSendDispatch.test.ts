@@ -68,6 +68,7 @@ describe("agentStreamPreparedSendDispatch", () => {
       runtime: {} as never,
       ensureSession: async () => "session-1",
       attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel: async () => true,
       executionStrategy: "react",
       accessMode: "current",
       clawTraceEnabled: false,

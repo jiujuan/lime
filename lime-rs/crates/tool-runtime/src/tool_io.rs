@@ -5,6 +5,7 @@
 
 use agent_protocol::model_context::resolve_model_context_window_or;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::OnceLock;
 
@@ -49,6 +50,49 @@ impl ToolOutputTruncationPolicy {
         match self {
             Self::Bytes(limit) => u64::try_from(limit).unwrap_or(u64::MAX),
             Self::Tokens(_) => default_bytes,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolOutputTruncationReason {
+    ByteLimit,
+    TokenLimit,
+    PayloadOffloaded,
+    ContextPressure,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolOutputTruncation {
+    pub reason: ToolOutputTruncationReason,
+    pub original_chars: usize,
+    pub original_bytes: usize,
+    pub original_tokens: usize,
+}
+
+impl ToolOutputTruncation {
+    pub fn new(reason: ToolOutputTruncationReason, stats: ToolIoPayloadStats) -> Self {
+        Self {
+            reason,
+            original_chars: stats.chars,
+            original_bytes: stats.bytes,
+            original_tokens: stats.tokens,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolOutputReference {
+    pub reference: String,
+    pub preview: Option<String>,
+}
+
+impl ToolOutputReference {
+    pub fn new(reference: impl Into<String>, preview: Option<String>) -> Self {
+        Self {
+            reference: reference.into(),
+            preview,
         }
     }
 }

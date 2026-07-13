@@ -194,8 +194,21 @@ describe("AgentChatWorkspace right surface state boundary", () => {
       ),
       "utf8",
     );
+    const sceneCompositionSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneComposition.tsx",
+      ),
+      "utf8",
+    );
 
     expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceSceneComposition({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceRightSurfaceCompositionRuntime({",
+    );
+    expect(sceneCompositionSource).toContain(
       "useWorkspaceRightSurfaceCompositionRuntime({",
     );
     expect(compositionSource).toContain(
@@ -243,16 +256,23 @@ describe("AgentChatWorkspace right surface state boundary", () => {
       ),
       "utf8",
     );
-    const compositionCallStart = workspaceSource.indexOf(
+    const sceneCompositionSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneComposition.tsx",
+      ),
+      "utf8",
+    );
+    const compositionCallStart = sceneCompositionSource.indexOf(
       "useWorkspaceRightSurfaceCompositionRuntime({",
     );
-    const compositionCallEnd = workspaceSource.indexOf(
+    const compositionCallEnd = sceneCompositionSource.indexOf(
       "const { homeRecoverySession",
       compositionCallStart,
     );
     expect(compositionCallStart).toBeGreaterThanOrEqual(0);
     expect(compositionCallEnd).toBeGreaterThan(compositionCallStart);
-    const compositionCallSource = workspaceSource.slice(
+    const compositionCallSource = sceneCompositionSource.slice(
       compositionCallStart,
       compositionCallEnd,
     );
@@ -351,8 +371,21 @@ describe("AgentChatWorkspace right surface state boundary", () => {
       ),
       "utf8",
     );
+    const sceneCompositionSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneComposition.tsx",
+      ),
+      "utf8",
+    );
 
     expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceSceneComposition({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceRightSurfaceCompositionRuntime({",
+    );
+    expect(sceneCompositionSource).toContain(
       "useWorkspaceRightSurfaceCompositionRuntime({",
     );
     expect(workspaceSource).not.toContain(
@@ -408,22 +441,38 @@ describe("AgentChatWorkspace conversation right surface boundary", () => {
       ),
       "utf8",
     );
-    const compositionCallStart = workspaceSource.indexOf(
+    const sceneCompositionSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneComposition.tsx",
+      ),
+      "utf8",
+    );
+    const compositionCallStart = sceneCompositionSource.indexOf(
       "useWorkspaceConversationCompositionRuntime({",
     );
-    const sceneCallStart = workspaceSource.indexOf(
+    const sceneCallStart = sceneCompositionSource.indexOf(
       "scene: {",
       compositionCallStart,
     );
-    const sceneCallEnd = workspaceSource.indexOf(
+    const sceneCallEnd = sceneCompositionSource.indexOf(
       "\n    },\n  });",
       sceneCallStart,
     );
     expect(compositionCallStart).toBeGreaterThanOrEqual(0);
     expect(sceneCallStart).toBeGreaterThan(compositionCallStart);
     expect(sceneCallEnd).toBeGreaterThan(sceneCallStart);
-    const sceneCallSource = workspaceSource.slice(sceneCallStart, sceneCallEnd);
+    const sceneCallSource = sceneCompositionSource.slice(
+      sceneCallStart,
+      sceneCallEnd,
+    );
 
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceSceneComposition({",
+    );
+    expect(workspaceSource).not.toContain(
+      "useWorkspaceConversationCompositionRuntime({",
+    );
     expect(compositionSource).toContain(
       "buildWorkspaceConversationRightSurfaceChrome({",
     );

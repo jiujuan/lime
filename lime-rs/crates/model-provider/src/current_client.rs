@@ -14,7 +14,11 @@ use crate::ModelProviderProtocol;
 use futures::future::BoxFuture;
 use futures::Stream;
 use reqwest::{Client, Response, StatusCode};
-use serde_json::{json, Value};
+pub use runtime_core::{CanonicalLlmEvent, FinishReason, Usage};
+use runtime_core::{
+    CanonicalRequest, CanonicalRole, CanonicalToolDefinition, ContentPart, ToolResultValue,
+};
+use serde_json::Value;
 use std::fmt;
 use std::pin::Pin;
 use std::time::Duration;
@@ -30,7 +34,7 @@ use transport::{
 };
 
 pub type CurrentProviderStream =
-    Pin<Box<dyn Stream<Item = Result<CurrentProviderEvent, CurrentProviderError>> + Send>>;
+    Pin<Box<dyn Stream<Item = Result<CanonicalLlmEvent, CurrentProviderError>> + Send>>;
 
 /// Turn executor 依赖的 current provider stream contract。
 ///
@@ -77,6 +81,104 @@ impl CurrentProviderRequest {
     ) -> Self {
         self.model_request_policy = model_request_policy;
         self
+    }
+
+    /// 将回合边界的历史消息转换为唯一的 provider-neutral request contract。
+    ///
+    /// `CurrentProviderMessage` 仍由上层 transcript 使用，模型名由 current client
+    /// 的 route config 注入；wire lowering 不再读取这些旧消息结构。
+    pub(crate) fn into_canonical(
+        &self,
+        model: impl Into<String>,
+    ) -> Result<CanonicalRequest, CurrentProviderError> {
+        let mut canonical = CanonicalRequest::text(model, "");
+        canonical.messages.clear();
+        canonical.system = self
+            .system_prompt
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| vec![ContentPart::text(value)])
+            .unwrap_or_default();
+        canonical.messages = self
+            .messages
+            .iter()
+            .map(canonical_message)
+            .collect::<Result<Vec<_>, _>>()?;
+        canonical.tools = self
+            .tools
+            .iter()
+            .map(|tool| CanonicalToolDefinition {
+                name: tool.name.clone(),
+                description: tool.description.clone(),
+                input_schema: tool.input_schema.clone(),
+                output_schema: None,
+                metadata: Default::default(),
+            })
+            .collect();
+        Ok(canonical)
+    }
+}
+
+fn canonical_message(
+    message: &CurrentProviderMessage,
+) -> Result<runtime_core::CanonicalMessage, CurrentProviderError> {
+    let role = match message.role {
+        CurrentProviderRole::User => CanonicalRole::User,
+        CurrentProviderRole::Assistant => CanonicalRole::Assistant,
+        CurrentProviderRole::Tool => CanonicalRole::Tool,
+    };
+    let content = message
+        .content
+        .iter()
+        .map(canonical_content)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(runtime_core::CanonicalMessage {
+        id: None,
+        role,
+        content,
+        metadata: Default::default(),
+    })
+}
+
+fn canonical_content(
+    content: &CurrentProviderContent,
+) -> Result<ContentPart, CurrentProviderError> {
+    match content {
+        CurrentProviderContent::Text(text) => Ok(ContentPart::text(text)),
+        CurrentProviderContent::Reasoning(text) => Ok(ContentPart::Reasoning {
+            text: text.clone(),
+            encrypted: None,
+            metadata: Default::default(),
+        }),
+        CurrentProviderContent::Image { data, media_type } => {
+            ContentPart::media(data.clone(), media_type.clone()).map_err(|error| {
+                CurrentProviderError::new(format!("canonical media input rejected: {error}"))
+            })
+        }
+        CurrentProviderContent::ToolCall(call) => Ok(ContentPart::ToolCall {
+            id: call.id.clone(),
+            name: call.name.clone(),
+            input: call.arguments.clone(),
+            provider_executed: None,
+            metadata: Default::default(),
+        }),
+        CurrentProviderContent::ToolResult(result) => Ok(ContentPart::ToolResult {
+            id: result.call_id.clone(),
+            name: result.name.clone(),
+            result: if result.success {
+                ToolResultValue::text(result.output.clone())
+            } else {
+                ToolResultValue::Error {
+                    value: serde_json::json!({
+                        "output": result.output,
+                        "error": result.error,
+                    }),
+                }
+            },
+            error: result.error.clone(),
+            provider_executed: Some(false),
+            metadata: Default::default(),
+        }),
     }
 }
 
@@ -144,15 +246,22 @@ impl CurrentProviderToolCall {
         }
     }
 
-    fn from_raw(id: String, name: String, raw_arguments: String) -> Self {
-        let arguments = serde_json::from_str(&raw_arguments)
-            .unwrap_or_else(|_| json!({ "_raw": raw_arguments }));
-        Self {
+    fn try_from_raw(
+        id: String,
+        name: String,
+        raw_arguments: String,
+    ) -> Result<Self, CurrentProviderError> {
+        let arguments = serde_json::from_str(&raw_arguments).map_err(|error| {
+            CurrentProviderError::new(format!(
+                "Provider returned invalid JSON arguments for tool {name}: {error}"
+            ))
+        })?;
+        Ok(Self {
             id,
             name,
             arguments,
             raw_arguments,
-        }
+        })
     }
 }
 
@@ -170,24 +279,6 @@ pub struct CurrentProviderTool {
     pub name: String,
     pub description: String,
     pub input_schema: Value,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum CurrentProviderEvent {
-    TextDelta(String),
-    ReasoningDelta(String),
-    ToolCallInputDelta {
-        call_id: String,
-        tool_name: Option<String>,
-        delta: String,
-        accumulated_arguments: String,
-    },
-    ToolCall(CurrentProviderToolCall),
-    Usage(CurrentProviderUsage),
-    Completed {
-        response_id: Option<String>,
-        end_turn: bool,
-    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -289,16 +380,19 @@ impl CurrentProviderClient {
         request: CurrentProviderRequest,
     ) -> Result<CurrentProviderStream, CurrentProviderError> {
         let protocol = self.protocol();
+        let canonical_request = request.into_canonical(&self.config.model_name)?;
         let wire_shape = RuntimeReplyProviderRequestWireShape::from_model_request_policy(
             request.model_request_policy.as_ref(),
         );
         let payload = match protocol {
             ModelProviderProtocol::Responses => {
-                responses_request(&self.config, &request, &wire_shape)
+                responses_request(&self.config, &canonical_request, &wire_shape)
             }
-            ModelProviderProtocol::AnthropicMessages => anthropic_request(&self.config, &request),
+            ModelProviderProtocol::AnthropicMessages => {
+                anthropic_request(&self.config, &canonical_request)
+            }
             ModelProviderProtocol::ChatCompletions | ModelProviderProtocol::Custom(_) => {
-                chat_completions_request(&self.config, &request, &wire_shape)
+                chat_completions_request(&self.config, &canonical_request, &wire_shape)
             }
         };
         let response = self
@@ -478,6 +572,7 @@ mod tests {
     use super::stream::{drain_sse_frames, parse_sse_frame, response_item_tool_call};
     use super::*;
     use crate::runtime_provider::RuntimeProviderConfig;
+    use serde_json::json;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -540,7 +635,7 @@ mod tests {
             CurrentProviderMessage::user(vec![
                 CurrentProviderContent::Text("look".to_string()),
                 CurrentProviderContent::Image {
-                    data: "data:image/png;base64,abc".to_string(),
+                    data: "sidecar://image-1".to_string(),
                     media_type: "image/png".to_string(),
                 },
             ]),
@@ -558,9 +653,12 @@ mod tests {
             )]),
         ]);
 
+        let canonical = request
+            .into_canonical("gpt-5-codex")
+            .expect("canonical request");
         let value = chat_completions_request(
             &config(Some(RuntimeProviderProtocol::ChatCompletions)),
-            &request,
+            &canonical,
             &RuntimeReplyProviderRequestWireShape::default(),
         );
 
@@ -573,6 +671,22 @@ mod tests {
     }
 
     #[test]
+    fn canonical_request_rejects_inline_media_payloads() {
+        let request = CurrentProviderRequest::new(vec![CurrentProviderMessage::user(vec![
+            CurrentProviderContent::Image {
+                data: "data:image/png;base64,abc".to_string(),
+                media_type: "image/png".to_string(),
+            },
+        ])]);
+
+        let error = request
+            .into_canonical("gpt-5-codex")
+            .expect_err("inline media must fail closed");
+
+        assert!(error.message.contains("canonical media input rejected"));
+    }
+
+    #[test]
     fn responses_tool_call_is_normalized_from_final_item() {
         let item = json!({
             "type": "function_call",
@@ -580,11 +694,27 @@ mod tests {
             "name": "apply_patch",
             "arguments": "{\"patch\":\"*** Begin Patch\"}"
         });
-        let call = response_item_tool_call(&item).expect("tool call");
+        let call = response_item_tool_call(&item)
+            .expect("valid tool call")
+            .expect("tool call");
 
         assert_eq!(call.id, "call-7");
         assert_eq!(call.name, "apply_patch");
         assert_eq!(call.arguments["patch"], "*** Begin Patch");
+    }
+
+    #[test]
+    fn responses_tool_call_rejects_invalid_json_arguments() {
+        let item = json!({
+            "type": "function_call",
+            "call_id": "call-invalid",
+            "name": "apply_patch",
+            "arguments": "{not-json"
+        });
+
+        let error = response_item_tool_call(&item).expect_err("invalid JSON must fail closed");
+
+        assert!(error.message.contains("invalid JSON arguments"));
     }
 
     #[test]

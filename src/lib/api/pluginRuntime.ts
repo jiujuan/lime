@@ -77,6 +77,7 @@ function assertStartTaskResult(
     typeof value.traceId !== "string" ||
     typeof value.taskKind !== "string" ||
     typeof value.sessionId !== "string" ||
+    typeof value.threadId !== "string" ||
     typeof value.turnId !== "string" ||
     typeof value.eventName !== "string" ||
     value.status !== "accepted" ||
@@ -95,6 +96,7 @@ function assertCancelTaskResult(
     typeof value.appId !== "string" ||
     typeof value.taskId !== "string" ||
     typeof value.sessionId !== "string" ||
+    typeof value.threadId !== "string" ||
     typeof value.cancelled !== "boolean" ||
     (value.status !== "cancelled" && value.status !== "not_running")
   ) {
@@ -111,6 +113,7 @@ function assertTaskSnapshot(
     typeof value.appId !== "string" ||
     typeof value.taskId !== "string" ||
     typeof value.sessionId !== "string" ||
+    typeof value.threadId !== "string" ||
     value.status !== "thread_read_available" ||
     typeof value.taskStatus !== "string" ||
     !Array.isArray(value.taskEvents) ||
@@ -172,6 +175,7 @@ export interface PluginRuntimeStartTaskResult {
   traceId: string;
   taskKind: string;
   sessionId: string;
+  threadId: string;
   turnId: string;
   eventName: string;
   status: "accepted";
@@ -182,7 +186,7 @@ export interface PluginRuntimeStartTaskResult {
 export interface PluginRuntimeCancelTaskRequest {
   appId: string;
   taskId: string;
-  sessionId: string;
+  threadId: string;
   turnId?: string;
 }
 
@@ -190,6 +194,7 @@ export interface PluginRuntimeCancelTaskResult {
   appId: string;
   taskId: string;
   sessionId: string;
+  threadId: string;
   cancelled: boolean;
   status: "cancelled" | "not_running";
 }
@@ -197,7 +202,7 @@ export interface PluginRuntimeCancelTaskResult {
 export interface PluginRuntimeGetTaskRequest {
   appId: string;
   taskId: string;
-  sessionId: string;
+  threadId: string;
 }
 
 export interface PluginRuntimeTaskEvent {
@@ -219,6 +224,7 @@ export interface PluginRuntimeTaskSnapshot {
   appId: string;
   taskId: string;
   sessionId: string;
+  threadId: string;
   status: "thread_read_available";
   taskStatus: string;
   taskEvents: PluginRuntimeTaskEvent[];

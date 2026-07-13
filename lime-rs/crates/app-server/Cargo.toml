@@ -60,6 +60,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tool-runtime.workspace = true
+thread-store.workspace = true
 tracing.workspace = true
 tracing-opentelemetry.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }

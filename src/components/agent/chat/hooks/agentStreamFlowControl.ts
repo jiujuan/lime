@@ -1,9 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type {
-  AgentRuntimeThreadReadModel,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Message } from "../types";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
@@ -23,12 +20,7 @@ import {
   resolveInterruptedInputRestorePlan,
   resolveQueuedTurnsForRestore,
 } from "./agentStreamInputRestorePlan";
-import {
-  normalizeQueuedTurnsFromReadModel,
-  readArrayField,
-  readRecord,
-  readStringField,
-} from "./agentStreamReadModelParsing";
+import type { ChatRuntimeQueueControlProjection } from "../projection/chatRuntimeQueueControlProjection";
 import {
   buildInterruptedMessageContentPatch,
   markInterruptedAgentMessageThreadItems,
@@ -228,11 +220,12 @@ interface RemoveQueuedTurnOptions extends QueueActionOptions {
 interface PromoteQueuedTurnOptions extends QueueActionOptions {
   runtime: Pick<
     AgentRuntimeAdapter,
-    | "getSessionReadModel"
+    | "getThreadQueueControl"
     | "interruptTurn"
     | "promoteQueuedTurn"
     | "resumeThread"
   >;
+  threadId?: string | null;
   queuedTurnId: string;
   activeStream: ActiveStreamState | null;
   removeStreamListener: (eventName: string) => boolean;
@@ -514,101 +507,10 @@ function settleActiveStreamForQueuedPromotion(options: {
   setActiveStream(null);
 }
 
-function readQueuedTurnIdsFromReadModel(
-  readModel: AgentRuntimeThreadReadModel | null,
-): Set<string> {
-  return new Set(
-    normalizeQueuedTurnsFromReadModel(readModel)
-      .map((item) => item.queued_turn_id.trim())
-      .filter(Boolean),
-  );
-}
-
-function readThreadReadModelRecords(
-  readModel: AgentRuntimeThreadReadModel | null,
-): Record<string, unknown>[] {
-  const root = readRecord(readModel as unknown as Record<string, unknown>);
-  const detail = readRecord(root?.detail);
-  const detailThreadRead =
-    readRecord(detail?.thread_read) ?? readRecord(detail?.threadRead);
-  return [root, detailThreadRead, detail].filter(
-    (item): item is Record<string, unknown> => Boolean(item),
-  );
-}
-
-function isQueuedPromotionInterruptCandidate(
-  turnId: string | null,
-  excludedTurnIds: ReadonlySet<string>,
+function resolveQueuedPromotionInterruptTurnId(
+  projection: ChatRuntimeQueueControlProjection,
 ) {
-  return Boolean(turnId && !excludedTurnIds.has(turnId));
-}
-
-function resolveRunningTurnIdFromReadModel(
-  readModel: AgentRuntimeThreadReadModel | null,
-  excludedTurnIds: ReadonlySet<string> = new Set(),
-): string | null {
-  const records = readThreadReadModelRecords(readModel);
-  for (const record of records) {
-    const activeTurnId = readStringField(
-      record,
-      "active_turn_id",
-      "activeTurnId",
-    );
-    if (isQueuedPromotionInterruptCandidate(activeTurnId, excludedTurnIds)) {
-      return activeTurnId;
-    }
-  }
-
-  for (const record of records) {
-    const turns = readArrayField(record, "turns");
-    for (let index = turns.length - 1; index >= 0; index -= 1) {
-      const turn = readRecord(turns[index]);
-      const turnId = readStringField(turn, "turn_id", "turnId", "id");
-      if (!isQueuedPromotionInterruptCandidate(turnId, excludedTurnIds)) {
-        continue;
-      }
-      const nativeStatus = readStringField(
-        turn,
-        "native_status",
-        "nativeStatus",
-      )?.toLowerCase();
-      const status = readStringField(turn, "status")?.toLowerCase();
-      if (nativeStatus === "queued" || status === "queued") {
-        continue;
-      }
-      if (
-        status === "running" ||
-        status === "accepted" ||
-        nativeStatus === "running" ||
-        nativeStatus === "accepted" ||
-        nativeStatus === "waitingaction" ||
-        nativeStatus === "waiting_action"
-      ) {
-        return turnId;
-      }
-    }
-  }
-  return null;
-}
-
-function resolveQueuedPromotionInterruptTurnId(options: {
-  activeStream: ActiveStreamState | null;
-  readModel: AgentRuntimeThreadReadModel | null;
-}) {
-  const queuedTurnIds = readQueuedTurnIdsFromReadModel(options.readModel);
-  const readModelTurnId = resolveRunningTurnIdFromReadModel(
-    options.readModel,
-    queuedTurnIds,
-  );
-  const localTurnId = resolveInterruptTurnId(options.activeStream);
-  const readModelInterruptTurnId =
-    readModelTurnId && !queuedTurnIds.has(readModelTurnId)
-      ? readModelTurnId
-      : null;
-  const localInterruptTurnId =
-    localTurnId && !queuedTurnIds.has(localTurnId) ? localTurnId : null;
-
-  return readModelInterruptTurnId ?? localInterruptTurnId ?? undefined;
+  return projection.activeTurnId ?? undefined;
 }
 
 export async function promoteQueuedAgentTurn(
@@ -616,6 +518,7 @@ export async function promoteQueuedAgentTurn(
 ) {
   const {
     runtime,
+    threadId,
     queuedTurnId,
     activeStream,
     removeStreamListener,
@@ -645,22 +548,24 @@ export async function promoteQueuedAgentTurn(
       queuedTurnId,
       sessionId: activeSessionId,
     });
-    const readModelBeforePromote =
-      await runtime.getSessionReadModel(activeSessionId);
-    const queuedTurnIdsBeforePromote = readQueuedTurnIdsFromReadModel(
-      readModelBeforePromote ?? null,
-    );
-    const interruptTurnId = resolveQueuedPromotionInterruptTurnId({
-      activeStream,
-      readModel: readModelBeforePromote ?? null,
-    });
+    const canonicalThreadId = threadId?.trim();
+    if (!canonicalThreadId) {
+      await refreshSessionReadModel(activeSessionId);
+      return false;
+    }
+    const queueProjection =
+      await runtime.getThreadQueueControl(canonicalThreadId);
+    const queuedTurnIdsBeforePromote = new Set(queueProjection.queuedTurnIds);
+    if (!queuedTurnIdsBeforePromote.has(queuedTurnId.trim())) {
+      await refreshSessionReadModel(activeSessionId);
+      return false;
+    }
+    const interruptTurnId =
+      resolveQueuedPromotionInterruptTurnId(queueProjection);
     logAgentDebug("AgentStream", "queuedPromotion.readModelResolved", {
       interruptTurnId: interruptTurnId ?? null,
       queuedTurnIds: Array.from(queuedTurnIdsBeforePromote),
-      readModelRunningTurnId: resolveRunningTurnIdFromReadModel(
-        readModelBeforePromote ?? null,
-        queuedTurnIdsBeforePromote,
-      ),
+      readModelRunningTurnId: queueProjection.activeTurnId,
       sessionId: activeSessionId,
     });
     const promoted = await runtime.promoteQueuedTurn(

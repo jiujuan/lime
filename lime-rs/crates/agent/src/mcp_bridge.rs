@@ -73,6 +73,7 @@ impl McpBridgeRuntimeRegistry {
                     Arc::clone(&snapshot.running_service),
                     Arc::clone(&snapshot.handler),
                     snapshot.server_info.clone(),
+                    snapshot.tool_timeout,
                 ))));
             let surface = registration.config.clone();
 
@@ -110,9 +111,10 @@ impl McpBridgeClient {
         service: Arc<rmcp::service::RunningService<rmcp::RoleClient, lime_mcp::LimeMcpClient>>,
         handler: Arc<lime_mcp::LimeMcpClient>,
         server_info: Option<InitializeResult>,
+        tool_timeout: std::time::Duration,
     ) -> Self {
         Self {
-            inner: RuntimeMcpBridgeClient::new(service, handler, server_info),
+            inner: RuntimeMcpBridgeClient::new(service, handler, server_info, tool_timeout),
         }
     }
 

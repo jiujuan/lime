@@ -1,4 +1,40 @@
 use super::*;
+use serde_json::Value;
+
+fn canonical_tool_event(
+    event_type: &str,
+    call_id: &str,
+    name: &str,
+    status: &str,
+    output: Option<Value>,
+) -> RuntimeEvent {
+    RuntimeEvent::new(
+        event_type,
+        json!({
+            "item": {
+                "sessionId": "sess_coding_snapshot_evidence",
+                "threadId": "thread_coding_snapshot_evidence",
+                "turnId": "turn_coding_snapshot_evidence",
+                "itemId": call_id,
+                "sequence": 1,
+                "ordinal": 1,
+                "createdAtMs": 1,
+                "updatedAtMs": 2,
+                "completedAtMs": (event_type == "item.completed").then_some(2),
+                "kind": "tool",
+                "status": status,
+                "payload": {
+                    "type": "tool",
+                    "call_id": call_id,
+                    "name": name,
+                    "arguments": [],
+                    "output": output,
+                },
+                "metadata": {}
+            }
+        }),
+    )
+}
 
 #[tokio::test]
 async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
@@ -32,12 +68,12 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
         "sess_coding_snapshot_evidence",
         Some("turn_coding_snapshot_evidence"),
         vec![
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool_snapshot_evidence",
-                    "toolName": "Bash"
-                }),
+            canonical_tool_event(
+                "item.started",
+                "tool_snapshot_evidence",
+                "Bash",
+                "inProgress",
+                None,
             ),
             RuntimeEvent::new(
                 "action.required",
@@ -56,40 +92,44 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
                     "decision": "approved"
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "tool_snapshot_evidence",
-                    "toolName": "Bash",
+            canonical_tool_event(
+                "item.completed",
+                "tool_snapshot_evidence",
+                "Bash",
+                "completed",
+                Some(json!({
                     "outputRef": "output://snapshot-evidence",
-                    "outputPreview": "snapshot output",
-                    "outputBytes": 42,
-                    "outputSnapshotFile": "runtime-outputs/snapshot-evidence.txt",
-                    "sidecarRef": {
-                        "ref": "sidecar://tool_output/snapshot-evidence",
-                        "kind": "tool_output",
-                        "relativePath": "sessions/sess_coding_snapshot_evidence/runtime-outputs/snapshot-evidence.txt",
-                        "bytes": 42,
-                        "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                        "contentStatus": "available",
-                        "createdAt": "2026-06-14T00:00:00.000Z"
+                    "structuredContent": {
+                        "outputPreview": "snapshot output",
+                        "outputBytes": 42,
+                        "outputSnapshotFile": "runtime-outputs/snapshot-evidence.txt",
+                        "sidecarRef": {
+                            "ref": "sidecar://tool_output/snapshot-evidence",
+                            "kind": "tool_output",
+                            "relativePath": "sessions/sess_coding_snapshot_evidence/runtime-outputs/snapshot-evidence.txt",
+                            "bytes": 42,
+                            "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "contentStatus": "available",
+                            "createdAt": "2026-06-14T00:00:00.000Z"
+                        }
                     }
-                }),
+                })),
             ),
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool_apply_patch_evidence",
-                    "toolName": "apply_patch"
-                }),
+            canonical_tool_event(
+                "item.started",
+                "tool_apply_patch_evidence",
+                "apply_patch",
+                "inProgress",
+                None,
             ),
-            RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "tool_apply_patch_evidence",
-                    "toolName": "apply_patch",
+            canonical_tool_event(
+                "item.completed",
+                "tool_apply_patch_evidence",
+                "apply_patch",
+                "completed",
+                Some(json!({
                     "outputRef": "output://apply-patch-evidence"
-                }),
+                })),
             ),
             RuntimeEvent::new(
                 "file.changed",

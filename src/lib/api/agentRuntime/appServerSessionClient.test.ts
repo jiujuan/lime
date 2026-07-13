@@ -628,6 +628,14 @@ describe("appServerSessionClient", () => {
         thread_id: "thread-items",
         created_at: 1780912800000,
         updated_at: 1780912806000,
+        turns: [
+          {
+            turnId: "legacy-detail-turn-shadow",
+            threadId: "thread-items",
+            status: "completed",
+            completedAtMs: 1780912806000,
+          },
+        ],
         items: [
           {
             id: "item-assistant-content",
@@ -641,6 +649,29 @@ describe("appServerSessionClient", () => {
             started_at: "2026-06-08T10:00:05.000Z",
             completed_at: "2026-06-08T10:00:06.000Z",
             updated_at: "2026-06-08T10:00:06.000Z",
+          },
+          {
+            sessionId: "session-items",
+            threadId: "thread-items",
+            turnId: "turn-items",
+            itemId: "item_approval-session",
+            ordinal: 3,
+            sequence: 3,
+            kind: "approval",
+            status: "completed",
+            payload: {
+              type: "approval",
+              request_id: "approval-session",
+              action: {
+                kind: "tool_confirmation",
+                description: "允许执行浏览器工具？",
+              },
+              scope: "session",
+              decision: "approvedForSession",
+            },
+            createdAtMs: 1780912802000,
+            completedAtMs: 1780912803000,
+            updatedAtMs: 1780912803000,
           },
         ],
       },
@@ -673,6 +704,16 @@ describe("appServerSessionClient", () => {
           type: "agent_message",
           content: "最终总结正文。",
           phase: "final_answer",
+        },
+        {
+          id: "item_approval-session",
+          type: "approval_request",
+          request_id: "approval-session",
+          status: "completed",
+          response: {
+            decision: "allow_for_session",
+            decision_scope: "session",
+          },
         },
       ],
       queued_turns: [],

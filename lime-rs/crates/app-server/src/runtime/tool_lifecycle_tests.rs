@@ -2,6 +2,14 @@ use super::*;
 use serde_json::json;
 
 fn event(event_id: &str, event_type: &str, payload: Value) -> AgentEvent {
+    let payload = if matches!(
+        event_type,
+        "item.started" | "item.updated" | "item.completed"
+    ) {
+        canonical_tool_item_payload(event_type, payload)
+    } else {
+        payload
+    };
     AgentEvent {
         event_id: event_id.to_string(),
         sequence: 1,
@@ -14,33 +22,78 @@ fn event(event_id: &str, event_type: &str, payload: Value) -> AgentEvent {
     }
 }
 
-#[test]
-fn rejects_tool_args_without_active_tool() {
-    let candidate = event(
-        "evt_args",
-        "tool.args",
-        json!({ "toolCallId": "tool_1", "args": {} }),
-    );
-
-    let error = validate_tool_lifecycle_event(&[], &candidate)
-        .expect_err("tool args without active tool should fail");
-    assert!(error.contains("tool_args_without_start"));
-}
-
-#[test]
-fn allows_tool_args_between_start_and_result() {
-    let existing = vec![event(
-        "evt_start",
-        "tool.started",
-        json!({ "toolCallId": "tool_1" }),
-    )];
-    let candidate = event(
-        "evt_args",
-        "tool.args.delta",
-        json!({ "toolCallId": "tool_1", "delta": "{}" }),
-    );
-
-    validate_tool_lifecycle_event(&existing, &candidate).expect("active tool args");
+fn canonical_tool_item_payload(event_type: &str, payload: Value) -> Value {
+    let call_id = payload
+        .get("toolCallId")
+        .and_then(Value::as_str)
+        .unwrap_or("tool_1");
+    let name = payload
+        .get("toolName")
+        .and_then(Value::as_str)
+        .unwrap_or("Bash");
+    let owner = payload
+        .get("itemId")
+        .or_else(|| payload.get("messageId"))
+        .or_else(|| payload.get("assistantMessageId"))
+        .and_then(Value::as_str)
+        .unwrap_or(call_id);
+    let item_id = if owner.starts_with("item_") {
+        owner.to_string()
+    } else {
+        format!("item_{owner}")
+    };
+    let arguments = payload
+        .get("arguments")
+        .and_then(Value::as_object)
+        .map(|arguments| {
+            arguments
+                .iter()
+                .map(|(name, value)| {
+                    json!({
+                        "name": name,
+                        "value": value.to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let failed = payload.get("failureCategory").is_some()
+        || payload.get("error").is_some()
+        || payload.get("status").and_then(Value::as_str) == Some("failed");
+    let status = match event_type {
+        "item.started" | "item.updated" => "inProgress",
+        _ if failed => "failed",
+        _ => "completed",
+    };
+    let output = (event_type != "item.started").then(|| {
+        json!({
+            "text": payload.get("output").and_then(Value::as_str),
+            "error": payload.get("error").and_then(Value::as_str),
+        })
+    });
+    json!({
+        "item": {
+            "sessionId": "sess_test",
+            "threadId": "thread_test",
+            "turnId": "turn_test",
+            "itemId": item_id,
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1,
+            "updatedAtMs": 1,
+            "completedAtMs": (event_type == "item.completed").then_some(1),
+            "kind": "tool",
+            "status": status,
+            "payload": {
+                "type": "tool",
+                "call_id": call_id,
+                "name": name,
+                "arguments": arguments,
+                "output": output,
+            },
+            "metadata": {},
+        }
+    })
 }
 
 #[test]
@@ -48,12 +101,12 @@ fn rejects_policy_event_for_inactive_tool() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         ),
         event(
             "evt_result",
-            "tool.result",
+            "item.completed",
             json!({ "toolCallId": "tool_1" }),
         ),
     ];
@@ -73,7 +126,7 @@ fn rejects_tool_output_before_action_resolution() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         ),
         event(
@@ -101,7 +154,7 @@ fn allows_tool_result_after_action_resolution() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         ),
         event(
@@ -124,7 +177,7 @@ fn allows_tool_result_after_action_resolution() {
     ];
     let candidate = event(
         "evt_result",
-        "tool.result",
+        "item.completed",
         json!({ "toolCallId": "tool_1", "output": "ok" }),
     );
 
@@ -136,7 +189,7 @@ fn rejects_tool_result_after_action_denial() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         ),
         event(
@@ -158,7 +211,7 @@ fn rejects_tool_result_after_action_denial() {
     ];
     let candidate = event(
         "evt_result",
-        "tool.result",
+        "item.completed",
         json!({ "toolCallId": "tool_1", "output": "should not run" }),
     );
 
@@ -172,7 +225,7 @@ fn rejects_tool_result_after_sandbox_blocked() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         ),
         event(
@@ -186,7 +239,7 @@ fn rejects_tool_result_after_sandbox_blocked() {
     ];
     let candidate = event(
         "evt_result",
-        "tool.result",
+        "item.completed",
         json!({ "toolCallId": "tool_1", "output": "should not run" }),
     );
 
@@ -200,7 +253,7 @@ fn rejects_tool_output_after_permission_denied() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         ),
         event(
@@ -228,7 +281,7 @@ fn allows_tool_failed_after_sandbox_blocked() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         ),
         event(
@@ -242,7 +295,7 @@ fn allows_tool_failed_after_sandbox_blocked() {
     ];
     let candidate = event(
         "evt_failed",
-        "tool.failed",
+        "item.completed",
         json!({
             "toolCallId": "tool_1",
             "failureCategory": "sandbox_blocked"
@@ -257,7 +310,7 @@ fn allows_tool_failed_after_sandbox_blocked() {
 fn allows_tool_result_with_matching_owner() {
     let existing = vec![event(
         "evt_start",
-        "tool.started",
+        "item.started",
         json!({
             "toolCallId": "tool_1",
             "messageId": "assistant_1",
@@ -266,7 +319,7 @@ fn allows_tool_result_with_matching_owner() {
     )];
     let candidate = event(
         "evt_result",
-        "tool.result",
+        "item.completed",
         json!({
             "toolCallId": "tool_1",
             "assistantMessageId": "assistant_1",
@@ -282,7 +335,7 @@ fn allows_tool_result_with_matching_owner() {
 fn rejects_tool_result_owner_mismatch() {
     let existing = vec![event(
         "evt_start",
-        "tool.started",
+        "item.started",
         json!({
             "toolCallId": "tool_1",
             "messageId": "assistant_1"
@@ -290,7 +343,7 @@ fn rejects_tool_result_owner_mismatch() {
     )];
     let candidate = event(
         "evt_result",
-        "tool.result",
+        "item.completed",
         json!({
             "toolCallId": "tool_1",
             "messageId": "assistant_2",
@@ -304,31 +357,34 @@ fn rejects_tool_result_owner_mismatch() {
 }
 
 #[test]
-fn rejects_tool_result_missing_owner_when_start_has_owner() {
+fn allows_tool_terminal_with_canonical_item_owner() {
     let existing = vec![event(
         "evt_start",
-        "tool.started",
+        "item.started",
         json!({
             "toolCallId": "tool_1",
-            "messageId": "assistant_1"
+            "itemId": "item_1"
         }),
     )];
     let candidate = event(
         "evt_result",
-        "tool.result",
-        json!({ "toolCallId": "tool_1", "output": "missing owner" }),
+        "item.completed",
+        json!({
+            "toolCallId": "tool_1",
+            "itemId": "item_1",
+            "output": "canonical owner"
+        }),
     );
 
-    let error = validate_tool_lifecycle_event(&existing, &candidate)
-        .expect_err("owned tool terminal without owner should fail");
-    assert!(error.contains("tool_terminal_missing_owner"));
+    validate_tool_lifecycle_event(&existing, &candidate)
+        .expect("canonical item identity should own the terminal event");
 }
 
 #[test]
 fn rejects_tool_output_owner_mismatch() {
     let existing = vec![event(
         "evt_start",
-        "tool.started",
+        "item.started",
         json!({
             "toolCallId": "tool_1",
             "itemId": "item_1"
@@ -353,7 +409,7 @@ fn rejects_tool_output_owner_mismatch() {
 fn normalizes_action_required_with_matching_active_tool() {
     let existing = vec![event(
         "evt_start",
-        "tool.started",
+        "item.started",
         json!({
             "toolCallId": "tool_shell",
             "toolName": "Bash",
@@ -390,7 +446,7 @@ fn normalizes_action_resolved_from_previous_action_required_tool() {
     let existing = vec![
         event(
             "evt_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_shell", "toolName": "Bash" }),
         ),
         event(

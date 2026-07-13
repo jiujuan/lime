@@ -34,6 +34,7 @@ export interface AgentStreamPreparedSendEnv {
     promptText: string,
     options?: { requireTerminal?: boolean; turnId?: string | null },
   ) => Promise<boolean>;
+  refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   executionStrategy: AgentExecutionStrategy;
   accessMode: AgentAccessMode;
   providerTypeRef: MutableRefObject<string>;

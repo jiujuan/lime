@@ -1,23 +1,17 @@
-use super::{
-    CurrentProviderContent, CurrentProviderMessage, CurrentProviderRequest, CurrentProviderRole,
-    CurrentProviderTool, CurrentProviderToolResult,
-};
 use crate::provider_stream::RuntimeReplyProviderRequestWireShape;
 use crate::runtime_provider::RuntimeProviderConfig;
+use runtime_core::{CanonicalRequest, CanonicalRole, ContentPart, ToolResultValue};
 use serde_json::{json, Map, Value};
 
 pub(super) fn chat_completions_request(
     config: &RuntimeProviderConfig,
-    request: &CurrentProviderRequest,
+    request: &CanonicalRequest,
     wire_shape: &RuntimeReplyProviderRequestWireShape,
 ) -> Value {
     let mut messages = Vec::new();
-    if let Some(system_prompt) = request
-        .system_prompt
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        messages.push(json!({ "role": "system", "content": system_prompt }));
+    let system = text_from_parts(&request.system);
+    if !system.is_empty() {
+        messages.push(json!({ "role": "system", "content": system }));
     }
     messages.extend(request.messages.iter().flat_map(chat_message));
     let mut object = Map::from_iter([
@@ -39,15 +33,12 @@ pub(super) fn chat_completions_request(
             json!(wire_shape.parallel_tool_calls.unwrap_or(true)),
         );
     }
-    if let Some(reasoning_effort) = config.reasoning_effort.as_deref() {
-        object.insert("reasoning_effort".to_string(), json!(reasoning_effort));
-    }
     Value::Object(object)
 }
 
 pub(super) fn responses_request(
     config: &RuntimeProviderConfig,
-    request: &CurrentProviderRequest,
+    request: &CanonicalRequest,
     wire_shape: &RuntimeReplyProviderRequestWireShape,
 ) -> Value {
     let mut input = Vec::new();
@@ -60,11 +51,8 @@ pub(super) fn responses_request(
         ("stream".to_string(), Value::Bool(true)),
         ("store".to_string(), Value::Bool(false)),
     ]);
-    if let Some(instructions) = request
-        .system_prompt
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
+    let instructions = text_from_parts(&request.system);
+    if !instructions.is_empty() {
         object.insert("instructions".to_string(), json!(instructions));
     }
     if !request.tools.is_empty() {
@@ -91,22 +79,12 @@ pub(super) fn responses_request(
             json!(wire_shape.parallel_tool_calls.unwrap_or(true)),
         );
     }
-    if let Some(reasoning_effort) = config.reasoning_effort.as_deref() {
-        let mut reasoning = json!({ "effort": reasoning_effort });
-        if let Some(summary) = wire_shape.reasoning_summary.as_deref() {
-            reasoning["summary"] = json!(summary);
-        }
-        object.insert("reasoning".to_string(), reasoning);
-    }
-    if let Some(verbosity) = wire_shape.text_verbosity.as_deref() {
-        object.insert("text".to_string(), json!({ "verbosity": verbosity }));
-    }
     Value::Object(object)
 }
 
 pub(super) fn anthropic_request(
     config: &RuntimeProviderConfig,
-    request: &CurrentProviderRequest,
+    request: &CanonicalRequest,
 ) -> Value {
     let messages = request
         .messages
@@ -116,14 +94,11 @@ pub(super) fn anthropic_request(
     let mut object = Map::from_iter([
         ("model".to_string(), json!(config.model_name)),
         ("messages".to_string(), Value::Array(messages)),
-        ("max_tokens".to_string(), Value::Number(4096.into())),
+        ("max_tokens".to_string(), json!(4096)),
         ("stream".to_string(), Value::Bool(true)),
     ]);
-    if let Some(system) = request
-        .system_prompt
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
+    let system = text_from_parts(&request.system);
+    if !system.is_empty() {
         object.insert("system".to_string(), json!(system));
     }
     if !request.tools.is_empty() {
@@ -147,30 +122,34 @@ pub(super) fn anthropic_request(
     Value::Object(object)
 }
 
-fn chat_message(message: &CurrentProviderMessage) -> Vec<Value> {
+fn chat_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
     match message.role {
-        CurrentProviderRole::Tool => message
+        CanonicalRole::Tool => message
             .content
             .iter()
             .filter_map(|content| match content {
-                CurrentProviderContent::ToolResult(result) => Some(json!({
+                ContentPart::ToolResult {
+                    id, result, error, ..
+                } => Some(json!({
                     "role": "tool",
-                    "tool_call_id": result.call_id,
-                    "content": tool_result_text(result),
+                    "tool_call_id": id,
+                    "content": tool_result_text(result, error.as_deref()),
                 })),
                 _ => None,
             })
             .collect(),
-        CurrentProviderRole::Assistant => {
-            let text = content_text(&message.content);
+        CanonicalRole::Assistant => {
+            let text = text_from_parts(&message.content);
             let tool_calls = message
                 .content
                 .iter()
                 .filter_map(|content| match content {
-                    CurrentProviderContent::ToolCall(call) => Some(json!({
-                        "id": call.id,
+                    ContentPart::ToolCall {
+                        id, name, input, ..
+                    } => Some(json!({
+                        "id": id,
                         "type": "function",
-                        "function": { "name": call.name, "arguments": call.raw_arguments },
+                        "function": { "name": name, "arguments": input.to_string() },
                     })),
                     _ => None,
                 })
@@ -181,28 +160,40 @@ fn chat_message(message: &CurrentProviderMessage) -> Vec<Value> {
             }
             vec![value]
         }
-        CurrentProviderRole::User => vec![json!({
-            "role": "user",
+        CanonicalRole::User | CanonicalRole::System | CanonicalRole::Developer => vec![json!({
+            "role": wire_role(message.role),
             "content": chat_content(&message.content),
         })],
     }
 }
 
-fn chat_content(content: &[CurrentProviderContent]) -> Value {
-    let has_image = content
+fn wire_role(role: CanonicalRole) -> &'static str {
+    match role {
+        CanonicalRole::System => "system",
+        CanonicalRole::Developer => "developer",
+        CanonicalRole::User => "user",
+        CanonicalRole::Assistant => "assistant",
+        CanonicalRole::Tool => "tool",
+    }
+}
+
+fn chat_content(content: &[ContentPart]) -> Value {
+    let has_media = content
         .iter()
-        .any(|part| matches!(part, CurrentProviderContent::Image { .. }));
-    if !has_image {
-        return json!(content_text(content));
+        .any(|part| matches!(part, ContentPart::Media { .. }));
+    if !has_media {
+        return json!(text_from_parts(content));
     }
     Value::Array(
         content
             .iter()
             .filter_map(|part| match part {
-                CurrentProviderContent::Text(text) => Some(json!({ "type": "text", "text": text })),
-                CurrentProviderContent::Image { data, .. } => Some(json!({
+                ContentPart::Text { text, .. } => Some(json!({ "type": "text", "text": text })),
+                ContentPart::Media {
+                    uri, media_type, ..
+                } => Some(json!({
                     "type": "image_url",
-                    "image_url": { "url": data },
+                    "image_url": { "url": uri, "media_type": media_type },
                 })),
                 _ => None,
             })
@@ -210,7 +201,7 @@ fn chat_content(content: &[CurrentProviderContent]) -> Value {
     )
 }
 
-fn chat_tool(tool: &CurrentProviderTool) -> Value {
+fn chat_tool(tool: &runtime_core::CanonicalToolDefinition) -> Value {
     json!({
         "type": "function",
         "function": {
@@ -222,23 +213,25 @@ fn chat_tool(tool: &CurrentProviderTool) -> Value {
     })
 }
 
-fn responses_message(message: &CurrentProviderMessage) -> Vec<Value> {
+fn responses_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
     match message.role {
-        CurrentProviderRole::Tool => message
+        CanonicalRole::Tool => message
             .content
             .iter()
             .filter_map(|content| match content {
-                CurrentProviderContent::ToolResult(result) => Some(json!({
+                ContentPart::ToolResult {
+                    id, result, error, ..
+                } => Some(json!({
                     "type": "function_call_output",
-                    "call_id": result.call_id,
-                    "output": tool_result_text(result),
+                    "call_id": id,
+                    "output": tool_result_text(result, error.as_deref()),
                 })),
                 _ => None,
             })
             .collect(),
-        CurrentProviderRole::Assistant => {
+        CanonicalRole::Assistant => {
             let mut items = Vec::new();
-            let text = content_text(&message.content);
+            let text = text_from_parts(&message.content);
             if !text.is_empty() {
                 items.push(json!({
                     "type": "message",
@@ -246,99 +239,103 @@ fn responses_message(message: &CurrentProviderMessage) -> Vec<Value> {
                     "content": [{ "type": "output_text", "text": text }],
                 }));
             }
-            for content in &message.content {
-                if let CurrentProviderContent::ToolCall(call) = content {
+            for part in &message.content {
+                if let ContentPart::ToolCall {
+                    id, name, input, ..
+                } = part
+                {
                     items.push(json!({
                         "type": "function_call",
-                        "call_id": call.id,
-                        "name": call.name,
-                        "arguments": call.raw_arguments,
+                        "call_id": id,
+                        "name": name,
+                        "arguments": input.to_string(),
                     }));
                 }
             }
             items
         }
-        CurrentProviderRole::User => vec![json!({
-            "role": "user",
+        CanonicalRole::User | CanonicalRole::System | CanonicalRole::Developer => vec![json!({
+            "type": "message",
+            "role": wire_role(message.role),
             "content": responses_input_content(&message.content),
         })],
     }
 }
 
-fn responses_input_content(content: &[CurrentProviderContent]) -> Vec<Value> {
+fn responses_input_content(content: &[ContentPart]) -> Vec<Value> {
     content
         .iter()
         .filter_map(|part| match part {
-            CurrentProviderContent::Text(text) => {
-                Some(json!({ "type": "input_text", "text": text }))
-            }
-            CurrentProviderContent::Image { data, .. } => {
-                Some(json!({ "type": "input_image", "image_url": data }))
-            }
+            ContentPart::Text { text, .. } => Some(json!({ "type": "input_text", "text": text })),
+            ContentPart::Media {
+                uri, media_type, ..
+            } => Some(json!({
+                "type": "input_image",
+                "image_url": uri,
+                "media_type": media_type,
+            })),
             _ => None,
         })
         .collect()
 }
 
-fn anthropic_message(message: &CurrentProviderMessage) -> Vec<Value> {
+fn anthropic_message(message: &runtime_core::CanonicalMessage) -> Vec<Value> {
     let role = match message.role {
-        CurrentProviderRole::Assistant => "assistant",
-        CurrentProviderRole::User | CurrentProviderRole::Tool => "user",
+        CanonicalRole::Assistant => "assistant",
+        _ => "user",
     };
     let content = message
         .content
         .iter()
         .filter_map(|part| match part {
-            CurrentProviderContent::Text(text) => Some(json!({ "type": "text", "text": text })),
-            CurrentProviderContent::Reasoning(thinking) => {
-                Some(json!({ "type": "thinking", "thinking": thinking }))
+            ContentPart::Text { text, .. } => Some(json!({ "type": "text", "text": text })),
+            ContentPart::Reasoning { text, .. } => {
+                Some(json!({ "type": "thinking", "thinking": text }))
             }
-            CurrentProviderContent::Image { data, media_type } => Some(json!({
+            ContentPart::Media {
+                uri, media_type, ..
+            } => Some(json!({
                 "type": "image",
-                "source": { "type": "base64", "media_type": media_type, "data": image_payload(data) },
+                "source": { "type": "url", "url": uri, "media_type": media_type },
             })),
-            CurrentProviderContent::ToolCall(call) => Some(json!({
+            ContentPart::ToolCall {
+                id, name, input, ..
+            } => Some(json!({
                 "type": "tool_use",
-                "id": call.id,
-                "name": call.name,
-                "input": call.arguments,
+                "id": id,
+                "name": name,
+                "input": input,
             })),
-            CurrentProviderContent::ToolResult(result) => Some(json!({
+            ContentPart::ToolResult {
+                id, result, error, ..
+            } => Some(json!({
                 "type": "tool_result",
-                "tool_use_id": result.call_id,
-                "content": tool_result_text(result),
-                "is_error": !result.success,
+                "tool_use_id": id,
+                "content": tool_result_text(result, error.as_deref()),
             })),
         })
         .collect::<Vec<_>>();
-    (!content.is_empty())
-        .then_some(json!({ "role": role, "content": content }))
-        .into_iter()
-        .collect()
+    vec![json!({ "role": role, "content": content })]
 }
 
-fn image_payload(data: &str) -> &str {
-    data.split_once(',')
-        .map(|(_, payload)| payload)
-        .unwrap_or(data)
-}
-
-fn content_text(content: &[CurrentProviderContent]) -> String {
-    content
+fn text_from_parts(parts: &[ContentPart]) -> String {
+    parts
         .iter()
         .filter_map(|part| match part {
-            CurrentProviderContent::Text(text) | CurrentProviderContent::Reasoning(text) => {
-                Some(text.as_str())
-            }
+            ContentPart::Text { text, .. } => Some(text.as_str()),
             _ => None,
         })
         .collect::<Vec<_>>()
         .join("")
 }
 
-fn tool_result_text(result: &CurrentProviderToolResult) -> String {
-    match result.error.as_deref() {
-        Some(error) if !result.success => format!("{}\n{error}", result.output),
-        _ => result.output.clone(),
+fn tool_result_text(result: &ToolResultValue, error: Option<&str>) -> String {
+    if let Some(error) = error.filter(|value| !value.trim().is_empty()) {
+        return error.to_string();
+    }
+    match result {
+        ToolResultValue::Text { value } => value.clone(),
+        ToolResultValue::Json { value } | ToolResultValue::Error { value } => value.to_string(),
+        ToolResultValue::Content { value } => text_from_parts(value),
     }
 }

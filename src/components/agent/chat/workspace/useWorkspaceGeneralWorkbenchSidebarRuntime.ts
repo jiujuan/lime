@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/executionRun";
 import { extractArtifactProtocolPathsFromRecord } from "@/lib/artifact-protocol";
 import {
+  resolveExecutableSkillId,
   skillExecutionApi,
   type SkillDetailInfo,
 } from "@/lib/api/skill-execution";
@@ -178,7 +179,12 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
     }
 
     void loadGeneralWorkbenchHistory(0, true);
-  }, [isThemeWorkbench, loadGeneralWorkbenchHistory, sessionId, sidebarVisible]);
+  }, [
+    isThemeWorkbench,
+    loadGeneralWorkbenchHistory,
+    sessionId,
+    sidebarVisible,
+  ]);
 
   const generalWorkbenchRequiredSkillNames = useMemo(() => {
     if (!isThemeWorkbench) {
@@ -232,32 +238,51 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
     }
 
     let disposed = false;
-    Promise.all(
-      missingSkillNames.map(async (skillName) => {
-        try {
-          const detail = await skillExecutionApi.getSkillDetail(skillName);
-          return [skillName, detail] as const;
-        } catch (error) {
-          console.warn(
-            "[AgentChatPage] 加载 Skill 详情失败:",
-            skillName,
-            error,
-          );
-          return [skillName, null] as const;
+    void skillExecutionApi
+      .listExecutableSkills()
+      .then((skills) =>
+        Promise.all(
+          missingSkillNames.map(async (skillReference) => {
+            const skillId = resolveExecutableSkillId(skills, skillReference);
+            if (!skillId) {
+              console.warn(
+                "[AgentChatPage] 无法唯一解析 Skill 引用:",
+                skillReference,
+              );
+              return [skillReference, null] as const;
+            }
+            try {
+              const detail = await skillExecutionApi.getSkillDetail(skillId);
+              return [skillReference, detail] as const;
+            } catch (error) {
+              console.warn(
+                "[AgentChatPage] 加载 Skill 详情失败:",
+                skillId,
+                error,
+              );
+              return [skillReference, null] as const;
+            }
+          }),
+        ),
+      )
+      .catch((error) => {
+        console.warn("[AgentChatPage] 加载 Skill catalog 失败:", error);
+        return missingSkillNames.map(
+          (skillReference) => [skillReference, null] as const,
+        );
+      })
+      .then((entries) => {
+        if (disposed) {
+          return;
         }
-      }),
-    ).then((entries) => {
-      if (disposed) {
-        return;
-      }
-      setGeneralWorkbenchSkillDetailMap((previous) => {
-        const next = { ...previous };
-        entries.forEach(([skillName, detail]) => {
-          next[skillName] = detail;
+        setGeneralWorkbenchSkillDetailMap((previous) => {
+          const next = { ...previous };
+          entries.forEach(([skillReference, detail]) => {
+            next[skillReference] = detail;
+          });
+          return next;
         });
-        return next;
       });
-    });
 
     return () => {
       disposed = true;
@@ -531,7 +556,7 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
         selectedGeneralWorkbenchRunId,
       ) ??
       (selectedGeneralWorkbenchRunId === sessionId
-        ? generalWorkbenchWorkflowRuns[0] ?? null
+        ? (generalWorkbenchWorkflowRuns[0] ?? null)
         : null);
     if (workflowRun) {
       setSelectedGeneralWorkbenchRunDetail(
@@ -642,10 +667,7 @@ function workflowRunToActivityLog(
   return {
     id: `workflow-run-${run.workflowRunId}`,
     name:
-      run.workflowTitle ??
-      run.workflowKey ??
-      failedStep?.title ??
-      "Workflow",
+      run.workflowTitle ?? run.workflowKey ?? failedStep?.title ?? "Workflow",
     status:
       status === "error"
         ? "failed"

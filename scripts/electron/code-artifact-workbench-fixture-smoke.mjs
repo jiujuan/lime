@@ -387,6 +387,39 @@ if (input.kind === "turnStart") {
   const assistantText = isRecoveryTurn
     ? "已继续修复 coding-target，并通过 npm test -- coding-target。"
     : "${ASSISTANT_ARTIFACT_TEXT}";
+  const sessionId = String(input.request?.session?.sessionId || "");
+  const threadId = String(input.request?.session?.threadId || sessionId);
+  const turnId = String(input.request?.turn?.turnId || "");
+  const toolStartedAtMs = Date.now();
+  const canonicalToolItem = (status, sequence, output = null) => {
+    const updatedAtMs = Date.now();
+    return {
+      sessionId,
+      threadId,
+      turnId,
+      itemId: "${TOOL_CALL_ID}",
+      sequence,
+      ordinal: 4,
+      createdAtMs: toolStartedAtMs,
+      updatedAtMs,
+      completedAtMs: output ? updatedAtMs : undefined,
+      kind: "tool",
+      status,
+      payload: {
+        type: "tool",
+        call_id: "${TOOL_CALL_ID}",
+        name: "${TOOL_NAME}",
+        arguments: [
+          { name: "url", value: "https://example.com/lime-workbench-tool" },
+          { name: "purpose", value: "code-artifact-workbench-electron-fixture" }
+        ],
+        output
+      },
+      metadata: {
+        source: "code-artifact-workbench-electron-fixture"
+      }
+    };
+  };
   const events = [
       {
         type: "message.delta",
@@ -395,24 +428,20 @@ if (input.kind === "turnStart") {
         }
       },
       {
-        type: "tool.started",
+        type: "item.started",
         payload: {
-          toolCallId: "${TOOL_CALL_ID}",
-          toolName: "${TOOL_NAME}",
-          arguments: {
-            url: "https://example.com/lime-workbench-tool",
-            purpose: "code-artifact-workbench-electron-fixture"
-          }
+          item: canonicalToolItem("inProgress", 1)
         }
       },
       {
-        type: "tool.result",
+        type: "item.completed",
         payload: {
-          toolCallId: "${TOOL_CALL_ID}",
-          toolName: "${TOOL_NAME}",
-          outputPreview: "${TOOL_OUTPUT_PREVIEW}",
-          output: "${TOOL_OUTPUT_PREVIEW}",
-          success: true
+          item: canonicalToolItem("completed", 2, {
+            text: "${TOOL_OUTPUT_PREVIEW}",
+            structuredContent: { source: "fixture" },
+            durationMs: Math.max(0, Date.now() - toolStartedAtMs),
+            truncated: false
+          })
         }
       },
       {
@@ -1408,7 +1437,7 @@ async function waitForCodeArtifactReadModel(
 
   throw new Error(
     `代码产物会话未完成，或未持久化 artifact.snapshot / tool_calls / coding facts: ${JSON.stringify(
-      sanitizeJson(lastRead),
+      summarizeCodeArtifactRead(lastRead),
     )}`,
   );
 }
@@ -2821,8 +2850,8 @@ async function run() {
       collectTraceJsonRpcMessages(traceMessages),
     );
     const traceRecoveryMetadata =
-      traceRecoveryTurnStart?.params?.runtimeOptions?.runtimeRequest?.metadata ||
-      {};
+      traceRecoveryTurnStart?.params?.runtimeOptions?.runtimeRequest
+        ?.metadata || {};
     const traceRecoveryContext =
       traceRecoveryMetadata.harness?.coding_workbench_recovery || null;
     const capturedRecoveryContext =

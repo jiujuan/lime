@@ -75,6 +75,142 @@ fn apply_events_updates_projection_in_one_batch() {
 }
 
 #[test]
+fn apply_events_discards_stale_sequence_without_regressing_read_model() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let completed = event(2, "turn.completed", "sess_1", "thread_1", Some("turn_1"));
+    let stale = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+
+    assert_eq!(projection.apply_event(&completed), Ok(()));
+    assert_eq!(
+        projection
+            .apply_events(&[stale])
+            .expect("apply stale event"),
+        0
+    );
+
+    let session = projection
+        .read_session_projection("sess_1", ProjectionReadWindow::default())
+        .expect("read projection")
+        .expect("session");
+    assert_eq!(session.session.status, AgentSessionStatus::Completed);
+    assert_eq!(session.item_count, 1);
+    assert_eq!(session.last_event_sequence, 2);
+    assert_eq!(
+        projection.read_watermark("sess_1").expect("watermark"),
+        Some(ProjectionWatermark { last_sequence: 2 })
+    );
+}
+
+#[test]
+fn apply_events_ignores_duplicate_event_id_idempotently() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let original = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+
+    assert_eq!(projection.apply_event(&original), Ok(()));
+    assert_eq!(
+        projection
+            .apply_events(&[original])
+            .expect("apply duplicate event"),
+        0
+    );
+
+    let session = projection
+        .read_session_projection("sess_1", ProjectionReadWindow::default())
+        .expect("read projection")
+        .expect("session");
+    assert_eq!(session.item_count, 1);
+    assert_eq!(session.last_event_sequence, 1);
+}
+
+#[test]
+fn apply_events_rejects_same_sequence_with_different_event_id() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let original = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+    projection.apply_event(&original).expect("apply event");
+
+    let mut conflicting = original.clone();
+    conflicting.event_id = "evt-conflicting-sequence".to_string();
+    let error = projection
+        .apply_events(&[conflicting])
+        .expect_err("same sequence must fail closed");
+    assert!(error.contains("Projection sequence collision"));
+    assert_eq!(
+        projection.read_watermark("sess_1").expect("read watermark"),
+        Some(ProjectionWatermark { last_sequence: 1 })
+    );
+}
+
+#[test]
+fn apply_events_rejects_same_identity_with_changed_payload() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let original = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+    projection.apply_event(&original).expect("apply event");
+
+    let mut changed = original.clone();
+    changed.payload = json!({ "text": "changed" });
+    let error = projection
+        .apply_events(&[changed])
+        .expect_err("changed duplicate must fail closed");
+    assert!(error.contains("Projection event identity collision"));
+}
+
+#[test]
+fn apply_events_rolls_back_valid_prefix_when_later_event_collides() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let original = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+    projection.apply_event(&original).expect("apply event");
+
+    let valid_next = event(2, "message.completed", "sess_1", "thread_1", Some("turn_1"));
+    let mut collision = original.clone();
+    collision.session_id = "sess_2".to_string();
+    let error = projection
+        .apply_events(&[valid_next, collision])
+        .expect_err("later collision must roll back the batch");
+    assert!(error.contains("Projection event identity collision"));
+
+    let session = projection
+        .read_session_projection("sess_1", ProjectionReadWindow::default())
+        .expect("read projection")
+        .expect("session");
+    assert_eq!(session.item_count, 1);
+    assert_eq!(session.last_event_sequence, 1);
+    assert!(projection
+        .read_session_projection("sess_2", ProjectionReadWindow::default())
+        .expect("read projection")
+        .is_none());
+}
+
+#[test]
+fn apply_events_rejects_event_id_collision_across_sessions() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let original = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+    let mut collision = event(1, "turn.accepted", "sess_2", "thread_2", Some("turn_2"));
+    collision.event_id = original.event_id.clone();
+
+    projection.apply_event(&original).expect("apply original");
+    let error = projection
+        .apply_event(&collision)
+        .expect_err("event id collision should fail");
+    assert!(error.contains("identity collision"));
+    assert!(projection
+        .read_session("sess_2")
+        .expect("read collision session")
+        .is_none());
+}
+
+#[test]
 fn clear_session_removes_projected_rows() {
     let temp = tempfile::tempdir().expect("tempdir");
     let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))

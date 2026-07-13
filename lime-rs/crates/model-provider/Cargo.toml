@@ -11,12 +11,14 @@ path = "src/lib.rs"
 doctest = false
 
 [dependencies]
+app-server-protocol.workspace = true
 agent-protocol.workspace = true
 anyhow.workspace = true
 async-stream.workspace = true
 futures.workspace = true
 once_cell.workspace = true
 reqwest.workspace = true
+runtime-core.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true

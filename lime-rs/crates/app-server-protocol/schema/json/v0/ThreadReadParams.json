@@ -1,0 +1,27 @@
+{
+  "$defs": {
+    "ThreadTurnsView": {
+      "enum": [
+        "full",
+        "notLoaded",
+        "summary"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    },
+    "turnsView": {
+      "$ref": "#/$defs/ThreadTurnsView",
+      "default": "full"
+    }
+  },
+  "required": [
+    "threadId"
+  ],
+  "title": "ThreadReadParams",
+  "type": "object"
+}

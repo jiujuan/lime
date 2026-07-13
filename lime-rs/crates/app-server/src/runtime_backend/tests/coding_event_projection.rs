@@ -1,5 +1,101 @@
 use super::*;
 use crate::runtime_backend::event_mapper::emit_runtime_agent_event_with_coding_mirror_and_plan_parser;
+use agent_protocol::{
+    ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload, ToolArgument,
+    ToolOutput, TurnId,
+};
+
+fn tool_started(tool_name: &str, tool_id: &str, arguments: Option<Value>) -> RuntimeAgentEvent {
+    canonical_tool_event(tool_name, tool_id, arguments, None)
+}
+
+fn tool_completed(tool_id: &str, result: AgentToolResult) -> RuntimeAgentEvent {
+    canonical_tool_event("tool", tool_id, None, Some(result))
+}
+
+fn canonical_tool_event(
+    tool_name: &str,
+    tool_id: &str,
+    arguments: Option<Value>,
+    result: Option<AgentToolResult>,
+) -> RuntimeAgentEvent {
+    let arguments = arguments
+        .map(|arguments| match arguments {
+            Value::Object(arguments) => arguments
+                .into_iter()
+                .map(|(name, value)| ToolArgument {
+                    name,
+                    value: value
+                        .as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| value.to_string()),
+                })
+                .collect(),
+            value => vec![ToolArgument {
+                name: "value".to_string(),
+                value: value
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| value.to_string()),
+            }],
+        })
+        .unwrap_or_default();
+    let (status, output, metadata) = match result {
+        Some(result) => {
+            let status = if result.success {
+                ItemStatus::Completed
+            } else {
+                ItemStatus::Failed
+            };
+            let metadata = result
+                .metadata
+                .map(|metadata| Value::Object(metadata.into_iter().collect()))
+                .unwrap_or_else(|| json!({}));
+            let output = ToolOutput {
+                text: Some(result.output),
+                structured_content: result.structured_content,
+                error: result.error,
+                duration_ms: metadata.get("duration_ms").and_then(Value::as_u64),
+                truncated: metadata
+                    .get("truncated")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                output_ref: metadata
+                    .get("output_ref")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+            };
+            (status, Some(output), metadata)
+        }
+        None => (ItemStatus::InProgress, None, json!({})),
+    };
+    let payload = ThreadItemPayload::Tool {
+        call_id: tool_id.to_string(),
+        name: tool_name.to_string(),
+        arguments,
+        output,
+    };
+    let item = ThreadItem {
+        session_id: SessionId::new("session-test"),
+        thread_id: ThreadId::new("thread-test"),
+        turn_id: TurnId::new("turn-test"),
+        item_id: ItemId::new(tool_id),
+        sequence: 1,
+        ordinal: 1,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        completed_at_ms: status.is_terminal().then_some(2),
+        kind: payload.kind(),
+        status,
+        payload,
+        metadata,
+    };
+    if status.is_terminal() {
+        RuntimeAgentEvent::ItemCompleted { item }
+    } else {
+        RuntimeAgentEvent::ItemStarted { item }
+    }
+}
 
 #[test]
 fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
@@ -7,13 +103,11 @@ fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
     let mut mirror = coding_events::CodingEventMirror::default();
 
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolStart {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-test".to_string(),
-            arguments: Some(
-                json!({ "command": "cargo test -p app-server coding_events" }).to_string(),
-            ),
-        },
+        &tool_started(
+            "Bash",
+            "tool-test",
+            Some(json!({ "command": "cargo test -p app-server coding_events" })),
+        ),
         &mut sink,
         &mut mirror,
     )
@@ -30,9 +124,9 @@ fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
     )
     .expect("tool output should emit");
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-test".to_string(),
-            result: AgentToolResult {
+        &tool_completed(
+            "tool-test",
+            AgentToolResult {
                 success: true,
                 output: "ok".to_string(),
                 error: None,
@@ -46,7 +140,7 @@ fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
                     ),
                 ])),
             },
-        },
+        ),
         &mut sink,
         &mut mirror,
     )
@@ -60,31 +154,32 @@ fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {
     assert_eq!(
         event_types,
         vec![
-            "tool.started",
-            "tool.args",
+            "item.started",
             "command.started",
             "test.started",
             "tool.output.delta",
             "command.output",
-            "tool.result",
+            "item.completed",
             "command.exited",
             "test.completed"
         ]
     );
-    let args_event = sink
+    let item_started = sink
         .events
         .iter()
-        .find(|event| event.event_type == "tool.args")
-        .expect("tool args event");
-    assert_eq!(args_event.payload["toolCallId"].as_str(), Some("tool-test"));
+        .find(|event| event.event_type == "item.started")
+        .expect("canonical tool item start");
     assert_eq!(
-        args_event.payload["args"]["command"].as_str(),
-        Some("cargo test -p app-server coding_events")
+        item_started.payload["item"]["payload"]["call_id"].as_str(),
+        Some("tool-test")
     );
-    assert_eq!(
-        args_event.payload["source"].as_str(),
-        Some("runtime_tool_start")
-    );
+    let arguments = item_started.payload["item"]["payload"]["arguments"]
+        .as_array()
+        .expect("typed tool arguments");
+    assert!(arguments.iter().any(|argument| {
+        argument["name"] == "command"
+            && argument["value"] == "cargo test -p app-server coding_events"
+    }));
     let command_started = sink
         .events
         .iter()
@@ -328,19 +423,19 @@ fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
     let mut mirror = coding_events::CodingEventMirror::default();
 
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolStart {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-failed".to_string(),
-            arguments: Some(json!({ "command": "cargo test -p app-server missing" }).to_string()),
-        },
+        &tool_started(
+            "Bash",
+            "tool-failed",
+            Some(json!({ "command": "cargo test -p app-server missing" })),
+        ),
         &mut sink,
         &mut mirror,
     )
     .expect("tool start should emit");
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-failed".to_string(),
-            result: AgentToolResult {
+        &tool_completed(
+            "tool-failed",
+            AgentToolResult {
                 success: false,
                 output: "test failed".to_string(),
                 error: Some("exit code 101".to_string()),
@@ -355,7 +450,7 @@ fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
                     ),
                 ])),
             },
-        },
+        ),
         &mut sink,
         &mut mirror,
     )
@@ -369,11 +464,11 @@ fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
     assert_eq!(
         event_types,
         vec![
-            "tool.started",
+            "item.started",
             "tool.args",
             "command.started",
             "test.started",
-            "tool.failed",
+            "item.completed",
             "command.output",
             "command.exited",
             "test.completed"
@@ -382,22 +477,21 @@ fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
     let failed_event = sink
         .events
         .iter()
-        .find(|event| event.event_type == "tool.failed")
-        .expect("tool failed event");
+        .find(|event| event.event_type == "item.completed")
+        .expect("failed canonical item event");
     assert_eq!(
-        failed_event.payload["toolCallId"].as_str(),
-        Some("tool-failed")
+        failed_event.payload["item"]["payload"]["callId"],
+        "tool-failed"
     );
-    assert_eq!(failed_event.payload["status"].as_str(), Some("failed"));
+    assert_eq!(failed_event.payload["item"]["status"], "failed");
     assert_eq!(
-        failed_event.payload["failureCategory"].as_str(),
-        Some("test_failed")
-    );
-    assert_eq!(
-        failed_event.payload["error"].as_str(),
+        failed_event.payload["item"]["payload"]["output"]["error"].as_str(),
         Some("exit code 101")
     );
-    assert_eq!(failed_event.payload["output"].as_str(), Some("test failed"));
+    assert_eq!(
+        failed_event.payload["item"]["payload"]["output"]["text"].as_str(),
+        Some("test failed")
+    );
 }
 
 #[test]
@@ -406,19 +500,19 @@ fn runtime_agent_permission_denied_fact_precedes_tool_failed_terminal() {
     let mut mirror = coding_events::CodingEventMirror::default();
 
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolStart {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-denied".to_string(),
-            arguments: Some(json!({ "command": "rm -rf important" }).to_string()),
-        },
+        &tool_started(
+            "Bash",
+            "tool-denied",
+            Some(json!({ "command": "rm -rf important" })),
+        ),
         &mut sink,
         &mut mirror,
     )
     .expect("tool start should emit");
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-denied".to_string(),
-            result: AgentToolResult {
+        &tool_completed(
+            "tool-denied",
+            AgentToolResult {
                 success: false,
                 output: String::new(),
                 error: Some("policy denied this command".to_string()),
@@ -429,7 +523,7 @@ fn runtime_agent_permission_denied_fact_precedes_tool_failed_terminal() {
                     json!("dangerous_command"),
                 )])),
             },
-        },
+        ),
         &mut sink,
         &mut mirror,
     )
@@ -443,11 +537,11 @@ fn runtime_agent_permission_denied_fact_precedes_tool_failed_terminal() {
     assert_eq!(
         event_types,
         vec![
-            "tool.started",
+            "item.started",
             "tool.args",
             "command.started",
             "permission.denied",
-            "tool.failed",
+            "item.completed",
             "command.exited"
         ]
     );
@@ -469,19 +563,15 @@ fn runtime_agent_read_tool_result_is_mirrored_to_file_read() {
     let mut mirror = coding_events::CodingEventMirror::default();
 
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolStart {
-            tool_name: "Read".to_string(),
-            tool_id: "tool-read".to_string(),
-            arguments: Some(json!({ "path": "src/App.tsx" }).to_string()),
-        },
+        &tool_started("Read", "tool-read", Some(json!({ "path": "src/App.tsx" }))),
         &mut sink,
         &mut mirror,
     )
     .expect("tool start should emit");
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-read".to_string(),
-            result: AgentToolResult {
+        &tool_completed(
+            "tool-read",
+            AgentToolResult {
                 success: true,
                 output: "1 | export {}".to_string(),
                 error: None,
@@ -489,7 +579,7 @@ fn runtime_agent_read_tool_result_is_mirrored_to_file_read() {
                 images: None,
                 metadata: Some(HashMap::from([("file_type".to_string(), json!("text"))])),
             },
-        },
+        ),
         &mut sink,
         &mut mirror,
     )
@@ -502,7 +592,7 @@ fn runtime_agent_read_tool_result_is_mirrored_to_file_read() {
         .collect::<Vec<_>>();
     assert_eq!(
         event_types,
-        vec!["tool.started", "tool.args", "tool.result", "file.read"]
+        vec!["item.started", "tool.args", "item.completed", "file.read"]
     );
     assert_eq!(
         sink.events.last().expect("file read event").payload["path"].as_str(),
@@ -516,24 +606,23 @@ fn runtime_agent_shell_apply_patch_is_mirrored_to_patch_lifecycle() {
     let mut mirror = coding_events::CodingEventMirror::default();
 
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolStart {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-patch-shell".to_string(),
-            arguments: Some(
+        &tool_started(
+            "Bash",
+            "tool-patch-shell",
+            Some(
                 json!({
                     "command": "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: notes/live.md\n+hello\n*** End Patch\nPATCH"
-                })
-                .to_string(),
+                }),
             ),
-        },
+        ),
         &mut sink,
         &mut mirror,
     )
     .expect("tool start should emit");
     emit_runtime_agent_event_with_coding_mirror(
-        &RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-patch-shell".to_string(),
-            result: AgentToolResult {
+        &tool_completed(
+            "tool-patch-shell",
+            AgentToolResult {
                 success: true,
                 output: "ok".to_string(),
                 error: None,
@@ -544,7 +633,7 @@ fn runtime_agent_shell_apply_patch_is_mirrored_to_patch_lifecycle() {
                     ("command".to_string(), json!("apply_patch <<'PATCH'")),
                 ])),
             },
-        },
+        ),
         &mut sink,
         &mut mirror,
     )
@@ -558,11 +647,11 @@ fn runtime_agent_shell_apply_patch_is_mirrored_to_patch_lifecycle() {
     assert_eq!(
         event_types,
         vec![
-            "tool.started",
+            "item.started",
             "tool.args",
             "patch.started",
             "command.started",
-            "tool.result",
+            "item.completed",
             "command.output",
             "command.exited",
             "patch.applied",

@@ -260,6 +260,19 @@ export interface AgentThreadFileArtifactItem extends AgentThreadItemBase {
   content?: string;
   metadata?: unknown;
 }
+
+export interface AgentThreadMediaItem extends AgentThreadItemBase {
+  type: "media";
+  uri: string;
+  mime_type: string;
+  preview?: string;
+}
+
+export interface AgentThreadExtensionItem extends AgentThreadItemBase {
+  type: "extension";
+  name: string;
+  data: Record<string, unknown>;
+}
 export interface AgentThreadSubagentActivityItem extends AgentThreadItemBase {
   type: "subagent_activity";
   status_label: string;
@@ -316,6 +329,8 @@ export type AgentThreadItem =
   | AgentThreadApprovalRequestItem
   | AgentThreadRequestUserInputItem
   | AgentThreadFileArtifactItem
+  | AgentThreadMediaItem
+  | AgentThreadExtensionItem
   | AgentThreadSubagentActivityItem
   | AgentThreadExpertProfileSwitchItem
   | AgentThreadWarningItem

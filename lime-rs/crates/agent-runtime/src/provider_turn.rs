@@ -11,28 +11,89 @@ use crate::session_config::AgentSessionConfig;
 use futures::future::join_all;
 use futures::StreamExt;
 use model_provider::current_client::{
-    CurrentProvider, CurrentProviderContent, CurrentProviderEvent, CurrentProviderMessage,
+    CanonicalLlmEvent, CurrentProvider, CurrentProviderContent, CurrentProviderMessage,
     CurrentProviderRequest, CurrentProviderTool, CurrentProviderToolCall,
-    CurrentProviderToolResult, CurrentProviderUsage,
+    CurrentProviderToolResult, CurrentProviderUsage, Usage,
 };
 use model_provider::provider_stream::RuntimeReplyModelRequestPolicy;
+use std::collections::HashMap;
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use tool_runtime::tool_definition::RuntimeToolDefinition;
+use tool_runtime::tool_call::{ToolCall, ToolEnvironment};
+use tool_runtime::tool_definition::{RuntimeToolDefinition, RuntimeToolExposure};
 use tool_runtime::tool_executor::{
-    RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutionRequest,
-    RuntimeToolExecutorHandle,
+    RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutionError,
+    RuntimeToolExecutionFuture, RuntimeToolExecutionRequest, RuntimeToolExecutor,
+    RuntimeToolExecutorHandle, RuntimeToolPolicyErrorKind,
 };
+use tool_runtime::tool_lifecycle::ToolLifecycleEmitter;
+use tool_runtime::tool_result_projection::NormalizedToolOutput;
+
+const LOCAL_TOOL_ENVIRONMENT_ID: &str = "local";
+
+#[derive(Clone)]
+pub struct RuntimeToolStepSnapshot {
+    pub definitions: Vec<RuntimeToolDefinition>,
+    pub executor: RuntimeToolExecutorHandle,
+}
+
+impl RuntimeToolStepSnapshot {
+    pub fn new(
+        definitions: Vec<RuntimeToolDefinition>,
+        executor: RuntimeToolExecutorHandle,
+    ) -> Self {
+        Self {
+            definitions,
+            executor,
+        }
+    }
+}
+
+pub type RuntimeToolStepSnapshotFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<RuntimeToolStepSnapshot, String>> + Send + 'a>>;
+
+pub trait RuntimeToolStepSnapshotSource: Send + Sync {
+    fn capture(&self) -> RuntimeToolStepSnapshotFuture<'_>;
+}
+
+#[derive(Clone)]
+pub struct RuntimeToolStepSnapshotSourceHandle(Arc<dyn RuntimeToolStepSnapshotSource>);
+
+impl RuntimeToolStepSnapshotSourceHandle {
+    pub fn new(source: Arc<dyn RuntimeToolStepSnapshotSource>) -> Self {
+        Self(source)
+    }
+
+    pub fn fixed(snapshot: RuntimeToolStepSnapshot) -> Self {
+        Self::new(Arc::new(FixedRuntimeToolStepSnapshotSource { snapshot }))
+    }
+
+    async fn capture(&self) -> Result<RuntimeToolStepSnapshot, String> {
+        self.0.capture().await
+    }
+}
+
+struct FixedRuntimeToolStepSnapshotSource {
+    snapshot: RuntimeToolStepSnapshot,
+}
+
+impl RuntimeToolStepSnapshotSource for FixedRuntimeToolStepSnapshotSource {
+    fn capture(&self) -> RuntimeToolStepSnapshotFuture<'_> {
+        Box::pin(async move { Ok(self.snapshot.clone()) })
+    }
+}
 
 #[derive(Clone)]
 pub struct CurrentProviderTurnInput {
     pub provider: Arc<dyn CurrentProvider>,
     pub session_config: AgentSessionConfig,
     pub initial_messages: Vec<CurrentProviderMessage>,
-    pub tool_definitions: Vec<RuntimeToolDefinition>,
+    pub tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle,
     pub model_request_policy: Option<RuntimeReplyModelRequestPolicy>,
-    pub tool_executor: RuntimeToolExecutorHandle,
+    pub tool_lifecycle_emitter: Arc<dyn ToolLifecycleEmitter>,
     pub working_directory: PathBuf,
     pub cancel_token: Option<CancellationToken>,
 }
@@ -51,19 +112,6 @@ pub enum CurrentProviderTurnEvent {
         delta: String,
         accumulated_arguments: String,
     },
-    ToolStart {
-        tool_id: String,
-        tool_name: String,
-        arguments: serde_json::Value,
-    },
-    ToolEnd {
-        tool_id: String,
-        tool_name: String,
-        success: bool,
-        output: String,
-        error: Option<String>,
-        metadata: std::collections::HashMap<String, serde_json::Value>,
-    },
     Usage {
         usage: CurrentProviderUsage,
     },
@@ -80,20 +128,22 @@ where
         provider,
         session_config,
         mut initial_messages,
-        tool_definitions,
+        tool_step_snapshot_source,
         model_request_policy,
-        tool_executor,
+        tool_lifecycle_emitter,
         working_directory,
         cancel_token,
     } = input;
-    let tools = tool_definitions
-        .into_iter()
-        .map(|definition| CurrentProviderTool {
-            name: definition.name,
-            description: definition.description,
-            input_schema: definition.input_schema,
-        })
-        .collect::<Vec<_>>();
+    let turn_id = session_config
+        .turn_id
+        .clone()
+        .filter(|turn_id| !turn_id.trim().is_empty())
+        .ok_or_else(|| {
+            RuntimeReplyAttemptError::new(
+                "Current provider turn requires a canonical turn_id",
+                false,
+            )
+        })?;
     let mut loop_state = RuntimeReplyLoop::new(session_config.max_turns);
     let mut text_output = String::new();
     let mut errors = Vec::new();
@@ -129,6 +179,20 @@ where
             }
         }
 
+        let tool_step_snapshot = tool_step_snapshot_source
+            .capture()
+            .await
+            .map_err(|message| RuntimeReplyAttemptError::new(message, emitted_any))?;
+        let tools = tool_step_snapshot
+            .definitions
+            .iter()
+            .map(|definition| CurrentProviderTool {
+                name: definition.name.clone(),
+                description: definition.description.clone(),
+                input_schema: definition.input_schema.clone(),
+            })
+            .collect::<Vec<_>>();
+
         let request = CurrentProviderRequest::new(initial_messages.clone())
             .with_system_prompt(session_config.system_prompt.clone())
             .with_tools(tools.clone())
@@ -140,6 +204,7 @@ where
         let mut assistant_content = Vec::new();
         let mut calls = Vec::new();
         let mut completed = false;
+        let mut tool_arguments = HashMap::<String, String>::new();
 
         while let Some(event) = stream.next().await {
             if is_cancelled(&cancel_token) {
@@ -154,40 +219,55 @@ where
             match event
                 .map_err(|error| RuntimeReplyAttemptError::new(error.message, emitted_any))?
             {
-                CurrentProviderEvent::TextDelta(text) => {
+                CanonicalLlmEvent::TextDelta { text, .. } => {
                     emitted_any = true;
                     text_output.push_str(&text);
                     assistant_content.push(CurrentProviderContent::Text(text.clone()));
                     on_event(CurrentProviderTurnEvent::TextDelta { text });
                 }
-                CurrentProviderEvent::ReasoningDelta(text) => {
+                CanonicalLlmEvent::ReasoningDelta { text, .. } => {
                     emitted_any = true;
                     assistant_content.push(CurrentProviderContent::Reasoning(text.clone()));
                     on_event(CurrentProviderTurnEvent::ReasoningDelta { text });
                 }
-                CurrentProviderEvent::ToolCallInputDelta {
-                    call_id,
-                    tool_name,
-                    delta,
-                    accumulated_arguments,
-                } => {
+                CanonicalLlmEvent::ToolInputDelta { id, name, text } => {
                     emitted_any = true;
+                    let accumulated_arguments = tool_arguments.entry(id.clone()).or_default();
+                    accumulated_arguments.push_str(&text);
                     on_event(CurrentProviderTurnEvent::ToolInputDelta {
-                        tool_id: call_id,
-                        tool_name,
-                        delta,
-                        accumulated_arguments,
+                        tool_id: id,
+                        tool_name: Some(name),
+                        delta: text,
+                        accumulated_arguments: accumulated_arguments.clone(),
                     });
                 }
-                CurrentProviderEvent::ToolCall(call) => {
+                CanonicalLlmEvent::ToolCall {
+                    id, name, input, ..
+                } => {
                     emitted_any = true;
+                    let call = CurrentProviderToolCall::new(id, name, input);
                     assistant_content.push(CurrentProviderContent::ToolCall(call.clone()));
                     calls.push(call);
                 }
-                CurrentProviderEvent::Usage(usage) => {
-                    on_event(CurrentProviderTurnEvent::Usage { usage });
+                CanonicalLlmEvent::Usage { usage } => {
+                    on_event(CurrentProviderTurnEvent::Usage {
+                        usage: current_provider_usage(usage),
+                    });
                 }
-                CurrentProviderEvent::Completed { .. } => completed = true,
+                CanonicalLlmEvent::Finish { .. } => completed = true,
+                CanonicalLlmEvent::ProviderError { message, .. } => {
+                    return Err(RuntimeReplyAttemptError::new(message, emitted_any));
+                }
+                CanonicalLlmEvent::StepStart { .. }
+                | CanonicalLlmEvent::TextStart { .. }
+                | CanonicalLlmEvent::TextEnd { .. }
+                | CanonicalLlmEvent::ReasoningStart { .. }
+                | CanonicalLlmEvent::ReasoningEnd { .. }
+                | CanonicalLlmEvent::ToolInputStart { .. }
+                | CanonicalLlmEvent::ToolInputEnd { .. }
+                | CanonicalLlmEvent::ToolResult { .. }
+                | CanonicalLlmEvent::ToolError { .. }
+                | CanonicalLlmEvent::StepFinish { .. } => {}
             }
         }
 
@@ -208,16 +288,19 @@ where
         }
 
         let results = execute_calls(
-            &tool_executor,
-            &session_config,
+            &tool_step_snapshot.executor,
+            &tool_step_snapshot.definitions,
+            &turn_id,
+            &session_config.id,
+            session_config.turn_context.as_ref(),
             &working_directory,
             cancel_token.clone(),
+            tool_lifecycle_emitter.clone(),
             calls,
             model_request_policy
                 .as_ref()
                 .and_then(RuntimeReplyModelRequestPolicy::parallel_tool_calls)
                 .unwrap_or(false),
-            &mut on_event,
         )
         .await;
         initial_messages.push(CurrentProviderMessage::tool(
@@ -229,33 +312,49 @@ where
     }
 }
 
-async fn execute_calls<F>(
+fn current_provider_usage(usage: Usage) -> CurrentProviderUsage {
+    CurrentProviderUsage {
+        input_tokens: usage.input_tokens.unwrap_or_default().min(u32::MAX as u64) as u32,
+        output_tokens: usage.output_tokens.unwrap_or_default().min(u32::MAX as u64) as u32,
+        cached_input_tokens: usage
+            .cache_read_input_tokens
+            .map(|value| value.min(u32::MAX as u64) as u32),
+        cache_creation_input_tokens: usage
+            .cache_write_input_tokens
+            .map(|value| value.min(u32::MAX as u64) as u32),
+    }
+}
+
+async fn execute_calls(
     executor: &RuntimeToolExecutorHandle,
-    session_config: &AgentSessionConfig,
+    tool_definitions: &[RuntimeToolDefinition],
+    turn_id: &str,
+    session_id: &str,
+    turn_context: Option<&agent_protocol::turn_context::TurnContextOverride>,
     working_directory: &PathBuf,
     cancel_token: Option<CancellationToken>,
+    lifecycle_emitter: Arc<dyn ToolLifecycleEmitter>,
     calls: Vec<CurrentProviderToolCall>,
     allow_parallel: bool,
-    on_event: &mut F,
-) -> Vec<CurrentProviderToolResult>
-where
-    F: FnMut(CurrentProviderTurnEvent) + Send,
-{
-    for call in &calls {
-        on_event(CurrentProviderTurnEvent::ToolStart {
-            tool_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            arguments: call.arguments.clone(),
-        });
-    }
-
+) -> Vec<CurrentProviderToolResult> {
     let execute = |call: CurrentProviderToolCall| {
+        let (definition, step_executor) =
+            match runtime_tool_definition_for_call(tool_definitions, &call) {
+                Some(definition) => (definition, executor.clone()),
+                None => (
+                    unavailable_runtime_tool_definition(&call),
+                    RuntimeToolExecutorHandle::new(Arc::new(UnavailableStepToolExecutor)),
+                ),
+            };
         execute_call(
-            executor.clone(),
-            session_config.id.clone(),
-            session_config.turn_context.clone(),
+            step_executor,
+            definition,
+            turn_id.to_string(),
+            session_id.to_string(),
+            turn_context.cloned(),
             working_directory.clone(),
             cancel_token.clone(),
+            lifecycle_emitter.clone(),
             call,
         )
     };
@@ -270,90 +369,94 @@ where
     };
 
     let mut results = Vec::with_capacity(completed.len());
-    for CompletedToolCall {
-        call,
-        success,
-        output,
-        error,
-        metadata,
-    } in completed
-    {
-        on_event(CurrentProviderTurnEvent::ToolEnd {
-            tool_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            success,
-            output: output.clone(),
-            error: error.clone(),
-            metadata,
-        });
+    for CompletedToolCall { call, output } in completed {
         results.push(CurrentProviderToolResult {
             call_id: call.id,
             name: call.name,
-            success,
-            output,
-            error,
+            success: output.success,
+            output: output.text,
+            error: output.error,
         });
     }
     results
 }
 
+fn runtime_tool_definition_for_call(
+    definitions: &[RuntimeToolDefinition],
+    call: &CurrentProviderToolCall,
+) -> Option<RuntimeToolDefinition> {
+    definitions
+        .iter()
+        .find(|definition| definition.name == call.name)
+        .cloned()
+}
+
+fn unavailable_runtime_tool_definition(call: &CurrentProviderToolCall) -> RuntimeToolDefinition {
+    RuntimeToolDefinition::new(
+        call.name.clone(),
+        "Provider requested a tool that was unavailable for this sampling step",
+        serde_json::json!({ "type": "object" }),
+    )
+}
+
+struct UnavailableStepToolExecutor;
+
+impl RuntimeToolExecutor for UnavailableStepToolExecutor {
+    fn execute<'a>(
+        &'a self,
+        request: RuntimeToolExecutionRequest<'a>,
+    ) -> RuntimeToolExecutionFuture<'a> {
+        Box::pin(async move {
+            let message = format!(
+                "tool '{}' was not advertised for this sampling step",
+                request.tool_name
+            );
+            Err(RuntimeToolExecutionError::new(
+                message.clone(),
+                Some(RuntimeToolPolicyErrorKind::PermissionDenied(message)),
+            ))
+        })
+    }
+}
+
 struct CompletedToolCall {
     call: CurrentProviderToolCall,
-    success: bool,
-    output: String,
-    error: Option<String>,
-    metadata: std::collections::HashMap<String, serde_json::Value>,
+    output: NormalizedToolOutput,
 }
 
 async fn execute_call(
     executor: RuntimeToolExecutorHandle,
+    definition: RuntimeToolDefinition,
+    turn_id: String,
     session_id: String,
     turn_context: Option<agent_protocol::turn_context::TurnContextOverride>,
     working_directory: PathBuf,
     cancel_token: Option<CancellationToken>,
+    lifecycle_emitter: Arc<dyn ToolLifecycleEmitter>,
     call: CurrentProviderToolCall,
 ) -> CompletedToolCall {
     let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
-        working_directory,
+        working_directory: working_directory.clone(),
         session_id,
         cancel_token,
         workspace_sandbox: None,
     });
-    let result = if serde_json::from_str::<serde_json::Value>(&call.raw_arguments).is_err() {
-        Err(tool_runtime::tool_executor::RuntimeToolExecutionError::new(
-            "Provider returned invalid JSON tool arguments",
-            Some(
-                tool_runtime::tool_executor::RuntimeToolPolicyErrorKind::ExecutionFailed(
-                    "invalid_tool_arguments".to_string(),
-                ),
-            ),
-        ))
-    } else {
-        executor
-            .execute(RuntimeToolExecutionRequest {
-                tool_name: &call.name,
-                params: &call.arguments,
-                context: &context,
-                turn_context: turn_context.as_ref(),
-            })
-            .await
-    };
-    let (success, output, error, metadata) = match result {
-        Ok(result) => (result.success, result.output, result.error, result.metadata),
-        Err(error) => (
-            false,
-            String::new(),
-            Some(error.message().to_string()),
-            Default::default(),
-        ),
-    };
-    CompletedToolCall {
-        call,
-        success,
-        output,
-        error,
-        metadata,
-    }
+    let tool_call = ToolCall::new(
+        turn_id,
+        call.id.clone(),
+        call.name.clone(),
+        call.arguments.clone(),
+        vec![ToolEnvironment::new(
+            LOCAL_TOOL_ENVIRONMENT_ID,
+            working_directory,
+        )],
+        lifecycle_emitter,
+    );
+    let runtime_tool = executor.bind(definition, RuntimeToolExposure::Direct);
+    let output = runtime_tool
+        .execute_call(&tool_call, &context, turn_context.as_ref())
+        .await;
+    CompletedToolCall { call, output }
 }
 
 fn is_cancelled(cancel_token: &Option<CancellationToken>) -> bool {
@@ -367,246 +470,5 @@ fn attempts_summary(loop_state: &RuntimeReplyLoop) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::future::BoxFuture;
-    use futures::stream;
-    use model_provider::current_client::CurrentProviderRole;
-    use model_provider::current_client::{CurrentProviderError, CurrentProviderStream};
-    use std::collections::VecDeque;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Mutex;
-    use tool_runtime::tool_executor::{
-        RuntimeToolExecutionFuture, RuntimeToolExecutionResult, RuntimeToolExecutor,
-    };
-
-    #[derive(Clone)]
-    struct ScriptedProvider {
-        streams: Arc<Mutex<VecDeque<Vec<Result<CurrentProviderEvent, CurrentProviderError>>>>>,
-        requests: Arc<Mutex<Vec<CurrentProviderRequest>>>,
-    }
-
-    impl ScriptedProvider {
-        fn new(streams: Vec<Vec<Result<CurrentProviderEvent, CurrentProviderError>>>) -> Self {
-            Self {
-                streams: Arc::new(Mutex::new(VecDeque::from(streams))),
-                requests: Arc::new(Mutex::new(Vec::new())),
-            }
-        }
-    }
-
-    impl CurrentProvider for ScriptedProvider {
-        fn stream<'a>(
-            &'a self,
-            request: CurrentProviderRequest,
-        ) -> BoxFuture<'a, Result<CurrentProviderStream, CurrentProviderError>> {
-            self.requests.lock().expect("record request").push(request);
-            let stream = self
-                .streams
-                .lock()
-                .expect("take stream")
-                .pop_front()
-                .unwrap_or_else(|| {
-                    vec![Ok(CurrentProviderEvent::Completed {
-                        response_id: None,
-                        end_turn: true,
-                    })]
-                });
-            Box::pin(async move {
-                let stream: CurrentProviderStream = Box::pin(stream::iter(stream));
-                Ok(stream)
-            })
-        }
-    }
-
-    // The production client owns HTTP. This fake only documents turn-loop behavior below.
-    struct EchoTool;
-
-    impl RuntimeToolExecutor for EchoTool {
-        fn execute<'a>(
-            &'a self,
-            request: RuntimeToolExecutionRequest<'a>,
-        ) -> RuntimeToolExecutionFuture<'a> {
-            Box::pin(async move {
-                Ok(RuntimeToolExecutionResult::new(
-                    true,
-                    format!("executed {}", request.tool_name),
-                    None,
-                    Default::default(),
-                ))
-            })
-        }
-    }
-
-    #[derive(Default)]
-    struct ParallelProbe {
-        active: AtomicUsize,
-        max_active: AtomicUsize,
-    }
-
-    impl RuntimeToolExecutor for ParallelProbe {
-        fn execute<'a>(
-            &'a self,
-            _request: RuntimeToolExecutionRequest<'a>,
-        ) -> RuntimeToolExecutionFuture<'a> {
-            Box::pin(async move {
-                let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
-                self.max_active.fetch_max(active, Ordering::SeqCst);
-                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-                self.active.fetch_sub(1, Ordering::SeqCst);
-                Ok(RuntimeToolExecutionResult::new(
-                    true,
-                    "done".to_string(),
-                    None,
-                    Default::default(),
-                ))
-            })
-        }
-    }
-
-    #[tokio::test]
-    async fn turn_executes_tool_then_continues_with_tool_result_transcript() {
-        let provider = Arc::new(ScriptedProvider::new(vec![
-            vec![
-                Ok(CurrentProviderEvent::ToolCallInputDelta {
-                    call_id: "call-1".to_string(),
-                    tool_name: Some("Read".to_string()),
-                    delta: "{\"path\":\"README.md\"}".to_string(),
-                    accumulated_arguments: "{\"path\":\"README.md\"}".to_string(),
-                }),
-                Ok(CurrentProviderEvent::ToolCall(
-                    CurrentProviderToolCall::new(
-                        "call-1",
-                        "Read",
-                        serde_json::json!({ "path": "README.md" }),
-                    ),
-                )),
-                Ok(CurrentProviderEvent::Completed {
-                    response_id: Some("response-1".to_string()),
-                    end_turn: false,
-                }),
-            ],
-            vec![
-                Ok(CurrentProviderEvent::TextDelta("done".to_string())),
-                Ok(CurrentProviderEvent::Completed {
-                    response_id: Some("response-2".to_string()),
-                    end_turn: true,
-                }),
-            ],
-        ]));
-        let requests = Arc::clone(&provider.requests);
-        let mut events = Vec::new();
-        let execution = run_current_provider_turn(
-            CurrentProviderTurnInput {
-                provider,
-                session_config: crate::session_config::SessionConfigBuilder::new("session-1")
-                    .max_turns(3)
-                    .build(),
-                initial_messages: vec![CurrentProviderMessage::user(vec![
-                    CurrentProviderContent::Text("read it".to_string()),
-                ])],
-                tool_definitions: vec![RuntimeToolDefinition::new(
-                    "Read",
-                    "read files",
-                    serde_json::json!({ "type": "object" }),
-                )],
-                model_request_policy: None,
-                tool_executor: RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
-                working_directory: PathBuf::from("."),
-                cancel_token: None,
-            },
-            |event| events.push(event),
-        )
-        .await
-        .expect("turn execution");
-
-        assert_eq!(execution.text_output, "done");
-        assert_eq!(execution.attempts_summary, "attempts=2");
-        assert!(events.iter().any(|event| matches!(
-            event,
-            CurrentProviderTurnEvent::ToolStart { tool_id, tool_name, .. }
-                if tool_id == "call-1" && tool_name == "Read"
-        )));
-        assert!(events.iter().any(|event| matches!(
-            event,
-            CurrentProviderTurnEvent::ToolEnd { success: true, .. }
-        )));
-
-        let requests = requests.lock().expect("recorded requests");
-        assert_eq!(requests.len(), 2);
-        assert!(matches!(
-            requests[1].messages.last(),
-            Some(CurrentProviderMessage {
-                role: CurrentProviderRole::Tool,
-                content,
-            }) if matches!(content.as_slice(), [CurrentProviderContent::ToolResult(result)]
-                if result.call_id == "call-1" && result.output == "executed Read")
-        ));
-    }
-
-    #[tokio::test]
-    async fn turn_executes_same_response_tool_batch_in_parallel_when_policy_allows() {
-        let provider = Arc::new(ScriptedProvider::new(vec![
-            vec![
-                Ok(CurrentProviderEvent::ToolCall(
-                    CurrentProviderToolCall::new(
-                        "call-1",
-                        "Read",
-                        serde_json::json!({ "path": "README.md" }),
-                    ),
-                )),
-                Ok(CurrentProviderEvent::ToolCall(
-                    CurrentProviderToolCall::new(
-                        "call-2",
-                        "Glob",
-                        serde_json::json!({ "pattern": "*.rs" }),
-                    ),
-                )),
-                Ok(CurrentProviderEvent::Completed {
-                    response_id: Some("response-1".to_string()),
-                    end_turn: false,
-                }),
-            ],
-            vec![Ok(CurrentProviderEvent::Completed {
-                response_id: Some("response-2".to_string()),
-                end_turn: true,
-            })],
-        ]));
-        let probe = Arc::new(ParallelProbe::default());
-        let policy = RuntimeReplyModelRequestPolicy {
-            responses: None,
-            tool_call: Some(
-                model_provider::provider_stream::RuntimeReplyToolCallPolicy {
-                    supports_parallel_tool_calls: true,
-                    parallel_tool_calls: true,
-                },
-            ),
-            reasoning_output: None,
-        };
-
-        run_current_provider_turn(
-            CurrentProviderTurnInput {
-                provider,
-                session_config: crate::session_config::SessionConfigBuilder::new("session-1")
-                    .max_turns(3)
-                    .build(),
-                initial_messages: vec![CurrentProviderMessage::user(vec![
-                    CurrentProviderContent::Text("inspect it".to_string()),
-                ])],
-                tool_definitions: vec![
-                    RuntimeToolDefinition::new("Read", "read files", serde_json::json!({})),
-                    RuntimeToolDefinition::new("Glob", "find files", serde_json::json!({})),
-                ],
-                model_request_policy: Some(policy),
-                tool_executor: RuntimeToolExecutorHandle::new(probe.clone()),
-                working_directory: PathBuf::from("."),
-                cancel_token: None,
-            },
-            |_| {},
-        )
-        .await
-        .expect("parallel tool turn");
-
-        assert_eq!(probe.max_active.load(Ordering::SeqCst), 2);
-    }
-}
+#[path = "provider_turn/tests.rs"]
+mod tests;

@@ -1,5 +1,6 @@
 use app_server_protocol::AgentEvent;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::BufRead;
@@ -11,6 +12,158 @@ use std::path::{Path, PathBuf};
 pub struct EventLogRecord {
     pub path: PathBuf,
     pub event: AgentEvent,
+}
+
+/// A single issue found while scanning the canonical JSONL event log.
+///
+/// The scanner deliberately stops at the first issue.  A projection may only
+/// be rebuilt from the contiguous, fingerprinted prefix; a caller must not
+/// silently sort or skip records after an issue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EventLogIssue {
+    UnterminatedTail {
+        offset: u64,
+    },
+    MalformedTail {
+        offset: u64,
+        message: String,
+    },
+    MalformedRecord {
+        offset: u64,
+        message: String,
+    },
+    SequenceGap {
+        offset: u64,
+        expected: u64,
+        actual: u64,
+    },
+    SequenceRegression {
+        offset: u64,
+        previous: u64,
+        actual: u64,
+    },
+    EqualSequenceDivergence {
+        offset: u64,
+        sequence: u64,
+        previous_event_id: String,
+        event_id: String,
+    },
+    DuplicateEventId {
+        offset: u64,
+        event_id: String,
+    },
+    SessionMismatch {
+        offset: u64,
+        expected: String,
+        actual: String,
+    },
+}
+
+impl EventLogIssue {
+    pub(crate) fn is_repairable_tail(&self) -> bool {
+        matches!(
+            self,
+            Self::UnterminatedTail { .. } | Self::MalformedTail { .. }
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct EventLogScan {
+    pub(crate) path: PathBuf,
+    pub(crate) records: Vec<EventLogRecord>,
+    /// SHA-256 over the canonical serialized records in the valid prefix.
+    pub(crate) fingerprint: String,
+    /// Byte offset immediately after the last valid, newline-terminated record.
+    pub(crate) last_valid_offset: u64,
+    pub(crate) file_len: u64,
+    pub(crate) issue: Option<EventLogIssue>,
+}
+
+impl EventLogScan {
+    pub(crate) fn is_clean(&self) -> bool {
+        self.issue.is_none()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EventLogComparison {
+    Exact,
+    Append {
+        expected_len: usize,
+        actual_len: usize,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EventLogComparisonIssue {
+    ShorterLog {
+        expected_len: usize,
+        actual_len: usize,
+    },
+    MissingMiddle {
+        index: usize,
+        expected_sequence: u64,
+        actual_sequence: u64,
+    },
+    EqualSequenceDivergence {
+        index: usize,
+        sequence: u64,
+        expected_event_id: String,
+        actual_event_id: String,
+    },
+    OutOfOrder {
+        index: usize,
+        previous_sequence: u64,
+        actual_sequence: u64,
+    },
+}
+
+/// Compare two canonical event streams without treating a lower sequence as
+/// merely stale.  This is used by repair/resume code when a previous scan is
+/// available (for example, after a crash while replacing a log).
+pub(crate) fn compare_canonical_event_logs(
+    expected: &[AgentEvent],
+    actual: &[AgentEvent],
+) -> Result<EventLogComparison, EventLogComparisonIssue> {
+    for (index, (expected_event, actual_event)) in expected.iter().zip(actual).enumerate() {
+        if expected_event.sequence != actual_event.sequence {
+            if actual_event.sequence < expected_event.sequence {
+                return Err(EventLogComparisonIssue::OutOfOrder {
+                    index,
+                    previous_sequence: expected_event.sequence,
+                    actual_sequence: actual_event.sequence,
+                });
+            }
+            return Err(EventLogComparisonIssue::MissingMiddle {
+                index,
+                expected_sequence: expected_event.sequence,
+                actual_sequence: actual_event.sequence,
+            });
+        }
+        if expected_event != actual_event {
+            return Err(EventLogComparisonIssue::EqualSequenceDivergence {
+                index,
+                sequence: expected_event.sequence,
+                expected_event_id: expected_event.event_id.clone(),
+                actual_event_id: actual_event.event_id.clone(),
+            });
+        }
+    }
+    if actual.len() < expected.len() {
+        return Err(EventLogComparisonIssue::ShorterLog {
+            expected_len: expected.len(),
+            actual_len: actual.len(),
+        });
+    }
+    if actual.len() == expected.len() {
+        Ok(EventLogComparison::Exact)
+    } else {
+        Ok(EventLogComparison::Append {
+            expected_len: expected.len(),
+            actual_len: actual.len(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +217,12 @@ impl EventLogWriter {
 
         let mut paths = Vec::with_capacity(events_by_path.len());
         for (path, events) in events_by_path {
+            let session_id = events
+                .first()
+                .map(|event| event.session_id.as_str())
+                .ok_or_else(|| "event log append group cannot be empty".to_string())?;
+            let scan = prepare_session_event_log_for_append(&path, session_id)?;
+            validate_appended_events(&scan, &events)?;
             append_events_to_path(&path, &events)?;
             paths.push(path);
         }
@@ -71,8 +230,55 @@ impl EventLogWriter {
     }
 
     pub fn read_session_events(&self, session_id: &str) -> Result<Vec<EventLogRecord>, String> {
+        let scan = self.scan_session_events(session_id)?;
+        if let Some(issue) = scan.issue {
+            return Err(format!(
+                "event log {} requires repair at offset {}: {issue:?}",
+                scan.path.display(),
+                scan.last_valid_offset
+            ));
+        }
+        Ok(scan.records)
+    }
+
+    /// Scan one session log and return only its contiguous valid prefix.
+    ///
+    /// No mutation happens during a scan.  A final malformed or unterminated
+    /// record is isolated in `issue`; sequence gaps and divergence are never
+    /// interpreted as stale events.
+    pub(crate) fn scan_session_events(&self, session_id: &str) -> Result<EventLogScan, String> {
+        scan_event_log_path(&self.session_path(session_id), session_id)
+    }
+
+    /// Truncate only a repairable malformed/unterminated tail.  Middle-log
+    /// corruption and sequence issues fail closed and are left untouched.
+    pub(crate) fn repair_session_event_log(
+        &self,
+        session_id: &str,
+    ) -> Result<EventLogScan, String> {
         let path = self.session_path(session_id);
-        read_events_from_path(&path)
+        let scan = scan_event_log_path(&path, session_id)?;
+        let Some(issue) = scan.issue.as_ref() else {
+            return Ok(scan);
+        };
+        if !issue.is_repairable_tail() {
+            return Err(format!(
+                "event log {} is not safely repairable: {issue:?}",
+                path.display()
+            ));
+        }
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .map_err(|error| format!("无法打开 event log 以截断 {}: {error}", path.display()))?;
+        file.set_len(scan.last_valid_offset).map_err(|error| {
+            format!(
+                "无法截断 event log {} 到 {}: {error}",
+                path.display(),
+                scan.last_valid_offset
+            )
+        })?;
+        scan_event_log_path(&path, session_id)
     }
 
     pub fn append_workflow_audit_events(
@@ -232,6 +438,247 @@ impl EventLogWriter {
             .join("sessions")
             .join(format!("session_{}.jsonl", safe_file_stem(session_id)))
     }
+}
+
+fn prepare_session_event_log_for_append(
+    path: &Path,
+    session_id: &str,
+) -> Result<EventLogScan, String> {
+    let scan = scan_event_log_path(path, session_id)?;
+    match scan.issue.as_ref() {
+        None => Ok(scan),
+        Some(EventLogIssue::UnterminatedTail { .. }) => {
+            // Codex rollouts repair a complete non-newline-terminated record
+            // before appending.  Preserve that behavior, then rescan so a
+            // sequence or identity conflict still fails closed.
+            let mut file = fs::OpenOptions::new()
+                .append(true)
+                .open(path)
+                .map_err(|error| {
+                    format!(
+                        "无法打开 unterminated event log {}: {error}",
+                        path.display()
+                    )
+                })?;
+            file.write_all(b"\n")
+                .and_then(|_| file.flush())
+                .map_err(|error| format!("无法终止 event log 尾部 {}: {error}", path.display()))?;
+            let repaired = scan_event_log_path(path, session_id)?;
+            if let Some(issue) = repaired.issue.as_ref() {
+                return Err(format!(
+                    "event log {} remains invalid after newline repair: {issue:?}",
+                    path.display()
+                ));
+            }
+            Ok(repaired)
+        }
+        Some(EventLogIssue::MalformedTail { .. }) => {
+            let file = fs::OpenOptions::new()
+                .write(true)
+                .open(path)
+                .map_err(|error| {
+                    format!("无法打开 malformed event log {}: {error}", path.display())
+                })?;
+            file.set_len(scan.last_valid_offset).map_err(|error| {
+                format!(
+                    "无法截断 malformed event log {} 到 {}: {error}",
+                    path.display(),
+                    scan.last_valid_offset
+                )
+            })?;
+            scan_event_log_path(path, session_id)
+        }
+        Some(issue) => Err(format!(
+            "event log {} is not appendable: {issue:?}",
+            path.display()
+        )),
+    }
+}
+
+fn validate_appended_events(scan: &EventLogScan, events: &[&AgentEvent]) -> Result<(), String> {
+    let expected_session_id = events
+        .first()
+        .map(|event| event.session_id.as_str())
+        .unwrap_or_default();
+    let mut previous_sequence = scan.records.last().map(|record| record.event.sequence);
+    let mut event_ids = scan
+        .records
+        .iter()
+        .map(|record| record.event.event_id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for event in events {
+        if event.session_id != expected_session_id {
+            return Err(format!(
+                "event log append session mismatch: expected {expected_session_id}, got {}",
+                event.session_id
+            ));
+        }
+        if let Some(previous) = previous_sequence {
+            let expected = previous
+                .checked_add(1)
+                .ok_or_else(|| "event log sequence overflow".to_string())?;
+            if event.sequence != expected {
+                return Err(format!(
+                    "event log append sequence mismatch: expected {expected}, got {} ({})",
+                    event.sequence, event.event_id
+                ));
+            }
+        }
+        if !event_ids.insert(event.event_id.as_str()) {
+            return Err(format!(
+                "event log append duplicate event_id: {}",
+                event.event_id
+            ));
+        }
+        previous_sequence = Some(event.sequence);
+    }
+    Ok(())
+}
+
+fn scan_event_log_path(path: &Path, expected_session_id: &str) -> Result<EventLogScan, String> {
+    if !path.exists() {
+        return Ok(EventLogScan {
+            path: path.to_path_buf(),
+            records: Vec::new(),
+            fingerprint: fingerprint_events(&[]),
+            last_valid_offset: 0,
+            file_len: 0,
+            issue: None,
+        });
+    }
+
+    let bytes = fs::read(path)
+        .map_err(|error| format!("无法读取 event log {}: {error}", path.display()))?;
+    let file_len = bytes.len() as u64;
+    let mut records = Vec::new();
+    let mut event_ids = BTreeMap::<String, u64>::new();
+    let mut fingerprint = Sha256::new();
+    let mut offset = 0_u64;
+    let mut last_valid_offset = 0_u64;
+    let mut previous_sequence = None;
+    let mut issue = None;
+
+    for raw_line in bytes.split_inclusive(|byte| *byte == b'\n') {
+        let line_offset = offset;
+        offset += raw_line.len() as u64;
+        let has_newline = raw_line.last() == Some(&b'\n');
+        let content = raw_line.strip_suffix(&[b'\n']).unwrap_or(raw_line);
+        let content = content.strip_suffix(&[b'\r']).unwrap_or(content);
+        if content.iter().all(u8::is_ascii_whitespace) {
+            if has_newline {
+                last_valid_offset = offset;
+            }
+            continue;
+        }
+
+        let event = match serde_json::from_slice::<AgentEvent>(content) {
+            Ok(event) => event,
+            Err(error) => {
+                issue = Some(if !has_newline && offset == file_len {
+                    EventLogIssue::MalformedTail {
+                        offset: line_offset,
+                        message: error.to_string(),
+                    }
+                } else {
+                    EventLogIssue::MalformedRecord {
+                        offset: line_offset,
+                        message: error.to_string(),
+                    }
+                });
+                break;
+            }
+        };
+
+        if event.session_id != expected_session_id {
+            issue = Some(EventLogIssue::SessionMismatch {
+                offset: line_offset,
+                expected: expected_session_id.to_string(),
+                actual: event.session_id.clone(),
+            });
+            break;
+        }
+        if let Some(previous) = previous_sequence {
+            if event.sequence == previous {
+                let previous_event_id = records
+                    .last()
+                    .map(|record: &EventLogRecord| record.event.event_id.clone())
+                    .unwrap_or_default();
+                issue = Some(EventLogIssue::EqualSequenceDivergence {
+                    offset: line_offset,
+                    sequence: event.sequence,
+                    previous_event_id,
+                    event_id: event.event_id.clone(),
+                });
+                break;
+            }
+            if event.sequence < previous {
+                issue = Some(EventLogIssue::SequenceRegression {
+                    offset: line_offset,
+                    previous,
+                    actual: event.sequence,
+                });
+                break;
+            }
+            if event.sequence != previous.saturating_add(1) {
+                issue = Some(EventLogIssue::SequenceGap {
+                    offset: line_offset,
+                    expected: previous.saturating_add(1),
+                    actual: event.sequence,
+                });
+                break;
+            }
+        }
+        if event_ids.contains_key(&event.event_id) {
+            issue = Some(EventLogIssue::DuplicateEventId {
+                offset: line_offset,
+                event_id: event.event_id.clone(),
+            });
+            break;
+        }
+
+        // A complete JSON value without its terminating newline is treated as
+        // a crash tail and isolated until an explicit repair truncates it.
+        // Validate identity and ordering first so divergence cannot masquerade
+        // as a repairable tail.
+        if !has_newline && offset == file_len {
+            issue = Some(EventLogIssue::UnterminatedTail {
+                offset: line_offset,
+            });
+            break;
+        }
+
+        let canonical = serde_json::to_vec(&event)
+            .map_err(|error| format!("无法规范化 event {}: {error}", event.event_id))?;
+        fingerprint.update(&canonical);
+        fingerprint.update([b'\n']);
+        event_ids.insert(event.event_id.clone(), event.sequence);
+        previous_sequence = Some(event.sequence);
+        records.push(EventLogRecord {
+            path: path.to_path_buf(),
+            event,
+        });
+        last_valid_offset = offset;
+    }
+
+    Ok(EventLogScan {
+        path: path.to_path_buf(),
+        records,
+        fingerprint: hex::encode(fingerprint.finalize()),
+        last_valid_offset,
+        file_len,
+        issue,
+    })
+}
+
+fn fingerprint_events(events: &[AgentEvent]) -> String {
+    let mut hasher = Sha256::new();
+    for event in events {
+        if let Ok(canonical) = serde_json::to_vec(event) {
+            hasher.update(canonical);
+            hasher.update([b'\n']);
+        }
+    }
+    hex::encode(hasher.finalize())
 }
 
 fn read_events_from_path(path: &Path) -> Result<Vec<EventLogRecord>, String> {

@@ -153,6 +153,8 @@ export type AppServerAgentSessionStartResponse =
   protocol.AgentSessionStartResponse;
 export type AppServerAgentSessionReadResponse =
   protocol.AgentSessionReadResponse;
+export type AppServerThreadReadParams = protocol.ThreadReadParams;
+export type AppServerThreadReadResponse = protocol.ThreadReadResponse;
 export type AppServerAgentSessionToolInventoryReadResponse =
   protocol.AgentSessionToolInventoryReadResponse;
 export type AppServerAgentSessionUpdateParams =

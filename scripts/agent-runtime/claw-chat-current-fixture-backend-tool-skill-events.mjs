@@ -40,88 +40,64 @@ export function renderBackendToolAndSkillEventScript({
   if (isWebToolsRenderingPrompt) {
     emitEvents([
       {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          tool_call_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          toolId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          tool_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          toolName: "WebSearch",
-          tool_name: "WebSearch",
+        type: "item.started",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          ordinal: 2,
+          callId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
           name: "WebSearch",
           arguments: {
             query: "Lime WebSearch rendering"
-          }
-        }
+          },
+          status: "inProgress"
+        })
       }
     ]);
     await sleep(80);
     emitEvents([
       {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          tool_call_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          toolId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          tool_id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
-          toolName: "WebSearch",
-          tool_name: "WebSearch",
-          outputPreview: ${JSON.stringify(
-            JSON.stringify({
-              results: [
-                {
-                  title: "Help",
-                  url: "https://help.yahoo.com/kb/search-for-desktop",
-                  snippet: "Yahoo search help navigation",
-                },
-                {
-                  title: "Sign In",
-                  url: "https://login.yahoo.com/?src=search",
-                  snippet: "Yahoo sign in navigation",
-                },
-                {
-                  title: "Yahoo Scout",
-                  url: "https://scout.yahoo.com/chat",
-                  snippet: "Yahoo search assistant navigation",
-                },
-                {
-                  title: WEB_TOOLS_SEARCH_TITLE,
-                  url: WEB_TOOLS_SEARCH_URL,
-                  snippet: WEB_TOOLS_SEARCH_SNIPPET,
-                },
-              ],
-            }),
-          )},
-          output: ${JSON.stringify(
-            JSON.stringify({
-              results: [
-                {
-                  title: "Help",
-                  url: "https://help.yahoo.com/kb/search-for-desktop",
-                  snippet: "Yahoo search help navigation",
-                },
-                {
-                  title: "Sign In",
-                  url: "https://login.yahoo.com/?src=search",
-                  snippet: "Yahoo sign in navigation",
-                },
-                {
-                  title: "Yahoo Scout",
-                  url: "https://scout.yahoo.com/chat",
-                  snippet: "Yahoo search assistant navigation",
-                },
-                {
-                  title: WEB_TOOLS_SEARCH_TITLE,
-                  url: WEB_TOOLS_SEARCH_URL,
-                  snippet: WEB_TOOLS_SEARCH_SNIPPET,
-                },
-              ],
-            }),
-          )},
-          success: true
-        }
+        type: "item.completed",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          ordinal: 2,
+          callId: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
+          name: "WebSearch",
+          status: "completed",
+          output: {
+            text: ${JSON.stringify(
+              JSON.stringify({
+                results: [
+                  {
+                    title: "Help",
+                    url: "https://help.yahoo.com/kb/search-for-desktop",
+                    snippet: "Yahoo search help navigation",
+                  },
+                  {
+                    title: "Sign In",
+                    url: "https://login.yahoo.com/?src=search",
+                    snippet: "Yahoo sign in navigation",
+                  },
+                  {
+                    title: "Yahoo Scout",
+                    url: "https://scout.yahoo.com/chat",
+                    snippet: "Yahoo search assistant navigation",
+                  },
+                  {
+                    title: WEB_TOOLS_SEARCH_TITLE,
+                    url: WEB_TOOLS_SEARCH_URL,
+                    snippet: WEB_TOOLS_SEARCH_SNIPPET,
+                  },
+                ],
+              }),
+            )}
+          }
+        })
       }
     ]);
     await sleep(80);
@@ -177,55 +153,49 @@ export function renderBackendToolAndSkillEventScript({
     await sleep(80);
     emitEvents([
       {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          tool_call_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          toolId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          tool_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          toolName: "WebFetch",
-          tool_name: "WebFetch",
+        type: "item.started",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          ordinal: 4,
+          callId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
           name: "WebFetch",
           arguments: {
             url: "${WEB_TOOLS_SEARCH_URL}"
-          }
-        }
+          },
+          status: "inProgress"
+        })
       }
     ]);
     await sleep(80);
     emitEvents([
       {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          tool_call_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          toolId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          tool_id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
-          toolName: "WebFetch",
-          tool_name: "WebFetch",
-          outputPreview: ${JSON.stringify(
-            JSON.stringify({
-              bytes: 2048,
-              code: 200,
-              codeText: "OK",
-              result: WEB_TOOLS_FETCH_MARKDOWN,
-            }),
-          )},
-          output: ${JSON.stringify(
-            JSON.stringify({
-              bytes: 2048,
-              code: 200,
-              codeText: "OK",
-              result: WEB_TOOLS_FETCH_MARKDOWN,
-            }),
-          )},
-          success: true,
+        type: "item.completed",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          ordinal: 4,
+          callId: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
+          name: "WebFetch",
+          status: "completed",
+          output: {
+            text: ${JSON.stringify(
+              JSON.stringify({
+                bytes: 2048,
+                code: 200,
+                codeText: "OK",
+                result: WEB_TOOLS_FETCH_MARKDOWN,
+              }),
+            )}
+          },
           metadata: {
             url: "${WEB_TOOLS_SEARCH_URL}"
           }
-        }
+        })
       }
     ]);
     await sleep(80);
@@ -265,62 +235,52 @@ export function renderBackendToolAndSkillEventScript({
   if (isMcpStructuredContentPrompt) {
     emitEvents([
       {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          tool_call_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          toolId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          tool_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          toolName: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
-          tool_name: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
+        type: "item.started",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          ordinal: 2,
+          callId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
           name: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
           arguments: {
             question: "structured content display",
             server: "docs"
           },
+          status: "inProgress",
           metadata: {
             tool_family: "mcp",
             mcp_server: "docs",
             mcp_tool: "diagnostic_probe"
           }
-        }
+        })
       }
     ]);
     await sleep(80);
     emitEvents([
       {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          tool_call_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          toolId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          tool_id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          id: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
-          toolName: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
-          tool_name: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
-          outputPreview: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)},
-          output: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)},
-          success: true,
-          structuredContent: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)},
-          structured_content: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)},
-          result: {
-            success: true,
-            output: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)},
+        type: "item.completed",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          ordinal: 2,
+          callId: "${MCP_STRUCTURED_CONTENT_TOOL_CALL_ID}",
+          name: "${MCP_STRUCTURED_CONTENT_TOOL_NAME}",
+          status: "completed",
+          output: {
+            text: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)},
             structuredContent: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)},
-            structured_content: ${JSON.stringify(MCP_STRUCTURED_CONTENT_RESULT)},
-            metadata: {
-              tool_family: "mcp",
-              mcp_server: "docs",
-              mcp_tool: "diagnostic_probe"
-            }
+            durationMs: 80
           },
           metadata: {
             tool_family: "mcp",
             mcp_server: "docs",
             mcp_tool: "diagnostic_probe"
           }
-        }
+        })
       }
     ]);
     await sleep(120);
@@ -486,30 +446,38 @@ ${expertPanelSkillsRuntimeBackendEvents}
   if (isEventReadProbe) {
     emitEvents([
       {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
-          toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
-          tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
+        type: "item.started",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+          ordinal: 2,
+          callId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+          name: "${EVENT_READ_PROBE_TOOL_NAME}",
           arguments: {
             url: "https://example.com/claw-event-read",
             purpose: "claw-chat-current-fixture-event-read"
-          }
-        }
+          },
+          status: "inProgress"
+        })
       }
     ]);
     await sleep(80);
     emitEvents([
       {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
-          toolName: "${EVENT_READ_PROBE_TOOL_NAME}",
-          tool_name: "${EVENT_READ_PROBE_TOOL_NAME}",
-          outputPreview: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
-          output: "${EVENT_READ_PROBE_TOOL_OUTPUT}",
-          success: true
-        }
+        type: "item.completed",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId: currentThreadId(),
+          turnId: currentTurnId(),
+          itemId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+          ordinal: 2,
+          callId: "${EVENT_READ_PROBE_TOOL_CALL_ID}",
+          name: "${EVENT_READ_PROBE_TOOL_NAME}",
+          status: "completed",
+          output: { text: "${EVENT_READ_PROBE_TOOL_OUTPUT}" }
+        })
       }
     ]);
     await sleep(80);

@@ -1,6 +1,13 @@
 use super::*;
+use agent_protocol::{
+    ItemId, ItemStatus, SessionId, Thread, ThreadHistoryChangeSet, ThreadId, ThreadItem,
+    ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn, TurnAdmissionState, TurnApprovalState,
+    TurnId, TurnItemsView, TurnQueueState, TurnStatus,
+};
 use app_server_protocol::{AgentEvent, AgentSession, AgentTurn, AgentTurnStatus};
+use futures::executor::block_on;
 use serde_json::json;
+use thread_store::{ApplyThreadHistoryParams, CreateThreadParams, ThreadStore};
 
 fn stored_running_session(started_at: &str, latest_event_at: &str) -> StoredSession {
     let session_id = "sess_read_model_orphan_running".to_string();
@@ -174,4 +181,99 @@ fn read_detail_projects_thread_items_into_thread_read() {
         .expect("message content")
         .iter()
         .any(|part| part["text"] == "保留富文本输入片段"));
+}
+
+#[test]
+fn read_detail_prefers_canonical_thread_store_items() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection_store =
+        ProjectionStore::initialize(temp.path().join("projection.sqlite")).expect("store");
+    let stored = stored_running_session("2026-03-29T00:00:00.000Z", "2026-03-29T00:00:01.000Z");
+    let thread = Thread {
+        session_id: SessionId::new(stored.session.session_id.clone()),
+        thread_id: ThreadId::new(stored.session.thread_id.clone()),
+        status: ThreadStatus::Idle,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        archived: false,
+        recency_at_ms: Some(2),
+        parent_thread_id: None,
+        forked_from_id: None,
+        preview: String::new(),
+        model_provider: "test".to_string(),
+        product: None,
+        name: None,
+        metadata: json!({}),
+        turns: Vec::new(),
+        turns_view: ThreadTurnsView::NotLoaded,
+    };
+    block_on(projection_store.create_thread(CreateThreadParams {
+        thread: thread.clone(),
+    }))
+    .expect("create thread");
+    let turn = Turn {
+        session_id: thread.session_id.clone(),
+        thread_id: thread.thread_id.clone(),
+        turn_id: TurnId::new("turn-read-model-canonical"),
+        status: TurnStatus::Completed,
+        admission: TurnAdmissionState::Accepted,
+        queue: TurnQueueState::Running,
+        approval: TurnApprovalState::NotRequired,
+        items: Vec::new(),
+        items_view: TurnItemsView::NotLoaded,
+        error: None,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        started_at_ms: Some(1),
+        completed_at_ms: Some(2),
+        duration_ms: Some(1),
+    };
+    let item = ThreadItem {
+        session_id: thread.session_id.clone(),
+        thread_id: thread.thread_id.clone(),
+        turn_id: turn.turn_id.clone(),
+        item_id: ItemId::new("message-read-model-canonical"),
+        sequence: 2,
+        ordinal: 1,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        completed_at_ms: Some(2),
+        kind: agent_protocol::ItemKind::AgentMessage,
+        status: ItemStatus::Completed,
+        payload: ThreadItemPayload::AgentMessage {
+            text: "canonical item".to_string(),
+            phase: None,
+        },
+        metadata: json!({}),
+    };
+    block_on(projection_store.apply_history(ApplyThreadHistoryParams {
+        session_id: thread.session_id.clone(),
+        thread_id: thread.thread_id.clone(),
+        changes: ThreadHistoryChangeSet {
+            sequence: 2,
+            changed_turns: vec![turn],
+            changed_items: vec![item],
+            ..Default::default()
+        },
+    }))
+    .expect("apply canonical history");
+
+    let detail = block_on(runtime_session_read_detail_from_thread_store(
+        &stored,
+        ReadDetailOptions::default(),
+        &[],
+        &projection_store,
+    ))
+    .expect("canonical detail");
+
+    assert_eq!(detail["items"], detail["thread_read"]["thread_items"]);
+    assert_eq!(
+        detail["items"][0]["id"],
+        "item_message-read-model-canonical"
+    );
+    assert_eq!(detail["items"][0]["type"], "agent_message");
+    assert_eq!(detail["items"][0]["status"], "completed");
+    assert_eq!(detail["items"][0]["text"], "canonical item");
+    assert_eq!(detail["items"][0]["started_at"], "1970-01-01T00:00:00.001Z");
+    assert_ne!(detail["items"][0]["id"], "event-read-model-running");
 }

@@ -9,6 +9,7 @@ import {
 } from "./generated/protocol-types.js";
 import type {
   AgentSessionMediaReadResponse as GeneratedAgentSessionMediaReadResponse,
+  CanonicalThreadEventNotification as GeneratedCanonicalThreadEventNotification,
   ConversationImportSourceClient as GeneratedConversationImportSourceClient,
   ConversationImportSourceStatus as GeneratedConversationImportSourceStatus,
   ConversationImportThreadStatus as GeneratedConversationImportThreadStatus,
@@ -1304,15 +1305,80 @@ export type WorkspaceEnsureReadyResponse = {
 };
 
 export type SkillReadParams = {
-  skillName: string;
+  skillId: string;
+};
+
+export type SkillScope = "project" | "user" | "app" | "other";
+
+export type SkillSource = "project" | "user" | "app" | "other";
+
+export type SkillAuthority = "workspace" | "user" | "application" | "external";
+
+export type SkillInterface = {
+  displayName: string;
+  executionMode: string;
+  provider?: string;
+  model?: string;
+  argumentHint?: string;
+};
+
+export type SkillToolDependency = {
+  type: string;
+  value: string;
+  required: boolean;
+};
+
+export type SkillDependencies = {
+  tools: SkillToolDependency[];
+};
+
+export type SkillPolicy = {
+  allowImplicitInvocation: boolean;
+  whenToUse?: string;
+};
+
+export type SkillLocator = {
+  directory: string;
+  skillFilePath: string;
+};
+
+export type SkillSummary = {
+  skillId: string;
+  name: string;
+  description: string;
+  scope: SkillScope;
+  source: SkillSource;
+  authority: SkillAuthority;
+  enabled: boolean;
+  interface: SkillInterface;
+  dependencies: SkillDependencies;
+  policy: SkillPolicy;
+  capabilities: string[];
+  locator: SkillLocator;
+};
+
+export type SkillWorkflowStep = {
+  id: string;
+  name: string;
+  dependencies: string[];
+};
+
+export type SkillDetail = {
+  metadata: SkillSummary;
+  markdownContent: string;
+  workflowSteps: SkillWorkflowStep[];
 };
 
 export type SkillListResponse = {
-  skills: unknown[];
+  skills: SkillSummary[];
 };
 
 export type SkillReadResponse = {
-  skill: unknown;
+  skill: SkillDetail;
+};
+
+export type SkillManagementListResponse = {
+  skills: unknown[];
 };
 
 export type SkillManagementListParams = {
@@ -2894,7 +2960,11 @@ export type AgentSessionActionRespondResponse = Record<string, never>;
 export type AgentSessionEventParams = {
   event: AgentEvent;
   typedEvent?: AgentSessionRuntimeEventNotification;
+  canonicalEvent?: GeneratedCanonicalThreadEventNotification;
 };
+
+export type CanonicalThreadEventNotification =
+  GeneratedCanonicalThreadEventNotification;
 
 export type AgentSessionEventNotification = JsonRpcNotification & {
   method: typeof METHOD_AGENT_SESSION_EVENT;
@@ -3382,6 +3452,12 @@ export function agentSessionRuntimeEventNotification(
   message: JsonRpcMessage,
 ): AgentSessionRuntimeEventNotification | undefined {
   return agentSessionEventNotification(message)?.params.typedEvent;
+}
+
+export function canonicalThreadEventNotification(
+  message: JsonRpcMessage,
+): CanonicalThreadEventNotification | undefined {
+  return agentSessionEventNotification(message)?.params.canonicalEvent;
 }
 
 export function isWorkspaceRightSurfacePendingChangedNotification(

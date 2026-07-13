@@ -11,7 +11,7 @@ const DEFAULT_WORKING_DIR: &str = "/tmp/lime-approval/workspace/app";
 const DEFAULT_PROJECT_ROOT: &str = "/tmp/lime-approval/workspace";
 
 #[tokio::test]
-async fn action_respond_requires_decision_only_for_tool_confirmation() {
+async fn action_respond_requires_canonical_pending_identity() {
     let core = RuntimeCore::with_backend(Arc::new(RuntimeBackend::new()));
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_approval_contract".to_string()),
@@ -44,9 +44,11 @@ async fn action_respond_requires_decision_only_for_tool_confirmation() {
         Ok(_) => panic!("tool confirmation without decision must fail closed"),
         Err(error) => error,
     };
-    assert!(missing_decision
-        .to_string()
-        .contains("tool_confirmation action/respond requires decision"));
+    assert!(matches!(
+        missing_decision,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_not_found" && request_id == "approval-missing-decision"
+    ));
 
     let non_approval_decision = match core
         .respond_action(
@@ -69,9 +71,11 @@ async fn action_respond_requires_decision_only_for_tool_confirmation() {
         Ok(_) => panic!("ask_user with approval decision must fail closed"),
         Err(error) => error,
     };
-    assert!(non_approval_decision
-        .to_string()
-        .contains("approval decision is only valid for tool_confirmation"));
+    assert!(matches!(
+        non_approval_decision,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_not_found" && request_id == "ask-with-approval-decision"
+    ));
 }
 
 #[tokio::test]
@@ -144,6 +148,93 @@ async fn browser_control_preflight_requests_permission_without_provider() {
             .filter_map(|decision| decision.as_str())
             .collect::<Vec<_>>(),
         vec!["allow_once", "allow_for_session", "decline", "cancel"]
+    );
+
+    let wrong_type = core
+        .respond_action(
+            AgentSessionActionRespondParams {
+                session_id: SESSION_ID.to_string(),
+                request_id: request_id.to_string(),
+                action_type: AgentSessionActionType::AskUser,
+                decision: None,
+                confirmed: Some(true),
+                response: None,
+                user_data: Some(json!({ "confirmed": true })),
+                metadata: None,
+                event_name: None,
+                action_scope: Some(AgentSessionActionScope {
+                    session_id: Some(SESSION_ID.to_string()),
+                    thread_id: Some(THREAD_ID.to_string()),
+                    turn_id: Some(TURN_ID.to_string()),
+                }),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("preflight action type mismatch must fail closed");
+    assert!(matches!(
+        wrong_type,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_type_mismatch" && request_id.contains(TURN_ID)
+    ));
+
+    let missing_scope = core
+        .respond_action(
+            AgentSessionActionRespondParams {
+                session_id: SESSION_ID.to_string(),
+                request_id: request_id.to_string(),
+                action_type: AgentSessionActionType::ToolConfirmation,
+                decision: Some(AgentSessionApprovalDecision::Decline),
+                confirmed: None,
+                response: None,
+                user_data: None,
+                metadata: None,
+                event_name: None,
+                action_scope: None,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("preflight missing scope must fail closed");
+    assert!(matches!(
+        missing_scope,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_scope_missing" && request_id.contains(TURN_ID)
+    ));
+
+    let wrong_scope = core
+        .respond_action(
+            AgentSessionActionRespondParams {
+                session_id: SESSION_ID.to_string(),
+                request_id: request_id.to_string(),
+                action_type: AgentSessionActionType::ToolConfirmation,
+                decision: Some(AgentSessionApprovalDecision::Decline),
+                confirmed: None,
+                response: None,
+                user_data: None,
+                metadata: None,
+                event_name: None,
+                action_scope: Some(AgentSessionActionScope {
+                    session_id: Some(SESSION_ID.to_string()),
+                    thread_id: Some(THREAD_ID.to_string()),
+                    turn_id: Some("wrong-turn".to_string()),
+                }),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("preflight wrong scope must fail closed");
+    assert!(matches!(
+        wrong_scope,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_scope_mismatch" && request_id.contains(TURN_ID)
+    ));
+    assert_eq!(
+        read_thread(&core)["pending_requests"]
+            .as_array()
+            .expect("pending requests after rejected responses")
+            .len(),
+        1
     );
 
     let responded = core
@@ -647,7 +738,16 @@ async fn approval_cancel_skips_backend_cancel_when_action_response_already_termi
         .map(|event| event.event_type.as_str())
         .collect::<Vec<_>>();
     assert!(event_types.contains(&"action.resolved"));
-    assert!(event_types.contains(&"tool.failed"));
+    let failed_tool = responded
+        .events
+        .iter()
+        .find(|event| event.event_type == "item.completed")
+        .expect("cancel response should complete the canonical tool item");
+    assert_eq!(failed_tool.payload["item"]["status"], "failed");
+    assert_eq!(
+        failed_tool.payload["item"]["payload"]["call_id"],
+        "approval-tool-1"
+    );
     assert_eq!(
         event_types
             .iter()

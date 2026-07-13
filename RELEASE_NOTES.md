@@ -1,40 +1,40 @@
-## Lime v1.100.0
+## Lime v1.101.0
 
 ### 新功能
 
-- Agent / Tool Runtime 继续收敛到 Codex-first Thread / Turn / Item 主链，新增 request user input、runtime timeline record、runtime item / request / status / turn event 等结构化模块。
-- MCP、thread-store、model-provider 和 tool-runtime 增加 current extension surface、runtime store、sampling、gateway dispatch 与用户输入执行分层，减少旧 Agent surface 对生产路径的占用。
-- Agent Chat Workspace 拆出 artifact、browser assist、conversation message list、right surface、service skill、team memory、image workbench 和 inputbar presentation 等运行时模块，降低巨型组件复杂度。
-- Benchmark release / agent runtime smoke 增加 managed tool execution、P0 coding artifact 和 current fixture 断言，强化发布前对真实主链的证据要求。
+- 建立 canonical Thread / Turn / Item 的端到端产品链：App Server 提供 `thread/read`、列表与分页协议，ProjectionStore 直接持久化 typed changeset，并向 Renderer 投递完整 canonical entity。
+- 新增 empty Thread 原子创建、active / queued Turn 读取与队列控制投影，使新会话、重启恢复、排队执行和终态读取共享同一事实源。
+- 扩展 Skills 管理与读取协议，加入稳定 skill identity、authority、policy、dependency 和 workflow metadata，并接入 App Server、tool-runtime 与前端 typed client。
+- 为 Tool、Approval、MCP 和协作 Agent 建立 typed display item 与 lifecycle contract，保留 arguments、structured output、duration、truncation、sidecar 和决策语义。
 
 ### 修复
 
-- 修复 Agent stream 完成、失败、停止、继续发送、历史恢复和 assistant 可见文本之间的状态收口问题，减少伪运行态和重复输出。
-- 修复 request user input、approval prompt、tool batch、shell / file execution、runtime overlay 和 tool inventory 的 current 投影一致性。
-- 修复 image command、model selection、provider stream、OpenAI image request 和 reasoning policy 的边界回归。
-- 修复 Workspace 会话初始导航、输入框恢复、任务中心发送、右侧 surface 和工作台 canvas 布局的多处回归。
+- 修复 approval / request-user-input 在重启、恢复和取消路径中的 identity 与 continuation 校验，缺少可恢复 continuation 时返回结构化错误且不伪造 resolved 状态。
+- 修复 canonical event sequence、重复 lifecycle、损坏 event-log 尾部、projection repair 和 conversation import 的一致性问题，非法 identity 或顺序继续 fail closed。
+- 修复 GUI active Turn、queued Turn、terminal history、输入恢复和右侧工作台状态之间的投影偏差，避免 renderer cache 反向成为运行时真相。
+- 修复 image command、media request、provider stream 和 imported Tool event 在 canonical lifecycle 中的参数、输出与终态保真。
 
 ### 优化与重构
 
-- 大幅删除 `agent-compat` 和 `agent-runtime` 中旧 ask、subagent、session manager、legacy tool、file/search/shell/powershell 等 Agent-shaped 实现，保留必要 compat owner。
-- 将 runtime state、request tool policy、runtime store、conversation transcript、runtime snapshot 和 reply backend 进一步拆分为更小的职责模块。
-- 收缩 `AgentChatWorkspace.tsx` 和 Workspace scene runtime 的直接业务状态，把可测试逻辑迁到 projection、selector、hook runtime 与单元测试。
-- 更新 Desktop Host、DevBridge、command runtime、Playwright、质量工作流和 Agent migration 边界说明，继续把旧路径归类为 retired guard / dead surface。
+- 将 provider wire lowering 从 `runtime-core` 迁到 `model-provider`，统一 OpenAI、Anthropic、Gemini、Ollama、Fal 与图像请求的 current owner。
+- 将 current provider 工具执行切到 `RuntimeTool` / `ToolCall` / `ToolLifecycleEmitter`，由 host emitter 唯一产生 canonical `item.started` / `item.completed`。
+- 前端 Agent Chat、Plugin runtime 与 app-server clients 改为消费 canonical Thread read 与 typed Item projection，收缩旧 `agentSession/read` presentation adapter 的职责。
+- 删除旧 Agent tool orchestrator/lifecycle、runtime-core mapper、thread-store legacy store/transcript、raw tool batch，以及前端独立 media/subagent client 双轨实现。
 
 ### 测试与质量
 
-- 新增和更新 AgentChatWorkspace boundary guard、InputbarApprovalPrompt、message list projection、stream lifecycle、Workspace scene、conversation message list、right surface 和 service skill 回归。
-- 扩展 Rust runtime / tool-runtime / provider / thread-store / App Server 定向测试，覆盖 request user input、runtime store、gateway dispatch、sampling 和 session state。
-- 更新 Agent migration boundary、production command current boundary、DevBridge command policy、model reasoning policy 和 modality execution profile 守卫。
-- 更新 benchmark release manifest、agent-qc 脚本和 Electron smoke 入口，确保发布证据仍绑定 current 链路。
+- 扩展 App Server protocol/schema/client contract，覆盖 canonical Thread read、Skills、request access、通知序列与序列化边界。
+- 新增 Rust 定向回归，覆盖 empty Thread、event-log repair、Tool/Approval lifecycle、conversation import、provider/media lowering、projection store 和 restart recovery。
+- 新增 Agent Chat、Plugin runtime、queue control、canonical item reader、approval projection 与 workspace composition 的 TypeScript 回归。
+- 补充 refactor v2 Gate A / Gate B、current fixture、协议守卫与逐切片 evidence，记录生产 consumer cutover 和 dead surface 删除证明。
 
 ### 文档
 
-- 更新 Agent migration Phase 6、refactor v1 impact audit、approval HITL decision model、provider reply backend、clawstream guardrail、benchmark progress 和 version test plan。
-- 更新命令运行时、命令边界、Playwright E2E 和质量工作流文档，明确 current / compat / dead 口径。
+- 更新全局架构，明确 ProjectionStore、canonical read edge、Tool lifecycle、Approval 语义、provider lowering 和 Renderer 消费边界。
+- 新增 refactor v2 多进程实施计划、v1 crosswalk 与 S1-S6 施工证据，统一 current / deprecated / dead 分类和后续退出条件。
 
 ### 其他
 
-- 版本事实源更新到 `1.100.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.101.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.99.0` -> `v1.100.0`
+**完整变更**: `v1.100.0` -> `v1.101.0`

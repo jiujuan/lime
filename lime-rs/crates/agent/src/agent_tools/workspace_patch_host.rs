@@ -1,17 +1,27 @@
-use crate::agent_tools::tool_orchestrator::{PlannedToolExecution, ToolExecutionOutcome};
-use crate::agent_tools::workspace_patch_runtime_adapter::{
-    execute_workspace_patch_runtime_tool_batch, WorkspacePatchRuntimeToolBatchInput,
-};
-use crate::AgentRuntimeState;
+use crate::protocol::{canonical_tool_item_event, AgentEvent, ToolItemLifecycleContext};
 use crate::AgentTurnContext;
+use agent_protocol::{SessionId, ThreadId};
+use futures::{stream, StreamExt};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use tool_runtime::tool_call::{ToolCall, ToolEnvironment};
+use tool_runtime::tool_definition::{RuntimeToolDefinition, RuntimeToolExposure};
+use tool_runtime::tool_executor::{
+    RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutorHandle,
+};
+use tool_runtime::tool_lifecycle::{
+    ToolLifecycleEmissionFuture, ToolLifecycleEmitter, ToolLifecycleEvent, ToolLifecyclePhase,
+};
+use tool_runtime::tool_result_projection::NormalizedToolOutput;
+use tool_runtime::web_search::{runtime_web_search_executor_handle, web_search_tool_definition};
 
 pub const WORKSPACE_PATCH_HOST_TOOL_EVENT_SOURCE: &str = "workspace_patch_host_tool_requests";
 
 const LEGACY_ARTICLE_WORKFLOW_KEY: &str = "content_article_workflow";
 const WEB_SEARCH_TOOL_NAME: &str = "WebSearch";
+const LOCAL_TOOL_ENVIRONMENT_ID: &str = "local";
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePatchHostToolPlan {
@@ -26,15 +36,23 @@ pub struct WorkspacePatchHostToolRequest {
     pub purpose: Option<String>,
     pub query: Option<String>,
     pub tool_name: String,
-    pub tool_id: String,
     pub arguments: String,
     pub params: Value,
     pub workflow_key: Option<String>,
+    ordinal: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct BoundWorkspacePatchHostToolRequest {
+    pub request: WorkspacePatchHostToolRequest,
+    pub tool_id: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePatchHostToolExecutionInput {
     pub session_id: String,
+    pub thread_id: String,
+    pub turn_id: String,
     pub working_directory: PathBuf,
     pub turn_context: Option<AgentTurnContext>,
     pub parallelism: usize,
@@ -42,8 +60,34 @@ pub struct WorkspacePatchHostToolExecutionInput {
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePatchHostToolExecutionResult {
-    pub events: Vec<crate::protocol::AgentEvent>,
+    pub events: Vec<AgentEvent>,
     pub host_tool_evidence: Vec<Value>,
+    pub bound_requests: Vec<BoundWorkspacePatchHostToolRequest>,
+}
+
+#[derive(Debug, Clone)]
+struct WorkspacePatchHostToolOutcome {
+    output: NormalizedToolOutput,
+}
+
+struct WorkspacePatchToolLifecycleEmitter {
+    session_id: SessionId,
+    thread_id: ThreadId,
+    state: Mutex<WorkspacePatchToolLifecycleState>,
+}
+
+#[derive(Default)]
+struct WorkspacePatchToolLifecycleState {
+    next_sequence: u64,
+    next_ordinal: u64,
+    items: HashMap<String, WorkspacePatchToolItemState>,
+    events: Vec<AgentEvent>,
+}
+
+#[derive(Clone, Copy)]
+struct WorkspacePatchToolItemState {
+    ordinal: u64,
+    created_at_ms: i64,
 }
 
 impl WorkspacePatchHostToolPlan {
@@ -57,50 +101,189 @@ impl WorkspacePatchHostToolPlan {
             .collect::<Vec<_>>();
         (!requests.is_empty()).then_some(Self { requests })
     }
-
-    pub fn planned_tools(&self) -> Vec<PlannedToolExecution> {
-        self.requests
-            .iter()
-            .map(WorkspacePatchHostToolRequest::to_planned_tool_execution)
-            .collect()
-    }
 }
 
 pub async fn execute_workspace_patch_host_tool_plan(
-    agent_state: &AgentRuntimeState,
     plan: &WorkspacePatchHostToolPlan,
     input: WorkspacePatchHostToolExecutionInput,
 ) -> Result<WorkspacePatchHostToolExecutionResult, String> {
-    let batch = execute_workspace_patch_runtime_tool_batch(
-        agent_state,
-        WorkspacePatchRuntimeToolBatchInput {
-            session_id: input.session_id,
-            working_directory: input.working_directory,
-            turn_context: input.turn_context,
-            parallelism: input.parallelism,
-        },
-        plan.planned_tools(),
+    execute_workspace_patch_host_tool_plan_with_runtime(
+        plan,
+        input,
+        runtime_web_search_executor_handle(),
+        web_search_tool_definition(),
     )
-    .await?;
+    .await
+}
+
+async fn execute_workspace_patch_host_tool_plan_with_runtime(
+    plan: &WorkspacePatchHostToolPlan,
+    input: WorkspacePatchHostToolExecutionInput,
+    executor: RuntimeToolExecutorHandle,
+    definition: RuntimeToolDefinition,
+) -> Result<WorkspacePatchHostToolExecutionResult, String> {
+    let emitter = Arc::new(WorkspacePatchToolLifecycleEmitter::new(
+        input.session_id.clone(),
+        input.thread_id.clone(),
+    ));
+    let bound_requests = bind_workspace_patch_host_tool_requests(plan, &input);
+    let mut indexed_outcomes = stream::iter(bound_requests.iter().cloned().enumerate().map(
+        |(index, request)| {
+            let input = input.clone();
+            let executor = executor.clone();
+            let definition = definition.clone();
+            let emitter = emitter.clone();
+            async move {
+                let outcome = execute_workspace_patch_host_tool_request(
+                    request, input, executor, definition, emitter,
+                )
+                .await;
+                (index, outcome)
+            }
+        },
+    ))
+    .buffer_unordered(input.parallelism.max(1))
+    .collect::<Vec<_>>()
+    .await;
+    indexed_outcomes.sort_by_key(|(index, _)| *index);
+    let outcomes = indexed_outcomes
+        .into_iter()
+        .map(|(_, outcome)| outcome)
+        .collect::<Vec<_>>();
     let host_tool_evidence =
-        build_workspace_patch_host_tool_evidence(&plan.requests, batch.outcomes.as_slice());
+        build_workspace_patch_host_tool_evidence(&bound_requests, outcomes.as_slice());
 
     Ok(WorkspacePatchHostToolExecutionResult {
-        events: batch.events,
+        events: emitter.events(),
         host_tool_evidence,
+        bound_requests,
     })
 }
 
-impl WorkspacePatchHostToolRequest {
-    pub fn to_planned_tool_execution(&self) -> PlannedToolExecution {
-        PlannedToolExecution {
-            tool_name: self.tool_name.clone(),
-            tool_id: self.tool_id.clone(),
-            arguments: Some(self.arguments.clone()),
-            params: self.params.clone(),
+fn bind_workspace_patch_host_tool_requests(
+    plan: &WorkspacePatchHostToolPlan,
+    input: &WorkspacePatchHostToolExecutionInput,
+) -> Vec<BoundWorkspacePatchHostToolRequest> {
+    plan.requests
+        .iter()
+        .cloned()
+        .map(|request| {
+            let ordinal_bytes = request.ordinal.to_le_bytes();
+            let identity_hash = stable_identity_hash(&[
+                input.session_id.as_bytes(),
+                input.thread_id.as_bytes(),
+                input.turn_id.as_bytes(),
+                &ordinal_bytes,
+                request.id.as_bytes(),
+            ]);
+            BoundWorkspacePatchHostToolRequest {
+                tool_id: format!(
+                    "workspace-patch-host-tool-{}-{:04}-{:016x}",
+                    sanitize_tool_id(&request.tool_name.to_ascii_lowercase()),
+                    request.ordinal.saturating_add(1),
+                    identity_hash,
+                ),
+                request,
+            }
+        })
+        .collect()
+}
+
+async fn execute_workspace_patch_host_tool_request(
+    request: BoundWorkspacePatchHostToolRequest,
+    input: WorkspacePatchHostToolExecutionInput,
+    executor: RuntimeToolExecutorHandle,
+    definition: RuntimeToolDefinition,
+    emitter: Arc<dyn ToolLifecycleEmitter>,
+) -> WorkspacePatchHostToolOutcome {
+    let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
+        working_directory: input.working_directory.clone(),
+        session_id: input.session_id,
+        cancel_token: None,
+        workspace_sandbox: None,
+    });
+    let call = ToolCall::new(
+        input.turn_id,
+        request.tool_id.clone(),
+        request.request.tool_name.clone(),
+        request.request.params,
+        vec![ToolEnvironment::new(
+            LOCAL_TOOL_ENVIRONMENT_ID,
+            input.working_directory,
+        )],
+        emitter,
+    );
+    let runtime = executor.bind(definition, RuntimeToolExposure::Direct);
+    let output = runtime
+        .execute_call(&call, &context, input.turn_context.as_ref())
+        .await;
+    WorkspacePatchHostToolOutcome { output }
+}
+
+impl WorkspacePatchToolLifecycleEmitter {
+    fn new(session_id: impl Into<String>, thread_id: impl Into<String>) -> Self {
+        Self {
+            session_id: SessionId::new(session_id),
+            thread_id: ThreadId::new(thread_id),
+            state: Mutex::new(WorkspacePatchToolLifecycleState::default()),
         }
     }
 
+    fn project(&self, event: ToolLifecycleEvent) {
+        let terminal = matches!(event.phase, ToolLifecyclePhase::Completed);
+        if terminal && event.output.is_none() {
+            return;
+        }
+        let now = chrono::Utc::now().timestamp_millis();
+        let key = format!("{}\0{}", event.turn_id, event.call_id);
+        let mut state = self
+            .state
+            .lock()
+            .expect("workspace patch tool lifecycle mutex poisoned");
+        let item_state = state.items.get(&key).copied().unwrap_or_else(|| {
+            state.next_ordinal += 1;
+            let item_state = WorkspacePatchToolItemState {
+                ordinal: state.next_ordinal,
+                created_at_ms: now,
+            };
+            state.items.insert(key.clone(), item_state);
+            item_state
+        });
+        if terminal {
+            state.items.remove(&key);
+        }
+        state.next_sequence += 1;
+        if let Some(event) = canonical_tool_item_event(
+            event,
+            ToolItemLifecycleContext {
+                session_id: self.session_id.clone(),
+                thread_id: self.thread_id.clone(),
+                sequence: state.next_sequence,
+                ordinal: item_state.ordinal,
+                created_at_ms: item_state.created_at_ms,
+                updated_at_ms: now,
+            },
+        ) {
+            state.events.push(event);
+        }
+    }
+
+    fn events(&self) -> Vec<AgentEvent> {
+        self.state
+            .lock()
+            .expect("workspace patch tool lifecycle mutex poisoned")
+            .events
+            .clone()
+    }
+}
+
+impl ToolLifecycleEmitter for WorkspacePatchToolLifecycleEmitter {
+    fn emit<'a>(&'a self, event: ToolLifecycleEvent) -> ToolLifecycleEmissionFuture<'a> {
+        Box::pin(async move { self.project(event) })
+    }
+}
+
+impl WorkspacePatchHostToolRequest {
     fn from_candidate(
         index: usize,
         candidate: WorkspacePatchHostToolRequestCandidate,
@@ -134,11 +317,6 @@ impl WorkspacePatchHostToolRequest {
         let workflow_key = value_string(&value, &["workflowKey", "workflow_key"])
             .map(ToString::to_string)
             .or(candidate.workflow_key);
-        let tool_id = format!(
-            "workspace-patch-host-tool-{}-{}",
-            sanitize_tool_id(&tool_name.to_ascii_lowercase()),
-            sanitize_tool_id(&id)
-        );
         Some(Self {
             id,
             round_id,
@@ -146,17 +324,17 @@ impl WorkspacePatchHostToolRequest {
             purpose,
             query,
             tool_name: tool_name.clone(),
-            tool_id,
             arguments,
             params,
             workflow_key,
+            ordinal: u64::try_from(index).unwrap_or(u64::MAX),
         })
     }
 }
 
 pub fn enrich_workspace_patch_host_tool_payload(
     payload: &mut Value,
-    requests: &[WorkspacePatchHostToolRequest],
+    requests: &[BoundWorkspacePatchHostToolRequest],
 ) {
     let workflow_key = payload_tool_call_id(payload)
         .and_then(|tool_call_id| {
@@ -164,30 +342,12 @@ pub fn enrich_workspace_patch_host_tool_payload(
                 .iter()
                 .find(|request| request.tool_id == tool_call_id)
         })
-        .and_then(|request| request.workflow_key.as_deref())
+        .and_then(|request| request.request.workflow_key.as_deref())
         .map(ToString::to_string);
-    let Some(payload) = payload.as_object_mut() else {
-        return;
-    };
-    payload.insert(
-        "source".to_string(),
-        Value::String(WORKSPACE_PATCH_HOST_TOOL_EVENT_SOURCE.to_string()),
-    );
-    if let Some(workflow_key) = workflow_key.as_deref() {
-        payload.insert(
-            "workflowKey".to_string(),
-            Value::String(workflow_key.to_string()),
-        );
-        payload.insert(
-            "workflow_key".to_string(),
-            Value::String(workflow_key.to_string()),
-        );
-    }
-    let metadata = payload
-        .entry("metadata".to_string())
-        .or_insert_with(|| json!({}))
-        .as_object_mut();
-    let Some(metadata) = metadata else {
+    let Some(metadata) = payload
+        .pointer_mut("/item/metadata")
+        .and_then(Value::as_object_mut)
+    else {
         return;
     };
     metadata.insert(
@@ -203,37 +363,43 @@ pub fn enrich_workspace_patch_host_tool_payload(
     }
 }
 
-pub fn build_workspace_patch_host_tool_evidence(
-    requests: &[WorkspacePatchHostToolRequest],
-    outcomes: &[ToolExecutionOutcome],
+fn build_workspace_patch_host_tool_evidence(
+    requests: &[BoundWorkspacePatchHostToolRequest],
+    outcomes: &[WorkspacePatchHostToolOutcome],
 ) -> Vec<Value> {
-    let outcomes_by_tool_id = outcomes
-        .iter()
-        .map(|outcome| (outcome.tool_id.as_str(), outcome))
-        .collect::<HashMap<_, _>>();
     requests
         .iter()
-        .filter_map(|request| {
-            let outcome = outcomes_by_tool_id.get(request.tool_id.as_str())?;
-            Some(json!({
-                "id": format!("host-tool-evidence-{}", sanitize_tool_id(&request.id)),
-                "requestId": request.id,
-                "roundId": request.round_id,
-                "connectorRef": request.connector_ref,
-                "tool": request.tool_name,
-                "toolName": request.tool_name,
-                "toolCallId": outcome.tool_id,
+        .zip(outcomes)
+        .map(|(request, outcome)| {
+            let source = &request.request;
+            let output_ref = outcome
+                .output
+                .sidecar_reference
+                .as_ref()
+                .map(|reference| reference.reference.as_str());
+            json!({
+                "id": format!("host-tool-evidence-{}", sanitize_tool_id(&source.id)),
+                "requestId": source.id,
+                "roundId": source.round_id,
+                "connectorRef": source.connector_ref,
+                "tool": source.tool_name,
+                "toolName": source.tool_name,
+                "toolCallId": request.tool_id,
                 "source": WORKSPACE_PATCH_HOST_TOOL_EVENT_SOURCE,
-                "workflowKey": request.workflow_key,
-                "status": if outcome.success { "completed" } else { "failed" },
-                "query": request.query,
-                "purpose": request.purpose,
-                "summary": workspace_patch_search_output_summary(&outcome.output),
-                "output": outcome.output,
-                "error": outcome.error,
-                "metadata": outcome.metadata,
-                "confidence": if outcome.success { "host_verified" } else { "needs_review" },
-            }))
+                "workflowKey": source.workflow_key,
+                "status": if outcome.output.success { "completed" } else { "failed" },
+                "query": source.query,
+                "purpose": source.purpose,
+                "summary": workspace_patch_search_output_summary(&outcome.output.text),
+                "output": outcome.output.text,
+                "structuredContent": outcome.output.structured_content,
+                "error": outcome.output.error,
+                "durationMs": outcome.output.duration_ms,
+                "truncated": outcome.output.truncation.is_some(),
+                "outputRef": output_ref,
+                "metadata": outcome.output.metadata,
+                "confidence": if outcome.output.success { "host_verified" } else { "needs_review" },
+            })
         })
         .collect()
 }
@@ -438,19 +604,9 @@ fn source_has_host_tool_request(source: &Value) -> bool {
 
 fn payload_tool_call_id(payload: &Value) -> Option<&str> {
     payload
-        .get("toolCallId")
-        .or_else(|| payload.get("tool_id"))
+        .pointer("/item/payload/call_id")
+        .or_else(|| payload.pointer("/item/payload/callId"))
         .and_then(Value::as_str)
-        .or_else(|| {
-            payload
-                .get("runtimeEvent")
-                .and_then(|runtime_event| {
-                    runtime_event
-                        .get("tool_id")
-                        .or_else(|| runtime_event.get("toolCallId"))
-                })
-                .and_then(Value::as_str)
-        })
 }
 
 fn value_string<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
@@ -475,12 +631,33 @@ fn sanitize_tool_id(value: &str) -> String {
     sanitized.trim_matches('-').to_string()
 }
 
+fn stable_identity_hash(fields: &[&[u8]]) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for field in fields {
+        let field_len = u64::try_from(field.len()).unwrap_or(u64::MAX).to_le_bytes();
+        for byte in field_len.iter().chain(field.iter()) {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    hash
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent_tools::tool_orchestrator::ToolExecutionOutcome;
+    use agent_protocol::thread::ThreadItemPayload;
     use serde_json::json;
     use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+    use tool_runtime::tool_executor::{
+        RuntimeToolExecutionFuture, RuntimeToolExecutionRequest, RuntimeToolExecutionResult,
+        RuntimeToolExecutor,
+    };
+    use tool_runtime::tool_io::{
+        ToolIoPayloadStats, ToolOutputReference, ToolOutputTruncation, ToolOutputTruncationReason,
+    };
 
     #[test]
     fn reads_host_tool_requests_from_workspace_patch_source() {
@@ -545,14 +722,248 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn runtime_execution_emits_bounded_canonical_items_and_preserves_output() {
+        let patch = json!({
+            "workflowKey": "content_article_workflow",
+            "hostToolRequests": [
+                { "id": "request-1", "toolName": "WebSearch", "query": "alpha" },
+                { "id": "request-2", "toolName": "WebSearch", "query": "beta" },
+                { "id": "request-3", "toolName": "WebSearch", "query": "gamma" }
+            ]
+        });
+        let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let executor = Arc::new(CapturingExecutor::default());
+
+        let execution = execute_workspace_patch_host_tool_plan_with_runtime(
+            &plan,
+            WorkspacePatchHostToolExecutionInput {
+                session_id: "session-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: "turn-1".to_string(),
+                working_directory: PathBuf::from("/tmp/workspace"),
+                turn_context: None,
+                parallelism: 2,
+            },
+            RuntimeToolExecutorHandle::new(executor.clone()),
+            web_search_tool_definition(),
+        )
+        .await
+        .expect("workspace patch host tools should execute");
+
+        assert_eq!(executor.max_active.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            executor
+                .sessions
+                .lock()
+                .expect("captured sessions mutex poisoned")
+                .as_slice(),
+            ["session-1", "session-1", "session-1"]
+        );
+        assert_eq!(execution.events.len(), 6);
+        assert_eq!(execution.bound_requests.len(), 3);
+        assert_eq!(
+            execution
+                .bound_requests
+                .iter()
+                .map(|request| request.tool_id.as_str())
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3
+        );
+        let completed_items = execution
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                AgentEvent::ItemCompleted { item } => Some(item),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(completed_items.len(), 3);
+        for item in &completed_items {
+            assert_eq!(item.session_id.as_str(), "session-1");
+            assert_eq!(item.thread_id.as_str(), "thread-1");
+            assert_eq!(item.turn_id.as_str(), "turn-1");
+            assert_eq!(item.metadata["source"], "fake_web_search");
+            assert_eq!(item.metadata["truncation"]["reason"], "byte_limit");
+            assert_eq!(
+                item.metadata["sidecar_reference"]["reference"],
+                "sidecar://workspace-patch"
+            );
+            let ThreadItemPayload::Tool {
+                call_id, output, ..
+            } = &item.payload
+            else {
+                panic!("expected canonical tool item");
+            };
+            assert!(call_id.starts_with("workspace-patch-host-tool-websearch-"));
+            let output = output.as_ref().expect("terminal tool output");
+            assert!(output.duration_ms.is_some_and(|duration| duration > 0));
+            assert!(output.truncated);
+            assert_eq!(
+                output.output_ref.as_deref(),
+                Some("sidecar://workspace-patch")
+            );
+            assert_eq!(output.structured_content.as_ref().unwrap()["matches"], 1);
+        }
+
+        assert_eq!(execution.host_tool_evidence.len(), 3);
+        for evidence in &execution.host_tool_evidence {
+            assert_eq!(evidence["status"], "completed");
+            assert_eq!(evidence["structuredContent"]["matches"], 1);
+            assert!(evidence["durationMs"]
+                .as_u64()
+                .is_some_and(|value| value > 0));
+            assert_eq!(evidence["truncated"], true);
+            assert_eq!(evidence["outputRef"], "sidecar://workspace-patch");
+            assert_eq!(evidence["metadata"]["source"], "fake_web_search");
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_execution_binds_distinct_call_ids_across_turns_in_one_thread() {
+        let patch = json!({
+            "hostToolRequests": [
+                { "id": "search-request-1", "toolName": "WebSearch", "query": "alpha" }
+            ]
+        });
+        let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let executor = Arc::new(CapturingExecutor::default());
+        let first = execute_workspace_patch_host_tool_plan_with_runtime(
+            &plan,
+            execution_input("turn-1"),
+            RuntimeToolExecutorHandle::new(executor.clone()),
+            web_search_tool_definition(),
+        )
+        .await
+        .expect("first turn execution");
+        let second = execute_workspace_patch_host_tool_plan_with_runtime(
+            &plan,
+            execution_input("turn-2"),
+            RuntimeToolExecutorHandle::new(executor),
+            web_search_tool_definition(),
+        )
+        .await
+        .expect("second turn execution");
+
+        let first_id = &first.bound_requests[0].tool_id;
+        let second_id = &second.bound_requests[0].tool_id;
+        assert_ne!(first_id, second_id);
+        assert!(first
+            .events
+            .iter()
+            .all(|event| event_tool_call_id(event).as_deref() == Some(first_id)));
+        assert!(second
+            .events
+            .iter()
+            .all(|event| event_tool_call_id(event).as_deref() == Some(second_id)));
+    }
+
+    #[tokio::test]
+    async fn runtime_execution_disambiguates_duplicate_and_sanitized_request_ids() {
+        let patch = json!({
+            "hostToolRequests": [
+                { "id": "request/a", "toolName": "WebSearch", "query": "alpha" },
+                { "id": "request a", "toolName": "WebSearch", "query": "beta" },
+                { "id": "request/a", "toolName": "WebSearch", "query": "gamma" }
+            ]
+        });
+        let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let input = execution_input("turn-collision");
+        let expected = bind_workspace_patch_host_tool_requests(&plan, &input);
+        let rebound = bind_workspace_patch_host_tool_requests(&plan, &input);
+        assert_eq!(
+            expected
+                .iter()
+                .map(|request| request.tool_id.as_str())
+                .collect::<Vec<_>>(),
+            rebound
+                .iter()
+                .map(|request| request.tool_id.as_str())
+                .collect::<Vec<_>>()
+        );
+
+        let execution = execute_workspace_patch_host_tool_plan_with_runtime(
+            &plan,
+            input,
+            RuntimeToolExecutorHandle::new(Arc::new(CapturingExecutor::default())),
+            web_search_tool_definition(),
+        )
+        .await
+        .expect("collision execution");
+
+        let call_ids = execution
+            .bound_requests
+            .iter()
+            .map(|request| request.tool_id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(call_ids.len(), 3);
+        assert_eq!(execution.host_tool_evidence[0]["requestId"], "request/a");
+        assert_eq!(execution.host_tool_evidence[0]["query"], "alpha");
+        assert_eq!(
+            execution.host_tool_evidence[0]["output"],
+            "result=\"alpha\""
+        );
+        assert_eq!(execution.host_tool_evidence[1]["requestId"], "request a");
+        assert_eq!(execution.host_tool_evidence[1]["query"], "beta");
+        assert_eq!(execution.host_tool_evidence[1]["output"], "result=\"beta\"");
+        assert_eq!(execution.host_tool_evidence[2]["requestId"], "request/a");
+        assert_eq!(execution.host_tool_evidence[2]["query"], "gamma");
+        assert_eq!(
+            execution.host_tool_evidence[2]["output"],
+            "result=\"gamma\""
+        );
+    }
+
+    #[test]
+    fn canonical_payload_enrichment_only_updates_nested_item_metadata() {
+        let patch = json!({
+            "workflowKey": "content_article_workflow",
+            "hostToolRequests": [
+                { "id": "request-1", "toolName": "WebSearch", "query": "alpha" }
+            ]
+        });
+        let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let bound_requests =
+            bind_workspace_patch_host_tool_requests(&plan, &execution_input("turn-1"));
+        let mut payload = json!({
+            "item": {
+                "payload": {
+                    "type": "tool",
+                    "call_id": bound_requests[0].tool_id
+                },
+                "metadata": { "existing": true }
+            }
+        });
+
+        enrich_workspace_patch_host_tool_payload(&mut payload, &bound_requests);
+
+        assert!(payload.get("source").is_none());
+        assert!(payload.get("workflowKey").is_none());
+        assert_eq!(
+            payload["item"]["metadata"]["source"],
+            WORKSPACE_PATCH_HOST_TOOL_EVENT_SOURCE
+        );
+        assert_eq!(
+            payload["item"]["metadata"]["workflowKey"],
+            "content_article_workflow"
+        );
+        assert_eq!(
+            payload["item"]["metadata"]["workflow_key"],
+            "content_article_workflow"
+        );
+        assert_eq!(payload["item"]["metadata"]["existing"], true);
+    }
+
     #[test]
     fn workspace_patch_host_evidence_updates_article_search_fields_on_success() {
         let mut patch = article_workspace_patch_with_host_search_request();
         let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let bound_requests =
+            bind_workspace_patch_host_tool_requests(&plan, &execution_input("turn-1"));
         let evidence = build_workspace_patch_host_tool_evidence(
-            &plan.requests,
+            &bound_requests,
             &[tool_outcome(
-                &plan.requests[0],
                 true,
                 "session=session-1 query=Lime 写文章 result=found",
                 None,
@@ -588,14 +999,11 @@ mod tests {
     fn workspace_patch_host_evidence_marks_article_failed_on_tool_failure() {
         let mut patch = article_workspace_patch_with_host_search_request();
         let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let bound_requests =
+            bind_workspace_patch_host_tool_requests(&plan, &execution_input("turn-1"));
         let evidence = build_workspace_patch_host_tool_evidence(
-            &plan.requests,
-            &[tool_outcome(
-                &plan.requests[0],
-                false,
-                "",
-                Some("web search unavailable"),
-            )],
+            &bound_requests,
+            &[tool_outcome(false, "", Some("web search unavailable"))],
         );
 
         update_workspace_patch_with_host_tool_evidence(&mut patch, &evidence);
@@ -664,22 +1072,90 @@ mod tests {
     }
 
     fn tool_outcome(
-        request: &WorkspacePatchHostToolRequest,
         success: bool,
         output: &str,
         error: Option<&str>,
-    ) -> ToolExecutionOutcome {
-        ToolExecutionOutcome {
-            tool_name: request.tool_name.clone(),
-            tool_id: request.tool_id.clone(),
-            success,
-            output: output.to_string(),
-            error: error.map(ToString::to_string),
-            metadata: Some(HashMap::from([(
-                "source".to_string(),
-                json!("fixed_web_search"),
-            )])),
-            stream_events: Vec::new(),
+    ) -> WorkspacePatchHostToolOutcome {
+        WorkspacePatchHostToolOutcome {
+            output: NormalizedToolOutput {
+                success,
+                text: output.to_string(),
+                structured_content: None,
+                error: error.map(ToString::to_string),
+                duration_ms: 0,
+                truncation: None,
+                sidecar_reference: None,
+                metadata: HashMap::from([("source".to_string(), json!("fixed_web_search"))]),
+            },
+        }
+    }
+
+    fn execution_input(turn_id: &str) -> WorkspacePatchHostToolExecutionInput {
+        WorkspacePatchHostToolExecutionInput {
+            session_id: "session-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: turn_id.to_string(),
+            working_directory: PathBuf::from("/tmp/workspace"),
+            turn_context: None,
+            parallelism: 2,
+        }
+    }
+
+    fn event_tool_call_id(event: &AgentEvent) -> Option<String> {
+        let item = match event {
+            AgentEvent::ItemStarted { item }
+            | AgentEvent::ItemUpdated { item }
+            | AgentEvent::ItemCompleted { item } => item,
+            _ => return None,
+        };
+        let ThreadItemPayload::Tool { call_id, .. } = &item.payload else {
+            return None;
+        };
+        Some(call_id.clone())
+    }
+
+    #[derive(Default)]
+    struct CapturingExecutor {
+        active: AtomicUsize,
+        max_active: AtomicUsize,
+        sessions: Mutex<Vec<String>>,
+    }
+
+    impl RuntimeToolExecutor for CapturingExecutor {
+        fn execute<'a>(
+            &'a self,
+            request: RuntimeToolExecutionRequest<'a>,
+        ) -> RuntimeToolExecutionFuture<'a> {
+            Box::pin(async move {
+                self.sessions
+                    .lock()
+                    .expect("captured sessions mutex poisoned")
+                    .push(request.context.session_id().to_string());
+                let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+                self.max_active.fetch_max(active, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                self.active.fetch_sub(1, Ordering::SeqCst);
+
+                Ok(RuntimeToolExecutionResult::new(
+                    true,
+                    format!("result={}", request.params["query"]),
+                    None,
+                    HashMap::from([("source".to_string(), json!("fake_web_search"))]),
+                )
+                .with_structured_content(json!({ "matches": 1 }))
+                .with_truncation(ToolOutputTruncation::new(
+                    ToolOutputTruncationReason::ByteLimit,
+                    ToolIoPayloadStats {
+                        chars: 32,
+                        bytes: 32,
+                        tokens: 8,
+                    },
+                ))
+                .with_sidecar_reference(ToolOutputReference::new(
+                    "sidecar://workspace-patch",
+                    Some("preview".to_string()),
+                )))
+            })
         }
     }
 }

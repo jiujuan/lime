@@ -101,6 +101,99 @@ import {
   MEDIA_REFERENCE_URI,
 } from "./claw-chat-current-fixture-media-reference.mjs";
 
+export function summarizeRequestInput(request) {
+  const attachments = Array.isArray(request?.input?.attachments)
+    ? request.input.attachments
+    : [];
+  const agentImages = Array.isArray(
+    request?.runtimeOptions?.runtimeRequest?.images,
+  )
+    ? request.runtimeOptions.runtimeRequest.images
+    : [];
+  const runtimeMetadata =
+    request?.runtimeOptions?.runtimeRequest?.metadata ?? {};
+  const harnessMetadata = runtimeMetadata?.harness ?? {};
+  const pathReferences = Array.isArray(runtimeMetadata?.path_references)
+    ? runtimeMetadata.path_references
+    : Array.isArray(runtimeMetadata?.pathReferences)
+      ? runtimeMetadata.pathReferences
+      : [];
+  const harnessFileReferences = Array.isArray(harnessMetadata?.file_references)
+    ? harnessMetadata.file_references
+    : Array.isArray(harnessMetadata?.fileReferences)
+      ? harnessMetadata.fileReferences
+      : [];
+  const fileReferences =
+    pathReferences.length > 0 ? pathReferences : harnessFileReferences;
+  const imageAttachments = attachments.filter(
+    (attachment) => attachment?.kind === "image",
+  );
+  return {
+    textLength:
+      typeof request?.input?.text === "string" ? request.input.text.length : 0,
+    attachmentCount: attachments.length + agentImages.length,
+    imageAttachmentCount: imageAttachments.length + agentImages.length,
+    fileReferenceCount: fileReferences.length,
+    fileReferenceNames: fileReferences
+      .map((reference) => reference?.name)
+      .filter((value) => typeof value === "string"),
+    fileReferencePaths: fileReferences
+      .map((reference) => reference?.path)
+      .filter((value) => typeof value === "string"),
+  };
+}
+
+export function buildCanonicalToolItem({
+  sessionId,
+  threadId,
+  turnId,
+  itemId,
+  ordinal,
+  callId,
+  name,
+  arguments: toolArguments = [],
+  status = "inProgress",
+  output = null,
+  metadata = {},
+}) {
+  const timestamp = Date.now();
+  const argumentsList = Array.isArray(toolArguments)
+    ? toolArguments
+    : Object.entries(toolArguments).map(([argumentName, value]) => ({
+        name: argumentName,
+        value:
+          typeof value === "string"
+            ? value
+            : (JSON.stringify(value) ?? String(value)),
+      }));
+  const terminal = ["completed", "failed", "interrupted", "cancelled"].includes(
+    status,
+  );
+  return {
+    item: {
+      sessionId,
+      threadId,
+      turnId,
+      itemId,
+      sequence: 0,
+      ordinal,
+      createdAtMs: timestamp,
+      updatedAtMs: timestamp,
+      ...(terminal ? { completedAtMs: timestamp } : {}),
+      kind: "tool",
+      status,
+      payload: {
+        type: "tool",
+        call_id: callId,
+        name,
+        arguments: argumentsList,
+        output,
+      },
+      metadata,
+    },
+  };
+}
+
 export function writeFixtureBackend(backendPath, options = {}) {
   const mediaReferenceSourcePath = String(
     options.mediaReferenceSourcePath ?? "",
@@ -243,48 +336,8 @@ export function currentTurnId() {
     "";
 }
 
-export function summarizeRequestInput(request) {
-  const attachments = Array.isArray(request?.input?.attachments)
-    ? request.input.attachments
-    : [];
-  const agentImages = Array.isArray(
-    request?.runtimeOptions?.runtimeRequest?.images,
-  )
-    ? request.runtimeOptions.runtimeRequest.images
-    : [];
-  const runtimeMetadata = request?.runtimeOptions?.runtimeRequest?.metadata ?? {};
-  const harnessMetadata = runtimeMetadata?.harness ?? {};
-  const pathReferences = Array.isArray(runtimeMetadata?.path_references)
-    ? runtimeMetadata.path_references
-    : Array.isArray(runtimeMetadata?.pathReferences)
-      ? runtimeMetadata.pathReferences
-      : [];
-  const harnessFileReferences = Array.isArray(harnessMetadata?.file_references)
-    ? harnessMetadata.file_references
-    : Array.isArray(harnessMetadata?.fileReferences)
-      ? harnessMetadata.fileReferences
-      : [];
-  const fileReferences = pathReferences.length > 0
-    ? pathReferences
-    : harnessFileReferences;
-  return {
-    textLength: typeof request?.input?.text === "string"
-      ? request.input.text.length
-      : 0,
-    attachmentCount: attachments.length + agentImages.length,
-    imageAttachmentCount:
-      attachments.filter((attachment) =>
-        String(attachment?.mediaType ?? attachment?.media_type ?? "").startsWith("image/")
-      ).length + agentImages.length,
-    fileReferenceCount: fileReferences.length,
-    fileReferenceNames: fileReferences
-      .map((reference) => reference?.name)
-      .filter((value) => typeof value === "string"),
-    fileReferencePaths: fileReferences
-      .map((reference) => reference?.path)
-      .filter((value) => typeof value === "string")
-  };
-}
+${summarizeRequestInput.toString()}
+${buildCanonicalToolItem.toString()}
 
 export function summarizeActionRespondRequest(request) {
   const actionScope = request?.actionScope || request?.action_scope || {};

@@ -29,7 +29,7 @@ import {
   readAgentMessageItemId,
   readAgentMessagePhase,
   readAgentThreadItemFromPayload,
-  readAgentThreadTurnFromPayload,
+  readCanonicalAgentThreadTurn,
   readArtifactSnapshotSignalFromPayload,
   readCommandExecutionItemFromPayload,
   readFileReadItemFromPayload,
@@ -39,9 +39,24 @@ import {
   readPluginWorkerRetryItemFromPayload,
   readUserMessageItemFromPayload,
 } from "./appServerEventTimelineReaders";
+import { readCanonicalThreadItem } from "./appServerCanonicalItemReader";
 
 export function projectAppServerAgentEventPayload(
   notification: AppServerJsonRpcNotification,
+): Record<string, unknown> | null {
+  return projectAppServerAgentEventPayloadInternal(notification, false);
+}
+
+/** Test-only entry for frozen raw lifecycle fixtures during canonical cutover. */
+export function projectRawAppServerAgentEventPayloadForTests(
+  notification: AppServerJsonRpcNotification,
+): Record<string, unknown> | null {
+  return projectAppServerAgentEventPayloadInternal(notification, true);
+}
+
+function projectAppServerAgentEventPayloadInternal(
+  notification: AppServerJsonRpcNotification,
+  allowRawLifecycle: boolean,
 ): Record<string, unknown> | null {
   if (notification.method !== APP_SERVER_METHOD_AGENT_SESSION_EVENT) {
     return null;
@@ -69,6 +84,21 @@ export function projectAppServerAgentEventPayload(
     timestamp: event.timestamp,
   };
 
+  const canonicalEvent = normalizeRecord(
+    normalizeRecord(notification.params)?.canonicalEvent,
+  );
+  if (canonicalEvent) {
+    return projectCanonicalThreadEvent(
+      canonicalEvent,
+      event,
+      payload,
+      basePayload,
+    );
+  }
+  if (!allowRawLifecycle && !isCurrentNonThreadSideChannelEvent(event.type)) {
+    return null;
+  }
+
   switch (event.type) {
     case "thread.started":
       return {
@@ -76,12 +106,22 @@ export function projectAppServerAgentEventPayload(
         type: "thread_started",
         thread_id: event.threadId ?? event.sessionId,
       };
-    case "turn.started":
+    case "turn.started": {
+      const turn = readCanonicalTurnProjection(
+        notification,
+        event,
+        "inProgress",
+        "running",
+      );
+      if (!turn) {
+        return null;
+      }
       return {
         ...basePayload,
         type: "turn_started",
-        turn: readAgentThreadTurnFromPayload(payload, event, "running"),
+        turn,
       };
+    }
     case "item.started":
       return {
         ...basePayload,
@@ -567,11 +607,13 @@ export function projectAppServerAgentEventPayload(
         arguments: readActionArguments(payload),
         prompt: readString(payload, "prompt", "message", "reason"),
         questions: readActionQuestions(payload),
-        available_decisions: readStringArray(
-          payload,
-          "availableDecisions",
-          "available_decisions",
-        ),
+        available_decisions:
+          readStringArray(
+            normalizeRecord(payload.data) ?? {},
+            "availableDecisions",
+            "available_decisions",
+          ) ??
+          readStringArray(payload, "availableDecisions", "available_decisions"),
         requested_schema:
           normalizeRecord(payload.requested_schema) ??
           normalizeRecord(payload.requestedSchema) ??
@@ -601,75 +643,391 @@ export function projectAppServerAgentEventPayload(
         type: "runtime_status",
         status: normalizeRecord(payload.status) ?? payload,
       };
-    case "turn.completed":
+    case "turn.completed": {
+      const turn = readCanonicalTurnProjection(
+        notification,
+        event,
+        "completed",
+        "completed",
+      );
+      if (!turn) {
+        return null;
+      }
       return {
         ...basePayload,
         type: "turn_completed",
         text: readString(payload, "text", "delta", "message", "content"),
         usage: payload.usage,
-        turn: normalizeRecord(payload.turn) ?? {
-          id: event.turnId ?? "",
-          thread_id: event.threadId ?? event.sessionId,
-          prompt_text:
-            readString(payload, "prompt_text", "promptText", "prompt") ?? "",
-          status: "completed",
-          started_at: event.timestamp,
-          completed_at: event.timestamp,
-          created_at: event.timestamp,
-          updated_at: event.timestamp,
-        },
+        turn,
       };
-    case "turn.failed":
+    }
+    case "turn.failed": {
+      const turn = readCanonicalTurnProjection(
+        notification,
+        event,
+        "failed",
+        "failed",
+      );
+      if (!turn) {
+        return null;
+      }
       return {
         ...basePayload,
         type: "turn_failed",
-        turn: normalizeRecord(payload.turn) ?? {
-          id: event.turnId ?? "",
-          thread_id: event.threadId ?? event.sessionId,
-          prompt_text:
-            readString(payload, "prompt_text", "promptText", "prompt") ?? "",
-          status: "failed",
-          started_at: event.timestamp,
-          completed_at: event.timestamp,
-          created_at: event.timestamp,
-          updated_at: event.timestamp,
-          error_message:
-            readString(payload, "message", "error", "reason") ??
-            "App Server turn failed",
-        },
+        turn,
       };
-    case "turn.canceled":
+    }
+    case "turn.canceled": {
+      const turn = readCanonicalTurnProjection(
+        notification,
+        event,
+        "interrupted",
+        "canceled",
+      );
+      if (!turn) {
+        return null;
+      }
       return {
         ...basePayload,
         type: "turn_canceled",
         text: readString(payload, "text", "delta", "message", "content"),
         usage: payload.usage,
-        turn: normalizeRecord(payload.turn) ?? {
-          id: event.turnId ?? "",
-          thread_id: event.threadId ?? event.sessionId,
-          prompt_text:
-            readString(payload, "prompt_text", "promptText", "prompt") ?? "",
-          status: "canceled",
-          started_at: event.timestamp,
-          completed_at: event.timestamp,
-          created_at: event.timestamp,
-          updated_at: event.timestamp,
+        turn: {
+          ...turn,
           error_message: "本轮已中止",
         },
       };
+    }
     default:
+      return isCurrentNonThreadSideChannelEvent(event.type)
+        ? { ...basePayload, type: event.type.split(".").join("_") }
+        : null;
+  }
+}
+
+function projectCanonicalThreadEvent(
+  canonicalEvent: Record<string, unknown>,
+  event: AppServerAgentEvent,
+  rawPayload: Record<string, unknown>,
+  basePayload: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const method = readString(canonicalEvent, "method");
+  const params = normalizeRecord(canonicalEvent.params);
+  if (!params) {
+    return null;
+  }
+
+  switch (method) {
+    case "thread/updated": {
+      const sessionId = readString(params, "sessionId", "session_id");
+      const threadId = readString(params, "threadId", "thread_id");
+      if (
+        sessionId !== event.sessionId ||
+        !threadId ||
+        (event.threadId !== undefined && threadId !== event.threadId)
+      ) {
+        return null;
+      }
+      return { ...basePayload, type: "thread_started", thread_id: threadId };
+    }
+    case "turn/updated":
+      return projectCanonicalTurnEvent(params, event, rawPayload, basePayload);
+    case "item/updated":
+      return projectCanonicalItemEvent(params, event, rawPayload, basePayload);
+    default:
+      return null;
+  }
+}
+
+function projectCanonicalTurnEvent(
+  turn: Record<string, unknown>,
+  event: AppServerAgentEvent,
+  rawPayload: Record<string, unknown>,
+  basePayload: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const status = readString(turn, "status");
+  const expectedStatus = expectedCanonicalTurnStatus(event.type);
+  if (expectedStatus && !expectedStatus.includes(status ?? "")) {
+    return null;
+  }
+  const projectedStatus =
+    status === "interrupted"
+      ? "canceled"
+      : status === "notStarted" || status === "inProgress"
+        ? "running"
+        : status;
+  if (!projectedStatus) {
+    return null;
+  }
+  const canonicalTurn = readCanonicalTurnProjection(
+    {
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: { canonicalEvent: { method: "turn/updated", params: turn } },
+    },
+    event,
+    status ?? "",
+    projectedStatus,
+  );
+  if (!canonicalTurn) {
+    return null;
+  }
+
+  const presentation = {
+    text: readString(rawPayload, "text", "delta", "message", "content"),
+    usage: rawPayload.usage,
+  };
+  switch (status) {
+    case "notStarted":
+    case "inProgress":
+      return { ...basePayload, type: "turn_started", turn: canonicalTurn };
+    case "completed":
       return {
         ...basePayload,
-        type: event.type.split(".").join("_"),
+        ...presentation,
+        type: "turn_completed",
+        turn: canonicalTurn,
       };
+    case "failed":
+      return { ...basePayload, type: "turn_failed", turn: canonicalTurn };
+    case "interrupted":
+      return {
+        ...basePayload,
+        ...presentation,
+        type: "turn_canceled",
+        turn: { ...canonicalTurn, error_message: "本轮已中止" },
+      };
+    default:
+      return null;
   }
+}
+
+function projectCanonicalItemEvent(
+  item: Record<string, unknown>,
+  event: AppServerAgentEvent,
+  rawPayload: Record<string, unknown>,
+  basePayload: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const projectedItem = readCanonicalThreadItem(item, event);
+  if (!projectedItem) {
+    return null;
+  }
+  const status = readString(item, "status");
+  const canonicalPayload = normalizeRecord(item.payload);
+  if (readString(canonicalPayload ?? {}, "type") === "approval") {
+    return projectCanonicalApprovalEvent(
+      projectedItem,
+      canonicalPayload ?? {},
+      status,
+      event,
+      rawPayload,
+      basePayload,
+    );
+  }
+  if (
+    readString(canonicalPayload ?? {}, "type") === "agentMessage" &&
+    !["completed", "failed", "interrupted", "cancelled"].includes(status ?? "")
+  ) {
+    const text = readString(canonicalPayload ?? {}, "text") ?? "";
+    const phase = readString(canonicalPayload ?? {}, "phase");
+    const itemId = readString(item, "itemId", "item_id");
+    return {
+      ...basePayload,
+      type: "text_delta",
+      text,
+      itemId,
+      item_id: itemId,
+      phase,
+    };
+  }
+  const createdAtMs = readFiniteNumber(item, "createdAtMs");
+  const updatedAtMs = readFiniteNumber(item, "updatedAtMs");
+  const type = ["completed", "failed", "interrupted", "cancelled"].includes(
+    status ?? "",
+  )
+    ? "item_completed"
+    : event.type === "item.updated"
+      ? "item_updated"
+      : event.type === "item.started" ||
+          status === "pending" ||
+          createdAtMs === updatedAtMs
+        ? "item_started"
+        : "item_updated";
+  const deltaType = event.type.includes("delta") ? "item_updated" : type;
+  return { ...basePayload, type: deltaType, item: projectedItem };
+}
+
+function projectCanonicalApprovalEvent(
+  projectedItem: Record<string, unknown>,
+  canonicalPayload: Record<string, unknown>,
+  status: string | undefined,
+  event: AppServerAgentEvent,
+  rawPayload: Record<string, unknown>,
+  basePayload: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const requestId = readString(canonicalPayload, "request_id");
+  const action = normalizeRecord(canonicalPayload.action);
+  const actionType = readString(action ?? {}, "kind");
+  const runtimeEvent = normalizeRecord(rawPayload.runtimeEvent);
+  const rawRequestId =
+    readString(rawPayload, "requestId", "actionId") ??
+    readString(
+      runtimeEvent ?? {},
+      "requestId",
+      "request_id",
+      "actionId",
+      "action_id",
+    ) ??
+    readString(rawPayload, "action_id", "request_id");
+  const rawActionType =
+    readString(rawPayload, "actionType") ??
+    readString(runtimeEvent ?? {}, "actionType", "action_type") ??
+    readString(rawPayload, "action_type");
+  if (
+    !requestId ||
+    !actionType ||
+    (rawRequestId !== undefined && rawRequestId !== requestId) ||
+    (rawActionType !== undefined && rawActionType !== actionType)
+  ) {
+    return null;
+  }
+
+  const terminal = ["completed", "failed", "interrupted", "cancelled"].includes(
+    status ?? "",
+  );
+  if (
+    (event.type === "action.required" && terminal) ||
+    (event.type === "action.resolved" && !terminal)
+  ) {
+    return null;
+  }
+
+  const scope = {
+    session_id: event.sessionId,
+    thread_id: readString(projectedItem, "thread_id"),
+    turn_id: readString(projectedItem, "turn_id"),
+  };
+  if (!terminal) {
+    return {
+      ...basePayload,
+      type: "action_required",
+      request_id: requestId,
+      action_type: actionType,
+      scope,
+      prompt: readString(projectedItem, "prompt"),
+      available_decisions: projectedItem.available_decisions,
+    };
+  }
+  if (actionType === "tool_confirmation") {
+    return {
+      ...basePayload,
+      type: "item_completed",
+      item: projectedItem,
+    };
+  }
+
+  const decision = readString(canonicalPayload, "decision");
+  const response = normalizeRecord(projectedItem.response);
+  if (!decision || !response) {
+    if (!allowsDecisionlessApprovalResolution(actionType)) {
+      return null;
+    }
+    return {
+      ...basePayload,
+      type: "action_resolved",
+      request_id: requestId,
+      action_type: actionType,
+      scope,
+    };
+  }
+  return {
+    ...basePayload,
+    type: "action_resolved",
+    request_id: requestId,
+    action_type: actionType,
+    scope,
+    approved: decision === "approved" || decision === "approvedForSession",
+    feedback: readString(canonicalPayload, "reason_code"),
+    permission_mode: readString(response, "decision"),
+    data: response,
+  };
+}
+
+function allowsDecisionlessApprovalResolution(actionType: string): boolean {
+  return ["ask_user", "elicitation", "mcp_elicitation"].includes(actionType);
+}
+
+function expectedCanonicalTurnStatus(eventType: string): string[] | null {
+  switch (eventType) {
+    case "turn.accepted":
+    case "turn.started":
+      return ["notStarted", "inProgress"];
+    case "turn.completed":
+      return ["completed"];
+    case "turn.failed":
+      return ["failed"];
+    case "turn.canceled":
+      return ["interrupted"];
+    default:
+      return null;
+  }
+}
+
+function isCurrentNonThreadSideChannelEvent(eventType: string): boolean {
+  return (
+    providerTraceStageFromEventType(eventType) !== undefined ||
+    eventType === "runtime.status" ||
+    eventType === "image_task.presentation.generated" ||
+    eventType === "image_task.created" ||
+    eventType === "image_task.parameters.required" ||
+    eventType === "image_task_parameters_required" ||
+    eventType === "media.read.chunk" ||
+    eventType === "media.read.completed"
+  );
+}
+
+function readCanonicalTurnProjection(
+  notification: AppServerJsonRpcNotification,
+  event: AppServerAgentEvent,
+  expectedStatus: string,
+  projectedStatus: string,
+): Record<string, unknown> | null {
+  const params = normalizeRecord(notification.params);
+  const canonicalEvent = normalizeRecord(params?.canonicalEvent);
+  if (readString(canonicalEvent ?? {}, "method") !== "turn/updated") {
+    return null;
+  }
+
+  const turn = normalizeRecord(canonicalEvent?.params);
+  if (!turn || readString(turn, "status") !== expectedStatus) {
+    return null;
+  }
+
+  const sessionId = readString(turn, "sessionId", "session_id");
+  const threadId = readString(turn, "threadId", "thread_id");
+  const turnId = readString(turn, "turnId", "turn_id", "id");
+  if (
+    sessionId !== event.sessionId ||
+    !threadId ||
+    !turnId ||
+    (event.threadId !== undefined && threadId !== event.threadId) ||
+    (event.turnId !== undefined && turnId !== event.turnId)
+  ) {
+    return null;
+  }
+
+  return readCanonicalAgentThreadTurn(turn, event, projectedStatus);
 }
 
 function readActionRequestId(payload: Record<string, unknown>): string {
   return (
-    readString(payload, "action_id", "actionId", "requestId", "id") ??
-    readString(payload, "request_id") ??
-    ""
+    readString(
+      payload,
+      "request_id",
+      "requestId",
+      "action_id",
+      "actionId",
+      "id",
+    ) ?? ""
   );
 }
 

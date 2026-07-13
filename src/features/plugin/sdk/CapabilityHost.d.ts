@@ -28,12 +28,25 @@ export interface LimeKnowledgeCapability {
         limit?: number;
     }): Promise<PluginKnowledgeSearchResult>;
 }
+export interface PluginTaskLookup {
+    taskId: string;
+    threadId?: string;
+    sessionId?: string;
+    traceId?: string;
+    turnId?: string;
+    workspaceId?: string;
+    title?: string;
+    taskKind?: string;
+    input?: unknown;
+    expectedOutput?: unknown;
+    startedAt?: string;
+}
 export interface LimeAgentCapability {
     startTask(input: PluginTaskRequest): Promise<PluginTaskRecord>;
-    streamTask(taskId: string): Promise<PluginTaskStreamEvent[]>;
-    getTask(taskId: string): Promise<PluginTaskRecord | null>;
-    cancelTask(taskId: string): Promise<PluginTaskRecord>;
-    retryTask(taskId: string): Promise<PluginTaskRecord>;
+    streamTask(task: string | PluginTaskLookup): Promise<PluginTaskStreamEvent[]>;
+    getTask(task: string | PluginTaskLookup): Promise<PluginTaskRecord | null>;
+    cancelTask(task: string | PluginTaskLookup): Promise<PluginTaskRecord>;
+    retryTask(task: string | PluginTaskLookup): Promise<PluginTaskRecord>;
     submitHostResponse(input: PluginTaskHostResponseRequest): Promise<PluginTaskHostResponseResult>;
     listTasks(): Promise<PluginTaskRecord[]>;
 }

@@ -1,6 +1,7 @@
 use super::*;
 use app_server_protocol::AgentEvent;
 use serde_json::json;
+use std::io::Write;
 
 fn event(sequence: u64) -> AgentEvent {
     AgentEvent {
@@ -344,4 +345,248 @@ fn clear_session_removes_session_event_log() {
         .expect("audit records");
     assert!(audit_records.is_empty());
     writer.clear_session("session-a").expect("clear missing");
+}
+
+#[test]
+fn canonical_scan_fingerprint_ignores_source_json_field_order() {
+    let first_temp = tempfile::tempdir().expect("first tempdir");
+    let first_writer = EventLogWriter::new(first_temp.path()).expect("first writer");
+    first_writer
+        .append(&event(1))
+        .expect("append canonical event");
+
+    let second_temp = tempfile::tempdir().expect("second tempdir");
+    let second_writer = EventLogWriter::new(second_temp.path()).expect("second writer");
+    let reordered = json!({
+        "payload": { "text": "hello-1" },
+        "timestamp": "2026-06-14T00:00:00.000Z",
+        "type": "message.delta",
+        "turnId": "turn-a",
+        "threadId": "thread-a",
+        "sessionId": "session-a",
+        "sequence": 1,
+        "eventId": "evt-1"
+    });
+    let second_path = second_writer.session_path("session-a");
+    fs::create_dir_all(second_path.parent().expect("second parent")).expect("create second parent");
+    fs::write(second_path, format!("{reordered}\n")).expect("write reordered event");
+
+    let first = first_writer
+        .scan_session_events("session-a")
+        .expect("first scan");
+    let second = second_writer
+        .scan_session_events("session-a")
+        .expect("second scan");
+
+    assert!(first.is_clean());
+    assert!(second.is_clean());
+    assert_eq!(first.fingerprint, second.fingerprint);
+    assert_eq!(first.last_valid_offset, first.file_len);
+}
+
+#[test]
+fn malformed_tail_is_isolated_and_truncated_to_last_valid_offset() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    writer.append(&event(1)).expect("append");
+    let path = writer.session_path("session-a");
+    let valid_len = fs::metadata(&path).expect("metadata").len();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .expect("open tail")
+        .write_all(br#"{"eventId":"evt-2"#)
+        .expect("write malformed tail");
+
+    let scan = writer.scan_session_events("session-a").expect("scan");
+    assert_eq!(scan.records.len(), 1);
+    assert_eq!(scan.last_valid_offset, valid_len);
+    assert!(matches!(
+        scan.issue,
+        Some(EventLogIssue::MalformedTail { offset, .. }) if offset == valid_len
+    ));
+    assert!(writer.read_session_events("session-a").is_err());
+
+    let repaired = writer
+        .repair_session_event_log("session-a")
+        .expect("repair tail");
+    assert!(repaired.is_clean());
+    assert_eq!(repaired.records.len(), 1);
+    assert_eq!(repaired.file_len, valid_len);
+    assert_eq!(
+        fs::metadata(path).expect("repaired metadata").len(),
+        valid_len
+    );
+}
+
+#[test]
+fn complete_but_unterminated_tail_is_not_assumed_committed() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    writer.append(&event(1)).expect("append");
+    let path = writer.session_path("session-a");
+    let valid_len = fs::metadata(&path).expect("metadata").len();
+    let tail = serde_json::to_vec(&event(2)).expect("serialize tail");
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .expect("open tail")
+        .write_all(&tail)
+        .expect("write tail");
+
+    let scan = writer.scan_session_events("session-a").expect("scan");
+    assert_eq!(scan.records.len(), 1);
+    assert_eq!(scan.last_valid_offset, valid_len);
+    assert_eq!(
+        scan.issue,
+        Some(EventLogIssue::UnterminatedTail { offset: valid_len })
+    );
+}
+
+#[test]
+fn append_terminates_valid_tail_and_truncates_malformed_tail_before_writing() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    writer.append(&event(1)).expect("append first");
+    let path = writer.session_path("session-a");
+    let second = serde_json::to_vec(&event(2)).expect("serialize second");
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .expect("open valid tail")
+        .write_all(&second)
+        .expect("write valid tail");
+
+    writer.append(&event(3)).expect("append after valid tail");
+    let records = writer
+        .read_session_events("session-a")
+        .expect("records after valid tail");
+    assert_eq!(
+        records
+            .iter()
+            .map(|record| record.event.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
+
+    writer.clear_session("session-a").expect("clear");
+    writer.append(&event(1)).expect("append first again");
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .expect("open malformed tail")
+        .write_all(br#"{"eventId":"broken"#)
+        .expect("write malformed tail");
+    writer
+        .append(&event(2))
+        .expect("append after malformed tail");
+    let records = writer
+        .read_session_events("session-a")
+        .expect("records after malformed tail");
+    assert_eq!(
+        records
+            .iter()
+            .map(|record| record.event.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+}
+
+#[test]
+fn malformed_middle_record_is_not_truncated_by_tail_repair() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    let path = writer.session_path("session-a");
+    fs::create_dir_all(path.parent().expect("parent")).expect("create parent");
+    let first = serde_json::to_string(&event(1)).expect("first");
+    let third = serde_json::to_string(&event(3)).expect("third");
+    fs::write(&path, format!("{first}\n{{broken}}\n{third}\n")).expect("write log");
+    let before = fs::read(&path).expect("before");
+
+    let scan = writer.scan_session_events("session-a").expect("scan");
+    assert!(matches!(
+        scan.issue,
+        Some(EventLogIssue::MalformedRecord { .. })
+    ));
+    assert!(writer.repair_session_event_log("session-a").is_err());
+    assert_eq!(fs::read(path).expect("after"), before);
+}
+
+#[test]
+fn canonical_scan_rejects_gap_regression_and_equal_sequence_divergence() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    let path = writer.session_path("session-a");
+    fs::create_dir_all(path.parent().expect("parent")).expect("create parent");
+
+    write_events_to_path(&path, &[&event(1), &event(3)]).expect("write gap");
+    let gap = writer.scan_session_events("session-a").expect("gap scan");
+    assert!(matches!(
+        gap.issue,
+        Some(EventLogIssue::SequenceGap {
+            expected: 2,
+            actual: 3,
+            ..
+        })
+    ));
+
+    write_events_to_path(&path, &[&event(3), &event(2)]).expect("write regression");
+    let regression = writer
+        .scan_session_events("session-a")
+        .expect("regression scan");
+    assert!(matches!(
+        regression.issue,
+        Some(EventLogIssue::SequenceRegression {
+            previous: 3,
+            actual: 2,
+            ..
+        })
+    ));
+
+    let mut divergent = event(1);
+    divergent.event_id = "evt-divergent".to_string();
+    write_events_to_path(&path, &[&event(1), &divergent]).expect("write divergence");
+    let divergence = writer
+        .scan_session_events("session-a")
+        .expect("divergence scan");
+    assert!(matches!(
+        divergence.issue,
+        Some(EventLogIssue::EqualSequenceDivergence { sequence: 1, .. })
+    ));
+}
+
+#[test]
+fn canonical_comparison_detects_append_shorter_missing_middle_and_divergence() {
+    let expected = vec![event(1), event(2), event(3)];
+    let mut appended = expected.clone();
+    appended.push(event(4));
+    assert_eq!(
+        compare_canonical_event_logs(&expected, &expected),
+        Ok(EventLogComparison::Exact)
+    );
+    assert_eq!(
+        compare_canonical_event_logs(&expected, &appended),
+        Ok(EventLogComparison::Append {
+            expected_len: 3,
+            actual_len: 4
+        })
+    );
+    assert!(matches!(
+        compare_canonical_event_logs(&expected, &expected[..2]),
+        Err(EventLogComparisonIssue::ShorterLog { .. })
+    ));
+    assert!(matches!(
+        compare_canonical_event_logs(&expected, &[event(1), event(3), event(4)]),
+        Err(EventLogComparisonIssue::MissingMiddle {
+            expected_sequence: 2,
+            actual_sequence: 3,
+            ..
+        })
+    ));
+    let mut divergent = event(2);
+    divergent.payload = json!({ "text": "different" });
+    assert!(matches!(
+        compare_canonical_event_logs(&expected, &[event(1), divergent, event(3)]),
+        Err(EventLogComparisonIssue::EqualSequenceDivergence { sequence: 2, .. })
+    ));
 }

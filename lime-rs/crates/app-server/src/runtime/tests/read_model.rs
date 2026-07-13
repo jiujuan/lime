@@ -336,39 +336,6 @@ fn media_task_artifact_response(record: serde_json::Value) -> MediaTaskArtifactR
     }
 }
 
-fn tool_item_event_payload(
-    item_id: &str,
-    thread_id: &str,
-    turn_id: &str,
-    sequence: i64,
-    status: &str,
-    tool_name: &str,
-    arguments: serde_json::Value,
-    output: Option<&str>,
-    success: Option<bool>,
-) -> serde_json::Value {
-    json!({
-        "item": {
-            "id": item_id,
-            "thread_id": thread_id,
-            "turn_id": turn_id,
-            "sequence": sequence,
-            "status": status,
-            "started_at": "2026-06-18T00:00:00.000Z",
-            "updated_at": "2026-06-18T00:00:01.000Z",
-            "completed_at": if status == "completed" { Some("2026-06-18T00:00:01.000Z") } else { None },
-            "type": "tool_call",
-            "tool_name": tool_name,
-            "arguments": arguments,
-            "output": output,
-            "success": success,
-            "metadata": {
-                "source": "native_item_runtime"
-            }
-        }
-    })
-}
-
 mod article_workspace_artifact_documents;
 mod article_workspace_worker_evidence;
 mod article_workspace_worker_failure;

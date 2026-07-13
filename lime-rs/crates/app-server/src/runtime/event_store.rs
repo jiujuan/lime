@@ -10,8 +10,7 @@ use crate::runtime_backend::{
     current_agent_runtime_config_metadata, tool_process_external_metadata,
 };
 use app_server_protocol::*;
-use serde_json::{json, Value};
-use std::collections::HashSet;
+use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 impl RuntimeCoreEventAppender {
@@ -156,7 +155,14 @@ fn append_runtime_events_to_stored_session(
         return Ok(Vec::new());
     }
     let runtime_events = runtime_events_with_turn_input(stored, turn_id, runtime_events);
-    let runtime_events = runtime_events_with_synthetic_tool_starts(stored, turn_id, runtime_events);
+    if let Some(retired_event) = runtime_events.iter().find(|event| {
+        is_retired_tool_wire_event_class(normalized_runtime_event_class(&event.event_type))
+    }) {
+        return Err(RuntimeCoreError::Backend(format!(
+            "retired raw tool wire event is forbidden: {}",
+            retired_event.event_type
+        )));
+    }
     if runtime_events.is_empty() {
         return Ok(Vec::new());
     }
@@ -312,7 +318,9 @@ fn append_runtime_events_to_stored_session(
         }
         events.push(event);
     }
-    let appended_events = events.clone();
+    let appended_events = events;
+    let notification_events =
+        notification_events_with_canonical_entities(stored, &appended_events)?;
     if let Some(event_log_writer) = event_log_writer {
         event_log_writer
             .append_events(&appended_events)
@@ -337,8 +345,16 @@ fn append_runtime_events_to_stored_session(
                 error
             );
         }
+        if let Err(error) = projection_store.apply_canonical_events(stored, &appended_events) {
+            tracing::warn!(
+                "[canonical-thread-store] failed to apply {} events for session {}: {}",
+                appended_events.len(),
+                session_id,
+                error
+            );
+        }
     }
-    for event in events {
+    for event in appended_events.iter().cloned() {
         apply_runtime_event_state_transition(stored, turn_id, event.event_type.as_str());
         stored.events.push(event);
     }
@@ -347,7 +363,147 @@ fn append_runtime_events_to_stored_session(
             .output_blobs
             .insert(output.output_ref.clone(), output);
     }
-    Ok(appended_events)
+    Ok(notification_events)
+}
+
+#[derive(Clone, Copy)]
+enum CanonicalNotificationTarget {
+    Turn,
+    Item,
+}
+
+fn notification_events_with_canonical_entities(
+    stored: &StoredSession,
+    events: &[AgentEvent],
+) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
+    let mut history = Vec::with_capacity(stored.events.len() + events.len());
+    history.extend(stored.events.iter().cloned());
+    let mut notifications = Vec::with_capacity(events.len());
+
+    for event in events {
+        history.push(event.clone());
+        let Some(target) = canonical_notification_target(event) else {
+            notifications.push(event.clone());
+            continue;
+        };
+        let changes = thread_item_projection::materialize_events(
+            &history,
+            &stored.session.session_id,
+            &stored.session.thread_id,
+        )
+        .map_err(|error| {
+            RuntimeCoreError::Backend(format!(
+                "cannot materialize canonical notification for event {} ({}): {error}",
+                event.event_id, event.event_type
+            ))
+        })?;
+        let mut notification = event.clone();
+        let payload = notification.payload.as_object_mut().ok_or_else(|| {
+            RuntimeCoreError::Backend(format!(
+                "cannot attach canonical notification entity to non-object payload for event {} ({})",
+                event.event_id, event.event_type
+            ))
+        })?;
+
+        match target {
+            CanonicalNotificationTarget::Turn => {
+                let turn_id = event.turn_id.as_deref().ok_or_else(|| {
+                    RuntimeCoreError::Backend(format!(
+                        "cannot materialize canonical turn notification without turn id for event {} ({})",
+                        event.event_id, event.event_type
+                    ))
+                })?;
+                let turn = changes
+                    .changed_turns
+                    .into_iter()
+                    .find(|turn| turn.turn_id.as_str() == turn_id)
+                    .ok_or_else(|| {
+                        RuntimeCoreError::Backend(format!(
+                            "canonical materializer produced no turn for event {} ({})",
+                            event.event_id, event.event_type
+                        ))
+                    })?;
+                payload.insert(
+                    "turn".to_string(),
+                    serde_json::to_value(turn).map_err(|error| {
+                        RuntimeCoreError::Backend(format!(
+                            "cannot serialize canonical turn for event {}: {error}",
+                            event.event_id
+                        ))
+                    })?,
+                );
+            }
+            CanonicalNotificationTarget::Item => {
+                let item = changes
+                    .changed_items
+                    .into_iter()
+                    .find(|item| item.sequence == event.sequence)
+                    .ok_or_else(|| {
+                        RuntimeCoreError::Backend(format!(
+                            "canonical materializer produced no item for event {} ({})",
+                            event.event_id, event.event_type
+                        ))
+                    })?;
+                payload.insert(
+                    "item".to_string(),
+                    serde_json::to_value(item).map_err(|error| {
+                        RuntimeCoreError::Backend(format!(
+                            "cannot serialize canonical item for event {}: {error}",
+                            event.event_id
+                        ))
+                    })?,
+                );
+            }
+        }
+        notifications.push(notification);
+    }
+
+    Ok(notifications)
+}
+
+fn canonical_notification_target(event: &AgentEvent) -> Option<CanonicalNotificationTarget> {
+    let event_type = event.event_type.as_str();
+    if matches!(
+        event_type,
+        "turn.accepted" | "turn.started" | "turn.completed" | "turn.failed" | "turn.canceled"
+    ) {
+        return Some(CanonicalNotificationTarget::Turn);
+    }
+    if matches!(
+        event_type,
+        "item.removed"
+            | "item.deleted"
+            | "message.removed"
+            | "tool.removed"
+            | "turn.removed"
+            | "turn.deleted"
+    ) {
+        return None;
+    }
+    if event.turn_id.is_none() {
+        return None;
+    }
+    let item_lifecycle = [
+        "item.",
+        "message.",
+        "reasoning.",
+        "tool.",
+        "mcp.",
+        "collab.",
+        "action.",
+        "approval.",
+        "command.",
+        "patch.",
+        "file.",
+        "artifact.",
+        "media.",
+        "subagent.",
+        "sub_agent.",
+        "context.compaction",
+    ]
+    .iter()
+    .any(|prefix| event_type.starts_with(prefix));
+    item_lifecycle.then_some(CanonicalNotificationTarget::Item)
 }
 
 fn runtime_events_with_turn_input(
@@ -377,234 +533,6 @@ fn runtime_events_with_turn_input(
     events.push(input_event);
     events.extend(runtime_events);
     events
-}
-
-fn runtime_events_with_synthetic_tool_starts(
-    stored: &StoredSession,
-    turn_id: Option<&str>,
-    runtime_events: Vec<RuntimeEvent>,
-) -> Vec<RuntimeEvent> {
-    if runtime_events.is_empty() {
-        return runtime_events;
-    }
-
-    let mut active_tool_call_ids = active_tool_call_ids_for_turn(stored, turn_id);
-    let mut events = Vec::with_capacity(runtime_events.len());
-
-    for event in runtime_events {
-        let event_class = normalized_runtime_event_class(&event.event_type);
-        if redundant_runtime_tool_start_after_synthetic_start(
-            event_class,
-            &event.payload,
-            &active_tool_call_ids,
-        ) {
-            continue;
-        }
-        if let Some((tool_call_id, tool_name)) =
-            synthetic_tool_start_candidate(event_class, &event.payload, &active_tool_call_ids)
-        {
-            events.push(RuntimeEvent::new(
-                "tool.started",
-                synthetic_tool_start_payload(&event.payload, &tool_call_id, &tool_name),
-            ));
-            active_tool_call_ids.insert_synthetic(tool_call_id);
-        }
-
-        update_active_tool_call_ids_from_runtime_event(
-            &mut active_tool_call_ids,
-            event_class,
-            &event.payload,
-        );
-        events.push(event);
-    }
-
-    events
-}
-
-#[derive(Default)]
-struct ActiveToolCallIds {
-    active: HashSet<String>,
-    synthetic: HashSet<String>,
-}
-
-impl ActiveToolCallIds {
-    fn contains(&self, tool_call_id: &str) -> bool {
-        self.active.contains(tool_call_id)
-    }
-
-    fn is_synthetic(&self, tool_call_id: &str) -> bool {
-        self.synthetic.contains(tool_call_id)
-    }
-
-    fn insert(&mut self, tool_call_id: String) {
-        self.synthetic.remove(&tool_call_id);
-        self.active.insert(tool_call_id);
-    }
-
-    fn insert_synthetic(&mut self, tool_call_id: String) {
-        self.active.insert(tool_call_id.clone());
-        self.synthetic.insert(tool_call_id);
-    }
-
-    fn remove(&mut self, tool_call_id: &str) {
-        self.active.remove(tool_call_id);
-        self.synthetic.remove(tool_call_id);
-    }
-}
-
-fn active_tool_call_ids_for_turn(
-    stored: &StoredSession,
-    turn_id: Option<&str>,
-) -> ActiveToolCallIds {
-    let mut active_tool_call_ids = ActiveToolCallIds::default();
-    for event in stored
-        .events
-        .iter()
-        .filter(|event| event.turn_id.as_deref() == turn_id)
-    {
-        update_active_tool_call_ids_from_agent_event(
-            &mut active_tool_call_ids,
-            normalized_runtime_event_class(event.event_type.as_str()),
-            &event.payload,
-        );
-    }
-    active_tool_call_ids
-}
-
-fn synthetic_tool_start_candidate(
-    event_class: &str,
-    payload: &Value,
-    active_tool_call_ids: &ActiveToolCallIds,
-) -> Option<(String, String)> {
-    if !is_synthetic_tool_start_source(event_class, payload) {
-        return None;
-    }
-
-    let tool_call_id = payload_string(
-        payload,
-        &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
-    )?;
-    if active_tool_call_ids.contains(&tool_call_id) {
-        return None;
-    }
-    let tool_name = payload_string(payload, &["toolName", "tool_name", "name"])?;
-    Some((tool_call_id, tool_name))
-}
-
-fn is_synthetic_tool_start_source(event_class: &str, payload: &Value) -> bool {
-    match event_class {
-        "tool.args.delta" => {
-            payload_string(payload, &["source"]).as_deref() == Some("llm_protocol")
-                && payload_string(payload, &["backend"]).as_deref() == Some("llm_protocol")
-        }
-        "tool.input.delta" => {
-            payload_string(payload, &["backend"]).as_deref() == Some("runtime")
-                && payload
-                    .get("runtimeEvent")
-                    .and_then(|event| payload_string(event, &["type"]))
-                    .as_deref()
-                    == Some("tool_input_delta")
-        }
-        _ => false,
-    }
-}
-
-fn redundant_runtime_tool_start_after_synthetic_start(
-    event_class: &str,
-    payload: &Value,
-    active_tool_call_ids: &ActiveToolCallIds,
-) -> bool {
-    if event_class != "tool.started" || !is_runtime_tool_start_event(payload) {
-        return false;
-    }
-
-    let Some(tool_call_id) = payload_string(
-        payload,
-        &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
-    ) else {
-        return false;
-    };
-
-    active_tool_call_ids.is_synthetic(&tool_call_id)
-}
-
-fn is_runtime_tool_start_event(payload: &Value) -> bool {
-    payload_string(payload, &["backend"]).as_deref() == Some("runtime")
-        && payload
-            .get("runtimeEvent")
-            .and_then(|event| payload_string(event, &["type"]))
-            .as_deref()
-            == Some("tool_start")
-}
-
-fn synthetic_tool_start_payload(
-    source_payload: &Value,
-    tool_call_id: &str,
-    tool_name: &str,
-) -> Value {
-    let mut payload = json!({
-        "toolCallId": tool_call_id,
-        "toolName": tool_name,
-        "source": synthetic_tool_start_source_name(source_payload),
-        "backend": payload_string(source_payload, &["backend"]).unwrap_or_else(|| "runtime".to_string())
-    });
-    if let Some(runtime_event) = source_payload.get("runtimeEvent").cloned() {
-        payload["runtimeEvent"] = runtime_event;
-    }
-    payload
-}
-
-fn synthetic_tool_start_source_name(source_payload: &Value) -> &'static str {
-    match payload_string(source_payload, &["backend"]).as_deref() {
-        Some("llm_protocol") => "llm_protocol_tool_delta",
-        Some("runtime") => "runtime_tool_input_delta",
-        _ => "tool_input_delta",
-    }
-}
-
-fn update_active_tool_call_ids_from_runtime_event(
-    active_tool_call_ids: &mut ActiveToolCallIds,
-    event_class: &str,
-    payload: &Value,
-) {
-    match event_class {
-        "tool.started" => {
-            if let Some(tool_call_id) = payload_string(
-                payload,
-                &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
-            ) {
-                if is_synthetic_tool_started_payload(payload) {
-                    active_tool_call_ids.insert_synthetic(tool_call_id);
-                } else {
-                    active_tool_call_ids.insert(tool_call_id);
-                }
-            }
-        }
-        "tool.result" | "tool.failed" => {
-            if let Some(tool_call_id) = payload_string(
-                payload,
-                &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
-            ) {
-                active_tool_call_ids.remove(&tool_call_id);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn is_synthetic_tool_started_payload(payload: &Value) -> bool {
-    matches!(
-        payload_string(payload, &["source"]).as_deref(),
-        Some("llm_protocol_tool_delta" | "runtime_tool_input_delta")
-    )
-}
-
-fn update_active_tool_call_ids_from_agent_event(
-    active_tool_call_ids: &mut ActiveToolCallIds,
-    event_class: &str,
-    payload: &Value,
-) {
-    update_active_tool_call_ids_from_runtime_event(active_tool_call_ids, event_class, payload);
 }
 
 fn attach_session_projection_metadata(event: &mut AgentEvent, stored: &StoredSession) {
@@ -742,7 +670,10 @@ fn should_build_validation_context(event_class: &str, pending_terminal_for_turn:
 }
 
 fn requires_sequence_validation_context_class(event_class: &str) -> bool {
-    event_class.starts_with("tool.")
+    matches!(
+        event_class,
+        "item.started" | "item.updated" | "item.completed"
+    ) || event_class.starts_with("tool.")
         || event_class.starts_with("action.")
         || event_class.starts_with("patch.")
         || event_class.starts_with("command.")
@@ -789,13 +720,11 @@ fn should_normalize_policy_event_payload_class(event_class: &str) -> bool {
 fn should_validate_tool_lifecycle_event_class(event_class: &str) -> bool {
     matches!(
         event_class,
-        "tool.args"
-            | "tool.args.delta"
-            | "tool.input.delta"
+        "item.started"
+            | "item.updated"
+            | "item.completed"
             | "tool.progress"
             | "tool.output.delta"
-            | "tool.result"
-            | "tool.failed"
             | "action.required"
             | "action.resolved"
             | "action.cancelled"
@@ -810,7 +739,6 @@ fn should_enrich_tool_process_event_payload_class(event_class: &str) -> bool {
     matches!(
         event_class,
         "tool.started"
-            | "tool.args"
             | "tool.args.delta"
             | "tool.input.delta"
             | "tool.progress"
@@ -847,6 +775,19 @@ fn normalized_runtime_event_class(event_type: &str) -> &str {
         "turn.canceled" => "turn.canceled",
         value => value,
     }
+}
+
+fn is_retired_tool_wire_event_class(event_class: &str) -> bool {
+    matches!(
+        event_class,
+        "tool.started"
+            | "tool.args"
+            | "tool.result"
+            | "tool.failed"
+            | "tool_end"
+            | "tool.args.delta"
+            | "tool.input.delta"
+    )
 }
 
 fn is_text_delta_event_class(event_class: &str) -> bool {

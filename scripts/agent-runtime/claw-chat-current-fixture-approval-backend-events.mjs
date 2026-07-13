@@ -260,15 +260,18 @@ if (input.kind === "actionRespond") {
   const completionEvents = approvalCanceled
     ? [
         {
-          type: "tool.failed",
-          payload: {
-            toolCallId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-            tool_call_id: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-            toolName: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
-            tool_name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
-            error: ${js(APPROVAL_REQUEST_CANCEL_DONE_TEXT)},
-            status: "failed"
-          }
+          type: "item.completed",
+          payload: buildCanonicalToolItem({
+            sessionId: input.request?.session?.sessionId,
+            threadId,
+            turnId,
+            itemId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+            ordinal: 2,
+            callId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+            name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
+            status: "failed",
+            output: { error: ${js(APPROVAL_REQUEST_CANCEL_DONE_TEXT)} }
+          })
         },
         {
           type: "turn.canceled",
@@ -282,15 +285,18 @@ if (input.kind === "actionRespond") {
     : approvalAllowed
       ? [
           {
-            type: "tool.result",
-            payload: {
-              toolCallId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-              tool_call_id: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-              toolName: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
-              tool_name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
-              output: ${js(APPROVAL_REQUEST_RESUME_RESULT_TEXT)},
-              status: "completed"
-            }
+            type: "item.completed",
+            payload: buildCanonicalToolItem({
+              sessionId: input.request?.session?.sessionId,
+              threadId,
+              turnId,
+              itemId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+              ordinal: 2,
+              callId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+              name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
+              status: "completed",
+              output: { text: ${js(APPROVAL_REQUEST_RESUME_RESULT_TEXT)} }
+            })
           },
           {
             type: "provider.first_text_delta.received",
@@ -329,15 +335,18 @@ if (input.kind === "actionRespond") {
         ]
       : [
           {
-            type: "tool.failed",
-            payload: {
-              toolCallId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-              tool_call_id: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-              toolName: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
-              tool_name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
-              error: ${js(APPROVAL_REQUEST_DECLINE_RESULT_TEXT)},
-              status: "failed"
-            }
+            type: "item.completed",
+            payload: buildCanonicalToolItem({
+              sessionId: input.request?.session?.sessionId,
+              threadId,
+              turnId,
+              itemId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+              ordinal: 2,
+              callId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+              name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
+              status: "failed",
+              output: { error: ${js(APPROVAL_REQUEST_DECLINE_RESULT_TEXT)} }
+            })
           },
           {
             type: "provider.first_text_delta.received",
@@ -396,20 +405,21 @@ export function renderApprovalRequestResumeTurnStartScript() {
         payload: providerTracePayload("first_event_received", 40, "running")
       },
       {
-        type: "tool.started",
-        payload: {
-          toolCallId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-          tool_call_id: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
-          toolName: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
-          tool_name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
+        type: "item.started",
+        payload: buildCanonicalToolItem({
+          sessionId: input.request?.session?.sessionId,
+          threadId,
+          turnId,
+          itemId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+          ordinal: 2,
+          callId: ${js(APPROVAL_REQUEST_RESUME_TOOL_CALL_ID)},
+          name: ${js(APPROVAL_REQUEST_RESUME_TOOL_NAME)},
           arguments: {
             command: ${js(APPROVAL_REQUEST_RESUME_COMMAND)}
           },
-          thread_id: threadId,
-          threadId,
-          turn_id: turnId,
-          turnId
-        }
+          status: "inProgress",
+          metadata: { runtime_contract: ${js(BROWSER_CONTROL_CONTRACT)} }
+        })
       },
       {
         type: "action.required",

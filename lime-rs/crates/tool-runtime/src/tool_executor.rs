@@ -1,9 +1,14 @@
+use crate::tool_call::ToolCall;
+use crate::tool_definition::{RuntimeToolDefinition, RuntimeToolExposure};
+use crate::tool_io::{ToolOutputReference, ToolOutputTruncation};
+use crate::tool_result_projection::NormalizedToolOutput;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone)]
@@ -21,6 +26,30 @@ pub struct RuntimeToolExecutionContext {
     cancel_token: Option<CancellationToken>,
     workspace_sandbox: Option<RuntimeWorkspaceSandboxInput>,
     environment: HashMap<String, String>,
+    tool_identity: Option<RuntimeToolExecutionIdentity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeToolExecutionIdentity {
+    call_id: String,
+    turn_id: String,
+}
+
+impl RuntimeToolExecutionIdentity {
+    pub fn new(call_id: impl Into<String>, turn_id: impl Into<String>) -> Self {
+        Self {
+            call_id: call_id.into(),
+            turn_id: turn_id.into(),
+        }
+    }
+
+    pub fn call_id(&self) -> &str {
+        &self.call_id
+    }
+
+    pub fn turn_id(&self) -> &str {
+        &self.turn_id
+    }
 }
 
 impl RuntimeToolExecutionContext {
@@ -31,6 +60,7 @@ impl RuntimeToolExecutionContext {
             cancel_token: input.cancel_token,
             workspace_sandbox: input.workspace_sandbox,
             environment: HashMap::new(),
+            tool_identity: None,
         }
     }
 
@@ -56,6 +86,15 @@ impl RuntimeToolExecutionContext {
 
     pub fn environment(&self) -> &HashMap<String, String> {
         &self.environment
+    }
+
+    pub fn tool_identity(&self) -> Option<&RuntimeToolExecutionIdentity> {
+        self.tool_identity.as_ref()
+    }
+
+    pub fn with_tool_identity(mut self, identity: RuntimeToolExecutionIdentity) -> Self {
+        self.tool_identity = Some(identity);
+        self
     }
 }
 
@@ -108,6 +147,23 @@ pub trait RuntimeToolExecutor: Send + Sync {
         &'a self,
         request: RuntimeToolExecutionRequest<'a>,
     ) -> RuntimeToolExecutionFuture<'a>;
+
+    fn execute_call<'a>(
+        &'a self,
+        call: &'a ToolCall,
+        context: &'a RuntimeToolExecutionContext,
+        turn_context: Option<&'a RuntimeToolTurnContext>,
+    ) -> RuntimeToolExecutionFuture<'a> {
+        Box::pin(async move {
+            self.execute(RuntimeToolExecutionRequest {
+                tool_name: call.tool_name(),
+                params: call.arguments(),
+                context,
+                turn_context,
+            })
+            .await
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -126,6 +182,104 @@ impl RuntimeToolExecutorHandle {
     ) -> Result<RuntimeToolExecutionResult, RuntimeToolExecutionError> {
         self.executor.execute(request).await
     }
+
+    pub async fn execute_call(
+        &self,
+        call: &ToolCall,
+        context: &RuntimeToolExecutionContext,
+        turn_context: Option<&RuntimeToolTurnContext>,
+    ) -> Result<RuntimeToolExecutionResult, RuntimeToolExecutionError> {
+        let context = context
+            .clone()
+            .with_tool_identity(RuntimeToolExecutionIdentity::new(
+                call.call_id(),
+                call.turn_id(),
+            ));
+        self.executor
+            .execute_call(call, &context, turn_context)
+            .await
+    }
+
+    pub fn bind(
+        self,
+        definition: RuntimeToolDefinition,
+        exposure: RuntimeToolExposure,
+    ) -> RuntimeTool {
+        RuntimeTool::new(definition, exposure, self)
+    }
+}
+
+/// Binds the model-visible definition and exposure to its executable runtime.
+#[derive(Clone)]
+pub struct RuntimeTool {
+    definition: RuntimeToolDefinition,
+    exposure: RuntimeToolExposure,
+    executor: RuntimeToolExecutorHandle,
+}
+
+impl RuntimeTool {
+    pub fn new(
+        definition: RuntimeToolDefinition,
+        exposure: RuntimeToolExposure,
+        executor: RuntimeToolExecutorHandle,
+    ) -> Self {
+        Self {
+            definition,
+            exposure,
+            executor,
+        }
+    }
+
+    pub fn definition(&self) -> &RuntimeToolDefinition {
+        &self.definition
+    }
+
+    pub fn exposure(&self) -> RuntimeToolExposure {
+        self.exposure
+    }
+
+    pub async fn execute_call(
+        &self,
+        call: &ToolCall,
+        context: &RuntimeToolExecutionContext,
+        turn_context: Option<&RuntimeToolTurnContext>,
+    ) -> NormalizedToolOutput {
+        call.emit_started().await;
+        let started_at = Instant::now();
+        let outcome = if call.tool_name() == self.definition.name {
+            RuntimeToolExecutionOutcome::from_execution_result(
+                self.executor
+                    .execute_call(call, context, turn_context)
+                    .await,
+            )
+        } else {
+            RuntimeToolExecutionOutcome::Error(RuntimeToolExecutionFailure::from_error(
+                RuntimeToolExecutionError::new(
+                    format!(
+                        "tool call name '{}' does not match bound runtime '{}'",
+                        call.tool_name(),
+                        self.definition.name
+                    ),
+                    None,
+                ),
+            ))
+        };
+        let duration_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let output = NormalizedToolOutput::from_execution_outcome(outcome, duration_ms);
+        call.emit_completed(output.clone()).await;
+        output
+    }
+}
+
+impl std::fmt::Debug for RuntimeTool {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeTool")
+            .field("definition", &self.definition)
+            .field("exposure", &self.exposure)
+            .field("executor", &"<runtime tool executor>")
+            .finish()
+    }
 }
 
 pub async fn run_runtime_tool_execution(
@@ -139,7 +293,10 @@ pub async fn run_runtime_tool_execution(
 pub struct RuntimeToolExecutionResult {
     pub success: bool,
     pub output: String,
+    pub structured_content: Option<Value>,
     pub error: Option<String>,
+    pub truncation: Option<ToolOutputTruncation>,
+    pub sidecar_reference: Option<ToolOutputReference>,
     pub metadata: HashMap<String, Value>,
 }
 
@@ -153,9 +310,27 @@ impl RuntimeToolExecutionResult {
         Self {
             success,
             output,
+            structured_content: None,
             error,
+            truncation: None,
+            sidecar_reference: None,
             metadata,
         }
+    }
+
+    pub fn with_structured_content(mut self, structured_content: Value) -> Self {
+        self.structured_content = Some(structured_content);
+        self
+    }
+
+    pub fn with_truncation(mut self, truncation: ToolOutputTruncation) -> Self {
+        self.truncation = Some(truncation);
+        self
+    }
+
+    pub fn with_sidecar_reference(mut self, sidecar_reference: ToolOutputReference) -> Self {
+        self.sidecar_reference = Some(sidecar_reference);
+        self
     }
 }
 
@@ -345,6 +520,81 @@ mod tests {
             Some(&metadata)
         );
         assert!(context.environment().is_empty());
+        assert!(context.tool_identity().is_none());
+    }
+
+    struct IdentityExecutor;
+
+    impl RuntimeToolExecutor for IdentityExecutor {
+        fn execute<'a>(
+            &'a self,
+            request: RuntimeToolExecutionRequest<'a>,
+        ) -> RuntimeToolExecutionFuture<'a> {
+            Box::pin(async move {
+                let identity = request
+                    .context
+                    .tool_identity()
+                    .expect("execute_call must bind canonical tool identity");
+                Ok(RuntimeToolExecutionResult::new(
+                    true,
+                    format!("{}:{}", identity.call_id(), identity.turn_id()),
+                    None,
+                    HashMap::new(),
+                ))
+            })
+        }
+    }
+
+    struct NoopLifecycleEmitter;
+
+    impl crate::tool_lifecycle::ToolLifecycleEmitter for NoopLifecycleEmitter {
+        fn emit<'a>(
+            &'a self,
+            _event: crate::tool_lifecycle::ToolLifecycleEvent,
+        ) -> crate::tool_lifecycle::ToolLifecycleEmissionFuture<'a> {
+            Box::pin(async {})
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_call_binds_typed_identity_without_mutating_turn_metadata() {
+        let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
+            working_directory: PathBuf::from("/tmp/workspace"),
+            session_id: "session-identity".to_string(),
+            cancel_token: None,
+            workspace_sandbox: None,
+        });
+        let call = ToolCall::new(
+            "turn-canonical",
+            "call-canonical",
+            "Echo",
+            json!({}),
+            Vec::new(),
+            Arc::new(NoopLifecycleEmitter),
+        );
+        let turn_context = RuntimeToolTurnContext {
+            metadata: HashMap::from([
+                ("tool_call_id".to_string(), json!("call-metadata")),
+                ("turn_id".to_string(), json!("turn-metadata")),
+            ]),
+            ..RuntimeToolTurnContext::default()
+        };
+        let executor = RuntimeToolExecutorHandle::new(Arc::new(IdentityExecutor));
+
+        let result = executor
+            .execute_call(&call, &context, Some(&turn_context))
+            .await
+            .expect("identified call should execute");
+
+        assert_eq!(result.output, "call-canonical:turn-canonical");
+        assert_eq!(
+            turn_context.metadata.get("tool_call_id"),
+            Some(&json!("call-metadata"))
+        );
+        assert_eq!(
+            turn_context.metadata.get("turn_id"),
+            Some(&json!("turn-metadata"))
+        );
     }
 
     struct EchoExecutor;

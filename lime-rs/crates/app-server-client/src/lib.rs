@@ -81,6 +81,7 @@ pub use app_server_protocol::BrowserSessionState;
 pub use app_server_protocol::BrowserSessionTargetInfo;
 pub use app_server_protocol::BrowserSessionTargetListParams;
 pub use app_server_protocol::BrowserSessionTargetListResponse;
+pub use app_server_protocol::CanonicalThreadEventNotification;
 pub use app_server_protocol::CapabilityListParams;
 pub use app_server_protocol::DiagnosticsCapabilityRoutingMetricsSnapshot;
 pub use app_server_protocol::DiagnosticsIdempotencyDiagnostics;
@@ -206,6 +207,7 @@ pub use app_server_protocol::ProjectMemoryReadParams;
 pub use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::RequestId;
 pub use app_server_protocol::ServerDiagnosticsResponse;
+use app_server_protocol::ServerNotification;
 pub use app_server_protocol::SkillDownloadInstallParams;
 pub use app_server_protocol::SkillDownloadInstallResponse;
 pub use app_server_protocol::SkillListResponse;
@@ -213,6 +215,7 @@ pub use app_server_protocol::SkillLocalDetailInspectParams;
 pub use app_server_protocol::SkillLocalDetailInspectResponse;
 pub use app_server_protocol::SkillLocalRenameParams;
 pub use app_server_protocol::SkillLocalRenameResponse;
+pub use app_server_protocol::SkillManagementListResponse;
 pub use app_server_protocol::SkillMarketplaceInstallParams;
 pub use app_server_protocol::SkillMarketplaceInstallResponse;
 pub use app_server_protocol::SkillPackageExportParams;
@@ -226,6 +229,14 @@ pub use app_server_protocol::SkillPackageLocalReplaceResponse;
 pub use app_server_protocol::SkillReadParams;
 pub use app_server_protocol::SkillReadResponse;
 pub use app_server_protocol::SupportBundleExportResponse;
+pub use app_server_protocol::ThreadItemsListParams;
+pub use app_server_protocol::ThreadItemsListResponse;
+pub use app_server_protocol::ThreadListParams;
+pub use app_server_protocol::ThreadListResponse;
+pub use app_server_protocol::ThreadReadParams;
+pub use app_server_protocol::ThreadReadResponse;
+pub use app_server_protocol::ThreadTurnsListParams;
+pub use app_server_protocol::ThreadTurnsListResponse;
 pub use app_server_protocol::UsageStatsDailyTrendsListResponse;
 pub use app_server_protocol::UsageStatsDailyUsage;
 pub use app_server_protocol::UsageStatsModelRankingListResponse;
@@ -415,6 +426,10 @@ pub use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_INSPECT;
 pub use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_INSTALL;
 pub use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_REPLACE;
 pub use app_server_protocol::METHOD_SKILL_READ;
+pub use app_server_protocol::METHOD_THREAD_ITEMS_LIST;
+pub use app_server_protocol::METHOD_THREAD_LIST;
+pub use app_server_protocol::METHOD_THREAD_READ;
+pub use app_server_protocol::METHOD_THREAD_TURNS_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_READ;
@@ -476,6 +491,7 @@ impl<P> TypedRequest<P> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientEvent {
+    CanonicalThread(CanonicalThreadEventNotification),
     AgentSession(JsonRpcNotification),
     Notification(JsonRpcNotification),
     Request(JsonRpcRequest),
@@ -489,7 +505,13 @@ impl From<JsonRpcMessage> for ClientEvent {
             JsonRpcMessage::Notification(notification)
                 if notification.method == METHOD_AGENT_SESSION_EVENT =>
             {
-                Self::AgentSession(notification)
+                match ServerNotification::try_from(notification.clone()) {
+                    Ok(ServerNotification::AgentSessionEvent(params)) => params
+                        .canonical_event
+                        .map(Self::CanonicalThread)
+                        .unwrap_or(Self::AgentSession(notification)),
+                    _ => Self::AgentSession(notification),
+                }
             }
             JsonRpcMessage::Notification(notification) => Self::Notification(notification),
             JsonRpcMessage::Request(request) => Self::Request(request),
@@ -539,6 +561,31 @@ impl AppServerClient {
         params: AgentSessionListParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_sessions(params))
+    }
+
+    pub fn read_thread(&mut self, params: ThreadReadParams) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_thread(params))
+    }
+
+    pub fn list_threads(
+        &mut self,
+        params: ThreadListParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_threads(params))
+    }
+
+    pub fn list_thread_turns(
+        &mut self,
+        params: ThreadTurnsListParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_thread_turns(params))
+    }
+
+    pub fn list_thread_items(
+        &mut self,
+        params: ThreadItemsListParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_thread_items(params))
     }
 
     pub fn start_session(
@@ -1573,6 +1620,22 @@ pub mod typed {
         TypedRequest::new(METHOD_AGENT_SESSION_LIST, params)
     }
 
+    pub fn read_thread(params: ThreadReadParams) -> TypedRequest<ThreadReadParams> {
+        TypedRequest::new(METHOD_THREAD_READ, params)
+    }
+
+    pub fn list_threads(params: ThreadListParams) -> TypedRequest<ThreadListParams> {
+        TypedRequest::new(METHOD_THREAD_LIST, params)
+    }
+
+    pub fn list_thread_turns(params: ThreadTurnsListParams) -> TypedRequest<ThreadTurnsListParams> {
+        TypedRequest::new(METHOD_THREAD_TURNS_LIST, params)
+    }
+
+    pub fn list_thread_items(params: ThreadItemsListParams) -> TypedRequest<ThreadItemsListParams> {
+        TypedRequest::new(METHOD_THREAD_ITEMS_LIST, params)
+    }
+
     pub fn start_session(params: AgentSessionStartParams) -> TypedRequest<AgentSessionStartParams> {
         TypedRequest::new(METHOD_AGENT_SESSION_START, params)
     }
@@ -2503,6 +2566,60 @@ mod tests {
     }
 
     #[test]
+    fn canonical_thread_read_helpers_bind_current_methods() {
+        let mut client = AppServerClient::new();
+        let cases = [
+            client
+                .read_thread(
+                    serde_json::from_value(json!({
+                        "threadId": "thread_1",
+                        "turnsView": "full"
+                    }))
+                    .expect("thread/read params"),
+                )
+                .expect("thread/read request"),
+            client
+                .list_threads(
+                    serde_json::from_value(json!({
+                        "cursor": "opaque:thread:2",
+                        "includeArchived": true,
+                        "turnsView": "summary"
+                    }))
+                    .expect("thread/list params"),
+                )
+                .expect("thread/list request"),
+            client
+                .list_thread_turns(
+                    serde_json::from_value(json!({
+                        "threadId": "thread_1",
+                        "itemsView": "summary"
+                    }))
+                    .expect("thread/turns/list params"),
+                )
+                .expect("thread/turns/list request"),
+            client
+                .list_thread_items(
+                    serde_json::from_value(json!({
+                        "threadId": "thread_1",
+                        "turnId": "turn_1"
+                    }))
+                    .expect("thread/items/list params"),
+                )
+                .expect("thread/items/list request"),
+        ];
+
+        assert_eq!(
+            cases.map(|request| request.method),
+            [
+                METHOD_THREAD_READ,
+                METHOD_THREAD_LIST,
+                METHOD_THREAD_TURNS_LIST,
+                METHOD_THREAD_ITEMS_LIST,
+            ]
+        );
+    }
+
+    #[test]
     fn list_capabilities_uses_default_params_and_stable_method() {
         let mut client = AppServerClient::new();
 
@@ -3110,7 +3227,7 @@ mod tests {
         let skills = client.list_skills().expect("skills");
         let skill = client
             .read_skill(SkillReadParams {
-                skill_name: "article-writer".to_string(),
+                skill_id: "project:article-writer".to_string(),
             })
             .expect("skill");
         let inspect_detail = client
@@ -3191,7 +3308,7 @@ mod tests {
         assert_eq!(skill.method, METHOD_SKILL_READ);
         assert_eq!(
             skill.params.expect("params"),
-            json!({ "skillName": "article-writer" })
+            json!({ "skillId": "project:article-writer" })
         );
         assert_eq!(inspect_detail.method, METHOD_SKILL_LOCAL_DETAIL_INSPECT);
         assert_eq!(
@@ -4222,6 +4339,52 @@ mod tests {
         let event = AppServerClient::event(JsonRpcMessage::Notification(notification.clone()));
 
         assert_eq!(event, ClientEvent::AgentSession(notification));
+    }
+
+    #[test]
+    fn event_decodes_canonical_thread_item_projection() {
+        let notification = JsonRpcNotification::new(
+            METHOD_AGENT_SESSION_EVENT,
+            Some(
+                serde_json::to_value(AgentSessionEventParams::from_event(AgentEvent {
+                    event_id: "evt_1".to_string(),
+                    sequence: 1,
+                    session_id: "sess_1".to_string(),
+                    thread_id: Some("thread_1".to_string()),
+                    turn_id: Some("turn_1".to_string()),
+                    event_type: "item.updated".to_string(),
+                    timestamp: "2026-06-04T00:00:00Z".to_string(),
+                    payload: json!({
+                        "item": {
+                            "sessionId": "sess_1",
+                            "threadId": "thread_1",
+                            "turnId": "turn_1",
+                            "itemId": "msg_1",
+                            "sequence": 1,
+                            "ordinal": 0,
+                            "createdAtMs": 100,
+                            "updatedAtMs": 120,
+                            "kind": "agentMessage",
+                            "status": "inProgress",
+                            "payload": {
+                                "type": "agentMessage",
+                                "text": "hello"
+                            }
+                        }
+                    }),
+                }))
+                .expect("params"),
+            ),
+        );
+
+        let event = AppServerClient::event(JsonRpcMessage::Notification(notification));
+
+        assert!(matches!(
+            event,
+            ClientEvent::CanonicalThread(
+                CanonicalThreadEventNotification::ItemUpdated(item)
+            ) if item.item_id.as_str() == "msg_1"
+        ));
     }
 
     #[test]

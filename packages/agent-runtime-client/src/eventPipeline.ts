@@ -1,5 +1,5 @@
 import type {
-  AgentEvent,
+  CanonicalThreadEventNotification,
   AgentSessionEventNotification,
 } from "@limecloud/app-server-client";
 import {
@@ -10,7 +10,7 @@ import {
 
 export interface AgentRuntimeEventPipelineContext {
   notification: AgentSessionEventNotification;
-  event: AgentEvent;
+  event: CanonicalThreadEventNotification;
 }
 
 export type AgentRuntimeEventMiddlewareResult =
@@ -79,12 +79,18 @@ export class AgentRuntimeEventPipeline {
   async process(
     notification: AgentSessionEventNotification,
   ): Promise<AgentRuntimeEventPipelineResult> {
+    if (!notification.params.canonicalEvent) {
+      return { accepted: false, reason: "dropped" };
+    }
     return await this.#processFrom(0, [notification]);
   }
 
   processSync(
     notification: AgentSessionEventNotification,
   ): AgentRuntimeEventPipelineResult {
+    if (!notification.params.canonicalEvent) {
+      return { accepted: false, reason: "dropped" };
+    }
     return this.#processFromSync(0, [notification]);
   }
 
@@ -136,9 +142,11 @@ export class AgentRuntimeEventPipeline {
     for (let index = startIndex; index < this.#middlewares.length; index += 1) {
       const next: AgentSessionEventNotification[] = [];
       for (const notification of current) {
+        const event = notification.params.canonicalEvent;
+        if (!event) continue;
         const result = await runMiddleware(this.#middlewares[index], {
           notification,
-          event: notification.params.event,
+          event,
         });
         next.push(...normalizeMiddlewareResult(result, notification));
       }
@@ -158,9 +166,11 @@ export class AgentRuntimeEventPipeline {
     for (let index = startIndex; index < this.#middlewares.length; index += 1) {
       const next: AgentSessionEventNotification[] = [];
       for (const notification of current) {
+        const event = notification.params.canonicalEvent;
+        if (!event) continue;
         const result = runMiddlewareSync(this.#middlewares[index], {
           notification,
-          event: notification.params.event,
+          event,
         });
         next.push(...normalizeMiddlewareResult(result, notification));
       }
@@ -177,6 +187,9 @@ export class AgentRuntimeEventPipeline {
   ): AgentRuntimeEventPipelineResult {
     const accepted: AgentSessionEventNotification[] = [];
     for (const notification of notifications) {
+      if (!notification.params.canonicalEvent) {
+        continue;
+      }
       const verification = this.#sequenceGate.verify(notification);
       if (!verification.accepted) {
         return {
@@ -199,40 +212,15 @@ export class AgentRuntimeEventPipeline {
   }
 }
 
-export function createSchemaVersionCompatibilityMiddleware(
-  targetSchemaVersion = "lime-runtime-event/v0.1",
-): AgentRuntimeEventMiddleware {
-  return {
-    transform(context) {
-      const event = context.notification.params.event;
-      const eventRecord = event as unknown as Record<string, unknown>;
-      const payload = isRecord(event.payload) ? event.payload : {};
-      if (
-        typeof eventRecord.schemaVersion === "string" ||
-        typeof payload.schemaVersion === "string"
-      ) {
-        return;
-      }
-      return withEvent(context.notification, {
-        ...event,
-        payload: {
-          ...payload,
-          schemaVersion: targetSchemaVersion,
-        },
-      });
-    },
-  };
-}
-
 export function withEvent(
   notification: AgentSessionEventNotification,
-  event: AgentEvent,
+  event: CanonicalThreadEventNotification,
 ): AgentSessionEventNotification {
   return {
     ...notification,
     params: {
       ...notification.params,
-      event,
+      canonicalEvent: event,
     },
   };
 }

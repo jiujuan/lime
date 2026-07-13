@@ -172,6 +172,10 @@ impl RequestProcessor {
             METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).await,
+            METHOD_THREAD_READ => self.handle_thread_read_impl(params).await,
+            METHOD_THREAD_LIST => self.handle_thread_list_impl(params).await,
+            METHOD_THREAD_TURNS_LIST => self.handle_thread_turns_list_impl(params).await,
+            METHOD_THREAD_ITEMS_LIST => self.handle_thread_items_list_impl(params).await,
             METHOD_AGENT_SESSION_MEDIA_READ => {
                 self.handle_session_media_read_impl(&id, params, event_callback)
                     .await

@@ -185,10 +185,27 @@ async fn append_external_runtime_events_keeps_text_delta_fast_path_and_terminal_
         &session.session_id,
         Some(&turn_id),
         vec![RuntimeEvent::new(
-            "tool.started",
+            "item.started",
             json!({
-                "toolCallId": "tool_after_text_history",
-                "toolName": "WebFetch"
+                "item": {
+                    "sessionId": session.session_id.clone(),
+                    "threadId": session.thread_id.clone(),
+                    "turnId": turn_id.clone(),
+                    "itemId": "item_tool_after_text_history",
+                    "sequence": 131,
+                    "ordinal": 1,
+                    "createdAtMs": 1,
+                    "updatedAtMs": 1,
+                    "kind": "tool",
+                    "status": "inProgress",
+                    "payload": {
+                        "type": "tool",
+                        "call_id": "tool_after_text_history",
+                        "name": "WebFetch",
+                        "arguments": []
+                    },
+                    "metadata": {}
+                }
             }),
         )],
     )

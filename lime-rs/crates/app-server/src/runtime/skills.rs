@@ -16,7 +16,7 @@ impl RuntimeCore {
     pub async fn list_management_skills(
         &self,
         params: SkillManagementListParams,
-    ) -> Result<SkillListResponse, RuntimeCoreError> {
+    ) -> Result<SkillManagementListResponse, RuntimeCoreError> {
         self.app_data_source.list_management_skills(params).await
     }
 

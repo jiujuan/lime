@@ -1,6 +1,14 @@
 mod agent_message;
+pub(super) mod change_set;
+pub(super) mod materializer;
 pub(in crate::runtime) mod media_result;
 mod plan;
+
+pub(in crate::runtime) use change_set::{merge_item_snapshot, merge_turn_snapshot};
+pub(in crate::runtime) use materializer::materialize_events;
+
+#[cfg(test)]
+mod typed_tests;
 
 use super::raw_string_field;
 use super::string_array_field;
@@ -72,9 +80,6 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
                 if let Some(item) = plan::plan_item(stored, event) {
                     items.push(item);
                 }
-            }
-            "tool.started" | "tool.result" | "tool.failed" => {
-                media_result::upsert_from_event(stored, event, &mut media_result_items);
             }
             "command.started" | "command.output" | "command.exited" => {
                 upsert_command_item(stored, event, &mut command_items);

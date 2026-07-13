@@ -190,17 +190,17 @@ fn document_frequency(skills: &[AgentSkillMetadata]) -> HashMap<String, usize> {
 fn skill_search_fields(skill: &AgentSkillMetadata) -> Vec<(String, f32)> {
     let mut fields = vec![
         (skill.name.clone(), 2.4),
-        (skill.display_name.clone(), 2.0),
+        (skill.interface.display_name.clone(), 2.0),
         (skill.description.clone(), 1.4),
     ];
-    if let Some(when_to_use) = skill.when_to_use.as_ref() {
+    if let Some(when_to_use) = skill.policy.when_to_use.as_ref() {
         fields.push((when_to_use.clone(), 1.5));
     }
-    if let Some(argument_hint) = skill.argument_hint.as_ref() {
+    if let Some(argument_hint) = skill.interface.argument_hint.as_ref() {
         fields.push((argument_hint.clone(), 0.8));
     }
-    if !skill.allowed_tools.is_empty() {
-        fields.push((skill.allowed_tools.join(" "), 0.5));
+    if !skill.capabilities.is_empty() {
+        fields.push((skill.capabilities.join(" "), 0.5));
     }
     fields
 }

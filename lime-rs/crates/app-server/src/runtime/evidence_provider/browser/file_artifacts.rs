@@ -1,3 +1,4 @@
+use super::super::canonical_tool::canonical_tool_or_side_channel;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::ArtifactSummary;
 use app_server_protocol::EvidencePackArtifact;
@@ -90,10 +91,17 @@ fn collect_browser_file_items(
     let mut seen = BTreeSet::new();
 
     for event in events {
-        for candidate in browser_file_candidate_values(&event.payload) {
-            if let Some(item) =
-                browser_file_item_from_candidate(candidate, Some(event.event_type.as_str()), None)
-            {
+        let Some(tool) = canonical_tool_or_side_channel(event) else {
+            continue;
+        };
+        let canonical_value = tool.as_ref().map(|tool| tool.evidence_value());
+        let payload = canonical_value.as_ref().unwrap_or(&event.payload);
+        let status = tool
+            .as_ref()
+            .map(|tool| tool.status_label())
+            .unwrap_or_else(|| event_status_label(event.event_type.as_str()));
+        for candidate in browser_file_candidate_values(payload) {
+            if let Some(item) = browser_file_item_from_candidate(candidate, Some(status), None) {
                 let key = item_dedupe_key(&item, event.event_id.as_str());
                 if seen.insert(key) {
                     items.push(item);
@@ -121,7 +129,7 @@ fn collect_browser_file_items(
 
 fn browser_file_item_from_candidate(
     candidate: &Value,
-    event_type: Option<&str>,
+    event_status: Option<&str>,
     artifact: Option<&ArtifactSummary>,
 ) -> Option<BrowserFileEvidenceItem> {
     let artifact_kind = first_string(candidate, &["artifactKind", "artifact_kind", "kind"])
@@ -167,7 +175,7 @@ fn browser_file_item_from_candidate(
             .or_else(|| artifact.and_then(|artifact| artifact.title.clone())),
         status: first_string(candidate, &["status"])
             .or_else(|| artifact.and_then(|artifact| artifact.status.clone()))
-            .or_else(|| event_type.map(event_status_label).map(ToOwned::to_owned)),
+            .or_else(|| event_status.map(ToOwned::to_owned)),
         session_id: first_string(
             candidate,
             &[
@@ -427,9 +435,8 @@ fn value_string(value: &Value) -> Option<String> {
 
 fn event_status_label(event_type: &str) -> &'static str {
     match event_type {
-        "tool.failed" => "failed",
-        "item.completed" | "tool.result" => "completed",
-        "item.started" | "item.updated" | "tool.started" => "started",
+        "item.completed" => "completed",
+        "item.started" | "item.updated" => "started",
         _ => "recorded",
     }
 }
@@ -497,4 +504,31 @@ fn item_dedupe_key(item: &BrowserFileEvidenceItem, fallback: &str) -> String {
         item.artifact_path,
         item.action_id.as_deref().unwrap_or(fallback)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_tool_lifecycle_does_not_create_browser_file_evidence() {
+        let event = AgentEvent {
+            event_id: "raw-browser-file-result".to_string(),
+            sequence: 1,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: "tool.result".to_string(),
+            timestamp: "2026-07-13T00:00:00Z".to_string(),
+            payload: json!({
+                "toolCallId": "raw-browser-file-call",
+                "result": {
+                    "artifactKind": "browser_network_log",
+                    "artifactPath": "browser/raw/network.json"
+                }
+            }),
+        };
+
+        assert_eq!(browser_file_evidence_summary(&[event], &[]), None);
+    }
 }

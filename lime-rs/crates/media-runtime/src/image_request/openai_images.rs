@@ -1,4 +1,5 @@
-use runtime_core::{build_openai_images_generation_body, LlmMessage, LlmRequest, LlmRole};
+use model_provider::lowering::build_openai_images_generation_body;
+use runtime_core::{CanonicalRequest, ContentPart};
 use serde_json::{json, Value};
 
 use crate::{ImageGenerationRequestBodyFormat, ImageGenerationRunnerConfig, TaskErrorRecord};
@@ -113,10 +114,10 @@ pub(super) fn build_openai_compatible_image_generation_llm_request(
     request_prompt: &str,
     task_id: &str,
     count: Option<u32>,
-) -> LlmRequest {
-    let mut metadata = std::collections::BTreeMap::new();
+) -> Result<CanonicalRequest, TaskErrorRecord> {
+    let mut provider_options = std::collections::BTreeMap::new();
     if let Some(count) = count {
-        metadata.insert("n".to_string(), json!(count.max(1)));
+        provider_options.insert("n".to_string(), json!(count.max(1)));
     }
     if let Some(size) = prepared_input
         .size
@@ -124,41 +125,32 @@ pub(super) fn build_openai_compatible_image_generation_llm_request(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        metadata.insert("size".to_string(), json!(size));
+        provider_options.insert("size".to_string(), json!(size));
     }
-    metadata.insert("response_format".to_string(), json!("b64_json"));
-    metadata.insert("user".to_string(), json!(task_id));
+    provider_options.insert("response_format".to_string(), json!("b64_json"));
+    provider_options.insert("user".to_string(), json!(task_id));
     if let Some(style) = prepared_input
         .style
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        metadata.insert("style".to_string(), json!(style));
+        provider_options.insert("style".to_string(), json!(style));
     }
-    if !prepared_input.reference_image_urls.is_empty() {
-        metadata.insert(
-            "reference_images".to_string(),
-            Value::Array(
-                prepared_input
-                    .reference_image_urls
-                    .iter()
-                    .map(|image_url| json!(image_url))
-                    .collect(),
-            ),
-        );
+    let mut request = CanonicalRequest::text(&prepared_input.model, request_prompt);
+    request.provider_options = provider_options;
+    let content = &mut request.messages[0].content;
+    for image_url in &prepared_input.reference_image_urls {
+        content.push(ContentPart::media(image_url, "image/*").map_err(|error| {
+            build_image_task_error(
+                "image_reference_invalid",
+                format!("图片参考必须使用 URI 或 sidecar reference: {error}"),
+                false,
+                "request",
+            )
+        })?);
     }
-
-    LlmRequest {
-        instructions: None,
-        messages: vec![LlmMessage::text(LlmRole::User, request_prompt)],
-        tools: Vec::new(),
-        temperature: None,
-        max_output_tokens: None,
-        stream: false,
-        reasoning_effort: None,
-        metadata,
-    }
+    Ok(request)
 }
 
 fn build_image_generation_request_body(
@@ -180,7 +172,7 @@ fn build_image_generation_request_body(
         request_prompt,
         task_id,
         Some(request_count.max(1)),
-    );
+    )?;
     build_openai_images_generation_body(&prepared_input.model, &request).map_err(|error| {
         build_image_task_error(
             "image_request_mapping_failed",
@@ -400,5 +392,28 @@ mod tests {
             Some("url")
         );
         assert_eq!(body.get("response_format"), None);
+    }
+
+    #[test]
+    fn canonical_image_request_rejects_inline_reference_data() {
+        let prepared_input = ImageGenerationRequestInput {
+            model: "gpt-image-1".to_string(),
+            size: None,
+            style: None,
+            provider_id: Some("openai".to_string()),
+            executor_mode: "images_api".to_string(),
+            outer_model: None,
+            reference_image_urls: vec!["data:image/png;base64,AAAA".to_string()],
+        };
+
+        let error = build_openai_compatible_image_generation_llm_request(
+            &prepared_input,
+            "edit it",
+            "task-1",
+            Some(1),
+        )
+        .expect_err("inline media must fail closed");
+
+        assert_eq!(error.code, "image_reference_invalid");
     }
 }

@@ -4,7 +4,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
+import { requestChatHostOpenPath } from "../host/chatHostCapabilities";
 import { toast } from "sonner";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type {
@@ -348,7 +348,7 @@ export function useWorkspaceCanvasWorkflowActions({
 
   const handleImportDocument = useCallback(async () => {
     try {
-      const selected = await openDialog({
+      const selected = await requestChatHostOpenPath({
         multiple: false,
         filters: [
           {

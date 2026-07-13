@@ -4,8 +4,6 @@ import type {
   AppServerAgentEvent,
   AppServerAgentSessionActionRespondParams,
   AppServerAgentSessionActionRespondResponse,
-  AppServerAgentSessionReadParams,
-  AppServerAgentSessionReadResponse,
   AppServerAgentSessionStartParams,
   AppServerAgentSessionStartResponse,
   AppServerAgentSessionTurnCancelParams,
@@ -13,6 +11,8 @@ import type {
   AppServerAgentSessionTurnStartParams,
   AppServerAgentSessionTurnStartResponse,
   AppServerRequestResult,
+  AppServerThreadReadParams,
+  AppServerThreadReadResponse,
 } from "@/lib/api/appServer";
 import { withEvent } from "@limecloud/agent-runtime-client/sessionGateway";
 import {
@@ -59,18 +59,18 @@ function buildAppServerClient() {
         },
       }),
     ),
-    readSession: vi.fn(async (_request: AppServerAgentSessionReadParams) =>
-      appServerResult<AppServerAgentSessionReadResponse>(3, {
-        session: {
+    readThread: vi.fn(async (request: AppServerThreadReadParams) =>
+      appServerResult<AppServerThreadReadResponse>(3, {
+        thread: {
+          archived: false,
+          createdAtMs: 1_747_267_200_000,
           sessionId: "session-app-server",
-          threadId: "thread-app-server",
-          appId: "content-factory-app",
-          workspaceId: "workspace-1",
-          status: "running" as const,
-          createdAt: "2026-05-15T00:00:00.000Z",
-          updatedAt: "2026-05-15T00:00:02.000Z",
+          status: { type: "active" as const },
+          threadId: request.threadId,
+          turns: [],
+          turnsView: request.turnsView,
+          updatedAtMs: 1_747_267_202_000,
         },
-        turns: [],
       }),
     ),
     cancelTurn: vi.fn(async (_request: AppServerAgentSessionTurnCancelParams) =>
@@ -93,7 +93,10 @@ describe("agentRuntimeAppServerClient", () => {
       sessionId: "session-app-server",
       input: { text: "开始", attachments: [] },
     });
-    await runtimeClient.readThread({ sessionId: "session-app-server" });
+    await runtimeClient.readThread({
+      threadId: "thread-app-server",
+      turnsView: "full",
+    });
     await runtimeClient.cancelTurn({
       sessionId: "session-app-server",
       turnId: "turn-app-server",
@@ -110,8 +113,9 @@ describe("agentRuntimeAppServerClient", () => {
       sessionId: "session-app-server",
       input: { text: "开始", attachments: [] },
     });
-    expect(appServerClient.readSession).toHaveBeenCalledWith({
-      sessionId: "session-app-server",
+    expect(appServerClient.readThread).toHaveBeenCalledWith({
+      threadId: "thread-app-server",
+      turnsView: "full",
     });
     expect(appServerClient.cancelTurn).toHaveBeenCalledWith({
       sessionId: "session-app-server",
@@ -126,7 +130,7 @@ describe("agentRuntimeAppServerClient", () => {
     });
   });
 
-  it("允许 Plugin current runtime client 透传 event pipeline options", async () => {
+  it("拒绝非 canonical Plugin synthetic event，同时保留 pipeline 配置", async () => {
     const appServerClient = buildAppServerClient();
     const runtimeClient = createPluginRuntimeClientFromAppServer(
       appServerClient,
@@ -184,9 +188,9 @@ describe("agentRuntimeAppServerClient", () => {
           },
         },
       }),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
 
-    expect(received).toEqual(["A", "B"]);
+    expect(received).toEqual([]);
     subscription.unsubscribe();
   });
 

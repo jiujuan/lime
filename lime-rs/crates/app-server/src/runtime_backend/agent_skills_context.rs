@@ -2,11 +2,13 @@ use std::path::Path;
 
 use lime_skills::{
     agent_skill_roots_for_workspace, build_agent_skill_snapshot_from_roots,
-    contains_agent_skills_prompt, contains_selected_agent_skill_body_prompt, read_agent_skill_body,
-    render_available_agent_skills, render_selected_agent_skill_bodies,
-    reorder_agent_skill_snapshot_for_query, select_agent_skills_by_name_candidates,
-    select_explicit_agent_skills, select_implicit_agent_skills, AgentSkillBodyRenderOptions,
-    AgentSkillRenderOptions, AgentSkillSelection, AgentSkillSelectionTrigger, AgentSkillSnapshot,
+    contains_agent_skills_prompt, contains_selected_agent_skill_body_prompt,
+    evaluate_agent_skill_selection_bodies, render_available_agent_skills,
+    render_selected_agent_skill_bodies, reorder_agent_skill_snapshot_for_query,
+    select_agent_skills_by_name_candidates, select_explicit_agent_skills,
+    select_implicit_agent_skills, AgentSkillBodyBudgetDecisionKind, AgentSkillBodyRenderOptions,
+    AgentSkillRenderOptions, AgentSkillSelection, AgentSkillSelectionEvaluation,
+    AgentSkillSelectionTrigger, AgentSkillSnapshot, DEFAULT_AGENT_SKILL_BODY_TOKEN_BUDGET,
 };
 use serde_json::Value;
 
@@ -89,16 +91,29 @@ fn append_selected_agent_skill_bodies(
     if selections.is_empty() {
         return system_prompt;
     }
-    let bodies = selections
-        .iter()
-        .filter_map(|selection| match read_agent_skill_body(&selection.locator) {
-            Ok(body) => Some(body),
-            Err(error) => {
+    let evaluations = selected_agent_skill_body_evaluations(&selections, snapshot);
+    let bodies = evaluations
+        .into_iter()
+        .filter_map(|evaluation| match evaluation.decision {
+            AgentSkillBodyBudgetDecisionKind::Allow => evaluation.body,
+            AgentSkillBodyBudgetDecisionKind::Omitted => {
                 tracing::warn!(
-                    "[AgentSkillsContext] 读取显式选择的 Agent Skill 失败: name={}, path={}, error={}",
-                    selection.locator.name,
-                    selection.locator.skill_file_path.display(),
-                    error
+                    "[AgentSkillsContext] Skill 正文因 token budget 未注入: skill_id={}, name={}, estimated_tokens={:?}, max_visible_tokens={}",
+                    evaluation.skill_id,
+                    evaluation.selection.locator.name,
+                    evaluation.body_budget.estimated_tokens,
+                    evaluation.body_budget.max_visible_tokens,
+                );
+                None
+            }
+            AgentSkillBodyBudgetDecisionKind::Deny => {
+                tracing::warn!(
+                    "[AgentSkillsContext] 读取显式选择的 Agent Skill 失败: skill_id={}, name={}, path={}, reason={}, error={}",
+                    evaluation.skill_id,
+                    evaluation.selection.locator.name,
+                    evaluation.selection.locator.skill_file_path.display(),
+                    evaluation.reason,
+                    evaluation.error.as_deref().unwrap_or("unknown"),
                 );
                 None
             }
@@ -111,6 +126,17 @@ fn append_selected_agent_skill_bodies(
     };
 
     append_context_block(system_prompt, context)
+}
+
+pub(super) fn selected_agent_skill_body_evaluations(
+    selections: &[AgentSkillSelection],
+    snapshot: &AgentSkillSnapshot,
+) -> Vec<AgentSkillSelectionEvaluation> {
+    evaluate_agent_skill_selection_bodies(
+        selections,
+        snapshot,
+        DEFAULT_AGENT_SKILL_BODY_TOKEN_BUDGET,
+    )
 }
 
 pub(super) fn selected_agent_skill_selections(
@@ -555,6 +581,25 @@ mod tests {
         assert!(prompt.contains("Full body should not be rendered."));
         assert!(prompt.contains("## 可用 Agent Skills"));
         assert!(!prompt.contains("allow_model_skills"));
+    }
+
+    #[test]
+    fn body_evaluation_uses_the_real_skill_body_budget_before_prompt_injection() {
+        let workspace = TempDir::new().expect("workspace");
+        write_skill(&workspace, "writer", "Writer", "Write clearly.");
+        let snapshot = build_agent_skill_snapshot_for_turn(
+            Some(workspace.path()),
+            Some(workspace.path()),
+            &[],
+        );
+        let selections = selected_agent_skill_body_selections_for_prompt("$writer", &[], &snapshot);
+
+        let evaluations = selected_agent_skill_body_evaluations(&selections, &snapshot);
+
+        assert_eq!(evaluations.len(), 1);
+        assert_eq!(evaluations[0].skill_id, "project:writer");
+        assert_eq!(evaluations[0].body_budget.max_visible_tokens, 3_000);
+        assert!(evaluations[0].body_budget.estimated_tokens.is_some());
     }
 
     #[test]

@@ -13,6 +13,9 @@ mod artifact_sidecar;
 mod automation;
 mod backend;
 mod browser_session;
+mod canonical_thread_store;
+#[cfg(test)]
+mod canonical_thread_store_tests;
 mod capabilities;
 mod coding_activity_projection;
 mod connect;
@@ -43,6 +46,7 @@ pub(crate) mod memory_prompt;
 mod model_providers;
 mod objectives;
 mod output_refs;
+pub(crate) mod pending_action_descriptor;
 mod permission_state_projection;
 mod plugin_host_lifecycle;
 mod plugin_task_runtime;
@@ -61,6 +65,8 @@ mod projection_item_events;
 mod projection_payload_summary;
 mod projection_protocol;
 mod projection_repair;
+#[cfg(test)]
+mod projection_repair_tests;
 mod projection_schema;
 mod projection_status;
 mod projection_store;
@@ -73,7 +79,7 @@ mod right_surface;
 mod service_projection;
 mod session_control;
 mod session_files;
-mod session_hydration;
+pub(crate) mod session_hydration;
 mod session_lifecycle;
 pub(crate) mod session_list_scope;
 mod session_media_reader;
@@ -85,6 +91,7 @@ mod soul;
 mod status;
 mod storage_roots;
 mod thread_item_projection;
+mod thread_read;
 mod tool_item_projection;
 mod tool_lifecycle;
 mod trace;
@@ -201,6 +208,8 @@ pub enum RuntimeCoreError {
     RequestCanceled,
     #[error("execution backend error: {0}")]
     Backend(String),
+    #[error("action response error ({code}): {request_id}")]
+    ActionResponse { code: String, request_id: String },
 }
 
 impl RuntimeCoreError {
@@ -230,6 +239,14 @@ impl RuntimeCoreError {
                 JsonRpcError::new(error_codes::REQUEST_CANCELLED, "request canceled")
             }
             Self::Backend(message) => JsonRpcError::new(error_codes::RUNTIME_ERROR, message),
+            Self::ActionResponse { code, request_id } => JsonRpcError {
+                code: error_codes::RUNTIME_ERROR,
+                message: format!("action response failed: {code}"),
+                data: Some(serde_json::json!({
+                    "code": code,
+                    "requestId": request_id,
+                })),
+            },
         }
     }
 }
@@ -338,6 +355,7 @@ pub struct ActionRespondRequest {
     pub metadata: Option<serde_json::Value>,
     pub event_name: Option<String>,
     pub action_scope: Option<AgentSessionActionScope>,
+    pub pending_action_descriptor: Option<agent_runtime::action_required::PendingActionDescriptor>,
 }
 
 impl ActionRespondRequest {

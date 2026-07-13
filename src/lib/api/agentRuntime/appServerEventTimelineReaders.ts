@@ -8,6 +8,7 @@ import {
   readToolCallId,
   readToolName,
 } from "./appServerEventPayloadUtils";
+import { readCanonicalToolThreadItem } from "./appServerCanonicalItemReader";
 
 export function readArtifactSnapshotSignalFromPayload(
   payload: Record<string, unknown>,
@@ -128,9 +129,7 @@ function readHookOutputEntries(value: unknown):
       const text = readString(record, "text", "message", "content");
       return kind && text ? { kind, text } : null;
     })
-    .filter((entry): entry is { kind: string; text: string } =>
-      Boolean(entry),
-    );
+    .filter((entry): entry is { kind: string; text: string } => Boolean(entry));
   return entries.length > 0 ? entries : undefined;
 }
 
@@ -163,7 +162,7 @@ export function readHookItemFromPayload(
     completed_at:
       status === "in_progress"
         ? undefined
-        : readString(run, "completedAt", "completed_at") ?? event.timestamp,
+        : (readString(run, "completedAt", "completed_at") ?? event.timestamp),
     run_id: runId,
     event_name: readString(run, "eventName", "event_name", "hookEvent"),
     handler_type: readString(run, "handlerType", "handler_type"),
@@ -609,13 +608,19 @@ export function readAgentMessageFromPayload(
   };
 }
 
-export function readAgentThreadTurnFromPayload(
-  payload: Record<string, unknown>,
+export function readCanonicalAgentThreadTurn(
+  turn: Record<string, unknown>,
   event: AppServerAgentEvent,
   fallbackStatus: string,
 ): Record<string, unknown> {
-  const turn = normalizeRecord(payload.turn) ?? payload;
   const timestamp = event.timestamp;
+  const error = normalizeRecord(turn.error);
+  const createdAt = readTurnTimestamp(
+    turn,
+    timestamp,
+    ["created_at", "createdAt"],
+    ["createdAtMs"],
+  );
   return {
     id: readString(turn, "id", "turnId", "turn_id") ?? event.turnId ?? "",
     thread_id:
@@ -623,13 +628,82 @@ export function readAgentThreadTurnFromPayload(
       event.threadId ??
       event.sessionId,
     prompt_text: readString(turn, "prompt_text", "promptText", "prompt") ?? "",
-    status: readString(turn, "status") ?? fallbackStatus,
-    started_at: readString(turn, "started_at", "startedAt") ?? timestamp,
-    completed_at: readString(turn, "completed_at", "completedAt"),
-    error_message: readString(turn, "error_message", "errorMessage", "error"),
-    created_at: readString(turn, "created_at", "createdAt") ?? timestamp,
-    updated_at: readString(turn, "updated_at", "updatedAt") ?? timestamp,
+    status: normalizeAgentThreadTurnStatus(
+      readString(turn, "status"),
+      fallbackStatus,
+    ),
+    started_at: readTurnTimestamp(
+      turn,
+      createdAt,
+      ["started_at", "startedAt"],
+      ["startedAtMs"],
+    ),
+    completed_at: readOptionalTurnTimestamp(
+      turn,
+      ["completed_at", "completedAt"],
+      ["completedAtMs"],
+    ),
+    error_message:
+      readString(turn, "error_message", "errorMessage", "message") ??
+      readString(error ?? {}, "message") ??
+      (fallbackStatus === "failed" ? "App Server turn failed" : undefined),
+    created_at: createdAt,
+    updated_at: readTurnTimestamp(
+      turn,
+      timestamp,
+      ["updated_at", "updatedAt"],
+      ["updatedAtMs"],
+    ),
   };
+}
+
+function normalizeAgentThreadTurnStatus(
+  status: string | undefined,
+  fallbackStatus: string,
+): string {
+  switch (status) {
+    case "notStarted":
+    case "inProgress":
+      return "running";
+    case "interrupted":
+      return "canceled";
+    default:
+      return status ?? fallbackStatus;
+  }
+}
+
+function readTurnTimestamp(
+  turn: Record<string, unknown>,
+  fallback: string,
+  stringKeys: string[],
+  millisKeys: string[],
+): string {
+  return (
+    readString(turn, ...stringKeys) ??
+    timestampFromMillis(readFiniteNumber(turn, ...millisKeys)) ??
+    fallback
+  );
+}
+
+function readOptionalTurnTimestamp(
+  turn: Record<string, unknown>,
+  stringKeys: string[],
+  millisKeys: string[],
+): string | undefined {
+  return (
+    readString(turn, ...stringKeys) ??
+    timestampFromMillis(readFiniteNumber(turn, ...millisKeys))
+  );
+}
+
+function timestampFromMillis(value: number | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime())
+    ? undefined
+    : timestamp.toISOString();
 }
 
 export function readAgentThreadItemFromPayload(
@@ -638,6 +712,14 @@ export function readAgentThreadItemFromPayload(
   fallbackStatus: "in_progress" | "completed" | "failed",
 ): Record<string, unknown> {
   const item = normalizeRecord(payload.item) ?? payload;
+  const canonicalToolItem = readCanonicalToolThreadItem(
+    item,
+    event,
+    fallbackStatus,
+  );
+  if (canonicalToolItem) {
+    return canonicalToolItem;
+  }
   const itemType = readString(item, "type") ?? "agent_message";
   const baseItem = readAgentThreadItemBase(item, event, fallbackStatus);
 

@@ -22,6 +22,10 @@ import {
 } from "@/lib/api/agentRuntime";
 import type { AgentAccessMode } from "./agentChatStorage";
 import type { ActionRequiredScope, ApprovalDecision } from "../types";
+import {
+  projectChatRuntimeQueueControl,
+  type ChatRuntimeQueueControlProjection,
+} from "../projection/chatRuntimeQueueControlProjection";
 
 export interface AgentRuntimeActionResponse {
   sessionId: string;
@@ -61,6 +65,9 @@ export interface AgentRuntimeAdapter {
   getSessionReadModel(
     sessionId: string,
   ): Promise<AgentSessionDetail["thread_read"]>;
+  getThreadQueueControl(
+    threadId: string,
+  ): Promise<ChatRuntimeQueueControlProjection>;
   replayRequest(
     sessionId: string,
     requestId: string,
@@ -118,6 +125,7 @@ export interface AgentRuntimeAdapterDeps {
     | "generateAgentRuntimeSessionTitle"
     | "getAgentRuntimeSession"
     | "getAgentRuntimeThreadRead"
+    | "readAgentRuntimeThread"
     | "getRuntimeProviderSelection"
     | "interruptAgentRuntimeTurn"
     | "listAgentRuntimeSessions"
@@ -185,6 +193,20 @@ export function createAgentRuntimeAdapter({
     },
     async getSessionReadModel(sessionId) {
       return client.getAgentRuntimeThreadRead(sessionId);
+    },
+    async getThreadQueueControl(threadId) {
+      const result = projectChatRuntimeQueueControl(
+        await client.readAgentRuntimeThread(threadId),
+      );
+      if (!result.ok) {
+        throw new Error(
+          `canonical queue-control projection rejected: ${result.reason}`,
+        );
+      }
+      if (result.projection.threadId !== threadId.trim()) {
+        throw new Error("canonical queue-control thread identity mismatch");
+      }
+      return result.projection;
     },
     async replayRequest(sessionId, requestId) {
       return client.replayAgentRuntimeRequest({

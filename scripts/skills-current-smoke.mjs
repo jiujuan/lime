@@ -23,6 +23,7 @@ const DEFAULTS = {
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const REQUIRED_APP_SERVER_METHODS = [
   "skill/list",
+  "skill/read",
   "skillManagement/list",
   "skillRepository/list",
   "skillInstalledDirectories/list",
@@ -290,6 +291,34 @@ function sanitizeJson(value, depth = 0) {
   return sanitizeText(String(value));
 }
 
+function sanitizeAppServerResponse(method, response) {
+  const sanitized = sanitizeJson(response);
+  if (method !== "skill/read" || !sanitized?.result?.skill) {
+    return sanitized;
+  }
+  const skill = sanitized.result.skill;
+  const metadata = skill.metadata ?? {};
+  return {
+    ...sanitized,
+    result: {
+      skill: {
+        metadata: {
+          skillId: metadata.skillId ?? null,
+          name: metadata.name ?? null,
+          scope: metadata.scope ?? null,
+          source: metadata.source ?? null,
+          authority: metadata.authority ?? null,
+          enabled: metadata.enabled ?? null,
+        },
+        markdownContent: "[redacted]",
+        workflowStepCount: Array.isArray(skill.workflowSteps)
+          ? skill.workflowSteps.length
+          : null,
+      },
+    },
+  };
+}
+
 function collectInvokeEntry(requestPayload, responsePayload, url) {
   const requestLines =
     requestPayload?.request?.lines ??
@@ -329,7 +358,7 @@ function collectInvokeEntry(requestPayload, responsePayload, url) {
           id: message.id ?? null,
           method: message.method,
           params: sanitizeJson(message.params ?? {}),
-          response: sanitizeJson(response),
+          response: sanitizeAppServerResponse(message.method, response),
         };
       }),
     responseMessageCount: responseMessages.length,
@@ -369,6 +398,21 @@ function summarizeInvokeEntries(entries) {
   const skillReadRequests = appServerRequests.filter(
     (request) => request.method === "skill/read",
   );
+  const skillReadResponses = skillReadRequests.map((request) => {
+    const requestedSkillId = request.params?.skillId ?? null;
+    const responseSkillId =
+      request.response?.result?.skill?.metadata?.skillId ?? null;
+    return {
+      id: request.id,
+      requestedSkillId,
+      responseSkillId,
+      hasError: Boolean(request.response?.error),
+      identityMatches:
+        typeof requestedSkillId === "string" &&
+        requestedSkillId.length > 0 &&
+        requestedSkillId === responseSkillId,
+    };
+  });
   const skillPackageRequests = appServerRequests.filter((request) =>
     REQUIRED_SKILL_PACKAGE_APP_SERVER_METHODS.includes(request.method),
   );
@@ -434,6 +478,12 @@ function summarizeInvokeEntries(entries) {
     skillListResponses,
     skillReadRequestCount: skillReadRequests.length,
     skillReadRequests: skillReadRequests.map(summarizeAppServerRequest),
+    skillReadResponses,
+    skillReadResponsesValid:
+      skillReadResponses.length > 0 &&
+      skillReadResponses.every(
+        (response) => !response.hasError && response.identityMatches,
+      ),
     skillPackageProbeRequestCount: skillPackageRequests.length,
     skillPackageProbeRequests: skillPackageRequests.map(
       summarizeAppServerRequest,
@@ -704,6 +754,8 @@ async function run() {
     skillListResponsesValid: false,
     skillReadRequestCount: 0,
     skillReadRequests: [],
+    skillReadResponses: [],
+    skillReadResponsesValid: false,
     skillPackageProbeRequestCount: 0,
     skillPackageProbeRequests: [],
     skillPackageProbeResponses: [],
@@ -721,7 +773,30 @@ async function run() {
     summary.health = await waitForHealth(options);
 
     logStage("invoke-skill-list");
-    await invokeAppServerMethod(options, "skill/list", {}, invokeEntries);
+    const skillList = await invokeAppServerMethod(
+      options,
+      "skill/list",
+      {},
+      invokeEntries,
+    );
+    const readableSkillId = skillList?.skills?.find(
+      (skill) =>
+        skill?.enabled === true &&
+        typeof skill?.skillId === "string" &&
+        skill.skillId.trim().length > 0,
+    )?.skillId;
+    assert(
+      typeof readableSkillId === "string",
+      "skill/list 未返回可用于 stable-id read probe 的 enabled skillId",
+    );
+
+    logStage("invoke-skill-read");
+    await invokeAppServerMethod(
+      options,
+      "skill/read",
+      { skillId: readableSkillId },
+      invokeEntries,
+    );
 
     logStage("invoke-skill-management-list");
     await invokeAppServerMethod(
@@ -784,6 +859,14 @@ async function run() {
     assert(
       summary.skillListResponsesValid,
       "skill/list response 缺少 result.skills 数组或返回错误",
+    );
+    assert(
+      summary.skillReadRequestCount >= 1,
+      `skill/read 请求不足，实际 ${summary.skillReadRequestCount}`,
+    );
+    assert(
+      summary.skillReadResponsesValid,
+      "skill/read 必须使用 stable skillId 且响应 metadata.skillId 必须一致",
     );
     assert(
       summary.forbiddenAppServerMethodsSeen.length === 0,

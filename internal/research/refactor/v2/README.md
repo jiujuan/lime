@@ -58,9 +58,11 @@ React GUI
 | [10-tool-context/policy.md](./10-tool-context/policy.md) | 工具、审批、sandbox、context、skills、multi-agent |
 | [11-gui/electron-gates.md](./11-gui/electron-gates.md) | GUI 分层、桌面适配和 Gate A/B |
 | [12-plan/slices.md](./12-plan/slices.md) | 可执行重构切片、删除清单和退出条件 |
+| [多进程实施计划](../../../exec-plans/refactor-v2-implementation.md) | slice 认领、原子锁、写集隔离、交接和冲突处理 |
 | [13-evidence/verification.md](./13-evidence/verification.md) | 验证矩阵、证据格式和完成定义 |
 | [14-upstream/ledger.md](./14-upstream/ledger.md) | Codex/OpenCode 版本账本和 allowlist 规则 |
 | [15-cleanup/inventory.md](./15-cleanup/inventory.md) | v1 残留和 Lime 旧路径的清理盘点 |
+| [16-v1-crosswalk.md](./16-v1-crosswalk.md) | v1 丰富文档到 v2 current owner 的逐文件迁移对照 |
 | [99-archive/policy.md](./99-archive/policy.md) | 历史文档归档和断链防护 |
 
 ## v2 完成定义

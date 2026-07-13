@@ -263,8 +263,10 @@ export function summarizeAgentSessionEvents(events, turnId) {
       new Set(scopedEvents.map((event) => event.turnId).filter(Boolean)),
     ),
     hasTextDelta: scopedEvents.some((event) => event.type === "message.delta"),
-    hasToolStarted: scopedEvents.some((event) => event.type === "tool.started"),
-    hasToolResult: scopedEvents.some((event) => event.type === "tool.result"),
+    hasToolStarted: scopedEvents.some((event) => event.type === "item.started"),
+    hasToolResult: scopedEvents.some(
+      (event) => event.type === "item.completed",
+    ),
     hasCompleted: scopedEvents.some((event) => event.type === "turn.completed"),
     hasTerminal: scopedEvents.some((event) => terminalTypes.has(event.type)),
     terminalTypes: scopedEvents

@@ -14,43 +14,41 @@ async fn read_session_projects_imported_web_search_tool_result_as_timeline_item(
         Some(&turn.turn_id),
         vec![
             RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "call_search",
-                    "toolName": "web_search",
-                    "name": "web_search",
-                    "sourceClient": "codex",
-                    "sourceEventType": "synthetic_tool_started",
-                    "importedSynthetic": true
-                }),
+                "item.started",
+                canonical_tool_item_event_payload(
+                    "sess_imported_web_search",
+                    "call_search",
+                    "thread_imported_web_search",
+                    &turn.turn_id,
+                    1,
+                    "inProgress",
+                    "web_search",
+                    json!({
+                        "action": "search_query",
+                        "query": "codex imported query"
+                    }),
+                    None,
+                ),
             ),
             RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "call_search",
-                    "toolName": "web_search",
-                    "name": "web_search",
-                    "status": "completed",
-                    "success": true,
-                    "action": {
-                        "type": "search_query",
-                        "query": "codex imported query"
-                    },
-                    "query": "codex imported query",
-                    "arguments": {
-                        "action": {
+                "item.completed",
+                canonical_tool_item_event_payload(
+                    "sess_imported_web_search",
+                    "call_search",
+                    "thread_imported_web_search",
+                    &turn.turn_id,
+                    1,
+                    "completed",
+                    "web_search",
+                    json!({}),
+                    Some(json!({
+                        "text": "codex imported query",
+                        "structured_content": {
                             "type": "search_query",
                             "query": "codex imported query"
-                        },
-                        "query": "codex imported query"
-                    },
-                    "result": {
-                        "type": "search_query",
-                        "query": "codex imported query"
-                    },
-                    "sourceClient": "codex",
-                    "sourceEventType": "web_search_call"
-                }),
+                        }
+                    })),
+                ),
             ),
             RuntimeEvent::new("turn.completed", json!({})),
         ],
@@ -80,121 +78,52 @@ async fn read_session_projects_imported_web_search_tool_result_as_timeline_item(
 }
 
 #[tokio::test]
-async fn read_session_does_not_downgrade_completed_item_with_late_item_update() {
+async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() {
     let (core, turn) = start_read_model_test_turn(
-        "sess_item_terminal_priority",
-        "thread_item_terminal_priority",
-        "turn_item_terminal_priority",
+        "sess_canonical_item_sequence",
+        "thread_canonical_item_sequence",
+        "turn_canonical_item_sequence",
     )
     .await;
 
     core.append_external_runtime_events(
-        "sess_item_terminal_priority",
+        "sess_canonical_item_sequence",
         Some(&turn.turn_id),
         vec![
             RuntimeEvent::new(
-                "item.completed",
-                tool_item_event_payload(
-                    "tool-read-1",
-                    "thread_item_terminal_priority",
-                    &turn.turn_id,
-                    2,
-                    "completed",
-                    "read_file",
-                    json!({ "path": "README.md" }),
-                    Some("file contents"),
-                    Some(true),
-                ),
-            ),
-            RuntimeEvent::new(
-                "item.updated",
-                tool_item_event_payload(
-                    "tool-read-1",
-                    "thread_item_terminal_priority",
-                    &turn.turn_id,
-                    2,
-                    "in_progress",
-                    "read_file",
-                    json!({ "path": "README.md" }),
-                    None,
-                    None,
-                ),
-            ),
-            RuntimeEvent::new("turn.completed", json!({})),
-        ],
-    )
-    .expect("append current item lifecycle events");
-
-    let read = core
-        .read_session(AgentSessionReadParams {
-            session_id: "sess_item_terminal_priority".to_string(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("read session");
-    let detail = read.detail.expect("session detail");
-    let tool_call = detail["thread_read"]["tool_calls"]
-        .as_array()
-        .expect("tool calls")
-        .iter()
-        .find(|call| call["id"] == "tool-read-1")
-        .cloned()
-        .expect("tool-read-1 call");
-    assert_eq!(tool_call["status"], "completed");
-    assert_eq!(tool_call["output_preview"], "file contents");
-}
-
-#[tokio::test]
-async fn read_session_preserves_current_tool_item_sequence_when_legacy_events_merge() {
-    let (core, turn) = start_read_model_test_turn(
-        "sess_tool_item_sequence_merge",
-        "thread_tool_item_sequence_merge",
-        "turn_tool_item_sequence_merge",
-    )
-    .await;
-
-    core.append_external_runtime_events(
-        "sess_tool_item_sequence_merge",
-        Some(&turn.turn_id),
-        vec![
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool-search-sequence",
-                    "toolName": "WebSearch",
-                    "arguments": { "query": "Lime WebSearch rendering" }
-                }),
-            ),
-            RuntimeEvent::new(
-                "item.completed",
-                tool_item_event_payload(
+                "item.started",
+                canonical_tool_item_event_payload(
+                    "sess_canonical_item_sequence",
                     "tool-search-sequence",
-                    "thread_tool_item_sequence_merge",
+                    "thread_canonical_item_sequence",
+                    &turn.turn_id,
+                    2,
+                    "inProgress",
+                    "WebSearch",
+                    json!({ "query": "Lime WebSearch rendering" }),
+                    None,
+                ),
+            ),
+            RuntimeEvent::new(
+                "item.completed",
+                canonical_tool_item_event_payload(
+                    "sess_canonical_item_sequence",
+                    "tool-search-sequence",
+                    "thread_canonical_item_sequence",
                     &turn.turn_id,
                     2,
                     "completed",
                     "WebSearch",
                     json!({ "query": "Lime WebSearch rendering" }),
-                    Some("search result"),
-                    Some(true),
+                    Some(json!({ "text": "search result" })),
                 ),
-            ),
-            RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "tool-search-sequence",
-                    "toolName": "WebSearch",
-                    "success": true,
-                    "outputPreview": "search result"
-                }),
             ),
             RuntimeEvent::new(
                 "item.updated",
                 json!({
                     "item": {
                         "id": "reasoning-sequence",
-                        "thread_id": "thread_tool_item_sequence_merge",
+                        "thread_id": "thread_canonical_item_sequence",
                         "turn_id": turn.turn_id,
                         "sequence": 3,
                         "type": "reasoning",
@@ -206,44 +135,41 @@ async fn read_session_preserves_current_tool_item_sequence_when_legacy_events_me
                 }),
             ),
             RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool-fetch-sequence",
-                    "toolName": "WebFetch",
-                    "arguments": { "url": "https://example.com/lime-websearch-rendering" }
-                }),
+                "item.started",
+                canonical_tool_item_event_payload(
+                    "sess_canonical_item_sequence",
+                    "tool-fetch-sequence",
+                    "thread_canonical_item_sequence",
+                    &turn.turn_id,
+                    4,
+                    "inProgress",
+                    "WebFetch",
+                    json!({ "url": "https://example.com/lime-websearch-rendering" }),
+                    None,
+                ),
             ),
             RuntimeEvent::new(
                 "item.completed",
-                tool_item_event_payload(
+                canonical_tool_item_event_payload(
+                    "sess_canonical_item_sequence",
                     "tool-fetch-sequence",
-                    "thread_tool_item_sequence_merge",
+                    "thread_canonical_item_sequence",
                     &turn.turn_id,
                     4,
                     "completed",
                     "WebFetch",
                     json!({ "url": "https://example.com/lime-websearch-rendering" }),
-                    Some("fetched page"),
-                    Some(true),
+                    Some(json!({ "text": "fetched page" })),
                 ),
-            ),
-            RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "tool-fetch-sequence",
-                    "toolName": "WebFetch",
-                    "success": true,
-                    "outputPreview": "fetched page"
-                }),
             ),
             RuntimeEvent::new("turn.completed", json!({})),
         ],
     )
-    .expect("append mixed tool item and legacy events");
+    .expect("append canonical item lifecycle events");
 
     let read = core
         .read_session(AgentSessionReadParams {
-            session_id: "sess_tool_item_sequence_merge".to_string(),
+            session_id: "sess_canonical_item_sequence".to_string(),
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
@@ -281,10 +207,71 @@ async fn read_session_preserves_current_tool_item_sequence_when_legacy_events_me
     assert_eq!(
         items
             .iter()
+            .find(|item| item["id"] == "reasoning-sequence")
+            .expect("reasoning item")["sequence"],
+        3
+    );
+    assert_eq!(
+        items
+            .iter()
             .find(|item| item["id"] == "tool-fetch-sequence")
             .expect("fetch item")["sequence"],
         4
     );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn canonical_tool_item_event_payload(
+    session_id: &str,
+    item_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    sequence: u64,
+    status: &str,
+    tool_name: &str,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let arguments = match arguments {
+        serde_json::Value::Object(arguments) => arguments
+            .into_iter()
+            .map(|(name, value)| {
+                json!({
+                    "name": name,
+                    "value": value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string())
+                })
+            })
+            .collect::<Vec<_>>(),
+        serde_json::Value::Array(arguments) => arguments,
+        serde_json::Value::Null => Vec::new(),
+        value => vec![json!({ "name": "value", "value": value.to_string() })],
+    };
+    let terminal = matches!(status, "completed" | "failed" | "interrupted" | "cancelled");
+    json!({
+        "item": {
+            "sessionId": session_id,
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "itemId": format!("item_{item_id}"),
+            "sequence": sequence,
+            "ordinal": sequence,
+            "createdAtMs": 1_784_000_000_000_i64,
+            "updatedAtMs": 1_784_000_000_000_i64 + sequence as i64,
+            "completedAtMs": terminal.then_some(1_784_000_000_000_i64 + sequence as i64),
+            "kind": "tool",
+            "status": status,
+            "payload": {
+                "type": "tool",
+                "call_id": item_id,
+                "name": tool_name,
+                "arguments": arguments,
+                "output": output
+            },
+            "metadata": {
+                "source": "native_item_runtime"
+            }
+        }
+    })
 }
 
 #[tokio::test]

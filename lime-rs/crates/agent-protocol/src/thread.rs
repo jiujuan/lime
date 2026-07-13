@@ -1,0 +1,786 @@
+// Adapted from Codex app-server-protocol v2 thread_data/turn/item contracts
+// (5c19155cbd93bfa099016e7487259f61669823ff), Apache-2.0; see repository NOTICE.
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::{ItemId, SessionId, ThreadId, TurnId};
+
+/// Codex runtime status for a thread. Persistence operations such as archive or
+/// delete are commands, not runtime status values.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ThreadStatus {
+    NotLoaded,
+    Idle,
+    SystemError,
+    #[serde(rename_all = "camelCase")]
+    Active {
+        #[serde(default)]
+        active_flags: Vec<ThreadActiveFlag>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ThreadActiveFlag {
+    WaitingOnApproval,
+    WaitingOnUserInput,
+}
+
+impl ThreadStatus {
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Active { .. })
+    }
+
+    pub fn active_flags(&self) -> &[ThreadActiveFlag] {
+        match self {
+            Self::Active { active_flags } => active_flags,
+            _ => &[],
+        }
+    }
+}
+
+/// Canonical turn result. Admission, queue and approval controls are carried by
+/// their own fields on `Turn` and never become terminal result variants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TurnStatus {
+    InProgress,
+    Completed,
+    Interrupted,
+    Failed,
+}
+
+impl TurnStatus {
+    pub fn is_terminal(self) -> bool {
+        !matches!(self, Self::InProgress)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TurnAdmissionState {
+    #[default]
+    Accepted,
+    Rejected,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum TurnQueueState {
+    NotQueued,
+    Queued {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        position: Option<u32>,
+    },
+    Running,
+}
+
+impl Default for TurnQueueState {
+    fn default() -> Self {
+        Self::NotQueued
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TurnApprovalState {
+    #[default]
+    NotRequired,
+    Pending,
+    Resolved,
+    Approved,
+    Denied,
+    Cancelled,
+    TimedOut,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ItemStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+    Interrupted,
+    Cancelled,
+}
+
+impl ItemStatus {
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Completed | Self::Failed | Self::Interrupted | Self::Cancelled
+        )
+    }
+}
+
+/// Stable family name used by projections and selectors. The payload below is
+/// tagged and typed; consumers must not infer this value from rendered text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ItemKind {
+    UserMessage,
+    AgentMessage,
+    Reasoning,
+    Tool,
+    McpToolCall,
+    CollabAgentToolCall,
+    Approval,
+    Command,
+    File,
+    Media,
+    SubAgent,
+    ContextCompaction,
+    Extension,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolArgument {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolOutput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_content: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(default)]
+    pub truncated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_ref: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ApprovalScope {
+    #[default]
+    Once,
+    Turn,
+    Session,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum CollabAgentOperation {
+    Spawn,
+    SendMessage,
+    FollowUp,
+    Wait,
+    Interrupt,
+    Resume,
+    Close,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalAction {
+    pub kind: String,
+    pub description: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ApprovalDecision {
+    Approved,
+    ApprovedForSession,
+    Denied,
+    TimedOut,
+    Abort,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum FileChangeStatus {
+    Proposed,
+    Applied,
+    Rejected,
+    Failed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SubAgentActivityKind {
+    Spawned,
+    MessageSent,
+    Waiting,
+    Resumed,
+    Completed,
+    Failed,
+    Closed,
+}
+
+/// Typed Item payload union. JSON `Value` is intentionally confined to the
+/// extension escape hatch; structured core families use explicit fields.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ThreadItemPayload {
+    UserMessage {
+        content: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        client_id: Option<String>,
+    },
+    AgentMessage {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        phase: Option<String>,
+    },
+    Reasoning {
+        #[serde(default)]
+        summary: Vec<String>,
+        #[serde(default)]
+        content: Vec<String>,
+    },
+    Tool {
+        call_id: String,
+        name: String,
+        #[serde(default)]
+        arguments: Vec<ToolArgument>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<ToolOutput>,
+    },
+    McpToolCall {
+        call_id: String,
+        server_name: String,
+        tool_name: String,
+        #[serde(default)]
+        arguments: Vec<ToolArgument>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<ToolOutput>,
+    },
+    CollabAgentToolCall {
+        call_id: String,
+        operation: CollabAgentOperation,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_thread_id: Option<ThreadId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<ToolOutput>,
+    },
+    Approval {
+        request_id: String,
+        action: ApprovalAction,
+        #[serde(default)]
+        scope: ApprovalScope,
+        #[serde(default)]
+        available_decisions: Vec<ApprovalDecision>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        decision: Option<ApprovalDecision>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        requested_at_ms: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resolved_at_ms: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason_code: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expires_at_ms: Option<i64>,
+    },
+    Command {
+        command: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cwd: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+    },
+    File {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        diff: Option<String>,
+        status: FileChangeStatus,
+    },
+    Media {
+        uri: String,
+        mime_type: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview: Option<String>,
+    },
+    SubAgent {
+        child_thread_id: ThreadId,
+        activity: SubAgentActivityKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
+    ContextCompaction {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window_id: Option<String>,
+    },
+    Extension {
+        name: String,
+        data: Value,
+    },
+}
+
+impl ThreadItemPayload {
+    pub fn kind(&self) -> ItemKind {
+        match self {
+            Self::UserMessage { .. } => ItemKind::UserMessage,
+            Self::AgentMessage { .. } => ItemKind::AgentMessage,
+            Self::Reasoning { .. } => ItemKind::Reasoning,
+            Self::Tool { .. } => ItemKind::Tool,
+            Self::McpToolCall { .. } => ItemKind::McpToolCall,
+            Self::CollabAgentToolCall { .. } => ItemKind::CollabAgentToolCall,
+            Self::Approval { .. } => ItemKind::Approval,
+            Self::Command { .. } => ItemKind::Command,
+            Self::File { .. } => ItemKind::File,
+            Self::Media { .. } => ItemKind::Media,
+            Self::SubAgent { .. } => ItemKind::SubAgent,
+            Self::ContextCompaction { .. } => ItemKind::ContextCompaction,
+            Self::Extension { .. } => ItemKind::Extension,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Thread {
+    pub session_id: SessionId,
+    pub thread_id: ThreadId,
+    pub status: ThreadStatus,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub archived: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recency_at_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_thread_id: Option<ThreadId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forked_from_id: Option<ThreadId>,
+    #[serde(default)]
+    pub preview: String,
+    #[serde(default)]
+    pub model_provider: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub metadata: Value,
+    #[serde(default)]
+    pub turns: Vec<Turn>,
+    #[serde(default)]
+    pub turns_view: ThreadTurnsView,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ThreadTurnsView {
+    NotLoaded,
+    Summary,
+    #[default]
+    Full,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Turn {
+    pub session_id: SessionId,
+    pub thread_id: ThreadId,
+    pub turn_id: TurnId,
+    pub status: TurnStatus,
+    #[serde(default)]
+    pub admission: TurnAdmissionState,
+    #[serde(default)]
+    pub queue: TurnQueueState,
+    #[serde(default)]
+    pub approval: TurnApprovalState,
+    #[serde(default)]
+    pub items: Vec<ThreadItem>,
+    #[serde(default)]
+    pub items_view: TurnItemsView,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<TurnError>,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+}
+
+impl Turn {
+    pub fn is_terminal(&self) -> bool {
+        self.status.is_terminal()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TurnItemsView {
+    NotLoaded,
+    Summary,
+    #[default]
+    Full,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnError {
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SortDirection {
+    Asc,
+    #[default]
+    Desc,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PageCursor {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default)]
+    pub sort_direction: SortDirection,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadListParams {
+    #[serde(flatten)]
+    pub page: PageCursor,
+    #[serde(default)]
+    pub include_archived: bool,
+    #[serde(default)]
+    pub turns_view: ThreadTurnsView,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadReadParams {
+    pub thread_id: ThreadId,
+    #[serde(default)]
+    pub turns_view: ThreadTurnsView,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadReadResponse {
+    pub thread: Thread,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadListResponse {
+    pub data: Vec<Thread>,
+    pub next_cursor: Option<String>,
+    pub backwards_cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadTurnsListParams {
+    pub thread_id: ThreadId,
+    #[serde(flatten)]
+    pub page: PageCursor,
+    #[serde(default)]
+    pub items_view: TurnItemsView,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadTurnsListResponse {
+    pub data: Vec<Turn>,
+    pub next_cursor: Option<String>,
+    pub backwards_cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadItemsListParams {
+    pub thread_id: ThreadId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<TurnId>,
+    #[serde(flatten)]
+    pub page: PageCursor,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadItemsListResponse {
+    pub data: Vec<ThreadItem>,
+    pub next_cursor: Option<String>,
+    pub backwards_cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadItem {
+    pub session_id: SessionId,
+    pub thread_id: ThreadId,
+    pub turn_id: TurnId,
+    pub item_id: ItemId,
+    pub sequence: u64,
+    pub ordinal: u64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at_ms: Option<i64>,
+    pub kind: ItemKind,
+    pub status: ItemStatus,
+    pub payload: ThreadItemPayload,
+    #[serde(default)]
+    pub metadata: Value,
+}
+
+impl ThreadItem {
+    pub fn new(
+        session_id: SessionId,
+        thread_id: ThreadId,
+        turn_id: TurnId,
+        sequence: u64,
+        ordinal: u64,
+        payload: ThreadItemPayload,
+    ) -> Self {
+        let kind = payload.kind();
+        Self {
+            session_id,
+            thread_id,
+            turn_id,
+            item_id: ItemId::generated(),
+            sequence,
+            ordinal,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+            completed_at_ms: None,
+            kind,
+            status: ItemStatus::Pending,
+            payload,
+            metadata: Value::Null,
+        }
+    }
+
+    pub fn key(&self) -> (&ThreadId, &TurnId, &ItemId) {
+        (&self.thread_id, &self.turn_id, &self.item_id)
+    }
+
+    pub fn payload_kind(&self) -> ItemKind {
+        self.payload.kind()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum ThreadHistoryChange {
+    Create {
+        item: ThreadItem,
+    },
+    Update {
+        item: ThreadItem,
+    },
+    Remove {
+        thread_id: ThreadId,
+        turn_id: TurnId,
+        item_id: ItemId,
+        sequence: u64,
+    },
+}
+
+impl ThreadHistoryChange {
+    pub fn sequence(&self) -> u64 {
+        match self {
+            Self::Create { item } | Self::Update { item } => item.sequence,
+            Self::Remove { sequence, .. } => *sequence,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadHistoryChangeSet {
+    pub sequence: u64,
+    #[serde(default)]
+    pub changed_turns: Vec<Turn>,
+    #[serde(default)]
+    pub changed_items: Vec<ThreadItem>,
+    #[serde(default)]
+    pub removed_item_ids: Vec<ItemId>,
+    #[serde(default)]
+    pub removed_turn_ids: Vec<TurnId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback_to_sequence: Option<u64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn item() -> ThreadItem {
+        ThreadItem {
+            session_id: SessionId::new("session-1"),
+            thread_id: ThreadId::new("thread-1"),
+            turn_id: TurnId::new("turn-1"),
+            item_id: ItemId::new("item-test"),
+            sequence: 3,
+            ordinal: 1,
+            created_at_ms: 100,
+            updated_at_ms: 101,
+            completed_at_ms: None,
+            kind: ItemKind::AgentMessage,
+            status: ItemStatus::InProgress,
+            payload: ThreadItemPayload::AgentMessage {
+                text: "hello".to_string(),
+                phase: None,
+            },
+            metadata: Value::Null,
+        }
+    }
+
+    #[test]
+    fn thread_status_matches_codex_tagged_runtime_contract() {
+        let status = ThreadStatus::Active {
+            active_flags: vec![ThreadActiveFlag::WaitingOnApproval],
+        };
+        assert!(status.is_active());
+        assert_eq!(
+            status.active_flags(),
+            &[ThreadActiveFlag::WaitingOnApproval]
+        );
+        assert_eq!(
+            serde_json::to_value(status).expect("serialize status"),
+            json!({
+                "type": "active",
+                "activeFlags": ["waitingOnApproval"]
+            })
+        );
+    }
+
+    #[test]
+    fn turn_status_does_not_encode_admission_or_queue_control() {
+        assert!(TurnStatus::Completed.is_terminal());
+        assert!(!TurnStatus::InProgress.is_terminal());
+        assert_eq!(TurnAdmissionState::Accepted, TurnAdmissionState::Accepted);
+        assert!(matches!(
+            TurnQueueState::Queued { position: Some(2) },
+            TurnQueueState::Queued { .. }
+        ));
+    }
+
+    #[test]
+    fn item_payload_is_a_tagged_typed_union() {
+        let item = item();
+        let encoded = serde_json::to_value(&item).expect("serialize item");
+        assert_eq!(encoded["kind"], "agentMessage");
+        assert_eq!(encoded["payload"]["type"], "agentMessage");
+        assert_eq!(encoded["payload"]["text"], "hello");
+        assert_eq!(encoded["metadata"], Value::Null);
+        assert!(serde_json::from_value::<ThreadItem>(encoded).is_ok());
+    }
+
+    #[test]
+    fn item_payload_kind_cannot_be_guessed_from_text() {
+        let payload = ThreadItemPayload::Tool {
+            call_id: "call-search".to_string(),
+            name: "search".to_string(),
+            arguments: vec![ToolArgument {
+                name: "query".to_string(),
+                value: "hello".to_string(),
+            }],
+            output: None,
+        };
+        assert_eq!(payload.kind(), ItemKind::Tool);
+    }
+
+    #[test]
+    fn turn_contains_items_view_and_structured_terminal_error() {
+        let turn = Turn {
+            session_id: SessionId::new("session-1"),
+            thread_id: ThreadId::new("thread-1"),
+            turn_id: TurnId::new("turn-1"),
+            status: TurnStatus::Failed,
+            admission: TurnAdmissionState::Accepted,
+            queue: TurnQueueState::Running,
+            approval: TurnApprovalState::NotRequired,
+            items: vec![item()],
+            items_view: TurnItemsView::Full,
+            error: Some(TurnError {
+                message: "provider failed".to_string(),
+                code: Some("provider_error".to_string()),
+                details: None,
+            }),
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            started_at_ms: Some(1),
+            completed_at_ms: Some(2),
+            duration_ms: Some(1),
+        };
+        assert!(turn.is_terminal());
+        assert_eq!(turn.items.len(), 1);
+        assert_eq!(
+            turn.error.as_ref().expect("error").code.as_deref(),
+            Some("provider_error")
+        );
+    }
+
+    #[test]
+    fn history_change_sequence_and_paging_are_stable() {
+        let change = ThreadHistoryChange::Update { item: item() };
+        assert_eq!(change.sequence(), 3);
+        let params = ThreadItemsListParams {
+            thread_id: ThreadId::new("thread-1"),
+            turn_id: Some(TurnId::new("turn-1")),
+            page: PageCursor {
+                cursor: Some("ordinal:1".to_string()),
+                limit: Some(50),
+                sort_direction: SortDirection::Asc,
+            },
+        };
+        let encoded = serde_json::to_value(params).expect("serialize paging");
+        assert_eq!(encoded["cursor"], "ordinal:1");
+        assert_eq!(encoded["sortDirection"], "asc");
+    }
+
+    #[test]
+    fn read_and_list_params_expose_archive_and_view_contracts() {
+        let list = ThreadListParams {
+            page: PageCursor::default(),
+            include_archived: true,
+            turns_view: ThreadTurnsView::Summary,
+        };
+        let read = ThreadReadParams {
+            thread_id: ThreadId::new("thread-1"),
+            turns_view: ThreadTurnsView::Full,
+        };
+
+        assert_eq!(
+            serde_json::to_value(list).expect("serialize thread list params"),
+            serde_json::json!({
+                "sortDirection": "desc",
+                "includeArchived": true,
+                "turnsView": "summary"
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(read).expect("serialize thread read params"),
+            serde_json::json!({
+                "threadId": "thread-1",
+                "turnsView": "full"
+            })
+        );
+    }
+}

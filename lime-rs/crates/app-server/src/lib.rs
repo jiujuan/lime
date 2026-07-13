@@ -2023,6 +2023,9 @@ mod tests {
                 assert_payload_matches_with_session_projection(
                     &event["payload"],
                     expected_payload,
+                    expected_session_id,
+                    expected_thread_id,
+                    expected_turn_id,
                     "content-studio",
                     "default",
                 );
@@ -2034,6 +2037,9 @@ mod tests {
     fn assert_payload_matches_with_session_projection(
         actual_payload: &serde_json::Value,
         expected_payload: serde_json::Value,
+        expected_session_id: &str,
+        expected_thread_id: &str,
+        expected_turn_id: &str,
         expected_app_id: &str,
         expected_workspace_id: &str,
     ) {
@@ -2045,6 +2051,21 @@ mod tests {
         let session = actual_payload_object
             .remove("session")
             .expect("event payload session projection");
+        if let Some(item) = actual_payload_object.remove("item") {
+            assert_eq!(item["sessionId"], expected_session_id);
+            assert_eq!(item["threadId"], expected_thread_id);
+            assert_eq!(item["turnId"], expected_turn_id);
+            assert!(
+                item["itemId"]
+                    .as_str()
+                    .is_some_and(|value| !value.is_empty()),
+                "canonical itemId should be non-empty: {item:?}"
+            );
+            assert!(
+                item["payload"].is_object(),
+                "canonical item payload: {item:?}"
+            );
+        }
         assert_eq!(actual_payload_without_session, expected_payload);
 
         assert_eq!(session["appId"], expected_app_id);

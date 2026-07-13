@@ -15,7 +15,7 @@ import type { AgentRuntimeSessionResolver } from "./agentRuntimeCapabilityHost";
 
 type PluginRuntimeAppServerClient = Pick<
   AppServerClient,
-  "startSession" | "startTurn" | "readSession" | "cancelTurn" | "respondAction"
+  "startSession" | "startTurn" | "readThread" | "cancelTurn" | "respondAction"
 >;
 
 export interface PluginRuntimeHostOptions {
@@ -102,7 +102,7 @@ function createPluginRuntimeSessionGateway(
 ): AgentRuntimeSessionGateway {
   return {
     startTurn: (params) => appServerClient.startTurn(params),
-    readSession: (params) => appServerClient.readSession(params),
+    readThread: (params) => appServerClient.readThread(params),
     cancelTurn: (params) => appServerClient.cancelTurn(params),
     respondAction: (params) => appServerClient.respondAction(params),
   };

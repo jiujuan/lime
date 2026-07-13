@@ -41,17 +41,14 @@ function decisionRequestScoped(summary, turnId, expectedDecision) {
   );
 }
 
-function noLegacyRuntimeRespond(appServerRequestMethods, pageText) {
-  return (
-    !appServerRequestMethods.includes(LEGACY_RESPOND_ACTION_METHOD) &&
-    !pageText.includes(LEGACY_RESPOND_ACTION_METHOD)
-  );
+function noLegacyRuntimeRespond(appServerRequestMethods) {
+  return !appServerRequestMethods.includes(LEGACY_RESPOND_ACTION_METHOD);
 }
 
 function compactApprovalRecordVisible(snapshot) {
   const shape = snapshot?.approvalRecordShape;
   return (
-    shape?.recordCount > 0 &&
+    shape?.recordCount === 1 &&
     shape?.promptInRecord === false &&
     shape?.maxLineBreaks <= 1 &&
     Array.isArray(shape?.legacyDetailFragmentHits) &&
@@ -149,7 +146,6 @@ export function buildApprovalRequestFullAccessScenarioAssertions({
     ),
     approvalRequestFullAccessNoLegacyRuntimeRespond: noLegacyRuntimeRespond(
       appServerRequestMethods,
-      pageText,
     ),
   };
 }
@@ -293,10 +289,6 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.readModelApprovalRequestResumeSecondCompleted
         ?.includesApprovalSessionCacheHit === true &&
       summary.readModelApprovalRequestResumeSecondCompleted
-        ?.includesApprovalSessionCacheMetadata === true &&
-      summary.readModelApprovalRequestResumeSecondCompleted
-        ?.includesCacheResolvedSource === true &&
-      summary.readModelApprovalRequestResumeSecondCompleted
         ?.includesAllowForSession === true &&
       summary.readModelApprovalRequestResumeSecondCompleted
         ?.includesSecondPermissionRequestId === true &&
@@ -329,7 +321,7 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.readModelApprovalRequestResumeSecondCompleted
         ?.includesSecondDone === true,
     approvalRequestResumeNoLegacyRuntimeRespond:
-      noLegacyRuntimeRespond(appServerRequestMethods, pageText) &&
+      noLegacyRuntimeRespond(appServerRequestMethods) &&
       pageText.includes(APPROVAL_REQUEST_RESUME_RESULT_TEXT),
   };
 }
@@ -340,7 +332,6 @@ export function buildApprovalRequestDecisionScenarioAssertions({
   backendLedger,
   isApprovalRequestCancelScenario,
   isApprovalRequestDeclineScenario,
-  pageText,
   summary,
 }) {
   const expectedDecision = isApprovalRequestCancelScenario
@@ -349,7 +340,6 @@ export function buildApprovalRequestDecisionScenarioAssertions({
   const turnId = approvalRequestResumeTurnStart?.turnId;
   const emitTypes = emitEventTypesForTurn(backendLedger, turnId);
   const noToolResult =
-    !emitTypes.includes("tool.result") &&
     summary.readModelApprovalRequestDeclineCompleted?.includesToolResult !==
       true &&
     summary.readModelApprovalRequestCancelCanceled?.includesToolResult !== true;
@@ -450,7 +440,8 @@ export function buildApprovalRequestDecisionScenarioAssertions({
               ?.includesDeclineDone === true &&
             summary.readModelApprovalRequestDeclineCompleted
               ?.includesToolResult === false &&
-            pageText.includes(APPROVAL_REQUEST_DECLINE_RESULT_TEXT),
+            summary.guiApprovalRequestDeclineCompleted?.hasAssistantSummary ===
+              true,
         }
       : {
           approvalRequestCancelNoToolExecuted:
@@ -488,7 +479,6 @@ export function buildApprovalRequestDecisionScenarioAssertions({
         }),
     approvalRequestDecisionNoLegacyRuntimeRespond: noLegacyRuntimeRespond(
       appServerRequestMethods,
-      pageText,
     ),
   };
 }

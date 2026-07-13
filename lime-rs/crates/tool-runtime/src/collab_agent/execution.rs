@@ -118,6 +118,14 @@ pub trait CollabAgentExecutionBackend: Send + Sync {
         request: SendInputRequest,
     ) -> CollabAgentSurfaceResult<SendInputResponse>;
 
+    /// Verifies that `agent_id` belongs to the caller's agent graph and restores its persisted
+    /// runtime state when the agent is known but no longer loaded.
+    async fn ensure_agent_loaded(
+        &self,
+        current_session_id: &str,
+        agent_id: &str,
+    ) -> CollabAgentSurfaceResult<()>;
+
     async fn normalize_send_target(
         &self,
         session_id: &str,
@@ -269,6 +277,8 @@ pub async fn execute_collab_send_message(
         .iter()
         .any(|target| target.delivery_kind == ResolvedCollabSendTargetKind::CrossSessionLocal)
         .then(|| build_cross_session_sender_address(session_id));
+
+    prepare_agent_mailboxes(backend, session_id, &resolved_targets).await?;
 
     let deliveries = deliver_messages(
         backend,
@@ -514,6 +524,22 @@ fn unsupported_bridge_peer_output(
         metadata_key: "send_message",
         metadata: projection.metadata,
     })
+}
+
+async fn prepare_agent_mailboxes(
+    backend: &dyn CollabAgentExecutionBackend,
+    current_session_id: &str,
+    resolved_targets: &[ResolvedCollabSendTarget],
+) -> CollabAgentSurfaceResult<()> {
+    for target in resolved_targets {
+        if target.delivery_kind == ResolvedCollabSendTargetKind::Agent {
+            backend
+                .ensure_agent_loaded(current_session_id, &target.agent_id)
+                .await?;
+        }
+    }
+
+    Ok(())
 }
 
 fn delivery_message(

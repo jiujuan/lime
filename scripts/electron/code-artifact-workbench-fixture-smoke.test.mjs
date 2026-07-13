@@ -53,8 +53,14 @@ describe("code artifact workbench Electron fixture smoke guard", () => {
     expect(content).toContain('"agentSession/update"');
     expect(content).toContain('"agentSession/turn/start"');
     expect(content).toContain('"agentSession/read"');
-    expect(content).toContain('type: "tool.started"');
-    expect(content).toContain('type: "tool.result"');
+    expect(content).toContain('type: "item.started"');
+    expect(content).toContain('type: "item.completed"');
+    expect(content).toContain("canonicalToolItem");
+    expect(content).toContain('call_id: "${TOOL_CALL_ID}"');
+    expect(content).not.toContain('callId: "${TOOL_CALL_ID}"');
+    expect(content).toContain("ordinal: 4");
+    expect(content).not.toContain('type: "tool.started"');
+    expect(content).not.toContain('type: "tool.result"');
     expect(content).toContain("TOOL_CALL_ID");
     expect(content).toContain("TOOL_OUTPUT_PREVIEW");
     expect(content).toContain("collectToolCalls");

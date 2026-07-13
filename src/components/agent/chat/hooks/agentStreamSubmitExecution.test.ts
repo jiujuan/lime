@@ -117,6 +117,7 @@ describe("agentStreamSubmitExecution", () => {
         runtime,
         ensureSession,
         attemptSilentTurnRecovery: async () => false,
+        refreshSessionReadModel: async () => true,
         sessionIdRef: { current: null } as MutableRefObject<string | null>,
         getWorkspaceIdForSubmit: () => "workspace-1",
         getSyncedSessionExecutionStrategy: () => "react",
@@ -192,6 +193,7 @@ describe("agentStreamSubmitExecution", () => {
       runtime,
       ensureSession,
       attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel: async () => true,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
       getSyncedSessionExecutionStrategy: () => "react",
@@ -297,6 +299,84 @@ describe("agentStreamSubmitExecution", () => {
     expect(requestState.requestLogId).toBeTruthy();
   });
 
+  it("queued submit accepted 后应释放 listener、刷新 read model 且不覆盖 active stream", async () => {
+    getModelRegistryMock.mockResolvedValueOnce([]);
+    const unlisten = vi.fn();
+    const submitOp = vi.fn(async () => {});
+    const refreshSessionReadModel = vi.fn(async () => true);
+    const disposeListener = vi.fn();
+    const activateStream = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async () => unlisten),
+      submitOp,
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await executeAgentStreamSubmit({
+      runtime,
+      ensureSession: async () => "session-queued",
+      attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel,
+      sessionIdRef: {
+        current: "session-queued",
+      } as MutableRefObject<string | null>,
+      getWorkspaceIdForSubmit: () => "workspace-1",
+      getSyncedSessionExecutionStrategy: () => "react",
+      getSyncedSessionRecentPreferences: () => null,
+      effectiveAccessMode: "current",
+      content: "排队处理",
+      images: [],
+      skipUserMessage: false,
+      expectingQueue: true,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+      effectiveExecutionStrategy: "react",
+      eventName: "event-queued",
+      requestTurnId: "turn-queued",
+      requestState,
+      assistantMsgId: "assistant-queued",
+      pendingTurnKey: "pending-turn-queued",
+      pendingItemKey: "pending-item-queued",
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream,
+        isStreamActivated: () => false,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => false,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnsFromProjection: () => {},
+        registerListener: vi.fn(),
+      },
+      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+        parts,
+      setMessages: noopDispatch<Message[]>(),
+      setIsSending: noopDispatch<boolean>(),
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
+    });
+
+    expect(submitOp).toHaveBeenCalledTimes(1);
+    expect(activateStream).not.toHaveBeenCalled();
+    expect(disposeListener).toHaveBeenCalledTimes(1);
+    expect(refreshSessionReadModel).toHaveBeenCalledWith("session-queued");
+  });
+
   it("存在 targetSessionId 时应把 submit 绑定到指定会话", async () => {
     const unlisten = vi.fn();
     const submitOp = vi.fn(async () => {});
@@ -319,6 +399,7 @@ describe("agentStreamSubmitExecution", () => {
       runtime,
       ensureSession,
       attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel: async () => true,
       sessionIdRef: {
         current: "session-previous",
       } as MutableRefObject<string | null>,
@@ -424,6 +505,7 @@ describe("agentStreamSubmitExecution", () => {
         runtime,
         ensureSession,
         attemptSilentTurnRecovery: async () => false,
+        refreshSessionReadModel: async () => true,
         sessionIdRef: { current: null } as MutableRefObject<string | null>,
         getWorkspaceIdForSubmit: () => "workspace-1",
         getSyncedSessionExecutionStrategy: () => "react",
@@ -547,6 +629,7 @@ describe("agentStreamSubmitExecution", () => {
       runtime,
       ensureSession,
       attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel: async () => true,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
       getSyncedSessionExecutionStrategy: () => "react",
@@ -701,6 +784,7 @@ describe("agentStreamSubmitExecution", () => {
       runtime,
       ensureSession: vi.fn(async () => "session-target"),
       attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel: async () => true,
       sessionIdRef: { current: "session-target" } as MutableRefObject<
         string | null
       >,
@@ -823,6 +907,7 @@ describe("agentStreamSubmitExecution", () => {
       runtime,
       ensureSession,
       attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel: async () => true,
       sessionIdRef: { current: null } as MutableRefObject<string | null>,
       getWorkspaceIdForSubmit: () => "workspace-1",
       getSyncedSessionExecutionStrategy: () => "react",

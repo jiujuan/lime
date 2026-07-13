@@ -1,5 +1,8 @@
 use crate::credential_bridge::{ConfiguredReplyProvider, CredentialBridge};
 use crate::protocol::AgentActionRequiredScope;
+use agent_runtime::action_required::{
+    ActionRequiredError, ActionTerminalStatus, PendingActionDescriptor, PendingActionRestoreOutcome,
+};
 use lime_core::database::DbConnection;
 use lime_mcp::McpBridgeSnapshot;
 use std::collections::HashMap;
@@ -99,6 +102,27 @@ impl AgentRuntimeState {
         &self,
     ) -> Arc<agent_runtime::action_required::ActionRequiredState> {
         Arc::clone(&self.action_required)
+    }
+
+    pub async fn pending_action_descriptors(&self) -> Vec<PendingActionDescriptor> {
+        self.action_required.pending_action_descriptors().await
+    }
+
+    pub async fn restore_pending_action_descriptors(
+        &self,
+        descriptors: impl IntoIterator<Item = PendingActionDescriptor>,
+    ) -> Vec<PendingActionRestoreOutcome> {
+        self.action_required
+            .restore_pending_actions(descriptors)
+            .await
+    }
+
+    pub async fn contains_pending_action(&self, request_id: &str) -> bool {
+        self.action_required.contains_action(request_id).await
+    }
+
+    pub async fn terminal_action_status(&self, request_id: &str) -> Option<ActionTerminalStatus> {
+        self.action_required.terminal_status(request_id).await
     }
 
     async fn reset_native_tool_definitions(&self, definitions: Vec<RuntimeToolDefinition>) {
@@ -202,12 +226,18 @@ impl AgentRuntimeState {
     }
 
     pub async fn cancel_session(&self, session_id: &str) -> bool {
-        if let Some(token) = self.cancel_tokens.read().await.get(session_id) {
+        let canceled = if let Some(token) = self.cancel_tokens.read().await.get(session_id) {
             token.cancel();
             true
         } else {
             false
+        };
+        if let Some(scope) =
+            AgentActionRequiredScope::from_parts(Some(session_id.to_string()), None, None)
+        {
+            self.action_required.cancel_for_scope(&scope).await;
         }
+        canceled
     }
 
     pub async fn remove_cancel_token(&self, session_id: &str) {
@@ -220,33 +250,52 @@ impl AgentRuntimeState {
         request_id: &str,
         user_data: serde_json::Value,
         action_scope: Option<AgentActionRequiredScope>,
-    ) -> Result<(), String> {
-        let scope = action_scope.or_else(|| {
-            AgentActionRequiredScope::from_parts(
-                Some(session_id.to_string()),
-                Some(session_id.to_string()),
-                None,
-            )
-        });
+    ) -> Result<(), ActionRequiredError> {
+        let scope = require_action_scope(session_id, request_id, action_scope)?;
         self.action_required
-            .submit_response(request_id, scope.as_ref(), user_data)
+            .submit_response(request_id, Some(&scope), user_data)
             .await
-            .map_err(|error| error.to_string())
+    }
+
+    pub async fn ensure_action_resumable(
+        &self,
+        session_id: &str,
+        request_id: &str,
+        action_scope: Option<AgentActionRequiredScope>,
+    ) -> Result<(), ActionRequiredError> {
+        let scope = require_action_scope(session_id, request_id, action_scope)?;
+        self.action_required
+            .ensure_resumable(request_id, Some(&scope))
+            .await
+    }
+
+    pub async fn cancel_action(
+        &self,
+        session_id: &str,
+        request_id: &str,
+        action_scope: Option<AgentActionRequiredScope>,
+    ) -> Result<(), ActionRequiredError> {
+        let scope = require_action_scope(session_id, request_id, action_scope)?;
+        self.action_required
+            .cancel_action(request_id, Some(&scope))
+            .await
     }
 
     pub async fn confirm_tool_action(
         &self,
+        session_id: &str,
         request_id: &str,
         confirmed: bool,
-    ) -> Result<(), String> {
+        action_scope: Option<AgentActionRequiredScope>,
+    ) -> Result<(), ActionRequiredError> {
+        let scope = require_action_scope(session_id, request_id, action_scope)?;
         self.action_required
             .submit_response(
                 request_id,
-                None,
+                Some(&scope),
                 serde_json::json!({ "confirmed": confirmed }),
             )
             .await
-            .map_err(|error| error.to_string())
     }
 
     pub async fn sync_mcp_bridges(&self, snapshots: Vec<McpBridgeSnapshot>) -> Result<(), String> {
@@ -261,4 +310,23 @@ impl AgentRuntimeState {
     pub async fn is_initialized(&self) -> bool {
         self.initialized.load(Ordering::Acquire)
     }
+}
+
+fn require_action_scope(
+    session_id: &str,
+    request_id: &str,
+    scope: Option<AgentActionRequiredScope>,
+) -> Result<AgentActionRequiredScope, ActionRequiredError> {
+    let scope = scope.ok_or_else(|| ActionRequiredError::ScopeMissing(request_id.to_string()))?;
+    let complete = [
+        scope.session_id.as_deref(),
+        scope.thread_id.as_deref(),
+        scope.turn_id.as_deref(),
+    ]
+    .into_iter()
+    .all(|field| field.is_some_and(|value| !value.trim().is_empty()));
+    if !complete || scope.session_id.as_deref() != Some(session_id) {
+        return Err(ActionRequiredError::ScopeMismatch(request_id.to_string()));
+    }
+    Ok(scope)
 }

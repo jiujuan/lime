@@ -100,7 +100,22 @@ function mergeThreadItemMetadataIntoToolUsePart(
   };
 }
 
-export function syncExistingMessageToolCallFromThreadItem(params: {
+function toolUsePartFromThreadItem(
+  item: Extract<AgentThreadItem, { type: "tool_call" }>,
+  toolCall: MessageToolCallState,
+): MessageToolUsePart {
+  return {
+    type: "tool_use",
+    toolCall,
+    metadata: {
+      ...(metadataFromThreadItem(item) ?? {}),
+      sequence: item.sequence,
+      turnId: item.turn_id,
+    },
+  };
+}
+
+export function syncMessageToolCallFromThreadItem(params: {
   assistantMsgId: string;
   item: AgentThreadItem;
   setMessages: Dispatch<SetStateAction<Message[]>>;
@@ -114,37 +129,41 @@ export function syncExistingMessageToolCallFromThreadItem(params: {
       if (message.id !== params.assistantMsgId) {
         return message;
       }
-      const hasExistingToolCall = Boolean(
-        message.toolCalls?.some((toolCall) => toolCall.id === params.item.id),
+      const existingToolCall = message.toolCalls?.find(
+        (toolCall) => toolCall.id === toolCallItem.id,
       );
-      const hasExistingToolUsePart = Boolean(
-        message.contentParts?.some(
-          (part) =>
-            part.type === "tool_use" && part.toolCall.id === params.item.id,
-        ),
+      const nextToolCall = mergeToolCallStateFromItem(
+        existingToolCall,
+        toolCallItem,
       );
-      if (!hasExistingToolCall && !hasExistingToolUsePart) {
-        return message;
-      }
-
-      const updateToolCall = (
-        toolCall: MessageToolCallState,
-      ): MessageToolCallState =>
-        toolCall.id === toolCallItem.id
-          ? mergeToolCallStateFromItem(toolCall, toolCallItem)
-          : toolCall;
+      const updateToolCall = (toolCall: MessageToolCallState) =>
+        toolCall.id === toolCallItem.id ? nextToolCall : toolCall;
+      const hasToolUsePart = message.contentParts?.some(
+        (part) =>
+          part.type === "tool_use" && part.toolCall.id === toolCallItem.id,
+      );
 
       return {
         ...message,
-        toolCalls: message.toolCalls?.map(updateToolCall),
-        contentParts: message.contentParts?.map((part) =>
-          part.type === "tool_use" && part.toolCall.id === toolCallItem.id
-            ? {
-                ...mergeThreadItemMetadataIntoToolUsePart(part, toolCallItem),
-                toolCall: updateToolCall(part.toolCall),
-              }
-            : part,
-        ),
+        toolCalls: existingToolCall
+          ? message.toolCalls?.map(updateToolCall)
+          : [...(message.toolCalls ?? []), nextToolCall],
+        contentParts: hasToolUsePart
+          ? message.contentParts?.map((part) =>
+              part.type === "tool_use" && part.toolCall.id === toolCallItem.id
+                ? {
+                    ...mergeThreadItemMetadataIntoToolUsePart(
+                      part,
+                      toolCallItem,
+                    ),
+                    toolCall: nextToolCall,
+                  }
+                : part,
+            )
+          : [
+              ...(message.contentParts ?? []),
+              toolUsePartFromThreadItem(toolCallItem, nextToolCall),
+            ],
       };
     }),
   );

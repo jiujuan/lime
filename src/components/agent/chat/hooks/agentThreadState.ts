@@ -61,6 +61,9 @@ function compareItemOrder(
 }
 
 function threadItemMergeKey(item: AgentThreadItem): string {
+  if (item.type === "approval_request" || item.type === "request_user_input") {
+    return `${item.turn_id || ""}:action:${item.request_id}`;
+  }
   if (
     item.type === "tool_call" ||
     item.type === "command_execution" ||
@@ -156,6 +159,12 @@ export function upsertThreadItemState(
   }
 
   const existingItem = items[existingIndex];
+  if (
+    (existingItem.status === "completed" || existingItem.status === "failed") &&
+    nextItem.status === "in_progress"
+  ) {
+    return items;
+  }
   const mergedItem = mergeThreadItemUpdate(existingItem, nextItem);
   if (areJsonLikeValuesEqual(existingItem, mergedItem)) {
     return items;

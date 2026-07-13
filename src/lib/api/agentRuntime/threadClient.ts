@@ -9,9 +9,10 @@ import {
   type AppServerAgentSessionActionRespondParams,
   type AppServerAgentSessionActionScope,
   type AppServerCapabilityListParams,
-  type AppServerAgentSessionReadParams,
   type AppServerAgentSessionTurnCancelParams,
   type AppServerAgentSessionTurnStartParams,
+  type AppServerThreadReadParams,
+  type AppServerThreadReadResponse,
 } from "@/lib/api/appServer";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
 import type { AgentRuntimeClient as StandardAgentRuntimeClient } from "@limecloud/agent-runtime-client";
@@ -55,6 +56,7 @@ import type { AgentRuntimeCapabilityManifest } from "@limecloud/agent-ui-contrac
 export type AgentRuntimeAppServerClient = Pick<
   AppServerClient,
   | "readSession"
+  | "readThread"
   | "startTurn"
   | "cancelTurn"
   | "replayAction"
@@ -315,10 +317,27 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
     if (!normalizedSessionId) {
       throw new Error("sessionId is required to read App Server session");
     }
-    const response = await standardRuntimeClient.readThread({
+    const response = await appServerClient.readSession({
       sessionId: normalizedSessionId,
     });
     return projectAppServerSessionReadResult(response.result);
+  }
+
+  async function readAgentRuntimeThread(
+    threadId: string,
+  ): Promise<AppServerThreadReadResponse> {
+    assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
+    const normalizedThreadId = threadId.trim();
+    if (!normalizedThreadId) {
+      throw new Error(
+        "threadId is required to read canonical App Server thread",
+      );
+    }
+    const response = await appServerClient.readThread({
+      threadId: normalizedThreadId,
+      turnsView: "full",
+    } satisfies AppServerThreadReadParams);
+    return response.result;
   }
 
   async function listAgentRuntimeFileCheckpoints(
@@ -372,6 +391,7 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
     getAgentRuntimeFileCheckpoint,
     getAgentRuntimeCapabilityManifest,
     getAgentRuntimeThreadRead,
+    readAgentRuntimeThread,
     interruptAgentRuntimeTurn,
     listAgentRuntimeFileCheckpoints,
     promoteAgentRuntimeQueuedTurn,
@@ -429,8 +449,8 @@ function createAppServerAgentRuntimeLifecycleClient(
         params as unknown as AppServerAgentSessionActionRespondParams,
       ) as ReturnType<AgentRuntimeLifecycleClient["respondAction"]>,
     readThread: (params: AgentRuntimeLifecycleReadThreadParams) =>
-      appServerClient.readSession(
-        params as unknown as AppServerAgentSessionReadParams,
+      appServerClient.readThread(
+        params as unknown as AppServerThreadReadParams,
       ) as ReturnType<AgentRuntimeLifecycleClient["readThread"]>,
   };
 }
@@ -1058,6 +1078,7 @@ export const {
   getAgentRuntimeCapabilityManifest,
   getAgentRuntimeFileCheckpoint,
   getAgentRuntimeThreadRead,
+  readAgentRuntimeThread,
   interruptAgentRuntimeTurn,
   listAgentRuntimeFileCheckpoints,
   promoteAgentRuntimeQueuedTurn,

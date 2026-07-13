@@ -1,9 +1,11 @@
 use super::*;
 use crate::execution_process::ExecutionProcessServer;
 use crate::runtime::RuntimeHostContext;
+use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload};
 use app_server_protocol::{
-    AgentInput, AgentSession, AgentSessionActionType, AgentSessionApprovalDecision,
-    AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
+    AgentInput, AgentSession, AgentSessionActionRespondParams, AgentSessionActionScope,
+    AgentSessionActionType, AgentSessionApprovalDecision, AgentSessionStartParams,
+    AgentSessionStatus, AgentSessionTurnStartParams, AgentTurn, AgentTurnStatus, RuntimeOptions,
 };
 use lime_core::database::schema::create_tables;
 use rusqlite::Connection;
@@ -31,6 +33,47 @@ impl RuntimeEventSink for TestRuntimeEventSink {
 struct BridgeRuntimeEventSink {
     events: Arc<Mutex<Vec<RuntimeEvent>>>,
     approval_tx: mpsc::UnboundedSender<String>,
+}
+
+struct RestartPendingActionSeedBackend;
+
+#[async_trait]
+impl ExecutionBackend for RestartPendingActionSeedBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new(
+            "action.required",
+            json!({
+                "requestId": "ask-restart-1",
+                "actionType": "ask_user",
+                "prompt": "Choose a restart option",
+                "requestedSchema": { "type": "string" },
+                "availableDecisions": ["allow_once", "decline"],
+                "createdAtMs": 1_783_900_000_000_u64,
+                "deadlineAtMs": 1_999_999_999_999_u64,
+            }),
+        ))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
 }
 
 impl RuntimeEventSink for BridgeRuntimeEventSink {
@@ -172,7 +215,7 @@ async fn respond_action_initializes_agent_before_runtime_resume() {
 
     assert!(!backend.agent_state.is_initialized().await);
 
-    ExecutionBackend::respond_action(
+    let error = ExecutionBackend::respond_action(
         &backend,
         ActionRespondRequest {
             host: RuntimeHostContext::default(),
@@ -196,13 +239,323 @@ async fn respond_action_initializes_agent_before_runtime_resume() {
             metadata: None,
             event_name: None,
             action_scope: None,
+            pending_action_descriptor: None,
         },
         &mut sink,
     )
     .await
-    .expect("respond_action should initialize agent and emit resolved fact");
+    .expect_err("unknown action must fail closed after agent initialization");
 
     assert!(backend.agent_state.is_initialized().await);
+    assert!(matches!(
+        error,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_scope_missing" && request_id == "ask-respond-init"
+    ));
+    assert!(sink.events.is_empty());
+}
+
+#[tokio::test]
+async fn respond_action_restores_descriptor_and_fails_closed_without_continuation() {
+    let db = test_db();
+    let db = provider_config::initialize_runtime_database(Some(&db)).expect("runtime database");
+    let backend = RuntimeBackend::with_db(db);
+    let session = AgentSession {
+        session_id: "session-restored-action".to_string(),
+        thread_id: "thread-restored-action".to_string(),
+        app_id: "agent".to_string(),
+        workspace_id: None,
+        business_object_ref: None,
+        status: AgentSessionStatus::WaitingAction,
+        created_at: "2026-07-12T15:00:00Z".to_string(),
+        updated_at: "2026-07-12T15:00:00Z".to_string(),
+    };
+    let descriptor = agent_runtime::action_required::PendingActionDescriptor {
+        request_id: "approval-restored-1".to_string(),
+        action_type: "tool_confirmation".to_string(),
+        tool_id: Some("tool-restored-1".to_string()),
+        message: Some("Allow restored action?".to_string()),
+        requested_schema: None,
+        available_decisions: vec!["allow_once".to_string(), "decline".to_string()],
+        scope: lime_agent::AgentActionRequiredScope::from_parts(
+            Some("session-restored-action".to_string()),
+            Some("thread-restored-action".to_string()),
+            Some("turn-restored-action".to_string()),
+        ),
+        created_at_ms: Some(1_783_900_000_000_u64),
+        deadline_at_ms: Some(1_999_999_999_999_u64),
+        status: agent_runtime::action_required::PendingActionStatus::Pending,
+    };
+
+    let action_request = ActionRespondRequest {
+        host: RuntimeHostContext::default(),
+        session,
+        turn: Some(AgentTurn {
+            turn_id: "turn-restored-action".to_string(),
+            session_id: "session-restored-action".to_string(),
+            thread_id: "thread-restored-action".to_string(),
+            status: AgentTurnStatus::WaitingAction,
+            started_at: Some("2026-07-12T15:00:00Z".to_string()),
+            completed_at: None,
+        }),
+        request_id: "approval-restored-1".to_string(),
+        action_type: AgentSessionActionType::ToolConfirmation,
+        decision: Some(AgentSessionApprovalDecision::AllowOnce),
+        confirmed: true,
+        response: None,
+        user_data: None,
+        metadata: None,
+        event_name: None,
+        action_scope: Some(app_server_protocol::AgentSessionActionScope {
+            session_id: Some("session-restored-action".to_string()),
+            thread_id: Some("thread-restored-action".to_string()),
+            turn_id: Some("turn-restored-action".to_string()),
+        }),
+        pending_action_descriptor: Some(descriptor),
+    };
+    let mut sink = TestRuntimeEventSink::default();
+    let error = ExecutionBackend::respond_action(&backend, action_request.clone(), &mut sink)
+        .await
+        .expect_err("restored descriptor must not fake a live continuation");
+
+    assert!(
+        matches!(
+            error,
+            RuntimeCoreError::ActionResponse { ref code, ref request_id }
+                if code == "action_not_resumable" && request_id == "approval-restored-1"
+        ),
+        "unexpected restored action error: {error:?}"
+    );
+    assert!(sink.events.is_empty());
+
+    let repeated = ExecutionBackend::respond_action(&backend, action_request, &mut sink)
+        .await
+        .expect_err("repeated restored response must preserve terminal reason");
+    assert!(matches!(
+        repeated,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_not_resumable" && request_id == "approval-restored-1"
+    ));
+    assert!(sink.events.is_empty());
+}
+
+#[tokio::test]
+async fn denied_ask_user_cancels_restored_action_without_resolved_event() {
+    let session = AgentSession {
+        session_id: "session-restored-cancel".to_string(),
+        thread_id: "thread-restored-cancel".to_string(),
+        app_id: "agent".to_string(),
+        workspace_id: None,
+        business_object_ref: None,
+        status: AgentSessionStatus::WaitingAction,
+        created_at: "2026-07-12T15:00:00Z".to_string(),
+        updated_at: "2026-07-12T15:00:00Z".to_string(),
+    };
+    let turn = AgentTurn {
+        turn_id: "turn-restored-cancel".to_string(),
+        session_id: session.session_id.clone(),
+        thread_id: session.thread_id.clone(),
+        status: AgentTurnStatus::WaitingAction,
+        started_at: Some("2026-07-12T15:00:00Z".to_string()),
+        completed_at: None,
+    };
+    let descriptor = agent_runtime::action_required::PendingActionDescriptor {
+        request_id: "ask-restored-cancel".to_string(),
+        action_type: "ask_user".to_string(),
+        tool_id: None,
+        message: Some("Continue?".to_string()),
+        requested_schema: None,
+        available_decisions: Vec::new(),
+        scope: lime_agent::AgentActionRequiredScope::from_parts(
+            Some(session.session_id.clone()),
+            Some(session.thread_id.clone()),
+            Some(turn.turn_id.clone()),
+        ),
+        created_at_ms: Some(1_783_900_000_000_u64),
+        deadline_at_ms: Some(1_999_999_999_999_u64),
+        status: agent_runtime::action_required::PendingActionStatus::Pending,
+    };
+    let backend = RuntimeBackend::with_db(test_db());
+    let mut sink = TestRuntimeEventSink::default();
+
+    ExecutionBackend::respond_action(
+        &backend,
+        ActionRespondRequest {
+            host: RuntimeHostContext::default(),
+            session,
+            turn: Some(turn),
+            request_id: "ask-restored-cancel".to_string(),
+            action_type: AgentSessionActionType::AskUser,
+            decision: None,
+            confirmed: false,
+            response: None,
+            user_data: None,
+            metadata: None,
+            event_name: None,
+            action_scope: Some(AgentSessionActionScope {
+                session_id: Some("session-restored-cancel".to_string()),
+                thread_id: Some("thread-restored-cancel".to_string()),
+                turn_id: Some("turn-restored-cancel".to_string()),
+            }),
+            pending_action_descriptor: Some(descriptor),
+        },
+        &mut sink,
+    )
+    .await
+    .expect("denied restored ask-user action");
+
+    assert_eq!(sink.events.len(), 1);
+    assert_eq!(sink.events[0].event_type, "action.canceled");
+    assert!(sink
+        .events
+        .iter()
+        .all(|event| event.event_type != "action.resolved"));
+}
+
+#[tokio::test]
+async fn runtime_core_hydrates_persisted_descriptor_into_runtime_backend() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = crate::StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer =
+        Arc::new(crate::EventLogWriter::new(&roots.event_log_root).expect("event log"));
+    let projection_store = Arc::new(
+        crate::ProjectionStore::initialize(&roots.projection_db_path).expect("projection store"),
+    );
+    let session_id = "session-restart-production";
+    let thread_id = "thread-restart-production";
+    let turn_id = "turn-restart-production";
+
+    let seed_core = crate::RuntimeCore::with_backend(Arc::new(RestartPendingActionSeedBackend))
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
+    seed_core
+        .start_session(AgentSessionStartParams {
+            session_id: Some(session_id.to_string()),
+            thread_id: Some(thread_id.to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: Some("workspace-restart".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("seed session");
+    seed_core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session_id.to_string(),
+                turn_id: Some(turn_id.to_string()),
+                input: AgentInput {
+                    text: "wait for restart response".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: true,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("seed pending action");
+    drop(seed_core);
+    drop(event_log_writer);
+    drop(projection_store);
+
+    let event_log_writer =
+        Arc::new(crate::EventLogWriter::new(&roots.event_log_root).expect("reopen event log"));
+    let projection_store = Arc::new(
+        crate::ProjectionStore::initialize(&roots.projection_db_path)
+            .expect("reopen projection store"),
+    );
+
+    let restarted_core =
+        crate::RuntimeCore::with_backend(Arc::new(RuntimeBackend::with_db(test_db())))
+            .with_event_log_writer(event_log_writer.clone())
+            .with_projection_store(projection_store);
+    let type_mismatch = restarted_core
+        .respond_action(
+            AgentSessionActionRespondParams {
+                session_id: session_id.to_string(),
+                request_id: "ask-restart-1".to_string(),
+                action_type: AgentSessionActionType::ToolConfirmation,
+                decision: Some(AgentSessionApprovalDecision::AllowOnce),
+                confirmed: None,
+                response: None,
+                user_data: Some(json!({ "confirmed": true })),
+                metadata: None,
+                event_name: None,
+                action_scope: Some(AgentSessionActionScope {
+                    session_id: Some(session_id.to_string()),
+                    thread_id: Some(thread_id.to_string()),
+                    turn_id: Some(turn_id.to_string()),
+                }),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("caller action type must match persisted action");
+    assert!(matches!(
+        type_mismatch,
+        RuntimeCoreError::ActionResponse { ref code, ref request_id }
+            if code == "action_type_mismatch" && request_id == "ask-restart-1"
+    ));
+    let error = restarted_core
+        .respond_action(
+            AgentSessionActionRespondParams {
+                session_id: session_id.to_string(),
+                request_id: "ask-restart-1".to_string(),
+                action_type: AgentSessionActionType::AskUser,
+                decision: None,
+                confirmed: Some(true),
+                response: Some("continue".to_string()),
+                user_data: Some(json!({ "answer": "continue" })),
+                metadata: None,
+                event_name: None,
+                action_scope: Some(AgentSessionActionScope {
+                    session_id: Some(session_id.to_string()),
+                    thread_id: Some(thread_id.to_string()),
+                    turn_id: Some(turn_id.to_string()),
+                }),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("restored continuation must fail closed");
+
+    assert!(
+        matches!(
+            error,
+            RuntimeCoreError::ActionResponse { ref code, ref request_id }
+                if code == "action_not_resumable" && request_id == "ask-restart-1"
+        ),
+        "unexpected runtime restart error: {error:?}"
+    );
+    let persisted_events = event_log_writer
+        .read_session_events(session_id)
+        .expect("persisted events");
+    assert!(persisted_events
+        .iter()
+        .all(|record| record.event.event_type != "action.resolved"));
+}
+
+#[test]
+fn action_response_error_preserves_stable_jsonrpc_data() {
+    let error = RuntimeCoreError::ActionResponse {
+        code: "action_not_resumable".to_string(),
+        request_id: "ask-restart-1".to_string(),
+    }
+    .into_jsonrpc_error();
+
+    assert_eq!(error.code, app_server_protocol::error_codes::RUNTIME_ERROR);
+    assert_eq!(
+        error.message,
+        "action response failed: action_not_resumable"
+    );
+    assert_eq!(
+        error.data,
+        Some(json!({
+            "code": "action_not_resumable",
+            "requestId": "ask-restart-1",
+        }))
+    );
 }
 
 #[tokio::test]
@@ -224,6 +577,7 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
         &run_id,
     );
     let action_session = request.session.clone();
+    let action_turn = request.turn.clone();
     let (approval_tx, mut approval_rx) = mpsc::unbounded_channel::<String>();
     let stream_events = Arc::new(Mutex::new(Vec::new()));
     let stream_backend = backend.clone();
@@ -278,8 +632,8 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
         &*backend,
         ActionRespondRequest {
             host: RuntimeHostContext::default(),
-            session: action_session,
-            turn: None,
+            session: action_session.clone(),
+            turn: Some(action_turn.clone()),
             request_id: request_id.clone(),
             action_type: AgentSessionActionType::ToolConfirmation,
             decision: Some(AgentSessionApprovalDecision::AllowOnce),
@@ -288,7 +642,12 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
             user_data: None,
             metadata: None,
             event_name: None,
-            action_scope: None,
+            action_scope: Some(app_server_protocol::AgentSessionActionScope {
+                session_id: Some(action_session.session_id),
+                thread_id: Some(action_session.thread_id),
+                turn_id: Some(action_turn.turn_id),
+            }),
+            pending_action_descriptor: None,
         },
         &mut action_sink,
     )
@@ -310,11 +669,27 @@ async fn respond_action_tool_confirmation_resumes_pending_agent_tool_future() {
 
     let events = stream_events.lock().expect("read stream events");
     assert!(events.iter().any(|event| {
-        event.event_type == "tool.result"
-            && event.payload["toolCallId"].as_str() == Some("req-runtime-confirm")
-            && event.payload["result"]["success"].as_bool() == Some(true)
-            && event.payload["result"]["output"]
-                .as_str()
+        if event.event_type != "item.completed" {
+            return false;
+        }
+        let Some(item) = event
+            .payload
+            .get("item")
+            .cloned()
+            .and_then(|item| serde_json::from_value::<ThreadItem>(item).ok())
+        else {
+            return false;
+        };
+        let ThreadItemPayload::Tool {
+            call_id, output, ..
+        } = item.payload
+        else {
+            return false;
+        };
+        item.status == ItemStatus::Completed
+            && call_id == "req-runtime-confirm"
+            && output
+                .and_then(|output| output.text)
                 .is_some_and(|output| output.contains("runtime-confirmed"))
     }));
     assert!(events.iter().any(|event| {

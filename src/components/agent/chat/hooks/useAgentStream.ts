@@ -256,6 +256,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         runtime,
         ensureSession,
         attemptSilentTurnRecovery,
+        refreshSessionReadModel,
         executionStrategy,
         accessMode,
         providerTypeRef,
@@ -310,6 +311,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       onWriteFile,
       providerTypeRef,
       reasoningEffortRef,
+      refreshSessionReadModel,
       queuedTurns.length,
       runtime,
       sessionIdRef,
@@ -618,6 +620,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       return promoteQueuedAgentTurn({
         runtime,
         queuedTurnId,
+        threadId: threadRead?.thread_id,
         activeStream: activeStreamRef.current,
         removeStreamListener,
         sessionIdRef,
@@ -647,6 +650,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       setMessages,
       setThreadItems,
       setThreadTurns,
+      threadRead?.thread_id,
     ],
   );
 

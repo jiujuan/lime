@@ -50,6 +50,7 @@ export interface LimeKnowledgeCapability {
 
 export interface PluginTaskLookup {
   taskId: string;
+  threadId?: string;
   sessionId?: string;
   traceId?: string;
   turnId?: string;

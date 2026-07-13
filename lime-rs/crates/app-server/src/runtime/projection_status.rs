@@ -15,10 +15,28 @@ pub(super) fn session_status_from_event(event_type: &str) -> &'static str {
 pub(super) fn agent_session_status_from_projection(status: &str) -> AgentSessionStatus {
     match status {
         "running" | "active" => AgentSessionStatus::Running,
+        "waitingAction" | "waiting_action" => AgentSessionStatus::WaitingAction,
         "failed" => AgentSessionStatus::Failed,
         "canceled" => AgentSessionStatus::Canceled,
         "completed" => AgentSessionStatus::Completed,
         _ => AgentSessionStatus::Idle,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn waiting_action_projection_preserves_session_and_turn_status() {
+        assert_eq!(
+            agent_session_status_from_projection("waitingAction"),
+            AgentSessionStatus::WaitingAction
+        );
+        assert_eq!(
+            agent_turn_status_from_projection("waitingAction"),
+            AgentTurnStatus::WaitingAction
+        );
     }
 }
 

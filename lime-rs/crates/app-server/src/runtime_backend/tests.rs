@@ -81,6 +81,7 @@ struct TestMcpAutostartDataSource {
     servers: Vec<Value>,
     started_servers: Mutex<Vec<String>>,
     fail_start: bool,
+    hang_start: bool,
 }
 
 impl TestMcpAutostartDataSource {
@@ -89,11 +90,17 @@ impl TestMcpAutostartDataSource {
             servers,
             started_servers: Mutex::new(Vec::new()),
             fail_start: false,
+            hang_start: false,
         }
     }
 
     fn with_fail_start(mut self) -> Self {
         self.fail_start = true;
+        self
+    }
+
+    fn with_hanging_start(mut self) -> Self {
+        self.hang_start = true;
         self
     }
 
@@ -141,6 +148,9 @@ impl McpAppDataSource for TestMcpAutostartDataSource {
             .lock()
             .expect("started servers lock")
             .push(params.name);
+        if self.hang_start {
+            std::future::pending().await
+        }
         if self.fail_start {
             return Err(RuntimeCoreError::Backend("start failed".to_string()));
         }

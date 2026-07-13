@@ -3,9 +3,9 @@ use super::common::skill_package_app_to_core_app;
 use super::common::skill_state_key;
 use super::common::validate_skill_package_directory;
 use super::common::SkillPackageApp;
-use app_server_protocol::SkillListResponse;
 use app_server_protocol::SkillManagementInstallParams;
 use app_server_protocol::SkillManagementListParams;
+use app_server_protocol::SkillManagementListResponse;
 use app_server_protocol::SkillManagementUninstallParams;
 use app_server_protocol::SkillManagementWriteResponse;
 use app_server_protocol::SkillRepositoryDeleteParams;
@@ -32,7 +32,7 @@ fn parse_skill_list_scope(scope: Option<&str>) -> Result<LocalSkillCatalogScope,
 pub(crate) async fn list_management_skills(
     db: DbConnection,
     params: SkillManagementListParams,
-) -> Result<SkillListResponse, String> {
+) -> Result<SkillManagementListResponse, String> {
     let app = parse_skill_package_app(&params.app)?;
     let app_type = skill_package_app_to_core_app(app);
     let scope = parse_skill_list_scope(params.scope.as_deref())?;
@@ -75,7 +75,7 @@ pub(crate) async fn list_management_skills(
         }
     }
 
-    Ok(SkillListResponse {
+    Ok(SkillManagementListResponse {
         skills: skills
             .into_iter()
             .map(serde_json::to_value)

@@ -5,6 +5,11 @@ use lime_agent::AgentRuntimeState;
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
+use tokio::time::timeout;
+
+const MCP_AUTOSTART_TIMEOUT: Duration = Duration::from_secs(2);
+const MCP_BRIDGE_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub(super) async fn sync_mcp_bridges_if_available(
     agent_state: &AgentRuntimeState,
@@ -23,7 +28,28 @@ pub(super) async fn sync_mcp_bridges_if_available(
         return Ok(());
     };
     start_enabled_lime_mcp_servers_if_needed(app_data_source.clone()).await;
-    let snapshots = app_data_source.list_mcp_bridge_snapshots().await?;
+    let snapshots = match timeout(
+        MCP_BRIDGE_SNAPSHOT_TIMEOUT,
+        app_data_source.list_mcp_bridge_snapshots(),
+    )
+    .await
+    {
+        Ok(Ok(snapshots)) => snapshots,
+        Ok(Err(error)) => {
+            tracing::warn!(
+                error = %error,
+                "[RuntimeBackend] MCP bridge 快照同步失败，继续执行主模型回合"
+            );
+            return Ok(());
+        }
+        Err(_) => {
+            tracing::warn!(
+                timeout_secs = MCP_BRIDGE_SNAPSHOT_TIMEOUT.as_secs(),
+                "[RuntimeBackend] MCP bridge 快照同步超时，继续执行主模型回合"
+            );
+            return Ok(());
+        }
+    };
     agent_state
         .sync_mcp_bridges(snapshots)
         .await
@@ -45,23 +71,32 @@ pub(super) async fn start_enabled_lime_mcp_servers_if_needed(
     };
 
     for server_name in enabled_lime_mcp_servers_to_start(&response.servers) {
-        match app_data_source
-            .start_mcp_server(McpServerStartParams {
+        match timeout(
+            MCP_AUTOSTART_TIMEOUT,
+            app_data_source.start_mcp_server(McpServerStartParams {
                 name: server_name.clone(),
-            })
-            .await
+            }),
+        )
+        .await
         {
-            Ok(_) => {
+            Ok(Ok(_)) => {
                 tracing::info!(
                     server_name = %server_name,
                     "[RuntimeBackend] 已为 Agent turn 启动 Lime MCP server"
                 );
             }
-            Err(error) => {
+            Ok(Err(error)) => {
                 tracing::warn!(
                     server_name = %server_name,
                     error = %error,
                     "[RuntimeBackend] Agent turn 启动 Lime MCP server 失败，继续使用当前可用工具面"
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    server_name = %server_name,
+                    timeout_secs = MCP_AUTOSTART_TIMEOUT.as_secs(),
+                    "[RuntimeBackend] Agent turn 启动 Lime MCP server 超时，继续执行主模型回合"
                 );
             }
         }

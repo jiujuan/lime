@@ -2,9 +2,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
-use runtime_core::{
-    build_fal_video_generation_body, LlmMessage, LlmRequest, LlmRole, ProtocolMappingError,
-};
+use model_provider::lowering::{build_fal_video_generation_body, ProtocolMappingError};
+use runtime_core::CanonicalRequest;
 use serde_json::{json, Map, Value};
 
 use super::model_route;
@@ -386,60 +385,53 @@ fn build_video_generation_request_body(
 fn video_generation_llm_request(
     prepared_input: &PreparedVideoTaskInput,
     task_id: &str,
-) -> LlmRequest {
-    let mut metadata = std::collections::BTreeMap::new();
+) -> CanonicalRequest {
+    let mut provider_options = std::collections::BTreeMap::new();
     insert_string_metadata(
-        &mut metadata,
+        &mut provider_options,
         "provider_id",
         prepared_input.provider_id.as_deref(),
     );
     insert_string_metadata(
-        &mut metadata,
+        &mut provider_options,
         "aspect_ratio",
         prepared_input.aspect_ratio.as_deref(),
     );
     insert_string_metadata(
-        &mut metadata,
+        &mut provider_options,
         "resolution",
         prepared_input.resolution.as_deref(),
     );
     insert_string_metadata(
-        &mut metadata,
+        &mut provider_options,
         "image_url",
         prepared_input.image_url.as_deref(),
     );
     insert_string_metadata(
-        &mut metadata,
+        &mut provider_options,
         "end_image_url",
         prepared_input.end_image_url.as_deref(),
     );
-    insert_string_metadata(&mut metadata, "user", Some(task_id));
+    insert_string_metadata(&mut provider_options, "user", Some(task_id));
     if let Some(duration) = prepared_input.duration {
-        metadata.insert("duration".to_string(), json!(duration));
+        provider_options.insert("duration".to_string(), json!(duration));
     }
     if let Some(seed) = prepared_input.seed.as_ref() {
-        metadata.insert("seed".to_string(), seed.clone());
+        provider_options.insert("seed".to_string(), seed.clone());
     }
     if let Some(generate_audio) = prepared_input.generate_audio {
-        metadata.insert("generate_audio".to_string(), json!(generate_audio));
+        provider_options.insert("generate_audio".to_string(), json!(generate_audio));
     }
     if let Some(camera_fixed) = prepared_input.camera_fixed {
-        metadata.insert("camera_fixed".to_string(), json!(camera_fixed));
+        provider_options.insert("camera_fixed".to_string(), json!(camera_fixed));
     }
 
-    LlmRequest {
-        instructions: None,
-        messages: vec![LlmMessage::text(
-            LlmRole::User,
-            prepared_input.prompt.clone(),
-        )],
-        tools: Vec::new(),
-        temperature: None,
-        max_output_tokens: None,
-        stream: false,
-        reasoning_effort: None,
-        metadata,
-    }
+    let mut request = CanonicalRequest::text(
+        prepared_input.model.as_deref().unwrap_or_default(),
+        prepared_input.prompt.clone(),
+    );
+    request.provider_options = provider_options;
+    request
 }
 
 fn video_request_mapping_error(error: ProtocolMappingError) -> TaskErrorRecord {

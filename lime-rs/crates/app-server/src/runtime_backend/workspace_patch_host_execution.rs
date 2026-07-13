@@ -6,7 +6,6 @@ use super::request_context::{
     resolve_runtime_model_selection, runtime_request_from_request,
     selection_with_effective_reasoning, session_scope_from_request, RuntimeModelSelection,
 };
-use super::tool_events;
 use super::workspace_patch_host_tools;
 use super::RuntimeBackend;
 use crate::runtime::ensure_workspace_patch_artifact_paths;
@@ -74,10 +73,11 @@ pub(super) async fn prepare_runtime_worker_artifact_events(
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
     let execution = execute_workspace_patch_host_tool_plan(
-        &runtime_backend.agent_state,
         &host_tool_plan,
         WorkspacePatchHostToolExecutionInput {
-            session_id: request.session.session_id.clone(),
+            session_id: scope.session_id.clone(),
+            thread_id: scope.thread_id.clone(),
+            turn_id: scope.turn_id.clone(),
             working_directory,
             turn_context: Some(turn_context),
             parallelism: 2,
@@ -95,15 +95,15 @@ pub(super) async fn prepare_runtime_worker_artifact_events(
     );
     ensure_workspace_patch_artifact_paths(events.as_mut_slice());
     let mut tool_runtime_events = Vec::new();
-    for event in &execution.events {
-        let mut runtime_events = tool_events::runtime_events_from_agent_event(event)?;
-        for runtime_event in &mut runtime_events {
-            workspace_patch_host_tools::enrich_workspace_patch_host_tool_event(
-                runtime_event,
-                &host_tool_plan.requests,
-            );
+    for event in execution.events {
+        if let Some(runtime_event) =
+            workspace_patch_host_tools::workspace_patch_host_tool_runtime_event(
+                event,
+                &execution.bound_requests,
+            )
+        {
+            tool_runtime_events.push(runtime_event);
         }
-        tool_runtime_events.extend(runtime_events);
     }
     let insert_at = events
         .iter()

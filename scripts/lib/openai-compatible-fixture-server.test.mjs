@@ -43,13 +43,13 @@ describe("openai-compatible-fixture-server", () => {
       modelPreference: DEFAULT_FIXTURE_MODEL,
       source: "localhost-fixture",
       providerConfig: {
-        provider_id: "fixture-openai",
-        provider_name: "openai",
-        model_name: DEFAULT_FIXTURE_MODEL,
-        api_key: DEFAULT_FIXTURE_API_KEY,
-        base_url: fixture.baseUrl,
-        tool_call_strategy: "native",
-        model_capabilities: {
+        providerId: "fixture-openai",
+        providerName: "openai",
+        modelName: DEFAULT_FIXTURE_MODEL,
+        apiKey: DEFAULT_FIXTURE_API_KEY,
+        baseUrl: fixture.baseUrl,
+        toolCallStrategy: "native",
+        modelCapabilities: {
           capabilities: {
             vision: true,
             tools: true,

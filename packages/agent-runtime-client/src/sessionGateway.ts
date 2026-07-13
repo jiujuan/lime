@@ -2,11 +2,13 @@ import type {
   AgentRuntimeClient,
   AgentRuntimeClientSubscription,
   AgentRuntimeEventListener,
+  CanonicalThreadEventListener,
+  CanonicalThreadEventNotification,
   AgentSessionActionRespondParams,
   AgentSessionActionRespondResponse,
   AgentSessionEventNotification,
-  AgentSessionReadParams,
-  AgentSessionReadResponse,
+  ThreadReadParams,
+  ThreadReadResponse,
   AgentSessionToolInventoryReadParams,
   AgentSessionToolInventoryReadResponse,
   AgentSessionTurnCancelParams,
@@ -35,13 +37,12 @@ import {
 export {
   AgentRuntimeEventSequenceGate,
   AgentRuntimeSequenceViolationError,
-  runtimeExecutionEventFromAgentEvent,
+  runtimeExecutionEventFromCanonicalEvent,
   type AgentRuntimeSequenceVerifierLike,
   type AgentRuntimeSequenceVerifierMode,
 } from "./eventVerifier.js";
 export {
   AgentRuntimeEventPipeline,
-  createSchemaVersionCompatibilityMiddleware,
   withEvent,
   type AgentRuntimeEventAdapter,
   type AgentRuntimeEventMiddleware,
@@ -68,9 +69,9 @@ export type AgentRuntimeSessionGateway = {
     AgentSessionTurnStartParams,
     AgentSessionTurnStartResponse
   >;
-  readSession: AgentRuntimeGatewayMethod<
-    AgentSessionReadParams,
-    AgentSessionReadResponse
+  readThread: AgentRuntimeGatewayMethod<
+    ThreadReadParams,
+    ThreadReadResponse
   >;
   readToolInventory?: AgentRuntimeGatewayMethod<
     AgentSessionToolInventoryReadParams,
@@ -108,7 +109,7 @@ export function createAgentRuntimeClientFromSessionGateway(
     startTurn: (params, options) =>
       callAgentRuntimeSessionGateway(gateway.startTurn, params, options),
     readThread: (params, options) =>
-      callAgentRuntimeSessionGateway(gateway.readSession, params, options),
+      callAgentRuntimeSessionGateway(gateway.readThread, params, options),
     readToolInventory: (params = {}, options) =>
       callOptionalAgentRuntimeSessionGateway(
         gateway.readToolInventory,
@@ -129,6 +130,9 @@ export function createAgentRuntimeClientFromSessionGateway(
       ),
     subscribeEvents(listener) {
       return eventRouter.subscribe(listener);
+    },
+    subscribeCanonicalEvents(listener) {
+      return eventRouter.subscribeCanonical(listener);
     },
     async dispatchEvent(message) {
       const result = await eventRouter.dispatch(message);
@@ -228,6 +232,7 @@ async function nextDrainedAgentRuntimeEvent(
 
 class AgentRuntimeGatewayEventRouter {
   readonly #listeners = new Set<AgentRuntimeEventListener>();
+  readonly #canonicalListeners = new Set<CanonicalThreadEventListener>();
   readonly #eventPipeline: AgentRuntimeEventPipeline;
   readonly #pendingNextEvents: AgentSessionEventNotification[] = [];
 
@@ -249,6 +254,17 @@ class AgentRuntimeGatewayEventRouter {
     };
   }
 
+  subscribeCanonical(
+    listener: CanonicalThreadEventListener,
+  ): AgentRuntimeClientSubscription {
+    this.#canonicalListeners.add(listener);
+    return {
+      unsubscribe: () => {
+        this.#canonicalListeners.delete(listener);
+      },
+    };
+  }
+
   async dispatch(
     message: JsonRpcMessage,
   ): Promise<AgentRuntimeEventPipelineResult> {
@@ -256,13 +272,29 @@ class AgentRuntimeGatewayEventRouter {
     if (!notification) {
       return { accepted: false, reason: "dropped" };
     }
+    const canonicalEvent = canonicalThreadEventNotificationFromMessage(notification);
+    if (!canonicalEvent) {
+      if (!isNonThreadNotification(notification)) {
+        return { accepted: false, reason: "dropped" };
+      }
+      for (const listener of this.#listeners) {
+        await listener(notification.params.event, notification);
+      }
+      return {
+        accepted: true,
+        notification,
+        notifications: [notification],
+      };
+    }
     const pipelineResult = await this.#eventPipeline.process(notification);
     if (!pipelineResult.accepted) {
       return pipelineResult;
     }
     for (const notification of pipelineResult.notifications) {
-      for (const listener of this.#listeners) {
-        await listener(notification.params.event, notification);
+      const event = canonicalThreadEventNotificationFromMessage(notification);
+      if (!event) continue;
+      for (const listener of this.#canonicalListeners) {
+        await listener(event, notification);
       }
     }
     return pipelineResult;
@@ -279,6 +311,28 @@ class AgentRuntimeGatewayEventRouter {
   sequenceViolationError(): AgentRuntimeSequenceViolationError {
     return this.#eventPipeline.sequenceViolationError();
   }
+}
+
+function canonicalThreadEventNotificationFromMessage(
+  notification: AgentSessionEventNotification,
+): CanonicalThreadEventNotification | undefined {
+  return notification.params.canonicalEvent;
+}
+
+function isNonThreadNotification(
+  notification: AgentSessionEventNotification,
+): boolean {
+  const event = notification.params.event;
+  if (!isRecord(event.payload) || typeof event.payload.streamId !== "string") {
+    return false;
+  }
+  if (event.type === "media.read.chunk") {
+    return event.payload.done === false && isRecord(event.payload.chunk);
+  }
+  if (event.type === "media.read.completed") {
+    return event.payload.done === true && isRecord(event.payload.media);
+  }
+  return false;
 }
 
 function agentSessionEventNotificationFromMessage(

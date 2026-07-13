@@ -1,3 +1,4 @@
+use agent_protocol::{Thread, ThreadItem, Turn};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -292,13 +293,57 @@ pub struct AgentSessionEventParams {
     pub event: AgentEvent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub typed_event: Option<AgentSessionRuntimeEventNotification>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_event: Option<CanonicalThreadEventNotification>,
 }
 
 impl AgentSessionEventParams {
     pub fn from_event(event: AgentEvent) -> Self {
         let typed_event = AgentSessionRuntimeEventNotification::from_agent_event(&event);
-        Self { event, typed_event }
+        let canonical_event = CanonicalThreadEventNotification::from_agent_event(&event);
+        Self {
+            event,
+            typed_event,
+            canonical_event,
+        }
     }
+}
+
+/// Canonical live projection for Thread/Turn/Item consumers.
+///
+/// The projection only accepts fully typed canonical entities embedded by the
+/// runtime owner. It does not infer a canonical object from legacy payload
+/// fields; producers that do not yet emit a canonical entity remain visible
+/// through `event` until their owner migrates.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "method", content = "params")]
+pub enum CanonicalThreadEventNotification {
+    #[serde(rename = "thread/updated")]
+    ThreadUpdated(Thread),
+    #[serde(rename = "turn/updated")]
+    TurnUpdated(Turn),
+    #[serde(rename = "item/updated")]
+    ItemUpdated(ThreadItem),
+}
+
+impl CanonicalThreadEventNotification {
+    pub fn from_agent_event(event: &AgentEvent) -> Option<Self> {
+        match event.event_type.as_str() {
+            "thread.created" | "thread.started" | "thread.updated" => {
+                canonical_entity(&event.payload, "thread").map(Self::ThreadUpdated)
+            }
+            "turn.accepted" | "turn.started" | "turn.completed" | "turn.failed"
+            | "turn.canceled" => canonical_entity(&event.payload, "turn").map(Self::TurnUpdated),
+            _ => canonical_entity(&event.payload, "item").map(Self::ItemUpdated),
+        }
+    }
+}
+
+fn canonical_entity<T>(payload: &serde_json::Value, key: &str) -> Option<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_value(payload.get(key)?.clone()).ok()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -466,6 +511,8 @@ pub struct AgentSessionItemLifecycleNotification {
     pub timestamp: String,
     pub item_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordinal: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -486,6 +533,11 @@ impl AgentSessionItemLifecycleNotification {
             turn_id: event.turn_id.clone(),
             timestamp: event.timestamp.clone(),
             item_id,
+            ordinal: number_field(item, &["ordinal", "itemOrdinal", "item_ordinal"])
+                .or_else(|| number_field(payload, &["ordinal", "itemOrdinal", "item_ordinal"]))
+                .or_else(|| {
+                    number_field(&event.payload, &["ordinal", "itemOrdinal", "item_ordinal"])
+                }),
             item_type: string_field(item, &["type", "kind"])
                 .or_else(|| string_field(payload, &["type", "kind"])),
             status: string_field(item, &["status"])
@@ -554,6 +606,17 @@ fn string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
     let object = value.as_object()?;
     keys.iter()
         .find_map(|key| object.get(*key).and_then(value_as_string))
+}
+
+fn number_field(value: &serde_json::Value, keys: &[&str]) -> Option<u64> {
+    let object = value.as_object()?;
+    keys.iter().find_map(|key| {
+        object.get(*key).and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_str()?.parse::<u64>().ok())
+        })
+    })
 }
 
 fn value_as_string(value: &serde_json::Value) -> Option<String> {
@@ -659,6 +722,137 @@ mod tests {
             })
         );
         assert_eq!(params.event.event_type, "turn.failed");
+    }
+
+    #[test]
+    fn item_lifecycle_projects_stable_ordinal_when_present() {
+        let params = AgentSessionEventParams::from_event(event(
+            "item.started",
+            json!({
+                "item": {
+                    "id": "item_1",
+                    "type": "agent_message",
+                    "ordinal": "12"
+                }
+            }),
+        ));
+
+        let typed_event = params.typed_event.expect("typed item event");
+        assert_eq!(
+            serde_json::to_value(typed_event).expect("serialize typed event"),
+            json!({
+                "method": "item/started",
+                "params": {
+                    "eventId": "evt_1",
+                    "sequence": 7,
+                    "sessionId": "sess_1",
+                    "threadId": "thread_1",
+                    "turnId": "turn_1",
+                    "timestamp": "2026-07-05T00:00:00Z",
+                    "itemId": "item_1",
+                    "ordinal": 12,
+                    "itemType": "agent_message"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn canonical_item_event_deserializes_the_agent_protocol_contract_directly() {
+        let params = AgentSessionEventParams::from_event(event(
+            "item.updated",
+            json!({
+                "item": {
+                    "sessionId": "sess_1",
+                    "threadId": "thread_1",
+                    "turnId": "turn_1",
+                    "itemId": "msg_1",
+                    "sequence": 7,
+                    "ordinal": 3,
+                    "createdAtMs": 100,
+                    "updatedAtMs": 120,
+                    "kind": "agentMessage",
+                    "status": "inProgress",
+                    "payload": {
+                        "type": "agentMessage",
+                        "text": "hello",
+                        "phase": "commentary"
+                    }
+                }
+            }),
+        ));
+
+        let canonical_event = params.canonical_event.expect("canonical item event");
+        assert!(matches!(
+            &canonical_event,
+            CanonicalThreadEventNotification::ItemUpdated(item)
+                if item.item_id.as_str() == "msg_1"
+                    && item.sequence == 7
+                    && item.ordinal == 3
+        ));
+        assert_eq!(
+            serde_json::to_value(canonical_event).expect("serialize canonical item event"),
+            json!({
+                "method": "item/updated",
+                "params": {
+                    "sessionId": "sess_1",
+                    "threadId": "thread_1",
+                    "turnId": "turn_1",
+                    "itemId": "msg_1",
+                    "sequence": 7,
+                    "ordinal": 3,
+                    "createdAtMs": 100,
+                    "updatedAtMs": 120,
+                    "kind": "agentMessage",
+                    "status": "inProgress",
+                    "payload": {
+                        "type": "agentMessage",
+                        "text": "hello",
+                        "phase": "commentary"
+                    },
+                    "metadata": null
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn partial_item_payload_does_not_guess_a_canonical_entity() {
+        let params = AgentSessionEventParams::from_event(event(
+            "item.updated",
+            json!({
+                "item": {
+                    "id": "legacy_item_1",
+                    "text": "partial"
+                }
+            }),
+        ));
+
+        assert_eq!(params.canonical_event, None);
+    }
+
+    #[test]
+    fn current_turn_canceled_accepts_interrupted_canonical_turn() {
+        let payload = json!({
+            "turn": {
+                "sessionId": "sess_1",
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "status": "interrupted",
+                "createdAtMs": 100,
+                "updatedAtMs": 120
+            }
+        });
+
+        let canceled = AgentSessionEventParams::from_event(event("turn.canceled", payload.clone()));
+        assert!(matches!(
+            canceled.canonical_event,
+            Some(CanonicalThreadEventNotification::TurnUpdated(turn))
+                if turn.status == agent_protocol::TurnStatus::Interrupted
+        ));
+
+        let retired = AgentSessionEventParams::from_event(event("turn.interrupted", payload));
+        assert_eq!(retired.canonical_event, None);
     }
 }
 

@@ -1,0 +1,429 @@
+//! Typed, batch-local history changes produced by the item materializer.
+//!
+//! This follows Codex's `ThreadHistoryChangeAccumulator` rule: repeated snapshots
+//! for one `(thread, turn, item)` replace the latest value while preserving the
+//! first-change order.  The accumulator deliberately contains no storage logic;
+//! SQLite/read-model ownership belongs to the S2d/S2e slices.
+
+use agent_protocol::{ItemId, ThreadHistoryChangeSet, ThreadItem, Turn};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::runtime) enum MaterializationError {
+    EventIdentityCollision {
+        event_id: String,
+        previous_sequence: u64,
+        sequence: u64,
+    },
+    SequenceCollision {
+        sequence: u64,
+        previous_event_id: String,
+        event_id: String,
+    },
+}
+
+impl std::fmt::Display for MaterializationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EventIdentityCollision {
+                event_id,
+                previous_sequence,
+                sequence,
+            } => write!(
+                formatter,
+                "event id {event_id} changed sequence from {previous_sequence} to {sequence}"
+            ),
+            Self::SequenceCollision {
+                sequence,
+                previous_event_id,
+                event_id,
+            } => write!(
+                formatter,
+                "sequence {sequence} has event ids {previous_event_id} and {event_id}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MaterializationError {}
+
+#[derive(Debug, Default)]
+pub(super) struct ChangeSetAccumulator {
+    changed_items: Vec<Option<ThreadItem>>,
+    item_indexes: HashMap<(String, String, ItemId), usize>,
+    changed_turns: Vec<Option<Turn>>,
+    changed_turn_sequences: Vec<Option<u64>>,
+    turn_indexes: HashMap<String, usize>,
+    removed_item_ids: Vec<ItemId>,
+    removed_item_indexes: HashMap<ItemId, usize>,
+    removed_turn_ids: Vec<String>,
+    removed_turn_indexes: HashMap<String, usize>,
+    rollback_to_sequence: Option<u64>,
+}
+
+impl ChangeSetAccumulator {
+    pub(super) fn push_item(&mut self, item: ThreadItem) {
+        let key = (
+            item.thread_id.to_string(),
+            item.turn_id.to_string(),
+            item.item_id.clone(),
+        );
+        if self.removed_item_indexes.contains_key(&item.item_id) {
+            return;
+        }
+        if let Some(index) = self.item_indexes.get(&key).copied() {
+            let previous = self.changed_items[index]
+                .take()
+                .expect("item index always points at a live item");
+            self.changed_items[index] = Some(merge_item_snapshot(previous, item));
+        } else {
+            self.item_indexes.insert(key, self.changed_items.len());
+            self.changed_items.push(Some(item));
+        }
+    }
+
+    pub(super) fn push_turn(&mut self, turn: Turn, sequence: u64) {
+        let key = turn.turn_id.to_string();
+        if self.removed_turn_indexes.contains_key(&key) {
+            return;
+        }
+        if let Some(index) = self.turn_indexes.get(&key).copied() {
+            let previous = self.changed_turns[index]
+                .take()
+                .expect("turn index always points at a live turn");
+            self.changed_turns[index] = Some(merge_turn_snapshot(previous, turn));
+            self.changed_turn_sequences[index] = Some(sequence);
+        } else {
+            self.turn_indexes.insert(key, self.changed_turns.len());
+            self.changed_turns.push(Some(turn));
+            self.changed_turn_sequences.push(Some(sequence));
+        }
+    }
+
+    pub(super) fn remove_item(&mut self, item_id: ItemId) {
+        if !self.removed_item_indexes.contains_key(&item_id) {
+            self.removed_item_indexes
+                .insert(item_id.clone(), self.removed_item_ids.len());
+            self.removed_item_ids.push(item_id.clone());
+        }
+        let indexes = self
+            .item_indexes
+            .iter()
+            .filter(|(_, index)| {
+                self.changed_items[**index]
+                    .as_ref()
+                    .is_some_and(|item| item.item_id == item_id)
+            })
+            .map(|(key, index)| (key.clone(), *index))
+            .collect::<Vec<_>>();
+        for (key, index) in indexes {
+            self.item_indexes.remove(&key);
+            self.changed_items[index] = None;
+        }
+    }
+
+    pub(super) fn rollback(&mut self, sequence: u64) {
+        self.rollback_to_sequence = Some(
+            self.rollback_to_sequence
+                .map_or(sequence, |previous| previous.min(sequence)),
+        );
+        let item_ids = self
+            .changed_items
+            .iter()
+            .filter_map(|item| item.as_ref())
+            .filter(|item| item.sequence > sequence)
+            .map(|item| item.item_id.clone())
+            .collect::<Vec<_>>();
+        for item_id in item_ids {
+            self.remove_item(item_id);
+        }
+        let turn_ids = self
+            .changed_turns
+            .iter()
+            .zip(&self.changed_turn_sequences)
+            .filter_map(|(turn, turn_sequence)| {
+                let turn = turn.as_ref()?;
+                (turn_sequence
+                    .as_ref()
+                    .is_some_and(|value| *value > sequence))
+                .then(|| turn.turn_id.to_string())
+            })
+            .collect::<Vec<_>>();
+        for turn_id in turn_ids {
+            self.remove_turn(turn_id);
+        }
+    }
+
+    pub(super) fn finish(self, sequence: u64) -> ThreadHistoryChangeSet {
+        ThreadHistoryChangeSet {
+            sequence,
+            changed_turns: self.changed_turns.into_iter().flatten().collect(),
+            changed_items: self.changed_items.into_iter().flatten().collect(),
+            removed_item_ids: self.removed_item_ids,
+            removed_turn_ids: self.removed_turn_ids.into_iter().map(Into::into).collect(),
+            rollback_to_sequence: self.rollback_to_sequence,
+        }
+    }
+
+    pub(super) fn remove_turn(&mut self, turn_id: String) {
+        if !self.removed_turn_indexes.contains_key(&turn_id) {
+            self.removed_turn_indexes
+                .insert(turn_id.clone(), self.removed_turn_ids.len());
+            self.removed_turn_ids.push(turn_id.clone());
+        }
+        if let Some(index) = self.turn_indexes.remove(&turn_id) {
+            self.changed_turns[index] = None;
+            self.changed_turn_sequences[index] = None;
+        }
+        let keys = self
+            .item_indexes
+            .keys()
+            .filter(|(_, item_turn_id, _)| item_turn_id == &turn_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in keys {
+            if let Some(index) = self.item_indexes.remove(&key) {
+                self.changed_items[index] = None;
+            }
+        }
+    }
+}
+
+pub(in crate::runtime) fn merge_item_snapshot(
+    previous: ThreadItem,
+    mut next: ThreadItem,
+) -> ThreadItem {
+    next.created_at_ms = previous.created_at_ms;
+    next.ordinal = previous.ordinal;
+    if next.completed_at_ms.is_none() {
+        next.completed_at_ms = previous.completed_at_ms;
+    }
+    if previous.status.is_terminal() && !next.status.is_terminal() {
+        next.status = previous.status;
+    }
+    next.payload = merge_payload(previous.payload, next.payload);
+    next
+}
+
+fn merge_payload(
+    previous: agent_protocol::ThreadItemPayload,
+    next: agent_protocol::ThreadItemPayload,
+) -> agent_protocol::ThreadItemPayload {
+    use agent_protocol::ThreadItemPayload;
+
+    match (previous, next) {
+        (
+            ThreadItemPayload::AgentMessage { text: previous, .. },
+            ThreadItemPayload::AgentMessage { text, phase },
+        ) => ThreadItemPayload::AgentMessage {
+            text: merge_stream_text(previous, text),
+            phase,
+        },
+        (
+            ThreadItemPayload::Reasoning {
+                mut summary,
+                mut content,
+            },
+            ThreadItemPayload::Reasoning {
+                summary: next_summary,
+                content: next_content,
+            },
+        ) => {
+            extend_distinct(&mut summary, next_summary);
+            extend_distinct(&mut content, next_content);
+            ThreadItemPayload::Reasoning { summary, content }
+        }
+        (
+            ThreadItemPayload::Tool {
+                call_id: previous_call_id,
+                name: previous_name,
+                arguments: previous_arguments,
+                output: previous_output,
+            },
+            ThreadItemPayload::Tool {
+                call_id,
+                name,
+                arguments,
+                output,
+            },
+        ) => ThreadItemPayload::Tool {
+            call_id: if call_id.is_empty() {
+                previous_call_id
+            } else {
+                call_id
+            },
+            name: if name == "tool" { previous_name } else { name },
+            arguments: if arguments.is_empty() {
+                previous_arguments
+            } else {
+                arguments
+            },
+            output: merge_tool_output(previous_output, output),
+        },
+        (
+            ThreadItemPayload::McpToolCall {
+                call_id: previous_call_id,
+                server_name: previous_server_name,
+                tool_name: previous_tool_name,
+                arguments: previous_arguments,
+                output: previous_output,
+            },
+            ThreadItemPayload::McpToolCall {
+                call_id,
+                server_name,
+                tool_name,
+                arguments,
+                output,
+            },
+        ) => ThreadItemPayload::McpToolCall {
+            call_id: prefer_string(previous_call_id, call_id, ""),
+            server_name: prefer_string(previous_server_name, server_name, "unknown"),
+            tool_name: prefer_string(previous_tool_name, tool_name, "tool"),
+            arguments: if arguments.is_empty() {
+                previous_arguments
+            } else {
+                arguments
+            },
+            output: merge_tool_output(previous_output, output),
+        },
+        (
+            ThreadItemPayload::CollabAgentToolCall {
+                call_id: previous_call_id,
+                operation: previous_operation,
+                target_thread_id: previous_target,
+                message: previous_message,
+                output: previous_output,
+            },
+            ThreadItemPayload::CollabAgentToolCall {
+                call_id,
+                operation,
+                target_thread_id,
+                message,
+                output,
+            },
+        ) => ThreadItemPayload::CollabAgentToolCall {
+            call_id: prefer_string(previous_call_id, call_id, ""),
+            operation: if target_thread_id.is_none() && message.is_none() && output.is_none() {
+                previous_operation
+            } else {
+                operation
+            },
+            target_thread_id: target_thread_id.or(previous_target),
+            message: message.or(previous_message),
+            output: merge_tool_output(previous_output, output),
+        },
+        (
+            ThreadItemPayload::Approval {
+                request_id: previous_request_id,
+                action: previous_action,
+                scope: previous_scope,
+                available_decisions: previous_available_decisions,
+                decision: previous_decision,
+                requested_at_ms: previous_requested_at_ms,
+                resolved_at_ms: previous_resolved_at_ms,
+                reason_code: previous_reason_code,
+                expires_at_ms: previous_expires_at_ms,
+            },
+            ThreadItemPayload::Approval {
+                request_id,
+                action,
+                scope,
+                available_decisions,
+                decision,
+                requested_at_ms,
+                resolved_at_ms,
+                reason_code,
+                expires_at_ms,
+            },
+        ) => ThreadItemPayload::Approval {
+            request_id: prefer_string(previous_request_id, request_id, ""),
+            action: if action.description.is_empty() {
+                previous_action
+            } else {
+                action
+            },
+            scope: if matches!(scope, agent_protocol::ApprovalScope::Once) {
+                previous_scope
+            } else {
+                scope
+            },
+            available_decisions: if available_decisions.is_empty() {
+                previous_available_decisions
+            } else {
+                available_decisions
+            },
+            decision: if resolved_at_ms.is_some() {
+                decision
+            } else {
+                decision.or(previous_decision)
+            },
+            requested_at_ms: requested_at_ms.or(previous_requested_at_ms),
+            resolved_at_ms: resolved_at_ms.or(previous_resolved_at_ms),
+            reason_code: reason_code.or(previous_reason_code),
+            expires_at_ms: expires_at_ms.or(previous_expires_at_ms),
+        },
+        (_, next) => next,
+    }
+}
+
+fn prefer_string(previous: String, next: String, placeholder: &str) -> String {
+    if next.is_empty() || next == placeholder {
+        previous
+    } else {
+        next
+    }
+}
+
+fn merge_tool_output(
+    previous: Option<agent_protocol::ToolOutput>,
+    next: Option<agent_protocol::ToolOutput>,
+) -> Option<agent_protocol::ToolOutput> {
+    match (previous, next) {
+        (Some(previous), Some(mut next)) => {
+            next.text = next.text.or(previous.text);
+            next.structured_content = next.structured_content.or(previous.structured_content);
+            next.error = next.error.or(previous.error);
+            next.duration_ms = next.duration_ms.or(previous.duration_ms);
+            next.truncated |= previous.truncated;
+            next.output_ref = next.output_ref.or(previous.output_ref);
+            Some(next)
+        }
+        (previous, next) => next.or(previous),
+    }
+}
+
+fn merge_stream_text(previous: String, next: String) -> String {
+    if next.is_empty() || next == previous {
+        previous
+    } else if next.starts_with(&previous) {
+        next
+    } else {
+        format!("{previous}{next}")
+    }
+}
+
+fn extend_distinct(values: &mut Vec<String>, next: Vec<String>) {
+    for value in next {
+        if !values.contains(&value) {
+            values.push(value);
+        }
+    }
+}
+
+pub(in crate::runtime) fn merge_turn_snapshot(previous: Turn, mut next: Turn) -> Turn {
+    next.created_at_ms = previous.created_at_ms.min(next.created_at_ms);
+    next.started_at_ms = next.started_at_ms.or(previous.started_at_ms);
+    next.completed_at_ms = next.completed_at_ms.or(previous.completed_at_ms);
+    next.duration_ms = next.duration_ms.or(previous.duration_ms);
+    next.error = next.error.or(previous.error);
+    if next.queue == Default::default() {
+        next.queue = previous.queue;
+    }
+    if next.approval == Default::default() {
+        next.approval = previous.approval;
+    }
+    if previous.status.is_terminal() && !next.status.is_terminal() {
+        next.status = previous.status;
+    }
+    next
+}

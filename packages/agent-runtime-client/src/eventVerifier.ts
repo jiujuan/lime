@@ -1,13 +1,10 @@
 import type {
-  AgentEvent,
+  CanonicalThreadEventNotification,
   AgentSessionEventNotification,
 } from "@limecloud/app-server-client";
 import {
   createRuntimeSequenceVerifier,
-  normalizeRuntimeTurnTerminalEventClass,
-  runtimeStatusForTerminalEventClass,
   type AgentRuntimeExecutionEvent,
-  type RuntimeSequenceVerifier,
   type RuntimeSequenceViolation,
 } from "@limecloud/agent-ui-contracts";
 
@@ -31,6 +28,13 @@ export interface AgentRuntimeSequenceVerificationResult {
   accepted: boolean;
   violations: RuntimeSequenceViolation[];
 }
+
+type CanonicalThreadItem = Extract<
+  CanonicalThreadEventNotification,
+  { method: "item/updated" }
+>["params"];
+type CanonicalItemKind = CanonicalThreadItem["kind"];
+type CanonicalItemStatus = CanonicalThreadItem["status"];
 
 export class AgentRuntimeSequenceViolationError extends Error {
   readonly violations: RuntimeSequenceViolation[];
@@ -62,7 +66,13 @@ export class AgentRuntimeEventSequenceGate {
     if (!this.#verifier) {
       return { accepted: true, violations: [] };
     }
-    const event = runtimeExecutionEventFromAgentEvent(notification.params.event);
+    const canonical = notification.params.canonicalEvent;
+    if (!canonical) {
+      // Raw agentSession events belong to the non-thread channel. They must
+      // never participate in the Thread/Turn/Item lifecycle verifier.
+      return { accepted: true, violations: [] };
+    }
+    const event = runtimeExecutionEventFromCanonicalEvent(canonical);
     const violations = this.#verifier.push(event);
     return {
       accepted: this.#mode !== "fail-closed" || violations.length === 0,
@@ -79,149 +89,254 @@ export class AgentRuntimeEventSequenceGate {
   }
 }
 
-export function runtimeExecutionEventFromAgentEvent(
-  event: AgentEvent,
+/**
+ * Convert a canonical Thread/Turn/Item entity into the package's verifier
+ * input. Lifecycle state is read from the typed entity itself; the raw
+ * agentSession/event envelope is intentionally not consulted.
+ */
+export function runtimeExecutionEventFromCanonicalEvent(
+  event: CanonicalThreadEventNotification,
 ): AgentRuntimeExecutionEvent {
-  const eventRecord = event as unknown as Record<string, unknown>;
-  const payload = isRecord(event.payload) ? event.payload : {};
-  const eventClass = normalizeAgentEventClass(
-    stringValue(event.type) ?? "runtime.event",
-  );
-  const toolCallId =
-    stringValue(eventRecord.toolCallId)
-    ?? stringValue(eventRecord.tool_call_id)
-    ?? stringValue(payload.toolCallId)
-    ?? stringValue(payload.tool_call_id)
-    ?? stringValue(payload.toolId)
-    ?? stringValue(payload.tool_id);
-  const actionId =
-    stringValue(eventRecord.actionId)
-    ?? stringValue(eventRecord.requestId)
-    ?? stringValue(eventRecord.request_id)
-    ?? stringValue(payload.actionId)
-    ?? stringValue(payload.requestId)
-    ?? stringValue(payload.request_id);
+  if (event.method === "thread/updated") {
+    const thread = event.params;
+    return {
+      id: `thread:${thread.threadId}:${thread.updatedAtMs}`,
+      runtimeId: "app-server",
+      threadId: thread.threadId,
+      sequence: thread.updatedAtMs,
+      kind: "state",
+      status: threadStatus(thread.status.type),
+      eventClass: "run.status",
+      title: thread.name ?? "Thread",
+      payload: { canonical: thread },
+      createdAt: dateFromMillis(thread.updatedAtMs),
+    };
+  }
+
+  if (event.method === "turn/updated") {
+    const turn = event.params;
+    const eventClass = turnEventClass(turn.status);
+    return {
+      id: `turn:${turn.turnId}:${turn.updatedAtMs}`,
+      runtimeId: "app-server",
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      sequence: turn.updatedAtMs,
+      kind: "state",
+      status: turnStatus(turn.status),
+      eventClass,
+      title: "Turn",
+      payload: { canonical: turn },
+      createdAt: dateFromMillis(turn.updatedAtMs),
+      completedAt:
+        turn.completedAtMs == null
+          ? undefined
+          : dateFromMillis(turn.completedAtMs),
+    };
+  }
+
+  const item = event.params;
+  const eventClass = itemEventClass(item.kind, item.status);
   return {
-    id:
-      stringValue(event.eventId)
-      ?? stringValue(eventRecord.id)
-      ?? `${stringValue(event.sessionId) ?? "session"}:${eventClass}:${numberValue(event.sequence) ?? 0}`,
-    schemaVersion:
-      stringValue(eventRecord.schemaVersion)
-      ?? stringValue(payload.schemaVersion)
-      ?? "lime-runtime-event/v0.1",
-    runtimeId:
-      stringValue(eventRecord.runtimeId)
-      ?? stringValue(payload.runtimeId)
-      ?? stringValue(event.sessionId)
-      ?? "app-server",
-    threadId: stringValue(event.threadId) ?? stringValue(payload.threadId),
-    turnId: stringValue(event.turnId) ?? stringValue(payload.turnId),
-    taskId: stringValue(eventRecord.taskId) ?? stringValue(payload.taskId),
-    subagentId: stringValue(eventRecord.subagentId) ?? stringValue(payload.subagentId),
-    toolCallId,
-    actionId,
-    sequence: numberValue(event.sequence) ?? numberValue(payload.sequence) ?? 0,
-    kind: eventKindFromClass(eventClass),
-    status: eventStatusFromClass(eventClass),
+    id: `item:${item.itemId}:${item.sequence}:${item.updatedAtMs}`,
+    runtimeId: "app-server",
+    threadId: item.threadId,
+    turnId: item.turnId,
+    toolCallId: item.kind === "tool" ? item.itemId : undefined,
+    actionId: item.kind === "approval" ? item.itemId : undefined,
+    sequence: item.sequence,
+    kind: itemRuntimeKind(item.kind),
+    status: itemStatus(item.status),
     eventClass,
-    title:
-      stringValue(eventRecord.title)
-      ?? stringValue(payload.title)
-      ?? eventClass,
-    payload,
-    createdAt:
-      stringValue(event.timestamp)
-      ?? stringValue(eventRecord.createdAt)
-      ?? stringValue(payload.createdAt)
-      ?? new Date(0).toISOString(),
+    title: itemTitle(item),
+    payload: { canonical: item },
+    createdAt: dateFromMillis(item.createdAtMs),
+    completedAt:
+      item.completedAtMs == null
+        ? undefined
+        : dateFromMillis(item.completedAtMs),
   };
 }
 
-function eventKindFromClass(eventClass: string): AgentRuntimeExecutionEvent["kind"] {
-  const [prefix] = eventClass.split(".");
-  switch (prefix) {
-    case "action":
-      return "action";
-    case "artifact":
-      return "draft";
-    case "context":
-      return "context";
-    case "evidence":
-    case "review":
-      return "evidence";
-    case "model":
-    case "message":
+function dateFromMillis(value: number): string {
+  return new Date(value).toISOString();
+}
+
+function threadStatus(
+  status: "notLoaded" | "idle" | "systemError" | "active",
+): AgentRuntimeExecutionEvent["status"] {
+  switch (status) {
+    case "systemError":
+      return "failed";
+    case "active":
+      return "running";
+    case "notLoaded":
+      return "pending";
+    case "idle":
+    default:
+      return "completed";
+  }
+}
+
+function turnStatus(
+  status: "completed" | "failed" | "inProgress" | "interrupted",
+): AgentRuntimeExecutionEvent["status"] {
+  switch (status) {
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "interrupted":
+      return "canceled";
+    case "inProgress":
+    default:
+      return "running";
+  }
+}
+
+function turnEventClass(
+  status: "completed" | "failed" | "inProgress" | "interrupted",
+): string {
+  switch (status) {
+    case "completed":
+      return "turn.completed";
+    case "failed":
+      return "turn.failed";
+    case "interrupted":
+      return "turn.canceled";
+    case "inProgress":
+    default:
+      return "turn.started";
+  }
+}
+
+function itemStatus(
+  status: CanonicalItemStatus,
+): AgentRuntimeExecutionEvent["status"] {
+  switch (status) {
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "cancelled":
+    case "interrupted":
+      return "canceled";
+    case "inProgress":
+      return "running";
+    case "pending":
+    default:
+      return "pending";
+  }
+}
+
+function itemEventClass(
+  kind: CanonicalItemKind,
+  status: CanonicalItemStatus,
+): string {
+  const family = itemEventFamily(kind);
+  if (family === "tool") {
+    if (status === "pending") return "tool.pending";
+    if (status === "inProgress") return "tool.started";
+    if (status === "completed") return "tool.result";
+    return "tool.failed";
+  }
+  if (family === "model") {
+    if (status === "pending") return "model.pending";
+    if (status === "inProgress") return "model.delta";
+    if (status === "completed") return "model.completed";
+    return "model.failed";
+  }
+  if (family === "action") {
+    if (status === "pending" || status === "inProgress") {
+      return "action.required";
+    }
+    if (status === "completed") return "action.resolved";
+    return "action.canceled";
+  }
+  if (family === "command") {
+    if (status === "pending") return "command.pending";
+    if (status === "inProgress") return "command.started";
+    return "command.exited";
+  }
+  if (status === "failed") return `${family}.failed`;
+  if (status === "cancelled" || status === "interrupted") {
+    return `${family}.canceled`;
+  }
+  if (status === "completed") return `${family}.completed`;
+  if (status === "inProgress") return `${family}.started`;
+  return `${family}.pending`;
+}
+
+function itemEventFamily(kind: CanonicalItemKind): string {
+  switch (kind) {
+    case "agentMessage":
+    case "userMessage":
     case "reasoning":
       return "model";
-    case "permission":
-      return "permission";
-    case "sandbox":
-      return "sandbox";
+    case "approval":
+      return "action";
+    case "contextCompaction":
+      return "context";
+    case "file":
+    case "media":
+      return "artifact";
+    case "subAgent":
+      return "handoff";
+    case "extension":
+      return "runtime";
+    case "command":
+      return "command";
     case "tool":
-      return "tool";
-    case "turn":
-    case "run":
-    case "session":
     default:
-      return "state";
+      return "tool";
   }
 }
 
-function normalizeAgentEventClass(type: string): string {
-  const terminalEventClass = normalizeRuntimeTurnTerminalEventClass(type);
-  if (terminalEventClass) {
-    return terminalEventClass;
+function itemRuntimeKind(
+  kind: CanonicalItemKind,
+): AgentRuntimeExecutionEvent["kind"] {
+  switch (kind) {
+    case "agentMessage":
+    case "userMessage":
+    case "reasoning":
+      return "model";
+    case "approval":
+      return "action";
+    case "contextCompaction":
+      return "context";
+    case "file":
+    case "media":
+      return "draft";
+    case "subAgent":
+      return "handoff";
+    case "extension":
+      return "note";
+    case "command":
+      return "tool";
+    case "tool":
+    default:
+      return "tool";
   }
-  if (type === "message.delta" || type === "message.delta_batch" || type === "message.batch") {
-    return "model.delta";
-  }
-  if (
-    type === "message" ||
-    type === "message.completed" ||
-    type === "item.completed"
-  ) {
-    return "model.completed";
-  }
-  if (type === "thinking.delta") return "reasoning.delta";
-  if (type === "artifact.snapshot") return "artifact.changed";
-  if (type === "runtime.status") return "run.status";
-  return type;
 }
 
-function eventStatusFromClass(eventClass: string): AgentRuntimeExecutionEvent["status"] {
-  const terminalStatus = runtimeStatusForTerminalEventClass(eventClass);
-  if (terminalStatus) return terminalStatus;
-  if (eventClass.endsWith(".failed")) return "failed";
-  if (
-    eventClass.endsWith(".completed")
-    || eventClass.endsWith(".result")
-    || eventClass.endsWith(".resolved")
-    || eventClass === "action.cancelled"
-    || eventClass === "action.canceled"
-    || eventClass === "action.expired"
-  ) {
-    return "completed";
+function itemTitle(item: CanonicalThreadItem): string {
+  const payload = item.payload;
+  switch (payload.type) {
+    case "agentMessage":
+      return payload.text;
+    case "userMessage":
+      return payload.content;
+    case "tool":
+      return payload.name;
+    case "command":
+      return payload.command;
+    case "file":
+      return payload.path;
+    case "media":
+      return payload.mime_type;
+    case "subAgent":
+      return payload.child_thread_id;
+    default:
+      return payload.type;
   }
-  if (eventClass.endsWith(".required")) return "blocked";
-  if (
-    eventClass.endsWith(".started")
-    || eventClass.endsWith(".delta")
-    || eventClass.endsWith(".progress")
-  ) {
-    return "running";
-  }
-  return "pending";
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

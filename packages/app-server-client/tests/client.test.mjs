@@ -85,7 +85,6 @@ const {
   METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
   METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
   METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
-  METHOD_AGENT_SESSION_READ,
   METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
@@ -95,6 +94,10 @@ const {
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
+  METHOD_THREAD_ITEMS_LIST,
+  METHOD_THREAD_LIST,
+  METHOD_THREAD_READ,
+  METHOD_THREAD_TURNS_LIST,
   METHOD_WORKFLOW_CANCEL,
   METHOD_WORKFLOW_READ,
   METHOD_WORKFLOW_RESPOND,
@@ -346,6 +349,7 @@ const {
   agentSessionRuntimeEventNotification,
   agentSessionEventNotification,
   agentSessionTurnStartRequest,
+  canonicalThreadEventNotification,
   connectAppServerSidecar,
   decodeMessage,
   defaultReleaseManifestPath,
@@ -595,7 +599,7 @@ test("builds workspace and skill read requests with current methods", () => {
     args: { includeMarkdown: true },
   });
   const skills = client.listSkills();
-  const skill = client.readSkill({ skillName: "article-writer" });
+  const skill = client.readSkill({ skillId: "project:article-writer" });
   const bindings = client.listWorkspaceSkillBindings({
     workspaceRoot: "/workspace/project",
     caller: "agent-chat",
@@ -753,7 +757,7 @@ test("builds workspace and skill read requests with current methods", () => {
   assert.equal(skills.method, METHOD_SKILL_LIST);
   assert.deepEqual(skills.params, {});
   assert.equal(skill.method, METHOD_SKILL_READ);
-  assert.deepEqual(skill.params, { skillName: "article-writer" });
+  assert.deepEqual(skill.params, { skillId: "project:article-writer" });
   assert.equal(bindings.method, METHOD_WORKSPACE_SKILL_BINDINGS_LIST);
   assert.deepEqual(bindings.params, {
     workspaceRoot: "/workspace/project",
@@ -768,6 +772,46 @@ test("builds workspace and skill read requests with current methods", () => {
   assert.deepEqual(registeredSkills.params, {
     workspaceRoot: "/workspace/project",
   });
+});
+
+test("builds canonical thread read requests with opaque cursors and views", () => {
+  const client = new AppServerClient();
+  const read = client.readThread({
+    threadId: "thread_1",
+    turnsView: "full",
+  });
+  const list = client.listThreads({
+    cursor: "opaque:thread:2",
+    limit: 20,
+    sortDirection: "desc",
+    includeArchived: true,
+    turnsView: "summary",
+  });
+  const turns = client.listThreadTurns({
+    threadId: "thread_1",
+    cursor: "opaque:turn:4",
+    sortDirection: "asc",
+    itemsView: "summary",
+  });
+  const items = client.listThreadItems({
+    threadId: "thread_1",
+    turnId: "turn_1",
+    cursor: "opaque:item:8",
+    sortDirection: "asc",
+  });
+
+  assert.deepEqual(
+    [read.method, list.method, turns.method, items.method],
+    [
+      METHOD_THREAD_READ,
+      METHOD_THREAD_LIST,
+      METHOD_THREAD_TURNS_LIST,
+      METHOD_THREAD_ITEMS_LIST,
+    ],
+  );
+  assert.equal(list.params.includeArchived, true);
+  assert.equal(turns.params.itemsView, "summary");
+  assert.equal(items.params.cursor, "opaque:item:8");
 });
 
 test("builds session archive and unarchive requests with current App Server methods", () => {
@@ -1389,7 +1433,8 @@ test("builds app data surface requests with current methods", () => {
     file_path: "/tmp/interview.wav",
   });
   const transcribedVoiceAudio = client.transcribeVoiceAudio({
-    audio_base64: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=",
+    audio_base64:
+      "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=",
     mime_type: "audio/wav",
     credential_id: "cred-1",
   });
@@ -1942,7 +1987,8 @@ test("builds app data surface requests with current methods", () => {
     METHOD_VOICE_TRANSCRIPTION_TRANSCRIBE_AUDIO,
   );
   assert.deepEqual(transcribedVoiceAudio.params, {
-    audio_base64: "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=",
+    audio_base64:
+      "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=",
     mime_type: "audio/wav",
     credential_id: "cred-1",
   });
@@ -3142,7 +3188,7 @@ test("stdio sidecar stdin EPIPE rejects pending request instead of escaping as u
   );
 });
 
-test("agent runtime client facade delegates to current App Server session methods", async () => {
+test("agent runtime client facade delegates to current App Server methods", async () => {
   const sent = [];
   const inbound = [
     {
@@ -3159,15 +3205,16 @@ test("agent runtime client facade delegates to current App Server session method
     {
       id: 2,
       result: {
-        session: {
+        thread: {
+          archived: false,
+          createdAtMs: 1780531200000,
           sessionId: "sess_external",
+          status: { type: "active" },
           threadId: "thread_external",
-          appId: "content-studio",
-          status: "running",
-          createdAt: "2026-06-04T00:00:00Z",
-          updatedAt: "2026-06-04T00:00:01Z",
+          turns: [],
+          turnsView: "full",
+          updatedAtMs: 1780531201000,
         },
-        turns: [],
       },
     },
     {
@@ -3215,7 +3262,8 @@ test("agent runtime client facade delegates to current App Server session method
     input: { text: "写草稿" },
   });
   const read = await runtime.readThread({
-    sessionId: "sess_external",
+    threadId: "thread_external",
+    turnsView: "full",
   });
   await runtime.respondAction({
     sessionId: "sess_external",
@@ -3237,14 +3285,14 @@ test("agent runtime client facade delegates to current App Server session method
     sent.map((message) => message.method),
     [
       METHOD_AGENT_SESSION_TURN_START,
-      METHOD_AGENT_SESSION_READ,
+      METHOD_THREAD_READ,
       METHOD_AGENT_SESSION_ACTION_RESPOND,
       METHOD_AGENT_SESSION_TURN_CANCEL,
       METHOD_EVIDENCE_EXPORT,
     ],
   );
   assert.equal(start.result.turn.turnId, "turn-1");
-  assert.equal(read.result.session.sessionId, "sess_external");
+  assert.equal(read.result.thread.sessionId, "sess_external");
   assert.equal(evidence.result.exportedAt, "2026-06-04T00:00:03Z");
 });
 
@@ -3285,6 +3333,64 @@ test("agent runtime client facade subscribes to agent session event notification
   assert.equal(next.params.event.payload.text, "delta");
   assert.equal(received.length, 2);
   assert.equal(received[0].event.eventId, "evt-1");
+  assert.equal(received[0].message.method, METHOD_AGENT_SESSION_EVENT);
+});
+
+test("agent runtime client facade subscribes to canonical thread item events", async () => {
+  const notification = {
+    method: METHOD_AGENT_SESSION_EVENT,
+    params: {
+      event: {
+        eventId: "evt-1",
+        sequence: 1,
+        sessionId: "sess_external",
+        threadId: "thread_external",
+        turnId: "turn_external",
+        type: "item.updated",
+        timestamp: "2026-06-04T00:00:00Z",
+        payload: {},
+      },
+      canonicalEvent: {
+        method: "item/updated",
+        params: {
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          turnId: "turn_external",
+          itemId: "msg_1",
+          sequence: 1,
+          ordinal: 0,
+          createdAtMs: 100,
+          updatedAtMs: 120,
+          kind: "agentMessage",
+          status: "inProgress",
+          payload: {
+            type: "agentMessage",
+            text: "delta",
+          },
+        },
+      },
+    },
+  };
+  const runtime = new AppServerAgentRuntimeClient(
+    new AppServerConnection({
+      send() {},
+      async nextMessage() {
+        return notification;
+      },
+    }),
+  );
+  const received = [];
+  const subscription = runtime.subscribeCanonicalEvents((event, message) => {
+    received.push({ event, message });
+  });
+
+  await runtime.dispatchEvent(notification);
+  subscription.unsubscribe();
+  await runtime.dispatchEvent(notification);
+
+  assert.equal(received.length, 1);
+  assert.equal(received[0].event.method, "item/updated");
+  assert.equal(received[0].event.params.itemId, "msg_1");
   assert.equal(received[0].message.method, METHOD_AGENT_SESSION_EVENT);
 });
 
@@ -4402,9 +4508,29 @@ test("routes agent session event notifications for renderer projection", async (
           phase: "final_answer",
         },
       },
+      canonicalEvent: {
+        method: "item/updated",
+        params: {
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          turnId: "turn_external",
+          itemId: "msg_1",
+          sequence: 1,
+          ordinal: 0,
+          createdAtMs: 100,
+          updatedAtMs: 120,
+          kind: "agentMessage",
+          status: "inProgress",
+          payload: {
+            type: "agentMessage",
+            text: "delta",
+          },
+        },
+      },
     },
   };
   const routed = [];
+  const canonicalRouted = [];
   const router = new AppServerAgentEventRouter();
   const unsubscribe = router.subscribe((agentEvent, source) => {
     routed.push({
@@ -4412,6 +4538,14 @@ test("routes agent session event notifications for renderer projection", async (
       method: source.method,
     });
   });
+  const unsubscribeCanonical = router.subscribeCanonical(
+    (canonicalEvent, source) => {
+      canonicalRouted.push({
+        event: canonicalEvent,
+        method: source.method,
+      });
+    },
+  );
 
   assert.equal(isAgentSessionEventNotification(notification), true);
   assert.equal(
@@ -4426,8 +4560,13 @@ test("routes agent session event notifications for renderer projection", async (
     agentSessionRuntimeEventNotification(notification)?.params.itemId,
     "agent-message-final",
   );
+  assert.equal(
+    canonicalThreadEventNotification(notification)?.params.itemId,
+    "msg_1",
+  );
   assert.equal(await router.dispatch(notification), true);
   unsubscribe();
+  unsubscribeCanonical();
   assert.equal(await router.dispatch(notification), true);
   assert.equal(
     await router.dispatch({
@@ -4439,6 +4578,12 @@ test("routes agent session event notifications for renderer projection", async (
   assert.deepEqual(routed, [
     {
       event,
+      method: METHOD_AGENT_SESSION_EVENT,
+    },
+  ]);
+  assert.deepEqual(canonicalRouted, [
+    {
+      event: notification.params.canonicalEvent,
       method: METHOD_AGENT_SESSION_EVENT,
     },
   ]);

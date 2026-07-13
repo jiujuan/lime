@@ -308,7 +308,7 @@ async fn execute_image_generation_task_should_send_reference_images_to_edit_endp
             "model": "gpt-image-1",
             "reference_images": [
                 "https://cdn.example.test/source.png",
-                { "image_url": "data:image/png;base64,cmVmMg==" }
+                { "image_url": "https://cdn.example.test/source-2.png" }
             ]
         }),
         TaskWriteOptions::default(),
@@ -373,7 +373,7 @@ async fn execute_image_generation_task_should_send_reference_images_to_edit_endp
         body.get("images").and_then(Value::as_array).cloned(),
         Some(vec![
             json!({ "image_url": "https://cdn.example.test/source.png" }),
-            json!({ "image_url": "data:image/png;base64,cmVmMg==" })
+            json!({ "image_url": "https://cdn.example.test/source-2.png" })
         ])
     );
     assert_eq!(

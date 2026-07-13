@@ -176,6 +176,11 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionReadResponse>
     >;
+    readThread(
+      params: appServer.AppServerThreadReadParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadReadResponse>
+    >;
     readAgentSessionMedia(
       params: appServer.AppServerAgentSessionMediaReadParams,
       options?: appServer.AppServerRequestOptions,

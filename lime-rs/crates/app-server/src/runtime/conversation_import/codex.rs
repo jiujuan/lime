@@ -572,6 +572,17 @@ fn parse_rollout(
                         value.get("payload"),
                         runtime_events.len(),
                     );
+                    if runtime_events.is_empty()
+                        && value
+                            .get("payload")
+                            .and_then(|payload| payload.get("type"))
+                            .and_then(Value::as_str)
+                            == Some("item_completed")
+                    {
+                        summary.unsupported_count += 1;
+                        summary.fidelity.unsupported += 1;
+                        summary.fidelity.provenance_only += 1;
+                    }
                     timeline.extend(
                         runtime_events
                             .into_iter()
@@ -816,7 +827,7 @@ fn enrich_runtime_event_provenance(
     source_thread_id: &str,
     source_path: Option<&str>,
 ) {
-    let Some(Value::Object(object)) = event.payload.get("sourceProvenance").cloned() else {
+    let Some(Value::Object(object)) = event.source_provenance_value().cloned() else {
         return;
     };
     let Ok(provenance) =
@@ -827,9 +838,7 @@ fn enrich_runtime_event_provenance(
     let provenance =
         events::enrich_source_provenance(provenance, Some(source_thread_id), source_path);
     if let Some(value) = events::source_provenance_value(&provenance) {
-        if let Value::Object(ref mut payload) = event.payload {
-            payload.insert("sourceProvenance".to_string(), value);
-        }
+        event.set_source_provenance(value);
     }
 }
 
@@ -915,6 +924,36 @@ fn record_event_msg_fidelity(
         }
         Some("exec_approval_request") | Some("apply_patch_approval_request") => {
             fidelity.approvals += 1;
+        }
+        Some("item_completed") => {
+            let item_type = payload
+                .get("item")
+                .and_then(|item| item.get("type"))
+                .and_then(Value::as_str);
+            if mapped_runtime_events > 0 {
+                match item_type {
+                    Some("CommandExecution") => {
+                        fidelity.commands += 1;
+                        fidelity.tools += 1;
+                    }
+                    Some("McpToolCall") => {
+                        fidelity.mcp += 1;
+                        fidelity.tools += 1;
+                    }
+                    Some(
+                        "DynamicToolCall"
+                        | "CollabAgentToolCall"
+                        | "ImageView"
+                        | "ImageGeneration"
+                        | "Sleep",
+                    ) => fidelity.tools += 1,
+                    Some("WebSearch") => {
+                        fidelity.web_search += 1;
+                        fidelity.tools += 1;
+                    }
+                    _ => {}
+                }
+            }
         }
         _ => {}
     }

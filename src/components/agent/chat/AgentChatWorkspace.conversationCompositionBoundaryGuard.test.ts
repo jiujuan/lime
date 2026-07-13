@@ -16,10 +16,24 @@ describe("AgentChatWorkspace conversation composition boundary", () => {
       ),
       "utf8",
     );
+    const sceneCompositionSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneComposition.tsx",
+      ),
+      "utf8",
+    );
 
     expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceSceneComposition({",
+    );
+    expect(workspaceSource).not.toContain(
       "useWorkspaceConversationCompositionRuntime({",
     );
+    expect(sceneCompositionSource).toContain(
+      "useWorkspaceConversationCompositionRuntime({",
+    );
+    expect(sceneCompositionSource.split("\n").length).toBeLessThan(180);
     expect(ownerSource.split("\n").length).toBeLessThan(70);
     for (const retiredWorkspaceConversationGlue of [
       "useWorkspaceConversationLandingSurfaceRuntime(",

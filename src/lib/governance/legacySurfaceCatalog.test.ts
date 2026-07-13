@@ -3621,6 +3621,7 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
       "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
       "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+      "lime-rs/crates/app-server/src/runtime/output_refs/tests.rs",
       "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
       "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
       "lime-rs/crates/app-server/src/runtime/session_media_reader.rs",

@@ -8,6 +8,7 @@ use crate::agent_snapshot::{AgentSkillMetadata, AgentSkillScope};
 
 const MAX_REFERENCE_FILES: usize = 3;
 const MAX_REFERENCE_FILE_BYTES: u64 = 16 * 1024;
+pub const DEFAULT_AGENT_SKILL_BODY_TOKEN_BUDGET: u32 = 3_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSkillBodyLocator {
@@ -28,6 +29,29 @@ pub struct AgentSkillBody {
 pub struct AgentSkillReferenceBody {
     pub relative_path: String,
     pub content: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSkillBodyBudgetDecisionKind {
+    Allow,
+    Deny,
+    Omitted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSkillBodyBudgetDecision {
+    pub decision: AgentSkillBodyBudgetDecisionKind,
+    pub reason: String,
+    pub estimated_tokens: Option<u32>,
+    pub max_visible_tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSkillBodyEvaluation {
+    pub body: Option<AgentSkillBody>,
+    pub budget: AgentSkillBodyBudgetDecision,
+    pub error: Option<String>,
 }
 
 pub fn agent_skill_body_locator_from_metadata(
@@ -55,6 +79,66 @@ pub fn read_agent_skill_body(locator: &AgentSkillBodyLocator) -> Result<AgentSki
         references: read_referenced_files(locator, &markdown_content)?,
         markdown_content,
     })
+}
+
+pub fn evaluate_agent_skill_body(
+    locator: &AgentSkillBodyLocator,
+    max_visible_tokens: u32,
+) -> AgentSkillBodyEvaluation {
+    let body = match read_agent_skill_body(locator) {
+        Ok(body) => body,
+        Err(error) => {
+            return AgentSkillBodyEvaluation {
+                body: None,
+                budget: AgentSkillBodyBudgetDecision {
+                    decision: AgentSkillBodyBudgetDecisionKind::Deny,
+                    reason: "skill_body_read_failed".to_string(),
+                    estimated_tokens: None,
+                    max_visible_tokens,
+                },
+                error: Some(error),
+            };
+        }
+    };
+    let estimated_tokens = estimate_agent_skill_body_tokens(&body);
+    let (decision, reason) = if estimated_tokens <= max_visible_tokens {
+        (
+            AgentSkillBodyBudgetDecisionKind::Allow,
+            "skill_body_within_token_budget",
+        )
+    } else {
+        (
+            AgentSkillBodyBudgetDecisionKind::Omitted,
+            "skill_body_token_budget_exceeded",
+        )
+    };
+
+    AgentSkillBodyEvaluation {
+        body: Some(body),
+        budget: AgentSkillBodyBudgetDecision {
+            decision,
+            reason: reason.to_string(),
+            estimated_tokens: Some(estimated_tokens),
+            max_visible_tokens,
+        },
+        error: None,
+    }
+}
+
+pub fn estimate_agent_skill_body_tokens(body: &AgentSkillBody) -> u32 {
+    let chars =
+        body.references
+            .iter()
+            .fold(body.markdown_content.chars().count(), |total, reference| {
+                total
+                    .saturating_add(reference.relative_path.chars().count())
+                    .saturating_add(reference.content.chars().count())
+            });
+    usize_to_u32_saturating(chars.saturating_add(3) / 4)
+}
+
+fn usize_to_u32_saturating(value: usize) -> u32 {
+    u32::try_from(value).unwrap_or(u32::MAX)
 }
 
 fn read_referenced_files(
@@ -225,5 +309,63 @@ mod tests {
         .expect_err("should reject non SKILL.md");
 
         assert!(error.contains("SKILL.md"));
+    }
+
+    #[test]
+    fn body_budget_counts_skill_markdown_and_loaded_references() {
+        let root = TempDir::new().expect("root");
+        let skill_dir = root.path().join("writer");
+        std::fs::create_dir_all(skill_dir.join("references")).expect("references dir");
+        std::fs::write(
+            skill_dir.join("references/style.md"),
+            "reference body with enough text",
+        )
+        .expect("reference");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "Read references/style.md before writing the response.",
+        )
+        .expect("skill");
+        let locator = AgentSkillBodyLocator {
+            name: "writer".to_string(),
+            scope: AgentSkillScope::Project,
+            directory: skill_dir.clone(),
+            skill_file_path: skill_dir.join("SKILL.md"),
+        };
+
+        let allowed = evaluate_agent_skill_body(&locator, 100);
+        let omitted = evaluate_agent_skill_body(&locator, 1);
+
+        assert_eq!(
+            allowed.budget.decision,
+            AgentSkillBodyBudgetDecisionKind::Allow
+        );
+        assert_eq!(
+            omitted.budget.decision,
+            AgentSkillBodyBudgetDecisionKind::Omitted
+        );
+        assert!(allowed.budget.estimated_tokens.unwrap_or_default() > 1);
+        assert_eq!(omitted.budget.reason, "skill_body_token_budget_exceeded");
+    }
+
+    #[test]
+    fn body_budget_denies_unreadable_skill_with_stable_reason() {
+        let root = TempDir::new().expect("root");
+        let locator = AgentSkillBodyLocator {
+            name: "missing".to_string(),
+            scope: AgentSkillScope::Project,
+            directory: root.path().to_path_buf(),
+            skill_file_path: root.path().join("SKILL.md"),
+        };
+
+        let evaluation = evaluate_agent_skill_body(&locator, 100);
+
+        assert_eq!(
+            evaluation.budget.decision,
+            AgentSkillBodyBudgetDecisionKind::Deny
+        );
+        assert_eq!(evaluation.budget.reason, "skill_body_read_failed");
+        assert!(evaluation.body.is_none());
+        assert!(evaluation.error.is_some());
     }
 }

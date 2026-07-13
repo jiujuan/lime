@@ -13,6 +13,7 @@ const { mockCreateAgentRuntimeClient, mockRuntimeClient } = vi.hoisted(() => {
     generateAgentRuntimeSessionTitle: vi.fn(),
     getAgentRuntimeSession: vi.fn(),
     getAgentRuntimeThreadRead: vi.fn(),
+    readAgentRuntimeThread: vi.fn(),
     getRuntimeProviderSelection: vi.fn(),
     interruptAgentRuntimeTurn: vi.fn(),
     listAgentRuntimeSessions: vi.fn(),
@@ -124,6 +125,88 @@ describe("defaultAgentRuntimeAdapter", () => {
     expect(client.listAgentRuntimeSessions).toHaveBeenCalledWith({
       workspaceId: "workspace-9",
     });
+  });
+
+  it("getThreadQueueControl 应透传 canonical threadId 并返回窄投影", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      readAgentRuntimeThread: vi.fn().mockResolvedValue({
+        thread: {
+          archived: false,
+          createdAtMs: 100,
+          sessionId: "session-9",
+          status: { type: "active" },
+          threadId: "thread-9",
+          turnsView: "full",
+          turns: [
+            {
+              createdAtMs: 100,
+              sessionId: "session-9",
+              status: "inProgress",
+              threadId: "thread-9",
+              turnId: "turn-active",
+              updatedAtMs: 200,
+              queue: { state: "running" },
+            },
+          ],
+          updatedAtMs: 200,
+        },
+      }),
+    };
+    const adapter = createAgentRuntimeAdapter({ client });
+
+    await expect(adapter.getThreadQueueControl("thread-9")).resolves.toEqual({
+      threadId: "thread-9",
+      updatedAtMs: 200,
+      activeTurnId: "turn-active",
+      queuedTurnIds: [],
+    });
+    expect(client.readAgentRuntimeThread).toHaveBeenCalledWith("thread-9");
+  });
+
+  it("getThreadQueueControl 应拒绝非 full canonical read", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      readAgentRuntimeThread: vi.fn().mockResolvedValue({
+        thread: {
+          archived: false,
+          createdAtMs: 100,
+          sessionId: "session-9",
+          status: { type: "active" },
+          threadId: "thread-9",
+          turnsView: "summary",
+          updatedAtMs: 200,
+        },
+      }),
+    };
+    const adapter = createAgentRuntimeAdapter({ client });
+
+    await expect(adapter.getThreadQueueControl("thread-9")).rejects.toThrow(
+      "canonical queue-control projection rejected",
+    );
+  });
+
+  it("getThreadQueueControl 应拒绝返回其他 thread identity", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      readAgentRuntimeThread: vi.fn().mockResolvedValue({
+        thread: {
+          archived: false,
+          createdAtMs: 100,
+          sessionId: "session-9",
+          status: { type: "idle" },
+          threadId: "thread-other",
+          turns: [],
+          turnsView: "full",
+          updatedAtMs: 200,
+        },
+      }),
+    };
+    const adapter = createAgentRuntimeAdapter({ client });
+
+    await expect(adapter.getThreadQueueControl("thread-9")).rejects.toThrow(
+      "canonical queue-control thread identity mismatch",
+    );
   });
 
   it("getSession 应合并同一会话同一请求形状的并发读取", async () => {

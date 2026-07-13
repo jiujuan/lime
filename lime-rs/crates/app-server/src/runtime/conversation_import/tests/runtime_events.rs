@@ -75,10 +75,35 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
     .expect("commit");
 
     assert_eq!(response.imported_turns, 2);
+    let session_id = response.session.session_id.clone();
+    let stored_event_types = {
+        let state = core
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        state
+            .sessions
+            .get(&session_id)
+            .expect("imported stored session")
+            .events
+            .iter()
+            .map(|event| event.event_type.clone())
+            .collect::<Vec<_>>()
+    };
+    assert!(stored_event_types
+        .iter()
+        .any(|event_type| event_type == "item.started"));
+    assert!(stored_event_types
+        .iter()
+        .any(|event_type| event_type == "item.completed"));
+    assert!(!stored_event_types.iter().any(|event_type| matches!(
+        event_type.as_str(),
+        "tool.started" | "tool.result" | "tool.failed"
+    )));
 
     let read = core
         .read_session(AgentSessionReadParams {
-            session_id: response.session.session_id,
+            session_id,
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
@@ -152,7 +177,7 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             && item["turn_id"] == first_turn_id
             && item["id"] == "call_read_file"
             && item["tool_name"] == "read_file"
-            && item["arguments"]["path"] == "/workspace/app/docs/imported-preview.md"
+            && tool_argument_value(item, "path") == Some("/workspace/app/docs/imported-preview.md")
             && item["output"] == "imported preview"
     }));
     assert!(items.iter().any(|item| {
@@ -160,7 +185,8 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             && item["turn_id"] == first_turn_id
             && item["id"] == "call_read_html"
             && item["tool_name"] == "read_file"
-            && item["arguments"]["path"] == "/workspace/app/docs/imported-preview.html"
+            && tool_argument_value(item, "path")
+                == Some("/workspace/app/docs/imported-preview.html")
             && item["output"] == "imported html preview"
     }));
     assert!(items.iter().any(|item| {
@@ -168,7 +194,8 @@ fn commit_preserves_codex_tool_command_and_patch_timeline() {
             && item["turn_id"] == first_turn_id
             && item["id"] == "call_read_docx"
             && item["tool_name"] == "read_file"
-            && item["arguments"]["path"] == "/workspace/app/docs/imported-preview.docx"
+            && tool_argument_value(item, "path")
+                == Some("/workspace/app/docs/imported-preview.docx")
             && item["output"] == "imported docx preview"
     }));
     assert!(items.iter().any(|item| {
@@ -486,7 +513,6 @@ fn commit_preserves_imported_assistant_message_order_between_runtime_events() {
         .expect("read imported session");
     let detail = read.detail.expect("detail");
     let items = detail["items"].as_array().expect("timeline items");
-
     let ordered_types_and_text = items
         .iter()
         .map(|item| {
@@ -829,13 +855,12 @@ fn commit_projects_codex_runtime_specialized_items_into_existing_timeline_types(
         .expect("read imported session");
     let detail = read.detail.expect("detail");
     let items = detail["items"].as_array().expect("timeline items");
-
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
             && item["id"] == "call_mcp"
             && item["tool_name"] == "mcp__filesystem__read_file"
             && item["status"] == "completed"
-            && item["arguments"]["path"] == "src/lib.rs"
+            && tool_argument_value(item, "path") == Some("src/lib.rs")
             && item["metadata"]["source_client"] == "codex"
     }));
     assert!(items.iter().any(|item| {
@@ -848,7 +873,7 @@ fn commit_projects_codex_runtime_specialized_items_into_existing_timeline_types(
         item["type"] == "tool_call"
             && item["id"] == "call_image_view"
             && item["tool_name"] == "view_image"
-            && item["arguments"]["path"] == "/workspace/app/assets/input.png"
+            && tool_argument_value(item, "path") == Some("/workspace/app/assets/input.png")
     }));
     assert!(items.iter().any(|item| {
         item["type"] == "tool_call"
@@ -1335,6 +1360,15 @@ fn event_exited_review_mode(review: &str) -> String {
         }
     })
     .to_string()
+}
+
+fn tool_argument_value<'a>(item: &'a serde_json::Value, name: &str) -> Option<&'a str> {
+    item.get("arguments")?
+        .as_array()?
+        .iter()
+        .find(|argument| argument.get("name").and_then(serde_json::Value::as_str) == Some(name))?
+        .get("value")?
+        .as_str()
 }
 
 fn event_subagent_activity(event_id: &str) -> String {

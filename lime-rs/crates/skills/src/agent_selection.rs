@@ -5,14 +5,35 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::agent_body::{agent_skill_body_locator_from_metadata, AgentSkillBodyLocator};
-use crate::agent_snapshot::{AgentSkillMetadata, AgentSkillScope, AgentSkillSnapshot};
+use crate::agent_body::{
+    agent_skill_body_locator_from_metadata, evaluate_agent_skill_body, AgentSkillBody,
+    AgentSkillBodyBudgetDecision, AgentSkillBodyBudgetDecisionKind, AgentSkillBodyLocator,
+};
+use crate::agent_snapshot::{
+    agent_skill_stable_id, AgentSkillAuthority, AgentSkillMetadata, AgentSkillScope,
+    AgentSkillSnapshot, AgentSkillSource,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSkillSelection {
     pub locator: AgentSkillBodyLocator,
     pub trigger: AgentSkillSelectionTrigger,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSkillSelectionEvaluation {
+    pub selection: AgentSkillSelection,
+    pub skill_id: String,
+    pub decision: AgentSkillBodyBudgetDecisionKind,
+    pub reason: String,
+    pub source: Option<AgentSkillSource>,
+    pub authority: Option<AgentSkillAuthority>,
+    pub required_capabilities: Vec<String>,
+    pub missing_capabilities: Vec<String>,
+    pub body_budget: AgentSkillBodyBudgetDecision,
+    pub body: Option<AgentSkillBody>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,15 +49,63 @@ pub enum AgentSkillSelectionTrigger {
     ImplicitHighConfidence,
 }
 
+pub fn evaluate_agent_skill_selection_bodies(
+    selections: &[AgentSkillSelection],
+    snapshot: &AgentSkillSnapshot,
+    max_visible_tokens: u32,
+) -> Vec<AgentSkillSelectionEvaluation> {
+    let mut remaining_tokens = max_visible_tokens;
+    selections
+        .iter()
+        .cloned()
+        .map(|selection| {
+            let skill_id = agent_skill_stable_id(selection.locator.scope, &selection.locator.name);
+            let metadata = snapshot
+                .skills
+                .iter()
+                .find(|skill| skill.skill_id == skill_id);
+            let body_evaluation = evaluate_agent_skill_body(&selection.locator, remaining_tokens);
+            if body_evaluation.budget.decision == AgentSkillBodyBudgetDecisionKind::Allow {
+                remaining_tokens = remaining_tokens
+                    .saturating_sub(body_evaluation.budget.estimated_tokens.unwrap_or_default());
+            }
+            let reason = match body_evaluation.budget.decision {
+                AgentSkillBodyBudgetDecisionKind::Allow => "skill_selection_allowed",
+                AgentSkillBodyBudgetDecisionKind::Deny => body_evaluation.budget.reason.as_str(),
+                AgentSkillBodyBudgetDecisionKind::Omitted => {
+                    "skill_selection_body_omitted_by_token_budget"
+                }
+            }
+            .to_string();
+
+            AgentSkillSelectionEvaluation {
+                selection,
+                skill_id,
+                decision: body_evaluation.budget.decision,
+                reason,
+                source: metadata.map(|skill| skill.source),
+                authority: metadata.map(|skill| skill.authority),
+                required_capabilities: metadata
+                    .map(|skill| skill.capabilities.clone())
+                    .unwrap_or_default(),
+                missing_capabilities: Vec::new(),
+                body_budget: body_evaluation.budget,
+                body: body_evaluation.body,
+                error: body_evaluation.error,
+            }
+        })
+        .collect()
+}
+
 pub fn select_explicit_agent_skills(
     user_input: &str,
     snapshot: &AgentSkillSnapshot,
 ) -> Vec<AgentSkillSelection> {
     let mut selections = Vec::new();
-    let mut seen = HashSet::<PathBuf>::new();
+    let mut seen = HashSet::<String>::new();
     for candidate in explicit_candidates(user_input) {
         for selection in select_candidate(candidate, snapshot) {
-            let key = normalize_path(&selection.locator.skill_file_path);
+            let key = agent_skill_stable_id(selection.locator.scope, &selection.locator.name);
             if seen.insert(key) {
                 selections.push(selection);
             }
@@ -51,7 +120,7 @@ pub fn select_agent_skills_by_name_candidates(
     trigger: AgentSkillSelectionTrigger,
 ) -> Vec<AgentSkillSelection> {
     let mut selections = Vec::new();
-    let mut seen = HashSet::<PathBuf>::new();
+    let mut seen = HashSet::<String>::new();
     for candidate in candidates {
         let candidate = candidate.as_ref().trim();
         if candidate.is_empty() {
@@ -65,7 +134,7 @@ pub fn select_agent_skills_by_name_candidates(
             trigger: trigger.clone(),
             reason: format!("结构化 metadata 绑定 skill `{candidate}`"),
         };
-        let key = normalize_path(&selection.locator.skill_file_path);
+        let key = agent_skill_stable_id(selection.locator.scope, &selection.locator.name);
         if seen.insert(key) {
             selections.push(selection);
         }
@@ -85,6 +154,7 @@ pub fn select_implicit_agent_skills(
     let mut scored = snapshot
         .skills
         .iter()
+        .filter(|skill| skill.enabled && skill.policy.allow_implicit_invocation)
         .filter_map(|skill| implicit_skill_score(user_input, skill).map(|score| (skill, score)))
         .collect::<Vec<_>>();
     scored.sort_by(|(_, left), (_, right)| {
@@ -170,8 +240,8 @@ fn implicit_skill_score(
         });
     }
 
-    let mut skill_text = format!("{} {}", skill.description, skill.display_name);
-    if let Some(when_to_use) = skill.when_to_use.as_ref() {
+    let mut skill_text = format!("{} {}", skill.description, skill.interface.display_name);
+    if let Some(when_to_use) = skill.policy.when_to_use.as_ref() {
         skill_text.push(' ');
         skill_text.push_str(when_to_use);
     }
@@ -292,9 +362,10 @@ fn find_unique_skill_by_name<'a>(
 ) -> Option<&'a AgentSkillMetadata> {
     let normalized = normalize_skill_name(name);
     let mut matches = snapshot.skills.iter().filter(|skill| {
-        skill_name_aliases(skill)
-            .into_iter()
-            .any(|alias| normalize_skill_name(&alias) == normalized)
+        skill.enabled
+            && skill_name_aliases(skill)
+                .into_iter()
+                .any(|alias| normalize_skill_name(&alias) == normalized)
     });
     let first = matches.next()?;
     if matches.next().is_some() {
@@ -306,7 +377,7 @@ fn find_unique_skill_by_name<'a>(
 fn skill_name_aliases(skill: &AgentSkillMetadata) -> Vec<String> {
     let mut aliases = Vec::new();
     push_stable_skill_alias(&mut aliases, &skill.name);
-    push_display_skill_alias(&mut aliases, &skill.display_name);
+    push_display_skill_alias(&mut aliases, &skill.interface.display_name);
     if let Some(directory_name) = skill.directory.file_name().and_then(|name| name.to_str()) {
         push_stable_skill_alias(&mut aliases, directory_name);
     }
@@ -341,7 +412,7 @@ fn find_skill_by_path<'a>(
     snapshot
         .skills
         .iter()
-        .find(|skill| normalize_path(&skill.skill_file_path) == normalized)
+        .find(|skill| skill.enabled && normalize_path(&skill.skill_file_path) == normalized)
 }
 
 fn explicit_candidates(user_input: &str) -> Vec<ExplicitSkillCandidate> {
@@ -669,6 +740,32 @@ mod tests {
     }
 
     #[test]
+    fn explicit_selection_deduplicates_same_stable_skill_across_project_roots() {
+        let first = TempDir::new().expect("first");
+        let second = TempDir::new().expect("second");
+        let first_skill = write_skill(first.path(), "research", "Research");
+        let second_skill = write_skill(second.path(), "research", "Research");
+        let snapshot = build_agent_skill_snapshot_from_roots([
+            AgentSkillRoot {
+                path: first.path().to_path_buf(),
+                scope: AgentSkillScope::Project,
+            },
+            AgentSkillRoot {
+                path: second.path().to_path_buf(),
+                scope: AgentSkillScope::Project,
+            },
+        ]);
+
+        let selections = select_explicit_agent_skills(
+            &format!("{} {}", first_skill.display(), second_skill.display()),
+            &snapshot,
+        );
+
+        assert_eq!(selections.len(), 1);
+        assert_eq!(selections[0].locator.name, "research");
+    }
+
+    #[test]
     fn selects_unique_skill_from_structured_catalog_candidates() {
         let root = TempDir::new().expect("root");
         write_skill(root.path(), "writer", "Writer");
@@ -785,6 +882,59 @@ mod tests {
 
         assert_eq!(selections.len(), 1);
         assert_eq!(selections[0].locator.name, "fact-check-lab");
+    }
+
+    #[test]
+    fn selection_skips_disabled_skill_metadata() {
+        let root = TempDir::new().expect("root");
+        write_skill(root.path(), "writer", "Writer");
+        let mut snapshot = snapshot_from_root(root.path());
+        snapshot.skills[0].enabled = false;
+        snapshot.skills[0].policy.allow_implicit_invocation = false;
+
+        assert!(select_explicit_agent_skills("$writer", &snapshot).is_empty());
+        assert!(select_implicit_agent_skills("writer rewrite", &snapshot).is_empty());
+    }
+
+    #[test]
+    fn selection_body_budget_uses_real_bodies_and_omits_after_budget_is_consumed() {
+        let root = TempDir::new().expect("root");
+        write_skill(root.path(), "writer", "Writer");
+        write_skill(root.path(), "summary", "Summary");
+        let snapshot = snapshot_from_root(root.path());
+        let selections = select_agent_skills_by_name_candidates(
+            ["writer", "summary"],
+            &snapshot,
+            AgentSkillSelectionTrigger::CatalogBinding,
+        );
+        let first_budget = evaluate_agent_skill_body(&selections[0].locator, u32::MAX)
+            .budget
+            .estimated_tokens
+            .expect("first body tokens");
+
+        let evaluations =
+            evaluate_agent_skill_selection_bodies(&selections, &snapshot, first_budget);
+
+        assert_eq!(evaluations.len(), 2);
+        assert_eq!(
+            evaluations[0].decision,
+            AgentSkillBodyBudgetDecisionKind::Allow
+        );
+        assert_eq!(evaluations[0].reason, "skill_selection_allowed");
+        assert_eq!(evaluations[0].skill_id, "project:writer");
+        assert_eq!(evaluations[0].source, Some(AgentSkillSource::Project));
+        assert_eq!(
+            evaluations[0].authority,
+            Some(AgentSkillAuthority::Workspace)
+        );
+        assert_eq!(
+            evaluations[1].decision,
+            AgentSkillBodyBudgetDecisionKind::Omitted
+        );
+        assert_eq!(
+            evaluations[1].reason,
+            "skill_selection_body_omitted_by_token_budget"
+        );
     }
 
     fn snapshot_from_root(root: &Path) -> AgentSkillSnapshot {

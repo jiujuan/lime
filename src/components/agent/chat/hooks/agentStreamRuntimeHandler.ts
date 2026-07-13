@@ -217,15 +217,19 @@ export function handleTurnStreamEvent({
     requestState.preservedAssistantContentInitialized = true;
   }
 
-  const projectionEvents = buildAgentUiProjectionEvents(data, {
-    sequence: (requestState.agentUiEventSequence ?? 0) + 1,
-    timestamp: new Date().toISOString(),
-    sessionId: activeSessionId,
-    runId: eventName,
-    messageId: assistantMsgId,
-  }, {
-    soulCopy,
-  });
+  const projectionEvents = buildAgentUiProjectionEvents(
+    data,
+    {
+      sequence: (requestState.agentUiEventSequence ?? 0) + 1,
+      timestamp: new Date().toISOString(),
+      sessionId: activeSessionId,
+      runId: eventName,
+      messageId: assistantMsgId,
+    },
+    {
+      soulCopy,
+    },
+  );
   if (projectionEvents.length > 0) {
     requestState.agentUiEventSequence =
       (requestState.agentUiEventSequence ?? 0) + projectionEvents.length;
@@ -276,6 +280,7 @@ export function handleTurnStreamEvent({
     getThreadItems,
     setCurrentTurnId,
     setMessages,
+    setPendingActions,
     setThreadItems,
     setThreadTurns,
   };

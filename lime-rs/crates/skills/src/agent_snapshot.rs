@@ -9,23 +9,107 @@ use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 
-use crate::skill_loader::get_skill_roots;
 use crate::skill_summary::{load_skill_summaries_from_directory, LoadedSkillSummary};
+use lime_core::app_paths;
 
 const PROJECT_SKILLS_RELATIVE_DIR: &str = ".agents/skills";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSkillMetadata {
+    pub skill_id: String,
     pub name: String,
-    pub display_name: String,
     pub description: String,
     pub scope: AgentSkillScope,
-    pub source: String,
+    pub source: AgentSkillSource,
+    pub authority: AgentSkillAuthority,
+    pub enabled: bool,
+    pub interface: AgentSkillInterface,
+    pub dependencies: AgentSkillDependencies,
+    pub policy: AgentSkillPolicy,
+    pub capabilities: Vec<String>,
     pub directory: PathBuf,
     pub skill_file_path: PathBuf,
-    pub allowed_tools: Vec<String>,
+}
+
+impl AgentSkillMetadata {
+    /// 返回不依赖本地目录的稳定 skill identity。
+    ///
+    /// 本地路径只是正文读取 locator，不能作为跨 workspace/session 的 skill
+    /// identity。scope 由 snapshot root 提供，name 由 skill 目录名提供。
+    pub fn stable_id(&self) -> &str {
+        &self.skill_id
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSkillSource {
+    Project,
+    User,
+    App,
+    Other,
+}
+
+impl AgentSkillSource {
+    pub fn as_label(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::User => "user",
+            Self::App => "app",
+            Self::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSkillAuthority {
+    Workspace,
+    User,
+    Application,
+    External,
+}
+
+impl AgentSkillAuthority {
+    pub fn as_label(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace",
+            Self::User => "user",
+            Self::Application => "application",
+            Self::External => "external",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSkillInterface {
+    pub display_name: String,
+    pub execution_mode: String,
+    pub provider: Option<String>,
+    pub model: Option<String>,
     pub argument_hint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AgentSkillDependencies {
+    pub tools: Vec<AgentSkillToolDependency>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSkillToolDependency {
+    pub dependency_type: String,
+    pub value: String,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSkillPolicy {
+    pub allow_implicit_invocation: bool,
     pub when_to_use: Option<String>,
+}
+
+pub(crate) fn agent_skill_stable_id(scope: AgentSkillScope, name: &str) -> String {
+    format!("{}:{}", scope.as_label(), name.trim().to_ascii_lowercase())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -226,19 +310,29 @@ pub fn agent_skill_roots_for_workspace(
 }
 
 pub fn default_agent_skill_roots() -> Vec<AgentSkillRoot> {
-    get_skill_roots()
-        .into_iter()
-        .enumerate()
-        .map(|(index, path)| AgentSkillRoot {
-            path,
-            scope: match index {
-                0 => AgentSkillScope::Project,
-                1 => AgentSkillScope::User,
-                2 => AgentSkillScope::App,
-                _ => AgentSkillScope::Other,
-            },
-        })
-        .collect()
+    scoped_default_agent_skill_roots(
+        app_paths::resolve_lime_project_skill_roots(),
+        app_paths::resolve_lime_user_skill_roots(),
+        app_paths::resolve_skills_dir().ok(),
+    )
+}
+
+fn scoped_default_agent_skill_roots(
+    project_roots: impl IntoIterator<Item = PathBuf>,
+    user_roots: impl IntoIterator<Item = PathBuf>,
+    app_root: Option<PathBuf>,
+) -> Vec<AgentSkillRoot> {
+    let mut roots = Vec::new();
+    for path in project_roots {
+        push_unique_root(&mut roots, path, AgentSkillScope::Project);
+    }
+    for path in user_roots {
+        push_unique_root(&mut roots, path, AgentSkillScope::User);
+    }
+    if let Some(path) = app_root {
+        push_unique_root(&mut roots, path, AgentSkillScope::App);
+    }
+    roots
 }
 
 impl AgentSkillScope {
@@ -250,6 +344,24 @@ impl AgentSkillScope {
             AgentSkillScope::Other => "other",
         }
     }
+
+    pub fn source(self) -> AgentSkillSource {
+        match self {
+            Self::Project => AgentSkillSource::Project,
+            Self::User => AgentSkillSource::User,
+            Self::App => AgentSkillSource::App,
+            Self::Other => AgentSkillSource::Other,
+        }
+    }
+
+    pub fn authority(self) -> AgentSkillAuthority {
+        match self {
+            Self::Project => AgentSkillAuthority::Workspace,
+            Self::User => AgentSkillAuthority::User,
+            Self::App => AgentSkillAuthority::Application,
+            Self::Other => AgentSkillAuthority::External,
+        }
+    }
 }
 
 fn metadata_from_skill_summary(
@@ -257,17 +369,40 @@ fn metadata_from_skill_summary(
     scope: AgentSkillScope,
 ) -> AgentSkillMetadata {
     let directory = normalize_path(&skill.local_directory_path);
+    let capabilities = skill.allowed_tools.unwrap_or_default();
+    let dependencies = AgentSkillDependencies {
+        tools: capabilities
+            .iter()
+            .map(|value| AgentSkillToolDependency {
+                dependency_type: "runtime_tool".to_string(),
+                value: value.clone(),
+                required: true,
+            })
+            .collect(),
+    };
     AgentSkillMetadata {
+        skill_id: agent_skill_stable_id(scope, &skill.skill_name),
         name: skill.skill_name,
-        display_name: skill.display_name,
         description: normalize_inline_text(&skill.description),
         scope,
-        source: scope.as_label().to_string(),
+        source: scope.source(),
+        authority: scope.authority(),
+        enabled: !skill.disable_model_invocation,
+        interface: AgentSkillInterface {
+            display_name: skill.display_name,
+            execution_mode: skill.execution_mode,
+            provider: skill.provider,
+            model: skill.model,
+            argument_hint: skill.argument_hint.and_then(normalize_optional_text),
+        },
+        dependencies,
+        capabilities,
         skill_file_path: directory.join("SKILL.md"),
         directory,
-        allowed_tools: skill.allowed_tools.unwrap_or_default(),
-        argument_hint: skill.argument_hint.and_then(normalize_optional_text),
-        when_to_use: skill.when_to_use.and_then(normalize_optional_text),
+        policy: AgentSkillPolicy {
+            allow_implicit_invocation: !skill.disable_model_invocation,
+            when_to_use: skill.when_to_use.and_then(normalize_optional_text),
+        },
     }
 }
 
@@ -336,15 +471,19 @@ mod tests {
         assert_eq!(snapshot.roots.len(), 2);
         assert_eq!(snapshot.skills.len(), 2);
         assert_eq!(snapshot.skills[0].name, "research");
-        assert_eq!(snapshot.skills[0].display_name, "Research");
+        assert_eq!(snapshot.skills[0].interface.display_name, "Research");
         assert_eq!(snapshot.skills[0].scope, AgentSkillScope::Project);
         assert_eq!(
-            snapshot.skills[0].when_to_use.as_deref(),
+            snapshot.skills[0].policy.when_to_use.as_deref(),
             Some("Use for source-backed research.")
         );
         assert!(snapshot.skills[0]
             .skill_file_path
             .ends_with("research/SKILL.md"));
+        assert_eq!(snapshot.skills[0].skill_id, "project:research");
+        assert_eq!(snapshot.skills[0].source, AgentSkillSource::Project);
+        assert_eq!(snapshot.skills[0].authority, AgentSkillAuthority::Workspace);
+        assert!(snapshot.skills[0].enabled);
     }
 
     #[test]
@@ -369,6 +508,42 @@ mod tests {
     }
 
     #[test]
+    fn stable_skill_id_uses_scope_and_name_without_local_path() {
+        let first_root = TempDir::new().expect("first root");
+        let second_root = TempDir::new().expect("second root");
+        write_skill(
+            first_root.path(),
+            "research",
+            "Research",
+            "Search sources.",
+            None,
+        );
+        write_skill(
+            second_root.path(),
+            "research",
+            "Research",
+            "Search sources.",
+            None,
+        );
+
+        let first = build_agent_skill_snapshot_from_roots([AgentSkillRoot {
+            path: first_root.path().to_path_buf(),
+            scope: AgentSkillScope::Project,
+        }]);
+        let second = build_agent_skill_snapshot_from_roots([AgentSkillRoot {
+            path: second_root.path().to_path_buf(),
+            scope: AgentSkillScope::Project,
+        }]);
+
+        assert_ne!(first.skills[0].directory, second.skills[0].directory);
+        assert_eq!(first.skills[0].stable_id(), "project:research");
+        assert_eq!(first.skills[0].stable_id(), second.skills[0].stable_id());
+        assert!(!first.skills[0]
+            .stable_id()
+            .contains(&first_root.path().display().to_string()));
+    }
+
+    #[test]
     fn workspace_roots_prefer_project_before_defaults() {
         let workspace = TempDir::new().expect("workspace");
         let working = workspace.path().join("nested");
@@ -381,6 +556,35 @@ mod tests {
         assert!(roots
             .iter()
             .any(|root| root.path == working.join(".agents/skills")));
+    }
+
+    #[test]
+    fn default_roots_preserve_scope_across_all_provider_roots() {
+        let project_roots = (0..9)
+            .map(|index| PathBuf::from(format!("/workspace/provider-{index}/skills")))
+            .collect::<Vec<_>>();
+        let user_roots = (0..9)
+            .map(|index| PathBuf::from(format!("/home/provider-{index}/skills")))
+            .collect::<Vec<_>>();
+        let app_root = PathBuf::from("/app/skills");
+
+        let roots = scoped_default_agent_skill_roots(
+            project_roots.clone(),
+            user_roots.clone(),
+            Some(app_root.clone()),
+        );
+
+        assert_eq!(roots.len(), 19);
+        assert!(roots[..9]
+            .iter()
+            .zip(project_roots)
+            .all(|(root, path)| root.path == path && root.scope == AgentSkillScope::Project));
+        assert!(roots[9..18]
+            .iter()
+            .zip(user_roots)
+            .all(|(root, path)| root.path == path && root.scope == AgentSkillScope::User));
+        assert_eq!(roots[18].path, app_root);
+        assert_eq!(roots[18].scope, AgentSkillScope::App);
     }
 
     #[test]

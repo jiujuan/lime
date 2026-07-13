@@ -317,6 +317,10 @@ export const METHOD_SOUL_STYLE_PACK_LIST = "soulStylePack/list";
 export const METHOD_SOUL_STYLE_PACK_STATUS_SET = "soulStylePack/status/set";
 export const METHOD_SOUL_STYLE_PACK_UNINSTALL = "soulStylePack/uninstall";
 export const METHOD_TELEGRAM_CHANNEL_PROBE = "telegramChannel/probe";
+export const METHOD_THREAD_ITEMS_LIST = "thread/items/list";
+export const METHOD_THREAD_LIST = "thread/list";
+export const METHOD_THREAD_READ = "thread/read";
+export const METHOD_THREAD_TURNS_LIST = "thread/turns/list";
 export const METHOD_USAGE_STATS_DAILY_TRENDS_LIST =
   "usageStats/dailyTrends/list";
 export const METHOD_USAGE_STATS_MODEL_RANKING_LIST =
@@ -1386,6 +1390,22 @@ export const GENERATED_APP_SERVER_METHODS = [
   },
   {
     kind: "request",
+    method: "thread/items/list",
+  },
+  {
+    kind: "request",
+    method: "thread/list",
+  },
+  {
+    kind: "request",
+    method: "thread/read",
+  },
+  {
+    kind: "request",
+    method: "thread/turns/list",
+  },
+  {
+    kind: "request",
     method: "usageStats/dailyTrends/list",
   },
   {
@@ -1664,6 +1684,18 @@ export const GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES = [
     method: "projectShell/session/write",
     scope: "projectShellSession",
   },
+  {
+    method: "thread/items/list",
+    scope: "thread",
+  },
+  {
+    method: "thread/read",
+    scope: "thread",
+  },
+  {
+    method: "thread/turns/list",
+    scope: "thread",
+  },
 ] as const;
 
 export type GeneratedAppServerRequestSerializationScopeSpec =
@@ -1808,6 +1840,7 @@ export interface AgentSessionDeleteResponse {
 }
 
 export interface AgentSessionEventParams {
+  canonicalEvent?: CanonicalThreadEventNotification | null;
   event: AgentEvent;
   typedEvent?: AgentSessionRuntimeEventNotification | null;
 }
@@ -1932,6 +1965,7 @@ export interface AgentSessionItemLifecycleNotification {
   eventId: string;
   itemId: string;
   itemType?: null | string;
+  ordinal?: number | null;
   sequence: number;
   sessionId: string;
   status?: null | string;
@@ -2553,6 +2587,26 @@ export type AppServerClientRequest =
   | {
       id: number | string;
       method: "agentSession/list";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "thread/read";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "thread/list";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "thread/turns/list";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
+      method: "thread/items/list";
       params?: unknown;
     }
   | {
@@ -3859,6 +3913,13 @@ export type AppServerNotificationMethod =
   | "initialized"
   | "workspaceRightSurface/pendingChanged";
 
+export type AppServerRequestAccess = "exclusive" | "sharedRead";
+
+export interface AppServerRequestAccessSpec {
+  access: AppServerRequestAccess;
+  method: string;
+}
+
 export type AppServerRequestMethod =
   | "agentSession/action/replay"
   | "agentSession/action/respond"
@@ -4108,6 +4169,10 @@ export type AppServerRequestMethod =
   | "soulStylePack/status/set"
   | "soulStylePack/uninstall"
   | "telegramChannel/probe"
+  | "thread/items/list"
+  | "thread/list"
+  | "thread/read"
+  | "thread/turns/list"
   | "usageStats/dailyTrends/list"
   | "usageStats/modelRanking/list"
   | "usageStats/read"
@@ -4403,6 +4468,20 @@ export interface BusinessObjectRef {
   title?: null | string;
   uri?: null | string;
 }
+
+export type CanonicalThreadEventNotification =
+  | {
+      method: "thread/updated";
+      params: Thread;
+    }
+  | {
+      method: "turn/updated";
+      params: Turn;
+    }
+  | {
+      method: "item/updated";
+      params: ThreadItem;
+    };
 
 export interface CapabilityDescriptor {
   description?: null | string;
@@ -7132,6 +7211,18 @@ export interface SessionFileUpdateMetaParams {
   title?: null | string;
 }
 
+export type SkillAuthority = "application" | "external" | "user" | "workspace";
+
+export interface SkillDependencies {
+  tools: SkillToolDependency[];
+}
+
+export interface SkillDetail {
+  markdownContent: string;
+  metadata: SkillSummary;
+  workflowSteps: SkillWorkflowStep[];
+}
+
 export interface SkillDownloadInstallParams {
   app: string;
   downloadUrl: string;
@@ -7147,8 +7238,16 @@ export interface SkillInstalledDirectoriesListResponse {
   directories?: string[];
 }
 
+export interface SkillInterface {
+  argumentHint?: null | string;
+  displayName: string;
+  executionMode: string;
+  model?: null | string;
+  provider?: null | string;
+}
+
 export interface SkillListResponse {
-  skills?: unknown[];
+  skills: SkillSummary[];
 }
 
 export interface SkillLocalDetailInspectParams {
@@ -7190,6 +7289,11 @@ export interface SkillLocalRenameResponse {
   directory: string;
 }
 
+export interface SkillLocator {
+  directory: string;
+  skillFilePath: string;
+}
+
 export interface SkillManagementInstallParams {
   app: string;
   directory: string;
@@ -7199,6 +7303,10 @@ export interface SkillManagementListParams {
   app: string;
   refreshRemote?: boolean;
   scope?: null | string;
+}
+
+export interface SkillManagementListResponse {
+  skills: unknown[];
 }
 
 export interface SkillManagementUninstallParams {
@@ -7279,12 +7387,17 @@ export interface SkillPackageLocalReplaceResponse {
   inspection: unknown;
 }
 
+export interface SkillPolicy {
+  allowImplicitInvocation: boolean;
+  whenToUse?: null | string;
+}
+
 export interface SkillReadParams {
-  skillName: string;
+  skillId: string;
 }
 
 export interface SkillReadResponse {
-  skill: unknown;
+  skill: SkillDetail;
 }
 
 export interface SkillRemoteInspectParams {
@@ -7325,6 +7438,37 @@ export interface SkillScaffoldCreateParams {
 
 export interface SkillScaffoldCreateResponse {
   inspection: unknown;
+}
+
+export type SkillScope = "app" | "other" | "project" | "user";
+
+export type SkillSource = "app" | "other" | "project" | "user";
+
+export interface SkillSummary {
+  authority: SkillAuthority;
+  capabilities: string[];
+  dependencies: SkillDependencies;
+  description: string;
+  enabled: boolean;
+  interface: SkillInterface;
+  locator: SkillLocator;
+  name: string;
+  policy: SkillPolicy;
+  scope: SkillScope;
+  skillId: string;
+  source: SkillSource;
+}
+
+export interface SkillToolDependency {
+  required: boolean;
+  type: string;
+  value: string;
+}
+
+export interface SkillWorkflowStep {
+  dependencies: string[];
+  id: string;
+  name: string;
 }
 
 export interface SoulStylePackInstallParams {
@@ -7424,6 +7568,57 @@ export interface TextPosition {
 export interface TextRange {
   end: TextPosition;
   start: TextPosition;
+}
+
+export interface ThreadItemsListParams {
+  cursor?: null | string;
+  limit?: number | null;
+  sortDirection?: SortDirection;
+  threadId: string;
+  turnId?: null | string;
+}
+
+export interface ThreadItemsListResponse {
+  backwardsCursor?: null | string;
+  data: ThreadItem[];
+  nextCursor?: null | string;
+}
+
+export interface ThreadListParams {
+  cursor?: null | string;
+  includeArchived?: boolean;
+  limit?: number | null;
+  sortDirection?: SortDirection;
+  turnsView?: ThreadTurnsView;
+}
+
+export interface ThreadListResponse {
+  backwardsCursor?: null | string;
+  data: Thread[];
+  nextCursor?: null | string;
+}
+
+export interface ThreadReadParams {
+  threadId: string;
+  turnsView?: ThreadTurnsView;
+}
+
+export interface ThreadReadResponse {
+  thread: Thread;
+}
+
+export interface ThreadTurnsListParams {
+  cursor?: null | string;
+  itemsView?: TurnItemsView;
+  limit?: number | null;
+  sortDirection?: SortDirection;
+  threadId: string;
+}
+
+export interface ThreadTurnsListResponse {
+  backwardsCursor?: null | string;
+  data: Turn[];
+  nextCursor?: null | string;
 }
 
 export type TransportKind = "http" | "local_process" | "sidecar";
@@ -7985,6 +8180,271 @@ export type AgentSessionApprovalDecision =
   | "cancel"
   | "decline";
 
+export interface ApprovalAction {
+  description: string;
+  kind: string;
+}
+
+export type ApprovalDecision =
+  | "abort"
+  | "approved"
+  | "approvedForSession"
+  | "denied"
+  | "timedOut";
+
+export type ApprovalScope = "once" | "session" | "turn";
+
+export type CollabAgentOperation =
+  | "close"
+  | "followUp"
+  | "interrupt"
+  | "resume"
+  | "sendMessage"
+  | "spawn"
+  | "wait";
+
+export type FileChangeStatus = "applied" | "failed" | "proposed" | "rejected";
+
+export type ItemId = string;
+
+export type ItemKind =
+  | "agentMessage"
+  | "approval"
+  | "collabAgentToolCall"
+  | "command"
+  | "contextCompaction"
+  | "extension"
+  | "file"
+  | "mcpToolCall"
+  | "media"
+  | "reasoning"
+  | "subAgent"
+  | "tool"
+  | "userMessage";
+
+export type ItemStatus =
+  | "cancelled"
+  | "completed"
+  | "failed"
+  | "inProgress"
+  | "interrupted"
+  | "pending";
+
+export type SubAgentActivityKind =
+  | "closed"
+  | "completed"
+  | "failed"
+  | "messageSent"
+  | "resumed"
+  | "spawned"
+  | "waiting";
+
+export interface Thread {
+  archived: boolean;
+  createdAtMs: number;
+  forkedFromId?: null | string;
+  metadata?: unknown;
+  modelProvider?: string;
+  name?: null | string;
+  parentThreadId?: null | string;
+  preview?: string;
+  product?: null | string;
+  recencyAtMs?: number | null;
+  sessionId: string;
+  status: ThreadStatus;
+  threadId: string;
+  turns?: Turn[];
+  turnsView?: ThreadTurnsView;
+  updatedAtMs: number;
+}
+
+export type ThreadActiveFlag = "waitingOnApproval" | "waitingOnUserInput";
+
+export interface ThreadItem {
+  completedAtMs?: number | null;
+  createdAtMs: number;
+  itemId: ItemId;
+  kind: ItemKind;
+  metadata?: unknown;
+  ordinal: number;
+  payload: ThreadItemPayload;
+  sequence: number;
+  sessionId: string;
+  status: ItemStatus;
+  threadId: string;
+  turnId: string;
+  updatedAtMs: number;
+}
+
+export type ThreadItemPayload =
+  | {
+      client_id?: null | string;
+      content: string;
+      type: "userMessage";
+    }
+  | {
+      phase?: null | string;
+      text: string;
+      type: "agentMessage";
+    }
+  | {
+      content?: string[];
+      summary?: string[];
+      type: "reasoning";
+    }
+  | {
+      arguments?: ToolArgument[];
+      call_id: string;
+      name: string;
+      output?: ToolOutput | null;
+      type: "tool";
+    }
+  | {
+      arguments?: ToolArgument[];
+      call_id: string;
+      output?: ToolOutput | null;
+      server_name: string;
+      tool_name: string;
+      type: "mcpToolCall";
+    }
+  | {
+      call_id: string;
+      message?: null | string;
+      operation: CollabAgentOperation;
+      output?: ToolOutput | null;
+      target_thread_id?: null | string;
+      type: "collabAgentToolCall";
+    }
+  | {
+      action: ApprovalAction;
+      available_decisions?: ApprovalDecision[];
+      decision?: ApprovalDecision | null;
+      expires_at_ms?: number | null;
+      reason_code?: null | string;
+      request_id: string;
+      requested_at_ms?: number | null;
+      resolved_at_ms?: number | null;
+      scope?: ApprovalScope;
+      type: "approval";
+    }
+  | {
+      command: string;
+      cwd?: null | string;
+      exit_code?: number | null;
+      output?: null | string;
+      type: "command";
+    }
+  | {
+      diff?: null | string;
+      path: string;
+      status: FileChangeStatus;
+      type: "file";
+    }
+  | {
+      mime_type: string;
+      preview?: null | string;
+      type: "media";
+      uri: string;
+    }
+  | {
+      activity: SubAgentActivityKind;
+      child_thread_id: string;
+      detail?: null | string;
+      type: "subAgent";
+    }
+  | {
+      summary?: null | string;
+      type: "contextCompaction";
+      window_id?: null | string;
+    }
+  | {
+      data: unknown;
+      name: string;
+      type: "extension";
+    };
+
+export type ThreadStatus =
+  | {
+      type: "notLoaded";
+    }
+  | {
+      type: "idle";
+    }
+  | {
+      type: "systemError";
+    }
+  | {
+      activeFlags?: ThreadActiveFlag[];
+      type: "active";
+    };
+
+export type ThreadTurnsView = "full" | "notLoaded" | "summary";
+
+export interface ToolArgument {
+  name: string;
+  value: string;
+}
+
+export interface ToolOutput {
+  durationMs?: number | null;
+  error?: null | string;
+  outputRef?: null | string;
+  structuredContent?: unknown;
+  text?: null | string;
+  truncated?: boolean;
+}
+
+export interface Turn {
+  admission?: TurnAdmissionState;
+  approval?: TurnApprovalState;
+  completedAtMs?: number | null;
+  createdAtMs: number;
+  durationMs?: number | null;
+  error?: TurnError | null;
+  items?: ThreadItem[];
+  itemsView?: TurnItemsView;
+  queue?: TurnQueueState;
+  sessionId: string;
+  startedAtMs?: number | null;
+  status: TurnStatus;
+  threadId: string;
+  turnId: string;
+  updatedAtMs: number;
+}
+
+export type TurnAdmissionState = "accepted" | "rejected";
+
+export type TurnApprovalState =
+  | "approved"
+  | "cancelled"
+  | "denied"
+  | "notRequired"
+  | "pending"
+  | "resolved"
+  | "timedOut";
+
+export interface TurnError {
+  code?: null | string;
+  details?: null | string;
+  message: string;
+}
+
+export type TurnItemsView = "full" | "notLoaded" | "summary";
+
+export type TurnQueueState =
+  | {
+      state: "notQueued";
+    }
+  | {
+      position?: number | null;
+      state: "queued";
+    }
+  | {
+      state: "running";
+    };
+
+export type TurnStatus = "completed" | "failed" | "inProgress" | "interrupted";
+
 export type AgentSessionCwdFilter = string | string[];
 
 export interface PluginReadinessIssueCategorySummary {
@@ -7992,3 +8452,5 @@ export interface PluginReadinessIssueCategorySummary {
   codes?: string[];
   count: number;
 }
+
+export type SortDirection = "asc" | "desc";

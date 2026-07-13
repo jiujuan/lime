@@ -19,6 +19,7 @@ import type {
   AgentRuntimeListSessionsOptions,
   AgentRuntimeUpdateSessionRequest,
 } from "./types";
+import { projectCanonicalApprovalItem } from "./canonicalApprovalItemProjection";
 
 const DEFAULT_APP_ID = "desktop";
 
@@ -632,10 +633,11 @@ function appServerSessionOverviewToRuntimeInfo(
     execution_strategy: executionStrategyFromProtocol(
       session.executionStrategy,
     ),
-    session_business_object_ref_metadata:
-      isPlainObject(session.businessObjectRefMetadata)
-        ? session.businessObjectRefMetadata
-        : undefined,
+    session_business_object_ref_metadata: isPlainObject(
+      session.businessObjectRefMetadata,
+    )
+      ? session.businessObjectRefMetadata
+      : undefined,
     workspace_id: session.workspaceId,
     working_dir: session.workingDir,
     thread_status: session.threadStatus,
@@ -769,12 +771,19 @@ function readSessionDetail(
     messages: Array.isArray(detail.messages)
       ? detail.messages
       : fallback.messages,
-    turns: Array.isArray(detail.turns) ? detail.turns : fallback.turns,
-    items: Array.isArray(detail.items) ? detail.items : fallback.items,
+    turns: fallback.turns,
+    items: Array.isArray(detail.items)
+      ? (detail.items.map(
+          (item) => projectCanonicalApprovalItem(item) ?? item,
+        ) as AgentSessionDetail["items"])
+      : fallback.items,
     queued_turns: Array.isArray(detail.queued_turns)
       ? detail.queued_turns
       : fallback.queued_turns,
-    thread_read: mergeThreadReadDetail(detail.thread_read, fallback.thread_read),
+    thread_read: mergeThreadReadDetail(
+      detail.thread_read,
+      fallback.thread_read,
+    ),
     execution_runtime:
       detailExecutionRuntime === undefined
         ? fallback.execution_runtime
@@ -810,13 +819,12 @@ function mergeThreadReadDetail(
       typeof detailThreadRead.profile_status === "string"
         ? detailThreadRead.profile_status
         : fallbackThreadRead?.profile_status,
-    session_business_object_ref_metadata:
-      Object.prototype.hasOwnProperty.call(
-        detailThreadRead,
-        "session_business_object_ref_metadata",
-      )
-        ? detailThreadRead.session_business_object_ref_metadata
-        : fallbackThreadRead?.session_business_object_ref_metadata,
+    session_business_object_ref_metadata: Object.prototype.hasOwnProperty.call(
+      detailThreadRead,
+      "session_business_object_ref_metadata",
+    )
+      ? detailThreadRead.session_business_object_ref_metadata
+      : fallbackThreadRead?.session_business_object_ref_metadata,
   } as AgentSessionDetail["thread_read"];
 }
 

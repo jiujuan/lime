@@ -1,4 +1,5 @@
 use crate::RuntimeEvent;
+use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument, ToolOutput};
 use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -35,12 +36,16 @@ pub(super) struct CodingMirrorEvents {
 impl CodingEventMirror {
     pub(super) fn process_event(&mut self, event: &RuntimeAgentEvent) -> CodingMirrorEvents {
         match event {
-            RuntimeAgentEvent::ToolStart {
-                tool_name,
-                tool_id,
-                arguments,
-            } => CodingMirrorEvents {
-                after_raw: self.handle_tool_start(tool_name, tool_id, arguments.as_deref()),
+            RuntimeAgentEvent::ItemStarted { item } => CodingMirrorEvents {
+                after_raw: canonical_tool_item(item)
+                    .map(|tool| {
+                        self.handle_tool_start(
+                            tool.name,
+                            tool.call_id,
+                            canonical_arguments_value(tool.arguments).as_ref(),
+                        )
+                    })
+                    .unwrap_or_default(),
                 ..CodingMirrorEvents::default()
             },
             RuntimeAgentEvent::ToolOutputDelta {
@@ -57,7 +62,14 @@ impl CodingEventMirror {
                 ),
                 ..CodingMirrorEvents::default()
             },
-            RuntimeAgentEvent::ToolEnd { tool_id, result } => self.handle_tool_end(tool_id, result),
+            RuntimeAgentEvent::ItemCompleted { item } => canonical_tool_item(item)
+                .and_then(|tool| {
+                    tool.output.map(|output| {
+                        let result = canonical_agent_tool_result(item, output);
+                        self.handle_tool_end(tool.call_id, &result)
+                    })
+                })
+                .unwrap_or_default(),
             _ => CodingMirrorEvents::default(),
         }
     }
@@ -66,10 +78,10 @@ impl CodingEventMirror {
         &mut self,
         tool_name: &str,
         tool_id: &str,
-        arguments: Option<&str>,
+        arguments: Option<&Value>,
     ) -> Vec<RuntimeEvent> {
         let normalized_name = normalize_tool_name(tool_name);
-        let arguments_value = arguments.and_then(parse_json_str);
+        let arguments_value = arguments.cloned();
         let command_facts = command_facts_from_arguments(arguments_value.as_ref());
         let mut events = Vec::new();
         let patch_id = patch_id_for_tool_start(normalized_name, tool_id, arguments_value.as_ref());
@@ -277,6 +289,88 @@ impl CodingEventMirror {
         }
 
         events
+    }
+}
+
+struct CanonicalToolItem<'a> {
+    call_id: &'a str,
+    name: &'a str,
+    arguments: &'a [ToolArgument],
+    output: Option<&'a ToolOutput>,
+}
+
+fn canonical_tool_item(item: &ThreadItem) -> Option<CanonicalToolItem<'_>> {
+    let ThreadItemPayload::Tool {
+        call_id,
+        name,
+        arguments,
+        output,
+    } = &item.payload
+    else {
+        return None;
+    };
+    Some(CanonicalToolItem {
+        call_id,
+        name,
+        arguments,
+        output: output.as_ref(),
+    })
+}
+
+fn canonical_arguments_value(arguments: &[ToolArgument]) -> Option<Value> {
+    if arguments.is_empty() {
+        return None;
+    }
+    if let [argument] = arguments {
+        if argument.name == "value" {
+            return Some(
+                serde_json::from_str(&argument.value)
+                    .unwrap_or_else(|_| Value::String(argument.value.clone())),
+            );
+        }
+    }
+    Some(Value::Object(
+        arguments
+            .iter()
+            .map(|argument| {
+                let value = serde_json::from_str(&argument.value)
+                    .unwrap_or_else(|_| Value::String(argument.value.clone()));
+                (argument.name.clone(), value)
+            })
+            .collect(),
+    ))
+}
+
+fn canonical_agent_tool_result(item: &ThreadItem, output: &ToolOutput) -> AgentToolResult {
+    let mut metadata = item
+        .metadata
+        .as_object()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+    if let Some(duration_ms) = output.duration_ms {
+        metadata
+            .entry("duration_ms".to_string())
+            .or_insert(Value::from(duration_ms));
+    }
+    if output.truncated {
+        metadata
+            .entry("truncated".to_string())
+            .or_insert(Value::Bool(true));
+    }
+    if let Some(output_ref) = output.output_ref.as_ref() {
+        metadata
+            .entry("output_ref".to_string())
+            .or_insert_with(|| Value::String(output_ref.clone()));
+    }
+    AgentToolResult {
+        success: item.status == ItemStatus::Completed,
+        output: output.text.clone().unwrap_or_default(),
+        error: output.error.clone(),
+        structured_content: output.structured_content.clone(),
+        images: None,
+        metadata: (!metadata.is_empty()).then_some(metadata),
     }
 }
 
@@ -559,10 +653,6 @@ fn policy_diagnostics(tool: &TrackedTool, result: &AgentToolResult) -> Value {
         "commandArgvSource": tool.command_facts.as_ref().map(|facts| facts.source),
         "cwd": cwd_from_value(tool.arguments.as_ref()).or_else(|| metadata.and_then(|metadata| metadata_string(metadata, &["cwd", "workingDir", "working_dir"]))),
     }))
-}
-
-fn parse_json_str(value: &str) -> Option<Value> {
-    serde_json::from_str(value).ok()
 }
 
 fn normalize_tool_name(tool_name: &str) -> &str {

@@ -1,10 +1,9 @@
-use super::{
-    CurrentProviderError, CurrentProviderEvent, CurrentProviderToolCall, CurrentProviderUsage,
-};
+use super::{CurrentProviderError, CurrentProviderToolCall};
 use agent_protocol::{anthropic, openai};
 use async_stream::try_stream;
 use futures::{Stream, StreamExt};
 use reqwest::Response;
+use runtime_core::{CanonicalLlmEvent as LlmEvent, FailureClassification, FinishReason, Usage};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -14,6 +13,7 @@ struct ToolCallAccumulator {
     name: Option<String>,
     arguments: String,
     emitted: bool,
+    started: bool,
 }
 
 impl ToolCallAccumulator {
@@ -21,17 +21,23 @@ impl ToolCallAccumulator {
         self.id.clone().unwrap_or_else(|| fallback.to_string())
     }
 
-    fn into_call(&mut self, fallback: &str) -> Option<CurrentProviderToolCall> {
+    fn into_call(
+        &mut self,
+        fallback: &str,
+    ) -> Result<Option<CurrentProviderToolCall>, CurrentProviderError> {
         if self.emitted {
-            return None;
+            return Ok(None);
         }
-        let name = self.name.clone()?;
-        self.emitted = true;
-        Some(CurrentProviderToolCall::from_raw(
+        let Some(name) = self.name.clone() else {
+            return Ok(None);
+        };
+        let call = CurrentProviderToolCall::try_from_raw(
             self.call_id(fallback),
             name,
             self.arguments.clone(),
-        ))
+        )?;
+        self.emitted = true;
+        Ok(Some(call))
     }
 }
 
@@ -40,26 +46,36 @@ struct OpenAiStreamState {
     response_id: Option<String>,
     calls: BTreeMap<u32, ToolCallAccumulator>,
     emitted_tool_call: bool,
+    usage: Option<Usage>,
+    text_ids: HashSet<String>,
+    reasoning_ids: HashSet<String>,
+    finish_reason: Option<FinishReason>,
 }
 
 pub(super) fn openai_chat_sse(
     response: Response,
-) -> impl Stream<Item = Result<CurrentProviderEvent, CurrentProviderError>> + Send {
+) -> impl Stream<Item = Result<LlmEvent, CurrentProviderError>> + Send {
     try_stream! {
         let mut state = OpenAiStreamState::default();
         let mut frames = Box::pin(sse_frames(response));
         while let Some(frame) = frames.next().await {
             let frame = frame?;
             if frame.data.trim() == "[DONE]" {
-                for (index, call) in &mut state.calls {
-                    if let Some(call) = call.into_call(&format!("call_{index}")) {
-                        state.emitted_tool_call = true;
-                        yield CurrentProviderEvent::ToolCall(call);
-                    }
+                for id in state.text_ids.drain() {
+                    yield LlmEvent::TextEnd { id };
                 }
-                yield CurrentProviderEvent::Completed {
+                for id in state.reasoning_ids.drain() {
+                    yield LlmEvent::ReasoningEnd { id };
+                }
+                for event in take_openai_calls(&mut state)? {
+                    yield event;
+                }
+                yield LlmEvent::Finish {
+                    reason: state.finish_reason.unwrap_or_else(|| {
+                        if state.emitted_tool_call { FinishReason::ToolCall } else { FinishReason::Stop }
+                    }),
+                    usage: state.usage.take(),
                     response_id: state.response_id.clone(),
-                    end_turn: !state.emitted_tool_call,
                 };
                 return;
             }
@@ -67,65 +83,109 @@ pub(super) fn openai_chat_sse(
                 .map_err(|error| CurrentProviderError::new(format!("解析 OpenAI SSE chunk 失败: {error}")))?;
             state.response_id = Some(chunk.id.clone());
             if let Some(usage) = chunk.usage {
-                yield CurrentProviderEvent::Usage(openai_usage(usage));
+                let usage = openai_usage(usage);
+                yield LlmEvent::Usage { usage: usage.clone() };
+                state.usage = Some(usage);
             }
             for choice in chunk.choices {
+                let text_id = format!("text-{}", choice.index);
                 if let Some(text) = choice.delta.content.filter(|value| !value.is_empty()) {
-                    yield CurrentProviderEvent::TextDelta(text);
+                    if state.text_ids.insert(text_id.clone()) {
+                        yield LlmEvent::TextStart { id: text_id.clone() };
+                    }
+                    yield LlmEvent::TextDelta { id: text_id, text };
                 }
+                let reasoning_id = format!("reasoning-{}", choice.index);
                 if let Some(reasoning) = choice.delta.reasoning_content.filter(|value| !value.is_empty()) {
-                    yield CurrentProviderEvent::ReasoningDelta(reasoning);
+                    if state.reasoning_ids.insert(reasoning_id.clone()) {
+                        yield LlmEvent::ReasoningStart { id: reasoning_id.clone() };
+                    }
+                    yield LlmEvent::ReasoningDelta { id: reasoning_id, text: reasoning };
                 }
                 for delta in choice.delta.tool_calls.unwrap_or_default() {
                     let index = delta.index;
                     let call = state.calls.entry(index).or_default();
-                    if delta.id.is_some() {
-                        call.id = delta.id;
-                    }
-                    if delta.function.name.is_some() {
-                        call.name = delta.function.name;
-                    }
+                    if delta.id.is_some() { call.id = delta.id; }
+                    if delta.function.name.is_some() { call.name = delta.function.name; }
                     if let Some(arguments) = delta.function.arguments {
+                        let call_id = call.call_id(&format!("call_{index}"));
+                        let Some(name) = call.name.clone() else {
+                            yield LlmEvent::ProviderError {
+                                message: "OpenAI tool call stream omitted tool name".to_string(),
+                                classification: Some(FailureClassification::InvalidRequest),
+                                retryable: Some(false),
+                            };
+                            return;
+                        };
+                        if !call.started {
+                            call.started = true;
+                            yield LlmEvent::ToolInputStart { id: call_id.clone(), name: name.clone() };
+                        }
                         call.arguments.push_str(&arguments);
-                        yield CurrentProviderEvent::ToolCallInputDelta {
-                            call_id: call.call_id(&format!("call_{index}")),
-                            tool_name: call.name.clone(),
-                            delta: arguments,
-                            accumulated_arguments: call.arguments.clone(),
+                        yield LlmEvent::ToolInputDelta {
+                            id: call_id,
+                            name,
+                            text: arguments,
                         };
                     }
                 }
                 if choice.finish_reason.as_deref() == Some("tool_calls") {
-                    for (index, call) in &mut state.calls {
-                        if let Some(call) = call.into_call(&format!("call_{index}")) {
-                            state.emitted_tool_call = true;
-                            yield CurrentProviderEvent::ToolCall(call);
-                        }
+                    for event in take_openai_calls(&mut state)? {
+                        yield event;
                     }
+                }
+                if let Some(reason) = choice.finish_reason.as_deref() {
+                    state.finish_reason = Some(openai_finish_reason(reason));
                 }
             }
         }
-        for (index, call) in &mut state.calls {
-            if let Some(call) = call.into_call(&format!("call_{index}")) {
-                state.emitted_tool_call = true;
-                yield CurrentProviderEvent::ToolCall(call);
-            }
-        }
-        yield CurrentProviderEvent::Completed {
-            response_id: state.response_id,
-            end_turn: !state.emitted_tool_call,
-        };
+        for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
+        for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
+        yield truncated_stream_error("OpenAI Chat Completions");
     }
 }
 
-fn openai_usage(usage: openai::StreamUsage) -> CurrentProviderUsage {
-    CurrentProviderUsage {
-        input_tokens: usage.prompt_tokens,
-        output_tokens: usage.completion_tokens,
-        cached_input_tokens: usage
+fn openai_finish_reason(reason: &str) -> FinishReason {
+    match reason {
+        "stop" => FinishReason::Stop,
+        "tool_calls" | "function_call" => FinishReason::ToolCall,
+        "length" => FinishReason::Length,
+        "content_filter" => FinishReason::ContentFilter,
+        _ => FinishReason::Unknown,
+    }
+}
+
+fn take_openai_calls(state: &mut OpenAiStreamState) -> Result<Vec<LlmEvent>, CurrentProviderError> {
+    let mut events = Vec::new();
+    for (index, call) in &mut state.calls {
+        let Some(tool_call) = call.into_call(&format!("call_{index}"))? else {
+            continue;
+        };
+        state.emitted_tool_call = true;
+        events.push(LlmEvent::ToolInputEnd {
+            id: tool_call.id.clone(),
+            name: tool_call.name.clone(),
+        });
+        events.push(LlmEvent::ToolCall {
+            id: tool_call.id,
+            name: tool_call.name,
+            input: tool_call.arguments,
+            provider_executed: None,
+        });
+    }
+    Ok(events)
+}
+
+fn openai_usage(usage: openai::StreamUsage) -> Usage {
+    Usage {
+        input_tokens: Some(usage.prompt_tokens as u64),
+        output_tokens: Some(usage.completion_tokens as u64),
+        cache_read_input_tokens: usage
             .prompt_tokens_details
-            .and_then(|details| details.cached_tokens),
-        cache_creation_input_tokens: None,
+            .and_then(|details| details.cached_tokens)
+            .map(u64::from),
+        total_tokens: Some(usage.total_tokens as u64),
+        ..Usage::default()
     }
 }
 
@@ -135,11 +195,14 @@ struct ResponsesStreamState {
     calls: HashMap<String, ToolCallAccumulator>,
     emitted_calls: HashSet<String>,
     emitted_tool_call: bool,
+    usage: Option<Usage>,
+    text_ids: HashSet<String>,
+    reasoning_ids: HashSet<String>,
 }
 
 pub(super) fn responses_sse(
     response: Response,
-) -> impl Stream<Item = Result<CurrentProviderEvent, CurrentProviderError>> + Send {
+) -> impl Stream<Item = Result<LlmEvent, CurrentProviderError>> + Send {
     try_stream! {
         let mut state = ResponsesStreamState::default();
         let mut frames = Box::pin(sse_frames(response));
@@ -150,64 +213,58 @@ pub(super) fn responses_sse(
             let event_type = payload.get("type").and_then(Value::as_str).unwrap_or_default();
             match event_type {
                 "response.output_text.delta" => {
+                    let id = response_block_id(&payload, "text");
                     if let Some(delta) = payload.get("delta").and_then(Value::as_str).filter(|value| !value.is_empty()) {
-                        yield CurrentProviderEvent::TextDelta(delta.to_string());
+                        if state.text_ids.insert(id.clone()) { yield LlmEvent::TextStart { id: id.clone() }; }
+                        yield LlmEvent::TextDelta { id, text: delta.to_string() };
                     }
                 }
                 "response.reasoning_text.delta" | "response.reasoning_summary_text.delta" => {
+                    let id = response_block_id(&payload, "reasoning");
                     if let Some(delta) = payload.get("delta").and_then(Value::as_str).filter(|value| !value.is_empty()) {
-                        yield CurrentProviderEvent::ReasoningDelta(delta.to_string());
+                        if state.reasoning_ids.insert(id.clone()) { yield LlmEvent::ReasoningStart { id: id.clone() }; }
+                        yield LlmEvent::ReasoningDelta { id, text: delta.to_string() };
                     }
                 }
                 "response.output_item.added" => {
-                    if let Some(item) = payload.get("item") {
-                        absorb_responses_call(item, &mut state);
-                    }
+                    if let Some(item) = payload.get("item") { absorb_responses_call(item, &mut state); }
                 }
                 "response.function_call_arguments.delta" => {
                     let key = response_call_key(&payload);
                     let call = state.calls.entry(key.clone()).or_default();
-                    if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) {
-                        call.id = Some(call_id.to_string());
-                    }
-                    if let Some(name) = payload.get("name").and_then(Value::as_str) {
-                        call.name = Some(name.to_string());
-                    }
-                    if let Some(delta) = payload.get("delta").and_then(Value::as_str) {
-                        call.arguments.push_str(delta);
-                        yield CurrentProviderEvent::ToolCallInputDelta {
-                            call_id: call.call_id(&key),
-                            tool_name: call.name.clone(),
-                            delta: delta.to_string(),
-                            accumulated_arguments: call.arguments.clone(),
-                        };
-                    }
+                    if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) { call.id = Some(call_id.to_string()); }
+                    if let Some(name) = payload.get("name").and_then(Value::as_str) { call.name = Some(name.to_string()); }
+                    let Some(delta) = payload.get("delta").and_then(Value::as_str) else { continue; };
+                    let Some(name) = call.name.clone() else {
+                        yield LlmEvent::ProviderError { message: "Responses tool call stream omitted tool name".to_string(), classification: Some(FailureClassification::InvalidRequest), retryable: Some(false) };
+                        return;
+                    };
+                    let id = call.call_id(&key);
+                    if !call.started { call.started = true; yield LlmEvent::ToolInputStart { id: id.clone(), name: name.clone() }; }
+                    call.arguments.push_str(delta);
+                    yield LlmEvent::ToolInputDelta { id, name, text: delta.to_string() };
                 }
                 "response.function_call_arguments.done" => {
                     let key = response_call_key(&payload);
                     let call = state.calls.entry(key.clone()).or_default();
-                    if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) {
-                        call.id = Some(call_id.to_string());
-                    }
-                    if let Some(name) = payload.get("name").and_then(Value::as_str) {
-                        call.name = Some(name.to_string());
-                    }
-                    if let Some(arguments) = payload.get("arguments").and_then(Value::as_str) {
-                        call.arguments = arguments.to_string();
-                    }
-                    if let Some(call) = call.into_call(&key) {
+                    if let Some(call_id) = payload.get("call_id").and_then(Value::as_str) { call.id = Some(call_id.to_string()); }
+                    if let Some(name) = payload.get("name").and_then(Value::as_str) { call.name = Some(name.to_string()); }
+                    if let Some(arguments) = payload.get("arguments").and_then(Value::as_str) { call.arguments = arguments.to_string(); }
+                    if let Some(call) = call.into_call(&key)? {
                         state.emitted_tool_call = true;
                         state.emitted_calls.insert(call.id.clone());
-                        yield CurrentProviderEvent::ToolCall(call);
+                        yield LlmEvent::ToolInputEnd { id: call.id.clone(), name: call.name.clone() };
+                        yield LlmEvent::ToolCall { id: call.id, name: call.name, input: call.arguments, provider_executed: None };
                     }
                 }
                 "response.output_item.done" => {
                     if let Some(item) = payload.get("item") {
                         absorb_responses_call(item, &mut state);
-                        if let Some(call) = response_item_tool_call(item) {
+                        if let Some(call) = response_item_tool_call(item)? {
                             if state.emitted_calls.insert(call.id.clone()) {
                                 state.emitted_tool_call = true;
-                                yield CurrentProviderEvent::ToolCall(call);
+                                yield LlmEvent::ToolInputEnd { id: call.id.clone(), name: call.name.clone() };
+                                yield LlmEvent::ToolCall { id: call.id, name: call.name, input: call.arguments, provider_executed: None };
                             }
                         }
                     }
@@ -216,38 +273,50 @@ pub(super) fn responses_sse(
                     let response = payload.get("response").unwrap_or(&payload);
                     state.response_id = response.get("id").and_then(Value::as_str).map(ToOwned::to_owned);
                     if let Some(usage) = response.get("usage") {
-                        yield CurrentProviderEvent::Usage(responses_usage(usage));
+                        let usage = responses_usage(usage);
+                        yield LlmEvent::Usage { usage: usage.clone() };
+                        state.usage = Some(usage);
                     }
                     for item in response.get("output").and_then(Value::as_array).into_iter().flatten() {
-                        if let Some(call) = response_item_tool_call(item) {
+                        if let Some(call) = response_item_tool_call(item)? {
                             if state.emitted_calls.insert(call.id.clone()) {
                                 state.emitted_tool_call = true;
-                                yield CurrentProviderEvent::ToolCall(call);
+                                yield LlmEvent::ToolInputEnd { id: call.id.clone(), name: call.name.clone() };
+                                yield LlmEvent::ToolCall { id: call.id, name: call.name, input: call.arguments, provider_executed: None };
                             }
                         }
                     }
-                    yield CurrentProviderEvent::Completed {
-                        response_id: state.response_id.clone(),
-                        end_turn: !state.emitted_tool_call,
-                    };
+                    for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
+                    for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
+                    yield LlmEvent::Finish { reason: if state.emitted_tool_call { FinishReason::ToolCall } else { FinishReason::Stop }, usage: state.usage.take(), response_id: state.response_id.clone() };
                     return;
                 }
                 "error" | "response.failed" => {
-                    let message = payload
-                        .pointer("/error/message")
-                        .or_else(|| payload.get("message"))
-                        .and_then(Value::as_str)
-                        .unwrap_or("Responses provider stream failed");
-                    Err(CurrentProviderError::new(message.to_string()))?;
+                    let message = payload.pointer("/error/message").or_else(|| payload.get("message")).and_then(Value::as_str).unwrap_or("Responses provider stream failed");
+                    yield LlmEvent::ProviderError { message: message.to_string(), classification: Some(FailureClassification::ProviderInternal), retryable: Some(false) };
+                    return;
                 }
                 _ => {}
             }
         }
-        yield CurrentProviderEvent::Completed {
-            response_id: state.response_id,
-            end_turn: !state.emitted_tool_call,
-        };
+        for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
+        for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
+        yield truncated_stream_error("OpenAI Responses");
     }
+}
+
+fn response_block_id(payload: &Value, prefix: &str) -> String {
+    payload
+        .get("item_id")
+        .or_else(|| payload.get("output_index"))
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| value.to_string())
+        })
+        .map(|id| format!("{prefix}-{id}"))
+        .unwrap_or_else(|| format!("{prefix}-0"))
 }
 
 fn response_call_key(payload: &Value) -> String {
@@ -283,34 +352,40 @@ fn absorb_responses_call(item: &Value, state: &mut ResponsesStreamState) {
     }
 }
 
-pub(super) fn response_item_tool_call(item: &Value) -> Option<CurrentProviderToolCall> {
-    (item.get("type").and_then(Value::as_str) == Some("function_call")).then_some(())?;
-    let id = item.get("call_id").and_then(Value::as_str)?.to_string();
-    let name = item.get("name").and_then(Value::as_str)?.to_string();
+pub(super) fn response_item_tool_call(
+    item: &Value,
+) -> Result<Option<CurrentProviderToolCall>, CurrentProviderError> {
+    if item.get("type").and_then(Value::as_str) != Some("function_call") {
+        return Ok(None);
+    }
+    let id = item
+        .get("call_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CurrentProviderError::new("Responses function_call omitted call_id"))?
+        .to_string();
+    let name = item
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CurrentProviderError::new("Responses function_call omitted name"))?
+        .to_string();
     let arguments = item
         .get("arguments")
         .and_then(Value::as_str)
         .unwrap_or("{}")
         .to_string();
-    Some(CurrentProviderToolCall::from_raw(id, name, arguments))
+    CurrentProviderToolCall::try_from_raw(id, name, arguments).map(Some)
 }
 
-fn responses_usage(value: &Value) -> CurrentProviderUsage {
-    let number = |key: &str| {
-        value
-            .get(key)
-            .and_then(Value::as_u64)
-            .and_then(|value| u32::try_from(value).ok())
-            .unwrap_or_default()
-    };
-    CurrentProviderUsage {
+fn responses_usage(value: &Value) -> Usage {
+    let number = |key: &str| value.get(key).and_then(Value::as_u64);
+    Usage {
         input_tokens: number("input_tokens"),
         output_tokens: number("output_tokens"),
-        cached_input_tokens: value
+        cache_read_input_tokens: value
             .pointer("/input_tokens_details/cached_tokens")
-            .and_then(Value::as_u64)
-            .and_then(|value| u32::try_from(value).ok()),
-        cache_creation_input_tokens: None,
+            .and_then(Value::as_u64),
+        total_tokens: number("total_tokens"),
+        ..Usage::default()
     }
 }
 
@@ -319,11 +394,15 @@ struct AnthropicStreamState {
     response_id: Option<String>,
     calls: BTreeMap<u32, ToolCallAccumulator>,
     emitted_tool_call: bool,
+    usage: Option<Usage>,
+    text_ids: HashSet<String>,
+    reasoning_ids: HashSet<String>,
+    finish_reason: Option<FinishReason>,
 }
 
 pub(super) fn anthropic_sse(
     response: Response,
-) -> impl Stream<Item = Result<CurrentProviderEvent, CurrentProviderError>> + Send {
+) -> impl Stream<Item = Result<LlmEvent, CurrentProviderError>> + Send {
     try_stream! {
         let mut state = AnthropicStreamState::default();
         let mut frames = Box::pin(sse_frames(response));
@@ -335,79 +414,127 @@ pub(super) fn anthropic_sse(
                 anthropic::AnthropicStreamEvent::MessageStart { message } => {
                     state.response_id = Some(message.id);
                     if let Some(usage) = message.usage {
-                        yield CurrentProviderEvent::Usage(anthropic_usage(usage));
+                        let usage = anthropic_usage(usage);
+                        yield LlmEvent::Usage { usage: usage.clone() };
+                        state.usage = Some(usage);
                     }
                 }
-                anthropic::AnthropicStreamEvent::ContentBlockStart { index, content_block } => {
-                    if let anthropic::AnthropicContentBlock::ToolUse { id, name, input } = content_block {
+                anthropic::AnthropicStreamEvent::ContentBlockStart { index, content_block } => match content_block {
+                    anthropic::AnthropicContentBlock::Text { text } => {
+                        let id = format!("text-{index}");
+                        state.text_ids.insert(id.clone());
+                        yield LlmEvent::TextStart { id: id.clone() };
+                        if !text.is_empty() { yield LlmEvent::TextDelta { id, text }; }
+                    }
+                    anthropic::AnthropicContentBlock::Thinking { thinking, .. } => {
+                        let id = format!("reasoning-{index}");
+                        state.reasoning_ids.insert(id.clone());
+                        yield LlmEvent::ReasoningStart { id: id.clone() };
+                        if !thinking.is_empty() { yield LlmEvent::ReasoningDelta { id, text: thinking }; }
+                    }
+                    anthropic::AnthropicContentBlock::ToolUse { id, name, input } => {
                         let call = state.calls.entry(index).or_default();
-                        call.id = Some(id);
-                        call.name = Some(name);
-                        if input != Value::Null && input != json!({}) {
-                            call.arguments = serde_json::to_string(&input).unwrap_or_else(|_| "{}".to_string());
-                        }
+                        call.id = Some(id.clone()); call.name = Some(name.clone()); call.started = true;
+                        if input != Value::Null && input != json!({}) { call.arguments = serde_json::to_string(&input).unwrap_or_else(|_| "{}".to_string()); }
+                        yield LlmEvent::ToolInputStart { id, name };
                     }
-                }
+                    anthropic::AnthropicContentBlock::ToolResult { .. } | anthropic::AnthropicContentBlock::Image { .. } => {
+                        yield LlmEvent::ProviderError { message: "unsupported Anthropic output content block".to_string(), classification: Some(FailureClassification::InvalidRequest), retryable: Some(false) };
+                        return;
+                    }
+                },
                 anthropic::AnthropicStreamEvent::ContentBlockDelta { index, delta } => match delta {
-                    anthropic::AnthropicDelta::TextDelta { text } => {
-                        if !text.is_empty() {
-                            yield CurrentProviderEvent::TextDelta(text);
-                        }
-                    }
-                    anthropic::AnthropicDelta::ThinkingDelta { thinking } => {
-                        if !thinking.is_empty() {
-                            yield CurrentProviderEvent::ReasoningDelta(thinking);
-                        }
-                    }
+                    anthropic::AnthropicDelta::TextDelta { text } => if !text.is_empty() {
+                        let id = format!("text-{index}");
+                        if state.text_ids.insert(id.clone()) { yield LlmEvent::TextStart { id: id.clone() }; }
+                        yield LlmEvent::TextDelta { id, text };
+                    },
+                    anthropic::AnthropicDelta::ThinkingDelta { thinking } => if !thinking.is_empty() {
+                        let id = format!("reasoning-{index}");
+                        if state.reasoning_ids.insert(id.clone()) { yield LlmEvent::ReasoningStart { id: id.clone() }; }
+                        yield LlmEvent::ReasoningDelta { id, text: thinking };
+                    },
                     anthropic::AnthropicDelta::InputJsonDelta { partial_json } => {
                         let call = state.calls.entry(index).or_default();
-                        call.arguments.push_str(&partial_json);
-                        yield CurrentProviderEvent::ToolCallInputDelta {
-                            call_id: call.call_id(&format!("tool_{index}")),
-                            tool_name: call.name.clone(),
-                            delta: partial_json,
-                            accumulated_arguments: call.arguments.clone(),
+                        let Some(name) = call.name.clone() else {
+                            yield LlmEvent::ProviderError { message: "Anthropic tool call stream omitted tool name".to_string(), classification: Some(FailureClassification::InvalidRequest), retryable: Some(false) };
+                            return;
                         };
+                        let id = call.call_id(&format!("tool_{index}"));
+                        if !call.started { call.started = true; yield LlmEvent::ToolInputStart { id: id.clone(), name: name.clone() }; }
+                        call.arguments.push_str(&partial_json);
+                        yield LlmEvent::ToolInputDelta { id, name, text: partial_json };
                     }
                     anthropic::AnthropicDelta::SignatureDelta { .. } => {}
                 },
                 anthropic::AnthropicStreamEvent::ContentBlockStop { index } => {
-                    if let Some(call) = state.calls.get_mut(&index).and_then(|call| call.into_call(&format!("tool_{index}"))) {
+                    let text_id = format!("text-{index}");
+                    if state.text_ids.remove(&text_id) { yield LlmEvent::TextEnd { id: text_id }; }
+                    let reasoning_id = format!("reasoning-{index}");
+                    if state.reasoning_ids.remove(&reasoning_id) { yield LlmEvent::ReasoningEnd { id: reasoning_id }; }
+                    if let Some(call) = state
+                        .calls
+                        .get_mut(&index)
+                        .map(|call| call.into_call(&format!("tool_{index}")))
+                        .transpose()?
+                        .flatten()
+                    {
                         state.emitted_tool_call = true;
-                        yield CurrentProviderEvent::ToolCall(call);
+                        yield LlmEvent::ToolInputEnd { id: call.id.clone(), name: call.name.clone() };
+                        yield LlmEvent::ToolCall { id: call.id, name: call.name, input: call.arguments, provider_executed: None };
                     }
                 }
-                anthropic::AnthropicStreamEvent::MessageDelta { usage, .. } => {
-                    yield CurrentProviderEvent::Usage(anthropic_usage(usage));
+                anthropic::AnthropicStreamEvent::MessageDelta { delta, usage } => {
+                    let usage = anthropic_usage(usage);
+                    yield LlmEvent::Usage { usage: usage.clone() };
+                    state.usage = Some(usage);
+                    state.finish_reason = delta.stop_reason.as_deref().map(anthropic_finish_reason);
                 }
                 anthropic::AnthropicStreamEvent::MessageStop => {
-                    for (index, call) in &mut state.calls {
-                        if let Some(call) = call.into_call(&format!("tool_{index}")) {
-                            state.emitted_tool_call = true;
-                            yield CurrentProviderEvent::ToolCall(call);
-                        }
-                    }
-                    yield CurrentProviderEvent::Completed {
-                        response_id: state.response_id.clone(),
-                        end_turn: !state.emitted_tool_call,
+                    for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
+                    for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
+                    yield LlmEvent::Finish {
+                        reason: state.finish_reason.unwrap_or_else(|| {
+                            if state.emitted_tool_call { FinishReason::ToolCall } else { FinishReason::Stop }
+                        }),
+                        usage: state.usage,
+                        response_id: state.response_id,
                     };
                     return;
                 }
             }
         }
-        yield CurrentProviderEvent::Completed {
-            response_id: state.response_id,
-            end_turn: !state.emitted_tool_call,
-        };
+        for id in state.text_ids.drain() { yield LlmEvent::TextEnd { id }; }
+        for id in state.reasoning_ids.drain() { yield LlmEvent::ReasoningEnd { id }; }
+        yield truncated_stream_error("Anthropic Messages");
     }
 }
 
-fn anthropic_usage(usage: anthropic::AnthropicUsage) -> CurrentProviderUsage {
-    CurrentProviderUsage {
-        input_tokens: usage.input_tokens,
-        output_tokens: usage.output_tokens,
-        cached_input_tokens: usage.cache_read_input_tokens,
-        cache_creation_input_tokens: usage.cache_creation_input_tokens,
+fn anthropic_finish_reason(reason: &str) -> FinishReason {
+    match reason {
+        "end_turn" | "stop_sequence" => FinishReason::Stop,
+        "tool_use" => FinishReason::ToolCall,
+        "max_tokens" => FinishReason::Length,
+        "refusal" => FinishReason::ContentFilter,
+        _ => FinishReason::Unknown,
+    }
+}
+
+fn truncated_stream_error(protocol: &str) -> LlmEvent {
+    LlmEvent::ProviderError {
+        message: format!("{protocol} stream ended before its terminal event"),
+        classification: Some(FailureClassification::Transport),
+        retryable: Some(true),
+    }
+}
+
+fn anthropic_usage(usage: anthropic::AnthropicUsage) -> Usage {
+    Usage {
+        input_tokens: Some(usage.input_tokens as u64),
+        output_tokens: Some(usage.output_tokens as u64),
+        cache_read_input_tokens: usage.cache_read_input_tokens.map(u64::from),
+        cache_write_input_tokens: usage.cache_creation_input_tokens.map(u64::from),
+        ..Usage::default()
     }
 }
 
@@ -425,15 +552,10 @@ fn sse_frames(
         while let Some(next) = bytes.next().await {
             let next = next.map_err(|error| CurrentProviderError::new(format!("读取 provider SSE 失败: {error}")))?;
             pending.extend_from_slice(&next);
-            for frame in drain_sse_frames(&mut pending)? {
-                yield frame;
-            }
+            for frame in drain_sse_frames(&mut pending)? { yield frame; }
         }
-        let pending = std::str::from_utf8(&pending)
-            .map_err(|error| CurrentProviderError::new(format!("解析 provider SSE UTF-8 失败: {error}")))?;
-        if let Some(frame) = parse_sse_frame(pending) {
-            yield frame;
-        }
+        let pending = std::str::from_utf8(&pending).map_err(|error| CurrentProviderError::new(format!("解析 provider SSE UTF-8 失败: {error}")))?;
+        if let Some(frame) = parse_sse_frame(pending) { yield frame; }
     }
 }
 
@@ -479,4 +601,32 @@ pub(super) fn parse_sse_frame(frame: &str) -> Option<SseFrame> {
         .collect::<Vec<_>>()
         .join("\n");
     (!data.is_empty()).then_some(SseFrame { data })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finish_reason_mapping_preserves_terminal_semantics() {
+        assert_eq!(openai_finish_reason("tool_calls"), FinishReason::ToolCall);
+        assert_eq!(openai_finish_reason("length"), FinishReason::Length);
+        assert_eq!(anthropic_finish_reason("max_tokens"), FinishReason::Length);
+        assert_eq!(
+            anthropic_finish_reason("refusal"),
+            FinishReason::ContentFilter
+        );
+    }
+
+    #[test]
+    fn truncated_stream_is_retryable_transport_failure() {
+        assert!(matches!(
+            truncated_stream_error("OpenAI Responses"),
+            LlmEvent::ProviderError {
+                classification: Some(FailureClassification::Transport),
+                retryable: Some(true),
+                ..
+            }
+        ));
+    }
 }

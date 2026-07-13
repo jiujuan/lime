@@ -38,6 +38,30 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "optional-empty",
     },
     {
+      name: "readThread",
+      method: protocol.METHOD_THREAD_READ,
+      kind: "request",
+      params: "required",
+    },
+    {
+      name: "listThreads",
+      method: protocol.METHOD_THREAD_LIST,
+      kind: "request",
+      params: "optional-empty",
+    },
+    {
+      name: "listThreadTurns",
+      method: protocol.METHOD_THREAD_TURNS_LIST,
+      kind: "request",
+      params: "required",
+    },
+    {
+      name: "listThreadItems",
+      method: protocol.METHOD_THREAD_ITEMS_LIST,
+      kind: "request",
+      params: "required",
+    },
+    {
       name: "updateSession",
       method: protocol.METHOD_AGENT_SESSION_UPDATE,
       kind: "request",

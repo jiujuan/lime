@@ -1,93 +1,303 @@
-use app_server_protocol::SkillListResponse;
-use app_server_protocol::SkillReadParams;
-use app_server_protocol::SkillReadResponse;
-use lime_skills::find_skill_by_name;
-use lime_skills::get_skill_roots;
-use lime_skills::load_skill_summaries_from_directory;
-use lime_skills::LoadedSkillDefinition;
-use lime_skills::LoadedSkillSummary;
-use serde_json::json;
-use serde_json::Value;
+use app_server_protocol::{
+    SkillAuthority, SkillDependencies, SkillDetail, SkillInterface, SkillListResponse,
+    SkillLocator, SkillPolicy, SkillReadParams, SkillReadResponse, SkillScope, SkillSource,
+    SkillSummary, SkillToolDependency, SkillWorkflowStep,
+};
+use lime_skills::{
+    build_agent_skill_snapshot, load_skill_from_file, AgentSkillAuthority, AgentSkillMetadata,
+    AgentSkillScope, AgentSkillSnapshot, AgentSkillSource, LoadedSkillDefinition,
+};
 use std::collections::HashSet;
 
 pub(crate) fn list_skills() -> SkillListResponse {
+    list_skills_from_snapshot(&build_agent_skill_snapshot())
+}
+
+fn list_skills_from_snapshot(snapshot: &AgentSkillSnapshot) -> SkillListResponse {
     let mut skills = Vec::new();
     let mut seen = HashSet::new();
-    for root in get_skill_roots() {
-        for skill in load_skill_summaries_from_directory(&root) {
-            if !skill.disable_model_invocation && seen.insert(skill.skill_name.clone()) {
-                skills.push(skill_summary_to_executable_value(skill));
-            }
+    for skill in &snapshot.skills {
+        if skill.enabled && seen.insert(skill.skill_id.clone()) {
+            skills.push(agent_skill_to_summary(skill));
         }
     }
     SkillListResponse { skills }
 }
 
 pub(crate) fn read_skill(params: SkillReadParams) -> Result<SkillReadResponse, String> {
-    let skill = find_skill_by_name(&params.skill_name)?;
+    let snapshot = build_agent_skill_snapshot();
+    read_skill_from_snapshot(&snapshot, params)
+}
+
+fn read_skill_from_snapshot(
+    snapshot: &AgentSkillSnapshot,
+    params: SkillReadParams,
+) -> Result<SkillReadResponse, String> {
+    let skill_id = params.skill_id.trim();
+    if skill_id.is_empty() {
+        return Err("Skill id is required".to_string());
+    }
+    let metadata = snapshot
+        .skills
+        .iter()
+        .find(|metadata| metadata.skill_id == skill_id)
+        .ok_or_else(|| format!("Skill 不存在: {skill_id}"))?;
+    if !metadata.enabled {
+        return Err(format!("skill '{skill_id}' disabled model invocation"));
+    }
+    let skill = load_skill_from_file(&metadata.name, &metadata.skill_file_path)?;
     if !skill.standard_compliance.validation_errors.is_empty() {
         return Err(format!(
             "skill '{}' failed standard validation: {}",
-            params.skill_name,
+            skill_id,
             skill.standard_compliance.validation_errors.join("; ")
         ));
     }
     if skill.disable_model_invocation {
-        return Err(format!(
-            "skill '{}' disabled model invocation",
-            params.skill_name
-        ));
+        return Err(format!("skill '{skill_id}' disabled model invocation"));
     }
     Ok(SkillReadResponse {
-        skill: skill_to_detail_value(skill),
+        skill: skill_to_detail(metadata, skill),
     })
 }
 
-fn skill_summary_to_executable_value(skill: LoadedSkillSummary) -> Value {
-    json!({
-        "name": skill.skill_name,
-        "display_name": skill.display_name,
-        "description": skill.description,
-        "local_directory_path": skill.local_directory_path.to_string_lossy().to_string(),
-        "execution_mode": skill.execution_mode,
-        "has_workflow": skill.execution_mode == "workflow",
-        "provider": skill.provider,
-        "model": skill.model,
-        "argument_hint": skill.argument_hint,
-    })
-}
-
-fn skill_to_detail_value(skill: LoadedSkillDefinition) -> Value {
-    let workflow_steps = if skill.workflow_steps.is_empty() {
-        Value::Null
-    } else {
-        Value::Array(
-            skill
-                .workflow_steps
+fn agent_skill_to_summary(skill: &AgentSkillMetadata) -> SkillSummary {
+    SkillSummary {
+        skill_id: skill.skill_id.clone(),
+        name: skill.name.clone(),
+        description: skill.description.clone(),
+        scope: skill_scope(skill.scope),
+        source: skill_source(skill.source),
+        authority: skill_authority(skill.authority),
+        enabled: skill.enabled,
+        interface: SkillInterface {
+            display_name: skill.interface.display_name.clone(),
+            execution_mode: skill.interface.execution_mode.clone(),
+            provider: skill.interface.provider.clone(),
+            model: skill.interface.model.clone(),
+            argument_hint: skill.interface.argument_hint.clone(),
+        },
+        dependencies: SkillDependencies {
+            tools: skill
+                .dependencies
+                .tools
                 .iter()
-                .map(|step| {
-                    json!({
-                        "id": step.id,
-                        "name": step.name,
-                        "dependencies": [],
-                    })
+                .map(|dependency| SkillToolDependency {
+                    dependency_type: dependency.dependency_type.clone(),
+                    value: dependency.value.clone(),
+                    required: dependency.required,
                 })
                 .collect(),
+        },
+        policy: SkillPolicy {
+            allow_implicit_invocation: skill.policy.allow_implicit_invocation,
+            when_to_use: skill.policy.when_to_use.clone(),
+        },
+        capabilities: skill.capabilities.clone(),
+        locator: SkillLocator {
+            directory: skill.directory.to_string_lossy().into_owned(),
+            skill_file_path: skill.skill_file_path.to_string_lossy().into_owned(),
+        },
+    }
+}
+
+fn skill_to_detail(metadata: &AgentSkillMetadata, skill: LoadedSkillDefinition) -> SkillDetail {
+    SkillDetail {
+        metadata: agent_skill_to_summary(metadata),
+        markdown_content: skill.markdown_content,
+        workflow_steps: skill
+            .workflow_steps
+            .into_iter()
+            .map(|step| SkillWorkflowStep {
+                id: step.id,
+                name: step.name,
+                dependencies: Vec::new(),
+            })
+            .collect(),
+    }
+}
+
+fn skill_scope(scope: AgentSkillScope) -> SkillScope {
+    match scope {
+        AgentSkillScope::Project => SkillScope::Project,
+        AgentSkillScope::User => SkillScope::User,
+        AgentSkillScope::App => SkillScope::App,
+        AgentSkillScope::Other => SkillScope::Other,
+    }
+}
+
+fn skill_source(source: AgentSkillSource) -> SkillSource {
+    match source {
+        AgentSkillSource::Project => SkillSource::Project,
+        AgentSkillSource::User => SkillSource::User,
+        AgentSkillSource::App => SkillSource::App,
+        AgentSkillSource::Other => SkillSource::Other,
+    }
+}
+
+fn skill_authority(authority: AgentSkillAuthority) -> SkillAuthority {
+    match authority {
+        AgentSkillAuthority::Workspace => SkillAuthority::Workspace,
+        AgentSkillAuthority::User => SkillAuthority::User,
+        AgentSkillAuthority::Application => SkillAuthority::Application,
+        AgentSkillAuthority::External => SkillAuthority::External,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lime_skills::{build_agent_skill_snapshot_from_roots, AgentSkillRoot, AgentSkillScope};
+    use tempfile::TempDir;
+
+    #[test]
+    fn read_skill_uses_exact_stable_id_locator_when_names_overlap() {
+        let temp = TempDir::new().expect("temp dir");
+        let project_root = temp.path().join("project-skills");
+        let user_root = temp.path().join("user-skills");
+        write_skill(&project_root, "writer", "Project body");
+        write_skill(&user_root, "writer", "User body");
+        let snapshot = build_agent_skill_snapshot_from_roots([
+            AgentSkillRoot {
+                path: project_root,
+                scope: AgentSkillScope::Project,
+            },
+            AgentSkillRoot {
+                path: user_root,
+                scope: AgentSkillScope::User,
+            },
+        ]);
+
+        let response = read_skill_from_snapshot(
+            &snapshot,
+            SkillReadParams {
+                skill_id: "user:writer".to_string(),
+            },
         )
-    };
-    json!({
-        "name": skill.skill_name,
-        "display_name": skill.display_name,
-        "description": skill.description,
-        "local_directory_path": skill.local_directory_path.to_string_lossy().to_string(),
-        "execution_mode": skill.execution_mode,
-        "has_workflow": skill.execution_mode == "workflow",
-        "provider": skill.provider,
-        "model": skill.model,
-        "argument_hint": skill.argument_hint,
-        "markdown_content": skill.markdown_content,
-        "workflow_steps": workflow_steps,
-        "allowed_tools": skill.allowed_tools,
-        "when_to_use": skill.when_to_use,
-    })
+        .expect("read user-scoped writer");
+
+        assert_eq!(response.skill.metadata.skill_id, "user:writer");
+        assert!(response.skill.markdown_content.contains("User body"));
+        assert!(!response.skill.markdown_content.contains("Project body"));
+    }
+
+    #[test]
+    fn read_skill_rejects_name_only_reference() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = temp.path().join("project-skills");
+        write_skill(&root, "writer", "Project body");
+        let snapshot = build_agent_skill_snapshot_from_roots([AgentSkillRoot {
+            path: root,
+            scope: AgentSkillScope::Project,
+        }]);
+
+        let error = read_skill_from_snapshot(
+            &snapshot,
+            SkillReadParams {
+                skill_id: "writer".to_string(),
+            },
+        )
+        .expect_err("name-only reference must fail closed");
+
+        assert_eq!(error, "Skill 不存在: writer");
+    }
+
+    #[test]
+    fn list_and_read_share_first_provider_precedence_for_same_stable_id() {
+        let temp = TempDir::new().expect("temp dir");
+        let first_root = temp.path().join("first-project-provider");
+        let second_root = temp.path().join("second-project-provider");
+        write_skill(&first_root, "writer", "First provider body");
+        write_skill(&second_root, "writer", "Second provider body");
+        let snapshot = build_agent_skill_snapshot_from_roots([
+            AgentSkillRoot {
+                path: first_root,
+                scope: AgentSkillScope::Project,
+            },
+            AgentSkillRoot {
+                path: second_root,
+                scope: AgentSkillScope::Project,
+            },
+        ]);
+
+        let list = list_skills_from_snapshot(&snapshot);
+        let read = read_skill_from_snapshot(
+            &snapshot,
+            SkillReadParams {
+                skill_id: "project:writer".to_string(),
+            },
+        )
+        .expect("read winning provider");
+
+        assert_eq!(list.skills.len(), 1);
+        assert_eq!(list.skills[0].skill_id, "project:writer");
+        assert_eq!(
+            list.skills[0].locator.skill_file_path,
+            read.skill.metadata.locator.skill_file_path
+        );
+        assert!(read.skill.markdown_content.contains("First provider body"));
+        assert!(!read.skill.markdown_content.contains("Second provider body"));
+    }
+
+    #[test]
+    fn read_skill_rejects_blank_missing_and_disabled_ids() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = temp.path().join("project-skills");
+        write_disabled_skill(&root, "disabled");
+        let snapshot = build_agent_skill_snapshot_from_roots([AgentSkillRoot {
+            path: root,
+            scope: AgentSkillScope::Project,
+        }]);
+
+        let blank = read_skill_from_snapshot(
+            &snapshot,
+            SkillReadParams {
+                skill_id: "   ".to_string(),
+            },
+        )
+        .expect_err("blank id must fail closed");
+        let missing = read_skill_from_snapshot(
+            &snapshot,
+            SkillReadParams {
+                skill_id: "project:missing".to_string(),
+            },
+        )
+        .expect_err("missing id must fail closed");
+        let disabled = read_skill_from_snapshot(
+            &snapshot,
+            SkillReadParams {
+                skill_id: "project:disabled".to_string(),
+            },
+        )
+        .expect_err("disabled id must fail closed");
+
+        assert_eq!(blank, "Skill id is required");
+        assert_eq!(missing, "Skill 不存在: project:missing");
+        assert_eq!(
+            disabled,
+            "skill 'project:disabled' disabled model invocation"
+        );
+    }
+
+    fn write_skill(root: &std::path::Path, name: &str, body: &str) {
+        let skill_dir = root.join(name);
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: Test skill.\n---\n\n# {body}\n"),
+        )
+        .expect("skill file");
+    }
+
+    fn write_disabled_skill(root: &std::path::Path, name: &str) {
+        let skill_dir = root.join(name);
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            format!(
+                "---\nname: {name}\ndescription: Disabled skill.\ndisable-model-invocation: true\n---\n\n# Disabled\n"
+            ),
+        )
+        .expect("skill file");
+    }
 }

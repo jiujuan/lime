@@ -688,6 +688,14 @@ fn agent_session_event_notification_matches_protocol_fixture_shape() {
                     "status": "running",
                     "delta": {
                         "text": "hello"
+                    },
+                    "turn": {
+                        "sessionId": "sess_1",
+                        "threadId": "thread_1",
+                        "turnId": "turn_1",
+                        "status": "inProgress",
+                        "createdAtMs": 100,
+                        "updatedAtMs": 120
                     }
                 }),
             }))
@@ -713,6 +721,14 @@ fn agent_session_event_notification_matches_protocol_fixture_shape() {
                         "status": "running",
                         "delta": {
                             "text": "hello"
+                        },
+                        "turn": {
+                            "sessionId": "sess_1",
+                            "threadId": "thread_1",
+                            "turnId": "turn_1",
+                            "status": "inProgress",
+                            "createdAtMs": 100,
+                            "updatedAtMs": 120
                         }
                     }
                 },
@@ -727,8 +743,83 @@ fn agent_session_event_notification_matches_protocol_fixture_shape() {
                         "timestamp": "2026-06-04T00:00:00Z",
                         "status": "running"
                     }
+                },
+                "canonicalEvent": {
+                    "method": "turn/updated",
+                    "params": {
+                        "sessionId": "sess_1",
+                        "threadId": "thread_1",
+                        "turnId": "turn_1",
+                        "status": "inProgress",
+                        "admission": "accepted",
+                        "queue": {
+                            "state": "notQueued"
+                        },
+                        "approval": "notRequired",
+                        "items": [],
+                        "itemsView": "full",
+                        "createdAtMs": 100,
+                        "updatedAtMs": 120
+                    }
                 }
             }
         })
     );
+}
+
+#[test]
+fn canonical_thread_read_requests_match_protocol_fixture_shapes() {
+    let cases = [
+        (
+            METHOD_THREAD_READ,
+            json!({ "threadId": "thread_1", "turnsView": "full" }),
+        ),
+        (
+            METHOD_THREAD_LIST,
+            json!({
+                "cursor": "opaque:thread:2",
+                "limit": 20,
+                "sortDirection": "desc",
+                "includeArchived": true,
+                "turnsView": "summary"
+            }),
+        ),
+        (
+            METHOD_THREAD_TURNS_LIST,
+            json!({
+                "threadId": "thread_1",
+                "cursor": "opaque:turn:4",
+                "limit": 10,
+                "sortDirection": "asc",
+                "itemsView": "summary"
+            }),
+        ),
+        (
+            METHOD_THREAD_ITEMS_LIST,
+            json!({
+                "threadId": "thread_1",
+                "turnId": "turn_1",
+                "cursor": "opaque:item:8",
+                "limit": 50,
+                "sortDirection": "asc"
+            }),
+        ),
+    ];
+
+    for (index, (method, params)) in cases.into_iter().enumerate() {
+        let request = JsonRpcRequest::new(
+            RequestId::Integer(index as i64 + 1),
+            method,
+            Some(params.clone()),
+        );
+        let typed = AppServerClientRequest::try_from(request.clone()).expect("typed request");
+        let round_trip: JsonRpcRequest = typed.into();
+
+        assert_eq!(round_trip, request);
+    }
+
+    serde_json::from_value::<ThreadReadParams>(
+        json!({ "threadId": "thread_1", "turnsView": "full" }),
+    )
+    .expect("thread/read params");
 }

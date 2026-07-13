@@ -3,7 +3,8 @@
 > status: implementation-ready plan
 > owner: runtime-architecture
 > last_verified: 2026-07-12
-> execution_record: `internal/exec-plans/refactor-v2-research.md`
+> execution_record: `internal/exec-plans/refactor-v2-implementation.md`
+> research_record: `internal/exec-plans/refactor-v2-research.md`
 
 每个切片只认领窄写集；切片之间不以 compat wrapper 传递状态。`copy` 先于 `delete`，但复制后的 current owner 一旦通过最小验证，旧实现必须在同一切片或紧随其后的清理切片删除。
 
@@ -41,9 +42,9 @@
 
 **写集**：`runtime-core/src/llm_protocol`、`model-provider/**`、provider fixtures、capability projection。
 
-**动作**：复制 OpenCode ContentPart/LLMEvent/options/lowering 语义；把 wire mapper 从 runtime-core 迁到 model-provider，删除旧 mapper 和 GUI body builder。
+**动作**：复制 OpenCode ContentPart/LLMEvent/options/lowering 语义；把 wire mapper 从 runtime-core 迁到 model-provider。S3c 再迁移 media-runtime、agent-runtime 和 App Server consumer 后，删除旧 mapper 和 GUI body builder；S3 spike 单独不算完成。
 
-**退出条件**：每个已支持 protocol 有 canonical request/event、unsupported 显式失败、media reference-only、GUI/runtime gate 一致。
+**退出条件**：每个已支持 protocol 有 production-wired canonical request/event、unsupported 显式失败、media reference-only、GUI/runtime gate 一致；S3c consumer handoff 与旧 mapper 删除证明齐全。
 
 **验证**：provider 定向测试、`npm run test:contracts`、media GUI smoke。
 
@@ -90,8 +91,8 @@
 ## 依赖顺序
 
 ```text
-S0 -> S1 -> S2 -> S3
-          \-> S4 -> S5 -> S6 -> S7
+S0 -> S1 -> S2 -> S4 --\
+          \-> S3 -> S3c +-> S5 -> S6 -> S7
 ```
 
-S3 可与 S2 并行的只读审计，但不得在 Item/read model 契约冻结前接入 GUI。
+S2 与 S3 在 S1 contract 冻结后可并行施工；S4 的 Item/approval/agent edge 写入等待 S2 handoff。S5 等待 S2 read model、S3 provider capability 和 S4 tool display contract，未满足依赖时只允许只读审计 GUI。

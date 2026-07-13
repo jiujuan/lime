@@ -1016,6 +1016,22 @@
     },
     {
       "kind": "request",
+      "method": "thread/items/list"
+    },
+    {
+      "kind": "request",
+      "method": "thread/list"
+    },
+    {
+      "kind": "request",
+      "method": "thread/read"
+    },
+    {
+      "kind": "request",
+      "method": "thread/turns/list"
+    },
+    {
+      "kind": "request",
       "method": "usageStats/dailyTrends/list"
     },
     {
@@ -1288,6 +1304,18 @@
     {
       "method": "projectShell/session/write",
       "scope": "projectShellSession"
+    },
+    {
+      "method": "thread/items/list",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/read",
+      "scope": "thread"
+    },
+    {
+      "method": "thread/turns/list",
+      "scope": "thread"
     }
   ],
   "schemas": {
@@ -1392,6 +1420,8 @@
       "AppServerMethodKind",
       "AppServerMethodSpec",
       "AppServerNotificationMethod",
+      "AppServerRequestAccess",
+      "AppServerRequestAccessSpec",
       "AppServerRequestMethod",
       "AppServerRequestSerializationScope",
       "AppServerRequestSerializationScopeSpec",
@@ -1436,6 +1466,7 @@
       "BrowserSessionTargetListParams",
       "BrowserSessionTargetListResponse",
       "BusinessObjectRef",
+      "CanonicalThreadEventNotification",
       "CapabilityDescriptor",
       "CapabilityListParams",
       "CapabilityListResponse",
@@ -1796,9 +1827,13 @@
       "SessionFileResolvePathResponse",
       "SessionFileSaveParams",
       "SessionFileUpdateMetaParams",
+      "SkillAuthority",
+      "SkillDependencies",
+      "SkillDetail",
       "SkillDownloadInstallParams",
       "SkillDownloadInstallResponse",
       "SkillInstalledDirectoriesListResponse",
+      "SkillInterface",
       "SkillListResponse",
       "SkillLocalDetailInspectParams",
       "SkillLocalDetailInspectResponse",
@@ -1808,8 +1843,10 @@
       "SkillLocalInspectResponse",
       "SkillLocalRenameParams",
       "SkillLocalRenameResponse",
+      "SkillLocator",
       "SkillManagementInstallParams",
       "SkillManagementListParams",
+      "SkillManagementListResponse",
       "SkillManagementUninstallParams",
       "SkillManagementWriteResponse",
       "SkillMarketplaceBundleFile",
@@ -1823,6 +1860,7 @@
       "SkillPackageLocalInstallResponse",
       "SkillPackageLocalReplaceParams",
       "SkillPackageLocalReplaceResponse",
+      "SkillPolicy",
       "SkillReadParams",
       "SkillReadResponse",
       "SkillRemoteInspectParams",
@@ -1833,6 +1871,11 @@
       "SkillRepositorySaveParams",
       "SkillScaffoldCreateParams",
       "SkillScaffoldCreateResponse",
+      "SkillScope",
+      "SkillSource",
+      "SkillSummary",
+      "SkillToolDependency",
+      "SkillWorkflowStep",
       "SoulStylePackInstallParams",
       "SoulStylePackInstallResponse",
       "SoulStylePackInstallStatus",
@@ -1850,6 +1893,14 @@
       "SupportBundleTraceExportSelection",
       "TextPosition",
       "TextRange",
+      "ThreadItemsListParams",
+      "ThreadItemsListResponse",
+      "ThreadListParams",
+      "ThreadListResponse",
+      "ThreadReadParams",
+      "ThreadReadResponse",
+      "ThreadTurnsListParams",
+      "ThreadTurnsListResponse",
       "TransportKind",
       "UsageStatsDailyTrendsListResponse",
       "UsageStatsDailyUsage",

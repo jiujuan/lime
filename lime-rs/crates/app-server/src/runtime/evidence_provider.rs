@@ -1,4 +1,5 @@
 mod browser;
+mod canonical_tool;
 mod coding;
 mod context;
 mod observability;
@@ -581,8 +582,15 @@ fn evidence_pack_artifacts(request: &EvidencePackRequest) -> Vec<EvidencePackArt
         ));
     }
     for event in &request.events {
+        let Some(canonical_tool) = canonical_tool::canonical_tool_or_side_channel(event) else {
+            continue;
+        };
+        let artifact_metadata = match canonical_tool.as_ref() {
+            Some(tool) => tool.structured_content(),
+            None => Some(&event.payload),
+        };
         artifacts.extend(snapshot_evidence_artifacts_from_metadata(
-            Some(&event.payload),
+            artifact_metadata,
             event.event_id.as_str(),
         ));
     }

@@ -55,7 +55,9 @@ export async function submitAgentStreamUserInput(
     runtimeStatusPresentation,
     submittedDraft,
     initialThreadId:
-      targetSessionId || env.sessionIdRef.current || `local-thread:${assistantMsgId}`,
+      targetSessionId ||
+      env.sessionIdRef.current ||
+      `local-thread:${assistantMsgId}`,
     listenerMapRef: env.listenerMapRef,
     setActiveStream: env.setActiveStream,
     setMessages: env.setMessages,
@@ -92,6 +94,7 @@ export async function submitAgentStreamUserInput(
       runtime: env.runtime,
       ensureSession: env.ensureSession,
       attemptSilentTurnRecovery: env.attemptSilentTurnRecovery,
+      refreshSessionReadModel: env.refreshSessionReadModel,
       sessionIdRef: env.sessionIdRef,
       getWorkspaceIdForSubmit: env.getWorkspaceIdForSubmit,
       getSyncedSessionExecutionStrategy: env.getSyncedSessionExecutionStrategy,

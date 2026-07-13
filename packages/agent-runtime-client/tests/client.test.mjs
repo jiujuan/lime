@@ -2,18 +2,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import {
+import * as runtimeClientPackage from "../dist/index.js";
+
+const {
   AgentRuntimeEventPipeline,
   AgentRuntimeSequenceViolationError,
   AppServerConnection,
-  createSchemaVersionCompatibilityMiddleware,
   createAgentRuntimeClient,
   createAgentRuntimeClientFromSessionGateway,
-  runtimeExecutionEventFromAgentEvent,
+  runtimeExecutionEventFromCanonicalEvent,
   withEvent,
-} from "../dist/index.js";
+} = runtimeClientPackage;
 
-test("createAgentRuntimeClient is available from the standard runtime client package", async () => {
+test("createAgentRuntimeClient delegates current App Server requests", async () => {
   const sent = [];
   const responses = [
     {
@@ -35,18 +36,19 @@ test("createAgentRuntimeClient is available from the standard runtime client pac
       },
     },
   ];
-  const connection = new AppServerConnection({
-    send(message) {
-      sent.push(message);
-    },
-    async nextMessage() {
-      const response = responses.shift();
-      assert.ok(response, "unexpected App Server request");
-      return response;
-    },
-  });
+  const runtime = createAgentRuntimeClient(
+    new AppServerConnection({
+      send(message) {
+        sent.push(message);
+      },
+      async nextMessage() {
+        const response = responses.shift();
+        assert.ok(response, "unexpected App Server request");
+        return response;
+      },
+    }),
+  );
 
-  const runtime = createAgentRuntimeClient(connection);
   const result = await runtime.startTurn({
     sessionId: "session-1",
     input: { text: "生成草稿" },
@@ -58,114 +60,49 @@ test("createAgentRuntimeClient is available from the standard runtime client pac
   assert.equal(result.result.turn.turnId, "turn-1");
 });
 
-test("createAgentRuntimeClientFromSessionGateway adapts an existing session gateway", async () => {
+test("session gateway delegates the standard runtime client surface", async () => {
   const calls = [];
   const gateway = {
-    async startTurn(params, options) {
-      calls.push(["startTurn", params, options]);
-      return {
-        id: 1,
-        result: {
-          turn: {
-            turnId: "turn-1",
-            sessionId: params.sessionId,
-            threadId: "thread-1",
-            status: "accepted",
-          },
-        },
-        response: { jsonrpc: "2.0", id: 1, result: {} },
-        notifications: [],
-        messages: [],
-      };
-    },
-    async readSession(params, options) {
-      calls.push(["readSession", params, options]);
-      return {
-        id: 2,
-        result: {
-          session: {
-            sessionId: params.sessionId,
-            threadId: "thread-1",
-            status: "running",
-            createdAt: "2026-05-15T00:00:00.000Z",
-            updatedAt: "2026-05-15T00:00:01.000Z",
-          },
-          turns: [],
-        },
-        response: { jsonrpc: "2.0", id: 2, result: {} },
-        notifications: [],
-        messages: [],
-      };
-    },
+    ...createMinimalSessionGateway(calls),
     async readToolInventory(params, options) {
       calls.push(["readToolInventory", params, options]);
-      return {
-        id: 6,
-        result: {
-          tools: [],
-          updatedAt: "2026-05-15T00:00:01.000Z",
-        },
-        response: { jsonrpc: "2.0", id: 6, result: {} },
-        notifications: [],
-        messages: [],
-      };
-    },
-    async cancelTurn(params, options) {
-      calls.push(["cancelTurn", params, options]);
-      return {
-        id: 3,
-        result: {},
-        response: { jsonrpc: "2.0", id: 3, result: {} },
-        notifications: [],
-        messages: [],
-      };
-    },
-    async respondAction(params, options) {
-      calls.push(["respondAction", params, options]);
-      return {
-        id: 4,
-        result: {},
-        response: { jsonrpc: "2.0", id: 4, result: {} },
-        notifications: [],
-        messages: [],
-      };
+      return requestResult(6, {
+        tools: [],
+        updatedAt: "2026-05-15T00:00:01.000Z",
+      });
     },
     async exportEvidence(params, options) {
       calls.push(["exportEvidence", params, options]);
-      return {
-        id: 5,
-        result: {
-          session: {
-            sessionId: params.sessionId,
-            threadId: "thread-1",
-            status: "completed",
-            createdAt: "2026-05-15T00:00:00.000Z",
-            updatedAt: "2026-05-15T00:00:02.000Z",
-          },
-          turns: [],
-          events: [],
-          artifacts: [],
-          exportedAt: "2026-05-15T00:00:03.000Z",
+      return requestResult(5, {
+        session: {
+          sessionId: params.sessionId,
+          threadId: "thread-1",
+          status: "completed",
+          createdAt: "2026-05-15T00:00:00.000Z",
+          updatedAt: "2026-05-15T00:00:02.000Z",
         },
-        response: { jsonrpc: "2.0", id: 5, result: {} },
-        notifications: [],
-        messages: [],
-      };
+        turns: [],
+        events: [],
+        artifacts: [],
+        exportedAt: "2026-05-15T00:00:03.000Z",
+      });
     },
   };
-
   const runtime = createAgentRuntimeClientFromSessionGateway(gateway);
-  const requestOptions = { timeoutMs: 120_000 };
+  const options = { timeoutMs: 120_000 };
 
   await runtime.startTurn(
     { sessionId: "session-1", input: { text: "生成草稿" } },
-    requestOptions,
+    options,
   );
-  await runtime.readThread({ sessionId: "session-1" }, requestOptions);
-  await runtime.readToolInventory({ sessionId: "session-1" }, requestOptions);
+  await runtime.readThread(
+    { threadId: "thread-1", turnsView: "full" },
+    options,
+  );
+  await runtime.readToolInventory({ sessionId: "session-1" }, options);
   await runtime.cancelTurn(
     { sessionId: "session-1", turnId: "turn-1" },
-    requestOptions,
+    options,
   );
   await runtime.respondAction(
     {
@@ -175,380 +112,325 @@ test("createAgentRuntimeClientFromSessionGateway adapts an existing session gate
       confirmed: true,
       response: "继续",
     },
-    requestOptions,
+    options,
   );
   await runtime.exportEvidence(
-    {
-      sessionId: "session-1",
-      includeEvents: true,
-      includeArtifacts: true,
-    },
-    requestOptions,
+    { sessionId: "session-1", includeEvents: true },
+    options,
   );
 
   assert.deepEqual(calls.map(([name]) => name), [
     "startTurn",
-    "readSession",
+    "readThread",
     "readToolInventory",
     "cancelTurn",
     "respondAction",
     "exportEvidence",
   ]);
-  assert.equal(calls[1][1].sessionId, "session-1");
   assert.equal(calls[1][2].timeoutMs, 120_000);
-  assert.equal(calls[2][1].sessionId, "session-1");
-  assert.equal(calls[2][2].timeoutMs, 120_000);
   assert.equal(calls[5][1].includeEvents, true);
 });
 
-test("session gateway client dispatches only App Server runtime events", async () => {
+test("package root exports the canonical mapper without compatibility aliases", () => {
+  assert.equal(typeof runtimeExecutionEventFromCanonicalEvent, "function");
+  assert.equal("runtimeExecutionEventFromAgentEvent" in runtimeClientPackage, false);
+  assert.equal(
+    "createSchemaVersionCompatibilityMiddleware" in runtimeClientPackage,
+    false,
+  );
+});
+
+test("package root type surface exports canonical thread read types only", async () => {
+  const declarations = await readFile(
+    new URL("../dist/index.d.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(declarations.includes("type ThreadReadParams"), true);
+  assert.equal(declarations.includes("type ThreadReadResponse"), true);
+  assert.equal(declarations.includes("AgentSessionReadParams"), false);
+  assert.equal(declarations.includes("AgentSessionReadResponse"), false);
+});
+
+test("canonical mapper reads lifecycle state from typed Thread Turn and Item", () => {
+  const thread = runtimeExecutionEventFromCanonicalEvent({
+    method: "thread/updated",
+    params: {
+      sessionId: "session-1",
+      threadId: "thread-1",
+      name: "Research",
+      status: { type: "active", activeFlags: ["waitingOnApproval"] },
+      createdAtMs: 100,
+      updatedAtMs: 110,
+    },
+  });
+  const turn = runtimeExecutionEventFromCanonicalEvent(
+    turnEvent("interrupted", { updatedAtMs: 220, completedAtMs: 220 }),
+  );
+  const item = runtimeExecutionEventFromCanonicalEvent(
+    itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
+  );
+  const approval = runtimeExecutionEventFromCanonicalEvent(
+    itemEvent({ kind: "approval", status: "pending" }),
+  );
+  const command = runtimeExecutionEventFromCanonicalEvent(
+    itemEvent({ kind: "command", status: "completed" }),
+  );
+
+  assert.equal(thread.status, "running");
+  assert.equal(thread.title, "Research");
+  assert.equal(turn.eventClass, "turn.canceled");
+  assert.equal(turn.status, "canceled");
+  assert.equal(item.eventClass, "tool.result");
+  assert.equal(item.toolCallId, "tool_call_1");
+  assert.equal(approval.eventClass, "action.required");
+  assert.equal(command.eventClass, "command.exited");
+});
+
+test("root client dispatches canonical lifecycle only to canonical listeners", async () => {
+  const runtime = createRuntimeClient();
+  const canonical = [];
+  const raw = [];
+  runtime.subscribeCanonicalEvents((event) => canonical.push(event));
+  runtime.subscribeEvents((event) => raw.push(event));
+
+  for (const notification of canonicalToolLifecycle()) {
+    assert.equal(await runtime.dispatchEvent(notification), true);
+  }
+  assert.equal(
+    await runtime.dispatchEvent(rawNotification("turn.completed")),
+    false,
+  );
+
+  assert.deepEqual(canonical.map((event) => event.method), [
+    "turn/updated",
+    "item/updated",
+    "item/updated",
+    "item/updated",
+    "turn/updated",
+  ]);
+  assert.deepEqual(raw, []);
+});
+
+test("session gateway dispatches canonical lifecycle and rejects raw lifecycle", async () => {
   const runtime = createAgentRuntimeClientFromSessionGateway(
     createMinimalSessionGateway(),
   );
-  const received = [];
-  const subscription = runtime.subscribeEvents((event, notification) => {
-    received.push([event.type, notification.method]);
-  });
+  const canonical = [];
+  const raw = [];
+  runtime.subscribeCanonicalEvents((event) => canonical.push(event));
+  runtime.subscribeEvents((event) => raw.push(event));
 
-  const ignored = await runtime.dispatchEvent({
-    method: "log/list",
-    params: {},
-  });
-  const handled = await runtime.dispatchEvent(
-    agentSessionEventNotification("turn.started"),
+  assert.equal(
+    await runtime.dispatchEvent(canonicalNotification(turnEvent("inProgress"))),
+    true,
   );
-  subscription.unsubscribe();
-  await runtime.dispatchEvent(agentSessionEventNotification("turn.completed"));
+  assert.equal(
+    await runtime.dispatchEvent(rawNotification("turn.started")),
+    false,
+  );
 
-  assert.equal(ignored, false);
-  assert.equal(handled, true);
-  assert.deepEqual(received, [["turn.started", "agentSession/event"]]);
+  assert.equal(canonical[0].method, "turn/updated");
+  assert.deepEqual(raw, []);
 });
 
-test("session gateway client reads nextEvent from gateway event sources", async () => {
+test("disabling sequence verification does not restore raw lifecycle", async () => {
+  const runtime = createAgentRuntimeClientFromSessionGateway(
+    createMinimalSessionGateway(),
+    { sequenceVerifierMode: "off" },
+  );
+
+  assert.equal(
+    await runtime.dispatchEvent(rawNotification("tool.result")),
+    false,
+  );
+  assert.equal(
+    await runtime.dispatchEvent(
+      canonicalNotification(itemEvent({ status: "completed" })),
+    ),
+    true,
+  );
+});
+
+test("raw channel accepts only explicit media.read notifications", async () => {
+  for (const runtime of [
+    createRuntimeClient(),
+    createAgentRuntimeClientFromSessionGateway(createMinimalSessionGateway()),
+  ]) {
+    const received = [];
+    runtime.subscribeEvents((event) => received.push(event.type));
+
+    assert.equal(
+      await runtime.dispatchEvent(mediaReadChunkNotification()),
+      true,
+    );
+    assert.equal(
+      await runtime.dispatchEvent(mediaReadCompletedNotification()),
+      true,
+    );
+    assert.equal(
+      await runtime.dispatchEvent(rawNotification("snapshot.updated")),
+      false,
+    );
+    assert.equal(
+      await runtime.dispatchEvent(rawNotification("media.read.chunk")),
+      false,
+    );
+
+    assert.deepEqual(received, ["media.read.chunk", "media.read.completed"]);
+  }
+});
+
+test("nextEvent consumes canonical notifications from gateway sources", async () => {
+  const directNotification = canonicalNotification(
+    itemEvent({ kind: "agentMessage", status: "inProgress" }),
+  );
   const directRuntime = createAgentRuntimeClientFromSessionGateway({
     ...createMinimalSessionGateway(),
     async nextEvent(timeoutMs) {
       assert.equal(timeoutMs, 500);
-      return agentSessionEventNotification("tool.started");
+      return directNotification;
     },
   });
   const directReceived = [];
-  directRuntime.subscribeEvents((event) => {
-    directReceived.push(event.type);
-  });
+  directRuntime.subscribeCanonicalEvents((event) => directReceived.push(event));
 
   const directEvent = await directRuntime.nextEvent(500);
 
-  assert.equal(directEvent.params.event.type, "tool.started");
-  assert.deepEqual(directReceived, ["tool.started"]);
+  assert.equal(directEvent.params.canonicalEvent.method, "item/updated");
+  assert.equal(directReceived[0].params.kind, "agentMessage");
 
+  const drainedNotification = canonicalNotification(turnEvent("inProgress"));
   const drainedRuntime = createAgentRuntimeClientFromSessionGateway({
     ...createMinimalSessionGateway(),
     async drainEvents(limit) {
       assert.equal(limit, 1);
-      return [
-        { method: "log/list", params: {} },
-        agentSessionEventNotification("action.required"),
-      ];
+      return [{ method: "log/list", params: {} }, drainedNotification];
     },
   });
 
   const drainedEvent = await drainedRuntime.nextEvent();
-
-  assert.equal(drainedEvent.params.event.type, "action.required");
+  assert.equal(drainedEvent.params.canonicalEvent.method, "turn/updated");
 });
 
-test("runtime client blocks invalid agentSession/event streams by default", async () => {
-  const runtime = createAgentRuntimeClient(
+test("sequence verifier fails closed for orphan canonical tool completion", async () => {
+  const notification = canonicalNotification(
+    itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
+  );
+  const runtime = createRuntimeClient();
+
+  assert.equal(await runtime.dispatchEvent(notification), false);
+
+  const streamingRuntime = createAgentRuntimeClient(
     new AppServerConnection({
       send() {},
       async nextMessage() {
-        return agentSessionEventNotification("tool.result", {
-          payload: { toolCallId: "tool-orphan" },
-        });
+        return notification;
       },
     }),
   );
-  const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(event.type);
-  });
-
-  const handled = await runtime.dispatchEvent(
-    agentSessionEventNotification("tool.result", {
-      payload: { toolCallId: "tool-orphan" },
-    }),
-  );
-
-  assert.equal(handled, false);
-  assert.deepEqual(received, []);
   await assert.rejects(
-    runtime.nextEvent(),
+    streamingRuntime.nextEvent(),
     AgentRuntimeSequenceViolationError,
   );
 });
 
-test("runtime client normalizes App Server message events before sequence verification", async () => {
-  const runtime = createAgentRuntimeClient(
-    new AppServerConnection({
-      send() {},
-      async nextMessage() {
-        throw new Error("unused");
-      },
-    }),
-  );
-  const delta = agentSessionEventNotification("message.delta", {
-    eventId: "evt-message-delta",
-    sequence: 1,
-    payload: { messageId: "msg-1", text: "hello" },
-  });
-  const completed = agentSessionEventNotification("turn.completed", {
-    eventId: "evt-turn-completed",
-    sequence: 2,
-  });
-
-  assert.equal(
-    runtimeExecutionEventFromAgentEvent(delta.params.event).eventClass,
-    "model.delta",
-  );
-  assert.equal(await runtime.dispatchEvent(delta), true);
-  assert.equal(await runtime.dispatchEvent(completed), true);
-  assert.equal(
-    await runtime.dispatchEvent(agentSessionEventNotification("message.delta", {
-      eventId: "evt-late-delta",
-      sequence: 3,
-      payload: { messageId: "msg-1", text: "late" },
-    })),
-    false,
-  );
-});
-
-test("runtime client treats App Server canceled turn events as terminal", async () => {
-  const runtime = createAgentRuntimeClient(
-    new AppServerConnection({
-      send() {},
-      async nextMessage() {
-        throw new Error("unused");
-      },
-    }),
-  );
-
-  assert.equal(
-    runtimeExecutionEventFromAgentEvent(
-      agentSessionEventNotification("turn.canceled", {
-        eventId: "evt-turn-canceled",
-      }).params.event,
-    ).eventClass,
-    "turn.canceled",
-  );
-  assert.equal(
-    runtimeExecutionEventFromAgentEvent(
-      agentSessionEventNotification("turn.canceled", {
-        eventId: "evt-turn-canceled",
-      }).params.event,
-    ).status,
-    "canceled",
-  );
-  assert.equal(
-    await runtime.dispatchEvent(
-      agentSessionEventNotification("turn.canceled", {
-        eventId: "evt-turn-canceled",
-      }),
-    ),
-    true,
-  );
-  assert.equal(
-    await runtime.dispatchEvent(
-      agentSessionEventNotification("message.delta", {
-        eventId: "evt-late-delta-after-cancel",
-        sequence: 2,
-        payload: { messageId: "msg-1", text: "late" },
-      }),
-    ),
-    false,
-  );
-});
-
-test("runtime client treats action cancel and expiry events as completed action terminals", () => {
-  for (const type of ["action.cancelled", "action.canceled", "action.expired"]) {
-    const runtimeEvent = runtimeExecutionEventFromAgentEvent(
-      agentSessionEventNotification(type, {
-        eventId: `evt-${type}`,
-        payload: { actionId: "action-1" },
-      }).params.event,
-    );
-
-    assert.equal(runtimeEvent.eventClass, type);
-    assert.equal(runtimeEvent.kind, "action");
-    assert.equal(runtimeEvent.status, "completed");
-  }
-});
-
-test("runtime client can collect sequence diagnostics without blocking dispatch", async () => {
-  const runtime = createAgentRuntimeClient(
-    new AppServerConnection({
-      send() {},
-      async nextMessage() {
-        throw new Error("unused");
-      },
-    }),
+test("collect-diagnostics keeps canonical dispatch observable", async () => {
+  const runtime = createAgentRuntimeClientFromSessionGateway(
+    createMinimalSessionGateway(),
     { sequenceVerifierMode: "collect-diagnostics" },
   );
   const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(event.type);
-  });
+  runtime.subscribeCanonicalEvents((event) => received.push(event));
 
   const handled = await runtime.dispatchEvent(
-    agentSessionEventNotification("tool.result", {
-      payload: { toolCallId: "tool-orphan" },
-    }),
+    canonicalNotification(
+      itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
+    ),
   );
 
   assert.equal(handled, true);
-  assert.deepEqual(received, ["tool.result"]);
+  assert.equal(received[0].params.status, "completed");
 });
 
-test("runtime event adapters run before sequence verification", async () => {
-  const runtime = createAgentRuntimeClient(
-    new AppServerConnection({
-      send() {},
-      async nextMessage() {
-        throw new Error("unused");
-      },
-    }),
-    {
-      adapters: [
-        ({ notification, event }) => {
-          if (event.type !== "legacy.tool.output") return;
-          return withEvent(notification, {
+test("canonical adapters run before verification and may fan out", async () => {
+  const runtime = createRuntimeClient({
+    adapters: [
+      ({ notification, event }) => {
+        if (event.method !== "item/updated") return;
+        return [
+          withEvent(notification, {
             ...event,
-            type: "tool.result",
-            payload: {
-              ...event.payload,
-              toolCallId: "tool-1",
+            params: {
+              ...event.params,
+              status: "inProgress",
+              sequence: 1,
+              updatedAtMs: 310,
             },
-          });
-        },
-      ],
-    },
-  );
-  const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(event.type);
-  });
-
-  assert.equal(
-    await runtime.dispatchEvent(
-      agentSessionEventNotification("tool.started", {
-        eventId: "evt-tool-started",
-        payload: { toolCallId: "tool-1" },
-      }),
-    ),
-    true,
-  );
-  assert.equal(
-    await runtime.dispatchEvent(
-      agentSessionEventNotification("legacy.tool.output", {
-        eventId: "evt-legacy-tool-output",
-        sequence: 2,
-      }),
-    ),
-    true,
-  );
-
-  assert.deepEqual(received, ["tool.started", "tool.result"]);
-});
-
-test("runtime event adapters can fan out one transport notification into multiple verified events", async () => {
-  const runtime = createAgentRuntimeClient(
-    new AppServerConnection({
-      send() {},
-      async nextMessage() {
-        throw new Error("unused");
+          }),
+          withEvent(notification, {
+            ...event,
+            params: {
+              ...event.params,
+              status: "completed",
+              sequence: 2,
+              updatedAtMs: 320,
+              completedAtMs: 320,
+            },
+          }),
+        ];
       },
-    }),
-    {
-      adapters: [
-        ({ notification, event }) => {
-          if (event.type !== "legacy.tool.complete") return;
-          return [
-            withEvent(notification, {
-              ...event,
-              eventId: "evt-fanout-tool-start",
-              sequence: event.sequence,
-              type: "tool.started",
-              payload: {
-                ...event.payload,
-                toolCallId: "tool-fanout",
-              },
-            }),
-            withEvent(notification, {
-              ...event,
-              eventId: "evt-fanout-tool-result",
-              sequence: event.sequence + 1,
-              type: "tool.result",
-              payload: {
-                ...event.payload,
-                toolCallId: "tool-fanout",
-              },
-            }),
-          ];
-        },
-      ],
-    },
-  );
+    ],
+  });
   const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(`${event.sequence}:${event.type}`);
+  runtime.subscribeCanonicalEvents((event) => {
+    received.push(`${event.params.sequence}:${event.params.status}`);
   });
 
   const handled = await runtime.dispatchEvent(
-    agentSessionEventNotification("legacy.tool.complete", {
-      eventId: "evt-legacy-tool-complete",
-      sequence: 1,
-    }),
+    canonicalNotification(itemEvent({ status: "pending", sequence: 0 })),
   );
 
   assert.equal(handled, true);
-  assert.deepEqual(received, ["1:tool.started", "2:tool.result"]);
+  assert.deepEqual(received, ["1:inProgress", "2:completed"]);
 });
 
-test("runtime client nextEvent returns fanned-out events before reading more transport messages", async () => {
+test("nextEvent returns canonical adapter fanout before another transport read", async () => {
   let reads = 0;
+  const source = canonicalNotification(
+    itemEvent({ status: "pending", sequence: 0 }),
+  );
   const runtime = createAgentRuntimeClient(
     new AppServerConnection({
       send() {},
       async nextMessage() {
         reads += 1;
-        return agentSessionEventNotification("legacy.tool.complete", {
-          eventId: "evt-legacy-tool-complete-next",
-          sequence: 1,
-        });
+        return source;
       },
     }),
     {
       adapters: [
-        ({ notification, event }) => {
-          if (event.type !== "legacy.tool.complete") return;
-          return [
-            withEvent(notification, {
-              ...event,
-              eventId: "evt-next-tool-start",
-              sequence: event.sequence,
-              type: "tool.started",
-              payload: { toolCallId: "tool-next" },
-            }),
-            withEvent(notification, {
-              ...event,
-              eventId: "evt-next-tool-result",
-              sequence: event.sequence + 1,
-              type: "tool.result",
-              payload: { toolCallId: "tool-next" },
-            }),
-          ];
-        },
+        ({ notification, event }) => [
+          withEvent(notification, {
+            ...event,
+            params: {
+              ...event.params,
+              status: "inProgress",
+              sequence: 1,
+              updatedAtMs: 310,
+            },
+          }),
+          withEvent(notification, {
+            ...event,
+            params: {
+              ...event.params,
+              status: "completed",
+              sequence: 2,
+              updatedAtMs: 320,
+              completedAtMs: 320,
+            },
+          }),
+        ],
       ],
     },
   );
@@ -556,142 +438,65 @@ test("runtime client nextEvent returns fanned-out events before reading more tra
   const first = await runtime.nextEvent();
   const second = await runtime.nextEvent();
 
-  assert.equal(first.params.event.type, "tool.started");
-  assert.equal(second.params.event.type, "tool.result");
+  assert.equal(first.params.canonicalEvent.params.status, "inProgress");
+  assert.equal(second.params.canonicalEvent.params.status, "completed");
   assert.equal(reads, 1);
 });
 
-test("runtime event middleware can drop events before listener dispatch", async () => {
-  const runtime = createAgentRuntimeClient(
-    new AppServerConnection({
-      send() {},
-      async nextMessage() {
-        throw new Error("unused");
-      },
-    }),
-    {
-      middlewares: [
-        ({ event }) => {
-          if (event.type === "snapshot.updated") return false;
-        },
-      ],
-    },
-  );
-  const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(event.type);
-  });
-
-  assert.equal(
-    await runtime.dispatchEvent(agentSessionEventNotification("snapshot.updated")),
-    false,
-  );
-
-  assert.deepEqual(received, []);
-});
-
-test("schemaVersion compatibility middleware patches events in one place", async () => {
-  const runtime = createAgentRuntimeClientFromSessionGateway(
-    createMinimalSessionGateway(),
-    {
-      middlewares: [createSchemaVersionCompatibilityMiddleware()],
-    },
-  );
-  const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(event.payload.schemaVersion);
-  });
-
-  const handled = await runtime.dispatchEvent(
-    agentSessionEventNotification("turn.started"),
-  );
-
-  assert.equal(handled, true);
-  assert.deepEqual(received, ["lime-runtime-event/v0.1"]);
-});
-
-test("runtime event pipeline flush emits buffered transform events through verifier", async () => {
-  const pipeline = new AgentRuntimeEventPipeline({
+test("canonical middleware can drop an item before listener dispatch", async () => {
+  const runtime = createRuntimeClient({
     middlewares: [
-      {
-        transform({ notification, event }) {
-          if (event.type !== "message.delta") return;
-          return [
-            withEvent(notification, {
-              ...event,
-              eventId: "evt-buffered-message-delta",
-              type: "message.delta",
-            }),
-          ];
-        },
-        flush() {
-          return agentSessionEventNotification("turn.completed", {
-            eventId: "evt-buffered-turn-final",
-            sequence: 2,
-          });
-        },
-      },
+      ({ event }) => event.method === "item/updated" ? false : undefined,
     ],
   });
-
-  const processed = await pipeline.process(
-    agentSessionEventNotification("message.delta", {
-      eventId: "evt-source-message-delta",
-      sequence: 1,
-      payload: { text: "hello" },
-    }),
-  );
-  const flushed = await pipeline.flush();
-
-  assert.equal(processed.accepted, true);
-  assert.equal(processed.notifications[0].params.event.type, "message.delta");
-  assert.equal(flushed.accepted, true);
-  assert.deepEqual(
-    flushed.notifications.map((notification) => notification.params.event.type),
-    ["turn.completed"],
-  );
-});
-
-test("session gateway client blocks invalid agentSession/event streams by default", async () => {
-  const runtime = createAgentRuntimeClientFromSessionGateway(
-    createMinimalSessionGateway(),
-  );
   const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(event.type);
-  });
+  runtime.subscribeCanonicalEvents((event) => received.push(event));
 
   const handled = await runtime.dispatchEvent(
-    agentSessionEventNotification("tool.result", {
-      payload: { toolCallId: "tool-orphan" },
-    }),
+    canonicalNotification(
+      itemEvent({ kind: "agentMessage", status: "inProgress" }),
+    ),
   );
 
   assert.equal(handled, false);
   assert.deepEqual(received, []);
 });
 
-test("session gateway client can disable sequence verifier explicitly", async () => {
-  const runtime = createAgentRuntimeClientFromSessionGateway(
-    createMinimalSessionGateway(),
-    { sequenceVerifierMode: "off" },
+test("pipeline flush verifies buffered canonical notifications", async () => {
+  const completed = canonicalNotification(
+    itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
   );
-  const received = [];
-  runtime.subscribeEvents((event) => {
-    received.push(event.type);
+  const pipeline = new AgentRuntimeEventPipeline({
+    middlewares: [
+      {
+        transform() {},
+        flush() {
+          return completed;
+        },
+      },
+    ],
   });
 
-  const handled = await runtime.dispatchEvent(
-    agentSessionEventNotification("tool.result", {
-      payload: { toolCallId: "tool-orphan" },
-    }),
+  const processed = await pipeline.process(
+    canonicalNotification(
+      itemEvent({ status: "inProgress", sequence: 1, updatedAtMs: 310 }),
+    ),
   );
+  const flushed = await pipeline.flush();
 
-  assert.equal(handled, true);
-  assert.deepEqual(received, ["tool.result"]);
+  assert.equal(processed.accepted, true);
+  assert.equal(
+    processed.notifications[0].params.canonicalEvent.params.status,
+    "inProgress",
+  );
+  assert.equal(flushed.accepted, true);
+  assert.equal(
+    flushed.notifications[0].params.canonicalEvent.params.status,
+    "completed",
+  );
 });
 
-test("session gateway client fails closed when required runtime surfaces are missing", async () => {
+test("session gateway fails closed when optional runtime surfaces are absent", async () => {
   const runtime = createAgentRuntimeClientFromSessionGateway(
     createMinimalSessionGateway(),
   );
@@ -703,7 +508,7 @@ test("session gateway client fails closed when required runtime surfaces are mis
   await assert.rejects(runtime.nextEvent(), /does not expose agentSession\/event/);
 });
 
-test("session gateway client propagates transport errors without fallback mocks", async () => {
+test("session gateway propagates transport errors without mock fallback", async () => {
   const runtime = createAgentRuntimeClientFromSessionGateway({
     ...createMinimalSessionGateway(),
     async startTurn() {
@@ -717,7 +522,7 @@ test("session gateway client propagates transport errors without fallback mocks"
   );
 });
 
-test("sessionGateway subpath remains browser-safe", async () => {
+test("sessionGateway subpath is browser-safe and canonical-only", async () => {
   const subpath = await import("../dist/sessionGateway.js");
   const source = await readFile(
     new URL("../dist/sessionGateway.js", import.meta.url),
@@ -727,76 +532,180 @@ test("sessionGateway subpath remains browser-safe", async () => {
   assert.equal(typeof subpath.AgentRuntimeEventSequenceGate, "function");
   assert.equal(typeof subpath.AgentRuntimeEventPipeline, "function");
   assert.equal(
-    typeof subpath.createSchemaVersionCompatibilityMiddleware,
+    typeof subpath.runtimeExecutionEventFromCanonicalEvent,
     "function",
   );
-  assert.equal(typeof subpath.runtimeExecutionEventFromAgentEvent, "function");
+  assert.equal("runtimeExecutionEventFromAgentEvent" in subpath, false);
+  assert.equal(
+    "createSchemaVersionCompatibilityMiddleware" in subpath,
+    false,
+  );
   assert.equal(source.includes("node:"), false);
   assert.equal(source.includes("app-server-client"), false);
   assert.equal(source.includes("@limecloud/app-server-client"), false);
 });
 
-function createMinimalSessionGateway() {
+function createRuntimeClient(options = {}) {
+  return createAgentRuntimeClient(
+    new AppServerConnection({
+      send() {},
+      async nextMessage() {
+        throw new Error("unused");
+      },
+    }),
+    options,
+  );
+}
+
+function createMinimalSessionGateway(calls = []) {
   return {
-    async startTurn(params) {
-      return {
-        id: 1,
-        result: {
-          turn: {
-            turnId: "turn-1",
-            sessionId: params.sessionId,
-            threadId: "thread-1",
-            status: "accepted",
-          },
+    async startTurn(params, options) {
+      calls.push(["startTurn", params, options]);
+      return requestResult(1, {
+        turn: {
+          turnId: "turn-1",
+          sessionId: params.sessionId,
+          threadId: "thread-1",
+          status: "accepted",
         },
-        response: { jsonrpc: "2.0", id: 1, result: {} },
-        notifications: [],
-        messages: [],
-      };
+      });
     },
-    async readSession(params) {
-      return {
-        id: 2,
-        result: {
-          session: {
-            sessionId: params.sessionId,
-            threadId: "thread-1",
-            status: "running",
-            createdAt: "2026-05-15T00:00:00.000Z",
-            updatedAt: "2026-05-15T00:00:01.000Z",
-          },
+    async readThread(params, options) {
+      calls.push(["readThread", params, options]);
+      return requestResult(2, {
+        thread: {
+          archived: false,
+          createdAtMs: 1778803200000,
+          sessionId: "session-1",
+          status: { type: "active" },
+          threadId: params.threadId,
           turns: [],
+          turnsView: params.turnsView,
+          updatedAtMs: 1778803201000,
         },
-        response: { jsonrpc: "2.0", id: 2, result: {} },
-        notifications: [],
-        messages: [],
-      };
+      });
     },
-    async cancelTurn() {
-      return {
-        id: 3,
-        result: {},
-        response: { jsonrpc: "2.0", id: 3, result: {} },
-        notifications: [],
-        messages: [],
-      };
+    async cancelTurn(params, options) {
+      calls.push(["cancelTurn", params, options]);
+      return requestResult(3, {});
     },
-    async respondAction() {
-      return {
-        id: 4,
-        result: {},
-        response: { jsonrpc: "2.0", id: 4, result: {} },
-        notifications: [],
-        messages: [],
-      };
+    async respondAction(params, options) {
+      calls.push(["respondAction", params, options]);
+      return requestResult(4, {});
     },
   };
 }
 
-function agentSessionEventNotification(type, overrides = {}) {
-  const payload = {
-    ...(overrides.payload ?? {}),
+function requestResult(id, result) {
+  return {
+    id,
+    result,
+    response: { jsonrpc: "2.0", id, result },
+    notifications: [],
+    messages: [],
   };
+}
+
+function canonicalToolLifecycle() {
+  return [
+    canonicalNotification(turnEvent("inProgress", { updatedAtMs: 210 })),
+    canonicalNotification(
+      itemEvent({ status: "pending", sequence: 0, updatedAtMs: 300 }),
+    ),
+    canonicalNotification(
+      itemEvent({ status: "inProgress", sequence: 1, updatedAtMs: 310 }),
+    ),
+    canonicalNotification(
+      itemEvent({ status: "completed", sequence: 2, updatedAtMs: 320 }),
+    ),
+    canonicalNotification(
+      turnEvent("completed", { updatedAtMs: 220, completedAtMs: 220 }),
+    ),
+  ];
+}
+
+function turnEvent(status, overrides = {}) {
+  return {
+    method: "turn/updated",
+    params: {
+      sessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status,
+      createdAtMs: 200,
+      updatedAtMs: 210,
+      ...overrides,
+    },
+  };
+}
+
+function itemEvent({
+  kind = "tool",
+  status = "inProgress",
+  itemId = kind === "agentMessage" ? "msg_1" : "tool_call_1",
+  sequence = 1,
+  updatedAtMs = 310,
+  ...overrides
+} = {}) {
+  const payload = itemPayload(kind);
+  return {
+    method: "item/updated",
+    params: {
+      sessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId,
+      sequence,
+      ordinal: 0,
+      createdAtMs: 300,
+      updatedAtMs,
+      kind,
+      status,
+      payload,
+      ...overrides,
+    },
+  };
+}
+
+function itemPayload(kind) {
+  switch (kind) {
+    case "agentMessage":
+      return { type: "agentMessage", text: "hello" };
+    case "approval":
+      return {
+        type: "approval",
+        action: { type: "askUser", prompt: "Continue?" },
+        decision: { type: "pending" },
+      };
+    case "command":
+      return { type: "command", command: "npm test" };
+    default:
+      return { type: "tool", name: "shell", arguments: [] };
+  }
+}
+
+function canonicalNotification(canonicalEvent) {
+  const sequence = canonicalEvent.params.sequence
+    ?? canonicalEvent.params.updatedAtMs;
+  return {
+    method: "agentSession/event",
+    params: {
+      event: {
+        eventId: `event-${canonicalEvent.method}-${sequence}`,
+        sequence,
+        sessionId: canonicalEvent.params.sessionId,
+        threadId: canonicalEvent.params.threadId,
+        turnId: canonicalEvent.params.turnId,
+        type: canonicalEvent.method,
+        timestamp: new Date(canonicalEvent.params.updatedAtMs).toISOString(),
+        payload: {},
+      },
+      canonicalEvent,
+    },
+  };
+}
+
+function rawNotification(type, overrides = {}) {
   return {
     method: "agentSession/event",
     params: {
@@ -808,9 +717,31 @@ function agentSessionEventNotification(type, overrides = {}) {
         turnId: "turn-1",
         type,
         timestamp: "2026-05-15T00:00:02.000Z",
-        payload,
+        payload: {},
         ...overrides,
       },
     },
   };
+}
+
+function mediaReadChunkNotification() {
+  return rawNotification("media.read.chunk", {
+    payload: {
+      streamId: "media-stream-1",
+      chunkIndex: 0,
+      done: false,
+      chunk: { contentBase64: "aGVsbG8=" },
+    },
+  });
+}
+
+function mediaReadCompletedNotification() {
+  return rawNotification("media.read.completed", {
+    payload: {
+      streamId: "media-stream-1",
+      chunkCount: 1,
+      done: true,
+      media: { mimeType: "image/png" },
+    },
+  });
 }

@@ -19,6 +19,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+  APP_SERVER_METHOD_THREAD_READ,
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_CAPABILITY_LIST,
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
@@ -85,6 +86,48 @@ function line(value: unknown): string {
 describe("App Server API", () => {
   beforeEach(() => {
     vi.mocked(safeInvoke).mockReset();
+  });
+
+  it("readThread 应通过 canonical thread/read typed method", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 1,
+          result: {
+            thread: {
+              archived: false,
+              createdAtMs: 100,
+              sessionId: "session-1",
+              status: { type: "active" },
+              threadId: "thread-1",
+              turns: [],
+              turnsView: "full",
+              updatedAtMs: 200,
+            },
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient();
+    const result = await client.readThread({
+      threadId: "thread-1",
+      turnsView: "full",
+    });
+
+    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
+      "app_server_handle_json_lines",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          lines: [
+            expect.stringContaining(
+              `"method":"${APP_SERVER_METHOD_THREAD_READ}"`,
+            ),
+          ],
+        }),
+      }),
+    );
+    expect(result.result.thread.threadId).toBe("thread-1");
   });
 
   it("initialize 应通过 App Server JSON-RPC 命令完成握手", async () => {

@@ -1,9 +1,15 @@
 use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceStage};
 use agent_protocol::turn_context::TurnOutputSchemaRuntime;
-use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadTurn};
+use agent_protocol::{
+    ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload, ToolArgument,
+    ToolOutput, TurnId,
+};
+use lime_core::database::dao::agent_timeline::AgentThreadTurn;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
+use tool_runtime::tool_lifecycle::{ToolLifecycleEvent, ToolLifecyclePhase};
+use tool_runtime::tool_result_projection::NormalizedToolOutput;
 
 use crate::queued_turn::QueuedTurnSnapshot;
 use crate::session_execution_runtime::{
@@ -244,13 +250,13 @@ pub enum AgentEvent {
     TurnStarted { turn: AgentThreadTurn },
 
     #[serde(rename = "item_started")]
-    ItemStarted { item: AgentThreadItem },
+    ItemStarted { item: ThreadItem },
 
     #[serde(rename = "item_updated")]
-    ItemUpdated { item: AgentThreadItem },
+    ItemUpdated { item: ThreadItem },
 
     #[serde(rename = "item_completed")]
-    ItemCompleted { item: AgentThreadItem },
+    ItemCompleted { item: ThreadItem },
 
     #[serde(rename = "turn_completed")]
     TurnCompleted { turn: AgentThreadTurn },
@@ -270,20 +276,6 @@ pub enum AgentEvent {
 
     #[serde(rename = "thinking_delta")]
     ThinkingDelta { text: String },
-
-    #[serde(rename = "tool_start")]
-    ToolStart {
-        tool_name: String,
-        tool_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        arguments: Option<String>,
-    },
-
-    #[serde(rename = "tool_end")]
-    ToolEnd {
-        tool_id: String,
-        result: AgentToolResult,
-    },
 
     #[serde(rename = "tool_progress")]
     ToolProgress {
@@ -495,6 +487,153 @@ pub enum AgentEvent {
 
     #[serde(rename = "message")]
     Message { message: AgentMessage },
+}
+
+pub(crate) struct ToolItemLifecycleContext {
+    pub session_id: SessionId,
+    pub thread_id: ThreadId,
+    pub sequence: u64,
+    pub ordinal: u64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+pub(crate) fn canonical_tool_item_event(
+    event: ToolLifecycleEvent,
+    context: ToolItemLifecycleContext,
+) -> Option<AgentEvent> {
+    let ToolLifecycleEvent {
+        turn_id,
+        call_id,
+        tool_name,
+        arguments,
+        environments,
+        phase,
+        output,
+    } = event;
+    if matches!(phase, ToolLifecyclePhase::Completed) && output.is_none() {
+        return None;
+    }
+
+    let arguments = canonical_tool_arguments(arguments);
+    let mut metadata = serde_json::Map::new();
+    metadata.insert(
+        "environments".to_string(),
+        Value::Array(
+            environments
+                .into_iter()
+                .map(|environment| {
+                    serde_json::json!({
+                        "environmentId": environment.environment_id,
+                        "cwd": environment.cwd.to_string_lossy(),
+                    })
+                })
+                .collect(),
+        ),
+    );
+
+    let (status, output) = match output {
+        Some(output) => {
+            let NormalizedToolOutput {
+                success,
+                text,
+                structured_content,
+                error,
+                duration_ms,
+                truncation,
+                sidecar_reference,
+                metadata: output_metadata,
+            } = output;
+            metadata.extend(output_metadata);
+            metadata.insert("success".to_string(), Value::Bool(success));
+            metadata.insert("duration_ms".to_string(), Value::from(duration_ms));
+            if let Some(truncation) = truncation.as_ref() {
+                metadata.insert(
+                    "truncation".to_string(),
+                    serde_json::to_value(truncation).unwrap_or(Value::Null),
+                );
+            }
+            if let Some(reference) = sidecar_reference.as_ref() {
+                metadata.insert(
+                    "sidecar_reference".to_string(),
+                    serde_json::to_value(reference).unwrap_or(Value::Null),
+                );
+            }
+            (
+                if success {
+                    ItemStatus::Completed
+                } else {
+                    ItemStatus::Failed
+                },
+                Some(ToolOutput {
+                    text: Some(text),
+                    structured_content,
+                    error,
+                    duration_ms: Some(duration_ms),
+                    truncated: truncation.is_some(),
+                    output_ref: sidecar_reference.map(|reference| reference.reference),
+                }),
+            )
+        }
+        None => (ItemStatus::InProgress, None),
+    };
+    let payload = ThreadItemPayload::Tool {
+        call_id: call_id.clone(),
+        name: tool_name,
+        arguments,
+        output,
+    };
+    let item = ThreadItem {
+        session_id: context.session_id,
+        thread_id: context.thread_id,
+        turn_id: TurnId::new(turn_id),
+        item_id: ItemId::new(call_id),
+        sequence: context.sequence,
+        ordinal: context.ordinal,
+        created_at_ms: context.created_at_ms,
+        updated_at_ms: context.updated_at_ms,
+        completed_at_ms: status.is_terminal().then_some(context.updated_at_ms),
+        kind: payload.kind(),
+        status,
+        payload,
+        metadata: Value::Object(metadata),
+    };
+    Some(match phase {
+        ToolLifecyclePhase::Started => AgentEvent::ItemStarted { item },
+        ToolLifecyclePhase::Completed => AgentEvent::ItemCompleted { item },
+    })
+}
+
+fn canonical_tool_arguments(arguments: Value) -> Vec<ToolArgument> {
+    match arguments {
+        Value::Object(arguments) => arguments
+            .into_iter()
+            .map(|(name, value)| ToolArgument {
+                name,
+                value: compact_tool_argument(value),
+            })
+            .collect(),
+        Value::Array(arguments) => arguments
+            .into_iter()
+            .enumerate()
+            .map(|(index, value)| ToolArgument {
+                name: index.to_string(),
+                value: compact_tool_argument(value),
+            })
+            .collect(),
+        Value::Null => Vec::new(),
+        value => vec![ToolArgument {
+            name: "value".to_string(),
+            value: compact_tool_argument(value),
+        }],
+    }
+}
+
+fn compact_tool_argument(value: Value) -> String {
+    match value {
+        Value::String(value) => value,
+        value => value.to_string(),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

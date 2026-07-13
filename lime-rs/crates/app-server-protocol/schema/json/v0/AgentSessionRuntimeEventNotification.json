@@ -107,6 +107,14 @@
             "string"
           ]
         },
+        "ordinal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "sequence": {
           "format": "uint64",
           "minimum": 0,

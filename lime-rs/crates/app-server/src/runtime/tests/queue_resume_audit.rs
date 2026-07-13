@@ -297,6 +297,20 @@ async fn action_response_writes_workflow_resume_audit_with_worker_lifecycle_meta
     )
     .await
     .expect("turn");
+    core.append_external_runtime_events(
+        "sess_action_resume_lifecycle",
+        Some("turn_action"),
+        vec![RuntimeEvent::new(
+            "action.required",
+            json!({
+                "requestId": "article-draft-review",
+                "actionType": "ask_user",
+                "prompt": "Review the draft",
+                "deadlineAtMs": 1_999_999_999_999_u64,
+            }),
+        )],
+    )
+    .expect("append pending action");
 
     core.respond_action(
         AgentSessionActionRespondParams {

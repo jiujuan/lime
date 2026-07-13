@@ -1,5 +1,5 @@
 use crate::{ExecutionRequest, RuntimeEvent};
-use lime_skills::{read_agent_skill_body, AgentSkillSelection};
+use lime_skills::{AgentSkillBodyBudgetDecisionKind, AgentSkillSelectionEvaluation};
 use serde_json::{json, Value};
 
 pub(super) fn runtime_status_events_for_agent_skills(
@@ -32,7 +32,11 @@ pub(super) fn runtime_status_events_for_agent_skills(
 
     let mut events = Vec::new();
     if !body_selections.is_empty() {
-        events.extend(skill_body_read_events(&body_selections));
+        let evaluations = super::agent_skills_context::selected_agent_skill_body_evaluations(
+            &body_selections,
+            &snapshot,
+        );
+        events.extend(skill_body_read_events(&evaluations));
     }
     if !runtime_enable_sources.is_empty() || !selections.is_empty() {
         events.push(skill_gate_decision_event(
@@ -55,45 +59,84 @@ pub(super) fn runtime_status_events_for_agent_skills(
     events
 }
 
-fn skill_body_read_events(selections: &[AgentSkillSelection]) -> Vec<RuntimeEvent> {
-    selections
+fn skill_body_read_events(evaluations: &[AgentSkillSelectionEvaluation]) -> Vec<RuntimeEvent> {
+    evaluations
         .iter()
-        .map(
-            |selection| match read_agent_skill_body(&selection.locator) {
-                Ok(body) => runtime_status_event(
-                    "context",
-                    "Skill instructions loaded",
-                    format!("Loaded SKILL.md for `{}`.", selection.locator.name),
-                    json!({
-                        "skillRuntime": {
-                            "event": "skill_body_read",
-                            "skillName": selection.locator.name,
-                            "trigger": selection.trigger,
-                            "reason": selection.reason,
-                            "skillFilePath": selection.locator.skill_file_path,
-                            "status": "loaded",
-                        "bodyChars": body.markdown_content.chars().count(),
-                        }
-                    }),
+        .map(|evaluation| match evaluation.decision {
+            AgentSkillBodyBudgetDecisionKind::Allow => runtime_status_event(
+                "context",
+                "Skill instructions loaded",
+                format!(
+                    "Loaded SKILL.md for `{}`.",
+                    evaluation.selection.locator.name
                 ),
-                Err(error) => runtime_status_event(
-                    "failed",
-                    "Skill instructions failed",
-                    format!("Failed to load SKILL.md for `{}`.", selection.locator.name),
-                    json!({
-                        "skillRuntime": {
-                            "event": "skill_body_read",
-                            "skillName": selection.locator.name,
-                            "trigger": selection.trigger,
-                            "reason": selection.reason,
-                            "skillFilePath": selection.locator.skill_file_path,
-                            "status": "failed",
-                            "error": error.to_string(),
-                        }
-                    }),
+                json!({
+                    "skillRuntime": {
+                        "event": "skill_body_read",
+                        "skillId": evaluation.skill_id,
+                        "skillName": evaluation.selection.locator.name,
+                        "trigger": evaluation.selection.trigger,
+                        "reason": evaluation.reason,
+                        "source": evaluation.source.map(|source| source.as_label()),
+                        "authority": evaluation.authority.map(|authority| authority.as_label()),
+                        "requiredCapabilities": evaluation.required_capabilities,
+                        "missingCapabilities": evaluation.missing_capabilities,
+                        "skillFilePath": evaluation.selection.locator.skill_file_path,
+                        "status": "loaded",
+                        "bodyTokenBudget": evaluation.body_budget,
+                    }
+                }),
+            ),
+            AgentSkillBodyBudgetDecisionKind::Omitted => runtime_status_event(
+                "context",
+                "Skill instructions omitted",
+                format!(
+                    "SKILL.md for `{}` exceeded the token budget.",
+                    evaluation.selection.locator.name
                 ),
-            },
-        )
+                json!({
+                    "skillRuntime": {
+                        "event": "skill_body_read",
+                        "skillId": evaluation.skill_id,
+                        "skillName": evaluation.selection.locator.name,
+                        "trigger": evaluation.selection.trigger,
+                        "reason": evaluation.reason,
+                        "source": evaluation.source.map(|source| source.as_label()),
+                        "authority": evaluation.authority.map(|authority| authority.as_label()),
+                        "requiredCapabilities": evaluation.required_capabilities,
+                        "missingCapabilities": evaluation.missing_capabilities,
+                        "skillFilePath": evaluation.selection.locator.skill_file_path,
+                        "status": "omitted",
+                        "bodyTokenBudget": evaluation.body_budget,
+                    }
+                }),
+            ),
+            AgentSkillBodyBudgetDecisionKind::Deny => runtime_status_event(
+                "failed",
+                "Skill instructions failed",
+                format!(
+                    "Failed to load SKILL.md for `{}`.",
+                    evaluation.selection.locator.name
+                ),
+                json!({
+                    "skillRuntime": {
+                        "event": "skill_body_read",
+                        "skillId": evaluation.skill_id,
+                        "skillName": evaluation.selection.locator.name,
+                        "trigger": evaluation.selection.trigger,
+                        "reason": evaluation.reason,
+                        "source": evaluation.source.map(|source| source.as_label()),
+                        "authority": evaluation.authority.map(|authority| authority.as_label()),
+                        "requiredCapabilities": evaluation.required_capabilities,
+                        "missingCapabilities": evaluation.missing_capabilities,
+                        "skillFilePath": evaluation.selection.locator.skill_file_path,
+                        "status": "failed",
+                        "bodyTokenBudget": evaluation.body_budget,
+                        "error": evaluation.error,
+                    }
+                }),
+            ),
+        })
         .collect()
 }
 
@@ -220,6 +263,22 @@ mod tests {
         assert_eq!(
             events[0].payload["status"]["metadata"]["skillRuntime"]["skillName"],
             json!("writer")
+        );
+        assert_eq!(
+            events[0].payload["status"]["metadata"]["skillRuntime"]["skillId"],
+            json!("project:writer")
+        );
+        assert_eq!(
+            events[0].payload["status"]["metadata"]["skillRuntime"]["source"],
+            json!("project")
+        );
+        assert_eq!(
+            events[0].payload["status"]["metadata"]["skillRuntime"]["authority"],
+            json!("workspace")
+        );
+        assert_eq!(
+            events[0].payload["status"]["metadata"]["skillRuntime"]["bodyTokenBudget"]["decision"],
+            json!("allow")
         );
         assert_eq!(
             events[1].payload["status"]["metadata"]["skillRuntime"]["event"],

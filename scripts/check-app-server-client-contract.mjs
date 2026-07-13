@@ -670,6 +670,7 @@ const checks = [
       "lime-rs/crates/app-server/src/runtime.rs",
       "lime-rs/crates/app-server/src/runtime/event_store.rs",
       "lime-rs/crates/app-server/src/runtime/tool_lifecycle.rs",
+      "lime-rs/crates/app-server/src/runtime/tool_lifecycle_tests.rs",
       "lime-rs/crates/app-server/src/runtime/tests.rs",
       "lime-rs/crates/app-server/src/runtime/tests/external_events.rs",
       ...collectRustFiles(
@@ -693,30 +694,16 @@ const checks = [
       "pub(super) fn validate_tool_lifecycle_event",
       "agent runtime event sequence validation failed",
       "agent runtime tool lifecycle validation failed",
-      "tool_args_without_start",
-      "tool_output_without_start",
-      "tool_policy_event_without_active_tool",
-      "tool_output_before_action_resolved",
-      "tool_result_before_action_resolved",
-      "tool_result_after_action_denied",
-      "tool_event_owner_mismatch",
-      "tool_terminal_missing_owner",
+      "rejects_policy_event_for_inactive_tool",
+      "rejects_tool_output_before_action_resolution",
+      "rejects_tool_result_after_action_denial",
+      "rejects_tool_result_owner_mismatch",
       "append_external_runtime_events_rejects_invalid_state_delta_before_storage",
       "invalid state.delta must fail closed",
-      "append_external_runtime_events_rejects_tool_args_without_started_tool",
-      "append_external_runtime_events_rejects_tool_output_delta_without_started_tool",
-      "append_external_runtime_events_allows_tool_args_between_start_and_result",
-      "append_external_runtime_events_rejects_batch_atomically_before_storage",
-      "append_external_runtime_events_rejects_sandbox_blocked_for_inactive_tool",
-      "append_external_runtime_events_rejects_action_required_for_inactive_tool",
-      "append_external_runtime_events_rejects_tool_output_before_action_resolved",
-      "append_external_runtime_events_allows_tool_result_after_action_resolved",
-      "append_external_runtime_events_rejects_tool_result_after_action_denied",
-      "append_external_runtime_events_allows_tool_result_with_matching_owner",
-      "append_external_runtime_events_rejects_tool_result_owner_mismatch",
-      "append_external_runtime_events_rejects_tool_terminal_missing_owner",
-      "append_external_runtime_events_rejects_unpaired_tool_result_before_storage",
-      "append_external_runtime_events_rejects_unclosed_tool_at_turn_terminal",
+      "append_external_runtime_events_rejects_canonical_tool_completed_without_start",
+      "append_external_runtime_events_rejects_duplicate_canonical_tool_start",
+      "append_external_runtime_events_rejects_retired_raw_tool_wire",
+      "append_external_runtime_events_rejects_retired_raw_tool_wire_with_import_markers",
     ],
   },
   {
@@ -2904,18 +2891,14 @@ const checks = [
       "pub(super) fn tool_calls_from_events(events: &[AgentEvent]) -> Vec<Value>",
       "pub(super) fn tool_items_from_events(stored: &StoredSession) -> Vec<Value>",
       "pub(super) fn current_tool_item_from_event(event: &AgentEvent) -> Option<CurrentToolItem>",
-      "pub(super) fn legacy_tool_event_from_event(event: &AgentEvent) -> Option<LegacyToolEvent>",
+      "fn apply_current_item(",
+      "ToolState::from_current_item(",
+      "self.tools[index].merge_current_item(event, item)",
       '"item.started" | "item.updated" | "item.completed"',
-      '"tool.started" => "in_progress"',
-      '"tool.result" => "completed"',
-      '"tool.failed" => "failed"',
       "read_session_projects_runtime_events_into_thread_read_tool_calls",
-      "read_session_prefers_item_lifecycle_over_conflicting_legacy_tool_events",
-      "read_session_keeps_legacy_only_tool_events_as_synthetic_items",
-      "read_session_does_not_downgrade_completed_item_with_late_item_update",
+      "read_session_merges_tool_started_arguments_into_completed_tool_calls",
+      "canonical_tool_projection_does_not_downgrade_completed_item_with_late_update",
       "read_session_keeps_workspace_patch_in_thread_read_artifacts_only",
-      '"tool.started"',
-      '"tool.result"',
       '"artifact.snapshot"',
       '"contentFactoryWorkspacePatch"',
       'assert_eq!(web_fetch["status"], "completed")',
@@ -2952,25 +2935,25 @@ const checks = [
     absentSnippets: ["APP_SERVER_BACKEND_MODE=mock", '"backend": "mock"'],
   },
   {
-    name: "Agent tool orchestrator owns planned tool execution events",
+    name: "Conversation import preserves tools after canonical Item lowering",
     files: [
-      "lime-rs/crates/tool-runtime/src/tool_batch.rs",
-      "lime-rs/crates/agent/src/agent_tools/mod.rs",
-      "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
-      "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/tests.rs",
+      "lime-rs/crates/app-server/src/runtime/conversation_import/commit.rs",
+      "lime-rs/crates/app-server/src/runtime/conversation_import/commit_events.rs",
+      "lime-rs/crates/app-server/src/runtime/conversation_import/tests/runtime_events.rs",
     ],
     snippets: [
-      "pub mod tool_orchestrator;",
-      "pub struct PlannedToolExecution",
-      "pub struct ToolExecutionBatchInput",
-      "pub async fn execute_planned_tool_batch",
-      "RuntimeAgentEvent::ToolStart",
-      "RuntimeAgentEvent::ToolEnd",
-      "RuntimeToolExecutorHandle",
-      "RuntimeToolExecutionRequest",
-      ".execute(RuntimeToolExecutionRequest {",
-      "turn_context: input.turn_context.as_ref()",
-      "execute_planned_tool_batch_emits_tool_start_and_terminal_events",
+      "lower_imported_runtime_events_for_commit",
+      '"item.started"',
+      '"item.completed"',
+      "stored_event_types",
+      "commit_preserves_codex_tool_command_and_patch_timeline",
+      "commit_preserves_high_volume_codex_tool_events_with_bounded_default_projection",
+      "commit_applies_import_runtime_projection_budget_per_thread",
+      "commit_preserves_imported_assistant_message_order_between_runtime_events",
+      "commit_delays_imported_turn_terminal_until_after_late_runtime_events",
+      "commit_preserves_imported_update_plan_timeline_item",
+      "commit_projects_codex_runtime_specialized_items_into_existing_timeline_types",
+      "commit_closes_incomplete_imported_lifecycles_without_failed_timeline_items",
     ],
   },
   {
@@ -3468,7 +3451,7 @@ const checks = [
     files: appServerRuntimeBackendFiles,
     snippets: [
       "handle_action_response",
-      "respond_action_emits_resolved_fact_with_action_identity",
+      "respond_action_tool_confirmation_resumes_pending_agent_tool_future",
       '"action.resolved"',
       "run_agent_turn_with_policy",
       "AgentTurnExecutionRequest",
@@ -3645,7 +3628,6 @@ const checks = [
     files: [
       ...agentRuntimeBoundaryFiles,
       ...agentRequestToolPolicyFiles,
-      "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
       "lime-rs/crates/app-server/src/lib.rs",
       ...appServerRuntimeBackendExecutionChainFiles,
     ],
@@ -3679,7 +3661,9 @@ const checks = [
       "TurnContextOverride",
       "TurnOutputSchemaSource",
       "execute_workspace_patch_host_tool_plan",
-      "execute_planned_tool_batch",
+      "RuntimeToolExecutorHandle",
+      "RuntimeToolExecutionContext",
+      ".execute_call(",
       "run_host_managed_generation",
       "HostManagedGenerationPlan",
       "run_agent_turn_with_policy",
@@ -3687,17 +3671,15 @@ const checks = [
       "stream_runtime_reply_with_policy(",
       "runtime_events_from_agent_event",
       "runtime_event_type_for_agent_event",
-      '"tool.args"',
-      '"runtime_tool_start"',
-      '"tool.failed"',
+      '"item.started"',
+      '"item.completed"',
       '"failureCategory"',
-      "parse_tool_arguments(arguments)",
+      "canonical_tool_item(event)",
+      "canonical_arguments_value",
       "final_done_raw_runtime_event_does_not_map_to_current_terminal_event",
-      "runtime_agent_tool_start_without_arguments_does_not_emit_empty_tool_args",
-      "runtime_agent_tool_args_preserve_non_json_arguments",
-      "runtime_agent_json_tool_args_emit_tool_args_fact",
-      "runtime_agent_successful_tool_end_emits_tool_result",
-      "runtime_agent_failed_tool_end_emits_tool_failed",
+      "canonical_tool_start_without_arguments_emits_only_item",
+      "canonical_tool_start_emits_only_typed_item_arguments",
+      "canonical_tool_completion_preserves_output_and_metadata",
       "runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts",
       "request_tool_policy_from_request",
       "RequestToolPolicyMode::Auto",
@@ -5028,11 +5010,8 @@ const checks = [
   },
   {
     name: "Agent Runtime retired subagent facade names stay out of production gateway policy",
-    files: [
-      "src/lib/api/agentRuntime/subagentClient.ts",
-      "src/lib/dev-bridge/commandPolicy.ts",
-    ],
-    snippets: ["Public subagent control is retired"],
+    file: "src/lib/dev-bridge/commandPolicy.ts",
+    snippets: [],
     absentSnippets: [
       '"agent_runtime_spawn_subagent"',
       '"agent_runtime_send_subagent_input"',
@@ -5299,8 +5278,11 @@ const checks = [
       "createAppServerAgentRuntimeLifecycleClient(appServerClient)",
       "async function getAgentRuntimeThreadRead(",
       "assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable)",
-      "standardRuntimeClient.readThread({",
+      "appServerClient.readSession({",
       "return projectAppServerSessionReadResult(response.result)",
+      "async function readAgentRuntimeThread(",
+      "appServerClient.readThread({",
+      'turnsView: "full"',
     ],
     absentSnippets: [
       "AGENT_RUNTIME_COMMANDS.getThreadRead",
@@ -6624,9 +6606,13 @@ const checks = [
       "AgentRuntimeClient adapter requires an existing sessionId",
       "runtimeRequest: mergePluginRuntimeRequest(",
       "function mergePluginRuntimeRequest(",
-      "threadReadFromAgentSessionRead(response)",
-      "detail?.thread_read",
-      "detail?.threadRead",
+      "const thread = await readCanonicalThread(runtimeClient, threadId)",
+      "function activeThreadTurn(thread:",
+      'turn.status === "inProgress" && turn.queue?.state !== "queued"',
+      "function readCanonicalThread(",
+      "thread.threadId !== threadId",
+      "turn.threadId !== thread.threadId",
+      "Plugin task cancel requires a canonical threadId",
       "requires a standard AgentRuntimeClient or explicit compat api",
       "把 Plugin startTask 投影到标准 AgentRuntimeClient.startTurn",
       "没有 sessionId 时 fail closed，不伪造独立 task 协议",
@@ -6667,11 +6653,11 @@ const checks = [
       "type AgentRuntimeLifecycleClient",
       "type AgentRuntimeSessionGateway",
       '"startTurn" | "readThread" | "cancelTurn" | "respondAction"',
-      "readSession(",
-      "callAgentRuntimeSessionGateway(gateway.readSession, params, options)",
+      "readThread:",
+      "callAgentRuntimeSessionGateway(gateway.readThread, params, options)",
       "if (options === undefined)",
-      "createAgentRuntimeClientFromSessionGateway adapts an existing session gateway",
-      "readSession",
+      "createAgentRuntimeClientFromSessionGateway(...)` 只适配现有 session gateway",
+      "readThread",
       "timeoutMs: 120_000",
     ],
     absentSnippets: [
@@ -6774,12 +6760,13 @@ const checks = [
     ],
     snippets: [
       "function readThreadReadToolCalls(",
-      "const nestedThreadRead =",
-      "threadRead.thread_read",
-      "threadRead.threadRead",
-      'readRecordArray(threadRead, "tool_calls")',
-      'readRecordArray(threadRead, "toolCalls")',
-      'readRecordArray(nestedThreadRead, "tool_calls")',
+      "canonicalThreadItems(threadRead)",
+      "function canonicalThreadItems(",
+      "Array.isArray(threadRead.turns)",
+      'type !== "tool"',
+      'type !== "mcpToolCall"',
+      'type !== "collabAgentToolCall"',
+      'readRecordString(payload, "call_id")',
       "function buildRuntimeToolCallReplayEvents(",
       'type: "task:toolCall"',
       'source: "app_server_tool_call_replay"',
@@ -6798,6 +6785,12 @@ const checks = [
       "mockPriorityCommands",
       "defaultMocks",
       "invokeMockOnly",
+      "const nestedThreadRead =",
+      "threadRead.thread_read",
+      "threadRead.threadRead",
+      'readRecordArray(threadRead, "tool_calls")',
+      'readRecordArray(threadRead, "toolCalls")',
+      'readRecordArray(nestedThreadRead, "tool_calls")',
     ],
   },
   {
@@ -7434,7 +7427,7 @@ const checks = [
     ],
     snippets: [
       "function shouldLetLegacyToolEventUpdateMessageLayer(",
-      "function syncExistingMessageToolCallFromThreadItem(",
+      "function syncMessageToolCallFromThreadItem(",
       "function isItemLifecycleToolItem(",
       'metadata?.source !== "legacy_tool_event"',
       "return !isItemLifecycleToolItem(item);",
@@ -7442,7 +7435,7 @@ const checks = [
       "getThreadItems?: () => readonly AgentThreadItem[]",
       "getThreadItems?.() as",
       'case "item_completed":',
-      "syncExistingMessageToolCallFromThreadItem({",
+      "syncMessageToolCallFromThreadItem({",
       "shouldUpdateLegacyToolMessageLayer(data)",
       "if (!shouldUpdateMessageLayer) {",
       "handleToolEndEvent({",
@@ -8265,6 +8258,36 @@ const checks = [
       "project events into their own renderer state",
     ],
   },
+  {
+    name: "Runtime client readThread stays on canonical thread/read",
+    files: [
+      "packages/app-server-client/src/agent-runtime.ts",
+      "packages/agent-runtime-client/src/runtimeClient.ts",
+      "packages/agent-runtime-client/src/sessionGateway.ts",
+    ],
+    snippets: ["connection.readThread", "gateway.readThread"],
+    absentSnippets: ["readSession", '"agentSession/read"'],
+  },
+  {
+    name: "Runtime client root exports canonical thread read types only",
+    file: "packages/agent-runtime-client/src/index.ts",
+    snippets: ["type ThreadReadParams", "type ThreadReadResponse"],
+    absentSnippets: ["AgentSessionReadParams", "AgentSessionReadResponse"],
+  },
+  {
+    name: "Queued promotion decisions do not read legacy session truth",
+    files: [
+      "src/components/agent/chat/hooks/agentStreamFlowControl.ts",
+      "src/components/agent/chat/hooks/useAgentStream.ts",
+      "src/components/agent/chat/projection/chatRuntimeQueueControlProjection.ts",
+    ],
+    snippets: [
+      "getThreadQueueControl(canonicalThreadId)",
+      "threadId: threadRead?.thread_id",
+      "queuedTurnIdsBeforePromote.has(queuedTurnId.trim())",
+    ],
+    absentSnippets: ["readSession", "getSessionReadModel("],
+  },
 ];
 
 const failures = [];
@@ -8344,6 +8367,10 @@ checkMcpRuntimeCurrentContracts({ repoRoot, failures });
 checkWorkspaceRightSurfaceCurrentContracts({ repoRoot, failures });
 checkKnowledgeBuilderRuntimeCurrentContracts();
 checkRetiredAppServerAgentBackendCrate();
+checkRetiredRuntimeCoreMapperSurface();
+checkRetiredAgentRuntimeClientShells();
+checkRetiredToolWireSurface();
+checkCanonicalRendererSequenceGate();
 checkAgentUiPackageCanonicalNaming();
 
 if (failures.length > 0) {
@@ -8428,6 +8455,244 @@ function checkRetiredAppServerAgentBackendCrate() {
     failures.push(
       `retired App Server agent backend crate must stay deleted: ${retiredCratePath}`,
     );
+  }
+}
+
+function checkRetiredRuntimeCoreMapperSurface() {
+  const mapperRoot = path.join(
+    repoRoot,
+    "lime-rs/crates/runtime-core/src/llm_protocol/mapper",
+  );
+  if (fs.existsSync(mapperRoot)) {
+    failures.push(
+      "retired runtime-core llm_protocol mapper directory must stay deleted; provider lowering belongs to model-provider",
+    );
+  }
+
+  const protocolFiles = [
+    "lime-rs/crates/runtime-core/src/llm_protocol.rs",
+    "lime-rs/crates/runtime-core/src/lib.rs",
+  ];
+  for (const relativePath of protocolFiles) {
+    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    for (const snippet of [
+      "mod mapper",
+      "pub use mapper",
+      "build_provider_wire_request",
+    ]) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired runtime-core mapper export must stay absent: ${relativePath} contains ${JSON.stringify(snippet)}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredToolWireSurface() {
+  const retiredPaths = [
+    "lime-rs/crates/agent/src/agent_tools/workspace_patch_runtime_adapter.rs",
+    "lime-rs/crates/agent/src/agent_tools/tool_lifecycle.rs",
+    "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
+    "lime-rs/crates/tool-runtime/src/tool_batch.rs",
+    "lime-rs/crates/agent/src/tool_output_truncation.rs",
+    "lime-rs/crates/app-server/src/runtime/tests/external_events/actions.rs",
+    "lime-rs/crates/app-server/src/runtime/tests/external_events/owner_terminal.rs",
+    "lime-rs/crates/app-server/src/runtime/tests/external_events/tool_lifecycle.rs",
+  ];
+  for (const relativePath of retiredPaths) {
+    if (fs.existsSync(path.join(repoRoot, relativePath))) {
+      failures.push(`retired raw tool wire must stay deleted: ${relativePath}`);
+    }
+  }
+
+  for (const relativePath of [
+    "lime-rs/crates/app-server/src/runtime/event_store.rs",
+    "lime-rs/crates/app-server/src/runtime/tests/external_events/canonical_tool_items.rs",
+  ]) {
+    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    if (!content.includes('"tool_end"')) {
+      failures.push(
+        `retired tool_end alias must stay fail-closed: ${relativePath} has no explicit guard`,
+      );
+    }
+  }
+
+  const currentFiles = [
+    {
+      path: "lime-rs/crates/app-server/src/runtime/event_store.rs",
+      forbidden: [
+        '"tool.started" =>',
+        '"tool.result" =>',
+        '"tool.failed" =>',
+        "is_imported_tool_wire_payload",
+      ],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime/projection_item_events.rs",
+      forbidden: ['"tool.started"', '"tool.result"', '"tool.failed"'],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime/tests/external_events/canonical_tool_items.rs",
+      forbidden: [
+        "append_external_runtime_events_allows_explicit_import_tool_compat",
+      ],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs",
+      forbidden: ['"tool.args"', "runtime_tool_args_event_payload"],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime/tool_item_projection.rs",
+      forbidden: [
+        "LegacyToolEvent",
+        "legacy_tool_event_from_event",
+        "apply_legacy_tool_event",
+        "find_legacy_match_for_current",
+        "find_legacy_index",
+        "from_legacy_event",
+        "merge_legacy_event",
+        "has_current_item",
+        '"tool.started"',
+        '"tool.result"',
+        '"tool.failed"',
+      ],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime/tool_item_projection/extract.rs",
+      forbidden: [
+        "LegacyToolEvent",
+        "legacy_tool_event_from_event",
+        "legacy_tool_id",
+        "is_imported_legacy_tool_event",
+        "normalize_tool_name_for_id",
+        '"tool.started"',
+        '"tool.result"',
+        '"tool.failed"',
+      ],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+      forbidden: [
+        "largest_legacy_tool_output",
+        "nested_result_output",
+        "nested_runtime_event_result_output",
+        "truncate_result_output_field",
+        "truncate_runtime_event_result_output_field",
+      ],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime/thread_item_projection.rs",
+      forbidden: ['"tool.started"', '"tool.result"', '"tool.failed"'],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/runtime/tests/coding_events/output_snapshots.rs",
+      forbidden: [
+        '"tool.started"',
+        '"tool.result"',
+        '"tool.failed"',
+        '"tool_end"',
+      ],
+    },
+    {
+      path: "lime-rs/crates/agent/src/agent_tools/mod.rs",
+      forbidden: ["pub mod tool_orchestrator;", "mod tool_lifecycle;"],
+    },
+    {
+      path: "lime-rs/crates/agent/src/lib.rs",
+      forbidden: ["mod tool_output_truncation;"],
+    },
+    {
+      path: "lime-rs/crates/agent/src/protocol.rs",
+      forbidden: ["ToolStart {", "ToolEnd {"],
+    },
+    {
+      path: "lime-rs/crates/tool-runtime/src/lib.rs",
+      forbidden: ["pub mod tool_batch;"],
+    },
+  ];
+  for (const currentFile of currentFiles) {
+    const content = fs.readFileSync(
+      path.join(repoRoot, currentFile.path),
+      "utf8",
+    );
+    for (const snippet of currentFile.forbidden) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired raw tool wire export must stay absent: ${currentFile.path} contains ${JSON.stringify(snippet)}`,
+        );
+      }
+    }
+  }
+
+  const canonicalToolConsumerFiles = [
+    "lime-rs/crates/app-server/src/runtime/provider_history.rs",
+    "lime-rs/crates/app-server/src/runtime/context_compaction.rs",
+    "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+    "lime-rs/crates/app-server/src/runtime/evidence_provider/coding.rs",
+    "lime-rs/crates/app-server/src/runtime/evidence_provider/observability.rs",
+    "lime-rs/crates/app-server/src/runtime/evidence_provider/browser/action_index.rs",
+    ...collectRustFiles(
+      "lime-rs/crates/app-server/src/runtime/evidence_provider/browser/action_index",
+    ),
+    "lime-rs/crates/app-server/src/runtime/evidence_provider/browser/file_artifacts.rs",
+    "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
+    "lime-rs/crates/app-server/src/runtime/thread_item_projection/materializer.rs",
+  ];
+  for (const relativePath of canonicalToolConsumerFiles) {
+    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    const productionContent = content.split("#[cfg(test)]", 1)[0];
+    for (const retiredEventType of [
+      '"tool.started"',
+      '"tool.result"',
+      '"tool.failed"',
+      '"tool.completed"',
+    ]) {
+      if (productionContent.includes(retiredEventType)) {
+        failures.push(
+          `canonical Tool consumer must not parse retired lifecycle: ${relativePath} contains ${retiredEventType}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeClientShells() {
+  for (const relativePath of [
+    "src/lib/api/agentRuntime/mediaClient.ts",
+    "src/lib/api/agentRuntime/mediaClient.d.ts",
+    "src/lib/api/agentRuntime/subagentClient.ts",
+    "src/lib/api/agentRuntime/subagentClient.d.ts",
+  ]) {
+    if (fs.existsSync(path.join(repoRoot, relativePath))) {
+      failures.push(
+        `retired Agent Runtime client shell must stay deleted: ${relativePath}`,
+      );
+    }
+  }
+}
+
+function checkCanonicalRendererSequenceGate() {
+  const relativePath = "src/lib/api/agentRuntime/eventSequenceGate.ts";
+  const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+  for (const snippet of ["AgentRuntimeEventPipeline", "processSync("]) {
+    if (!content.includes(snippet)) {
+      failures.push(
+        `canonical renderer sequence gate missing ${JSON.stringify(snippet)} in ${relativePath}`,
+      );
+    }
+  }
+  for (const snippet of [
+    "AgentRuntimeEventAdapter",
+    "withEvent",
+    "currentCompatibilityAdapter",
+    "currentToolCompletedFanoutAdapter",
+  ]) {
+    if (content.includes(snippet)) {
+      failures.push(
+        `canonical renderer sequence gate must not restore raw lifecycle adaptation: ${relativePath} contains ${JSON.stringify(snippet)}`,
+      );
+    }
   }
 }
 

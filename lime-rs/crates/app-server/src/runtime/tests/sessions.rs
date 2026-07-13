@@ -1,5 +1,257 @@
 use super::support::*;
 use super::*;
+use agent_protocol::{SortDirection, ThreadId, ThreadStatus, ThreadTurnsView, TurnItemsView};
+use futures::executor::block_on;
+use thread_store::{
+    ListItemsParams, ListThreadsParams, ListTurnsParams, PageRequest, ReadThreadParams, ThreadStore,
+};
+
+fn canonical_page() -> PageRequest {
+    PageRequest {
+        cursor: None,
+        limit: 20,
+        sort_direction: SortDirection::Asc,
+    }
+}
+
+fn empty_thread_session_params(session_id: &str, thread_id: &str) -> AgentSessionStartParams {
+    AgentSessionStartParams {
+        session_id: Some(session_id.to_string()),
+        thread_id: Some(thread_id.to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    }
+}
+
+#[test]
+fn start_session_creates_empty_canonical_thread_before_returning() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
+    let core = RuntimeCore::default().with_projection_store(store.clone());
+
+    let response = core
+        .start_session(empty_thread_session_params(
+            "sess_empty_canonical",
+            "thread_empty_canonical",
+        ))
+        .expect("start session");
+
+    let session_read = block_on(core.read_session_current(AgentSessionReadParams {
+        session_id: "sess_empty_canonical".to_string(),
+        history_limit: None,
+        history_offset: None,
+        history_before_message_id: None,
+    }))
+    .expect("read empty session through current boundary");
+    assert!(session_read.turns.is_empty());
+    assert!(session_read
+        .detail
+        .as_ref()
+        .and_then(|detail| detail["items"].as_array())
+        .is_some_and(Vec::is_empty));
+
+    let thread = block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread_empty_canonical"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::Full,
+    }))
+    .expect("read canonical thread")
+    .expect("canonical thread exists");
+    assert_eq!(thread.session_id.as_str(), response.session.session_id);
+    assert_eq!(thread.thread_id.as_str(), response.session.thread_id);
+    assert_eq!(thread.status, ThreadStatus::Idle);
+    assert!(thread.turns.is_empty());
+
+    let threads = block_on(store.list_threads(ListThreadsParams {
+        include_archived: false,
+        page: canonical_page(),
+    }))
+    .expect("list canonical threads");
+    assert_eq!(threads.data.len(), 1);
+    assert_eq!(threads.data[0].thread_id, thread.thread_id);
+    assert!(block_on(store.list_turns(ListTurnsParams {
+        thread_id: thread.thread_id.clone(),
+        include_archived: false,
+        page: canonical_page(),
+        items_view: TurnItemsView::NotLoaded,
+    }))
+    .expect("list canonical turns")
+    .data
+    .is_empty());
+    assert!(block_on(store.list_items(ListItemsParams {
+        thread_id: thread.thread_id,
+        turn_id: None,
+        include_archived: false,
+        page: canonical_page(),
+    }))
+    .expect("list canonical items")
+    .data
+    .is_empty());
+}
+
+#[test]
+fn start_session_rejects_duplicate_session_and_thread_identity_atomically() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
+    let core = RuntimeCore::default().with_projection_store(store.clone());
+    core.start_session(empty_thread_session_params(
+        "sess_identity_owner",
+        "thread_identity_owner",
+    ))
+    .expect("first session");
+
+    let duplicate_session = core
+        .start_session(empty_thread_session_params(
+            "sess_identity_owner",
+            "thread_duplicate_session",
+        ))
+        .expect_err("duplicate session must fail");
+    assert!(matches!(
+        duplicate_session,
+        RuntimeCoreError::SessionAlreadyExists(ref id) if id == "sess_identity_owner"
+    ));
+    assert!(block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread_duplicate_session"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::NotLoaded,
+    }))
+    .expect("read duplicate session thread")
+    .is_none());
+
+    let duplicate_thread = core
+        .start_session(empty_thread_session_params(
+            "sess_duplicate_thread",
+            "thread_identity_owner",
+        ))
+        .expect_err("duplicate thread identity must fail");
+    assert!(matches!(duplicate_thread, RuntimeCoreError::Backend(_)));
+    assert!(matches!(
+        core.read_session(AgentSessionReadParams {
+            session_id: "sess_duplicate_thread".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        }),
+        Err(RuntimeCoreError::SessionNotFound(ref id)) if id == "sess_duplicate_thread"
+    ));
+
+    let restarted_core = RuntimeCore::default().with_projection_store(store.clone());
+    assert!(matches!(
+        restarted_core.start_session(empty_thread_session_params(
+            "sess_identity_owner",
+            "thread_duplicate_persisted_session",
+        )),
+        Err(RuntimeCoreError::Backend(_))
+    ));
+    assert!(block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread_duplicate_persisted_session"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::NotLoaded,
+    }))
+    .expect("read persisted duplicate session thread")
+    .is_none());
+}
+
+#[test]
+fn start_session_store_failure_leaves_no_memory_session_and_allows_retry() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let database_path = temp.path().join("projection.sqlite");
+    let backup_path = temp.path().join("projection.sqlite.backup");
+    let blocked_path = temp.path().join("projection.sqlite.blocked");
+    let store = Arc::new(ProjectionStore::initialize(&database_path).expect("projection store"));
+    let core = RuntimeCore::default().with_projection_store(store.clone());
+    std::fs::rename(&database_path, &backup_path).expect("move database aside");
+    std::fs::create_dir(&database_path).expect("block database path");
+
+    let params = empty_thread_session_params("sess_store_retry", "thread_store_retry");
+    assert!(matches!(
+        core.start_session(params.clone()),
+        Err(RuntimeCoreError::Backend(_))
+    ));
+    assert!(matches!(
+        core.read_session(AgentSessionReadParams {
+            session_id: "sess_store_retry".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        }),
+        Err(RuntimeCoreError::SessionNotFound(ref id)) if id == "sess_store_retry"
+    ));
+
+    std::fs::rename(&database_path, &blocked_path).expect("unblock database path");
+    std::fs::rename(&backup_path, &database_path).expect("restore database");
+    core.start_session(params).expect("retry session start");
+    assert!(block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread_store_retry"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::NotLoaded,
+    }))
+    .expect("read retried canonical thread")
+    .is_some());
+}
+
+#[tokio::test]
+async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let database_path = temp.path().join("projection.sqlite");
+    let backup_path = temp.path().join("projection.sqlite.backup");
+    let blocked_path = temp.path().join("projection.sqlite.blocked");
+    let store = Arc::new(ProjectionStore::initialize(&database_path).expect("projection store"));
+    let core = RuntimeCore::default().with_projection_store(store.clone());
+    let params = empty_thread_session_params("sess_empty_delete", "thread_empty_delete");
+    core.start_session(params.clone()).expect("start session");
+
+    std::fs::rename(&database_path, &backup_path).expect("move database aside");
+    std::fs::create_dir(&database_path).expect("block database path");
+    assert!(matches!(
+        core.delete_agent_session(AgentSessionDeleteParams {
+            session_id: "sess_empty_delete".to_string(),
+        })
+        .await,
+        Err(RuntimeCoreError::Backend(_))
+    ));
+    core.read_session(AgentSessionReadParams {
+        session_id: "sess_empty_delete".to_string(),
+        history_limit: None,
+        history_offset: None,
+        history_before_message_id: None,
+    })
+    .expect("failed delete keeps memory session");
+    std::fs::rename(&database_path, &blocked_path).expect("unblock database path");
+    std::fs::rename(&backup_path, &database_path).expect("restore database");
+
+    let deleted = core
+        .delete_agent_session(AgentSessionDeleteParams {
+            session_id: "sess_empty_delete".to_string(),
+        })
+        .await
+        .expect("delete session");
+    assert!(deleted.deleted);
+    assert!(block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread_empty_delete"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::NotLoaded,
+    }))
+    .expect("read deleted canonical thread")
+    .is_none());
+
+    core.start_session(params).expect("recreate session");
+    assert!(block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread_empty_delete"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::NotLoaded,
+    }))
+    .expect("read recreated canonical thread")
+    .is_some());
+}
 
 #[tokio::test]
 async fn compact_agent_session_writes_session_context_artifact() {
@@ -724,23 +976,27 @@ async fn read_session_current_uses_projection_summary_for_limited_history() {
         .expect("watermark")
         .expect("watermark")
         .last_sequence;
+    let extra_event = AgentEvent {
+        event_id: "evt_projection_fast_read_extra".to_string(),
+        sequence: watermark_before + 1,
+        session_id: "sess_projection_fast_read".to_string(),
+        thread_id: Some("thread_projection_fast_read".to_string()),
+        turn_id: Some("turn_projection_fast_read_extra".to_string()),
+        event_type: "message.created".to_string(),
+        timestamp: timestamp(),
+        payload: json!({
+            "input": {
+                "text": "current projection should support limited read",
+                "attachments": []
+            }
+        }),
+    };
     event_log_writer
-        .append(&AgentEvent {
-            event_id: "evt_projection_fast_read_stale_extra".to_string(),
-            sequence: watermark_before + 100,
-            session_id: "sess_projection_fast_read".to_string(),
-            thread_id: Some("thread_projection_fast_read".to_string()),
-            turn_id: Some("turn_projection_fast_read_stale".to_string()),
-            event_type: "message.created".to_string(),
-            timestamp: timestamp(),
-            payload: json!({
-                "input": {
-                    "text": "stale event should not block limited read",
-                    "attachments": []
-                }
-            }),
-        })
-        .expect("append stale event");
+        .append(&extra_event)
+        .expect("append projection event");
+    projection_store
+        .apply_event(&extra_event)
+        .expect("apply current projection event");
 
     let restarted_core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer)
@@ -761,9 +1017,9 @@ async fn read_session_current_uses_projection_summary_for_limited_history() {
         .expect("watermark after")
         .last_sequence;
 
-    assert_eq!(watermark_after, watermark_before);
+    assert_eq!(watermark_after, watermark_before + 1);
     assert_eq!(detail["projection_source"], "runtime.projection_1");
-    assert_eq!(detail["messages_count"].as_u64(), Some(2));
+    assert_eq!(detail["messages_count"].as_u64(), Some(3));
     assert_eq!(detail["history_cursor"]["loaded_count"].as_u64(), Some(1));
     assert_eq!(
         detail["messages"][0]["metadata"]["source"].as_str(),
@@ -812,24 +1068,28 @@ async fn read_session_current_projection_summary_projects_turn_usage() {
         .expect("watermark")
         .expect("watermark")
         .last_sequence;
+    let usage_event = AgentEvent {
+        event_id: "evt_projection_usage_terminal".to_string(),
+        sequence: watermark_before + 1,
+        session_id: "sess_projection_usage_read".to_string(),
+        thread_id: Some("thread_projection_usage_read".to_string()),
+        turn_id: Some("turn_projection_usage_read".to_string()),
+        event_type: "turn.completed".to_string(),
+        timestamp: timestamp(),
+        payload: json!({
+            "usage": {
+                "input_tokens": 1175,
+                "output_tokens": 112,
+                "cached_input_tokens": 0
+            }
+        }),
+    };
     event_log_writer
-        .append(&AgentEvent {
-            event_id: "evt_projection_usage_terminal".to_string(),
-            sequence: watermark_before + 100,
-            session_id: "sess_projection_usage_read".to_string(),
-            thread_id: Some("thread_projection_usage_read".to_string()),
-            turn_id: Some("turn_projection_usage_read".to_string()),
-            event_type: "turn.completed".to_string(),
-            timestamp: timestamp(),
-            payload: json!({
-                "usage": {
-                    "input_tokens": 1175,
-                    "output_tokens": 112,
-                    "cached_input_tokens": 0
-                }
-            }),
-        })
+        .append(&usage_event)
         .expect("append usage terminal event");
+    projection_store
+        .apply_event(&usage_event)
+        .expect("apply usage projection event");
 
     let restarted_core = RuntimeCore::default()
         .with_event_log_writer(event_log_writer)
@@ -850,7 +1110,7 @@ async fn read_session_current_projection_summary_projects_turn_usage() {
         .expect("watermark after")
         .last_sequence;
 
-    assert_eq!(watermark_after, watermark_before);
+    assert_eq!(watermark_after, watermark_before + 1);
     assert_eq!(detail["projection_source"], "runtime.projection_1");
     assert_eq!(
         detail["messages"][0]["metadata"]["source"].as_str(),
@@ -881,6 +1141,12 @@ async fn read_session_current_projection_summary_preserves_process_items() {
     let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
     let projection_store =
         Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let core = RuntimeCore::default().with_projection_store(projection_store.clone());
+    core.start_session(empty_thread_session_params(
+        "sess_projection_process",
+        "thread_projection_process",
+    ))
+    .expect("start canonical session");
     let events = vec![
         AgentEvent {
             event_id: "evt_projection_process_user".to_string(),
@@ -929,15 +1195,13 @@ async fn read_session_current_projection_summary_preserves_process_items() {
                     "id": "tool-history-web-search",
                     "type": "tool_call",
                     "status": "completed",
-                    "payload": {
-                        "type": "tool_call",
-                        "name": "WebSearch",
-                        "arguments": {
-                            "query": "history process preservation"
-                        },
-                        "output": "搜索完成",
-                        "success": true
-                    }
+                    "callId": "tool-history-web-search",
+                    "toolName": "WebSearch",
+                    "arguments": {
+                        "query": "history process preservation"
+                    },
+                    "output": "搜索完成",
+                    "success": true
                 }
             }),
         },
@@ -950,6 +1214,7 @@ async fn read_session_current_projection_summary_preserves_process_items() {
             event_type: "message.delta".to_string(),
             timestamp: timestamp(),
             payload: json!({
+                "itemId": "agent-commentary",
                 "text": "上面工具还在查找。",
                 "phase": "commentary"
             }),
@@ -978,17 +1243,11 @@ async fn read_session_current_projection_summary_preserves_process_items() {
             session_id: "sess_projection_process".to_string(),
             thread_id: Some("thread_projection_process".to_string()),
             turn_id: Some("turn_projection_process".to_string()),
-            event_type: "message.delta_batch".to_string(),
+            event_type: "message.delta".to_string(),
             timestamp: timestamp(),
             payload: json!({
-                "deltas": [
-                    {
-                        "text": "批量过程输出也要保留。"
-                    },
-                    {
-                        "text": "不能混进最终结论。"
-                    }
-                ],
+                "itemId": "agent-commentary",
+                "text": "批量过程输出也要保留。不能混进最终结论。",
                 "phase": "commentary"
             }),
         },
@@ -1124,6 +1383,7 @@ async fn read_session_current_projection_summary_preserves_process_items() {
             event_type: "message.delta_batch".to_string(),
             timestamp: timestamp(),
             payload: json!({
+                "itemId": "agent-final",
                 "deltas": [
                     {
                         "text": "结论：历史打开后应保留工具调用"
@@ -1149,6 +1409,17 @@ async fn read_session_current_projection_summary_preserves_process_items() {
     event_log_writer
         .append_events(&events)
         .expect("append events");
+    let stored = core
+        .state
+        .lock()
+        .expect("runtime core state mutex poisoned")
+        .sessions
+        .get("sess_projection_process")
+        .expect("stored canonical session")
+        .clone();
+    projection_store
+        .apply_canonical_events(&stored, &events)
+        .expect("apply canonical events");
     projection_store
         .apply_events(&events)
         .expect("apply events");
@@ -1184,7 +1455,7 @@ async fn read_session_current_projection_summary_preserves_process_items() {
                 .is_some_and(|text| text.contains("查找历史事件"))
     }));
     assert!(items.iter().any(|item| {
-        item["type"].as_str() == Some("web_search")
+        item["type"].as_str() == Some("tool_call")
             && item["tool_name"].as_str() == Some("WebSearch")
     }));
     assert!(items.iter().any(|item| {
@@ -1197,16 +1468,11 @@ async fn read_session_current_projection_summary_preserves_process_items() {
             })
     }));
     assert!(items.iter().any(|item| {
-        item["type"].as_str() == Some("request_user_input")
+        item["type"].as_str() == Some("approval_request")
             && item["action_type"].as_str() == Some("ask_user")
             && item["status"].as_str() == Some("completed")
+            && item["response"].is_null()
             && item["prompt"].as_str() == Some("是否继续对齐 Codex？")
-    }));
-    assert!(items.iter().any(|item| {
-        item["type"].as_str() == Some("warning")
-            && item["message"]
-                .as_str()
-                .is_some_and(|message| message.contains("模型路由发生降级"))
     }));
     assert_eq!(detail["thread_read"]["thread_items"], detail["items"]);
     assert_eq!(

@@ -1,3 +1,4 @@
+use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload};
 use app_server_protocol::AgentEvent;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -135,10 +136,10 @@ pub(super) fn normalize_policy_event_payload(
 impl ToolLifecycleState {
     fn push_existing(&mut self, event: &AgentEvent) {
         match normalize_event_class(&event.event_type) {
-            "tool.started" => {
-                if let Some(tool_call_id) = tool_call_id(event) {
+            "item.started" => {
+                if let Some(tool) = canonical_tool_item(event) {
                     self.tools.insert(
-                        tool_call_id,
+                        tool.call_id,
                         ToolState {
                             owner: ToolOwner::from_event(event),
                             gate: ToolGateState::Open,
@@ -146,9 +147,9 @@ impl ToolLifecycleState {
                     );
                 }
             }
-            "tool.result" | "tool.failed" => {
-                if let Some(tool_call_id) = tool_call_id(event) {
-                    self.tools.remove(&tool_call_id);
+            "item.completed" => {
+                if let Some(tool) = canonical_tool_item(event) {
+                    self.tools.remove(&tool.call_id);
                 }
             }
             "action.required" => {
@@ -197,7 +198,18 @@ impl ToolLifecycleState {
         let mut violations = Vec::new();
         let event_class = normalize_event_class(&event.event_type);
         match event_class {
-            "tool.args" | "tool.args.delta" | "tool.input.delta" | "tool.progress" => {
+            "item.started" => {
+                if let Some(tool) = canonical_tool_item(event) {
+                    if self.tool_snapshot(&tool.call_id).is_some() {
+                        violations.push(ToolLifecycleViolation {
+                            code: "tool_item_started_already_active",
+                            event_id: event.event_id.clone(),
+                            tool_call_id: Some(tool.call_id),
+                        });
+                    }
+                }
+            }
+            "tool.progress" => {
                 if let Some(tool_call_id) = tool_call_id(event) {
                     if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
                         validate_tool_owner(
@@ -208,11 +220,7 @@ impl ToolLifecycleState {
                         );
                     } else {
                         violations.push(ToolLifecycleViolation {
-                            code: if event_class == "tool.progress" {
-                                "tool_progress_without_start"
-                            } else {
-                                "tool_args_without_start"
-                            },
+                            code: "tool_progress_without_start",
                             event_id: event.event_id.clone(),
                             tool_call_id: Some(tool_call_id),
                         });
@@ -246,30 +254,38 @@ impl ToolLifecycleState {
                     }
                 }
             }
-            "tool.result" => {
-                if let Some(tool_call_id) = tool_call_id(event) {
-                    if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
+            "item.updated" => {
+                if let Some(tool) = canonical_tool_item(event) {
+                    if let Some(snapshot) = self.tool_snapshot(&tool.call_id) {
                         validate_tool_owner(
                             &mut violations,
                             event,
                             &snapshot,
-                            OwnerRequirement::RequiredForTerminal,
+                            OwnerRequirement::ExplicitOnly,
                         );
-                        if snapshot.pending_approval_action_id().is_some() {
+                        if tool.has_output && snapshot.pending_approval_action_id().is_some() {
                             violations.push(ToolLifecycleViolation {
-                                code: "tool_result_before_action_resolved",
+                                code: "tool_output_before_action_resolved",
                                 event_id: event.event_id.clone(),
                                 tool_call_id: Some(snapshot.tool_call_id.clone()),
                             });
-                        } else if let Some(code) = snapshot.result_blocked_violation_code() {
-                            violations.push(snapshot.violation(event, code));
+                        } else if tool.has_output {
+                            if let Some(code) = snapshot.output_blocked_violation_code() {
+                                violations.push(snapshot.violation(event, code));
+                            }
                         }
+                    } else {
+                        violations.push(ToolLifecycleViolation {
+                            code: "tool_output_without_start",
+                            event_id: event.event_id.clone(),
+                            tool_call_id: Some(tool.call_id),
+                        });
                     }
                 }
             }
-            "tool.failed" => {
-                if let Some(tool_call_id) = tool_call_id(event) {
-                    if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
+            "item.completed" => {
+                if let Some(tool) = canonical_tool_item(event) {
+                    if let Some(snapshot) = self.tool_snapshot(&tool.call_id) {
                         validate_tool_owner(
                             &mut violations,
                             event,
@@ -278,11 +294,25 @@ impl ToolLifecycleState {
                         );
                         if snapshot.pending_approval_action_id().is_some() {
                             violations.push(ToolLifecycleViolation {
-                                code: "tool_failed_before_action_resolved",
+                                code: if tool.status == ItemStatus::Completed {
+                                    "tool_result_before_action_resolved"
+                                } else {
+                                    "tool_failed_before_action_resolved"
+                                },
                                 event_id: event.event_id.clone(),
                                 tool_call_id: Some(snapshot.tool_call_id.clone()),
                             });
+                        } else if tool.status == ItemStatus::Completed {
+                            if let Some(code) = snapshot.result_blocked_violation_code() {
+                                violations.push(snapshot.violation(event, code));
+                            }
                         }
+                    } else {
+                        violations.push(ToolLifecycleViolation {
+                            code: "tool_item_completed_without_start",
+                            event_id: event.event_id.clone(),
+                            tool_call_id: Some(tool.call_id),
+                        });
                     }
                 }
             }
@@ -320,6 +350,16 @@ impl ToolLifecycleState {
 struct ActiveToolCandidate {
     name: Option<String>,
     arguments: Option<Value>,
+}
+
+#[derive(Debug, Clone)]
+struct CanonicalToolItem {
+    call_id: String,
+    name: String,
+    arguments: Value,
+    item_id: String,
+    status: ItemStatus,
+    has_output: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -386,6 +426,12 @@ impl ToolLifecycleSnapshot {
 
 impl ToolOwner {
     fn from_event(event: &AgentEvent) -> Self {
+        if let Some(tool) = canonical_tool_item(event) {
+            return Self {
+                assistant_owner_id: None,
+                item_id: Some(tool.item_id),
+            };
+        }
         Self {
             assistant_owner_id: string_field(
                 &event.payload,
@@ -465,7 +511,6 @@ fn same_tool_lifecycle_scope(event: &AgentEvent, candidate: &AgentEvent) -> bool
 
 fn normalize_event_class(event_type: &str) -> &str {
     match event_type {
-        "tool_args" => "tool.args",
         "tool_args_delta" => "tool.args.delta",
         "tool_output_delta" => "tool.output.delta",
         "tool_input_delta" => "tool.input.delta",
@@ -564,20 +609,20 @@ fn active_tools_for_turn(
         .filter(|event| same_turn(event, turn_id))
     {
         match normalize_event_class(&event.event_type) {
-            "tool.started" => {
-                if let Some(tool_call_id) = tool_call_id(event) {
+            "item.started" => {
+                if let Some(tool) = canonical_tool_item(event) {
                     active_tools.insert(
-                        tool_call_id,
+                        tool.call_id,
                         ActiveToolCandidate {
-                            name: string_field(&event.payload, &["toolName", "tool_name", "name"]),
-                            arguments: tool_arguments_from_event(event),
+                            name: Some(tool.name),
+                            arguments: Some(tool.arguments),
                         },
                     );
                 }
             }
-            "tool.result" | "tool.failed" => {
-                if let Some(tool_call_id) = tool_call_id(event) {
-                    active_tools.remove(&tool_call_id);
+            "item.completed" => {
+                if let Some(tool) = canonical_tool_item(event) {
+                    active_tools.remove(&tool.call_id);
                 }
             }
             _ => {}
@@ -618,23 +663,6 @@ fn action_arguments(object: &Map<String, Value>) -> Option<Value> {
         .get("arguments")
         .cloned()
         .or_else(|| object.get("data")?.as_object()?.get("arguments").cloned())
-}
-
-fn tool_arguments_from_event(event: &AgentEvent) -> Option<Value> {
-    event
-        .payload
-        .get("arguments")
-        .and_then(normalize_arguments_value)
-        .or_else(|| event.payload.get("args").cloned())
-}
-
-fn normalize_arguments_value(value: &Value) -> Option<Value> {
-    match value {
-        Value::String(text) => serde_json::from_str(text)
-            .ok()
-            .or_else(|| Some(value.clone())),
-        other => Some(other.clone()),
-    }
 }
 
 fn action_arguments_match(
@@ -680,7 +708,45 @@ fn insert_string_if_absent(object: &mut Map<String, Value>, key: &str, value: St
     object.insert(key.to_string(), Value::String(value));
 }
 
+fn canonical_tool_item(event: &AgentEvent) -> Option<CanonicalToolItem> {
+    if !matches!(
+        normalize_event_class(&event.event_type),
+        "item.started" | "item.updated" | "item.completed"
+    ) {
+        return None;
+    }
+    let item = serde_json::from_value::<ThreadItem>(event.payload.get("item")?.clone()).ok()?;
+    let ThreadItemPayload::Tool {
+        call_id,
+        name,
+        arguments,
+        output,
+    } = item.payload
+    else {
+        return None;
+    };
+    let arguments = arguments
+        .into_iter()
+        .map(|argument| {
+            let value = serde_json::from_str(&argument.value)
+                .unwrap_or_else(|_| Value::String(argument.value));
+            (argument.name, value)
+        })
+        .collect::<Map<_, _>>();
+    Some(CanonicalToolItem {
+        call_id,
+        name,
+        arguments: Value::Object(arguments),
+        item_id: item.item_id.to_string(),
+        status: item.status,
+        has_output: output.is_some(),
+    })
+}
+
 fn tool_call_id(event: &AgentEvent) -> Option<String> {
+    if let Some(tool) = canonical_tool_item(event) {
+        return Some(tool.call_id);
+    }
     string_field(
         &event.payload,
         &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
@@ -688,6 +754,9 @@ fn tool_call_id(event: &AgentEvent) -> Option<String> {
 }
 
 fn explicit_tool_call_id(event: &AgentEvent) -> Option<String> {
+    if let Some(tool) = canonical_tool_item(event) {
+        return Some(tool.call_id);
+    }
     string_field(
         &event.payload,
         &["toolCallId", "tool_call_id", "toolId", "tool_id"],

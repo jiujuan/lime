@@ -1,4 +1,5 @@
 use super::*;
+use agent_protocol::{ItemId, SessionId, ThreadId, TurnId};
 use lime_agent::AgentToolResult;
 
 fn success_result(output: &str, metadata: HashMap<String, Value>) -> AgentToolResult {
@@ -12,24 +13,118 @@ fn success_result(output: &str, metadata: HashMap<String, Value>) -> AgentToolRe
     }
 }
 
+fn tool_started(tool_name: &str, tool_id: &str, arguments: Option<Value>) -> RuntimeAgentEvent {
+    canonical_tool_event(tool_name, tool_id, arguments, None)
+}
+
+fn tool_completed(tool_id: &str, result: AgentToolResult) -> RuntimeAgentEvent {
+    canonical_tool_event("tool", tool_id, None, Some(result))
+}
+
+fn canonical_tool_event(
+    tool_name: &str,
+    tool_id: &str,
+    arguments: Option<Value>,
+    result: Option<AgentToolResult>,
+) -> RuntimeAgentEvent {
+    let arguments = arguments.map(canonical_test_arguments).unwrap_or_default();
+    let (status, output, metadata) = match result {
+        Some(result) => {
+            let status = if result.success {
+                ItemStatus::Completed
+            } else {
+                ItemStatus::Failed
+            };
+            let metadata = result
+                .metadata
+                .map(|metadata| Value::Object(metadata.into_iter().collect()))
+                .unwrap_or_else(|| json!({}));
+            let output = ToolOutput {
+                text: Some(result.output),
+                structured_content: result.structured_content,
+                error: result.error,
+                duration_ms: metadata.get("duration_ms").and_then(Value::as_u64),
+                truncated: metadata
+                    .get("truncated")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                output_ref: metadata
+                    .get("output_ref")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+            };
+            (status, Some(output), metadata)
+        }
+        None => (ItemStatus::InProgress, None, json!({})),
+    };
+    let payload = ThreadItemPayload::Tool {
+        call_id: tool_id.to_string(),
+        name: tool_name.to_string(),
+        arguments,
+        output,
+    };
+    let item = ThreadItem {
+        session_id: SessionId::new("session-test"),
+        thread_id: ThreadId::new("thread-test"),
+        turn_id: TurnId::new("turn-test"),
+        item_id: ItemId::new(tool_id),
+        sequence: 1,
+        ordinal: 1,
+        created_at_ms: 1,
+        updated_at_ms: 2,
+        completed_at_ms: status.is_terminal().then_some(2),
+        kind: payload.kind(),
+        status,
+        payload,
+        metadata,
+    };
+    if status.is_terminal() {
+        RuntimeAgentEvent::ItemCompleted { item }
+    } else {
+        RuntimeAgentEvent::ItemStarted { item }
+    }
+}
+
+fn canonical_test_arguments(arguments: Value) -> Vec<ToolArgument> {
+    match arguments {
+        Value::Object(arguments) => arguments
+            .into_iter()
+            .map(|(name, value)| ToolArgument {
+                name,
+                value: value
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| value.to_string()),
+            })
+            .collect(),
+        value => vec![ToolArgument {
+            name: "value".to_string(),
+            value: value
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(|| value.to_string()),
+        }],
+    }
+}
+
 #[test]
 fn shell_tool_events_emit_command_and_test_lifecycle() {
     let mut mirror = CodingEventMirror::default();
 
-    let started = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-1".to_string(),
-        arguments: Some(json!({ "command": "cargo test -p app-server coding_events" }).to_string()),
-    });
+    let started = mirror.process_event(&tool_started(
+        "Bash",
+        "tool-1",
+        Some(json!({ "command": "cargo test -p app-server coding_events" })),
+    ));
     let output = mirror.process_event(&RuntimeAgentEvent::ToolOutputDelta {
         tool_id: "tool-1".to_string(),
         delta: "running tests".to_string(),
         output_kind: Some("stdout".to_string()),
         metadata: None,
     });
-    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-1".to_string(),
-        result: success_result(
+    let ended = mirror.process_event(&tool_completed(
+        "tool-1",
+        success_result(
             "ok",
             HashMap::from([
                 ("exit_code".to_string(), json!(0)),
@@ -41,7 +136,7 @@ fn shell_tool_events_emit_command_and_test_lifecycle() {
                 ("shell".to_string(), json!("bash")),
             ]),
         ),
-    });
+    ));
 
     let event_types = started
         .after_raw
@@ -66,11 +161,11 @@ fn shell_tool_events_emit_command_and_test_lifecycle() {
 fn shell_tool_output_delta_preserves_process_lifecycle_metadata() {
     let mut mirror = CodingEventMirror::default();
 
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-process".to_string(),
-        arguments: Some(json!({ "command": "npm test" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Bash",
+        "tool-process",
+        Some(json!({ "command": "npm test" })),
+    ));
     let output = mirror.process_event(&RuntimeAgentEvent::ToolOutputDelta {
         tool_id: "tool-process".to_string(),
         delta: "running".to_string(),
@@ -104,11 +199,11 @@ fn shell_tool_output_delta_preserves_process_lifecycle_metadata() {
 fn shell_tool_metadata_only_delta_updates_process_lifecycle_without_consuming_output() {
     let mut mirror = CodingEventMirror::default();
 
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-process-start".to_string(),
-        arguments: Some(json!({ "command": "sleep 1 && echo done" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Bash",
+        "tool-process-start",
+        Some(json!({ "command": "sleep 1 && echo done" })),
+    ));
     let process_update = mirror.process_event(&RuntimeAgentEvent::ToolOutputDelta {
         tool_id: "tool-process-start".to_string(),
         delta: String::new(),
@@ -124,16 +219,16 @@ fn shell_tool_metadata_only_delta_updates_process_lifecycle_without_consuming_ou
             ("stdinWritable".to_string(), json!(true)),
         ])),
     });
-    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-process-start".to_string(),
-        result: success_result(
+    let ended = mirror.process_event(&tool_completed(
+        "tool-process-start",
+        success_result(
             "done",
             HashMap::from([
                 ("exit_code".to_string(), json!(0)),
                 ("command".to_string(), json!("sleep 1 && echo done")),
             ]),
         ),
-    });
+    ));
 
     assert_eq!(process_update.after_raw.len(), 1);
     assert_eq!(process_update.after_raw[0].event_type, "command.output");
@@ -161,15 +256,15 @@ fn shell_tool_metadata_only_delta_updates_process_lifecycle_without_consuming_ou
 #[test]
 fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "PowerShellTool".to_string(),
-        tool_id: "tool-2".to_string(),
-        arguments: Some(json!({ "command": "Write-Output ok" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "PowerShellTool",
+        "tool-2",
+        Some(json!({ "command": "Write-Output ok" })),
+    ));
 
-    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-2".to_string(),
-        result: success_result(
+    let ended = mirror.process_event(&tool_completed(
+        "tool-2",
+        success_result(
             "ok",
             HashMap::from([
                 ("exit_code".to_string(), json!(0)),
@@ -182,7 +277,7 @@ fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
                 ("stderr_bytes".to_string(), json!(0)),
             ]),
         ),
-    });
+    ));
 
     assert_eq!(ended.after_raw[0].event_type, "command.output");
     assert_eq!(ended.after_raw[1].event_type, "command.exited");
@@ -223,27 +318,26 @@ fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
 #[test]
 fn shell_apply_patch_command_emits_patch_lifecycle_after_command_exit() {
     let mut mirror = CodingEventMirror::default();
-    let started = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-patch-shell".to_string(),
-        arguments: Some(
+    let started = mirror.process_event(&tool_started(
+        "Bash",
+        "tool-patch-shell",
+        Some(
             json!({
                 "command": "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: notes/live.md\n+hello\n*** End Patch\nPATCH"
-            })
-            .to_string(),
+            }),
         ),
-    });
+    ));
 
-    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-patch-shell".to_string(),
-        result: success_result(
+    let ended = mirror.process_event(&tool_completed(
+        "tool-patch-shell",
+        success_result(
             "ok",
             HashMap::from([
                 ("exit_code".to_string(), json!(0)),
                 ("command".to_string(), json!("apply_patch <<'PATCH'")),
             ]),
         ),
-    });
+    ));
 
     let event_types = started
         .after_raw
@@ -266,20 +360,19 @@ fn shell_apply_patch_command_emits_patch_lifecycle_after_command_exit() {
 #[test]
 fn apply_patch_tool_failure_emits_patch_failed_with_category() {
     let mut mirror = CodingEventMirror::default();
-    let started = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "apply_patch".to_string(),
-        tool_id: "tool-patch-failed".to_string(),
-        arguments: Some(
+    let started = mirror.process_event(&tool_started(
+        "apply_patch",
+        "tool-patch-failed",
+        Some(
             json!({
                 "patch": "*** Begin Patch\n*** Update File: missing.txt\n@@\n-old\n+new\n*** End Patch\n"
-            })
-            .to_string(),
+            }),
         ),
-    });
+    ));
 
-    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-patch-failed".to_string(),
-        result: AgentToolResult {
+    let ended = mirror.process_event(&tool_completed(
+        "tool-patch-failed",
+        AgentToolResult {
             success: false,
             output: "target file not found".to_string(),
             error: None,
@@ -287,7 +380,7 @@ fn apply_patch_tool_failure_emits_patch_failed_with_category() {
             images: None,
             metadata: None,
         },
-    });
+    ));
 
     assert_eq!(started.after_raw.len(), 1);
     assert_eq!(started.after_raw[0].event_type, "patch.started");
@@ -302,20 +395,19 @@ fn apply_patch_tool_failure_emits_patch_failed_with_category() {
 #[test]
 fn apply_patch_tool_success_emits_patch_and_all_file_changes() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "apply_patch".to_string(),
-        tool_id: "tool-patch-success".to_string(),
-        arguments: Some(
+    let _ = mirror.process_event(&tool_started(
+        "apply_patch",
+        "tool-patch-success",
+        Some(
             json!({
                 "patch": "*** Begin Patch\n*** Add File: a.txt\n+a\n*** Add File: b.txt\n+b\n*** End Patch\n"
-            })
-            .to_string(),
+            }),
         ),
-    });
+    ));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-patch-success".to_string(),
-        result: success_result(
+    let events = mirror.process_event(&tool_completed(
+        "tool-patch-success",
+        success_result(
             "applied",
             HashMap::from([(
                 "file_changes".to_string(),
@@ -344,7 +436,7 @@ fn apply_patch_tool_success_emits_patch_and_all_file_changes() {
                 }),
             )]),
         ),
-    });
+    ));
 
     let event_types = events
         .after_raw
@@ -388,19 +480,19 @@ fn apply_patch_tool_success_emits_patch_and_all_file_changes() {
 #[test]
 fn write_tool_result_emits_file_changed_with_artifact_reference() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Write".to_string(),
-        tool_id: "tool-3".to_string(),
-        arguments: Some(json!({ "path": "src/App.tsx", "content": "export {}" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Write",
+        "tool-3",
+        Some(json!({ "path": "src/App.tsx", "content": "export {}" })),
+    ));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-3".to_string(),
-        result: success_result(
+    let events = mirror.process_event(&tool_completed(
+        "tool-3",
+        success_result(
             "written",
             HashMap::from([("path".to_string(), json!("src/App.tsx"))]),
         ),
-    });
+    ));
 
     assert_eq!(events.after_raw.len(), 1);
     assert_eq!(events.after_raw[0].event_type, "file.changed");
@@ -414,15 +506,15 @@ fn write_tool_result_emits_file_changed_with_artifact_reference() {
 #[test]
 fn write_tool_result_preserves_artifact_checkpoint_and_diff_refs() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Edit".to_string(),
-        tool_id: "tool-edit-refs".to_string(),
-        arguments: Some(json!({ "path": "src/App.tsx" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Edit",
+        "tool-edit-refs",
+        Some(json!({ "path": "src/App.tsx" })),
+    ));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-edit-refs".to_string(),
-        result: success_result(
+    let events = mirror.process_event(&tool_completed(
+        "tool-edit-refs",
+        success_result(
             "updated",
             HashMap::from([
                 ("path".to_string(), json!("src/App.tsx")),
@@ -440,7 +532,7 @@ fn write_tool_result_preserves_artifact_checkpoint_and_diff_refs() {
                 ("previewText".to_string(), json!("changed App component")),
             ]),
         ),
-    });
+    ));
 
     let event = events.after_raw.first().expect("file.changed event");
     assert_eq!(event.event_type, "file.changed");
@@ -475,21 +567,19 @@ fn write_tool_result_preserves_artifact_checkpoint_and_diff_refs() {
 #[test]
 fn read_tool_result_emits_file_read_from_arguments() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Read".to_string(),
-        tool_id: "tool-read".to_string(),
-        arguments: Some(
-            json!({ "path": "src/App.tsx", "start_line": 2, "end_line": 8 }).to_string(),
-        ),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Read",
+        "tool-read",
+        Some(json!({ "path": "src/App.tsx", "start_line": 2, "end_line": 8 })),
+    ));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-read".to_string(),
-        result: success_result(
+    let events = mirror.process_event(&tool_completed(
+        "tool-read",
+        success_result(
             "2 | export {}",
             HashMap::from([("file_type".to_string(), json!("text"))]),
         ),
-    });
+    ));
 
     assert_eq!(events.after_raw.len(), 1);
     assert_eq!(events.after_raw[0].event_type, "file.read");
@@ -507,14 +597,14 @@ fn read_tool_result_emits_file_read_from_arguments() {
 #[test]
 fn read_and_shell_tool_results_preserve_output_refs() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Read".to_string(),
-        tool_id: "tool-read-ref".to_string(),
-        arguments: Some(json!({ "path": "src/App.tsx" }).to_string()),
-    });
-    let read_events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-read-ref".to_string(),
-        result: success_result(
+    let _ = mirror.process_event(&tool_started(
+        "Read",
+        "tool-read-ref",
+        Some(json!({ "path": "src/App.tsx" })),
+    ));
+    let read_events = mirror.process_event(&tool_completed(
+        "tool-read-ref",
+        success_result(
             "export {}",
             HashMap::from([
                 ("path".to_string(), json!("src/App.tsx")),
@@ -526,7 +616,7 @@ fn read_and_shell_tool_results_preserve_output_refs() {
                 ),
             ]),
         ),
-    });
+    ));
     let read = read_events.after_raw.first().expect("file.read event");
     assert_eq!(
         read.payload["outputRef"].as_str(),
@@ -545,14 +635,14 @@ fn read_and_shell_tool_results_preserve_output_refs() {
         ]
     );
 
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-shell-ref".to_string(),
-        arguments: Some(json!({ "command": "npm test" }).to_string()),
-    });
-    let shell_events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-shell-ref".to_string(),
-        result: success_result(
+    let _ = mirror.process_event(&tool_started(
+        "Bash",
+        "tool-shell-ref",
+        Some(json!({ "command": "npm test" })),
+    ));
+    let shell_events = mirror.process_event(&tool_completed(
+        "tool-shell-ref",
+        success_result(
             "ok",
             HashMap::from([
                 ("exit_code".to_string(), json!(0)),
@@ -563,7 +653,7 @@ fn read_and_shell_tool_results_preserve_output_refs() {
                 ),
             ]),
         ),
-    });
+    ));
     let output = shell_events
         .after_raw
         .iter()
@@ -582,15 +672,15 @@ fn read_and_shell_tool_results_preserve_output_refs() {
 #[test]
 fn failed_edit_does_not_emit_file_changed() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Edit".to_string(),
-        tool_id: "tool-4".to_string(),
-        arguments: Some(json!({ "path": "src/App.tsx" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Edit",
+        "tool-4",
+        Some(json!({ "path": "src/App.tsx" })),
+    ));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-4".to_string(),
-        result: AgentToolResult {
+    let events = mirror.process_event(&tool_completed(
+        "tool-4",
+        AgentToolResult {
             success: false,
             output: "not found".to_string(),
             error: Some("not found".to_string()),
@@ -598,7 +688,7 @@ fn failed_edit_does_not_emit_file_changed() {
             images: None,
             metadata: Some(HashMap::from([("path".to_string(), json!("src/App.tsx"))])),
         },
-    });
+    ));
 
     assert!(events.after_raw.is_empty());
 }
@@ -606,15 +696,15 @@ fn failed_edit_does_not_emit_file_changed() {
 #[test]
 fn failed_tool_result_emits_permission_denied_before_raw_terminal() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-denied".to_string(),
-        arguments: Some(json!({ "command": "rm -rf important" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Bash",
+        "tool-denied",
+        Some(json!({ "command": "rm -rf important" })),
+    ));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-denied".to_string(),
-        result: AgentToolResult {
+    let events = mirror.process_event(&tool_completed(
+        "tool-denied",
+        AgentToolResult {
             success: false,
             output: String::new(),
             error: Some("policy denied this command".to_string()),
@@ -628,7 +718,7 @@ fn failed_tool_result_emits_permission_denied_before_raw_terminal() {
                 ("platform".to_string(), json!("macos")),
             ])),
         },
-    });
+    ));
 
     assert_eq!(events.before_raw.len(), 1);
     assert_eq!(events.before_raw[0].event_type, "permission.denied");
@@ -665,15 +755,11 @@ fn failed_tool_result_emits_permission_denied_before_raw_terminal() {
 #[test]
 fn failed_tool_result_uses_policy_metadata_command_when_start_arguments_are_missing() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-denied-metadata".to_string(),
-        arguments: None,
-    });
+    let _ = mirror.process_event(&tool_started("Bash", "tool-denied-metadata", None));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-denied-metadata".to_string(),
-        result: AgentToolResult {
+    let events = mirror.process_event(&tool_completed(
+        "tool-denied-metadata",
+        AgentToolResult {
             success: false,
             output: String::new(),
             error: Some("Permission denied: policy denied this command".to_string()),
@@ -686,7 +772,7 @@ fn failed_tool_result_uses_policy_metadata_command_when_start_arguments_are_miss
                 ("policyName".to_string(), json!("workspace_tool_execution")),
             ])),
         },
-    });
+    ));
 
     assert_eq!(events.before_raw.len(), 1);
     assert_eq!(events.before_raw[0].event_type, "permission.denied");
@@ -707,15 +793,15 @@ fn failed_tool_result_uses_policy_metadata_command_when_start_arguments_are_miss
 #[test]
 fn failed_tool_result_emits_sandbox_blocked_before_raw_terminal() {
     let mut mirror = CodingEventMirror::default();
-    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
-        tool_name: "Bash".to_string(),
-        tool_id: "tool-sandbox".to_string(),
-        arguments: Some(json!({ "command": "curl https://example.com" }).to_string()),
-    });
+    let _ = mirror.process_event(&tool_started(
+        "Bash",
+        "tool-sandbox",
+        Some(json!({ "command": "curl https://example.com" })),
+    ));
 
-    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
-        tool_id: "tool-sandbox".to_string(),
-        result: AgentToolResult {
+    let events = mirror.process_event(&tool_completed(
+        "tool-sandbox",
+        AgentToolResult {
             success: false,
             output: "sandbox blocked network access".to_string(),
             error: None,
@@ -731,7 +817,7 @@ fn failed_tool_result_emits_sandbox_blocked_before_raw_terminal() {
                 ("platform".to_string(), json!("windows")),
             ])),
         },
-    });
+    ));
 
     assert_eq!(events.before_raw.len(), 1);
     assert_eq!(events.before_raw[0].event_type, "sandbox.blocked");

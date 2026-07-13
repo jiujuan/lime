@@ -1,6 +1,10 @@
 use super::image_tools;
 use super::request_context::RuntimeSessionScope;
 use crate::{AppDataSource, ExecutionRequest, RuntimeCoreError, RuntimeEvent, RuntimeEventSink};
+use agent_protocol::{
+    ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload, ToolArgument,
+    ToolOutput, TurnId,
+};
 use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
 use lime_agent::{agent_tools::catalog::LIME_CREATE_IMAGE_TASK_TOOL_NAME, AgentTokenUsage};
 mod intent;
@@ -160,16 +164,30 @@ pub(super) async fn handle_image_command_turn_if_present(
 
     let tool_call_id = tool_call_id(scope);
     let create_params = intent.clone().into_create_params();
+    let tool_started_at_ms = chrono::Utc::now().timestamp_millis();
     emit_workflow_step_started(&intent, "create_tasks", "创建图片任务", None, sink)?;
-    emit_tool_started(&tool_call_id, &create_params, sink)?;
+    emit_tool_started(
+        scope,
+        &tool_call_id,
+        &create_params,
+        tool_started_at_ms,
+        sink,
+    )?;
     match app_data_source
-        .create_image_media_task_artifact(create_params)
+        .create_image_media_task_artifact(create_params.clone())
         .await
     {
         Ok(response) => {
             let task_id = response.task_id.clone();
             let artifact_path = response.artifact_path.clone();
-            emit_task_created(&tool_call_id, response, sink)?;
+            emit_task_created(
+                scope,
+                &tool_call_id,
+                &create_params,
+                tool_started_at_ms,
+                response,
+                sink,
+            )?;
             tracing::info!(
                 session_id = %intent.scope.session_id,
                 thread_id = %intent.scope.thread_id,
@@ -198,6 +216,8 @@ pub(super) async fn handle_image_command_turn_if_present(
             emit_create_failed_after_tool_started(
                 &intent,
                 &tool_call_id,
+                &create_params,
+                tool_started_at_ms,
                 "image_task_create_failed",
                 &error.to_string(),
                 sink,
@@ -591,39 +611,34 @@ fn emit_parameter_required(
 }
 
 fn emit_tool_started(
+    scope: &RuntimeSessionScope,
     tool_call_id: &str,
     params: &MediaTaskArtifactImageCreateParams,
+    started_at_ms: i64,
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
-    let args = serde_json::to_value(params).unwrap_or_else(|_| json!({}));
-    sink.emit(RuntimeEvent::new(
-        "tool.started",
+    emit_tool_item(
+        "item.started",
+        scope,
+        tool_call_id,
+        params,
+        ItemStatus::InProgress,
+        None,
         json!({
             "backend": "runtime",
             "source": WORKFLOW_SOURCE,
-            "toolCallId": tool_call_id,
-            "toolName": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "tool_name": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "name": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "arguments": args,
         }),
-    ))?;
-    sink.emit(RuntimeEvent::new(
-        "tool.args",
-        json!({
-            "backend": "runtime",
-            "source": WORKFLOW_SOURCE,
-            "toolCallId": tool_call_id,
-            "toolName": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "tool_name": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "args": args,
-            "rawArgs": args,
-        }),
-    ))
+        started_at_ms,
+        started_at_ms,
+        sink,
+    )
 }
 
 fn emit_task_created(
+    scope: &RuntimeSessionScope,
     tool_call_id: &str,
+    params: &MediaTaskArtifactImageCreateParams,
+    started_at_ms: i64,
     response: MediaTaskArtifactResponse,
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
@@ -641,23 +656,31 @@ fn emit_task_created(
             "response": response.clone(),
         }),
     ))?;
+    let structured_content = serde_json::to_value(&response).ok();
     let result = image_tools::tool_result_from_response(response);
-    sink.emit(RuntimeEvent::new(
-        "tool.result",
-        json!({
-            "backend": "runtime",
-            "source": WORKFLOW_SOURCE,
-            "toolCallId": tool_call_id,
-            "toolName": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "tool_name": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "name": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "result": {
-                "success": true,
-                "output": result.output,
-                "metadata": result.metadata,
-            },
+    let mut metadata = serde_json::Map::from_iter(result.metadata);
+    metadata.insert("backend".to_string(), json!("runtime"));
+    metadata.insert("source".to_string(), json!(WORKFLOW_SOURCE));
+    metadata.insert("success".to_string(), json!(true));
+    emit_tool_item(
+        "item.completed",
+        scope,
+        tool_call_id,
+        params,
+        ItemStatus::Completed,
+        Some(ToolOutput {
+            text: result.output,
+            structured_content,
+            error: None,
+            duration_ms: None,
+            truncated: false,
+            output_ref: None,
         }),
-    ))
+        Value::Object(metadata),
+        started_at_ms,
+        chrono::Utc::now().timestamp_millis(),
+        sink,
+    )
 }
 
 fn emit_task_created_turn_completed(
@@ -689,6 +712,7 @@ fn emit_create_failed(
 ) -> Result<(), RuntimeCoreError> {
     let tool_call_id = tool_call_id(&intent.scope);
     let create_params = intent.clone().into_create_params();
+    let tool_started_at_ms = chrono::Utc::now().timestamp_millis();
     tracing::warn!(
         session_id = %intent.scope.session_id,
         thread_id = %intent.scope.thread_id,
@@ -697,13 +721,29 @@ fn emit_create_failed(
         reason_code = %reason_code,
         "[RuntimeBackend] ImageCommandWorkflow task create failed"
     );
-    emit_tool_started(&tool_call_id, &create_params, sink)?;
-    emit_create_failed_after_tool_started(intent, &tool_call_id, reason_code, message, sink)
+    emit_tool_started(
+        &intent.scope,
+        &tool_call_id,
+        &create_params,
+        tool_started_at_ms,
+        sink,
+    )?;
+    emit_create_failed_after_tool_started(
+        intent,
+        &tool_call_id,
+        &create_params,
+        tool_started_at_ms,
+        reason_code,
+        message,
+        sink,
+    )
 }
 
 fn emit_create_failed_after_tool_started(
     intent: &ImageCommandIntent,
     tool_call_id: &str,
+    params: &MediaTaskArtifactImageCreateParams,
+    started_at_ms: i64,
     reason_code: &str,
     message: &str,
     sink: &mut dyn RuntimeEventSink,
@@ -711,7 +751,15 @@ fn emit_create_failed_after_tool_started(
     emit_image_task_create_failed(intent, reason_code, message, sink)?;
     emit_workflow_step_completed(intent, "create_tasks", "创建图片任务", "failed", None, sink)?;
     emit_workflow_run_completed(intent, "create_failed", None, sink)?;
-    emit_tool_failed(&tool_call_id, reason_code, message, sink)?;
+    emit_tool_failed(
+        &intent.scope,
+        tool_call_id,
+        params,
+        started_at_ms,
+        reason_code,
+        message,
+        sink,
+    )?;
     emit_turn_completed("create_failed", intent, sink)
 }
 
@@ -737,36 +785,105 @@ fn emit_image_task_create_failed(
 }
 
 fn emit_tool_failed(
+    scope: &RuntimeSessionScope,
     tool_call_id: &str,
+    params: &MediaTaskArtifactImageCreateParams,
+    started_at_ms: i64,
     reason_code: &str,
     message: &str,
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
-    sink.emit(RuntimeEvent::new(
-        "tool.failed",
+    emit_tool_item(
+        "item.completed",
+        scope,
+        tool_call_id,
+        params,
+        ItemStatus::Failed,
+        Some(ToolOutput {
+            text: None,
+            structured_content: None,
+            error: Some(message.to_string()),
+            duration_ms: None,
+            truncated: false,
+            output_ref: None,
+        }),
         json!({
             "backend": "runtime",
             "source": WORKFLOW_SOURCE,
-            "toolCallId": tool_call_id,
-            "toolName": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "tool_name": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "name": LIME_CREATE_IMAGE_TASK_TOOL_NAME,
-            "status": "failed",
-            "failureCategory": reason_code,
-            "failure_category": reason_code,
-            "error": message,
-            "result": {
-                "success": false,
-                "output": "",
-                "error": message,
-                "metadata": {
-                    "reasonCode": reason_code,
-                    "reason_code": reason_code,
-                    "source": WORKFLOW_SOURCE,
-                },
-            },
+            "success": false,
+            "reasonCode": reason_code,
+            "reason_code": reason_code,
         }),
-    ))
+        started_at_ms,
+        chrono::Utc::now().timestamp_millis(),
+        sink,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_tool_item(
+    event_type: &str,
+    scope: &RuntimeSessionScope,
+    tool_call_id: &str,
+    params: &MediaTaskArtifactImageCreateParams,
+    status: ItemStatus,
+    output: Option<ToolOutput>,
+    metadata: Value,
+    created_at_ms: i64,
+    updated_at_ms: i64,
+    sink: &mut dyn RuntimeEventSink,
+) -> Result<(), RuntimeCoreError> {
+    let updated_at_ms = updated_at_ms.max(created_at_ms);
+    let mut output = output;
+    if status.is_terminal() {
+        if let Some(output) = output.as_mut() {
+            output.duration_ms = Some(
+                u64::try_from(updated_at_ms.saturating_sub(created_at_ms)).unwrap_or_default(),
+            );
+        }
+    }
+    let payload = ThreadItemPayload::Tool {
+        call_id: tool_call_id.to_string(),
+        name: LIME_CREATE_IMAGE_TASK_TOOL_NAME.to_string(),
+        arguments: tool_arguments(params),
+        output,
+    };
+    let item = ThreadItem {
+        session_id: SessionId::new(scope.session_id.clone()),
+        thread_id: ThreadId::new(scope.thread_id.clone()),
+        turn_id: TurnId::new(scope.turn_id.clone()),
+        item_id: ItemId::new(tool_call_id),
+        sequence: 0,
+        ordinal: 0,
+        created_at_ms,
+        updated_at_ms,
+        completed_at_ms: status.is_terminal().then_some(updated_at_ms),
+        kind: payload.kind(),
+        status,
+        payload,
+        metadata,
+    };
+    sink.emit(RuntimeEvent::new(event_type, json!({ "item": item })))
+}
+
+fn tool_arguments(params: &MediaTaskArtifactImageCreateParams) -> Vec<ToolArgument> {
+    match serde_json::to_value(params).unwrap_or(Value::Null) {
+        Value::Object(arguments) => arguments
+            .into_iter()
+            .map(|(name, value)| ToolArgument {
+                name,
+                value: match value {
+                    Value::String(value) => value,
+                    value => value.to_string(),
+                },
+            })
+            .collect(),
+        Value::Null => Vec::new(),
+        value => vec![ToolArgument {
+            name: "value".to_string(),
+            value: value.to_string(),
+        }],
+    }
 }
 
 fn emit_turn_completed(
@@ -788,5 +905,5 @@ fn emit_turn_completed(
 }
 
 fn tool_call_id(scope: &RuntimeSessionScope) -> String {
-    format!("image-command-create-task-{}", scope.turn_id)
+    ItemId::new(format!("image-command-create-task-{}", scope.turn_id)).to_string()
 }

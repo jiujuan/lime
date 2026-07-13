@@ -1,4 +1,67 @@
 use super::*;
+use serde_json::Value;
+
+fn canonical_tool_event(event_type: &str, payload: Value) -> RuntimeEvent {
+    let call_id = payload["toolCallId"].as_str().expect("tool call id");
+    let name = payload["toolName"].as_str().expect("tool name");
+    let arguments: Vec<Value> = payload
+        .get("arguments")
+        .and_then(Value::as_object)
+        .map(|arguments| {
+            arguments
+                .iter()
+                .map(|(name, value)| json!({ "name": name, "value": value.to_string() }))
+                .collect()
+        })
+        .unwrap_or_default();
+    let structured_content: Option<Value> = payload
+        .get("structuredContent")
+        .cloned()
+        .or_else(|| {
+            payload
+                .get("result")
+                .and_then(|result| result.get("structuredContent"))
+                .cloned()
+        })
+        .or_else(|| payload.get("result").cloned())
+        .or_else(|| {
+            payload
+                .get("metadata")
+                .cloned()
+                .map(|metadata| json!({ "metadata": metadata }))
+        });
+    let output = (event_type == "item.completed").then(|| {
+        json!({
+            "structuredContent": structured_content,
+        })
+    });
+    RuntimeEvent::new(
+        event_type,
+        json!({
+            "item": {
+                "sessionId": "evidence-session",
+                "threadId": "evidence-thread",
+                "turnId": "evidence-turn",
+                "itemId": call_id,
+                "sequence": 1,
+                "ordinal": 1,
+                "createdAtMs": 1,
+                "updatedAtMs": 2,
+                "completedAtMs": (event_type == "item.completed").then_some(2),
+                "kind": "tool",
+                "status": if event_type == "item.completed" { "completed" } else { "inProgress" },
+                "payload": {
+                    "type": "tool",
+                    "call_id": call_id,
+                    "name": name,
+                    "arguments": arguments,
+                    "output": output,
+                },
+                "metadata": payload.get("metadata").cloned().unwrap_or(Value::Null)
+            }
+        }),
+    )
+}
 
 #[tokio::test]
 async fn export_evidence_uses_injected_evidence_pack_provider() {
@@ -244,8 +307,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
         "sess_skill_invocation_evidence",
         Some("turn_skill_invocation_evidence"),
         vec![
-            RuntimeEvent::new(
-                "tool.started",
+            canonical_tool_event(
+                "item.started",
                 json!({
                     "toolCallId": "skill-call-1",
                     "toolName": "Skill",
@@ -254,8 +317,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.started",
+            canonical_tool_event(
+                "item.started",
                 json!({
                     "toolCallId": "skill-search-call-1",
                     "toolName": "skill_search",
@@ -264,8 +327,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
+            canonical_tool_event(
+                "item.completed",
                 json!({
                     "toolCallId": "skill-search-call-1",
                     "toolName": "skill_search",
@@ -282,8 +345,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.started",
+            canonical_tool_event(
+                "item.started",
                 json!({
                     "toolCallId": "mcp-search-call-1",
                     "toolName": "mcp__docs__search_docs",
@@ -292,8 +355,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
+            canonical_tool_event(
+                "item.completed",
                 json!({
                     "toolCallId": "mcp-search-call-1",
                     "toolName": "mcp__docs__search_docs",
@@ -313,8 +376,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.started",
+            canonical_tool_event(
+                "item.started",
                 json!({
                     "toolCallId": "mcp-resource-call-1",
                     "toolName": "ReadMcpResourceTool",
@@ -324,8 +387,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
+            canonical_tool_event(
+                "item.completed",
                 json!({
                     "toolCallId": "mcp-resource-call-1",
                     "toolName": "ReadMcpResourceTool",
@@ -341,8 +404,8 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
+            canonical_tool_event(
+                "item.completed",
                 json!({
                     "toolCallId": "skill-call-1",
                     "toolName": "Skill",
@@ -592,8 +655,8 @@ async fn export_evidence_marks_completed_with_workspace_skill_and_artifact() {
         "sess_skill_completion_evidence",
         Some("turn_skill_completion_evidence"),
         vec![
-            RuntimeEvent::new(
-                "tool.started",
+            canonical_tool_event(
+                "item.started",
                 json!({
                     "toolCallId": "skill-call-completion-1",
                     "toolName": "Skill",
@@ -602,8 +665,8 @@ async fn export_evidence_marks_completed_with_workspace_skill_and_artifact() {
                     }
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
+            canonical_tool_event(
+                "item.completed",
                 json!({
                     "toolCallId": "skill-call-completion-1",
                     "toolName": "Skill",

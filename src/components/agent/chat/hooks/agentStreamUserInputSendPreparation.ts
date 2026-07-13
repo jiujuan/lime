@@ -96,6 +96,7 @@ export interface PreparedAgentStreamUserInputSend {
 
 export function resolvePreparedSendExpectingQueue(options: {
   activeStreamSessionId?: string | null;
+  activeStreamTurnId?: string | null;
   currentSessionId?: string | null;
   queuedTurnsCount: number;
   threadBusy: boolean;
@@ -106,6 +107,10 @@ export function resolvePreparedSendExpectingQueue(options: {
   }
 
   if (options.threadBusy || options.pendingPreparedSubmit) {
+    return true;
+  }
+
+  if (options.activeStreamTurnId?.trim()) {
     return true;
   }
 
@@ -408,6 +413,7 @@ export function prepareAgentStreamUserInputSend(
   const skillRequest = sendOptions?.skillRequest;
   const expectingQueue = resolvePreparedSendExpectingQueue({
     activeStreamSessionId: env.activeStreamRef.current?.sessionId,
+    activeStreamTurnId: env.activeStreamRef.current?.turnId,
     currentSessionId: sessionIdForSend,
     queuedTurnsCount: env.getQueuedTurnsCount(),
     threadBusy: env.isThreadBusy(),

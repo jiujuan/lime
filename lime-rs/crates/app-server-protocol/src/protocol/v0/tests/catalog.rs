@@ -41,6 +41,10 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
             METHOD_AGENT_SESSION_LIST,
+            METHOD_THREAD_READ,
+            METHOD_THREAD_LIST,
+            METHOD_THREAD_TURNS_LIST,
+            METHOD_THREAD_ITEMS_LIST,
             METHOD_AGENT_SESSION_UPDATE,
             METHOD_AGENT_SESSION_ARCHIVE_MANY,
             METHOD_AGENT_SESSION_DELETE,
@@ -441,5 +445,26 @@ fn app_server_request_serialization_scope_covers_high_risk_methods() {
     assert_eq!(
         app_server_request_serialization_scope(METHOD_AGENT_SESSION_EVENT),
         None
+    );
+}
+
+#[test]
+fn app_server_request_access_keeps_shared_reads_in_the_catalog() {
+    for method in [
+        METHOD_BROWSER_SESSION_READ,
+        METHOD_THREAD_READ,
+        METHOD_THREAD_LIST,
+        METHOD_THREAD_TURNS_LIST,
+        METHOD_THREAD_ITEMS_LIST,
+    ] {
+        assert_eq!(
+            app_server_request_access(method),
+            AppServerRequestAccess::SharedRead,
+            "{method}"
+        );
+    }
+    assert_eq!(
+        app_server_request_access(METHOD_AGENT_SESSION_TURN_START),
+        AppServerRequestAccess::Exclusive
     );
 }

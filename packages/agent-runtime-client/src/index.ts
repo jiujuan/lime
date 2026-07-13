@@ -4,11 +4,13 @@ export {
   type AgentRuntimeClient,
   type AgentRuntimeClientSubscription,
   type AgentRuntimeEventListener,
+  type CanonicalThreadEventListener,
+  type CanonicalThreadEventNotification,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
   type AgentSessionEventNotification,
-  type AgentSessionReadParams,
-  type AgentSessionReadResponse,
+  type ThreadReadParams,
+  type ThreadReadResponse,
   type AgentSessionTurnCancelParams,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
@@ -30,14 +32,13 @@ export {
 export {
   AgentRuntimeEventSequenceGate,
   AgentRuntimeSequenceViolationError,
-  runtimeExecutionEventFromAgentEvent,
+  runtimeExecutionEventFromCanonicalEvent,
   type AgentRuntimeSequenceVerifierLike,
   type AgentRuntimeSequenceVerifierMode,
 } from "./eventVerifier.js";
 
 export {
   AgentRuntimeEventPipeline,
-  createSchemaVersionCompatibilityMiddleware,
   withEvent,
   type AgentRuntimeEventAdapter,
   type AgentRuntimeEventMiddleware,

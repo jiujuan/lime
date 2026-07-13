@@ -39,6 +39,8 @@ async function requestSkillExecutionAppServer<T>(
  * 用于 listExecutableSkills 返回的 Skill 列表项
  */
 export interface ExecutableSkillInfo {
+  /** 跨 workspace/session 稳定的 Skill identity */
+  skill_id: string;
   /** Skill 名称（唯一标识） */
   name: string;
   /** 显示名称 */
@@ -55,6 +57,35 @@ export interface ExecutableSkillInfo {
   model?: string;
   /** 参数提示（可选） */
   argument_hint?: string;
+  /** Skill 来源 */
+  source: "project" | "user" | "app" | "other";
+  /** Skill 权限事实源 */
+  authority: "workspace" | "user" | "application" | "external";
+  /** Skill 作用域 */
+  scope: "project" | "user" | "app" | "other";
+  /** 当前是否允许模型选择 */
+  enabled: boolean;
+  /** 所需 runtime capabilities */
+  capabilities: string[];
+  /** typed tool dependencies */
+  dependencies: SkillDependencyInfo[];
+  /** 本地读取 locator，不参与 identity */
+  locator: SkillLocatorInfo;
+  /** 是否允许隐式选择 */
+  allow_implicit_invocation: boolean;
+  /** 使用场景说明（可选） */
+  when_to_use?: string;
+}
+
+export interface SkillDependencyInfo {
+  type: string;
+  value: string;
+  required: boolean;
+}
+
+export interface SkillLocatorInfo {
+  directory: string;
+  skill_file_path: string;
 }
 
 /**
@@ -98,17 +129,253 @@ function normalizeSkillListResponse(
     throw new Error("App Server skill/list did not return skills");
   }
 
-  return response.skills as ExecutableSkillInfo[];
+  return response.skills.map((skill: unknown, index: number) =>
+    normalizeSkillSummary(skill, `skill/list skills[${index}]`),
+  );
+}
+
+export function resolveExecutableSkillId(
+  skills: ReadonlyArray<Pick<ExecutableSkillInfo, "skill_id" | "name">>,
+  reference: string,
+): string | null {
+  const normalizedReference = reference.trim();
+  if (!normalizedReference) {
+    return null;
+  }
+
+  const exactIdMatches = skills.filter(
+    (skill) => skill.skill_id === normalizedReference,
+  );
+  if (exactIdMatches.length === 1) {
+    return exactIdMatches[0].skill_id;
+  }
+  if (exactIdMatches.length > 1) {
+    return null;
+  }
+
+  const nameMatches = skills.filter(
+    (skill) => skill.name === normalizedReference,
+  );
+  return nameMatches.length === 1 ? nameMatches[0].skill_id : null;
 }
 
 function normalizeSkillReadResponse(
   response: AppServerSkillReadResponse | null | undefined,
+  expectedSkillId: string,
 ): SkillDetailInfo {
   if (!response || typeof response !== "object" || !response.skill) {
     throw new Error("App Server skill/read did not return skill");
   }
 
-  return response.skill as SkillDetailInfo;
+  const detail = normalizeSkillDetail(response.skill);
+  if (detail.skill_id !== expectedSkillId) {
+    throw new Error(
+      `App Server skill/read returned unexpected skillId: ${detail.skill_id}`,
+    );
+  }
+  return detail;
+}
+
+function normalizeSkillSummary(
+  skill: unknown,
+  label: string,
+): ExecutableSkillInfo {
+  if (!isRecord(skill)) {
+    throw new Error(`${label} is not an object`);
+  }
+  const skillInterface = requireRecord(skill.interface, `${label}.interface`);
+  const dependencies = requireRecord(
+    skill.dependencies,
+    `${label}.dependencies`,
+  );
+  const policy = requireRecord(skill.policy, `${label}.policy`);
+  const locator = requireRecord(skill.locator, `${label}.locator`);
+  const executionMode = requireExecutionMode(
+    skillInterface.executionMode,
+    `${label}.interface.executionMode`,
+  );
+
+  return {
+    skill_id: requireString(skill.skillId, `${label}.skillId`),
+    name: requireString(skill.name, `${label}.name`),
+    display_name: requireString(
+      skillInterface.displayName,
+      `${label}.interface.displayName`,
+    ),
+    description: requireString(skill.description, `${label}.description`),
+    execution_mode: executionMode,
+    has_workflow: executionMode === "workflow",
+    provider: optionalString(
+      skillInterface.provider,
+      `${label}.interface.provider`,
+    ),
+    model: optionalString(skillInterface.model, `${label}.interface.model`),
+    argument_hint: optionalString(
+      skillInterface.argumentHint,
+      `${label}.interface.argumentHint`,
+    ),
+    source: requireOneOf(
+      skill.source,
+      ["project", "user", "app", "other"] as const,
+      `${label}.source`,
+    ),
+    authority: requireOneOf(
+      skill.authority,
+      ["workspace", "user", "application", "external"] as const,
+      `${label}.authority`,
+    ),
+    scope: requireOneOf(
+      skill.scope,
+      ["project", "user", "app", "other"] as const,
+      `${label}.scope`,
+    ),
+    enabled: requireBoolean(skill.enabled, `${label}.enabled`),
+    capabilities: requireStringArray(
+      skill.capabilities,
+      `${label}.capabilities`,
+    ),
+    dependencies: requireArray(
+      dependencies.tools,
+      `${label}.dependencies.tools`,
+    ).map((dependency, index) => {
+      const item = requireRecord(
+        dependency,
+        `${label}.dependencies.tools[${index}]`,
+      );
+      return {
+        type: requireString(
+          item.type,
+          `${label}.dependencies.tools[${index}].type`,
+        ),
+        value: requireString(
+          item.value,
+          `${label}.dependencies.tools[${index}].value`,
+        ),
+        required: requireBoolean(
+          item.required,
+          `${label}.dependencies.tools[${index}].required`,
+        ),
+      };
+    }),
+    locator: {
+      directory: requireString(locator.directory, `${label}.locator.directory`),
+      skill_file_path: requireString(
+        locator.skillFilePath,
+        `${label}.locator.skillFilePath`,
+      ),
+    },
+    allow_implicit_invocation: requireBoolean(
+      policy.allowImplicitInvocation,
+      `${label}.policy.allowImplicitInvocation`,
+    ),
+    when_to_use: optionalString(policy.whenToUse, `${label}.policy.whenToUse`),
+  };
+}
+
+function normalizeSkillDetail(skill: unknown): SkillDetailInfo {
+  if (!isRecord(skill)) {
+    throw new Error("App Server skill/read skill is not an object");
+  }
+  const metadata = normalizeSkillSummary(
+    skill.metadata,
+    "skill/read skill.metadata",
+  );
+  const workflowSteps = requireArray(
+    skill.workflowSteps,
+    "skill/read skill.workflowSteps",
+  ).map((step, index) => {
+    const item = requireRecord(
+      step,
+      `skill/read skill.workflowSteps[${index}]`,
+    );
+    return {
+      id: requireString(item.id, `skill/read skill.workflowSteps[${index}].id`),
+      name: requireString(
+        item.name,
+        `skill/read skill.workflowSteps[${index}].name`,
+      ),
+      dependencies: requireStringArray(
+        item.dependencies,
+        `skill/read skill.workflowSteps[${index}].dependencies`,
+      ),
+    };
+  });
+
+  return {
+    ...metadata,
+    markdown_content: requireString(
+      skill.markdownContent,
+      "skill/read skill.markdownContent",
+    ),
+    workflow_steps: workflowSteps.length > 0 ? workflowSteps : undefined,
+    allowed_tools: metadata.capabilities,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error(`${label} is not an object`);
+  }
+  return value;
+}
+
+function requireArray(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} is not an array`);
+  }
+  return value;
+}
+
+function requireString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${label} is not a non-empty string`);
+  }
+  return value;
+}
+
+function optionalString(value: unknown, label: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return requireString(value, label);
+}
+
+function requireBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${label} is not a boolean`);
+  }
+  return value;
+}
+
+function requireStringArray(value: unknown, label: string): string[] {
+  return requireArray(value, label).map((item, index) =>
+    requireString(item, `${label}[${index}]`),
+  );
+}
+
+function requireExecutionMode(
+  value: unknown,
+  label: string,
+): ExecutableSkillInfo["execution_mode"] {
+  return requireOneOf(value, ["prompt", "workflow", "agent"] as const, label);
+}
+
+function requireOneOf<const T extends readonly string[]>(
+  value: unknown,
+  allowed: T,
+  label: string,
+): T[number] {
+  if (
+    typeof value !== "string" ||
+    !(allowed as readonly string[]).includes(value)
+  ) {
+    throw new Error(`${label} is not a supported value`);
+  }
+  return value as T[number];
 }
 
 /**
@@ -160,18 +427,18 @@ export const skillExecutionApi = {
   /**
    * 获取 Skill 详情
    *
-   * @param skillName - Skill 名称
+   * @param skillId - typed catalog 暴露的稳定 Skill identity
    * @returns Skill 详情信息
    * @throws 如果 Skill 不存在则抛出错误
    *
    * @requirements 5.1, 5.2, 5.3, 5.4
    */
-  async getSkillDetail(skillName: string): Promise<SkillDetailInfo> {
+  async getSkillDetail(skillId: string): Promise<SkillDetailInfo> {
     const response =
       await requestSkillExecutionAppServer<AppServerSkillReadResponse>(
         METHOD_SKILL_READ,
-        { skillName },
+        { skillId },
       );
-    return normalizeSkillReadResponse(response);
+    return normalizeSkillReadResponse(response, skillId);
   },
 };

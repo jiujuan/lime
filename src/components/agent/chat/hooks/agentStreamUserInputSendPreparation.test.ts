@@ -129,6 +129,19 @@ describe("agentStreamUserInputSendPreparation", () => {
     ).toBe(false);
   });
 
+  it("同一会话 active stream 已绑定真实 turn 时应立即进入 queue 模式", () => {
+    expect(
+      resolvePreparedSendExpectingQueue({
+        activeStreamSessionId: "session-1",
+        activeStreamTurnId: "turn-active-1",
+        currentSessionId: "session-1",
+        queuedTurnsCount: 0,
+        threadBusy: false,
+        pendingPreparedSubmit: false,
+      }),
+    ).toBe(true);
+  });
+
   it("跨会话 active stream、真实 queued turn、busy read model 或 pending submit 仍应进入 queue 模式", () => {
     const base = {
       activeStreamSessionId: "session-1",
@@ -465,12 +478,8 @@ describe("agentStreamUserInputSendPreparation", () => {
       env: createEnv(),
     });
 
-    expect(result.assistantMsg.id).toBe(
-      "00000000-0000-0000-0000-000000000301",
-    );
-    expect(result.userMsg?.id).toBe(
-      "00000000-0000-0000-0000-000000000302",
-    );
+    expect(result.assistantMsg.id).toBe("00000000-0000-0000-0000-000000000301");
+    expect(result.userMsg?.id).toBe("00000000-0000-0000-0000-000000000302");
     expect(result.requestMetadata).toMatchObject({
       agentUiPerformanceTrace: expect.objectContaining({
         requestId: expect.stringMatching(/^claw_request_/),
@@ -730,6 +739,50 @@ describe("agentStreamUserInputSendPreparation", () => {
 
     expect(result.expectingQueue).toBe(false);
     expect(messages).toHaveLength(2);
+    expect(isSending).toBe(true);
+  });
+
+  it("同一会话 active stream 带 turnId 时应把下一轮投影为 queued draft", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000013")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000014");
+
+    let messages: Message[] = [];
+    let isSending = true;
+    const env = {
+      ...createEnv({
+        sessionId: "session-active",
+        activeStream: {
+          assistantMsgId: "assistant-active",
+          eventName: "event-active",
+          sessionId: "session-active",
+          turnId: "turn-active",
+        },
+      }),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setIsSending: createStateSetter(
+        () => isSending,
+        (value) => {
+          isSending = value;
+        },
+      ),
+    };
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "排到当前回合之后",
+      images: [],
+      skipUserMessage: false,
+      env,
+    });
+
+    expect(result.expectingQueue).toBe(true);
+    expect(messages).toHaveLength(2);
+    expect(messages[1]?.runtimeStatus?.title).toBe("已加入排队列表");
     expect(isSending).toBe(true);
   });
 

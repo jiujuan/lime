@@ -20,10 +20,12 @@ mod plugin;
 mod project;
 mod project_git;
 mod project_shell;
+mod request_serialization;
 mod request_trace;
 mod right_surface;
 mod skill;
 mod soul;
+mod thread;
 mod voice;
 mod wechat;
 mod workflow;
@@ -75,6 +77,11 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::Instrument;
 
+use request_serialization::{
+    is_turn_admission_notification, resolve_request_serialization_scope,
+    RequestSerializationQueues, RequestSerializationScope,
+};
+
 #[derive(Clone)]
 pub struct RequestProcessor {
     state: Arc<Mutex<ProcessorState>>,
@@ -82,6 +89,7 @@ pub struct RequestProcessor {
     project_shell: ProjectShellManager,
     execution_process: ExecutionProcessServer,
     config_warning_provider: ConfigWarningProvider,
+    request_serialization_queues: RequestSerializationQueues,
 }
 
 #[derive(Debug, Default)]
@@ -110,6 +118,7 @@ impl RequestProcessor {
             project_shell: ProjectShellManager::default(),
             execution_process,
             config_warning_provider: config_warning::default_config_warning_provider(),
+            request_serialization_queues: RequestSerializationQueues::default(),
         }
     }
 
@@ -127,9 +136,60 @@ impl RequestProcessor {
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
         let client_info = self.client_info();
         let span = request_trace::request_span(&request, client_info.as_ref());
-        self.handle_request_inner(request, None)
-            .instrument(span)
+        let scope = match resolve_request_serialization_scope(&self.runtime, &request).await {
+            Ok(scope) => scope,
+            Err(message) => return Ok(vec![message]),
+        };
+        if request.method == app_server_protocol::METHOD_AGENT_SESSION_TURN_START {
+            return self
+                .handle_turn_request_until_admitted(request, scope, span)
+                .await;
+        }
+        self.request_serialization_queues
+            .run(
+                scope,
+                self.handle_request_inner(request, None).instrument(span),
+            )
             .await
+    }
+
+    async fn handle_turn_request_until_admitted(
+        &self,
+        request: JsonRpcRequest,
+        scope: Option<RequestSerializationScope>,
+        span: tracing::Span,
+    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
+        let mut admitted_tx = Some(admitted_tx);
+        let mut streamed_events = Vec::new();
+        let mut admission_callback = |message: JsonRpcMessage| {
+            let admitted = is_turn_admission_notification(&message);
+            streamed_events.push(message);
+            if admitted {
+                if let Some(admitted_tx) = admitted_tx.take() {
+                    let _ = admitted_tx.send(());
+                }
+            }
+        };
+        let mut messages = self
+            .request_serialization_queues
+            .run_until_released(
+                scope,
+                async move {
+                    let _ = admitted_rx.await;
+                },
+                self.handle_request_inner(request, Some(&mut admission_callback))
+                    .instrument(span),
+            )
+            .await?;
+        drop(admission_callback);
+
+        if matches!(messages.first(), Some(JsonRpcMessage::Response(_))) {
+            let trailing_notifications = messages.split_off(1);
+            messages.append(&mut streamed_events);
+            messages.extend(trailing_notifications);
+        }
+        Ok(messages)
     }
 
     pub async fn handle_request_streaming(
@@ -139,8 +199,40 @@ impl RequestProcessor {
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
         let client_info = self.client_info();
         let span = request_trace::request_span(&request, client_info.as_ref());
-        self.handle_request_inner(request, Some(event_callback))
-            .instrument(span)
+        let scope = match resolve_request_serialization_scope(&self.runtime, &request).await {
+            Ok(scope) => scope,
+            Err(message) => return Ok(vec![message]),
+        };
+        if request.method == app_server_protocol::METHOD_AGENT_SESSION_TURN_START {
+            let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
+            let mut admitted_tx = Some(admitted_tx);
+            let mut forwarding_callback = |message: JsonRpcMessage| {
+                let admitted = is_turn_admission_notification(&message);
+                event_callback(message);
+                if admitted {
+                    if let Some(admitted_tx) = admitted_tx.take() {
+                        let _ = admitted_tx.send(());
+                    }
+                }
+            };
+            return self
+                .request_serialization_queues
+                .run_until_released(
+                    scope,
+                    async move {
+                        let _ = admitted_rx.await;
+                    },
+                    self.handle_request_inner(request, Some(&mut forwarding_callback))
+                        .instrument(span),
+                )
+                .await;
+        }
+        self.request_serialization_queues
+            .run(
+                scope,
+                self.handle_request_inner(request, Some(event_callback))
+                    .instrument(span),
+            )
             .await
     }
 
@@ -414,7 +506,9 @@ impl RequestProcessor {
         let host = self.runtime_host_context();
         let config_warnings = self.config_warning_notifications(ConfigWarningScope::TurnStart);
         if let Some(event_callback) = event_callback {
+            let mut streamed_event_ids = HashSet::new();
             let mut runtime_event_callback = |event: AgentEvent| {
+                streamed_event_ids.insert(event.event_id.clone());
                 let message = event_notification_jsonrpc(event).map_err(|error| {
                     RuntimeCoreError::Backend(format!(
                         "failed to serialize streaming event notification: {}",
@@ -429,6 +523,15 @@ impl RequestProcessor {
                 .start_turn_with_event_callback(params, host, &mut runtime_event_callback)
                 .await
                 .map_err(to_jsonrpc_error)?;
+            drop(runtime_event_callback);
+            for event in output
+                .events
+                .iter()
+                .filter(|event| !streamed_event_ids.contains(&event.event_id))
+                .cloned()
+            {
+                event_callback(event_notification_jsonrpc(event)?);
+            }
             Ok(dispatch_result(output.response)?.with_notifications(config_warnings))
         } else {
             let output = self

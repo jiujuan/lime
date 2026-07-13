@@ -1,15 +1,22 @@
 use crate::ActionRespondRequest;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
+use agent_runtime::action_required::ActionRequiredError;
 use app_server_protocol::AgentSessionActionType;
 use lime_agent::AgentActionRequiredScope;
 use lime_agent::AgentRuntimeState;
 use serde_json::{json, Value};
 
+pub(super) enum ActionResponseOutcome {
+    Resolved,
+    Canceled,
+}
+
 pub(super) async fn handle_action_response(
     agent_state: &AgentRuntimeState,
     request: &ActionRespondRequest,
-) -> Result<(), RuntimeCoreError> {
+) -> Result<ActionResponseOutcome, RuntimeCoreError> {
+    let action_scope = required_action_scope(request)?;
     match request.action_type {
         AgentSessionActionType::ToolConfirmation => {
             let decision = request.decision.ok_or_else(|| {
@@ -18,13 +25,27 @@ pub(super) async fn handle_action_response(
                 )
             })?;
             agent_state
-                .confirm_tool_action(&request.request_id, decision.confirmed())
+                .confirm_tool_action(
+                    &request.session.session_id,
+                    &request.request_id,
+                    decision.confirmed(),
+                    Some(action_scope),
+                )
                 .await
-                .map_err(backend_error)
+                .map_err(action_required_error)?;
+            Ok(ActionResponseOutcome::Resolved)
         }
         AgentSessionActionType::AskUser | AgentSessionActionType::Elicitation => {
             if !request.confirmed {
-                return Ok(());
+                agent_state
+                    .cancel_action(
+                        &request.session.session_id,
+                        &request.request_id,
+                        Some(action_scope),
+                    )
+                    .await
+                    .map_err(action_required_error)?;
+                return Ok(ActionResponseOutcome::Canceled);
             }
             let user_data = action_response_user_data(request);
             agent_state
@@ -32,15 +53,48 @@ pub(super) async fn handle_action_response(
                     &request.session.session_id,
                     &request.request_id,
                     user_data,
-                    request
-                        .action_scope
-                        .clone()
-                        .map(agent_action_required_scope_from_protocol),
+                    Some(action_scope),
                 )
                 .await
-                .map_err(backend_error)
+                .map_err(action_required_error)?;
+            Ok(ActionResponseOutcome::Resolved)
         }
     }
+}
+
+pub(super) fn validate_action_scope(
+    request: &ActionRespondRequest,
+) -> Result<(), RuntimeCoreError> {
+    required_action_scope(request).map(|_| ())
+}
+
+fn required_action_scope(
+    request: &ActionRespondRequest,
+) -> Result<AgentActionRequiredScope, RuntimeCoreError> {
+    let scope = request
+        .action_scope
+        .clone()
+        .ok_or_else(|| action_response_error("action_scope_missing", &request.request_id))?;
+    let complete = [
+        scope.session_id.as_deref(),
+        scope.thread_id.as_deref(),
+        scope.turn_id.as_deref(),
+    ]
+    .into_iter()
+    .all(|field| field.is_some_and(|value| !value.trim().is_empty()));
+    let session_matches = scope.session_id.as_deref() == Some(request.session.session_id.as_str());
+    let thread_matches = scope.thread_id.as_deref() == Some(request.session.thread_id.as_str());
+    let turn_matches = request
+        .turn
+        .as_ref()
+        .is_none_or(|turn| scope.turn_id.as_deref() == Some(turn.turn_id.as_str()));
+    if !complete || !session_matches || !thread_matches || !turn_matches {
+        return Err(action_response_error(
+            "action_scope_mismatch",
+            &request.request_id,
+        ));
+    }
+    Ok(agent_action_required_scope_from_protocol(scope))
 }
 
 pub(super) fn action_resolved_event(request: &ActionRespondRequest) -> RuntimeEvent {
@@ -61,6 +115,20 @@ pub(super) fn action_resolved_event(request: &ActionRespondRequest) -> RuntimeEv
         }
     }
     RuntimeEvent::new("action.resolved", payload)
+}
+
+pub(super) fn action_canceled_event(request: &ActionRespondRequest) -> RuntimeEvent {
+    RuntimeEvent::new(
+        "action.canceled",
+        json!({
+            "backend": "runtime",
+            "requestId": request.request_id,
+            "actionId": request.request_id,
+            "actionType": request.action_type,
+            "confirmed": false,
+            "scope": request.action_scope,
+        }),
+    )
 }
 
 fn action_response_user_data(request: &ActionRespondRequest) -> Value {
@@ -86,6 +154,92 @@ fn agent_action_required_scope_from_protocol(
     }
 }
 
-fn backend_error(error: impl std::fmt::Display) -> RuntimeCoreError {
-    RuntimeCoreError::Backend(error.to_string())
+fn action_required_error(error: ActionRequiredError) -> RuntimeCoreError {
+    action_response_error(error.code(), error.request_id())
+}
+
+fn action_response_error(code: &str, request_id: &str) -> RuntimeCoreError {
+    RuntimeCoreError::ActionResponse {
+        code: code.to_string(),
+        request_id: request_id.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeHostContext;
+    use app_server_protocol::{
+        AgentSession, AgentSessionActionScope, AgentSessionStatus, AgentTurn, AgentTurnStatus,
+    };
+
+    fn session() -> AgentSession {
+        AgentSession {
+            session_id: "session-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            app_id: "agent".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            status: AgentSessionStatus::WaitingAction,
+            created_at: "2026-07-12T15:00:00Z".to_string(),
+            updated_at: "2026-07-12T15:00:00Z".to_string(),
+        }
+    }
+
+    fn turn(status: AgentTurnStatus) -> AgentTurn {
+        AgentTurn {
+            turn_id: "turn-1".to_string(),
+            session_id: "session-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            status,
+            started_at: Some("2026-07-12T15:00:00Z".to_string()),
+            completed_at: None,
+        }
+    }
+
+    fn action_request(scope: Option<AgentSessionActionScope>) -> ActionRespondRequest {
+        ActionRespondRequest {
+            host: RuntimeHostContext::default(),
+            session: session(),
+            turn: Some(turn(AgentTurnStatus::WaitingAction)),
+            request_id: "approval-1".to_string(),
+            action_type: AgentSessionActionType::AskUser,
+            decision: None,
+            confirmed: true,
+            response: None,
+            user_data: None,
+            metadata: None,
+            event_name: None,
+            action_scope: scope,
+            pending_action_descriptor: None,
+        }
+    }
+
+    fn complete_scope() -> AgentSessionActionScope {
+        AgentSessionActionScope {
+            session_id: Some("session-1".to_string()),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+        }
+    }
+
+    #[test]
+    fn action_scope_requires_canonical_session_thread_and_turn() {
+        let missing = required_action_scope(&action_request(None)).expect_err("missing scope");
+        assert!(missing.to_string().contains("action_scope_missing"));
+
+        let mut wrong_session = complete_scope();
+        wrong_session.session_id = Some("wrong-session".to_string());
+        let error = required_action_scope(&action_request(Some(wrong_session)))
+            .expect_err("wrong canonical scope");
+        assert!(error.to_string().contains("action_scope_mismatch"));
+
+        let mut wrong_thread = complete_scope();
+        wrong_thread.thread_id = Some("wrong-thread".to_string());
+        assert!(required_action_scope(&action_request(Some(wrong_thread))).is_err());
+        let mut wrong_turn = complete_scope();
+        wrong_turn.turn_id = Some("wrong-turn".to_string());
+        assert!(required_action_scope(&action_request(Some(wrong_turn))).is_err());
+        assert!(required_action_scope(&action_request(Some(complete_scope()))).is_ok());
+    }
 }

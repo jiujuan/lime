@@ -1,6 +1,63 @@
+use crate::tool_executor::RuntimeToolExecutionOutcome;
+use crate::tool_io::{ToolOutputReference, ToolOutputTruncation};
 use rmcp::model::{CallToolResult, Content};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+
+/// Canonical terminal output emitted for every tool execution outcome.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NormalizedToolOutput {
+    pub success: bool,
+    pub text: String,
+    pub structured_content: Option<Value>,
+    pub error: Option<String>,
+    pub duration_ms: u64,
+    pub truncation: Option<ToolOutputTruncation>,
+    pub sidecar_reference: Option<ToolOutputReference>,
+    pub metadata: HashMap<String, Value>,
+}
+
+impl NormalizedToolOutput {
+    pub fn from_execution_outcome(outcome: RuntimeToolExecutionOutcome, duration_ms: u64) -> Self {
+        match outcome {
+            RuntimeToolExecutionOutcome::Result(result) => {
+                let text = if result.success {
+                    result.output.clone()
+                } else {
+                    result
+                        .error
+                        .clone()
+                        .filter(|error| !error.is_empty())
+                        .unwrap_or_else(|| result.output.clone())
+                };
+                Self {
+                    success: result.success,
+                    text,
+                    structured_content: result.structured_content,
+                    error: result.error,
+                    duration_ms,
+                    truncation: result.truncation,
+                    sidecar_reference: result.sidecar_reference,
+                    metadata: result.metadata,
+                }
+            }
+            RuntimeToolExecutionOutcome::Error(error) => {
+                let message = error.message().to_string();
+                Self {
+                    success: false,
+                    text: message.clone(),
+                    structured_content: None,
+                    error: Some(message),
+                    duration_ms,
+                    truncation: None,
+                    sidecar_reference: None,
+                    metadata: HashMap::new(),
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeToolResultParts {

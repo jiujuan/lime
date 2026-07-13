@@ -264,6 +264,7 @@ use app_server_protocol::SkillLocalRenameParams;
 use app_server_protocol::SkillLocalRenameResponse;
 use app_server_protocol::SkillManagementInstallParams;
 use app_server_protocol::SkillManagementListParams;
+use app_server_protocol::SkillManagementListResponse;
 use app_server_protocol::SkillManagementUninstallParams;
 use app_server_protocol::SkillManagementWriteResponse;
 use app_server_protocol::SkillMarketplaceInstallParams;

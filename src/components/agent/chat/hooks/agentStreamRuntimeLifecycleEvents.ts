@@ -1,5 +1,9 @@
 import type { AgentEvent, AgentThreadItem } from "@/lib/api/agentProtocol";
 import type { Message } from "../types";
+import {
+  applyAcknowledgedActionRequests,
+  removeActionsByRequestIds,
+} from "./agentChatActionState";
 import { appendTextToParts } from "./agentChatHistory";
 import {
   removeThreadItemState,
@@ -23,9 +27,7 @@ import {
   syncAssistantReasoningContentPartFromThreadItem,
 } from "./agentStreamReasoningContentSync";
 import { syncAssistantAgentMessageContentPartFromThreadItem } from "./agentStreamAgentMessageContentSync";
-import {
-  syncExistingMessageToolCallFromThreadItem,
-} from "./agentStreamToolItemMessageSync";
+import { syncMessageToolCallFromThreadItem } from "./agentStreamToolItemMessageSync";
 import {
   buildAgentStreamTurnStartedPendingItemUpdate,
   shouldDeferAgentStreamThreadItemUpdate,
@@ -45,6 +47,7 @@ import type {
 type RuntimeHandlerStateSetters = Pick<
   HandleTurnStreamEventOptions,
   | "getThreadItems"
+  | "setPendingActions"
   | "setCurrentTurnId"
   | "setMessages"
   | "setThreadItems"
@@ -69,8 +72,7 @@ function noteCompletedTextAsAssistantReplyIfNeeded(
   if (!requestState.hasFinalAnswerRequiredProcessBoundary) {
     return;
   }
-  requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary =
-    true;
+  requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary = true;
 }
 
 export function handleAgentStreamMessageSnapshotEvent(params: {
@@ -124,7 +126,9 @@ export function handleAgentStreamMessageSnapshotEvent(params: {
 export function handleAgentStreamQueueEvent(params: {
   event: Extract<
     AgentEvent,
-    { type: "queue_added" | "queue_removed" | "queue_started" | "queue_cleared" }
+    {
+      type: "queue_added" | "queue_removed" | "queue_started" | "queue_cleared";
+    }
   >;
   markQueuedDraftState: (queuedMessageText?: string | null) => void;
   removeQueuedTurnsFromProjection: (queuedTurnIds: string[]) => void;
@@ -257,7 +261,7 @@ export function handleAgentStreamThreadItemLifecycleEvent(params: {
     nextThreadItemsForSync = nextItems;
     return nextItems;
   });
-  syncExistingMessageToolCallFromThreadItem({
+  syncMessageToolCallFromThreadItem({
     assistantMsgId: params.assistantMsgId,
     item: params.event.item,
     setMessages: params.setters.setMessages,
@@ -274,6 +278,23 @@ export function handleAgentStreamThreadItemLifecycleEvent(params: {
     threadItems: nextThreadItemsForSync,
     setMessages: params.setters.setMessages,
   });
+  if (
+    params.event.item.type === "approval_request" &&
+    (params.event.item.status === "completed" ||
+      params.event.item.status === "failed")
+  ) {
+    const requestIds = new Set([params.event.item.request_id]);
+    params.setters.setPendingActions((prev) =>
+      removeActionsByRequestIds(prev, requestIds),
+    );
+    params.setters.setMessages((prev) =>
+      applyAcknowledgedActionRequests({
+        messages: prev,
+        requestIds,
+        shouldPersistSubmittedAction: false,
+      }),
+    );
+  }
   return "applied";
 }
 
@@ -284,7 +305,9 @@ export function handleAgentStreamTurnCompletedEvent(params: {
     plan: AgentStreamCompletionMessagePlan,
   ) => void;
   event: Extract<AgentEvent, { type: "turn_completed" }>;
-  finalizeMissingFinalReplyFailure: (plan: AgentStreamMissingFinalReplyPlan) => void;
+  finalizeMissingFinalReplyFailure: (
+    plan: AgentStreamMissingFinalReplyPlan,
+  ) => void;
   pendingTurnKey: string;
   requestState: StreamRequestState;
   shouldPreserveAssistantContent: boolean;
@@ -304,7 +327,8 @@ export function handleAgentStreamTurnCompletedEvent(params: {
     ),
   );
   params.setters.setCurrentTurnId(params.event.turn.id);
-  const completedAt = params.event.turn.completed_at || new Date().toISOString();
+  const completedAt =
+    params.event.turn.completed_at || new Date().toISOString();
   params.setters.setThreadItems((prev) =>
     prev.map((item) =>
       isStreamedReasoningTimelineItem(item, params.event.turn.id) ||
@@ -321,26 +345,24 @@ export function handleAgentStreamTurnCompletedEvent(params: {
     ),
   );
   resetStreamedReasoningSegment(params.requestState);
-  if (
-    params.event.text?.trim() &&
-    !params.shouldPreserveAssistantContent
-  ) {
+  if (params.event.text?.trim() && !params.shouldPreserveAssistantContent) {
     const completedText = params.event.text;
     const existingContent = params.requestState.accumulatedContent;
     const shouldPreferCompletedText =
       Boolean(params.requestState.hasFinalAnswerRequiredProcessBoundary) &&
       completedText.trim().length > 0;
-    const completedTextAdopted = shouldPreferCompletedText || !existingContent.trim()
-      ? true
-      : completedText.startsWith(existingContent) &&
-        completedText.length > existingContent.length;
+    const completedTextAdopted =
+      shouldPreferCompletedText || !existingContent.trim()
+        ? true
+        : completedText.startsWith(existingContent) &&
+          completedText.length > existingContent.length;
     const nextContent = shouldPreferCompletedText
       ? completedText
       : !existingContent.trim()
-      ? completedText
-      : completedText.startsWith(existingContent)
         ? completedText
-        : existingContent;
+        : completedText.startsWith(existingContent)
+          ? completedText
+          : existingContent;
     params.requestState.accumulatedContent = nextContent;
     params.requestState.renderedContent = nextContent;
     if (
@@ -406,7 +428,9 @@ export function handleAgentStreamTurnFailedEvent(params: {
     plan: AgentStreamCompletionMessagePlan,
   ) => void;
   event: Extract<AgentEvent, { type: "turn_failed" }>;
-  finalizeMissingFinalReplyFailure: (plan: AgentStreamMissingFinalReplyPlan) => void;
+  finalizeMissingFinalReplyFailure: (
+    plan: AgentStreamMissingFinalReplyPlan,
+  ) => void;
   pendingTurnKey: string;
   requestState: StreamRequestState;
   setters: RuntimeHandlerStateSetters;
@@ -447,8 +471,8 @@ export function handleAgentStreamTurnFailedEvent(params: {
   params.finalizeMissingFinalReplyFailure(
     buildAgentStreamMissingFinalReplyFailurePlan({
       errorMessage,
-      toastMessage: resolveAgentRuntimeErrorPresentation(errorMessage)
-        .toastMessage,
+      toastMessage:
+        resolveAgentRuntimeErrorPresentation(errorMessage).toastMessage,
       queuedTurnId: params.requestState.queuedTurnId,
     }),
   );

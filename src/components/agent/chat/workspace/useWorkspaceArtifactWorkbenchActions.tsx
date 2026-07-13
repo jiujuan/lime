@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { save as saveDialog } from "@/lib/desktop-host/plugin-dialog";
+import { requestChatHostSavePath } from "../host/chatHostCapabilities";
 import { toast } from "sonner";
 import { saveExportedDocument } from "@/lib/api/document-export";
 import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
@@ -39,7 +39,7 @@ async function exportArtifactWorkbenchFile(params: {
 }) {
   let selectedPath: string | null;
   try {
-    selectedPath = await saveDialog({
+    selectedPath = await requestChatHostSavePath({
       title: params.dialogTitle,
       defaultPath: params.defaultFilename,
       filters: [

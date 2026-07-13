@@ -53,7 +53,6 @@ mod subagent_control;
 mod subagent_profiles;
 pub mod team_runtime_governor;
 pub mod tool_io_offload;
-mod tool_output_truncation;
 pub mod tools;
 mod turn_context_configuration;
 mod turn_execution;
@@ -195,4 +194,4 @@ pub use turn_input_envelope::{
     TurnProviderRoutingSnapshot, TurnRequestToolPolicySnapshot, TurnSystemPromptSource,
 };
 pub use turn_state::TurnState;
-pub use write_artifact_events::{build_write_tool_artifact_events, WriteArtifactEventEmitter};
+pub use write_artifact_events::WriteArtifactEventEmitter;

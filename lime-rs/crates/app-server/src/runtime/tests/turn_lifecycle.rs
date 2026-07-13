@@ -185,6 +185,58 @@ async fn streaming_turn_start_emits_lifecycle_before_backend_progress() {
 }
 
 #[tokio::test]
+async fn streaming_agent_message_notification_includes_canonical_item() {
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_streaming_message_notification".to_string()),
+            thread_id: Some("thread_streaming_message_notification".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_streaming_message_notification".to_string()),
+                input: AgentInput {
+                    text: "hello canonical notification".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+    let message_event = output
+        .events
+        .iter()
+        .find(|event| event.event_type == "message.delta")
+        .expect("message delta notification");
+    let params = app_server_protocol::AgentSessionEventParams::from_event(message_event.clone());
+    let app_server_protocol::CanonicalThreadEventNotification::ItemUpdated(item) = params
+        .canonical_event
+        .expect("message delta canonical item notification")
+    else {
+        panic!("message delta must project canonical item notification");
+    };
+
+    assert!(matches!(
+        item.payload,
+        agent_protocol::ThreadItemPayload::AgentMessage { ref text, .. }
+            if text == "你好！有什么可以帮你的吗？"
+    ));
+}
+
+#[tokio::test]
 async fn runtime_events_are_appended_to_jsonl_event_log() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
@@ -206,22 +258,31 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
         .expect("session")
         .session;
 
-    core.start_turn(
-        AgentSessionTurnStartParams {
-            session_id: session.session_id.clone(),
-            turn_id: Some("turn_jsonl".to_string()),
-            input: AgentInput {
-                text: "hello".to_string(),
-                attachments: Vec::new(),
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_jsonl".to_string()),
+                input: AgentInput {
+                    text: "hello".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
             },
-            runtime_options: None,
-            queue_if_busy: false,
-            skip_pre_submit_resume: false,
-        },
-        RuntimeHostContext::default(),
-    )
-    .await
-    .expect("turn");
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+    assert_eq!(
+        output.events[0].payload["item"]["kind"],
+        json!("userMessage")
+    );
+    assert_eq!(
+        output.events[1].payload["turn"]["status"],
+        json!("inProgress")
+    );
 
     let records = event_log_writer
         .read_session_events("sess_jsonl")
@@ -235,7 +296,15 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
     assert_eq!(records[0].event.turn_id.as_deref(), Some("turn_jsonl"));
     assert_eq!(records[0].event.event_type, "message.created");
     assert_eq!(records[0].event.payload["input"]["text"], "hello");
+    assert!(records[0].event.payload.get("item").is_none());
     assert_eq!(records[1].event.event_type, "turn.accepted");
+    assert!(records[1].event.payload.get("turn").is_none());
+
+    let stored = core
+        .events_for_session("sess_jsonl")
+        .expect("stored runtime events");
+    assert!(stored[0].payload.get("item").is_none());
+    assert!(stored[1].payload.get("turn").is_none());
 
     let projected = projection_store
         .read_session("sess_jsonl")
@@ -244,6 +313,74 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
     assert_eq!(projected.thread_id, "thread_jsonl");
     assert_eq!(projected.status, "running");
     assert_eq!(projected.last_event_sequence, 2);
+}
+
+#[tokio::test]
+async fn missing_canonical_item_fails_before_durable_append() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let core = RuntimeCore::default().with_event_log_writer(event_log_writer.clone());
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_canonical_fail_closed".to_string()),
+            thread_id: Some("thread_canonical_fail_closed".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_canonical_fail_closed".to_string()),
+                input: AgentInput {
+                    text: "hello".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn")
+        .response
+        .turn;
+    let durable_before = event_log_writer
+        .read_session_events(&session.session_id)
+        .expect("durable events before failure");
+    let in_memory_before = core
+        .events_for_session(&session.session_id)
+        .expect("in-memory events before failure");
+
+    let error = core
+        .append_runtime_events(
+            &session.session_id,
+            &session.thread_id,
+            Some(&turn.turn_id),
+            vec![RuntimeEvent::new("item.completed", json!({}))],
+        )
+        .expect_err("missing canonical item must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("canonical materializer produced no item"),
+        "unexpected error: {error}"
+    );
+
+    let durable_after = event_log_writer
+        .read_session_events(&session.session_id)
+        .expect("durable events after failure");
+    let in_memory_after = core
+        .events_for_session(&session.session_id)
+        .expect("in-memory events after failure");
+    assert_eq!(durable_after.len(), durable_before.len());
+    assert_eq!(in_memory_after, in_memory_before);
 }
 
 #[tokio::test]
@@ -827,6 +964,10 @@ async fn cancel_turn_returns_canceled_without_waiting_for_backend_cancel() {
 
     assert_eq!(output.events.len(), 1);
     assert_eq!(output.events[0].event_type, "turn.canceled");
+    assert_eq!(
+        output.events[0].payload["turn"]["status"],
+        json!("interrupted")
+    );
 
     let read = core
         .read_session(AgentSessionReadParams {

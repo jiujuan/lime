@@ -1,6 +1,36 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RuntimeToolCaller(String);
+
+impl RuntimeToolCaller {
+    pub fn parse(value: impl AsRef<str>) -> Option<Self> {
+        let normalized = value.as_ref().trim().to_ascii_lowercase();
+        (!normalized.is_empty()).then_some(Self(normalized))
+    }
+
+    pub fn assistant() -> Self {
+        Self("assistant".to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn is_allowed(&self, allowed_callers: Option<&[String]>) -> bool {
+        allowed_callers.is_none_or(|allowed_callers| {
+            allowed_callers.is_empty()
+                || allowed_callers.iter().any(|allowed| {
+                    Self::parse(allowed)
+                        .as_ref()
+                        .is_some_and(|allowed| allowed == self)
+                })
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeExtensionConfig {
     pub name: String,
@@ -210,7 +240,7 @@ fn collapse_extension_allowed_caller(tools: &[RuntimeExtensionToolSurface]) -> O
 mod tests {
     use super::{
         RuntimeExtensionConfig, RuntimeExtensionRegistration, RuntimeExtensionSyncPlan,
-        RuntimeExtensionToolSurface,
+        RuntimeExtensionToolSurface, RuntimeToolCaller,
     };
 
     fn surface(
@@ -251,6 +281,21 @@ mod tests {
         assert!(config.deferred_loading);
         assert_eq!(config.allowed_caller.as_deref(), Some("assistant"));
         assert_eq!(config.always_expose_tools, vec!["read_docs".to_string()]);
+    }
+
+    #[test]
+    fn runtime_tool_caller_normalizes_and_supports_dynamic_values() {
+        let assistant = RuntimeToolCaller::parse(" Assistant ").expect("assistant caller");
+        assert_eq!(assistant, RuntimeToolCaller::assistant());
+        assert_eq!(assistant.as_str(), "assistant");
+
+        let plugin = RuntimeToolCaller::parse(" Plugin:Docs ").expect("plugin caller");
+        assert_eq!(plugin.as_str(), "plugin:docs");
+        assert!(plugin.is_allowed(Some(&[" PLUGIN:DOCS ".to_string()])));
+        assert!(!plugin.is_allowed(Some(&["assistant".to_string()])));
+        assert!(plugin.is_allowed(None));
+        assert!(plugin.is_allowed(Some(&[])));
+        assert!(RuntimeToolCaller::parse("   ").is_none());
     }
 
     #[test]

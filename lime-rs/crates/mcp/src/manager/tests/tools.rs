@@ -1,7 +1,20 @@
+use super::super::bridge_tool_timeout;
 use super::super::tools::{normalize_tool_input_schema, tool_result_output_schema};
 use super::common::*;
 use crate::manager::McpClientManager;
 use crate::types::{McpContent, McpError, McpToolDefinition};
+use std::time::Duration;
+
+#[test]
+fn bridge_tool_timeout_preserves_explicit_and_startup_fallback_values() {
+    let mut config = create_test_config();
+    config.startup_timeout = 120;
+    config.tool_timeout = Some(15);
+    assert_eq!(bridge_tool_timeout(&config), Duration::from_secs(15));
+
+    config.tool_timeout = None;
+    assert_eq!(bridge_tool_timeout(&config), Duration::from_secs(120));
+}
 
 #[test]
 fn test_extract_tool_metadata_from_schema_extension() {

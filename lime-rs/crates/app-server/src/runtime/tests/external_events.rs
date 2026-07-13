@@ -38,31 +38,5 @@ async fn runtime_with_active_turn(
     (core, session.session_id, output.response.turn.turn_id)
 }
 
-fn assert_runtime_state_unchanged(
-    core: &RuntimeCore,
-    session_id: &str,
-    before: &AgentSessionReadResponse,
-    before_event_count: usize,
-) {
-    let after = core
-        .read_session(AgentSessionReadParams {
-            session_id: session_id.to_string(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("read after");
-    let after_event_count = core
-        .events_for_session(session_id)
-        .expect("events after")
-        .len();
-
-    assert_eq!(after_event_count, before_event_count);
-    assert_eq!(after.turns[0].status, before.turns[0].status);
-    assert_eq!(after.session.status, before.session.status);
-}
-
-mod actions;
-mod owner_terminal;
+mod canonical_tool_items;
 mod sequence;
-mod tool_lifecycle;

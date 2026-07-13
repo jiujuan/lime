@@ -39,6 +39,22 @@ function collectPendingRequests(readModel) {
   ].filter(Boolean);
 }
 
+function collectReadModelItems(readModel) {
+  const detail = readModel?.detail ?? readModel ?? {};
+  const threadRead = detail?.thread_read ?? detail?.threadRead ?? {};
+  return [
+    ...(Array.isArray(readModel?.items) ? readModel.items : []),
+    ...(Array.isArray(readModel?.thread_items) ? readModel.thread_items : []),
+    ...(Array.isArray(readModel?.threadItems) ? readModel.threadItems : []),
+    ...(Array.isArray(detail?.items) ? detail.items : []),
+    ...(Array.isArray(detail?.thread_items) ? detail.thread_items : []),
+    ...(Array.isArray(detail?.threadItems) ? detail.threadItems : []),
+    ...(Array.isArray(threadRead?.items) ? threadRead.items : []),
+    ...(Array.isArray(threadRead?.thread_items) ? threadRead.thread_items : []),
+    ...(Array.isArray(threadRead?.threadItems) ? threadRead.threadItems : []),
+  ].filter(Boolean);
+}
+
 function readLatestTurnStatus(readModel) {
   return (
     readModel?.detail?.thread_read?.runtime_summary?.latestTurnStatus ??
@@ -111,9 +127,9 @@ export function summarizeApprovalCompletedReadModel(readModel) {
     includesToolCallId: serialized.includes(
       APPROVAL_REQUEST_RESUME_TOOL_CALL_ID,
     ),
-    includesToolResult:
-      serialized.includes("tool.result") ||
-      serialized.includes(APPROVAL_REQUEST_RESUME_RESULT_TEXT),
+    includesToolResult: serialized.includes(
+      APPROVAL_REQUEST_RESUME_RESULT_TEXT,
+    ),
     includesActionResolved:
       serialized.includes("action.resolved") ||
       serialized.includes("action_resolved") ||
@@ -133,6 +149,45 @@ export function summarizeApprovalDecisionReadModel(readModel, decision) {
   const serialized = JSON.stringify(readModel || {});
   const pendingRequests = collectPendingRequests(readModel);
   const latestTurnStatus = readLatestTurnStatus(readModel);
+  const expectedCanonicalDecision =
+    decision === "decline"
+      ? "denied"
+      : decision === "cancel"
+        ? "abort"
+        : decision;
+  const approvalEvents = collectEventLikeRecords(readModel).filter(
+    (event) =>
+      event.eventType.toLowerCase() === "approval" &&
+      eventPayloadRequestId(event.payload) ===
+        APPROVAL_REQUEST_RESUME_REQUEST_ID,
+  );
+  const includesCanonicalTerminalApproval = approvalEvents.some((event) =>
+    ["completed", "failed", "interrupted", "cancelled"].includes(
+      String(event.status || "").toLowerCase(),
+    ),
+  );
+  const includesCanonicalDecision = approvalEvents.some(
+    (event) => event.payload?.decision === expectedCanonicalDecision,
+  );
+  const canonicalApprovalItems = collectReadModelItems(readModel).filter(
+    (item) =>
+      (item?.type === "approval_request" || item?.kind === "approval") &&
+      String(item?.request_id ?? item?.requestId ?? "") ===
+        APPROVAL_REQUEST_RESUME_REQUEST_ID,
+  );
+  const includesCanonicalTerminalItem = canonicalApprovalItems.some((item) =>
+    ["completed", "failed", "interrupted", "cancelled"].includes(
+      String(item?.status || "").toLowerCase(),
+    ),
+  );
+  const includesCanonicalItemDecision = canonicalApprovalItems.some((item) => {
+    const response = item?.response;
+    const itemDecision =
+      typeof response === "string"
+        ? response
+        : (response?.decision ?? item?.decision);
+    return itemDecision === expectedCanonicalDecision;
+  });
   return sanitizeJson({
     decision,
     pendingRequestCount: pendingRequests.length,
@@ -147,25 +202,33 @@ export function summarizeApprovalDecisionReadModel(readModel, decision) {
     includesToolCallId: serialized.includes(
       APPROVAL_REQUEST_RESUME_TOOL_CALL_ID,
     ),
-    includesToolResult:
-      serialized.includes("tool.result") ||
-      serialized.includes(APPROVAL_REQUEST_RESUME_RESULT_TEXT),
+    includesToolResult: serialized.includes(
+      APPROVAL_REQUEST_RESUME_RESULT_TEXT,
+    ),
     includesActionResolved:
       serialized.includes("action.resolved") ||
-      serialized.includes("action_resolved"),
+      serialized.includes("action_resolved") ||
+      includesCanonicalTerminalApproval ||
+      includesCanonicalTerminalItem,
     includesDecision:
       serialized.includes(`"decision":"${decision}"`) ||
-      serialized.includes(`"decision": "${decision}"`),
+      serialized.includes(`"decision": "${decision}"`) ||
+      includesCanonicalDecision ||
+      includesCanonicalItemDecision,
     includesDeclineResult: serialized.includes(
       APPROVAL_REQUEST_DECLINE_RESULT_TEXT,
     ),
-    includesDeclineDone: serialized.includes(APPROVAL_REQUEST_DECLINE_DONE_TEXT),
+    includesDeclineDone: serialized.includes(
+      APPROVAL_REQUEST_DECLINE_DONE_TEXT,
+    ),
     includesCancelDone: serialized.includes(APPROVAL_REQUEST_CANCEL_DONE_TEXT),
     includesCanceled:
       serialized.includes('"status":"canceled"') ||
       serialized.includes('"status": "canceled"') ||
       serialized.includes("turn.canceled") ||
-      serialized.includes("turn_canceled"),
+      serialized.includes("turn_canceled") ||
+      approvalEvents.some((event) => event.payload?.decision === "abort") ||
+      canonicalApprovalItems.some((item) => item?.response === "abort"),
   });
 }
 
@@ -177,10 +240,11 @@ function collectEventLikeRecords(value, output = []) {
     value.forEach((item) => collectEventLikeRecords(item, output));
     return output;
   }
-  const eventType = value.event_type ?? value.eventType ?? value.type;
+  const eventType =
+    value.event_type ?? value.eventType ?? value.type ?? value.kind;
   const payload = value.payload;
   if (typeof eventType === "string" && payload && typeof payload === "object") {
-    output.push({ eventType, payload });
+    output.push({ eventType, payload, status: value.status });
   }
   Object.values(value).forEach((item) => collectEventLikeRecords(item, output));
   return output;
@@ -196,7 +260,10 @@ function eventPayloadRequestId(payload) {
   );
 }
 
-export function summarizeApprovalSessionCacheReadModel(readModel, secondTurnId) {
+export function summarizeApprovalSessionCacheReadModel(
+  readModel,
+  secondTurnId,
+) {
   const serialized = JSON.stringify(readModel || {});
   const pendingRequests = collectPendingRequests(readModel);
   const secondPermissionRequestId = secondTurnId
@@ -213,7 +280,9 @@ export function summarizeApprovalSessionCacheReadModel(readModel, secondTurnId) 
   const includesCacheResolvedSource = serialized.includes(
     "approval_session_cache",
   );
-  const includesAllowForSession = serialized.includes("allow_for_session");
+  const includesAllowForSession =
+    serialized.includes("allow_for_session") ||
+    serialized.includes("approvedForSession");
   const includesSecondPermissionRequestId = secondPermissionRequestId
     ? secondPermissionEvents.length > 0 ||
       serialized.includes(secondPermissionRequestId)
@@ -226,13 +295,17 @@ export function summarizeApprovalSessionCacheReadModel(readModel, secondTurnId) 
   const includesActionResolvedForSecondPermission =
     secondPermissionEvents.some(
       (event) =>
-        (event.eventType === "action.resolved" ||
+        ((event.eventType === "action.resolved" ||
           event.eventType === "action_resolved") &&
-        (event.payload?.source === "approval_session_cache" ||
-          event.payload?.decision === "allow_for_session"),
+          (event.payload?.source === "approval_session_cache" ||
+            event.payload?.decision === "allow_for_session")) ||
+        (event.eventType === "approval" &&
+          ["completed", "failed", "interrupted", "cancelled"].includes(
+            event.status,
+          ) &&
+          event.payload?.decision === "approvedForSession"),
     ) ||
     (includesSecondPermissionRequestId &&
-      includesCacheResolvedSource &&
       includesAllowForSession &&
       !includesActionRequiredForSecondPermission);
   return sanitizeJson({

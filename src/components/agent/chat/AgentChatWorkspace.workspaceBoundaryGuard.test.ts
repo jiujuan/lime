@@ -3,6 +3,52 @@ import { join } from "node:path";
 import process from "node:process";
 import { describe, expect, it } from "vitest";
 
+describe("AgentChatWorkspace local display boundary", () => {
+  it("草稿、恢复、选择、横幅、布局和预览状态必须由 local display owner 提供", () => {
+    const workspaceSource = readFileSync(
+      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      "utf8",
+    );
+    const ownerSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceLocalDisplayState.ts",
+      ),
+      "utf8",
+    );
+
+    expect(workspaceSource).toContain(
+      "useAgentChatWorkspaceLocalDisplayState({",
+    );
+    expect(ownerSource.split("\n").length).toBeLessThan(180);
+    for (const localDisplayStateOwner of [
+      "const [input, setInput] = useState",
+      "useState<InterruptedInputRestoreRequest | null>",
+      "const [selectedText, setSelectedText] = useState",
+      "const [entryBannerVisible, setEntryBannerVisible] = useState",
+      "const [activeTheme, setActiveTheme] = useState",
+      "const [layoutMode, setLayoutMode] = useState",
+      "const [artifactPreviewSize, setArtifactPreviewSize] = useState",
+      "const [canvasWorkbenchLayoutMode, setCanvasWorkbenchLayoutMode] =",
+      'logAgentDebug("AgentChatWorkspace", "inputRestoreRequest.received"',
+    ]) {
+      expect(workspaceSource).not.toContain(localDisplayStateOwner);
+      expect(ownerSource).toContain(localDisplayStateOwner);
+    }
+    for (const forbiddenRuntimeTruth of [
+      "queuedTurns",
+      "threadRead",
+      "pendingActions",
+      "submittedActionsInFlight",
+      "turn.completed",
+      "streamListener",
+      "approval",
+    ]) {
+      expect(ownerSource).not.toContain(forbiddenRuntimeTruth);
+    }
+  });
+});
+
 describe("AgentChatWorkspace home input navigation boundary", () => {
   it("首页首发创建真实 session 后不得同步路由重挂页面", () => {
     const ownerSource = readFileSync(
@@ -644,8 +690,15 @@ describe("AgentChatWorkspace conversation landing surface boundary", () => {
       ),
       "utf8",
     );
+    const sceneCompositionSource = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceSceneComposition.tsx",
+      ),
+      "utf8",
+    );
     const compositionCallStart = workspaceSource.indexOf(
-      "useWorkspaceConversationCompositionRuntime({",
+      "useAgentChatWorkspaceSceneComposition({",
     );
     const landingCallStart = workspaceSource.indexOf(
       "landing: {",
@@ -657,7 +710,7 @@ describe("AgentChatWorkspace conversation landing surface boundary", () => {
     );
     const sceneCallStart = workspaceSource.indexOf("scene: {", landingCallEnd);
     const sceneCallEnd = workspaceSource.indexOf(
-      "\n    },\n  });",
+      "\n      },\n    },\n    fileManager:",
       sceneCallStart,
     );
     expect(compositionCallStart).toBeGreaterThanOrEqual(0);
@@ -687,6 +740,9 @@ describe("AgentChatWorkspace conversation landing surface boundary", () => {
     }
     expect(workspaceSource).not.toContain(
       "useWorkspaceConversationLandingSurfaceRuntime(",
+    );
+    expect(sceneCompositionSource).toContain(
+      "useWorkspaceConversationCompositionRuntime({",
     );
     expect(compositionOwnerSource).toContain(
       "useWorkspaceConversationLandingSurfaceRuntime(",

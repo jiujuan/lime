@@ -60,6 +60,7 @@ describe("agentStreamUserInputSubmission", () => {
       runtime,
       ensureSession: async () => "session-1",
       attemptSilentTurnRecovery: async () => false,
+      refreshSessionReadModel: async () => true,
       executionStrategy: "react",
       accessMode: "current",
       clawTraceEnabled: false,

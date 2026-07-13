@@ -21,7 +21,7 @@ pub trait SkillAppDataSource: Send + Sync {
     async fn list_management_skills(
         &self,
         _params: SkillManagementListParams,
-    ) -> Result<SkillListResponse, RuntimeCoreError> {
+    ) -> Result<SkillManagementListResponse, RuntimeCoreError> {
         Err(unavailable("skillManagement/list"))
     }
 

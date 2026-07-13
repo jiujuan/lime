@@ -1,8 +1,8 @@
-use reqwest::StatusCode;
-use runtime_core::{
+use model_provider::lowering::{
     build_responses_image_generation_body, ResponsesImageGenerationInputShape,
     ResponsesImageGenerationOptions,
 };
+use reqwest::StatusCode;
 use serde_json::{json, Value};
 
 use crate::{ImageGenerationRunnerConfig, TaskErrorRecord};
@@ -218,7 +218,7 @@ fn build_responses_image_generation_request_body(
         request_prompt,
         task_id,
         None,
-    );
+    )?;
     let options = ResponsesImageGenerationOptions {
         outer_model: prepared_input.outer_model.clone(),
         input_shape: if use_input_list {
@@ -226,7 +226,6 @@ fn build_responses_image_generation_request_body(
         } else {
             ResponsesImageGenerationInputShape::PromptString
         },
-        reference_image_urls: prepared_input.reference_image_urls.clone(),
     };
     build_responses_image_generation_body(&prepared_input.model, &request, &options).map_err(
         |error| {

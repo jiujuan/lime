@@ -70,6 +70,49 @@ describe("agentThreadState", () => {
     });
   });
 
+  it("迟到的非终态快照不应回退 terminal item", () => {
+    const completed = createItem({ sequence: 4, status: "completed" });
+    const items = [completed];
+
+    expect(
+      upsertThreadItemState(
+        items,
+        createItem({ sequence: 3, status: "in_progress" }),
+      ),
+    ).toBe(items);
+  });
+
+  it("canonical 审批终态应覆盖同 request 的 live action item", () => {
+    const liveApproval = createItem({
+      id: "approval-request-id",
+      type: "approval_request",
+      request_id: "approval-request-id",
+      action_type: "tool_confirmation",
+      status: "in_progress",
+      sequence: 6,
+    });
+    const canonicalApproval = createItem({
+      id: "item_approval-request-id",
+      type: "approval_request",
+      request_id: "approval-request-id",
+      action_type: "tool_confirmation",
+      response: { decision: "decline" },
+      status: "completed",
+      sequence: 7,
+    });
+
+    expect(
+      upsertThreadItemState([liveApproval], canonicalApproval),
+    ).toMatchObject([
+      {
+        id: "item_approval-request-id",
+        request_id: "approval-request-id",
+        status: "completed",
+        response: { decision: "decline" },
+      },
+    ]);
+  });
+
   it("缺失 started_at 的 turn 进入实时状态时不应打断排序", () => {
     const turns = [createTurn({ id: "turn-with-time" })];
     const nextTurns = upsertThreadTurnState(

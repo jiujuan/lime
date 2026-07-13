@@ -6,7 +6,7 @@ that talk to `app-server` over JSON-RPC.
 Current scope:
 
 - build initialize / initialized requests;
-- build `agentSession/*` requests;
+- build current `agentSession/*` and canonical `thread/*` requests;
 - encode and decode newline-delimited JSON-RPC messages;
 - resolve sidecar binary names, packaged paths, and stdio launch args;
 - read release manifest metadata and select the current platform artifact;
@@ -104,20 +104,21 @@ await runtime.startTurn({
 });
 
 const thread = await runtime.readThread({
-  sessionId: session.result.session.sessionId,
+  threadId: session.result.session.threadId,
+  turnsView: "full",
 });
 
 await runtime.exportEvidence({
-  sessionId: thread.result.session.sessionId,
+  sessionId: thread.result.thread.sessionId,
   includeEvents: true,
 });
 ```
 
 `AgentRuntimeClient` is a facade over the current App Server JSON-RPC methods.
-`readThread` intentionally maps to `agentSession/read`; this package does not
-invent a separate task read protocol. Apps that need task projections should
-derive them from the returned session, turns, and runtime events until App
-Server exposes a dedicated current method.
+`readThread` maps to canonical `thread/read` and requires a hydrated
+`threadId`; callers should use the returned `thread.sessionId` only when a
+legacy session-scoped method still requires it. This package does not invent a
+separate task read protocol.
 
 This package does not import Lime Rust crates, Tauri commands, Agent DTOs, or
 renderer UI code. Electron apps should use it from main / preload boundaries and

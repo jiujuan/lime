@@ -2,7 +2,8 @@ use crate::artifact_protocol::{
     extract_artifact_protocol_paths_from_metadata, extract_artifact_protocol_paths_from_value,
     normalize_artifact_protocol_path,
 };
-use crate::protocol::{AgentArtifactSignal, AgentEvent as RuntimeAgentEvent, AgentToolResult};
+use crate::protocol::{AgentArtifactSignal, AgentEvent as RuntimeAgentEvent};
+use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -46,53 +47,6 @@ pub struct WriteArtifactEventEmitter {
     tracked_artifacts: HashMap<String, TrackedArtifactState>,
 }
 
-fn push_processed_event(
-    target: &mut Vec<RuntimeAgentEvent>,
-    emitter: &mut WriteArtifactEventEmitter,
-    mut event: RuntimeAgentEvent,
-) {
-    target.extend(emitter.process_event(&mut event));
-    target.push(event);
-}
-
-pub fn build_write_tool_artifact_events(
-    scope_id: &str,
-    tool_name: &str,
-    tool_id: &str,
-    file_path: &str,
-    file_content: &str,
-    result: AgentToolResult,
-) -> Vec<RuntimeAgentEvent> {
-    let arguments = serde_json::json!({
-        "path": file_path,
-        "content": file_content,
-    })
-    .to_string();
-    let mut emitter = WriteArtifactEventEmitter::new(scope_id.to_string());
-    let mut events = Vec::new();
-
-    push_processed_event(
-        &mut events,
-        &mut emitter,
-        RuntimeAgentEvent::ToolStart {
-            tool_name: tool_name.to_string(),
-            tool_id: tool_id.to_string(),
-            arguments: Some(arguments),
-        },
-    );
-
-    push_processed_event(
-        &mut events,
-        &mut emitter,
-        RuntimeAgentEvent::ToolEnd {
-            tool_id: tool_id.to_string(),
-            result,
-        },
-    );
-
-    events
-}
-
 impl WriteArtifactEventEmitter {
     pub fn new(scope_id: impl Into<String>) -> Self {
         Self {
@@ -103,13 +57,20 @@ impl WriteArtifactEventEmitter {
 
     pub fn process_event(&mut self, event: &mut RuntimeAgentEvent) -> Vec<RuntimeAgentEvent> {
         match event {
-            RuntimeAgentEvent::ToolStart {
-                tool_name,
-                tool_id,
-                arguments,
-            } => self.handle_tool_start(tool_name, tool_id, arguments.as_deref()),
+            RuntimeAgentEvent::ItemStarted { item } => {
+                let ThreadItemPayload::Tool {
+                    call_id,
+                    name,
+                    arguments,
+                    ..
+                } = &item.payload
+                else {
+                    return Vec::new();
+                };
+                self.handle_tool_start(name, call_id, arguments)
+            }
             RuntimeAgentEvent::TextDelta { text } => self.handle_text_delta(text),
-            RuntimeAgentEvent::ToolEnd { tool_id, result } => self.handle_tool_end(tool_id, result),
+            RuntimeAgentEvent::ItemCompleted { item } => self.handle_tool_completed(item),
             _ => Vec::new(),
         }
     }
@@ -118,11 +79,9 @@ impl WriteArtifactEventEmitter {
         &mut self,
         tool_name: &str,
         tool_id: &str,
-        arguments: Option<&str>,
+        arguments: &[ToolArgument],
     ) -> Vec<RuntimeAgentEvent> {
-        let Some(arguments_value) = parse_json_str(arguments) else {
-            return Vec::new();
-        };
+        let arguments_value = tool_arguments_value(arguments);
         let patch_text = extract_candidate_patch_text(&arguments_value);
         if !is_write_like_tool(tool_name)
             && !patch_text
@@ -231,17 +190,24 @@ impl WriteArtifactEventEmitter {
         events
     }
 
-    fn handle_tool_end(
-        &mut self,
-        tool_id: &str,
-        result: &mut AgentToolResult,
-    ) -> Vec<RuntimeAgentEvent> {
-        let artifacts = self.collect_tool_end_artifacts(tool_id, result.metadata.as_ref());
+    fn handle_tool_completed(&mut self, item: &mut ThreadItem) -> Vec<RuntimeAgentEvent> {
+        let ThreadItemPayload::Tool {
+            call_id, output, ..
+        } = &item.payload
+        else {
+            return Vec::new();
+        };
+        let tool_id = call_id.clone();
+        let error = output.as_ref().and_then(|output| output.error.clone());
+        let success = item.status == ItemStatus::Completed;
+        let item_metadata = metadata_hash_map(&item.metadata);
+        let artifacts = self.collect_tool_end_artifacts(&tool_id, item_metadata.as_ref());
         if artifacts.is_empty() {
             return Vec::new();
         }
 
-        annotate_tool_result_metadata(result, &artifacts);
+        annotate_thread_item_metadata(&mut item.metadata, &artifacts);
+        let item_metadata = metadata_hash_map(&item.metadata);
 
         let mut events = Vec::new();
         for artifact in &artifacts {
@@ -262,16 +228,16 @@ impl WriteArtifactEventEmitter {
                 );
             }
 
-            if result.success {
+            if success {
                 let merged_metadata =
-                    self.merged_tool_end_metadata(&artifact.artifact_id, result.metadata.as_ref());
+                    self.merged_tool_end_metadata(&artifact.artifact_id, item_metadata.as_ref());
                 let metadata = build_snapshot_metadata(
                     Some(&merged_metadata),
                     "tool_result",
                     "completed",
                     true,
                     artifact.content.as_str(),
-                    result.error.as_deref(),
+                    error.as_deref(),
                 );
                 events.push(build_artifact_snapshot_event(
                     artifact.artifact_id.clone(),
@@ -482,8 +448,13 @@ fn build_artifact_snapshot_event(
     }
 }
 
-fn annotate_tool_result_metadata(result: &mut AgentToolResult, artifacts: &[ToolEndArtifact]) {
-    let metadata = result.metadata.get_or_insert_with(HashMap::new);
+fn annotate_thread_item_metadata(metadata: &mut Value, artifacts: &[ToolEndArtifact]) {
+    if !metadata.is_object() {
+        *metadata = Value::Object(Default::default());
+    }
+    let metadata = metadata
+        .as_object_mut()
+        .expect("thread item metadata was initialized as an object");
     metadata.insert("artifact_streamed".to_string(), Value::Bool(true));
 
     if artifacts.len() == 1 {
@@ -606,12 +577,26 @@ fn is_write_like_tool(tool_name: &str) -> bool {
         || normalized.contains("replace")
 }
 
-fn parse_json_str(raw: Option<&str>) -> Option<Value> {
-    let text = raw?.trim();
-    if text.is_empty() {
-        return None;
-    }
-    serde_json::from_str::<Value>(text).ok()
+fn tool_arguments_value(arguments: &[ToolArgument]) -> Value {
+    Value::Object(
+        arguments
+            .iter()
+            .map(|argument| {
+                let value = serde_json::from_str(&argument.value)
+                    .unwrap_or_else(|_| Value::String(argument.value.clone()));
+                (argument.name.clone(), value)
+            })
+            .collect(),
+    )
+}
+
+fn metadata_hash_map(metadata: &Value) -> Option<HashMap<String, Value>> {
+    metadata.as_object().map(|metadata| {
+        metadata
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
+    })
 }
 
 fn extract_candidate_paths(value: &Value) -> Vec<String> {
@@ -851,6 +836,77 @@ fn write_file_open_tag_regex() -> &'static Regex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_protocol::{ItemId, ItemKind, SessionId, ThreadId, ToolOutput, TurnId};
+
+    fn canonical_arguments(arguments: Value) -> Vec<ToolArgument> {
+        arguments
+            .as_object()
+            .expect("tool arguments object")
+            .iter()
+            .map(|(name, value)| ToolArgument {
+                name: name.clone(),
+                value: value
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| value.to_string()),
+            })
+            .collect()
+    }
+
+    fn canonical_tool_item(
+        call_id: &str,
+        name: &str,
+        arguments: Value,
+        status: ItemStatus,
+        metadata: Value,
+    ) -> ThreadItem {
+        ThreadItem {
+            session_id: SessionId::new("session-1"),
+            thread_id: ThreadId::new("thread-1"),
+            turn_id: TurnId::new("turn-1"),
+            item_id: ItemId::new(call_id),
+            sequence: 1,
+            ordinal: 1,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            completed_at_ms: status.is_terminal().then_some(2),
+            kind: ItemKind::Tool,
+            status,
+            payload: ThreadItemPayload::Tool {
+                call_id: call_id.to_string(),
+                name: name.to_string(),
+                arguments: canonical_arguments(arguments),
+                output: status.is_terminal().then(|| ToolOutput {
+                    text: Some("tool result".to_string()),
+                    ..ToolOutput::default()
+                }),
+            },
+            metadata,
+        }
+    }
+
+    fn item_started(call_id: &str, name: &str, arguments: Value) -> RuntimeAgentEvent {
+        RuntimeAgentEvent::ItemStarted {
+            item: canonical_tool_item(
+                call_id,
+                name,
+                arguments,
+                ItemStatus::InProgress,
+                Value::Null,
+            ),
+        }
+    }
+
+    fn item_completed(
+        call_id: &str,
+        name: &str,
+        arguments: Value,
+        metadata: Value,
+    ) -> RuntimeAgentEvent {
+        RuntimeAgentEvent::ItemCompleted {
+            item: canonical_tool_item(call_id, name, arguments, ItemStatus::Completed, metadata),
+        }
+    }
 
     fn assert_snapshot(
         event: &RuntimeAgentEvent,
@@ -877,13 +933,13 @@ mod tests {
     }
 
     #[test]
-    fn tool_start_with_path_only_emits_preparing_snapshot() {
+    fn item_started_with_path_only_emits_preparing_snapshot() {
         let mut emitter = WriteArtifactEventEmitter::new("session-1");
-        let mut event = RuntimeAgentEvent::ToolStart {
-            tool_name: "write_file".to_string(),
-            tool_id: "tool-1".to_string(),
-            arguments: Some(r#"{"path":"drafts/demo.md"}"#.to_string()),
-        };
+        let mut event = item_started(
+            "tool-1",
+            "write_file",
+            serde_json::json!({ "path": "drafts/demo.md" }),
+        );
 
         let extras = emitter.process_event(&mut event);
         assert_eq!(extras.len(), 1);
@@ -906,16 +962,15 @@ mod tests {
     }
 
     #[test]
-    fn tool_start_apply_patch_emits_preparing_snapshot_for_target_file() {
+    fn item_started_apply_patch_emits_preparing_snapshot_for_target_file() {
         let mut emitter = WriteArtifactEventEmitter::new("session-1");
-        let mut event = RuntimeAgentEvent::ToolStart {
-            tool_name: "apply_patch".to_string(),
-            tool_id: "tool-patch-1".to_string(),
-            arguments: Some(
-                r#"{"patch":"*** Begin Patch\n*** Update File: drafts/demo.md\n@@\n-old\n+new\n*** End Patch\n"}"#
-                    .to_string(),
-            ),
-        };
+        let mut event = item_started(
+            "tool-patch-1",
+            "apply_patch",
+            serde_json::json!({
+                "patch": "*** Begin Patch\n*** Update File: drafts/demo.md\n@@\n-old\n+new\n*** End Patch\n"
+            }),
+        );
 
         let extras = emitter.process_event(&mut event);
 
@@ -926,14 +981,13 @@ mod tests {
     #[test]
     fn shell_apply_patch_command_emits_preparing_snapshot_for_target_file() {
         let mut emitter = WriteArtifactEventEmitter::new("session-1");
-        let mut event = RuntimeAgentEvent::ToolStart {
-            tool_name: "bash".to_string(),
-            tool_id: "tool-shell-patch-1".to_string(),
-            arguments: Some(
-                r#"{"command":"apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: notes/live.md\n+hello\n*** End Patch\nPATCH\n"}"#
-                    .to_string(),
-            ),
-        };
+        let mut event = item_started(
+            "tool-shell-patch-1",
+            "bash",
+            serde_json::json!({
+                "command": "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: notes/live.md\n+hello\n*** End Patch\nPATCH\n"
+            }),
+        );
 
         let extras = emitter.process_event(&mut event);
 
@@ -962,34 +1016,24 @@ mod tests {
     }
 
     #[test]
-    fn tool_end_emits_completed_snapshot_and_backfills_metadata() {
+    fn item_completed_emits_snapshot_and_backfills_metadata() {
         let mut emitter = WriteArtifactEventEmitter::new("session-1");
-        let mut tool_start = RuntimeAgentEvent::ToolStart {
-            tool_name: "write_file".to_string(),
-            tool_id: "tool-1".to_string(),
-            arguments: Some(r##"{"path":"drafts/demo.md","content":"# 标题"}"##.to_string()),
-        };
-        emitter.process_event(&mut tool_start);
+        let arguments = serde_json::json!({
+            "path": "drafts/demo.md",
+            "content": "# 标题"
+        });
+        let mut started = item_started("tool-1", "write_file", arguments.clone());
+        emitter.process_event(&mut started);
 
-        let mut tool_end = RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-1".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "写入完成".to_string(),
-                error: None,
-                structured_content: None,
-                images: None,
-                metadata: None,
-            },
-        };
+        let mut completed = item_completed("tool-1", "write_file", arguments, Value::Null);
 
-        let extras = emitter.process_event(&mut tool_end);
+        let extras = emitter.process_event(&mut completed);
         assert_eq!(extras.len(), 1);
         let artifact_id = assert_snapshot(&extras[0], "drafts/demo.md", "# 标题", true);
 
-        match &tool_end {
-            RuntimeAgentEvent::ToolEnd { result, .. } => {
-                let metadata = result.metadata.as_ref().expect("tool_end metadata");
+        match &completed {
+            RuntimeAgentEvent::ItemCompleted { item } => {
+                let metadata = item.metadata.as_object().expect("thread item metadata");
                 assert_eq!(
                     metadata.get("artifact_id").and_then(Value::as_str),
                     Some(artifact_id.as_str())
@@ -1003,50 +1047,34 @@ mod tests {
                     Some(true)
                 );
             }
-            _ => panic!("expected tool_end"),
+            _ => panic!("expected item completed"),
         }
     }
 
     #[test]
-    fn tool_end_preserves_embedded_checkpoint_metadata() {
+    fn item_completed_preserves_embedded_checkpoint_metadata() {
         let mut emitter = WriteArtifactEventEmitter::new("session-1");
-        let mut tool_start = RuntimeAgentEvent::ToolStart {
-            tool_name: "Write".to_string(),
-            tool_id: "tool-1".to_string(),
-            arguments: Some(
-                serde_json::json!({
-                    "path": "src/greeting.ts",
-                    "content": "export const greeting = 'Hello Lime Runtime';",
-                    "metadata": {
-                        "artifactVersionNo": 2,
-                        "artifactVersionId": "code-runtime-fixture:v2",
-                        "artifactVersions": [
-                            { "id": "code-runtime-fixture:v1", "versionNo": 1 },
-                            { "id": "code-runtime-fixture:v2", "versionNo": 2 }
-                        ],
-                        "artifactVersionDiff": {
-                            "summary": "更新 greeting 文案"
-                        }
-                    }
-                })
-                .to_string(),
-            ),
-        };
-        emitter.process_event(&mut tool_start);
+        let arguments = serde_json::json!({
+            "path": "src/greeting.ts",
+            "content": "export const greeting = 'Hello Lime Runtime';",
+            "metadata": {
+                "artifactVersionNo": 2,
+                "artifactVersionId": "code-runtime-fixture:v2",
+                "artifactVersions": [
+                    { "id": "code-runtime-fixture:v1", "versionNo": 1 },
+                    { "id": "code-runtime-fixture:v2", "versionNo": 2 }
+                ],
+                "artifactVersionDiff": {
+                    "summary": "更新 greeting 文案"
+                }
+            }
+        });
+        let mut started = item_started("tool-1", "Write", arguments.clone());
+        emitter.process_event(&mut started);
 
-        let mut tool_end = RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-1".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "写入完成".to_string(),
-                error: None,
-                structured_content: None,
-                images: None,
-                metadata: None,
-            },
-        };
+        let mut completed = item_completed("tool-1", "Write", arguments, Value::Null);
 
-        let extras = emitter.process_event(&mut tool_end);
+        let extras = emitter.process_event(&mut completed);
         assert_eq!(extras.len(), 1);
 
         match &extras[0] {
@@ -1073,39 +1101,28 @@ mod tests {
     }
 
     #[test]
-    fn tool_end_reads_nested_artifact_protocol_metadata_paths() {
+    fn item_completed_reads_nested_artifact_protocol_metadata_paths() {
         let mut emitter = WriteArtifactEventEmitter::new("session-1");
-        let mut tool_end = RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-2".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "写入完成".to_string(),
-                error: None,
-                structured_content: None,
-                images: None,
-                metadata: Some(HashMap::from([
-                    (
-                        "artifact_id".to_string(),
-                        Value::String("artifact-social-1".to_string()),
-                    ),
-                    (
-                        "payload".to_string(),
-                        serde_json::json!({
-                            "artifact_paths": ["content-posts\\final.md"]
-                        }),
-                    ),
-                ])),
-            },
-        };
+        let mut completed = item_completed(
+            "tool-2",
+            "write_file",
+            serde_json::json!({}),
+            serde_json::json!({
+                "artifact_id": "artifact-social-1",
+                "payload": {
+                    "artifact_paths": ["content-posts\\final.md"]
+                }
+            }),
+        );
 
-        let extras = emitter.process_event(&mut tool_end);
+        let extras = emitter.process_event(&mut completed);
 
         assert_eq!(extras.len(), 1);
         assert_snapshot(&extras[0], "content-posts/final.md", "", true);
 
-        match &tool_end {
-            RuntimeAgentEvent::ToolEnd { result, .. } => {
-                let metadata = result.metadata.as_ref().expect("tool_end metadata");
+        match &completed {
+            RuntimeAgentEvent::ItemCompleted { item } => {
+                let metadata = item.metadata.as_object().expect("thread item metadata");
                 assert_eq!(
                     metadata.get("path").and_then(Value::as_str),
                     Some("content-posts/final.md")
@@ -1115,57 +1132,7 @@ mod tests {
                     Some("artifact-social-1")
                 );
             }
-            _ => panic!("expected tool_end"),
-        }
-    }
-
-    #[test]
-    fn build_write_tool_artifact_events_emits_protocol_order() {
-        let events = build_write_tool_artifact_events(
-            "session-1",
-            "write_file",
-            "tool-3",
-            "drafts/demo.md",
-            "# 标题",
-            AgentToolResult {
-                success: true,
-                output: "写入完成".to_string(),
-                error: None,
-                structured_content: None,
-                images: None,
-                metadata: None,
-            },
-        );
-
-        assert_eq!(events.len(), 4);
-        assert_snapshot(&events[0], "drafts/demo.md", "# 标题", false);
-
-        match &events[1] {
-            RuntimeAgentEvent::ToolStart {
-                tool_name, tool_id, ..
-            } => {
-                assert_eq!(tool_name, "write_file");
-                assert_eq!(tool_id, "tool-3");
-            }
-            _ => panic!("expected tool_start"),
-        }
-
-        assert_snapshot(&events[2], "drafts/demo.md", "# 标题", true);
-
-        match &events[3] {
-            RuntimeAgentEvent::ToolEnd { tool_id, result } => {
-                assert_eq!(tool_id, "tool-3");
-                let metadata = result.metadata.as_ref().expect("tool_end metadata");
-                assert_eq!(
-                    metadata.get("artifact_streamed").and_then(Value::as_bool),
-                    Some(true)
-                );
-                assert_eq!(
-                    metadata.get("file_path").and_then(Value::as_str),
-                    Some("drafts/demo.md")
-                );
-            }
-            _ => panic!("expected tool_end"),
+            _ => panic!("expected item completed"),
         }
     }
 }

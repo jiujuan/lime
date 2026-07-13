@@ -4,7 +4,7 @@ use lime_agent::agent_tools::workspace_patch_host::{
     enrich_workspace_patch_host_tool_payload, update_workspace_patch_with_host_tool_evidence,
 };
 pub(super) use lime_agent::agent_tools::workspace_patch_host::{
-    WorkspacePatchHostToolPlan, WorkspacePatchHostToolRequest,
+    BoundWorkspacePatchHostToolRequest, WorkspacePatchHostToolPlan,
     WORKSPACE_PATCH_HOST_TOOL_EVENT_SOURCE,
 };
 use lime_agent::{
@@ -43,17 +43,18 @@ pub(super) fn workspace_patch_host_tool_turn_context(
     context
 }
 
-pub(super) fn enrich_workspace_patch_host_tool_event(
-    event: &mut RuntimeEvent,
-    requests: &[WorkspacePatchHostToolRequest],
-) {
-    if !matches!(
-        event.event_type.as_str(),
-        "tool.started" | "tool.args" | "tool.result" | "tool.failed"
-    ) {
-        return;
-    }
-    enrich_workspace_patch_host_tool_payload(&mut event.payload, requests);
+pub(super) fn workspace_patch_host_tool_runtime_event(
+    event: lime_agent::AgentEvent,
+    requests: &[BoundWorkspacePatchHostToolRequest],
+) -> Option<RuntimeEvent> {
+    let (event_type, item) = match event {
+        lime_agent::AgentEvent::ItemStarted { item } => ("item.started", item),
+        lime_agent::AgentEvent::ItemCompleted { item } => ("item.completed", item),
+        _ => return None,
+    };
+    let mut payload = json!({ "item": item });
+    enrich_workspace_patch_host_tool_payload(&mut payload, requests);
+    Some(RuntimeEvent::new(event_type, payload))
 }
 
 pub(super) fn update_workspace_patch_host_tool_artifact_events(

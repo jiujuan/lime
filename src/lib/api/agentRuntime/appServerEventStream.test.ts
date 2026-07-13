@@ -1,9 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES } from "@limecloud/agent-ui-contracts";
 import { APP_SERVER_METHOD_AGENT_SESSION_EVENT } from "@/lib/api/appServer";
-import { projectAppServerAgentEventPayload } from "./appServerEventStream";
+import { projectAppServerAgentEventPayload as projectCurrentAppServerAgentEventPayload } from "./appServerEventStream";
+import { projectRawAppServerAgentEventPayloadForTests as projectAppServerAgentEventPayload } from "./appServerEventPayloadProjection";
 
 describe("appServerEventStream", () => {
+  it("production projection 应拒绝 raw lifecycle 并保留 current side-channel", () => {
+    const notification = (type: string) =>
+      ({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: `event-${type}`,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            sequence: 1,
+            timestamp: "2026-07-13T00:00:00.000Z",
+            type,
+            payload: { text: "raw lifecycle must not project" },
+          },
+        },
+      }) as never;
+
+    expect(
+      projectCurrentAppServerAgentEventPayload(notification("message.delta")),
+    ).toBeNull();
+    expect(
+      projectCurrentAppServerAgentEventPayload(
+        notification("provider.first_text_delta.received"),
+      ),
+    ).toMatchObject({ type: "provider_trace" });
+  });
+
   it("message.delta 应读取 App Server content.text 增量", () => {
     const payload = projectAppServerAgentEventPayload({
       method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
@@ -112,6 +141,375 @@ describe("appServerEventStream", () => {
     });
   });
 
+  it("canonical Turn 终态应覆盖冲突的 raw Turn shadow", () => {
+    const createdAtMs = Date.parse("2026-07-12T10:00:00.000Z");
+    const completedAtMs = Date.parse("2026-07-12T10:00:01.000Z");
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-canonical-turn-completed",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 13,
+          timestamp: "2026-07-12T10:00:01.000Z",
+          type: "turn.completed",
+          payload: {
+            turn: {
+              sessionId: "stale-session",
+              threadId: "stale-thread",
+              turnId: "stale-turn",
+              status: "inProgress",
+              createdAtMs: 0,
+              startedAtMs: 0,
+              updatedAtMs: 0,
+            },
+          },
+        },
+        canonicalEvent: {
+          method: "turn/updated",
+          params: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            status: "completed",
+            createdAtMs,
+            completedAtMs,
+            updatedAtMs: completedAtMs,
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "turn_completed",
+      turn: {
+        id: "turn-1",
+        thread_id: "thread-1",
+        status: "completed",
+        started_at: "2026-07-12T10:00:00.000Z",
+        completed_at: "2026-07-12T10:00:01.000Z",
+      },
+    });
+  });
+
+  it("canonical ask-user 终态应投影 action_resolved", () => {
+    const completedAtMs = Date.parse("2026-07-12T10:00:01.000Z");
+    expect(
+      projectCurrentAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "event-canonical-approval-resolved",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            sequence: 13,
+            timestamp: "2026-07-12T10:00:01.000Z",
+            type: "action.resolved",
+            payload: {
+              requestId: "approval-1",
+              actionType: "ask_user",
+              approved: true,
+            },
+          },
+          canonicalEvent: {
+            method: "item/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              itemId: "item-approval-1",
+              sequence: 13,
+              ordinal: 3,
+              kind: "approval",
+              status: "completed",
+              payload: {
+                type: "approval",
+                request_id: "approval-1",
+                action: { kind: "ask_user", description: "继续？" },
+                scope: "once",
+                decision: "approved",
+              },
+              createdAtMs: completedAtMs - 1_000,
+              updatedAtMs: completedAtMs,
+              completedAtMs,
+            },
+          },
+        },
+      } as never),
+    ).toMatchObject({
+      type: "action_resolved",
+      request_id: "approval-1",
+      action_type: "ask_user",
+      approved: true,
+      permission_mode: "allow_once",
+    });
+  });
+
+  it("canonical Approval pending 应从 runtimeEvent 读取 domain identity", () => {
+    const createdAtMs = Date.parse("2026-07-12T10:00:01.000Z");
+    expect(
+      projectCurrentAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "event-canonical-approval-pending",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            sequence: 12,
+            timestamp: "2026-07-12T10:00:01.000Z",
+            type: "action.required",
+            payload: {
+              request_id: "trace-request-1",
+              action_type: "tool_confirmation",
+              runtimeEvent: {
+                type: "action_required",
+                request_id: "approval-1",
+                action_type: "tool_confirmation",
+              },
+            },
+          },
+          canonicalEvent: {
+            method: "item/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              itemId: "item-approval-1",
+              sequence: 12,
+              ordinal: 3,
+              kind: "approval",
+              status: "pending",
+              payload: {
+                type: "approval",
+                request_id: "approval-1",
+                action: {
+                  kind: "tool_confirmation",
+                  description: "允许执行浏览器工具？",
+                },
+                scope: "once",
+                available_decisions: ["approved", "denied", "abort"],
+                requested_at_ms: createdAtMs,
+              },
+              createdAtMs,
+              updatedAtMs: createdAtMs,
+            },
+          },
+        },
+      } as never),
+    ).toMatchObject({
+      type: "action_required",
+      request_id: "approval-1",
+      action_type: "tool_confirmation",
+      prompt: "允许执行浏览器工具？",
+      available_decisions: ["allow_once", "decline", "cancel"],
+    });
+  });
+
+  it("canonical ask-user 无 decision 终态仍应投影 action_resolved", () => {
+    const completedAtMs = Date.parse("2026-07-12T10:00:02.000Z");
+    expect(
+      projectCurrentAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "event-canonical-ask-user-resolved",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            sequence: 13,
+            timestamp: "2026-07-12T10:00:02.000Z",
+            type: "action.resolved",
+            payload: {
+              runtimeEvent: {
+                type: "action_resolved",
+                request_id: "ask-1",
+                action_type: "ask_user",
+              },
+            },
+          },
+          canonicalEvent: {
+            method: "item/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              itemId: "item-ask-1",
+              sequence: 13,
+              ordinal: 3,
+              kind: "approval",
+              status: "completed",
+              payload: {
+                type: "approval",
+                request_id: "ask-1",
+                action: { kind: "ask_user", description: "继续？" },
+                scope: "once",
+              },
+              createdAtMs: completedAtMs - 1_000,
+              updatedAtMs: completedAtMs,
+              completedAtMs,
+            },
+          },
+        },
+      } as never),
+    ).toMatchObject({
+      type: "action_resolved",
+      request_id: "ask-1",
+      action_type: "ask_user",
+    });
+  });
+
+  it.each([
+    {
+      eventType: "turn.started",
+      canonicalStatus: "inProgress",
+      projectedType: "turn_started",
+      projectedStatus: "running",
+      completedAtMs: undefined,
+    },
+    {
+      eventType: "turn.failed",
+      canonicalStatus: "failed",
+      projectedType: "turn_failed",
+      projectedStatus: "failed",
+      completedAtMs: Date.parse("2026-07-12T10:00:01.000Z"),
+    },
+    {
+      eventType: "turn.canceled",
+      canonicalStatus: "interrupted",
+      projectedType: "turn_canceled",
+      projectedStatus: "canceled",
+      completedAtMs: Date.parse("2026-07-12T10:00:01.000Z"),
+    },
+  ])(
+    "$eventType 应只从 canonical Turn 投影 $projectedStatus",
+    ({
+      eventType,
+      canonicalStatus,
+      projectedType,
+      projectedStatus,
+      completedAtMs,
+    }) => {
+      const createdAtMs = Date.parse("2026-07-12T10:00:00.000Z");
+      const updatedAtMs = Date.parse("2026-07-12T10:00:01.000Z");
+      const payload = projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: `event-canonical-${eventType}`,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            sequence: 14,
+            timestamp: "2026-07-12T10:00:01.000Z",
+            type: eventType,
+            payload: {},
+          },
+          canonicalEvent: {
+            method: "turn/updated",
+            params: {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              status: canonicalStatus,
+              createdAtMs,
+              startedAtMs: createdAtMs,
+              completedAtMs,
+              updatedAtMs,
+              ...(canonicalStatus === "failed"
+                ? { error: { message: "provider failed" } }
+                : {}),
+            },
+          },
+        },
+      } as never);
+
+      expect(payload).toMatchObject({
+        type: projectedType,
+        turn: {
+          id: "turn-1",
+          thread_id: "thread-1",
+          status: projectedStatus,
+          started_at: "2026-07-12T10:00:00.000Z",
+        },
+      });
+      if (canonicalStatus === "failed") {
+        expect(payload).toMatchObject({
+          turn: { error_message: "provider failed" },
+        });
+      }
+    },
+  );
+
+  it("缺失或 identity 冲突的 canonical Turn 应 fail closed", () => {
+    const event = {
+      eventId: "event-invalid-canonical-turn",
+      sessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      sequence: 15,
+      timestamp: "2026-07-12T10:00:01.000Z",
+      type: "turn.completed",
+      payload: {
+        turn: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+      },
+    };
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: { event },
+      } as never),
+    ).toBeNull();
+    const canonicalTurn = {
+      sessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "completed",
+      createdAtMs: 0,
+      completedAtMs: 1,
+      updatedAtMs: 1,
+    };
+    for (const canonicalEvent of [
+      { method: "item/updated", params: canonicalTurn },
+      {
+        method: "turn/updated",
+        params: { ...canonicalTurn, status: "inProgress" },
+      },
+      {
+        method: "turn/updated",
+        params: { ...canonicalTurn, sessionId: "session-other" },
+      },
+      {
+        method: "turn/updated",
+        params: { ...canonicalTurn, threadId: "thread-other" },
+      },
+      {
+        method: "turn/updated",
+        params: { ...canonicalTurn, turnId: "turn-other" },
+      },
+      {
+        method: "turn/updated",
+        params: { ...canonicalTurn, turnId: undefined },
+      },
+    ]) {
+      expect(
+        projectAppServerAgentEventPayload({
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: { event, canonicalEvent },
+        } as never),
+      ).toBeNull();
+    }
+  });
+
   it("legacy terminal 事件不应投影成 current turn terminal payload", () => {
     for (const type of LEGACY_RUNTIME_TURN_TERMINAL_EVENT_CLASSES) {
       const payload = projectAppServerAgentEventPayload({
@@ -149,10 +547,17 @@ describe("appServerEventStream", () => {
           timestamp: "2026-07-05T10:00:01.000Z",
           type: "action.required",
           payload: {
-            actionId: "approval-network",
+            actionId: "legacy-action-network",
+            requestId: "approval-network",
             actionType: "tool_confirmation",
             toolName: "web_fetch",
             data: {
+              availableDecisions: [
+                "allow_once",
+                "allow_for_session",
+                "decline",
+                "cancel",
+              ],
               url: "https://example.com/docs",
               policy: {
                 networkRiskLevel: "medium",
@@ -175,6 +580,12 @@ describe("appServerEventStream", () => {
     expect(payload).toMatchObject({
       type: "action_required",
       request_id: "approval-network",
+      available_decisions: [
+        "allow_once",
+        "allow_for_session",
+        "decline",
+        "cancel",
+      ],
       scope: {
         session_id: "session-1",
         thread_id: "thread-1",

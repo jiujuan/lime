@@ -369,6 +369,14 @@ impl RuntimeCore {
             updated_at: now,
         };
 
+        let stored = StoredSession {
+            session: session.clone(),
+            turns: Vec::new(),
+            turn_inputs: HashMap::new(),
+            turn_runtime_options: HashMap::new(),
+            events: Vec::new(),
+            output_blobs: HashMap::new(),
+        };
         let mut state = self
             .state
             .lock()
@@ -376,17 +384,12 @@ impl RuntimeCore {
         if state.sessions.contains_key(&session_id) {
             return Err(RuntimeCoreError::SessionAlreadyExists(session_id));
         }
-        state.sessions.insert(
-            session_id,
-            StoredSession {
-                session: session.clone(),
-                turns: Vec::new(),
-                turn_inputs: HashMap::new(),
-                turn_runtime_options: HashMap::new(),
-                events: Vec::new(),
-                output_blobs: HashMap::new(),
-            },
-        );
+        if let Some(projection_store) = self.projection_store.as_deref() {
+            projection_store
+                .create_empty_canonical_thread(&stored)
+                .map_err(RuntimeCoreError::Backend)?;
+        }
+        state.sessions.insert(session_id, stored);
 
         Ok(AgentSessionStartResponse { session })
     }
@@ -428,6 +431,46 @@ impl RuntimeCore {
         self.load_session_current(params)
             .await
             .map(|context| context.response)
+    }
+
+    pub(crate) async fn resolve_session_thread_id_current(
+        &self,
+        session_id: &str,
+    ) -> Result<String, RuntimeCoreError> {
+        if let Some(thread_id) = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .sessions
+            .get(session_id)
+            .map(|stored| stored.session.thread_id.clone())
+        {
+            return Ok(thread_id);
+        }
+        if let Some(projection_store) = self.projection_store.as_ref() {
+            if let Some(projection) = projection_store
+                .read_session_projection(
+                    session_id,
+                    super::projection_store::ProjectionReadWindow::default(),
+                )
+                .map_err(RuntimeCoreError::Backend)?
+            {
+                return Ok(projection.session.thread_id);
+            }
+        }
+        if let Some(response) = self
+            .app_data_source
+            .read_agent_session(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?
+        {
+            return Ok(response.session.thread_id);
+        }
+        Err(RuntimeCoreError::SessionNotFound(session_id.to_string()))
     }
 
     pub async fn update_session_current(
@@ -544,25 +587,26 @@ impl RuntimeCore {
                 .state
                 .lock()
                 .expect("runtime core state mutex poisoned");
-            super::approval_cache::remove_session(&mut state.session_approval_cache, &session_id);
-            state.sessions.remove(&session_id).is_some()
-        };
-
-        if let Some(projection_store) = self.projection_store.as_ref() {
-            if projection_store
-                .read_session_projection(
-                    &session_id,
-                    super::projection_store::ProjectionReadWindow::default(),
-                )
-                .map_err(RuntimeCoreError::Backend)?
-                .is_some()
-            {
-                deleted = true;
+            let mut deleted = state.sessions.contains_key(&session_id);
+            if let Some(projection_store) = self.projection_store.as_ref() {
+                if projection_store
+                    .read_session_projection(
+                        &session_id,
+                        super::projection_store::ProjectionReadWindow::default(),
+                    )
+                    .map_err(RuntimeCoreError::Backend)?
+                    .is_some()
+                {
+                    deleted = true;
+                }
+                deleted |= projection_store
+                    .delete_session_data(&session_id)
+                    .map_err(RuntimeCoreError::Backend)?;
             }
-            projection_store
-                .clear_session(&session_id)
-                .map_err(RuntimeCoreError::Backend)?;
-        }
+            super::approval_cache::remove_session(&mut state.session_approval_cache, &session_id);
+            state.sessions.remove(&session_id);
+            deleted
+        };
         if let Some(event_log_writer) = self.event_log_writer.as_ref() {
             if !event_log_writer
                 .read_session_events(&session_id)

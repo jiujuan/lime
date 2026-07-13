@@ -22,8 +22,10 @@ mod skill_summary;
 pub mod ecommerce_review_reply;
 
 pub use agent_body::{
-    agent_skill_body_locator_from_metadata, read_agent_skill_body, AgentSkillBody,
-    AgentSkillBodyLocator,
+    agent_skill_body_locator_from_metadata, estimate_agent_skill_body_tokens,
+    evaluate_agent_skill_body, read_agent_skill_body, AgentSkillBody, AgentSkillBodyBudgetDecision,
+    AgentSkillBodyBudgetDecisionKind, AgentSkillBodyEvaluation, AgentSkillBodyLocator,
+    DEFAULT_AGENT_SKILL_BODY_TOKEN_BUDGET,
 };
 pub use agent_render::{
     contains_agent_skills_prompt, contains_selected_agent_skill_body_prompt,
@@ -36,14 +38,16 @@ pub use agent_search::{
     AgentSkillSearchResult, DEFAULT_AGENT_SKILL_SEARCH_LIMIT,
 };
 pub use agent_selection::{
-    select_agent_skills_by_name_candidates, select_explicit_agent_skills,
-    select_implicit_agent_skills, AgentSkillSelection, AgentSkillSelectionTrigger,
+    evaluate_agent_skill_selection_bodies, select_agent_skills_by_name_candidates,
+    select_explicit_agent_skills, select_implicit_agent_skills, AgentSkillSelection,
+    AgentSkillSelectionEvaluation, AgentSkillSelectionTrigger,
 };
 pub use agent_snapshot::{
     agent_skill_roots_for_workspace, build_agent_skill_snapshot,
     build_agent_skill_snapshot_from_roots, build_agent_skill_snapshot_from_workspace,
-    default_agent_skill_roots, AgentSkillMetadata, AgentSkillRoot, AgentSkillScope,
-    AgentSkillSnapshot, AgentSkillSnapshotOptions,
+    default_agent_skill_roots, AgentSkillAuthority, AgentSkillDependencies, AgentSkillInterface,
+    AgentSkillMetadata, AgentSkillPolicy, AgentSkillRoot, AgentSkillScope, AgentSkillSnapshot,
+    AgentSkillSnapshotOptions, AgentSkillSource, AgentSkillToolDependency,
 };
 pub use execution_callback::{
     events, ExecutionCallback, ExecutionCompletePayload, StepCompletePayload, StepErrorPayload,

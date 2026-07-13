@@ -1,3 +1,4 @@
+use agent_protocol::{ThreadItem, ThreadItemPayload};
 use app_server_protocol::AgentEvent;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -64,7 +65,7 @@ impl SequenceVerifier {
             });
         }
 
-        let event_class = normalize_event_class(&event.event_type);
+        let event_class = normalize_event_class(event);
         let turn_key = event
             .turn_id
             .as_deref()
@@ -82,11 +83,11 @@ impl SequenceVerifier {
         }
 
         match event_class {
-            "tool.started" => {
+            "item.started" => {
                 if let Some(tool_call_id) = tool_call_id(event) {
                     if turn.active_tools.contains_key(&tool_call_id) {
                         violations.push(SequenceViolation {
-                            code: "tool_started_already_active",
+                            code: "tool_item_started_already_active",
                             event_id: event.event_id.clone(),
                             scope_id: Some(tool_call_id),
                         });
@@ -96,15 +97,11 @@ impl SequenceVerifier {
                     }
                 }
             }
-            "tool.result" | "tool.failed" => {
+            "item.completed" => {
                 if let Some(tool_call_id) = tool_call_id(event) {
                     if turn.active_tools.remove(&tool_call_id).is_none() {
                         violations.push(SequenceViolation {
-                            code: if event_class == "tool.result" {
-                                "tool_result_without_start"
-                            } else {
-                                "tool_failed_without_start"
-                            },
+                            code: "tool_item_completed_without_start",
                             event_id: event.event_id.clone(),
                             scope_id: Some(tool_call_id),
                         });
@@ -286,10 +283,11 @@ fn same_sequence_scope(event: &AgentEvent, candidate: &AgentEvent) -> bool {
     event.session_id == candidate.session_id && event.turn_id == candidate.turn_id
 }
 
-fn normalize_event_class(event_type: &str) -> &str {
-    match event_type {
+fn normalize_event_class(event: &AgentEvent) -> &str {
+    match event.event_type.as_str() {
         "message.delta" | "message.delta_batch" | "message.batch" => "model.delta",
-        "message" | "message.completed" | "item.completed" => "model.completed",
+        "message" | "message.completed" => "model.completed",
+        "item.completed" if canonical_tool_item(event).is_none() => "model.completed",
         "thinking.delta" => "reasoning.delta",
         "artifact.snapshot" => "artifact.changed",
         "runtime.status" => "run.status",
@@ -300,6 +298,7 @@ fn normalize_event_class(event_type: &str) -> &str {
 
 fn is_execution_stream_class(event_class: &str) -> bool {
     event_class.starts_with("tool.")
+        || event_class.starts_with("item.")
         || event_class.starts_with("action.")
         || event_class.starts_with("model.")
         || event_class.starts_with("reasoning.")
@@ -320,10 +319,26 @@ fn is_action_terminal_event_class(event_class: &str) -> bool {
 }
 
 fn tool_call_id(event: &AgentEvent) -> Option<String> {
+    if let Some(item) = canonical_tool_item(event) {
+        if let ThreadItemPayload::Tool { call_id, .. } = item.payload {
+            return Some(call_id);
+        }
+    }
     string_field(
         &event.payload,
         &["toolCallId", "tool_call_id", "toolId", "tool_id", "id"],
     )
+}
+
+fn canonical_tool_item(event: &AgentEvent) -> Option<ThreadItem> {
+    if !matches!(
+        event.event_type.as_str(),
+        "item.started" | "item.updated" | "item.completed"
+    ) {
+        return None;
+    }
+    let item = serde_json::from_value::<ThreadItem>(event.payload.get("item")?.clone()).ok()?;
+    matches!(&item.payload, ThreadItemPayload::Tool { .. }).then_some(item)
 }
 
 fn action_id(event: &AgentEvent) -> Option<String> {
@@ -400,6 +415,11 @@ mod tests {
     use serde_json::json;
 
     fn event(event_id: &str, event_type: &str, payload: Value) -> AgentEvent {
+        let payload = if matches!(event_type, "item.started" | "item.completed") {
+            canonical_tool_item_payload(event_type, payload)
+        } else {
+            payload
+        };
         AgentEvent {
             event_id: event_id.to_string(),
             sequence: 1,
@@ -412,16 +432,51 @@ mod tests {
         }
     }
 
+    fn canonical_tool_item_payload(event_type: &str, payload: Value) -> Value {
+        let call_id = payload
+            .get("toolCallId")
+            .and_then(Value::as_str)
+            .unwrap_or("tool_1");
+        let status = if event_type == "item.started" {
+            "inProgress"
+        } else {
+            "completed"
+        };
+        json!({
+            "item": {
+                "sessionId": "sess_test",
+                "threadId": "thread_test",
+                "turnId": "turn_test",
+                "itemId": format!("item_{call_id}"),
+                "sequence": 1,
+                "ordinal": 1,
+                "createdAtMs": 1,
+                "updatedAtMs": 1,
+                "completedAtMs": (event_type == "item.completed").then_some(1),
+                "kind": "tool",
+                "status": status,
+                "payload": {
+                    "type": "tool",
+                    "call_id": call_id,
+                    "name": "Bash",
+                    "arguments": [],
+                    "output": (event_type == "item.completed").then(|| json!({"text": "ok"})),
+                },
+                "metadata": {},
+            }
+        })
+    }
+
     #[test]
     fn accepts_paired_tool_sequence() {
         let existing = vec![event(
             "evt_tool_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         )];
         let candidate = event(
             "evt_tool_result",
-            "tool.result",
+            "item.completed",
             json!({ "toolCallId": "tool_1" }),
         );
 
@@ -429,23 +484,23 @@ mod tests {
     }
 
     #[test]
-    fn rejects_tool_result_without_start() {
+    fn rejects_tool_item_completed_without_start() {
         let candidate = event(
             "evt_tool_result",
-            "tool.result",
+            "item.completed",
             json!({ "toolCallId": "tool_1" }),
         );
 
         let error = validate_agent_event_sequence(&[], &candidate)
             .expect_err("tool result without start should fail");
-        assert!(error.contains("tool_result_without_start"));
+        assert!(error.contains("tool_item_completed_without_start"));
     }
 
     #[test]
     fn rejects_unclosed_tool_at_terminal_turn() {
         let existing = vec![event(
             "evt_tool_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         )];
         let candidate = event("evt_turn_done", "turn.completed", json!({}));
@@ -517,7 +572,7 @@ mod tests {
     fn legacy_final_done_does_not_close_active_tools() {
         let existing = vec![event(
             "evt_tool_start",
-            "tool.started",
+            "item.started",
             json!({ "toolCallId": "tool_1" }),
         )];
         let candidate = event("evt_turn_done", "turn.final_done", json!({}));

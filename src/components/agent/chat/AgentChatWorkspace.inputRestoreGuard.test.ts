@@ -21,6 +21,7 @@ const INPUT_RESTORE_REQUEST_PRODUCTION_FILES = new Set([
   "src/components/agent/chat/hooks/useAgentStream.ts",
   "src/components/agent/chat/workspace/WorkspaceConversationScene.tsx",
   "src/components/agent/chat/workspace/chatSurfaceProps.ts",
+  "src/components/agent/chat/workspace/useAgentChatWorkspaceLocalDisplayState.ts",
   "src/components/agent/chat/workspace/useWorkspaceConversationLandingSurfaceRuntime.tsx",
   "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.tsx",
   "src/components/agent/chat/workspace/useWorkspaceInputbarSceneRuntime.tsx",
@@ -65,9 +66,12 @@ function expectInputRestoreUiWriteOwnedByCurrentOwner(pattern: string) {
 }
 
 describe("AgentChatWorkspace input restore boundary", () => {
-  it("父级 Workspace 只转发恢复请求，不再执行 text/path-only fallback", () => {
+  it("local-display owner 只转发恢复请求，不执行 text/path-only fallback", () => {
     const source = readFileSync(
-      join(process.cwd(), "src/components/agent/chat/AgentChatWorkspace.tsx"),
+      join(
+        process.cwd(),
+        "src/components/agent/chat/workspace/useAgentChatWorkspaceLocalDisplayState.ts",
+      ),
       "utf8",
     );
     const handlerStart = source.indexOf("const handleRestoreInterruptedInput");

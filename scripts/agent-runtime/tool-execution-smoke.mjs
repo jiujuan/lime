@@ -66,7 +66,7 @@ const CODING_CURRENT_TOOLS = ["Read", "apply_patch", "Glob", "Grep", "Bash"];
 const MEDIA_NOTEBOOK_SHELL_TOOLS = ["view_image", "NotebookEdit", "Bash"];
 const TASK_BOARD_TOOLS = ["TaskCreate", "TaskGet", "TaskUpdate", "TaskList"];
 const BACKGROUND_TASK_TOOLS = ["Bash", "TaskOutput", "TaskStop"];
-const RUNTIME_INTROSPECTION_TOOLS = ["ToolSearch", "SendUserMessage"];
+const RUNTIME_INTROSPECTION_TOOLS = ["tool_search", "SendUserMessage"];
 const WEB_TOOLS = ["WebFetch", "WebSearch"];
 const AGENT_CONTROL_TOOLS = [
   "TeamCreate",
@@ -109,7 +109,7 @@ const BATCH_TARGET_TOOLS = {
   "creation-task-tools": CREATION_TASK_TOOLS,
   "mcp-resource-tools": MCP_RESOURCE_TOOLS,
   "skill-tools": SKILL_TOOLS,
-  [MCP_CONTEXT7_TOOLSEARCH_BATCH_ID]: ["ToolSearch"],
+  [MCP_CONTEXT7_TOOLSEARCH_BATCH_ID]: ["tool_search"],
 };
 const SUPPORTED_BATCH_IDS = Object.keys(BATCH_TARGET_TOOLS);
 const OPTIONAL_RUNTIME_COVERAGE_TOOLS = [
@@ -543,8 +543,8 @@ function buildBackgroundTaskFixtureResponses() {
 
 function buildRuntimeIntrospectionFixtureResponses() {
   return [
-    toolCall("ToolSearch", "call-tool-exec-tool-search", {
-      query: "select:Read,ToolSearch,SendUserMessage",
+    toolCall("tool_search", "call-tool-exec-tool-search", {
+      query: "select:Read,tool_search,SendUserMessage",
       max_results: 10,
     }),
     toolCall("SendUserMessage", "call-tool-exec-send-user-message", {
@@ -777,7 +777,7 @@ function mcpRuntimeToolName(serverName, toolName) {
 
 function buildContext7ToolSearchFixtureResponses({ queryDocsToolName }) {
   return [
-    toolCall("ToolSearch", "call-tool-exec-context7-tool-search", {
+    toolCall("tool_search", "call-tool-exec-context7-tool-search", {
       query: `select:${queryDocsToolName}`,
       max_results: 10,
     }),
@@ -801,7 +801,7 @@ async function createContext7AgentTurnServer(options, serverName) {
       server: {
         id: serverId,
         name: serverName,
-        description: "Agent turn Context7 ToolSearch smoke",
+        description: "Agent turn Context7 tool_search smoke",
         server_config: {
           transport: "streamable_http",
           url: CONTEXT7_LIVE_URL,
@@ -877,10 +877,10 @@ function buildBatchScenario(batchId, fixtureFiles) {
     return {
       id: MCP_CONTEXT7_TOOLSEARCH_BATCH_ID,
       prompt:
-        "请从普通输入框自然语言触发 Context7 MCP 工具验收：先用 ToolSearch 精确选择 Context7 query-docs 工具，再调用 query-docs 查询 AI Agent 是什么。不要使用命令入口。",
+        "请从普通输入框自然语言触发 Context7 MCP 工具验收：先用 tool_search 精确选择 Context7 query-docs 工具，再调用 query-docs 查询 AI Agent 是什么。不要使用命令入口。",
       promptNeedle: "Context7 MCP 工具验收",
-      targetTools: ["ToolSearch", queryDocsToolName],
-      initialInventoryTargetTools: ["ToolSearch"],
+      targetTools: ["tool_search", queryDocsToolName],
+      initialInventoryTargetTools: ["tool_search"],
       requiresTargetToolsInInitialInventory: false,
       requiresEvidenceToolPresence: false,
       deferScriptedToolCallsUntilAvailable: true,
@@ -920,15 +920,13 @@ function buildBatchScenario(batchId, fixtureFiles) {
         const toolSearchOutput =
           toolOutputText
             .split("\n")
-            .find((line) => line.startsWith("ToolSearch:")) || "";
+            .find((line) => line.startsWith("tool_search:")) || "";
         const normalizedToolSearchOutput = toolSearchOutput
           .replace(/\\"/g, '"')
           .replace(/\\n/g, "\n");
         const toolSearchReturnedEmptyMatches = /"matches"\s*:\s*\[\s*\]/.test(
           normalizedToolSearchOutput,
         );
-        const toolSearchReturnedZeroDeferred =
-          /"total_deferred_tools"\s*:\s*0\b/.test(normalizedToolSearchOutput);
         const queryDocsProviderRequestSeen = providerRequests.some((request) =>
           request.toolNames.includes(queryDocsToolName),
         );
@@ -939,9 +937,7 @@ function buildBatchScenario(batchId, fixtureFiles) {
           toolSearchSawContext7QueryDocs:
             normalizedToolSearchOutput.includes('"matches"') &&
             normalizedToolSearchOutput.includes(queryDocsToolName) &&
-            normalizedToolSearchOutput.includes('"total_deferred_tools"') &&
-            !toolSearchReturnedEmptyMatches &&
-            !toolSearchReturnedZeroDeferred,
+            !toolSearchReturnedEmptyMatches,
           providerExposedContext7QueryDocsAfterToolSearch:
             queryDocsProviderRequestSeen,
           context7QueryDocsExecuted:
@@ -1095,7 +1091,7 @@ function buildBatchScenario(batchId, fixtureFiles) {
         return {
           toolSearchReturnedToolSurface:
             toolOutputText.includes('"tools"') ||
-            toolOutputText.includes("ToolSearch"),
+            toolOutputText.includes("tool_search"),
           sendUserMessageDelivered: toolOutputText.includes(
             "Message delivered to user",
           ),

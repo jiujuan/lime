@@ -34,6 +34,22 @@ declare module "./connection.js" {
       params?: protocol.AgentSessionListParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.AgentSessionListResponse>>;
+    readThread(
+      params: protocol.ThreadReadParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadReadResponse>>;
+    listThreads(
+      params?: protocol.ThreadListParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadListResponse>>;
+    listThreadTurns(
+      params: protocol.ThreadTurnsListParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadTurnsListResponse>>;
+    listThreadItems(
+      params: protocol.ThreadItemsListParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.ThreadItemsListResponse>>;
     updateSession(
       params: protocol.AgentSessionUpdateParams,
       options?: AppServerRequestOptions,
@@ -236,7 +252,7 @@ declare module "./connection.js" {
     listManagementSkills(
       params: protocol.SkillManagementListParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.SkillListResponse>>;
+    ): Promise<AppServerRequestResult<protocol.SkillManagementListResponse>>;
     installManagementSkill(
       params: protocol.SkillManagementInstallParams,
       options?: AppServerRequestOptions,

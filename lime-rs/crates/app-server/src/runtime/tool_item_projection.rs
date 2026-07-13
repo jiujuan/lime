@@ -3,9 +3,7 @@ mod extract;
 use super::StoredSession;
 use app_server_protocol::AgentEvent;
 use extract::{
-    current_tool_item_from_event, is_command_tool_name, is_update_plan_tool_name,
-    item_type_for_tool_name, legacy_tool_event_from_event, legacy_tool_id, CurrentToolItem,
-    LegacyToolEvent,
+    current_tool_item_from_event, is_command_tool_name, is_update_plan_tool_name, CurrentToolItem,
 };
 use serde_json::{json, Map, Value};
 
@@ -30,18 +28,17 @@ struct ToolState {
     output_ref: Option<String>,
     ref_ids: Vec<String>,
     output_truncated: Option<bool>,
+    duration_ms: Option<u64>,
     output_bytes: Option<u64>,
     success: Option<bool>,
     error: Option<String>,
     query: Option<String>,
     action: Option<String>,
     metadata: Map<String, Value>,
-    diagnostics: Vec<Value>,
     started_at: String,
     updated_at: String,
     completed_at: Option<String>,
     sequence: u64,
-    has_current_item: bool,
 }
 
 pub(super) fn tool_items_from_events(stored: &StoredSession) -> Vec<Value> {
@@ -78,10 +75,6 @@ impl ToolProjection {
     fn apply_event(&mut self, event: &AgentEvent, fallback_thread_id: Option<&str>) {
         if let Some(item) = current_tool_item_from_event(event) {
             self.apply_current_item(event, fallback_thread_id, item);
-            return;
-        }
-        if let Some(tool_event) = legacy_tool_event_from_event(event) {
-            self.apply_legacy_tool_event(event, fallback_thread_id, tool_event);
         }
     }
 
@@ -91,9 +84,7 @@ impl ToolProjection {
         fallback_thread_id: Option<&str>,
         item: CurrentToolItem,
     ) {
-        let index = self
-            .find_current_index(&item)
-            .or_else(|| self.find_legacy_match_for_current(&item));
+        let index = self.find_current_index(&item);
         let Some(index) = index else {
             self.tools.push(ToolState::from_current_item(
                 event,
@@ -105,56 +96,12 @@ impl ToolProjection {
         self.tools[index].merge_current_item(event, item);
     }
 
-    fn apply_legacy_tool_event(
-        &mut self,
-        event: &AgentEvent,
-        fallback_thread_id: Option<&str>,
-        tool_event: LegacyToolEvent,
-    ) {
-        let index = self.find_legacy_index(event, &tool_event);
-        let Some(index) = index else {
-            self.tools.push(ToolState::from_legacy_event(
-                event,
-                fallback_thread_id,
-                tool_event,
-            ));
-            return;
-        };
-        self.tools[index].merge_legacy_event(event, tool_event);
-    }
-
     fn find_current_index(&self, item: &CurrentToolItem) -> Option<usize> {
         self.tools.iter().position(|tool| {
             same_turn(tool.turn_id.as_deref(), item.turn_id.as_deref())
                 && (tool.item_id.as_deref() == Some(item.item_id.as_str())
-                    || tool.tool_call_id.as_deref() == Some(item.item_id.as_str())
-                    || tool.id == item.item_id)
-        })
-    }
-
-    fn find_legacy_match_for_current(&self, item: &CurrentToolItem) -> Option<usize> {
-        let tool_name = item.tool_name.as_deref()?;
-        self.tools.iter().position(|tool| {
-            !tool.has_current_item
-                && same_turn(tool.turn_id.as_deref(), item.turn_id.as_deref())
-                && tool.tool_name.as_deref() == Some(tool_name)
-        })
-    }
-
-    fn find_legacy_index(&self, event: &AgentEvent, tool_event: &LegacyToolEvent) -> Option<usize> {
-        if let Some(tool_call_id) = tool_event.tool_call_id.as_deref() {
-            return self.tools.iter().position(|tool| {
-                same_turn(tool.turn_id.as_deref(), event.turn_id.as_deref())
-                    && (tool.item_id.as_deref() == Some(tool_call_id)
-                        || tool.tool_call_id.as_deref() == Some(tool_call_id)
-                        || tool.id == tool_call_id)
-            });
-        }
-        let tool_name = tool_event.tool_name.as_deref()?;
-        self.tools.iter().position(|tool| {
-            same_turn(tool.turn_id.as_deref(), event.turn_id.as_deref())
-                && tool.tool_call_id.is_none()
-                && tool.tool_name.as_deref() == Some(tool_name)
+                    || tool.tool_call_id.as_deref() == Some(item.tool_call_id.as_str())
+                    || tool.id == item.tool_call_id)
         })
     }
 }
@@ -172,9 +119,9 @@ impl ToolState {
             .or_else(|| fallback_thread_id.map(str::to_string))
             .unwrap_or_else(|| event.session_id.clone());
         let mut state = Self {
-            id: item.item_id.clone(),
+            id: item.tool_call_id.clone(),
             item_id: Some(item.item_id.clone()),
-            tool_call_id: Some(item.item_id.clone()),
+            tool_call_id: Some(item.tool_call_id.clone()),
             thread_id,
             turn_id: item.turn_id.clone().or_else(|| event.turn_id.clone()),
             item_type: item.item_type.clone(),
@@ -186,13 +133,13 @@ impl ToolState {
             output_ref: item.output_ref.clone(),
             ref_ids: item.ref_ids.clone(),
             output_truncated: item.output_truncated,
+            duration_ms: item.duration_ms,
             output_bytes: item.output_bytes,
             success: item.success,
             error: item.error.clone(),
             query: item.query.clone(),
             action: item.action.clone(),
             metadata: Map::new(),
-            diagnostics: Vec::new(),
             started_at: item
                 .started_at
                 .clone()
@@ -206,66 +153,16 @@ impl ToolState {
                 .clone()
                 .or_else(|| is_terminal_status(&item.status).then(|| event.timestamp.clone())),
             sequence: item.sequence,
-            has_current_item: true,
         };
         state.merge_metadata_value(item.metadata);
         state.merge_event_metadata(event);
         state
     }
 
-    fn from_legacy_event(
-        event: &AgentEvent,
-        fallback_thread_id: Option<&str>,
-        tool_event: LegacyToolEvent,
-    ) -> Self {
-        let id = legacy_tool_id(event, &tool_event);
-        let item_type = item_type_for_tool_name(tool_event.tool_name.as_deref());
-        let mut metadata = Map::new();
-        if !has_metadata_key(tool_event.metadata.as_ref(), "source") {
-            metadata.insert("source".to_string(), json!("legacy_tool_event"));
-        }
-        let mut state = Self {
-            id: id.clone(),
-            item_id: None,
-            tool_call_id: tool_event.tool_call_id.clone(),
-            thread_id: event
-                .thread_id
-                .clone()
-                .or_else(|| fallback_thread_id.map(str::to_string))
-                .unwrap_or_else(|| event.session_id.clone()),
-            turn_id: event.turn_id.clone(),
-            item_type,
-            status: tool_event.status.clone(),
-            tool_name: tool_event.tool_name.clone(),
-            arguments: tool_event.arguments.clone(),
-            structured_content: tool_event.structured_content.clone(),
-            output: tool_event.output.clone(),
-            output_ref: tool_event.output_ref.clone(),
-            ref_ids: tool_event.ref_ids.clone(),
-            output_truncated: tool_event.output_truncated,
-            output_bytes: tool_event.output_bytes,
-            success: tool_event.success,
-            error: tool_event.error.clone(),
-            query: tool_event.query.clone(),
-            action: tool_event.action.clone(),
-            metadata,
-            diagnostics: Vec::new(),
-            started_at: event.timestamp.clone(),
-            updated_at: event.timestamp.clone(),
-            completed_at: is_terminal_status(&tool_event.status).then(|| event.timestamp.clone()),
-            sequence: event.sequence,
-            has_current_item: false,
-        };
-        state.merge_metadata_value(tool_event.metadata);
-        state.merge_event_metadata(event);
-        state
-    }
-
     fn merge_current_item(&mut self, event: &AgentEvent, item: CurrentToolItem) {
-        self.has_current_item = true;
         self.item_id = Some(item.item_id.clone());
-        self.tool_call_id.get_or_insert(item.item_id.clone());
-        self.id = item.item_id.clone();
+        self.tool_call_id = Some(item.tool_call_id.clone());
+        self.id = item.tool_call_id.clone();
         self.item_type = item.item_type.clone();
         self.thread_id = item
             .thread_id
@@ -275,7 +172,7 @@ impl ToolState {
         if item.turn_id.is_some() {
             self.turn_id = item.turn_id.clone();
         }
-        self.merge_status(event, &item.status, true);
+        self.merge_status(event, &item.status);
         self.merge_current_fields(item);
         self.merge_event_metadata(event);
     }
@@ -289,6 +186,7 @@ impl ToolState {
         self.output_ref = item.output_ref.or(self.output_ref.take());
         merge_vec_unique(&mut self.ref_ids, item.ref_ids);
         self.output_truncated = item.output_truncated.or(self.output_truncated);
+        self.duration_ms = item.duration_ms.or(self.duration_ms);
         self.output_bytes = item.output_bytes.or(self.output_bytes);
         self.success = item.success.or(self.success);
         self.error = item.error.or(self.error.take());
@@ -300,67 +198,14 @@ impl ToolState {
         self.merge_metadata_value(item.metadata);
     }
 
-    fn merge_legacy_event(&mut self, event: &AgentEvent, tool_event: LegacyToolEvent) {
-        let status_applied = self.merge_status(event, &tool_event.status, false);
-        if self.tool_call_id.is_none() {
-            self.tool_call_id = tool_event.tool_call_id.clone();
+    fn merge_status(&mut self, event: &AgentEvent, next_status: &str) {
+        if is_terminal_status(&self.status) && next_status == "in_progress" {
+            return;
         }
-        merge_option_if_empty(&mut self.tool_name, tool_event.tool_name);
-        merge_option_if_empty(&mut self.arguments, tool_event.arguments);
-        if status_applied || !self.has_current_item {
-            merge_option_if_present(&mut self.structured_content, tool_event.structured_content);
-            merge_option_if_present(&mut self.output, tool_event.output);
-            merge_option_if_present(&mut self.output_ref, tool_event.output_ref);
-            merge_vec_unique(&mut self.ref_ids, tool_event.ref_ids);
-            self.output_truncated = tool_event.output_truncated.or(self.output_truncated);
-            self.output_bytes = tool_event.output_bytes.or(self.output_bytes);
-            self.success = tool_event.success.or(self.success);
-            merge_option_if_present(&mut self.error, tool_event.error);
-            self.query = tool_event.query.or(self.query.take());
-            self.action = tool_event.action.or(self.action.take());
-        }
-        self.updated_at = event.timestamp.clone();
-        self.merge_metadata_value_prefer_new(tool_event.metadata);
-        self.merge_event_metadata(event);
-        self.sequence = self.sequence.min(event.sequence);
-    }
-
-    fn merge_status(&mut self, event: &AgentEvent, next_status: &str, current_item: bool) -> bool {
-        if current_item {
-            if is_terminal_status(&self.status) && next_status == "in_progress" {
-                self.push_status_diagnostic(event, next_status);
-                return false;
-            }
-            self.status = next_status.to_string();
-            if is_terminal_status(next_status) {
-                self.completed_at = Some(event.timestamp.clone());
-            }
-            return true;
-        }
-
-        if self.has_current_item {
-            if is_terminal_status(next_status) && self.status != next_status {
-                self.push_status_diagnostic(event, next_status);
-                return false;
-            }
-            return true;
-        }
-
         self.status = next_status.to_string();
         if is_terminal_status(next_status) {
             self.completed_at = Some(event.timestamp.clone());
         }
-        true
-    }
-
-    fn push_status_diagnostic(&mut self, event: &AgentEvent, ignored_status: &str) {
-        self.diagnostics.push(json!({
-            "kind": "ignored_legacy_status_conflict",
-            "source_event_id": event.event_id,
-            "source_event_type": event.event_type,
-            "ignored_status": ignored_status,
-            "kept_status": self.status,
-        }));
     }
 
     fn merge_event_metadata(&mut self, event: &AgentEvent) {
@@ -387,15 +232,6 @@ impl ToolState {
         };
         for (key, value) in metadata {
             self.metadata.entry(key).or_insert(value);
-        }
-    }
-
-    fn merge_metadata_value_prefer_new(&mut self, metadata: Option<Value>) {
-        let Some(Value::Object(metadata)) = metadata else {
-            return;
-        };
-        for (key, value) in metadata {
-            self.metadata.insert(key, value);
         }
     }
 
@@ -466,6 +302,11 @@ impl ToolState {
         );
         insert_optional(
             object,
+            "duration_ms",
+            self.duration_ms.map(|value| json!(value)),
+        );
+        insert_optional(
+            object,
             "output_bytes",
             self.output_bytes.map(|value| json!(value)),
         );
@@ -476,17 +317,11 @@ impl ToolState {
         if !self.metadata.is_empty() {
             object.insert("metadata".to_string(), Value::Object(self.metadata.clone()));
         }
-        if !self.diagnostics.is_empty() {
-            object.insert(
-                "diagnostics".to_string(),
-                json!({ "status_conflicts": self.diagnostics }),
-            );
-        }
     }
 }
 
 fn is_terminal_status(status: &str) -> bool {
-    matches!(status, "completed" | "failed")
+    matches!(status, "completed" | "failed" | "interrupted" | "cancelled")
 }
 
 fn tool_call_status(status: &str) -> &str {
@@ -501,18 +336,6 @@ fn same_turn(left: Option<&str>, right: Option<&str>) -> bool {
         (Some(left), Some(right)) => left == right,
         (None, None) => true,
         _ => false,
-    }
-}
-
-fn merge_option_if_empty<T>(target: &mut Option<T>, value: Option<T>) {
-    if target.is_none() {
-        *target = value;
-    }
-}
-
-fn merge_option_if_present<T>(target: &mut Option<T>, value: Option<T>) {
-    if value.is_some() {
-        *target = value;
     }
 }
 
@@ -553,12 +376,6 @@ fn copy_payload_metadata(metadata: &mut Map<String, Value>, payload: &Value) {
     }
 }
 
-fn has_metadata_key(metadata: Option<&Value>, key: &str) -> bool {
-    metadata
-        .and_then(Value::as_object)
-        .is_some_and(|metadata| metadata.contains_key(key))
-}
-
 fn insert_optional(object: &mut Map<String, Value>, key: &str, value: Option<Value>) {
     let Some(value) = value else {
         return;
@@ -596,5 +413,198 @@ fn compact_json(value: Value) -> Value {
         ),
         Value::Array(items) => Value::Array(items.into_iter().map(compact_json).collect()),
         value => value,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_tool_items_use_call_identity_and_preserve_typed_output() {
+        let events = vec![
+            event(
+                "item-started",
+                1,
+                "item.started",
+                canonical_tool_item("inProgress", false),
+            ),
+            event(
+                "item-completed",
+                2,
+                "item.completed",
+                canonical_tool_item("failed", true),
+            ),
+        ];
+
+        let tool_calls = tool_calls_from_events(&events);
+
+        assert_eq!(tool_calls.len(), 1);
+        let call = &tool_calls[0];
+        assert_eq!(call["id"], "call-runtime-1");
+        assert_eq!(call["tool_call_id"], "call-runtime-1");
+        assert_eq!(call["status"], "failed");
+        assert_eq!(call["tool_name"], "read_file");
+        assert_eq!(
+            call["arguments"],
+            json!([
+                {"name": "path", "value": "/workspace/README.md"},
+                {"name": "line_start", "value": "1"},
+                {"name": "query", "value": "needle"}
+            ])
+        );
+        assert_eq!(call["output"], "partial output");
+        assert_eq!(call["structured_content"]["lines"], 12);
+        assert_eq!(call["error"], "permission denied");
+        assert_eq!(call["duration_ms"], 42);
+        assert_eq!(call["output_truncated"], true);
+        assert_eq!(call["output_ref"], "sidecar://call-runtime-1");
+        assert_eq!(call["output_bytes"], 2048);
+        assert_eq!(call["ref_ids"], json!(["ref-item", "ref-outer"]));
+        assert_eq!(call["query"], "needle");
+        assert_eq!(call["action"], "read");
+        assert_eq!(call["success"], false);
+        assert_eq!(call["metadata"]["source"], "runtime-tool");
+    }
+
+    #[test]
+    fn canonical_tool_item_preserves_interrupted_status() {
+        let event = event(
+            "item-interrupted",
+            1,
+            "item.completed",
+            json!({"item": canonical_tool_item_with_status("interrupted")}),
+        );
+
+        let tool_calls = tool_calls_from_events(&[event]);
+
+        assert_eq!(tool_calls[0]["status"], "interrupted");
+        assert_eq!(tool_calls[0]["success"], false);
+    }
+
+    #[test]
+    fn canonical_tool_projection_does_not_downgrade_completed_item_with_late_update() {
+        let events = vec![
+            event(
+                "item-started",
+                1,
+                "item.started",
+                canonical_tool_item("inProgress", false),
+            ),
+            event(
+                "item-completed",
+                2,
+                "item.completed",
+                canonical_tool_item("completed", true),
+            ),
+            event(
+                "item-updated-late",
+                3,
+                "item.updated",
+                canonical_tool_item("inProgress", false),
+            ),
+        ];
+
+        let tool_calls = tool_calls_from_events(&events);
+
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0]["status"], "completed");
+        assert_eq!(tool_calls[0]["output"], "partial output");
+    }
+
+    #[test]
+    fn canonical_tool_projection_uses_outer_event_envelope_facts() {
+        let mut payload = canonical_tool_item("completed", true);
+        payload["item"]["threadId"] = json!("placeholder-thread");
+        payload["item"]["turnId"] = json!("placeholder-turn");
+        payload["item"]["sequence"] = json!(999);
+        payload["item"]["createdAtMs"] = json!(1);
+        payload["item"]["updatedAtMs"] = json!(2);
+        payload["item"]["completedAtMs"] = json!(3);
+        let mut completed = event("item-completed", 42, "item.completed", payload);
+        completed.thread_id = Some("outer-thread".to_string());
+        completed.turn_id = Some("outer-turn".to_string());
+        completed.timestamp = "2026-07-13T01:23:45Z".to_string();
+
+        let extracted = current_tool_item_from_event(&completed).expect("canonical tool item");
+        assert_eq!(extracted.thread_id.as_deref(), Some("outer-thread"));
+        assert_eq!(extracted.turn_id.as_deref(), Some("outer-turn"));
+        assert_eq!(extracted.sequence, 42);
+        assert_eq!(
+            extracted.completed_at.as_deref(),
+            Some("2026-07-13T01:23:45Z")
+        );
+
+        let tool_calls = tool_calls_from_events(&[completed]);
+
+        assert_eq!(tool_calls[0]["turn_id"], "outer-turn");
+        assert_eq!(tool_calls[0]["timestamp"], "2026-07-13T01:23:45Z");
+    }
+
+    fn event(event_id: &str, sequence: u64, event_type: &str, payload: Value) -> AgentEvent {
+        AgentEvent {
+            event_id: event_id.to_string(),
+            sequence,
+            session_id: "session-1".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: event_type.to_string(),
+            timestamp: "2026-07-13T00:00:00Z".to_string(),
+            payload,
+        }
+    }
+
+    fn canonical_tool_item(status: &str, terminal: bool) -> Value {
+        let mut item = canonical_tool_item_with_status(status);
+        if terminal {
+            item["completedAtMs"] = json!(1_783_900_000_042_i64);
+            item["payload"]["arguments"] = json!([]);
+            item["payload"]["output"] = json!({
+                "text": "partial output",
+                "structuredContent": {"lines": 12},
+                "error": "permission denied",
+                "durationMs": 42,
+                "truncated": true,
+                "outputRef": "sidecar://call-runtime-1"
+            });
+            item["metadata"]["output_bytes"] = json!(2048);
+            item["metadata"]["ref_ids"] = json!(["ref-item"]);
+            item["metadata"]["action"] = json!("read");
+        }
+        let ref_ids = if terminal {
+            json!(["ref-outer"])
+        } else {
+            json!([])
+        };
+        json!({
+            "item": item,
+            "refIds": ref_ids
+        })
+    }
+
+    fn canonical_tool_item_with_status(status: &str) -> Value {
+        json!({
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "itemId": "item-display-1",
+            "sequence": 1,
+            "ordinal": 1,
+            "createdAtMs": 1_783_900_000_000_i64,
+            "updatedAtMs": 1_783_900_000_010_i64,
+            "kind": "tool",
+            "status": status,
+            "payload": {
+                "type": "tool",
+                "call_id": "call-runtime-1",
+                "name": "read_file",
+                "arguments": [
+                    {"name": "path", "value": "/workspace/README.md"},
+                    {"name": "line_start", "value": "1"},
+                    {"name": "query", "value": "needle"}
+                ]
+            },
+            "metadata": {"source": "runtime-tool"}
+        })
     }
 }

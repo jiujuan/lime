@@ -60,6 +60,7 @@ export {
   getAgentRuntimeCapabilityManifest,
   getAgentRuntimeFileCheckpoint,
   getAgentRuntimeThreadRead,
+  readAgentRuntimeThread,
   interruptAgentRuntimeTurn,
   listAgentRuntimeFileCheckpoints,
   promoteAgentRuntimeQueuedTurn,

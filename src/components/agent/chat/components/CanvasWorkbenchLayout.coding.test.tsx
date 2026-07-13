@@ -1417,7 +1417,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
           ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
         absolutePath:
           "/workspace/.lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
-        previousContent: null,
+        previousContent: "export function greeting() { return 'Hello Lime'; }",
       } satisfies CanvasWorkbenchDefaultPreview,
       loadFilePreview: vi.fn(async (path: string) => ({
         path,

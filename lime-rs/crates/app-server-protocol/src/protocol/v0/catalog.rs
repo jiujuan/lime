@@ -39,6 +39,20 @@ pub struct AppServerRequestSerializationScopeSpec {
     pub scope: AppServerRequestSerializationScope,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum AppServerRequestAccess {
+    Exclusive,
+    SharedRead,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AppServerRequestAccessSpec {
+    pub method: &'static str,
+    pub access: AppServerRequestAccess,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum AppServerRequestMethod {
     #[serde(rename = "initialize")]
@@ -107,6 +121,14 @@ pub enum AppServerRequestMethod {
     AgentSessionReviewDecisionSave,
     #[serde(rename = "agentSession/list")]
     AgentSessionList,
+    #[serde(rename = "thread/read")]
+    ThreadRead,
+    #[serde(rename = "thread/list")]
+    ThreadList,
+    #[serde(rename = "thread/turns/list")]
+    ThreadTurnsList,
+    #[serde(rename = "thread/items/list")]
+    ThreadItemsList,
     #[serde(rename = "agentSession/update")]
     AgentSessionUpdate,
     #[serde(rename = "agentSession/archiveMany")]
@@ -663,6 +685,10 @@ impl AppServerRequestMethod {
             }
             Self::AgentSessionReviewDecisionSave => METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
             Self::AgentSessionList => METHOD_AGENT_SESSION_LIST,
+            Self::ThreadRead => METHOD_THREAD_READ,
+            Self::ThreadList => METHOD_THREAD_LIST,
+            Self::ThreadTurnsList => METHOD_THREAD_TURNS_LIST,
+            Self::ThreadItemsList => METHOD_THREAD_ITEMS_LIST,
             Self::AgentSessionUpdate => METHOD_AGENT_SESSION_UPDATE,
             Self::AgentSessionArchiveMany => METHOD_AGENT_SESSION_ARCHIVE_MANY,
             Self::AgentSessionDelete => METHOD_AGENT_SESSION_DELETE,
@@ -975,6 +1001,10 @@ impl AppServerRequestMethod {
             }
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE => Some(Self::AgentSessionReviewDecisionSave),
             METHOD_AGENT_SESSION_LIST => Some(Self::AgentSessionList),
+            METHOD_THREAD_READ => Some(Self::ThreadRead),
+            METHOD_THREAD_LIST => Some(Self::ThreadList),
+            METHOD_THREAD_TURNS_LIST => Some(Self::ThreadTurnsList),
+            METHOD_THREAD_ITEMS_LIST => Some(Self::ThreadItemsList),
             METHOD_AGENT_SESSION_UPDATE => Some(Self::AgentSessionUpdate),
             METHOD_AGENT_SESSION_ARCHIVE_MANY => Some(Self::AgentSessionArchiveMany),
             METHOD_AGENT_SESSION_DELETE => Some(Self::AgentSessionDelete),
@@ -1442,6 +1472,22 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_THREAD_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_THREAD_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_THREAD_TURNS_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_THREAD_ITEMS_LIST,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -2488,6 +2534,18 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
 
 pub const APP_SERVER_REQUEST_SERIALIZATION_SCOPES: &[AppServerRequestSerializationScopeSpec] = &[
     AppServerRequestSerializationScopeSpec {
+        method: METHOD_THREAD_READ,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: METHOD_THREAD_TURNS_LIST,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
+        method: METHOD_THREAD_ITEMS_LIST,
+        scope: AppServerRequestSerializationScope::Thread,
+    },
+    AppServerRequestSerializationScopeSpec {
         method: METHOD_AGENT_SESSION_TURN_START,
         scope: AppServerRequestSerializationScope::Thread,
     },
@@ -2585,6 +2643,37 @@ pub const APP_SERVER_REQUEST_SERIALIZATION_SCOPES: &[AppServerRequestSerializati
     },
 ];
 
+pub const APP_SERVER_REQUEST_ACCESSES: &[AppServerRequestAccessSpec] = &[
+    AppServerRequestAccessSpec {
+        method: METHOD_BROWSER_SESSION_READ,
+        access: AppServerRequestAccess::SharedRead,
+    },
+    AppServerRequestAccessSpec {
+        method: METHOD_THREAD_READ,
+        access: AppServerRequestAccess::SharedRead,
+    },
+    AppServerRequestAccessSpec {
+        method: METHOD_THREAD_LIST,
+        access: AppServerRequestAccess::SharedRead,
+    },
+    AppServerRequestAccessSpec {
+        method: METHOD_THREAD_TURNS_LIST,
+        access: AppServerRequestAccess::SharedRead,
+    },
+    AppServerRequestAccessSpec {
+        method: METHOD_THREAD_ITEMS_LIST,
+        access: AppServerRequestAccess::SharedRead,
+    },
+];
+
+pub fn app_server_request_access(method: &str) -> AppServerRequestAccess {
+    APP_SERVER_REQUEST_ACCESSES
+        .iter()
+        .find(|spec| spec.method == method)
+        .map(|spec| spec.access)
+        .unwrap_or(AppServerRequestAccess::Exclusive)
+}
+
 pub fn app_server_request_serialization_scope(
     method: &str,
 ) -> Option<AppServerRequestSerializationScope> {
@@ -2637,6 +2726,36 @@ mod tests {
         let raw: JsonRpcRequest = request.into();
         assert_eq!(raw.method, METHOD_AGENT_SESSION_TURN_START);
         assert_eq!(raw.id, RequestId::Integer(7));
+    }
+
+    #[test]
+    fn canonical_thread_read_methods_are_shared_reads() {
+        for method in [
+            METHOD_THREAD_READ,
+            METHOD_THREAD_LIST,
+            METHOD_THREAD_TURNS_LIST,
+            METHOD_THREAD_ITEMS_LIST,
+        ] {
+            assert!(is_app_server_request_method(method));
+            assert_eq!(
+                app_server_request_access(method),
+                AppServerRequestAccess::SharedRead
+            );
+        }
+        for method in [
+            METHOD_THREAD_READ,
+            METHOD_THREAD_TURNS_LIST,
+            METHOD_THREAD_ITEMS_LIST,
+        ] {
+            assert_eq!(
+                app_server_request_serialization_scope(method),
+                Some(AppServerRequestSerializationScope::Thread)
+            );
+        }
+        assert_eq!(
+            app_server_request_serialization_scope(METHOD_THREAD_LIST),
+            None
+        );
     }
 
     #[test]

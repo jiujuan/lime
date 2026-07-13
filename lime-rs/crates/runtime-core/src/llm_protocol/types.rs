@@ -13,25 +13,6 @@ pub enum LlmRole {
     Tool,
 }
 
-impl LlmRole {
-    pub(crate) fn as_wire_role(self) -> &'static str {
-        match self {
-            Self::System => "system",
-            Self::Developer => "developer",
-            Self::User => "user",
-            Self::Assistant => "assistant",
-            Self::Tool => "tool",
-        }
-    }
-
-    pub(crate) fn as_gemini_role(self) -> &'static str {
-        match self {
-            Self::Assistant => "model",
-            _ => "user",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LlmInputPart {

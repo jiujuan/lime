@@ -1,5 +1,5 @@
 use crate::skill_gate::{
-    check_skill_tool_access, normalize_skill_invocation_params,
+    check_skill_tool_access, evaluate_skill_tool_policy, normalize_skill_invocation_params,
     workspace_skill_source_for_invocation_params,
 };
 use crate::skill_result::{
@@ -138,6 +138,7 @@ pub async fn run_skill_execution<B>(
 where
     B: RuntimeSkillExecutionBackend + ?Sized,
 {
+    let policy_evaluation = evaluate_skill_tool_policy(&request.session_id, &request.params);
     check_skill_tool_access(&request.session_id, &request.params)
         .map_err(|error| RuntimeSkillExecutionError::new(error.message()))?;
 
@@ -152,6 +153,7 @@ where
             if let Some(source) = workspace_skill_source.as_ref() {
                 result = result.with_metadata(workspace_skill_source_metadata_map(source));
             }
+            result = result.with_metadata(skill_policy_metadata(&policy_evaluation));
             return Ok(result);
         }
     };
@@ -167,7 +169,17 @@ where
     if let Some(source) = workspace_skill_source.as_ref() {
         result = result.with_metadata(workspace_skill_source_metadata_map(source));
     }
+    result = result.with_metadata(skill_policy_metadata(&policy_evaluation));
     Ok(result)
+}
+
+fn skill_policy_metadata(
+    evaluation: &crate::skill_gate::SkillPolicyEvaluation,
+) -> HashMap<String, Value> {
+    HashMap::from([(
+        "policy".to_string(),
+        serde_json::to_value(evaluation).expect("skill policy evaluation is serializable"),
+    )])
 }
 
 fn read_skill_name(params: &Value) -> Result<&str, RuntimeSkillExecutionError> {
@@ -325,6 +337,20 @@ mod tests {
         assert_eq!(
             result.metadata.get("entry_source"),
             Some(&json!("at_site_search_command"))
+        );
+        assert_eq!(
+            result
+                .metadata
+                .get("policy")
+                .and_then(|value| value.get("decision")),
+            Some(&json!("allow"))
+        );
+        assert_eq!(
+            result
+                .metadata
+                .get("policy")
+                .and_then(|value| value.get("source")),
+            Some(&json!("session_skill_gate"))
         );
     }
 

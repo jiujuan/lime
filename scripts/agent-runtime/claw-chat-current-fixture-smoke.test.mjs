@@ -1,6 +1,16 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { containsForbiddenTraceEvidenceFragment } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
+import { APPROVAL_REQUEST_RESUME_REQUEST_ID } from "./claw-chat-current-fixture-constants.mjs";
+import {
+  buildCanonicalToolItem,
+  summarizeRequestInput,
+} from "./claw-chat-current-fixture-backend-script.mjs";
+import {
+  summarizeApprovalDecisionReadModel,
+  summarizeApprovalSessionCacheReadModel,
+} from "./claw-chat-current-fixture-approval-read-model.mjs";
+import { buildApprovalRequestDecisionScenarioAssertions } from "./claw-chat-current-fixture-approval-assertions.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import { registerImageContentAndTeamSmokeGuards } from "./claw-chat-current-fixture-smoke-domain-guards.mjs";
 import { registerSkillsRuntimeSmokeGuards } from "./claw-chat-current-fixture-smoke-skills-runtime-guards.mjs";
@@ -395,8 +405,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("EVENT_READ_PROBE_TOOL_CALL_ID");
     expect(content).toContain('const EVENT_READ_PROBE_TOOL_NAME = "WebFetch"');
     expect(content).toContain("EVENT_READ_PROBE_TOOL_OUTPUT");
-    expect(content).toContain('type: "tool.started"');
-    expect(content).toContain('type: "tool.result"');
+    expect(content).toContain('type: "item.started"');
+    expect(content).toContain('type: "item.completed"');
     expect(content).toContain("hasToolStarted");
     expect(content).toContain("hasToolResult");
     expect(content).toContain("collectReadModelToolCalls");
@@ -463,12 +473,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
       approvalCancelBranchStart,
       approvalCancelBranchEnd,
     );
-    expect(approvalCancelCompletionBranch).toContain('type: "tool.failed"');
+    expect(approvalCancelCompletionBranch).toContain('type: "item.completed"');
+    expect(approvalCancelCompletionBranch).toContain('status: "failed"');
     expect(approvalCancelCompletionBranch).toContain('type: "turn.canceled"');
     expect(approvalCancelCompletionBranch).toContain(
       'reason: "approval_request_cancelled"',
     );
-    expect(content).toContain('!emitTypes.includes("tool.result")');
     expect(content).toContain("approvalRequestDeclineNoToolExecuted");
     expect(content).toContain("approvalRequestCancelNoToolExecuted");
     expect(content).toContain("readModelApprovalRequestCancelCanceled");
@@ -634,6 +644,197 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(regressionContent).toContain(
       "Inputbar rich draft restore output-free cancel Electron fixture",
+    );
+  });
+
+  it("counts current AgentAttachment images by protocol kind", () => {
+    expect(
+      summarizeRequestInput({
+        input: {
+          text: "inspect image",
+          attachments: [
+            {
+              kind: "image",
+              uri: "data:image/png;base64,abc",
+              metadata: { mediaType: "image/png", index: 0 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      attachmentCount: 1,
+      imageAttachmentCount: 1,
+    });
+  });
+
+  it("builds typed canonical tool items for the external fixture", () => {
+    expect(
+      buildCanonicalToolItem({
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "tool-1",
+        ordinal: 2,
+        callId: "tool-1",
+        name: "browser_control",
+        arguments: { command: "open https://example.com" },
+      }),
+    ).toMatchObject({
+      item: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "tool-1",
+        ordinal: 2,
+        kind: "tool",
+        status: "inProgress",
+        payload: {
+          type: "tool",
+          call_id: "tool-1",
+          name: "browser_control",
+          arguments: [{ name: "command", value: "open https://example.com" }],
+          output: null,
+        },
+      },
+    });
+  });
+
+  it("keeps retired raw tool wire out of external backend emissions", () => {
+    const backendEventSources = [
+      "scripts/agent-runtime/claw-chat-current-fixture-approval-backend-events.mjs",
+      "scripts/agent-runtime/claw-chat-current-fixture-backend-tool-skill-events.mjs",
+    ].map((file) => fs.readFileSync(file, "utf8"));
+    const retiredToolWire =
+      /type: "tool\.(?:started|args|result|failed|args\.delta|input\.delta)"/u;
+
+    for (const source of backendEventSources) {
+      expect(source).not.toMatch(retiredToolWire);
+    }
+  });
+
+  it("reads session-cache auto-resolution from canonical Approval", () => {
+    expect(
+      summarizeApprovalSessionCacheReadModel(
+        {
+          detail: {
+            thread_read: {
+              items: [
+                {
+                  kind: "approval",
+                  status: "completed",
+                  payload: {
+                    type: "approval",
+                    request_id: "permission-turn-2",
+                    action: { kind: "tool_confirmation", description: "" },
+                    decision: "approvedForSession",
+                  },
+                },
+              ],
+            },
+          },
+        },
+        "turn-2",
+      ),
+    ).toMatchObject({
+      includesApprovalSessionCacheHit: true,
+      includesAllowForSession: true,
+      includesSecondPermissionRequestId: true,
+      includesActionRequiredForSecondPermission: false,
+      includesActionResolvedForSecondPermission: true,
+    });
+  });
+
+  it.each([
+    ["decline", "denied", false],
+    ["cancel", "abort", true],
+  ])(
+    "reads %s resolution from canonical Approval",
+    (decision, canonicalDecision, includesCanceled) => {
+      expect(
+        summarizeApprovalDecisionReadModel(
+          {
+            detail: {
+              thread_read: {
+                runtime_summary: {
+                  latestTurnStatus:
+                    decision === "cancel" ? "canceled" : "completed",
+                },
+                items: [
+                  {
+                    kind: "approval",
+                    status: "completed",
+                    payload: {
+                      type: "approval",
+                      request_id: APPROVAL_REQUEST_RESUME_REQUEST_ID,
+                      action: { kind: "tool_confirmation", description: "" },
+                      decision: canonicalDecision,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          decision,
+        ),
+      ).toMatchObject({
+        includesActionResolved: true,
+        includesDecision: true,
+        includesCanceled,
+      });
+    },
+  );
+
+  it("reads terminal Approval from the canonical session read model", () => {
+    expect(
+      summarizeApprovalDecisionReadModel(
+        {
+          detail: {
+            thread_read: {
+              runtime_summary: { latestTurnStatus: "completed" },
+              thread_items: [
+                {
+                  type: "approval_request",
+                  request_id: APPROVAL_REQUEST_RESUME_REQUEST_ID,
+                  status: "completed",
+                  response: "denied",
+                },
+              ],
+            },
+          },
+        },
+        "decline",
+      ),
+    ).toMatchObject({
+      includesActionResolved: true,
+      includesDecision: true,
+    });
+  });
+
+  it("requires exactly one compact approval record", () => {
+    const buildAssertions = (recordCount) =>
+      buildApprovalRequestDecisionScenarioAssertions({
+        appServerRequestMethods: [],
+        approvalRequestResumeTurnStart: { turnId: "turn-1" },
+        backendLedger: [],
+        isApprovalRequestCancelScenario: false,
+        isApprovalRequestDeclineScenario: true,
+        summary: {
+          guiApprovalRequestDeclineCompleted: {
+            approvalRecordShape: {
+              recordCount,
+              promptInRecord: false,
+              maxLineBreaks: 0,
+              legacyDetailFragmentHits: [],
+            },
+          },
+        },
+      });
+
+    expect(buildAssertions(1).guiApprovalRequestDeclineRecordCompact).toBe(
+      true,
+    );
+    expect(buildAssertions(2).guiApprovalRequestDeclineRecordCompact).toBe(
+      false,
     );
   });
 
@@ -1074,12 +1275,11 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('tool_family: "mcp"');
     expect(content).toContain('mcp_server: "docs"');
     expect(content).toContain('mcp_tool: "diagnostic_probe"');
+    expect(content).toContain("buildCanonicalToolItem({");
+    expect(content).toContain('status: "completed"');
     expect(content).toContain("structuredContent:");
-    expect(content).toContain("structured_content:");
-    expect(content).toContain("result: {");
-    expect(content).toContain("success: true,");
     expect(content).toContain(
-      "output: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)}",
+      "text: ${JSON.stringify(MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT)}",
     );
     expect(content).toContain("waitForGuiMcpStructuredContentCompleted");
     expect(content).toContain(

@@ -57,6 +57,7 @@ interface ExecuteAgentStreamSubmitOptions {
     promptText: string,
     options?: { requireTerminal?: boolean; turnId?: string | null },
   ) => Promise<boolean>;
+  refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   sessionIdRef: MutableRefObject<string | null>;
   getWorkspaceIdForSubmit: () => string | undefined;
   getSyncedSessionExecutionStrategy: (
@@ -181,6 +182,7 @@ export async function executeAgentStreamSubmit(
     runtime,
     ensureSession,
     attemptSilentTurnRecovery,
+    refreshSessionReadModel,
     sessionIdRef,
     getWorkspaceIdForSubmit,
     getSyncedSessionExecutionStrategy,
@@ -329,7 +331,9 @@ export async function executeAgentStreamSubmit(
     observer,
     onWriteFile,
     callbacks: {
-      activateStream: callbacks.activateStream,
+      activateStream: expectingQueue
+        ? () => undefined
+        : callbacks.activateStream,
       isStreamActivated: callbacks.isStreamActivated,
       clearOptimisticItem: callbacks.clearOptimisticItem,
       clearOptimisticTurn: callbacks.clearOptimisticTurn,
@@ -361,7 +365,9 @@ export async function executeAgentStreamSubmit(
     eventName,
     expectingQueue,
     onSubmitAccepted: () => {
-      requestState.startTerminalRecoveryPoll?.();
+      if (!expectingQueue) {
+        requestState.startTerminalRecoveryPoll?.();
+      }
     },
     requestState,
     submit: async () => {
@@ -430,4 +436,9 @@ export async function executeAgentStreamSubmit(
       await runtime.submitOp(submitOp);
     },
   });
+
+  if (expectingQueue) {
+    callbacks.disposeListener();
+    await refreshSessionReadModel(resolvedActiveSessionId);
+  }
 }

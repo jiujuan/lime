@@ -6,12 +6,13 @@
 
 use super::output_refs;
 use super::{OutputSnapshotStore, StoredSession};
+use agent_protocol::{ItemStatus, ThreadItem, ThreadItemPayload, ToolArgument};
 use app_server_protocol::{AgentAttachment, AgentEvent, AgentInput};
 use model_provider::current_client::{
     CurrentProviderContent, CurrentProviderMessage, CurrentProviderToolCall,
     CurrentProviderToolResult,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 
 pub(in crate::runtime) fn provider_history(
     stored: &StoredSession,
@@ -74,15 +75,15 @@ where
                     assistant_content.push(CurrentProviderContent::Reasoning(text));
                 }
             }
-            "tool.started" => {
-                flush_tool_results(&mut messages, &mut tool_results);
-                if let Some(call) = tool_call_from_event(event) {
+            "item.started" => {
+                if let Some(call) = canonical_tool_call_from_event(event) {
+                    flush_tool_results(&mut messages, &mut tool_results);
                     assistant_content.push(CurrentProviderContent::ToolCall(call));
                 }
             }
-            "tool.result" | "tool.failed" => {
-                flush_assistant(&mut messages, &mut assistant_content);
-                if let Some(result) = tool_result_from_event(event, &mut output_content) {
+            "item.completed" => {
+                if let Some(result) = canonical_tool_result_from_event(event, &mut output_content) {
+                    flush_assistant(&mut messages, &mut assistant_content);
                     tool_results.push(CurrentProviderContent::ToolResult(result));
                 }
             }
@@ -115,6 +116,96 @@ fn flush_tool_results(
         return;
     }
     messages.push(CurrentProviderMessage::tool(std::mem::take(tool_results)));
+}
+
+fn canonical_tool_call_from_event(event: &AgentEvent) -> Option<CurrentProviderToolCall> {
+    let item = canonical_tool_item(event)?;
+    let ThreadItemPayload::Tool {
+        call_id,
+        name,
+        arguments,
+        ..
+    } = item.payload
+    else {
+        return None;
+    };
+    let (arguments, raw_arguments) = canonical_tool_arguments(&arguments);
+    Some(CurrentProviderToolCall {
+        id: call_id,
+        name,
+        arguments,
+        raw_arguments,
+    })
+}
+
+fn canonical_tool_result_from_event<F>(
+    event: &AgentEvent,
+    output_content: &mut F,
+) -> Option<CurrentProviderToolResult>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let item = canonical_tool_item(event)?;
+    let status = item.status;
+    let ThreadItemPayload::Tool {
+        call_id,
+        name,
+        output,
+        ..
+    } = item.payload
+    else {
+        return None;
+    };
+    let output = output?;
+    let output_ref = output.output_ref;
+    let output_text = output_ref
+        .as_deref()
+        .and_then(output_content)
+        .or(output.text)
+        .or_else(|| output.structured_content.map(|content| content.to_string()))
+        .unwrap_or_default();
+    Some(CurrentProviderToolResult {
+        call_id,
+        name,
+        success: status == ItemStatus::Completed,
+        output: output_text,
+        error: output.error.filter(|error| !error.trim().is_empty()),
+    })
+}
+
+fn canonical_tool_item(event: &AgentEvent) -> Option<ThreadItem> {
+    if !matches!(event.event_type.as_str(), "item.started" | "item.completed") {
+        return None;
+    }
+    serde_json::from_value(event.payload.get("item")?.clone()).ok()
+}
+
+fn canonical_tool_arguments(arguments: &[ToolArgument]) -> (Value, String) {
+    let arguments = if let [argument] = arguments {
+        if argument.name == "value" {
+            serde_json::from_str(&argument.value)
+                .unwrap_or_else(|_| Value::String(argument.value.clone()))
+        } else {
+            canonical_tool_argument_object(arguments)
+        }
+    } else {
+        canonical_tool_argument_object(arguments)
+    };
+    let raw_arguments = serde_json::to_string(&arguments).unwrap_or_else(|_| "{}".to_string());
+    (arguments, raw_arguments)
+}
+
+fn canonical_tool_argument_object(arguments: &[ToolArgument]) -> Value {
+    Value::Object(
+        arguments
+            .iter()
+            .map(|argument| {
+                let value = serde_json::from_str(&argument.value)
+                    .unwrap_or_else(|_| Value::String(argument.value.clone()));
+                (argument.name.clone(), value)
+            })
+            .collect(),
+    )
 }
 
 fn user_message_from_event(event: &AgentEvent) -> Option<CurrentProviderMessage> {
@@ -191,91 +282,8 @@ fn attachment_media_type(attachment: &AgentAttachment) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn tool_call_from_event(event: &AgentEvent) -> Option<CurrentProviderToolCall> {
-    let payload = provider_event_payload(&event.payload);
-    let id = string_field(
-        payload,
-        &["tool_id", "toolId", "toolCallId", "tool_call_id", "id"],
-    )?;
-    let name = string_field(payload, &["tool_name", "toolName", "name"])?;
-    let (arguments, raw_arguments) = tool_arguments(payload);
-    Some(CurrentProviderToolCall {
-        id,
-        name,
-        arguments,
-        raw_arguments,
-    })
-}
-
-fn tool_result_from_event<F>(
-    event: &AgentEvent,
-    output_content: &mut F,
-) -> Option<CurrentProviderToolResult>
-where
-    F: FnMut(&str) -> Option<String>,
-{
-    let provider_payload = provider_event_payload(&event.payload);
-    let result = provider_payload.get("result").unwrap_or(provider_payload);
-    let call_id = string_field(
-        &event.payload,
-        &["tool_id", "toolId", "toolCallId", "tool_call_id", "id"],
-    )
-    .or_else(|| {
-        string_field(
-            provider_payload,
-            &["tool_id", "toolId", "toolCallId", "tool_call_id", "id"],
-        )
-    })?;
-    let name = string_field(&event.payload, &["tool_name", "toolName", "name"])
-        .or_else(|| string_field(provider_payload, &["tool_name", "toolName", "name"]))
-        .or_else(|| string_field(result, &["tool_name", "toolName", "name"]))
-        .unwrap_or_else(|| "tool".to_string());
-    let success = bool_field(result, &["success"])
-        .or_else(|| bool_field(provider_payload, &["success"]))
-        .or_else(|| bool_field(&event.payload, &["success"]))
-        .unwrap_or(event.event_type == "tool.result");
-    let output = output_ref(&event.payload)
-        .or_else(|| output_ref(provider_payload))
-        .and_then(|output_ref| output_content(&output_ref))
-        .or_else(|| output_text(result))
-        .or_else(|| output_text(provider_payload))
-        .or_else(|| output_text(&event.payload))
-        .unwrap_or_default();
-    let error = string_field(result, &["error", "message", "reason"])
-        .or_else(|| string_field(provider_payload, &["error", "message", "reason"]))
-        .or_else(|| string_field(&event.payload, &["error", "message", "reason"]))
-        .filter(|value| !value.is_empty());
-    Some(CurrentProviderToolResult {
-        call_id,
-        name,
-        success,
-        output,
-        error,
-    })
-}
-
 fn provider_event_payload(payload: &Value) -> &Value {
     payload.get("runtimeEvent").unwrap_or(payload)
-}
-
-fn tool_arguments(payload: &Value) -> (Value, String) {
-    let value = payload
-        .get("arguments")
-        .or_else(|| payload.get("input"))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    match value {
-        Value::String(raw_arguments) => {
-            let arguments = serde_json::from_str(&raw_arguments)
-                .unwrap_or_else(|_| json!({ "_raw": raw_arguments }));
-            (arguments, raw_arguments)
-        }
-        arguments => {
-            let raw_arguments =
-                serde_json::to_string(&arguments).unwrap_or_else(|_| "{}".to_string());
-            (arguments, raw_arguments)
-        }
-    }
 }
 
 fn text_from_payload(payload: &Value) -> Option<String> {
@@ -288,42 +296,11 @@ fn text_from_payload(payload: &Value) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn output_text(payload: &Value) -> Option<String> {
-    payload
-        .get("output")
-        .or_else(|| payload.get("outputPreview"))
-        .or_else(|| payload.get("output_preview"))
-        .or_else(|| payload.get("text"))
-        .or_else(|| payload.get("content"))
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-}
-
-fn output_ref(payload: &Value) -> Option<String> {
-    string_field(
-        payload,
-        &["outputRef", "output_ref", "contentRef", "content_ref"],
-    )
-}
-
-fn string_field(payload: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .filter_map(|key| payload.get(*key))
-        .find_map(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-fn bool_field(payload: &Value, keys: &[&str]) -> Option<bool> {
-    keys.iter()
-        .filter_map(|key| payload.get(*key))
-        .find_map(Value::as_bool)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_protocol::{ItemId, ItemKind, SessionId, ThreadId, ToolOutput, TurnId};
+    use serde_json::json;
 
     fn event(sequence: u64, event_type: &str, payload: Value) -> AgentEvent {
         AgentEvent {
@@ -338,8 +315,189 @@ mod tests {
         }
     }
 
+    fn canonical_tool_event(
+        sequence: u64,
+        event_type: &str,
+        status: ItemStatus,
+        call_id: &str,
+        name: &str,
+        arguments: Value,
+        output: Option<ToolOutput>,
+    ) -> AgentEvent {
+        let arguments = arguments
+            .as_object()
+            .expect("canonical tool arguments object")
+            .iter()
+            .map(|(name, value)| ToolArgument {
+                name: name.clone(),
+                value: value
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| value.to_string()),
+            })
+            .collect();
+        let item = ThreadItem {
+            session_id: SessionId::new("session-1"),
+            thread_id: ThreadId::new("thread-1"),
+            turn_id: TurnId::new("turn-1"),
+            item_id: ItemId::new(call_id),
+            sequence,
+            ordinal: 1,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            completed_at_ms: status.is_terminal().then_some(2),
+            kind: ItemKind::Tool,
+            status,
+            payload: ThreadItemPayload::Tool {
+                call_id: call_id.to_string(),
+                name: name.to_string(),
+                arguments,
+                output,
+            },
+            metadata: Value::Null,
+        };
+        event(sequence, event_type, json!({ "item": item }))
+    }
+
     #[test]
-    fn history_preserves_user_assistant_tool_call_and_tool_result_order() {
+    fn canonical_history_preserves_tool_call_result_and_order() {
+        let arguments = json!({ "path": "README.md" });
+        let messages = messages_from_events(
+            &[
+                event(
+                    1,
+                    "message.created",
+                    json!({ "input": { "text": "read it", "attachments": [] } }),
+                ),
+                canonical_tool_event(
+                    2,
+                    "item.started",
+                    ItemStatus::InProgress,
+                    "call-read",
+                    "Read",
+                    arguments.clone(),
+                    None,
+                ),
+                canonical_tool_event(
+                    3,
+                    "item.completed",
+                    ItemStatus::Completed,
+                    "call-read",
+                    "Read",
+                    arguments,
+                    Some(ToolOutput {
+                        text: Some("contents".to_string()),
+                        ..ToolOutput::default()
+                    }),
+                ),
+                event(4, "message.delta", json!({ "text": "Done." })),
+            ],
+            |_| None,
+        );
+
+        assert_eq!(messages.len(), 4);
+        assert!(matches!(
+            &messages[1].content[..],
+            [CurrentProviderContent::ToolCall(call)]
+                if call.id == "call-read"
+                    && call.name == "Read"
+                    && call.arguments == json!({ "path": "README.md" })
+        ));
+        assert!(matches!(
+            &messages[2].content[..],
+            [CurrentProviderContent::ToolResult(result)]
+                if result.call_id == "call-read" && result.success && result.output == "contents"
+        ));
+        assert!(matches!(
+            &messages[3].content[..],
+            [CurrentProviderContent::Text(text)] if text == "Done."
+        ));
+    }
+
+    #[test]
+    fn canonical_history_preserves_failed_tool_result() {
+        let messages = messages_from_events(
+            &[canonical_tool_event(
+                1,
+                "item.completed",
+                ItemStatus::Failed,
+                "call-failed",
+                "Read",
+                json!({ "path": "missing.md" }),
+                Some(ToolOutput {
+                    text: Some("read failed".to_string()),
+                    error: Some("not found".to_string()),
+                    ..ToolOutput::default()
+                }),
+            )],
+            |_| None,
+        );
+
+        assert!(matches!(
+            &messages[0].content[..],
+            [CurrentProviderContent::ToolResult(result)]
+                if result.call_id == "call-failed"
+                    && !result.success
+                    && result.output == "read failed"
+                    && result.error.as_deref() == Some("not found")
+        ));
+    }
+
+    #[test]
+    fn canonical_history_reads_persisted_output_ref() {
+        let messages = messages_from_events(
+            &[canonical_tool_event(
+                1,
+                "item.completed",
+                ItemStatus::Completed,
+                "call-large",
+                "Read",
+                json!({ "path": "large.txt" }),
+                Some(ToolOutput {
+                    text: Some("preview".to_string()),
+                    truncated: true,
+                    output_ref: Some("output://large".to_string()),
+                    ..ToolOutput::default()
+                }),
+            )],
+            |output_ref| (output_ref == "output://large").then(|| "full output".to_string()),
+        );
+
+        assert!(matches!(
+            &messages[0].content[..],
+            [CurrentProviderContent::ToolResult(result)]
+                if result.call_id == "call-large" && result.output == "full output"
+        ));
+    }
+
+    #[test]
+    fn canonical_history_ignores_outer_event_output_ref() {
+        let mut event = canonical_tool_event(
+            1,
+            "item.completed",
+            ItemStatus::Completed,
+            "call-large",
+            "Read",
+            json!({ "path": "large.txt" }),
+            Some(ToolOutput {
+                text: Some("preview".to_string()),
+                ..ToolOutput::default()
+            }),
+        );
+        event.payload["outputRef"] = json!("output://outer");
+
+        let messages = messages_from_events(&[event], |output_ref| {
+            (output_ref == "output://outer").then(|| "outer output".to_string())
+        });
+
+        assert!(matches!(
+            &messages[0].content[..],
+            [CurrentProviderContent::ToolResult(result)] if result.output == "preview"
+        ));
+    }
+
+    #[test]
+    fn raw_tool_events_do_not_enter_provider_history() {
         let messages = messages_from_events(
             &[
                 event(
@@ -369,6 +527,16 @@ mod tests {
                 ),
                 event(
                     6,
+                    "tool.failed",
+                    json!({ "toolId": "call-failed", "toolName": "Read", "error": "failed" }),
+                ),
+                event(
+                    7,
+                    "tool.completed",
+                    json!({ "toolId": "call-completed", "toolName": "Read", "output": "done" }),
+                ),
+                event(
+                    8,
                     "message.delta",
                     json!({ "runtimeEvent": { "text": "Done." } }),
                 ),
@@ -376,49 +544,15 @@ mod tests {
             |_| None,
         );
 
-        assert_eq!(messages.len(), 4);
+        assert_eq!(messages.len(), 2);
         assert!(matches!(
             &messages[0].content[..],
             [CurrentProviderContent::Text(text)] if text == "read it"
         ));
         assert!(matches!(
             &messages[1].content[..],
-            [CurrentProviderContent::Reasoning(reasoning), CurrentProviderContent::Text(text), CurrentProviderContent::ToolCall(call)]
-                if reasoning == "inspect" && text == "I will read it." && call.id == "call-read" && call.raw_arguments == "{\"path\":\"README.md\"}"
-        ));
-        assert!(matches!(
-            &messages[2].content[..],
-            [CurrentProviderContent::ToolResult(result)] if result.call_id == "call-read" && result.output == "contents"
-        ));
-        assert!(matches!(
-            &messages[3].content[..],
-            [CurrentProviderContent::Text(text)] if text == "Done."
-        ));
-    }
-
-    #[test]
-    fn history_uses_persisted_output_when_tool_event_contains_only_preview() {
-        let messages = messages_from_events(
-            &[event(
-                1,
-                "tool.result",
-                json!({
-                    "toolCallId": "call-large",
-                    "toolName": "Read",
-                    "outputRef": "output://large",
-                    "runtimeEvent": {
-                        "tool_id": "call-large",
-                        "tool_name": "Read",
-                        "result": { "success": true, "output": "preview" }
-                    }
-                }),
-            )],
-            |output_ref| (output_ref == "output://large").then(|| "full output".to_string()),
-        );
-
-        assert!(matches!(
-            &messages[0].content[..],
-            [CurrentProviderContent::ToolResult(result)] if result.call_id == "call-large" && result.name == "Read" && result.output == "full output"
+            [CurrentProviderContent::Reasoning(reasoning), CurrentProviderContent::Text(before), CurrentProviderContent::Text(after)]
+                if reasoning == "inspect" && before == "I will read it." && after == "Done."
         ));
     }
 

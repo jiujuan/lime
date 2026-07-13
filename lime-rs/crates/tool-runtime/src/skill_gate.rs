@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 
 use crate::tool_definition::RuntimeToolDefinition;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub const IMAGE_GENERATION_CONTRACT_KEY: &str = "image_generation";
@@ -76,6 +77,34 @@ struct SkillToolSessionAccess {
     allowed_skills: Option<HashSet<String>>,
     skill_sources: HashMap<String, SkillToolSessionSkillSource>,
     allowed_capabilities: HashSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillPolicyDecision {
+    Allow,
+    Deny,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillTokenBudgetDecision {
+    NotEvaluated,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPolicyEvaluation {
+    pub decision: SkillPolicyDecision,
+    pub reason: String,
+    pub source: String,
+    pub authority: String,
+    pub skill_name: String,
+    pub required_capabilities: Vec<String>,
+    pub missing_capabilities: Vec<String>,
+    pub estimated_tokens: Option<u32>,
+    pub max_visible_tokens: Option<u32>,
+    pub token_budget: SkillTokenBudgetDecision,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,18 +272,81 @@ pub fn check_skill_tool_access(
     session_id: &str,
     params: &Value,
 ) -> Result<(), SkillToolAccessError> {
-    if !is_skill_tool_enabled_for_session(session_id) {
-        return Err(SkillToolAccessError::Disabled);
-    }
-    if let Some(skill_name) = params.get("skill").and_then(Value::as_str) {
-        if !is_skill_allowed_for_session(session_id, skill_name) {
-            return Err(SkillToolAccessError::NotAllowed {
-                skill_name: skill_name.to_string(),
-            });
+    let evaluation = evaluate_skill_tool_policy(session_id, params);
+    if evaluation.decision == SkillPolicyDecision::Deny {
+        if evaluation.reason == "session_skill_runtime_disabled" {
+            return Err(SkillToolAccessError::Disabled);
         }
+        return Err(SkillToolAccessError::NotAllowed {
+            skill_name: evaluation.skill_name,
+        });
     }
 
     Ok(())
+}
+
+pub fn evaluate_skill_tool_policy(session_id: &str, params: &Value) -> SkillPolicyEvaluation {
+    let skill_name = params
+        .get("skill")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("")
+        .to_string();
+    let mut evaluation = SkillPolicyEvaluation {
+        decision: SkillPolicyDecision::Deny,
+        reason: "session_skill_runtime_disabled".to_string(),
+        source: "session_skill_gate".to_string(),
+        authority: "session_runtime".to_string(),
+        skill_name: skill_name.clone(),
+        required_capabilities: skill_required_turn_capability(&skill_name)
+            .into_iter()
+            .map(ToString::to_string)
+            .collect(),
+        missing_capabilities: Vec::new(),
+        estimated_tokens: None,
+        max_visible_tokens: None,
+        token_budget: SkillTokenBudgetDecision::NotEvaluated,
+    };
+
+    let session_id = session_id.trim();
+    let store = session_access_store();
+    let guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    let Some(access) = guard.get(session_id) else {
+        return evaluation;
+    };
+    if !access.enabled {
+        return evaluation;
+    }
+    evaluation.reason = "skill_allowlist_checked".to_string();
+
+    let allowed_by_capability =
+        is_skill_allowed_by_turn_capability(&skill_name, &access.allowed_capabilities);
+    let allowed_by_name = access.allowed_skills.as_ref().is_none_or(|allowed| {
+        skill_name_gate_aliases(&skill_name)
+            .iter()
+            .any(|alias| allowed.contains(alias))
+    });
+    if !allowed_by_capability && !allowed_by_name {
+        evaluation.missing_capabilities = evaluation.required_capabilities.clone();
+        evaluation.reason = "skill_not_allowlisted".to_string();
+        return evaluation;
+    }
+
+    if let Some(source) = skill_name_gate_aliases(&skill_name)
+        .iter()
+        .find_map(|alias| access.skill_sources.get(alias))
+    {
+        evaluation.source = source.source.clone();
+        evaluation.authority = source.approval.clone();
+    }
+
+    evaluation.decision = SkillPolicyDecision::Allow;
+    evaluation.reason = "skill_allowlisted".to_string();
+    evaluation
 }
 
 pub fn is_skill_tool_enabled_for_session(session_id: &str) -> bool {
@@ -490,10 +582,16 @@ mod tests {
             &serde_json::json!({ "skill": "capability-report" }),
         )
         .expect("source should resolve from short skill name");
+        let evaluation = evaluate_skill_tool_policy(
+            session_id,
+            &serde_json::json!({ "skill": "capability-report" }),
+        );
 
         clear_skill_tool_session_access(session_id);
 
         assert_eq!(restored, source);
+        assert_eq!(evaluation.source, "manual_session_enable");
+        assert_eq!(evaluation.authority, "manual");
     }
 
     #[test]
@@ -531,5 +629,33 @@ mod tests {
             .get("args")
             .and_then(Value::as_str)
             .is_some_and(|args| args.contains("project-1")));
+    }
+
+    #[test]
+    fn policy_evaluation_exposes_reason_capability_and_pending_body_budget() {
+        let session_id = "skill-gate-policy-session";
+        set_skill_tool_session_allowed_skills(session_id, ["project:research"]);
+
+        let allowed = evaluate_skill_tool_policy(
+            session_id,
+            &serde_json::json!({ "skill": "research", "args": "cite sources" }),
+        );
+        assert_eq!(allowed.decision, SkillPolicyDecision::Allow);
+        assert_eq!(allowed.reason, "skill_allowlisted");
+        assert_eq!(allowed.source, "session_skill_gate");
+        assert_eq!(allowed.estimated_tokens, None);
+        assert_eq!(allowed.max_visible_tokens, None);
+        assert_eq!(allowed.token_budget, SkillTokenBudgetDecision::NotEvaluated);
+
+        let capability_denied = evaluate_skill_tool_policy(
+            session_id,
+            &serde_json::json!({ "skill": IMAGE_GENERATE_SKILL_NAME }),
+        );
+        assert_eq!(
+            capability_denied.missing_capabilities,
+            vec![IMAGE_GENERATION_CONTRACT_KEY.to_string()]
+        );
+
+        clear_skill_tool_session_access(session_id);
     }
 }

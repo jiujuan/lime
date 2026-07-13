@@ -10,12 +10,15 @@ pub use context_fragments::{
     ContextFragmentBudgetStatus, ContextFragmentEnvelope, ContextFragmentInput,
     ContextFragmentSource, ContextSidecarReference,
 };
+pub use llm_protocol::canonical::{
+    ContentPart, FailureClassification, FinishReason, GenerationOptions,
+    LlmEvent as CanonicalLlmEvent, Message as CanonicalMessage, ProviderMetadata,
+    Request as CanonicalRequest, Role as CanonicalRole, ToolDefinition as CanonicalToolDefinition,
+    ToolResultValue, Usage,
+};
 pub use llm_protocol::{
-    build_fal_video_generation_body, build_openai_images_generation_body,
-    build_provider_wire_request, build_responses_image_generation_body,
-    build_responses_image_generation_wire_request, runtime_event_from_llm_event, LlmEvent,
-    LlmInputPart, LlmMessage, LlmOutputPart, LlmRequest, LlmRole, LlmRuntimeEvent,
-    LlmToolDefinition, ProtocolMappingError, ProviderWireRequest,
+    runtime_event_from_llm_event, LlmEvent, LlmInputPart, LlmMessage, LlmOutputPart, LlmRequest,
+    LlmRole, LlmRuntimeEvent, LlmToolDefinition, ProviderWireRequest,
     ResponsesImageGenerationInputShape, ResponsesImageGenerationOptions,
 };
 pub use model_route::{

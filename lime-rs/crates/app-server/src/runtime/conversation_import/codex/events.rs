@@ -1,25 +1,19 @@
 use super::super::provenance;
 use app_server_protocol::{ConversationImportSourceClient, ConversationImportSourceProvenance};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
-#[derive(Debug, Clone)]
-pub(in crate::runtime::conversation_import) struct ImportedRuntimeEvent {
-    pub(in crate::runtime::conversation_import) event_type: &'static str,
-    pub(in crate::runtime::conversation_import) payload: Value,
-}
+mod tool_draft;
 
-impl ImportedRuntimeEvent {
-    pub(in crate::runtime::conversation_import) fn new(
-        event_type: &'static str,
-        payload: Value,
-    ) -> Self {
-        Self {
-            event_type,
-            payload,
-        }
-    }
-}
+use tool_draft::{
+    completed_turn_item_tool_event, imported_tool_started, imported_tool_terminal,
+    response_item_web_search_event, tool_finish_events_from_response_item,
+    tool_finished_from_response_item, tool_start_events_from_response_item,
+    tool_started_from_response_item,
+};
+pub(in crate::runtime::conversation_import) use tool_draft::{
+    ImportedRuntimeEvent, ImportedToolDraft, ImportedToolPhase, ImportedToolSource,
+};
 
 pub(super) fn response_item_runtime_events(
     payload: Option<&Value>,
@@ -157,54 +151,8 @@ fn apply_provenance_to_runtime_events(
         return;
     };
     for event in events {
-        if let Value::Object(ref mut object) = event.payload {
-            object
-                .entry("sourceProvenance".to_string())
-                .or_insert_with(|| provenance_value.clone());
-        }
+        event.enrich_source_provenance(provenance_value.clone());
     }
-}
-
-fn tool_start_events_from_response_item(payload: &Value) -> Vec<ImportedRuntimeEvent> {
-    let mut events = vec![tool_started_from_response_item(payload)];
-    match tool_name(payload).as_deref() {
-        Some("exec_command") => events.push(command_started_from_response_item(payload)),
-        Some("update_plan") => {
-            if let Some(event) = plan_final_from_response_item(payload) {
-                events.push(event);
-            }
-        }
-        _ => {}
-    }
-    events
-}
-
-fn tool_finish_events_from_response_item(
-    payload: &Value,
-    failed: bool,
-) -> Vec<ImportedRuntimeEvent> {
-    vec![tool_finished_from_response_item(payload, failed)]
-}
-
-fn tool_started_from_response_item(payload: &Value) -> ImportedRuntimeEvent {
-    let call_id = call_id(payload);
-    let tool_name = tool_name(payload);
-    let arguments = parsed_arguments(payload);
-    let mut event_payload = Map::new();
-    insert_string(&mut event_payload, "toolCallId", call_id);
-    insert_string(&mut event_payload, "toolName", tool_name.clone());
-    insert_string(&mut event_payload, "name", tool_name);
-    if let Some(arguments) = arguments {
-        event_payload.insert("arguments".to_string(), arguments);
-    }
-    insert_string(
-        &mut event_payload,
-        "status",
-        string_field(payload, &["status"]),
-    );
-    event_payload.insert("sourceClient".to_string(), json!("codex"));
-    event_payload.insert("sourceEventType".to_string(), payload["type"].clone());
-    ImportedRuntimeEvent::new("tool.started", Value::Object(event_payload))
 }
 
 fn command_started_from_response_item(payload: &Value) -> ImportedRuntimeEvent {
@@ -230,50 +178,6 @@ fn command_started_from_response_item(payload: &Value) -> ImportedRuntimeEvent {
             "sourceEventType": "function_call",
         })),
     )
-}
-
-fn tool_finished_from_response_item(payload: &Value, failed: bool) -> ImportedRuntimeEvent {
-    let output = response_item_output(payload);
-    let success = !failed;
-    let event_type = if success {
-        "tool.result"
-    } else {
-        "tool.failed"
-    };
-    let payload = compact_json(json!({
-        "toolCallId": call_id(payload),
-        "toolName": tool_name(payload),
-        "name": tool_name(payload),
-        "status": if success { "completed" } else { "failed" },
-        "success": success,
-        "output": output,
-        "outputPreview": output.as_deref().map(truncate_output_preview),
-        "sourceClient": "codex",
-        "sourceEventType": payload.get("type").and_then(Value::as_str),
-    }));
-    ImportedRuntimeEvent::new(event_type, payload)
-}
-
-fn response_item_web_search_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
-    let call_id = call_id(payload)?;
-    let action = payload.get("action").cloned();
-    Some(ImportedRuntimeEvent::new(
-        "tool.started",
-        compact_json(json!({
-            "toolCallId": call_id,
-            "toolName": "web_search",
-            "name": "web_search",
-            "status": "in_progress",
-            "action": action.as_ref().and_then(web_search_action_label),
-            "arguments": action.as_ref().map(|action| json!({
-                "action": action,
-                "query": web_search_action_query(action),
-            })),
-            "query": action.as_ref().and_then(web_search_action_query),
-            "sourceClient": "codex",
-            "sourceEventType": "web_search_call",
-        })),
-    ))
 }
 
 fn response_item_reasoning_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
@@ -321,7 +225,7 @@ fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
         .and_then(Value::as_str)
         .is_some_and(|item_type| item_type == "Plan" || item_type == "plan")
     {
-        return None;
+        return completed_turn_item_tool_event(payload);
     }
     let text = string_field(item, &["text"])?;
     Some(ImportedRuntimeEvent::new(
@@ -340,20 +244,21 @@ fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
 fn mcp_tool_call_begin_event(payload: &Value) -> ImportedRuntimeEvent {
     let invocation = payload.get("invocation").cloned();
     let tool_name = mcp_tool_name(invocation.as_ref());
-    ImportedRuntimeEvent::new(
-        "tool.started",
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": tool_name,
-            "name": tool_name,
+    imported_tool_started(
+        call_id(payload),
+        tool_name,
+        invocation
+            .as_ref()
+            .and_then(|value| value.get("arguments"))
+            .cloned(),
+        json!({
             "status": "in_progress",
-            "arguments": invocation.as_ref().and_then(|value| value.get("arguments")).cloned(),
             "server": invocation.as_ref().and_then(|value| string_field(value, &["server"])),
             "mcpAppResourceUri": string_field(payload, &["mcp_app_resource_uri", "mcpAppResourceUri"]),
             "pluginId": string_field(payload, &["plugin_id", "pluginId"]),
             "sourceClient": "codex",
             "sourceEventType": "mcp_tool_call_begin",
-        })),
+        }),
     )
 }
 
@@ -361,46 +266,41 @@ fn mcp_tool_call_end_event(payload: &Value) -> ImportedRuntimeEvent {
     let invocation = payload.get("invocation").cloned();
     let result = payload.get("result").cloned();
     let success = !mcp_result_is_error(result.as_ref());
-    let event_type = if success {
-        "tool.result"
-    } else {
-        "tool.failed"
-    };
     let tool_name = mcp_tool_name(invocation.as_ref());
-    ImportedRuntimeEvent::new(
-        event_type,
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": tool_name,
-            "name": tool_name,
+    imported_tool_terminal(
+        call_id(payload),
+        tool_name,
+        invocation
+            .as_ref()
+            .and_then(|value| value.get("arguments"))
+            .cloned(),
+        result.clone(),
+        !success,
+        json!({
             "status": if success { "completed" } else { "failed" },
             "success": success,
-            "arguments": invocation.as_ref().and_then(|value| value.get("arguments")).cloned(),
             "server": invocation.as_ref().and_then(|value| string_field(value, &["server"])),
             "mcpAppResourceUri": string_field(payload, &["mcp_app_resource_uri", "mcpAppResourceUri"]),
             "pluginId": string_field(payload, &["plugin_id", "pluginId"]),
             "result": result,
-            "output": result.as_ref().map(Value::to_string),
             "sourceClient": "codex",
             "sourceEventType": "mcp_tool_call_end",
-        })),
+        }),
     )
 }
 
 fn dynamic_tool_call_started_event(payload: &Value) -> ImportedRuntimeEvent {
     let tool_name = dynamic_tool_name(payload);
-    ImportedRuntimeEvent::new(
-        "tool.started",
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": tool_name,
-            "name": tool_name,
+    imported_tool_started(
+        call_id(payload),
+        tool_name,
+        payload.get("arguments").cloned(),
+        json!({
             "status": "in_progress",
-            "arguments": payload.get("arguments").cloned(),
             "namespace": string_field(payload, &["namespace"]),
             "sourceClient": "codex",
             "sourceEventType": "dynamic_tool_call_request",
-        })),
+        }),
     )
 }
 
@@ -409,66 +309,59 @@ fn dynamic_tool_call_finished_event(payload: &Value) -> ImportedRuntimeEvent {
         .get("success")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    let event_type = if success {
-        "tool.result"
-    } else {
-        "tool.failed"
-    };
     let tool_name = dynamic_tool_name(payload);
     let output = dynamic_tool_output(payload);
-    ImportedRuntimeEvent::new(
-        event_type,
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": tool_name,
-            "name": tool_name,
+    imported_tool_terminal(
+        call_id(payload),
+        tool_name,
+        payload.get("arguments").cloned(),
+        output.map(Value::String),
+        !success,
+        json!({
             "status": if success { "completed" } else { "failed" },
             "success": success,
-            "arguments": payload.get("arguments").cloned(),
             "namespace": string_field(payload, &["namespace"]),
             "contentItems": payload.get("content_items")
                 .or_else(|| payload.get("contentItems"))
                 .cloned(),
-            "output": output,
             "sourceClient": "codex",
             "sourceEventType": "dynamic_tool_call_response",
-        })),
+        }),
     )
 }
 
 fn view_image_tool_call_event(payload: &Value) -> ImportedRuntimeEvent {
     let path = string_field(payload, &["path"]);
-    ImportedRuntimeEvent::new(
-        "tool.result",
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": "view_image",
-            "name": "view_image",
+    let output = path.as_ref().map(|path| format!("Viewed image: {path}"));
+    imported_tool_terminal(
+        call_id(payload),
+        Some("view_image".to_string()),
+        path.as_ref().map(|path| json!({ "path": path })),
+        output.map(Value::String),
+        false,
+        json!({
             "status": "completed",
             "success": true,
-            "arguments": path.as_ref().map(|path| json!({ "path": path })),
-            "output": path.as_ref().map(|path| format!("Viewed image: {path}")),
             "path": path,
             "sourceClient": "codex",
             "sourceEventType": "view_image_tool_call",
-        })),
+        }),
     )
 }
 
 fn image_generation_started_event(payload: &Value) -> ImportedRuntimeEvent {
-    ImportedRuntimeEvent::new(
-        "tool.started",
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": "image_generation",
-            "name": "image_generation",
+    imported_tool_started(
+        call_id(payload),
+        Some("image_generation".to_string()),
+        payload
+            .get("prompt")
+            .and_then(Value::as_str)
+            .map(|prompt| json!({ "prompt": prompt })),
+        json!({
             "status": "in_progress",
-            "arguments": payload.get("prompt")
-                .and_then(Value::as_str)
-                .map(|prompt| json!({ "prompt": prompt })),
             "sourceClient": "codex",
             "sourceEventType": "image_generation_begin",
-        })),
+        }),
     )
 }
 
@@ -481,27 +374,22 @@ fn image_generation_finished_event(payload: &Value) -> ImportedRuntimeEvent {
     let output = string_field(payload, &["result"])
         .or_else(|| string_field(payload, &["saved_path", "savedPath"]))
         .or_else(|| string_field(payload, &["revised_prompt", "revisedPrompt"]));
-    ImportedRuntimeEvent::new(
-        if success {
-            "tool.result"
-        } else {
-            "tool.failed"
-        },
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": "image_generation",
-            "name": "image_generation",
+    imported_tool_terminal(
+        call_id(payload),
+        Some("image_generation".to_string()),
+        Some(json!({
+            "revisedPrompt": string_field(payload, &["revised_prompt", "revisedPrompt"]),
+            "savedPath": string_field(payload, &["saved_path", "savedPath"]),
+        })),
+        output.map(Value::String),
+        !success,
+        json!({
             "status": if success { "completed" } else { "failed" },
             "success": success,
-            "arguments": {
-                "revisedPrompt": string_field(payload, &["revised_prompt", "revisedPrompt"]),
-                "savedPath": string_field(payload, &["saved_path", "savedPath"]),
-            },
-            "output": output,
             "result": string_field(payload, &["result"]),
             "sourceClient": "codex",
             "sourceEventType": "image_generation_end",
-        })),
+        }),
     )
 }
 
@@ -509,26 +397,27 @@ fn web_search_end_event(payload: &Value) -> ImportedRuntimeEvent {
     let action = payload.get("action").cloned();
     let output = response_item_output(payload).or_else(|| action.as_ref().map(Value::to_string));
     let query = action.as_ref().and_then(web_search_action_query);
-    ImportedRuntimeEvent::new(
-        "tool.result",
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": "web_search",
-            "name": "web_search",
+    imported_tool_terminal(
+        call_id(payload),
+        Some("web_search".to_string()),
+        action.as_ref().map(|action| {
+            json!({
+                "action": action,
+                "query": query.clone(),
+            })
+        }),
+        output.clone().map(Value::String),
+        false,
+        json!({
             "status": "completed",
             "success": true,
             "action": action.as_ref().and_then(web_search_action_label),
-            "arguments": action.as_ref().map(|action| json!({
-                "action": action,
-                "query": query.clone(),
-            })),
             "query": query,
             "result": action,
-            "output": output,
             "outputPreview": output.as_deref().map(truncate_output_preview),
             "sourceClient": "codex",
             "sourceEventType": "web_search_end",
-        })),
+        }),
     )
 }
 
@@ -701,28 +590,30 @@ fn subagent_activity_event(payload: &Value) -> ImportedRuntimeEvent {
 
 fn collab_agent_tool_event(payload: &Value, in_progress: bool) -> ImportedRuntimeEvent {
     let success = !collab_agent_failed(payload);
-    let event_type = if in_progress {
-        "tool.started"
-    } else if success {
-        "tool.result"
-    } else {
-        "tool.failed"
-    };
     let tool_name = collab_tool_name(payload);
-    ImportedRuntimeEvent::new(
-        event_type,
-        compact_json(json!({
-            "toolCallId": call_id(payload),
-            "toolName": tool_name,
-            "name": tool_name,
-            "status": if in_progress { "in_progress" } else if success { "completed" } else { "failed" },
-            "success": if in_progress { None } else { Some(success) },
-            "arguments": collab_tool_arguments(payload),
-            "output": collab_tool_output(payload),
-            "sourceClient": "codex",
-            "sourceEventType": payload.get("type").and_then(Value::as_str),
-        })),
-    )
+    let metadata = json!({
+        "status": if in_progress { "in_progress" } else if success { "completed" } else { "failed" },
+        "success": if in_progress { None } else { Some(success) },
+        "sourceClient": "codex",
+        "sourceEventType": payload.get("type").and_then(Value::as_str),
+    });
+    if in_progress {
+        imported_tool_started(
+            call_id(payload),
+            Some(tool_name),
+            Some(collab_tool_arguments(payload)),
+            metadata,
+        )
+    } else {
+        imported_tool_terminal(
+            call_id(payload),
+            Some(tool_name),
+            Some(collab_tool_arguments(payload)),
+            collab_tool_output(payload).map(Value::String),
+            !success,
+            metadata,
+        )
+    }
 }
 
 fn response_item_arguments(payload: &Value) -> Option<Value> {
@@ -1086,12 +977,6 @@ fn number_field(payload: &Value, keys: &[&str]) -> Option<Value> {
         .find_map(|key| payload.get(*key))
         .filter(|value| value.is_number())
         .cloned()
-}
-
-fn insert_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {
-    if let Some(value) = value {
-        map.insert(key.to_string(), Value::String(value));
-    }
 }
 
 fn truncate_output_preview(value: &str) -> String {

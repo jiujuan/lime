@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "argumentHint": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "executionMode": {
+      "type": "string"
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "provider": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "displayName",
+    "executionMode"
+  ],
+  "title": "SkillInterface",
+  "type": "object"
+}

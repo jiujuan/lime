@@ -4,20 +4,128 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillReadParams {
-    pub skill_name: String,
+    pub skill_id: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillScope {
+    Project,
+    User,
+    App,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillSource {
+    Project,
+    User,
+    App,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillAuthority {
+    Workspace,
+    User,
+    Application,
+    External,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillInterface {
+    pub display_name: String,
+    pub execution_mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub argument_hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillToolDependency {
+    #[serde(rename = "type")]
+    pub dependency_type: String,
+    pub value: String,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDependencies {
+    pub tools: Vec<SkillToolDependency>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPolicy {
+    pub allow_implicit_invocation: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when_to_use: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocator {
+    pub directory: String,
+    pub skill_file_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillSummary {
+    pub skill_id: String,
+    pub name: String,
+    pub description: String,
+    pub scope: SkillScope,
+    pub source: SkillSource,
+    pub authority: SkillAuthority,
+    pub enabled: bool,
+    pub interface: SkillInterface,
+    pub dependencies: SkillDependencies,
+    pub policy: SkillPolicy,
+    pub capabilities: Vec<String>,
+    pub locator: SkillLocator,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillWorkflowStep {
+    pub id: String,
+    pub name: String,
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDetail {
+    pub metadata: SkillSummary,
+    pub markdown_content: String,
+    pub workflow_steps: Vec<SkillWorkflowStep>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillListResponse {
-    #[serde(default)]
-    pub skills: Vec<serde_json::Value>,
+    pub skills: Vec<SkillSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillReadResponse {
+    pub skill: SkillDetail,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct SkillReadResponse {
-    pub skill: serde_json::Value,
+pub struct SkillManagementListResponse {
+    pub skills: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -273,6 +381,103 @@ pub struct SkillMarketplaceInstallResponse {
 pub struct SkillDownloadInstallResponse {
     pub directory: String,
     pub inspection: serde_json::Value,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn summary() -> SkillSummary {
+        SkillSummary {
+            skill_id: "project:writer".to_string(),
+            name: "writer".to_string(),
+            description: "Write clearly.".to_string(),
+            scope: SkillScope::Project,
+            source: SkillSource::Project,
+            authority: SkillAuthority::Workspace,
+            enabled: true,
+            interface: SkillInterface {
+                display_name: "Writer".to_string(),
+                execution_mode: "prompt".to_string(),
+                provider: None,
+                model: None,
+                argument_hint: None,
+            },
+            dependencies: SkillDependencies {
+                tools: vec![SkillToolDependency {
+                    dependency_type: "runtime_tool".to_string(),
+                    value: "Read".to_string(),
+                    required: true,
+                }],
+            },
+            policy: SkillPolicy {
+                allow_implicit_invocation: true,
+                when_to_use: Some("Use for writing.".to_string()),
+            },
+            capabilities: vec!["Read".to_string()],
+            locator: SkillLocator {
+                directory: "/workspace/.agents/skills/writer".to_string(),
+                skill_file_path: "/workspace/.agents/skills/writer/SKILL.md".to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn executable_skill_response_serializes_typed_identity_and_locator() {
+        let value = serde_json::to_value(SkillListResponse {
+            skills: vec![summary()],
+        })
+        .expect("serialize skill list");
+
+        assert_eq!(value["skills"][0]["skillId"], json!("project:writer"));
+        assert_eq!(value["skills"][0]["authority"], json!("workspace"));
+        assert_eq!(
+            value["skills"][0]["dependencies"]["tools"][0]["type"],
+            json!("runtime_tool")
+        );
+        assert_eq!(
+            value["skills"][0]["locator"]["skillFilePath"],
+            json!("/workspace/.agents/skills/writer/SKILL.md")
+        );
+    }
+
+    #[test]
+    fn skill_read_params_serialize_stable_identity() {
+        let value = serde_json::to_value(SkillReadParams {
+            skill_id: "project:writer".to_string(),
+        })
+        .expect("serialize skill read params");
+
+        assert_eq!(value, json!({ "skillId": "project:writer" }));
+    }
+
+    #[test]
+    fn skill_read_params_reject_legacy_name_only_shape() {
+        let error = serde_json::from_value::<SkillReadParams>(json!({
+            "skillName": "writer"
+        }))
+        .expect_err("legacy name-only params must fail closed");
+
+        assert!(error.to_string().contains("skillId"));
+    }
+
+    #[test]
+    fn executable_and_management_responses_keep_distinct_item_contracts() {
+        let executable = SkillListResponse {
+            skills: vec![summary()],
+        };
+        let management = SkillManagementListResponse {
+            skills: vec![json!({
+                "directory": "writer",
+                "installed": true,
+                "catalogSource": "project"
+            })],
+        };
+
+        assert_eq!(executable.skills[0].skill_id, "project:writer");
+        assert_eq!(management.skills[0]["installed"], json!(true));
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

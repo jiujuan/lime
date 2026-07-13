@@ -31,6 +31,7 @@ use rmcp::service::RunningService;
 use rmcp::RoleClient;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -117,6 +118,7 @@ pub struct McpBridgeSnapshot {
     pub running_service: Arc<RunningService<RoleClient, crate::client::LimeMcpClient>>,
     pub handler: Arc<crate::client::LimeMcpClient>,
     pub server_info: Option<rmcp::model::InitializeResult>,
+    pub tool_timeout: Duration,
 }
 
 impl McpClientManager {
@@ -376,6 +378,7 @@ impl McpClientManager {
                 running_service,
                 handler: wrapper.handler(),
                 server_info,
+                tool_timeout: bridge_tool_timeout(&wrapper.config),
             });
         }
         snapshots.sort_by(|left, right| left.server_name.cmp(&right.server_name));
@@ -496,6 +499,10 @@ impl McpClientManager {
         debug!(tool_count = tools.len(), "工具列表已更新");
         self.emit_event("mcp:tools_updated", McpToolsUpdatedPayload { tools });
     }
+}
+
+fn bridge_tool_timeout(config: &McpServerConfig) -> Duration {
+    Duration::from_secs(config.tool_timeout_secs())
 }
 
 /// MCP 管理器共享状态包装器

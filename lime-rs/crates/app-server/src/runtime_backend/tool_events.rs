@@ -1,22 +1,15 @@
 use super::plan_events;
-use super::tool_process_metadata::{tool_failure_category, SoulStyleMetadata};
+use super::tool_process_metadata::SoulStyleMetadata;
 use super::tool_process_runtime_metadata;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use agent_protocol::provider_trace::runtime_event_type_for_provider_trace_stage;
 #[cfg(test)]
 use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceStage};
+use agent_protocol::{ThreadItem, ThreadItemPayload, ToolOutput};
 use lime_agent::AgentEvent as RuntimeAgentEvent;
 use model_provider::safety::SAFETY_BUFFERING_RUNTIME_EVENT_KIND;
-#[cfg(test)]
-use runtime_core::runtime_event_from_llm_event as runtime_core_event_from_llm_event;
 use serde_json::{json, Value};
-
-#[cfg(test)]
-pub(super) fn runtime_event_from_llm_event(event: &runtime_core::LlmEvent) -> RuntimeEvent {
-    let mapped = runtime_core_event_from_llm_event(event);
-    RuntimeEvent::new(mapped.event_type, mapped.payload)
-}
 
 pub(super) fn runtime_events_from_agent_event(
     event: &RuntimeAgentEvent,
@@ -61,15 +54,6 @@ pub(super) fn runtime_events_from_agent_event_with_soul_style(
     if let Some(payload_object) = payload.as_object_mut() {
         payload_object.insert("backend".to_string(), Value::String("runtime".to_string()));
         payload_object.insert("runtimeEvent".to_string(), runtime_event);
-        if let RuntimeAgentEvent::ActionRequired { action_type, .. } = event {
-            if action_type == "tool_confirmation" {
-                payload_object.insert(
-                    "availableDecisions".to_string(),
-                    json!(["allow_once", "decline", "cancel"]),
-                );
-            }
-        }
-        enrich_tool_terminal_payload(event, payload_object);
         tool_process_runtime_metadata::enrich_runtime_tool_process_payload(
             event,
             payload_object,
@@ -81,22 +65,7 @@ pub(super) fn runtime_events_from_agent_event_with_soul_style(
         runtime_event_type_for_agent_event(event, &raw_type),
         payload,
     )];
-    if let RuntimeAgentEvent::ToolStart {
-        tool_name,
-        tool_id,
-        arguments,
-    } = event
-    {
-        if let Some(arguments) = arguments.as_deref().and_then(non_empty_str) {
-            events.push(RuntimeEvent::new(
-                "tool.args",
-                tool_process_runtime_metadata::runtime_tool_args_event_payload(
-                    tool_id, tool_name, arguments, soul_style,
-                ),
-            ));
-        }
-    }
-    if let Some(plan_event) = update_plan_event_from_tool_end(event) {
+    if let Some(plan_event) = update_plan_event_from_completed_tool(event) {
         events.push(plan_event);
     }
     Ok(events)
@@ -114,8 +83,6 @@ pub(super) fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "text_delta" => "message.delta",
         "text_delta_batch" => "message.delta_batch",
         "thinking_delta" => "reasoning.delta",
-        "tool_start" => "tool.started",
-        "tool_end" => "tool.result",
         "tool_progress" => "tool.progress",
         "tool_output_delta" => "tool.output.delta",
         "tool_input_delta" => "tool.input.delta",
@@ -168,17 +135,24 @@ fn enrich_reasoning_payload(
     );
 }
 
-fn update_plan_event_from_tool_end(event: &RuntimeAgentEvent) -> Option<RuntimeEvent> {
-    let RuntimeAgentEvent::ToolEnd { tool_id, result } = event else {
+fn update_plan_event_from_completed_tool(event: &RuntimeAgentEvent) -> Option<RuntimeEvent> {
+    let RuntimeAgentEvent::ItemCompleted { .. } = event else {
         return None;
     };
-    if !result.success {
+    let tool = canonical_tool_item(event)?;
+    let output = tool.output?;
+    if !tool.item.status.is_terminal() || output.error.is_some() {
         return None;
     }
+    let metadata = tool
+        .item
+        .metadata
+        .as_object()
+        .map(|metadata| metadata.clone().into_iter().collect());
     plan_events::plan_final_event_from_update_plan_result(
-        tool_id,
-        &result.output,
-        result.metadata.as_ref(),
+        tool.call_id,
+        output.text.as_deref().unwrap_or_default(),
+        metadata.as_ref(),
     )
 }
 
@@ -187,7 +161,6 @@ fn runtime_event_type_for_agent_event(event: &RuntimeAgentEvent, raw_type: &str)
         RuntimeAgentEvent::ProviderTrace { event } => {
             runtime_event_type_for_provider_trace_stage(event.stage)
         }
-        RuntimeAgentEvent::ToolEnd { result, .. } if !result.success => "tool.failed",
         _ => runtime_event_type_from_raw(raw_type),
     }
 }
@@ -199,43 +172,30 @@ fn provider_stream_runtime_event_type(runtime_event_kind: &str) -> &'static str 
     }
 }
 
-fn enrich_tool_terminal_payload(
-    event: &RuntimeAgentEvent,
-    payload_object: &mut serde_json::Map<String, Value>,
-) {
-    let RuntimeAgentEvent::ToolEnd { tool_id, result } = event else {
-        return;
-    };
-    payload_object.insert("toolCallId".to_string(), Value::String(tool_id.clone()));
-    payload_object.insert(
-        "status".to_string(),
-        Value::String(
-            if result.success {
-                "completed"
-            } else {
-                "failed"
-            }
-            .to_string(),
-        ),
-    );
-    if result.success {
-        return;
-    }
-    payload_object.insert(
-        "failureCategory".to_string(),
-        Value::String(tool_failure_category(result)),
-    );
-    if let Some(error) = result.error.as_deref().and_then(non_empty_str) {
-        payload_object.insert("error".to_string(), Value::String(error.to_string()));
-    }
-    if let Some(output) = non_empty_str(&result.output) {
-        payload_object.insert("output".to_string(), Value::String(output.to_string()));
-    }
+struct CanonicalToolItem<'a> {
+    item: &'a ThreadItem,
+    call_id: &'a str,
+    output: Option<&'a ToolOutput>,
 }
 
-fn non_empty_str(value: &str) -> Option<&str> {
-    let value = value.trim();
-    (!value.is_empty()).then_some(value)
+fn canonical_tool_item(event: &RuntimeAgentEvent) -> Option<CanonicalToolItem<'_>> {
+    let item = match event {
+        RuntimeAgentEvent::ItemStarted { item }
+        | RuntimeAgentEvent::ItemUpdated { item }
+        | RuntimeAgentEvent::ItemCompleted { item } => item,
+        _ => return None,
+    };
+    let ThreadItemPayload::Tool {
+        call_id, output, ..
+    } = &item.payload
+    else {
+        return None;
+    };
+    Some(CanonicalToolItem {
+        item,
+        call_id,
+        output: output.as_ref(),
+    })
 }
 
 fn event_error(error: impl std::fmt::Display) -> RuntimeCoreError {
@@ -245,6 +205,7 @@ fn event_error(error: impl std::fmt::Display) -> RuntimeCoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_protocol::{ItemId, ItemStatus, SessionId, ThreadId, ToolArgument, TurnId};
     use lime_agent::AgentToolResult;
     use serde_json::json;
     use std::collections::HashMap;
@@ -371,299 +332,242 @@ mod tests {
         );
     }
 
-    #[test]
-    fn runtime_agent_tool_start_without_arguments_does_not_emit_empty_tool_args() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolStart {
-            tool_name: "WebFetch".to_string(),
-            tool_id: "tool-no-args".to_string(),
-            arguments: None,
-        })
-        .expect("tool start should emit");
+    fn canonical_tool_event(
+        tool_id: &str,
+        tool_name: &str,
+        arguments: Option<Value>,
+        result: Option<AgentToolResult>,
+    ) -> RuntimeAgentEvent {
+        let arguments = arguments.map(canonical_test_arguments).unwrap_or_default();
+        let (status, output, metadata) = match result {
+            Some(result) => {
+                let status = if result.success {
+                    ItemStatus::Completed
+                } else {
+                    ItemStatus::Failed
+                };
+                let metadata = result
+                    .metadata
+                    .map(|metadata| Value::Object(metadata.into_iter().collect()))
+                    .unwrap_or_else(|| json!({}));
+                let output = ToolOutput {
+                    text: Some(result.output),
+                    structured_content: result.structured_content,
+                    error: result.error,
+                    duration_ms: metadata.get("duration_ms").and_then(Value::as_u64),
+                    truncated: metadata
+                        .get("truncated")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    output_ref: metadata
+                        .get("output_ref")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                };
+                (status, Some(output), metadata)
+            }
+            None => (ItemStatus::InProgress, None, json!({})),
+        };
+        let payload = ThreadItemPayload::Tool {
+            call_id: tool_id.to_string(),
+            name: tool_name.to_string(),
+            arguments,
+            output,
+        };
+        let item = ThreadItem {
+            session_id: SessionId::new("session-test"),
+            thread_id: ThreadId::new("thread-test"),
+            turn_id: TurnId::new("turn-test"),
+            item_id: ItemId::new(tool_id),
+            sequence: 1,
+            ordinal: 1,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            completed_at_ms: status.is_terminal().then_some(2),
+            kind: payload.kind(),
+            status,
+            payload,
+            metadata,
+        };
+        if status.is_terminal() {
+            RuntimeAgentEvent::ItemCompleted { item }
+        } else {
+            RuntimeAgentEvent::ItemStarted { item }
+        }
+    }
 
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event_type, "tool.started");
+    fn canonical_test_arguments(arguments: Value) -> Vec<ToolArgument> {
+        match arguments {
+            Value::Object(arguments) => arguments
+                .into_iter()
+                .map(|(name, value)| ToolArgument {
+                    name,
+                    value: value
+                        .as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| value.to_string()),
+                })
+                .collect(),
+            value => vec![ToolArgument {
+                name: "value".to_string(),
+                value: value
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| value.to_string()),
+            }],
+        }
     }
 
     #[test]
-    fn runtime_agent_tool_args_preserve_non_json_arguments() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolStart {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-raw-args".to_string(),
-            arguments: Some("echo hello".to_string()),
-        })
-        .expect("tool start should emit");
-
-        let args_event = events
-            .iter()
-            .find(|event| event.event_type == "tool.args")
-            .expect("tool args event");
-        assert_eq!(
-            args_event.payload["toolCallId"].as_str(),
-            Some("tool-raw-args")
-        );
-        assert_eq!(args_event.payload["args"].as_str(), Some("echo hello"));
-        assert_eq!(args_event.payload["rawArgs"].as_str(), Some("echo hello"));
-    }
-
-    #[test]
-    fn runtime_agent_json_tool_args_emit_tool_args_fact() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolStart {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-json-args".to_string(),
-            arguments: Some(json!({ "command": "cargo test" }).to_string()),
-        })
-        .expect("tool start should emit");
+    fn canonical_tool_start_emits_only_typed_item_arguments() {
+        let events = runtime_events_from_agent_event(&canonical_tool_event(
+            "tool-json-args",
+            "Bash",
+            Some(json!({ "command": "cargo test" })),
+            None,
+        ))
+        .expect("tool item start should emit");
 
         assert_eq!(
             events
                 .iter()
                 .map(|event| event.event_type.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tool.started", "tool.args"]
+            vec!["item.started"]
         );
         assert_eq!(
-            events[1].payload["args"]["command"].as_str(),
-            Some("cargo test")
+            events[0].payload["item"]["payload"]["call_id"],
+            "tool-json-args"
         );
         assert_eq!(
-            events[1].payload["source"].as_str(),
-            Some("runtime_tool_start")
+            events[0].payload["item"]["payload"]["arguments"][0]["name"],
+            "command"
+        );
+        assert_eq!(
+            events[0].payload["item"]["payload"]["arguments"][0]["value"],
+            "cargo test"
         );
     }
 
     #[test]
-    fn runtime_agent_tool_start_adds_key_based_process_summary_metadata() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolStart {
-            tool_name: "web_search".to_string(),
-            tool_id: "tool-search-start".to_string(),
-            arguments: Some(json!({ "query": "runtime facts" }).to_string()),
+    fn action_required_preserves_runtime_available_decisions_without_override() {
+        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ActionRequired {
+            request_id: "approval-1".to_string(),
+            action_type: "tool_confirmation".to_string(),
+            data: json!({
+                "availableDecisions": [
+                    "allow_once",
+                    "allow_for_session",
+                    "decline",
+                    "cancel"
+                ]
+            }),
+            scope: None,
         })
-        .expect("tool start should emit");
+        .expect("action required should emit");
 
-        assert_eq!(events[0].event_type, "tool.started");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "action.required");
+        assert!(events[0].payload.get("availableDecisions").is_none());
         assert_eq!(
-            events[0].payload["metadata"]["tool_process_summary"]["pre"]["key"],
-            "toolCall.processSummary.webSearch.searchFirstWithQuery"
-        );
-        assert_eq!(
-            events[0].payload["metadata"]["tool_process_summary"]["pre"]["values"]["query"],
-            "runtime facts"
-        );
-        assert_eq!(
-            events[0].payload["metadata"]["tool_process_facts"]["phase"],
-            "before_tool"
-        );
-        assert_eq!(
-            events[0].payload["metadata"]["soul_lifecycle"]["status"],
-            "started"
+            events[0].payload["data"]["availableDecisions"],
+            json!(["allow_once", "allow_for_session", "decline", "cancel"])
         );
     }
 
     #[test]
-    fn runtime_agent_tool_start_adds_active_soul_style_metadata() {
+    fn canonical_tool_start_without_arguments_emits_only_item() {
+        let events = runtime_events_from_agent_event(&canonical_tool_event(
+            "tool-no-args",
+            "WebFetch",
+            None,
+            None,
+        ))
+        .expect("tool item start should emit");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "item.started");
+    }
+
+    #[test]
+    fn canonical_tool_process_metadata_is_nested_on_item() {
         let soul_style = SoulStyleMetadata {
             profile_id: Some("cool_confident_operator".to_string()),
             pack_id: Some("com.lime.soul.cool-confident-operator".to_string()),
             tone_variant: Some("cool_confident".to_string()),
         };
         let events = runtime_events_from_agent_event_with_soul_style(
-            &RuntimeAgentEvent::ToolStart {
-                tool_name: "web_search".to_string(),
-                tool_id: "tool-search-style".to_string(),
-                arguments: Some(json!({ "query": "runtime facts" }).to_string()),
-            },
+            &canonical_tool_event(
+                "tool-search-style",
+                "web_search",
+                Some(json!({ "query": "runtime facts" })),
+                None,
+            ),
             Some(&soul_style),
         )
-        .expect("tool start should emit");
+        .expect("tool item start should emit");
 
+        let metadata = &events[0].payload["item"]["metadata"];
         assert_eq!(
-            events
-                .iter()
-                .map(|event| event.event_type.as_str())
-                .collect::<Vec<_>>(),
-            vec!["tool.started", "tool.args"]
-        );
-        assert_eq!(events[0].event_type, "tool.started");
-        assert_eq!(
-            events[0].payload["metadata"]["soul_lifecycle"]["profileId"].as_str(),
-            Some("cool_confident_operator")
+            metadata["tool_process_summary"]["pre"]["key"],
+            "toolCall.processSummary.webSearch.searchFirstWithQuery"
         );
         assert_eq!(
-            events[0].payload["metadata"]["soul_lifecycle"]["packId"].as_str(),
-            Some("com.lime.soul.cool-confident-operator")
+            metadata["tool_process_facts"]["profileId"],
+            "cool_confident_operator"
         );
-        assert_eq!(
-            events[0].payload["metadata"]["soul_lifecycle"]["toneVariant"].as_str(),
-            Some("cool_confident")
-        );
-        assert_eq!(
-            events[0].payload["toolProcessFacts"]["profileId"].as_str(),
-            Some("cool_confident_operator")
-        );
-        assert_eq!(
-            events[0].payload["metadata"]["profile_id"].as_str(),
-            Some("cool_confident_operator")
-        );
-        assert_eq!(
-            events[1].payload["metadata"]["tool_process_facts"]["status"].as_str(),
-            Some("input_delta")
-        );
-        assert_eq!(
-            events[1].payload["metadata"]["soul_lifecycle"]["profileId"].as_str(),
-            Some("cool_confident_operator")
-        );
-        assert_eq!(
-            events[1].payload["toolProcessFacts"]["toneVariant"].as_str(),
-            Some("cool_confident")
-        );
+        assert_eq!(metadata["soul_lifecycle"]["status"], "started");
+        assert!(metadata.get("metadata").is_none());
     }
 
     #[test]
-    fn llm_event_mapping_delegates_to_runtime_core_contract() {
-        let event = runtime_event_from_llm_event(&runtime_core::LlmEvent::OutputDelta {
-            part: runtime_core::LlmOutputPart::Text {
-                text: "hello".to_string(),
-            },
-        });
-
-        assert_eq!(event.event_type, "message.delta");
-        assert_eq!(event.payload["text"].as_str(), Some("hello"));
-        assert_eq!(event.payload["backend"].as_str(), Some("llm_protocol"));
-    }
-
-    #[test]
-    fn llm_tool_delta_uses_current_tool_args_delta_event() {
-        let event = runtime_event_from_llm_event(&runtime_core::LlmEvent::ToolCallDelta {
-            call_id: "call_1".to_string(),
-            name: "read_file".to_string(),
-            arguments_delta: "{\"path\"".to_string(),
-        });
-
-        assert_eq!(event.event_type, "tool.args.delta");
-        assert_eq!(event.payload["toolCallId"].as_str(), Some("call_1"));
-        assert_eq!(event.payload["toolName"].as_str(), Some("read_file"));
-        assert_eq!(event.payload["delta"].as_str(), Some("{\"path\""));
-    }
-
-    #[test]
-    fn runtime_agent_successful_tool_end_emits_tool_result() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-ok".to_string(),
-            result: AgentToolResult {
+    fn canonical_tool_completion_preserves_output_and_metadata() {
+        let events = runtime_events_from_agent_event(&canonical_tool_event(
+            "tool-mcp-structured",
+            "mcp_lookup",
+            Some(json!({ "query": "facts" })),
+            Some(AgentToolResult {
                 success: true,
                 output: "ok".to_string(),
                 error: None,
-                structured_content: None,
+                structured_content: Some(json!({ "answer": "ok", "ids": ["doc-1"] })),
                 images: None,
-                metadata: None,
-            },
-        })
-        .expect("tool end should emit");
+                metadata: Some(HashMap::from([
+                    ("source".to_string(), json!("mcp")),
+                    ("duration_ms".to_string(), json!(42)),
+                    ("truncated".to_string(), json!(true)),
+                    ("output_ref".to_string(), json!("sidecar://tool-output-1")),
+                ])),
+            }),
+        ))
+        .expect("tool item completion should emit");
 
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event_type, "tool.result");
-        assert_eq!(events[0].payload["toolCallId"].as_str(), Some("tool-ok"));
-        assert_eq!(events[0].payload["status"].as_str(), Some("completed"));
-    }
-
-    #[test]
-    fn runtime_agent_tool_end_adds_process_summary_descriptor_to_result_metadata() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-ok".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "ok".to_string(),
-                error: None,
-                structured_content: None,
-                images: None,
-                metadata: Some(HashMap::from([(
-                    "tool_name".to_string(),
-                    json!("web_search"),
-                )])),
-            },
-        })
-        .expect("tool end should emit");
-
-        let metadata = &events[0].payload["result"]["metadata"];
+        assert_eq!(events[0].event_type, "item.completed");
+        let item = &events[0].payload["item"];
         assert_eq!(
-            metadata["tool_process_summary"]["completed"]["key"],
-            "toolCall.processSummary.generic.searchedWithSubject"
+            item["payload"]["output"]["structuredContent"]["answer"],
+            "ok"
         );
+        assert_eq!(item["payload"]["output"]["durationMs"], 42);
+        assert_eq!(item["payload"]["output"]["truncated"], true);
         assert_eq!(
-            metadata["tool_process_summary"]["completed"]["values"]["subject"],
-            "web_search"
+            item["payload"]["output"]["outputRef"],
+            "sidecar://tool-output-1"
         );
-        assert_eq!(metadata["tool_process_facts"]["status"], "completed");
-        assert_eq!(metadata["soul_phase"], "after_tool_success");
-    }
-
-    #[test]
-    fn runtime_agent_tool_end_preserves_existing_process_summary_descriptor() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-preserve-summary".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "ok".to_string(),
-                error: None,
-                structured_content: None,
-                images: None,
-                metadata: Some(HashMap::from([(
-                    "tool_process_summary".to_string(),
-                    json!({
-                        "source": "tool_runtime",
-                        "completed": {
-                            "key": "toolCall.processSummary.webSearch.sourcesFound",
-                            "values": { "count": 7 }
-                        }
-                    }),
-                )])),
-            },
-        })
-        .expect("tool end should emit");
-
-        let metadata = &events[0].payload["result"]["metadata"];
-        assert_eq!(metadata["tool_process_summary"]["source"], "tool_runtime");
+        assert_eq!(item["metadata"]["source"], "mcp");
         assert_eq!(
-            metadata["tool_process_summary"]["completed"]["values"]["count"],
-            7
-        );
-        assert_eq!(metadata["tool_process_facts"]["status"], "completed");
-    }
-
-    #[test]
-    fn runtime_agent_tool_end_does_not_treat_raw_process_summary_as_descriptor() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-raw-summary".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "ok".to_string(),
-                error: None,
-                structured_content: None,
-                images: None,
-                metadata: Some(HashMap::from([(
-                    "process_summary".to_string(),
-                    json!("fixed copy should not block runtime descriptor"),
-                )])),
-            },
-        })
-        .expect("tool end should emit");
-
-        let metadata = &events[0].payload["result"]["metadata"];
-        assert_eq!(
-            metadata["process_summary"],
-            "fixed copy should not block runtime descriptor"
-        );
-        assert_eq!(
-            metadata["tool_process_summary"]["completed"]["key"],
-            "toolCall.processSummary.generic.completed"
+            item["metadata"]["tool_process_facts"]["status"],
+            "completed"
         );
     }
 
     #[test]
-    fn runtime_agent_update_plan_tool_end_emits_plan_final_fact() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-plan".to_string(),
-            result: AgentToolResult {
+    fn canonical_update_plan_completion_emits_plan_final_fact() {
+        let events = runtime_events_from_agent_event(&canonical_tool_event(
+            "tool-plan",
+            "update_plan",
+            Some(json!({})),
+            Some(AgentToolResult {
                 success: true,
                 output: "Plan updated".to_string(),
                 error: None,
@@ -679,95 +583,47 @@ mod tests {
                     ),
                     ("explanation".to_string(), json!("开始实现")),
                 ])),
-            },
-        })
-        .expect("update_plan tool end should emit");
+            }),
+        ))
+        .expect("update_plan item completion should emit");
 
         assert_eq!(
             events
                 .iter()
                 .map(|event| event.event_type.as_str())
                 .collect::<Vec<_>>(),
-            vec!["tool.result", "plan.final"]
+            vec!["item.completed", "plan.final"]
         );
-        let plan_event = &events[1];
-        assert_eq!(plan_event.payload["source"], "update_plan");
-        assert_eq!(plan_event.payload["toolCallId"], "tool-plan");
-        assert_eq!(plan_event.payload["revisionId"], "update_plan:tool-plan");
-        assert_eq!(plan_event.payload["text"], "- [x] 读现状\n- [ ] 打通主链");
+        assert_eq!(events[1].payload["revisionId"], "update_plan:tool-plan");
     }
 
     #[test]
-    fn runtime_agent_tool_end_preserves_structured_content_in_result_payload() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-mcp-structured".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "ok".to_string(),
-                error: None,
-                structured_content: Some(json!({
-                    "answer": "ok",
-                    "ids": ["doc-1"]
-                })),
-                images: None,
-                metadata: Some(HashMap::from([("source".to_string(), json!("mcp"))])),
-            },
-        })
-        .expect("tool end should emit");
-
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event_type, "tool.result");
-        assert_eq!(
-            events[0].payload["result"]["structuredContent"],
-            json!({
-                "answer": "ok",
-                "ids": ["doc-1"]
-            })
-        );
-    }
-
-    #[test]
-    fn runtime_agent_failed_tool_end_emits_tool_failed() {
-        let events = runtime_events_from_agent_event(&RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-failed".to_string(),
-            result: AgentToolResult {
+    fn canonical_failed_tool_stays_failed_item_and_gets_process_summary() {
+        let events = runtime_events_from_agent_event(&canonical_tool_event(
+            "tool-failed",
+            "Bash",
+            Some(json!({ "command": "cargo test" })),
+            Some(AgentToolResult {
                 success: false,
                 output: "test failed".to_string(),
                 error: Some("exit code 101".to_string()),
                 structured_content: None,
                 images: None,
-                metadata: Some(HashMap::from([
-                    ("exit_code".to_string(), json!(101)),
-                    ("failureCategory".to_string(), json!("test_failed")),
-                ])),
-            },
-        })
-        .expect("failed tool end should emit");
+                metadata: Some(HashMap::from([(
+                    "failureCategory".to_string(),
+                    json!("test_failed"),
+                )])),
+            }),
+        ))
+        .expect("failed tool item should emit");
 
-        assert_eq!(events.len(), 1);
-        let failed_event = &events[0];
-        assert_eq!(failed_event.event_type, "tool.failed");
+        assert_eq!(events[0].event_type, "item.completed");
+        let item = &events[0].payload["item"];
+        assert_eq!(item["status"], "failed");
+        assert_eq!(item["payload"]["output"]["error"], "exit code 101");
         assert_eq!(
-            failed_event.payload["toolCallId"].as_str(),
-            Some("tool-failed")
-        );
-        assert_eq!(failed_event.payload["status"].as_str(), Some("failed"));
-        assert_eq!(
-            failed_event.payload["failureCategory"].as_str(),
-            Some("test_failed")
-        );
-        assert_eq!(
-            failed_event.payload["result"]["metadata"]["tool_process_summary"]["failed"]["key"],
+            item["metadata"]["tool_process_summary"]["failed"]["key"],
             "toolCall.processSummary.error.failed"
         );
-        assert_eq!(
-            failed_event.payload["result"]["metadata"]["soul_phase"],
-            "after_tool_failure"
-        );
-        assert_eq!(
-            failed_event.payload["error"].as_str(),
-            Some("exit code 101")
-        );
-        assert_eq!(failed_event.payload["output"].as_str(), Some("test failed"));
     }
 }

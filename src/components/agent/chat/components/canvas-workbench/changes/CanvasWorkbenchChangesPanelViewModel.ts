@@ -137,20 +137,15 @@ function hasChangeItemReviewEvidence(item: CanvasWorkbenchChangeItem): boolean {
   );
 }
 
-function findRuntimeChangeItemWithEvidence(
+function findLatestRuntimeChangeItemWithEvidence(
   items: readonly CanvasWorkbenchChangeItem[],
-  excludedItemId?: string,
 ): CanvasWorkbenchChangeItem | undefined {
+  const itemsByLatest = [...items].reverse();
   return (
-    items.find(
+    itemsByLatest.find(
       (item) =>
-        item.id !== excludedItemId &&
-        item.source === "runtime" &&
-        hasChangeItemReviewEvidence(item),
-    ) ||
-    items.find(
-      (item) => item.id !== excludedItemId && item.source === "runtime",
-    )
+        item.source === "runtime" && hasChangeItemReviewEvidence(item),
+    ) || itemsByLatest.find((item) => item.source === "runtime")
   );
 }
 
@@ -172,23 +167,20 @@ export function resolveCanvasWorkbenchSelectedChangeItem({
     return explicitSelection;
   }
 
-  const runtimeEvidenceItem = findRuntimeChangeItemWithEvidence(items);
-  const runtimeEvidenceAfterActiveSelection = findRuntimeChangeItemWithEvidence(
-    items,
-    activeSelectionChangeItem?.id,
-  );
-  if (preferRuntimeEvidenceDefault && runtimeEvidenceItem) {
+  const latestRuntimeEvidenceItem =
+    findLatestRuntimeChangeItemWithEvidence(items);
+  if (preferRuntimeEvidenceDefault && latestRuntimeEvidenceItem) {
     if (
-      activeSelectionChangeItem &&
+      activeSelectionChangeItem?.source === "runtime" &&
       hasChangeItemReviewEvidence(activeSelectionChangeItem) &&
       activeSelectionChangeItem.previousContent != null
     ) {
       return activeSelectionChangeItem;
     }
-    return runtimeEvidenceAfterActiveSelection || runtimeEvidenceItem;
+    return latestRuntimeEvidenceItem;
   }
 
-  return activeSelectionChangeItem || runtimeEvidenceItem || items[0];
+  return activeSelectionChangeItem || latestRuntimeEvidenceItem || items[0];
 }
 
 export function resolveChangeStatusCopyKey(

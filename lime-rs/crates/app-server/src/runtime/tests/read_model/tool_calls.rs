@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn read_session_projects_runtime_events_into_thread_read_tool_calls() {
-    let core = RuntimeCore::with_backend(Arc::new(ToolReadModelBackend));
+    let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_tool_read".to_string()),
         thread_id: Some("thread_tool_read".to_string()),
@@ -21,22 +21,93 @@ async fn read_session_projects_runtime_events_into_thread_read_tool_calls() {
     })
     .expect("session");
 
-    core.start_turn(
-        AgentSessionTurnStartParams {
-            session_id: "sess_tool_read".to_string(),
-            turn_id: Some("turn_tool_read".to_string()),
-            input: AgentInput {
-                text: "整理今天的国际新闻".to_string(),
-                attachments: Vec::new(),
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_tool_read".to_string(),
+                turn_id: Some("turn_tool_read".to_string()),
+                input: AgentInput {
+                    text: "整理今天的国际新闻".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
             },
-            runtime_options: None,
-            queue_if_busy: false,
-            skip_pre_submit_resume: false,
-        },
-        RuntimeHostContext::default(),
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn")
+        .response
+        .turn;
+    core.append_external_runtime_events(
+        "sess_tool_read",
+        Some(&turn.turn_id),
+        vec![
+            RuntimeEvent::new(
+                "item.started",
+                canonical_tool_item_payload(
+                    "sess_tool_read",
+                    "thread_tool_read",
+                    &turn.turn_id,
+                    1,
+                    "inProgress",
+                    "fetch-call-1",
+                    "WebFetch",
+                    json!({"url": "https://example.com"}),
+                    None,
+                    json!({}),
+                ),
+            ),
+            RuntimeEvent::new(
+                "item.completed",
+                canonical_tool_item_payload(
+                    "sess_tool_read",
+                    "thread_tool_read",
+                    &turn.turn_id,
+                    2,
+                    "completed",
+                    "fetch-call-1",
+                    "WebFetch",
+                    json!({}),
+                    Some(json!({"text": "fetched https://example.com"})),
+                    json!({}),
+                ),
+            ),
+            RuntimeEvent::new(
+                "item.started",
+                canonical_tool_item_payload(
+                    "sess_tool_read",
+                    "thread_tool_read",
+                    &turn.turn_id,
+                    3,
+                    "inProgress",
+                    "search-call-1",
+                    "WebSearch",
+                    json!({"query": "international news"}),
+                    None,
+                    json!({}),
+                ),
+            ),
+            RuntimeEvent::new(
+                "item.completed",
+                canonical_tool_item_payload(
+                    "sess_tool_read",
+                    "thread_tool_read",
+                    &turn.turn_id,
+                    4,
+                    "completed",
+                    "search-call-1",
+                    "WebSearch",
+                    json!({}),
+                    Some(json!({"text": "search results"})),
+                    json!({}),
+                ),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
     )
-    .await
-    .expect("turn");
+    .expect("append canonical tool events");
 
     let read = core
         .read_session(AgentSessionReadParams {
@@ -110,54 +181,67 @@ async fn read_session_merges_tool_started_arguments_into_completed_tool_calls() 
         Some(&turn.turn_id),
         vec![
             RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "call_read_md",
-                    "toolName": "read_file",
-                    "arguments": {
-                        "path": "/workspace/docs/imported-preview.md"
-                    }
-                }),
+                "item.started",
+                canonical_tool_item_payload(
+                    "sess_tool_arguments",
+                    "thread_tool_arguments",
+                    &turn.turn_id,
+                    1,
+                    "inProgress",
+                    "call_read_md",
+                    "read_file",
+                    json!({"path": "/workspace/docs/imported-preview.md"}),
+                    None,
+                    json!({}),
+                ),
             ),
             RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "call_read_md",
-                    "status": "completed",
-                    "success": true,
-                    "output": "导入会话 Markdown 预览内容"
-                }),
+                "item.completed",
+                canonical_tool_item_payload(
+                    "sess_tool_arguments",
+                    "thread_tool_arguments",
+                    &turn.turn_id,
+                    2,
+                    "completed",
+                    "call_read_md",
+                    "read_file",
+                    json!({}),
+                    Some(json!({"text": "导入会话 Markdown 预览内容"})),
+                    json!({}),
+                ),
             ),
             RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "call_mcp_docs",
-                    "toolName": "mcp__docs__search_docs",
-                    "arguments": {
-                        "query": "mcp structured content"
-                    }
-                }),
+                "item.started",
+                canonical_tool_item_payload(
+                    "sess_tool_arguments",
+                    "thread_tool_arguments",
+                    &turn.turn_id,
+                    3,
+                    "inProgress",
+                    "call_mcp_docs",
+                    "mcp__docs__search_docs",
+                    json!({"query": "mcp structured content"}),
+                    None,
+                    json!({}),
+                ),
             ),
             RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "call_mcp_docs",
-                    "toolName": "mcp__docs__search_docs",
-                    "success": true,
-                    "result": {
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "docs found"
-                            }
-                        ],
-                        "structuredContent": {
-                            "answer": "ok",
-                            "ids": ["doc-1"]
-                        },
-                        "isError": false
-                    }
-                }),
+                "item.completed",
+                canonical_tool_item_payload(
+                    "sess_tool_arguments",
+                    "thread_tool_arguments",
+                    &turn.turn_id,
+                    4,
+                    "completed",
+                    "call_mcp_docs",
+                    "mcp__docs__search_docs",
+                    json!({}),
+                    Some(json!({
+                        "text": "docs found",
+                        "structuredContent": {"answer": "ok", "ids": ["doc-1"]}
+                    })),
+                    json!({}),
+                ),
             ),
             RuntimeEvent::new("turn.completed", json!({})),
         ],
@@ -185,8 +269,8 @@ async fn read_session_merges_tool_started_arguments_into_completed_tool_calls() 
     assert_eq!(read_file["status"], "completed");
     assert_eq!(read_file["success"], true);
     assert_eq!(
-        read_file["arguments"]["path"],
-        "/workspace/docs/imported-preview.md"
+        tool_argument_value(&read_file["arguments"], "path"),
+        Some("/workspace/docs/imported-preview.md")
     );
     assert_eq!(read_file["output_preview"], "导入会话 Markdown 预览内容");
     let mcp_docs = tool_calls
@@ -198,185 +282,6 @@ async fn read_session_merges_tool_started_arguments_into_completed_tool_calls() 
     assert_eq!(mcp_docs["success"], true);
     assert_eq!(mcp_docs["structured_content"]["answer"], "ok");
     assert_eq!(mcp_docs["structured_content"]["ids"][0], "doc-1");
-}
-
-#[tokio::test]
-async fn read_session_prefers_item_lifecycle_over_conflicting_legacy_tool_events() {
-    let (core, turn) = start_read_model_test_turn(
-        "sess_item_first_tool_read",
-        "thread_item_first_tool_read",
-        "turn_item_first_tool_read",
-    )
-    .await;
-
-    core.append_external_runtime_events(
-        "sess_item_first_tool_read",
-        Some(&turn.turn_id),
-        vec![
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool-web-fetch-1",
-                    "toolName": "WebFetch"
-                }),
-            ),
-            RuntimeEvent::new(
-                "item.started",
-                tool_item_event_payload(
-                    "tool-web-fetch-1",
-                    "thread_item_first_tool_read",
-                    &turn.turn_id,
-                    3,
-                    "in_progress",
-                    "WebFetch",
-                    json!({ "url": "https://example.com/a" }),
-                    None,
-                    None,
-                ),
-            ),
-            RuntimeEvent::new(
-                "item.completed",
-                tool_item_event_payload(
-                    "tool-web-fetch-1",
-                    "thread_item_first_tool_read",
-                    &turn.turn_id,
-                    3,
-                    "completed",
-                    "WebFetch",
-                    json!({ "url": "https://example.com/a" }),
-                    Some("fetched current item result"),
-                    Some(true),
-                ),
-            ),
-            RuntimeEvent::new(
-                "tool.failed",
-                json!({
-                    "toolCallId": "tool-web-fetch-1",
-                    "toolName": "WebFetch",
-                    "error": "legacy terminal arrived late"
-                }),
-            ),
-            RuntimeEvent::new("turn.completed", json!({})),
-        ],
-    )
-    .expect("append item lifecycle events");
-
-    let read = core
-        .read_session(AgentSessionReadParams {
-            session_id: "sess_item_first_tool_read".to_string(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("read session");
-    let detail = read.detail.expect("session detail");
-    let tool_calls = detail["thread_read"]["tool_calls"]
-        .as_array()
-        .expect("tool calls");
-    assert_eq!(
-        tool_calls
-            .iter()
-            .filter(|call| call["id"] == "tool-web-fetch-1")
-            .count(),
-        1
-    );
-    let tool_call = tool_calls
-        .iter()
-        .find(|call| call["id"] == "tool-web-fetch-1")
-        .expect("tool call");
-    assert_eq!(tool_call["status"], "completed");
-    assert_eq!(tool_call["success"], true);
-    assert_eq!(tool_call["output_preview"], "fetched current item result");
-    assert_eq!(
-        tool_call["diagnostics"]["status_conflicts"][0]["ignored_status"],
-        "failed"
-    );
-
-    let items = detail["items"].as_array().expect("items");
-    assert_eq!(
-        items
-            .iter()
-            .filter(|item| item["id"] == "tool-web-fetch-1" && item["type"] == "tool_call")
-            .count(),
-        1
-    );
-    let item = items
-        .iter()
-        .find(|item| item["id"] == "tool-web-fetch-1")
-        .expect("tool item");
-    assert_eq!(item["status"], "completed");
-    assert_eq!(item["output"], "fetched current item result");
-}
-
-#[tokio::test]
-async fn read_session_keeps_legacy_only_tool_events_as_synthetic_items() {
-    let (core, turn) = start_read_model_test_turn(
-        "sess_legacy_tool_synthetic",
-        "thread_legacy_tool_synthetic",
-        "turn_legacy_tool_synthetic",
-    )
-    .await;
-
-    core.append_external_runtime_events(
-        "sess_legacy_tool_synthetic",
-        Some(&turn.turn_id),
-        vec![
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "legacy-search-1",
-                    "toolName": "WebSearch",
-                    "arguments": {
-                        "query": "codex turn item lifecycle"
-                    }
-                }),
-            ),
-            RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "legacy-search-1",
-                    "toolName": "WebSearch",
-                    "success": true,
-                    "outputPreview": "legacy search result"
-                }),
-            ),
-            RuntimeEvent::new("turn.completed", json!({})),
-        ],
-    )
-    .expect("append legacy tool events");
-
-    let read = core
-        .read_session(AgentSessionReadParams {
-            session_id: "sess_legacy_tool_synthetic".to_string(),
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("read session");
-    let detail = read.detail.expect("session detail");
-    let tool_calls = detail["thread_read"]["tool_calls"]
-        .as_array()
-        .expect("tool calls");
-    let tool_call = tool_calls
-        .iter()
-        .find(|call| call["id"] == "legacy-search-1")
-        .expect("legacy synthetic tool call");
-    assert_eq!(tool_call["status"], "completed");
-    assert_eq!(
-        tool_call["metadata"]["source"].as_str(),
-        Some("legacy_tool_event")
-    );
-
-    let items = detail["items"].as_array().expect("items");
-    let item = items
-        .iter()
-        .find(|item| item["id"] == "legacy-search-1")
-        .expect("legacy synthetic item");
-    assert_eq!(item["type"], "web_search");
-    assert_eq!(item["status"], "completed");
-    assert_eq!(item["turn_id"], turn.turn_id);
-    assert_eq!(item["query"], "codex turn item lifecycle");
-    assert_eq!(item["metadata"]["source"], "legacy_tool_event");
 }
 
 #[tokio::test]
@@ -415,16 +320,23 @@ async fn read_session_preserves_image_tool_result_metadata_for_history_restore()
         Some(&turn.turn_id),
         vec![
             RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "image-tool-1",
-                    "toolName": "lime_create_image_generation_task",
-                    "arguments": {
+                "item.started",
+                canonical_tool_item_payload(
+                    "sess_image_tool_read",
+                    "thread_image_tool_read",
+                    &turn.turn_id,
+                    1,
+                    "inProgress",
+                    "image-tool-1",
+                    "lime_create_image_generation_task",
+                    json!({
                         "prompt": "画一张深圳夏天的图",
                         "provider_id": "agnes",
                         "model": "agnes-image-21-flash"
-                    }
-                }),
+                    }),
+                    None,
+                    json!({}),
+                ),
             ),
             RuntimeEvent::new(
                 "image_task.created",
@@ -436,35 +348,38 @@ async fn read_session_preserves_image_tool_result_metadata_for_history_restore()
                 }),
             ),
             RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "image-tool-1",
-                    "toolName": "lime_create_image_generation_task",
-                    "result": {
-                        "success": true,
-                        "output": response_output,
-                        "metadata": {
+                "item.completed",
+                canonical_tool_item_payload(
+                    "sess_image_tool_read",
+                    "thread_image_tool_read",
+                    &turn.turn_id,
+                    3,
+                    "completed",
+                    "image-tool-1",
+                    "lime_create_image_generation_task",
+                    json!({}),
+                    Some(json!({"text": response_output})),
+                    json!({
+                        "task_id": "task-image-1",
+                        "task_type": "image_generate",
+                        "task_family": "image",
+                        "status": "pending",
+                        "normalized_status": "pending",
+                        "artifact_path": ".lime/tasks/image_generate/task-image-1.json",
+                        "record": {
                             "task_id": "task-image-1",
                             "task_type": "image_generate",
                             "task_family": "image",
                             "status": "pending",
                             "normalized_status": "pending",
-                            "artifact_path": ".lime/tasks/image_generate/task-image-1.json",
-                            "record": {
-                                "task_id": "task-image-1",
-                                "task_type": "image_generate",
-                                "task_family": "image",
-                                "status": "pending",
-                                "normalized_status": "pending",
-                                "payload": {
-                                    "prompt": "画一张深圳夏天的图",
-                                    "provider_id": "agnes",
-                                    "model": "agnes-image-21-flash"
-                                }
+                            "payload": {
+                                "prompt": "画一张深圳夏天的图",
+                                "provider_id": "agnes",
+                                "model": "agnes-image-21-flash"
                             }
                         }
-                    }
-                }),
+                    }),
+                ),
             ),
             RuntimeEvent::new("turn.completed", json!({})),
         ],
@@ -656,33 +571,42 @@ async fn read_session_preserves_workspace_patch_host_tool_metadata_on_thread_ite
         Some(&turn.turn_id),
         vec![
             RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "workspace-patch-host-tool-websearch-1",
-                    "toolName": "WebSearch",
-                    "arguments": {
-                        "query": "golang 学习路径"
-                    },
-                    "metadata": {
+                "item.started",
+                canonical_tool_item_payload(
+                    "sess_legacy_tool_metadata",
+                    "thread_legacy_tool_metadata",
+                    &turn.turn_id,
+                    1,
+                    "inProgress",
+                    "workspace-patch-host-tool-websearch-1",
+                    "WebSearch",
+                    json!({"query": "golang 学习路径"}),
+                    None,
+                    json!({
                         "source": "workspace_patch_host_tool_requests",
                         "workflowKey": "content_article_workflow",
                         "workflow_key": "content_article_workflow"
-                    }
-                }),
+                    }),
+                ),
             ),
             RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "workspace-patch-host-tool-websearch-1",
-                    "toolName": "WebSearch",
-                    "success": true,
-                    "outputPreview": "找到 3 条资料",
-                    "metadata": {
+                "item.completed",
+                canonical_tool_item_payload(
+                    "sess_legacy_tool_metadata",
+                    "thread_legacy_tool_metadata",
+                    &turn.turn_id,
+                    2,
+                    "completed",
+                    "workspace-patch-host-tool-websearch-1",
+                    "WebSearch",
+                    json!({}),
+                    Some(json!({"text": "找到 3 条资料"})),
+                    json!({
                         "source": "workspace_patch_host_tool_requests",
                         "workflowKey": "content_article_workflow",
                         "workflow_key": "content_article_workflow"
-                    }
-                }),
+                    }),
+                ),
             ),
             RuntimeEvent::new("turn.completed", json!({})),
         ],
@@ -712,4 +636,65 @@ async fn read_session_preserves_workspace_patch_host_tool_metadata_on_thread_ite
     );
     assert_eq!(item["metadata"]["workflowKey"], "content_article_workflow");
     assert_eq!(item["metadata"]["workflow_key"], "content_article_workflow");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn canonical_tool_item_payload(
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    sequence: u64,
+    status: &str,
+    call_id: &str,
+    tool_name: &str,
+    arguments: serde_json::Value,
+    output: Option<serde_json::Value>,
+    metadata: serde_json::Value,
+) -> serde_json::Value {
+    let arguments = match arguments {
+        serde_json::Value::Object(arguments) => arguments
+            .into_iter()
+            .map(|(name, value)| {
+                json!({
+                    "name": name,
+                    "value": value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string())
+                })
+            })
+            .collect::<Vec<_>>(),
+        serde_json::Value::Array(arguments) => arguments,
+        serde_json::Value::Null => Vec::new(),
+        value => vec![json!({"name": "value", "value": value.to_string()})],
+    };
+    let terminal = matches!(status, "completed" | "failed" | "interrupted" | "cancelled");
+    json!({
+        "item": {
+            "sessionId": session_id,
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "itemId": format!("item_{call_id}"),
+            "sequence": sequence,
+            "ordinal": sequence,
+            "createdAtMs": 1_784_000_000_000_i64,
+            "updatedAtMs": 1_784_000_000_000_i64 + sequence as i64,
+            "completedAtMs": terminal.then_some(1_784_000_000_000_i64 + sequence as i64),
+            "kind": "tool",
+            "status": status,
+            "payload": {
+                "type": "tool",
+                "call_id": call_id,
+                "name": tool_name,
+                "arguments": arguments,
+                "output": output
+            },
+            "metadata": metadata
+        }
+    })
+}
+
+fn tool_argument_value<'a>(arguments: &'a serde_json::Value, name: &str) -> Option<&'a str> {
+    arguments.as_array()?.iter().find_map(|argument| {
+        (argument.get("name").and_then(serde_json::Value::as_str) == Some(name))
+            .then(|| argument.get("value").and_then(serde_json::Value::as_str))
+            .flatten()
+    })
 }
