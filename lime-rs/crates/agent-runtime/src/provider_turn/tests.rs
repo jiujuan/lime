@@ -1,12 +1,15 @@
 use super::*;
+use agent_protocol::provider_trace::ProviderTraceStage;
 use futures::future::BoxFuture;
 use futures::stream;
 use model_provider::current_client::CurrentProviderRole;
 use model_provider::current_client::FinishReason;
 use model_provider::current_client::{CurrentProviderError, CurrentProviderStream};
+use model_provider::provider_stream::RuntimeReplyProviderTraceMetadata;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use tokio::sync::oneshot;
 use tool_runtime::tool_executor::{
     RuntimeToolExecutionFuture, RuntimeToolExecutionRequest, RuntimeToolExecutionResult,
     RuntimeToolExecutor,
@@ -50,6 +53,48 @@ impl CurrentProvider for ScriptedProvider {
             });
         Box::pin(async move {
             let stream: CurrentProviderStream = Box::pin(stream::iter(stream));
+            Ok(stream)
+        })
+    }
+}
+
+struct HangingRequestProvider {
+    started: Mutex<Option<oneshot::Sender<()>>>,
+}
+
+impl CurrentProvider for HangingRequestProvider {
+    fn stream<'a>(
+        &'a self,
+        _request: CurrentProviderRequest,
+    ) -> BoxFuture<'a, Result<CurrentProviderStream, CurrentProviderError>> {
+        Box::pin(async move {
+            if let Some(sender) = self.started.lock().expect("provider started lock").take() {
+                let _ = sender.send(());
+            }
+            std::future::pending::<Result<CurrentProviderStream, CurrentProviderError>>().await
+        })
+    }
+}
+
+struct HangingFirstEventProvider {
+    stream_started: Mutex<Option<oneshot::Sender<()>>>,
+}
+
+impl CurrentProvider for HangingFirstEventProvider {
+    fn stream<'a>(
+        &'a self,
+        _request: CurrentProviderRequest,
+    ) -> BoxFuture<'a, Result<CurrentProviderStream, CurrentProviderError>> {
+        Box::pin(async move {
+            if let Some(sender) = self
+                .stream_started
+                .lock()
+                .expect("stream started lock")
+                .take()
+            {
+                let _ = sender.send(());
+            }
+            let stream: CurrentProviderStream = Box::pin(stream::pending());
             Ok(stream)
         })
     }
@@ -179,6 +224,109 @@ impl ToolLifecycleEmitter for RecordingLifecycleEmitter {
 }
 
 #[tokio::test]
+async fn each_sampling_attempt_emits_independent_provider_phase_trace() {
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        vec![
+            Ok(CanonicalLlmEvent::TextDelta {
+                id: "text-1".to_string(),
+                text: "working".to_string(),
+            }),
+            Ok(CanonicalLlmEvent::ToolCall {
+                id: "call-1".to_string(),
+                name: "Read".to_string(),
+                input: serde_json::json!({ "path": "README.md" }),
+                provider_executed: None,
+            }),
+            Ok(CanonicalLlmEvent::Finish {
+                reason: FinishReason::ToolCall,
+                usage: None,
+                response_id: Some("response-1".to_string()),
+            }),
+        ],
+        vec![
+            Ok(CanonicalLlmEvent::TextDelta {
+                id: "text-2".to_string(),
+                text: "done".to_string(),
+            }),
+            Ok(CanonicalLlmEvent::Finish {
+                reason: FinishReason::Stop,
+                usage: None,
+                response_id: Some("response-2".to_string()),
+            }),
+        ],
+    ]));
+    let mut events = Vec::new();
+
+    run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: Some(RuntimeReplyProviderTraceMetadata {
+                provider_name: "openai".to_string(),
+                model_name: "gpt-5".to_string(),
+                runtime_provider_backend: "current".to_string(),
+                runtime_provider_selector: Some("primary".to_string()),
+                runtime_provider_protocol: Some("responses".to_string()),
+                runtime_provider_active_model: Some("gpt-5".to_string()),
+            }),
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .max_turns(3)
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("read it".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    vec![RuntimeToolDefinition::new(
+                        "Read",
+                        "read files",
+                        serde_json::json!({ "type": "object" }),
+                    )],
+                    RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("."),
+            cancel_token: None,
+        },
+        |event| events.push(event),
+    )
+    .await
+    .expect("turn execution");
+
+    let traces = events
+        .into_iter()
+        .filter_map(|event| match event {
+            CurrentProviderTurnEvent::ProviderTrace { event } => Some(event),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        traces
+            .iter()
+            .map(|event| (event.attempt, event.stage))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, ProviderTraceStage::RequestStarted),
+            (1, ProviderTraceStage::FirstEventReceived),
+            (1, ProviderTraceStage::FirstTextDeltaReceived),
+            (2, ProviderTraceStage::RequestStarted),
+            (2, ProviderTraceStage::FirstEventReceived),
+            (2, ProviderTraceStage::FirstTextDeltaReceived),
+        ]
+    );
+    assert!(traces.iter().all(|event| {
+        event.provider == "openai"
+            && event.model == "gpt-5"
+            && event.runtime_provider_backend.as_deref() == Some("current")
+            && event.runtime_provider_selector.as_deref() == Some("primary")
+            && event.runtime_provider_protocol.as_deref() == Some("responses")
+            && event.runtime_provider_active_model.as_deref() == Some("gpt-5")
+    }));
+}
+
+#[tokio::test]
 async fn turn_executes_tool_then_continues_with_tool_result_transcript() {
     let provider = Arc::new(ScriptedProvider::new(vec![
         vec![
@@ -217,6 +365,7 @@ async fn turn_executes_tool_then_continues_with_tool_result_transcript() {
     let execution = run_current_provider_turn(
         CurrentProviderTurnInput {
             provider,
+            provider_trace_metadata: None,
             session_config: crate::session_config::SessionConfigBuilder::new("session-1")
                 .turn_id("turn-1")
                 .max_turns(3)
@@ -328,6 +477,7 @@ async fn each_sampling_step_uses_a_fresh_definition_and_executor_snapshot() {
     run_current_provider_turn(
         CurrentProviderTurnInput {
             provider,
+            provider_trace_metadata: None,
             session_config: crate::session_config::SessionConfigBuilder::new("session-1")
                 .turn_id("turn-1")
                 .max_turns(3)
@@ -395,6 +545,7 @@ async fn unadvertised_native_and_mcp_calls_fail_without_reaching_step_executor()
     run_current_provider_turn(
         CurrentProviderTurnInput {
             provider,
+            provider_trace_metadata: None,
             session_config: crate::session_config::SessionConfigBuilder::new("session-1")
                 .turn_id("turn-1")
                 .max_turns(3)
@@ -498,6 +649,7 @@ async fn turn_executes_same_response_tool_batch_in_parallel_when_policy_allows()
     run_current_provider_turn(
         CurrentProviderTurnInput {
             provider,
+            provider_trace_metadata: None,
             session_config: crate::session_config::SessionConfigBuilder::new("session-1")
                 .turn_id("turn-1")
                 .max_turns(3)
@@ -540,6 +692,7 @@ async fn turn_propagates_canonical_provider_error() {
     let error = run_current_provider_turn(
         CurrentProviderTurnInput {
             provider,
+            provider_trace_metadata: None,
             session_config: crate::session_config::SessionConfigBuilder::new("session-1")
                 .turn_id("turn-1")
                 .build(),
@@ -567,6 +720,153 @@ async fn turn_propagates_canonical_provider_error() {
 }
 
 #[tokio::test]
+async fn turn_fails_when_provider_completes_with_reasoning_but_no_user_visible_output() {
+    let provider = Arc::new(ScriptedProvider::new(vec![vec![
+        Ok(CanonicalLlmEvent::ReasoningDelta {
+            id: "reasoning-1".to_string(),
+            text: "I need to think about this first.".to_string(),
+        }),
+        Ok(CanonicalLlmEvent::Finish {
+            reason: FinishReason::Stop,
+            usage: None,
+            response_id: Some("response-1".to_string()),
+        }),
+    ]]));
+
+    let error = run_current_provider_turn(
+        CurrentProviderTurnInput {
+            provider,
+            provider_trace_metadata: None,
+            session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                .turn_id("turn-1")
+                .build(),
+            initial_messages: vec![CurrentProviderMessage::user(vec![
+                CurrentProviderContent::Text("hello".to_string()),
+            ])],
+            tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                RuntimeToolStepSnapshot::new(
+                    Vec::new(),
+                    RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                ),
+            ),
+            model_request_policy: None,
+            tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+            working_directory: PathBuf::from("."),
+            cancel_token: None,
+        },
+        |_| {},
+    )
+    .await
+    .expect_err("reasoning-only completion must fail the turn");
+
+    assert_eq!(
+        error.message,
+        "Provider completed without user-visible output"
+    );
+    assert!(error.emitted_any);
+}
+
+#[tokio::test]
+async fn cancelling_during_provider_request_releases_the_turn_without_waiting_for_http() {
+    let (started_sender, started_receiver) = oneshot::channel();
+    let cancel_token = CancellationToken::new();
+    let turn_cancel_token = cancel_token.clone();
+    let provider = Arc::new(HangingRequestProvider {
+        started: Mutex::new(Some(started_sender)),
+    });
+
+    let turn = tokio::spawn(async move {
+        run_current_provider_turn(
+            CurrentProviderTurnInput {
+                provider,
+                provider_trace_metadata: None,
+                session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                    .turn_id("turn-1")
+                    .build(),
+                initial_messages: vec![CurrentProviderMessage::user(vec![
+                    CurrentProviderContent::Text("hello".to_string()),
+                ])],
+                tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                    RuntimeToolStepSnapshot::new(
+                        Vec::new(),
+                        RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                    ),
+                ),
+                model_request_policy: None,
+                tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+                working_directory: PathBuf::from("."),
+                cancel_token: Some(turn_cancel_token),
+            },
+            |_| {},
+        )
+        .await
+    });
+
+    started_receiver
+        .await
+        .expect("provider request should start");
+    cancel_token.cancel();
+
+    let execution = tokio::time::timeout(std::time::Duration::from_millis(100), turn)
+        .await
+        .expect("cancel should not wait for the provider")
+        .expect("turn task should complete")
+        .expect("canceled provider request should be a normal terminal result");
+
+    assert!(execution.cancelled);
+}
+
+#[tokio::test]
+async fn cancelling_while_waiting_for_the_first_provider_event_releases_the_turn() {
+    let (started_sender, started_receiver) = oneshot::channel();
+    let cancel_token = CancellationToken::new();
+    let turn_cancel_token = cancel_token.clone();
+    let provider = Arc::new(HangingFirstEventProvider {
+        stream_started: Mutex::new(Some(started_sender)),
+    });
+
+    let turn = tokio::spawn(async move {
+        run_current_provider_turn(
+            CurrentProviderTurnInput {
+                provider,
+                provider_trace_metadata: None,
+                session_config: crate::session_config::SessionConfigBuilder::new("session-1")
+                    .turn_id("turn-1")
+                    .build(),
+                initial_messages: vec![CurrentProviderMessage::user(vec![
+                    CurrentProviderContent::Text("hello".to_string()),
+                ])],
+                tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(
+                    RuntimeToolStepSnapshot::new(
+                        Vec::new(),
+                        RuntimeToolExecutorHandle::new(Arc::new(EchoTool)),
+                    ),
+                ),
+                model_request_policy: None,
+                tool_lifecycle_emitter: Arc::new(RecordingLifecycleEmitter::default()),
+                working_directory: PathBuf::from("."),
+                cancel_token: Some(turn_cancel_token),
+            },
+            |_| {},
+        )
+        .await
+    });
+
+    started_receiver
+        .await
+        .expect("provider stream should start");
+    cancel_token.cancel();
+
+    let execution = tokio::time::timeout(std::time::Duration::from_millis(100), turn)
+        .await
+        .expect("cancel should not wait for the first provider event")
+        .expect("turn task should complete")
+        .expect("canceled provider stream should be a normal terminal result");
+
+    assert!(execution.cancelled);
+}
+
+#[tokio::test]
 async fn turn_requires_canonical_turn_id_before_provider_sampling() {
     let provider = Arc::new(ScriptedProvider::new(Vec::new()));
     let requests = Arc::clone(&provider.requests);
@@ -574,6 +874,7 @@ async fn turn_requires_canonical_turn_id_before_provider_sampling() {
     let error = run_current_provider_turn(
         CurrentProviderTurnInput {
             provider,
+            provider_trace_metadata: None,
             session_config: crate::session_config::SessionConfigBuilder::new("session-1").build(),
             initial_messages: Vec::new(),
             tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle::fixed(

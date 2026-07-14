@@ -29,9 +29,18 @@ interface McpResourcesBrowserProps {
   resources: McpResourceDefinition[];
   loading: boolean;
   onRefresh: () => Promise<void>;
-  onReadResource: (uri: string) => Promise<McpResourceContent>;
-  onSubscribeResource: (uri: string) => Promise<void>;
-  onUnsubscribeResource: (uri: string) => Promise<void>;
+  onReadResource: (server: string, uri: string) => Promise<McpResourceContent>;
+  onSubscribeResource: (server: string, uri: string) => Promise<void>;
+  onUnsubscribeResource: (server: string, uri: string) => Promise<void>;
+}
+
+interface McpResourceTarget {
+  server: string;
+  uri: string;
+}
+
+function resourceTargetKey(target: McpResourceTarget): string {
+  return `${target.server}\u0000${target.uri}`;
 }
 
 export function McpResourcesBrowser({
@@ -47,12 +56,13 @@ export function McpResourcesBrowser({
   const [expandedServers, setExpandedServers] = useState<Set<string>>(
     new Set(),
   );
-  const [activeResource, setActiveResource] = useState<string | null>(null);
+  const [activeResource, setActiveResource] =
+    useState<McpResourceTarget | null>(null);
   const [resourceContent, setResourceContent] =
     useState<McpResourceContent | null>(null);
   const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
-  const subscribedResourceRef = useRef<string | null>(null);
+  const subscribedResourceRef = useRef<McpResourceTarget | null>(null);
   const requestIdRef = useRef(0);
   const resourcesByServer = useMemo(
     () => groupMcpResourcesByServer(resources),
@@ -75,9 +85,9 @@ export function McpResourcesBrowser({
   };
 
   const unsubscribeResource = useCallback(
-    async (uri: string) => {
+    async (target: McpResourceTarget) => {
       try {
-        await onUnsubscribeResource(uri);
+        await onUnsubscribeResource(target.server, target.uri);
       } catch (e) {
         console.error("[McpResourcesBrowser] 取消订阅资源失败:", e);
       }
@@ -86,20 +96,25 @@ export function McpResourcesBrowser({
   );
 
   const unsubscribePreviewResource = useCallback(
-    async (uri: string) => {
-      if (subscribedResourceRef.current !== uri) {
+    async (target: McpResourceTarget) => {
+      if (
+        !subscribedResourceRef.current ||
+        resourceTargetKey(subscribedResourceRef.current) !==
+          resourceTargetKey(target)
+      ) {
         return;
       }
       subscribedResourceRef.current = null;
-      await unsubscribeResource(uri);
+      await unsubscribeResource(target);
     },
     [unsubscribeResource],
   );
 
-  const handleReadResource = async (uri: string) => {
-    if (activeResource === uri) {
+  const handleReadResource = async (target: McpResourceTarget) => {
+    const targetKey = resourceTargetKey(target);
+    if (activeResource && resourceTargetKey(activeResource) === targetKey) {
       requestIdRef.current += 1;
-      void unsubscribePreviewResource(uri);
+      void unsubscribePreviewResource(target);
       setActiveResource(null);
       setResourceContent(null);
       setReadError(null);
@@ -112,25 +127,25 @@ export function McpResourcesBrowser({
     }
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setActiveResource(uri);
+    setActiveResource(target);
     setReading(true);
     setReadError(null);
     setResourceContent(null);
     try {
       try {
-        await onSubscribeResource(uri);
+        await onSubscribeResource(target.server, target.uri);
         if (requestIdRef.current !== requestId) {
-          await unsubscribeResource(uri);
+          await unsubscribeResource(target);
           return;
         }
-        subscribedResourceRef.current = uri;
+        subscribedResourceRef.current = target;
       } catch (e) {
         console.error("[McpResourcesBrowser] 订阅资源失败:", e);
       }
       if (requestIdRef.current !== requestId) {
         return;
       }
-      const content = await onReadResource(uri);
+      const content = await onReadResource(target.server, target.uri);
       if (requestIdRef.current === requestId) {
         setResourceContent(content);
       }
@@ -258,13 +273,23 @@ export function McpResourcesBrowser({
                             )}
                           </div>
                           <button
-                            onClick={() => handleReadResource(resource.uri)}
+                            onClick={() =>
+                              handleReadResource({
+                                server: resource.server_name,
+                                uri: resource.uri,
+                              })
+                            }
                             className="p-1 rounded hover:bg-muted text-muted-foreground flex-shrink-0"
                             title={t(
                               "settings.mcpPage.runtime.resourceBrowser.readTitle",
                             )}
                           >
-                            {activeResource === resource.uri ? (
+                            {activeResource &&
+                            resourceTargetKey(activeResource) ===
+                              resourceTargetKey({
+                                server: resource.server_name,
+                                uri: resource.uri,
+                              }) ? (
                               <X className="h-4 w-4" />
                             ) : (
                               <Eye className="h-4 w-4" />
@@ -273,26 +298,31 @@ export function McpResourcesBrowser({
                         </div>
 
                         {/* 资源内容预览 */}
-                        {activeResource === resource.uri && (
-                          <div className="px-8 pb-3">
-                            {reading ? (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <RefreshCw className="h-3 w-3 animate-spin" />
-                                {t(
-                                  "settings.mcpPage.runtime.resourceBrowser.reading",
-                                )}
-                              </div>
-                            ) : readError ? (
-                              <div className="p-2 rounded bg-destructive/10 text-destructive text-xs">
-                                {readError}
-                              </div>
-                            ) : resourceContent ? (
-                              <McpResourceContentPreview
-                                content={resourceContent}
-                              />
-                            ) : null}
-                          </div>
-                        )}
+                        {activeResource &&
+                          resourceTargetKey(activeResource) ===
+                            resourceTargetKey({
+                              server: resource.server_name,
+                              uri: resource.uri,
+                            }) && (
+                            <div className="px-8 pb-3">
+                              {reading ? (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                  {t(
+                                    "settings.mcpPage.runtime.resourceBrowser.reading",
+                                  )}
+                                </div>
+                              ) : readError ? (
+                                <div className="p-2 rounded bg-destructive/10 text-destructive text-xs">
+                                  {readError}
+                                </div>
+                              ) : resourceContent ? (
+                                <McpResourceContentPreview
+                                  content={resourceContent}
+                                />
+                              ) : null}
+                            </div>
+                          )}
                       </div>
                     ))}
                   </div>

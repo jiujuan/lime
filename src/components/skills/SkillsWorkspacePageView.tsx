@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Skill } from "@/lib/api/skills";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { SkillScaffoldDraft } from "@/types/page";
 import { WorkspaceRegisteredSkillsPanel } from "@/features/capability-drafts";
 import { Button } from "@/components/ui/button";

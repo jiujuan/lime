@@ -6,7 +6,7 @@
  * @module components/mcp/McpPromptsBrowser
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageSquare, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ import {
   buildMcpPromptArguments,
   filterMcpPromptsByServer,
   groupMcpPromptsByServer,
+  mcpPromptTargetKey,
 } from "./mcpPromptBrowserModel";
 import { McpPromptServerGroup } from "./McpPromptServerGroup";
 
@@ -23,6 +24,7 @@ interface McpPromptsBrowserProps {
   loading: boolean;
   onRefresh: () => Promise<void>;
   onGetPrompt: (
+    server: string,
     name: string,
     args: Record<string, unknown>,
   ) => Promise<McpPromptResult>;
@@ -46,6 +48,7 @@ export function McpPromptsBrowser({
   );
   const [calling, setCalling] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const promptsByServer = useMemo(
     () => groupMcpPromptsByServer(prompts),
@@ -68,15 +71,21 @@ export function McpPromptsBrowser({
   };
 
   const handleOpenPrompt = (prompt: McpPromptDefinition) => {
-    setActivePrompt(prompt.name);
+    requestIdRef.current += 1;
+    setActivePrompt(mcpPromptTargetKey(prompt));
     setPromptArgs({});
     setPromptResult(null);
     setCallError(null);
+    setCalling(false);
   };
 
   const handleTogglePrompt = (prompt: McpPromptDefinition) => {
-    if (activePrompt === prompt.name) {
+    if (activePrompt === mcpPromptTargetKey(prompt)) {
+      requestIdRef.current += 1;
       setActivePrompt(null);
+      setPromptResult(null);
+      setCallError(null);
+      setCalling(false);
       return;
     }
 
@@ -91,16 +100,24 @@ export function McpPromptsBrowser({
   };
 
   const handleCallPrompt = async (prompt: McpPromptDefinition) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setCalling(true);
     setCallError(null);
     try {
       const args = buildMcpPromptArguments(prompt, promptArgs);
-      const result = await onGetPrompt(prompt.name, args);
-      setPromptResult(result);
+      const result = await onGetPrompt(prompt.server_name, prompt.name, args);
+      if (requestIdRef.current === requestId) {
+        setPromptResult(result);
+      }
     } catch (e) {
-      setCallError(e instanceof Error ? e.message : String(e));
+      if (requestIdRef.current === requestId) {
+        setCallError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
-      setCalling(false);
+      if (requestIdRef.current === requestId) {
+        setCalling(false);
+      }
     }
   };
 

@@ -81,13 +81,13 @@ function schemaToTs(schema, indent = 0) {
   // oneOf 联合类型
   if (schema.oneOf) {
     const variants = schema.oneOf.map((s) => schemaToTs(s, indent));
-    return variants.join(" | ");
+    return composeRootSchemaWithVariants(schema, variants, "oneOf", indent);
   }
 
   // anyOf 联合类型
   if (schema.anyOf) {
     const variants = schema.anyOf.map((s) => schemaToTs(s, indent));
-    return variants.join(" | ");
+    return composeRootSchemaWithVariants(schema, variants, "anyOf", indent);
   }
 
   // const 字面量
@@ -137,6 +137,19 @@ function schemaToTs(schema, indent = 0) {
   return "unknown";
 }
 
+function composeRootSchemaWithVariants(schema, variants, keyword, indent) {
+  const variantType = variants.join(" | ");
+  const rootSchema = { ...schema };
+  delete rootSchema[keyword];
+  const hasRootShape =
+    Object.keys(rootSchema.properties || {}).length > 0 ||
+    Object.keys(rootSchema.patternProperties || {}).length > 0;
+  if (!hasRootShape) {
+    return variantType;
+  }
+  return `(${schemaToTs(rootSchema, indent)}) & (${variantType})`;
+}
+
 function primitiveToTs(type, schema = {}) {
   switch (type) {
     case "string":
@@ -176,6 +189,7 @@ function objectTypeToTs(schema, indent = 0) {
 }
 
 function generateTypes() {
+  assertCompositionSupport();
   console.log("📖 读取 JSON Schema bundle...");
   const bundleRaw = fs.readFileSync(SCHEMA_BUNDLE_PATH, "utf8");
   const bundle = JSON.parse(bundleRaw);
@@ -209,8 +223,8 @@ function generateTypes() {
     try {
       const schema = globalDefs[name];
       const tsType = schemaToTs(schema, 0);
-      // 只有有 properties 的对象用 interface，其他用 type alias
-      if (schema.properties) {
+      // 组合 schema 需要交叉/联合 type；普通 properties 对象使用 interface。
+      if (schema.properties && !schema.oneOf && !schema.anyOf) {
         typeBlocks.push(`export interface ${name} ${tsType}`);
       } else {
         typeBlocks.push(`export type ${name} = ${tsType};`);
@@ -264,6 +278,27 @@ function generateTypes() {
   formatGeneratedOutput();
   const formattedLength = fs.readFileSync(OUTPUT_PATH, "utf8").length;
   console.log(`✅ 已写入 ${OUTPUT_PATH} (${formattedLength} bytes)`);
+}
+
+function assertCompositionSupport() {
+  const result = schemaToTs({
+    type: "object",
+    properties: { threadId: { type: "string" } },
+    required: ["threadId"],
+    oneOf: [
+      {
+        type: "object",
+        properties: { mode: { const: "form" } },
+        required: ["mode"],
+      },
+    ],
+  });
+  if (
+    !result.includes("threadId: string;") ||
+    !result.includes('mode: "form";')
+  ) {
+    throw new Error("root properties must survive oneOf/anyOf composition");
+  }
 }
 
 function collectMethodConstants(methods) {

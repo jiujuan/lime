@@ -1,17 +1,20 @@
 use crate::credential_bridge::{ConfiguredReplyProvider, CredentialBridge};
 use crate::protocol::AgentActionRequiredScope;
+mod mcp_runtime;
+#[cfg(test)]
+mod mcp_runtime_tests;
 use agent_runtime::action_required::{
     ActionRequiredError, ActionTerminalStatus, PendingActionDescriptor, PendingActionRestoreOutcome,
 };
 use lime_core::database::DbConnection;
-use lime_mcp::McpBridgeSnapshot;
+use lime_mcp::{ElicitationRequestRouter, McpRuntimeServerSpec};
+pub(crate) use mcp_runtime::McpThreadRuntime;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use tool_runtime::gateway_dispatch_execution::RuntimeGatewayToolExecutionRegistry;
-use tool_runtime::mcp_connection::McpConnectionRegistry;
 use tool_runtime::tool_definition::RuntimeToolDefinition;
 
 pub struct AgentRuntimeState {
@@ -21,8 +24,8 @@ pub struct AgentRuntimeState {
     provider: Arc<RwLock<Option<ConfiguredReplyProvider>>>,
     native_tool_definitions: Arc<RwLock<HashMap<String, RuntimeToolDefinition>>>,
     gateway_tools: RuntimeGatewayToolExecutionRegistry,
-    mcp_connections: Arc<McpConnectionRegistry>,
-    mcp_bridge_registry: Arc<crate::mcp_bridge::McpBridgeRuntimeRegistry>,
+    mcp_runtimes: Arc<RwLock<HashMap<String, Arc<McpThreadRuntime>>>>,
+    mcp_runtime_lifecycle: Arc<Mutex<()>>,
     action_required: Arc<agent_runtime::action_required::ActionRequiredState>,
     live_execution_gateway:
         Arc<RwLock<Option<Arc<dyn crate::live_execution_process::LiveExecutionProcessGateway>>>>,
@@ -37,8 +40,8 @@ impl Clone for AgentRuntimeState {
             provider: Arc::clone(&self.provider),
             native_tool_definitions: Arc::clone(&self.native_tool_definitions),
             gateway_tools: self.gateway_tools.clone(),
-            mcp_connections: Arc::clone(&self.mcp_connections),
-            mcp_bridge_registry: Arc::clone(&self.mcp_bridge_registry),
+            mcp_runtimes: Arc::clone(&self.mcp_runtimes),
+            mcp_runtime_lifecycle: Arc::clone(&self.mcp_runtime_lifecycle),
             action_required: Arc::clone(&self.action_required),
             live_execution_gateway: Arc::clone(&self.live_execution_gateway),
         }
@@ -60,8 +63,8 @@ impl AgentRuntimeState {
             provider: Arc::new(RwLock::new(None)),
             native_tool_definitions: Arc::new(RwLock::new(HashMap::new())),
             gateway_tools: RuntimeGatewayToolExecutionRegistry::default(),
-            mcp_connections: Arc::new(McpConnectionRegistry::new()),
-            mcp_bridge_registry: Arc::new(crate::mcp_bridge::McpBridgeRuntimeRegistry::new()),
+            mcp_runtimes: Arc::new(RwLock::new(HashMap::new())),
+            mcp_runtime_lifecycle: Arc::new(Mutex::new(())),
             action_required: Arc::new(
                 agent_runtime::action_required::ActionRequiredState::default(),
             ),
@@ -94,8 +97,23 @@ impl AgentRuntimeState {
         &self.gateway_tools
     }
 
-    pub(crate) fn mcp_connections(&self) -> &McpConnectionRegistry {
-        self.mcp_connections.as_ref()
+    pub(crate) async fn mcp_runtime(
+        &self,
+        session_id: &str,
+        thread_id: &str,
+    ) -> Result<Arc<McpThreadRuntime>, String> {
+        let runtimes = self.mcp_runtimes.read().await;
+        let runtime = runtimes
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| format!("MCP runtime is not initialized for session '{session_id}'"))?;
+        if runtime.thread_id() != thread_id {
+            return Err(format!(
+                "MCP runtime thread mismatch for session '{session_id}': expected '{}', got '{thread_id}'",
+                runtime.thread_id()
+            ));
+        }
+        Ok(runtime)
     }
 
     pub(crate) fn action_required_state(
@@ -298,13 +316,91 @@ impl AgentRuntimeState {
             .await
     }
 
-    pub async fn sync_mcp_bridges(&self, snapshots: Vec<McpBridgeSnapshot>) -> Result<(), String> {
-        let bridge_count = self
-            .mcp_bridge_registry
-            .sync(self.mcp_connections.as_ref(), snapshots)
-            .await;
-        tracing::info!(bridge_count, "[AgentRuntime] MCP bridge 同步完成");
-        Ok(())
+    pub async fn ensure_mcp_runtime(
+        &self,
+        session_id: String,
+        thread_id: String,
+        elicitation_router: ElicitationRequestRouter,
+        server_specs: Vec<McpRuntimeServerSpec>,
+    ) -> Result<(), String> {
+        self.ensure_mcp_runtime_generation(session_id, thread_id, elicitation_router, server_specs)
+            .await
+            .map(|_| ())
+    }
+
+    async fn ensure_mcp_runtime_generation(
+        &self,
+        session_id: String,
+        thread_id: String,
+        elicitation_router: ElicitationRequestRouter,
+        server_specs: Vec<McpRuntimeServerSpec>,
+    ) -> Result<Arc<McpThreadRuntime>, String> {
+        if session_id.trim().is_empty() || thread_id.trim().is_empty() {
+            return Err("MCP runtime requires canonical session and thread identity".to_string());
+        }
+        let _lifecycle = self.mcp_runtime_lifecycle.lock().await;
+        if let Some(runtime) = self.mcp_runtimes.read().await.get(&session_id).cloned() {
+            if runtime.thread_id() != thread_id {
+                return Err(format!(
+                    "MCP runtime thread mismatch for session '{session_id}'"
+                ));
+            }
+            if runtime.server_specs() == server_specs {
+                return Ok(runtime);
+            }
+        }
+
+        let runtime = Arc::new(McpThreadRuntime::new(
+            session_id.clone(),
+            thread_id.clone(),
+            elicitation_router,
+            server_specs.clone(),
+        ));
+        runtime.start().await?;
+        let mut runtimes = self.mcp_runtimes.write().await;
+        if let Some(existing) = runtimes.get(&session_id).cloned() {
+            if existing.thread_id() != runtime.thread_id() {
+                return Err(format!(
+                    "MCP runtime thread mismatch for session '{session_id}'"
+                ));
+            }
+        }
+        runtimes.insert(session_id, Arc::clone(&runtime));
+        Ok(runtime)
+    }
+
+    pub async fn close_mcp_runtime(&self, session_id: &str, thread_id: &str) {
+        let _lifecycle = self.mcp_runtime_lifecycle.lock().await;
+        let runtime = self.mcp_runtimes.write().await.remove(session_id);
+        let Some(runtime) = runtime else {
+            return;
+        };
+        if runtime.thread_id() != thread_id {
+            self.mcp_runtimes
+                .write()
+                .await
+                .insert(session_id.to_string(), runtime);
+            tracing::warn!(
+                session_id,
+                thread_id,
+                "refusing to close MCP runtime with mismatched thread"
+            );
+            return;
+        }
+        runtime.shutdown().await;
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn mcp_runtime_count(&self) -> usize {
+        self.mcp_runtimes.read().await.len()
+    }
+
+    pub async fn clear_mcp_runtimes(&self) {
+        let _lifecycle = self.mcp_runtime_lifecycle.lock().await;
+        let runtimes = std::mem::take(&mut *self.mcp_runtimes.write().await);
+        for runtime in runtimes.into_values() {
+            runtime.shutdown().await;
+        }
     }
 
     pub async fn is_initialized(&self) -> bool {

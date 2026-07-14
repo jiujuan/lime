@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "_meta": {
+          "default": null
+        },
+        "message": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mode": {
+          "const": "form",
+          "type": "string"
+        },
+        "requestedSchema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": [
+        "message",
+        "mode",
+        "requestedSchema"
+      ],
+      "type": "object"
+    }
+  ],
+  "properties": {
+    "serverName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "threadId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "turnId": {
+      "default": null,
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "serverName",
+    "threadId"
+  ],
+  "title": "McpServerElicitationRequestParams",
+  "type": "object"
+}

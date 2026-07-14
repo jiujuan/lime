@@ -246,13 +246,12 @@ export function resolveMessageListItemProjection({
       shouldNormalizeInactiveRunningWebRetrieval,
     );
   const terminalApprovalRequestIds = new Set(
-    (timelineItemsForDisplay || [])
-      .filter(
-        (item) =>
-          item.type === "approval_request" &&
-          (item.status === "completed" || item.status === "failed"),
-      )
-      .map((item) => item.request_id),
+    (timelineItemsForDisplay || []).flatMap((item) =>
+      item.type === "approval_request" &&
+      (item.status === "completed" || item.status === "failed")
+        ? [item.request_id]
+        : [],
+    ),
   );
   const filterTerminalApprovalActionRequests = (
     actionRequests: Message["actionRequests"],

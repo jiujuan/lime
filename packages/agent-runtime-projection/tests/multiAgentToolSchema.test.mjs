@@ -28,6 +28,15 @@ test("Codex v2 multi-agent schema contracts expose current tool names only", () 
   assert.equal(isLegacyMultiAgentToolName("Agent"), true);
   assert.equal(isLegacyMultiAgentToolName("TeamCreate"), true);
   assert.equal(isLegacyMultiAgentToolName("multi_agent_v1.send_input"), true);
+  for (const legacyName of [
+    "send_input",
+    "resume_agent",
+    "wait",
+    "close_agent",
+  ]) {
+    assert.equal(isCodexMultiAgentToolName(legacyName), false);
+    assert.equal(isLegacyMultiAgentToolName(legacyName), true);
+  }
 });
 
 test("spawn_agent requires task_name and message and rejects v1 item fields", () => {
@@ -106,13 +115,21 @@ test("message, wait, interrupt and list contracts match Codex v2 guardrails", ()
 });
 
 test("legacy Lime/Agent team tool names fail closed before projection", () => {
-  assert.deepEqual(
-    validateCodexMultiAgentToolSchema({
-      toolName: "TeamCreate",
-      input: { name: "writers" },
-    }).map((item) => item.code),
-    ["legacy_tool_name"],
-  );
+  for (const toolName of [
+    "TeamCreate",
+    "send_input",
+    "resume_agent",
+    "wait",
+    "close_agent",
+  ]) {
+    assert.deepEqual(
+      validateCodexMultiAgentToolSchema({
+        toolName,
+        input: { name: "writers" },
+      }).map((item) => item.code),
+      ["legacy_tool_name"],
+    );
+  }
   assert.equal(
     buildCodexMultiAgentToolSchemaProjectionEvent({
       toolName: "TeamCreate",

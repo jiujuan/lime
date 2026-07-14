@@ -10,10 +10,10 @@ import {
 } from "@/lib/api/capabilityDrafts";
 import {
   exportAgentRuntimeEvidencePack,
-  listWorkspaceSkillBindings,
-  type AgentRuntimeCompletionAuditSummary,
-  type AgentRuntimeWorkspaceSkillBinding,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/exportClient";
+import { listWorkspaceSkillBindings } from "@/lib/api/agentRuntime/inventoryClient";
+import type { AgentRuntimeCompletionAuditSummary } from "@/lib/api/agentRuntime/evidenceTypes";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import {
   getAutomationJobs,
   getAutomationRunHistory,

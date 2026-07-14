@@ -1,3 +1,8 @@
+mod agent_control;
+mod agent_control_gateway;
+mod agent_control_gateway_support;
+mod agent_mailbox_delivery;
+mod agent_terminal_activity;
 mod app_data;
 pub(crate) mod approval_cache;
 mod approval_decision_contract;
@@ -401,6 +406,14 @@ pub trait ExecutionBackend: Send + Sync {
         request: CancelExecutionRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError>;
+
+    async fn close_session(
+        &self,
+        _session_id: &str,
+        _thread_id: &str,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
 
     async fn respond_action(
         &self,

@@ -199,11 +199,21 @@ pub(crate) async fn list_mcp_tools(
     })
 }
 
-pub(crate) async fn list_mcp_bridge_snapshots(
-    manager: &McpManagerState,
-) -> Result<Vec<lime_mcp::McpBridgeSnapshot>, RuntimeCoreError> {
-    let manager = manager.lock().await;
-    manager.bridge_snapshots().await.map_err(mcp_error)
+pub(crate) fn list_mcp_runtime_server_specs(
+    db: &DbConnection,
+) -> Result<Vec<lime_mcp::McpRuntimeServerSpec>, RuntimeCoreError> {
+    Ok(McpService::get_all(db)
+        .map_err(data_error)?
+        .into_iter()
+        .filter(|server| server.enabled_lime)
+        .filter_map(|server| {
+            let config = parse_mcp_server_config(&server.server_config);
+            config.enabled.then(|| lime_mcp::McpRuntimeServerSpec {
+                name: server.name,
+                config,
+            })
+        })
+        .collect::<Vec<_>>())
 }
 
 pub(crate) async fn list_mcp_tools_for_context(
@@ -279,7 +289,7 @@ pub(crate) async fn get_mcp_prompt(
 ) -> Result<McpPromptGetResponse, RuntimeCoreError> {
     let manager = manager.lock().await;
     let result = manager
-        .get_prompt(&params.name, params.arguments)
+        .get_prompt(&params.server, &params.name, params.arguments)
         .await
         .map_err(mcp_error)?;
     Ok(to_mcp_prompt_get_response(result))
@@ -305,7 +315,7 @@ pub(crate) async fn read_mcp_resource(
 ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
     let manager = manager.lock().await;
     let result = manager
-        .read_resource(&params.uri)
+        .read_resource(&params.server, &params.uri)
         .await
         .map_err(mcp_error)?;
     Ok(McpResourceReadResponse {
@@ -322,7 +332,7 @@ pub(crate) async fn subscribe_mcp_resource(
 ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
     let manager = manager.lock().await;
     manager
-        .subscribe_resource(&params.uri)
+        .subscribe_resource(&params.server, &params.uri)
         .await
         .map_err(mcp_error)?;
     Ok(McpResourceSubscriptionResponse::default())
@@ -334,7 +344,7 @@ pub(crate) async fn unsubscribe_mcp_resource(
 ) -> Result<McpResourceSubscriptionResponse, RuntimeCoreError> {
     let manager = manager.lock().await;
     manager
-        .unsubscribe_resource(&params.uri)
+        .unsubscribe_resource(&params.server, &params.uri)
         .await
         .map_err(mcp_error)?;
     Ok(McpResourceSubscriptionResponse::default())

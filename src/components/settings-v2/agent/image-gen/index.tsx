@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
+import { getConfig, type Config } from "@/lib/api/appConfig";
 import {
   findConfiguredProviderBySelection,
   type ConfiguredProvider,
@@ -22,7 +22,6 @@ import {
 import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 import { resolveProviderModelLoadOptions } from "@/lib/model/providerModelLoadOptions";
 import {
-  buildPersistedMediaGenerationPreference,
   hasMediaGenerationPreferenceOverride,
   type MediaGenerationPreference,
 } from "@/lib/mediaGeneration";
@@ -34,6 +33,7 @@ import {
   type ImageGenModel,
 } from "@/lib/imageGen/catalog";
 import { MediaPreferenceSection } from "../shared/MediaPreferenceSection";
+import { updateMediaPreference } from "../shared/mediaPreferencePersistence";
 
 const DEFAULT_MEDIA_PREFERENCE: MediaGenerationPreference = {
   allowFallback: true,
@@ -217,25 +217,12 @@ export function ImageGenSettings() {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  const savePreference = async (nextPreference: MediaGenerationPreference) => {
-    if (!config) {
-      return;
-    }
-
+  const savePreference = async (
+    updater: (current: MediaGenerationPreference) => MediaGenerationPreference,
+  ) => {
     try {
-      const persistedPreference =
-        buildPersistedMediaGenerationPreference(nextPreference);
-      const updatedConfig: Config = {
-        ...config,
-        workspace_preferences: {
-          ...config.workspace_preferences,
-          media_defaults: {
-            ...config.workspace_preferences?.media_defaults,
-            image: persistedPreference,
-          },
-        },
-      };
-      await saveConfig(updatedConfig);
+      const { config: updatedConfig, preference: nextPreference } =
+        await updateMediaPreference("image", updater);
       setConfig(updatedConfig);
       setGlobalImagePreference(nextPreference);
       showMessage("success", t("settings.mediaGeneration.message.saved"));
@@ -259,36 +246,48 @@ export function ImageGenSettings() {
           api_host: nextProvider.apiHost,
         })
       : [];
-    const preferredModelId = preferredProviderId
-      ? nextModelIds.includes(globalImagePreference.preferredModelId || "")
-        ? globalImagePreference.preferredModelId
-        : undefined
-      : undefined;
-
-    void savePreference({
+    void savePreference((current) => ({
       preferredProviderId,
-      preferredModelId,
-      allowFallback: globalImagePreference.allowFallback ?? true,
-    });
+      preferredModelId: preferredProviderId
+        ? nextModelIds.includes(current.preferredModelId || "")
+          ? current.preferredModelId
+          : undefined
+        : undefined,
+      allowFallback: current.allowFallback ?? true,
+    }));
   };
 
   const handleModelChange = (value: string) => {
-    void savePreference({
-      ...globalImagePreference,
+    void savePreference((current) => ({
+      ...current,
       preferredModelId: value.trim() || undefined,
-      allowFallback: globalImagePreference.allowFallback ?? true,
-    });
+      allowFallback: current.allowFallback ?? true,
+    }));
+  };
+
+  const handleProviderAndModelChange = (
+    providerValue: string,
+    modelValue: string,
+  ) => {
+    void savePreference((current) => ({
+      preferredProviderId: providerValue.trim() || undefined,
+      preferredModelId:
+        providerValue.trim() && modelValue.trim()
+          ? modelValue.trim()
+          : undefined,
+      allowFallback: current.allowFallback ?? true,
+    }));
   };
 
   const handleFallbackChange = (value: boolean) => {
-    void savePreference({
-      ...globalImagePreference,
+    void savePreference((current) => ({
+      ...current,
       allowFallback: value,
-    });
+    }));
   };
 
   const handleResetPreference = () => {
-    void savePreference(DEFAULT_MEDIA_PREFERENCE);
+    void savePreference(() => DEFAULT_MEDIA_PREFERENCE);
   };
 
   const getImageFallbackModels = useCallback((provider: ConfiguredProvider) => {
@@ -321,6 +320,7 @@ export function ImageGenSettings() {
         setProviderType={handleProviderChange}
         model={globalImagePreference.preferredModelId ?? ""}
         setModel={handleModelChange}
+        setProviderAndModel={handleProviderAndModelChange}
         providerFilter={(provider) =>
           provider.authStatus === "login_required" ||
           isImageCapabilityProvider({

@@ -31,7 +31,7 @@ import {
   subscribeAppConfigChanged,
 } from "@/lib/api/appConfig";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
   FOOTER_SIDEBAR_NAV_ITEMS,

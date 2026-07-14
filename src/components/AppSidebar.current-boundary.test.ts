@@ -19,7 +19,42 @@ function sourceBetween(
   return source.slice(start, end);
 }
 
+const SIDEBAR_SESSION_DOMAIN_SOURCES = [
+  "src/components/AppSidebar.tsx",
+  "src/components/AppSidebar.conversations.test.tsx",
+  "src/components/AppSidebar.testFixtures.tsx",
+  "src/components/app-sidebar/AppSidebarConversationMenus.tsx",
+  "src/components/app-sidebar/AppSidebarConversationRow.test.tsx",
+  "src/components/app-sidebar/AppSidebarConversationRow.tsx",
+  "src/components/app-sidebar/AppSidebarConversationShelf.tsx",
+  "src/components/app-sidebar/AppSidebarProjectConversationGroups.tsx",
+  "src/components/app-sidebar/AppSidebarSearchDialog.tsx",
+  "src/components/app-sidebar/sidebarConversationGroups.test.ts",
+  "src/components/app-sidebar/sidebarConversationGroups.ts",
+  "src/components/app-sidebar/sidebarSessionFormatting.test.ts",
+  "src/components/app-sidebar/sidebarSessionFormatting.ts",
+  "src/components/app-sidebar/sidebarSessions.test.ts",
+  "src/components/app-sidebar/sidebarSessions.ts",
+  "src/components/app-sidebar/useAppSidebarConversationActions.ts",
+  "src/components/app-sidebar/useAppSidebarSessions.ts",
+  "src/components/settings-v2/general/archived-conversations/index.test.tsx",
+  "src/components/settings-v2/general/archived-conversations/index.tsx",
+] as const;
+
 describe("AppSidebar current App Server session boundary", () => {
+  it("侧栏会话域不得回绕 agentRuntime compat 根 barrel", () => {
+    for (const relativePath of SIDEBAR_SESSION_DOMAIN_SOURCES) {
+      const source = readSource(relativePath);
+
+      expect(source, relativePath).not.toContain(
+        'from "@/lib/api/agentRuntime"',
+      );
+      expect(source, relativePath).not.toContain(
+        'vi.mock("@/lib/api/agentRuntime"',
+      );
+    }
+  });
+
   it("侧栏归档 / 恢复入口只能经 agentRuntime session gateway 更新 session", () => {
     const source = readSource(
       "src/components/app-sidebar/useAppSidebarConversationActions.ts",

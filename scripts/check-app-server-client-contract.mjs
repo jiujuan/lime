@@ -790,7 +790,7 @@ const checks = [
       "method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY,",
       "method: METHOD_FILE_SYSTEM_RENAME_FILE,",
       "method: METHOD_FILE_SYSTEM_DELETE_FILE,",
-      "app_server_method_catalog_keeps_request_and_notification_methods_together",
+      "app_server_method_catalog_keeps_all_method_kinds_together",
     ],
   },
   {
@@ -8499,6 +8499,13 @@ function checkRetiredToolWireSurface() {
     "lime-rs/crates/app-server/src/runtime/tests/external_events/actions.rs",
     "lime-rs/crates/app-server/src/runtime/tests/external_events/owner_terminal.rs",
     "lime-rs/crates/app-server/src/runtime/tests/external_events/tool_lifecycle.rs",
+    "lime-rs/crates/app-server/src/backend_event.rs",
+    "lime-rs/crates/tool-runtime/src/collab_agent.rs",
+    "lime-rs/crates/tool-runtime/src/collab_agent/execution.rs",
+    "lime-rs/crates/tool-runtime/src/collab_agent/execution_tests.rs",
+    "lime-rs/crates/tool-runtime/src/collab_agent/projection.rs",
+    "lime-rs/crates/tool-runtime/src/collab_agent/tests.rs",
+    "lime-rs/crates/tool-runtime/src/collab_agent/validation.rs",
   ];
   for (const relativePath of retiredPaths) {
     if (fs.existsSync(path.join(repoRoot, relativePath))) {
@@ -8526,6 +8533,18 @@ function checkRetiredToolWireSurface() {
         '"tool.result" =>',
         '"tool.failed" =>',
         "is_imported_tool_wire_payload",
+      ],
+    },
+    {
+      path: "lime-rs/crates/app-server/src/lib.rs",
+      forbidden: ["mod backend_event;", "runtime_event_type_from_backend_type"],
+    },
+    {
+      path: "lime-rs/crates/core/src/agent/types.rs",
+      forbidden: [
+        "pub enum StreamEvent {",
+        "pub struct ToolExecutionResult {",
+        "pub struct StreamResult {",
       ],
     },
     {
@@ -8608,7 +8627,36 @@ function checkRetiredToolWireSurface() {
     },
     {
       path: "lime-rs/crates/tool-runtime/src/lib.rs",
-      forbidden: ["pub mod tool_batch;"],
+      forbidden: ["pub mod tool_batch;", "pub mod collab_agent;"],
+    },
+    {
+      path: "lime-rs/crates/agent/src/agent_tools/catalog.rs",
+      forbidden: [
+        'name: "Agent",',
+        'name: "SendMessage",',
+        'name: "TeamCreate",',
+        'name: "TeamDelete",',
+        'name: "ListPeers",',
+        '=> "Agent"',
+        '=> "SendMessage"',
+        '=> "TeamCreate"',
+        '=> "TeamDelete"',
+        '=> "ListPeers"',
+      ],
+    },
+    {
+      path: "lime-rs/crates/core/src/tool_calling.rs",
+      forbidden: [
+        'canonical_name: "Agent",',
+        'canonical_name: "SendMessage",',
+        'canonical_name: "TeamCreate",',
+        'canonical_name: "TeamDelete",',
+        'canonical_name: "ListPeers",',
+      ],
+    },
+    {
+      path: "lime-rs/crates/tool-runtime/src/turn_tool_surface.rs",
+      forbidden: ["SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES"],
     },
   ];
   for (const currentFile of currentFiles) {
@@ -8625,6 +8673,95 @@ function checkRetiredToolWireSurface() {
     }
   }
 
+  const nativeOverlayProduction = fs
+    .readFileSync(
+      path.join(
+        repoRoot,
+        "lime-rs/crates/tool-runtime/src/native_overlay.rs",
+      ),
+      "utf8",
+    )
+    .split("#[cfg(test)]", 1)[0];
+  for (const retiredName of [
+    "Agent",
+    "SendMessage",
+    "TeamCreate",
+    "TeamDelete",
+    "ListPeers",
+  ]) {
+    if (nativeOverlayProduction.includes(`"${retiredName}"`)) {
+      failures.push(
+        `retired Team tool must stay out of the native registry allowlist: ${retiredName}`,
+      );
+    }
+  }
+
+  for (const bridgeSurface of [
+    {
+      path: "lime-rs/crates/tool-runtime/src/mcp_connection.rs",
+      forbidden: [
+        "async fn list_resources(",
+        "async fn read_resource(",
+        "async fn list_prompts(",
+        "async fn get_prompt(",
+        "fn get_info(",
+      ],
+    },
+    {
+      path: "lime-rs/crates/tool-runtime/src/mcp_connection/registry.rs",
+      forbidden: [
+        "pub struct McpConnectionSummary",
+        "pub async fn supports_resources(",
+        "pub async fn summaries(",
+        "pub async fn dispatch(",
+        "pub async fn list_prompts(",
+        "pub async fn get_prompt(",
+      ],
+    },
+    {
+      path: "lime-rs/crates/mcp/src/bridge_client.rs",
+      forbidden: [
+        "pub fn server_info(",
+        "pub async fn list_resources(",
+        "pub async fn read_resource(",
+        "pub async fn list_prompts(",
+        "pub async fn get_prompt(",
+      ],
+    },
+    {
+      path: "lime-rs/crates/agent/src/mcp_bridge.rs",
+      forbidden: [
+        "async fn list_resources(",
+        "async fn read_resource(",
+        "async fn list_prompts(",
+        "async fn get_prompt(",
+        "fn get_info(",
+      ],
+    },
+  ]) {
+    const content = fs.readFileSync(
+      path.join(repoRoot, bridgeSurface.path),
+      "utf8",
+    );
+    for (const snippet of bridgeSurface.forbidden) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `MCP sampling-step bridge must not own live management surface: ${bridgeSurface.path} contains ${JSON.stringify(snippet)}`,
+        );
+      }
+    }
+  }
+
+  const mcpClientHandler = fs.readFileSync(
+    path.join(repoRoot, "lime-rs/crates/mcp/src/client.rs"),
+    "utf8",
+  );
+  if (mcpClientHandler.includes("enable_sampling()")) {
+    failures.push(
+      "MCP client must not advertise sampling without a typed createMessage owner: lime-rs/crates/mcp/src/client.rs contains enable_sampling()",
+    );
+  }
+
   const canonicalToolConsumerFiles = [
     "lime-rs/crates/app-server/src/runtime/provider_history.rs",
     "lime-rs/crates/app-server/src/runtime/context_compaction.rs",
@@ -8637,7 +8774,13 @@ function checkRetiredToolWireSurface() {
     ),
     "lime-rs/crates/app-server/src/runtime/evidence_provider/browser/file_artifacts.rs",
     "lime-rs/crates/app-server/src/runtime/thread_item_projection/media_result.rs",
+    "lime-rs/crates/app-server/src/runtime/thread_item_projection/coding_items.rs",
+    "lime-rs/crates/app-server/src/runtime/thread_item_projection/control_items.rs",
+    "lime-rs/crates/app-server/src/runtime/thread_item_projection/helpers.rs",
     "lime-rs/crates/app-server/src/runtime/thread_item_projection/materializer.rs",
+    ...collectRustFiles(
+      "lime-rs/crates/app-server/src/runtime/thread_item_projection/materializer",
+    ),
   ];
   for (const relativePath of canonicalToolConsumerFiles) {
     const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");

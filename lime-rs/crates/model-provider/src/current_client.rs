@@ -251,6 +251,12 @@ impl CurrentProviderToolCall {
         name: String,
         raw_arguments: String,
     ) -> Result<Self, CurrentProviderError> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CurrentProviderError::new(
+                "Provider tool call omitted tool name",
+            ));
+        }
         let arguments = serde_json::from_str(&raw_arguments).map_err(|error| {
             CurrentProviderError::new(format!(
                 "Provider returned invalid JSON arguments for tool {name}: {error}"
@@ -258,7 +264,7 @@ impl CurrentProviderToolCall {
         })?;
         Ok(Self {
             id,
-            name,
+            name: name.to_string(),
             arguments,
             raw_arguments,
         })
@@ -569,9 +575,12 @@ fn endpoint_urls(base_url: &str, endpoint: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::lowering::chat_completions_request;
-    use super::stream::{drain_sse_frames, parse_sse_frame, response_item_tool_call};
+    use super::stream::{
+        drain_sse_frames, openai_chat_sse, parse_sse_frame, response_item_tool_call, responses_sse,
+    };
     use super::*;
     use crate::runtime_provider::RuntimeProviderConfig;
+    use futures::StreamExt;
     use serde_json::json;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
@@ -718,6 +727,20 @@ mod tests {
     }
 
     #[test]
+    fn responses_tool_call_rejects_blank_tool_name() {
+        let item = json!({
+            "type": "function_call",
+            "call_id": "call-blank-name",
+            "name": "  ",
+            "arguments": "{}"
+        });
+
+        let error = response_item_tool_call(&item).expect_err("blank tool name must fail closed");
+
+        assert_eq!(error.message, "Provider tool call omitted tool name");
+    }
+
+    #[test]
     fn sse_frame_parser_keeps_multiline_data_without_comments() {
         let frame =
             parse_sse_frame(": keepalive\ndata: {\"type\":\"response.created\"}\ndata: second")
@@ -740,6 +763,151 @@ mod tests {
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].data, "{\"delta\":\"中\"}");
         assert!(pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn openai_tool_stream_accepts_arguments_before_name() {
+        let body = concat!(
+            "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"arguments\":\"{\\\"query\\\":\\\"\"}}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"WebSearch\"}}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"Rust release\\\"}\"}}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.5\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let (base_url, _requests, server) = spawn_http_fixture(vec![fixture_response(
+            "200 OK",
+            "Content-Type: text/event-stream\r\n",
+            body,
+        )])
+        .await;
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .expect("HTTP client")
+            .get(base_url)
+            .send()
+            .await
+            .expect("SSE response");
+
+        let events = openai_chat_sse(response)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("out-of-order tool fields must normalize");
+
+        server.await.expect("fixture server");
+        assert!(events.iter().any(|event| matches!(
+            event,
+            CanonicalLlmEvent::ToolCall { name, input, .. }
+                if name == "WebSearch" && input == &json!({ "query": "Rust release" })
+        )));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, CanonicalLlmEvent::ToolCall { .. }))
+                .count(),
+            1
+        );
+        let lifecycle = events
+            .iter()
+            .filter_map(|event| match event {
+                CanonicalLlmEvent::ToolInputStart { .. } => Some("start"),
+                CanonicalLlmEvent::ToolInputDelta { .. } => Some("delta"),
+                CanonicalLlmEvent::ToolInputEnd { .. } => Some("end"),
+                CanonicalLlmEvent::ToolCall { .. } => Some("call"),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(lifecycle, ["start", "delta", "delta", "end", "call"]);
+    }
+
+    #[tokio::test]
+    async fn responses_tool_stream_accepts_arguments_before_name() {
+        let body = concat!(
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"call_id\":\"call-1\",\"delta\":\"{\\\"query\\\":\\\"\"}\n\n",
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"call_id\":\"call-1\",\"name\":\"WebSearch\",\"delta\":\"Rust release\\\"}\"}\n\n",
+            "data: {\"type\":\"response.function_call_arguments.done\",\"call_id\":\"call-1\",\"arguments\":\"{\\\"query\\\":\\\"Rust release\\\"}\"}\n\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-1\",\"output\":[]}}\n\n"
+        );
+        let (base_url, _requests, server) = spawn_http_fixture(vec![fixture_response(
+            "200 OK",
+            "Content-Type: text/event-stream\r\n",
+            body,
+        )])
+        .await;
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .expect("HTTP client")
+            .get(base_url)
+            .send()
+            .await
+            .expect("SSE response");
+
+        let events = responses_sse(response)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("out-of-order tool fields must normalize");
+
+        server.await.expect("fixture server");
+        assert!(events.iter().any(|event| matches!(
+            event,
+            CanonicalLlmEvent::ToolCall { name, input, .. }
+                if name == "WebSearch" && input == &json!({ "query": "Rust release" })
+        )));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, CanonicalLlmEvent::ToolCall { .. }))
+                .count(),
+            1
+        );
+        let lifecycle = events
+            .iter()
+            .filter_map(|event| match event {
+                CanonicalLlmEvent::ToolInputStart { .. } => Some("start"),
+                CanonicalLlmEvent::ToolInputDelta { .. } => Some("delta"),
+                CanonicalLlmEvent::ToolInputEnd { .. } => Some("end"),
+                CanonicalLlmEvent::ToolCall { .. } => Some("call"),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(lifecycle, ["start", "delta", "end", "call"]);
+    }
+
+    #[tokio::test]
+    async fn responses_tool_stream_rejects_terminal_arguments_without_name() {
+        let body = concat!(
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"call_id\":\"call-1\",\"delta\":\"{}\"}\n\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-1\",\"output\":[]}}\n\n"
+        );
+        let (base_url, _requests, server) = spawn_http_fixture(vec![fixture_response(
+            "200 OK",
+            "Content-Type: text/event-stream\r\n",
+            body,
+        )])
+        .await;
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .expect("HTTP client")
+            .get(base_url)
+            .send()
+            .await
+            .expect("SSE response");
+
+        let error = responses_sse(response)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect_err("terminal incomplete tool call must fail closed");
+
+        server.await.expect("fixture server");
+        assert_eq!(error.message, "Provider tool call omitted tool name");
     }
 
     #[tokio::test]
@@ -814,6 +982,8 @@ mod tests {
         let (base_url, requests, server) = spawn_http_fixture(vec![
             fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "first"),
             fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "second"),
+            fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "third"),
+            fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "fourth"),
             fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "final"),
         ])
         .await;
@@ -836,7 +1006,10 @@ mod tests {
         assert_eq!(error.status, Some(StatusCode::SERVICE_UNAVAILABLE.as_u16()));
         assert!(error.message.contains("final"));
         server.await.expect("fixture server");
-        assert_eq!(requests.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            usize::from(MAX_STREAM_REQUEST_ATTEMPTS)
+        );
     }
 
     #[tokio::test]
@@ -844,6 +1017,8 @@ mod tests {
         let (base_url, requests, server) = spawn_http_fixture(vec![
             fixture_response("404 Not Found", "", "not found"),
             fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "second"),
+            fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "third"),
+            fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "fourth"),
             fixture_response("503 Service Unavailable", "Retry-After: 0\r\n", "final"),
         ])
         .await;
@@ -866,7 +1041,10 @@ mod tests {
         assert_eq!(error.status, Some(StatusCode::SERVICE_UNAVAILABLE.as_u16()));
         assert!(error.message.contains("final"));
         server.await.expect("fixture server");
-        assert_eq!(requests.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            usize::from(MAX_STREAM_REQUEST_ATTEMPTS)
+        );
     }
 
     async fn spawn_http_fixture(

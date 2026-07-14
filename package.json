@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.101.0",
+  "version": "1.102.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -234,6 +234,7 @@
     "smoke:mcp-config-electron-fixture": "node scripts/electron/mcp-config-fixture-smoke.mjs",
     "smoke:mcp-workspace-plugin-runtime-electron-fixture": "node scripts/electron/mcp-workspace-plugin-runtime-fixture-smoke.mjs",
     "smoke:mcp-context7-live-electron-fixture": "node scripts/electron/mcp-context7-live-fixture-smoke.mjs",
+    "smoke:mcp-elicitation-gate-b": "node scripts/electron/mcp-elicitation-gate-b.mjs",
     "smoke:code-artifact-workbench-electron-fixture": "node scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
     "smoke:claw-chat-current-fixture": "node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     "smoke:claw-image-live": "node scripts/agent-runtime/claw-image-live-smoke.mjs",

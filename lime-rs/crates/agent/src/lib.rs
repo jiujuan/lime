@@ -16,7 +16,6 @@ mod credential_bridge;
 mod current_provider_turn;
 mod direct_text_generation;
 pub mod durable_memory_fs;
-mod execution_strategy_compat;
 pub mod filesystem_event_protocol;
 pub mod hooks;
 mod host_managed_generation;
@@ -43,14 +42,9 @@ mod runtime_state_support;
 mod runtime_support;
 mod session_configuration;
 mod session_execution_runtime;
-mod session_execution_runtime_query;
 mod session_record_sql;
-pub mod session_state_snapshot;
-mod session_store;
 mod session_usage_projection;
 pub mod skill_execution;
-mod subagent_control;
-mod subagent_profiles;
 pub mod team_runtime_governor;
 pub mod tool_io_offload;
 pub mod tools;
@@ -146,26 +140,9 @@ pub use session_configuration::{
     SessionConfigBuilder,
 };
 pub use session_execution_runtime::{
-    apply_usage_to_cost_state, detect_runtime_limit_event, SessionExecutionRuntime,
-    SessionExecutionRuntimeAccessMode, SessionExecutionRuntimeCostState,
-    SessionExecutionRuntimeLimitEvent, SessionExecutionRuntimeLimitState,
-    SessionExecutionRuntimeOemPolicy, SessionExecutionRuntimePermissionState,
-    SessionExecutionRuntimePreferences, SessionExecutionRuntimeRecentTeamRole,
-    SessionExecutionRuntimeRecentTeamSelection, SessionExecutionRuntimeRoutingDecision,
-    SessionExecutionRuntimeSource, SessionExecutionRuntimeSummary,
+    SessionExecutionRuntimeCostState, SessionExecutionRuntimeLimitEvent,
+    SessionExecutionRuntimeLimitState, SessionExecutionRuntimeRoutingDecision,
     SessionExecutionRuntimeTaskProfile,
-};
-pub use session_state_snapshot::SessionStateSnapshot;
-pub use session_store::{
-    count_session_messages_sync, create_session_sync, create_session_with_id_sync, delete_session,
-    get_persisted_session_metadata_sync, get_runtime_session_detail,
-    get_runtime_session_detail_with_history_limit, get_runtime_session_detail_with_history_page,
-    get_runtime_session_detail_with_history_window, get_session_sync,
-    get_session_sync_with_full_timeline_without_messages, list_sessions_sync, rename_session_sync,
-    update_session_archived_state_sync, update_session_execution_strategy_sync,
-    update_session_working_dir_sync, ChildSubagentRuntimeStatus, ChildSubagentSession,
-    PersistedSessionMetadata, SessionDetail, SessionInfo, SessionTodoItem, SessionTodoStatus,
-    SubagentParentContext,
 };
 pub use skill_execution::{
     execute_skill_prompt, execute_skill_workflow, SkillEventEmitter, SkillExecutionError,

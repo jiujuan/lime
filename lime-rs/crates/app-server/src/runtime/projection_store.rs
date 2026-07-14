@@ -1172,6 +1172,7 @@ fn query_projected_first_user_message(
 }
 
 fn apply_event_in_tx(conn: &Connection, event: &AgentEvent) -> Result<bool, String> {
+    let thread_id = resolve_projected_thread_id(conn, event)?;
     let existing_event = conn
         .query_row(
             "SELECT session_id, sequence, thread_id, turn_id, item_type,
@@ -1202,13 +1203,9 @@ fn apply_event_in_tx(conn: &Connection, event: &AgentEvent) -> Result<bool, Stri
         existing_timestamp,
     )) = existing_event
     {
-        let incoming_thread_id = event
-            .thread_id
-            .as_deref()
-            .unwrap_or(event.session_id.as_str());
         let same_identity =
             existing_session_id == event.session_id && existing_sequence == event.sequence as i64;
-        let same_content = existing_thread_id == incoming_thread_id
+        let same_content = existing_thread_id == thread_id
             && existing_turn_id == event.turn_id
             && existing_event_type == event.event_type
             && existing_payload_summary == bounded_payload_summary(&event.payload)
@@ -1259,12 +1256,74 @@ fn apply_event_in_tx(conn: &Connection, event: &AgentEvent) -> Result<bool, Stri
         }
     }
 
-    upsert_projected_session(conn, event)?;
+    assert_projected_turn_owner(conn, event, &thread_id)?;
+    upsert_projected_session(conn, event, &thread_id)?;
     apply_projected_queue_event(conn, event)?;
-    upsert_projected_turn(conn, event)?;
-    insert_projected_item(conn, event)?;
+    upsert_projected_turn(conn, event, &thread_id)?;
+    insert_projected_item(conn, event, &thread_id)?;
     upsert_watermark(conn, event)?;
     Ok(true)
+}
+
+fn resolve_projected_thread_id(conn: &Connection, event: &AgentEvent) -> Result<String, String> {
+    let event_thread_id = normalized_text(event.thread_id.as_deref());
+    let projected_thread_id = conn
+        .query_row(
+            "SELECT thread_id FROM projected_sessions WHERE session_id = ?1 LIMIT 1",
+            params![event.session_id.as_str()],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| format!("无法读取 projected_sessions thread owner: {error}"))?;
+
+    match (projected_thread_id, event_thread_id) {
+        (Some(projected_thread_id), Some(event_thread_id)) => {
+            if projected_thread_id != event_thread_id {
+                return Err(format!(
+                    "Projection session thread identity conflict: session_id={} projected_thread_id={} event_thread_id={}",
+                    event.session_id, projected_thread_id, event_thread_id
+                ));
+            }
+            Ok(event_thread_id)
+        }
+        (Some(projected_thread_id), None) => Ok(projected_thread_id),
+        (None, Some(event_thread_id)) => Ok(event_thread_id),
+        (None, None) => Err(format!(
+            "Projection event missing thread identity: session_id={} event_id={}",
+            event.session_id, event.event_id
+        )),
+    }
+}
+
+fn assert_projected_turn_owner(
+    conn: &Connection,
+    event: &AgentEvent,
+    thread_id: &str,
+) -> Result<(), String> {
+    let Some(turn_id) = event.turn_id.as_deref() else {
+        return Ok(());
+    };
+    let existing = conn
+        .query_row(
+            "SELECT session_id, thread_id FROM projected_turns WHERE turn_id = ?1 LIMIT 1",
+            params![turn_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|error| format!("无法读取 projected_turns owner: {error}"))?;
+    if let Some((existing_session_id, existing_thread_id)) = existing {
+        if existing_session_id != event.session_id || existing_thread_id != thread_id {
+            return Err(format!(
+                "Projection turn identity conflict: turn_id={} existing_session_id={} existing_thread_id={} event_session_id={} event_thread_id={}",
+                turn_id,
+                existing_session_id,
+                existing_thread_id,
+                event.session_id,
+                thread_id,
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn apply_projected_queue_event(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
@@ -1309,12 +1368,11 @@ fn clear_session_in_tx(conn: &Connection, session_id: &str) -> Result<(), String
     Ok(())
 }
 
-fn upsert_projected_session(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
-    let thread_id = event
-        .thread_id
-        .as_deref()
-        .unwrap_or(event.session_id.as_str())
-        .to_string();
+fn upsert_projected_session(
+    conn: &Connection,
+    event: &AgentEvent,
+    thread_id: &str,
+) -> Result<(), String> {
     let fields = projected_session_fields_from_event(event);
     conn.execute(
         r#"
@@ -1325,7 +1383,6 @@ fn upsert_projected_session(conn: &Connection, event: &AgentEvent) -> Result<(),
         )
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ON CONFLICT(session_id) DO UPDATE SET
-            thread_id = excluded.thread_id,
             status = excluded.status,
             created_at = COALESCE(projected_sessions.created_at, excluded.created_at),
             updated_at = excluded.updated_at,
@@ -1501,7 +1558,11 @@ fn value_string(value: Option<&Value>, keys: &[&str]) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn upsert_projected_turn(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
+fn upsert_projected_turn(
+    conn: &Connection,
+    event: &AgentEvent,
+    thread_id: &str,
+) -> Result<(), String> {
     let Some(turn_id) = event.turn_id.as_deref() else {
         return Ok(());
     };
@@ -1520,10 +1581,7 @@ fn upsert_projected_turn(conn: &Connection, event: &AgentEvent) -> Result<(), St
         params![
             turn_id,
             event.session_id,
-            event
-                .thread_id
-                .as_deref()
-                .unwrap_or(event.session_id.as_str()),
+            thread_id,
             turn_status_from_event(event.event_type.as_str()),
             event.timestamp,
             turn_completed_at(event),
@@ -1534,7 +1592,11 @@ fn upsert_projected_turn(conn: &Connection, event: &AgentEvent) -> Result<(), St
     Ok(())
 }
 
-fn insert_projected_item(conn: &Connection, event: &AgentEvent) -> Result<(), String> {
+fn insert_projected_item(
+    conn: &Connection,
+    event: &AgentEvent,
+    thread_id: &str,
+) -> Result<(), String> {
     conn.execute(
         r#"
         INSERT OR IGNORE INTO projected_items (
@@ -1546,10 +1608,7 @@ fn insert_projected_item(conn: &Connection, event: &AgentEvent) -> Result<(), St
         params![
             event.event_id,
             event.session_id,
-            event
-                .thread_id
-                .as_deref()
-                .unwrap_or(event.session_id.as_str()),
+            thread_id,
             event.turn_id,
             event.sequence as i64,
             event.event_type,

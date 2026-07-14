@@ -13,8 +13,6 @@ use super::{
 };
 
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
-const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
-const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
 const LIME_RUNTIME_CONTEXT_POLICY_KEY: &str = "context_policy";
 const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT: i64 = 95;
 const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR: i64 = 9;
@@ -61,18 +59,8 @@ pub(in crate::runtime_backend) fn turn_context_from_request(
     if let Some(context_policy) = lime_runtime_context_policy_from_request(request) {
         merge_lime_runtime_metadata(&mut metadata, context_policy);
     }
-    let request_tool_policy = request_tool_policy_from_request(host_request);
-    let fast_response_tool_surface =
-        super::fast_response_tool_surface_for_request(request, &request_tool_policy);
-    if let Some(tool_surface) = fast_response_tool_surface.metadata_tool_surface() {
-        merge_lime_runtime_metadata(
-            &mut metadata,
-            json!({
-                LIME_RUNTIME_AUTO_COMPACT_KEY: false,
-                LIME_RUNTIME_TOOL_SURFACE_KEY: tool_surface,
-                "source": "fast_response_routing",
-            }),
-        );
+    if let Some(turn_policy) = super::app_server_turn_policy_runtime(request) {
+        merge_lime_runtime_metadata(&mut metadata, Value::Object(turn_policy.clone()));
     }
     if let Some(config_metadata) = config_metadata {
         metadata.insert("config".to_string(), config_metadata);

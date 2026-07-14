@@ -199,22 +199,22 @@ async fn mcp_runtime_methods_require_initialized_and_fail_closed_without_manager
         (
             RequestId::Integer(13),
             METHOD_MCP_PROMPT_GET,
-            json!({ "name": "docs_prompt", "arguments": {} }),
+            json!({ "server": "docs", "name": "docs_prompt", "arguments": {} }),
         ),
         (
             RequestId::Integer(14),
             METHOD_MCP_RESOURCE_READ,
-            json!({ "uri": "docs://readme" }),
+            json!({ "server": "docs", "uri": "docs://readme" }),
         ),
         (
             RequestId::Integer(15),
             METHOD_MCP_RESOURCE_SUBSCRIBE,
-            json!({ "uri": "docs://readme" }),
+            json!({ "server": "docs", "uri": "docs://readme" }),
         ),
         (
             RequestId::Integer(16),
             METHOD_MCP_RESOURCE_UNSUBSCRIBE,
-            json!({ "uri": "docs://readme" }),
+            json!({ "server": "docs", "uri": "docs://readme" }),
         ),
     ];
 

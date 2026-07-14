@@ -101,6 +101,31 @@ describe("mcp", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
+  it("单资源操作应拒绝空白 target 且不发送请求", async () => {
+    await expect(mcpApi.readResource(" ", "docs://readme")).rejects.toThrow(
+      "server cannot be empty",
+    );
+    await expect(mcpApi.subscribeResource("docs", " ")).rejects.toThrow(
+      "URI cannot be empty",
+    );
+    await expect(mcpApi.unsubscribeResource(" ", " ")).rejects.toThrow(
+      "server cannot be empty",
+    );
+
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("提示词操作应拒绝空白 target 且不发送请求", async () => {
+    await expect(mcpApi.getPrompt(" ", "summarize", {})).rejects.toThrow(
+      "server cannot be empty",
+    );
+    await expect(mcpApi.getPrompt("docs", " ", {})).rejects.toThrow(
+      "name cannot be empty",
+    );
+
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
   it("状态列表应保留 streamable HTTP 配置与 runtime status", async () => {
     const server = {
       id: "server-http",
@@ -329,43 +354,49 @@ describe("mcp", () => {
     );
 
     await expect(
-      mcpApi.getPrompt("docs_summarize", { topic: "lime" }),
+      mcpApi.getPrompt("docs", "summarize", { topic: "lime" }),
     ).resolves.toEqual({
       description: "prompt",
       messages: [{ role: "user", content: { type: "text", text: "hello" } }],
     });
     expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpPrompt/get", {
-      name: "docs_summarize",
+      server: "docs",
+      name: "summarize",
       arguments: { topic: "lime" },
     });
 
-    await expect(mcpApi.readResource("docs://readme")).resolves.toEqual({
-      uri: "docs://readme",
-      mime_type: "text/plain",
-      text: "README",
-    });
+    await expect(mcpApi.readResource("docs", "docs://readme")).resolves.toEqual(
+      {
+        uri: "docs://readme",
+        mime_type: "text/plain",
+        text: "README",
+      },
+    );
     expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpResource/read", {
+      server: "docs",
       uri: "docs://readme",
     });
 
     mockAppServerResult({});
     await expect(
-      mcpApi.subscribeResource("docs://readme"),
+      mcpApi.subscribeResource("docs", "docs://readme"),
     ).resolves.toBeUndefined();
     expect(appServerRequestMock).toHaveBeenLastCalledWith(
       "mcpResource/subscribe",
       {
+        server: "docs",
         uri: "docs://readme",
       },
     );
 
     mockAppServerResult({});
     await expect(
-      mcpApi.unsubscribeResource("docs://readme"),
+      mcpApi.unsubscribeResource("docs", "docs://readme"),
     ).resolves.toBeUndefined();
     expect(appServerRequestMock).toHaveBeenLastCalledWith(
       "mcpResource/unsubscribe",
       {
+        server: "docs",
         uri: "docs://readme",
       },
     );

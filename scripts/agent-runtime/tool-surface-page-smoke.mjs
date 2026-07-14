@@ -140,7 +140,6 @@ const REQUIRED_AGENT_RUNTIME_TASK_FLAGS = [
 ];
 const FORBIDDEN_PAGE_WARNINGS = [
   "当前 runtime tool surface 还没有暴露 WebSearch，联网搜索偏好本轮可能不会生效。",
-  "当前 runtime tool surface 缺少 Agent / SendMessage / Team* current tools，任务拆分偏好本轮可能不会完全生效。",
 ];
 
 function printHelp() {
@@ -2486,15 +2485,13 @@ function isExpectedApprovalResponseRequest(request) {
 }
 
 function isExpectedPlainCodeRuntimeSubmitRequest(request) {
-  const harnessMetadata = request?.runtimeRequest?.metadata?.harness;
   return (
     request?.message === PROMPT_TEXT &&
     !String(request?.message || "")
       .trim()
       .startsWith("@代码") &&
     request?.sessionId === CODE_FIXTURE_SESSION_ID &&
-    request?.runtimeRequest?.metadata?.harness?.code_command === undefined &&
-    harnessMetadata?.fast_response_routing === undefined
+    request?.runtimeRequest?.metadata?.harness?.code_command === undefined
   );
 }
 

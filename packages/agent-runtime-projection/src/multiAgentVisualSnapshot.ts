@@ -6,7 +6,10 @@ import type {
 } from "@limecloud/agent-ui-contracts";
 
 import { buildAgentUiProjectionBase } from "./envelope.js";
-import { isLegacyMultiAgentToolName } from "./multiAgentToolSchema.js";
+import {
+  isLegacyMultiAgentToolName,
+  type AgentUiMultiAgentToolName,
+} from "./multiAgentToolSchema.js";
 import {
   compactProjectionFields,
   definedString,
@@ -16,12 +19,7 @@ import {
   truncateText,
 } from "./normalization.js";
 
-export type AgentUiMultiAgentVisualTool =
-  | "spawn_agent"
-  | "send_input"
-  | "resume_agent"
-  | "wait"
-  | "close_agent";
+export type AgentUiMultiAgentVisualTool = AgentUiMultiAgentToolName;
 
 export type AgentUiMultiAgentVisualIssueCode =
   | "missing_collab_tool_call_item"
@@ -176,21 +174,29 @@ function normalizeTool(value: string | undefined): AgentUiMultiAgentVisualTool |
   switch (normalized) {
     case "spawn_agent":
       return "spawn_agent";
-    case "send_input":
     case "send_message":
-      return "send_input";
-    case "resume_agent":
+      return "send_message";
     case "followup_task":
-      return "resume_agent";
-    case "wait":
+      return "followup_task";
     case "wait_agent":
-      return "wait";
-    case "close_agent":
+      return "wait_agent";
     case "interrupt_agent":
-      return "close_agent";
+      return "interrupt_agent";
+    case "list_agents":
+      return "list_agents";
     default:
       return undefined;
   }
+}
+
+function requiresReceiverThreadLineage(
+  tool: AgentUiMultiAgentVisualTool | undefined,
+): boolean {
+  return (
+    tool === "send_message" ||
+    tool === "followup_task" ||
+    tool === "interrupt_agent"
+  );
 }
 
 function runtimeStatus(value: string | undefined): AgentUiRuntimeStatus {
@@ -476,7 +482,10 @@ function validateSnapshot(
         ),
       );
     }
-    if (item.tool && item.tool !== "spawn_agent" && item.receiverThreadIds.length === 0) {
+    if (
+      requiresReceiverThreadLineage(item.tool) &&
+      item.receiverThreadIds.length === 0
+    ) {
       issues.push(
         issue(
           "missing_receiver_thread_id",
@@ -621,7 +630,8 @@ export function extractCodexMultiAgentVisualSnapshot(
     lineageStable: items.every(
       (item) =>
         Boolean(item.senderThreadId) &&
-        (item.tool === "spawn_agent" || item.receiverThreadIds.length > 0),
+        (!requiresReceiverThreadLineage(item.tool) ||
+          item.receiverThreadIds.length > 0),
     ),
     legacyTranscriptOnly: items.length === 0 && legacyRows.length > 0,
     legacyTranscriptLeak: items.length > 0 && legacyRows.length > 0,

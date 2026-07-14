@@ -7,11 +7,17 @@
       "type": "object"
     },
     "name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "server": {
+      "minLength": 1,
       "type": "string"
     }
   },
   "required": [
-    "name"
+    "name",
+    "server"
   ],
   "title": "McpPromptGetParams",
   "type": "object"

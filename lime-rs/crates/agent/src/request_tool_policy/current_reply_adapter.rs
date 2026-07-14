@@ -20,6 +20,7 @@ pub(crate) async fn stream_runtime_reply_with_policy<F>(
     session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     policy: &RequestToolPolicy,
+    agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
@@ -33,6 +34,7 @@ where
         session_config,
         cancel_token,
         policy,
+        agent_control_gateway,
         on_event,
     )
     .await
@@ -58,6 +60,7 @@ where
         session_config,
         cancel_token,
         policy,
+        None,
         on_event,
     )
     .await
@@ -84,6 +87,7 @@ where
         session_config,
         cancel_token,
         policy,
+        None,
         on_event,
     )
     .await
@@ -123,6 +127,7 @@ async fn stream_current<F>(
     session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     policy: &RequestToolPolicy,
+    agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
@@ -144,6 +149,7 @@ where
         session_config,
         cancel_token,
         policy,
+        agent_control_gateway,
         on_event,
     )
     .await
@@ -156,6 +162,7 @@ pub async fn stream_reply_with_policy<F>(
     session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     policy: &RequestToolPolicy,
+    agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
@@ -168,6 +175,7 @@ where
         session_config,
         cancel_token,
         policy,
+        agent_control_gateway,
         on_event,
     )
     .await

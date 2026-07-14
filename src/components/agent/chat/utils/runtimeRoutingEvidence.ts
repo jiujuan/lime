@@ -1,4 +1,4 @@
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { ProviderSettingsFocusContext } from "@/types/page";
 
 export interface RuntimeRoutingEvidence {

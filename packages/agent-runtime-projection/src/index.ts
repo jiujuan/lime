@@ -19,7 +19,6 @@ export * from "./hydrationEvents.js";
 export * from "./lifecycle.js";
 export * from "./localRemoteImageInput.js";
 export * from "./liveTailCommit.js";
-export * from "./mcpElicitation.js";
 export * from "./mcpInventoryStatus.js";
 export * from "./mcpResourceRead.js";
 export * from "./mcpStartupStatus.js";

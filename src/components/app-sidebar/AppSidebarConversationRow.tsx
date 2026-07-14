@@ -1,7 +1,7 @@
 import type { MouseEvent } from "react";
 import styled from "styled-components";
 import { CircleAlert, Clock3, LoaderCircle, MoreHorizontal, Pin } from "lucide-react";
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 
 type ConversationRuntimeStatus = "running" | "queued" | "waitingAction";

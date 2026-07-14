@@ -1,6 +1,7 @@
 import { act } from "react";
 import { describe, expect, it } from "vitest";
 import {
+  createDeferred,
   flushEffects,
   mockGetDefaultProvider,
   mockGetRuntimeProviderSelection,
@@ -73,12 +74,12 @@ describe("useAgentChat 兼容接口 - guide / provider", () => {
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-          ?.providerPreference,
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.providerPreference,
       ).toBe(providerId);
       expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-          ?.modelPreference,
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.modelPreference,
       ).toBe(model);
     } finally {
       harness.unmount();
@@ -108,19 +109,141 @@ describe("useAgentChat 兼容接口 - guide / provider", () => {
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-          ?.providerPreference,
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.providerPreference,
       ).toBe(selectedProvider);
       expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-          ?.modelPreference,
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.modelPreference,
       ).toBe(selectedModel);
     } finally {
       harness.unmount();
     }
   });
 
-  it("发送前应等待 runtime warmup 修复只有模型没有 provider 的工作区缓存", async () => {
+  it("已有完整模型快照时后台 runtime warmup 不应阻塞发送", async () => {
+    const workspaceId = "ws-guide-background-warmup";
+    const selectedProvider = "openai";
+    const selectedModel = "gpt-5.5";
+    const scheduledTasks: Array<() => void> = [];
+    const runtimeSelection = createDeferred<{
+      provider_configured: boolean;
+      provider_selector: string;
+      model_name: string;
+    }>();
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify(selectedProvider),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify(selectedModel),
+    );
+    mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
+      scheduledTasks.push(task);
+      return () => undefined;
+    });
+    mockGetRuntimeProviderSelection.mockReturnValue(runtimeSelection.promise);
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: selectedProvider,
+      model: selectedModel,
+    });
+
+    const harness = mountHook(workspaceId, {
+      initialRuntimeWarmupLoadMode: "deferred",
+      initialRuntimeWarmupDeferredDelayMs: 60_000,
+    });
+
+    try {
+      await flushEffects();
+      expect(scheduledTasks).toHaveLength(1);
+      expect(mockGetRuntimeProviderSelection).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await harness.getValue().triggerAIGuide("分析这个文件夹");
+      });
+
+      expect(mockGetRuntimeProviderSelection).toHaveBeenCalledTimes(1);
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.providerPreference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.modelPreference,
+      ).toBe(selectedModel);
+
+      await act(async () => {
+        runtimeSelection.resolve({
+          provider_configured: true,
+          provider_selector: selectedProvider,
+          model_name: selectedModel,
+        });
+        await runtimeSelection.promise;
+      });
+
+      expect(mockGetRuntimeProviderSelection).toHaveBeenCalledTimes(1);
+      expect(mockResolveClawWorkspaceProviderSelection).not.toHaveBeenCalled();
+
+      await act(async () => {
+        scheduledTasks.forEach((task) => task());
+        await Promise.resolve();
+      });
+      expect(mockGetRuntimeProviderSelection).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("已有完整模型快照时后台 runtime warmup 失败不应污染发送", async () => {
+    const workspaceId = "ws-guide-failed-background-warmup";
+    const selectedProvider = "openai";
+    const selectedModel = "gpt-5.5";
+    const scheduledTasks: Array<() => void> = [];
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify(selectedProvider),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify(selectedModel),
+    );
+    mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
+      scheduledTasks.push(task);
+      return () => undefined;
+    });
+    mockGetRuntimeProviderSelection.mockRejectedValue(
+      new Error("runtime warmup unavailable"),
+    );
+
+    const harness = mountHook(workspaceId, {
+      initialRuntimeWarmupLoadMode: "deferred",
+      initialRuntimeWarmupDeferredDelayMs: 60_000,
+    });
+
+    try {
+      await flushEffects();
+      await act(async () => {
+        await harness.getValue().triggerAIGuide("继续分析这个文件夹");
+      });
+
+      expect(mockGetRuntimeProviderSelection).toHaveBeenCalledTimes(1);
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.providerPreference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.modelPreference,
+      ).toBe(selectedModel);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("模型快照不完整时发送仍应等待 runtime warmup 自愈", async () => {
     const workspaceId = "ws-guide-heal-model-only-cache";
     const selectedProvider = "openai";
     const selectedModel = "gpt-5.5";
@@ -164,12 +287,12 @@ describe("useAgentChat 兼容接口 - guide / provider", () => {
       });
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-          ?.providerPreference,
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.providerPreference,
       ).toBe(selectedProvider);
       expect(
-        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions?.runtimeRequest
-          ?.modelPreference,
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.runtimeOptions
+          ?.runtimeRequest?.modelPreference,
       ).toBe(selectedModel);
 
       await act(async () => {

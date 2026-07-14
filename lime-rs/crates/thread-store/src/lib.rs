@@ -1,3 +1,6 @@
+pub mod agent_graph;
+pub mod agent_identity;
+pub mod agent_mailbox;
 pub mod runtime_snapshot;
 pub mod session_record;
 pub mod session_repository;
@@ -9,6 +12,17 @@ pub mod types;
 use std::error::Error;
 use std::fmt;
 
+pub use agent_graph::{
+    AgentGraphStore, AgentGraphStoreFuture, ThreadSpawnEdgeStatus, ThreadSpawnParent,
+};
+pub use agent_identity::{
+    canonical_agent_path_task_name, AgentIdentity, AgentIdentityStore, AgentIdentityStoreFuture,
+};
+pub use agent_mailbox::{
+    AgentMailboxDeliveryMode, AgentMailboxDeliveryStatus, AgentMailboxMessage,
+    AgentMailboxMessageKind, AgentMailboxResultStatus, AgentMailboxStore, AgentMailboxStoreFuture,
+    AppendAgentMailboxMessageParams,
+};
 pub use store::{ThreadStore, ThreadStoreFuture};
 pub use types::{
     ApplyThreadHistoryParams, ApplyThreadHistoryResult, ArchiveThreadParams, ClearableField,

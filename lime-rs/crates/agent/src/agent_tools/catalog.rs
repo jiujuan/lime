@@ -141,8 +141,6 @@ const WORKBENCH_PROFILES: &[ToolSurfaceProfile] = &[ToolSurfaceProfile::Workbenc
 const BROWSER_PROFILES: &[ToolSurfaceProfile] = &[ToolSurfaceProfile::BrowserAssist];
 
 const PLAN_CAP: &[ToolCapability] = &[ToolCapability::Planning];
-const DELEGATION_CAP: &[ToolCapability] =
-    &[ToolCapability::Delegation, ToolCapability::SessionControl];
 const SEARCH_CAP: &[ToolCapability] = &[ToolCapability::WebSearch];
 const SKILL_CAP: &[ToolCapability] = &[ToolCapability::SkillExecution];
 const CONTENT_CAP: &[ToolCapability] = &[ToolCapability::ContentCreation];
@@ -353,51 +351,6 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         workspace_default_allow: true,
     },
     ToolCatalogEntry {
-        name: "Agent",
-        profiles: CORE_PROFILES,
-        capabilities: DELEGATION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::LimeInjected,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "SendMessage",
-        profiles: CORE_PROFILES,
-        capabilities: DELEGATION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TeamCreate",
-        profiles: CORE_PROFILES,
-        capabilities: DELEGATION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "TeamDelete",
-        profiles: CORE_PROFILES,
-        capabilities: DELEGATION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
-        name: "ListPeers",
-        profiles: CORE_PROFILES,
-        capabilities: DELEGATION_CAP,
-        lifecycle: ToolLifecycle::Current,
-        source: ToolSourceKind::RuntimeBuiltin,
-        permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
-    },
-    ToolCatalogEntry {
         name: SOCIAL_IMAGE_TOOL_NAME,
         profiles: WORKBENCH_PROFILES,
         capabilities: CONTENT_CAP,
@@ -569,8 +522,6 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
     match tool_catalog_reference_lookup_key(tool_name).as_str() {
         "requestuserinput" | "requestuserinputtool" => "request_user_input",
         "clocksleep" | "clock.sleep" | "sleep" => SLEEP_TOOL_NAME,
-        "spawnagent" | "subagenttask" | "agenttool" => "Agent",
-        "sendinput" | "sendmessagetool" => "SendMessage",
         "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
         | "localshellcall" => "Bash",
         "filereadtool" | "readfiletool" | "readfile" | "developerread" | "mcpsystemreadfile" => {
@@ -588,9 +539,6 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "powershelltool" => "PowerShell",
         "skilltool" => "Skill",
         "syntheticoutputtool" => "StructuredOutput",
-        "teamcreatetool" => "TeamCreate",
-        "teamdeletetool" => "TeamDelete",
-        "listpeerstool" => "ListPeers",
         "toolsearchtool" | "toolsearch" | "mcpsystemtoolsearch" => TOOL_SEARCH_TOOL_NAME,
         "skillsearchtool" | "skillsearch" | "skillssearch" => SKILL_SEARCH_TOOL_NAME,
         "updateplan" | "updateplantool" | "updateplan_tool" | "update_plan" => {
@@ -709,9 +657,11 @@ mod tests {
     #[test]
     fn test_workspace_default_allowed_tool_names_excludes_parameter_restricted_tools() {
         let names = workspace_default_allowed_tool_names(WorkspaceToolSurface::core());
-        assert!(names.contains(&"Agent"));
-        assert!(names.contains(&"TeamCreate"));
-        assert!(names.contains(&"TeamDelete"));
+        assert!(!names.contains(&"Agent"));
+        assert!(!names.contains(&"SendMessage"));
+        assert!(!names.contains(&"TeamCreate"));
+        assert!(!names.contains(&"TeamDelete"));
+        assert!(!names.contains(&"ListPeers"));
         assert!(names.contains(&"WebSearch"));
         assert!(names.contains(&MEMORY_LIST_TOOL_NAME));
         assert!(names.contains(&MEMORY_READ_TOOL_NAME));
@@ -724,22 +674,30 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_catalog_entry_normalizes_legacy_aliases_to_current_surface() {
-        assert_eq!(
-            tool_catalog_entry("spawn_agent")
-                .expect("legacy spawn_agent should normalize")
-                .name,
-            "Agent"
-        );
+    fn test_tool_catalog_entry_rejects_retired_team_aliases() {
+        for retired_name in [
+            "Agent",
+            "AgentTool",
+            "SendMessage",
+            "SendMessageTool",
+            "TeamCreate",
+            "TeamCreateTool",
+            "TeamDelete",
+            "TeamDeleteTool",
+            "ListPeers",
+            "ListPeersTool",
+            "send_input",
+            "subagent_task",
+        ] {
+            assert!(
+                tool_catalog_entry(retired_name).is_none(),
+                "retired Team tool must not resolve through the current catalog: {retired_name}"
+            );
+        }
+        assert!(tool_catalog_entry("spawn_agent").is_none());
         assert!(tool_catalog_entry("brief").is_none());
         assert!(tool_catalog_entry("BriefTool").is_none());
         assert!(tool_catalog_entry("SendUserMessage").is_none());
-        assert_eq!(
-            tool_catalog_entry("send_input")
-                .expect("legacy send_input should normalize")
-                .name,
-            "SendMessage"
-        );
         assert!(tool_catalog_entry("ask").is_none());
         assert!(tool_catalog_entry("AskUserQuestionTool").is_none());
         assert_eq!(
@@ -766,7 +724,6 @@ mod tests {
     #[test]
     fn test_tool_catalog_entry_normalizes_reference_js_tool_names_to_current_surface() {
         let cases = [
-            ("AgentTool", "Agent"),
             ("request_user_input", "request_user_input"),
             ("RequestUserInputTool", "request_user_input"),
             ("clock.sleep", SLEEP_TOOL_NAME),
@@ -797,15 +754,11 @@ mod tests {
             ("memory_add_note", MEMORY_ADD_NOTE_TOOL_NAME),
             ("PowerShellTool", "PowerShell"),
             ("ReadMcpResourceTool", READ_MCP_RESOURCE_TOOL_NAME),
-            ("SendMessageTool", "SendMessage"),
             ("SkillTool", "Skill"),
             ("SyntheticOutputTool", "StructuredOutput"),
             ("update_plan", UPDATE_PLAN_TOOL_NAME),
             ("UpdatePlan", UPDATE_PLAN_TOOL_NAME),
             ("UpdatePlanTool", UPDATE_PLAN_TOOL_NAME),
-            ("TeamCreateTool", "TeamCreate"),
-            ("TeamDeleteTool", "TeamDelete"),
-            ("ListPeersTool", "ListPeers"),
             ("ToolSearch", TOOL_SEARCH_TOOL_NAME),
             ("ToolSearchTool", TOOL_SEARCH_TOOL_NAME),
             ("mcp__system__tool_search", TOOL_SEARCH_TOOL_NAME),
@@ -1000,8 +953,8 @@ mod tests {
         assert!(names.contains(&TOOL_SEARCH_TOOL_NAME));
         assert!(names.contains(&LIST_MCP_RESOURCES_TOOL_NAME));
         assert!(names.contains(&READ_MCP_RESOURCE_TOOL_NAME));
-        assert!(names.contains(&"TeamCreate"));
-        assert!(names.contains(&"TeamDelete"));
+        assert!(!names.contains(&"TeamCreate"));
+        assert!(!names.contains(&"TeamDelete"));
         assert!(names.contains(&LIME_CREATE_TRANSCRIPTION_TASK_TOOL_NAME));
         assert!(names.contains(&LIME_CREATE_AUDIO_TASK_TOOL_NAME));
         assert!(!names.contains(&LIME_CREATE_VIDEO_TASK_TOOL_NAME));

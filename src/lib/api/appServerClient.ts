@@ -23,6 +23,7 @@ import type {
   AppServerInitializeParams,
   AppServerInitializeResponse,
   AppServerJsonRpcMessage,
+  AppServerJsonRpcError,
   AppServerRequestId,
   AppServerRequestOptions,
   AppServerRequestResult,
@@ -131,6 +132,20 @@ export class AppServerClient {
       typeof request === "number" ? { limit: request } : (request ?? {});
     const response = await drainAppServerEvents(drainRequest);
     return decodeAppServerMessages(response.lines);
+  }
+
+  async respondServerRequest(
+    id: AppServerRequestId,
+    result: unknown,
+  ): Promise<void> {
+    await this.exchange([{ id, result }]);
+  }
+
+  async rejectServerRequest(
+    id: AppServerRequestId,
+    error: AppServerJsonRpcError,
+  ): Promise<void> {
+    await this.exchange([{ id, error }]);
   }
 }
 

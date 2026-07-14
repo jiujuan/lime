@@ -211,6 +211,9 @@ pub enum FileChangeStatus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum SubAgentActivityKind {
+    Started,
+    Interacted,
+    Interrupted,
     Spawned,
     MessageSent,
     Waiting,
@@ -704,6 +707,32 @@ mod tests {
             output: None,
         };
         assert_eq!(payload.kind(), ItemKind::Tool);
+    }
+
+    #[test]
+    fn subagent_activity_keeps_current_and_historical_wire_values() {
+        let values = [
+            (SubAgentActivityKind::Started, "started"),
+            (SubAgentActivityKind::Interacted, "interacted"),
+            (SubAgentActivityKind::Interrupted, "interrupted"),
+            (SubAgentActivityKind::Spawned, "spawned"),
+            (SubAgentActivityKind::MessageSent, "messageSent"),
+            (SubAgentActivityKind::Waiting, "waiting"),
+            (SubAgentActivityKind::Resumed, "resumed"),
+            (SubAgentActivityKind::Completed, "completed"),
+            (SubAgentActivityKind::Failed, "failed"),
+            (SubAgentActivityKind::Closed, "closed"),
+        ];
+
+        for (activity, wire) in values {
+            let encoded = serde_json::to_value(activity).expect("serialize subagent activity");
+            assert_eq!(encoded, json!(wire));
+            assert_eq!(
+                serde_json::from_value::<SubAgentActivityKind>(encoded)
+                    .expect("deserialize subagent activity"),
+                activity
+            );
+        }
     }
 
     #[test]

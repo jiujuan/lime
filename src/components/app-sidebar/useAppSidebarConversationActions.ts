@@ -3,14 +3,17 @@ import { toast } from "sonner";
 import {
   deleteAgentRuntimeSession,
   updateAgentRuntimeSession,
-  type AgentSessionInfo,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionClient";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import {
   buildClawAgentParams,
   buildHomeAgentParams,
 } from "@/lib/workspace/navigation";
 import { requestTaskCenterDraftTask } from "@/components/agent/chat/taskCenterDraftTaskEvents";
+import {
+  requestExplicitInitialSessionNavigation,
+} from "@/components/agent/chat/workspace/useWorkspaceInitialSessionNavigation";
 import type { Page, PageParams } from "@/types/page";
 import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sidebarConversationGroups";
 import {
@@ -224,6 +227,7 @@ export function useAppSidebarConversationActions({
   const navigateToConversation = useCallback(
     (session: AgentSessionInfo) => {
       deferConversationNavigation();
+      requestExplicitInitialSessionNavigation(session.id);
 
       const sessionProjectId = resolveProjectIdForSession(
         session,

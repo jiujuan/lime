@@ -10,9 +10,7 @@ fn natural_language_news_turn_exposes_search_tool_surface_by_default() {
     assert!(policy.effective_web_search);
     assert_eq!(policy.search_mode, RequestToolPolicyMode::Auto);
     assert!(!policy.requires_web_search());
-    assert!(!should_defer_tool_surface_for_fast_response(
-        &request, &policy
-    ));
+    assert!(!should_use_compact_tool_surface(&request));
 }
 
 #[test]

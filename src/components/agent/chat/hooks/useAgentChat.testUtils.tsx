@@ -11,6 +11,7 @@ const {
   mockListAgentRuntimeSessions,
   mockGetAgentRuntimeSession,
   mockGetAgentRuntimeThreadRead,
+  mockReadAgentRuntimeThread,
   mockGenerateAgentRuntimeSessionTitle,
   mockUpdateAgentRuntimeSession,
   mockDeleteAgentRuntimeSession,
@@ -35,6 +36,7 @@ const {
   mockListAgentRuntimeSessions: vi.fn(),
   mockGetAgentRuntimeSession: vi.fn(),
   mockGetAgentRuntimeThreadRead: vi.fn(),
+  mockReadAgentRuntimeThread: vi.fn(),
   mockGenerateAgentRuntimeSessionTitle: vi.fn(),
   mockUpdateAgentRuntimeSession: vi.fn(),
   mockDeleteAgentRuntimeSession: vi.fn(),
@@ -69,6 +71,7 @@ export {
   mockListAgentRuntimeSessions,
   mockGetAgentRuntimeSession,
   mockGetAgentRuntimeThreadRead,
+  mockReadAgentRuntimeThread,
   mockGenerateAgentRuntimeSessionTitle,
   mockUpdateAgentRuntimeSession,
   mockDeleteAgentRuntimeSession,
@@ -96,6 +99,7 @@ vi.mock("@/lib/api/agentRuntime", () => ({
     listAgentRuntimeSessions: mockListAgentRuntimeSessions,
     getAgentRuntimeSession: mockGetAgentRuntimeSession,
     getAgentRuntimeThreadRead: mockGetAgentRuntimeThreadRead,
+    readAgentRuntimeThread: mockReadAgentRuntimeThread,
     generateAgentRuntimeSessionTitle: mockGenerateAgentRuntimeSessionTitle,
     updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
     deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
@@ -380,9 +384,7 @@ function readRuntimeEventNameFromCall(args: unknown[]) {
     return null;
   }
   const eventName = (runtimeOptions as { eventName?: unknown }).eventName;
-  return typeof eventName === "string" && eventName.trim()
-    ? eventName
-    : null;
+  return typeof eventName === "string" && eventName.trim() ? eventName : null;
 }
 
 export function seedSession(workspaceId: string, sessionId: string) {
@@ -444,6 +446,7 @@ beforeEach(async () => {
   mockListAgentRuntimeSessions.mockReset();
   mockGetAgentRuntimeSession.mockReset();
   mockGetAgentRuntimeThreadRead.mockReset();
+  mockReadAgentRuntimeThread.mockReset();
   mockGenerateAgentRuntimeSessionTitle.mockReset();
   mockUpdateAgentRuntimeSession.mockReset();
   mockDeleteAgentRuntimeSession.mockReset();
@@ -482,6 +485,18 @@ beforeEach(async () => {
     messages: [],
   });
   mockGetAgentRuntimeThreadRead.mockResolvedValue(undefined);
+  mockReadAgentRuntimeThread.mockResolvedValue({
+    thread: {
+      archived: false,
+      createdAtMs: 1,
+      sessionId: "session-from-api",
+      status: { type: "idle" },
+      threadId: "session-from-api",
+      turns: [],
+      turnsView: "full",
+      updatedAtMs: 1,
+    },
+  });
   mockGenerateAgentRuntimeSessionTitle.mockResolvedValue("");
   mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
   mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);

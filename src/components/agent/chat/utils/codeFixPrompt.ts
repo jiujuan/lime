@@ -1,4 +1,4 @@
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime/sessionTypes";
 
 export interface CodeFixPromptSignal {
   toolName: string;

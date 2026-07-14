@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   buildRuntimeRoutingEvidenceLines,
   formatDiagnosticDurationMs,

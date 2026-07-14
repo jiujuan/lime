@@ -1,4 +1,4 @@
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import { formatDate, formatRelativeTime } from "@/i18n/format";
 import { isAssistantRuntimeErrorDisplayText } from "@/components/agent/chat/utils/messageDisplaySanitizer";
 

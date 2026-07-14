@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   getConfig,
-  saveConfig,
+  updateConfig,
   type Config,
   type ServiceModelPreferenceConfig,
   type ServiceModelsConfig,
@@ -274,8 +274,7 @@ export function MediaServicesSettings() {
   };
 
   const persistConfig = async (updater: (current: Config) => Config) => {
-    const currentConfig = configRef.current;
-    if (!currentConfig) {
+    if (!configRef.current) {
       return;
     }
 
@@ -283,18 +282,15 @@ export function MediaServicesSettings() {
     saveRevisionRef.current = nextRevision;
 
     try {
-      const nextConfig = updater(currentConfig);
+      const nextConfig = await updateConfig(updater);
       configRef.current = nextConfig;
       setConfig(nextConfig);
-      await saveConfig(nextConfig);
       if (saveRevisionRef.current === nextRevision) {
         showMessage("success", t("settings.mediaServices.message.saved"));
       }
     } catch (error) {
       console.error("保存服务模型配置失败:", error);
       if (saveRevisionRef.current === nextRevision) {
-        configRef.current = currentConfig;
-        setConfig(currentConfig);
         showMessage("error", t("settings.mediaServices.message.saveFailed"));
       }
     }

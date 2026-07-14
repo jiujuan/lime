@@ -176,6 +176,8 @@ export const METHOD_MCP_RESOURCE_SUBSCRIBE = "mcpResource/subscribe";
 export const METHOD_MCP_RESOURCE_UNSUBSCRIBE = "mcpResource/unsubscribe";
 export const METHOD_MCP_SERVER_CREATE = "mcpServer/create";
 export const METHOD_MCP_SERVER_DELETE = "mcpServer/delete";
+export const METHOD_MCP_SERVER_ELICITATION_REQUEST =
+  "mcpServer/elicitation/request";
 export const METHOD_MCP_SERVER_ENABLED_SET = "mcpServer/enabled/set";
 export const METHOD_MCP_SERVER_IMPORT_FROM_APP = "mcpServer/importFromApp";
 export const METHOD_MCP_SERVER_LIST = "mcpServer/list";
@@ -281,6 +283,7 @@ export const METHOD_PROJECT_SHELL_SESSION_RESIZE =
   "projectShell/session/resize";
 export const METHOD_PROJECT_SHELL_SESSION_START = "projectShell/session/start";
 export const METHOD_PROJECT_SHELL_SESSION_WRITE = "projectShell/session/write";
+export const METHOD_SERVER_REQUEST_RESOLVED = "serverRequest/resolved";
 export const METHOD_SESSION_FILE_DELETE = "sessionFile/delete";
 export const METHOD_SESSION_FILE_GET_OR_CREATE = "sessionFile/getOrCreate";
 export const METHOD_SESSION_FILE_LIST = "sessionFile/list";
@@ -893,6 +896,10 @@ export const GENERATED_APP_SERVER_METHODS = [
     method: "mcpServer/delete",
   },
   {
+    kind: "serverRequest",
+    method: "mcpServer/elicitation/request",
+  },
+  {
     kind: "request",
     method: "mcpServer/enabled/set",
   },
@@ -1251,6 +1258,10 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "projectShell/session/write",
+  },
+  {
+    kind: "notification",
+    method: "serverRequest/resolved",
   },
   {
     kind: "request",
@@ -3900,7 +3911,7 @@ export type AppServerClientRequest =
       params?: unknown;
     };
 
-export type AppServerMethodKind = "notification" | "request";
+export type AppServerMethodKind = "notification" | "request" | "serverRequest";
 
 export interface AppServerMethodSpec {
   kind: AppServerMethodKind;
@@ -3911,6 +3922,7 @@ export type AppServerNotificationMethod =
   | "agentSession/event"
   | "configWarning"
   | "initialized"
+  | "serverRequest/resolved"
   | "workspaceRightSurface/pendingChanged";
 
 export type AppServerRequestAccess = "exclusive" | "sharedRead";
@@ -5543,6 +5555,7 @@ export type McpContent =
 export interface McpPromptGetParams {
   arguments?: Record<string, unknown>;
   name: string;
+  server: string;
 }
 
 export interface McpPromptGetResponse {
@@ -5565,6 +5578,7 @@ export interface McpResourceListResponse {
 }
 
 export interface McpResourceReadParams {
+  server: string;
   uri: string;
 }
 
@@ -5576,12 +5590,14 @@ export interface McpResourceReadResponse {
 }
 
 export interface McpResourceSubscribeParams {
+  server: string;
   uri: string;
 }
 
 export type McpResourceSubscriptionResponse = Record<string, unknown>;
 
 export interface McpResourceUnsubscribeParams {
+  server: string;
   uri: string;
 }
 
@@ -5591,6 +5607,25 @@ export interface McpServerCreateParams {
 
 export interface McpServerDeleteParams {
   id: string;
+}
+
+export type McpServerElicitationAction = "accept" | "cancel" | "decline";
+
+export type McpServerElicitationRequestParams = {
+  serverName: string;
+  threadId: string;
+  turnId?: null | string;
+} & {
+  _meta?: unknown;
+  message: string;
+  mode: "form";
+  requestedSchema: Record<string, unknown>;
+};
+
+export interface McpServerElicitationResponse {
+  _meta?: null | Record<string, unknown>;
+  action: McpServerElicitationAction;
+  content?: unknown;
 }
 
 export interface McpServerEnabledSetParams {
@@ -7138,6 +7173,10 @@ export type ServerNotification =
       params: ConfigWarningNotification;
     }
   | {
+      method: "serverRequest/resolved";
+      params: ServerRequestResolvedNotification;
+    }
+  | {
       method: "agentSession/event";
       params: AgentSessionEventParams;
     }
@@ -7145,6 +7184,10 @@ export type ServerNotification =
       method: "workspaceRightSurface/pendingChanged";
       params: WorkspaceRightSurfacePendingChangedParams;
     };
+
+export interface ServerRequestResolvedNotification {
+  requestId: number | string;
+}
 
 export interface SessionFileEntry {
   createdAt: number;
@@ -8234,9 +8277,12 @@ export type SubAgentActivityKind =
   | "closed"
   | "completed"
   | "failed"
+  | "interacted"
+  | "interrupted"
   | "messageSent"
   | "resumed"
   | "spawned"
+  | "started"
   | "waiting";
 
 export interface Thread {

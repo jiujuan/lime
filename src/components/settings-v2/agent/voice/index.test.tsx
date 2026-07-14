@@ -1,6 +1,7 @@
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import type { Config } from "@/lib/api/appConfig";
 import {
   persistVoiceModelSettingsFocusRequest,
   VOICE_MODEL_SETTINGS_FOCUS_STORAGE_KEY,
@@ -17,6 +18,7 @@ import {
 const {
   mockGetConfig,
   mockSaveConfig,
+  mockUpdateConfig,
   mockGetVoiceInputConfig,
   mockSaveVoiceInputConfig,
   mockListVoiceModelCatalog,
@@ -31,6 +33,7 @@ const {
   return {
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
+    mockUpdateConfig: vi.fn(),
     mockGetVoiceInputConfig: vi.fn(),
     mockSaveVoiceInputConfig: vi.fn(),
     mockListVoiceModelCatalog: vi.fn(),
@@ -47,6 +50,7 @@ const {
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
+  updateConfig: mockUpdateConfig,
 }));
 
 vi.mock("@/lib/api/asrProvider", () => ({
@@ -166,6 +170,7 @@ let emitVoiceModelProgress:
       message: string;
     }) => void)
   | null = null;
+let persistedConfig: Config;
 const scrollIntoViewMock = vi.fn();
 const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
   Element.prototype,
@@ -216,7 +221,8 @@ beforeEach(async () => {
     },
   );
 
-  mockGetConfig.mockResolvedValue({
+  persistedConfig = {
+    default_provider: "openai",
     workspace_preferences: {
       media_defaults: {
         voice: {
@@ -226,7 +232,8 @@ beforeEach(async () => {
         },
       },
     },
-  });
+  } as Config;
+  mockGetConfig.mockImplementation(async () => persistedConfig);
 
   mockGetVoiceInputConfig.mockResolvedValue(createVoiceInputConfig());
 
@@ -308,6 +315,13 @@ beforeEach(async () => {
   });
   mockOpenDialog.mockResolvedValue("/tmp/interview.wav");
   mockSaveConfig.mockResolvedValue(undefined);
+  mockUpdateConfig.mockImplementation(
+    async (updater: (current: Config) => Config) => {
+      persistedConfig = updater(persistedConfig);
+      await mockSaveConfig(persistedConfig);
+      return persistedConfig;
+    },
+  );
   mockSaveVoiceInputConfig.mockResolvedValue(undefined);
 });
 

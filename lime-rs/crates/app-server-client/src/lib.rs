@@ -141,6 +141,9 @@ pub use app_server_protocol::McpPromptListResponse;
 pub use app_server_protocol::McpResourceListResponse;
 pub use app_server_protocol::McpResourceReadParams;
 pub use app_server_protocol::McpResourceReadResponse;
+pub use app_server_protocol::McpResourceSubscribeParams;
+pub use app_server_protocol::McpResourceSubscriptionResponse;
+pub use app_server_protocol::McpResourceUnsubscribeParams;
 pub use app_server_protocol::McpServerCreateParams;
 pub use app_server_protocol::McpServerDeleteParams;
 pub use app_server_protocol::McpServerEnabledSetParams;
@@ -365,6 +368,8 @@ pub use app_server_protocol::METHOD_MCP_PROMPT_GET;
 pub use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 pub use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
 pub use app_server_protocol::METHOD_MCP_RESOURCE_READ;
+pub use app_server_protocol::METHOD_MCP_RESOURCE_SUBSCRIBE;
+pub use app_server_protocol::METHOD_MCP_RESOURCE_UNSUBSCRIBE;
 pub use app_server_protocol::METHOD_MCP_SERVER_CREATE;
 pub use app_server_protocol::METHOD_MCP_SERVER_DELETE;
 pub use app_server_protocol::METHOD_MCP_SERVER_ENABLED_SET;
@@ -459,6 +464,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ClientError {
+    #[error("invalid request params: {0}")]
+    InvalidParams(String),
     #[error("failed to serialize request params: {0}")]
     Serialize(#[from] serde_json::Error),
     #[error(transparent)]
@@ -487,6 +494,34 @@ impl<P> TypedRequest<P> {
     pub fn into_parts(self) -> (&'static str, P) {
         (self.method, self.params)
     }
+}
+
+fn validate_mcp_resource_target(server: &str, uri: &str) -> Result<(), ClientError> {
+    if server.trim().is_empty() {
+        return Err(ClientError::InvalidParams(
+            "MCP resource server cannot be empty".to_string(),
+        ));
+    }
+    if uri.trim().is_empty() {
+        return Err(ClientError::InvalidParams(
+            "MCP resource URI cannot be empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_mcp_prompt_target(server: &str, name: &str) -> Result<(), ClientError> {
+    if server.trim().is_empty() {
+        return Err(ClientError::InvalidParams(
+            "MCP prompt server cannot be empty".to_string(),
+        ));
+    }
+    if name.trim().is_empty() {
+        return Err(ClientError::InvalidParams(
+            "MCP prompt name cannot be empty".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1284,7 +1319,7 @@ impl AppServerClient {
         &mut self,
         params: McpPromptGetParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::get_mcp_prompt(params))
+        self.typed_request(typed::get_mcp_prompt(params)?)
     }
 
     pub fn list_mcp_resources(&mut self) -> Result<JsonRpcRequest, ClientError> {
@@ -1295,7 +1330,21 @@ impl AppServerClient {
         &mut self,
         params: McpResourceReadParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::read_mcp_resource(params))
+        self.typed_request(typed::read_mcp_resource(params)?)
+    }
+
+    pub fn subscribe_mcp_resource(
+        &mut self,
+        params: McpResourceSubscribeParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::subscribe_mcp_resource(params)?)
+    }
+
+    pub fn unsubscribe_mcp_resource(
+        &mut self,
+        params: McpResourceUnsubscribeParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::unsubscribe_mcp_resource(params)?)
     }
 
     pub fn read_project_memory(
@@ -2204,16 +2253,36 @@ pub mod typed {
         TypedRequest::new(METHOD_MCP_PROMPT_LIST, serde_json::json!({}))
     }
 
-    pub fn get_mcp_prompt(params: McpPromptGetParams) -> TypedRequest<McpPromptGetParams> {
-        TypedRequest::new(METHOD_MCP_PROMPT_GET, params)
+    pub fn get_mcp_prompt(
+        params: McpPromptGetParams,
+    ) -> Result<TypedRequest<McpPromptGetParams>, ClientError> {
+        validate_mcp_prompt_target(&params.server, &params.name)?;
+        Ok(TypedRequest::new(METHOD_MCP_PROMPT_GET, params))
     }
 
     pub fn list_mcp_resources() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_MCP_RESOURCE_LIST, serde_json::json!({}))
     }
 
-    pub fn read_mcp_resource(params: McpResourceReadParams) -> TypedRequest<McpResourceReadParams> {
-        TypedRequest::new(METHOD_MCP_RESOURCE_READ, params)
+    pub fn read_mcp_resource(
+        params: McpResourceReadParams,
+    ) -> Result<TypedRequest<McpResourceReadParams>, ClientError> {
+        validate_mcp_resource_target(&params.server, &params.uri)?;
+        Ok(TypedRequest::new(METHOD_MCP_RESOURCE_READ, params))
+    }
+
+    pub fn subscribe_mcp_resource(
+        params: McpResourceSubscribeParams,
+    ) -> Result<TypedRequest<McpResourceSubscribeParams>, ClientError> {
+        validate_mcp_resource_target(&params.server, &params.uri)?;
+        Ok(TypedRequest::new(METHOD_MCP_RESOURCE_SUBSCRIBE, params))
+    }
+
+    pub fn unsubscribe_mcp_resource(
+        params: McpResourceUnsubscribeParams,
+    ) -> Result<TypedRequest<McpResourceUnsubscribeParams>, ClientError> {
+        validate_mcp_resource_target(&params.server, &params.uri)?;
+        Ok(TypedRequest::new(METHOD_MCP_RESOURCE_UNSUBSCRIBE, params))
     }
 
     pub fn read_project_memory(
@@ -2715,6 +2784,7 @@ mod tests {
         let prompts = client.list_mcp_prompts().expect("prompts");
         let prompt = client
             .get_mcp_prompt(McpPromptGetParams {
+                server: "filesystem".to_string(),
                 name: "summarize".to_string(),
                 arguments: serde_json::Map::from_iter([(
                     "topic".to_string(),
@@ -2725,9 +2795,22 @@ mod tests {
         let resources = client.list_mcp_resources().expect("resources");
         let resource = client
             .read_mcp_resource(McpResourceReadParams {
+                server: "filesystem".to_string(),
                 uri: "file:///workspace/README.md".to_string(),
             })
             .expect("resource");
+        let resource_subscription = client
+            .subscribe_mcp_resource(McpResourceSubscribeParams {
+                server: "filesystem".to_string(),
+                uri: "file:///workspace/README.md".to_string(),
+            })
+            .expect("subscribe resource");
+        let resource_unsubscription = client
+            .unsubscribe_mcp_resource(McpResourceUnsubscribeParams {
+                server: "filesystem".to_string(),
+                uri: "file:///workspace/README.md".to_string(),
+            })
+            .expect("unsubscribe resource");
 
         assert_eq!(servers.method, METHOD_MCP_SERVER_LIST);
         assert_eq!(servers.params.expect("params"), json!({}));
@@ -2799,6 +2882,7 @@ mod tests {
         assert_eq!(
             prompt.params.expect("params"),
             json!({
+                "server": "filesystem",
                 "name": "summarize",
                 "arguments": { "topic": "release notes" },
             })
@@ -2808,8 +2892,71 @@ mod tests {
         assert_eq!(resource.method, METHOD_MCP_RESOURCE_READ);
         assert_eq!(
             resource.params.expect("params"),
-            json!({ "uri": "file:///workspace/README.md" })
+            json!({
+                "server": "filesystem",
+                "uri": "file:///workspace/README.md"
+            })
         );
+        assert_eq!(resource_subscription.method, METHOD_MCP_RESOURCE_SUBSCRIBE);
+        assert_eq!(
+            resource_subscription.params.expect("params"),
+            json!({
+                "server": "filesystem",
+                "uri": "file:///workspace/README.md"
+            })
+        );
+        assert_eq!(
+            resource_unsubscription.method,
+            METHOD_MCP_RESOURCE_UNSUBSCRIBE
+        );
+        assert_eq!(
+            resource_unsubscription.params.expect("params"),
+            json!({
+                "server": "filesystem",
+                "uri": "file:///workspace/README.md"
+            })
+        );
+    }
+
+    #[test]
+    fn mcp_resource_helpers_reject_empty_exact_target() {
+        let mut client = AppServerClient::new();
+
+        let read = client.read_mcp_resource(McpResourceReadParams {
+            server: " ".to_string(),
+            uri: "docs://readme".to_string(),
+        });
+        let subscribe = client.subscribe_mcp_resource(McpResourceSubscribeParams {
+            server: "docs".to_string(),
+            uri: " ".to_string(),
+        });
+        let unsubscribe = client.unsubscribe_mcp_resource(McpResourceUnsubscribeParams {
+            server: " ".to_string(),
+            uri: " ".to_string(),
+        });
+
+        assert!(matches!(read, Err(ClientError::InvalidParams(_))));
+        assert!(matches!(subscribe, Err(ClientError::InvalidParams(_))));
+        assert!(matches!(unsubscribe, Err(ClientError::InvalidParams(_))));
+    }
+
+    #[test]
+    fn mcp_prompt_helper_rejects_empty_exact_target() {
+        let mut client = AppServerClient::new();
+
+        let missing_server = client.get_mcp_prompt(McpPromptGetParams {
+            server: " ".to_string(),
+            name: "summarize".to_string(),
+            arguments: serde_json::Map::new(),
+        });
+        let missing_name = client.get_mcp_prompt(McpPromptGetParams {
+            server: "docs".to_string(),
+            name: " ".to_string(),
+            arguments: serde_json::Map::new(),
+        });
+
+        assert!(matches!(missing_server, Err(ClientError::InvalidParams(_))));
+        assert!(matches!(missing_name, Err(ClientError::InvalidParams(_))));
     }
 
     #[test]

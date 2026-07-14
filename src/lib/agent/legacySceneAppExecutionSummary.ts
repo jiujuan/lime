@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeReviewDecisionTemplate,
   AgentRuntimeSaveReviewDecisionRequest,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 
 export interface SceneAppDeliveryPartViewModel {
   key: string;

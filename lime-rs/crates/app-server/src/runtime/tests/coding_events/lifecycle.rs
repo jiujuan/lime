@@ -1,3 +1,4 @@
+use super::super::support::{canonical_tool_completed_event, canonical_tool_started_event};
 use super::*;
 
 #[tokio::test]
@@ -130,12 +131,12 @@ async fn read_model_projects_active_coding_activity_and_pending_action() {
                     "suite": "unit"
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool_needs_approval",
-                    "toolName": "Shell"
-                }),
+            canonical_tool_started_event(
+                &session_id,
+                "thread_coding_active_read_model",
+                &turn_id,
+                "tool_needs_approval",
+                "Shell",
             ),
             RuntimeEvent::new(
                 "action.required",
@@ -254,12 +255,12 @@ async fn read_model_clears_resolved_coding_activity() {
                     "failed": 1
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool_resolved_approval",
-                    "toolName": "Shell"
-                }),
+            canonical_tool_started_event(
+                &session_id,
+                "thread_coding_resolved_read_model",
+                &turn_id,
+                "tool_resolved_approval",
+                "Shell",
             ),
             RuntimeEvent::new(
                 "action.required",
@@ -278,13 +279,13 @@ async fn read_model_clears_resolved_coding_activity() {
                     "decision": "approve"
                 }),
             ),
-            RuntimeEvent::new(
-                "tool.result",
-                json!({
-                    "toolCallId": "tool_resolved_approval",
-                    "toolName": "Shell",
-                    "output": "approved"
-                }),
+            canonical_tool_completed_event(
+                &session_id,
+                "thread_coding_resolved_read_model",
+                &turn_id,
+                "tool_resolved_approval",
+                "Shell",
+                "approved",
             ),
         ],
     )

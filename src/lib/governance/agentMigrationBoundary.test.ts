@@ -45,9 +45,27 @@ const DELETED_AGENT_PATHS = [
   "lime-rs/crates/agent/src/runtime_store_agent_adapter.rs",
   "lime-rs/crates/agent/src/runtime_timeline_adapter.rs",
   "lime-rs/crates/agent/src/session_config_adapter.rs",
+  "lime-rs/crates/agent/src/execution_strategy_compat.rs",
   "lime-rs/crates/agent/src/session_execution_runtime_adapter.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime/runtime_payload.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime_query.rs",
   "lime-rs/crates/agent/src/session_runtime_conversation_query.rs",
+  "lime-rs/crates/agent/src/session_state_snapshot.rs",
+  "lime-rs/crates/agent/src/session_store.rs",
+  "lime-rs/crates/agent/src/session_store_history_visibility.rs",
+  "lime-rs/crates/agent/src/session_store_message_projection.rs",
+  "lime-rs/crates/agent/src/session_store_provider_routing.rs",
+  "lime-rs/crates/agent/src/session_store_runtime_detail.rs",
+  "lime-rs/crates/agent/src/session_store_runtime_projection.rs",
+  "lime-rs/crates/agent/src/session_store_subagent_context.rs",
+  "lime-rs/crates/agent/src/session_store_subagent_projection.rs",
+  "lime-rs/crates/agent/src/session_store_subagent_query.rs",
   "lime-rs/crates/agent/src/session_store_todo_agent_adapter.rs",
+  "lime-rs/crates/agent/src/session_store_todo_projection.rs",
+  "lime-rs/crates/agent/src/session_store_tests.rs",
+  "lime-rs/crates/agent/src/session_store_types.rs",
+  "lime-rs/crates/agent/src/subagent_control.rs",
+  "lime-rs/crates/agent/src/subagent_profiles.rs",
   "lime-rs/crates/agent/src/subagent_runtime_adapter.rs",
   "lime-rs/crates/agent/src/tools/skill_tool_gate.rs",
   "lime-rs/crates/agent/src/turn_context_configuration/agent_adapter.rs",
@@ -135,19 +153,28 @@ describe("Agent migration boundary", () => {
     expect(source).not.toContain("agent::");
   });
 
-  it("MCP current owner 必须是 tool-runtime connection registry", () => {
-    const source = read(
+  it("MCP current owner 必须由 tool-runtime registry 和每回合 snapshot 分工", () => {
+    const registrySource = read(
       "lime-rs/crates/tool-runtime/src/mcp_connection/registry.rs",
     );
-    expect(source).toContain("pub struct McpConnectionRegistry");
-    expect(source).toContain("pub async fn dispatch");
-    expect(source).not.toContain("agent::");
+    const snapshotSource = read(
+      "lime-rs/crates/tool-runtime/src/mcp_connection/step_snapshot.rs",
+    );
+    expect(registrySource).toContain("pub struct McpConnectionRegistry");
+    expect(registrySource).toContain("pub async fn step_snapshot");
+    expect(registrySource).not.toContain("agent::");
+    expect(snapshotSource).toContain("pub struct McpStepSnapshot");
+    expect(snapshotSource).toContain("pub async fn dispatch");
+    expect(snapshotSource).not.toContain("agent::");
   });
 
   it("request_user_input pending state 必须归属 session/turn current state", () => {
     const source = read("lime-rs/crates/agent-runtime/src/action_required.rs");
-    const turnSource = read(
-      "lime-rs/crates/agent/src/current_provider_turn.rs",
+    const turnSnapshotSource = read(
+      "lime-rs/crates/agent/src/current_provider_turn/mcp_step_snapshot.rs",
+    );
+    const turnExecutorSource = read(
+      "lime-rs/crates/agent/src/current_provider_turn/tool_executor.rs",
     );
     const bridgeSource = read(
       "lime-rs/crates/agent/src/request_user_input_bridge.rs",
@@ -156,9 +183,10 @@ describe("Agent migration boundary", () => {
     expect(source).toContain("pending");
     expect(source).toContain("submit_response");
     expect(source).not.toContain("static ACTION_REQUIRED");
-    expect(turnSource).toContain("request_user_input_tool_definition");
-    expect(turnSource).toContain("execute_request_user_input");
-    expect(bridgeSource).toContain("request_and_wait_with_notification");
+    expect(turnSnapshotSource).toContain("request_user_input_tool_definition");
+    expect(turnExecutorSource).toContain("execute_request_user_input");
+    expect(bridgeSource).toContain("request_action_and_wait_with_notification");
+    expect(bridgeSource).toContain("run_request_user_input");
     expect(bridgeSource).toContain("AgentEvent::ActionRequired");
   });
 

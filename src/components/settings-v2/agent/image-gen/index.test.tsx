@@ -2,29 +2,31 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import type { Config } from "@/lib/api/appConfig";
 
-const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
+const { mockGetConfig, mockSaveConfig, mockUpdateConfig } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
   mockSaveConfig: vi.fn(),
+  mockUpdateConfig: vi.fn(),
+}));
+const { mockModelSelectorRender } = vi.hoisted(() => ({
+  mockModelSelectorRender: vi.fn(),
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
+  updateConfig: mockUpdateConfig,
 }));
 
 vi.mock("@/components/input-kit", () => ({
-  ModelSelector: ({
-    providerType,
-    model,
-    placeholderLabel,
-    providerFilter,
-    modelFilter,
-    getFallbackModels,
-  }: {
+  ModelSelector: (props: {
     providerType: string;
     model: string;
     placeholderLabel?: string;
+    setProviderType: (value: string) => void;
+    setModel: (value: string) => void;
+    setProviderAndModel?: (providerType: string, model: string) => void;
     providerFilter?: (provider: {
       key: string;
       label: string;
@@ -60,6 +62,15 @@ vi.mock("@/components/input-kit", () => ({
       customModels?: string[];
     }) => Array<{ id: string }>;
   }) => {
+    mockModelSelectorRender(props);
+    const {
+      providerType,
+      model,
+      placeholderLabel,
+      providerFilter,
+      modelFilter,
+      getFallbackModels,
+    } = props;
     const providerFixtures = [
       {
         key: "relay-openai",
@@ -240,6 +251,7 @@ interface Mounted {
 }
 
 const mounted: Mounted[] = [];
+let persistedConfig: Config;
 
 function renderComponent(): HTMLDivElement {
   const container = document.createElement("div");
@@ -317,9 +329,11 @@ beforeEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  mockModelSelectorRender.mockReset();
   await changeLimeLocale("en-US");
 
-  mockGetConfig.mockResolvedValue({
+  persistedConfig = {
+    default_provider: "openai",
     workspace_preferences: {
       media_defaults: {
         image: {
@@ -333,8 +347,16 @@ beforeEach(async () => {
       default_count: 3,
       default_quality: "hd",
     },
-  });
+  } as Config;
+  mockGetConfig.mockImplementation(async () => persistedConfig);
   mockSaveConfig.mockResolvedValue(undefined);
+  mockUpdateConfig.mockImplementation(
+    async (updater: (current: Config) => Config) => {
+      persistedConfig = updater(persistedConfig);
+      await mockSaveConfig(persistedConfig);
+      return persistedConfig;
+    },
+  );
 });
 
 afterEach(async () => {
@@ -409,6 +431,29 @@ describe("ImageGenSettings", () => {
       savedConfig.workspace_preferences.media_defaults.image,
     ).toBeUndefined();
     expect(container.textContent).toContain("Settings saved");
+  });
+
+  it("跨 Provider 选择应原子保存 Provider 与图片模型", async () => {
+    renderComponent();
+    await flushEffects(3);
+
+    const selectorProps = mockModelSelectorRender.mock.calls.at(-1)?.[0];
+    expect(selectorProps?.setProviderAndModel).toBeTypeOf("function");
+
+    await act(async () => {
+      selectorProps.setProviderAndModel("agnes", "agnes-image-2.1-flash");
+      await flushEffects(3);
+    });
+
+    expect(mockSaveConfig).toHaveBeenCalledTimes(1);
+    expect(
+      mockSaveConfig.mock.calls[0]?.[0].workspace_preferences.media_defaults
+        .image,
+    ).toEqual({
+      preferredProviderId: "agnes",
+      preferredModelId: "agnes-image-2.1-flash",
+      allowFallback: true,
+    });
   });
 
   it("Fal 只配置文本自定义模型时，图片模型选择器应回退到内置 Fal 图片模型", async () => {

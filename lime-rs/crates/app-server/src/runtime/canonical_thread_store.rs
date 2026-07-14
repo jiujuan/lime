@@ -19,6 +19,7 @@ use thread_store::{
 
 use super::{ProjectionStore, StoredSession};
 
+mod agent_graph;
 mod persistence;
 mod queries;
 
@@ -133,7 +134,10 @@ impl ProjectionStore {
         Ok(())
     }
 
-    fn read_thread_sync(&self, params: ReadThreadParams) -> ThreadStoreResult<Option<Thread>> {
+    pub(crate) fn read_thread_sync(
+        &self,
+        params: ReadThreadParams,
+    ) -> ThreadStoreResult<Option<Thread>> {
         let conn = self.open_thread_store()?;
         let Some((mut thread, archived)) = read_thread_row(&conn, &params.thread_id)? else {
             return Ok(None);

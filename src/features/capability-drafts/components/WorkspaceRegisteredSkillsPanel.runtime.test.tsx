@@ -2,10 +2,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { capabilityDraftsApi } from "@/lib/api/capabilityDrafts";
-import {
-  exportAgentRuntimeEvidencePack,
-  listWorkspaceSkillBindings,
-} from "@/lib/api/agentRuntime";
+import { exportAgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/exportClient";
+import { listWorkspaceSkillBindings } from "@/lib/api/agentRuntime/inventoryClient";
 import {
   getAutomationJobs,
   getAutomationRunHistory,
@@ -52,8 +50,11 @@ vi.mock("@/lib/api/capabilityDrafts", () => ({
   },
 }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/exportClient", () => ({
   exportAgentRuntimeEvidencePack: vi.fn(),
+}));
+
+vi.mock("@/lib/api/agentRuntime/inventoryClient", () => ({
   listWorkspaceSkillBindings: vi.fn(),
 }));
 

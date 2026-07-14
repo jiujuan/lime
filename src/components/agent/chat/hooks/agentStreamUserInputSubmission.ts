@@ -15,7 +15,6 @@ export async function submitAgentStreamUserInput(
   const { preparedSend, env } = options;
   const {
     assistantMsg,
-    runtimeStatusPresentation,
     assistantMsgId,
     userMsgId,
     userMsg,
@@ -52,7 +51,6 @@ export async function submitAgentStreamUserInput(
     userMsg,
     content,
     expectingQueue,
-    runtimeStatusPresentation,
     submittedDraft,
     initialThreadId:
       targetSessionId ||

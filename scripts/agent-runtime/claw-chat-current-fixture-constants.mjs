@@ -635,6 +635,7 @@ export const INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS = [
   "inputbarPendingSteerRichPromptNotStartedBeforeCancel",
   "inputbarPendingSteerQueuedRestoreClicked",
   "inputbarPendingSteerGuiCanceled",
+  "inputbarPendingSteerQueuedProjectionCleared",
   "inputbarPendingSteerTextRestored",
   "inputbarPendingSteerImageRestored",
   "inputbarPendingSteerPathRestored",

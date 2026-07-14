@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import type { PluginMarketplaceViewItem } from "../marketplace/pluginMarketplaceViewModel";
 import { buildPluginHistorySessionSelectionModel } from "./pluginHistorySessionSelection";
 

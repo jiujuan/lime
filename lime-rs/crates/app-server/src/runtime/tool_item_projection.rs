@@ -178,7 +178,7 @@ impl ToolState {
     }
 
     fn merge_current_fields(&mut self, item: CurrentToolItem) {
-        self.sequence = item.sequence;
+        self.sequence = self.sequence.min(item.sequence);
         self.tool_name = item.tool_name.or(self.tool_name.take());
         self.arguments = item.arguments.or(self.arguments.take());
         self.structured_content = item.structured_content.or(self.structured_content.take());

@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -153,6 +159,7 @@ export interface ModelSelectorProps {
   setProviderType: (type: string) => void;
   model: string;
   setModel: (model: string) => void;
+  setProviderAndModel?: (providerType: string, model: string) => void;
   reasoningEffort?: ModelReasoningEffortLevel | "";
   setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   activeTheme?: string;
@@ -184,6 +191,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   setProviderType,
   model,
   setModel,
+  setProviderAndModel,
   reasoningEffort = "",
   setReasoningEffort,
   activeTheme,
@@ -224,6 +232,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const hasInitialized = useRef(false);
   const modelRef = useRef(model);
   modelRef.current = model;
+  const commitProviderAndModel = useCallback(
+    (nextProviderType: string, nextModel: string) => {
+      if (setProviderAndModel) {
+        setProviderAndModel(nextProviderType, nextModel);
+        return;
+      }
+      setProviderType(nextProviderType);
+      setModel(nextModel);
+    },
+    [setModel, setProviderAndModel, setProviderType],
+  );
   const shouldBackgroundLoadModels =
     backgroundPreload === "immediate" ||
     backgroundProviderLoadReady ||
@@ -361,11 +380,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           )
         : filteredResult.models;
 
-    if (
-      baseModels.length > 0 ||
-      !selectedProvider ||
-      !getFallbackModels
-    ) {
+    if (baseModels.length > 0 || !selectedProvider || !getFallbackModels) {
       return baseModels;
     }
 
@@ -375,12 +390,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     }
 
     return fallbackModels.filter((item) => modelFilter(item, selectedProvider));
-  }, [
-    filteredResult.models,
-    getFallbackModels,
-    modelFilter,
-    selectedProvider,
-  ]);
+  }, [filteredResult.models, getFallbackModels, modelFilter, selectedProvider]);
 
   const modelOptions = useMemo(
     () =>
@@ -442,8 +452,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     [selectedModelOption?.metadata],
   );
   const selectedReasoningEffort =
-    reasoningEffort &&
-    selectedReasoningEffortLevels.includes(reasoningEffort)
+    reasoningEffort && selectedReasoningEffortLevels.includes(reasoningEffort)
       ? reasoningEffort
       : "";
   const selectedReasoningEffortLabel = selectedReasoningEffort
@@ -495,11 +504,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     if (!providerType.trim()) {
       const nextProvider = autoSelectableProviders[0];
       if (nextProvider) {
-        setProviderType(nextProvider.providerId ?? nextProvider.key);
         const nextModel = resolveInitialProviderModel(nextProvider);
-        if (nextModel) {
-          setModel(nextModel);
-        }
+        commitProviderAndModel(
+          nextProvider.providerId ?? nextProvider.key,
+          nextModel,
+        );
       } else {
         hasInitialized.current = false;
       }
@@ -507,10 +516,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   }, [
     allowAutoProvider,
     autoSelectableProviders,
+    commitProviderAndModel,
     providerType,
     providersLoading,
-    setModel,
-    setProviderType,
     shouldLoadProviders,
     suppressAutoSelection,
     visibleProviders,
@@ -526,8 +534,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     const currentModel = modelRef.current;
     const currentModelKnownButIncompatible = Boolean(
       currentModel &&
-        selectedModelKnownOption?.id === currentModel &&
-        selectedModelKnownOption.compatibilityIssue,
+      selectedModelKnownOption?.id === currentModel &&
+      selectedModelKnownOption.compatibilityIssue,
     );
     const currentModelMissingFromOptions = Boolean(
       currentModel && !selectedModelKnownOption,
@@ -837,8 +845,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   {allowAutoProvider ? (
                     <button
                       onClick={() => {
-                        setProviderType("");
-                        setModel("");
+                        commitProviderAndModel("", "");
                         setReasoningEffort?.("");
                         setOpen(false);
                       }}
@@ -903,10 +910,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                     currentModelOptions: modelOptions,
                                   },
                                 );
-                                setProviderType(
+                                commitProviderAndModel(
                                   resolveProviderSelectionValue(provider),
+                                  nextModel,
                                 );
-                                setModel(nextModel);
                                 setReasoningEffort?.("");
                               }}
                               className={cn(
@@ -1025,10 +1032,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                           key={level}
                           type="button"
                           aria-pressed={selected}
-                          aria-label={t(
-                            "common.modelSelector.reasoning.aria",
-                            { level: label },
-                          )}
+                          aria-label={t("common.modelSelector.reasoning.aria", {
+                            level: label,
+                          })}
                           className={cn(
                             "inline-flex h-7 min-w-0 items-center justify-center gap-1 rounded-full px-2 text-xs font-medium transition-colors",
                             selected
@@ -1039,10 +1045,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         >
                           <span className="truncate">{label}</span>
                           {selected ? (
-                            <Check
-                              size={12}
-                              className="shrink-0 opacity-80"
-                            />
+                            <Check size={12} className="shrink-0 opacity-80" />
                           ) : null}
                         </button>
                       );

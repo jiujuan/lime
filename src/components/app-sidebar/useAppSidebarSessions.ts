@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
   listAgentRuntimeSessions,
-  type AgentSessionInfo,
-  type AgentRuntimeSessionsChangedDetail,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionClient";
+import type {
+  AgentRuntimeSessionsChangedDetail,
+} from "@/lib/api/agentRuntime/sessionClient";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   recordAgentUiPerformanceMetric,
   subscribeAgentUiPerformanceMetricRecorded,

@@ -48,6 +48,7 @@ const {
   agentSessionMediaReadEventNotification,
   createAgentRuntimeClient,
   getAppServerRequestSerializationScope,
+  isAppServerServerRequestMethod,
   METHOD_PLUGIN_INSTALLED_DISABLED_SET,
   METHOD_PLUGIN_INSTALLED_LIST,
   METHOD_PLUGIN_INSTALLED_SAVE,
@@ -240,6 +241,7 @@ const {
   METHOD_MCP_SERVER_IMPORT_FROM_APP,
   METHOD_MCP_SERVER_LIST,
   METHOD_MCP_SERVER_OAUTH_LOGIN,
+  METHOD_MCP_SERVER_ELICITATION_REQUEST,
   METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
   METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
@@ -1204,17 +1206,21 @@ test("builds app data surface requests with current methods", () => {
   });
   const mcpPrompts = client.listMcpPrompts();
   const mcpPrompt = client.getMcpPrompt({
+    server: "filesystem",
     name: "summarize",
     arguments: { topic: "release notes" },
   });
   const mcpResources = client.listMcpResources();
   const mcpResource = client.readMcpResource({
+    server: "filesystem",
     uri: "file:///workspace/README.md",
   });
   const mcpResourceSubscribe = client.subscribeMcpResource({
+    server: "filesystem",
     uri: "file:///workspace/README.md",
   });
   const mcpResourceUnsubscribe = client.unsubscribeMcpResource({
+    server: "filesystem",
     uri: "file:///workspace/README.md",
   });
   const memory = client.readProjectMemory({
@@ -1645,6 +1651,7 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(mcpPrompts.params, {});
   assert.equal(mcpPrompt.method, METHOD_MCP_PROMPT_GET);
   assert.deepEqual(mcpPrompt.params, {
+    server: "filesystem",
     name: "summarize",
     arguments: { topic: "release notes" },
   });
@@ -1652,14 +1659,17 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(mcpResources.params, {});
   assert.equal(mcpResource.method, METHOD_MCP_RESOURCE_READ);
   assert.deepEqual(mcpResource.params, {
+    server: "filesystem",
     uri: "file:///workspace/README.md",
   });
   assert.equal(mcpResourceSubscribe.method, METHOD_MCP_RESOURCE_SUBSCRIBE);
   assert.deepEqual(mcpResourceSubscribe.params, {
+    server: "filesystem",
     uri: "file:///workspace/README.md",
   });
   assert.equal(mcpResourceUnsubscribe.method, METHOD_MCP_RESOURCE_UNSUBSCRIBE);
   assert.deepEqual(mcpResourceUnsubscribe.params, {
+    server: "filesystem",
     uri: "file:///workspace/README.md",
   });
   assert.equal(memory.method, METHOD_PROJECT_MEMORY_READ);
@@ -2526,6 +2536,18 @@ test("exports app-server method catalog from checked-in Rust manifest", () => {
   assert.equal(isAppServerNotificationMethod(METHOD_AGENT_SESSION_EVENT), true);
   assert.equal(
     isAppServerNotificationMethod(METHOD_AGENT_SESSION_START),
+    false,
+  );
+  assert.equal(
+    isAppServerServerRequestMethod(METHOD_MCP_SERVER_ELICITATION_REQUEST),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_MCP_SERVER_ELICITATION_REQUEST),
+    false,
+  );
+  assert.equal(
+    isAppServerNotificationMethod(METHOD_MCP_SERVER_ELICITATION_REQUEST),
     false,
   );
   assert.equal(
@@ -4647,6 +4669,54 @@ test("connection buffers request responses read by idle notification loop", asyn
   ]);
   assert.equal(result.result.turn.turnId, "turn-1");
   assert.equal(notification.method, METHOD_AGENT_SESSION_EVENT);
+});
+
+test("connection server-message drain does not steal client responses", async () => {
+  const sent = [];
+  const waiters = [];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    nextMessage() {
+      return new Promise((resolve) => {
+        waiters.push(resolve);
+      });
+    },
+  });
+
+  const serverMessagePromise = connection.nextServerMessage(1_000);
+  await waitFor(() => waiters.length === 1);
+  const responsePromise = connection.listSessions({});
+  await waitFor(() => sent.length === 1);
+
+  waiters.shift()({
+    id: 1,
+    result: {
+      sessions: [],
+    },
+  });
+  await waitFor(() => waiters.length === 1);
+  waiters.shift()({
+    id: "app-server-request:7",
+    method: METHOD_MCP_SERVER_ELICITATION_REQUEST,
+    params: {
+      server: "form-server",
+      message: "Choose a value",
+      requestedSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+  });
+
+  const [serverMessage, response] = await Promise.all([
+    serverMessagePromise,
+    responsePromise,
+  ]);
+  assert.equal(serverMessage.id, "app-server-request:7");
+  assert.equal(serverMessage.method, METHOD_MCP_SERVER_ELICITATION_REQUEST);
+  assert.deepEqual(response.result.sessions, []);
 });
 
 test("connection mirrors long request notifications for event drain", async () => {

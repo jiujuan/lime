@@ -280,6 +280,8 @@ export function buildApprovalRequestResumeScenarioAssertions({
       summary.guiApprovalRequestResumeSecondNoApprovalPrompt
         ?.includesRuntimePermissionPrompt === false &&
       summary.guiApprovalRequestResumeSecondNoApprovalPrompt
+        ?.hasPendingApprovalStatus === false &&
+      summary.guiApprovalRequestResumeSecondNoApprovalPrompt
         ?.textareaVisible === true &&
       summary.guiApprovalRequestResumeSecondNoApprovalPrompt
         ?.textareaDisabled === false,

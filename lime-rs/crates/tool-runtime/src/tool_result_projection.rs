@@ -16,6 +16,8 @@ pub struct NormalizedToolOutput {
     pub truncation: Option<ToolOutputTruncation>,
     pub sidecar_reference: Option<ToolOutputReference>,
     pub metadata: HashMap<String, Value>,
+    #[serde(skip, default)]
+    pub agent_control_projection_facts: Vec<crate::agent_control::SubAgentProjectionFact>,
 }
 
 impl NormalizedToolOutput {
@@ -40,6 +42,7 @@ impl NormalizedToolOutput {
                     truncation: result.truncation,
                     sidecar_reference: result.sidecar_reference,
                     metadata: result.metadata,
+                    agent_control_projection_facts: result.agent_control_projection_facts,
                 }
             }
             RuntimeToolExecutionOutcome::Error(error) => {
@@ -53,6 +56,7 @@ impl NormalizedToolOutput {
                     truncation: None,
                     sidecar_reference: None,
                     metadata: HashMap::new(),
+                    agent_control_projection_facts: Vec::new(),
                 }
             }
         }

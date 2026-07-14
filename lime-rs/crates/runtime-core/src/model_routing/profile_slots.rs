@@ -8,8 +8,9 @@ use serde_json::{Map, Value};
 pub fn selection_from_profile_model_slot(
     metadata_values: &[&Value],
     reasoning_effort: Option<String>,
+    preferred_slot: Option<&str>,
 ) -> Option<RuntimeModelSelection> {
-    let slot = primary_profile_model_slot(metadata_values)?;
+    let slot = primary_profile_model_slot(metadata_values, preferred_slot)?;
     Some(RuntimeModelSelection {
         provider: slot.provider?,
         model: slot.model?,
@@ -62,25 +63,14 @@ pub fn resolve_model_routing_for_candidate(
     selection: &RuntimeModelSelection,
 ) -> ModelRoutingDecision {
     let profile_slots = profile_model_slots_from_metadata_values(metadata_values);
-    let fast_response_requested = fast_response_routing_requested(metadata_values);
     let primary_slot = profile_slots
         .iter()
-        .find(|slot| {
-            fast_response_requested
-                && slot.slot == "fast"
-                && slot_matches_selection(slot, selection)
-        })
-        .or_else(|| {
-            profile_slots.iter().find(|slot| {
-                slot.slot == DEFAULT_CODING_SLOT && slot_matches_selection(slot, selection)
-            })
-        })
+        .find(|slot| slot.slot == DEFAULT_CODING_SLOT && slot_matches_selection(slot, selection))
         .or_else(|| {
             profile_slots
                 .iter()
                 .find(|slot| slot_matches_selection(slot, selection))
         })
-        .or_else(|| preferred_unselected_slot(&profile_slots, fast_response_requested, "fast"))
         .or_else(|| {
             profile_slots
                 .iter()
@@ -192,28 +182,19 @@ fn slot_matches_selection(slot: &ProfileModelSlot, selection: &RuntimeModelSelec
         && slot.model.as_deref() == Some(selection.model.as_str())
 }
 
-fn preferred_unselected_slot<'a>(
-    slots: &'a [ProfileModelSlot],
-    enabled: bool,
-    slot_name: &str,
-) -> Option<&'a ProfileModelSlot> {
-    enabled.then(|| {
-        slots
-            .iter()
-            .find(|slot| slot.slot == slot_name && slot_is_selectable(slot))
-    })?
-}
-
 fn slot_is_selectable(slot: &ProfileModelSlot) -> bool {
     slot.provider.is_some() && slot.model.is_some()
 }
 
-fn primary_profile_model_slot(metadata_values: &[&Value]) -> Option<ProfileModelSlot> {
+fn primary_profile_model_slot(
+    metadata_values: &[&Value],
+    preferred_slot: Option<&str>,
+) -> Option<ProfileModelSlot> {
     let slots = profile_model_slots_from_metadata_values(metadata_values);
-    if fast_response_routing_requested(metadata_values) {
+    if let Some(preferred_slot) = preferred_slot {
         if let Some(slot) = slots
             .iter()
-            .find(|slot| slot.slot == "fast" && slot_is_selectable(slot))
+            .find(|slot| slot.slot == preferred_slot && slot_is_selectable(slot))
         {
             return Some(slot.clone());
         }
@@ -259,29 +240,6 @@ fn profile_model_slots_from_metadata(metadata: &Value) -> Option<Vec<ProfileMode
         _ => None,
     }
     .filter(|slots| !slots.is_empty())
-}
-
-fn fast_response_routing_requested(metadata_values: &[&Value]) -> bool {
-    metadata_values.iter().any(|metadata| {
-        let Some(routing) = metadata
-            .pointer("/harness/fast_response_routing")
-            .or_else(|| metadata.pointer("/harness/fastResponseRouting"))
-            .or_else(|| metadata.pointer("/fast_response_routing"))
-            .or_else(|| metadata.pointer("/fastResponseRouting"))
-        else {
-            return false;
-        };
-
-        let Some(routing) = routing.as_object() else {
-            return false;
-        };
-        let mode = routing
-            .get("mode")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .unwrap_or("auto");
-        mode != "off"
-    })
 }
 
 fn slots_from_object(object: &Map<String, Value>) -> Vec<ProfileModelSlot> {

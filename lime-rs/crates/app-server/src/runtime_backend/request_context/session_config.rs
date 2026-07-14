@@ -26,10 +26,9 @@ pub(in crate::runtime_backend) fn session_config_from_request(
 ) -> AgentSessionConfig {
     let workspace_scope = request_workspace_scope(request, host_request);
     let metadata_values = super::super::skill_runtime_enable::request_metadata_values(request);
-    let fast_response_tool_surface =
-        super::fast_response_tool_surface_for_request(request, request_tool_policy);
+    let turn_tool_surface = super::turn_tool_surface_for_request(request);
     let runtime_metadata = request.runtime_metadata();
-    let system_prompt = if fast_response_tool_surface.uses_light_session_prompt() {
+    let system_prompt = if turn_tool_surface.uses_light_session_prompt() {
         append_soul_context_to_system_prompt(
             Some(request_system_prompt(request)),
             config_metadata.as_ref(),
@@ -75,7 +74,7 @@ pub(in crate::runtime_backend) fn session_config_from_request(
         turn_id: scope.turn_id.clone(),
         system_prompt,
         turn_context,
-        include_context_trace: !fast_response_tool_surface.uses_light_session_prompt(),
+        include_context_trace: !turn_tool_surface.uses_light_session_prompt(),
     })
 }
 

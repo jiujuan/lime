@@ -1,4 +1,4 @@
-import type { AgentRuntimeDiagnosticProviderSafetyBufferingSample } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeDiagnosticProviderSafetyBufferingSample } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentUiProjectionTranslation } from "../projection/agentUiProjectionSummary";
 
 const DIAGNOSTIC_I18N_PREFIX = "agentChat.threadReliability.diagnostic.";

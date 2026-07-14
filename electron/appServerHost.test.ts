@@ -37,6 +37,8 @@ const {
   let turnStartRequestMode:
     | "resolve"
     | "hang"
+    | "hang-non-admission"
+    | "hang-non-admission-read-invalid"
     | "hang-request"
     | "throw-stale-once"
     | "throw-exited-before-next-message"
@@ -77,6 +79,9 @@ const {
           );
         }
         recordedRequests.push(request);
+        const hasCanonicalIdentity =
+          turnStartRequestMode !== "hang-non-admission" &&
+          turnStartRequestMode !== "hang-non-admission-read-invalid";
         const notification = {
           method: "agentSession/event",
           params: {
@@ -84,16 +89,21 @@ const {
               eventId: `evt-${request.id}`,
               sequence: 1,
               sessionId: "session-b",
+              ...(hasCanonicalIdentity ? { threadId: "thread-b" } : {}),
               turnId: "turn-b",
-              type: "message.delta",
+              type: "message.created",
               timestamp: "2026-06-06T00:00:00.000Z",
-              payload: { text: "第一段" },
+              payload: {},
             },
           },
         };
         if (request.method === "agentSession/turn/start") {
           mirroredNotifications.push(notification);
-          if (turnStartRequestMode === "hang") {
+          if (
+            turnStartRequestMode === "hang" ||
+            turnStartRequestMode === "hang-non-admission" ||
+            turnStartRequestMode === "hang-non-admission-read-invalid"
+          ) {
             return {
               id: request.id,
               completed: false,
@@ -176,6 +186,34 @@ const {
           await new Promise(() => undefined);
         }
       }
+      if (
+        request.method === "agentSession/read" &&
+        (turnStartRequestMode === "hang-non-admission" ||
+          turnStartRequestMode === "hang-non-admission-read-invalid")
+      ) {
+        const invalidIdentity =
+          turnStartRequestMode === "hang-non-admission-read-invalid";
+        return {
+          result: {
+            session: {
+              sessionId: "session-b",
+              threadId: invalidIdentity ? "" : "thread-b",
+              updatedAt: "2026-06-06T00:00:00.000Z",
+            },
+            turns: invalidIdentity
+              ? []
+              : [
+                  {
+                    turnId: "turn-b",
+                    sessionId: "session-b",
+                    threadId: "thread-b",
+                    startedAt: "2026-06-06T00:00:00.000Z",
+                  },
+                ],
+          },
+          messages: [],
+        };
+      }
       return {
         result: {
           ok: true,
@@ -194,6 +232,13 @@ const {
         ],
       };
     }),
+    client: {
+      readSession: vi.fn((params: { sessionId: string }) => ({
+        id: "electron-host:session-read",
+        method: "agentSession/read",
+        params,
+      })),
+    },
     transport: {
       send: vi.fn(),
     },
@@ -203,6 +248,13 @@ const {
         throw new Error("no notification");
       }
       return notification;
+    }),
+    nextServerMessage: vi.fn(async () => {
+      const message = mirroredNotifications.shift();
+      if (!message) {
+        throw new Error("no server message");
+      }
+      return message;
     }),
   };
 
@@ -285,8 +337,10 @@ const {
       turnStartRequestMode = "resolve";
       fakeConnection.request.mockClear();
       fakeConnection.requestUntilFirstNotificationOrResponse.mockClear();
+      fakeConnection.client.readSession.mockClear();
       fakeConnection.transport.send.mockClear();
       fakeConnection.nextNotification.mockClear();
+      fakeConnection.nextServerMessage.mockClear();
     },
     setSystemProxyRules: (rules: string) => {
       systemProxyRules = rules;
@@ -295,6 +349,8 @@ const {
       mode:
         | "resolve"
         | "hang"
+        | "hang-non-admission"
+        | "hang-non-admission-read-invalid"
         | "hang-request"
         | "throw-stale-once"
         | "throw-exited-before-next-message"
@@ -362,9 +418,26 @@ vi.mock("@limecloud/app-server-client", async (importOriginal) => {
   return {
     ...actual,
     AppServerSidecarLifecycle: FakeAppServerSidecarLifecycle,
+    defaultReleaseManifestPath: vi.fn(
+      (resourcesPath: string) => `${resourcesPath}/app-server-release.json`,
+    ),
     readReleaseManifest: vi.fn(async () => {
       throw new Error("no packaged manifest");
     }),
+    resolveSidecarFromReleaseManifest: vi.fn(() => null),
+    stdioSidecar: vi.fn(
+      (
+        binaryPath: string,
+        appPolicyPath?: string,
+        dataDir?: string,
+        productDbMigrationCleanup?: string,
+      ) => ({
+        binaryPath,
+        ...(appPolicyPath ? { appPolicyPath } : {}),
+        ...(dataDir ? { dataDir } : {}),
+        ...(productDbMigrationCleanup ? { productDbMigrationCleanup } : {}),
+      }),
+    ),
   };
 });
 
@@ -703,12 +776,57 @@ describe("ElectronAppServerHost", () => {
           eventId: expect.stringMatching(/^evt-electron-host:\d+$/),
           sessionId: "session-b",
           turnId: "turn-b",
-          type: "message.delta",
-          payload: { text: "第一段" },
+          type: "message.created",
+          payload: {},
         },
       },
     });
-    expect(fakeConnection.nextNotification).toHaveBeenCalled();
+    expect(fakeConnection.nextServerMessage).toHaveBeenCalled();
+  });
+
+  it("drainEvents 应上行 server request 并透传 renderer exact-id response", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+    enqueueFakeNotifications([
+      {
+        id: "app-server-request:7",
+        method: "mcpServer/elicitation/request",
+        params: {
+          server: "form-server",
+          message: "Choose a value",
+          requestedSchema: {
+            type: "object",
+            properties: {},
+          },
+        },
+      },
+    ]);
+
+    const drained = await host.drainEvents({ limit: 1 });
+    expect(decodeMessage(drained.lines[0] ?? "")).toMatchObject({
+      id: "app-server-request:7",
+      method: "mcpServer/elicitation/request",
+    });
+
+    await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: "app-server-request:7",
+          result: {
+            action: "accept",
+            content: { confirmed: true },
+          },
+        }),
+      ],
+    });
+
+    expect(fakeConnection.transport.send).toHaveBeenCalledWith({
+      id: "app-server-request:7",
+      result: {
+        action: "accept",
+        content: { confirmed: true },
+      },
+    });
   });
 
   it("drainEvents includeRecent 应允许第二观察者读取最近已消费 notification", async () => {
@@ -840,7 +958,7 @@ describe("ElectronAppServerHost", () => {
           turn: expect.objectContaining({
             turnId: "turn-b",
             sessionId: "session-b",
-            threadId: "session-b",
+            threadId: "thread-b",
             status: "accepted",
           }),
         },
@@ -854,10 +972,71 @@ describe("ElectronAppServerHost", () => {
         event: {
           sessionId: "session-b",
           turnId: "turn-b",
-          type: "message.delta",
+          type: "message.created",
         },
       },
     });
+  });
+
+  it("首条 streaming 通知缺少 thread identity 时应从 App Server 读取精确 canonical turn", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    setTurnStartRequestMode("hang-non-admission");
+    const host = new ElectronAppServerHost();
+
+    const result = await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: 1,
+          method: "agentSession/turn/start",
+          params: {
+            sessionId: "session-b",
+            turnId: "turn-b",
+            input: { text: "从 current owner 读取 threadId" },
+          },
+        }),
+      ],
+    });
+
+    expect(result.lines.map(decodeMessage)).toMatchObject([
+      {
+        id: 1,
+        result: {
+          turn: {
+            sessionId: "session-b",
+            threadId: "thread-b",
+            turnId: "turn-b",
+          },
+        },
+      },
+    ]);
+    expect(recordedRequests.map((request) => request.method)).toEqual([
+      "agentSession/turn/start",
+      "agentSession/read",
+    ]);
+  });
+
+  it("App Server 未返回精确 canonical turn 时应拒绝伪造回合身份", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    setTurnStartRequestMode("hang-non-admission-read-invalid");
+    const host = new ElectronAppServerHost();
+
+    await expect(
+      host.handleJsonLines({
+        lines: [
+          encodeMessage({
+            id: 1,
+            method: "agentSession/turn/start",
+            params: {
+              sessionId: "session-b",
+              turnId: "turn-b",
+              input: { text: "不允许伪造 threadId" },
+            },
+          }),
+        ],
+      }),
+    ).rejects.toThrow(
+      "app-server turn/start did not resolve a canonical turn identity",
+    );
   });
 
   it("长 turn/start 返回 accepted 后不应阻塞后续读模型请求", async () => {

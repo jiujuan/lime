@@ -24,6 +24,7 @@ interface SettingModelSelectorFieldProps extends Pick<
   | "providerFilter"
   | "providerType"
   | "setModel"
+  | "setProviderAndModel"
   | "setProviderType"
   | "suppressAutoSelection"
 > {

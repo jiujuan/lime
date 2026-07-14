@@ -143,15 +143,15 @@ describe("mcp App Server current API fail-closed", () => {
             "assistant",
           ),
       ],
-      ["mcpPrompt/get", () => mcpApi.getPrompt("summarize", {})],
-      ["mcpResource/read", () => mcpApi.readResource("docs://readme")],
+      ["mcpPrompt/get", () => mcpApi.getPrompt("docs", "summarize", {})],
+      ["mcpResource/read", () => mcpApi.readResource("docs", "docs://readme")],
       [
         "mcpResource/subscribe",
-        () => mcpApi.subscribeResource("docs://readme"),
+        () => mcpApi.subscribeResource("docs", "docs://readme"),
       ],
       [
         "mcpResource/unsubscribe",
-        () => mcpApi.unsubscribeResource("docs://readme"),
+        () => mcpApi.unsubscribeResource("docs", "docs://readme"),
       ],
     ];
 
@@ -209,22 +209,22 @@ describe("mcp App Server current API fail-closed", () => {
       ],
       [
         { messages: [{ role: "user", content: { type: "text" } }] },
-        () => mcpApi.getPrompt("summarize", {}),
+        () => mcpApi.getPrompt("docs", "summarize", {}),
         "mcpPrompt/get did not return prompt result",
       ],
       [
         { mime_type: "text/plain", text: "README" },
-        () => mcpApi.readResource("docs://readme"),
+        () => mcpApi.readResource("docs", "docs://readme"),
         "mcpResource/read did not return resource content",
       ],
       [
         { ok: true },
-        () => mcpApi.subscribeResource("docs://readme"),
+        () => mcpApi.subscribeResource("docs", "docs://readme"),
         "mcpResource/subscribe did not return empty result",
       ],
       [
         { ok: true },
-        () => mcpApi.unsubscribeResource("docs://readme"),
+        () => mcpApi.unsubscribeResource("docs", "docs://readme"),
         "mcpResource/unsubscribe did not return empty result",
       ],
     ];

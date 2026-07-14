@@ -97,7 +97,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-search-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    2,
+                    3,
                     "inProgress",
                     "WebSearch",
                     json!({ "query": "Lime WebSearch rendering" }),
@@ -111,7 +111,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-search-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    2,
+                    3,
                     "completed",
                     "WebSearch",
                     json!({ "query": "Lime WebSearch rendering" }),
@@ -125,7 +125,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                         "id": "reasoning-sequence",
                         "thread_id": "thread_canonical_item_sequence",
                         "turn_id": turn.turn_id,
-                        "sequence": 3,
+                        "sequence": 5,
                         "type": "reasoning",
                         "text": "搜索结果还需要继续筛掉广告软文，我先读取有效来源。",
                         "status": "in_progress",
@@ -141,7 +141,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-fetch-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    4,
+                    6,
                     "inProgress",
                     "WebFetch",
                     json!({ "url": "https://example.com/lime-websearch-rendering" }),
@@ -155,7 +155,7 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
                     "tool-fetch-sequence",
                     "thread_canonical_item_sequence",
                     &turn.turn_id,
-                    4,
+                    6,
                     "completed",
                     "WebFetch",
                     json!({ "url": "https://example.com/lime-websearch-rendering" }),
@@ -195,28 +195,29 @@ async fn read_session_preserves_canonical_tool_sequence_around_reasoning_item() 
             "tool-search-sequence",
             "reasoning-sequence",
             "tool-fetch-sequence"
-        ]
+        ],
+        "{items:#?}"
     );
     assert_eq!(
         items
             .iter()
             .find(|item| item["id"] == "tool-search-sequence")
             .expect("search item")["sequence"],
-        2
+        3
     );
     assert_eq!(
         items
             .iter()
             .find(|item| item["id"] == "reasoning-sequence")
             .expect("reasoning item")["sequence"],
-        3
+        5
     );
     assert_eq!(
         items
             .iter()
             .find(|item| item["id"] == "tool-fetch-sequence")
             .expect("fetch item")["sequence"],
-        4
+        6
     );
 }
 

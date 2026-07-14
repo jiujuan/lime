@@ -1,4 +1,4 @@
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import type { PluginMarketplaceViewItem } from "../marketplace/pluginMarketplaceViewModel";
 
 export type PluginHistorySessionCandidateSource =

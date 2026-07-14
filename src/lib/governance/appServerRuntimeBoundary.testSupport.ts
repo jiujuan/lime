@@ -98,11 +98,6 @@ export const AGENT_SESSION_EXECUTION_RUNTIME_OWNER_MODULES = [
   "lime-rs/crates/agent/src/agent_tools/execution.rs",
   "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_snapshot.rs",
   "lime-rs/crates/agent/src/provider_configuration.rs",
-  "lime-rs/crates/agent/src/session_execution_runtime/runtime_payload.rs",
-  "lime-rs/crates/agent/src/session_execution_runtime/tests.rs",
-  "lime-rs/crates/agent/src/session_execution_runtime/tests/recent_settings.rs",
-  "lime-rs/crates/agent/src/session_execution_runtime/tests/runtime_payload.rs",
-  "lime-rs/crates/agent/src/session_execution_runtime_adapter.rs",
   "lime-rs/crates/agent/src/turn_context_configuration.rs",
   "lime-rs/crates/agent/src/turn_input_envelope.rs",
 ];

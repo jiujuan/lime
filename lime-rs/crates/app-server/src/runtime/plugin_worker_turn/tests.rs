@@ -755,6 +755,7 @@ fn execution_request(metadata: Value) -> ExecutionRequest {
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,
+        agent_control_gateway: None,
     }
 }
 

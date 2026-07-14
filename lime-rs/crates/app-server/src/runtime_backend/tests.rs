@@ -1,9 +1,8 @@
 use super::request_context::{
-    fast_response_selection_from_profile_model_slot, host_reasoning_effort, host_thinking_enabled,
+    apply_app_server_turn_policy, host_reasoning_effort, host_thinking_enabled,
     request_workspace_scope, resolve_runtime_model_selection, selection_from_explicit_preferences,
     selection_from_host_provider_config, selection_from_session_default,
-    selection_with_effective_reasoning, should_defer_tool_surface_for_fast_response,
-    should_use_compact_tool_surface_for_fast_response, turn_context_from_request,
+    selection_with_effective_reasoning, should_use_compact_tool_surface, turn_context_from_request,
     RuntimeModelSelection,
 };
 use super::*;
@@ -211,7 +210,18 @@ pub(super) fn request_for_test(
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,
+        agent_control_gateway: None,
     }
+}
+
+pub(super) fn apply_detached_desktop_first_turn_policy(request: &mut ExecutionRequest) {
+    request.session.app_id = "desktop".to_string();
+    request.session.workspace_id = None;
+    request.session.business_object_ref = None;
+    let host_request = super::request_context::runtime_request_from_request(request);
+    let tool_policy =
+        super::request_context::request_tool_policy_from_request(host_request.as_ref());
+    apply_app_server_turn_policy(request, true, &tool_policy);
 }
 
 fn request_with_session_metadata(metadata: Value) -> ExecutionRequest {

@@ -22,14 +22,12 @@ export interface AgentUiPerformanceSessionSummary {
   sessionId: string;
   workspaceId?: string | null;
   inputbarTriggerToHomeSubmitMs?: number;
-  inputbarTriggerToPendingShellMs?: number;
   inputbarTriggerToPendingPreviewCommitMs?: number;
   inputbarTriggerToPendingPreviewPaintMs?: number;
   inputbarTriggerToSendDispatchMs?: number;
   inputbarTriggerToSubmitAcceptedMs?: number;
   inputbarTriggerToFirstTextDeltaMs?: number;
   inputbarTriggerToFirstTextPaintMs?: number;
-  homeInputToPendingShellMs?: number;
   homeInputToPendingPreviewCommitMs?: number;
   homeInputToPendingPreviewPaintMs?: number;
   homeInputToSendDispatchMs?: number;
@@ -485,10 +483,6 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
     );
     const switchSuccess = lastEntry(sessionEntries, "session.switch.success");
     const homeInputSubmit = firstEntry(sessionEntries, "homeInput.submit");
-    const homeInputPendingShell = firstEntry(
-      sessionEntries,
-      "homeInput.pendingShellApplied",
-    );
     const homeInputPendingPreviewCommitted = firstEntry(
       sessionEntries,
       "homeInput.pendingPreviewCommitted",
@@ -573,10 +567,6 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
       homeInputSubmit,
       "triggerToHomeSubmitMs",
     );
-    const homeInputToPendingShell = deltaMs(
-      homeInputSubmit,
-      homeInputPendingShell,
-    );
     const homeInputToPendingPreviewCommit = deltaMs(
       homeInputSubmit,
       homeInputPendingPreviewCommitted,
@@ -607,9 +597,6 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
       workspaceId:
         sessionEntries.find((entry) => entry.workspaceId)?.workspaceId ?? null,
       inputbarTriggerToHomeSubmitMs: inputbarTriggerToHomeSubmit,
-      inputbarTriggerToPendingShellMs:
-        metricNumber(homeInputPendingShell, "durationMs") ??
-        addMs(inputbarTriggerToHomeSubmit, homeInputToPendingShell),
       inputbarTriggerToPendingPreviewCommitMs:
         metricNumber(homeInputPendingPreviewCommitted, "durationMs") ??
         addMs(inputbarTriggerToHomeSubmit, homeInputToPendingPreviewCommit),
@@ -628,7 +615,6 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
       inputbarTriggerToFirstTextPaintMs:
         metricNumber(streamFirstTextPaint, "homeSubmittedDeltaMs") ??
         addMs(inputbarTriggerToHomeSubmit, homeInputToFirstTextPaint),
-      homeInputToPendingShellMs: homeInputToPendingShell,
       homeInputToPendingPreviewCommitMs: homeInputToPendingPreviewCommit,
       homeInputToPendingPreviewPaintMs: homeInputToPendingPreviewPaint,
       homeInputToSendDispatchMs: homeInputToSendDispatch,

@@ -376,6 +376,7 @@ pub struct LocalAppDataSource {
     api_key_provider_service: ApiKeyProviderService,
     model_registry_service: ModelRegistryService,
     mcp_manager: McpManagerState,
+    mcp_elicitation_router: lime_mcp::ElicitationRequestRouter,
     telegram_gateway_state: TelegramGatewayState,
     feishu_gateway_state: FeishuGatewayState,
     discord_gateway_state: DiscordGatewayState,
@@ -418,6 +419,7 @@ impl LocalAppDataSource {
             api_key_provider_service,
             model_registry_service,
             mcp_manager: Arc::new(TokioMutex::new(McpClientManager::new(None))),
+            mcp_elicitation_router: lime_mcp::ElicitationRequestRouter::default(),
             telegram_gateway_state: TelegramGatewayState::default(),
             feishu_gateway_state: FeishuGatewayState::default(),
             discord_gateway_state: DiscordGatewayState::default(),
@@ -432,6 +434,10 @@ impl LocalAppDataSource {
     pub fn with_sidecar_store(mut self, sidecar_store: Arc<crate::runtime::SidecarStore>) -> Self {
         self.sidecar_store = Some(sidecar_store);
         self
+    }
+
+    pub fn mcp_elicitation_router(&self) -> lime_mcp::ElicitationRequestRouter {
+        self.mcp_elicitation_router.clone()
     }
 }
 

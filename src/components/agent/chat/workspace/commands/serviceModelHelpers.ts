@@ -11,6 +11,7 @@ import type {
   ServiceModelsConfig,
 } from "@/lib/api/appConfigTypes";
 import type { HandleSendOptions } from "../../hooks/handleSendTypes";
+import { buildServiceModelSlotMetadata } from "@/lib/serviceModels";
 import { asRecord } from "./skillSlotUtils";
 import { hasHarnessLaunchRequestMetadata } from "./sendHelpers";
 
@@ -22,6 +23,36 @@ const PROMPT_REWRITE_PURPOSES = new Set<RewritePurpose>([
   "style_rewrite",
   "style_audit",
 ]);
+
+const RESPONSIVE_CHAT_MODEL_SLOT = "fast";
+
+export function withConfiguredModelSlots(
+  requestMetadata: Record<string, unknown> | undefined,
+  serviceModels?: ServiceModelsConfig,
+): Record<string, unknown> | undefined {
+  const responsiveChatSlot = buildServiceModelSlotMetadata({
+    preference: serviceModels?.responsive_chat,
+    source: "service_models.responsive_chat",
+    reason: "service_model_preference",
+  });
+  if (!responsiveChatSlot) {
+    return requestMetadata;
+  }
+
+  const nextMetadata = { ...(requestMetadata || {}) };
+  const harness = asRecord(nextMetadata.harness) || {};
+  const existingModelSlots = asRecord(harness.model_slots) || {};
+  nextMetadata.harness = {
+    ...harness,
+    model_slots: {
+      ...existingModelSlots,
+      [RESPONSIVE_CHAT_MODEL_SLOT]:
+        asRecord(existingModelSlots[RESPONSIVE_CHAT_MODEL_SLOT]) ||
+        responsiveChatSlot,
+    },
+  };
+  return nextMetadata;
+}
 
 export function resolveServiceModelSendOverrides(params: {
   requestMetadata: Record<string, unknown> | undefined;
@@ -80,7 +111,10 @@ export function shouldRefreshServiceModelsBeforeSend(params: {
 }): boolean {
   const { requestMetadata, purpose } = params;
   return (
-    hasHarnessLaunchRequestMetadata(requestMetadata, "translation_skill_launch") ||
+    hasHarnessLaunchRequestMetadata(
+      requestMetadata,
+      "translation_skill_launch",
+    ) ||
     hasHarnessLaunchRequestMetadata(
       requestMetadata,
       "resource_search_skill_launch",

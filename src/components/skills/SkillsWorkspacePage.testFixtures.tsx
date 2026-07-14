@@ -162,9 +162,12 @@ vi.mock("@/lib/api/capabilityDrafts", () => ({
   },
 }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/inventoryClient", () => ({
   listWorkspaceSkillBindings: (...args: unknown[]) =>
     mocks.listWorkspaceSkillBindings(...args),
+}));
+
+vi.mock("@/lib/api/agentRuntime/exportClient", () => ({
   exportAgentRuntimeEvidencePack: (...args: unknown[]) =>
     mocks.exportAgentRuntimeEvidencePack(...args),
 }));

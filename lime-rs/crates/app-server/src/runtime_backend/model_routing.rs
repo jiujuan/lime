@@ -14,6 +14,7 @@ use runtime_core::{
 use serde_json::Value;
 use std::str::FromStr;
 
+#[cfg(test)]
 pub(super) fn selection_from_profile_model_slot(
     request: &ExecutionRequest,
 ) -> Option<RuntimeModelSelection> {
@@ -21,6 +22,7 @@ pub(super) fn selection_from_profile_model_slot(
     runtime_core::selection_from_profile_model_slot(
         &metadata_values,
         super::request_context::reasoning_effort_from_request(request),
+        None,
     )
 }
 

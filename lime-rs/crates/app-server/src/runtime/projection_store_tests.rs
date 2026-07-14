@@ -211,6 +211,144 @@ fn apply_events_rejects_event_id_collision_across_sessions() {
 }
 
 #[test]
+fn apply_events_rejects_initial_event_without_thread_identity() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let mut missing_thread = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+    missing_thread.thread_id = None;
+
+    let error = projection
+        .apply_event(&missing_thread)
+        .expect_err("first projected event requires thread identity");
+
+    assert!(error.contains("missing thread identity"));
+    assert!(projection
+        .read_session("sess_1")
+        .expect("read session")
+        .is_none());
+}
+
+#[test]
+fn apply_events_reuses_existing_session_thread_for_missing_followup_identity() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let accepted = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+    let mut completed = event(2, "turn.completed", "sess_1", "thread_1", Some("turn_1"));
+    completed.thread_id = None;
+
+    projection
+        .apply_events(&[accepted, completed])
+        .expect("apply events");
+
+    let session = projection
+        .read_session_projection("sess_1", ProjectionReadWindow::default())
+        .expect("read projection")
+        .expect("session");
+    assert_eq!(session.session.thread_id, "thread_1");
+    assert_eq!(session.turns[0].thread_id, "thread_1");
+}
+
+#[test]
+fn apply_events_rejects_conflicting_session_thread_without_mutating_projection() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let accepted = event(1, "turn.accepted", "sess_1", "thread_1", Some("turn_1"));
+    projection.apply_event(&accepted).expect("apply accepted");
+    let conflicting = event(2, "turn.completed", "sess_1", "thread_2", Some("turn_1"));
+
+    let error = projection
+        .apply_event(&conflicting)
+        .expect_err("session thread identity must remain immutable");
+
+    assert!(error.contains("Projection session thread identity conflict"));
+    let session = projection
+        .read_session_projection("sess_1", ProjectionReadWindow::default())
+        .expect("read projection")
+        .expect("session");
+    assert_eq!(session.session.thread_id, "thread_1");
+    assert_eq!(session.last_event_sequence, 1);
+    assert_eq!(session.item_count, 1);
+}
+
+#[test]
+fn apply_events_rejects_turn_reuse_across_sessions_without_creating_second_session() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let original = event(
+        1,
+        "turn.accepted",
+        "sess_1",
+        "thread_1",
+        Some("turn_shared"),
+    );
+    projection.apply_event(&original).expect("apply original");
+    let mut conflicting = event(
+        1,
+        "turn.accepted",
+        "sess_2",
+        "thread_2",
+        Some("turn_shared"),
+    );
+    conflicting.event_id = "evt-second-session-turn-reuse".to_string();
+
+    let error = projection
+        .apply_event(&conflicting)
+        .expect_err("turn id cannot cross session or thread owner");
+
+    assert!(error.contains("Projection turn identity conflict"));
+    assert!(projection
+        .read_session("sess_2")
+        .expect("read second session")
+        .is_none());
+}
+
+#[test]
+fn repair_session_rolls_back_clear_when_replay_thread_identity_conflicts() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let existing = event(
+        1,
+        "turn.accepted",
+        "sess_1",
+        "thread_1",
+        Some("turn_existing"),
+    );
+    projection.apply_event(&existing).expect("apply existing");
+    let replay_start = event(
+        1,
+        "turn.accepted",
+        "sess_1",
+        "thread_1",
+        Some("turn_replay"),
+    );
+    let replay_conflict = event(
+        2,
+        "turn.completed",
+        "sess_1",
+        "thread_2",
+        Some("turn_replay"),
+    );
+
+    let error = projection
+        .repair_session("sess_1", &[replay_start, replay_conflict])
+        .expect_err("replay identity conflict must roll back clear and rebuild");
+
+    assert!(error.contains("Projection session thread identity conflict"));
+    let session = projection
+        .read_session_projection("sess_1", ProjectionReadWindow::default())
+        .expect("read projection")
+        .expect("existing projection remains");
+    assert_eq!(session.session.thread_id, "thread_1");
+    assert_eq!(session.last_event_sequence, 1);
+    assert_eq!(session.turns[0].turn_id, "turn_existing");
+}
+
+#[test]
 fn clear_session_removes_projected_rows() {
     let temp = tempfile::tempdir().expect("tempdir");
     let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))

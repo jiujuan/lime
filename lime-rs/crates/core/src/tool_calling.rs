@@ -303,23 +303,6 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         ],
     },
     ToolDiscoveryProfile {
-        canonical_name: "Agent",
-        aliases: &["AgentTool", "Task"],
-        intent_terms: &[
-            "subagent",
-            "delegate",
-            "parallel agent",
-            "子代理",
-            "委派",
-            "并行任务",
-        ],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "SendMessage",
-        aliases: &["SendMessageTool"],
-        intent_terms: &["send message", "team message", "发消息", "团队消息"],
-    },
-    ToolDiscoveryProfile {
         canonical_name: "request_user_input",
         aliases: &["RequestUserInputTool"],
         intent_terms: &["ask user", "user input", "clarify", "询问用户", "补充信息"],
@@ -350,27 +333,6 @@ static TOOL_DISCOVERY_PROFILES: &[ToolDiscoveryProfile] = &[
         canonical_name: "Skill",
         aliases: &["SkillTool"],
         intent_terms: &["run skill", "service skill", "执行技能", "技能"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TeamCreate",
-        aliases: &["TeamCreateTool"],
-        intent_terms: &["create team", "create swarm", "swarm team", "创建团队"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "TeamDelete",
-        aliases: &["TeamDeleteTool"],
-        intent_terms: &["delete team", "cleanup team", "disband swarm", "解散团队"],
-    },
-    ToolDiscoveryProfile {
-        canonical_name: "ListPeers",
-        aliases: &["ListPeersTool"],
-        intent_terms: &[
-            "list peers",
-            "peer discovery",
-            "swarm peers",
-            "message peers",
-            "成员列表",
-        ],
     },
     ToolDiscoveryProfile {
         canonical_name: "ListMcpResourcesTool",
@@ -1236,6 +1198,27 @@ mod tests {
             assert!(
                 canonical_tool_discovery_name(deleted_name).is_none(),
                 "Agent Task* alias must not be discoverable: {deleted_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_retired_team_tool_discovery_profiles_stay_deleted() {
+        for deleted_name in [
+            "Agent",
+            "AgentTool",
+            "SendMessage",
+            "SendMessageTool",
+            "TeamCreate",
+            "TeamCreateTool",
+            "TeamDelete",
+            "TeamDeleteTool",
+            "ListPeers",
+            "ListPeersTool",
+        ] {
+            assert!(
+                canonical_tool_discovery_name(deleted_name).is_none(),
+                "retired Team tool must not remain discoverable: {deleted_name}"
             );
         }
     }

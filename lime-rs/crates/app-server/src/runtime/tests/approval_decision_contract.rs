@@ -1,3 +1,4 @@
+use super::support::canonical_tool_started_event;
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -14,12 +15,12 @@ impl ExecutionBackend for ShellApprovalOnceOnlyBackend {
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
         sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
-        sink.emit(RuntimeEvent::new(
-            "tool.started",
-            json!({
-                "toolCallId": "shell-tool-1",
-                "toolName": "Bash",
-            }),
+        sink.emit(canonical_tool_started_event(
+            "sess_shell_approval_decision_contract",
+            "thread_shell_approval_decision_contract",
+            "turn_shell_approval_decision_contract",
+            "shell-tool-1",
+            "Bash",
         ))?;
         sink.emit(RuntimeEvent::new(
             "action.required",

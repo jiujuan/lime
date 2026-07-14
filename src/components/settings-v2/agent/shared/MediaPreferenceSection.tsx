@@ -20,6 +20,7 @@ interface MediaPreferenceSectionProps extends Pick<
   | "providerFilter"
   | "providerType"
   | "setModel"
+  | "setProviderAndModel"
   | "setProviderType"
 > {
   title: string;
@@ -54,6 +55,7 @@ export function MediaPreferenceSection({
   setProviderType,
   model,
   setModel,
+  setProviderAndModel,
   providerFilter,
   modelFilter,
   getFallbackModels,
@@ -108,6 +110,7 @@ export function MediaPreferenceSection({
           setProviderType={setProviderType}
           model={model}
           setModel={setModel}
+          setProviderAndModel={setProviderAndModel}
           providerFilter={providerFilter}
           modelFilter={modelFilter}
           getFallbackModels={getFallbackModels}

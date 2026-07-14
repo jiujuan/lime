@@ -1,7 +1,7 @@
 # App Server 实施计划
 
 > 状态：进行中
-> 更新时间：2026-06-13
+> 更新时间：2026-07-13
 > 主路线图：`internal/roadmap/appserver/README.md`
 > 参考实现：`/Users/coso/Documents/dev/rust/codex/codex-rs/app-server*`（Codex CLI 仓库内的 codex-rs Rust 分层，不包含 Codex App 前端）
 > 当前阶段：`P3.314 legacy agent_runtime command manifest generator retired`
@@ -71,6 +71,7 @@ App Client
 | `compat`         | legacy desktop facade                                                  | 迁移期仅用于把旧前端 / 命令委托到 App Server current 主链，不承接新业务逻辑；退出条件是 Electron current API / App Server read model 覆盖后删除。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `deprecated`     | 壳层内继续新增 runtime 业务逻辑                                        | 不允许新增，只能下沉。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `dead`           | 旧桌面宿主作为 current 运行时事实源                                    | 不再允许作为新 Agent/runtime/sidecar 能力的设计入口或验证依据。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `dead`           | `app-server/backend_event.rs` 与 `core::agent::types` 旧 stream DTO    | 零消费者第二事实源已物理删除；backend event type 与 Tool lifecycle 只允许在 canonical RuntimeEvent / ThreadItem owner 中表达。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ## 4. 阶段计划
 
@@ -177,7 +178,7 @@ App Client
 
 已完成：
 
-1. `lime-rs/crates/app-server/src/backend_event.rs` 只保留通用 backend event type 归一化 helper，不再依赖 Lime 内部事件类型。
+1. 原 `lime-rs/crates/app-server/src/backend_event.rs` 通用 event-name helper 已在 S4n 证明零消费者后物理删除；backend event 必须在 current producer 边界直接产出 canonical RuntimeEvent / ThreadItem，不再经过第二套字符串 mapper。
 2. `RuntimeBackendSubmitResult / RuntimeBackendCancelResult` 已改为 `Vec<RuntimeEvent>`，`ExecutionBackend` 公共合同不再暴露 `lime_agent::AgentEvent`。
 3. `lime-rs/crates/app-server/tests/host_boundary_guard.rs` 防止 `app-server` 直接引入旧桌面壳层依赖。
 4. `ExecutionBackend`、`RuntimeCore::start_turn`、`RuntimeCore::cancel_turn` 已 async 化，避免真实 submit / cancel 被同步接口卡住。
@@ -407,7 +408,7 @@ App Client
 8. 抽出 `RuntimeCore / ExecutionBackend / RuntimeEventSink / RuntimeHostContext / MockBackend`。
 9. 显式排除旧空目录 `crates/agent-app-server*`，防止 workspace glob 继续吸入旧命名。
 10. `RuntimeCore` 事件投递为 JSON-RPC `agentSession/event` notification。
-11. 新增 `backend_event`，把 backend snake_case event type 归一化为公共 `RuntimeEvent` event type；Lime 内部事件解析只留在 Desktop compat adapter。
+11. 历史上新增过 `backend_event` 把 snake_case event type 归一化为公共 `RuntimeEvent`；该 helper 从未形成编译图 consumer，已在 S4n 连同 public export 删除并补回流守卫。
 12. 新增 `host_boundary_guard`，防止 `app-server` 直接依赖 Tauri。
 13. `ExecutionBackend / RuntimeCore / RuntimeBackendHost / AppServer` 已完成 async 边界收敛。
 14. `RuntimeBackend` 已具备 host-agnostic async submit / cancel port，后续可接真实 Tauri host adapter 或独立进程 host。

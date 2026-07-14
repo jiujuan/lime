@@ -82,13 +82,13 @@ describe("serviceModels", () => {
           preferredModelId: " fast-model ",
         },
         source: "service_models.responsive_chat",
-        reason: "fast_response_routing",
+        reason: "service_model_preference",
       }),
     ).toEqual({
       provider: "responsive-provider",
       model: "fast-model",
       source: "service_models.responsive_chat",
-      reason: "fast_response_routing",
+      reason: "service_model_preference",
     });
 
     expect(
@@ -98,7 +98,7 @@ describe("serviceModels", () => {
           enabled: false,
         },
         source: "service_models.responsive_chat",
-        reason: "fast_response_routing",
+        reason: "service_model_preference",
       }),
     ).toBeUndefined();
   });

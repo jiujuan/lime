@@ -1,8 +1,7 @@
 const LIVE_SERVER_URL_ENV = "LIME_MCP_LIVE_SERVER_URL";
 const LIVE_SERVER_NAME_ENV = "LIME_MCP_LIVE_SERVER_NAME";
 const LIVE_BEARER_TOKEN_ENV_VAR_ENV = "LIME_MCP_LIVE_BEARER_TOKEN_ENV_VAR";
-const LIVE_ENV_HTTP_HEADERS_JSON_ENV =
-  "LIME_MCP_LIVE_ENV_HTTP_HEADERS_JSON";
+const LIVE_ENV_HTTP_HEADERS_JSON_ENV = "LIME_MCP_LIVE_ENV_HTTP_HEADERS_JSON";
 const LIVE_SCOPES_ENV = "LIME_MCP_LIVE_SCOPES";
 const LIVE_TOOL_NAME_ENV = "LIME_MCP_LIVE_TOOL_NAME";
 const LIVE_TOOL_ARGS_JSON_ENV = "LIME_MCP_LIVE_TOOL_ARGS_JSON";
@@ -67,7 +66,9 @@ function parseStringRecordEnv(env, name) {
   const entries = Object.entries(parsed);
   for (const [key, value] of entries) {
     if (!key.trim() || typeof value !== "string" || !value.trim()) {
-      throw new Error(`${name} must map non-empty header names to env var names`);
+      throw new Error(
+        `${name} must map non-empty header names to env var names`,
+      );
     }
     assertEnvVarName(value.trim(), `${name}.${key}`);
   }
@@ -135,7 +136,8 @@ function summarizeUri(uri) {
 
 function contentSummary(result) {
   const content = Array.isArray(result?.content) ? result.content : [];
-  const structuredContent = result?.structuredContent ?? result?.structured_content;
+  const structuredContent =
+    result?.structuredContent ?? result?.structured_content;
   return {
     contentCount: content.length,
     contentTypes: Array.from(
@@ -206,9 +208,7 @@ export function readLiveProviderConfig(env = process.env) {
       transport: "streamable_http",
       url: parsedUrl.toString(),
       timeout: 10,
-      ...(bearerTokenEnvVar
-        ? { bearer_token_env_var: bearerTokenEnvVar }
-        : {}),
+      ...(bearerTokenEnvVar ? { bearer_token_env_var: bearerTokenEnvVar } : {}),
       ...(envHttpHeaders ? { env_http_headers: envHttpHeaders } : {}),
       ...(scopes && scopes.length > 0 ? { scopes } : {}),
     },
@@ -305,7 +305,10 @@ export async function runMcpLiveProviderSmoke({
       },
       entries,
     );
-    assert(Array.isArray(createResult?.servers), "mcpServer/create did not return servers");
+    assert(
+      Array.isArray(createResult?.servers),
+      "mcpServer/create did not return servers",
+    );
 
     await invokeAppServerMethod(
       options,
@@ -417,13 +420,17 @@ export async function runMcpLiveProviderSmoke({
     let readResource = null;
     if (live.expected.resourceUri) {
       assert(
-        resources.some((resource) => resource?.uri === live.expected.resourceUri),
+        resources.some(
+          (resource) =>
+            resource?.uri === live.expected.resourceUri &&
+            (resource?.server_name ?? resource?.serverName) === serverName,
+        ),
         `mcpResource/list did not return requested live resource ${live.expected.resourceUri}`,
       );
       const readResult = await invokeAppServerMethod(
         options,
         "mcpResource/read",
-        { uri: live.expected.resourceUri },
+        { server: serverName, uri: live.expected.resourceUri },
         entries,
       );
       readResource = {

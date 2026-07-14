@@ -60,9 +60,20 @@ function threadItemToolSequenceById(
     if (normalizedTurnId && item.turn_id !== normalizedTurnId) {
       continue;
     }
-    sequenceById.set(item.id, item.sequence);
+    sequenceById.set(item.id, threadItemTimelinePosition(item));
   }
   return sequenceById;
+}
+
+function threadItemTimelinePosition(item: AgentThreadItem): number {
+  if (isComparableThreadItemSequence(item.ordinal)) {
+    return item.ordinal;
+  }
+  const metadata = metadataFromThreadItem(item);
+  const metadataOrdinal = metadata?.ordinal;
+  return isComparableThreadItemSequence(metadataOrdinal)
+    ? metadataOrdinal
+    : item.sequence;
 }
 
 function isComparableThreadItemSequence(sequence: unknown): sequence is number {
@@ -203,6 +214,8 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
     return;
   }
 
+  const timelinePosition = threadItemTimelinePosition(params.item);
+
   params.setMessages((prev) =>
     prev.map((message) => {
       if (message.id !== params.assistantMsgId) {
@@ -213,7 +226,7 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
         ...(metadataFromThreadItem(params.item) ?? {}),
         source: "thread_item_reasoning",
         threadItemId: params.item.id,
-        sequence: params.item.sequence,
+        sequence: timelinePosition,
         turnId: params.item.turn_id,
       };
       const sequenceByToolId = threadItemToolSequenceById(
@@ -231,7 +244,11 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
         existingIndex >= 0
           ? existingIndex
           : parts.findIndex((part) =>
-              isThinkingPartCompatibleWithReasoningItem(part, params.item, text),
+              isThinkingPartCompatibleWithReasoningItem(
+                part,
+                params.item,
+                text,
+              ),
             );
       const nextPart: MessageContentPart = {
         type: "thinking",
@@ -245,7 +262,9 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
           ...parts.slice(0, compatibleThinkingIndex),
           ...parts.slice(compatibleThinkingIndex + 1),
         ];
-        if (!hasComparableContentPartSequence(remainingParts, sequenceByToolId)) {
+        if (
+          !hasComparableContentPartSequence(remainingParts, sequenceByToolId)
+        ) {
           const nextParts = [...parts];
           nextParts[compatibleThinkingIndex] = nextPart;
           if (
@@ -263,7 +282,7 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
         const nextParts = insertReasoningPartByContentSequence({
           parts: remainingParts,
           reasoningPart: nextPart,
-          reasoningSequence: params.item.sequence,
+          reasoningSequence: timelinePosition,
           sequenceByToolId,
         });
         if (
@@ -285,7 +304,7 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
         contentParts: insertReasoningPartByContentSequence({
           parts,
           reasoningPart: nextPart,
-          reasoningSequence: params.item.sequence,
+          reasoningSequence: timelinePosition,
           sequenceByToolId,
         }),
       };

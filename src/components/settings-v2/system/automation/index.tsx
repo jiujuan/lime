@@ -44,7 +44,7 @@ import {
   updateAutomationJob,
   updateAutomationSchedulerConfig,
 } from "@/lib/api/automation";
-import { auditAgentRuntimeObjective } from "@/lib/api/agentRuntime";
+import { auditAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
 import {
   openPathWithDefaultApp,
   revealPathInFinder,

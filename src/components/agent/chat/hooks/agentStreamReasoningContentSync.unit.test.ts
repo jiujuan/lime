@@ -152,6 +152,39 @@ describe("agentStreamReasoningContentSync", () => {
     });
   });
 
+  it("reasoning 完成序号晚于正文时仍应按 canonical ordinal 排在正文前", () => {
+    const messages = applyReasoningSync({
+      messages: [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "",
+          timestamp: new Date("2026-06-22T10:00:00.000Z"),
+          contentParts: [
+            {
+              type: "text",
+              text: "最终正文。",
+              metadata: { sequence: 48 },
+            },
+          ],
+        },
+      ],
+      item: buildReasoningItem({ sequence: 85, ordinal: 6 }),
+    });
+
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "thinking",
+        metadata: expect.objectContaining({ sequence: 6 }),
+      }),
+      expect.objectContaining({
+        type: "text",
+        text: "最终正文。",
+        metadata: { sequence: 48 },
+      }),
+    ]);
+  });
+
   it("无可比较 sequence 时应把 reasoning 放在首个正文前", () => {
     const messages = applyReasoningSync({
       messages: [

@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, AgentThreadTurn } from "../types";
 
 interface CanvasSessionOverviewPanelProps {

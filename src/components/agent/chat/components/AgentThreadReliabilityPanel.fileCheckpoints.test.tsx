@@ -1,6 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRuntimeFileCheckpointRestoreResult } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointRestoreResult } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   createFileCheckpointDetail,
   createFileCheckpointListResult,

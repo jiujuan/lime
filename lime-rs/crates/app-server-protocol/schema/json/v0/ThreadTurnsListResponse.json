@@ -93,9 +93,12 @@
         "closed",
         "completed",
         "failed",
+        "interacted",
+        "interrupted",
         "messageSent",
         "resumed",
         "spawned",
+        "started",
         "waiting"
       ],
       "type": "string"

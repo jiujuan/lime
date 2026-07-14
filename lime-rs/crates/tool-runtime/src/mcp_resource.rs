@@ -31,8 +31,7 @@ struct ListMcpResourcesInput {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReadMcpResourceInput {
-    #[serde(default)]
-    server: Option<String>,
+    server: String,
     uri: String,
 }
 
@@ -89,6 +88,15 @@ impl RuntimeToolExecutor for RuntimeMcpResourceExecutor {
                 }
                 READ_MCP_RESOURCE_TOOL_NAME => {
                     let input = parse_read_input(request.params)?;
+                    let server = input.server.trim();
+                    if server.is_empty() {
+                        return Err(RuntimeToolExecutionError::new(
+                            "server 不能为空",
+                            Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
+                                "invalid_mcp_resource_server".to_string(),
+                            )),
+                        ));
+                    }
                     let uri = input.uri.trim();
                     if uri.is_empty() {
                         return Err(RuntimeToolExecutionError::new(
@@ -101,6 +109,7 @@ impl RuntimeToolExecutor for RuntimeMcpResourceExecutor {
                     let response = self
                         .gateway
                         .read_mcp_resource(McpResourceReadParams {
+                            server: server.to_string(),
                             uri: uri.to_string(),
                         })
                         .await
@@ -112,7 +121,7 @@ impl RuntimeToolExecutor for RuntimeMcpResourceExecutor {
                                 )),
                             )
                         })?;
-                    Ok(read_mcp_resource_result(input.server.as_deref(), response))
+                    Ok(read_mcp_resource_result(server, response))
                 }
                 other => Err(RuntimeToolExecutionError::new(
                     format!("unsupported MCP resource tool: {other}"),
@@ -236,10 +245,9 @@ fn list_mcp_resources_result(
 }
 
 fn read_mcp_resource_result(
-    server: Option<&str>,
+    server: &str,
     response: McpResourceReadResponse,
 ) -> RuntimeToolExecutionResult {
-    let server = server.map(str::trim).filter(|value| !value.is_empty());
     let uri = response.uri.clone();
     let has_text = response.text.is_some();
     let has_blob = response.blob.is_some();
@@ -250,9 +258,7 @@ fn read_mcp_resource_result(
     metadata.insert("uri".to_string(), json!(uri));
     metadata.insert("has_text".to_string(), json!(has_text));
     metadata.insert("has_blob".to_string(), json!(has_blob));
-    if let Some(server) = server {
-        metadata.insert("server".to_string(), json!(server));
-    }
+    metadata.insert("server".to_string(), json!(server));
 
     RuntimeToolExecutionResult::new(true, output.to_string(), None, metadata)
 }
@@ -263,7 +269,7 @@ fn filter_resource_values(values: Vec<Value>, server: Option<&str>) -> Vec<Value
     };
     values
         .into_iter()
-        .filter(|value| resource_server(value).is_none_or(|candidate| candidate == server))
+        .filter(|value| resource_server(value) == Some(server))
         .collect()
 }
 
@@ -356,6 +362,7 @@ mod tests {
 
         assert!(result.success);
         assert_eq!(result.metadata.get("uri"), Some(&json!("docs://readme")));
+        assert_eq!(result.metadata.get("server"), Some(&json!("docs")));
         assert!(result.output.contains("hello"));
     }
 }

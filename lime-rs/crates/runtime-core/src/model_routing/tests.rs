@@ -33,8 +33,9 @@ fn selection_from_profile_slot_reads_harness_metadata() {
         }
     });
 
-    let selection = selection_from_profile_model_slot(&[&metadata], Some("medium".to_string()))
-        .expect("slot selection");
+    let selection =
+        selection_from_profile_model_slot(&[&metadata], Some("medium".to_string()), None)
+            .expect("slot selection");
 
     assert_eq!(selection.provider, "custom-coding");
     assert_eq!(selection.model, "coder-large");
@@ -43,13 +44,9 @@ fn selection_from_profile_slot_reads_harness_metadata() {
 }
 
 #[test]
-fn selection_from_profile_slot_prefers_fast_slot_for_fast_response_metadata() {
+fn selection_from_profile_slot_honors_runtime_preferred_slot() {
     let metadata = json!({
         "harness": {
-            "fast_response_routing": {
-                "mode": "auto",
-                "service_model_slot": "responsive_chat"
-            },
             "model_slots": {
                 "coding": {
                     "provider": "custom-coding",
@@ -67,8 +64,8 @@ fn selection_from_profile_slot_prefers_fast_slot_for_fast_response_metadata() {
         }
     });
 
-    let selection =
-        selection_from_profile_model_slot(&[&metadata], None).expect("fast slot selection");
+    let selection = selection_from_profile_model_slot(&[&metadata], None, Some("fast"))
+        .expect("fast slot selection");
 
     assert_eq!(selection.provider, "responsive-provider");
     assert_eq!(selection.model, "fast-chat");
@@ -78,7 +75,7 @@ fn selection_from_profile_slot_prefers_fast_slot_for_fast_response_metadata() {
 }
 
 #[test]
-fn selection_from_profile_slot_ignores_fast_slot_without_fast_response_metadata() {
+fn selection_from_profile_slot_ignores_fast_slot_without_runtime_preference() {
     let metadata = json!({
         "harness": {
             "model_slots": {
@@ -95,7 +92,7 @@ fn selection_from_profile_slot_ignores_fast_slot_without_fast_response_metadata(
     });
 
     let selection =
-        selection_from_profile_model_slot(&[&metadata], None).expect("coding slot selection");
+        selection_from_profile_model_slot(&[&metadata], None, None).expect("coding slot selection");
 
     assert_eq!(selection.provider, "custom-coding");
     assert_eq!(selection.model, "coder-large");
@@ -192,7 +189,7 @@ fn ready_routing_falls_back_from_unready_coding_slot_to_base_slot() {
         }
     });
     let requested =
-        selection_from_profile_model_slot(&[&metadata], None).expect("requested selection");
+        selection_from_profile_model_slot(&[&metadata], None, None).expect("requested selection");
 
     let resolution = resolve_ready_model_routing(&[&metadata], &requested, |candidate| {
         if candidate.provider == "openai" {
@@ -238,10 +235,6 @@ fn ready_routing_falls_back_from_unready_coding_slot_to_base_slot() {
 fn ready_routing_falls_back_from_unready_fast_slot_to_coding_slot() {
     let metadata = json!({
         "harness": {
-            "fast_response_routing": {
-                "mode": "auto",
-                "service_model_slot": "responsive_chat"
-            },
             "model_slots": {
                 "fast": {
                     "provider": "responsive-provider",
@@ -254,8 +247,8 @@ fn ready_routing_falls_back_from_unready_fast_slot_to_coding_slot() {
             }
         }
     });
-    let requested =
-        selection_from_profile_model_slot(&[&metadata], None).expect("requested fast selection");
+    let requested = selection_from_profile_model_slot(&[&metadata], None, Some("fast"))
+        .expect("requested fast selection");
 
     let resolution = resolve_ready_model_routing(&[&metadata], &requested, |candidate| {
         if candidate.provider == "custom-coding" {

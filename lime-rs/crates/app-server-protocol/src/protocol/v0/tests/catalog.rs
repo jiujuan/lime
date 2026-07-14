@@ -1,7 +1,7 @@
 use super::super::*;
 
 #[test]
-fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
+fn app_server_method_catalog_keeps_all_method_kinds_together() {
     let methods: Vec<&str> = APP_SERVER_METHODS.iter().map(|spec| spec.method).collect();
     assert_eq!(
         methods,
@@ -9,6 +9,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_INITIALIZE,
             METHOD_INITIALIZED,
             METHOD_CONFIG_WARNING,
+            METHOD_SERVER_REQUEST_RESOLVED,
             METHOD_CAPABILITY_LIST,
             METHOD_ARTIFACT_READ,
             METHOD_FILE_SYSTEM_LIST_DIRECTORY,
@@ -223,6 +224,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_MCP_SERVER_OAUTH_LOGIN,
             METHOD_MCP_SERVER_START,
             METHOD_MCP_SERVER_STOP,
+            METHOD_MCP_SERVER_ELICITATION_REQUEST,
             METHOD_MCP_TOOL_LIST,
             METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
             METHOD_MCP_TOOL_SEARCH,
@@ -310,6 +312,19 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
 
     let unique_methods = methods.iter().collect::<std::collections::HashSet<_>>();
     assert_eq!(unique_methods.len(), methods.len());
+    assert_eq!(
+        APP_SERVER_METHODS
+            .iter()
+            .find(|spec| spec.method == METHOD_MCP_SERVER_ELICITATION_REQUEST)
+            .map(|spec| spec.kind),
+        Some(AppServerMethodKind::ServerRequest)
+    );
+    assert!(!is_app_server_request_method(
+        METHOD_MCP_SERVER_ELICITATION_REQUEST
+    ));
+    assert!(!is_app_server_notification_method(
+        METHOD_MCP_SERVER_ELICITATION_REQUEST
+    ));
     assert!(is_app_server_request_method(METHOD_INITIALIZE));
     assert!(is_app_server_request_method(METHOD_EVIDENCE_EXPORT));
     assert!(is_app_server_request_method(
@@ -347,6 +362,9 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
     assert!(!is_app_server_request_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(METHOD_CONFIG_WARNING));
+    assert!(is_app_server_notification_method(
+        METHOD_SERVER_REQUEST_RESOLVED
+    ));
     assert!(is_app_server_notification_method(
         METHOD_AGENT_SESSION_EVENT
     ));

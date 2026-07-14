@@ -14,11 +14,23 @@ use model_provider::current_client::{
 };
 use serde_json::Value;
 
-pub(in crate::runtime) fn provider_history(
+/// Current turn input is supplied separately to the provider. It remains durable and visible in
+/// the canonical Item log, but must not be submitted twice in the same provider request.
+pub(in crate::runtime) fn provider_history_excluding_current_turn_input(
     stored: &StoredSession,
     output_snapshot_store: &dyn OutputSnapshotStore,
+    turn_id: &str,
 ) -> Vec<CurrentProviderMessage> {
-    messages_from_events(&stored.events, |output_ref| {
+    let events = stored
+        .events
+        .iter()
+        .filter(|event| {
+            event.turn_id.as_deref() != Some(turn_id)
+                || !super::turn_input_events::is_turn_input_event(event)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    messages_from_events(&events, |output_ref| {
         output_refs::output_content(
             &stored.output_blobs,
             output_snapshot_store,

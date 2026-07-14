@@ -1,4 +1,4 @@
-import type { AgentRuntimeOutcomeView } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeOutcomeView } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentThreadTurn } from "../types";
 import { isRuntimePermissionConfirmationWaitMessage } from "./runtimeActionConfirmation";
 import {

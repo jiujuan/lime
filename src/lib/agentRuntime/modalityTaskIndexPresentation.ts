@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeEvidenceTaskIndex,
   AgentRuntimeEvidenceTaskIndexItem,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 
 export interface ModalityTaskIndexQueryFilters {
   threadId?: string;

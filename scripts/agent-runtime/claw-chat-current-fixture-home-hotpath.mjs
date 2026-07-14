@@ -42,6 +42,7 @@ const HOME_HOTPATH_SUBMIT_FRAME_SAMPLES_KEY =
   "__LIME_HOME_HOTPATH_SUBMIT_FRAME_SAMPLES__";
 const HOME_HOTPATH_SUBMIT_FRAME_DONE_KEY =
   "__LIME_HOME_HOTPATH_SUBMIT_FRAME_DONE__";
+const HOME_HOTPATH_MAIN_AREA_BOUNDS_TOLERANCE_PX = 1;
 
 function normalizeHomeHotpathScenarioConfig(config = {}) {
   return {
@@ -71,6 +72,8 @@ function readHomeHotpathSnapshot(matchers = {}) {
   const textarea = document.querySelector('textarea[name="agent-chat-message"]');
   const textareaRect = textarea?.getBoundingClientRect();
   const textareaStyle = textarea ? window.getComputedStyle(textarea) : null;
+  const mainArea = document.querySelector('[data-testid="workspace-main-area"]');
+  const mainAreaRect = mainArea?.getBoundingClientRect();
   const textareaVisible = Boolean(
     textarea &&
       textareaRect &&
@@ -108,6 +111,17 @@ function readHomeHotpathSnapshot(matchers = {}) {
       document.querySelector('[data-testid="message-list"]') ||
         document.querySelector('[data-testid="message-list-frame"]'),
     ),
+    imperativePendingShellCount: document.querySelectorAll(
+      "[data-home-hotpath-pending-shell]",
+    ).length,
+    mainAreaBounds: mainAreaRect
+      ? {
+          left: Math.round(mainAreaRect.left * 100) / 100,
+          top: Math.round(mainAreaRect.top * 100) / 100,
+          width: Math.round(mainAreaRect.width * 100) / 100,
+          height: Math.round(mainAreaRect.height * 100) / 100,
+        }
+      : null,
     textareaVisible,
     textareaDisabled:
       textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
@@ -230,6 +244,9 @@ function summarizeHomeHotpathStabilitySample(snapshot, startedAt, index) {
     hasConnectedComposer: snapshot?.hasConnectedComposer === true,
     hasMessageTurnGroup: snapshot?.hasMessageTurnGroup === true,
     hasMessageList: snapshot?.hasMessageList === true,
+    imperativePendingShellCount:
+      snapshot?.imperativePendingShellCount ?? null,
+    mainAreaBounds: snapshot?.mainAreaBounds ?? null,
     hasTaskCenterHomeText: snapshot?.hasTaskCenterHomeText === true,
     hasEmptyConversationText: snapshot?.hasEmptyConversationText === true,
     hasNoAvailableModelText: snapshot?.hasNoAvailableModelText === true,
@@ -317,6 +334,55 @@ function analyzeHomeHotpathPostCompletionStabilitySamples(samples) {
   });
 }
 
+function analyzeHomeHotpathMainAreaBounds(samples, baselineBounds) {
+  const keys = ["left", "top", "width", "height"];
+  const hasBaseline = keys.every(
+    (key) =>
+      typeof baselineBounds?.[key] === "number" &&
+      Number.isFinite(baselineBounds[key]),
+  );
+  const comparableSamples = samples.filter((sample) =>
+    keys.every(
+      (key) =>
+        typeof sample?.mainAreaBounds?.[key] === "number" &&
+        Number.isFinite(sample.mainAreaBounds[key]),
+    ),
+  );
+  const maxDriftByKey = Object.fromEntries(
+    keys.map((key) => [
+      key,
+      hasBaseline
+        ? Math.max(
+            0,
+            ...comparableSamples.map((sample) =>
+              Math.abs(sample.mainAreaBounds[key] - baselineBounds[key]),
+            ),
+          )
+        : null,
+    ]),
+  );
+  const finiteDrifts = Object.values(maxDriftByKey).filter(
+    (value) => typeof value === "number" && Number.isFinite(value),
+  );
+  const maxDriftPx =
+    finiteDrifts.length > 0 ? Math.max(...finiteDrifts) : null;
+
+  return sanitizeJson({
+    stable:
+      hasBaseline &&
+      samples.length > 0 &&
+      comparableSamples.length === samples.length &&
+      typeof maxDriftPx === "number" &&
+      maxDriftPx <= HOME_HOTPATH_MAIN_AREA_BOUNDS_TOLERANCE_PX,
+    baselineBounds: hasBaseline ? baselineBounds : null,
+    comparableSampleCount: comparableSamples.length,
+    missingBoundsSampleCount: samples.length - comparableSamples.length,
+    maxDriftByKey,
+    maxDriftPx,
+    tolerancePx: HOME_HOTPATH_MAIN_AREA_BOUNDS_TOLERANCE_PX,
+  });
+}
+
 async function installHomeHotpathSubmitFrameSampler(
   page,
   matchers,
@@ -342,6 +408,10 @@ async function installHomeHotpathSubmitFrameSampler(
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
         );
+        const mainArea = document.querySelector(
+          '[data-testid="workspace-main-area"]',
+        );
+        const mainAreaRect = mainArea?.getBoundingClientRect();
         const assistantMessages = Array.from(
           document.querySelectorAll('[data-message-role="assistant"]'),
         );
@@ -366,6 +436,17 @@ async function installHomeHotpathSubmitFrameSampler(
             document.querySelector('[data-testid="message-list"]') ||
               document.querySelector('[data-testid="message-list-frame"]'),
           ),
+          imperativePendingShellCount: document.querySelectorAll(
+            "[data-home-hotpath-pending-shell]",
+          ).length,
+          mainAreaBounds: mainAreaRect
+            ? {
+                left: Math.round(mainAreaRect.left * 100) / 100,
+                top: Math.round(mainAreaRect.top * 100) / 100,
+                width: Math.round(mainAreaRect.width * 100) / 100,
+                height: Math.round(mainAreaRect.height * 100) / 100,
+              }
+            : null,
           textareaSessionId:
             textarea instanceof HTMLTextAreaElement
               ? textarea.dataset.sessionId || null
@@ -457,8 +538,34 @@ async function readHomeHotpathSubmitFrameSamples(page, options) {
   );
 }
 
-function analyzeHomeHotpathSubmitToConversationSamples(samples) {
-  const unstableSamples = samples.filter(
+export function analyzeHomeHotpathSubmitToConversationSamples(
+  samples,
+  baselineMainAreaBounds,
+) {
+  const conversationStartedIndex = samples.findIndex(
+    (sample) =>
+      sample.hasTaskCenterHomeText !== true &&
+      sample.hasEmptyStateFirstScreen !== true &&
+      sample.promptInBody === true &&
+      sample.hasMessageList === true,
+  );
+  const beforeConversationSamples =
+    conversationStartedIndex >= 0
+      ? samples.slice(0, conversationStartedIndex)
+      : samples;
+  const conversationSamples =
+    conversationStartedIndex >= 0 ? samples.slice(conversationStartedIndex) : [];
+  const invalidBeforeConversationSamples = beforeConversationSamples.filter(
+    (sample) =>
+      sample.hasTaskCenterHomeText !== true ||
+      sample.hasEmptyStateFirstScreen !== true ||
+      sample.hasConnectedComposer !== true ||
+      sample.hasEmptyConversationText ||
+      sample.hasNoAvailableModelText ||
+      sample.promptInBody ||
+      sample.hasMessageList,
+  );
+  const unstableConversationSamples = conversationSamples.filter(
     (sample) =>
       sample.hasTaskCenterHomeText ||
       sample.hasEmptyConversationText ||
@@ -467,11 +574,46 @@ function analyzeHomeHotpathSubmitToConversationSamples(samples) {
       sample.promptInBody !== true ||
       sample.hasMessageList !== true,
   );
+  const conversationStartedAtMs =
+    conversationStartedIndex >= 0
+      ? (samples[conversationStartedIndex]?.elapsedMs ?? null)
+      : null;
   return sanitizeJson({
-    stable: samples.length > 0 && unstableSamples.length === 0,
+    stable:
+      samples.length > 0 &&
+      conversationStartedIndex >= 0 &&
+      invalidBeforeConversationSamples.length === 0 &&
+      unstableConversationSamples.length === 0,
+    conversationStartedAtMs,
+    conversationStartedIndex,
+    beforeConversationSampleCount: beforeConversationSamples.length,
+    conversationSampleCount: conversationSamples.length,
+    noImperativePendingShell:
+      samples.length > 0 &&
+      samples.every((sample) => sample.imperativePendingShellCount === 0),
+    imperativePendingShellMaxCount: Math.max(
+      0,
+      ...samples.map((sample) =>
+        typeof sample.imperativePendingShellCount === "number"
+          ? sample.imperativePendingShellCount
+          : 0,
+      ),
+    ),
+    mainAreaBounds: analyzeHomeHotpathMainAreaBounds(
+      samples,
+      baselineMainAreaBounds,
+    ),
     sampleCount: samples.length,
-    unstableCount: unstableSamples.length,
-    firstUnstableSamples: unstableSamples.slice(0, 8),
+    unstableCount:
+      invalidBeforeConversationSamples.length +
+      unstableConversationSamples.length,
+    firstInvalidBeforeConversationSamples:
+      invalidBeforeConversationSamples.slice(0, 8),
+    firstUnstableConversationSamples: unstableConversationSamples.slice(0, 8),
+    firstUnstableSamples: [
+      ...invalidBeforeConversationSamples,
+      ...unstableConversationSamples,
+    ].slice(0, 8),
     observedTextareaSessionIds: Array.from(
       new Set(
         samples
@@ -716,6 +858,7 @@ export async function runHomeHotpathScenario({
   const submitToConversationStability =
     analyzeHomeHotpathSubmitToConversationSamples(
       submitToConversationFrameSamples,
+      homeOpened.after?.mainAreaBounds ?? null,
     );
   const postSubmitProjection = await sampleHomeHotpathProjection(
     page,

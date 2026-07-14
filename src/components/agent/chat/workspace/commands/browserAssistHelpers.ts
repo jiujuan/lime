@@ -8,7 +8,6 @@
 
 import type { HandleSendOptions } from "../../hooks/handleSendTypes";
 import type { GeneralWorkbenchSendBoundaryState } from "../workspaceSendHelpers";
-import type { AgentFastResponseRoutingDecision } from "../../utils/fastResponseRouting";
 
 export function shouldSkipBrowserAssistPrimeForPlainFirstTurn(params: {
   activeTheme: string;
@@ -33,33 +32,4 @@ export function shouldSkipBrowserAssistPrimeForPlainFirstTurn(params: {
 
   const text = params.sourceText.trim();
   return Boolean(text && !text.startsWith("/") && !text.startsWith("@"));
-}
-
-export function buildFastResponseAssistantDraft(
-  decision: AgentFastResponseRoutingDecision,
-): HandleSendOptions["assistantDraft"] {
-  if (!decision.enabled) {
-    return undefined;
-  }
-
-  const checkpoints = [
-    "已启用短提示词快速响应",
-    "仅当前轻量首轮请求生效",
-    "复杂任务仍保留原模型与工具策略",
-  ];
-
-  return {
-    initialRuntimeStatus: {
-      phase: "routing",
-      title: "快速响应已启用",
-      detail: "这轮使用更短的系统提示降低首字等待。",
-      checkpoints,
-    },
-    waitingRuntimeStatus: {
-      phase: "routing",
-      title: "快速响应处理中",
-      detail: "已提交请求，正在等待首个模型事件。",
-      checkpoints,
-    },
-  };
 }

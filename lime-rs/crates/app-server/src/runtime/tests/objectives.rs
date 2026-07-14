@@ -1,3 +1,4 @@
+use super::support::canonical_tool_started_event;
 use super::support::*;
 use super::*;
 
@@ -60,12 +61,12 @@ async fn objective_continue_fails_closed_when_pending_requests_exist() {
         session_id,
         Some(turn_id),
         vec![
-            RuntimeEvent::new(
-                "tool.started",
-                json!({
-                    "toolCallId": "tool_needs_approval",
-                    "toolName": "Shell"
-                }),
+            canonical_tool_started_event(
+                session_id,
+                "thread_objective_continue",
+                turn_id,
+                "tool_needs_approval",
+                "Shell",
             ),
             RuntimeEvent::new(
                 "action.required",

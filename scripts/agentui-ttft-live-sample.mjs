@@ -327,26 +327,8 @@ async function invoke(options, cmd, args, timeoutMs = options.timeoutMs) {
   return payload?.result;
 }
 
-function buildFastResponseMetadata() {
-  return {
-    harness: {
-      fast_response_routing: {
-        mode: "auto",
-        label: "快速响应",
-        reason: "first-turn-short-prompt",
-        service_model_slot: "responsive_chat",
-        routing_slot: "responsive_chat_model",
-        routing_changed: false,
-        resolver: "backend_service_model",
-        runtime_status_presentation: "transient",
-      },
-    },
-  };
-}
-
 function buildRuntimeRequest(options) {
   const runtimeRequest = {
-    metadata: buildFastResponseMetadata(),
     searchMode: "disabled",
     webSearch: false,
     thinkingEnabled: false,

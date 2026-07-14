@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime/evidenceTypes";
 import {
   buildModalityTaskIndexFacets,
   buildModalityTaskIndexRows,

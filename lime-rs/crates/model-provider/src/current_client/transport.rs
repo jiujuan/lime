@@ -1,9 +1,11 @@
 use super::CurrentProviderError;
+use rand::Rng;
 use reqwest::{header::HeaderMap, StatusCode};
 use std::time::Duration;
 
-pub(super) const MAX_STREAM_REQUEST_ATTEMPTS: u8 = 3;
-const INITIAL_RETRY_DELAY: Duration = Duration::from_millis(250);
+// Matches the Codex provider default: four retries after the initial request.
+pub(super) const MAX_STREAM_REQUEST_ATTEMPTS: u8 = 5;
+const INITIAL_RETRY_DELAY: Duration = Duration::from_millis(200);
 const MAX_RETRY_AFTER: Duration = Duration::from_secs(10);
 
 pub(super) fn should_retry_stream_request_status(status: StatusCode) -> bool {
@@ -36,11 +38,13 @@ fn retry_after(headers: &HeaderMap) -> Option<Duration> {
         .trim()
         .parse::<u64>()
         .ok()?;
-    Some(Duration::from_secs(seconds).min(MAX_RETRY_AFTER))
+    (seconds > 0).then(|| Duration::from_secs(seconds).min(MAX_RETRY_AFTER))
 }
 
 fn exponential_backoff(completed_attempts: u8) -> Duration {
-    INITIAL_RETRY_DELAY.saturating_mul(1_u32 << completed_attempts.saturating_sub(1))
+    let delay = INITIAL_RETRY_DELAY.saturating_mul(1_u32 << completed_attempts.saturating_sub(1));
+    let jitter = rand::thread_rng().gen_range(0.9_f64..1.1_f64);
+    Duration::from_millis((delay.as_millis() as f64 * jitter) as u64)
 }
 
 #[cfg(test)]
@@ -83,14 +87,21 @@ mod tests {
     }
 
     #[test]
-    fn retry_delay_uses_short_exponential_backoff() {
-        assert_eq!(
-            retry_delay(&HeaderMap::new(), 1),
-            Duration::from_millis(250)
-        );
-        assert_eq!(
-            retry_delay(&HeaderMap::new(), 2),
-            Duration::from_millis(500)
-        );
+    fn zero_retry_after_falls_back_to_exponential_backoff() {
+        let mut headers = HeaderMap::new();
+        headers.insert(RETRY_AFTER, HeaderValue::from_static("0"));
+
+        let delay = retry_delay(&headers, 1);
+
+        assert!((Duration::from_millis(180)..=Duration::from_millis(220)).contains(&delay));
+    }
+
+    #[test]
+    fn retry_delay_uses_jittered_exponential_backoff() {
+        let first = retry_delay(&HeaderMap::new(), 1);
+        let second = retry_delay(&HeaderMap::new(), 2);
+
+        assert!((Duration::from_millis(180)..=Duration::from_millis(220)).contains(&first));
+        assert!((Duration::from_millis(360)..=Duration::from_millis(440)).contains(&second));
     }
 }

@@ -17,10 +17,6 @@ const HARNESS_THEME_KEYS = ["theme", "harness_theme", "harnessTheme"] as const;
 const HARNESS_SESSION_MODE_KEYS = ["session_mode", "sessionMode"] as const;
 const HARNESS_GATE_KEY_KEYS = ["gate_key", "gateKey"] as const;
 const HARNESS_RUN_TITLE_KEYS = ["run_title", "runTitle", "title"] as const;
-const HARNESS_FAST_RESPONSE_ROUTING_KEYS = [
-  "fast_response_routing",
-  "fastResponseRouting",
-] as const;
 const HARNESS_IMAGE_COMMAND_INTENT_KEYS = [
   "image_command_intent",
   "imageCommandIntent",
@@ -134,22 +130,6 @@ function readHarnessArrayFromRequestMetadata(
   return null;
 }
 
-function hasHarnessObjectFromRequestMetadata(
-  requestMetadata: Record<string, unknown> | undefined,
-  keys: readonly string[],
-): boolean {
-  if (!requestMetadata) {
-    return false;
-  }
-
-  const nestedHarness = requestMetadata.harness;
-  const harness = isPlainRecord(nestedHarness)
-    ? (nestedHarness as Record<string, unknown>)
-    : requestMetadata;
-
-  return keys.some((key) => isPlainRecord(harness[key]));
-}
-
 function readHarnessObjectFromRequestMetadata(
   requestMetadata: Record<string, unknown> | undefined,
   keys: readonly string[],
@@ -252,46 +232,6 @@ function hasImageGenerationLaunchRouting(
     hasImageGenerationContractMarker(launch) ||
     hasImageGenerationContractMarker(imageTask)
   );
-}
-
-function withFastResponseFallbackPreference(
-  requestMetadata: Record<string, unknown> | undefined,
-  providerType: string,
-  model: string,
-): Record<string, unknown> | undefined {
-  const providerValue = providerType.trim();
-  const modelValue = model.trim();
-  if (!requestMetadata || !providerValue || !modelValue) {
-    return requestMetadata;
-  }
-
-  const nestedHarness = requestMetadata.harness;
-  const usesNestedHarness = isPlainRecord(nestedHarness);
-  const harness = usesNestedHarness
-    ? { ...(nestedHarness as Record<string, unknown>) }
-    : { ...requestMetadata };
-  const routingKey = HARNESS_FAST_RESPONSE_ROUTING_KEYS.find((key) =>
-    isPlainRecord(harness[key]),
-  );
-  if (!routingKey) {
-    return requestMetadata;
-  }
-
-  const routing = {
-    ...(harness[routingKey] as Record<string, unknown>),
-    fallback_provider_preference: providerValue,
-    fallback_model_preference: modelValue,
-  };
-  harness[routingKey] = routing;
-
-  if (!usesNestedHarness) {
-    return harness;
-  }
-
-  return {
-    ...requestMetadata,
-    harness,
-  };
 }
 
 function omitHarnessFieldsFromRequestMetadata(
@@ -557,13 +497,8 @@ export function buildSubmitOpRuntimeCompaction(
   const syncedProviderSelector =
     syncedSessionModelPreference?.providerType?.trim() || null;
   const syncedModelName = syncedSessionModelPreference?.model?.trim() || null;
-  const hasFastResponseRouting = hasHarnessObjectFromRequestMetadata(
-    requestMetadata,
-    HARNESS_FAST_RESPONSE_ROUTING_KEYS,
-  );
   const hasImageGenerationRouting =
     hasImageGenerationLaunchRouting(requestMetadata);
-  const shouldDeferModelRoutingToBackend = hasFastResponseRouting;
   const hasExplicitModelOverride = Boolean(modelOverride?.trim());
   const normalizedEffectiveProviderType = normalizeRuntimeIdentifier(
     effectiveProviderType,
@@ -590,7 +525,6 @@ export function buildSubmitOpRuntimeCompaction(
     hasEffectiveProviderType &&
     hasEffectiveModel &&
     !shouldSuppressImageOnlyEffectivePreferences &&
-    !shouldDeferModelRoutingToBackend &&
     (!syncedProviderSelector ||
       !syncedModelName ||
       normalizeRuntimeIdentifier(syncedProviderSelector) !==
@@ -600,7 +534,6 @@ export function buildSubmitOpRuntimeCompaction(
     hasEffectiveProviderType &&
     hasEffectiveModel &&
     !shouldSuppressImageOnlyEffectivePreferences &&
-    !(shouldDeferModelRoutingToBackend && !hasExplicitModelOverride) &&
     (hasExplicitModelOverride ||
       shouldSubmitProviderPreference ||
       !syncedProviderSelector ||
@@ -743,14 +676,6 @@ export function buildSubmitOpRuntimeCompaction(
     metadata = omitHarnessFieldsFromRequestMetadata(
       metadata,
       HARNESS_RUN_TITLE_KEYS,
-    );
-  }
-
-  if (hasFastResponseRouting) {
-    metadata = withFastResponseFallbackPreference(
-      metadata,
-      effectiveProviderType,
-      effectiveModel,
     );
   }
 

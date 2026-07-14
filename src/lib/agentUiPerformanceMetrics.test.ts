@@ -184,17 +184,11 @@ describe("agentUiPerformanceMetrics", () => {
     expect(JSON.stringify(details)).not.toContain("serverToRendererDeltaMs");
   });
 
-  it("应汇总首页输入提交到会话壳和发送派发的耗时", () => {
+  it("应汇总首页输入提交到 pending preview 和发送派发的耗时", () => {
     recordAgentUiPerformanceMetric("homeInput.submit", {
       requestId: "request-a",
       sessionId: "draft-a",
       triggerToHomeSubmitMs: 7,
-      workspaceId: "workspace-a",
-    });
-    recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-      durationMs: 11,
-      requestId: "request-a",
-      sessionId: "draft-a",
       workspaceId: "workspace-a",
     });
     recordAgentUiPerformanceMetric("homeInput.pendingPreviewCommitted", {
@@ -299,7 +293,6 @@ describe("agentUiPerformanceMetrics", () => {
         inputbarTriggerToHomeSubmitMs: 7,
         inputbarTriggerToPendingPreviewCommitMs: 14,
         inputbarTriggerToPendingPreviewPaintMs: 19,
-        inputbarTriggerToPendingShellMs: 11,
         inputbarTriggerToSendDispatchMs: 31,
         inputbarTriggerToSubmitAcceptedMs: 80,
         inputbarTriggerToFirstTextDeltaMs: 120,
@@ -310,9 +303,6 @@ describe("agentUiPerformanceMetrics", () => {
         workspaceId: "workspace-a",
       }),
     ]);
-    expect(
-      summary.sessions[0]?.homeInputToPendingShellMs,
-    ).toBeGreaterThanOrEqual(0);
     expect(
       summary.sessions[0]?.homeInputToPendingPreviewPaintMs,
     ).toBeGreaterThanOrEqual(0);
@@ -389,12 +379,6 @@ describe("agentUiPerformanceMetrics", () => {
       triggerToHomeSubmitMs: 6,
       workspaceId: "workspace-merge",
     });
-    recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-      durationMs: 12,
-      requestId: "request-merge",
-      sessionId: "draft-merge",
-      workspaceId: "workspace-merge",
-    });
     recordAgentUiPerformanceMetric("homeInput.pendingPreviewCommitted", {
       durationMs: 15,
       requestId: "request-merge",
@@ -451,7 +435,6 @@ describe("agentUiPerformanceMetrics", () => {
       inputbarTriggerToHomeSubmitMs: 6,
       inputbarTriggerToPendingPreviewCommitMs: 15,
       inputbarTriggerToPendingPreviewPaintMs: 18,
-      inputbarTriggerToPendingShellMs: 12,
       inputbarTriggerToSendDispatchMs: 52,
       inputbarTriggerToSubmitAcceptedMs: 90,
       inputbarTriggerToFirstTextDeltaMs: 130,

@@ -64,10 +64,10 @@ mod request_context;
 pub(crate) use provider_config::current_agent_runtime_config_metadata;
 use provider_config::{initialize_runtime_database, model_effective_event_from_runtime};
 use request_context::{
-    direct_provider_config_from_request, request_tool_policy_from_request,
-    resolve_runtime_model_selection, runtime_request_from_request,
-    selection_with_effective_reasoning, session_config_from_request, session_scope_from_request,
-    should_defer_tool_surface_for_fast_response, should_use_compact_tool_surface_for_fast_response,
+    apply_app_server_turn_policy, direct_provider_config_from_request,
+    request_tool_policy_from_request, resolve_runtime_model_selection,
+    runtime_request_from_request, selection_with_effective_reasoning, session_config_from_request,
+    session_scope_from_request, should_use_compact_tool_surface,
 };
 
 #[cfg(test)]
@@ -159,7 +159,7 @@ impl RuntimeBackend {
 
     async fn handle_turn_start_with_provider_history(
         &self,
-        request: ExecutionRequest,
+        mut request: ExecutionRequest,
         provider_history: Vec<CurrentProviderMessage>,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
@@ -175,24 +175,23 @@ impl RuntimeBackend {
         {
             return Ok(());
         }
+        let initial_host_request = runtime_request_from_request(&request);
+        let initial_tool_policy = request_tool_policy_from_request(initial_host_request.as_ref());
+        apply_app_server_turn_policy(
+            &mut request,
+            provider_history.is_empty(),
+            &initial_tool_policy,
+        );
         let host_request = runtime_request_from_request(&request);
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
-        let defer_tool_surface =
-            should_defer_tool_surface_for_fast_response(&request, &request_tool_policy);
-        let compact_tool_surface =
-            should_use_compact_tool_surface_for_fast_response(&request, &request_tool_policy);
-        let _skill_runtime_enable_guard = if defer_tool_surface {
-            skill_runtime_enable::clear_workspace_skill_runtime_enable(&session_scope.session_id)
-        } else {
+        let compact_tool_surface = should_use_compact_tool_surface(&request);
+        let _skill_runtime_enable_guard =
             skill_runtime_enable::apply_workspace_skill_runtime_enable(
                 &request,
                 &session_scope.session_id,
-            )
-        };
-        if !defer_tool_surface {
-            for event in agent_skills_telemetry::runtime_status_events_for_agent_skills(&request) {
-                sink.emit(event)?;
-            }
+            );
+        for event in agent_skills_telemetry::runtime_status_events_for_agent_skills(&request) {
+            sink.emit(event)?;
         }
         if let Some(event) = permission_preflight::browser_control_permission_event(
             &request,
@@ -262,10 +261,15 @@ impl RuntimeBackend {
         self.ensure_agent_initialized(&db).await?;
         self.install_live_execution_process_hook_if_available()
             .await?;
-        if !defer_tool_surface && !compact_tool_surface {
+        if !compact_tool_surface {
             self.register_current_native_tools_if_available().await?;
-            mcp_bridges::sync_mcp_bridges_if_available(&self.agent_state, &self.app_data_source)
-                .await?;
+            mcp_bridges::ensure_thread_mcp_runtime_if_available(
+                &self.agent_state,
+                &self.app_data_source,
+                &session_scope.session_id,
+                &session_scope.thread_id,
+            )
+            .await?;
         }
         let config_metadata = current_agent_runtime_config_metadata();
         let soul_style = tool_process_metadata::SoulStyleMetadata::from_config_metadata(
@@ -302,6 +306,7 @@ impl RuntimeBackend {
                         direct_provider_config,
                     ),
                 }),
+                agent_control_gateway: request.agent_control_gateway.clone(),
             },
             |event| {
                 if emit_error.is_some() {
@@ -436,6 +441,18 @@ impl ExecutionBackend for RuntimeBackend {
         ))
     }
 
+    async fn close_session(
+        &self,
+        session_id: &str,
+        thread_id: &str,
+    ) -> Result<(), RuntimeCoreError> {
+        self.agent_state.cancel_session(session_id).await;
+        self.agent_state
+            .close_mcp_runtime(session_id, thread_id)
+            .await;
+        Ok(())
+    }
+
     async fn respond_action(
         &self,
         request: ActionRespondRequest,
@@ -502,8 +519,6 @@ impl ExecutionBackend for RuntimeBackend {
         request: ToolInventoryReadRequest,
     ) -> Result<Value, RuntimeCoreError> {
         self.register_current_native_tools_if_available().await?;
-        mcp_bridges::sync_mcp_bridges_if_available(&self.agent_state, &self.app_data_source)
-            .await?;
         let app_data_source = self
             .app_data_source
             .read()

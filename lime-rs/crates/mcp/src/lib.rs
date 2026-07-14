@@ -3,9 +3,12 @@
 //! MCP（Model Context Protocol）集成模块，提供 MCP 协议的客户端实现。
 //! 使用 DynEmitter 进行事件发射，与具体桌面宿主解耦。
 
+mod active_time;
 pub mod auth_status;
 pub mod bridge_client;
-pub mod client;
+mod client;
+mod client_service;
+pub mod elicitation;
 pub mod events;
 pub mod extension_surface;
 pub mod manager;
@@ -19,14 +22,18 @@ pub mod types;
 
 pub use auth_status::{McpServerAuthActionPlan, McpServerAuthStatus};
 pub use bridge_client::McpBridgeClient;
-pub use client::{LimeMcpClient, McpClientWrapper};
+pub use client_service::LimeMcpClientService;
+pub use elicitation::{
+    ClaimedElicitationResolution, ElicitationAction, ElicitationRequest, ElicitationRequestId,
+    ElicitationRequestRouter, ElicitationResponse, ElicitationRouterError,
+};
 pub use events::{
     McpOAuthCompletedPayload, McpResourceUpdatedPayload, McpResourcesUpdatedPayload,
     McpServerErrorPayload, McpServerStartedPayload, McpServerStoppedPayload,
     McpToolsUpdatedPayload,
 };
 pub use extension_surface::{build_runtime_extension_surface, runtime_extension_name};
-pub use manager::{McpBridgeSnapshot, McpClientManager};
+pub use manager::{McpBridgeSnapshot, McpClientManager, McpRuntimeOwner, McpRuntimeServerSpec};
 pub use oauth::{McpOAuthLoginParams, McpOAuthLoginResponse, McpOAuthRegistry};
 pub use tool_converter::ToolConverter;
 pub use types::{

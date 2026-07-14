@@ -1,4 +1,4 @@
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import type { ConversationImportThreadCommitResponse } from "@/lib/api/conversationImport";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
 import { resolveSidebarSessionTitle } from "./sidebarSessionFormatting";

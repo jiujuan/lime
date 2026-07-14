@@ -424,14 +424,15 @@ describe("submitOpRuntimeCompaction", () => {
     });
   });
 
-  it("快速响应路由应让后端解析服务模型，不应把前端当前模型作为本轮 request preference", () => {
+  it("配置的 model slot 不应吞掉当前 provider/model fallback", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {
         harness: {
-          fast_response_routing: {
-            service_model_slot: "responsive_chat",
-            routing_slot: "responsive_chat_model",
-            resolver: "backend_service_model",
+          model_slots: {
+            fast: {
+              provider: "responsive-provider",
+              model: "fast-chat",
+            },
           },
           browser_assist: {
             enabled: true,
@@ -448,16 +449,15 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveModel: "deepseek-v4-pro",
     });
 
-    expect(result.shouldSubmitProviderPreference).toBe(false);
-    expect(result.shouldSubmitModelPreference).toBe(false);
+    expect(result.shouldSubmitProviderPreference).toBe(true);
+    expect(result.shouldSubmitModelPreference).toBe(true);
     expect(result.metadata).toEqual({
       harness: {
-        fast_response_routing: {
-          service_model_slot: "responsive_chat",
-          routing_slot: "responsive_chat_model",
-          resolver: "backend_service_model",
-          fallback_provider_preference: "deepseek",
-          fallback_model_preference: "deepseek-v4-pro",
+        model_slots: {
+          fast: {
+            provider: "responsive-provider",
+            model: "fast-chat",
+          },
         },
         browser_assist: {
           enabled: true,
@@ -467,13 +467,15 @@ describe("submitOpRuntimeCompaction", () => {
     });
   });
 
-  it("快速响应路由不应压过显式模型覆盖", () => {
+  it("配置的 model slot 不应压过显式模型覆盖", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {
         harness: {
-          fastResponseRouting: {
-            serviceModelSlot: "responsive_chat",
-            routingSlot: "responsive_chat_model",
+          model_slots: {
+            fast: {
+              provider: "responsive-provider",
+              model: "fast-chat",
+            },
           },
         },
       },
@@ -487,7 +489,7 @@ describe("submitOpRuntimeCompaction", () => {
       modelOverride: "gpt-5.4-mini",
     });
 
-    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitProviderPreference).toBe(true);
     expect(result.shouldSubmitModelPreference).toBe(true);
   });
 

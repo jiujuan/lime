@@ -1,5 +1,5 @@
+pub mod agent_control;
 pub mod apply_patch;
-pub mod collab_agent;
 pub mod command_semantics;
 pub mod execution_approval;
 pub mod execution_decision;

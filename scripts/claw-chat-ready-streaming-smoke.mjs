@@ -2593,7 +2593,8 @@ async function main() {
     summary.liveWebSubmitAppServer =
       appServerTurnEvidenceFromRecord(liveWebSubmit);
     summary.liveWebSubmitRuntimeRequest = liveWebRequest.runtimeRequest || null;
-    summary.liveWebSearchMode = liveWebRequest.runtimeRequest?.searchMode || null;
+    summary.liveWebSearchMode =
+      liveWebRequest.runtimeRequest?.searchMode || null;
     assert(
       liveWebRequest.runtimeRequest?.webSearch === true,
       "live WebSearch/WebFetch turn 必须显式提交 webSearch=true",
@@ -2738,10 +2739,6 @@ async function main() {
       liveWebRequest.runtimeRequest?.modelPreference === preferredModel ||
       latestRuntimeRouting?.selectedModel === preferredModel ||
       latestRuntimeRouting?.requestedModel === preferredModel;
-    const liveWebFastResponseRoutingDisabled = Boolean(
-      liveWebRequest.runtimeRequest &&
-      !liveWebRequest.runtimeRequest?.metadata?.harness?.fast_response_routing,
-    );
     summary.followRoutingEvidence = {
       selectedProvider: latestRuntimeRouting?.selectedProvider || null,
       selectedModel: latestRuntimeRouting?.selectedModel || null,
@@ -3029,10 +3026,6 @@ async function main() {
       liveWebRequiredToolsCompleted: liveWebRequiredReadModelToolsCompleted,
       liveWebRequiredToolOutputsPresent:
         liveWebRequiredReadModelToolOutputsPresent,
-      fastResponseRoutingDisabled:
-        !longRequest.runtimeRequest?.metadata?.harness?.fast_response_routing &&
-        !followRequest.runtimeRequest?.metadata?.harness?.fast_response_routing,
-      liveWebFastResponseRoutingDisabled,
       liveWebExplicitSearchRequired:
         liveWebRequest.runtimeRequest?.webSearch === true &&
         liveWebRequest.runtimeRequest?.searchMode === "required",
@@ -3109,8 +3102,6 @@ async function main() {
       summary.assertions.liveWebRequiredToolsCompleted &&
       summary.assertions.liveWebRequiredToolOutputsPresent &&
       summary.assertions.liveWebExplicitSearchRequired &&
-      summary.assertions.fastResponseRoutingDisabled &&
-      summary.assertions.liveWebFastResponseRoutingDisabled &&
       summary.assertions.noRuntimeMockFallbackSeen &&
       summary.assertions.noBlockingConsoleErrors &&
       summary.queueCountFinal === 0 &&

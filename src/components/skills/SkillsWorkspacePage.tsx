@@ -14,7 +14,7 @@ import type {
   SkillScaffoldDraft,
   SkillsPageParams,
 } from "@/types/page";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { buildServiceSkillRecommendationBuckets } from "@/components/agent/chat/service-skills/recommendedServiceSkills";
 import { resolveServiceSkillLaunchPrefill } from "@/components/agent/chat/service-skills/serviceSkillLaunchPrefill";
 import type { ServiceSkillHomeItem } from "@/components/agent/chat/service-skills/types";

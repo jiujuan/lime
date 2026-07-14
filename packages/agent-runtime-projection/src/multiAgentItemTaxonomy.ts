@@ -123,16 +123,12 @@ function normalizeToolName(
   switch (normalized) {
     case "spawn_agent":
       return "spawn_agent";
-    case "send_input":
     case "send_message":
       return "send_message";
-    case "resume_agent":
     case "followup_task":
       return "followup_task";
-    case "wait":
     case "wait_agent":
       return "wait_agent";
-    case "close_agent":
     case "interrupt_agent":
       return "interrupt_agent";
     case "list_agents":

@@ -548,10 +548,10 @@ fn turn_context_allows_web_tools_without_confirmation(
         || turn_context_approval_policy_is_never(turn_context)
 }
 
-/// Temporary allowlist for tools that may still be registered through the Agent registry.
+/// Allowlist for tools that may still be registered through the Agent registry.
 ///
 /// The list is owned here so App Server / GUI inventory and the migration guard have
-/// one current policy source while the reply loop is still being removed from Agent.
+/// one current policy source while registry-backed tools are migrated to their domain owners.
 const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
     "Bash",
     "PowerShell",
@@ -575,11 +575,6 @@ const RUNTIME_NATIVE_TOOL_REGISTRATION_ALLOWLIST: &[&str] = &[
     "lime_create_image_generation_task",
     "list_mcp_resources",
     "read_mcp_resource",
-    "Agent",
-    "SendMessage",
-    "TeamCreate",
-    "TeamDelete",
-    "ListPeers",
 ];
 
 pub fn runtime_native_tool_registration_allowlist() -> &'static [&'static str] {
@@ -816,6 +811,11 @@ mod tests {
         assert!(!names.contains(&"SleepTool"));
         assert!(!names.contains(&"Cron"));
         assert!(!names.contains(&"RemoteTrigger"));
+        assert!(!names.contains(&"Agent"));
+        assert!(!names.contains(&"SendMessage"));
+        assert!(!names.contains(&"TeamCreate"));
+        assert!(!names.contains(&"TeamDelete"));
+        assert!(!names.contains(&"ListPeers"));
     }
 
     #[test]

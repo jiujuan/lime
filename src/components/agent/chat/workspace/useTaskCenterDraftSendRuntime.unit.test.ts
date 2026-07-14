@@ -12,7 +12,6 @@ import {
   useTaskCenterDraftSendDispatchRuntime,
   useTaskCenterEmptyStateSendRuntime,
 } from "./useTaskCenterDraftSendRuntime";
-import { clearHomeHotpathPendingShell } from "./homeHotpathPendingShell";
 
 vi.mock("@/lib/agentUiPerformanceMetrics", () => ({
   recordAgentUiPerformanceMetric: vi.fn(),
@@ -300,7 +299,6 @@ function mountEmptyStateSendRuntime({
 }
 
 afterEach(() => {
-  clearHomeHotpathPendingShell({ restoreHome: true });
   mountedRoots.splice(0).forEach(({ root, container }) => {
     act(() => {
       root.unmount();
@@ -1231,13 +1229,9 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
         }),
       }),
     );
-    expect(recordAgentUiPerformanceMetric).toHaveBeenCalledWith(
+    expect(recordAgentUiPerformanceMetric).not.toHaveBeenCalledWith(
       "homeInput.pendingShellApplied",
-      expect.objectContaining({
-        sessionId: null,
-        source: "empty-state",
-        workspaceId: "workspace-test",
-      }),
+      expect.anything(),
     );
     const initialTrackingRequest =
       runtime.setTaskCenterDraftSendRequest.mock.calls[0]?.[0];

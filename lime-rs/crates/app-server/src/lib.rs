@@ -1,8 +1,9 @@
 mod agent_runtime_registry;
+mod agent_identity_store;
+mod agent_mailbox_store;
 mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
 mod automation_execution;
-mod backend_event;
 mod capability;
 mod execution_process;
 mod external_backend;
@@ -11,6 +12,7 @@ mod file_checkpoint_snapshot;
 mod gateway_tunnel;
 mod knowledge_builder_runtime;
 mod local_data_source;
+mod mcp_elicitation;
 mod media_runtime_contract;
 mod media_task;
 mod media_task_payload;
@@ -27,6 +29,7 @@ mod project_shell;
 mod runtime;
 mod runtime_backend;
 mod runtime_factory;
+mod server_request;
 mod skill_registry;
 mod trace_context;
 
@@ -104,7 +107,6 @@ use app_server_transport::OutgoingMessage;
 use app_server_transport::QueuedOutgoingMessage;
 use app_server_transport::TransportError;
 use app_server_transport::TransportEvent;
-pub use backend_event::runtime_event_type_from_backend_type;
 pub use capability::capability_source_from_app_policy_json;
 pub use capability::AppPolicyCapability;
 pub use capability::AppPolicyLoadError;
@@ -202,6 +204,7 @@ pub use runtime_backend::RuntimeBackend;
 pub use runtime_factory::AppServerBackendMode;
 pub use runtime_factory::AppServerRuntimeFactory;
 pub use runtime_factory::UnsupportedBackendMode;
+pub use server_request::ServerRequestError;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -217,6 +220,11 @@ type TransportWriter = mpsc::Sender<QueuedOutgoingMessage>;
 type TransportWriters = Arc<Mutex<HashMap<ConnectionId, TransportWriter>>>;
 type StreamedTransportMessage = Result<(ConnectionId, JsonRpcMessage), AppServerError>;
 
+struct ServerRequestClient {
+    connection_id: ConnectionId,
+    writer: TransportWriter,
+}
+
 #[derive(Debug, Error)]
 pub enum AppServerError {
     #[error(transparent)]
@@ -229,6 +237,8 @@ pub enum AppServerError {
     ConnectionUnavailable { connection_id: ConnectionId },
     #[error("app-server transport connection {connection_id} writer is closed")]
     ConnectionWriterClosed { connection_id: ConnectionId },
+    #[error(transparent)]
+    ServerRequest(#[from] ServerRequestError),
 }
 
 #[derive(Clone)]
@@ -236,6 +246,8 @@ pub struct AppServer {
     processor: RequestProcessor,
     outbound_messages: broadcast::Sender<JsonRpcMessage>,
     transport_writers: TransportWriters,
+    server_requests: server_request::ServerRequestRouter,
+    mcp_elicitation_requests: mcp_elicitation::ElicitationRequestSource,
 }
 
 #[derive(Clone)]
@@ -256,7 +268,18 @@ impl AppServer {
             processor: RequestProcessor::new(runtime),
             outbound_messages,
             transport_writers: Arc::new(Mutex::new(HashMap::new())),
+            server_requests: server_request::ServerRequestRouter::default(),
+            mcp_elicitation_requests: mcp_elicitation::ElicitationRequestSource::default(),
         }
+    }
+
+    pub fn with_mcp_elicitation_router(
+        mut self,
+        router: lime_mcp::ElicitationRequestRouter,
+    ) -> Result<Self, lime_mcp::ElicitationRouterError> {
+        self.mcp_elicitation_requests =
+            mcp_elicitation::ElicitationRequestSource::subscribe(router)?;
+        Ok(self)
     }
 
     pub fn subscribe_outbound_messages(&self) -> broadcast::Receiver<JsonRpcMessage> {
@@ -295,7 +318,42 @@ impl AppServer {
                 self.processor.handle_notification(notification);
                 Ok(Vec::new())
             }
-            JsonRpcMessage::Response(_) | JsonRpcMessage::Error(_) => Ok(Vec::new()),
+            JsonRpcMessage::Response(_response) => {
+                #[cfg(test)]
+                self.resolve_test_server_request_response(_response.id, _response.result);
+                Ok(Vec::new())
+            }
+            JsonRpcMessage::Error(_response) => {
+                #[cfg(test)]
+                self.resolve_test_server_request_error(_response.id, _response.error);
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    async fn handle_transport_message(
+        &self,
+        connection_id: ConnectionId,
+        message: JsonRpcMessage,
+    ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
+        match message {
+            JsonRpcMessage::Response(response) => {
+                self.resolve_transport_server_request_response(
+                    connection_id,
+                    response.id,
+                    response.result,
+                );
+                Ok(Vec::new())
+            }
+            JsonRpcMessage::Error(response) => {
+                self.resolve_transport_server_request_error(
+                    connection_id,
+                    response.id,
+                    response.error,
+                );
+                Ok(Vec::new())
+            }
+            message => self.handle_message(message).await,
         }
     }
 
@@ -314,7 +372,16 @@ impl AppServer {
                 self.processor.handle_notification(notification);
                 Ok(Vec::new())
             }
-            JsonRpcMessage::Response(_) | JsonRpcMessage::Error(_) => Ok(Vec::new()),
+            JsonRpcMessage::Response(_response) => {
+                #[cfg(test)]
+                self.resolve_test_server_request_response(_response.id, _response.result);
+                Ok(Vec::new())
+            }
+            JsonRpcMessage::Error(_response) => {
+                #[cfg(test)]
+                self.resolve_test_server_request_error(_response.id, _response.error);
+                Ok(Vec::new())
+            }
         }
     }
 
@@ -370,6 +437,108 @@ impl AppServer {
             .await
             .map_err(|_| AppServerError::ConnectionWriterClosed { connection_id })
     }
+
+    pub async fn send_server_request(
+        &self,
+        method: impl Into<String>,
+        params: impl serde::Serialize,
+    ) -> Result<serde_json::Value, AppServerError> {
+        self.begin_server_request(method, params)
+            .await?
+            .wait()
+            .await
+            .map_err(AppServerError::from)
+    }
+
+    fn server_request_client(&self) -> Result<ServerRequestClient, AppServerError> {
+        let writers = self
+            .transport_writers
+            .lock()
+            .expect("app-server transport writer mutex poisoned")
+            .iter()
+            .map(|(connection_id, writer)| (*connection_id, writer.clone()))
+            .collect::<Vec<_>>();
+        let client_count = writers.len();
+        if client_count == 0 {
+            return Err(ServerRequestError::ClientUnavailable.into());
+        }
+        if client_count != 1 {
+            return Err(ServerRequestError::ClientAmbiguous { client_count }.into());
+        }
+
+        let (connection_id, writer) = writers
+            .into_iter()
+            .next()
+            .expect("one transport writer was counted");
+        Ok(ServerRequestClient {
+            connection_id,
+            writer,
+        })
+    }
+
+    async fn send_to_server_request_client(
+        &self,
+        client: ServerRequestClient,
+        message: JsonRpcMessage,
+    ) -> Result<(), AppServerError> {
+        client
+            .writer
+            .send(QueuedOutgoingMessage::new(OutgoingMessage::from(message)))
+            .await
+            .map_err(|_| AppServerError::ConnectionWriterClosed {
+                connection_id: client.connection_id,
+            })
+    }
+
+    fn cancel_pending_server_requests(&self, reason: &str) {
+        self.server_requests.cancel_all(reason);
+    }
+
+    #[cfg(test)]
+    fn resolve_test_server_request_response(&self, id: RequestId, result: serde_json::Value) {
+        let request_id = id.clone();
+        if let Err(error) = self.server_requests.resolve_response(id, result) {
+            tracing::warn!(%request_id, %error, "dropping unmatched App Server test response");
+        }
+    }
+
+    #[cfg(test)]
+    fn resolve_test_server_request_error(&self, id: RequestId, response: JsonRpcError) {
+        let request_id = id.clone();
+        if let Err(error) = self.server_requests.resolve_error(id, response) {
+            tracing::warn!(%request_id, %error, "dropping unmatched App Server test error");
+        }
+    }
+
+    fn resolve_transport_server_request_response(
+        &self,
+        connection_id: ConnectionId,
+        id: RequestId,
+        result: serde_json::Value,
+    ) {
+        let request_id = id.clone();
+        if let Err(error) =
+            self.server_requests
+                .resolve_transport_response(connection_id, id, result)
+        {
+            tracing::warn!(%request_id, %connection_id, %error, "dropping unmatched App Server transport response");
+        }
+    }
+
+    fn resolve_transport_server_request_error(
+        &self,
+        connection_id: ConnectionId,
+        id: RequestId,
+        response: JsonRpcError,
+    ) {
+        let request_id = id.clone();
+        if let Err(error) =
+            self.server_requests
+                .resolve_transport_error(connection_id, id, response)
+        {
+            tracing::warn!(%request_id, %connection_id, %error, "dropping unmatched App Server transport error");
+        }
+    }
 }
 
 pub fn spawn_image_task_worker_scheduler(
@@ -396,11 +565,15 @@ impl AppServerEventBridge {
             .into_iter()
             .map(event_notification_jsonrpc)
             .collect::<Result<Vec<_>, _>>()?;
-        for message in &messages {
+        self.publish_events(&messages);
+        Ok(messages)
+    }
+
+    fn publish_events(&self, messages: &[JsonRpcMessage]) {
+        for message in messages {
             let _ = self.outbound_messages.send(message.clone());
             enqueue_transport_outbound_message(&self.transport_writers, message.clone());
         }
-        Ok(messages)
     }
 }
 
@@ -420,59 +593,94 @@ where
     let (transport_event_tx, mut transport_event_rx) = mpsc::channel(OUTBOUND_MESSAGE_CAPACITY);
     let _stdio_handles = start_stdio_connection(transport_event_tx, reader, writer).await?;
     let (streamed_tx, mut streamed_rx) = mpsc::unbounded_channel::<StreamedTransportMessage>();
+    let mcp_elicitation_shutdown = tokio_util::sync::CancellationToken::new();
+    let mcp_elicitation_pump = tokio::spawn(mcp_elicitation::run_request_pump(
+        server.clone(),
+        server.mcp_elicitation_requests.clone(),
+        mcp_elicitation_shutdown.clone(),
+    ));
 
-    loop {
-        tokio::select! {
-            event = transport_event_rx.recv() => {
-                let Some(event) = event else {
-                    break;
-                };
-                match event {
-                    TransportEvent::ConnectionOpened {
-                        connection_id,
-                        writer,
-                        ..
-                    } => server.register_transport_writer(connection_id, writer),
-                    TransportEvent::StdioClientInitialized { .. } => {}
-                    TransportEvent::ConnectionClosed { connection_id } => {
-                        server.unregister_transport_writer(connection_id);
+    let transport_result = async {
+        loop {
+            tokio::select! {
+                event = transport_event_rx.recv() => {
+                    let Some(event) = event else {
                         break;
-                    }
-                    TransportEvent::IncomingMessage {
-                        connection_id,
-                        message,
-                    } => {
-                        if should_spawn_transport_request(&message) {
-                            spawn_transport_request(
-                                server.clone(),
-                                connection_id,
-                                message,
-                                streamed_tx.clone(),
+                    };
+                    match event {
+                        TransportEvent::ConnectionOpened {
+                            connection_id,
+                            writer,
+                            ..
+                        } => server.register_transport_writer(connection_id, writer),
+                        TransportEvent::StdioClientInitialized { .. } => {}
+                        TransportEvent::ConnectionClosed { connection_id } => {
+                            server.unregister_transport_writer(connection_id);
+                            server.server_requests.cancel_owner(
+                                server_request::ServerRequestOwner::Transport(connection_id),
+                                "App Server transport disconnected",
                             );
-                            continue;
+                            break;
                         }
-                        for response in server.handle_message(message).await? {
-                            server
-                                .send_to_transport_connection(connection_id, response)
-                                .await?;
+                        TransportEvent::IncomingMessage {
+                            connection_id,
+                            message,
+                        } => {
+                            if should_spawn_transport_request(&message) {
+                                spawn_transport_request(
+                                    server.clone(),
+                                    connection_id,
+                                    message,
+                                    streamed_tx.clone(),
+                                );
+                                continue;
+                            }
+                            for response in server
+                                .handle_transport_message(connection_id, message)
+                                .await?
+                            {
+                                server
+                                    .send_to_transport_connection(connection_id, response)
+                                    .await?;
+                            }
                         }
                     }
                 }
-            }
-            streamed = streamed_rx.recv() => {
-                let Some(streamed) = streamed else {
-                    break;
-                };
-                let (connection_id, message) = streamed?;
-                server
-                    .send_to_transport_connection(connection_id, message)
-                    .await?;
+                streamed = streamed_rx.recv() => {
+                    let Some(streamed) = streamed else {
+                        break;
+                    };
+                    let (connection_id, message) = streamed?;
+                    server
+                        .send_to_transport_connection(connection_id, message)
+                        .await?;
+                }
             }
         }
+        Ok(())
     }
+    .await;
 
+    finish_json_lines(
+        &server,
+        mcp_elicitation_shutdown,
+        mcp_elicitation_pump,
+        transport_result,
+    )
+    .await
+}
+
+async fn finish_json_lines(
+    server: &AppServer,
+    mcp_elicitation_shutdown: tokio_util::sync::CancellationToken,
+    mcp_elicitation_pump: tokio::task::JoinHandle<()>,
+    transport_result: Result<(), AppServerError>,
+) -> Result<(), AppServerError> {
+    server.cancel_pending_server_requests("App Server transport stopped");
+    mcp_elicitation_shutdown.cancel();
+    let _ = mcp_elicitation_pump.await;
     server.clear_transport_writers();
-    Ok(())
+    transport_result
 }
 
 fn spawn_transport_request(
@@ -1971,39 +2179,6 @@ mod tests {
         }
         panic!("expected agent event notification {expected_type}");
     }
-    fn assert_agent_event_notification(
-        message: &JsonRpcMessage,
-        expected_type: &str,
-        expected_turn_id: &str,
-        expected_payload: serde_json::Value,
-    ) {
-        assert_scoped_agent_event_notification(
-            message,
-            "sess_flow",
-            "thread_flow",
-            expected_type,
-            expected_turn_id,
-            expected_payload,
-        );
-    }
-    fn agent_event_notification<'a>(
-        messages: &'a [JsonRpcMessage],
-        expected_type: &str,
-    ) -> Option<&'a JsonRpcMessage> {
-        messages.iter().find(|message| {
-            let JsonRpcMessage::Notification(notification) = message else {
-                return false;
-            };
-            notification.method == METHOD_AGENT_SESSION_EVENT
-                && notification
-                    .params
-                    .as_ref()
-                    .and_then(|params| params.pointer("/event/type"))
-                    .and_then(serde_json::Value::as_str)
-                    == Some(expected_type)
-        })
-    }
-
     fn assert_scoped_agent_event_notification(
         message: &JsonRpcMessage,
         expected_session_id: &str,

@@ -1,5 +1,4 @@
 use super::backend_error;
-use super::mcp_bridges;
 use super::provider_config::current_agent_runtime_config_metadata;
 use super::provider_config::initialize_runtime_database;
 use super::request_context::{
@@ -44,11 +43,6 @@ pub(super) async fn prepare_runtime_worker_artifact_events(
     runtime_backend
         .register_current_native_tools_if_available()
         .await?;
-    mcp_bridges::sync_mcp_bridges_if_available(
-        &runtime_backend.agent_state,
-        &runtime_backend.app_data_source,
-    )
-    .await?;
 
     let host_request = runtime_request_from_request(request);
     let scope = session_scope_from_request(request)?;

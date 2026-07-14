@@ -16,7 +16,7 @@ import type {
   AgentRuntimeFileCheckpointListResult,
   AgentRuntimeFileCheckpointRestoreResult,
   AgentRuntimeThreadReadModel,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
 import type { HarnessSessionState } from "../utils/harnessState";
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 import { changeLimeLocale } from "@/i18n/createI18n";
@@ -50,9 +50,11 @@ vi.mock("sonner", () => ({
   toast: hoistedMocks.mockToast,
 }));
 
-vi.mock("@/lib/api/agentRuntime", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/agentRuntime")>(
-    "@/lib/api/agentRuntime",
+vi.mock("@/lib/api/agentRuntime/threadClient", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/agentRuntime/threadClient")
+  >(
+    "@/lib/api/agentRuntime/threadClient",
   );
   return {
     ...actual,

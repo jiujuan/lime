@@ -1,25 +1,18 @@
 //! MCP 桥接运行时边界
 //!
-//! 将 Agent reply-loop 的 MCP 调用转发到
-//! Lime 已有的 MCP RunningService，避免重复启动进程。
+//! 将 Agent reply-loop 的 MCP 调用绑定到其 Session-owned connection generation。
 
-use agent_protocol::session_context::SESSION_ID_HEADER;
-use agent_runtime::runtime_scope::current_session_id;
 use lime_mcp::{
     build_runtime_extension_surface, runtime_extension_name,
     McpBridgeClient as RuntimeMcpBridgeClient, McpBridgeSnapshot,
 };
-use rmcp::model::{
-    CallToolResult, Extensions, GetPromptResult, InitializeResult, JsonObject, ListPromptsResult,
-    ListResourcesResult, ListToolsResult, Meta, ReadResourceResult, ServerNotification,
-};
-use serde_json::Value;
+use rmcp::model::{CallToolResult, Extensions, JsonObject, ListToolsResult, ServerNotification};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use tool_runtime::mcp_connection::McpConnectionRegistry;
-use tool_runtime::mcp_connection::{McpConnection, McpConnectionError};
+use tool_runtime::mcp_connection::{McpCallScope, McpConnection, McpConnectionError};
 use tool_runtime::tool_extension::{RuntimeExtensionRegistration, RuntimeExtensionSyncPlan};
 
 pub(crate) struct McpBridgeRuntimeRegistry {
@@ -68,22 +61,17 @@ impl McpBridgeRuntimeRegistry {
             let Some(snapshot) = snapshots_by_bridge_name.get(&bridge_name) else {
                 continue;
             };
-            let client: Arc<Mutex<Box<dyn McpConnection>>> =
-                Arc::new(Mutex::new(Box::new(McpBridgeClient::new(
+            let client: Arc<Mutex<Box<dyn McpConnection>>> = Arc::new(Mutex::new(Box::new(
+                McpBridgeClient::new(
+                    Arc::clone(&snapshot.manager),
                     Arc::clone(&snapshot.running_service),
-                    Arc::clone(&snapshot.handler),
-                    snapshot.server_info.clone(),
                     snapshot.tool_timeout,
-                ))));
+                ),
+            )));
             let surface = registration.config.clone();
 
             connections
-                .register(
-                    bridge_name.clone(),
-                    surface,
-                    client,
-                    snapshot.server_info.clone(),
-                )
+                .register(bridge_name.clone(), surface, client)
                 .await;
         }
 
@@ -103,38 +91,26 @@ impl McpBridgeRuntimeRegistry {
 }
 
 struct McpBridgeClient {
+    _manager: Arc<lime_mcp::McpClientManager>,
     inner: RuntimeMcpBridgeClient,
 }
 
 impl McpBridgeClient {
     fn new(
-        service: Arc<rmcp::service::RunningService<rmcp::RoleClient, lime_mcp::LimeMcpClient>>,
-        handler: Arc<lime_mcp::LimeMcpClient>,
-        server_info: Option<InitializeResult>,
+        manager: Arc<lime_mcp::McpClientManager>,
+        service: Arc<
+            rmcp::service::RunningService<rmcp::RoleClient, lime_mcp::LimeMcpClientService>,
+        >,
         tool_timeout: std::time::Duration,
     ) -> Self {
         Self {
-            inner: RuntimeMcpBridgeClient::new(service, handler, server_info, tool_timeout),
+            _manager: manager,
+            inner: RuntimeMcpBridgeClient::new(service, tool_timeout),
         }
     }
 
-    /// 注入 Session ID 到扩展字段
     fn request_extensions(&self) -> Extensions {
-        let mut extensions = Extensions::default();
-        if let Some(session_id) = current_session_id() {
-            let mut meta_map = extensions
-                .get::<Meta>()
-                .map(|meta| meta.0.clone())
-                .unwrap_or_default();
-
-            // 移除旧的 ID (大小写不敏感)
-            meta_map.retain(|k, _| !k.eq_ignore_ascii_case(SESSION_ID_HEADER));
-            // 插入新的 ID
-            meta_map.insert(SESSION_ID_HEADER.to_string(), Value::String(session_id));
-
-            extensions.insert(Meta(meta_map));
-        }
-        extensions
+        Extensions::default()
     }
 }
 
@@ -146,30 +122,6 @@ fn map_mcp_result<T>(
 
 #[async_trait::async_trait]
 impl McpConnection for McpBridgeClient {
-    async fn list_resources(
-        &self,
-        cursor: Option<String>,
-        cancel_token: CancellationToken,
-    ) -> Result<ListResourcesResult, McpConnectionError> {
-        map_mcp_result(
-            self.inner
-                .list_resources(cursor, self.request_extensions(), cancel_token)
-                .await,
-        )
-    }
-
-    async fn read_resource(
-        &self,
-        uri: &str,
-        cancel_token: CancellationToken,
-    ) -> Result<ReadResourceResult, McpConnectionError> {
-        map_mcp_result(
-            self.inner
-                .read_resource(uri, self.request_extensions(), cancel_token)
-                .await,
-        )
-    }
-
     async fn list_tools(
         &self,
         cursor: Option<String>,
@@ -186,45 +138,23 @@ impl McpConnection for McpBridgeClient {
         &self,
         name: &str,
         arguments: Option<JsonObject>,
+        scope: &McpCallScope,
         cancel_token: CancellationToken,
     ) -> Result<CallToolResult, McpConnectionError> {
         map_mcp_result(
             self.inner
-                .call_tool(name, arguments, self.request_extensions(), cancel_token)
-                .await,
-        )
-    }
-
-    async fn list_prompts(
-        &self,
-        cursor: Option<String>,
-        cancel_token: CancellationToken,
-    ) -> Result<ListPromptsResult, McpConnectionError> {
-        map_mcp_result(
-            self.inner
-                .list_prompts(cursor, self.request_extensions(), cancel_token)
-                .await,
-        )
-    }
-
-    async fn get_prompt(
-        &self,
-        name: &str,
-        arguments: Value,
-        cancel_token: CancellationToken,
-    ) -> Result<GetPromptResult, McpConnectionError> {
-        map_mcp_result(
-            self.inner
-                .get_prompt(name, arguments, self.request_extensions(), cancel_token)
+                .call_tool(
+                    name,
+                    arguments,
+                    self.request_extensions(),
+                    Some(scope),
+                    cancel_token,
+                )
                 .await,
         )
     }
 
     async fn subscribe(&self) -> mpsc::Receiver<ServerNotification> {
         self.inner.subscribe().await
-    }
-
-    fn get_info(&self) -> Option<&InitializeResult> {
-        self.inner.server_info()
     }
 }

@@ -4078,8 +4078,7 @@
         "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.ts",
         "src/components/agent/chat/hooks/",
         "src/components/agent/chat/utils/",
-        "src/components/agent/chat/workspace/",
-        "lime-rs/crates/agent/src/session_store.rs"
+        "src/components/agent/chat/workspace/"
       ],
       "allowedPaths": [
         "src/lib/api/agentProtocol.test.ts",
@@ -4094,7 +4093,7 @@
     {
       "id": "agent-runtime-execution-strategy-compat-helper-single-boundary",
       "classification": "dead",
-      "description": "execution strategy 历史值归一只能走单一 compat helper；agentProtocol、runtimeInputCapabilityCatalog 和 Rust session_store 不得各自维护独立的 code_orchestrated/auto 归一逻辑，也不得继续暴露旧 wrapper 名",
+      "description": "execution strategy 历史值归一只能走单一 compat helper；agentProtocol 和 runtimeInputCapabilityCatalog 不得各自维护独立的 code_orchestrated/auto 归一逻辑，也不得继续暴露旧 wrapper 名",
       "patterns": ["code_orchestrated"],
       "regexPatterns": [
         "\\bnormalizeLegacyExecutionStrategyToCurrentReact\\s*\\(",
@@ -4106,15 +4105,12 @@
       "includePathPrefixes": [
         "src/lib/api/agentProtocol.ts",
         "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.ts",
-        "src/lib/api/agentRuntime/executionStrategyCompat.ts",
-        "lime-rs/crates/agent/src/session_store.rs",
-        "lime-rs/crates/agent/src/execution_strategy_compat.rs"
+        "src/lib/api/agentRuntime/executionStrategyCompat.ts"
       ],
       "allowedPaths": [
         "src/lib/api/agentRuntime/executionStrategyCompat.ts",
         "src/lib/api/agentRuntime/executionStrategyCompat.test.ts",
-        "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.test.tsx",
-        "lime-rs/crates/agent/src/execution_strategy_compat.rs"
+        "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.test.tsx"
       ]
     },
     {
@@ -5162,7 +5158,6 @@
       ],
       "includePathPrefixes": ["lime-rs/crates"],
       "allowedPaths": [
-        "lime-rs/crates/agent/src/session_store_tests.rs",
         "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
         "lime-rs/crates/app-server/src/local_data_source/tests.rs",
         "lime-rs/crates/core/src/database/dao/agent.rs",
@@ -5182,7 +5177,6 @@
       ],
       "includePathPrefixes": ["lime-rs/crates"],
       "allowedPaths": [
-        "lime-rs/crates/agent/src/session_store_history_visibility.rs",
         "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
         "lime-rs/crates/app-server/src/local_data_source/tests.rs",
         "lime-rs/crates/core/src/database/dao/agent.rs",
@@ -5458,6 +5452,106 @@
       "description": "lime-agent 重新对 crate 外暴露 session_store 模块",
       "patterns": ["pub mod session_store;"],
       "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-agent-session-store-family",
+      "classification": "dead",
+      "description": "已删除的 lime-agent session_store CRUD、历史读取和子代理聚合不得恢复；会话主链只允许 App Server RuntimeCore、ThreadStore 与 ProjectionStore",
+      "patterns": [
+        "mod session_store;",
+        "mod session_state_snapshot;",
+        "pub use session_store::{",
+        "pub use session_state_snapshot::SessionStateSnapshot;",
+        "create_session_sync(",
+        "get_runtime_session_detail(",
+        "get_session_sync_with_full_timeline_without_messages(",
+        "update_session_execution_strategy_sync("
+      ],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-execution-strategy-compat",
+      "classification": "dead",
+      "description": "已删除的 lime-agent execution strategy compat 模块不得恢复；Rust request/lowering 只承接 current React-only typed semantics",
+      "patterns": [
+        "mod execution_strategy_compat;",
+        "normalize_execution_strategy_to_react("
+      ],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-agent-runtime-session-query",
+      "classification": "dead",
+      "description": "已删除的 lime-agent direct execution runtime session query 不得恢复；GUI runtime detail 只允许经 App Server session_metadata/read model 投影",
+      "patterns": [
+        "mod session_execution_runtime_query;",
+        "read_session_execution_runtime_session_projection(",
+        "project_session_record_execution_runtime_session("
+      ],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-agent-runtime-aggregate",
+      "classification": "dead",
+      "description": "已删除的 lime-agent aggregate execution runtime、lime_runtime metadata parser 与 permission fallback 不得恢复；GUI runtime detail 只允许由 App Server read model 与 agent-runtime current projection 提供",
+      "patterns": [
+        "mod runtime_payload;",
+        "build_session_execution_runtime(",
+        "reconcile_session_execution_runtime_permission_fallback(",
+        "pub struct SessionExecutionRuntime {",
+        "pub enum SessionExecutionRuntimeSource",
+        "pub struct SessionExecutionRuntimePermissionState",
+        "pub struct SessionExecutionRuntimeOemPolicy",
+        "pub struct SessionExecutionRuntimeSummary",
+        "LIME_RUNTIME_METADATA_KEY"
+      ],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-agent-subagent-sidecars",
+      "classification": "dead",
+      "description": "已删除的 lime-agent 本地 subagent control/profile sidecar 不得恢复；subagent 状态只允许走 agent-runtime DTO 与 App Server canonical graph/mailbox/projection 主链",
+      "patterns": [
+        "mod subagent_control;",
+        "mod subagent_profiles;",
+        "load_subagent_runtime_status(",
+        "SubagentCustomizationState",
+        "SubagentSkillSummary",
+        "subagent_control.v0"
+      ],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-team-tool-surface",
+      "classification": "dead",
+      "description": "已删除的 Team/collab_agent 工具实现、静态 catalog 与 discovery profile 不得恢复；多代理控制只允许走 per-turn AgentControl gateway 六工具",
+      "patterns": [
+        "pub mod collab_agent;",
+        "collab_agent_tool_definitions(",
+        "collab_agent_canonical_tool_name(",
+        "name: \"Agent\",",
+        "name: \"SendMessage\",",
+        "name: \"TeamCreate\",",
+        "name: \"TeamDelete\",",
+        "name: \"ListPeers\",",
+        "canonical_name: \"Agent\",",
+        "canonical_name: \"SendMessage\",",
+        "canonical_name: \"TeamCreate\",",
+        "canonical_name: \"TeamDelete\",",
+        "canonical_name: \"ListPeers\",",
+        "SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES"
+      ],
+      "includePathPrefixes": [
+        "lime-rs/crates/tool-runtime/src",
+        "lime-rs/crates/agent/src",
+        "lime-rs/crates/core/src"
+      ],
       "allowedPaths": []
     },
     {
@@ -5853,7 +5947,6 @@
         "migration::check_general_chat_migration_status(",
         "migration::migrate_general_chat_to_unified(",
         "migration_v2::migrate_unified_content_system(",
-        "migration_v3::migrate_playwright_mcp_server(",
         "migration_v4::migrate_fix_promise_paths("
       ],
       "allowedPaths": ["lime-rs/crates/core/src/database/startup_migrations.rs"]
@@ -5870,9 +5963,22 @@
         "match migration::migrate_mcp_created_at_to_integer(",
         "match migration::migrate_general_chat_to_unified(",
         "match migration_v2::migrate_unified_content_system(",
-        "match migration_v3::migrate_playwright_mcp_server(",
         "match migration_v4::migrate_fix_promise_paths("
       ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-retired-default-playwright-mcp-seed",
+      "classification": "dead",
+      "description": "已删除的默认 Playwright MCP seed、marker 与启动调度不得回流；MCP 只允许由用户显式配置或当前管理入口创建",
+      "patterns": [
+        "@modelcontextprotocol/server-playwright",
+        "migrated_playwright_mcp_server_v1",
+        "migration_v3::migrate_playwright_mcp_server(",
+        "mod migration_v3;",
+        "pub mod migration_v3;"
+      ],
+      "includePathPrefixes": ["lime-rs"],
       "allowedPaths": []
     },
     {

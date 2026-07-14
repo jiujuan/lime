@@ -1,5 +1,101 @@
 use crate::manager::McpClientManager;
 use crate::types::McpError;
+use rmcp::{
+    model::{
+        ReadResourceRequestParam, ReadResourceResult, ResourceContents, ServerCapabilities,
+        ServerInfo, SubscribeRequestParam, UnsubscribeRequestParam,
+    },
+    service::RequestContext,
+    RoleServer, ServerHandler, ServiceExt,
+};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+#[derive(Clone)]
+struct ExactTargetResourceServer {
+    name: &'static str,
+    subscriptions: Arc<Mutex<Vec<String>>>,
+    unsubscriptions: Arc<Mutex<Vec<String>>>,
+}
+
+impl ServerHandler for ExactTargetResourceServer {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            capabilities: ServerCapabilities::builder()
+                .enable_resources()
+                .enable_resources_subscribe()
+                .build(),
+            ..Default::default()
+        }
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, rmcp::ErrorData> {
+        Ok(ReadResourceResult {
+            contents: vec![ResourceContents::text(self.name, request.uri)],
+        })
+    }
+
+    async fn subscribe(
+        &self,
+        request: SubscribeRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<(), rmcp::ErrorData> {
+        self.subscriptions.lock().await.push(request.uri);
+        Ok(())
+    }
+
+    async fn unsubscribe(
+        &self,
+        request: UnsubscribeRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<(), rmcp::ErrorData> {
+        self.unsubscriptions.lock().await.push(request.uri);
+        Ok(())
+    }
+}
+
+async fn add_exact_target_server(
+    manager: &McpClientManager,
+    name: &'static str,
+) -> (
+    Arc<Mutex<Vec<String>>>,
+    Arc<Mutex<Vec<String>>>,
+    tokio::task::JoinHandle<()>,
+) {
+    let subscriptions = Arc::new(Mutex::new(Vec::new()));
+    let unsubscriptions = Arc::new(Mutex::new(Vec::new()));
+    let server = ExactTargetResourceServer {
+        name,
+        subscriptions: subscriptions.clone(),
+        unsubscriptions: unsubscriptions.clone(),
+    };
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+    let server_handle = tokio::spawn(async move {
+        let service = server
+            .serve(server_transport)
+            .await
+            .expect("start exact target server");
+        service
+            .waiting()
+            .await
+            .expect("wait for exact target server");
+    });
+    let client = crate::client_service::LimeMcpClientService::new(name.to_string(), None)
+        .serve(client_transport)
+        .await
+        .expect("start exact target client");
+    let mut wrapper = super::common::create_test_client(name);
+    wrapper.set_running_service(client);
+    manager
+        .add_client(name.to_string(), wrapper)
+        .await
+        .expect("add exact target client");
+    (subscriptions, unsubscriptions, server_handle)
+}
 
 #[tokio::test]
 async fn test_list_resources_returns_empty_when_no_servers() {
@@ -24,15 +120,17 @@ async fn test_read_resource_not_found() {
     let manager = McpClientManager::new(None);
 
     // 读取不存在的资源
-    let result = manager.read_resource("file:///nonexistent/resource").await;
+    let result = manager
+        .read_resource("missing-server", "file:///nonexistent/resource")
+        .await;
 
     // 应该返回错误
     assert!(result.is_err());
     match result {
-        Err(McpError::ToolNotFound(msg)) => {
-            assert!(msg.contains("资源不存在"));
+        Err(McpError::ServerNotRunning(name)) => {
+            assert_eq!(name, "missing-server");
         }
-        _ => panic!("Expected ToolNotFound error"),
+        _ => panic!("Expected ServerNotRunning error"),
     }
 }
 
@@ -41,10 +139,10 @@ async fn test_subscribe_resource_not_found() {
     let manager = McpClientManager::new(None);
 
     let result = manager
-        .subscribe_resource("file:///nonexistent/resource")
+        .subscribe_resource("missing-server", "file:///nonexistent/resource")
         .await;
 
-    assert!(matches!(result, Err(McpError::ToolNotFound(_))));
+    assert!(matches!(result, Err(McpError::ServerNotRunning(_))));
 }
 
 #[tokio::test]
@@ -52,10 +150,68 @@ async fn test_unsubscribe_resource_not_found() {
     let manager = McpClientManager::new(None);
 
     let result = manager
-        .unsubscribe_resource("file:///nonexistent/resource")
+        .unsubscribe_resource("missing-server", "file:///nonexistent/resource")
         .await;
 
-    assert!(matches!(result, Err(McpError::ToolNotFound(_))));
+    assert!(matches!(result, Err(McpError::ServerNotRunning(_))));
+}
+
+#[tokio::test]
+async fn resource_operations_reject_empty_exact_target_before_dispatch() {
+    let manager = McpClientManager::new(None);
+
+    assert!(matches!(
+        manager.read_resource(" ", "docs://readme").await,
+        Err(McpError::ConfigError(_))
+    ));
+    assert!(matches!(
+        manager.subscribe_resource("docs", " ").await,
+        Err(McpError::ConfigError(_))
+    ));
+    assert!(matches!(
+        manager.unsubscribe_resource(" ", " ").await,
+        Err(McpError::ConfigError(_))
+    ));
+}
+
+#[tokio::test]
+async fn resource_operations_route_same_uri_to_exact_server() {
+    let manager = McpClientManager::new(None);
+    let (subscriptions_a, unsubscriptions_a, server_a) =
+        add_exact_target_server(&manager, "server-a").await;
+    let (subscriptions_b, unsubscriptions_b, server_b) =
+        add_exact_target_server(&manager, "server-b").await;
+    let uri = "docs://shared";
+
+    let content = manager
+        .read_resource("server-b", uri)
+        .await
+        .expect("read exact server resource");
+    manager
+        .subscribe_resource("server-b", uri)
+        .await
+        .expect("subscribe exact server resource");
+    manager
+        .unsubscribe_resource("server-b", uri)
+        .await
+        .expect("unsubscribe exact server resource");
+
+    assert_eq!(content.text.as_deref(), Some("server-b"));
+    assert!(subscriptions_a.lock().await.is_empty());
+    assert!(unsubscriptions_a.lock().await.is_empty());
+    assert_eq!(subscriptions_b.lock().await.as_slice(), [uri]);
+    assert_eq!(unsubscriptions_b.lock().await.as_slice(), [uri]);
+
+    manager
+        .stop_server("server-a")
+        .await
+        .expect("stop server-a");
+    manager
+        .stop_server("server-b")
+        .await
+        .expect("stop server-b");
+    server_a.await.expect("join server-a");
+    server_b.await.expect("join server-b");
 }
 
 #[test]

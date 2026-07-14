@@ -11,8 +11,8 @@ import { useTranslation } from "react-i18next";
 import {
   listAgentRuntimeSessions,
   updateAgentRuntimeSession,
-  type AgentSessionInfo,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionClient";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import { formatDate } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import { resolveSidebarSessionTitle } from "@/components/app-sidebar/sidebarSessionFormatting";

@@ -161,8 +161,11 @@ export async function waitForGuiChatCompleted(
               /\bStop\b/i.test(label))
           );
         });
+        const approvalRecordRoot = scopedTurnGroup ?? messageListScope;
         const approvalRecords = Array.from(
-          document.querySelectorAll('[data-testid="timeline-approval-record"]'),
+          approvalRecordRoot.querySelectorAll(
+            '[data-testid="timeline-approval-record"]',
+          ),
         ).map((record) => ({
           text: record.textContent || "",
           lineBreaks: ((record.textContent || "").match(/\n/gu) || []).length,

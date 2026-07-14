@@ -10,6 +10,7 @@ use crate::AgentSessionConfig;
 use agent_runtime::reply_input::RuntimeReplyInput;
 use lime_core::database::DbConnection;
 use model_provider::current_client::CurrentProviderMessage;
+use tool_runtime::agent_control::AgentControlGatewayHandle;
 
 pub struct AgentTurnExecutionRequest<'a> {
     pub session_id: &'a str,
@@ -18,6 +19,7 @@ pub struct AgentTurnExecutionRequest<'a> {
     pub session_config: AgentSessionConfig,
     pub request_tool_policy: &'a RequestToolPolicy,
     pub provider_configuration: Option<AgentTurnProviderConfiguration<'a>>,
+    pub agent_control_gateway: Option<AgentControlGatewayHandle>,
 }
 
 pub struct AgentTurnProviderConfiguration<'a> {
@@ -77,6 +79,7 @@ where
         session_config,
         Some(cancel_token),
         request.request_tool_policy,
+        request.agent_control_gateway,
         on_event,
     )
     .await;

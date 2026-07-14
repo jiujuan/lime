@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { FileText, GitCompare, RotateCcw, TerminalSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime/sessionTypes";
 import { cn } from "@/lib/utils";
 import type { HarnessSessionState } from "../utils/harnessState";
 import {

@@ -430,6 +430,20 @@ async fn workflow_respond_writes_resume_lifecycle_before_progress_audit() {
     core.append_external_runtime_events(
         "sess_workflow_respond_lifecycle",
         Some("turn_waiting"),
+        vec![RuntimeEvent::new(
+            "action.required",
+            json!({
+                "requestId": "article-draft-review",
+                "actionType": "ask_user",
+                "prompt": "Review the draft",
+                "deadlineAtMs": 1_999_999_999_999_u64,
+            }),
+        )],
+    )
+    .expect("append workflow pending action");
+    core.append_external_runtime_events(
+        "sess_workflow_respond_lifecycle",
+        Some("turn_waiting"),
         vec![
             RuntimeEvent::new(
                 "workflow.run.started",

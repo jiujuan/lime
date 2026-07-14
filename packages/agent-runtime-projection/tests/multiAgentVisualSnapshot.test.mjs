@@ -10,7 +10,7 @@ function spawnItem(overrides = {}) {
   return {
     type: "collabToolCall",
     id: "spawn-1",
-    tool: "SpawnAgent",
+    tool: "spawn_agent",
     status: "completed",
     sender_thread_id: "thread-root",
     receiver_thread_ids: ["thread-research"],
@@ -30,7 +30,7 @@ function waitItem(overrides = {}) {
   return {
     type: "collabToolCall",
     id: "wait-1",
-    tool: "Wait",
+    tool: "wait_agent",
     status: "completed",
     senderThreadId: "thread-root",
     receiverThreadIds: ["thread-research", "thread-review"],
@@ -238,6 +238,83 @@ test("collab item lineage requires sender and receiver thread ids", () => {
       "spawn_missing_new_thread_id",
     ],
   );
+});
+
+test("wait and list snapshots do not require receiver thread lineage", () => {
+  const snapshot = extractCodexMultiAgentVisualSnapshot({
+    threadId: "thread-root",
+    collabToolCallItems: [
+      {
+        type: "collabToolCall",
+        id: "wait-1",
+        tool: "wait_agent",
+        status: "completed",
+        senderThreadId: "thread-root",
+      },
+      {
+        type: "collabToolCall",
+        id: "list-1",
+        tool: "list_agents",
+        status: "completed",
+        senderThreadId: "thread-root",
+      },
+    ],
+    observedSnapshot: {
+      teamTranscriptRows: [{ itemId: "wait-1" }, { itemId: "list-1" }],
+      teamRosterCards: [],
+      delegationEdges: [],
+      workerNotifications: [],
+    },
+  });
+
+  assert.equal(snapshot.lineageStable, true);
+  assert.deepEqual(
+    snapshot.teamTranscriptRows.map((row) => row.tool),
+    ["wait_agent", "list_agents"],
+  );
+  assert.deepEqual(snapshot.validationIssues, []);
+});
+
+test("followup and interrupt keep Codex v2 names in visual snapshots", () => {
+  const snapshot = extractCodexMultiAgentVisualSnapshot({
+    threadId: "thread-root",
+    collabToolCallItems: [
+      {
+        type: "collabToolCall",
+        id: "followup-1",
+        tool: "followup_task",
+        status: "completed",
+        senderThreadId: "thread-root",
+        receiverThreadIds: ["thread-research"],
+      },
+      {
+        type: "collabToolCall",
+        id: "interrupt-1",
+        tool: "interrupt_agent",
+        status: "completed",
+        senderThreadId: "thread-root",
+        receiverThreadIds: ["thread-research"],
+      },
+    ],
+    observedSnapshot: {
+      teamTranscriptRows: [
+        { itemId: "followup-1" },
+        { itemId: "interrupt-1" },
+      ],
+      teamRosterCards: [],
+      delegationEdges: [
+        { itemId: "followup-1" },
+        { itemId: "interrupt-1" },
+      ],
+      workerNotifications: [],
+    },
+  });
+
+  assert.deepEqual(
+    snapshot.teamTranscriptRows.map((row) => row.tool),
+    ["followup_task", "interrupt_agent"],
+  );
+  assert.deepEqual(snapshot.validationIssues, []);
 });
 
 test("observed GUI snapshot must preserve transcript, roster, graph and worker ids", () => {

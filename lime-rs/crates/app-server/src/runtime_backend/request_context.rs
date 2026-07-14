@@ -11,8 +11,14 @@ pub(super) use runtime_core::RuntimeModelSelection;
 use serde_json::Value;
 use std::path::PathBuf;
 
-const LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE: &str = "direct_answer";
 const LIME_RUNTIME_COMPACT_TOOLS_TOOL_SURFACE: &str = "compact_tools";
+const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
+const LIME_RUNTIME_MODEL_SLOT_KEY: &str = "model_slot";
+const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
+const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
+const LIME_RUNTIME_SOURCE_KEY: &str = "source";
+const APP_SERVER_TURN_POLICY_SOURCE: &str = "app_server_turn_policy";
+const RESPONSIVE_CHAT_MODEL_SLOT: &str = "fast";
 
 mod session_config;
 mod turn_context;
@@ -23,23 +29,69 @@ pub(super) use turn_context::turn_context_from_request;
 pub(super) use workspace_scope::request_workspace_scope;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FastResponseToolSurface {
+enum TurnToolSurface {
     Full,
-    DirectAnswer,
     CompactTools,
 }
 
-impl FastResponseToolSurface {
+impl TurnToolSurface {
     fn uses_light_session_prompt(self) -> bool {
-        matches!(self, Self::DirectAnswer | Self::CompactTools)
+        matches!(self, Self::CompactTools)
+    }
+}
+
+pub(super) fn apply_app_server_turn_policy(
+    request: &mut ExecutionRequest,
+    first_sampling_turn: bool,
+    request_tool_policy: &RequestToolPolicy,
+) {
+    let use_responsive_profile =
+        should_use_responsive_chat_profile(request, first_sampling_turn, request_tool_policy);
+    let options = request.runtime_options.get_or_insert_with(Default::default);
+    let metadata = options
+        .runtime_metadata_mut()
+        .get_or_insert_with(|| Value::Object(Default::default()));
+    if !metadata.is_object() {
+        *metadata = Value::Object(Default::default());
+    }
+    let metadata_object = metadata.as_object_mut().expect("runtime metadata object");
+    let runtime = metadata_object
+        .entry(LIME_RUNTIME_METADATA_KEY.to_string())
+        .or_insert_with(|| Value::Object(Default::default()));
+    if !runtime.is_object() {
+        *runtime = Value::Object(Default::default());
+    }
+    let runtime = runtime.as_object_mut().expect("lime_runtime object");
+    runtime.remove(LIME_RUNTIME_MODEL_SLOT_KEY);
+    runtime.remove(LIME_RUNTIME_TOOL_SURFACE_KEY);
+    runtime.remove(LIME_RUNTIME_AUTO_COMPACT_KEY);
+    if runtime.get(LIME_RUNTIME_SOURCE_KEY).and_then(Value::as_str)
+        == Some(APP_SERVER_TURN_POLICY_SOURCE)
+    {
+        runtime.remove(LIME_RUNTIME_SOURCE_KEY);
     }
 
-    fn metadata_tool_surface(self) -> Option<&'static str> {
-        match self {
-            Self::Full => None,
-            Self::DirectAnswer => Some(LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE),
-            Self::CompactTools => Some(LIME_RUNTIME_COMPACT_TOOLS_TOOL_SURFACE),
-        }
+    if use_responsive_profile {
+        runtime.insert(
+            LIME_RUNTIME_MODEL_SLOT_KEY.to_string(),
+            Value::String(RESPONSIVE_CHAT_MODEL_SLOT.to_string()),
+        );
+        runtime.insert(
+            LIME_RUNTIME_TOOL_SURFACE_KEY.to_string(),
+            Value::String(LIME_RUNTIME_COMPACT_TOOLS_TOOL_SURFACE.to_string()),
+        );
+        runtime.insert(
+            LIME_RUNTIME_AUTO_COMPACT_KEY.to_string(),
+            Value::Bool(false),
+        );
+        runtime.insert(
+            LIME_RUNTIME_SOURCE_KEY.to_string(),
+            Value::String(APP_SERVER_TURN_POLICY_SOURCE.to_string()),
+        );
+    }
+
+    if runtime.is_empty() {
+        metadata_object.remove(LIME_RUNTIME_METADATA_KEY);
     }
 }
 
@@ -79,8 +131,16 @@ pub(super) fn selection_with_effective_reasoning(
 pub(super) fn resolve_runtime_model_selection(
     request: &ExecutionRequest,
 ) -> Result<RuntimeModelSelection, RuntimeCoreError> {
-    if let Some(selection) = fast_response_selection_from_profile_model_slot(request) {
-        return Ok(selection);
+    let metadata_values = runtime_model_metadata_values(request);
+    let preferred_slot = app_server_turn_policy_value(request, LIME_RUNTIME_MODEL_SLOT_KEY);
+    if let Some(preferred_slot) = preferred_slot {
+        if let Some(selection) = runtime_core::selection_from_profile_model_slot(
+            &metadata_values,
+            reasoning_effort_from_request(request),
+            Some(preferred_slot),
+        ) {
+            return Ok(selection);
+        }
     }
     if let Some(selection) = selection_from_explicit_preferences(request) {
         return Ok(selection);
@@ -88,7 +148,11 @@ pub(super) fn resolve_runtime_model_selection(
     if let Some(selection) = selection_from_host_provider_config(request) {
         return Ok(selection);
     }
-    if let Some(selection) = super::model_routing::selection_from_profile_model_slot(request) {
+    if let Some(selection) = runtime_core::selection_from_profile_model_slot(
+        &metadata_values,
+        reasoning_effort_from_request(request),
+        None,
+    ) {
         return Ok(selection);
     }
     if let Some(selection) = selection_from_session_default(request) {
@@ -98,18 +162,6 @@ pub(super) fn resolve_runtime_model_selection(
     Err(RuntimeCoreError::Backend(
         "App Server runtime backend requires provider/model selection. Submit runtimeOptions.runtimeRequest.providerPreference and runtimeOptions.runtimeRequest.modelPreference, runtimeOptions.runtimeRequest.providerConfig, or persist a complete session provider/model default.".to_string(),
     ))
-}
-
-pub(super) fn fast_response_selection_from_profile_model_slot(
-    request: &ExecutionRequest,
-) -> Option<RuntimeModelSelection> {
-    let metadata_values = runtime_model_metadata_values(request);
-    let selection = runtime_core::selection_from_profile_model_slot(
-        &metadata_values,
-        reasoning_effort_from_request(request),
-    )?;
-    let routing = runtime_core::resolve_model_routing_for_candidate(&metadata_values, &selection);
-    (routing.service_model_slot == "fast").then_some(selection)
 }
 
 pub(super) fn selection_from_explicit_preferences(
@@ -276,13 +328,21 @@ pub(super) fn session_scope_from_request(
             "App Server runtime backend session.sessionId is empty".to_string(),
         )
     })?;
-    let thread_id = non_empty(Some(&request.turn.thread_id))
-        .or_else(|| non_empty(Some(&request.session.thread_id)))
-        .ok_or_else(|| {
-            RuntimeCoreError::Backend(
-                "App Server runtime backend session.threadId is empty".to_string(),
-            )
-        })?;
+    let session_thread_id = non_empty(Some(&request.session.thread_id)).ok_or_else(|| {
+        RuntimeCoreError::Backend(
+            "App Server runtime backend session.threadId is empty".to_string(),
+        )
+    })?;
+    let turn_thread_id = non_empty(Some(&request.turn.thread_id)).ok_or_else(|| {
+        RuntimeCoreError::Backend("App Server runtime backend turn.threadId is empty".to_string())
+    })?;
+    if turn_thread_id != session_thread_id {
+        return Err(RuntimeCoreError::Backend(format!(
+            "App Server runtime backend turn thread '{}' does not match session thread '{}'",
+            turn_thread_id, session_thread_id
+        )));
+    }
+    let thread_id = session_thread_id;
     let turn_id = non_empty(Some(&request.turn.turn_id)).ok_or_else(|| {
         RuntimeCoreError::Backend("App Server runtime backend turn.turnId is empty".to_string())
     })?;
@@ -401,48 +461,17 @@ pub(super) fn request_tool_policy_from_request(
     }
 }
 
-pub(super) fn should_defer_tool_surface_for_fast_response(
-    request: &ExecutionRequest,
-    request_tool_policy: &RequestToolPolicy,
-) -> bool {
+pub(super) fn should_use_compact_tool_surface(request: &ExecutionRequest) -> bool {
     matches!(
-        fast_response_tool_surface_for_request(request, request_tool_policy),
-        FastResponseToolSurface::DirectAnswer
+        turn_tool_surface_for_request(request),
+        TurnToolSurface::CompactTools
     )
 }
 
-pub(super) fn should_use_compact_tool_surface_for_fast_response(
-    request: &ExecutionRequest,
-    request_tool_policy: &RequestToolPolicy,
-) -> bool {
-    matches!(
-        fast_response_tool_surface_for_request(request, request_tool_policy),
-        FastResponseToolSurface::CompactTools
-    )
-}
-
-fn fast_response_tool_surface_for_request(
-    request: &ExecutionRequest,
-    request_tool_policy: &RequestToolPolicy,
-) -> FastResponseToolSurface {
-    if request_tool_policy.requires_web_search() {
-        return FastResponseToolSurface::Full;
-    }
-    let metadata_values = super::skill_runtime_enable::request_metadata_values(request);
-    let fast_response_enabled = metadata_values
-        .iter()
-        .any(|metadata| fast_response_routing_enabled(metadata));
-    if !fast_response_enabled
-        || metadata_values
-            .iter()
-            .any(|metadata| metadata_requests_tool_surface(metadata))
-    {
-        return FastResponseToolSurface::Full;
-    }
-    if request_tool_policy.allows_web_search() {
-        FastResponseToolSurface::CompactTools
-    } else {
-        FastResponseToolSurface::DirectAnswer
+fn turn_tool_surface_for_request(request: &ExecutionRequest) -> TurnToolSurface {
+    match app_server_turn_policy_value(request, LIME_RUNTIME_TOOL_SURFACE_KEY) {
+        Some(LIME_RUNTIME_COMPACT_TOOLS_TOOL_SURFACE) => TurnToolSurface::CompactTools,
+        _ => TurnToolSurface::Full,
     }
 }
 
@@ -458,23 +487,118 @@ fn host_requests_research_web_fetch(host: &RuntimeRequest) -> bool {
     })
 }
 
-fn fast_response_routing_enabled(metadata: &Value) -> bool {
-    let Some(routing) = metadata
-        .pointer("/harness/fast_response_routing")
-        .or_else(|| metadata.pointer("/harness/fastResponseRouting"))
-        .or_else(|| metadata.pointer("/fast_response_routing"))
-        .or_else(|| metadata.pointer("/fastResponseRouting"))
-        .and_then(Value::as_object)
-    else {
-        return false;
-    };
+fn should_use_responsive_chat_profile(
+    request: &ExecutionRequest,
+    first_sampling_turn: bool,
+    request_tool_policy: &RequestToolPolicy,
+) -> bool {
+    first_sampling_turn
+        && request.session.app_id == "desktop"
+        && request.session.workspace_id.is_none()
+        && request
+            .session
+            .business_object_ref
+            .as_ref()
+            .is_none_or(|reference| reference.kind == "agent.session")
+        && request.input.attachments.is_empty()
+        && request.runtime_options.as_ref().is_none_or(|options| {
+            options.capability_id.is_none()
+                && options.expected_output.is_none()
+                && options.structured_output.is_none()
+                && options.output_schema.is_none()
+        })
+        && request.expected_output.is_none()
+        && request.structured_output.is_none()
+        && request.output_schema.is_none()
+        && !request_tool_policy.requires_web_search()
+        && !request_has_workspace_context(request)
+        && !request
+            .runtime_metadata()
+            .is_some_and(metadata_requests_tool_surface)
+}
 
-    routing
-        .get("mode")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or("auto")
-        != "off"
+fn request_has_workspace_context(request: &ExecutionRequest) -> bool {
+    let runtime_request = request.runtime_request();
+    runtime_request.is_some_and(|runtime_request| {
+        runtime_request
+            .workspace_id
+            .as_deref()
+            .is_some_and(non_blank)
+            || runtime_request
+                .working_dir
+                .as_deref()
+                .is_some_and(non_blank)
+            || runtime_request
+                .workspace_root
+                .as_deref()
+                .is_some_and(non_blank)
+            || runtime_request
+                .project_root
+                .as_deref()
+                .is_some_and(non_blank)
+            || runtime_request.auto_continue == Some(true)
+    }) || request.runtime_metadata().is_some_and(|metadata| {
+        [
+            "/harness/cwd",
+            "/harness/working_dir",
+            "/harness/workspace_root",
+            "/harness/project_root",
+            "/cwd",
+            "/working_dir",
+            "/workspace_root",
+            "/project_root",
+        ]
+        .iter()
+        .any(|pointer| {
+            metadata
+                .pointer(pointer)
+                .and_then(Value::as_str)
+                .is_some_and(non_blank)
+        })
+    }) || request
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .is_some_and(|metadata| {
+            [
+                "/workingDir",
+                "/working_dir",
+                "/projectRoot",
+                "/project_root",
+            ]
+            .iter()
+            .any(|pointer| {
+                metadata
+                    .pointer(pointer)
+                    .and_then(Value::as_str)
+                    .is_some_and(non_blank)
+            })
+        })
+}
+
+fn non_blank(value: &str) -> bool {
+    !value.trim().is_empty()
+}
+
+fn app_server_turn_policy_value<'a>(request: &'a ExecutionRequest, key: &str) -> Option<&'a str> {
+    let runtime = app_server_turn_policy_runtime(request)?;
+    runtime.get(key).and_then(Value::as_str)
+}
+
+fn app_server_turn_policy_runtime(
+    request: &ExecutionRequest,
+) -> Option<&serde_json::Map<String, Value>> {
+    let runtime = request
+        .runtime_metadata()?
+        .get(LIME_RUNTIME_METADATA_KEY)?
+        .as_object()?;
+    if runtime.get(LIME_RUNTIME_SOURCE_KEY).and_then(Value::as_str)
+        != Some(APP_SERVER_TURN_POLICY_SOURCE)
+    {
+        return None;
+    }
+    Some(runtime)
 }
 
 fn metadata_requests_tool_surface(metadata: &Value) -> bool {

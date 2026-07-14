@@ -4,7 +4,7 @@ import type {
   AgentRuntimeEvidenceVerificationOutcome,
   AgentRuntimeEvidenceVerificationSummary,
   AgentRuntimeGuiSmokeVerificationSummary,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import type { TFunction } from "i18next";
 import { formatNumber } from "@/i18n/format";
 

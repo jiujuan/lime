@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeThreadReadModel,
   AgentRuntimeSummary,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
 import type { TeamMemoryShadowRequestMetadata } from "@/lib/teamMemorySync";
 import type { AgentThreadTurn } from "../types";
 import type { RuntimeRoutingEvidence } from "../utils/runtimeRoutingEvidence";

@@ -51,7 +51,7 @@ export const CONVERSATION_IMPORT_THREAD_STATUSES = [
   "conflict",
 ] as const satisfies readonly GeneratedConversationImportThreadStatus[];
 
-export type AppServerMethodKind = "request" | "notification";
+export type AppServerMethodKind = "request" | "notification" | "serverRequest";
 
 export type AppServerMethodSpec = {
   method: string;
@@ -2854,6 +2854,7 @@ export type McpPromptListResponse = {
 };
 
 export type McpPromptGetParams = {
+  server: string;
   name: string;
   arguments?: Record<string, unknown>;
 };
@@ -2874,14 +2875,17 @@ export type McpResourceListResponse = {
 };
 
 export type McpResourceReadParams = {
+  server: string;
   uri: string;
 };
 
 export type McpResourceSubscribeParams = {
+  server: string;
   uri: string;
 };
 
 export type McpResourceUnsubscribeParams = {
+  server: string;
   uri: string;
 };
 
@@ -3305,6 +3309,20 @@ export function notification(
   return compactParams({ method, params });
 }
 
+export function response<T = RpcResult>(
+  id: RequestId,
+  result: T,
+): JsonRpcResponse<T> {
+  return { id, result };
+}
+
+export function errorResponse(
+  id: RequestId,
+  error: JsonRpcError,
+): JsonRpcErrorResponse {
+  return { id, error };
+}
+
 export function cancelRequest(id: RequestId): JsonRpcNotification {
   return notification(METHOD_CANCEL_REQUEST, { id });
 }
@@ -3318,6 +3336,12 @@ export function isAppServerRequestMethod(method: string): boolean {
 export function isAppServerNotificationMethod(method: string): boolean {
   return APP_SERVER_METHODS.some(
     (spec) => spec.kind === "notification" && spec.method === method,
+  );
+}
+
+export function isAppServerServerRequestMethod(method: string): boolean {
+  return APP_SERVER_METHODS.some(
+    (spec) => spec.kind === "serverRequest" && spec.method === method,
   );
 }
 

@@ -9,7 +9,7 @@ import type { FileChangesAggregate } from "./fileChangeSummary";
 const listAgentRuntimeFileCheckpointsMock = vi.fn();
 const restoreAgentRuntimeFileCheckpointMock = vi.fn();
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/threadClient", () => ({
   listAgentRuntimeFileCheckpoints: (...args: unknown[]) =>
     listAgentRuntimeFileCheckpointsMock(...args),
   restoreAgentRuntimeFileCheckpoint: (...args: unknown[]) =>

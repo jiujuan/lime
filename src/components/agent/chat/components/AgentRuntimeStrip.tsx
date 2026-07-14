@@ -6,11 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AgentI18nKey } from "@/i18n/agentResources";
 import { buildAgentUiCollaborationPayloadMetadata } from "@limecloud/agent-runtime-projection";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import type {
-  AgentSessionExecutionRuntime,
-  AgentSubagentSessionInfo,
   AgentRuntimeFileCheckpointThreadSummary,
-} from "@/lib/api/agentRuntime";
+  AgentSubagentSessionInfo,
+} from "@/lib/api/agentRuntime/sessionTypes";
 
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { HarnessSessionState } from "../utils/harnessState";

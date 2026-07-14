@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import type {
   AgentRuntimeDiagnosticProviderSafetyBufferingSample,
   AgentRuntimeThreadReadModel,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
 import { ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 

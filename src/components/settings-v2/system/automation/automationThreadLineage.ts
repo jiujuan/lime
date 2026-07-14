@@ -5,7 +5,7 @@ import type {
 import type {
   AgentApprovalPolicy,
   AgentSandboxPolicy,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
 
 export interface AutomationThreadLineage {
   sessionId?: string | null;

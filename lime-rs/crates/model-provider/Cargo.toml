@@ -17,6 +17,7 @@ anyhow.workspace = true
 async-stream.workspace = true
 futures.workspace = true
 once_cell.workspace = true
+rand.workspace = true
 reqwest.workspace = true
 runtime-core.workspace = true
 regex.workspace = true

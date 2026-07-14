@@ -34,11 +34,12 @@ sidecar, read-model, artifact, transcript, or media state.
   structured output, and only emits final media for completed+succeeded tasks with sidecar facts.
 - Materializer side-channel handling is an exact allowlist for `tool.progress` and
   `tool.output.delta`; raw lifecycle and `tool.input.delta` remain negative-only.
-- Large test files were split: `output_refs.rs` is 620 lines; typed projection tests are
-  570/416 lines; output snapshot integration remains 794 lines.
+- Touched hot files were split without changing owners: `output_refs` is 620/242 lines,
+  `event_store` is 721/142, `thread_item_projection` is 704/183/330/265, materializer is
+  336/203/166/498, typed projection tests are 570/416, and output snapshot integration is 794.
 - Governance allowlist follows the moved `output_refs/tests.rs` test-only owner, and contract
-  guards prevent legacy extractors, projection branches, raw positive snapshots, or missing
-  `tool_end` rejection from returning.
+  guards scan the split production projection modules and prevent legacy extractors, projection
+  branches, raw positive snapshots, or missing `tool_end` rejection from returning.
 
 ## Validation
 
@@ -48,9 +49,12 @@ sidecar, read-model, artifact, transcript, or media state.
 - `cargo test -p app-server external_events::canonical_tool_items --lib`: `4/4`.
 - `cargo test -p app-server thread_item_projection --lib`: `34/34`.
 - Media projection focused subset: `5/5`.
+- `node scripts/check-app-server-client-contract.mjs`: pass, `290 checks`.
 - `npm run test:contracts`: pass, `290 checks`.
 - `npx vitest run src/lib/governance/legacySurfaceCatalog.test.ts`: `199/199`.
 - `npm run governance:legacy-report`: pass, boundary violations `0`.
+- `npm run governance:file-size`: the repository-wide gate still reports `85` violations in
+  other write sets; no S4m code, guard, or documentation file remains in the violation list.
 - Scoped `rustfmt --check` and `git diff --check`: pass.
 
 This slice does not change Electron, JSON-RPC, or Renderer contracts. It fixes the App Server

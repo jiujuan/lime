@@ -20,22 +20,18 @@ fn explicit_runtime_preferences_win() {
 }
 
 #[test]
-fn fast_response_fast_slot_can_override_default_runtime_preferences() {
+fn app_server_turn_policy_can_select_configured_responsive_slot() {
     let mut request = request_for_test(
         "只回答一个字：好",
         None,
         Some(json!({
             "harness": {
-                "fast_response_routing": {
-                    "mode": "auto",
-                    "service_model_slot": "responsive_chat"
-                },
                 "model_slots": {
                     "fast": {
                         "provider": "responsive-provider",
                         "model": "fast-chat",
                         "source": "service_models.responsive_chat",
-                        "reason": "fast_response_routing"
+                        "reason": "service_model_preference"
                     }
                 }
             }
@@ -44,9 +40,9 @@ fn fast_response_fast_slot_can_override_default_runtime_preferences() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
     options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
+    apply_detached_desktop_first_turn_policy(&mut request);
 
-    let selection =
-        fast_response_selection_from_profile_model_slot(&request).expect("fast selection");
+    let selection = resolve_runtime_model_selection(&request).expect("responsive selection");
 
     assert_eq!(
         selection,
@@ -60,23 +56,18 @@ fn fast_response_fast_slot_can_override_default_runtime_preferences() {
 }
 
 #[test]
-fn runtime_model_selection_prefers_fast_slot_for_fast_response_turn() {
+fn runtime_model_selection_prefers_responsive_slot_for_detached_first_turn() {
     let mut request = request_for_test(
         "只回答一个字：好",
         None,
         Some(json!({
             "harness": {
-                "modelReasoningEffort": "minimal",
-                "fast_response_routing": {
-                    "mode": "auto",
-                    "service_model_slot": "responsive_chat"
-                },
                 "model_slots": {
                     "fast": {
                         "provider": "responsive-provider",
                         "model": "fast-chat",
                         "source": "service_models.responsive_chat",
-                        "reason": "fast_response_routing"
+                        "reason": "service_model_preference"
                     }
                 }
             }
@@ -85,13 +76,14 @@ fn runtime_model_selection_prefers_fast_slot_for_fast_response_turn() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
     options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
+    apply_detached_desktop_first_turn_policy(&mut request);
 
     let selection = resolve_runtime_model_selection(&request).expect("selection");
 
     assert_eq!(selection.provider, "responsive-provider");
     assert_eq!(selection.model, "fast-chat");
     assert_eq!(selection.source, "profile_model_slot");
-    assert_eq!(selection.reasoning_effort.as_deref(), Some("minimal"));
+    assert_eq!(selection.reasoning_effort, None);
     let effective_selection = selection_with_effective_reasoning(&selection);
     assert_eq!(effective_selection.reasoning_effort, None);
 
@@ -131,26 +123,14 @@ fn effective_reasoning_selection_maps_minimal_for_reasoning_models() {
 }
 
 #[test]
-fn fast_response_without_complete_fast_slot_keeps_explicit_preferences() {
-    let mut request = request_for_test(
-        "只回答一个字：好",
-        None,
-        Some(json!({
-            "harness": {
-                "fast_response_routing": {
-                    "mode": "auto",
-                    "service_model_slot": "responsive_chat"
-                }
-            }
-        })),
-    );
+fn responsive_policy_without_configured_slot_keeps_explicit_preferences() {
+    let mut request = request_for_test("只回答一个字：好", None, None);
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("deepseek".to_string());
     options.runtime_request_mut().model_preference = Some("deepseek-chat".to_string());
+    apply_detached_desktop_first_turn_policy(&mut request);
 
-    assert!(fast_response_selection_from_profile_model_slot(&request).is_none());
-
-    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let selection = resolve_runtime_model_selection(&request).expect("selection");
     assert_eq!(selection.provider, "deepseek");
     assert_eq!(selection.model, "deepseek-chat");
 }
@@ -415,16 +395,12 @@ fn model_request_policy_context_flows_to_lime_runtime_metadata() {
 }
 
 #[test]
-fn fast_response_lime_runtime_keeps_context_policy_and_auto_compact_override() {
+fn app_server_turn_policy_keeps_context_policy_and_auto_compact_override() {
     let mut request = request_for_test(
         "只回答一个字：好",
         None,
         Some(json!({
             "harness": {
-                "fast_response_routing": {
-                    "mode": "auto",
-                    "service_model_slot": "responsive_chat"
-                },
                 "model_request_policy": {
                     "context_policy": {
                         "resolved_context_window": 200000,
@@ -438,6 +414,7 @@ fn fast_response_lime_runtime_keeps_context_policy_and_auto_compact_override() {
     let options = request.runtime_options.as_mut().expect("runtime options");
     options.runtime_request_mut().provider_preference = Some("openai".to_string());
     options.runtime_request_mut().model_preference = Some("gpt-4.1".to_string());
+    apply_detached_desktop_first_turn_policy(&mut request);
 
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let scope = session_scope_from_request(&request).expect("scope");

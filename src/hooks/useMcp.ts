@@ -68,15 +68,16 @@ export interface UseMcpReturn {
   // 提示词操作
   refreshPrompts: () => Promise<void>;
   getPrompt: (
+    server: string,
     name: string,
     args: Record<string, unknown>,
   ) => Promise<McpPromptResult>;
 
   // 资源操作
   refreshResources: () => Promise<void>;
-  readResource: (uri: string) => Promise<McpResourceContent>;
-  subscribeResource: (uri: string) => Promise<void>;
-  unsubscribeResource: (uri: string) => Promise<void>;
+  readResource: (server: string, uri: string) => Promise<McpResourceContent>;
+  subscribeResource: (server: string, uri: string) => Promise<void>;
+  unsubscribeResource: (server: string, uri: string) => Promise<void>;
 }
 
 // ============================================================================
@@ -292,11 +293,12 @@ export function useMcp(): UseMcpReturn {
 
   const getPrompt = useCallback(
     async (
+      server: string,
       name: string,
       args: Record<string, unknown>,
     ): Promise<McpPromptResult> => {
       try {
-        return await mcpApi.getPrompt(name, args);
+        return await mcpApi.getPrompt(server, name, args);
       } catch (e) {
         console.error("[useMcp] 获取提示词失败:", e);
         throw e;
@@ -310,9 +312,9 @@ export function useMcp(): UseMcpReturn {
   // --------------------------------------------------------------------------
 
   const readResource = useCallback(
-    async (uri: string): Promise<McpResourceContent> => {
+    async (server: string, uri: string): Promise<McpResourceContent> => {
       try {
-        return await mcpApi.readResource(uri);
+        return await mcpApi.readResource(server, uri);
       } catch (e) {
         console.error("[useMcp] 读取资源失败:", e);
         throw e;
@@ -321,23 +323,29 @@ export function useMcp(): UseMcpReturn {
     [],
   );
 
-  const subscribeResource = useCallback(async (uri: string): Promise<void> => {
-    try {
-      await mcpApi.subscribeResource(uri);
-    } catch (e) {
-      console.error("[useMcp] 订阅资源失败:", e);
-      throw e;
-    }
-  }, []);
+  const subscribeResource = useCallback(
+    async (server: string, uri: string): Promise<void> => {
+      try {
+        await mcpApi.subscribeResource(server, uri);
+      } catch (e) {
+        console.error("[useMcp] 订阅资源失败:", e);
+        throw e;
+      }
+    },
+    [],
+  );
 
-  const unsubscribeResource = useCallback(async (uri: string): Promise<void> => {
-    try {
-      await mcpApi.unsubscribeResource(uri);
-    } catch (e) {
-      console.error("[useMcp] 取消订阅资源失败:", e);
-      throw e;
-    }
-  }, []);
+  const unsubscribeResource = useCallback(
+    async (server: string, uri: string): Promise<void> => {
+      try {
+        await mcpApi.unsubscribeResource(server, uri);
+      } catch (e) {
+        console.error("[useMcp] 取消订阅资源失败:", e);
+        throw e;
+      }
+    },
+    [],
+  );
 
   // --------------------------------------------------------------------------
   // 初始化和事件监听

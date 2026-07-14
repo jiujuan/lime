@@ -5,17 +5,20 @@
 //! transcript，再开始下一次 sampling。provider wire lowering 留在 model-provider，
 //! 工具执行留在 tool-runtime；本模块不接触 Agent。
 
+use crate::provider_trace::RuntimeProviderTraceAttempt;
 use crate::reply_execution::{RuntimeReplyAttemptError, RuntimeReplyExecution};
 use crate::reply_loop::{RuntimeReplyLoop, RuntimeReplyLoopStep, MAX_REPLY_TURNS_REACHED_MESSAGE};
 use crate::session_config::AgentSessionConfig;
+use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceFailure};
 use futures::future::join_all;
 use futures::StreamExt;
 use model_provider::current_client::{
-    CanonicalLlmEvent, CurrentProvider, CurrentProviderContent, CurrentProviderMessage,
-    CurrentProviderRequest, CurrentProviderTool, CurrentProviderToolCall,
-    CurrentProviderToolResult, CurrentProviderUsage, Usage,
+    CanonicalLlmEvent, CurrentProvider, CurrentProviderContent, CurrentProviderError,
+    CurrentProviderMessage, CurrentProviderRequest, CurrentProviderStream, CurrentProviderTool,
+    CurrentProviderToolCall, CurrentProviderToolResult, CurrentProviderUsage, Usage,
 };
 use model_provider::provider_stream::RuntimeReplyModelRequestPolicy;
+use model_provider::provider_stream::RuntimeReplyProviderTraceMetadata;
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
@@ -89,6 +92,7 @@ impl RuntimeToolStepSnapshotSource for FixedRuntimeToolStepSnapshotSource {
 #[derive(Clone)]
 pub struct CurrentProviderTurnInput {
     pub provider: Arc<dyn CurrentProvider>,
+    pub provider_trace_metadata: Option<RuntimeReplyProviderTraceMetadata>,
     pub session_config: AgentSessionConfig,
     pub initial_messages: Vec<CurrentProviderMessage>,
     pub tool_step_snapshot_source: RuntimeToolStepSnapshotSourceHandle,
@@ -100,6 +104,9 @@ pub struct CurrentProviderTurnInput {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CurrentProviderTurnEvent {
+    ProviderTrace {
+        event: ProviderTraceEvent,
+    },
     TextDelta {
         text: String,
     },
@@ -126,6 +133,7 @@ where
 {
     let CurrentProviderTurnInput {
         provider,
+        provider_trace_metadata,
         session_config,
         mut initial_messages,
         tool_step_snapshot_source,
@@ -148,6 +156,7 @@ where
     let mut text_output = String::new();
     let mut errors = Vec::new();
     let mut emitted_any = false;
+    let mut emitted_tool_call = false;
 
     loop {
         if is_cancelled(&cancel_token) {
@@ -159,8 +168,8 @@ where
                 true,
             ));
         }
-        match loop_state.next_attempt() {
-            RuntimeReplyLoopStep::Continue { .. } => {}
+        let attempt = match loop_state.next_attempt() {
+            RuntimeReplyLoopStep::Continue { attempt } => attempt,
             RuntimeReplyLoopStep::MaxTurnsReached { .. } => {
                 if !text_output.is_empty() {
                     text_output.push('\n');
@@ -177,7 +186,7 @@ where
                     false,
                 ));
             }
-        }
+        };
 
         let tool_step_snapshot = tool_step_snapshot_source
             .capture()
@@ -197,17 +206,69 @@ where
             .with_system_prompt(session_config.system_prompt.clone())
             .with_tools(tools.clone())
             .with_model_request_policy(model_request_policy.clone());
-        let mut stream = provider
-            .stream(request)
-            .await
-            .map_err(|error| RuntimeReplyAttemptError::new(error.message, emitted_any))?;
+        let mut provider_trace_attempt = provider_trace_metadata.as_ref().map(|metadata| {
+            RuntimeProviderTraceAttempt::new(
+                metadata.provider_name.clone(),
+                metadata.model_name.clone(),
+                attempt,
+            )
+        });
+        if let Some(trace) = provider_trace_attempt.as_ref() {
+            emit_provider_trace(
+                &mut on_event,
+                provider_trace_metadata.as_ref(),
+                trace.request_started(),
+            );
+        }
+        let mut stream =
+            match start_provider_stream(&provider, request, cancel_token.as_ref()).await {
+                Ok(Some(stream)) => stream,
+                Ok(None) => {
+                    if let Some(trace) = provider_trace_attempt.as_ref() {
+                        emit_provider_trace(
+                            &mut on_event,
+                            provider_trace_metadata.as_ref(),
+                            trace.canceled("turn_canceled"),
+                        );
+                    }
+                    return Ok(RuntimeReplyExecution::new(
+                        text_output,
+                        errors,
+                        emitted_any,
+                        attempts_summary(&loop_state),
+                        true,
+                    ));
+                }
+                Err(error) => {
+                    if let Some(trace) = provider_trace_attempt.as_ref() {
+                        emit_provider_trace(
+                            &mut on_event,
+                            provider_trace_metadata.as_ref(),
+                            trace.failed(ProviderTraceFailure::new(
+                                "provider_request_failed",
+                                false,
+                                false,
+                            )),
+                        );
+                    }
+                    return Err(RuntimeReplyAttemptError::new(error.message, emitted_any));
+                }
+            };
         let mut assistant_content = Vec::new();
         let mut calls = Vec::new();
         let mut completed = false;
         let mut tool_arguments = HashMap::<String, String>::new();
 
-        while let Some(event) = stream.next().await {
+        loop {
+            let event = next_provider_event(&mut stream, cancel_token.as_ref()).await;
             if is_cancelled(&cancel_token) {
+                if let Some(trace) = provider_trace_attempt.as_ref() {
+                    emit_provider_trace(
+                        &mut on_event,
+                        provider_trace_metadata.as_ref(),
+                        trace.canceled("turn_canceled"),
+                    );
+                }
                 return Ok(RuntimeReplyExecution::new(
                     text_output,
                     errors,
@@ -216,10 +277,40 @@ where
                     true,
                 ));
             }
-            match event
-                .map_err(|error| RuntimeReplyAttemptError::new(error.message, emitted_any))?
+            let Some(event) = event else {
+                break;
+            };
+            let event = match event {
+                Ok(event) => event,
+                Err(error) => {
+                    if let Some(trace) = provider_trace_attempt.as_ref() {
+                        emit_provider_trace(
+                            &mut on_event,
+                            provider_trace_metadata.as_ref(),
+                            trace.failed(ProviderTraceFailure::new(
+                                "provider_stream_failed",
+                                false,
+                                false,
+                            )),
+                        );
+                    }
+                    return Err(RuntimeReplyAttemptError::new(error.message, emitted_any));
+                }
+            };
+            if let Some(event) = provider_trace_attempt
+                .as_mut()
+                .and_then(RuntimeProviderTraceAttempt::first_event_received)
             {
+                emit_provider_trace(&mut on_event, provider_trace_metadata.as_ref(), event);
+            }
+            match event {
                 CanonicalLlmEvent::TextDelta { text, .. } => {
+                    if let Some(event) = provider_trace_attempt
+                        .as_mut()
+                        .and_then(|trace| trace.first_text_delta_received(text.chars().count()))
+                    {
+                        emit_provider_trace(&mut on_event, provider_trace_metadata.as_ref(), event);
+                    }
                     emitted_any = true;
                     text_output.push_str(&text);
                     assistant_content.push(CurrentProviderContent::Text(text.clone()));
@@ -245,6 +336,7 @@ where
                     id, name, input, ..
                 } => {
                     emitted_any = true;
+                    emitted_tool_call = true;
                     let call = CurrentProviderToolCall::new(id, name, input);
                     assistant_content.push(CurrentProviderContent::ToolCall(call.clone()));
                     calls.push(call);
@@ -256,6 +348,17 @@ where
                 }
                 CanonicalLlmEvent::Finish { .. } => completed = true,
                 CanonicalLlmEvent::ProviderError { message, .. } => {
+                    if let Some(trace) = provider_trace_attempt.as_ref() {
+                        emit_provider_trace(
+                            &mut on_event,
+                            provider_trace_metadata.as_ref(),
+                            trace.failed(ProviderTraceFailure::new(
+                                "provider_event_failed",
+                                false,
+                                false,
+                            )),
+                        );
+                    }
                     return Err(RuntimeReplyAttemptError::new(message, emitted_any));
                 }
                 CanonicalLlmEvent::StepStart { .. }
@@ -277,6 +380,12 @@ where
         if calls.is_empty() {
             if !completed {
                 errors.push("Provider stream ended without completion event".to_string());
+            }
+            if text_output.trim().is_empty() && !emitted_tool_call {
+                return Err(RuntimeReplyAttemptError::new(
+                    "Provider completed without user-visible output",
+                    emitted_any,
+                ));
             }
             return Ok(RuntimeReplyExecution::new(
                 text_output,
@@ -310,6 +419,50 @@ where
                 .collect(),
         ));
     }
+}
+
+async fn start_provider_stream(
+    provider: &Arc<dyn CurrentProvider>,
+    request: CurrentProviderRequest,
+    cancel_token: Option<&CancellationToken>,
+) -> Result<Option<CurrentProviderStream>, CurrentProviderError> {
+    match cancel_token {
+        Some(cancel_token) => {
+            tokio::select! {
+                _ = cancel_token.cancelled() => Ok(None),
+                result = provider.stream(request) => result.map(Some),
+            }
+        }
+        None => provider.stream(request).await.map(Some),
+    }
+}
+
+async fn next_provider_event(
+    stream: &mut CurrentProviderStream,
+    cancel_token: Option<&CancellationToken>,
+) -> Option<Result<CanonicalLlmEvent, CurrentProviderError>> {
+    match cancel_token {
+        Some(cancel_token) => {
+            tokio::select! {
+                _ = cancel_token.cancelled() => None,
+                event = stream.next() => event,
+            }
+        }
+        None => stream.next().await,
+    }
+}
+
+fn emit_provider_trace<F>(
+    on_event: &mut F,
+    metadata: Option<&RuntimeReplyProviderTraceMetadata>,
+    mut event: ProviderTraceEvent,
+) where
+    F: FnMut(CurrentProviderTurnEvent),
+{
+    if let Some(metadata) = metadata {
+        metadata.apply_to_provider_trace_event(&mut event);
+    }
+    on_event(CurrentProviderTurnEvent::ProviderTrace { event });
 }
 
 fn current_provider_usage(usage: Usage) -> CurrentProviderUsage {

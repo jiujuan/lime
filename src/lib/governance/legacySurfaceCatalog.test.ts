@@ -59,6 +59,25 @@ describe("legacySurfaceCatalog", () => {
     expect("legacyHelperSurfaceMonitors" in agentCommandCatalog).toBe(false);
   });
 
+  it("应阻止已删除的默认 Playwright MCP seed 回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-default-playwright-mcp-seed",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.includePathPrefixes).toEqual(["lime-rs"]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "@modelcontextprotocol/server-playwright",
+        "migrated_playwright_mcp_server_v1",
+        "migration_v3::migrate_playwright_mcp_server(",
+        "pub mod migration_v3;",
+      ]),
+    );
+  });
+
   it("应记录已删除的根目录一次性 Task Center 补丁脚本", () => {
     const monitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "root-task-center-patch-scripts",
@@ -3401,14 +3420,11 @@ describe("legacySurfaceCatalog", () => {
       "src/lib/api/agentProtocol.ts",
       "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.ts",
       "src/lib/api/agentRuntime/executionStrategyCompat.ts",
-      "lime-rs/crates/agent/src/session_store.rs",
-      "lime-rs/crates/agent/src/execution_strategy_compat.rs",
     ]);
     expect(monitor?.allowedPaths).toEqual([
       "src/lib/api/agentRuntime/executionStrategyCompat.ts",
       "src/lib/api/agentRuntime/executionStrategyCompat.test.ts",
       "src/components/agent/chat/skill-selection/runtimeInputCapabilityCatalog.test.tsx",
-      "lime-rs/crates/agent/src/execution_strategy_compat.rs",
     ]);
     expect(monitor?.patterns).toEqual(["code_orchestrated"]);
     expect(monitor?.regexPatterns).toEqual([
@@ -3418,6 +3434,113 @@ describe("legacySurfaceCatalog", () => {
       "\\bnormalizeLegacyExecutionStrategy\\s*\\(",
       "\\bnormalizeLegacyCatalogExecutionStrategy\\s*\\(",
     ]);
+  });
+
+  it("应阻止已删除的 lime-agent execution strategy compat 模块回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-execution-strategy-compat",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/agent/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "mod execution_strategy_compat;",
+        "normalize_execution_strategy_to_react(",
+      ]),
+    );
+  });
+
+  it("应阻止已删除的 lime-agent subagent sidecar 回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-agent-subagent-sidecars",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/agent/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "mod subagent_control;",
+        "load_subagent_runtime_status(",
+        "SubagentCustomizationState",
+        "subagent_control.v0",
+      ]),
+    );
+  });
+
+  it("应阻止已删除的 Team/collab_agent 工具面回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-team-tool-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/tool-runtime/src",
+      "lime-rs/crates/agent/src",
+      "lime-rs/crates/core/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "pub mod collab_agent;",
+        "collab_agent_tool_definitions(",
+        'name: "Agent",',
+        'name: "TeamCreate",',
+        'canonical_name: "ListPeers",',
+        "SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES",
+      ]),
+    );
+  });
+
+  it("应阻止已删除的 lime-agent aggregate execution runtime 回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-agent-runtime-aggregate",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/agent/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "mod runtime_payload;",
+        "build_session_execution_runtime(",
+        "reconcile_session_execution_runtime_permission_fallback(",
+        "pub struct SessionExecutionRuntime {",
+        "LIME_RUNTIME_METADATA_KEY",
+      ]),
+    );
+  });
+
+  it("应阻止已删除的 lime-agent execution runtime session query 回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-agent-runtime-session-query",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/agent/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "mod session_execution_runtime_query;",
+        "read_session_execution_runtime_session_projection(",
+        "project_session_record_execution_runtime_session(",
+      ]),
+    );
   });
 
   it("应禁止 Agent Runtime current 不可用报错重新指向 legacy command 恢复路径", () => {
@@ -3451,7 +3574,6 @@ describe("legacySurfaceCatalog", () => {
     ]);
     expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates"]);
     expect(monitor?.allowedPaths).toEqual([
-      "lime-rs/crates/agent/src/session_store_tests.rs",
       "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
       "lime-rs/crates/app-server/src/local_data_source/tests.rs",
       "lime-rs/crates/core/src/database/dao/agent.rs",
@@ -3475,7 +3597,6 @@ describe("legacySurfaceCatalog", () => {
     ]);
     expect(monitor?.includePathPrefixes).toEqual(["lime-rs/crates"]);
     expect(monitor?.allowedPaths).toEqual([
-      "lime-rs/crates/agent/src/session_store_history_visibility.rs",
       "lime-rs/crates/app-server/src/local_data_source/legacy_message_backfill_source.rs",
       "lime-rs/crates/app-server/src/local_data_source/tests.rs",
       "lime-rs/crates/core/src/database/dao/agent.rs",
@@ -3567,17 +3688,24 @@ describe("legacySurfaceCatalog", () => {
     }
   });
 
-  it("应只在测试编译图保留 agent_messages 可见性读取 helper", () => {
-    const sessionStoreSource = readFileSync(
-      join(REPO_ROOT, "lime-rs/crates/agent/src/session_store.rs"),
-      "utf8",
+  it("应阻止已删除的 lime-agent session_store family 回流", () => {
+    const monitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-retired-agent-session-store-family",
     );
 
-    expect(sessionStoreSource).toContain(
-      '#[path = "session_store_history_visibility.rs"]',
-    );
-    expect(sessionStoreSource).toMatch(
-      /#\[cfg\(test\)\]\s*#\[path = "session_store_history_visibility\.rs"\]\s*mod session_store_history_visibility;/,
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual([
+      "lime-rs/crates/agent/src",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "mod session_store;",
+        "pub use session_store::{",
+        "create_session_sync(",
+        "get_runtime_session_detail(",
+      ]),
     );
   });
 

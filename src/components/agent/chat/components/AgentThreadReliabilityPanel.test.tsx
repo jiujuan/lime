@@ -1,6 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 import { renderPanel } from "./AgentThreadReliabilityPanel.testFixtures";

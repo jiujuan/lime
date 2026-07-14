@@ -334,7 +334,7 @@ impl RuntimeCore {
                     params.runtime_options.take(),
                 ));
         }
-        let pre_turn_events = self
+        let mut pre_turn_events = self
             .maybe_auto_compact_before_turn(&params.session_id, params.runtime_options.as_ref())
             .await?;
         if let Some(callback) = event_callback.as_deref_mut() {
@@ -469,7 +469,7 @@ impl RuntimeCore {
             });
         }
 
-        let (session, previous_session, turn, provider_history) = {
+        let (session, previous_session, turn) = {
             let mut state = self
                 .state
                 .lock()
@@ -502,20 +502,48 @@ impl RuntimeCore {
             }
             stored.turns.push(turn.clone());
 
-            let provider_history = super::provider_history::provider_history(
+            (stored.session.clone(), previous_session, turn)
+        };
+
+        let mailbox_delivery = match self
+            .deliver_pending_agent_mailbox_for_turn(&session, &turn, &params.input)
+            .await
+        {
+            Ok(delivery) => delivery,
+            Err(error) => {
+                self.rollback_started_turn(
+                    &session.session_id,
+                    &turn.turn_id,
+                    previous_session.clone(),
+                );
+                return Err(error);
+            }
+        };
+        if let Some(callback) = event_callback.as_deref_mut() {
+            for event in mailbox_delivery.events.iter().cloned() {
+                callback(event)?;
+            }
+        }
+        pre_turn_events.extend(mailbox_delivery.events);
+        let provider_history = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get(&session.session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(session.session_id.clone()))?;
+            super::provider_history::provider_history_excluding_current_turn_input(
                 stored,
                 self.output_snapshot_store.as_ref(),
-            );
-            (
-                stored.session.clone(),
-                previous_session,
-                turn,
-                provider_history,
+                &turn.turn_id,
             )
         };
 
         let runtime_options = params.runtime_options.clone();
         let request_host = host.clone();
+        let agent_control_host = host.clone();
         let request = ExecutionRequest {
             host,
             session: session.clone(),
@@ -541,6 +569,10 @@ impl RuntimeCore {
             runtime_options: params.runtime_options,
             queue_if_busy: params.queue_if_busy,
             skip_pre_submit_resume: params.skip_pre_submit_resume,
+            agent_control_gateway: self
+                .projection_store
+                .as_ref()
+                .map(|_| self.agent_control_gateway_for_turn(&session, &turn, agent_control_host)),
         };
 
         let backend_events = if let Some(event_callback) = event_callback {

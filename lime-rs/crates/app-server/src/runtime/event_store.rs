@@ -1,3 +1,6 @@
+mod canonical_notifications;
+
+use self::canonical_notifications::notification_events_with_canonical_entities;
 use super::status::{agent_turn_is_terminal, session_status_from_turn_status};
 use super::trace;
 use super::trace_store::TraceEventWriter;
@@ -11,6 +14,7 @@ use crate::runtime_backend::{
 };
 use app_server_protocol::*;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 impl RuntimeCoreEventAppender {
@@ -48,6 +52,155 @@ impl RuntimeCoreEventAppender {
             turn_id,
             runtime_events,
         )
+    }
+}
+
+impl RuntimeCore {
+    /// Replays an EventLog-first tail after a downstream canonical projection failure.
+    ///
+    /// This is intentionally narrower than normal append: callers have already proved the exact
+    /// events are durable in the canonical JSONL log, so replay must never write that log again.
+    pub(in crate::runtime) fn replay_durable_runtime_events(
+        &self,
+        session_id: &str,
+        durable_events: Vec<AgentEvent>,
+    ) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
+        if durable_events.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let stored = state
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+
+        let mut replay = Vec::new();
+        for event in durable_events {
+            if event.session_id != session_id {
+                return Err(RuntimeCoreError::Backend(format!(
+                    "durable event replay scope mismatch for session {session_id}"
+                )));
+            }
+            if let Some(existing) = stored.events.iter().find(|existing| {
+                existing.event_id == event.event_id || existing.sequence == event.sequence
+            }) {
+                if existing != &event {
+                    return Err(RuntimeCoreError::Backend(format!(
+                        "durable event replay identity conflict for session {session_id}"
+                    )));
+                }
+                continue;
+            }
+            replay.push(event);
+        }
+        if replay.is_empty() {
+            return Ok(Vec::new());
+        }
+        replay.sort_by_key(|event| event.sequence);
+        let next_sequence = stored
+            .events
+            .last()
+            .map(|event| event.sequence.saturating_add(1))
+            .unwrap_or(1);
+        if replay
+            .iter()
+            .enumerate()
+            .any(|(index, event)| event.sequence != next_sequence + index as u64)
+        {
+            return Err(RuntimeCoreError::Backend(format!(
+                "durable event replay is not the contiguous EventLog tail for session {session_id}"
+            )));
+        }
+
+        let notifications = notification_events_with_canonical_entities(stored, &replay)?;
+        let projection_store = self.projection_store.as_deref().ok_or_else(|| {
+            RuntimeCoreError::Backend(
+                "durable event replay requires a ProjectionStore for canonical recovery"
+                    .to_string(),
+            )
+        })?;
+        projection_store
+            .apply_canonical_events(stored, &replay)
+            .map_err(|error| {
+                RuntimeCoreError::Backend(format!(
+                    "canonical mailbox Item recovery failed after EventLog append: {error}"
+                ))
+            })?;
+        projection_store
+            .append_terminal_agent_results_sync(
+                &agent_protocol::ThreadId::new(stored.session.thread_id.clone()),
+                &replay,
+            )
+            .map_err(|error| {
+                RuntimeCoreError::Backend(format!(
+                    "durable child terminal activity recovery failed: {error}"
+                ))
+            })?;
+        if let Err(error) = projection_store.apply_events(&replay) {
+            tracing::warn!(
+                "[projection-store] failed to replay {} durable events for session {}: {}",
+                replay.len(),
+                session_id,
+                error
+            );
+        }
+        for event in replay {
+            apply_runtime_event_state_transition(
+                stored,
+                event.turn_id.as_deref(),
+                event.event_type.as_str(),
+            );
+            stored.events.push(event);
+        }
+        Ok(notifications)
+    }
+
+    /// Appends a terminal event for a turn that exists only in a verified durable EventLog tail.
+    ///
+    /// Normal callers must target a loaded turn. Mailbox recovery is different: the failed turn
+    /// was intentionally rolled back from memory while its EventLog-first input remained durable.
+    pub(in crate::runtime) fn append_durable_recovery_terminal_event(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        runtime_event: RuntimeEvent,
+    ) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
+        if !is_turn_terminal_event_class(normalized_runtime_event_class(&runtime_event.event_type))
+        {
+            return Err(RuntimeCoreError::Backend(
+                "durable recovery accepts terminal events only".to_string(),
+            ));
+        }
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let stored = state
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+        let thread_id = stored.session.thread_id.clone();
+        let session_status = stored.session.status;
+        let session_updated_at = stored.session.updated_at.clone();
+        let events = append_runtime_events_to_stored_session(
+            stored,
+            self.file_checkpoint_snapshot_store.as_ref(),
+            self.output_snapshot_store.as_ref(),
+            self.sidecar_store.as_deref(),
+            self.event_log_writer.as_deref(),
+            self.trace_event_writer.as_deref(),
+            self.projection_store.as_deref(),
+            session_id,
+            &thread_id,
+            Some(turn_id),
+            vec![runtime_event],
+        )?;
+        stored.session.status = session_status;
+        stored.session.updated_at = session_updated_at;
+        Ok(events)
     }
 }
 
@@ -154,6 +307,7 @@ fn append_runtime_events_to_stored_session(
     if is_terminal_turn(stored, turn_id) {
         return Ok(Vec::new());
     }
+    let runtime_events = deduplicate_mailbox_runtime_events(stored, runtime_events);
     let runtime_events = runtime_events_with_turn_input(stored, turn_id, runtime_events);
     if let Some(retired_event) = runtime_events.iter().find(|event| {
         is_retired_tool_wire_event_class(normalized_runtime_event_class(&event.event_type))
@@ -321,6 +475,23 @@ fn append_runtime_events_to_stored_session(
     let appended_events = events;
     let notification_events =
         notification_events_with_canonical_entities(stored, &appended_events)?;
+    let requires_mailbox_canonical_persistence = requires_canonical_persistence(&appended_events);
+    let terminal_result_required = projection_store
+        .map(|store| {
+            store.terminal_agent_result_required_sync(
+                &agent_protocol::ThreadId::new(thread_id),
+                &appended_events,
+            )
+        })
+        .transpose()
+        .map_err(|error| {
+            RuntimeCoreError::Backend(format!(
+                "failed to resolve durable child terminal activity owner: {error}"
+            ))
+        })?
+        .unwrap_or(false);
+    let requires_canonical_persistence =
+        requires_mailbox_canonical_persistence || terminal_result_required;
     if let Some(event_log_writer) = event_log_writer {
         event_log_writer
             .append_events(&appended_events)
@@ -337,6 +508,18 @@ fn append_runtime_events_to_stored_session(
         }
     }
     if let Some(projection_store) = projection_store {
+        if requires_canonical_persistence {
+            projection_store
+                .apply_canonical_events(stored, &appended_events)
+                .map_err(|error| {
+                    let message = if requires_mailbox_canonical_persistence {
+                        "canonical mailbox Item must persist before delivery acknowledgement"
+                    } else {
+                        "canonical child terminal Turn must persist before parent activity"
+                    };
+                    RuntimeCoreError::Backend(format!("{message}: {error}"))
+                })?;
+        }
         if let Err(error) = projection_store.apply_events(&appended_events) {
             tracing::warn!(
                 "[projection-store] failed to apply {} events for session {}: {}",
@@ -345,13 +528,27 @@ fn append_runtime_events_to_stored_session(
                 error
             );
         }
-        if let Err(error) = projection_store.apply_canonical_events(stored, &appended_events) {
-            tracing::warn!(
-                "[canonical-thread-store] failed to apply {} events for session {}: {}",
-                appended_events.len(),
-                session_id,
-                error
-            );
+        if !requires_canonical_persistence {
+            if let Err(error) = projection_store.apply_canonical_events(stored, &appended_events) {
+                tracing::warn!(
+                    "[canonical-thread-store] failed to apply {} events for session {}: {}",
+                    appended_events.len(),
+                    session_id,
+                    error
+                );
+            }
+        }
+        if terminal_result_required {
+            projection_store
+                .append_terminal_agent_results_sync(
+                    &agent_protocol::ThreadId::new(thread_id),
+                    &appended_events,
+                )
+                .map_err(|error| {
+                    RuntimeCoreError::Backend(format!(
+                        "failed to persist durable child terminal activity: {error}"
+                    ))
+                })?;
         }
     }
     for event in appended_events.iter().cloned() {
@@ -366,144 +563,36 @@ fn append_runtime_events_to_stored_session(
     Ok(notification_events)
 }
 
-#[derive(Clone, Copy)]
-enum CanonicalNotificationTarget {
-    Turn,
-    Item,
-}
-
-fn notification_events_with_canonical_entities(
+fn deduplicate_mailbox_runtime_events(
     stored: &StoredSession,
-    events: &[AgentEvent],
-) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
-    let mut history = Vec::with_capacity(stored.events.len() + events.len());
-    history.extend(stored.events.iter().cloned());
-    let mut notifications = Vec::with_capacity(events.len());
-
-    for event in events {
-        history.push(event.clone());
-        let Some(target) = canonical_notification_target(event) else {
-            notifications.push(event.clone());
-            continue;
-        };
-        let changes = thread_item_projection::materialize_events(
-            &history,
-            &stored.session.session_id,
-            &stored.session.thread_id,
-        )
-        .map_err(|error| {
-            RuntimeCoreError::Backend(format!(
-                "cannot materialize canonical notification for event {} ({}): {error}",
-                event.event_id, event.event_type
-            ))
-        })?;
-        let mut notification = event.clone();
-        let payload = notification.payload.as_object_mut().ok_or_else(|| {
-            RuntimeCoreError::Backend(format!(
-                "cannot attach canonical notification entity to non-object payload for event {} ({})",
-                event.event_id, event.event_type
-            ))
-        })?;
-
-        match target {
-            CanonicalNotificationTarget::Turn => {
-                let turn_id = event.turn_id.as_deref().ok_or_else(|| {
-                    RuntimeCoreError::Backend(format!(
-                        "cannot materialize canonical turn notification without turn id for event {} ({})",
-                        event.event_id, event.event_type
-                    ))
-                })?;
-                let turn = changes
-                    .changed_turns
-                    .into_iter()
-                    .find(|turn| turn.turn_id.as_str() == turn_id)
-                    .ok_or_else(|| {
-                        RuntimeCoreError::Backend(format!(
-                            "canonical materializer produced no turn for event {} ({})",
-                            event.event_id, event.event_type
-                        ))
-                    })?;
-                payload.insert(
-                    "turn".to_string(),
-                    serde_json::to_value(turn).map_err(|error| {
-                        RuntimeCoreError::Backend(format!(
-                            "cannot serialize canonical turn for event {}: {error}",
-                            event.event_id
-                        ))
-                    })?,
-                );
-            }
-            CanonicalNotificationTarget::Item => {
-                let item = changes
-                    .changed_items
-                    .into_iter()
-                    .find(|item| item.sequence == event.sequence)
-                    .ok_or_else(|| {
-                        RuntimeCoreError::Backend(format!(
-                            "canonical materializer produced no item for event {} ({})",
-                            event.event_id, event.event_type
-                        ))
-                    })?;
-                payload.insert(
-                    "item".to_string(),
-                    serde_json::to_value(item).map_err(|error| {
-                        RuntimeCoreError::Backend(format!(
-                            "cannot serialize canonical item for event {}: {error}",
-                            event.event_id
-                        ))
-                    })?,
-                );
-            }
-        }
-        notifications.push(notification);
-    }
-
-    Ok(notifications)
+    runtime_events: Vec<RuntimeEvent>,
+) -> Vec<RuntimeEvent> {
+    let mut seen_message_ids = stored
+        .events
+        .iter()
+        .filter_map(|event| mailbox_message_id(&event.payload).map(str::to_string))
+        .collect::<HashSet<_>>();
+    runtime_events
+        .into_iter()
+        .filter(|event| {
+            mailbox_message_id(&event.payload)
+                .map(|message_id| seen_message_ids.insert(message_id.to_string()))
+                .unwrap_or(true)
+        })
+        .collect()
 }
 
-fn canonical_notification_target(event: &AgentEvent) -> Option<CanonicalNotificationTarget> {
-    let event_type = event.event_type.as_str();
-    if matches!(
-        event_type,
-        "turn.accepted" | "turn.started" | "turn.completed" | "turn.failed" | "turn.canceled"
-    ) {
-        return Some(CanonicalNotificationTarget::Turn);
-    }
-    if matches!(
-        event_type,
-        "item.removed"
-            | "item.deleted"
-            | "message.removed"
-            | "tool.removed"
-            | "turn.removed"
-            | "turn.deleted"
-    ) {
-        return None;
-    }
-    if event.turn_id.is_none() {
-        return None;
-    }
-    let item_lifecycle = [
-        "item.",
-        "message.",
-        "reasoning.",
-        "tool.",
-        "mcp.",
-        "collab.",
-        "action.",
-        "approval.",
-        "command.",
-        "patch.",
-        "file.",
-        "artifact.",
-        "media.",
-        "subagent.",
-        "sub_agent.",
-        "context.compaction",
-    ]
-    .iter()
-    .any(|prefix| event_type.starts_with(prefix));
-    item_lifecycle.then_some(CanonicalNotificationTarget::Item)
+fn mailbox_message_id(payload: &Value) -> Option<&str> {
+    payload
+        .pointer("/mailbox/messageId")
+        .and_then(Value::as_str)
+}
+
+fn requires_canonical_persistence(events: &[AgentEvent]) -> bool {
+    events.iter().any(|event| {
+        event.payload.get("mailbox").is_some()
+            || event.payload.get("mailboxRecovery") == Some(&Value::Bool(true))
+    })
 }
 
 fn runtime_events_with_turn_input(
@@ -518,7 +607,7 @@ fn runtime_events_with_turn_input(
         event.turn_id.as_deref() == Some(turn_id) && turn_input_events::is_turn_input_event(event)
     }) || runtime_events
         .iter()
-        .any(|event| turn_input_events::is_turn_input_event_type(&event.event_type))
+        .any(turn_input_events::runtime_event_is_turn_input)
     {
         return runtime_events;
     }

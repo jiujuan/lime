@@ -1,3 +1,4 @@
+use super::RuntimeEvent;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentInput;
 use serde_json::json;
@@ -35,10 +36,22 @@ pub(super) fn turn_inputs_from_events(events: &[AgentEvent]) -> HashMap<String, 
 
 pub(super) fn is_turn_input_event(event: &AgentEvent) -> bool {
     is_turn_input_event_type(&event.event_type)
+        && event
+            .payload
+            .get("mailbox")
+            .is_none_or(|mailbox| mailbox["turnInput"] == true)
 }
 
 pub(super) fn is_turn_input_event_type(event_type: &str) -> bool {
     event_type == TURN_INPUT_EVENT_TYPE
+}
+
+pub(super) fn runtime_event_is_turn_input(event: &RuntimeEvent) -> bool {
+    is_turn_input_event_type(&event.event_type)
+        && event
+            .payload
+            .get("mailbox")
+            .is_none_or(|mailbox| mailbox["turnInput"] == true)
 }
 
 fn turn_input_from_event(event: &AgentEvent) -> Option<(String, AgentInput)> {

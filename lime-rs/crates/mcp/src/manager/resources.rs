@@ -162,6 +162,7 @@ impl McpClientManager {
     ///
     /// # Arguments
     ///
+    /// * `server_name` - 精确的服务器名称
     /// * `uri` - 资源 URI
     ///
     /// # Returns
@@ -170,38 +171,29 @@ impl McpClientManager {
     ///
     /// # 实现步骤（Task 4.5）
     ///
-    /// 1. 解析资源 URI，确定目标服务器
+    /// 1. 按服务器名称精确选择运行连接
     /// 2. 调用服务器的 read_resource 方法
-    /// 3. 转换结果为 McpResourceContent
-    /// 4. 返回结果
-    pub async fn read_resource(&self, uri: &str) -> Result<McpResourceContent, McpError> {
-        info!(uri = %uri, "读取 MCP 资源");
-
-        // 1. 解析资源 URI，确定目标服务器
-        let (server_name, _) = self.resolve_resource_target(uri).await?;
-
-        debug!(
-            uri = %uri,
-            server_name = %server_name,
-            "解析资源目标"
-        );
-
-        // 2. 获取目标服务器的客户端
+    /// 3. 转换并返回资源内容
+    pub async fn read_resource(
+        &self,
+        server_name: &str,
+        uri: &str,
+    ) -> Result<McpResourceContent, McpError> {
+        let (server_name, uri) = validate_resource_target(server_name, uri)?;
+        info!(server_name = %server_name, uri = %uri, "读取 MCP 资源");
         let clients = self.clients.read().await;
         let wrapper = clients
-            .get(&server_name)
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .get(server_name)
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
 
         let service = wrapper
             .running_service()
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
 
-        // 3. 构建 read_resource 请求参数
         let read_param = rmcp::model::ReadResourceRequestParam {
             uri: uri.to_string(),
         };
 
-        // 4. 调用 read_resource
         let result = service.read_resource(read_param).await.map_err(|e| {
             error!(
                 uri = %uri,
@@ -212,7 +204,6 @@ impl McpClientManager {
             McpError::ToolCallFailed(format!("读取资源失败: {e}"))
         })?;
 
-        // 5. 转换结果为 McpResourceContent
         let mcp_result = Self::convert_read_resource_result(uri, result);
 
         info!(
@@ -225,17 +216,16 @@ impl McpClientManager {
     }
 
     /// 订阅资源更新。
-    pub async fn subscribe_resource(&self, uri: &str) -> Result<(), McpError> {
-        info!(uri = %uri, "订阅 MCP 资源");
-        let (server_name, _) = self.resolve_resource_target(uri).await?;
-
+    pub async fn subscribe_resource(&self, server_name: &str, uri: &str) -> Result<(), McpError> {
+        let (server_name, uri) = validate_resource_target(server_name, uri)?;
+        info!(server_name = %server_name, uri = %uri, "订阅 MCP 资源");
         let clients = self.clients.read().await;
         let wrapper = clients
-            .get(&server_name)
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .get(server_name)
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
         let service = wrapper
             .running_service()
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
 
         service
             .subscribe(rmcp::model::SubscribeRequestParam {
@@ -257,17 +247,16 @@ impl McpClientManager {
     }
 
     /// 取消订阅资源更新。
-    pub async fn unsubscribe_resource(&self, uri: &str) -> Result<(), McpError> {
-        info!(uri = %uri, "取消订阅 MCP 资源");
-        let (server_name, _) = self.resolve_resource_target(uri).await?;
-
+    pub async fn unsubscribe_resource(&self, server_name: &str, uri: &str) -> Result<(), McpError> {
+        let (server_name, uri) = validate_resource_target(server_name, uri)?;
+        info!(server_name = %server_name, uri = %uri, "取消订阅 MCP 资源");
         let clients = self.clients.read().await;
         let wrapper = clients
-            .get(&server_name)
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .get(server_name)
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
         let service = wrapper
             .running_service()
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
 
         service
             .unsubscribe(rmcp::model::UnsubscribeRequestParam {
@@ -286,45 +275,6 @@ impl McpClientManager {
 
         info!(uri = %uri, server_name = %server_name, "资源取消订阅完成");
         Ok(())
-    }
-
-    /// 解析资源目标（服务器名称）
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - 资源 URI
-    ///
-    /// # Returns
-    ///
-    /// 返回 (服务器名称, 资源 URI) 元组。
-    ///
-    /// # 解析逻辑
-    ///
-    /// 遍历所有运行中的服务器，查找提供该资源的服务器。
-    async fn resolve_resource_target(&self, uri: &str) -> Result<(String, String), McpError> {
-        let clients = self.clients.read().await;
-
-        // 在所有服务器中查找该资源
-        for (server_name, wrapper) in clients.iter() {
-            // 检查服务器是否支持资源
-            if let Some(ref info) = wrapper.server_info {
-                if !info.supports_resources {
-                    continue;
-                }
-            }
-
-            if let Some(service) = wrapper.running_service() {
-                // 尝试获取资源列表并查找
-                if let Ok(resources) = service.list_all_resources().await {
-                    if resources.iter().any(|r| r.uri == uri) {
-                        return Ok((server_name.clone(), uri.to_string()));
-                    }
-                }
-            }
-        }
-
-        // 资源未找到
-        Err(McpError::ToolNotFound(format!("资源不存在: {uri}")))
     }
 
     /// 转换 rmcp ReadResourceResult 为 McpResourceContent
@@ -368,4 +318,23 @@ impl McpClientManager {
             }
         }
     }
+}
+
+fn validate_resource_target<'a>(
+    server_name: &'a str,
+    uri: &'a str,
+) -> Result<(&'a str, &'a str), McpError> {
+    let server_name = server_name.trim();
+    let uri = uri.trim();
+    if server_name.is_empty() {
+        return Err(McpError::ConfigError(
+            "MCP resource server cannot be empty".to_string(),
+        ));
+    }
+    if uri.is_empty() {
+        return Err(McpError::ConfigError(
+            "MCP resource URI cannot be empty".to_string(),
+        ));
+    }
+    Ok((server_name, uri))
 }

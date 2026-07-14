@@ -132,26 +132,47 @@ test("multi-agent item taxonomy covers Codex v2 team tools as structured items",
   );
 });
 
-test("multi-agent taxonomy maps visual aliases back to Codex v2 tool names", () => {
+test("multi-agent taxonomy does not promote v1 tool names into v2 coverage", () => {
   const snapshot = extractCodexMultiAgentItemTaxonomySnapshot(
     baseInput({
       taxonomyItems: [
-        item("SpawnAgent", "completed"),
         item("send_input", "running"),
         item("resume_agent", "completed"),
         item("wait", "completed"),
         item("close_agent", "interrupted"),
-        item("list_agents", "completed"),
+      ],
+      surfaceBindings: [
+        surface("team_transcript", [
+          "send_input-item",
+          "resume_agent-item",
+          "wait-item",
+          "close_agent-item",
+        ]),
       ],
     }),
   );
 
   assert.deepEqual(
     snapshot.items.map((entry) => entry.toolName),
-    EXPECTED_TOOLS,
+    [undefined, undefined, undefined, undefined],
   );
-  assert.equal(snapshot.toolsCovered, true);
+  assert.equal(snapshot.toolsCovered, false);
   assert.equal(snapshot.statusesCovered, true);
+  assert.deepEqual(
+    snapshot.validationIssues
+      .map((entry) => entry.code)
+      .filter(
+        (code) =>
+          code === "legacy_tool_name" || code === "expected_tool_missing",
+      ),
+    [
+      "legacy_tool_name",
+      "legacy_tool_name",
+      "legacy_tool_name",
+      "legacy_tool_name",
+      "expected_tool_missing",
+    ],
+  );
 });
 
 test("multi-agent taxonomy rejects legacy tools and missing lineage", () => {

@@ -17,6 +17,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::time::timeout;
 
+mod agent_mailbox_delivery;
+mod agent_terminal_activity;
 mod approval_decision_contract;
 mod artifacts;
 mod capabilities;

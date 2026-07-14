@@ -427,6 +427,13 @@ export async function waitForGuiApprovalPromptAbsentAfterSecondTurn(
       page,
       ({ promptText, secondPromptMarker, secondDoneText }) => {
         const bodyText = document.body?.innerText || "";
+        const secondTurnGroup = [...document.querySelectorAll(
+          '[data-testid="message-turn-group"]',
+        )]
+          .reverse()
+          .find((group) =>
+            (group.innerText || "").includes(secondPromptMarker),
+          );
         const approvalPrompt = document.querySelector(
           '[data-testid="inputbar-approval-prompt"]',
         );
@@ -453,6 +460,9 @@ export async function waitForGuiApprovalPromptAbsentAfterSecondTurn(
             bodyText.includes("需要确认浏览器控制权限"),
           hasSecondPrompt: bodyText.includes(secondPromptMarker),
           hasSecondDoneText: bodyText.includes(secondDoneText),
+          hasPendingApprovalStatus: (secondTurnGroup?.innerText || "").includes(
+            "待确认",
+          ),
           textareaVisible: Boolean(textarea),
           textareaDisabled: textarea?.disabled ?? null,
           stopButtonVisible,
@@ -470,6 +480,7 @@ export async function waitForGuiApprovalPromptAbsentAfterSecondTurn(
       snapshot?.hasSecondDoneText === true &&
       snapshot?.approvalPromptVisible === false &&
       snapshot?.includesRuntimePermissionPrompt === false &&
+      snapshot?.hasPendingApprovalStatus === false &&
       snapshot?.textareaVisible === true &&
       snapshot?.textareaDisabled === false &&
       snapshot?.stopButtonVisible === false

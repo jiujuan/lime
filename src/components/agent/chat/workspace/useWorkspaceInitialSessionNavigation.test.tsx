@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   rememberInitialSessionNavigationStart,
+  requestExplicitInitialSessionNavigation,
   resetInitialSessionNavigationDeduplicationForTests,
   useWorkspaceInitialSessionNavigation,
 } from "./useWorkspaceInitialSessionNavigation";
@@ -321,6 +322,80 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     });
   });
 
+  it("用户显式打开历史会话时不应被遗留草稿 surface 永久暂停", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+
+    renderHook({
+      initialSessionId: "session-from-history",
+      currentSessionId: null,
+      shouldPauseInitialSessionNavigation: true,
+      switchTopic,
+      resolveInitialSessionSwitch: () => ({
+        allowDetachedSession: true,
+        forceRefresh: true,
+      }),
+    });
+
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenCalledWith("session-from-history", {
+      allowDetachedSession: true,
+      forceRefresh: true,
+    });
+  });
+
+  it("新建任务过渡中旧 initialSessionId 未变化时应继续暂停恢复", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+    const mounted = renderHook({
+      initialSessionId: "session-current",
+      currentSessionId: "session-current",
+      shouldPauseInitialSessionNavigation: false,
+      switchTopic,
+    });
+
+    await flushEffects();
+    expect(switchTopic).not.toHaveBeenCalled();
+
+    mounted.rerender({
+      initialSessionId: "session-current",
+      currentSessionId: null,
+      shouldPauseInitialSessionNavigation: true,
+      switchTopic,
+    });
+    await flushEffects();
+
+    expect(switchTopic).not.toHaveBeenCalled();
+  });
+
+  it("用户从新建任务重新打开同一历史会话时应显式恢复", async () => {
+    const switchTopic = vi.fn(async () => undefined);
+    const mounted = renderHook({
+      initialSessionId: "session-current",
+      currentSessionId: "session-current",
+      shouldPauseInitialSessionNavigation: false,
+      switchTopic,
+    });
+
+    await flushEffects();
+    expect(switchTopic).not.toHaveBeenCalled();
+
+    mounted.rerender({
+      initialSessionId: "session-current",
+      currentSessionId: null,
+      shouldPauseInitialSessionNavigation: true,
+      switchTopic,
+    });
+    await flushEffects();
+    expect(switchTopic).not.toHaveBeenCalled();
+
+    act(() => {
+      requestExplicitInitialSessionNavigation("session-current");
+    });
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenCalledWith("session-current", undefined);
+  });
+
   it("任务中心首发已切到新会话后不应恢复旧 initialSessionId", async () => {
     const switchTopic = vi.fn(async () => undefined);
     const mounted = renderHook({
@@ -384,6 +459,7 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     renderHook({
       initialSessionId: "session-materialized-send",
       currentSessionId: null,
+      shouldPauseInitialSessionNavigation: true,
       switchTopic,
     });
     await flushEffects();

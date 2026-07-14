@@ -1,4 +1,4 @@
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 
 export type WorkspaceArticleWorkspaceWorkerEvidenceStatus =
   | "completed"

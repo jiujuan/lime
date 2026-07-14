@@ -56,6 +56,7 @@ fn setup_data_source() -> LocalAppDataSource {
             Connection::open_in_memory().expect("open model db"),
         ))),
         mcp_manager: Arc::new(TokioMutex::new(McpClientManager::new(None))),
+        mcp_elicitation_router: lime_mcp::ElicitationRequestRouter::default(),
         telegram_gateway_state: TelegramGatewayState::default(),
         feishu_gateway_state: FeishuGatewayState::default(),
         discord_gateway_state: DiscordGatewayState::default(),
@@ -263,11 +264,18 @@ async fn mcp_current_jsonrpc_starts_real_stdio_server_and_reads_tool_resource() 
     let resources = app_server_request(&server, 7, METHOD_MCP_RESOURCE_LIST, json!({})).await;
     assert_eq!(
         resources.pointer("/result/resources/0/uri"),
-        Some(&json!("fixture://status"))
+        Some(&json!("fixture://status")),
+        "{resources:?}"
+    );
+    assert_eq!(
+        resources.pointer("/result/resources/0/server_name"),
+        Some(&json!("fixture")),
+        "{resources:?}"
     );
     assert_eq!(
         resources.pointer("/result/resourceTemplates/0/uri_template"),
-        Some(&json!("fixture://item/{id}"))
+        Some(&json!("fixture://item/{id}")),
+        "{resources:?}"
     );
     assert_eq!(
         resources.pointer("/result/resourceTemplates/0/server_name"),
@@ -279,6 +287,7 @@ async fn mcp_current_jsonrpc_starts_real_stdio_server_and_reads_tool_resource() 
         8,
         METHOD_MCP_RESOURCE_READ,
         json!({
+            "server": "fixture",
             "uri": "fixture://status"
         }),
     )
@@ -297,6 +306,7 @@ async fn mcp_current_jsonrpc_starts_real_stdio_server_and_reads_tool_resource() 
         9,
         METHOD_MCP_RESOURCE_SUBSCRIBE,
         json!({
+            "server": "fixture",
             "uri": "fixture://status"
         }),
     )
@@ -308,6 +318,7 @@ async fn mcp_current_jsonrpc_starts_real_stdio_server_and_reads_tool_resource() 
         10,
         METHOD_MCP_RESOURCE_UNSUBSCRIBE,
         json!({
+            "server": "fixture",
             "uri": "fixture://status"
         }),
     )

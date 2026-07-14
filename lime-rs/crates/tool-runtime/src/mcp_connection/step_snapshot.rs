@@ -1,4 +1,4 @@
-use super::{McpConnectionCall, McpConnectionHandle};
+use super::{McpCallScope, McpConnectionCall, McpConnectionHandle};
 use crate::tool_extension::{RuntimeExtensionConfig, RuntimeToolCaller};
 use lime_core::tool_calling::extract_tool_surface_metadata;
 use rmcp::model::{CallToolRequestParam, ErrorCode, ErrorData, Tool};
@@ -40,6 +40,7 @@ impl McpStepSnapshot {
     pub async fn dispatch(
         &self,
         tool_call: CallToolRequestParam,
+        scope: McpCallScope,
         cancellation_token: CancellationToken,
     ) -> Result<McpConnectionCall, ErrorData> {
         let Some(route) = self.routes.get(tool_call.name.as_ref()).cloned() else {
@@ -64,7 +65,7 @@ impl McpStepSnapshot {
                 .connection
                 .lock()
                 .await
-                .call_tool(&route.tool_name, arguments, cancellation_token)
+                .call_tool(&route.tool_name, arguments, &scope, cancellation_token)
                 .await
                 .map_err(service_error_data)
         });
@@ -216,11 +217,7 @@ mod tests {
     use super::*;
     use crate::mcp_connection::{McpConnection, McpConnectionError, McpConnectionRegistry};
     use async_trait::async_trait;
-    use rmcp::model::{
-        CallToolResult, Content, GetPromptResult, InitializeResult, JsonObject, ListPromptsResult,
-        ListResourcesResult, ListToolsResult, ReadResourceResult, ServerNotification,
-    };
-    use serde_json::Value;
+    use rmcp::model::{CallToolResult, Content, JsonObject, ListToolsResult, ServerNotification};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::sync::{mpsc, Mutex};
 
@@ -240,22 +237,6 @@ mod tests {
 
     #[async_trait]
     impl McpConnection for TestConnection {
-        async fn list_resources(
-            &self,
-            _next_cursor: Option<String>,
-            _cancel_token: CancellationToken,
-        ) -> Result<ListResourcesResult, McpConnectionError> {
-            panic!("unused list_resources")
-        }
-
-        async fn read_resource(
-            &self,
-            _uri: &str,
-            _cancel_token: CancellationToken,
-        ) -> Result<ReadResourceResult, McpConnectionError> {
-            panic!("unused read_resource")
-        }
-
         async fn list_tools(
             &self,
             _next_cursor: Option<String>,
@@ -272,6 +253,7 @@ mod tests {
             &self,
             name: &str,
             _arguments: Option<JsonObject>,
+            _scope: &McpCallScope,
             _cancel_token: CancellationToken,
         ) -> Result<CallToolResult, McpConnectionError> {
             self.call_count.fetch_add(1, Ordering::SeqCst);
@@ -281,30 +263,9 @@ mod tests {
             ))]))
         }
 
-        async fn list_prompts(
-            &self,
-            _next_cursor: Option<String>,
-            _cancel_token: CancellationToken,
-        ) -> Result<ListPromptsResult, McpConnectionError> {
-            panic!("unused list_prompts")
-        }
-
-        async fn get_prompt(
-            &self,
-            _name: &str,
-            _arguments: Value,
-            _cancel_token: CancellationToken,
-        ) -> Result<GetPromptResult, McpConnectionError> {
-            panic!("unused get_prompt")
-        }
-
         async fn subscribe(&self) -> mpsc::Receiver<ServerNotification> {
             let (_sender, receiver) = mpsc::channel(1);
             receiver
-        }
-
-        fn get_info(&self) -> Option<&InitializeResult> {
-            None
         }
     }
 
@@ -318,7 +279,7 @@ mod tests {
         register(&registry, vec!["search", "new_tool"], "new").await;
 
         let old_result = captured
-            .dispatch(call("docs__search"), CancellationToken::default())
+            .dispatch(call("docs__search"), scope(), CancellationToken::default())
             .await
             .expect("dispatch captured route")
             .response
@@ -326,7 +287,7 @@ mod tests {
             .expect("old result");
         let fresh = snapshot(&registry, HashSet::new(), Duration::from_secs(1)).await;
         let new_result = fresh
-            .dispatch(call("docs__search"), CancellationToken::default())
+            .dispatch(call("docs__search"), scope(), CancellationToken::default())
             .await
             .expect("dispatch fresh route")
             .response
@@ -352,7 +313,11 @@ mod tests {
             .iter()
             .any(|tool| tool.name == "docs__new_tool"));
         assert!(captured
-            .dispatch(call("docs__new_tool"), CancellationToken::default())
+            .dispatch(
+                call("docs__new_tool"),
+                scope(),
+                CancellationToken::default(),
+            )
             .await
             .is_err());
         assert!(fresh
@@ -360,7 +325,11 @@ mod tests {
             .iter()
             .any(|tool| tool.name == "docs__new_tool"));
         assert!(fresh
-            .dispatch(call("docs__new_tool"), CancellationToken::default())
+            .dispatch(
+                call("docs__new_tool"),
+                scope(),
+                CancellationToken::default(),
+            )
             .await
             .is_ok());
     }
@@ -397,12 +366,12 @@ mod tests {
             .any(|tool| tool.name == "docs__search"));
         assert!(!before.tools().iter().any(|tool| tool.name == "docs__query"));
         assert!(before
-            .dispatch(call("docs__query"), CancellationToken::default())
+            .dispatch(call("docs__query"), scope(), CancellationToken::default())
             .await
             .is_err());
         assert!(after.tools().iter().any(|tool| tool.name == "docs__query"));
         assert!(after
-            .dispatch(call("docs__query"), CancellationToken::default())
+            .dispatch(call("docs__query"), scope(), CancellationToken::default())
             .await
             .is_ok());
     }
@@ -446,7 +415,11 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["mixed__public", "mixed__review"]);
         assert!(captured
-            .dispatch(call("mixed__execute"), CancellationToken::default())
+            .dispatch(
+                call("mixed__execute"),
+                scope(),
+                CancellationToken::default(),
+            )
             .await
             .is_err());
         assert_eq!(call_count.load(Ordering::SeqCst), 0);
@@ -465,7 +438,11 @@ mod tests {
             )])),
         };
         assert!(forged_snapshot
-            .dispatch(call("mixed__execute"), CancellationToken::default())
+            .dispatch(
+                call("mixed__execute"),
+                scope(),
+                CancellationToken::default(),
+            )
             .await
             .is_err());
         assert_eq!(call_count.load(Ordering::SeqCst), 0);
@@ -484,7 +461,11 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(code_names, vec!["mixed__execute", "mixed__public"]);
         let code_result = code_execution
-            .dispatch(call("mixed__execute"), CancellationToken::default())
+            .dispatch(
+                call("mixed__execute"),
+                scope(),
+                CancellationToken::default(),
+            )
             .await
             .expect("code execution route")
             .response
@@ -549,7 +530,7 @@ mod tests {
             .iter()
             .any(|tool| tool.name == "broken__search"));
         assert!(captured
-            .dispatch(call("fast__search"), CancellationToken::default())
+            .dispatch(call("fast__search"), scope(), CancellationToken::default())
             .await
             .is_ok());
     }
@@ -640,7 +621,7 @@ mod tests {
             call_count,
         })));
         registry
-            .register(name.to_string(), config, Arc::clone(&connection), None)
+            .register(name.to_string(), config, Arc::clone(&connection))
             .await;
         connection
     }
@@ -697,6 +678,10 @@ mod tests {
             name: name.to_string().into(),
             arguments: None,
         }
+    }
+
+    fn scope() -> McpCallScope {
+        McpCallScope::new(Some("turn-1")).expect("turn correlation")
     }
 
     fn result_text(result: &CallToolResult) -> String {

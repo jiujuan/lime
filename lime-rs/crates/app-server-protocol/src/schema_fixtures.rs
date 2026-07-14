@@ -41,6 +41,7 @@ pub fn protocol_fixture_manifest() -> Value {
                     "kind": match spec.kind {
                         AppServerMethodKind::Request => "request",
                         AppServerMethodKind::Notification => "notification",
+                        AppServerMethodKind::ServerRequest => "serverRequest",
                     }
                 })
             })

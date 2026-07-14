@@ -9,6 +9,7 @@ import {
   isJsonRpcErrorResponse,
   type AgentSessionTurnStartParams,
   type AgentSessionTurnStartResponse,
+  type AgentSessionReadResponse,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
   METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
@@ -192,7 +193,7 @@ export class ElectronAppServerHost {
 
     for (let index = 0; index < limit; index += 1) {
       try {
-        drained.push(await connected.connection.nextNotification(25));
+        drained.push(await connected.connection.nextServerMessage(25));
       } catch {
         break;
       }
@@ -357,13 +358,51 @@ export class ElectronAppServerHost {
       if (result.completed) {
         return messages;
       }
-      return [streamingTurnStartAcceptedResponse(originalMessage, message)];
+      const identity = turnEventIdentity(result.messages[0]);
+      return [
+        streamingTurnStartAcceptedResponse(
+          originalMessage,
+          identity ??
+            (await this.#readCanonicalTurnIdentity(connected, originalMessage)),
+        ),
+      ];
     } catch (error) {
       if (!isAppServerRequestTimeoutError(error)) {
         throw error;
       }
-      return [streamingTurnStartAcceptedResponse(originalMessage, message)];
+      const identity = await this.#readCanonicalTurnIdentity(
+        connected,
+        originalMessage,
+      );
+      return [streamingTurnStartAcceptedResponse(originalMessage, identity)];
     }
+  }
+
+  async #readCanonicalTurnIdentity(
+    connected: ConnectedAppServerSidecar,
+    originalMessage: JsonRpcRequest,
+  ): Promise<CanonicalTurnIdentity> {
+    const params = turnStartParams(originalMessage);
+    const sessionId = nonEmptyString(params?.sessionId);
+    const turnId = nonEmptyString(params?.turnId);
+    if (!sessionId || !turnId) {
+      throw new Error(
+        "app-server turn/start timed out before a canonical turn identity event",
+      );
+    }
+    const read = await this.#requestAppServer<AgentSessionReadResponse>(
+      connected,
+      connected.connection.client.readSession({ sessionId }),
+      "agentSession/read",
+      { timeoutMs: DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS },
+    );
+    const identity = turnIdentityFromSessionRead(read.result, sessionId, turnId);
+    if (!identity) {
+      throw new Error(
+        "app-server turn/start did not resolve a canonical turn identity",
+      );
+    }
+    return identity;
   }
 
   async #withActiveProxyRequest<T>(
@@ -568,27 +607,103 @@ function jsonRpcNotificationEventId(
     : undefined;
 }
 
+type CanonicalTurnIdentity = {
+  sessionId: string;
+  threadId: string;
+  turnId: string;
+  timestamp: string;
+};
+
 function streamingTurnStartAcceptedResponse(
   originalMessage: JsonRpcRequest,
-  proxiedMessage: JsonRpcRequest,
+  identity: CanonicalTurnIdentity,
 ): JsonRpcMessage {
-  const params = turnStartParams(proxiedMessage);
-  const now = new Date().toISOString();
-  const sessionId = nonEmptyString(params?.sessionId) || "";
-  const turnId =
-    nonEmptyString(params?.turnId) || `turn_${String(proxiedMessage.id)}`;
+  const expected = turnStartParams(originalMessage);
+  const sessionId = nonEmptyString(expected?.sessionId);
+  const requestedTurnId = nonEmptyString(expected?.turnId);
+  if (!sessionId || identity.sessionId !== sessionId) {
+    throw new Error(
+      "app-server turn/start did not emit a canonical turn identity",
+    );
+  }
+  if (requestedTurnId && identity.turnId !== requestedTurnId) {
+    throw new Error(
+      "app-server turn/start admission turnId does not match the requested turn",
+    );
+  }
   return {
     id: originalMessage.id,
     result: {
       turn: {
-        turnId,
-        sessionId,
-        threadId: sessionId,
+        turnId: identity.turnId,
+        sessionId: identity.sessionId,
+        threadId: identity.threadId,
         status: "accepted",
-        startedAt: now,
+        startedAt: identity.timestamp,
       },
     },
   } satisfies JsonRpcMessage;
+}
+
+function turnEventIdentity(
+  message: JsonRpcMessage | undefined,
+): CanonicalTurnIdentity | null {
+  if (
+    !message ||
+    !isJsonRpcNotification(message) ||
+    message.method !== "agentSession/event"
+  ) {
+    return null;
+  }
+  const params = message.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return null;
+  }
+  const event = (params as { event?: unknown }).event;
+  if (!event || typeof event !== "object" || Array.isArray(event)) {
+    return null;
+  }
+  const record = event as {
+    sessionId?: unknown;
+    threadId?: unknown;
+    timestamp?: unknown;
+    turnId?: unknown;
+    type?: unknown;
+  };
+  const sessionId = nonEmptyString(record.sessionId);
+  const threadId = nonEmptyString(record.threadId);
+  const turnId = nonEmptyString(record.turnId);
+  const timestamp = nonEmptyString(record.timestamp);
+  if (!sessionId || !threadId || !turnId || !timestamp) {
+    return null;
+  }
+  return { sessionId, threadId, turnId, timestamp };
+}
+
+function turnIdentityFromSessionRead(
+  response: AgentSessionReadResponse,
+  sessionId: string,
+  turnId: string,
+): CanonicalTurnIdentity | null {
+  if (response.session.sessionId !== sessionId) {
+    return null;
+  }
+  const threadId = nonEmptyString(response.session.threadId);
+  const turn = response.turns?.find((candidate) => candidate.turnId === turnId);
+  if (
+    !threadId ||
+    !turn ||
+    turn.sessionId !== sessionId ||
+    turn.threadId !== threadId
+  ) {
+    return null;
+  }
+  return {
+    sessionId,
+    threadId,
+    turnId,
+    timestamp: nonEmptyString(turn.startedAt) ?? response.session.updatedAt,
+  };
 }
 
 function turnStartParams(
@@ -657,11 +772,8 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
 
 async function resolveAppServerSidecarEnv(
   binaryPath: string,
-): Promise<
-  NodeJS.ProcessEnv | undefined
-> {
-  const env: NodeJS.ProcessEnv =
-    resolveAppServerRuntimeLibraryEnv(binaryPath);
+): Promise<NodeJS.ProcessEnv | undefined> {
+  const env: NodeJS.ProcessEnv = resolveAppServerRuntimeLibraryEnv(binaryPath);
   const currentNoProxy = APP_SERVER_NO_PROXY_ENV_KEYS.map(
     (key) => process.env[key],
   ).find((value) => Boolean(value?.trim()));
@@ -712,9 +824,7 @@ function resolveAppServerRuntimeLibraryEnv(
   if (process.platform === "linux") {
     return {
       ...env,
-      LD_LIBRARY_PATH: prependPathEnv(process.env.LD_LIBRARY_PATH, [
-        binaryDir,
-      ]),
+      LD_LIBRARY_PATH: prependPathEnv(process.env.LD_LIBRARY_PATH, [binaryDir]),
     };
   }
 
@@ -739,8 +849,7 @@ function prependPathEnv(
     if (!trimmed) {
       return;
     }
-    const key =
-      process.platform === "win32" ? trimmed.toLowerCase() : trimmed;
+    const key = process.platform === "win32" ? trimmed.toLowerCase() : trimmed;
     if (seen.has(key)) {
       return;
     }

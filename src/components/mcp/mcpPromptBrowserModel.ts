@@ -2,6 +2,10 @@ import type { McpPromptDefinition } from "@/lib/api/mcp";
 
 export type McpPromptsByServer = Record<string, McpPromptDefinition[]>;
 
+export function mcpPromptTargetKey(prompt: McpPromptDefinition): string {
+  return `${prompt.server_name}\u0000${prompt.name}`;
+}
+
 export function groupMcpPromptsByServer(
   prompts: readonly McpPromptDefinition[],
 ): McpPromptsByServer {

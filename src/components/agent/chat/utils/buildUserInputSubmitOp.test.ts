@@ -305,8 +305,12 @@ describe("buildUserInputSubmitOp", () => {
 
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
 
-    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe("custom-provider");
-    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe("mimo-v2.5-pro");
+    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe(
+      "custom-provider",
+    );
+    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe(
+      "mimo-v2.5-pro",
+    );
   });
 
   it("provider 发生切换时应同时提交 provider/model 偏好", () => {
@@ -363,7 +367,7 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.skipPreSubmitResume).toBe(true);
   });
 
-  it("快速响应应只提交后端路由槽位，不提交当前前端 provider/model", () => {
+  it("应透传配置的 model slot，同时保留当前 provider/model 作为后端 fallback", () => {
     const op = buildUserInputSubmitOp({
       content: "只回答一个字：好",
       images: [],
@@ -371,10 +375,13 @@ describe("buildUserInputSubmitOp", () => {
       eventName: "agent_stream_fast_routing",
       requestMetadata: {
         harness: {
-          fast_response_routing: {
-            service_model_slot: "responsive_chat",
-            routing_slot: "responsive_chat_model",
-            resolver: "backend_service_model",
+          model_slots: {
+            fast: {
+              provider: "responsive-provider",
+              model: "fast-chat",
+              source: "service_models.responsive_chat",
+              reason: "service_model_preference",
+            },
           },
           browser_assist: {
             enabled: true,
@@ -392,16 +399,17 @@ describe("buildUserInputSubmitOp", () => {
       effectiveModel: "deepseek-v4-pro",
     });
 
-    expect(op.preferences?.providerPreference).toBeUndefined();
-    expect(op.preferences?.modelPreference).toBeUndefined();
+    expect(op.preferences?.providerPreference).toBe("deepseek");
+    expect(op.preferences?.modelPreference).toBe("deepseek-v4-pro");
     expect(op.metadata).toEqual({
       harness: {
-        fast_response_routing: {
-          service_model_slot: "responsive_chat",
-          routing_slot: "responsive_chat_model",
-          resolver: "backend_service_model",
-          fallback_provider_preference: "deepseek",
-          fallback_model_preference: "deepseek-v4-pro",
+        model_slots: {
+          fast: {
+            provider: "responsive-provider",
+            model: "fast-chat",
+            source: "service_models.responsive_chat",
+            reason: "service_model_preference",
+          },
         },
         browser_assist: {
           enabled: true,
@@ -467,8 +475,12 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.modelPreference).toBe("deepseek-v4-pro");
 
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe("deepseek");
-    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe("deepseek-v4-pro");
+    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBe(
+      "deepseek",
+    );
+    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBe(
+      "deepseek-v4-pro",
+    );
     expect(request.runtimeOptions?.runtimeRequest?.metadata).toMatchObject({
       harness: {
         image_command_intent: {
@@ -535,8 +547,12 @@ describe("buildUserInputSubmitOp", () => {
       providerName: "deepseek",
       modelName: "deepseek-v4-pro",
     });
-    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBeUndefined();
-    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBeUndefined();
+    expect(
+      request.runtimeOptions?.runtimeRequest?.providerPreference,
+    ).toBeUndefined();
+    expect(
+      request.runtimeOptions?.runtimeRequest?.modelPreference,
+    ).toBeUndefined();
   });
 
   it("图片生成命令当前有效模型为图片通道时应退回会话文本模型编排", () => {
@@ -587,8 +603,12 @@ describe("buildUserInputSubmitOp", () => {
       providerName: "deepseek",
       modelName: "deepseek-v4-pro",
     });
-    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBeUndefined();
-    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBeUndefined();
+    expect(
+      request.runtimeOptions?.runtimeRequest?.providerPreference,
+    ).toBeUndefined();
+    expect(
+      request.runtimeOptions?.runtimeRequest?.modelPreference,
+    ).toBeUndefined();
   });
 
   it("图片生成命令没有文本模型候选时不应提交图片 provider 作为编排模型", () => {
@@ -627,9 +647,15 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.modelPreference).toBeUndefined();
 
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
-    expect(request.runtimeOptions?.runtimeRequest?.providerConfig).toBeUndefined();
-    expect(request.runtimeOptions?.runtimeRequest?.providerPreference).toBeUndefined();
-    expect(request.runtimeOptions?.runtimeRequest?.modelPreference).toBeUndefined();
+    expect(
+      request.runtimeOptions?.runtimeRequest?.providerConfig,
+    ).toBeUndefined();
+    expect(
+      request.runtimeOptions?.runtimeRequest?.providerPreference,
+    ).toBeUndefined();
+    expect(
+      request.runtimeOptions?.runtimeRequest?.modelPreference,
+    ).toBeUndefined();
   });
 
   it("应同时透传显式搜索开关和搜索模式到 RuntimeRequest", () => {
@@ -671,7 +697,9 @@ describe("buildUserInputSubmitOp", () => {
 
     const request = createAgentSessionTurnStartParamsFromUserInputOp(op);
 
-    expect(request.runtimeOptions?.runtimeRequest?.reasoningEffort).toBe("high");
+    expect(request.runtimeOptions?.runtimeRequest?.reasoningEffort).toBe(
+      "high",
+    );
   });
 
   it("应把未同步的显式搜索和思考开关迁移到 App Server RuntimeRequest", () => {

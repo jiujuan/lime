@@ -43,10 +43,6 @@ allowed-tools: search_query
         "harness": {
             "workspace_root": workspace.path().to_string_lossy(),
             "cwd": workspace.path().to_string_lossy(),
-            "fast_response_routing": {
-                "mode": "auto",
-                "service_model_slot": "responsive_chat"
-            },
             "research_skill_launch": research_launch.clone()
         }
     });
@@ -82,7 +78,7 @@ allowed-tools: search_query
 
     assert!(
         context.metadata.get("lime_runtime").is_none(),
-        "required web search must not be downgraded to fast-response tool surface"
+        "required web search must keep the full tool surface"
     );
     assert!(
         context.metadata.get("tool_scope").is_none(),

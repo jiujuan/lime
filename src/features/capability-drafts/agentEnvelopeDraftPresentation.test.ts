@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAgentEnvelopeDraftPresentation } from "./agentEnvelopeDraftPresentation";
 import type { WorkspaceRegisteredSkillRecord } from "@/lib/api/capabilityDrafts";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 
 function createSkill(): WorkspaceRegisteredSkillRecord {
   return {

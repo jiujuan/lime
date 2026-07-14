@@ -1,6 +1,7 @@
 import {
   isJsonRpcErrorResponse,
   isJsonRpcNotification,
+  isJsonRpcRequest,
   isJsonRpcResponse,
 } from "../../../packages/app-server-client/src/protocol";
 import {
@@ -14,6 +15,7 @@ import type {
   AppServerJsonRpcErrorResponse,
   AppServerJsonRpcMessage,
   AppServerJsonRpcNotification,
+  AppServerJsonRpcRequest,
   AppServerJsonRpcResponse,
   AppServerRequestId,
   AppServerRequestResult,
@@ -89,6 +91,18 @@ export function isAppServerJsonRpcNotification(
     return false;
   }
   return isJsonRpcNotification(message as AppServerJsonRpcMessage);
+}
+
+export function isAppServerJsonRpcRequest(
+  message: unknown,
+): message is AppServerJsonRpcRequest {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return false;
+  }
+  if (!("method" in message) || !("id" in message)) {
+    return false;
+  }
+  return isJsonRpcRequest(message as AppServerJsonRpcMessage);
 }
 
 export function isAppServerConfigWarningNotification(

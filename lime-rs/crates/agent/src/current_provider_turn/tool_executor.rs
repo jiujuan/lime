@@ -38,6 +38,8 @@ pub(super) struct CurrentTurnToolExecutor {
     pub(super) thread_id: ThreadId,
     pub(super) mcp_snapshot: tool_runtime::mcp_connection::McpStepSnapshot,
     pub(super) deferred_tools: mcp_step_snapshot::DeferredToolSelections,
+    pub(super) agent_control_gateway:
+        Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
 }
 
 impl RuntimeToolExecutor for CurrentTurnToolExecutor {
@@ -144,6 +146,18 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                 ..request
             };
 
+            if let Some(agent_control_gateway) = self.agent_control_gateway.as_ref() {
+                if let Some(result) = tool_runtime::agent_control::execute_agent_control_tool(
+                    agent_control_gateway.gateway(),
+                    self.thread_id.as_str(),
+                    request,
+                )
+                .await
+                {
+                    return result;
+                }
+            }
+
             if let Some(mut result) = execute_runtime_gateway_dispatch_tool(
                 self.state.gateway_tools(),
                 RuntimeGatewayDispatchToolRequest {
@@ -189,14 +203,41 @@ impl RuntimeToolExecutor for CurrentTurnToolExecutor {
                 name: request.tool_name.to_string().into(),
                 arguments: request.params.as_object().cloned(),
             };
+            let mcp_scope = mcp_call_scope(request)?;
             let call = self
                 .mcp_snapshot
-                .dispatch(mcp_request, cancel_token)
+                .dispatch(mcp_request, mcp_scope, cancel_token)
                 .await
                 .map_err(project_mcp_error)?;
             project_call_result(call.response.await)
         })
     }
+}
+
+pub(super) fn mcp_call_scope(
+    request: RuntimeToolExecutionRequest<'_>,
+) -> Result<tool_runtime::mcp_connection::McpCallScope, RuntimeToolExecutionError> {
+    let identity = request
+        .context
+        .tool_identity()
+        .ok_or_else(|| mcp_identity_error("tool identity"))?;
+    let turn_id = mcp_identity_value(identity.turn_id(), "turn_id")?;
+    tool_runtime::mcp_connection::McpCallScope::new(Some(turn_id)).map_err(mcp_identity_error)
+}
+
+fn mcp_identity_value(value: &str, field: &str) -> Result<String, RuntimeToolExecutionError> {
+    (!value.trim().is_empty())
+        .then(|| value.to_string())
+        .ok_or_else(|| mcp_identity_error(field))
+}
+
+fn mcp_identity_error(field: &str) -> RuntimeToolExecutionError {
+    RuntimeToolExecutionError::new(
+        format!("MCP call requires canonical {field}"),
+        Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
+            "mcp_call_scope_missing".to_string(),
+        )),
+    )
 }
 
 fn current_tool_execution_decision(

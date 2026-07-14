@@ -16,10 +16,13 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc::UnboundedSender, Mutex};
-use tool_runtime::native_dispatch::runtime_native_dispatch_definitions;
 use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_executor::RuntimeToolExecutorHandle;
 use tool_runtime::tool_extension::RuntimeToolCaller;
+use tool_runtime::turn_tool_surface::{
+    runtime_turn_tool_scope_from_metadata, runtime_turn_tool_surface_allows_tool_name,
+    runtime_turn_tool_surface_mode_from_metadata, RuntimeTurnToolSurfaceMode,
+};
 
 const MCP_TOOL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -64,7 +67,9 @@ pub(super) fn current_tool_step_snapshot_source(
     policy: RequestToolPolicy,
     turn_context: Option<agent_protocol::turn_context::TurnContextOverride>,
     event_sender: UnboundedSender<AgentEvent>,
+    session_id: String,
     thread_id: ThreadId,
+    agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
 ) -> RuntimeToolStepSnapshotSourceHandle {
     let deferred_tools = DeferredToolSelections::default();
     RuntimeToolStepSnapshotSourceHandle::new(Arc::new(CurrentTurnToolStepSnapshotSource {
@@ -72,18 +77,25 @@ pub(super) fn current_tool_step_snapshot_source(
         policy,
         turn_context,
         event_sender,
+        session_id,
         thread_id,
+        agent_control_gateway,
         deferred_tools,
     }))
 }
 
 pub(super) async fn mcp_step_snapshot(
     state: &AgentRuntimeState,
+    session_id: &str,
+    thread_id: &ThreadId,
     timeout_duration: Duration,
     deferred_tools: &DeferredToolSelections,
 ) -> tool_runtime::mcp_connection::McpStepSnapshot {
-    state
-        .mcp_connections()
+    let Ok(runtime) = state.mcp_runtime(session_id, thread_id.as_str()).await else {
+        return tool_runtime::mcp_connection::McpStepSnapshot::empty(RuntimeToolCaller::assistant());
+    };
+    runtime
+        .connections()
         .step_snapshot(
             None,
             RuntimeToolCaller::assistant(),
@@ -98,26 +110,55 @@ fn tool_definitions(
     policy: &RequestToolPolicy,
     turn_context: Option<&agent_protocol::turn_context::TurnContextOverride>,
     mcp_snapshot: &tool_runtime::mcp_connection::McpStepSnapshot,
+    agent_control_gateway: Option<&tool_runtime::agent_control::AgentControlGatewayHandle>,
 ) -> Vec<RuntimeToolDefinition> {
     let native_policy = native_tool_policy_from_turn_context(turn_context);
+    let tool_surface_mode = turn_context
+        .and_then(|context| runtime_turn_tool_surface_mode_from_metadata(&context.metadata));
+    let tool_scope = turn_context
+        .map(|context| runtime_turn_tool_scope_from_metadata(&context.metadata))
+        .unwrap_or_default();
     let blocked_by_model = native_tool_policy_disallowed_tool_names(native_policy.as_ref())
         .into_iter()
         .map(str::to_string)
         .collect::<HashSet<_>>();
-    let mut definitions = runtime_native_dispatch_definitions();
+    let native_dispatch = tool_runtime::native_dispatch::runtime_native_dispatch();
+    let mut definitions = native_dispatch.definitions();
     definitions.push(tool_runtime::request_user_input::request_user_input_tool_definition());
+    if agent_control_gateway.is_some() {
+        definitions.extend(tool_runtime::agent_control::agent_control_tool_definitions());
+    }
     definitions.extend(state.gateway_tools().definitions());
     definitions.extend(mcp_tool_definitions(mcp_snapshot));
+    let canonical_name = |name: &str| {
+        native_dispatch
+            .canonical_name(name)
+            .map(ToOwned::to_owned)
+            .or_else(|| state.gateway_tools().canonical_name(name))
+    };
 
     let mut seen = HashSet::new();
     definitions.retain(|definition| {
         let key = definition.name.to_ascii_lowercase();
+        let compact_agent_control_tool = agent_control_gateway.is_some()
+            && matches!(
+                tool_surface_mode.as_ref(),
+                Some(RuntimeTurnToolSurfaceMode::CompactTools)
+            )
+            && tool_runtime::agent_control::is_agent_control_tool_name(&definition.name);
         seen.insert(key)
             && !blocked_by_model
                 .iter()
                 .any(|name| is_same_tool(name, &definition.name))
             && !policy.matches_any_disallowed_tool(&definition.name)
             && (policy.allows_web_search() || !is_web_tool(&definition.name))
+            && (compact_agent_control_tool
+                || runtime_turn_tool_surface_allows_tool_name(
+                    &definition.name,
+                    tool_surface_mode.as_ref(),
+                    &tool_scope.allowed_tools,
+                    &canonical_name,
+                ))
     });
     definitions.sort_by(|left, right| left.name.cmp(&right.name));
     definitions
@@ -148,6 +189,8 @@ struct CurrentTurnToolStepSnapshotSource {
     turn_context: Option<agent_protocol::turn_context::TurnContextOverride>,
     event_sender: UnboundedSender<AgentEvent>,
     thread_id: ThreadId,
+    session_id: String,
+    agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
     deferred_tools: DeferredToolSelections,
 }
 
@@ -156,6 +199,8 @@ impl RuntimeToolStepSnapshotSource for CurrentTurnToolStepSnapshotSource {
         Box::pin(async move {
             let mcp_snapshot = mcp_step_snapshot(
                 &self.state,
+                &self.session_id,
+                &self.thread_id,
                 MCP_TOOL_DISCOVERY_TIMEOUT,
                 &self.deferred_tools,
             )
@@ -165,6 +210,7 @@ impl RuntimeToolStepSnapshotSource for CurrentTurnToolStepSnapshotSource {
                 &self.policy,
                 self.turn_context.as_ref(),
                 &mcp_snapshot,
+                self.agent_control_gateway.as_ref(),
             );
             let executor = RuntimeToolExecutorHandle::new(Arc::new(CurrentTurnToolExecutor {
                 state: self.state.clone(),
@@ -173,6 +219,7 @@ impl RuntimeToolStepSnapshotSource for CurrentTurnToolStepSnapshotSource {
                 thread_id: self.thread_id.clone(),
                 mcp_snapshot,
                 deferred_tools: self.deferred_tools.clone(),
+                agent_control_gateway: self.agent_control_gateway.clone(),
             }));
             Ok(RuntimeToolStepSnapshot::new(definitions, executor))
         })
@@ -182,6 +229,107 @@ impl RuntimeToolStepSnapshotSource for CurrentTurnToolStepSnapshotSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::request_tool_policy::{
+        resolve_request_tool_policy_with_mode, RequestToolPolicyMode,
+    };
+    use serde_json::json;
+    use std::collections::HashMap;
+    use tool_runtime::turn_tool_surface::{
+        RUNTIME_METADATA_KEY, RUNTIME_TOOL_SURFACE_KEY, TURN_TOOL_SURFACE_COMPACT_TOOLS,
+        TURN_TOOL_SURFACE_DIRECT_ANSWER,
+    };
+
+    fn turn_context_with_tool_surface(
+        surface: &str,
+    ) -> agent_protocol::turn_context::TurnContextOverride {
+        agent_protocol::turn_context::TurnContextOverride {
+            metadata: HashMap::from([(
+                RUNTIME_METADATA_KEY.to_string(),
+                json!({ RUNTIME_TOOL_SURFACE_KEY: surface }),
+            )]),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn provider_step_applies_structured_turn_tool_surface() {
+        let state = AgentRuntimeState::new();
+        let policy = resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Auto));
+        let snapshot =
+            tool_runtime::mcp_connection::McpStepSnapshot::empty(RuntimeToolCaller::assistant());
+        let full = tool_definitions(&state, &policy, None, &snapshot, None);
+        let compact_context = turn_context_with_tool_surface(TURN_TOOL_SURFACE_COMPACT_TOOLS);
+        let compact = tool_definitions(&state, &policy, Some(&compact_context), &snapshot, None);
+        let direct_context = turn_context_with_tool_surface(TURN_TOOL_SURFACE_DIRECT_ANSWER);
+        let direct = tool_definitions(&state, &policy, Some(&direct_context), &snapshot, None);
+
+        assert!(compact.len() < full.len());
+        assert!(compact.iter().any(|tool| tool.name == "WebSearch"));
+        assert!(compact.iter().any(|tool| tool.name == "Bash"));
+        assert!(compact.iter().any(|tool| tool.name == "apply_patch"));
+        assert!(compact.iter().any(|tool| tool.name == "request_user_input"));
+        assert!(!compact.iter().any(|tool| tool.name == "update_plan"));
+        assert!(direct.is_empty());
+    }
+
+    #[test]
+    fn compact_surface_exposes_agent_control_only_with_a_turn_gateway() {
+        let state = AgentRuntimeState::new();
+        let policy = resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Auto));
+        let snapshot =
+            tool_runtime::mcp_connection::McpStepSnapshot::empty(RuntimeToolCaller::assistant());
+        let compact_context = turn_context_with_tool_surface(TURN_TOOL_SURFACE_COMPACT_TOOLS);
+
+        let without_gateway =
+            tool_definitions(&state, &policy, Some(&compact_context), &snapshot, None);
+        assert!(!without_gateway
+            .iter()
+            .any(|tool| { tool_runtime::agent_control::is_agent_control_tool_name(&tool.name) }));
+
+        let gateway = tool_runtime::agent_control::AgentControlGatewayHandle::new(Arc::new(
+            RejectingAgentControlGateway,
+        ));
+        let with_gateway = tool_definitions(
+            &state,
+            &policy,
+            Some(&compact_context),
+            &snapshot,
+            Some(&gateway),
+        );
+        let names = with_gateway
+            .iter()
+            .filter(|tool| tool_runtime::agent_control::is_agent_control_tool_name(&tool.name))
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec![
+                "followup_task",
+                "interrupt_agent",
+                "list_agents",
+                "send_message",
+                "spawn_agent",
+                "wait_agent",
+            ]
+        );
+    }
+
+    struct RejectingAgentControlGateway;
+
+    #[async_trait::async_trait]
+    impl tool_runtime::agent_control::AgentControlGateway for RejectingAgentControlGateway {
+        async fn execute(
+            &self,
+            _request: tool_runtime::agent_control::AgentControlGatewayRequest,
+        ) -> Result<
+            tool_runtime::agent_control::AgentControlGatewayResult,
+            tool_runtime::agent_control::AgentControlGatewayError,
+        > {
+            Err(tool_runtime::agent_control::AgentControlGatewayError::new(
+                "test gateway must not execute",
+            ))
+        }
+    }
 
     #[tokio::test]
     async fn deferred_tool_selections_are_turn_local_and_report_real_updates() {

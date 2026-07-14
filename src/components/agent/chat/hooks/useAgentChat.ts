@@ -491,7 +491,15 @@ export function useAgentChat(options: UseAgentChatRuntimeOptions) {
 
   const sendMessage = useCallback<SendMessageFn>(
     async (...args) => {
-      await warmupRuntime({ allowDetached: true });
+      const hasCompleteModelSelection = Boolean(
+        context.providerTypeRef.current.trim() &&
+        context.modelRef.current.trim(),
+      );
+      if (hasCompleteModelSelection) {
+        void warmupRuntime({ allowDetached: true }).catch(() => undefined);
+      } else {
+        await warmupRuntime({ allowDetached: true });
+      }
       const send = createAgentChatSendMessage({
         baseStatusSnapshot: {
           sessionId: activeSessionId,

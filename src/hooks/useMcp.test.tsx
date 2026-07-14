@@ -31,9 +31,8 @@ const bridgeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/mcp", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/mcp")>(
-    "@/lib/api/mcp",
-  );
+  const actual =
+    await vi.importActual<typeof import("@/lib/api/mcp")>("@/lib/api/mcp");
 
   return {
     ...actual,
@@ -43,8 +42,7 @@ vi.mock("@/lib/api/mcp", async () => {
         mcpApiMocks.listServersWithStatus(...args),
       listTools: (...args: unknown[]) => mcpApiMocks.listTools(...args),
       listPrompts: (...args: unknown[]) => mcpApiMocks.listPrompts(...args),
-      listResources: (...args: unknown[]) =>
-        mcpApiMocks.listResources(...args),
+      listResources: (...args: unknown[]) => mcpApiMocks.listResources(...args),
       startServer: (...args: unknown[]) => mcpApiMocks.startServer(...args),
       stopServer: (...args: unknown[]) => mcpApiMocks.stopServer(...args),
       loginOAuthServer: (...args: unknown[]) =>
@@ -80,9 +78,7 @@ function HookHarness({ onReady }: HarnessProps) {
 
 const mountedRoots: MountedRoot[] = [];
 
-function createServer(
-  overrides: Partial<McpServerInfo> = {},
-): McpServerInfo {
+function createServer(overrides: Partial<McpServerInfo> = {}): McpServerInfo {
   return {
     id: "server-demo",
     name: "docs",
@@ -323,15 +319,31 @@ describe("useMcp", () => {
     });
 
     await act(async () => {
-      await getLatestValue().subscribeResource("file:///readme.md");
-      await getLatestValue().unsubscribeResource("file:///readme.md");
+      await getLatestValue().subscribeResource("docs", "file:///readme.md");
+      await getLatestValue().unsubscribeResource("docs", "file:///readme.md");
     });
 
     expect(mcpApiMocks.subscribeResource).toHaveBeenCalledWith(
+      "docs",
       "file:///readme.md",
     );
     expect(mcpApiMocks.unsubscribeResource).toHaveBeenCalledWith(
+      "docs",
       "file:///readme.md",
     );
+  });
+
+  it("提示词操作应透传精确 server 和 name", async () => {
+    await renderHook((value) => {
+      latestValue = value;
+    });
+
+    await act(async () => {
+      await getLatestValue().getPrompt("docs", "summarize", { topic: "lime" });
+    });
+
+    expect(mcpApiMocks.getPrompt).toHaveBeenCalledWith("docs", "summarize", {
+      topic: "lime",
+    });
   });
 });

@@ -104,20 +104,40 @@ pub struct McpClientManager {
     emitter: Option<DynEmitter>,
 
     oauth_registry: McpOAuthRegistry,
+
+    elicitation_router: Option<crate::elicitation::ElicitationRequestRouter>,
+    runtime_owner: Option<McpRuntimeOwner>,
+}
+
+/// Immutable owner bound when a runtime MCP generation is created.
+///
+/// It never crosses the App Server reverse-request protocol. The public
+/// request exposes only its `thread_id` and optional per-call `turn_id`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct McpRuntimeOwner {
+    pub session_id: String,
+    pub thread_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpRuntimeServerSpec {
+    pub name: String,
+    pub config: McpServerConfig,
 }
 
 /// 当前运行中的 MCP bridge 快照。
 ///
-/// 该类型只服务 App Server runtime 内部装配：Agent 复用已有
-/// `RunningService`，避免为 ToolSearch / tool call 再启动第二套 MCP 进程。
+/// 该类型只服务已绑定 owner 的 App Server runtime generation。
+/// 每个 `McpThreadRuntime` 自己持有 manager 与 `RunningService`，快照只导出
+/// 该 generation 的不可变 connection handle，不会复用管理控制面连接。
 #[derive(Clone)]
 pub struct McpBridgeSnapshot {
     pub server_name: String,
     pub description: String,
     pub tools: Vec<McpToolDefinition>,
-    pub running_service: Arc<RunningService<RoleClient, crate::client::LimeMcpClient>>,
-    pub handler: Arc<crate::client::LimeMcpClient>,
-    pub server_info: Option<rmcp::model::InitializeResult>,
+    pub running_service:
+        Arc<RunningService<RoleClient, crate::client_service::LimeMcpClientService>>,
+    pub manager: Arc<McpClientManager>,
     pub tool_timeout: Duration,
 }
 
@@ -139,6 +159,31 @@ impl McpClientManager {
             tool_cache: Arc::new(RwLock::new(None)),
             emitter,
             oauth_registry: McpOAuthRegistry::new(),
+            elicitation_router: None,
+            runtime_owner: None,
+        }
+    }
+
+    pub fn new_runtime(
+        emitter: Option<DynEmitter>,
+        elicitation_router: crate::elicitation::ElicitationRequestRouter,
+        session_id: impl Into<String>,
+        thread_id: impl Into<String>,
+    ) -> Self {
+        let session_id = session_id.into();
+        let thread_id = thread_id.into();
+        assert!(!session_id.trim().is_empty(), "runtime MCP session id is required");
+        assert!(!thread_id.trim().is_empty(), "runtime MCP thread id is required");
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            tool_cache: Arc::new(RwLock::new(None)),
+            emitter,
+            oauth_registry: McpOAuthRegistry::new(),
+            elicitation_router: Some(elicitation_router),
+            runtime_owner: Some(McpRuntimeOwner {
+                session_id,
+                thread_id,
+            }),
         }
     }
 
@@ -342,7 +387,10 @@ impl McpClientManager {
         clients.len()
     }
 
-    pub async fn bridge_snapshots(&self) -> Result<Vec<McpBridgeSnapshot>, McpError> {
+    pub async fn bridge_snapshots(self: &Arc<Self>) -> Result<Vec<McpBridgeSnapshot>, McpError> {
+        self.runtime_owner.as_ref().ok_or_else(|| {
+            McpError::ConfigError("management MCP connections cannot become runtime bridges".to_string())
+        })?;
         let tools = self.list_tools().await?;
         let mut tools_by_server: HashMap<String, Vec<McpToolDefinition>> = HashMap::new();
         for tool in tools {
@@ -376,13 +424,21 @@ impl McpClientManager {
                 description,
                 tools: server_tools,
                 running_service,
-                handler: wrapper.handler(),
-                server_info,
+                manager: Arc::clone(self),
                 tool_timeout: bridge_tool_timeout(&wrapper.config),
             });
         }
         snapshots.sort_by(|left, right| left.server_name.cmp(&right.server_name));
         Ok(snapshots)
+    }
+
+    pub async fn shutdown(&self) {
+        let names = self.get_running_servers().await;
+        for name in names {
+            if let Err(error) = self.stop_server(&name).await {
+                tracing::warn!(server_name = %name, %error, "failed to shut down runtime MCP server");
+            }
+        }
     }
 
     // ========================================================================

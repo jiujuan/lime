@@ -64,7 +64,7 @@ impl McpClientManager {
 
         // 2. 构建命令
         let mut command = Command::new(config.command());
-        command.args(config.args());
+        command.args(config.args()).kill_on_drop(true);
 
         // 设置环境变量
         for (key, value) in config.env() {
@@ -149,14 +149,13 @@ impl McpClientManager {
         });
 
         // 4. 初始化 MCP 客户端
-        let client_handler =
-            crate::client::LimeMcpClient::new(name.to_string(), self.emitter.clone());
+        let client_service = self.client_service(name);
 
         // 连接超时：至少 60 秒，避免 npx 首次下载时超时
         let timeout_secs = std::cmp::max(config.startup_timeout_secs(), 60);
         let connect_result = tokio::time::timeout(
             Duration::from_secs(timeout_secs),
-            client_handler.serve(transport),
+            client_service.serve(transport),
         )
         .await;
 
@@ -266,12 +265,11 @@ impl McpClientManager {
         T: rmcp::transport::IntoTransport<rmcp::RoleClient, E, A>,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let client_handler =
-            crate::client::LimeMcpClient::new(name.to_string(), self.emitter.clone());
+        let client_service = self.client_service(name);
         let timeout_secs = config.startup_timeout_secs();
         let connect_result = tokio::time::timeout(
             Duration::from_secs(timeout_secs),
-            client_handler.serve(transport),
+            client_service.serve(transport),
         )
         .await;
 
@@ -436,5 +434,22 @@ impl McpClientManager {
         let _ = self.stop_server(name).await;
         // 再启动
         self.start_server(name, config).await
+    }
+}
+
+impl McpClientManager {
+    fn client_service(&self, name: &str) -> crate::client_service::LimeMcpClientService {
+        match (&self.elicitation_router, &self.runtime_owner) {
+            (Some(router), Some(owner)) => {
+                crate::client_service::LimeMcpClientService::with_runtime_elicitation_router(
+                    name.to_string(),
+                    self.emitter.clone(),
+                    router.clone(),
+                    owner.session_id.clone(),
+                    owner.thread_id.clone(),
+                )
+            }
+            _ => crate::client_service::LimeMcpClientService::new(name.to_string(), self.emitter.clone()),
+        }
     }
 }

@@ -1,4 +1,4 @@
-use super::materializer::{materialize_events, materialize_runtime_events};
+use super::materializer::materialize_events;
 use agent_protocol::{
     ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, ItemKind, ItemStatus,
     ThreadItemPayload, TurnApprovalState, TurnQueueState, TurnStatus,
@@ -234,7 +234,7 @@ fn maps_core_families_to_typed_payloads() {
                 5,
                 "subagent.activity",
                 "turn-1",
-                json!({"childThreadId": "child", "activity": "spawned"}),
+                json!({"childThreadId": "child", "activity": "started"}),
             ),
             event(
                 "compact",
@@ -269,7 +269,13 @@ fn maps_core_families_to_typed_payloads() {
     assert!(changes
         .changed_items
         .iter()
-        .any(|item| matches!(item.payload, ThreadItemPayload::SubAgent { .. })));
+        .any(|item| matches!(
+            item.payload,
+            ThreadItemPayload::SubAgent {
+                activity: agent_protocol::SubAgentActivityKind::Started,
+                ..
+            }
+        )));
     assert!(changes
         .changed_items
         .iter()
@@ -567,4 +573,104 @@ fn tool_and_approval_with_shared_tool_call_id_remain_distinct_items() {
             ..
         } if request_id == "approval-1"
     ));
+}
+
+#[test]
+fn request_id_does_not_collapse_user_agent_and_reasoning_items() {
+    let changes = materialize_events(
+        &[
+            event(
+                "user-created",
+                1,
+                "message.created",
+                "turn-1",
+                json!({
+                    "request_id": "request-1",
+                    "role": "user",
+                    "input": {"text": "hello"}
+                }),
+            ),
+            event(
+                "reasoning-started",
+                2,
+                "reasoning.started",
+                "turn-1",
+                json!({
+                    "request_id": "request-1",
+                    "reasoningId": "runtime-thinking"
+                }),
+            ),
+            event(
+                "reasoning-delta",
+                3,
+                "reasoning.delta",
+                "turn-1",
+                json!({
+                    "request_id": "request-1",
+                    "reasoningId": "runtime-thinking",
+                    "text": "inspect"
+                }),
+            ),
+            event(
+                "agent-delta",
+                4,
+                "message.delta",
+                "turn-1",
+                json!({
+                    "request_id": "request-1",
+                    "role": "assistant",
+                    "text": "answer"
+                }),
+            ),
+            event(
+                "reasoning-final",
+                5,
+                "reasoning.final",
+                "turn-1",
+                json!({
+                    "request_id": "request-1",
+                    "reasoningId": "runtime-thinking",
+                    "text": "inspect inputs"
+                }),
+            ),
+            event(
+                "reasoning-ended",
+                6,
+                "reasoning.ended",
+                "turn-1",
+                json!({
+                    "request_id": "request-1",
+                    "reasoningId": "runtime-thinking",
+                    "status": "completed"
+                }),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize distinct turn items");
+
+    assert_eq!(changes.changed_items.len(), 3);
+    let user = &changes.changed_items[0];
+    let reasoning = &changes.changed_items[1];
+    let agent = &changes.changed_items[2];
+    assert_eq!(user.item_id.as_str(), "item_user-turn-1");
+    assert_eq!(reasoning.item_id.as_str(), "item_reasoning-turn-1");
+    assert_eq!(agent.item_id.as_str(), "item_agent-turn-1");
+    assert!(matches!(
+        user.payload,
+        ThreadItemPayload::UserMessage { .. }
+    ));
+    assert!(matches!(
+        reasoning.payload,
+        ThreadItemPayload::Reasoning { .. }
+    ));
+    assert!(matches!(
+        agent.payload,
+        ThreadItemPayload::AgentMessage { .. }
+    ));
+    assert_eq!(reasoning.ordinal, 2);
+    assert_eq!(reasoning.sequence, 6);
+    assert_eq!(agent.ordinal, 4);
+    assert_eq!(agent.sequence, 4);
 }

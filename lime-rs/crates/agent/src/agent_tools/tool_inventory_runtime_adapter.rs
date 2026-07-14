@@ -17,28 +17,12 @@ pub(super) async fn read_agent_tool_inventory_runtime_seed(
         return None;
     }
     let current_tool_definitions = agent_state.native_tool_definitions_snapshot().await;
-    let extension_configs = agent_state.mcp_connections().configs().await;
-    let visible_extension_tools = agent_state
-        .mcp_connections()
-        .list_tools(None)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|tool| ExtensionToolInventorySeed {
-            name: tool.name.to_string(),
-            description: tool
-                .description
-                .as_ref()
-                .map(|description| description.to_string())
-                .unwrap_or_default(),
-        })
-        .collect::<Vec<_>>();
-    let searchable_extension_tools = visible_extension_tools.clone();
-
     Some(AgentToolInventoryRuntimeSeed {
         current_tool_definitions,
-        extension_configs,
-        visible_extension_tools,
-        searchable_extension_tools,
+        // Tool inventory is management/configuration projection. It must not
+        // borrow a live Session-owned MCP runtime just to render a dashboard.
+        extension_configs: Vec::new(),
+        visible_extension_tools: Vec::new(),
+        searchable_extension_tools: Vec::new(),
     })
 }

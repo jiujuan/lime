@@ -4,7 +4,6 @@ use crate::tool_policy;
 use crate::types::*;
 use lime_core::tool_calling::ToolSurfaceMetadata;
 use std::collections::HashMap;
-use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
 impl McpClientManager {
@@ -304,7 +303,7 @@ impl McpClientManager {
         let service = wrapper
             .running_service()
             .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
-        let tool_timeout_secs = wrapper.config.tool_timeout_secs();
+        let tool_timeout = super::bridge_tool_timeout(&wrapper.config);
         let service = service.clone();
         drop(clients);
 
@@ -319,35 +318,35 @@ impl McpClientManager {
             }
         };
 
-        let call_param = rmcp::model::CallToolRequestParam {
-            name: actual_tool_name.clone().into(),
-            arguments: args,
-        };
-
-        // 4. 执行工具调用
-        let result = tokio::time::timeout(
-            Duration::from_secs(tool_timeout_secs),
-            service.call_tool(call_param),
-        )
-        .await
-        .map_err(|_| {
-            error!(
-                tool_name = %actual_tool_name,
-                server_name = %server_name,
-                timeout = tool_timeout_secs,
-                "工具调用超时"
-            );
-            McpError::Timeout
-        })?
-        .map_err(|e| {
-            error!(
-                tool_name = %actual_tool_name,
-                server_name = %server_name,
-                error = %e,
-                "工具调用失败"
-            );
-            McpError::ToolCallFailed(format!("{e}"))
-        })?;
+        // 4. 复用 connection-local active-time timeout，避免第二套 wall-clock timer。
+        let client = crate::bridge_client::McpBridgeClient::new(service, tool_timeout);
+        let result = client
+            .call_tool(
+                &actual_tool_name,
+                args,
+                Default::default(),
+                None,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .map_err(|error| {
+                if matches!(&error, rmcp::service::ServiceError::Timeout { .. }) {
+                    error!(
+                        tool_name = %actual_tool_name,
+                        server_name = %server_name,
+                        timeout = ?tool_timeout,
+                        "工具调用超时"
+                    );
+                    return McpError::Timeout;
+                }
+                error!(
+                    tool_name = %actual_tool_name,
+                    server_name = %server_name,
+                    error = %error,
+                    "工具调用失败"
+                );
+                McpError::ToolCallFailed(error.to_string())
+            })?;
 
         // 5. 转换结果为 McpToolResult
         let mcp_result = Self::convert_call_tool_result(result);

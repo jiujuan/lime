@@ -93,6 +93,7 @@ pub async fn run_direct_text_generation_with_db(
                 session_config,
                 None,
                 &request_tool_policy,
+                None,
                 |event| collect_model_text(event, &mut text, &mut usage),
             )
             .await

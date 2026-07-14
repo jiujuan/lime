@@ -8,6 +8,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { McpPromptDefinition, McpPromptResult } from "@/lib/api/mcp";
+import { mcpPromptTargetKey } from "./mcpPromptBrowserModel";
 
 interface McpPromptServerGroupProps {
   serverName: string;
@@ -63,9 +64,9 @@ export function McpPromptServerGroup({
         <div className="border-t">
           {prompts.map((prompt) => (
             <McpPromptRow
-              key={prompt.name}
+              key={mcpPromptTargetKey(prompt)}
               prompt={prompt}
-              active={activePrompt === prompt.name}
+              active={activePrompt === mcpPromptTargetKey(prompt)}
               promptArgs={promptArgs}
               promptResult={promptResult}
               calling={calling}

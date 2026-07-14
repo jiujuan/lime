@@ -98,6 +98,7 @@ describe("readCanonicalThreadItem", () => {
         thread_id: "thread-1",
         turn_id: "turn-1",
         sequence: 7,
+        ordinal: 3,
         status: "in_progress",
         started_at: "2026-07-13T00:00:00.000Z",
         updated_at: "2026-07-13T00:00:01.000Z",

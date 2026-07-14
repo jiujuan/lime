@@ -11,10 +11,6 @@ import type {
 import type { Message, MessageImage } from "../types";
 import { prepareAgentStreamSubmitDraft } from "./agentStreamSubmitDraft";
 import type { AgentStreamPreparedSendEnv } from "./agentStreamPreparedSendEnv";
-import {
-  resolveAgentRuntimeStatusPresentation,
-  type AgentRuntimeStatusPresentation,
-} from "../utils/fastResponseRouting";
 import type { InterruptedInputDraftSnapshot } from "./agentStreamInputRestoreTypes";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import { ensureAgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
@@ -90,7 +86,6 @@ export interface PreparedAgentStreamUserInputSend {
   userMsgId: string | null;
   userMsg: Message | null;
   assistantMsg: Message;
-  runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
   submittedDraft?: InterruptedInputDraftSnapshot | null;
 }
 
@@ -408,8 +403,6 @@ export function prepareAgentStreamUserInputSend(
     baseRequestMetadataWithModelGate,
     submittedDraft,
   );
-  const runtimeStatusPresentation =
-    resolveAgentRuntimeStatusPresentation(requestMetadata);
   const skillRequest = sendOptions?.skillRequest;
   const expectingQueue = resolvePreparedSendExpectingQueue({
     activeStreamSessionId: env.activeStreamRef.current?.sessionId,
@@ -467,7 +460,6 @@ export function prepareAgentStreamUserInputSend(
     userMsgId,
     userMsg,
     assistantMsg,
-    runtimeStatusPresentation,
     submittedDraft,
   };
 }

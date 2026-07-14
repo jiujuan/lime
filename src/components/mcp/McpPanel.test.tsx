@@ -437,7 +437,7 @@ describe("McpPanel", () => {
   it("资源预览打开、切换和关闭时应维护资源订阅生命周期", async () => {
     const subscribeResource = vi.fn(async () => undefined);
     const unsubscribeResource = vi.fn(async () => undefined);
-    const readResource = vi.fn(async (uri: string) => ({
+    const readResource = vi.fn(async (_server: string, uri: string) => ({
       uri,
       text: uri.includes("readme") ? "README content" : "Guide content",
       mime_type: "text/markdown",
@@ -475,8 +475,11 @@ describe("McpPanel", () => {
       await Promise.resolve();
     });
 
-    expect(subscribeResource).toHaveBeenCalledWith("file://demo/readme.md");
-    expect(readResource).toHaveBeenCalledWith("file://demo/readme.md");
+    expect(subscribeResource).toHaveBeenCalledWith(
+      "demo",
+      "file://demo/readme.md",
+    );
+    expect(readResource).toHaveBeenCalledWith("demo", "file://demo/readme.md");
     expect(container.textContent).toContain("README content");
 
     await act(async () => {
@@ -487,9 +490,15 @@ describe("McpPanel", () => {
       await Promise.resolve();
     });
 
-    expect(unsubscribeResource).toHaveBeenCalledWith("file://demo/readme.md");
-    expect(subscribeResource).toHaveBeenCalledWith("file://demo/guide.md");
-    expect(readResource).toHaveBeenCalledWith("file://demo/guide.md");
+    expect(unsubscribeResource).toHaveBeenCalledWith(
+      "demo",
+      "file://demo/readme.md",
+    );
+    expect(subscribeResource).toHaveBeenCalledWith(
+      "demo",
+      "file://demo/guide.md",
+    );
+    expect(readResource).toHaveBeenCalledWith("demo", "file://demo/guide.md");
     expect(container.textContent).toContain("Guide content");
 
     await act(async () => {
@@ -499,7 +508,82 @@ describe("McpPanel", () => {
       await Promise.resolve();
     });
 
-    expect(unsubscribeResource).toHaveBeenCalledWith("file://demo/guide.md");
+    expect(unsubscribeResource).toHaveBeenCalledWith(
+      "demo",
+      "file://demo/guide.md",
+    );
+  });
+
+  it("同 URI 的跨服务器资源应按 server identity 切换预览", async () => {
+    const subscribeResource = vi.fn(async () => undefined);
+    const unsubscribeResource = vi.fn(async () => undefined);
+    const readResource = vi.fn(async (server: string, uri: string) => ({
+      uri,
+      text: `${server} content`,
+      mime_type: "text/plain",
+    }));
+    useMcpMock.mockReturnValue(
+      createMcpState({
+        servers: [
+          createServer({ id: "server-a", name: "server-a" }),
+          createServer({ id: "server-b", name: "server-b" }),
+        ],
+        resources: [
+          { uri: "docs://shared", name: "Shared A", server_name: "server-a" },
+          { uri: "docs://shared", name: "Shared B", server_name: "server-b" },
+        ],
+        readResource,
+        subscribeResource,
+        unsubscribeResource,
+      }),
+    );
+    const container = await renderPanel({ hideHeader: true });
+    await act(async () => {
+      findButton(container, "资源").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      findButton(container, "server-a").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "server-b").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    const previewButtons = findResourcePreviewButtons(container);
+
+    await act(async () => {
+      previewButtons[0]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      previewButtons[1]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(unsubscribeResource).toHaveBeenCalledWith(
+      "server-a",
+      "docs://shared",
+    );
+    expect(subscribeResource).toHaveBeenLastCalledWith(
+      "server-b",
+      "docs://shared",
+    );
+    expect(readResource).toHaveBeenLastCalledWith("server-b", "docs://shared");
+    expect(container.textContent).toContain("server-b content");
   });
 
   it("资源预览应截断超长文本，不渲染尾部内容", async () => {

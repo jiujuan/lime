@@ -8,7 +8,7 @@ import {
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import { FileInput, MessageSquarePlus } from "lucide-react";
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import type { AgentBackgroundSessionRuntimeSnapshot } from "@/components/agent/chat";
 import {
   resolveUnfinishedSessionProjection,

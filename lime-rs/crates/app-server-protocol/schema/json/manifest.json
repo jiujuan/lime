@@ -519,6 +519,10 @@
       "method": "mcpServer/delete"
     },
     {
+      "kind": "serverRequest",
+      "method": "mcpServer/elicitation/request"
+    },
+    {
       "kind": "request",
       "method": "mcpServer/enabled/set"
     },
@@ -877,6 +881,10 @@
     {
       "kind": "request",
       "method": "projectShell/session/write"
+    },
+    {
+      "kind": "notification",
+      "method": "serverRequest/resolved"
     },
     {
       "kind": "request",
@@ -1618,6 +1626,9 @@
       "McpResourceUnsubscribeParams",
       "McpServerCreateParams",
       "McpServerDeleteParams",
+      "McpServerElicitationAction",
+      "McpServerElicitationRequestParams",
+      "McpServerElicitationResponse",
       "McpServerEnabledSetParams",
       "McpServerImportFromAppParams",
       "McpServerImportFromAppResponse",
@@ -1815,6 +1826,7 @@
       "ServerDiagnosticsResponse",
       "ServerInfo",
       "ServerNotification",
+      "ServerRequestResolvedNotification",
       "SessionFileEntry",
       "SessionFileEntryResponse",
       "SessionFileGetOrCreateParams",

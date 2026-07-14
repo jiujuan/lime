@@ -59,7 +59,7 @@ vi.mock("@/lib/api/project", () => ({
   listProjects: mockListProjects,
 }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
   auditAgentRuntimeObjective: mockAuditAgentRuntimeObjective,
 }));
 

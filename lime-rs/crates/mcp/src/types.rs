@@ -62,7 +62,7 @@ impl Default for McpServerTransport {
 }
 
 /// MCP 服务器配置。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct McpServerConfig {
     #[serde(flatten)]
     pub transport: McpServerTransport,

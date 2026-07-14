@@ -359,8 +359,12 @@ export async function runFixtureChecks(options, entries, fixture) {
       "resourceTemplates",
     );
     assert(
-      resources.some((resource) => resource?.uri === "fixture://status"),
-      "mcpResource/list did not return fixture://status",
+      resources.some(
+        (resource) =>
+          resource?.uri === "fixture://status" &&
+          (resource?.server_name ?? resource?.serverName) === serverName,
+      ),
+      `mcpResource/list did not return ${serverName}/fixture://status`,
     );
     const fixtureResourceTemplate = assertResourceTemplate(
       "mcpResource/list",
@@ -373,7 +377,7 @@ export async function runFixtureChecks(options, entries, fixture) {
       await invokeAppServerMethod(
         options,
         "mcpResource/read",
-        { uri: "fixture://status" },
+        { server: serverName, uri: "fixture://status" },
         entries,
       ),
       "fixture resource ok",

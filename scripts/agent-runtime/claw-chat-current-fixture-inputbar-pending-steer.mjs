@@ -221,7 +221,8 @@ export async function runInputbarPendingSteerRichRestoreScenario({
       snapshot.imageRestored === true &&
       snapshot.pathRestored === true &&
       snapshot.skillRestored === true &&
-      snapshot.stopButtonVisible === true &&
+      snapshot.stopButtonVisible === false &&
+      !snapshot.assistantTexts.includes("正在生成回复") &&
       snapshot.bodyText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT),
     "Inputbar pending steer 取消 queued rich turn 后未恢复完整 rich 草稿",
   );

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import type { Artifact } from "@/lib/artifact/types";
 import { WorkspacePluginHistoryRestoreLandingCard } from "./WorkspacePluginHistoryRestoreLandingCard";
 import {

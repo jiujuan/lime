@@ -14,6 +14,8 @@ pub struct ExecutionRequest {
     pub queued_turn_id: Option<String>,
     pub queue_if_busy: bool,
     pub skip_pre_submit_resume: bool,
+    /// Per-turn capability supplied by RuntimeCore for the current provider execution only.
+    pub agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
 }
 
 impl ExecutionRequest {

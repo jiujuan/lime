@@ -783,6 +783,7 @@ fn execution_request_for_tool_confirmation_bridge_test(
         queued_turn_id: None,
         queue_if_busy: false,
         skip_pre_submit_resume: false,
+        agent_control_gateway: None,
     }
 }
 

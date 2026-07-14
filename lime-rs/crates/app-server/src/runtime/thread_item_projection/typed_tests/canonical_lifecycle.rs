@@ -186,49 +186,56 @@ fn resolved_user_input_without_decision_is_terminal_and_clears_pending() {
 }
 
 #[test]
-fn resolved_mcp_elicitation_without_decision_is_terminal_on_replay() {
+fn approval_session_cache_hit_remains_audit_only_before_auto_resolution() {
     let changes = materialize_events(
         &[
             event(
-                "elicitation-start",
+                "approval-cache-hit",
                 1,
-                "action.required",
+                "approval.session_cache.hit",
                 "turn-1",
                 json!({
-                    "actionId": "elicitation-1",
-                    "actionType": "mcp_elicitation",
-                    "description": "select resource"
+                    "request_id": "provider-request-1",
+                    "sourceRequestId": "approval-turn-initial",
+                    "decision": "allow_for_session",
+                    "decisionScope": "session",
                 }),
             ),
             event(
-                "elicitation-end",
+                "approval-auto-resolved",
                 2,
                 "action.resolved",
                 "turn-1",
                 json!({
-                    "actionId": "elicitation-1",
-                    "actionType": "mcp_elicitation"
+                    "requestId": "permission-turn-1",
+                    "actionId": "permission-turn-1",
+                    "actionType": "tool_confirmation",
+                    "source": "approval_session_cache",
+                    "decision": "allow_for_session",
+                    "decisionScope": "session",
                 }),
             ),
         ],
         "session-1",
         "thread-1",
     )
-    .expect("materialize");
+    .expect("materialize cache-backed approval resolution");
 
-    assert_eq!(changes.changed_items[0].status, ItemStatus::Completed);
+    assert_eq!(changes.changed_items.len(), 1);
     assert!(matches!(
         &changes.changed_items[0].payload,
         ThreadItemPayload::Approval {
-            action: ApprovalAction { kind, description },
-            decision: None,
+            request_id,
+            decision: Some(ApprovalDecision::ApprovedForSession),
+            requested_at_ms: None,
             resolved_at_ms: Some(_),
             ..
-        } if kind == "mcp_elicitation" && description == "select resource"
+        } if request_id == "permission-turn-1"
     ));
+    assert_eq!(changes.changed_items[0].status, ItemStatus::Completed);
     assert_eq!(
         changes.changed_turns[0].approval,
-        TurnApprovalState::Resolved
+        TurnApprovalState::Approved
     );
 }
 
@@ -382,20 +389,6 @@ fn explicit_remove_and_item_lifecycle_events_use_the_same_identity() {
 
     assert!(changes.changed_items.is_empty());
     assert_eq!(changes.removed_item_ids[0].as_str(), "item_agent-1");
-}
-
-#[test]
-fn runtime_events_use_embedded_or_deterministic_identity() {
-    let changes = materialize_runtime_events(
-        &[super::super::super::RuntimeEvent::new(
-            "message.delta",
-            json!({"turnId": "turn-1", "itemId": "message-1", "text": "hi"}),
-        )],
-        "session-1",
-        "thread-1",
-    )
-    .expect("materialize");
-    assert_eq!(changes.changed_items[0].item_id.as_str(), "item_message-1");
 }
 
 #[test]

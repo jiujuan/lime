@@ -11,6 +11,7 @@ use super::*;
 pub enum AppServerMethodKind {
     Request,
     Notification,
+    ServerRequest,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1302,6 +1303,8 @@ pub enum AppServerNotificationMethod {
     Initialized,
     #[serde(rename = "configWarning")]
     ConfigWarning,
+    #[serde(rename = "serverRequest/resolved")]
+    ServerRequestResolved,
     #[serde(rename = "workspaceRightSurface/pendingChanged")]
     WorkspaceRightSurfacePendingChanged,
     #[serde(rename = "agentSession/event")]
@@ -1313,6 +1316,7 @@ impl AppServerNotificationMethod {
         match self {
             Self::Initialized => METHOD_INITIALIZED,
             Self::ConfigWarning => METHOD_CONFIG_WARNING,
+            Self::ServerRequestResolved => METHOD_SERVER_REQUEST_RESOLVED,
             Self::WorkspaceRightSurfacePendingChanged => {
                 METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED
             }
@@ -1324,6 +1328,7 @@ impl AppServerNotificationMethod {
         match method {
             METHOD_INITIALIZED => Some(Self::Initialized),
             METHOD_CONFIG_WARNING => Some(Self::ConfigWarning),
+            METHOD_SERVER_REQUEST_RESOLVED => Some(Self::ServerRequestResolved),
             METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED => {
                 Some(Self::WorkspaceRightSurfacePendingChanged)
             }
@@ -1344,6 +1349,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_CONFIG_WARNING,
+        kind: AppServerMethodKind::Notification,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SERVER_REQUEST_RESOLVED,
         kind: AppServerMethodKind::Notification,
     },
     AppServerMethodSpec {
@@ -2203,6 +2212,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_ELICITATION_REQUEST,
+        kind: AppServerMethodKind::ServerRequest,
+    },
+    AppServerMethodSpec {
         method: METHOD_MCP_TOOL_LIST,
         kind: AppServerMethodKind::Request,
     },
@@ -2813,5 +2826,25 @@ mod tests {
         let decoded = ServerNotification::try_from(raw).expect("decode");
 
         assert_eq!(decoded, notification);
+    }
+
+    #[test]
+    fn notification_round_trips_server_request_resolved_outer_id() {
+        let notification =
+            ServerNotification::ServerRequestResolved(ServerRequestResolvedNotification {
+                request_id: RequestId::String("app-server-request:boot:7".to_string()),
+            });
+
+        let raw: crate::JsonRpcNotification = notification.clone().into();
+        assert_eq!(raw.method, METHOD_SERVER_REQUEST_RESOLVED);
+        assert_eq!(
+            raw.params.as_ref(),
+            Some(&json!({ "requestId": "app-server-request:boot:7" }))
+        );
+
+        assert_eq!(
+            ServerNotification::try_from(raw).expect("decode resolved notification"),
+            notification
+        );
     }
 }

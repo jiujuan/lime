@@ -285,7 +285,9 @@ export function buildCommonAssertions(context) {
                   INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
                 ) === true
               : isInputbarPendingSteerRichRestoreScenario
-                ? summary.inputbarPendingSteerGuiCanceled?.hasPrompt === true &&
+                ? summary.inputbarPendingSteerGuiCanceled?.hasPrompt === false &&
+                  summary.inputbarPendingSteerGuiCanceled?.textareaValue ===
+                    INPUTBAR_RICH_RESTORE_PROMPT &&
                   summary.inputbarPendingSteerGuiCanceled?.bodyText?.includes(
                     INPUTBAR_PENDING_STEER_ACTIVE_PROMPT,
                   ) === true
@@ -753,7 +755,7 @@ export function buildCommonAssertions(context) {
               ? true
               : isInputbarPendingSteerRichRestoreScenario
                 ? summary.inputbarPendingSteerGuiCanceled?.stopButtonVisible ===
-                  true
+                  false
                 : isRightSurfaceVisualMatrixScenario
                   ? true
                   : isContentFactoryArticleWorkspaceScenario
@@ -875,7 +877,8 @@ export function buildCommonAssertions(context) {
                 pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT)
               : isInputbarPendingSteerRichRestoreScenario
                 ? pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_PROMPT) &&
-                  pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&
+                  summary.inputbarPendingSteerGuiCanceled?.textareaValue ===
+                    INPUTBAR_RICH_RESTORE_PROMPT &&
                   pageText.includes(INPUTBAR_PENDING_STEER_ACTIVE_OUTPUT_TEXT)
                 : isRightSurfaceVisualMatrixScenario
                   ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable

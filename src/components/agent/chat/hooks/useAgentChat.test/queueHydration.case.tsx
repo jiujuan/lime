@@ -1,19 +1,16 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it
-} from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   flushEffects,
   mockGetAgentRuntimeSession,
   mockGetAgentRuntimeThreadRead,
   mockListAgentRuntimeSessions,
   mockPromoteAgentRuntimeQueuedTurn,
+  mockReadAgentRuntimeThread,
   mockRemoveAgentRuntimeQueuedTurn,
   mockResumeAgentRuntimeThread,
   mockSubmitAgentRuntimeTurn,
-  mountHook
+  mountHook,
 } from "../useAgentChat.testUtils";
 
 describe("useAgentChat queue hydration", () => {
@@ -264,7 +261,6 @@ describe("useAgentChat queue hydration", () => {
             ],
           },
     );
-
     try {
       await flushEffects();
       await act(async () => {
@@ -381,6 +377,28 @@ describe("useAgentChat queue hydration", () => {
             ],
           },
     );
+    mockReadAgentRuntimeThread.mockResolvedValue({
+      thread: {
+        archived: false,
+        createdAtMs: 1,
+        sessionId,
+        status: { type: "active" },
+        threadId: "thread-queue-promote",
+        turnsView: "full",
+        turns: [
+          {
+            createdAtMs: 1,
+            queue: { state: "queued" },
+            sessionId,
+            status: "inProgress",
+            threadId: "thread-queue-promote",
+            turnId: "queued-1",
+            updatedAtMs: 2,
+          },
+        ],
+        updatedAtMs: 2,
+      },
+    });
 
     try {
       await flushEffects();
@@ -402,6 +420,9 @@ describe("useAgentChat queue hydration", () => {
         session_id: sessionId,
         queued_turn_id: "queued-1",
       });
+      expect(mockReadAgentRuntimeThread).toHaveBeenCalledWith(
+        "thread-queue-promote",
+      );
       expect(mockGetAgentRuntimeThreadRead).toHaveBeenCalledWith(sessionId);
       expect(harness.getValue().queuedTurns).toEqual([]);
       expect(harness.getValue().threadRead).toMatchObject({

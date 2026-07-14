@@ -104,7 +104,8 @@ impl McpClientManager {
     ///
     /// # Arguments
     ///
-    /// * `name` - 提示词名称（可能包含服务器前缀，格式为 "server_promptname"）
+    /// * `server_name` - 精确的服务器名称
+    /// * `name` - 提示词名称
     /// * `arguments` - 提示词参数
     ///
     /// # Returns
@@ -113,39 +114,28 @@ impl McpClientManager {
     ///
     /// # 实现步骤（Task 4.4）
     ///
-    /// 1. 解析提示词名称，确定目标服务器
+    /// 1. 按服务器名称精确选择运行连接
     /// 2. 验证必需参数是否提供
     /// 3. 调用服务器的 get_prompt 方法
     /// 4. 转换结果为 McpPromptResult
     /// 5. 返回结果
     pub async fn get_prompt(
         &self,
+        server_name: &str,
         name: &str,
         arguments: serde_json::Map<String, serde_json::Value>,
     ) -> Result<McpPromptResult, McpError> {
-        info!(prompt_name = %name, "获取 MCP 提示词内容");
-
-        // 1. 解析提示词名称，确定目标服务器和实际提示词名
-        let (server_name, actual_prompt_name) = self.resolve_prompt_target(name).await?;
-
-        debug!(
-            prompt_name = %name,
-            server_name = %server_name,
-            actual_prompt_name = %actual_prompt_name,
-            "解析提示词目标"
-        );
-
-        // 2. 获取目标服务器的客户端
+        let (server_name, name) = validate_prompt_target(server_name, name)?;
+        info!(server_name = %server_name, prompt_name = %name, "获取 MCP 提示词内容");
         let clients = self.clients.read().await;
         let wrapper = clients
-            .get(&server_name)
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .get(server_name)
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
 
         let service = wrapper
             .running_service()
-            .ok_or_else(|| McpError::ServerNotRunning(server_name.clone()))?;
+            .ok_or_else(|| McpError::ServerNotRunning(server_name.to_string()))?;
 
-        // 3. 构建 get_prompt 请求参数
         let args: Option<serde_json::Map<String, serde_json::Value>> = if arguments.is_empty() {
             None
         } else {
@@ -153,14 +143,13 @@ impl McpClientManager {
         };
 
         let get_prompt_param = rmcp::model::GetPromptRequestParam {
-            name: actual_prompt_name.clone(),
+            name: name.to_string(),
             arguments: args,
         };
 
-        // 4. 调用 get_prompt
         let result = service.get_prompt(get_prompt_param).await.map_err(|e| {
             error!(
-                prompt_name = %actual_prompt_name,
+                prompt_name = %name,
                 server_name = %server_name,
                 error = %e,
                 "获取提示词失败"
@@ -168,58 +157,16 @@ impl McpClientManager {
             McpError::ToolCallFailed(format!("获取提示词失败: {e}"))
         })?;
 
-        // 5. 转换结果为 McpPromptResult
         let mcp_result = Self::convert_get_prompt_result(result);
 
         info!(
-            prompt_name = %actual_prompt_name,
+            prompt_name = %name,
             server_name = %server_name,
             message_count = mcp_result.messages.len(),
             "提示词获取完成"
         );
 
         Ok(mcp_result)
-    }
-
-    /// 解析提示词目标（服务器名称和实际提示词名）
-    ///
-    /// # Arguments
-    ///
-    /// * `prompt_name` - 提示词名称（可能包含服务器前缀，格式为 "server_promptname"）
-    ///
-    /// # Returns
-    ///
-    /// 返回 (服务器名称, 实际提示词名) 元组。
-    async fn resolve_prompt_target(&self, prompt_name: &str) -> Result<(String, String), McpError> {
-        let clients = self.clients.read().await;
-
-        // 尝试解析带前缀的提示词名（格式：server_promptname）
-        if let Some(underscore_pos) = prompt_name.find('_') {
-            let potential_server = &prompt_name[..underscore_pos];
-            let potential_prompt = &prompt_name[underscore_pos + 1..];
-
-            // 检查是否存在该服务器
-            if clients.contains_key(potential_server) && !potential_prompt.is_empty() {
-                return Ok((potential_server.to_string(), potential_prompt.to_string()));
-            }
-        }
-
-        // 没有前缀或前缀不匹配，在所有服务器中查找该提示词
-        for (server_name, wrapper) in clients.iter() {
-            if let Some(service) = wrapper.running_service() {
-                // 尝试获取提示词列表并查找
-                if let Ok(prompts) = service.list_all_prompts().await {
-                    if prompts.iter().any(|p| p.name.as_str() == prompt_name) {
-                        return Ok((server_name.clone(), prompt_name.to_string()));
-                    }
-                }
-            }
-        }
-
-        // 提示词未找到
-        Err(McpError::ToolNotFound(format!(
-            "提示词不存在: {prompt_name}"
-        )))
     }
 
     /// 转换 rmcp GetPromptResult 为 McpPromptResult
@@ -278,4 +225,23 @@ impl McpClientManager {
             },
         }
     }
+}
+
+fn validate_prompt_target<'a>(
+    server_name: &'a str,
+    name: &'a str,
+) -> Result<(&'a str, &'a str), McpError> {
+    let server_name = server_name.trim();
+    let name = name.trim();
+    if server_name.is_empty() {
+        return Err(McpError::ConfigError(
+            "MCP prompt server cannot be empty".to_string(),
+        ));
+    }
+    if name.is_empty() {
+        return Err(McpError::ConfigError(
+            "MCP prompt name cannot be empty".to_string(),
+        ));
+    }
+    Ok((server_name, name))
 }

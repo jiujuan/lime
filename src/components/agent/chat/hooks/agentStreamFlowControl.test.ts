@@ -977,6 +977,25 @@ describe("agentStreamFlowControl", () => {
         timestamp: new Date("2026-03-29T00:00:00.000Z"),
         isThinking: true,
       },
+      {
+        id: "user-queued-rich",
+        role: "user",
+        content: "queued rich prompt",
+        timestamp: new Date("2026-03-29T00:00:01.000Z"),
+        runtimeTurnId: "queued-rich",
+      },
+      {
+        id: "assistant-queued-rich",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-03-29T00:00:01.000Z"),
+        isThinking: false,
+        runtimeStatus: {
+          phase: "routing",
+          title: "已加入排队列表",
+        },
+        runtimeTurnId: "queued-rich",
+      },
     ];
     let activeStream: ActiveStreamState | null = {
       assistantMsgId: "assistant-visible",
@@ -1043,6 +1062,9 @@ describe("agentStreamFlowControl", () => {
       isThinking: false,
       runtimeStatus: undefined,
     });
+    expect(messages).toHaveLength(1);
+    expect(messages.some((message) => message.runtimeTurnId === "queued-rich"))
+      .toBe(false);
     expect(onRestoreInterruptedInput).toHaveBeenCalledTimes(1);
     expect(onRestoreInterruptedInput.mock.calls[0]?.[0]).toMatchObject({
       requestId: expect.any(String),

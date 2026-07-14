@@ -19,7 +19,9 @@ pub const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "Glob",
     "Grep",
     "Bash",
-    "Agent",
+    "PowerShell",
+    "apply_patch",
+    "request_user_input",
     "WebSearch",
     "WebFetch",
     "StructuredOutput",
@@ -35,7 +37,6 @@ pub const SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES: &[&str] = &[
     "WebSearch",
 ];
 pub const SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES: &[&str] = &["Skill", "ToolSearch"];
-pub const SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES: &[&str] = &["SendMessage", "ListPeers"];
 pub const RUNTIME_TOOL_SURFACE_POWERSHELL_ENV: &str = "AGENT_USE_POWERSHELL_TOOL";
 
 pub const DIRECT_ANSWER_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合应优先直接回答。除非信息明显不足或用户明确要求，否则不要调用工具，也不要把简单回复扩展成多阶段流程。";
@@ -141,8 +142,6 @@ pub fn runtime_turn_tool_exposure_allows_tool_name(
     session_is_subagent: bool,
     resources_supported: bool,
     gates: RuntimeToolSurfaceGates,
-    subagent_teammate_tools_enabled: bool,
-    agent_tool_name: &str,
     final_output_tool_name: &str,
 ) -> bool {
     if !runtime_registered_tool_exposure_allows_tool_name(name, resources_supported, gates) {
@@ -157,14 +156,9 @@ pub fn runtime_turn_tool_exposure_allows_tool_name(
         return true;
     }
 
-    if name == agent_tool_name && subagent_teammate_tools_enabled {
-        return true;
-    }
-
     SUBAGENT_ALLOWED_NATIVE_TOOL_NAMES.contains(&name)
         || SUBAGENT_ALLOWED_COORDINATION_TOOL_NAMES.contains(&name)
         || name == final_output_tool_name
-        || (subagent_teammate_tools_enabled && SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES.contains(&name))
 }
 
 pub fn runtime_turn_tool_surface_mode_from_metadata(
@@ -508,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn subagent_tool_exposure_keeps_native_coordination_and_team_tools() {
+    fn subagent_tool_exposure_keeps_only_registered_current_tools() {
         let gates = RuntimeToolSurfaceGates { powershell: true };
 
         assert!(runtime_turn_tool_exposure_allows_tool_name(
@@ -516,8 +510,6 @@ mod tests {
             true,
             true,
             gates,
-            false,
-            "Agent",
             "StructuredOutput",
         ));
         assert!(runtime_turn_tool_exposure_allows_tool_name(
@@ -525,8 +517,6 @@ mod tests {
             true,
             true,
             gates,
-            false,
-            "Agent",
             "StructuredOutput",
         ));
         assert!(runtime_turn_tool_exposure_allows_tool_name(
@@ -534,44 +524,20 @@ mod tests {
             true,
             true,
             gates,
-            false,
-            "Agent",
             "StructuredOutput",
         ));
         assert!(!runtime_turn_tool_exposure_allows_tool_name(
-            "Agent",
+            "spawn_agent",
             true,
             true,
             gates,
-            false,
-            "Agent",
-            "StructuredOutput",
-        ));
-        assert!(runtime_turn_tool_exposure_allows_tool_name(
-            "Agent",
-            true,
-            true,
-            gates,
-            true,
-            "Agent",
-            "StructuredOutput",
-        ));
-        assert!(runtime_turn_tool_exposure_allows_tool_name(
-            "SendMessage",
-            true,
-            true,
-            gates,
-            true,
-            "Agent",
             "StructuredOutput",
         ));
         assert!(!runtime_turn_tool_exposure_allows_tool_name(
-            "SendMessage",
+            "send_message",
             true,
             true,
             gates,
-            false,
-            "Agent",
             "StructuredOutput",
         ));
         assert!(!runtime_turn_tool_exposure_allows_tool_name(
@@ -579,8 +545,6 @@ mod tests {
             true,
             false,
             gates,
-            false,
-            "Agent",
             "StructuredOutput",
         ));
     }

@@ -4,7 +4,7 @@ import type { BrowserStreamMode } from "@/lib/webview-api";
 import type {
   AgentApprovalPolicy,
   AgentSandboxPolicy,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
 import {
   METHOD_AUTOMATION_JOB_CREATE,
   METHOD_AUTOMATION_JOB_DELETE,

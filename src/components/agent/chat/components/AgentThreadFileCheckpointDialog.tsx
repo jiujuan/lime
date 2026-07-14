@@ -16,11 +16,13 @@ import {
   getAgentRuntimeFileCheckpoint,
   listAgentRuntimeFileCheckpoints,
   restoreAgentRuntimeFileCheckpoint,
-  type AgentRuntimeFileCheckpointDetail,
-  type AgentRuntimeFileCheckpointDiffResult,
-  type AgentRuntimeFileCheckpointListResult,
-  type AgentRuntimeFileCheckpointRestoreResult,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/threadClient";
+import type {
+  AgentRuntimeFileCheckpointDetail,
+  AgentRuntimeFileCheckpointDiffResult,
+  AgentRuntimeFileCheckpointListResult,
+  AgentRuntimeFileCheckpointRestoreResult,
+} from "@/lib/api/agentRuntime/sessionTypes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

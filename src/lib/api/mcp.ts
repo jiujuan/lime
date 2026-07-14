@@ -76,6 +76,30 @@ async function requestMcpAppServer<T>(
   return response.result;
 }
 
+function requireMcpResourceTarget(server: string, uri: string) {
+  const normalizedServer = server.trim();
+  const normalizedUri = uri.trim();
+  if (!normalizedServer) {
+    throw new Error("MCP resource server cannot be empty");
+  }
+  if (!normalizedUri) {
+    throw new Error("MCP resource URI cannot be empty");
+  }
+  return { server: normalizedServer, uri: normalizedUri };
+}
+
+function requireMcpPromptTarget(server: string, name: string) {
+  const normalizedServer = server.trim();
+  const normalizedName = name.trim();
+  if (!normalizedServer) {
+    throw new Error("MCP prompt server cannot be empty");
+  }
+  if (!normalizedName) {
+    throw new Error("MCP prompt name cannot be empty");
+  }
+  return { server: normalizedServer, name: normalizedName };
+}
+
 // ============================================================================
 // API 封装
 // ============================================================================
@@ -309,16 +333,21 @@ export const mcpApi = {
     ),
 
   /** 获取提示词内容 */
-  getPrompt: (
+  getPrompt: async (
+    server: string,
     name: string,
     args: Record<string, unknown>,
-  ): Promise<McpPromptResult> =>
-    requestMcpAppServer<AppServerMcpPromptGetResponse>(METHOD_MCP_PROMPT_GET, {
-      name,
-      arguments: args,
-    }).then((response) =>
-      assertMcpPromptResult(METHOD_MCP_PROMPT_GET, response),
-    ),
+  ): Promise<McpPromptResult> => {
+    const target = requireMcpPromptTarget(server, name);
+    const response = await requestMcpAppServer<AppServerMcpPromptGetResponse>(
+      METHOD_MCP_PROMPT_GET,
+      {
+        ...target,
+        arguments: args,
+      },
+    );
+    return assertMcpPromptResult(METHOD_MCP_PROMPT_GET, response);
+  },
 
   // --------------------------------------------------------------------------
   // 资源管理 API
@@ -343,33 +372,40 @@ export const mcpApi = {
     ),
 
   /** 读取资源内容 */
-  readResource: (uri: string): Promise<McpResourceContent> =>
-    requestMcpAppServer<AppServerMcpResourceReadResponse>(
-      METHOD_MCP_RESOURCE_READ,
-      { uri },
-    ).then((response) =>
-      assertMcpResourceContent(METHOD_MCP_RESOURCE_READ, response),
-    ),
+  readResource: async (
+    server: string,
+    uri: string,
+  ): Promise<McpResourceContent> => {
+    const target = requireMcpResourceTarget(server, uri);
+    const response =
+      await requestMcpAppServer<AppServerMcpResourceReadResponse>(
+        METHOD_MCP_RESOURCE_READ,
+        target,
+      );
+    return assertMcpResourceContent(METHOD_MCP_RESOURCE_READ, response);
+  },
 
   /** 订阅资源更新 */
-  subscribeResource: (uri: string): Promise<void> =>
-    requestMcpAppServer<AppServerMcpResourceSubscriptionResponse>(
-      METHOD_MCP_RESOURCE_SUBSCRIBE,
-      { uri },
-    ).then((response) => {
-      assertEmptyResponse(METHOD_MCP_RESOURCE_SUBSCRIBE, response);
-      return undefined;
-    }),
+  subscribeResource: async (server: string, uri: string): Promise<void> => {
+    const target = requireMcpResourceTarget(server, uri);
+    const response =
+      await requestMcpAppServer<AppServerMcpResourceSubscriptionResponse>(
+        METHOD_MCP_RESOURCE_SUBSCRIBE,
+        target,
+      );
+    assertEmptyResponse(METHOD_MCP_RESOURCE_SUBSCRIBE, response);
+  },
 
   /** 取消订阅资源更新 */
-  unsubscribeResource: (uri: string): Promise<void> =>
-    requestMcpAppServer<AppServerMcpResourceSubscriptionResponse>(
-      METHOD_MCP_RESOURCE_UNSUBSCRIBE,
-      { uri },
-    ).then((response) => {
-      assertEmptyResponse(METHOD_MCP_RESOURCE_UNSUBSCRIBE, response);
-      return undefined;
-    }),
+  unsubscribeResource: async (server: string, uri: string): Promise<void> => {
+    const target = requireMcpResourceTarget(server, uri);
+    const response =
+      await requestMcpAppServer<AppServerMcpResourceSubscriptionResponse>(
+        METHOD_MCP_RESOURCE_UNSUBSCRIBE,
+        target,
+      );
+    assertEmptyResponse(METHOD_MCP_RESOURCE_UNSUBSCRIBE, response);
+  },
 
   executePrepareRequests: async (
     requests: McpPrepareRequest[],

@@ -37,6 +37,16 @@ function createPromptResult(text: string): McpPromptResult {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 async function renderBrowser(
   props: Partial<React.ComponentProps<typeof McpPromptsBrowser>> = {},
 ) {
@@ -48,8 +58,9 @@ async function renderBrowser(
     prompts: [createPrompt()],
     loading: false,
     onRefresh: vi.fn(async () => undefined),
-    onGetPrompt: vi.fn(async (_name: string, _args: Record<string, unknown>) =>
-      createPromptResult("summary prompt"),
+    onGetPrompt: vi.fn(
+      async (_server: string, _name: string, _args: Record<string, unknown>) =>
+        createPromptResult("summary prompt"),
     ),
   };
 
@@ -102,6 +113,7 @@ describe("McpPromptsBrowser", () => {
   it("展开提示词、填写参数并展示返回消息", async () => {
     const onGetPrompt = vi.fn(
       async (
+        _server: string,
         _name: string,
         args: Record<string, unknown>,
       ): Promise<McpPromptResult> => createPromptResult(`topic=${args.topic}`),
@@ -150,10 +162,247 @@ describe("McpPromptsBrowser", () => {
       await Promise.resolve();
     });
 
-    expect(onGetPrompt).toHaveBeenCalledWith("write_summary", {
+    expect(onGetPrompt).toHaveBeenCalledWith("docs", "write_summary", {
       topic: "MCP",
     });
     expect(container.textContent).toContain("提示词结果");
     expect(container.textContent).toContain("topic=MCP");
+  });
+
+  it("同名提示词应按 server identity 切换并调用", async () => {
+    const onGetPrompt = vi.fn(
+      async (server: string): Promise<McpPromptResult> =>
+        createPromptResult(`${server} prompt`),
+    );
+    const container = await renderBrowser({
+      prompts: [
+        createPrompt({
+          name: "shared",
+          server_name: "server-a",
+          arguments: [],
+        }),
+        createPrompt({
+          name: "shared",
+          server_name: "server-b",
+          arguments: [],
+        }),
+      ],
+      onGetPrompt,
+    });
+
+    await act(async () => {
+      findButton(container, "server-a").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "server-b").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    const promptButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        'button[title="调用提示词"]',
+      ),
+    );
+    await act(async () => {
+      promptButtons[0]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "获取提示词").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      promptButtons[1]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "获取提示词").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onGetPrompt).toHaveBeenNthCalledWith(1, "server-a", "shared", {});
+    expect(onGetPrompt).toHaveBeenNthCalledWith(2, "server-b", "shared", {});
+    expect(container.textContent).toContain("server-b prompt");
+  });
+
+  it("切换同名提示词后应忽略前一个 server 的迟到结果", async () => {
+    const serverAResult = createDeferred<McpPromptResult>();
+    const onGetPrompt = vi.fn(
+      async (server: string): Promise<McpPromptResult> => {
+        if (server === "server-a") {
+          return serverAResult.promise;
+        }
+        return createPromptResult("server-b prompt");
+      },
+    );
+    const container = await renderBrowser({
+      prompts: [
+        createPrompt({
+          name: "shared",
+          server_name: "server-a",
+          arguments: [],
+        }),
+        createPrompt({
+          name: "shared",
+          server_name: "server-b",
+          arguments: [],
+        }),
+      ],
+      onGetPrompt,
+    });
+
+    await act(async () => {
+      findButton(container, "server-a").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "server-b").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    const promptButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        'button[title="调用提示词"]',
+      ),
+    );
+    await act(async () => {
+      promptButtons[0]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "获取提示词").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      promptButtons[1]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      serverAResult.resolve(createPromptResult("server-a late prompt"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain("server-a late prompt");
+
+    await act(async () => {
+      findButton(container, "获取提示词").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onGetPrompt).toHaveBeenNthCalledWith(1, "server-a", "shared", {});
+    expect(onGetPrompt).toHaveBeenNthCalledWith(2, "server-b", "shared", {});
+    expect(container.textContent).toContain("server-b prompt");
+  });
+
+  it("切换同名提示词后应忽略前一个 server 的迟到错误", async () => {
+    const serverAResult = createDeferred<McpPromptResult>();
+    const onGetPrompt = vi.fn(
+      async (server: string): Promise<McpPromptResult> => {
+        if (server === "server-a") {
+          return serverAResult.promise;
+        }
+        return createPromptResult("server-b prompt");
+      },
+    );
+    const container = await renderBrowser({
+      prompts: [
+        createPrompt({
+          name: "shared",
+          server_name: "server-a",
+          arguments: [],
+        }),
+        createPrompt({
+          name: "shared",
+          server_name: "server-b",
+          arguments: [],
+        }),
+      ],
+      onGetPrompt,
+    });
+
+    await act(async () => {
+      findButton(container, "server-a").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "server-b").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+
+    const promptButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        'button[title="调用提示词"]',
+      ),
+    );
+    await act(async () => {
+      promptButtons[0]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findButton(container, "获取提示词").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      promptButtons[1]?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      serverAResult.reject(new Error("server-a late error"));
+      await serverAResult.promise.catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain("server-a late error");
+
+    await act(async () => {
+      findButton(container, "获取提示词").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onGetPrompt).toHaveBeenNthCalledWith(1, "server-a", "shared", {});
+    expect(onGetPrompt).toHaveBeenNthCalledWith(2, "server-b", "shared", {});
+    expect(container.textContent).toContain("server-b prompt");
   });
 });

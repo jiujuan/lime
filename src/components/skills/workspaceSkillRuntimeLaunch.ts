@@ -1,4 +1,4 @@
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { AgentPageParams } from "@/types/page";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import {

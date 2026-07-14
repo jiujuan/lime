@@ -5,7 +5,7 @@ import { CanvasSessionOverviewPanel } from "./CanvasSessionOverviewPanel";
 import type { CanvasSessionOverviewActivity } from "./CanvasSessionOverviewPanel";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { formatDate } from "@/i18n/format";
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, AgentThreadTurn } from "../types";
 
 const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];

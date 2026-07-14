@@ -271,7 +271,53 @@ describe("agentStreamSubmissionLifecycle", () => {
     expect(queuedTurns.map((item) => item.position)).toEqual([1, 2]);
   });
 
-  it("轻量瞬态运行状态不应创建思考/进展卡", () => {
+  it("queued optimistic 消息创建时应直接绑定 request turn identity", () => {
+    const userMsg: Message = {
+      id: "user-queued-binding",
+      role: "user",
+      content: "queued rich prompt",
+      timestamp: new Date("2026-03-27T01:00:00.000Z"),
+    };
+    const assistantMsg: Message = {
+      id: "assistant-queued-binding",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-03-27T01:00:00.000Z"),
+      isThinking: false,
+      contentParts: [],
+    };
+    let messages = [userMsg, assistantMsg];
+
+    const lifecycle = createAgentStreamSubmissionLifecycle({
+      assistantMsg,
+      assistantMsgId: assistantMsg.id,
+      userMsg,
+      userMsgId: userMsg.id,
+      content: userMsg.content,
+      expectingQueue: true,
+      initialThreadId: "thread-queued-binding",
+      listenerMapRef: { current: new Map() },
+      setActiveStream: () => {},
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setQueuedTurns: () => {},
+      setThreadItems: () => {},
+      setThreadTurns: () => {},
+      setCurrentTurnId: () => {},
+    });
+
+    expect(messages.map((message) => message.runtimeTurnId)).toEqual([
+      lifecycle.requestTurnId,
+      lifecycle.requestTurnId,
+    ]);
+
+  });
+
+  it("所有回合只创建一条稳定的运行摘要投影", () => {
     const assistantMsg: Message = {
       id: "assistant-fast",
       role: "assistant",
@@ -297,7 +343,6 @@ describe("agentStreamSubmissionLifecycle", () => {
       userMsgId: "user-fast",
       content: "只回答 OK",
       expectingQueue: false,
-      runtimeStatusPresentation: "transient",
       initialThreadId: "local-thread:assistant-fast",
       listenerMapRef: { current: new Map() },
       setActiveStream: (next) => {
@@ -336,7 +381,7 @@ describe("agentStreamSubmissionLifecycle", () => {
     });
 
     expect(threadTurns).toHaveLength(1);
-    expect(threadItems).toHaveLength(0);
+    expect(threadItems).toHaveLength(1);
 
     const runtimeStatus = buildWaitingAgentRuntimeStatus({
       executionStrategy: "react",
@@ -348,7 +393,8 @@ describe("agentStreamSubmissionLifecycle", () => {
     );
     expect(messages[0]?.runtimeStatus).toEqual(runtimeStatus);
     expect(threadTurns[0]?.thread_id).toBe("session-fast");
-    expect(threadItems).toHaveLength(0);
+    expect(threadItems).toHaveLength(1);
+    expect(threadItems[0]?.thread_id).toBe("session-fast");
   });
 
   it("activateStream 应恢复首轮建会话时被快照覆盖的本地用户与助手草稿", () => {

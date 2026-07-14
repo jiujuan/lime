@@ -646,14 +646,39 @@
       ],
       "type": "string"
     },
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "ServerRequestResolvedNotification": {
+      "properties": {
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        }
+      },
+      "required": [
+        "requestId"
+      ],
+      "type": "object"
+    },
     "SubAgentActivityKind": {
       "enum": [
         "closed",
         "completed",
         "failed",
+        "interacted",
+        "interrupted",
         "messageSent",
         "resumed",
         "spawned",
+        "started",
         "waiting"
       ],
       "type": "string"
@@ -1739,6 +1764,22 @@
         },
         "params": {
           "$ref": "#/$defs/ConfigWarningNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "const": "serverRequest/resolved",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/ServerRequestResolvedNotification"
         }
       },
       "required": [

@@ -29,7 +29,6 @@ import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { markTaskCenterDraftTabRunning } from "./taskCenterDraftTabs";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { logAgentDebug } from "@/lib/agentDebug";
-import { applyHomeHotpathPendingShell } from "./homeHotpathPendingShell";
 
 type TaskCenterDraftSendExecutionStrategy = NonNullable<
   TaskCenterDraftSendRequest["sendExecutionStrategy"]
@@ -54,7 +53,7 @@ function resolveNonMaterializedReadySessionId(
     : null;
 }
 
-function flushHomePendingPreviewShell(apply: () => void): void {
+function flushHomePendingPreview(apply: () => void): void {
   flushSync(apply);
 }
 
@@ -333,11 +332,7 @@ export function useTaskCenterEmptyStateSendRuntime({
           source: "task-center-empty-state",
           triggerSource,
         };
-        const pendingShell = applyHomeHotpathPendingShell({
-          requestId,
-          text,
-        });
-        flushHomePendingPreviewShell(() => {
+        flushHomePendingPreview(() => {
           setInput("");
           if (
             displayMessagesLength > 0 ||
@@ -349,15 +344,7 @@ export function useTaskCenterEmptyStateSendRuntime({
           setTaskCenterDraftSendRequest(request);
           setHomePendingPreviewRequest(request);
         });
-        pendingShell.refresh();
         if (request.materializeDraft) {
-          recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-            durationMs: Date.now() - submittedAt,
-            requestId,
-            sessionId: activeDraftTabId,
-            source: "task-center-empty-state",
-            workspaceId: taskCenterWorkspaceId,
-          });
           return;
         }
 
@@ -395,7 +382,6 @@ export function useTaskCenterEmptyStateSendRuntime({
                 workspaceId: taskCenterWorkspaceId ?? null,
               });
               if (result !== true) {
-                pendingShell.clear(true);
                 setInput(text);
                 setHomePendingPreviewRequest((current) =>
                   current?.id === requestId ? null : current,
@@ -432,7 +418,6 @@ export function useTaskCenterEmptyStateSendRuntime({
                 source: "task-center-empty-state",
                 workspaceId: taskCenterWorkspaceId ?? null,
               });
-              pendingShell.clear(true);
               setInput(text);
               setTaskCenterDraftSendRequest((current) =>
                 current?.id === requestId ? null : current,
@@ -443,13 +428,6 @@ export function useTaskCenterEmptyStateSendRuntime({
               homeSendInFlightRef.current = false;
             },
           );
-        });
-        recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-          durationMs: Date.now() - submittedAt,
-          requestId,
-          sessionId: activeDraftTabId,
-          source: "task-center-empty-state",
-          workspaceId: taskCenterWorkspaceId,
         });
         return;
       }
@@ -506,22 +484,10 @@ export function useTaskCenterEmptyStateSendRuntime({
             source: "empty-state",
             triggerSource,
           };
-          const pendingShell = applyHomeHotpathPendingShell({
-            requestId,
-            text,
-          });
-          flushHomePendingPreviewShell(() => {
+          flushHomePendingPreview(() => {
             setInput("");
             setTaskCenterDraftSendRequest(previewRequest);
             setHomePendingPreviewRequest(previewRequest);
-          });
-          pendingShell.refresh();
-          recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-            durationMs: Date.now() - submittedAt,
-            requestId,
-            sessionId: null,
-            source: "empty-state",
-            workspaceId: taskCenterWorkspaceId,
           });
           logAgentDebug("AgentChatPage", "homeInput.directDispatch.start", {
             requestId,
@@ -565,7 +531,6 @@ export function useTaskCenterEmptyStateSendRuntime({
                   },
                 );
                 if (result !== true) {
-                  pendingShell.clear(true);
                   setInput(text);
                   setHomePendingPreviewRequest((current) =>
                     current?.id === requestId ? null : current,
@@ -611,7 +576,6 @@ export function useTaskCenterEmptyStateSendRuntime({
                   },
                   { level: "error" },
                 );
-                pendingShell.clear(true);
                 setInput(text);
                 setTaskCenterDraftSendRequest((current) =>
                   current?.id === requestId ? null : current,
@@ -654,22 +618,10 @@ export function useTaskCenterEmptyStateSendRuntime({
           source: "empty-state",
           triggerSource,
         };
-        const pendingShell = applyHomeHotpathPendingShell({
-          requestId,
-          text,
-        });
-        flushHomePendingPreviewShell(() => {
+        flushHomePendingPreview(() => {
           setInput("");
           setTaskCenterDraftSendRequest(previewRequest);
           setHomePendingPreviewRequest(previewRequest);
-        });
-        pendingShell.refresh();
-        recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-          durationMs: Date.now() - submittedAt,
-          requestId,
-          sessionId: existingSessionId,
-          source: "empty-state",
-          workspaceId: taskCenterWorkspaceId,
         });
         scheduleAfterNextPaint(() => {
           recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
@@ -698,7 +650,6 @@ export function useTaskCenterEmptyStateSendRuntime({
                 workspaceId: taskCenterWorkspaceId ?? null,
               });
               if (result !== true) {
-                pendingShell.clear(true);
                 setInput(text);
                 setHomePendingPreviewRequest((current) =>
                   current?.id === requestId ? null : current,
@@ -718,7 +669,6 @@ export function useTaskCenterEmptyStateSendRuntime({
                 source: "empty-state",
                 workspaceId: taskCenterWorkspaceId ?? null,
               });
-              pendingShell.clear(true);
               setInput(text);
               setTaskCenterDraftSendRequest((current) =>
                 current?.id === requestId ? null : current,

@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import { AppSidebarConversationRow } from "./AppSidebarConversationRow";
 
 function renderRow(
@@ -75,4 +75,3 @@ describe("AppSidebarConversationRow", () => {
     act(() => root.unmount());
   });
 });
-

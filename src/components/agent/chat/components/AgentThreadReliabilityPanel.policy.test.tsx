@@ -1,6 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { renderPanel } from "./AgentThreadReliabilityPanel.testFixtures";
 
 describe("AgentThreadReliabilityPanel policy/network diagnostics", () => {

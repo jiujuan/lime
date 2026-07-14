@@ -4,6 +4,10 @@ use async_trait::async_trait;
 
 #[async_trait]
 impl McpAppDataSource for LocalAppDataSource {
+    fn mcp_elicitation_router(&self) -> lime_mcp::ElicitationRequestRouter {
+        self.mcp_elicitation_router.clone()
+    }
+
     async fn list_mcp_servers(&self) -> Result<McpServerListResponse, RuntimeCoreError> {
         mcp::list_mcp_servers(&self.db)
     }
@@ -80,10 +84,10 @@ impl McpAppDataSource for LocalAppDataSource {
         mcp::list_mcp_tools(&self.mcp_manager).await
     }
 
-    async fn list_mcp_bridge_snapshots(
+    async fn list_mcp_runtime_server_specs(
         &self,
-    ) -> Result<Vec<lime_mcp::McpBridgeSnapshot>, RuntimeCoreError> {
-        mcp::list_mcp_bridge_snapshots(&self.mcp_manager).await
+    ) -> Result<Vec<lime_mcp::McpRuntimeServerSpec>, RuntimeCoreError> {
+        mcp::list_mcp_runtime_server_specs(&self.db)
     }
 
     async fn list_mcp_tools_for_context(

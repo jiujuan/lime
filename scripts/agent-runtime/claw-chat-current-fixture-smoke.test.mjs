@@ -10,7 +10,10 @@ import {
   summarizeApprovalDecisionReadModel,
   summarizeApprovalSessionCacheReadModel,
 } from "./claw-chat-current-fixture-approval-read-model.mjs";
-import { buildApprovalRequestDecisionScenarioAssertions } from "./claw-chat-current-fixture-approval-assertions.mjs";
+import {
+  buildApprovalRequestDecisionScenarioAssertions,
+  buildApprovalRequestResumeScenarioAssertions,
+} from "./claw-chat-current-fixture-approval-assertions.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import { registerImageContentAndTeamSmokeGuards } from "./claw-chat-current-fixture-smoke-domain-guards.mjs";
 import { registerSkillsRuntimeSmokeGuards } from "./claw-chat-current-fixture-smoke-skills-runtime-guards.mjs";
@@ -20,6 +23,7 @@ import {
   SOUL_STYLE_TRANSCRIPT_SURFACES,
 } from "./claw-chat-current-fixture-soul-style-transcript-golden.mjs";
 import { SOUL_STYLE_FIXTURE_PROFILE_IDS } from "./claw-chat-current-fixture-soul-style.mjs";
+import { analyzeHomeHotpathSubmitToConversationSamples } from "./claw-chat-current-fixture-home-hotpath.mjs";
 
 const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -126,6 +130,80 @@ function readFixtureUtilsScript() {
 }
 
 describe("claw chat current Electron fixture smoke guard", () => {
+  it("首页首发采样只允许从完整首页单向切换到 conversation", () => {
+    const mainAreaBounds = { left: 294, top: 8, width: 1134, height: 980 };
+    const homeSample = (elapsedMs) => ({
+      elapsedMs,
+      hasConnectedComposer: true,
+      hasEmptyConversationText: false,
+      hasEmptyStateFirstScreen: true,
+      hasMessageList: false,
+      hasNoAvailableModelText: false,
+      hasTaskCenterHomeText: true,
+      imperativePendingShellCount: 0,
+      mainAreaBounds,
+      promptInBody: false,
+    });
+    const conversationSample = (elapsedMs) => ({
+      elapsedMs,
+      hasConnectedComposer: false,
+      hasEmptyConversationText: false,
+      hasEmptyStateFirstScreen: false,
+      hasMessageList: true,
+      hasNoAvailableModelText: false,
+      hasTaskCenterHomeText: false,
+      imperativePendingShellCount: 0,
+      mainAreaBounds,
+      promptInBody: true,
+    });
+
+    const stable = analyzeHomeHotpathSubmitToConversationSamples(
+      [
+        homeSample(16),
+        homeSample(32),
+        conversationSample(48),
+        conversationSample(64),
+      ],
+      mainAreaBounds,
+    );
+    expect(stable).toMatchObject({
+      stable: true,
+      conversationStartedAtMs: 48,
+      beforeConversationSampleCount: 2,
+      conversationSampleCount: 2,
+      unstableCount: 0,
+    });
+
+    const returnedHome = analyzeHomeHotpathSubmitToConversationSamples(
+      [
+        homeSample(16),
+        conversationSample(32),
+        homeSample(48),
+      ],
+      mainAreaBounds,
+    );
+    expect(returnedHome.stable).toBe(false);
+    expect(returnedHome.firstUnstableConversationSamples).toHaveLength(1);
+
+    const blankIntermediate = analyzeHomeHotpathSubmitToConversationSamples(
+      [
+        homeSample(16),
+        {
+          ...homeSample(32),
+          hasConnectedComposer: false,
+          hasEmptyStateFirstScreen: false,
+          hasTaskCenterHomeText: false,
+        },
+        conversationSample(48),
+      ],
+      mainAreaBounds,
+    );
+    expect(blankIntermediate.stable).toBe(false);
+    expect(blankIntermediate.firstInvalidBeforeConversationSamples).toHaveLength(
+      1,
+    );
+  });
+
   it("drives the real Electron Desktop Host bridge and App Server JSON-RPC", () => {
     const content = readSmokeScript();
 
@@ -225,6 +303,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("postCompletionStability");
     expect(content).toContain("homeHotpathNoTransientFallbackAfterInputFill");
     expect(content).toContain("homeHotpathNoPostCompletionRefreshFlicker");
+    expect(content).toContain("homeHotpathNoImperativePendingShell");
+    expect(content).toContain("homeHotpathMainAreaBoundsStable");
+    expect(content).toContain("data-home-hotpath-pending-shell");
+    expect(content).toContain("workspace-main-area");
     expect(content).toContain("HOME_HOTPATH_BLOCKED_PRE_TURN_METHODS");
     expect(content).toContain("blockedAuxiliaryMethodsBeforeTurnStart");
     expect(content).toContain("homeHotpathPreTurnTraceWindowAvailable");
@@ -489,6 +571,44 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(backendScript).not.toContain(
       "input.request?.runtimeOptions?.hostOptions",
     );
+  });
+
+  it("requires the resumed turn to clear its own pending approval status", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("waitForGuiApprovalPromptAbsentAfterSecondTurn");
+    expect(content).toContain('[data-testid="message-turn-group"]');
+    expect(content).toContain("hasPendingApprovalStatus");
+    expect(content).toMatch(
+      /hasPendingApprovalStatus:\s*\(secondTurnGroup\?\.innerText \|\| ""\)\.includes\(\s*"待确认"/u,
+    );
+    expect(content).toContain("snapshot?.hasPendingApprovalStatus === false");
+    expect(content).toContain("?.hasPendingApprovalStatus === false");
+  });
+
+  it("fails the resumed approval assertion when its turn remains pending", () => {
+    const buildAssertions = (hasPendingApprovalStatus) =>
+      buildApprovalRequestResumeScenarioAssertions({
+        appServerRequestMethods: [],
+        approvalRequestResumeTurnStart: null,
+        pageText: "",
+        summary: {
+          guiApprovalRequestResumeSecondNoApprovalPrompt: {
+            approvalPromptVisible: false,
+            includesRuntimePermissionPrompt: false,
+            hasPendingApprovalStatus,
+            textareaVisible: true,
+            textareaDisabled: false,
+          },
+        },
+      });
+
+    expect(
+      buildAssertions(false).approvalRequestResumeSecondNoPendingApproval,
+    ).toBe(true);
+    expect(
+      buildAssertions(true).approvalRequestResumeSecondNoPendingApproval,
+    ).toBe(false);
   });
 
   it("keeps full-access approval out of prompts, records, and action/respond", () => {
@@ -911,6 +1031,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(content).toContain(
       "INPUTBAR_PENDING_STEER_RICH_RESTORE_ASSERTION_KEYS",
+    );
+    expect(content).toContain(
+      "inputbarPendingSteerQueuedProjectionCleared",
     );
     expect(content).toContain(
       "options.scenario !== INPUTBAR_PENDING_STEER_RICH_RESTORE_SCENARIO",

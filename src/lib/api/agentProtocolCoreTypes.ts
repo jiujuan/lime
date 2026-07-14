@@ -134,6 +134,7 @@ interface AgentThreadItemBase {
   thread_id: string;
   turn_id: string;
   sequence: number;
+  ordinal?: number;
   status: AgentThreadItemStatus;
   started_at: string;
   completed_at?: string;

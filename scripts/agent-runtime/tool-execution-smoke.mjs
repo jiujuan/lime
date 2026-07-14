@@ -32,6 +32,14 @@ import {
   liveProviderSmokeAllowed,
 } from "../lib/live-provider-smoke-gate.mjs";
 import { startOpenAiCompatibleFixtureServer } from "../lib/openai-compatible-fixture-server.mjs";
+import {
+  buildDeferredMcpToolSearchAssertions,
+  buildDeferredMcpToolSearchFixtureResponses,
+  cleanupDeferredMcpToolSearchServer,
+  createDeferredMcpToolSearchServer,
+  makeDeferredMcpToolSearchServerName,
+  runDeferredMcpNewTurnIsolation,
+} from "./deferred-mcp-tool-search-gate-b.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,11 +77,12 @@ const BACKGROUND_TASK_TOOLS = ["Bash", "TaskOutput", "TaskStop"];
 const RUNTIME_INTROSPECTION_TOOLS = ["tool_search", "SendUserMessage"];
 const WEB_TOOLS = ["WebFetch", "WebSearch"];
 const AGENT_CONTROL_TOOLS = [
-  "TeamCreate",
-  "ListPeers",
-  "Agent",
-  "SendMessage",
-  "TeamDelete",
+  "spawn_agent",
+  "send_message",
+  "followup_task",
+  "wait_agent",
+  "interrupt_agent",
+  "list_agents",
 ];
 const PLAN_WORKTREE_TOOLS = [
   "EnterPlanMode",
@@ -95,6 +104,8 @@ const CREATION_TASK_TOOLS = [
 const MCP_RESOURCE_TOOLS = ["ListMcpResourcesTool", "ReadMcpResourceTool"];
 const SKILL_TOOLS = ["Skill"];
 const MCP_CONTEXT7_TOOLSEARCH_BATCH_ID = "mcp-context7-toolsearch";
+const MCP_DEFERRED_TOOLSEARCH_GATE_B_BATCH_ID =
+  "mcp-deferred-tool-search-gate-b";
 const BATCH_TARGET_TOOLS = {
   "safe-core-tools": SAFE_FILE_TOOLS,
   "coding-current-tools": CODING_CURRENT_TOOLS,
@@ -110,6 +121,7 @@ const BATCH_TARGET_TOOLS = {
   "mcp-resource-tools": MCP_RESOURCE_TOOLS,
   "skill-tools": SKILL_TOOLS,
   [MCP_CONTEXT7_TOOLSEARCH_BATCH_ID]: ["tool_search"],
+  [MCP_DEFERRED_TOOLSEARCH_GATE_B_BATCH_ID]: ["tool_search"],
 };
 const SUPPORTED_BATCH_IDS = Object.keys(BATCH_TARGET_TOOLS);
 const OPTIONAL_RUNTIME_COVERAGE_TOOLS = [
@@ -364,17 +376,18 @@ function extractBackgroundTaskIdFromContext(context) {
   return taskId;
 }
 
-function extractAgentIdFromContext(context) {
-  const text = requestTextFromFixtureContext(context);
-  const metadataMatch = text.match(/"agentId"\s*:\s*"([^"]+)"/);
-  const outputMatch = text.match(/Agent launched:\s*([^\s\n]+)/);
-  const agentId = (metadataMatch?.[1] || outputMatch?.[1] || "").trim();
-  if (!agentId) {
-    throw new Error(
-      "fixture dynamic SendMessage response could not parse Agent result agentId",
-    );
-  }
-  return agentId;
+function requestToolCallNamesFromFixtureContext(context) {
+  const messages = Array.isArray(context?.body?.messages)
+    ? context.body.messages
+    : [];
+  return messages.flatMap((message) => {
+    const toolCalls = Array.isArray(message?.tool_calls)
+      ? message.tool_calls
+      : [];
+    return toolCalls
+      .map((toolCall) => String(toolCall?.function?.name || "").trim())
+      .filter(Boolean);
+  });
 }
 
 function outputPathFor(toolName) {
@@ -582,34 +595,62 @@ function buildWebFixtureResponses() {
   ];
 }
 
-function buildAgentControlFixtureResponses() {
-  const teamName = `lime-tool-smoke-${Date.now()}-${process.pid}`;
-  return [
-    toolCall("TeamCreate", "call-tool-exec-team-create", {
-      team_name: teamName,
-      description: "Agent runtime tool execution smoke team.",
-    }),
-    toolCall("ListPeers", "call-tool-exec-list-peers", {}),
-    toolCall("Agent", "call-tool-exec-agent", {
-      description: "tool smoke child",
-      prompt:
-        "Respond with AGENT_RUNTIME_AGENT_CHILD_OK and do not call tools.",
-      name: "tool-smoke-child",
-      team_name: teamName,
-      run_in_background: true,
-    }),
-    (context) =>
-      toolCall("SendMessage", "call-tool-exec-send-message", {
-        to: extractAgentIdFromContext(context),
-        summary: "runtime smoke ping",
-        message: "LIME_TOOL_EXECUTION_SEND_MESSAGE_OK",
-      }),
-    toolCall("TeamDelete", "call-tool-exec-team-delete", {}),
-    {
+function buildAgentControlFixtureResponse(context) {
+  const requestText = requestTextFromFixtureContext(context);
+  if (
+    requestText.includes("AGENT_RUNTIME_AGENT_CHILD_READY") ||
+    requestText.includes("AGENT_RUNTIME_AGENT_CHILD_FOLLOWUP")
+  ) {
+    return {
       type: "text",
-      content: "AGENT_RUNTIME_AGENT_CONTROL_TOOLS_DONE",
-    },
-  ];
+      content: "AGENT_RUNTIME_AGENT_CHILD_OK",
+    };
+  }
+
+  const calledTools = new Set(
+    requestToolCallNamesFromFixtureContext(context),
+  );
+  if (!calledTools.has("spawn_agent")) {
+    return toolCall("spawn_agent", "call-tool-exec-spawn-agent", {
+      task_name: "tool_smoke_child",
+      message:
+        "Reply with AGENT_RUNTIME_AGENT_CHILD_READY and do not call tools.",
+    });
+  }
+  if (!calledTools.has("list_agents")) {
+    return toolCall("list_agents", "call-tool-exec-list-agents", {});
+  }
+  if (!calledTools.has("send_message")) {
+    return toolCall("send_message", "call-tool-exec-send-message", {
+      target: "tool_smoke_child",
+      message: "LIME_TOOL_EXECUTION_SEND_MESSAGE_OK",
+    });
+  }
+  if (!calledTools.has("followup_task")) {
+    return toolCall("followup_task", "call-tool-exec-followup-task", {
+      target: "tool_smoke_child",
+      message:
+        "Reply with AGENT_RUNTIME_AGENT_CHILD_FOLLOWUP and do not call tools.",
+    });
+  }
+  if (!calledTools.has("interrupt_agent")) {
+    return toolCall("interrupt_agent", "call-tool-exec-interrupt-agent", {
+      target: "tool_smoke_child",
+    });
+  }
+  if (!calledTools.has("wait_agent")) {
+    return toolCall("wait_agent", "call-tool-exec-wait-agent", {
+      timeout_ms: 0,
+    });
+  }
+  return {
+    type: "text",
+    content: "AGENT_RUNTIME_AGENT_CONTROL_TOOLS_DONE",
+  };
+}
+
+function buildAgentControlFixtureResponses() {
+  return Array.from({ length: 7 }, () => buildAgentControlFixtureResponse);
 }
 
 function buildPlanWorktreeFixtureResponses() {
@@ -871,6 +912,55 @@ async function cleanupContext7AgentTurnServer(options, context) {
 }
 
 function buildBatchScenario(batchId, fixtureFiles) {
+  if (batchId === MCP_DEFERRED_TOOLSEARCH_GATE_B_BATCH_ID) {
+    const serverName = makeDeferredMcpToolSearchServerName();
+    const deferredToolName = mcpRuntimeToolName(serverName, "deferred_echo");
+    return {
+      id: MCP_DEFERRED_TOOLSEARCH_GATE_B_BATCH_ID,
+      prompt:
+        "请从普通输入框完成 deferred MCP 工具验收：先调用 tool_search 精确选择 deferred_echo，再调用该工具。不要使用命令入口。",
+      promptNeedle: "deferred MCP 工具验收",
+      targetTools: ["tool_search", deferredToolName],
+      initialInventoryTargetTools: ["tool_search"],
+      requiresTargetToolsInInitialInventory: false,
+      requiresEvidenceToolPresence: false,
+      deferScriptedToolCallsUntilAvailable: true,
+      expectedFixtureRequestCount: 3,
+      turnMetadata: {
+        harness: {
+          skip_mcp_prewarm: false,
+        },
+      },
+      scriptedResponses: buildDeferredMcpToolSearchFixtureResponses({
+        deferredToolName,
+        toolCall,
+      }),
+      async prepareAfterInventory(options) {
+        return createDeferredMcpToolSearchServer({
+          options,
+          serverName,
+          mcpRuntimeToolName,
+          invokeAppServerMethod,
+          sleep,
+        });
+      },
+      async cleanup(options, context) {
+        await cleanupDeferredMcpToolSearchServer({
+          options,
+          context,
+          invokeAppServerMethod,
+          logPrefix: LOG_PREFIX,
+        });
+      },
+      buildAssertions(values) {
+        return buildDeferredMcpToolSearchAssertions({
+          ...values,
+          deferredToolName,
+        });
+      },
+    };
+  }
+
   if (batchId === MCP_CONTEXT7_TOOLSEARCH_BATCH_ID) {
     const serverName = makeContext7AgentTurnServerName();
     const queryDocsToolName = mcpRuntimeToolName(serverName, "query-docs");
@@ -1141,34 +1231,35 @@ function buildBatchScenario(batchId, fixtureFiles) {
     return {
       id: "agent-control-tools",
       prompt:
-        "请从普通输入框自然语言触发协作工具验收：创建一个 team，列出 peers，启动一个后台子代理，给它发送一条消息，然后删除 team。不要使用命令入口。",
-      promptNeedle: "协作工具验收",
+        "请从普通输入框自然语言触发 Agent control 工具验收：创建子代理、列出 Agent、排队消息、续派任务、中断子代理并等待活动。不要使用命令入口。",
+      promptNeedle: "Agent control 工具验收",
       targetTools: AGENT_CONTROL_TOOLS,
       scriptedResponses: buildAgentControlFixtureResponses(),
+      requiresTargetToolsInInitialInventory: false,
       buildAssertions({ evidencePackText, toolOutputText }) {
         return {
-          teamToolCreatedTeam:
-            toolOutputText.includes("team_name") ||
-            toolOutputText.includes("TeamCreate") ||
-            toolOutputText.includes("lime-tool-smoke"),
-          listPeersReturnedPeerSurface:
-            toolOutputText.includes("peers") ||
-            toolOutputText.includes("ListPeers"),
-          agentToolLaunchedChild:
-            toolOutputText.includes("Agent launched:") ||
-            toolOutputText.includes('"agentId"'),
-          sendMessageDelivered:
-            toolOutputText.includes("Message sent") ||
-            toolOutputText.includes("LIME_TOOL_EXECUTION_SEND_MESSAGE_OK") ||
-            toolOutputText.includes("SendMessage"),
-          teamDeleteCompleted:
-            toolOutputText.includes("TeamDelete") ||
-            toolOutputText.includes("deleted") ||
-            toolOutputText.includes("删除"),
-          evidencePackMentionsAgentTool:
-            evidencePackText.includes("TeamCreate") ||
-            evidencePackText.includes("SendMessage") ||
-            evidencePackText.includes("agent-control-tools"),
+          spawnAgentCreatedDurableChild:
+            toolOutputText.includes("spawn_agent:") &&
+            toolOutputText.includes("tool_smoke_child"),
+          listAgentsReturnedDurableTree:
+            toolOutputText.includes("list_agents:") &&
+            toolOutputText.includes('"agents"'),
+          sendMessageQueuedMailboxItem:
+            toolOutputText.includes("send_message:") &&
+            toolOutputText.includes('"message_id"'),
+          followupTaskTriggeredChild:
+            toolOutputText.includes("followup_task:") &&
+            toolOutputText.includes('"message_id"'),
+          interruptAgentReturnedPreviousStatus:
+            toolOutputText.includes("interrupt_agent:") &&
+            toolOutputText.includes('"previous_status"'),
+          waitAgentReturnedTerminalResult:
+            toolOutputText.includes("wait_agent:") &&
+            toolOutputText.includes('"timed_out"'),
+          evidencePackMentionsCurrentAgentControl:
+            evidencePackText.includes("spawn_agent") &&
+            evidencePackText.includes("list_agents") &&
+            evidencePackText.includes("interrupt_agent"),
         };
       },
     };
@@ -1992,6 +2083,11 @@ async function runSmoke(options) {
       options.batch === "web-tools",
     scriptedResponses,
   });
+  const providerFixtureRequests = fixture.requests;
+  assertSmoke(
+    Array.isArray(providerFixtureRequests),
+    "localhost fixture 未暴露 provider request ledger",
+  );
   console.log(
     `${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`,
   );
@@ -2055,7 +2151,28 @@ async function runSmoke(options) {
       turnId,
     });
 
-    const providerRequests = providerRequestSummaries(fixture.requests);
+    const providerRequests = providerRequestSummaries(providerFixtureRequests);
+    const newTurnIsolation =
+      scenario.id === MCP_DEFERRED_TOOLSEARCH_GATE_B_BATCH_ID
+        ? await runDeferredMcpNewTurnIsolation({
+            options,
+            sessionId,
+            workspaceId,
+            fixtureRequests: providerFixtureRequests,
+            provider: fixture.provider,
+            turnMetadata,
+            startAgentSessionTurnCurrent,
+            readAgentRuntimeThreadCurrent,
+            summarizeThreadRead,
+            threadSettled,
+            fixtureChatRequestCount,
+            providerRequestSummaries,
+            assertSmoke,
+            sleep,
+            logPrefix: LOG_PREFIX,
+          })
+        : null;
+    const newTurnProviderRequests = newTurnIsolation?.providerRequests ?? null;
     const matrix = buildToolExecutionMatrix(finalState.threadRead, targetTools);
     const providerToolPresence = allTargetToolsPresentInProviderRequests(
       providerRequests,
@@ -2073,7 +2190,7 @@ async function runSmoke(options) {
       inventoryTargetTools,
     );
     const firstUserRequestText = requestUserMessagesText(
-      fixture.requests[0]?.body,
+      providerFixtureRequests[0]?.body,
     );
     const detailText = JSON.stringify(finalState.sessionDetail || {});
     const evidencePackText = JSON.stringify(evidencePack || {});
@@ -2099,10 +2216,12 @@ async function runSmoke(options) {
       providerRequests,
       runtimeContext,
       toolOutputText,
+      newTurnProviderRequests,
     });
     const assertions = {
       fixtureProviderUsed:
-        fixtureChatRequestCount(fixture.requests) >= scriptedResponses.length,
+        fixtureChatRequestCount(providerFixtureRequests) >=
+        (scenario.expectedFixtureRequestCount || scriptedResponses.length),
       naturalLanguageWithoutAtCommand:
         firstUserRequestText.includes(scenario.promptNeedle) &&
         !firstUserRequestText.trimStart().startsWith("@") &&
@@ -2174,6 +2293,7 @@ async function runSmoke(options) {
         modelPreference: fixture.provider.modelPreference,
         source: fixture.provider.source,
         requests: providerRequests,
+        newTurnIsolationRequests: newTurnProviderRequests,
         targetToolPresence: providerToolPresence,
       },
       inventory: {
@@ -2186,6 +2306,7 @@ async function runSmoke(options) {
         turnId,
         eventName,
         finalSnapshot: finalState.snapshot,
+        newTurnIsolation,
         matrix,
         toolStageMatrix,
         completedTools,
@@ -2229,6 +2350,8 @@ async function runSmoke(options) {
 }
 
 runSmoke(parseArgs(process.argv.slice(2))).catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(
+    error instanceof Error ? error.stack || error.message : String(error),
+  );
   process.exit(1);
 });

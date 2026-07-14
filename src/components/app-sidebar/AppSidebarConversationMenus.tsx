@@ -9,7 +9,7 @@ import {
   Pin,
   Trash2,
 } from "lucide-react";
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import type { SidebarOpenedProjectSummary } from "@/components/app-sidebar/sidebarConversationGroups";
 import { resolveProjectDisplayName } from "@/components/app-sidebar/sidebarProjectDisplayName";
 

@@ -96,7 +96,7 @@ impl RuntimeCore {
         }))
     }
 
-    async fn load_projection_session(
+    pub(in crate::runtime) async fn load_projection_session(
         &self,
         params: &AgentSessionReadParams,
     ) -> Result<Option<SessionLoadContext>, RuntimeCoreError> {

@@ -21,10 +21,7 @@ const appServerClientSplitSourceFiles = [
 function normalizeContractSnippet(value) {
   return value
     .replace(/\b(?:protocol|appServer|constants)\./gu, "")
-    .replace(
-      /(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu,
-      "$1?: $2",
-    )
+    .replace(/(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu, "$1?: $2")
     .replace(/\basync\s+(?=[A-Za-z_$][\w$]*\()/gu, "")
     .replace(/,\s*\)/gu, ")")
     .replace(/\s+/gu, "");
@@ -43,7 +40,9 @@ function expandContractFiles(files) {
   return [
     ...new Set(
       files.flatMap((file) =>
-        file === appServerClientIndexFile ? appServerClientSplitSourceFiles : [file],
+        file === appServerClientIndexFile
+          ? appServerClientSplitSourceFiles
+          : [file],
       ),
     ),
   ];
@@ -98,12 +97,12 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
         "pub struct McpServerOauthLoginResponse",
         "pub struct McpToolCallParams",
         "pub struct McpToolCallResponse",
-        "pub struct McpPromptGetParams",
+        "pub struct McpPromptGetParams { #[schemars(length(min = 1))] pub server: String, #[schemars(length(min = 1))] pub name: String",
         "pub struct McpResourceListResponse",
         "pub resource_templates: Vec<serde_json::Value>",
-        "pub struct McpResourceReadParams",
-        "pub struct McpResourceSubscribeParams",
-        "pub struct McpResourceUnsubscribeParams",
+        "pub struct McpResourceReadParams { #[schemars(length(min = 1))] pub server: String, #[schemars(length(min = 1))] pub uri: String",
+        "pub struct McpResourceSubscribeParams { #[schemars(length(min = 1))] pub server: String, #[schemars(length(min = 1))] pub uri: String",
+        "pub struct McpResourceUnsubscribeParams { #[schemars(length(min = 1))] pub server: String, #[schemars(length(min = 1))] pub uri: String",
         "pub struct McpResourceSubscriptionResponse",
       ],
     ],
@@ -169,14 +168,26 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
         "async fn call_mcp_tool_with_caller(",
         ".call_tool(&params.tool_name, params.arguments)",
         ".call_tool_with_caller(",
-        ".get_prompt(&params.name, params.arguments)",
+        ".get_prompt(&params.server, &params.name, params.arguments)",
         "async fn list_mcp_resources(",
         "manager.list_resources()",
         "list_resource_templates()",
         "resource_templates:",
-        ".read_resource(&params.uri)",
-        ".subscribe_resource(&params.uri)",
-        ".unsubscribe_resource(&params.uri)",
+        ".read_resource(&params.server, &params.uri)",
+        ".subscribe_resource(&params.server, &params.uri)",
+        ".unsubscribe_resource(&params.server, &params.uri)",
+      ],
+    ],
+    [
+      "lime-rs/crates/app-server-client/src/lib.rs",
+      [
+        "pub fn read_mcp_resource(",
+        "pub fn subscribe_mcp_resource(",
+        "pub fn unsubscribe_mcp_resource(",
+        "validate_mcp_resource_target(&params.server, &params.uri)?",
+        "METHOD_MCP_RESOURCE_READ",
+        "METHOD_MCP_RESOURCE_SUBSCRIBE",
+        "METHOD_MCP_RESOURCE_UNSUBSCRIBE",
       ],
     ],
     [
@@ -243,7 +254,7 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
         "export type McpServerOauthLoginResponse",
         "export type McpToolCallParams",
         "export type McpToolCallResponse",
-        "export type McpPromptGetParams",
+        "export type McpPromptGetParams = { server: string; name: string",
         "export type McpResourceListResponse",
         "resourceTemplates?: unknown[]",
         "export type McpResourceReadParams",
@@ -581,7 +592,10 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
   }
 }
 
-export function checkWorkspaceRightSurfaceCurrentContracts({ repoRoot, failures }) {
+export function checkWorkspaceRightSurfaceCurrentContracts({
+  repoRoot,
+  failures,
+}) {
   const requiredByFile = new Map([
     [
       [

@@ -36,6 +36,88 @@ fn append_and_read_session_events() {
 }
 
 #[test]
+fn cloned_writer_blocks_repair_until_an_inflight_record_is_complete() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    writer.append(&event(1)).expect("first append");
+    let second = event(2);
+    let second_json = serde_json::to_vec(&second).expect("serialize second event");
+
+    let path = writer.session_path("session-a");
+    let io_lock = writer.io_lock_for(&path).expect("event log I/O lock");
+    let io_guard = io_lock.lock().expect("event log I/O guard");
+    let mut file = open_event_log_for_append(&path).expect("append event log");
+    file.write_all(&second_json).expect("write partial record");
+    file.flush().expect("flush partial record");
+
+    let repair_writer = writer.clone();
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        sender
+            .send(repair_writer.repair_session_event_log("session-a"))
+            .expect("send repair result");
+    });
+    assert!(receiver.recv_timeout(Duration::from_millis(25)).is_err());
+
+    file.write_all(b"\n").expect("complete record");
+    file.flush().expect("flush complete record");
+    drop(file);
+    drop(io_guard);
+
+    let scan = receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("repair completes after append")
+        .expect("repair scan");
+    assert!(scan.issue.is_none());
+    assert_eq!(scan.records.len(), 2);
+    assert_eq!(scan.records[1].event, second);
+}
+
+#[test]
+fn session_io_lock_does_not_block_another_session_append() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let writer = EventLogWriter::new(temp.path()).expect("writer");
+    writer.append(&event(1)).expect("session a append");
+    let session_a_path = writer.session_path("session-a");
+    let session_a_lock = writer
+        .io_lock_for(&session_a_path)
+        .expect("session a I/O lock");
+    let session_a_guard = session_a_lock.lock().expect("session a I/O guard");
+
+    let mut session_b_event = event(1);
+    session_b_event.session_id = "session-b".to_string();
+    session_b_event.thread_id = Some("thread-b".to_string());
+    session_b_event.turn_id = Some("turn-b".to_string());
+    session_b_event.event_id = "evt-session-b-1".to_string();
+    let append_writer = writer.clone();
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        sender
+            .send(append_writer.append(&session_b_event))
+            .expect("send append result");
+    });
+
+    receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("session b append is independent")
+        .expect("session b append");
+    drop(session_a_guard);
+    assert_eq!(
+        writer
+            .read_session_events("session-b")
+            .expect("session b records")
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn append_events_groups_by_session_and_writes_all_events() {
     let temp = tempfile::tempdir().expect("tempdir");
     let writer = EventLogWriter::new(temp.path()).expect("writer");
@@ -378,8 +460,8 @@ fn canonical_scan_fingerprint_ignores_source_json_field_order() {
         .scan_session_events("session-a")
         .expect("second scan");
 
-    assert!(first.is_clean());
-    assert!(second.is_clean());
+    assert!(first.issue.is_none());
+    assert!(second.issue.is_none());
     assert_eq!(first.fingerprint, second.fingerprint);
     assert_eq!(first.last_valid_offset, first.file_len);
 }
@@ -410,7 +492,7 @@ fn malformed_tail_is_isolated_and_truncated_to_last_valid_offset() {
     let repaired = writer
         .repair_session_event_log("session-a")
         .expect("repair tail");
-    assert!(repaired.is_clean());
+    assert!(repaired.issue.is_none());
     assert_eq!(repaired.records.len(), 1);
     assert_eq!(repaired.file_len, valid_len);
     assert_eq!(
@@ -552,41 +634,5 @@ fn canonical_scan_rejects_gap_regression_and_equal_sequence_divergence() {
     assert!(matches!(
         divergence.issue,
         Some(EventLogIssue::EqualSequenceDivergence { sequence: 1, .. })
-    ));
-}
-
-#[test]
-fn canonical_comparison_detects_append_shorter_missing_middle_and_divergence() {
-    let expected = vec![event(1), event(2), event(3)];
-    let mut appended = expected.clone();
-    appended.push(event(4));
-    assert_eq!(
-        compare_canonical_event_logs(&expected, &expected),
-        Ok(EventLogComparison::Exact)
-    );
-    assert_eq!(
-        compare_canonical_event_logs(&expected, &appended),
-        Ok(EventLogComparison::Append {
-            expected_len: 3,
-            actual_len: 4
-        })
-    );
-    assert!(matches!(
-        compare_canonical_event_logs(&expected, &expected[..2]),
-        Err(EventLogComparisonIssue::ShorterLog { .. })
-    ));
-    assert!(matches!(
-        compare_canonical_event_logs(&expected, &[event(1), event(3), event(4)]),
-        Err(EventLogComparisonIssue::MissingMiddle {
-            expected_sequence: 2,
-            actual_sequence: 3,
-            ..
-        })
-    ));
-    let mut divergent = event(2);
-    divergent.payload = json!({ "text": "different" });
-    assert!(matches!(
-        compare_canonical_event_logs(&expected, &[event(1), divergent, event(3)]),
-        Err(EventLogComparisonIssue::EqualSequenceDivergence { sequence: 2, .. })
     ));
 }

@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeRequestView,
   AgentRuntimeThreadReadModel,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
 import type { ActionRequired, AgentThreadTurn } from "../types";
 import {
   formatTimeLabel,

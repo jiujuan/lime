@@ -5,7 +5,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import type { AgentSessionInfo } from "@/lib/api/agentRuntime";
+import type { AgentSessionInfo } from "@/lib/api/agentRuntime/sessionTypes";
 import { Modal } from "@/components/Modal";
 import {
   SidebarSearchBody,

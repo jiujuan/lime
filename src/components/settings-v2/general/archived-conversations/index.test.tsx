@@ -13,7 +13,7 @@ const { mockListAgentRuntimeSessions, mockUpdateAgentRuntimeSession, mockToast }
     },
   }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/sessionClient", () => ({
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
   updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
 }));

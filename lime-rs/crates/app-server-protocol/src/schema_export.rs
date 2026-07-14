@@ -182,10 +182,15 @@ fn method_catalog_schema() -> Value {
         .filter(|method| method.kind == AppServerMethodKind::Notification)
         .map(|method| method.method)
         .collect::<Vec<_>>();
+    let server_requests = APP_SERVER_METHODS
+        .iter()
+        .filter(|method| method.kind == AppServerMethodKind::ServerRequest)
+        .map(|method| method.method)
+        .collect::<Vec<_>>();
 
     json!({
         "type": "object",
-        "required": ["requests", "notifications"],
+        "required": ["requests", "notifications", "serverRequests"],
         "additionalProperties": false,
         "properties": {
             "requests": {
@@ -195,6 +200,10 @@ fn method_catalog_schema() -> Value {
             "notifications": {
                 "type": "array",
                 "items": { "enum": notifications }
+            },
+            "serverRequests": {
+                "type": "array",
+                "items": { "enum": server_requests }
             }
         }
     })
@@ -209,6 +218,7 @@ fn pretty_json_bytes(value: &Value) -> Vec<u8> {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+    use crate::{METHOD_MCP_SERVER_ELICITATION_REQUEST, METHOD_SERVER_REQUEST_RESOLVED};
 
     #[test]
     fn schema_bundle_exports_json_rpc_envelopes_and_method_catalog() {
@@ -225,6 +235,22 @@ pub(super) mod tests {
                 .iter()
                 .filter(|method| method.kind == AppServerMethodKind::Request)
                 .count()
+        );
+        assert!(
+            bundle["$defs"]["methods"]["properties"]["notifications"]["items"]["enum"]
+                .as_array()
+                .expect("notifications")
+                .contains(&serde_json::Value::String(
+                    METHOD_SERVER_REQUEST_RESOLVED.to_string()
+                ))
+        );
+        assert_eq!(
+            bundle["$defs"]["methods"]["properties"]["serverRequests"]["items"]["enum"]
+                .as_array()
+                .expect("server requests"),
+            &vec![serde_json::Value::String(
+                METHOD_MCP_SERVER_ELICITATION_REQUEST.to_string()
+            )]
         );
     }
 

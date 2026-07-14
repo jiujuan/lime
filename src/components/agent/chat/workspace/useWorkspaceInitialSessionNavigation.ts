@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { logAgentDebug } from "@/lib/agentDebug";
 
 const INITIAL_SESSION_NAVIGATION_DEDUPE_MS = 2_000;
@@ -12,6 +12,9 @@ let switchTopicScopedNavigationStarts = new WeakMap<
   Map<string, number>
 >();
 const externalNavigationStartsBySessionId = new Map<string, number>();
+const explicitNavigationRequestVersionsBySessionId = new Map<string, number>();
+const explicitNavigationRequestListeners = new Set<() => void>();
+let explicitNavigationRequestSequence = 0;
 
 interface InitialSessionSwitchOptions {
   forceRefresh?: boolean;
@@ -49,6 +52,29 @@ function normalizeSessionId(value?: string | null): string | null {
 export function resetInitialSessionNavigationDeduplicationForTests() {
   switchTopicScopedNavigationStarts = new WeakMap();
   externalNavigationStartsBySessionId.clear();
+  explicitNavigationRequestVersionsBySessionId.clear();
+  explicitNavigationRequestSequence = 0;
+}
+
+export function requestExplicitInitialSessionNavigation(sessionId: string) {
+  const normalizedSessionId = normalizeSessionId(sessionId);
+  if (!normalizedSessionId) {
+    return;
+  }
+
+  explicitNavigationRequestSequence += 1;
+  explicitNavigationRequestVersionsBySessionId.set(
+    normalizedSessionId,
+    explicitNavigationRequestSequence,
+  );
+  explicitNavigationRequestListeners.forEach((listener) => listener());
+}
+
+function subscribeExplicitInitialSessionNavigationRequests(
+  listener: () => void,
+) {
+  explicitNavigationRequestListeners.add(listener);
+  return () => explicitNavigationRequestListeners.delete(listener);
 }
 
 export function rememberInitialSessionNavigationStart(sessionId: string) {
@@ -72,9 +98,21 @@ export function useWorkspaceInitialSessionNavigation({
   resolveInitialSessionSwitch,
 }: UseWorkspaceInitialSessionNavigationParams) {
   const appliedInitialSessionIdRef = useRef<string | null>(null);
+  const handledExplicitNavigationRequestVersionRef = useRef(0);
+  const previousInitialSessionIdRef = useRef<string | null>(null);
   const pausedInitialSessionIdRef = useRef<string | null>(null);
   const normalizedInitialSessionId = normalizeSessionId(initialSessionId);
   const normalizedCurrentSessionId = normalizeSessionId(currentSessionId);
+  const explicitNavigationRequestVersion = useSyncExternalStore(
+    subscribeExplicitInitialSessionNavigationRequests,
+    () =>
+      normalizedInitialSessionId
+        ? (explicitNavigationRequestVersionsBySessionId.get(
+            normalizedInitialSessionId,
+          ) ?? 0)
+        : 0,
+    () => 0,
+  );
   const shouldRunMatchedHydration =
     normalizedCurrentSessionId === normalizedInitialSessionId &&
     shouldHydrateMatchedInitialSession;
@@ -99,20 +137,44 @@ export function useWorkspaceInitialSessionNavigation({
     : null;
 
   useEffect(() => {
+    const previousInitialSessionId = previousInitialSessionIdRef.current;
+    previousInitialSessionIdRef.current = normalizedInitialSessionId;
+
     if (!normalizedInitialSessionId) {
       appliedInitialSessionIdRef.current = null;
       pausedInitialSessionIdRef.current = null;
       return;
     }
 
-    if (shouldPauseInitialSessionNavigation) {
+    const navigationStartedAt = Date.now();
+    const registeredNavigationStartedAt =
+      externalNavigationStartsBySessionId.get(normalizedInitialSessionId) ?? 0;
+    const hasRegisteredLocalNavigation =
+      navigationStartedAt - registeredNavigationStartedAt <
+      INITIAL_SESSION_NAVIGATION_DEDUPE_MS;
+    const initialSessionTargetChanged =
+      previousInitialSessionId !== normalizedInitialSessionId;
+    const hasExplicitNavigationRequest =
+      explicitNavigationRequestVersion >
+      handledExplicitNavigationRequestVersionRef.current;
+    const shouldPauseForLocalDraftTransition =
+      shouldPauseInitialSessionNavigation &&
+      !hasExplicitNavigationRequest &&
+      (!initialSessionTargetChanged ||
+        normalizedCurrentSessionId === normalizedInitialSessionId ||
+        hasRegisteredLocalNavigation);
+
+    if (shouldPauseForLocalDraftTransition) {
       pausedInitialSessionIdRef.current = normalizedInitialSessionId;
       logAgentDebug(
         "AgentChatPage",
         "initialSessionNavigation.paused",
         {
           currentSessionId: normalizedCurrentSessionId,
+          hasExplicitNavigationRequest,
+          hasRegisteredLocalNavigation,
           initialSessionId: normalizedInitialSessionId,
+          initialSessionTargetChanged,
         },
         {
           dedupeKey: `initialSessionNavigation.paused:${normalizedInitialSessionId}`,
@@ -122,7 +184,19 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
+    const isExplicitResumeOfPausedNavigation =
+      hasExplicitNavigationRequest &&
+      pausedInitialSessionIdRef.current === normalizedInitialSessionId;
+    const consumeExplicitNavigationRequest = () => {
+      if (!hasExplicitNavigationRequest) {
+        return;
+      }
+      handledExplicitNavigationRequestVersionRef.current =
+        explicitNavigationRequestVersion;
+    };
+
     if (
+      !hasExplicitNavigationRequest &&
       shouldCancelPausedInitialSessionNavigationOnCurrentSessionChange &&
       pausedInitialSessionIdRef.current === normalizedInitialSessionId &&
       normalizedCurrentSessionId &&
@@ -145,6 +219,7 @@ export function useWorkspaceInitialSessionNavigation({
     }
 
     if (shouldSkipInitialSessionNavigation) {
+      consumeExplicitNavigationRequest();
       appliedInitialSessionIdRef.current = `${normalizedInitialSessionId}:skipped`;
       logAgentDebug(
         "AgentChatPage",
@@ -165,12 +240,17 @@ export function useWorkspaceInitialSessionNavigation({
       normalizedCurrentSessionId === normalizedInitialSessionId &&
       !shouldHydrateMatchedSession
     ) {
+      consumeExplicitNavigationRequest();
       appliedInitialSessionIdRef.current = `${normalizedInitialSessionId}:matched-current`;
+      pausedInitialSessionIdRef.current = null;
       externalNavigationStartsBySessionId.delete(normalizedInitialSessionId);
       return;
     }
 
-    if (appliedInitialSessionIdRef.current === appliedNavigationKey) {
+    if (
+      !hasExplicitNavigationRequest &&
+      appliedInitialSessionIdRef.current === appliedNavigationKey
+    ) {
       return;
     }
 
@@ -198,7 +278,7 @@ export function useWorkspaceInitialSessionNavigation({
       switchTopicScopedNavigationStarts.set(switchTopic, switchTopicStarts);
     }
 
-    const startedAt = Date.now();
+    const startedAt = navigationStartedAt;
     const scopedLastStartedAt = switchTopicStarts.get(dedupeKey) ?? 0;
     const scopedSessionLastStartedAt =
       switchTopicStarts.get(sessionDedupeKey) ?? 0;
@@ -209,7 +289,11 @@ export function useWorkspaceInitialSessionNavigation({
       scopedSessionLastStartedAt,
       externalLastStartedAt,
     );
-    if (startedAt - lastStartedAt < INITIAL_SESSION_NAVIGATION_DEDUPE_MS) {
+    if (
+      !isExplicitResumeOfPausedNavigation &&
+      startedAt - lastStartedAt < INITIAL_SESSION_NAVIGATION_DEDUPE_MS
+    ) {
+      consumeExplicitNavigationRequest();
       appliedInitialSessionIdRef.current = appliedNavigationKey;
       logAgentDebug(
         "AgentChatPage",
@@ -227,7 +311,9 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
+    consumeExplicitNavigationRequest();
     appliedInitialSessionIdRef.current = appliedNavigationKey;
+    pausedInitialSessionIdRef.current = null;
     switchTopicStarts.set(dedupeKey, startedAt);
     switchTopicStarts.set(sessionDedupeKey, startedAt);
     logAgentDebug("AgentChatPage", "initialSessionNavigation.start", {
@@ -281,6 +367,7 @@ export function useWorkspaceInitialSessionNavigation({
     normalizedCurrentSessionId,
     normalizedInitialSessionId,
     appliedNavigationKey,
+    explicitNavigationRequestVersion,
     navigationMode,
     resolveInitialSessionSwitch,
     resolvedSwitchOptions,

@@ -1,12 +1,21 @@
 import { AppServerClient } from "./appServerClient";
-import { isAppServerJsonRpcNotification } from "./appServerResponse";
+import {
+  METHOD_SERVER_REQUEST_RESOLVED,
+  type ServerRequestResolvedNotification,
+} from "@limecloud/app-server-client";
+import {
+  isAppServerJsonRpcNotification,
+  isAppServerJsonRpcRequest,
+} from "./appServerResponse";
 import type {
   AppServerDrainEventsRequest,
   AppServerJsonRpcNotification,
+  AppServerJsonRpcRequest,
 } from "./appServerTypes";
 
 const DEFAULT_APP_SERVER_EVENT_DRAIN_LIMIT = 50;
 const DEFAULT_APP_SERVER_EVENT_DRAIN_INTERVAL_MS = 250;
+const MAX_RESOLVED_SERVER_REQUEST_TOMBSTONES = 2_048;
 
 type AppServerEventDrainClient = {
   drainEvents: (
@@ -24,13 +33,18 @@ export interface AppServerEventBusDrainOptions {
 export interface AppServerEventBusSubscription {
   getDrainOptions?: () => AppServerEventBusDrainOptions | undefined;
   onError?: (error: unknown) => void;
-  onNotifications: (notifications: AppServerJsonRpcNotification[]) => void;
+  onNotifications?: (notifications: AppServerJsonRpcNotification[]) => void;
+  onServerRequests?: (requests: AppServerJsonRpcRequest[]) => void;
   shouldDrain?: () => boolean;
 }
 
 export class AppServerEventBus {
   readonly #appServerClient: AppServerEventDrainClient;
+  readonly #pendingServerRequests = new Map<string, AppServerJsonRpcRequest>();
+  readonly #resolvedServerRequestIds = new Set<string>();
+  readonly #seenServerRequestIds = new Set<string>();
   readonly #subscriptions = new Map<number, AppServerEventBusSubscription>();
+  #connectionGeneration = 0;
   #draining = false;
   #nextSubscriptionId = 1;
 
@@ -41,9 +55,25 @@ export class AppServerEventBus {
   }
 
   subscribe(subscription: AppServerEventBusSubscription): () => void {
+    if (!subscription.onNotifications && !subscription.onServerRequests) {
+      throw new Error(
+        "App Server event subscription requires a message handler",
+      );
+    }
+    if (
+      subscription.onServerRequests &&
+      [...this.#subscriptions.values()].some(
+        (existing) => existing.onServerRequests,
+      )
+    ) {
+      throw new Error(
+        "App Server event bus already has a server request handler",
+      );
+    }
     const id = this.#nextSubscriptionId;
     this.#nextSubscriptionId += 1;
     this.#subscriptions.set(id, subscription);
+    this.#flushPendingServerRequests(this.#activeSubscriptions());
     this.#startDrainLoop();
 
     return () => {
@@ -52,7 +82,11 @@ export class AppServerEventBus {
   }
 
   reset(): void {
+    this.#connectionGeneration += 1;
     this.#subscriptions.clear();
+    this.#pendingServerRequests.clear();
+    this.#resolvedServerRequestIds.clear();
+    this.#seenServerRequestIds.clear();
   }
 
   async #drainLoop(): Promise<void> {
@@ -70,9 +104,11 @@ export class AppServerEventBus {
           );
           continue;
         }
+        this.#flushPendingServerRequests(activeSubscriptions);
 
         const drainOptions = resolveDrainOptions(activeSubscriptions);
-        let hasDrainedNotifications = false;
+        const connectionGeneration = this.#connectionGeneration;
+        let hasDrainedMessages = false;
         try {
           const drainRequest =
             drainOptions.includeRecent === true
@@ -84,14 +120,25 @@ export class AppServerEventBus {
           const drainedMessages = await Promise.resolve(
             this.#appServerClient.drainEvents(drainRequest),
           );
+          if (connectionGeneration !== this.#connectionGeneration) {
+            continue;
+          }
           const notifications = readNotifications(drainedMessages);
-          hasDrainedNotifications = notifications.length > 0;
+          const serverRequests = readServerRequests(drainedMessages);
+          hasDrainedMessages =
+            notifications.length > 0 || serverRequests.length > 0;
+          this.#recordResolvedServerRequests(notifications);
           if (notifications.length > 0) {
             for (const subscription of activeSubscriptions) {
-              subscription.onNotifications(notifications);
+              subscription.onNotifications?.(notifications);
             }
           }
+          this.#queueServerRequests(serverRequests);
+          this.#flushPendingServerRequests(activeSubscriptions);
         } catch (error) {
+          if (connectionGeneration !== this.#connectionGeneration) {
+            continue;
+          }
           for (const subscription of activeSubscriptions) {
             subscription.onError?.(error);
           }
@@ -99,7 +146,7 @@ export class AppServerEventBus {
 
         if (this.#subscriptions.size > 0) {
           await waitForAppServerEventDrainInterval(
-            this.#resolveNextDrainIntervalMs(hasDrainedNotifications),
+            this.#resolveNextDrainIntervalMs(hasDrainedMessages),
           );
         }
       }
@@ -117,6 +164,57 @@ export class AppServerEventBus {
     );
   }
 
+  #queueServerRequests(requests: AppServerJsonRpcRequest[]): void {
+    for (const request of requests) {
+      const requestKey = stableServerRequestId(request.id);
+      if (this.#seenServerRequestIds.has(requestKey)) {
+        continue;
+      }
+      this.#seenServerRequestIds.add(requestKey);
+      if (this.#resolvedServerRequestIds.delete(requestKey)) {
+        continue;
+      }
+      this.#pendingServerRequests.set(requestKey, request);
+    }
+  }
+
+  #recordResolvedServerRequests(
+    notifications: AppServerJsonRpcNotification[],
+  ): void {
+    for (const notification of notifications) {
+      const requestId = readResolvedServerRequestId(notification);
+      if (requestId === null) {
+        continue;
+      }
+      const requestKey = stableServerRequestId(requestId);
+      if (
+        this.#pendingServerRequests.delete(requestKey) ||
+        this.#seenServerRequestIds.has(requestKey)
+      ) {
+        continue;
+      }
+      rememberBoundedTombstone(
+        this.#resolvedServerRequestIds,
+        requestKey,
+        MAX_RESOLVED_SERVER_REQUEST_TOMBSTONES,
+      );
+    }
+  }
+
+  #flushPendingServerRequests(
+    activeSubscriptions: AppServerEventBusSubscription[],
+  ): void {
+    const handler = activeSubscriptions.find(
+      (subscription) => subscription.onServerRequests,
+    )?.onServerRequests;
+    if (!handler || this.#pendingServerRequests.size === 0) {
+      return;
+    }
+    const requests = [...this.#pendingServerRequests.values()];
+    this.#pendingServerRequests.clear();
+    handler(requests);
+  }
+
   #startDrainLoop(): void {
     if (!this.#draining) {
       void this.#drainLoop();
@@ -132,6 +230,26 @@ export class AppServerEventBus {
     return hasDrainedNotifications
       ? (options.activeIntervalMs ?? options.intervalMs)
       : options.intervalMs;
+  }
+}
+
+function stableServerRequestId(id: AppServerJsonRpcRequest["id"]): string {
+  return `${typeof id}:${String(id)}`;
+}
+
+function rememberBoundedTombstone(
+  tombstones: Set<string>,
+  requestKey: string,
+  limit: number,
+): void {
+  tombstones.delete(requestKey);
+  tombstones.add(requestKey);
+  while (tombstones.size > limit) {
+    const oldest = tombstones.values().next().value;
+    if (oldest === undefined) {
+      return;
+    }
+    tombstones.delete(oldest);
   }
 }
 
@@ -225,6 +343,32 @@ function readNotifications(
   }
 
   return messages.filter(isAppServerJsonRpcNotification);
+}
+
+function readServerRequests(
+  messages: unknown[] | undefined,
+): AppServerJsonRpcRequest[] {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+  return messages.filter(isAppServerJsonRpcRequest);
+}
+
+function readResolvedServerRequestId(
+  notification: AppServerJsonRpcNotification,
+): AppServerJsonRpcRequest["id"] | null {
+  if (notification.method !== METHOD_SERVER_REQUEST_RESOLVED) {
+    return null;
+  }
+  const params = notification.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return null;
+  }
+  const requestId = (params as Partial<ServerRequestResolvedNotification>)
+    .requestId;
+  return typeof requestId === "string" || typeof requestId === "number"
+    ? requestId
+    : null;
 }
 
 function normalizePositiveInteger(value: unknown): number | undefined {

@@ -1,8 +1,8 @@
 use agent_protocol::provider_trace::{ProviderTraceEvent, ProviderTraceStage};
 use agent_protocol::turn_context::TurnOutputSchemaRuntime;
 use agent_protocol::{
-    ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload, ToolArgument,
-    ToolOutput, TurnId,
+    CollabAgentOperation, ItemId, ItemStatus, SessionId, ThreadId, ThreadItem, ThreadItemPayload,
+    ToolArgument, ToolOutput, TurnId,
 };
 use lime_core::database::dao::agent_timeline::AgentThreadTurn;
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,9 @@ use crate::session_execution_runtime::{
     SessionExecutionRuntimeLimitState, SessionExecutionRuntimeRoutingDecision,
     SessionExecutionRuntimeTaskProfile,
 };
+
+mod protocol_agent_control;
+pub(crate) use protocol_agent_control::CanonicalSubAgentActivity;
 
 pub type AgentActionRequiredScope = agent_protocol::action_required::ActionRequiredScope;
 
@@ -489,6 +492,7 @@ pub enum AgentEvent {
     Message { message: AgentMessage },
 }
 
+#[derive(Clone)]
 pub(crate) struct ToolItemLifecycleContext {
     pub session_id: SessionId,
     pub thread_id: ThreadId,
@@ -543,6 +547,7 @@ pub(crate) fn canonical_tool_item_event(
                 truncation,
                 sidecar_reference,
                 metadata: output_metadata,
+                agent_control_projection_facts: _,
             } = output;
             metadata.extend(output_metadata);
             metadata.insert("success".to_string(), Value::Bool(success));
@@ -577,11 +582,21 @@ pub(crate) fn canonical_tool_item_event(
         }
         None => (ItemStatus::InProgress, None),
     };
-    let payload = ThreadItemPayload::Tool {
-        call_id: call_id.clone(),
-        name: tool_name,
-        arguments,
-        output,
+    let payload = if tool_name == tool_runtime::agent_control::WAIT_AGENT_TOOL_NAME {
+        ThreadItemPayload::CollabAgentToolCall {
+            call_id: call_id.clone(),
+            operation: CollabAgentOperation::Wait,
+            target_thread_id: None,
+            message: None,
+            output,
+        }
+    } else {
+        ThreadItemPayload::Tool {
+            call_id: call_id.clone(),
+            name: tool_name,
+            arguments,
+            output,
+        }
     };
     let item = ThreadItem {
         session_id: context.session_id,
@@ -714,6 +729,10 @@ pub enum AgentOp {
         session_id: Option<String>,
     },
 }
+
+#[cfg(test)]
+#[path = "protocol_agent_control_tests.rs"]
+mod agent_control_tests;
 
 #[cfg(test)]
 mod tests {

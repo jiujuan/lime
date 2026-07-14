@@ -41,8 +41,8 @@ pub const TOOL_GUIDELINES: &str = r#"# 工具使用策略
 ### 任务管理工具
 - **update_plan**: 维护当前执行计划；每次只能有一个 `in_progress` 项
 
-### 委派工具
-- **Agent / TeamCreate / TeamDelete / SendMessage / ListPeers**: 当前 team runtime 主路径
+### 协作工具
+- 当当前工具面实际暴露 **spawn_agent / send_message / followup_task / wait_agent / interrupt_agent / list_agents** 时，使用这些工具完成持久化 Agent tree 内的委派、消息、续派、等待、中断与查询
 
 ### 人在环工具
 - **request_user_input**: 向用户请求确认或补充信息
@@ -55,7 +55,7 @@ pub const TOOL_GUIDELINES: &str = r#"# 工具使用策略
 4. **批后先给过程结论**：每完成一批工具调用，如果还要继续，先直接用 1 到 2 句话说明已经确认了什么、还缺什么、为什么继续；不要额外输出“阶段结论”标题，再决定下一批；不要连续多轮只丢工具而不给过程结论
 5. **先读后改**：修改文件前必须先读取文件内容
 6. **最小权限**：只执行必要的操作，避免不必要的文件修改
-7. **独立子问题再委派**：只有当任务需要隔离上下文、并行探索或分离执行时，才使用 team runtime 工具；优先 `Agent`，不要恢复旧工具名或额外平行入口
+7. **独立子问题再委派**：只有当任务需要隔离上下文、并行探索或分离执行，且当前工具面实际暴露 Agent control 工具时，才使用 `spawn_agent`；延续既有子代理使用 `followup_task`
 8. **不要猜文件路径**：当你不确定某个文件是否真的存在、是否就在仓库根目录时，先用 `Glob` / `Grep` / `Read` / `Bash(ls)` 确认父目录，再去读文件；如果某次读取因路径不存在失败，先修正路径，再继续下一批工具"#;
 
 /// 代码编写指南
@@ -65,7 +65,7 @@ pub const CODING_GUIDELINES: &str = r#"# 代码编写指南
 
 1. **先理解再修改**：在修改代码之前，先阅读相关文件理解现有模式和架构
 2. **使用 update_plan 规划**：对于复杂任务，先用 `update_plan` 维护执行计划
-3. **需要隔离上下文时委派**：对于可以独立完成的研究、规划或执行子问题，使用 `Agent` 创建真实子代理；对强依赖既有上下文的延续任务，优先 `SendMessage`
+3. **需要隔离上下文时委派**：当前工具面实际提供 Agent control 工具时，独立子问题使用 `spawn_agent` 创建子代理；延续任务使用 `followup_task`，只排队消息使用 `send_message`
 4. **安全第一**：避免引入安全漏洞（命令注入、XSS、SQL 注入等）
 5. **避免过度工程**：只做必要的修改，保持解决方案简单
 
@@ -101,7 +101,7 @@ pub const TASK_MANAGEMENT: &str = r#"# 任务管理
 
 不要批量完成多个任务后再标记，应该完成一个标记一个。
 
-如果某个子问题可以独立分析、规划或执行，并且不需要持续共享主对话上下文，可以使用 `Agent` 委派出去；统一使用 `Agent / SendMessage / TeamCreate / TeamDelete / ListPeers`，不要恢复旧 schema 工具名。"#;
+如果某个子问题可以独立分析、规划或执行，并且当前工具面实际提供 Agent control 工具，可以使用 `spawn_agent` 委派；继续既有子任务使用 `followup_task`，不要恢复 Team 工具或其他平行入口。"#;
 
 /// Git 操作指南
 pub const GIT_GUIDELINES: &str = r#"# Git 操作

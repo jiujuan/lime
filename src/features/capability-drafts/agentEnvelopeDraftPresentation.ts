@@ -1,8 +1,6 @@
 import type { WorkspaceRegisteredSkillRecord } from "@/lib/api/capabilityDrafts";
-import type {
-  AgentRuntimeCompletionAuditSummary,
-  AgentRuntimeWorkspaceSkillBinding,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeCompletionAuditSummary } from "@/lib/api/agentRuntime/evidenceTypes";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 
 export type AgentEnvelopeDraftStage =
   | "blocked"

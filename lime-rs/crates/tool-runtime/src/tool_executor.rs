@@ -298,6 +298,7 @@ pub struct RuntimeToolExecutionResult {
     pub truncation: Option<ToolOutputTruncation>,
     pub sidecar_reference: Option<ToolOutputReference>,
     pub metadata: HashMap<String, Value>,
+    pub agent_control_projection_facts: Vec<crate::agent_control::SubAgentProjectionFact>,
 }
 
 impl RuntimeToolExecutionResult {
@@ -315,6 +316,7 @@ impl RuntimeToolExecutionResult {
             truncation: None,
             sidecar_reference: None,
             metadata,
+            agent_control_projection_facts: Vec::new(),
         }
     }
 
@@ -330,6 +332,14 @@ impl RuntimeToolExecutionResult {
 
     pub fn with_sidecar_reference(mut self, sidecar_reference: ToolOutputReference) -> Self {
         self.sidecar_reference = Some(sidecar_reference);
+        self
+    }
+
+    pub fn with_agent_control_projection_facts(
+        mut self,
+        facts: Vec<crate::agent_control::SubAgentProjectionFact>,
+    ) -> Self {
+        self.agent_control_projection_facts = facts;
         self
     }
 }

@@ -4,7 +4,6 @@ pub mod managed_objective_repository;
 pub mod migration;
 mod migration_support;
 pub mod migration_v2;
-pub mod migration_v3;
 pub mod migration_v4;
 pub mod migration_v5;
 pub mod migration_v6;
@@ -131,5 +130,27 @@ fn apply_database_pragmas(conn: &Connection) -> Result<(), String> {
             tracing::info!("[数据库] 已回退到 DELETE journal 兼容模式");
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_database_does_not_seed_a_default_playwright_mcp_server() {
+        let temp_dir = tempfile::tempdir().expect("create database fixture directory");
+        let db = init_database_at_path(temp_dir.path().join("lime.db"))
+            .expect("initialize fresh database");
+        let count: i64 = lock_db(&db)
+            .expect("lock database")
+            .query_row(
+                "SELECT COUNT(*) FROM mcp_servers WHERE name = 'playwright'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count default playwright MCP rows");
+
+        assert_eq!(count, 0);
     }
 }

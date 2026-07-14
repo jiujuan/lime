@@ -107,6 +107,7 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
     if let Some(sidecar_store) = sidecar_store.clone() {
         app_data_source = app_data_source.with_sidecar_store(sidecar_store);
     }
+    let mcp_elicitation_router = app_data_source.mcp_elicitation_router();
     let app_data_source: Arc<dyn AppDataSource> = Arc::new(app_data_source);
     let capability_source = config
         .app_policy_path
@@ -176,7 +177,9 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             .with_telemetry_store(Arc::new(telemetry_store));
     }
 
-    Ok(AppServer::with_runtime(runtime))
+    AppServer::with_runtime(runtime)
+        .with_mcp_elicitation_router(mcp_elicitation_router)
+        .map_err(|error| anyhow::anyhow!("failed to attach MCP elicitation router: {error}"))
 }
 
 fn initialize_database(config: &CliConfig) -> anyhow::Result<InitializedDatabase> {

@@ -42,6 +42,11 @@ pub(super) fn create_thread_store_schema(conn: &Connection) -> ThreadStoreResult
             PRIMARY KEY (thread_id, sequence),
             FOREIGN KEY (thread_id) REFERENCES canonical_threads(thread_id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS canonical_thread_spawn_edges (
+            parent_thread_id TEXT NOT NULL,
+            child_thread_id TEXT NOT NULL PRIMARY KEY,
+            status TEXT NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_canonical_threads_archive_recency
             ON canonical_threads(archived, recency_at_ms DESC, updated_at_ms DESC, thread_id DESC);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_canonical_threads_session
@@ -52,6 +57,8 @@ pub(super) fn create_thread_store_schema(conn: &Connection) -> ThreadStoreResult
             ON canonical_items(thread_id, ordinal, item_id);
         CREATE INDEX IF NOT EXISTS idx_canonical_items_turn_page
             ON canonical_items(thread_id, turn_id, ordinal, item_id);
+        CREATE INDEX IF NOT EXISTS idx_canonical_thread_spawn_edges_parent_status
+            ON canonical_thread_spawn_edges(parent_thread_id, status);
         "#,
     )
     .map_err(store_error)

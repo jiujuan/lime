@@ -131,6 +131,7 @@ function metricWithin(traceSession, key, maxMs) {
 }
 
 const HOME_HOTPATH_PENDING_PREVIEW_PAINT_BUDGET_MS = 750;
+const HOME_HOTPATH_PENDING_PROJECTION_VISIBLE_BUDGET_MS = 250;
 const HOME_HOTPATH_SEND_DISPATCH_BUDGET_MS = 250;
 const HOME_HOTPATH_SUBMIT_ACCEPTED_BUDGET_MS = 1800;
 const HOME_HOTPATH_TEXT_DELTA_TO_PAINT_BUDGET_MS = 250;
@@ -168,6 +169,17 @@ function buildHomeHotpathScenarioAssertions({
       hotpath.inputSend?.afterFillStability?.stable === true,
     homeHotpathNoFlickerBetweenSubmitAndConversation:
       hotpath.submitToConversationStability?.stable === true,
+    homeHotpathPendingProjectionVisibleWithinBudget:
+      typeof hotpath.submitToConversationStability
+        ?.conversationStartedAtMs === "number" &&
+      hotpath.submitToConversationStability.conversationStartedAtMs <=
+        HOME_HOTPATH_PENDING_PROJECTION_VISIBLE_BUDGET_MS,
+    homeHotpathNoImperativePendingShell:
+      hotpath.submitToConversationStability?.noImperativePendingShell === true &&
+      postSubmitProjection.imperativePendingShellCount === 0 &&
+      completedProjection.imperativePendingShellCount === 0,
+    homeHotpathMainAreaBoundsStable:
+      hotpath.submitToConversationStability?.mainAreaBounds?.stable === true,
     homeHotpathPreTurnTraceWindowAvailable:
       typeof hotpath.preTurnTrace?.clickAt === "string" &&
       typeof hotpath.preTurnTrace?.turnStartAt === "string",
@@ -1347,11 +1359,19 @@ export function buildScenarioAssertions(context) {
                                                           summary
                                                             .inputbarPendingSteerGuiCanceled
                                                             ?.stopButtonVisible ===
-                                                            true &&
+                                                            false &&
                                                           summary
                                                             .inputbarPendingSteerGuiCanceled
                                                             ?.textareaDisabled ===
                                                             false,
+                                                        inputbarPendingSteerQueuedProjectionCleared:
+                                                          summary
+                                                            .inputbarPendingSteerGuiCanceled
+                                                            ?.hasPrompt ===
+                                                            false &&
+                                                          summary.inputbarPendingSteerGuiCanceled?.assistantTexts?.includes(
+                                                            "正在生成回复",
+                                                          ) === false,
                                                         inputbarPendingSteerTextRestored:
                                                           summary
                                                             .inputbarPendingSteerGuiCanceled

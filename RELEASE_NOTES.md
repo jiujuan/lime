@@ -1,40 +1,44 @@
-## Lime v1.101.0
+## Lime v1.102.0
 
 ### 新功能
 
-- 建立 canonical Thread / Turn / Item 的端到端产品链：App Server 提供 `thread/read`、列表与分页协议，ProjectionStore 直接持久化 typed changeset，并向 Renderer 投递完整 canonical entity。
-- 新增 empty Thread 原子创建、active / queued Turn 读取与队列控制投影，使新会话、重启恢复、排队执行和终态读取共享同一事实源。
-- 扩展 Skills 管理与读取协议，加入稳定 skill identity、authority、policy、dependency 和 workflow metadata，并接入 App Server、tool-runtime 与前端 typed client。
-- 为 Tool、Approval、MCP 和协作 Agent 建立 typed display item 与 lifecycle contract，保留 arguments、structured output、duration、truncation、sidecar 和决策语义。
+- 打通 MCP server elicitation 的真实产品链：thread-scoped runtime 通过 App Server reverse JSON-RPC 发起表单请求，Electron 原样转发，Renderer 提供五语言交互，并支持 response、远端 resolved 与取消收口。
+- 建立 durable Agent graph、identity 与 mailbox，并通过 per-turn gateway 向 current provider 提供 `spawn_agent`、`list_agents`、`send_message`、`followup_task`、`interrupt_agent`、`wait_agent` 六个控制工具；QueueOnly / TriggerTurn、canonical Item 和 delivered audit 共享同一持久化事实源。
+- 补齐 Multi-Agent 按需恢复与终态通知：restart 后只 hydrate exact target，child 完成或失败通过 durable assistant Item / mailbox 通知 parent，`wait_agent` 以 steer-first 语义返回结构化 activity，并投影 canonical Collab / SubAgent Item。
+- MCP Tool surface 改为 sampling-step snapshot，冻结 definition、allowlist、route、connection 与 timeout；资源和提示词读写使用精确 `(server, uri/name)` identity，避免跨连接误命中。
+- 为 runtime MCP server 增加并发启动与故障隔离：optional server 失败不影响健康连接，required server 失败保持旧 generation 并拒绝不完整 replacement。
 
 ### 修复
 
-- 修复 approval / request-user-input 在重启、恢复和取消路径中的 identity 与 continuation 校验，缺少可恢复 continuation 时返回结构化错误且不伪造 resolved 状态。
-- 修复 canonical event sequence、重复 lifecycle、损坏 event-log 尾部、projection repair 和 conversation import 的一致性问题，非法 identity 或顺序继续 fail closed。
-- 修复 GUI active Turn、queued Turn、terminal history、输入恢复和右侧工作台状态之间的投影偏差，避免 renderer cache 反向成为运行时真相。
-- 修复 image command、media request、provider stream 和 imported Tool event 在 canonical lifecycle 中的参数、输出与终态保真。
+- 修复 reverse JSON-RPC 的连接归属、boot-scoped request ID、abort cleanup、at-most-once response 与 resolved tombstone，重复、迟到、断连或未知响应继续 fail closed。
+- 修复 MCP elicitation 的 active-time timeout、响应 `_meta`、表单 schema/number/enum 语义与取消竞态，用户等待时间不再计入服务端执行超时。
+- 修复 Claw 首字与长工具循环稳定性：首轮响应策略统一归 App Server，移除 Renderer 快速路由双轨，并在已有联网证据后进入真实模型总结阶段。
+- 修复 Claw 中断会话从“新建任务”首页重新进入同一会话时的导航去重，显式用户意图现在可以恢复 current read model、输入框与后续发送，不再被 stale draft pause 拦截。
+- 修复媒体 provider/model 选择的原子持久化，以及侧边栏、归档会话、Automation、Skills 和 Plugin history 对旧 Agent runtime barrel 的依赖。
+- 修复 approval session-cache、canonical Thread identity、active/queued Turn、终态历史与输入恢复之间的投影偏差，避免生成重复 pending 项或回退旧 read model。
 
 ### 优化与重构
 
-- 将 provider wire lowering 从 `runtime-core` 迁到 `model-provider`，统一 OpenAI、Anthropic、Gemini、Ollama、Fal 与图像请求的 current owner。
-- 将 current provider 工具执行切到 `RuntimeTool` / `ToolCall` / `ToolLifecycleEmitter`，由 host emitter 唯一产生 canonical `item.started` / `item.completed`。
-- 前端 Agent Chat、Plugin runtime 与 app-server clients 改为消费 canonical Thread read 与 typed Item projection，收缩旧 `agentSession/read` presentation adapter 的职责。
-- 删除旧 Agent tool orchestrator/lifecycle、runtime-core mapper、thread-store legacy store/transcript、raw tool batch，以及前端独立 media/subagent client 双轨实现。
+- MCP management control plane 与 provider tool bridge 分离；canonical Tool Item 成为 history、compaction、coding、Skills、MCP、browser 与 artifact evidence 的唯一消费合同。
+- 删除旧 Agent session store、subagent sidecar、aggregate runtime、session query、execution strategy compat、backend event stream 和默认 Playwright MCP seed，并补回流守卫。
+- Agent Chat、Automation、Skills、归档会话、Sidebar 与 Plugin history 迁到各自 current owner，继续收缩旧兼容 barrel、快速响应 helper 和 pending shell 双轨。
+- Multi-Agent canonical activity 收敛为 `Started` / `Interacted` / `Interrupted` 三类；`list_agents` 保持普通 Tool，旧 V1 resume / close 与历史 activity taxonomy 不再进入 current producer。
+- 拆分 App Server event store、projection materializer、Agent runtime 与 GUI 大文件，保持领域 owner 和单一事实源边界。
 
 ### 测试与质量
 
-- 扩展 App Server protocol/schema/client contract，覆盖 canonical Thread read、Skills、request access、通知序列与序列化边界。
-- 新增 Rust 定向回归，覆盖 empty Thread、event-log repair、Tool/Approval lifecycle、conversation import、provider/media lowering、projection store 和 restart recovery。
-- 新增 Agent Chat、Plugin runtime、queue control、canonical item reader、approval projection 与 workspace composition 的 TypeScript 回归。
-- 补充 refactor v2 Gate A / Gate B、current fixture、协议守卫与逐切片 evidence，记录生产 consumer cutover 和 dead surface 删除证明。
+- 扩展 App Server protocol/schema、Rust/TypeScript client、Electron host 与 Renderer contract，覆盖 server-originated request、resolved notification、MCP target identity 和 elicitation form。
+- 新增 Agent graph/mailbox/control、restart-on-demand、terminal Result、concurrent wait、MCP router/timeout/fault isolation、canonical projection、first-token flow control 与 atomic media preference 的定向回归。
+- 补充真实 Electron Gate B、Claw 中断后重入与继续会话、current fixture、协议守卫和 S1-S6 删除证据，验证生产 bridge 不回退 mock。
+- 用户可见的 MCP elicitation 文案与 GUI 回归覆盖 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR`。
 
 ### 文档
 
-- 更新全局架构，明确 ProjectionStore、canonical read edge、Tool lifecycle、Approval 语义、provider lowering 和 Renderer 消费边界。
-- 新增 refactor v2 多进程实施计划、v1 crosswalk 与 S1-S6 施工证据，统一 current / deprecated / dead 分类和后续退出条件。
+- 更新架构、命令与 MCP 文档，明确 reverse JSON-RPC、MCP runtime/control-plane owner、Agent graph/mailbox、首轮响应策略和 canonical projection 边界。
+- 更新 refactor v2 执行计划与逐切片 evidence，记录 current / compat / deprecated / dead 分类、验证结果和删除退出条件。
 
 ### 其他
 
-- 版本事实源更新到 `1.101.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.102.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.100.0` -> `v1.101.0`
+**完整变更**: `v1.101.0` -> `v1.102.0`

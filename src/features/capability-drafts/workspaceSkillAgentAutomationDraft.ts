@@ -1,5 +1,5 @@
 import type { AutomationJobDialogInitialValues } from "@/components/settings-v2/system/automation/AutomationJobDialog";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { AutomationJobRecord, TaskSchedule } from "@/lib/api/automation";
 
 const DEFAULT_CRON_TIMEZONE = "Asia/Shanghai";

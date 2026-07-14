@@ -20,6 +20,9 @@ rmcp.workspace = true
 dirs.workspace = true
 reqwest.workspace = true
 axum.workspace = true
+chrono.workspace = true
+email_address.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

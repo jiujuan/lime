@@ -12,6 +12,9 @@ const APP_CONFIG_CHANGED_EVENT = "lime:app-config-changed";
 let configCache: Config | null = null;
 let configLoadingPromise: Promise<Config> | null = null;
 let configCacheStamp: string | null = null;
+let configMutationTail: Promise<void> = Promise.resolve();
+
+export type ConfigUpdater = (current: Config) => Config;
 
 export type {
   ClawTraceConfig,
@@ -218,6 +221,20 @@ export async function saveConfig(config: Config): Promise<void> {
   assertVoidResult("save_config", result);
   configCache = cloneConfig(normalizedConfig);
   configCacheStamp = markAppConfigChanged();
+}
+
+export function updateConfig(updater: ConfigUpdater): Promise<Config> {
+  const mutation = configMutationTail.then(async () => {
+    const currentConfig = await getConfig();
+    await saveConfig(updater(currentConfig));
+    return await getConfig();
+  });
+
+  configMutationTail = mutation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return mutation;
 }
 
 export async function getEnvironmentPreview(): Promise<EnvironmentPreview> {

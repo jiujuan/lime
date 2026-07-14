@@ -500,6 +500,55 @@ describe("ModelSelector", () => {
     expect(setModel).not.toHaveBeenCalledWith("gpt-5.5");
   });
 
+  it("提供原子选择回调时，切换供应商应只提交一次 Provider 与模型组合", () => {
+    const setProviderType = vi.fn();
+    const setModel = vi.fn();
+    const setProviderAndModel = vi.fn();
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime 云端",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          customModels: ["gpt-5.5"],
+        },
+        {
+          key: "deepseek",
+          label: "DeepSeek",
+          registryId: "deepseek",
+          type: "openai",
+          providerId: "deepseek",
+          customModels: ["deepseek-chat"],
+        },
+      ],
+      loading: false,
+    });
+
+    const { container } = renderModelSelector({
+      providerType: "lime-hub",
+      setProviderType,
+      model: "gpt-5.5",
+      setModel,
+      setProviderAndModel,
+    });
+
+    setProviderType.mockClear();
+    setModel.mockClear();
+    setProviderAndModel.mockClear();
+    clickModelSelectorTrigger(container);
+    clickBodyButtonByText("DeepSeek");
+
+    expect(setProviderAndModel).toHaveBeenCalledTimes(1);
+    expect(setProviderAndModel).toHaveBeenCalledWith(
+      "deepseek",
+      "deepseek-chat",
+    );
+    expect(setProviderType).not.toHaveBeenCalled();
+    expect(setModel).not.toHaveBeenCalled();
+  });
+
   it("带模型过滤器的设置页切换供应商时不应回填该供应商不适用的首个自定义模型", () => {
     const setProviderType = vi.fn();
     const setModel = vi.fn();
@@ -648,7 +697,9 @@ describe("ModelSelector", () => {
 
     expect(setReasoningEffort).toHaveBeenCalledWith("high");
     expect(
-      document.body.querySelector('[data-testid="model-selector-reasoning-effort"]'),
+      document.body.querySelector(
+        '[data-testid="model-selector-reasoning-effort"]',
+      ),
     ).not.toBeNull();
   });
 
@@ -686,7 +737,9 @@ describe("ModelSelector", () => {
     clickModelSelectorTrigger(container);
 
     expect(
-      document.body.querySelector('[data-testid="model-selector-reasoning-effort"]'),
+      document.body.querySelector(
+        '[data-testid="model-selector-reasoning-effort"]',
+      ),
     ).toBeNull();
   });
 
@@ -848,9 +901,7 @@ describe("ModelSelector", () => {
     });
     mockUseProviderModels.mockReturnValue({
       modelIds: ["glm-5.1"],
-      models: [
-        createReasoningModelMetadata("glm-5.1"),
-      ],
+      models: [createReasoningModelMetadata("glm-5.1")],
       loading: false,
       error: null,
     });
@@ -936,9 +987,7 @@ describe("ModelSelector", () => {
     });
     mockUseProviderModels.mockReturnValue({
       modelIds: [model],
-      models: [
-        createReasoningModelMetadata(model),
-      ],
+      models: [createReasoningModelMetadata(model)],
       loading: false,
       error: null,
     });
@@ -973,9 +1022,7 @@ describe("ModelSelector", () => {
     });
     mockUseProviderModels.mockReturnValue({
       modelIds: ["glm-5.1"],
-      models: [
-        createReasoningModelMetadata("glm-5.1"),
-      ],
+      models: [createReasoningModelMetadata("glm-5.1")],
       loading: false,
       error: null,
     });

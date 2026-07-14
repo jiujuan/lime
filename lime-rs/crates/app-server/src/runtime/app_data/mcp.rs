@@ -3,10 +3,14 @@ use super::NoopAppDataSource;
 use super::RuntimeCoreError;
 use app_server_protocol::*;
 use async_trait::async_trait;
-use lime_mcp::McpBridgeSnapshot;
+use lime_mcp::McpRuntimeServerSpec;
 
 #[async_trait]
 pub trait McpAppDataSource: Send + Sync {
+    fn mcp_elicitation_router(&self) -> lime_mcp::ElicitationRequestRouter {
+        lime_mcp::ElicitationRequestRouter::default()
+    }
+
     async fn list_mcp_servers(&self) -> Result<McpServerListResponse, RuntimeCoreError> {
         Ok(McpServerListResponse::default())
     }
@@ -83,7 +87,9 @@ pub trait McpAppDataSource: Send + Sync {
         Ok(McpToolListResponse::default())
     }
 
-    async fn list_mcp_bridge_snapshots(&self) -> Result<Vec<McpBridgeSnapshot>, RuntimeCoreError> {
+    async fn list_mcp_runtime_server_specs(
+        &self,
+    ) -> Result<Vec<McpRuntimeServerSpec>, RuntimeCoreError> {
         Ok(Vec::new())
     }
 

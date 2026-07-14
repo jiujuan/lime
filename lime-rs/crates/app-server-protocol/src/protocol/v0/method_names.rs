@@ -1,6 +1,7 @@
 pub const METHOD_INITIALIZE: &str = "initialize";
 pub const METHOD_INITIALIZED: &str = "initialized";
 pub const METHOD_CONFIG_WARNING: &str = "configWarning";
+pub const METHOD_SERVER_REQUEST_RESOLVED: &str = "serverRequest/resolved";
 pub const METHOD_CAPABILITY_LIST: &str = "capability/list";
 pub const METHOD_ARTIFACT_READ: &str = "artifact/read";
 pub const METHOD_FILE_SYSTEM_LIST_DIRECTORY: &str = "fileSystem/listDirectory";
@@ -225,6 +226,7 @@ pub const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE: &str = "mcpServer/syncAllToLive";
 pub const METHOD_MCP_SERVER_OAUTH_LOGIN: &str = "mcpServer/oauth/login";
 pub const METHOD_MCP_SERVER_START: &str = "mcpServer/start";
 pub const METHOD_MCP_SERVER_STOP: &str = "mcpServer/stop";
+pub const METHOD_MCP_SERVER_ELICITATION_REQUEST: &str = "mcpServer/elicitation/request";
 pub const METHOD_MCP_TOOL_LIST: &str = "mcpTool/list";
 pub const METHOD_MCP_TOOL_LIST_FOR_CONTEXT: &str = "mcpTool/listForContext";
 pub const METHOD_MCP_TOOL_SEARCH: &str = "mcpTool/search";

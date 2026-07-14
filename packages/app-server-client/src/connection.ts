@@ -7,6 +7,10 @@ export type AppServerMessageTransport = {
   nextMessage(timeoutMs?: number): Promise<protocol.JsonRpcMessage>;
 };
 
+export type AppServerServerMessage =
+  | protocol.JsonRpcRequest
+  | protocol.JsonRpcNotification;
+
 export type AppServerRequestOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -276,6 +280,37 @@ export class AppServerConnection {
     }
   }
 
+  async nextServerMessage(timeoutMs?: number): Promise<AppServerServerMessage> {
+    for (;;) {
+      const buffered = this.#shiftBufferedServerMessage();
+      if (buffered) {
+        return buffered;
+      }
+      const message = await this.#withTransportRead<
+        AppServerServerMessage | undefined
+      >(
+        timeoutMs,
+        () => this.#shiftBufferedServerMessage(),
+        (incoming) => {
+          if (this.#consumeDetachedRequestMessage(incoming)) {
+            return undefined;
+          }
+          if (
+            protocol.isJsonRpcNotification(incoming) ||
+            protocol.isJsonRpcRequest(incoming)
+          ) {
+            return incoming;
+          }
+          this.#prependBufferedMessages([incoming]);
+          return undefined;
+        },
+      );
+      if (message) {
+        return message;
+      }
+    }
+  }
+
   async nextMessage(timeoutMs?: number): Promise<protocol.JsonRpcMessage> {
     for (;;) {
       const buffered = this.#shiftBufferedMessage();
@@ -435,6 +470,24 @@ export class AppServerConnection {
     }
     const [message] = this.#bufferedMessages.splice(index, 1);
     return message as protocol.JsonRpcNotification;
+  }
+
+  #shiftBufferedServerMessage(): AppServerServerMessage | undefined {
+    const mirrored = this.#mirroredNotifications.shift();
+    if (mirrored) {
+      return mirrored;
+    }
+    this.#dropDetachedBufferedRequestMessages();
+    const index = this.#bufferedMessages.findIndex(
+      (message) =>
+        protocol.isJsonRpcNotification(message) ||
+        protocol.isJsonRpcRequest(message),
+    );
+    if (index < 0) {
+      return undefined;
+    }
+    const [message] = this.#bufferedMessages.splice(index, 1);
+    return message as AppServerServerMessage;
   }
 
   #dropDetachedBufferedRequestMessages(): void {

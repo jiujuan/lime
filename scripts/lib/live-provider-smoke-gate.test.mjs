@@ -138,8 +138,8 @@ describe("live-provider-smoke-gate", () => {
     );
     expect(content).toContain("LIVE_WEB_TOOL_PROMPT");
     expect(content).toContain("@搜索 关键词:联网工具验证");
-    expect(content).toContain("web_search=true");
-    expect(content).toContain('search_mode="required"');
+    expect(content).toContain("webSearch=true");
+    expect(content).toContain('searchMode="required"');
     expect(content).toContain("REQUIRED_LIVE_WEB_TOOL_NAMES");
     expect(content).toContain("./lib/claw-chat-live-web-tool-evidence.mjs");
     expect(content).toContain("liveWebToolEvidenceFromSession");
@@ -185,9 +185,6 @@ describe("live-provider-smoke-gate", () => {
     );
     expect(content).toContain(
       "summary.assertions.liveWebModelPreferenceHonored",
-    );
-    expect(content).toContain(
-      "summary.assertions.liveWebFastResponseRoutingDisabled",
     );
     expect(content).toContain(
       "summary.assertions.liveWebRequiredToolsCompleted",

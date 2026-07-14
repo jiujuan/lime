@@ -465,7 +465,6 @@ fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
         event_types,
         vec![
             "item.started",
-            "tool.args",
             "command.started",
             "test.started",
             "item.completed",
@@ -480,7 +479,7 @@ fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
         .find(|event| event.event_type == "item.completed")
         .expect("failed canonical item event");
     assert_eq!(
-        failed_event.payload["item"]["payload"]["callId"],
+        failed_event.payload["item"]["payload"]["call_id"],
         "tool-failed"
     );
     assert_eq!(failed_event.payload["item"]["status"], "failed");
@@ -538,7 +537,6 @@ fn runtime_agent_permission_denied_fact_precedes_tool_failed_terminal() {
         event_types,
         vec![
             "item.started",
-            "tool.args",
             "command.started",
             "permission.denied",
             "item.completed",
@@ -592,7 +590,7 @@ fn runtime_agent_read_tool_result_is_mirrored_to_file_read() {
         .collect::<Vec<_>>();
     assert_eq!(
         event_types,
-        vec!["item.started", "tool.args", "item.completed", "file.read"]
+        vec!["item.started", "item.completed", "file.read"]
     );
     assert_eq!(
         sink.events.last().expect("file read event").payload["path"].as_str(),
@@ -648,7 +646,6 @@ fn runtime_agent_shell_apply_patch_is_mirrored_to_patch_lifecycle() {
         event_types,
         vec![
             "item.started",
-            "tool.args",
             "patch.started",
             "command.started",
             "item.completed",

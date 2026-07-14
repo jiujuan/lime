@@ -3,7 +3,7 @@ import type { BrowserStreamMode } from "@/lib/webview-api";
 import type {
   AgentApprovalPolicy,
   AgentSandboxPolicy,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
 export type TaskSchedule =
   | {
       kind: "every";

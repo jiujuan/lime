@@ -404,21 +404,31 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
       );
     }
     setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === activeStream.assistantMsgId
-          ? (() => {
-              const interruptedMessage = settleInterruptedMessageProcess(msg);
-              return {
-                ...updateMessageArtifactsStatus(interruptedMessage, "complete"),
-                ...buildInterruptedMessageContentPatch(interruptedMessage),
-                isThinking: false,
-                runtimeTurnId:
-                  interruptedRuntimeTurnId ?? interruptedMessage.runtimeTurnId,
-                runtimeStatus: undefined,
-              };
-            })()
-          : msg,
-      ),
+      prev
+        .filter(
+          (msg) =>
+            !restoredQueuedTurnId ||
+            msg.runtimeTurnId !== restoredQueuedTurnId,
+        )
+        .map((msg) =>
+          msg.id === activeStream.assistantMsgId
+            ? (() => {
+                const interruptedMessage = settleInterruptedMessageProcess(msg);
+                return {
+                  ...updateMessageArtifactsStatus(
+                    interruptedMessage,
+                    "complete",
+                  ),
+                  ...buildInterruptedMessageContentPatch(interruptedMessage),
+                  isThinking: false,
+                  runtimeTurnId:
+                    interruptedRuntimeTurnId ??
+                    interruptedMessage.runtimeTurnId,
+                  runtimeStatus: undefined,
+                };
+              })()
+            : msg,
+        ),
     );
     clearAgentStreamTextOverlay(activeStream.assistantMsgId);
   }

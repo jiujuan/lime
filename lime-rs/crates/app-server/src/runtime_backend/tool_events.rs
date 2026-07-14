@@ -11,6 +11,7 @@ use lime_agent::AgentEvent as RuntimeAgentEvent;
 use model_provider::safety::SAFETY_BUFFERING_RUNTIME_EVENT_KIND;
 use serde_json::{json, Value};
 
+#[cfg(test)]
 pub(super) fn runtime_events_from_agent_event(
     event: &RuntimeAgentEvent,
 ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {

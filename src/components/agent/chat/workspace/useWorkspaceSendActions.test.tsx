@@ -171,8 +171,7 @@ function createInstalledContentFactory(): InstalledPluginState {
       installModes: [],
     },
     installMode: "in_lime",
-    runtimeProfileSummary:
-      {} as InstalledPluginState["runtimeProfileSummary"],
+    runtimeProfileSummary: {} as InstalledPluginState["runtimeProfileSummary"],
     setup: {} as InstalledPluginState["setup"],
     installedAt: "2026-06-28T00:00:00.000Z",
     updatedAt: "2026-06-28T00:00:00.000Z",
@@ -1132,7 +1131,7 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("首轮轻量对话应只注入后端快速响应路由意图", async () => {
+  it("首轮普通对话不应在 renderer 注入模型路由指令", async () => {
     const harness = mountHook({
       browserAssistProfileKey: "general_browser_assist",
       browserAssistAutoLaunch: true,
@@ -1148,34 +1147,13 @@ describe("useWorkspaceSendActions", () => {
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
-      expect(sendOptions).toMatchObject({
-        assistantDraft: {
-          initialRuntimeStatus: {
-            title: "快速响应已启用",
-          },
-          waitingRuntimeStatus: {
-            title: "快速响应处理中",
-          },
-        },
-        requestMetadata: {
-          harness: {
-            fast_response_routing: {
-              mode: "auto",
-              label: "快速响应",
-              reason: "first-turn-plain-text",
-              service_model_slot: "responsive_chat",
-              routing_slot: "responsive_chat_model",
-              routing_changed: false,
-              resolver: "backend_service_model",
-            },
-          },
-        },
-      });
+      expect(sendOptions?.assistantDraft).toBeUndefined();
       expect(sendOptions?.systemPromptOverride).toBeUndefined();
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
       const browserAssistHarness = ((sendOptions?.requestMetadata
         ?.harness as Record<string, unknown>) || {}) as Record<string, unknown>;
+      expect(browserAssistHarness.fast_response_routing).toBeUndefined();
       expect(browserAssistHarness.browser_assist).toEqual(
         expect.objectContaining({
           enabled: true,
@@ -1191,7 +1169,7 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("首轮轻量对话不等待 Provider 列表也应命中后端快速响应路由", async () => {
+  it("首轮普通对话不应等待 Provider 列表或生成 renderer 路由元数据", async () => {
     const harness = mountHook();
 
     try {
@@ -1203,18 +1181,9 @@ describe("useWorkspaceSendActions", () => {
       });
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
-      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        requestMetadata: {
-          harness: {
-            fast_response_routing: {
-              reason: "first-turn-plain-text",
-              service_model_slot: "responsive_chat",
-              routing_slot: "responsive_chat_model",
-              routing_changed: false,
-            },
-          },
-        },
-      });
+      const requestMetadata = mockSendMessage.mock.calls[0]?.[8]
+        ?.requestMetadata as { harness?: Record<string, unknown> } | undefined;
+      expect(requestMetadata?.harness?.fast_response_routing).toBeUndefined();
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
       ).toBeUndefined();
@@ -1252,28 +1221,26 @@ describe("useWorkspaceSendActions", () => {
       expect(sendOptions?.modelOverride).toBeUndefined();
       expect(sendOptions?.requestMetadata).toMatchObject({
         harness: {
-          model_reasoning_effort: "minimal",
-          modelReasoningEffort: "minimal",
           model_slots: {
             fast: {
               provider: "responsive-provider",
               model: "fast-chat",
               source: "service_models.responsive_chat",
-              reason: "fast_response_routing",
+              reason: "service_model_preference",
             },
-          },
-          fast_response_routing: {
-            reason: "first-turn-plain-text",
-            service_model_slot: "responsive_chat",
           },
         },
       });
+      expect(
+        (sendOptions?.requestMetadata?.harness as Record<string, unknown>)
+          ?.fast_response_routing,
+      ).toBeUndefined();
     } finally {
       harness.unmount();
     }
   });
 
-  it("普通首轮快答不应等待延迟加载的 service model 配置", async () => {
+  it("普通首轮发送不应等待非必要的延迟 service model 配置", async () => {
     const deferredServiceModels = createDeferred<{
       serviceModels?: HookProps["serviceModels"];
       agentResponseLanguage?: string | null;
@@ -1296,14 +1263,10 @@ describe("useWorkspaceSendActions", () => {
       expect(resolveServiceModelsBeforeSend).not.toHaveBeenCalled();
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
-      expect(sendOptions?.requestMetadata).toMatchObject({
-        harness: {
-          fast_response_routing: {
-            reason: "first-turn-plain-text",
-            service_model_slot: "responsive_chat",
-          },
-        },
-      });
+      expect(
+        (sendOptions?.requestMetadata?.harness as Record<string, unknown>)
+          ?.fast_response_routing,
+      ).toBeUndefined();
       expect(JSON.stringify(sendOptions?.requestMetadata)).not.toContain(
         "responsive-provider",
       );
@@ -1320,11 +1283,19 @@ describe("useWorkspaceSendActions", () => {
       await act(async () => {
         const started = await harness
           .getValue()
-          .handleSend([], false, false, "@配图 画一张封面", "react", undefined, {
-            skipSessionRestore: true,
-            skipSessionStartHooks: true,
-            skipWorkspaceCommandRouting: true,
-          });
+          .handleSend(
+            [],
+            false,
+            false,
+            "@配图 画一张封面",
+            "react",
+            undefined,
+            {
+              skipSessionRestore: true,
+              skipSessionStartHooks: true,
+              skipWorkspaceCommandRouting: true,
+            },
+          );
         expect(started).toBe(true);
       });
 
@@ -1383,7 +1354,7 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("首轮轻量对话不应在前端降级具体推理模型", async () => {
+  it("首轮普通对话不应在前端改写模型或系统提示", async () => {
     const harness = mountHook();
 
     try {
@@ -1396,16 +1367,10 @@ describe("useWorkspaceSendActions", () => {
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
-      expect(sendOptions).toMatchObject({
-        requestMetadata: {
-          harness: {
-            fast_response_routing: {
-              service_model_slot: "responsive_chat",
-              routing_slot: "responsive_chat_model",
-            },
-          },
-        },
-      });
+      expect(
+        (sendOptions?.requestMetadata?.harness as Record<string, unknown>)
+          ?.fast_response_routing,
+      ).toBeUndefined();
       expect(sendOptions?.systemPromptOverride).toBeUndefined();
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
@@ -1745,7 +1710,7 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("后端快速响应路由不应等待 Provider 列表预加载", async () => {
+  it("普通发送不应等待 Provider 列表预加载", async () => {
     const harness = mountHook();
 
     try {
@@ -1757,15 +1722,9 @@ Extract it into the Agent Skills directory.`,
       });
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
-      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        requestMetadata: {
-          harness: {
-            fast_response_routing: {
-              resolver: "backend_service_model",
-            },
-          },
-        },
-      });
+      const requestMetadata = mockSendMessage.mock.calls[0]?.[8]
+        ?.requestMetadata as { harness?: Record<string, unknown> } | undefined;
+      expect(requestMetadata?.harness?.fast_response_routing).toBeUndefined();
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
       ).toBeUndefined();
@@ -1807,15 +1766,10 @@ Extract it into the Agent Skills directory.`,
         skipSessionRestore: true,
         skipSessionStartHooks: true,
         skipPreSubmitResume: true,
-        requestMetadata: {
-          harness: {
-            fast_response_routing: {
-              service_model_slot: "responsive_chat",
-              routing_slot: "responsive_chat_model",
-            },
-          },
-        },
       });
+      const requestMetadata = mockSendMessage.mock.calls[0]?.[8]
+        ?.requestMetadata as { harness?: Record<string, unknown> } | undefined;
+      expect(requestMetadata?.harness?.fast_response_routing).toBeUndefined();
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
       ).toBeUndefined();
@@ -6804,9 +6758,7 @@ Extract it into the Agent Skills directory.`,
           | undefined
       )?.harness;
       expect(harnessMetadata?.code_command).toBeUndefined();
-      expect(harnessMetadata?.fast_response_routing).toMatchObject({
-        reason: "first-turn-plain-text",
-      });
+      expect(harnessMetadata?.fast_response_routing).toBeUndefined();
       expect(listMentionEntryUsage()).toEqual([]);
       expect(listServiceSkillUsage()).toEqual([]);
     } finally {

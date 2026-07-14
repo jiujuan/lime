@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeIncidentView,
   AgentRuntimeThreadReadModel,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
 import type {
   ActionRequired,
   AgentThreadItem,

@@ -582,6 +582,13 @@ impl RuntimeCore {
             ));
         }
 
+        // Event-log-only historical sessions may no longer have a current
+        // Thread projection. Preserve their deletion behavior while closing a
+        // runtime only when a canonical owner can be resolved.
+        if let Ok(thread_id) = self.resolve_session_thread_id_current(&session_id).await {
+            self.backend.close_session(&session_id, &thread_id).await?;
+        }
+
         let mut deleted = {
             let mut state = self
                 .state

@@ -5,16 +5,16 @@ import {
   findConfiguredProviderBySelection,
   useConfiguredProviders,
 } from "@/hooks/useConfiguredProviders";
-import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
+import { getConfig, type Config } from "@/lib/api/appConfig";
 import { cn } from "@/lib/utils";
 import {
-  buildPersistedMediaGenerationPreference,
   getVideoModelsForProvider,
   hasMediaGenerationPreferenceOverride,
   isVideoProvider,
   type MediaGenerationPreference,
 } from "@/lib/mediaGeneration";
 import { MediaPreferenceSection } from "../shared/MediaPreferenceSection";
+import { updateMediaPreference } from "../shared/mediaPreferencePersistence";
 
 const DEFAULT_PREFERENCE: MediaGenerationPreference = {
   allowFallback: true,
@@ -88,25 +88,12 @@ export function VideoGenSettings() {
         })
       : undefined;
 
-  const savePreference = async (nextPreference: MediaGenerationPreference) => {
-    if (!config) {
-      return;
-    }
-
+  const savePreference = async (
+    updater: (current: MediaGenerationPreference) => MediaGenerationPreference,
+  ) => {
     try {
-      const persistedPreference =
-        buildPersistedMediaGenerationPreference(nextPreference);
-      const updatedConfig: Config = {
-        ...config,
-        workspace_preferences: {
-          ...config.workspace_preferences,
-          media_defaults: {
-            ...config.workspace_preferences?.media_defaults,
-            video: persistedPreference,
-          },
-        },
-      };
-      await saveConfig(updatedConfig);
+      const { config: updatedConfig, preference: nextPreference } =
+        await updateMediaPreference("video", updater);
       setConfig(updatedConfig);
       setVideoPreference(nextPreference);
       setMessage({
@@ -136,36 +123,48 @@ export function VideoGenSettings() {
           nextProvider.customModels,
         )
       : [];
-    const preferredModelId = preferredProviderId
-      ? nextModels.includes(videoPreference.preferredModelId || "")
-        ? videoPreference.preferredModelId
-        : undefined
-      : undefined;
-
-    void savePreference({
+    void savePreference((current) => ({
       preferredProviderId,
-      preferredModelId,
-      allowFallback: videoPreference.allowFallback ?? true,
-    });
+      preferredModelId: preferredProviderId
+        ? nextModels.includes(current.preferredModelId || "")
+          ? current.preferredModelId
+          : undefined
+        : undefined,
+      allowFallback: current.allowFallback ?? true,
+    }));
   };
 
   const handleModelChange = (value: string) => {
-    void savePreference({
-      ...videoPreference,
+    void savePreference((current) => ({
+      ...current,
       preferredModelId: value.trim() || undefined,
-      allowFallback: videoPreference.allowFallback ?? true,
-    });
+      allowFallback: current.allowFallback ?? true,
+    }));
+  };
+
+  const handleProviderAndModelChange = (
+    providerValue: string,
+    modelValue: string,
+  ) => {
+    void savePreference((current) => ({
+      preferredProviderId: providerValue.trim() || undefined,
+      preferredModelId:
+        providerValue.trim() && modelValue.trim()
+          ? modelValue.trim()
+          : undefined,
+      allowFallback: current.allowFallback ?? true,
+    }));
   };
 
   const handleFallbackChange = (value: boolean) => {
-    void savePreference({
-      ...videoPreference,
+    void savePreference((current) => ({
+      ...current,
       allowFallback: value,
-    });
+    }));
   };
 
   const handleResetPreference = () => {
-    void savePreference(DEFAULT_PREFERENCE);
+    void savePreference(() => DEFAULT_PREFERENCE);
   };
 
   const providerHint = providersLoading
@@ -186,6 +185,7 @@ export function VideoGenSettings() {
         setProviderType={handleProviderChange}
         model={videoPreference.preferredModelId ?? ""}
         setModel={handleModelChange}
+        setProviderAndModel={handleProviderAndModelChange}
         providerFilter={(provider) =>
           isVideoProvider(provider.providerId ?? provider.key)
         }

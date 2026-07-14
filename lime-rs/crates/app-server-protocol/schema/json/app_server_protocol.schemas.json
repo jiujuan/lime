@@ -1583,9 +1583,12 @@
             "closed",
             "completed",
             "failed",
+            "interacted",
+            "interrupted",
             "messageSent",
             "resumed",
             "spawned",
+            "started",
             "waiting"
           ],
           "type": "string"
@@ -13372,7 +13375,8 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "enum": [
         "notification",
-        "request"
+        "request",
+        "serverRequest"
       ],
       "title": "AppServerMethodKind",
       "type": "string"
@@ -13382,7 +13386,8 @@
         "AppServerMethodKind": {
           "enum": [
             "notification",
-            "request"
+            "request",
+            "serverRequest"
           ],
           "type": "string"
         }
@@ -13409,6 +13414,7 @@
         "agentSession/event",
         "configWarning",
         "initialized",
+        "serverRequest/resolved",
         "workspaceRightSurface/pendingChanged"
       ],
       "title": "AppServerNotificationMethod",
@@ -15233,9 +15239,12 @@
             "closed",
             "completed",
             "failed",
+            "interacted",
+            "interrupted",
             "messageSent",
             "resumed",
             "spawned",
+            "started",
             "waiting"
           ],
           "type": "string"
@@ -24893,11 +24902,17 @@
           "type": "object"
         },
         "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "server": {
+          "minLength": 1,
           "type": "string"
         }
       },
       "required": [
-        "name"
+        "name",
+        "server"
       ],
       "title": "McpPromptGetParams",
       "type": "object"
@@ -25126,11 +25141,17 @@
     "McpResourceReadParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "server": {
+          "minLength": 1,
+          "type": "string"
+        },
         "uri": {
+          "minLength": 1,
           "type": "string"
         }
       },
       "required": [
+        "server",
         "uri"
       ],
       "title": "McpResourceReadParams",
@@ -25170,11 +25191,17 @@
     "McpResourceSubscribeParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "server": {
+          "minLength": 1,
+          "type": "string"
+        },
         "uri": {
+          "minLength": 1,
           "type": "string"
         }
       },
       "required": [
+        "server",
         "uri"
       ],
       "title": "McpResourceSubscribeParams",
@@ -25188,11 +25215,17 @@
     "McpResourceUnsubscribeParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "server": {
+          "minLength": 1,
+          "type": "string"
+        },
         "uri": {
+          "minLength": 1,
           "type": "string"
         }
       },
       "required": [
+        "server",
         "uri"
       ],
       "title": "McpResourceUnsubscribeParams",
@@ -25220,6 +25253,100 @@
         "id"
       ],
       "title": "McpServerDeleteParams",
+      "type": "object"
+    },
+    "McpServerElicitationAction": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "accept",
+        "cancel",
+        "decline"
+      ],
+      "title": "McpServerElicitationAction",
+      "type": "string"
+    },
+    "McpServerElicitationRequestParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "properties": {
+            "_meta": {
+              "default": null
+            },
+            "message": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "mode": {
+              "const": "form",
+              "type": "string"
+            },
+            "requestedSchema": {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          },
+          "required": [
+            "message",
+            "mode",
+            "requestedSchema"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "serverName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "threadId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "turnId": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "serverName",
+        "threadId"
+      ],
+      "title": "McpServerElicitationRequestParams",
+      "type": "object"
+    },
+    "McpServerElicitationResponse": {
+      "$defs": {
+        "McpServerElicitationAction": {
+          "enum": [
+            "accept",
+            "cancel",
+            "decline"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "_meta": {
+          "additionalProperties": true,
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "action": {
+          "$ref": "#/$defs/McpServerElicitationAction"
+        },
+        "content": true
+      },
+      "required": [
+        "action"
+      ],
+      "title": "McpServerElicitationResponse",
       "type": "object"
     },
     "McpServerEnabledSetParams": {
@@ -37272,14 +37399,39 @@
           ],
           "type": "string"
         },
+        "RequestId": {
+          "anyOf": [
+            {
+              "format": "int64",
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "ServerRequestResolvedNotification": {
+          "properties": {
+            "requestId": {
+              "$ref": "#/$defs/RequestId"
+            }
+          },
+          "required": [
+            "requestId"
+          ],
+          "type": "object"
+        },
         "SubAgentActivityKind": {
           "enum": [
             "closed",
             "completed",
             "failed",
+            "interacted",
+            "interrupted",
             "messageSent",
             "resumed",
             "spawned",
+            "started",
             "waiting"
           ],
           "type": "string"
@@ -38376,6 +38528,22 @@
         {
           "properties": {
             "method": {
+              "const": "serverRequest/resolved",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ServerRequestResolvedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
               "const": "agentSession/event",
               "type": "string"
             },
@@ -38407,6 +38575,32 @@
         }
       ],
       "title": "ServerNotification"
+    },
+    "ServerRequestResolvedNotification": {
+      "$defs": {
+        "RequestId": {
+          "anyOf": [
+            {
+              "format": "int64",
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        }
+      },
+      "required": [
+        "requestId"
+      ],
+      "title": "ServerRequestResolvedNotification",
+      "type": "object"
     },
     "SessionFileEntry": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -41229,9 +41423,12 @@
             "closed",
             "completed",
             "failed",
+            "interacted",
+            "interrupted",
             "messageSent",
             "resumed",
             "spawned",
+            "started",
             "waiting"
           ],
           "type": "string"
@@ -41945,9 +42142,12 @@
             "closed",
             "completed",
             "failed",
+            "interacted",
+            "interrupted",
             "messageSent",
             "resumed",
             "spawned",
+            "started",
             "waiting"
           ],
           "type": "string"
@@ -42997,9 +43197,12 @@
             "closed",
             "completed",
             "failed",
+            "interacted",
+            "interrupted",
             "messageSent",
             "resumed",
             "spawned",
+            "started",
             "waiting"
           ],
           "type": "string"
@@ -44059,9 +44262,12 @@
             "closed",
             "completed",
             "failed",
+            "interacted",
+            "interrupted",
             "messageSent",
             "resumed",
             "spawned",
+            "started",
             "waiting"
           ],
           "type": "string"
@@ -48682,6 +48888,7 @@
               "agentSession/event",
               "configWarning",
               "initialized",
+              "serverRequest/resolved",
               "workspaceRightSurface/pendingChanged"
             ]
           },
@@ -48988,11 +49195,20 @@
             ]
           },
           "type": "array"
+        },
+        "serverRequests": {
+          "items": {
+            "enum": [
+              "mcpServer/elicitation/request"
+            ]
+          },
+          "type": "array"
         }
       },
       "required": [
         "notifications",
-        "requests"
+        "requests",
+        "serverRequests"
       ],
       "type": "object"
     },

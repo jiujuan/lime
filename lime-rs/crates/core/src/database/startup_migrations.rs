@@ -2,7 +2,7 @@ use std::path::Path;
 
 use rusqlite::Connection;
 
-use super::{migration, migration_v2, migration_v3, migration_v4, migration_v5, migration_v6};
+use super::{migration, migration_v2, migration_v4, migration_v5, migration_v6};
 
 pub(super) fn run_startup_migrations(conn: &Connection) {
     run_provider_pool_startup_migrations(conn);
@@ -210,20 +210,6 @@ fn run_versioned_startup_migrations(conn: &Connection) {
                     stats.default_project_id, stats.migrated_contents_count
                 )
             })
-        },
-    );
-
-    run_nonfatal_logged_startup_migration(
-        conn,
-        "Playwright MCP Server 迁移失败",
-        migration_v3::migrate_playwright_mcp_server,
-        |_, result| {
-            result
-                .server_id
-                .filter(|_| result.executed)
-                .map(|server_id| {
-                    format!("[数据库] Playwright MCP Server 迁移完成: server_id={server_id}")
-                })
         },
     );
 

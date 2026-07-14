@@ -7,9 +7,11 @@ export {
   isAppServerConfigWarningNotification,
   isAppServerJsonRpcErrorResponse,
   isAppServerJsonRpcNotification,
+  isAppServerJsonRpcRequest,
   isAppServerJsonRpcResponse,
   readAppServerConfigWarnings,
 } from "./appServerResponse";
 export * from "./appServerConfigWarnings";
 export * from "./appServerEventBus";
+export * from "./appServerServerRequest";
 export * from "./appServerClient";

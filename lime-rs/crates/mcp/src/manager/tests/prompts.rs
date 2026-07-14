@@ -1,5 +1,64 @@
 use crate::manager::McpClientManager;
 use crate::types::{McpContent, McpError};
+use rmcp::{
+    model::{
+        GetPromptRequestParam, GetPromptResult, PromptMessage, PromptMessageRole,
+        ServerCapabilities, ServerInfo,
+    },
+    service::RequestContext,
+    RoleServer, ServerHandler, ServiceExt,
+};
+
+#[derive(Clone)]
+struct ExactTargetPromptServer(&'static str);
+
+impl ServerHandler for ExactTargetPromptServer {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            capabilities: ServerCapabilities::builder().enable_prompts().build(),
+            ..Default::default()
+        }
+    }
+
+    async fn get_prompt(
+        &self,
+        request: GetPromptRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResult, rmcp::ErrorData> {
+        Ok(GetPromptResult {
+            description: Some(format!("{}:{}", self.0, request.name)),
+            messages: vec![PromptMessage::new_text(PromptMessageRole::User, self.0)],
+        })
+    }
+}
+
+async fn add_exact_target_prompt_server(
+    manager: &McpClientManager,
+    name: &'static str,
+) -> tokio::task::JoinHandle<()> {
+    let (server_transport, client_transport) = tokio::io::duplex(4096);
+    let server_handle = tokio::spawn(async move {
+        let service = ExactTargetPromptServer(name)
+            .serve(server_transport)
+            .await
+            .expect("start exact target prompt server");
+        service
+            .waiting()
+            .await
+            .expect("wait for exact target prompt server");
+    });
+    let client = crate::client_service::LimeMcpClientService::new(name.to_string(), None)
+        .serve(client_transport)
+        .await
+        .expect("start exact target prompt client");
+    let mut wrapper = super::common::create_test_client(name);
+    wrapper.set_running_service(client);
+    manager
+        .add_client(name.to_string(), wrapper)
+        .await
+        .expect("add exact target prompt client");
+    server_handle
+}
 
 #[tokio::test]
 async fn test_list_prompts_returns_empty_when_no_servers() {
@@ -16,17 +75,68 @@ async fn test_get_prompt_not_found() {
 
     // 获取不存在的提示词
     let result = manager
-        .get_prompt("nonexistent_prompt", serde_json::Map::new())
+        .get_prompt(
+            "missing-server",
+            "nonexistent_prompt",
+            serde_json::Map::new(),
+        )
         .await;
 
     // 应该返回错误
     assert!(result.is_err());
     match result {
-        Err(McpError::ToolNotFound(msg)) => {
-            assert!(msg.contains("nonexistent_prompt"));
+        Err(McpError::ServerNotRunning(name)) => {
+            assert_eq!(name, "missing-server");
         }
-        _ => panic!("Expected ToolNotFound error"),
+        _ => panic!("Expected ServerNotRunning error"),
     }
+}
+
+#[tokio::test]
+async fn get_prompt_rejects_empty_exact_target_before_dispatch() {
+    let manager = McpClientManager::new(None);
+
+    assert!(matches!(
+        manager
+            .get_prompt(" ", "summarize", serde_json::Map::new())
+            .await,
+        Err(McpError::ConfigError(_))
+    ));
+    assert!(matches!(
+        manager
+            .get_prompt("docs", " ", serde_json::Map::new())
+            .await,
+        Err(McpError::ConfigError(_))
+    ));
+}
+
+#[tokio::test]
+async fn get_prompt_routes_same_name_to_exact_server() {
+    let manager = McpClientManager::new(None);
+    let server_a = add_exact_target_prompt_server(&manager, "server-a").await;
+    let server_b = add_exact_target_prompt_server(&manager, "server-b").await;
+
+    let result = manager
+        .get_prompt("server-b", "shared", serde_json::Map::new())
+        .await
+        .expect("get prompt from exact server");
+
+    assert_eq!(result.description.as_deref(), Some("server-b:shared"));
+    match &result.messages[0].content {
+        McpContent::Text { text } => assert_eq!(text, "server-b"),
+        other => panic!("expected text content, got {other:?}"),
+    }
+
+    manager
+        .stop_server("server-a")
+        .await
+        .expect("stop server-a");
+    manager
+        .stop_server("server-b")
+        .await
+        .expect("stop server-b");
+    server_a.await.expect("join server-a");
+    server_b.await.expect("join server-b");
 }
 
 #[test]

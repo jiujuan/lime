@@ -1,9 +1,11 @@
 import {
   listAgentRuntimeFileCheckpoints,
   restoreAgentRuntimeFileCheckpoint,
-  type AgentRuntimeFileCheckpointRestoreResult,
-  type AgentRuntimeFileCheckpointSummary,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/threadClient";
+import type {
+  AgentRuntimeFileCheckpointRestoreResult,
+  AgentRuntimeFileCheckpointSummary,
+} from "@/lib/api/agentRuntime/sessionTypes";
 import { areArtifactProtocolPathsEquivalent } from "@/lib/artifact-protocol";
 import type { FileChangesAggregate } from "./fileChangeSummary";
 

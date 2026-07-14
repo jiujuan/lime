@@ -9,38 +9,38 @@ use crate::model_request_policy::{
     input_modality_policy_allows_image_input, input_modality_policy_from_turn_context,
     runtime_reply_model_request_policy_from_turn_context,
 };
-use crate::protocol::{
-    canonical_tool_item_event, AgentEvent, AgentTokenUsage, ToolItemLifecycleContext,
-};
+use crate::protocol::{AgentEvent, AgentTokenUsage};
 use crate::request_tool_policy::{
     is_same_tool, merge_system_prompt_with_request_tool_policy, ReplyAttemptError,
     RequestToolPolicy, StreamReplyExecution, WebSearchExecutionTracker,
 };
 use crate::runtime_state::AgentRuntimeState;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
-use agent_protocol::{ItemStatus, SessionId, ThreadId, ThreadItemPayload};
+use agent_protocol::{ItemStatus, ThreadId, ThreadItemPayload};
 use agent_runtime::provider_turn::{
     run_current_provider_turn, CurrentProviderTurnEvent, CurrentProviderTurnInput,
 };
 use agent_runtime::reply_input::RuntimeReplyInput;
 use agent_runtime::session_config::AgentSessionConfig;
 #[cfg(test)]
-use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex as StdMutex};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tool_runtime::tool_lifecycle::{
-    ToolLifecycleEmissionFuture, ToolLifecycleEmitter, ToolLifecycleEvent, ToolLifecyclePhase,
-};
-
-mod mcp_step_snapshot;
-mod tool_executor;
+#[cfg(test)]
+use tool_runtime::tool_lifecycle::{ToolLifecycleEmitter, ToolLifecycleEvent, ToolLifecyclePhase};
 
 #[cfg(test)]
-use tool_executor::{action_scope, project_call_result};
+mod agent_control_tests;
+mod mcp_step_snapshot;
+mod tool_executor;
+mod tool_lifecycle_emitter;
+
+use tool_lifecycle_emitter::CurrentTurnToolLifecycleEmitter;
+
+#[cfg(test)]
+use tool_executor::{action_scope, mcp_call_scope, project_call_result};
 
 pub(crate) async fn stream_current_provider_turn<F>(
     state: &AgentRuntimeState,
@@ -51,6 +51,7 @@ pub(crate) async fn stream_current_provider_turn<F>(
     mut session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     policy: &RequestToolPolicy,
+    agent_control_gateway: Option<tool_runtime::agent_control::AgentControlGatewayHandle>,
     mut on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
@@ -81,6 +82,7 @@ where
         runtime_reply_model_request_policy_from_turn_context(session_config.turn_context.as_ref());
     initial_messages.push(user_message(input));
     let provider_name = provider.runtime_handle().provider_name().to_string();
+    let provider_trace_metadata = provider.runtime_handle().provider_trace_metadata();
     let mut artifact_events = WriteArtifactEventEmitter::new(session_config.id.clone());
     let mut usage = None;
     let mut web_search_tracker = WebSearchExecutionTracker::default();
@@ -91,7 +93,9 @@ where
         policy.clone(),
         session_config.turn_context.clone(),
         agent_event_sender,
+        session_id.clone(),
         ThreadId::new(thread_id.clone()),
+        agent_control_gateway,
     );
     let lifecycle_emitter = Arc::new(CurrentTurnToolLifecycleEmitter::new(
         host_event_sender.clone(),
@@ -102,6 +106,7 @@ where
     let turn_future = run_current_provider_turn(
         CurrentProviderTurnInput {
             provider: provider.client(),
+            provider_trace_metadata: Some(provider_trace_metadata),
             session_config,
             initial_messages,
             tool_step_snapshot_source,
@@ -152,90 +157,6 @@ where
 enum CurrentTurnHostEvent {
     Provider(CurrentProviderTurnEvent),
     ToolLifecycle(AgentEvent),
-}
-
-struct CurrentTurnToolLifecycleEmitter {
-    event_sender: UnboundedSender<CurrentTurnHostEvent>,
-    session_id: SessionId,
-    thread_id: ThreadId,
-    next_sequence: AtomicU64,
-    next_ordinal: AtomicU64,
-    items: StdMutex<HashMap<String, ToolItemLifecycleState>>,
-}
-
-#[derive(Clone, Copy)]
-struct ToolItemLifecycleState {
-    ordinal: u64,
-    created_at_ms: i64,
-}
-
-impl CurrentTurnToolLifecycleEmitter {
-    fn new(
-        event_sender: UnboundedSender<CurrentTurnHostEvent>,
-        session_id: impl Into<String>,
-        thread_id: impl Into<String>,
-    ) -> Self {
-        Self {
-            event_sender,
-            session_id: SessionId::new(session_id),
-            thread_id: ThreadId::new(thread_id),
-            next_sequence: AtomicU64::new(0),
-            next_ordinal: AtomicU64::new(0),
-            items: StdMutex::new(HashMap::new()),
-        }
-    }
-
-    fn project(&self, event: ToolLifecycleEvent) -> Option<AgentEvent> {
-        let terminal = matches!(event.phase, ToolLifecyclePhase::Completed);
-        if terminal && event.output.is_none() {
-            return None;
-        }
-
-        let now = chrono::Utc::now().timestamp_millis();
-        let key = format!("{}\0{}", event.turn_id, event.call_id);
-        let state = {
-            let mut items = self
-                .items
-                .lock()
-                .expect("tool item lifecycle mutex poisoned");
-            let state = items.get(&key).copied().unwrap_or_else(|| {
-                let state = ToolItemLifecycleState {
-                    ordinal: self.next_ordinal.fetch_add(1, Ordering::Relaxed) + 1,
-                    created_at_ms: now,
-                };
-                items.insert(key.clone(), state);
-                state
-            });
-            if terminal {
-                items.remove(&key);
-            }
-            state
-        };
-        let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed) + 1;
-        canonical_tool_item_event(
-            event,
-            ToolItemLifecycleContext {
-                session_id: self.session_id.clone(),
-                thread_id: self.thread_id.clone(),
-                sequence,
-                ordinal: state.ordinal,
-                created_at_ms: state.created_at_ms,
-                updated_at_ms: now,
-            },
-        )
-    }
-}
-
-impl ToolLifecycleEmitter for CurrentTurnToolLifecycleEmitter {
-    fn emit<'a>(&'a self, event: ToolLifecycleEvent) -> ToolLifecycleEmissionFuture<'a> {
-        Box::pin(async move {
-            if let Some(event) = self.project(event) {
-                let _ = self
-                    .event_sender
-                    .send(CurrentTurnHostEvent::ToolLifecycle(event));
-            }
-        })
-    }
 }
 
 fn handle_ordered_host_event<F>(
@@ -357,6 +278,11 @@ fn handle_provider_event<F>(
     F: FnMut(&AgentEvent),
 {
     match event {
+        CurrentProviderTurnEvent::ProviderTrace { event } => emit_with_artifacts(
+            artifact_events,
+            AgentEvent::ProviderTrace { event },
+            on_event,
+        ),
         CurrentProviderTurnEvent::TextDelta { text } => {
             emit_with_artifacts(artifact_events, AgentEvent::TextDelta { text }, on_event)
         }
@@ -427,10 +353,7 @@ fn default_working_directory() -> PathBuf {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use rmcp::model::{
-        CallToolResult, Content, GetPromptResult, InitializeResult, JsonObject, ListPromptsResult,
-        ListResourcesResult, ListToolsResult, ReadResourceResult, ServerNotification,
-    };
+    use rmcp::model::{CallToolResult, Content, JsonObject, ListToolsResult, ServerNotification};
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::{mpsc, Mutex};
@@ -447,22 +370,6 @@ mod tests {
 
     #[async_trait]
     impl McpConnection for HangingMcpConnection {
-        async fn list_resources(
-            &self,
-            _next_cursor: Option<String>,
-            _cancel_token: CancellationToken,
-        ) -> Result<ListResourcesResult, McpConnectionError> {
-            std::future::pending().await
-        }
-
-        async fn read_resource(
-            &self,
-            _uri: &str,
-            _cancel_token: CancellationToken,
-        ) -> Result<ReadResourceResult, McpConnectionError> {
-            std::future::pending().await
-        }
-
         async fn list_tools(
             &self,
             _next_cursor: Option<String>,
@@ -475,35 +382,15 @@ mod tests {
             &self,
             _name: &str,
             _arguments: Option<JsonObject>,
+            _scope: &tool_runtime::mcp_connection::McpCallScope,
             _cancel_token: CancellationToken,
         ) -> Result<CallToolResult, McpConnectionError> {
-            std::future::pending().await
-        }
-
-        async fn list_prompts(
-            &self,
-            _next_cursor: Option<String>,
-            _cancel_token: CancellationToken,
-        ) -> Result<ListPromptsResult, McpConnectionError> {
-            std::future::pending().await
-        }
-
-        async fn get_prompt(
-            &self,
-            _name: &str,
-            _arguments: Value,
-            _cancel_token: CancellationToken,
-        ) -> Result<GetPromptResult, McpConnectionError> {
             std::future::pending().await
         }
 
         async fn subscribe(&self) -> mpsc::Receiver<ServerNotification> {
             let (_sender, receiver) = mpsc::channel(1);
             receiver
-        }
-
-        fn get_info(&self) -> Option<&InitializeResult> {
-            None
         }
     }
 
@@ -591,6 +478,7 @@ mod tests {
                         Some("preview".to_string()),
                     )),
                     metadata: HashMap::from([("source".to_string(), serde_json::json!("mcp"))]),
+                    agent_control_projection_facts: Vec::new(),
                 }),
             })
             .expect("completed lifecycle projection");
@@ -669,6 +557,7 @@ mod tests {
                     truncation: None,
                     sidecar_reference: None,
                     metadata: HashMap::new(),
+                    agent_control_projection_facts: Vec::new(),
                 }),
             })
             .expect("failed lifecycle projection");
@@ -729,6 +618,7 @@ mod tests {
                     truncation: None,
                     sidecar_reference: None,
                     metadata: HashMap::new(),
+                    agent_control_projection_facts: Vec::new(),
                 }),
             })
             .await;
@@ -875,11 +765,96 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn mcp_call_scope_uses_canonical_execution_identity() {
+        let context = tool_runtime::tool_executor::RuntimeToolExecutionContext::new(
+            tool_runtime::tool_executor::RuntimeToolExecutionContextInput {
+                working_directory: PathBuf::from("/workspace"),
+                session_id: "session-canonical".to_string(),
+                cancel_token: None,
+                workspace_sandbox: None,
+            },
+        )
+        .with_tool_identity(
+            tool_runtime::tool_executor::RuntimeToolExecutionIdentity::new(
+                "call-canonical",
+                "turn-canonical",
+            ),
+        );
+        let turn_context = tool_runtime::tool_executor::RuntimeToolTurnContext {
+            metadata: HashMap::from([
+                (
+                    "thread_id".to_string(),
+                    serde_json::json!("thread-metadata"),
+                ),
+                ("turn_id".to_string(), serde_json::json!("turn-metadata")),
+                (
+                    "tool_call_id".to_string(),
+                    serde_json::json!("call-metadata"),
+                ),
+            ]),
+            ..tool_runtime::tool_executor::RuntimeToolTurnContext::default()
+        };
+        let params = serde_json::json!({});
+
+        let scope = mcp_call_scope(RuntimeToolExecutionRequest {
+            tool_name: "mcp_search",
+            params: &params,
+            context: &context,
+            turn_context: Some(&turn_context),
+        })
+        .expect("canonical execution identity should form MCP call scope");
+
+        assert_eq!(scope.turn_id(), Some("turn-canonical"));
+    }
+
+    #[test]
+    fn mcp_call_scope_fails_closed_without_typed_call_identity() {
+        let context = tool_runtime::tool_executor::RuntimeToolExecutionContext::new(
+            tool_runtime::tool_executor::RuntimeToolExecutionContextInput {
+                working_directory: PathBuf::from("/workspace"),
+                session_id: "session-1".to_string(),
+                cancel_token: None,
+                workspace_sandbox: None,
+            },
+        );
+        let turn_context = tool_runtime::tool_executor::RuntimeToolTurnContext {
+            metadata: HashMap::from([
+                ("turn_id".to_string(), serde_json::json!("turn-metadata")),
+                (
+                    "tool_call_id".to_string(),
+                    serde_json::json!("call-metadata"),
+                ),
+            ]),
+            ..tool_runtime::tool_executor::RuntimeToolTurnContext::default()
+        };
+        let params = serde_json::json!({});
+
+        let error = mcp_call_scope(RuntimeToolExecutionRequest {
+            tool_name: "mcp_search",
+            params: &params,
+            context: &context,
+            turn_context: Some(&turn_context),
+        })
+        .expect_err("metadata identity must not revive an unidentified MCP call");
+
+        assert_eq!(error.message(), "MCP call requires canonical tool identity");
+        assert!(matches!(
+            error.policy_kind(),
+            Some(RuntimeToolPolicyErrorKind::ExecutionFailed(reason))
+                if reason == "mcp_call_scope_missing"
+        ));
+    }
+
     #[tokio::test]
     async fn mcp_tool_discovery_timeout_keeps_main_turn_unblocked() {
         let state = AgentRuntimeState::new();
-        state
-            .mcp_connections()
+        let runtime = Arc::new(crate::runtime_state::McpThreadRuntime::for_test(
+            "session-1",
+            "thread-1",
+        ));
+        runtime
+            .connections()
             .register(
                 "slow".to_string(),
                 RuntimeExtensionConfig::new(
@@ -891,7 +866,6 @@ mod tests {
                     None,
                 ),
                 Arc::new(Mutex::new(Box::new(HangingMcpConnection))),
-                None,
             )
             .await;
 
@@ -899,6 +873,8 @@ mod tests {
             Duration::from_millis(200),
             mcp_step_snapshot::mcp_step_snapshot(
                 &state,
+                "session-1",
+                &ThreadId::new("thread-1"),
                 Duration::from_millis(10),
                 &mcp_step_snapshot::DeferredToolSelections::default(),
             ),
@@ -907,6 +883,6 @@ mod tests {
         .expect("MCP discovery timeout should return control to the main turn");
 
         assert!(snapshot.tools().is_empty());
-        assert_eq!(state.mcp_connections().names().await, vec!["slow"]);
+        assert_eq!(runtime.connections().names().await, vec!["slow"]);
     }
 }

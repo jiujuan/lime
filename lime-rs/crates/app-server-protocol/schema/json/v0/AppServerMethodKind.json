@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "enum": [
     "notification",
-    "request"
+    "request",
+    "serverRequest"
   ],
   "title": "AppServerMethodKind",
   "type": "string"

@@ -1,0 +1,632 @@
+//! Current provider contract for durable multi-agent control.
+//!
+//! Tool definitions and argument validation live here. The concrete owner is supplied per turn
+//! by App Server; this crate never owns agent graph, identity, mailbox, or RuntimeCore state.
+
+use crate::tool_definition::RuntimeToolDefinition;
+use crate::tool_executor::{
+    RuntimeToolExecutionError, RuntimeToolExecutionRequest, RuntimeToolExecutionResult,
+    RuntimeToolPolicyErrorKind,
+};
+use agent_protocol::ThreadId;
+use async_trait::async_trait;
+use serde::Deserialize;
+use serde_json::{json, Value};
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
+
+pub const SPAWN_AGENT_TOOL_NAME: &str = "spawn_agent";
+pub const SEND_MESSAGE_TOOL_NAME: &str = "send_message";
+pub const FOLLOWUP_TASK_TOOL_NAME: &str = "followup_task";
+pub const WAIT_AGENT_TOOL_NAME: &str = "wait_agent";
+pub const INTERRUPT_AGENT_TOOL_NAME: &str = "interrupt_agent";
+pub const LIST_AGENTS_TOOL_NAME: &str = "list_agents";
+const MAX_WAIT_TIMEOUT_MS: u64 = 120_000;
+
+pub fn is_agent_control_tool_name(name: &str) -> bool {
+    matches!(
+        name.trim(),
+        SPAWN_AGENT_TOOL_NAME
+            | SEND_MESSAGE_TOOL_NAME
+            | FOLLOWUP_TASK_TOOL_NAME
+            | WAIT_AGENT_TOOL_NAME
+            | INTERRUPT_AGENT_TOOL_NAME
+            | LIST_AGENTS_TOOL_NAME
+    )
+}
+
+pub fn agent_control_tool_definitions() -> Vec<RuntimeToolDefinition> {
+    vec![
+        RuntimeToolDefinition::new(
+            SPAWN_AGENT_TOOL_NAME,
+            "Spawn a child agent in the current durable agent tree.",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "task_name": { "type": "string" },
+                    "message": { "type": "string" }
+                },
+                "required": ["task_name", "message"]
+            }),
+        ),
+        RuntimeToolDefinition::new(
+            SEND_MESSAGE_TOOL_NAME,
+            "Queue a message for an agent in the current durable agent tree.",
+            message_input_schema(),
+        ),
+        RuntimeToolDefinition::new(
+            FOLLOWUP_TASK_TOOL_NAME,
+            "Send a follow-up task and trigger the target child agent.",
+            message_input_schema(),
+        ),
+        RuntimeToolDefinition::new(
+            WAIT_AGENT_TOOL_NAME,
+            "Wait for durable mailbox activity from the current agent tree.",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "timeout_ms": { "type": "integer", "minimum": 0, "maximum": MAX_WAIT_TIMEOUT_MS }
+                }
+            }),
+        ),
+        RuntimeToolDefinition::new(
+            INTERRUPT_AGENT_TOOL_NAME,
+            "Interrupt a child agent's active turn while keeping its durable graph edge open.",
+            target_input_schema(),
+        ),
+        RuntimeToolDefinition::new(
+            LIST_AGENTS_TOOL_NAME,
+            "List agents in the current durable agent tree.",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "path_prefix": { "type": "string" }
+                }
+            }),
+        ),
+    ]
+}
+
+fn message_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "target": { "type": "string" },
+            "message": { "type": "string" }
+        },
+        "required": ["target", "message"]
+    })
+}
+
+fn target_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "target": { "type": "string" }
+        },
+        "required": ["target"]
+    })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentControlCaller {
+    pub session_id: String,
+    pub thread_id: String,
+    pub turn_id: String,
+    pub call_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AgentControlCommand {
+    SpawnAgent { task_name: String, message: String },
+    SendMessage { target: String, message: String },
+    FollowupTask { target: String, message: String },
+    WaitAgent { timeout_ms: u64 },
+    InterruptAgent { target: String },
+    ListAgents { path_prefix: Option<String> },
+}
+
+#[derive(Clone, Debug)]
+pub struct AgentControlGatewayRequest {
+    pub caller: AgentControlCaller,
+    pub command: AgentControlCommand,
+    pub cancel_token: Option<CancellationToken>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AgentControlGatewayResult {
+    pub output: Value,
+    pub projection_facts: Vec<SubAgentProjectionFact>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubAgentProjectionActivity {
+    Started,
+    Interacted,
+    Interrupted,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubAgentProjectionFact {
+    pub target_thread_id: ThreadId,
+    pub activity: SubAgentProjectionActivity,
+    pub detail: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentControlGatewayError {
+    message: String,
+}
+
+impl AgentControlGatewayError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl std::fmt::Display for AgentControlGatewayError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for AgentControlGatewayError {}
+
+#[async_trait]
+pub trait AgentControlGateway: Send + Sync {
+    async fn execute(
+        &self,
+        request: AgentControlGatewayRequest,
+    ) -> Result<AgentControlGatewayResult, AgentControlGatewayError>;
+}
+
+#[derive(Clone)]
+pub struct AgentControlGatewayHandle(Arc<dyn AgentControlGateway>);
+
+impl AgentControlGatewayHandle {
+    pub fn new(gateway: Arc<dyn AgentControlGateway>) -> Self {
+        Self(gateway)
+    }
+
+    pub fn gateway(&self) -> &dyn AgentControlGateway {
+        self.0.as_ref()
+    }
+}
+
+impl std::fmt::Debug for AgentControlGatewayHandle {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("AgentControlGatewayHandle(..)")
+    }
+}
+
+pub async fn execute_agent_control_tool(
+    gateway: &dyn AgentControlGateway,
+    thread_id: &str,
+    request: RuntimeToolExecutionRequest<'_>,
+) -> Option<Result<RuntimeToolExecutionResult, RuntimeToolExecutionError>> {
+    let command = match parse_command(request.tool_name, request.params) {
+        Some(Ok(command)) => command,
+        Some(Err(error)) => return Some(Err(error)),
+        None => return None,
+    };
+    let Some(identity) = request.context.tool_identity() else {
+        return Some(Err(agent_control_execution_error(
+            "agent control requires canonical tool identity",
+            "agent_control_identity_missing",
+        )));
+    };
+    let turn_id = identity.turn_id().trim();
+    let call_id = identity.call_id().trim();
+    let thread_id = thread_id.trim();
+    if turn_id.is_empty() || call_id.is_empty() || thread_id.is_empty() {
+        return Some(Err(agent_control_execution_error(
+            "agent control requires canonical caller identity",
+            "agent_control_identity_invalid",
+        )));
+    }
+    let result = gateway
+        .execute(AgentControlGatewayRequest {
+            caller: AgentControlCaller {
+                session_id: request.context.session_id().to_string(),
+                thread_id: thread_id.to_string(),
+                turn_id: turn_id.to_string(),
+                call_id: call_id.to_string(),
+            },
+            command,
+            cancel_token: request.context.cancel_token().cloned(),
+        })
+        .await
+        .map_err(|error| {
+            agent_control_execution_error(
+                format!("agent control failed: {error}"),
+                "agent_control_gateway_failed",
+            )
+        });
+    Some(result.and_then(runtime_execution_result))
+}
+
+fn runtime_execution_result(
+    result: AgentControlGatewayResult,
+) -> Result<RuntimeToolExecutionResult, RuntimeToolExecutionError> {
+    let AgentControlGatewayResult {
+        output,
+        projection_facts,
+    } = result;
+    let output =
+        serde_json::to_string(&output).map_err(agent_control_result_serialization_error)?;
+    Ok(
+        RuntimeToolExecutionResult::new(true, output, None, Default::default())
+            .with_agent_control_projection_facts(projection_facts),
+    )
+}
+
+fn agent_control_result_serialization_error(error: serde_json::Error) -> RuntimeToolExecutionError {
+    agent_control_execution_error(
+        format!("agent control result serialization failed: {error}"),
+        "agent_control_result_invalid",
+    )
+}
+
+fn parse_command(
+    tool_name: &str,
+    params: &Value,
+) -> Option<Result<AgentControlCommand, RuntimeToolExecutionError>> {
+    match tool_name.trim() {
+        SPAWN_AGENT_TOOL_NAME => Some(parse_spawn(params)),
+        SEND_MESSAGE_TOOL_NAME => {
+            Some(
+                parse_message(params).map(|input| AgentControlCommand::SendMessage {
+                    target: input.target,
+                    message: input.message,
+                }),
+            )
+        }
+        FOLLOWUP_TASK_TOOL_NAME => {
+            Some(
+                parse_message(params).map(|input| AgentControlCommand::FollowupTask {
+                    target: input.target,
+                    message: input.message,
+                }),
+            )
+        }
+        WAIT_AGENT_TOOL_NAME => Some(parse_wait(params)),
+        INTERRUPT_AGENT_TOOL_NAME => {
+            Some(
+                parse_target(params).map(|input| AgentControlCommand::InterruptAgent {
+                    target: input.target,
+                }),
+            )
+        }
+        LIST_AGENTS_TOOL_NAME => Some(parse_list(params)),
+        _ => None,
+    }
+}
+
+fn parse_spawn(params: &Value) -> Result<AgentControlCommand, RuntimeToolExecutionError> {
+    let input: SpawnAgentInput = parse_input(params)?;
+    let task_name = required_nonempty(input.task_name, "task_name")?;
+    if task_name.contains('/') || matches!(task_name.as_str(), "." | "..") {
+        return Err(agent_control_execution_error(
+            "task_name must be one canonical path segment",
+            "agent_control_invalid_params",
+        ));
+    }
+    Ok(AgentControlCommand::SpawnAgent {
+        task_name,
+        message: required_nonempty(input.message, "message")?,
+    })
+}
+
+fn parse_message(params: &Value) -> Result<MessageInput, RuntimeToolExecutionError> {
+    let input: MessageInput = parse_input(params)?;
+    Ok(MessageInput {
+        target: required_nonempty(input.target, "target")?,
+        message: required_nonempty(input.message, "message")?,
+    })
+}
+
+fn parse_target(params: &Value) -> Result<TargetInput, RuntimeToolExecutionError> {
+    let input: TargetInput = parse_input(params)?;
+    Ok(TargetInput {
+        target: required_nonempty(input.target, "target")?,
+    })
+}
+
+fn parse_wait(params: &Value) -> Result<AgentControlCommand, RuntimeToolExecutionError> {
+    let input: WaitAgentInput = parse_input(params)?;
+    let timeout_ms = input.timeout_ms.unwrap_or(30_000);
+    if timeout_ms > MAX_WAIT_TIMEOUT_MS {
+        return Err(agent_control_execution_error(
+            format!("timeout_ms must not exceed {MAX_WAIT_TIMEOUT_MS}"),
+            "agent_control_invalid_params",
+        ));
+    }
+    Ok(AgentControlCommand::WaitAgent { timeout_ms })
+}
+
+fn parse_list(params: &Value) -> Result<AgentControlCommand, RuntimeToolExecutionError> {
+    let input: ListAgentsInput = parse_input(params)?;
+    let path_prefix = input
+        .path_prefix
+        .map(|value| required_nonempty(value, "path_prefix"))
+        .transpose()?;
+    Ok(AgentControlCommand::ListAgents { path_prefix })
+}
+
+fn parse_input<T: for<'de> Deserialize<'de>>(
+    params: &Value,
+) -> Result<T, RuntimeToolExecutionError> {
+    serde_json::from_value(params.clone()).map_err(|error| {
+        agent_control_execution_error(
+            format!("agent control parameters are invalid: {error}"),
+            "agent_control_invalid_params",
+        )
+    })
+}
+
+fn required_nonempty(value: String, field: &str) -> Result<String, RuntimeToolExecutionError> {
+    let value = value.trim().to_string();
+    (!value.is_empty()).then_some(value).ok_or_else(|| {
+        agent_control_execution_error(
+            format!("{field} is required"),
+            "agent_control_invalid_params",
+        )
+    })
+}
+
+fn agent_control_execution_error(
+    message: impl Into<String>,
+    code: &str,
+) -> RuntimeToolExecutionError {
+    RuntimeToolExecutionError::new(
+        message,
+        Some(RuntimeToolPolicyErrorKind::ExecutionFailed(
+            code.to_string(),
+        )),
+    )
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpawnAgentInput {
+    task_name: String,
+    message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MessageInput {
+    target: String,
+    message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TargetInput {
+    target: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WaitAgentInput {
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ListAgentsInput {
+    path_prefix: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tool_executor::{
+        RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutionIdentity,
+    };
+    use std::path::PathBuf;
+
+    #[derive(Default)]
+    struct RecordingGateway {
+        requests: std::sync::Mutex<Vec<AgentControlGatewayRequest>>,
+    }
+
+    #[async_trait]
+    impl AgentControlGateway for RecordingGateway {
+        async fn execute(
+            &self,
+            request: AgentControlGatewayRequest,
+        ) -> Result<AgentControlGatewayResult, AgentControlGatewayError> {
+            self.requests
+                .lock()
+                .expect("requests mutex poisoned")
+                .push(request);
+            Ok(AgentControlGatewayResult {
+                output: json!({ "accepted": true }),
+                projection_facts: Vec::new(),
+            })
+        }
+    }
+
+    fn request<'a>(
+        tool_name: &'a str,
+        params: &'a Value,
+        context: &'a RuntimeToolExecutionContext,
+    ) -> RuntimeToolExecutionRequest<'a> {
+        RuntimeToolExecutionRequest {
+            tool_name,
+            params,
+            context,
+            turn_context: None,
+        }
+    }
+
+    fn context() -> RuntimeToolExecutionContext {
+        RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
+            working_directory: PathBuf::from("/workspace"),
+            session_id: "session-root".to_string(),
+            cancel_token: None,
+            workspace_sandbox: None,
+        })
+        .with_tool_identity(RuntimeToolExecutionIdentity::new("call-1", "turn-1"))
+    }
+
+    #[test]
+    fn exposes_only_v2_agent_control_tools() {
+        let names = agent_control_tool_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec![
+                "spawn_agent",
+                "send_message",
+                "followup_task",
+                "wait_agent",
+                "interrupt_agent",
+                "list_agents",
+            ]
+        );
+        assert!(is_agent_control_tool_name(SPAWN_AGENT_TOOL_NAME));
+        assert!(!is_agent_control_tool_name("TeamCreate"));
+    }
+
+    #[tokio::test]
+    async fn dispatches_typed_spawn_without_legacy_aliases() {
+        let gateway = RecordingGateway::default();
+        let params = json!({ "task_name": "research", "message": "inspect the plan" });
+        let context = context();
+
+        let result = execute_agent_control_tool(
+            &gateway,
+            "thread-root",
+            request(SPAWN_AGENT_TOOL_NAME, &params, &context),
+        )
+        .await
+        .expect("current agent control tool")
+        .expect("gateway result");
+
+        assert_eq!(result.output, "{\"accepted\":true}");
+        let requests = gateway.requests.lock().expect("requests mutex poisoned");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].caller,
+            AgentControlCaller {
+                session_id: "session-root".to_string(),
+                thread_id: "thread-root".to_string(),
+                turn_id: "turn-1".to_string(),
+                call_id: "call-1".to_string(),
+            }
+        );
+        assert_eq!(
+            requests[0].command,
+            AgentControlCommand::SpawnAgent {
+                task_name: "research".to_string(),
+                message: "inspect the plan".to_string(),
+            }
+        );
+        assert!(requests[0].cancel_token.is_none());
+        assert!(execute_agent_control_tool(
+            &gateway,
+            "thread-root",
+            request("TeamCreate", &params, &context),
+        )
+        .await
+        .is_none());
+    }
+
+    #[tokio::test]
+    async fn rejects_ambiguous_or_invalid_parameters() {
+        let gateway = RecordingGateway::default();
+        let context = context();
+        let invalid = json!({ "task_name": "nested/agent", "message": "work" });
+        let error = execute_agent_control_tool(
+            &gateway,
+            "thread-root",
+            request(SPAWN_AGENT_TOOL_NAME, &invalid, &context),
+        )
+        .await
+        .expect("current tool")
+        .expect_err("invalid task name");
+        assert_eq!(
+            error.policy_kind(),
+            Some(&RuntimeToolPolicyErrorKind::ExecutionFailed(
+                "agent_control_invalid_params".to_string()
+            ))
+        );
+
+        let unknown = json!({ "target": "child", "message": "continue", "legacy": true });
+        assert!(execute_agent_control_tool(
+            &gateway,
+            "thread-root",
+            request(SEND_MESSAGE_TOOL_NAME, &unknown, &context),
+        )
+        .await
+        .expect("current tool")
+        .is_err());
+    }
+
+    #[test]
+    fn transports_typed_projection_facts_outside_model_visible_output() {
+        let expected = vec![
+            SubAgentProjectionFact {
+                target_thread_id: ThreadId::new("thread-child"),
+                activity: SubAgentProjectionActivity::Started,
+                detail: Some("/root/research".to_string()),
+            },
+            SubAgentProjectionFact {
+                target_thread_id: ThreadId::new("thread-child"),
+                activity: SubAgentProjectionActivity::Interacted,
+                detail: None,
+            },
+            SubAgentProjectionFact {
+                target_thread_id: ThreadId::new("thread-child"),
+                activity: SubAgentProjectionActivity::Interrupted,
+                detail: None,
+            },
+        ];
+        let result = runtime_execution_result(AgentControlGatewayResult {
+            output: json!({ "accepted": true }),
+            projection_facts: expected.clone(),
+        })
+        .expect("runtime projection");
+
+        assert_eq!(result.output, "{\"accepted\":true}");
+        assert_eq!(result.agent_control_projection_facts, expected);
+        assert!(result.metadata.is_empty());
+
+        let normalized =
+            crate::tool_result_projection::NormalizedToolOutput::from_execution_outcome(
+                crate::tool_executor::RuntimeToolExecutionOutcome::Result(result),
+                1,
+            );
+        assert_eq!(normalized.agent_control_projection_facts, expected);
+        let serialized = serde_json::to_value(normalized).expect("serialize normalized output");
+        assert!(serialized.get("agent_control_projection_facts").is_none());
+    }
+
+    #[test]
+    fn omits_projection_metadata_when_gateway_returns_no_facts() {
+        let result = runtime_execution_result(AgentControlGatewayResult {
+            output: json!({ "agents": [] }),
+            projection_facts: Vec::new(),
+        })
+        .expect("runtime projection");
+
+        assert_eq!(result.output, "{\"agents\":[]}");
+        assert!(result.agent_control_projection_facts.is_empty());
+        assert!(result.metadata.is_empty());
+    }
+}

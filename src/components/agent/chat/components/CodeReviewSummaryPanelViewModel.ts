@@ -1,5 +1,5 @@
 import type { AgentI18nKey } from "@/i18n/agentResources";
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime/sessionTypes";
 import type { HarnessSessionState } from "../utils/harnessState";
 import type { CodeFixPromptFileChange } from "../utils/codeFixPrompt";
 import type { HarnessFileChangeReviewSummary } from "./HarnessStatusPanel";

@@ -61,7 +61,6 @@ import { parseVideoWorkbenchCommand } from "../utils/videoWorkbenchCommand";
 import { parseVoiceWorkbenchCommand } from "../utils/voiceWorkbenchCommand";
 import { parseWritingWorkbenchCommand } from "../utils/writingWorkbenchCommand";
 import { parseWebpageWorkbenchCommand } from "../utils/webpageWorkbenchCommand";
-import { resolveAgentFastResponseRouting } from "../utils/fastResponseRouting";
 import { resolvePlainInputIntentConfirmation } from "../utils/plainInputIntentConfirmation";
 import { detectBrowserTaskRequirement } from "../utils/browserTaskRequirement";
 import { isTeamRuntimeRecommendation } from "../utils/contextualRecommendations";
@@ -174,10 +173,6 @@ import {
 import { asRecord } from "./commands/skillSlotUtils";
 import { waitForNextPaint } from "./commands/sendHelpers";
 import {
-  readFastResponseMode,
-  withFastResponseMetadata,
-} from "./commands/fastResponseHelpers";
-import {
   mergePluginActivationSendOptions,
   resolveWorkspacePluginActivation,
 } from "./workspacePluginActivation";
@@ -188,11 +183,9 @@ import {
 import {
   resolveServiceModelSendOverrides,
   shouldRefreshServiceModelsBeforeSend,
+  withConfiguredModelSlots,
 } from "./commands/serviceModelHelpers";
-import {
-  shouldSkipBrowserAssistPrimeForPlainFirstTurn,
-  buildFastResponseAssistantDraft,
-} from "./commands/browserAssistHelpers";
+import { shouldSkipBrowserAssistPrimeForPlainFirstTurn } from "./commands/browserAssistHelpers";
 import { buildImageWorkbenchAssistantDraft } from "./commands/imageWorkbenchHelpers";
 import { resolveSkillInstallPromptConfirmation } from "./commands/skillInstallHelpers";
 import {
@@ -3054,7 +3047,6 @@ export function useWorkspaceSendActions({
         sendOptions,
         completedMentionCommandUsage,
         completedMentionUsage,
-        hasContextWorkspace,
       } = plan;
 
       const executeStartedAt = Date.now();
@@ -3177,48 +3169,17 @@ export function useWorkspaceSendActions({
           purpose: sendOptions?.purpose,
           serviceModels: effectiveServiceModels,
         });
-        const fastResponseDecision = resolveAgentFastResponseRouting({
-          mode: readFastResponseMode(),
-          mappedTheme,
-          isThemeWorkbench,
-          contentId,
-          messageCount: messagesCount,
-          sourceText,
-          imagesCount: images.length,
-          toolPreferences: effectiveToolPreferences,
-          searchMode: effectiveSearchMode,
-          effectiveWebSearch,
-          hasExplicitProviderOverride: Boolean(
-            sendOptions?.providerOverride?.trim(),
-          ),
-          hasExplicitModelOverride: Boolean(sendOptions?.modelOverride?.trim()),
-          hasServiceModelOverride: Boolean(
-            serviceModelSendOverrides.providerOverride ||
-            serviceModelSendOverrides.modelOverride,
-          ),
-          hasCapabilityRoute: Boolean(
-            sendOptions?.capabilityRoute || browserRequirementForSend,
-          ),
-          hasSkillRequest: Boolean(sendOptions?.skillRequest),
-          hasSelectedTeam: Boolean(selectedTeam),
-          hasMentionedCharacters: mentionedCharacters.length > 0,
-          hasContextWorkspace,
-          hasPurpose: Boolean(sendOptions?.purpose),
-          hasAutoContinue: Boolean(autoContinuePayload?.enabled),
-        });
         const nextAssistantDraft =
           sendOptions?.assistantDraft ??
-          buildImageWorkbenchAssistantDraft(nextRequestMetadata) ??
-          buildFastResponseAssistantDraft(fastResponseDecision);
+          buildImageWorkbenchAssistantDraft(nextRequestMetadata);
         const nextSendOptions: HandleSendOptions = {
           ...(sendOptions || {}),
           displayContent:
             dispatchText !== sourceText
               ? (sendOptions?.displayContent ?? sourceText)
               : sendOptions?.displayContent,
-          requestMetadata: withFastResponseMetadata(
+          requestMetadata: withConfiguredModelSlots(
             nextRequestMetadata,
-            fastResponseDecision,
             effectiveServiceModels,
           ),
           ...(effectiveSearchMode ? { searchMode: effectiveSearchMode } : {}),
@@ -3234,7 +3195,11 @@ export function useWorkspaceSendActions({
 
         logAgentDebug("WorkspaceSend", "sendMessage.start", {
           durationMs: Date.now() - executeStartedAt,
-          fastResponseApplied: fastResponseDecision.enabled,
+          responsiveModelSlotConfigured: Boolean(
+            effectiveServiceModels?.responsive_chat?.enabled !== false &&
+            effectiveServiceModels?.responsive_chat?.preferredProviderId &&
+            effectiveServiceModels?.responsive_chat?.preferredModelId,
+          ),
           modelOverride: nextSendOptions.modelOverride ?? null,
           providerOverride: nextSendOptions.providerOverride ?? null,
         });
@@ -3308,7 +3273,6 @@ export function useWorkspaceSendActions({
       isThemeWorkbench,
       mappedTheme,
       messagesCount,
-      mentionedCharacters,
       preferredTeamPresetId,
       providerType,
       rollbackAfterSendFailure,

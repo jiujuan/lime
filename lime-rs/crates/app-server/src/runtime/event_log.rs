@@ -7,6 +7,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EventLogRecord {
@@ -80,96 +81,19 @@ pub(crate) struct EventLogScan {
     pub(crate) issue: Option<EventLogIssue>,
 }
 
-impl EventLogScan {
-    pub(crate) fn is_clean(&self) -> bool {
-        self.issue.is_none()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum EventLogComparison {
-    Exact,
-    Append {
-        expected_len: usize,
-        actual_len: usize,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum EventLogComparisonIssue {
-    ShorterLog {
-        expected_len: usize,
-        actual_len: usize,
-    },
-    MissingMiddle {
-        index: usize,
-        expected_sequence: u64,
-        actual_sequence: u64,
-    },
-    EqualSequenceDivergence {
-        index: usize,
-        sequence: u64,
-        expected_event_id: String,
-        actual_event_id: String,
-    },
-    OutOfOrder {
-        index: usize,
-        previous_sequence: u64,
-        actual_sequence: u64,
-    },
-}
-
-/// Compare two canonical event streams without treating a lower sequence as
-/// merely stale.  This is used by repair/resume code when a previous scan is
-/// available (for example, after a crash while replacing a log).
-pub(crate) fn compare_canonical_event_logs(
-    expected: &[AgentEvent],
-    actual: &[AgentEvent],
-) -> Result<EventLogComparison, EventLogComparisonIssue> {
-    for (index, (expected_event, actual_event)) in expected.iter().zip(actual).enumerate() {
-        if expected_event.sequence != actual_event.sequence {
-            if actual_event.sequence < expected_event.sequence {
-                return Err(EventLogComparisonIssue::OutOfOrder {
-                    index,
-                    previous_sequence: expected_event.sequence,
-                    actual_sequence: actual_event.sequence,
-                });
-            }
-            return Err(EventLogComparisonIssue::MissingMiddle {
-                index,
-                expected_sequence: expected_event.sequence,
-                actual_sequence: actual_event.sequence,
-            });
-        }
-        if expected_event != actual_event {
-            return Err(EventLogComparisonIssue::EqualSequenceDivergence {
-                index,
-                sequence: expected_event.sequence,
-                expected_event_id: expected_event.event_id.clone(),
-                actual_event_id: actual_event.event_id.clone(),
-            });
-        }
-    }
-    if actual.len() < expected.len() {
-        return Err(EventLogComparisonIssue::ShorterLog {
-            expected_len: expected.len(),
-            actual_len: actual.len(),
-        });
-    }
-    if actual.len() == expected.len() {
-        Ok(EventLogComparison::Exact)
-    } else {
-        Ok(EventLogComparison::Append {
-            expected_len: expected.len(),
-            actual_len: actual.len(),
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct EventLogWriter {
     root: PathBuf,
+    io_locks: Arc<Mutex<BTreeMap<PathBuf, Arc<Mutex<()>>>>>,
 }
+
+impl PartialEq for EventLogWriter {
+    fn eq(&self, other: &Self) -> bool {
+        self.root == other.root
+    }
+}
+
+impl Eq for EventLogWriter {}
 
 pub const WORKFLOW_AUDIT_ACTIVE_COMPACT_AFTER_RECORDS: usize = 1024;
 pub const WORKFLOW_AUDIT_ACTIVE_RETAIN_RECENT_RECORDS: usize = 512;
@@ -193,7 +117,10 @@ impl EventLogWriter {
                 root.display()
             )
         })?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            io_locks: Arc::new(Mutex::new(BTreeMap::new())),
+        })
     }
 
     pub fn append(&self, event: &AgentEvent) -> Result<PathBuf, String> {
@@ -217,6 +144,10 @@ impl EventLogWriter {
 
         let mut paths = Vec::with_capacity(events_by_path.len());
         for (path, events) in events_by_path {
+            let io_lock = self.io_lock_for(&path)?;
+            let _io_guard = io_lock
+                .lock()
+                .map_err(|_| "event log I/O lock poisoned".to_string())?;
             let session_id = events
                 .first()
                 .map(|event| event.session_id.as_str())
@@ -230,7 +161,12 @@ impl EventLogWriter {
     }
 
     pub fn read_session_events(&self, session_id: &str) -> Result<Vec<EventLogRecord>, String> {
-        let scan = self.scan_session_events(session_id)?;
+        let path = self.session_path(session_id);
+        let io_lock = self.io_lock_for(&path)?;
+        let _io_guard = io_lock
+            .lock()
+            .map_err(|_| "event log I/O lock poisoned".to_string())?;
+        let scan = scan_event_log_path(&path, session_id)?;
         if let Some(issue) = scan.issue {
             return Err(format!(
                 "event log {} requires repair at offset {}: {issue:?}",
@@ -247,7 +183,12 @@ impl EventLogWriter {
     /// record is isolated in `issue`; sequence gaps and divergence are never
     /// interpreted as stale events.
     pub(crate) fn scan_session_events(&self, session_id: &str) -> Result<EventLogScan, String> {
-        scan_event_log_path(&self.session_path(session_id), session_id)
+        let path = self.session_path(session_id);
+        let io_lock = self.io_lock_for(&path)?;
+        let _io_guard = io_lock
+            .lock()
+            .map_err(|_| "event log I/O lock poisoned".to_string())?;
+        scan_event_log_path(&path, session_id)
     }
 
     /// Truncate only a repairable malformed/unterminated tail.  Middle-log
@@ -257,6 +198,10 @@ impl EventLogWriter {
         session_id: &str,
     ) -> Result<EventLogScan, String> {
         let path = self.session_path(session_id);
+        let io_lock = self.io_lock_for(&path)?;
+        let _io_guard = io_lock
+            .lock()
+            .map_err(|_| "event log I/O lock poisoned".to_string())?;
         let scan = scan_event_log_path(&path, session_id)?;
         let Some(issue) = scan.issue.as_ref() else {
             return Ok(scan);
@@ -437,6 +382,17 @@ impl EventLogWriter {
         self.root
             .join("sessions")
             .join(format!("session_{}.jsonl", safe_file_stem(session_id)))
+    }
+
+    fn io_lock_for(&self, path: &Path) -> Result<Arc<Mutex<()>>, String> {
+        let mut io_locks = self
+            .io_locks
+            .lock()
+            .map_err(|_| "event log lock registry poisoned".to_string())?;
+        Ok(io_locks
+            .entry(path.to_path_buf())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone())
     }
 }
 
@@ -777,6 +733,10 @@ fn write_events(file: &mut fs::File, path: &Path, events: &[&AgentEvent]) -> Res
 impl EventLogWriter {
     pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
         let session_event_path = self.session_path(session_id);
+        let io_lock = self.io_lock_for(&session_event_path)?;
+        let _io_guard = io_lock
+            .lock()
+            .map_err(|_| "event log I/O lock poisoned".to_string())?;
         let workflow_audit_path = self.workflow_audit_path(session_id);
         let workflow_audit_archive_paths = self.workflow_audit_archive_paths(session_id)?;
         remove_event_log_path(&session_event_path)?;

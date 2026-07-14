@@ -554,7 +554,7 @@ describe("app-server runtime boundary", () => {
     ).toBeLessThanOrEqual(1445);
     expect(
       agentSessionRuntime.split(/\r?\n/u).length,
-      "session_execution_runtime.rs 已拆出 recent_context / recent_settings / runtime_payload / tests owner，新增 provider/tool/turn/context 投影必须先进 lime-agent domain 模块",
+      "session_execution_runtime.rs 只保留 AgentEvent DTO 与 current session projection alias；新增 provider/tool/turn/context 投影必须进入 App Server 或 agent-runtime current owner",
     ).toBeLessThanOrEqual(660);
     expect(
       missingModules,
@@ -578,11 +578,11 @@ describe("app-server runtime boundary", () => {
     ).toEqual([]);
     expect(
       returnedAgentSessionRuntimeResponsibilities,
-      "session_execution_runtime.rs 不得回收 provider/tool/turn context/adapter/recent context/recent settings/runtime payload owner 的函数定义",
+      "session_execution_runtime.rs 不得回收 provider/tool/turn context/adapter/recent context/recent settings或已删除 aggregate runtime payload 的函数定义",
     ).toEqual([]);
     expect(
       returnedAgentSessionRuntimeTestResponsibilities,
-      "session_execution_runtime.rs 不得回收 recent settings / runtime payload 测试职责；新增测试必须进入 session_execution_runtime/tests* owner",
+      "session_execution_runtime.rs 不得回收 recent settings或已删除 aggregate runtime payload 的测试职责；新增测试必须进入 current owner",
     ).toEqual([]);
   });
 

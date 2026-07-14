@@ -50,6 +50,7 @@ export function readCanonicalThreadItem(
     thread_id: threadId,
     turn_id: turnId,
     sequence: canonicalSequence,
+    ordinal,
     status,
     started_at: createdAt,
     updated_at: updatedAt,

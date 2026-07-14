@@ -3,7 +3,8 @@
     "AppServerMethodKind": {
       "enum": [
         "notification",
-        "request"
+        "request",
+        "serverRequest"
       ],
       "type": "string"
     }

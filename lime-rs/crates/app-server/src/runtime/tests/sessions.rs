@@ -25,6 +25,50 @@ fn empty_thread_session_params(session_id: &str, thread_id: &str) -> AgentSessio
     }
 }
 
+#[derive(Default)]
+struct CloseSessionRecordingBackend {
+    close_requests: Mutex<Vec<(String, String)>>,
+}
+
+#[async_trait]
+impl ExecutionBackend for CloseSessionRecordingBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn close_session(
+        &self,
+        session_id: &str,
+        thread_id: &str,
+    ) -> Result<(), RuntimeCoreError> {
+        self.close_requests
+            .lock()
+            .expect("close session requests mutex poisoned")
+            .push((session_id.to_string(), thread_id.to_string()));
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[test]
 fn start_session_creates_empty_canonical_thread_before_returning() {
     let temp = tempfile::tempdir().expect("tempdir");
@@ -251,6 +295,36 @@ async fn delete_session_removes_empty_canonical_thread_and_allows_recreate() {
     }))
     .expect("read recreated canonical thread")
     .is_some());
+}
+
+#[tokio::test]
+async fn delete_session_closes_exact_runtime_owner_before_removal() {
+    let backend = Arc::new(CloseSessionRecordingBackend::default());
+    let core = RuntimeCore::with_backend(backend.clone());
+    core.start_session(empty_thread_session_params(
+        "sess_close_runtime",
+        "thread_close_runtime",
+    ))
+    .expect("start session");
+
+    let deleted = core
+        .delete_agent_session(AgentSessionDeleteParams {
+            session_id: "sess_close_runtime".to_string(),
+        })
+        .await
+        .expect("delete session");
+
+    assert!(deleted.deleted);
+    assert_eq!(
+        *backend
+            .close_requests
+            .lock()
+            .expect("close session requests mutex poisoned"),
+        vec![(
+            "sess_close_runtime".to_string(),
+            "thread_close_runtime".to_string()
+        )]
+    );
 }
 
 #[tokio::test]
@@ -1192,16 +1266,31 @@ async fn read_session_current_projection_summary_preserves_process_items() {
             timestamp: timestamp(),
             payload: json!({
                 "item": {
-                    "id": "tool-history-web-search",
-                    "type": "tool_call",
+                    "sessionId": "sess_projection_process",
+                    "threadId": "thread_projection_process",
+                    "turnId": "turn_projection_process",
+                    "itemId": "item_tool-history-web-search",
+                    "sequence": 3,
+                    "ordinal": 3,
+                    "createdAtMs": 1_784_000_000_000_i64,
+                    "updatedAtMs": 1_784_000_000_003_i64,
+                    "completedAtMs": 1_784_000_000_003_i64,
+                    "kind": "tool",
                     "status": "completed",
-                    "callId": "tool-history-web-search",
-                    "toolName": "WebSearch",
-                    "arguments": {
-                        "query": "history process preservation"
+                    "payload": {
+                        "type": "tool",
+                        "call_id": "tool-history-web-search",
+                        "name": "WebSearch",
+                        "arguments": [{
+                            "name": "query",
+                            "value": "history process preservation"
+                        }],
+                        "output": {
+                            "text": "搜索完成",
+                            "truncated": false
+                        }
                     },
-                    "output": "搜索完成",
-                    "success": true
+                    "metadata": {}
                 }
             }),
         },

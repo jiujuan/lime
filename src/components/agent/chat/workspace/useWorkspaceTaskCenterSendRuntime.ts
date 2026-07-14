@@ -132,6 +132,21 @@ type WorkspaceTaskCenterSendRuntime<
   shouldHideCurrentSessionContent: boolean;
 };
 
+export function shouldSwitchToReadyTaskCenterSession(params: {
+  readySessionId: string;
+  currentSessionId?: string | null;
+  activeSessionId?: string | null;
+}): boolean {
+  const readySessionId = params.readySessionId.trim();
+  if (!readySessionId) {
+    return false;
+  }
+
+  return ![params.currentSessionId, params.activeSessionId]
+    .map((sessionId) => sessionId?.trim() || null)
+    .includes(readySessionId);
+}
+
 export function useWorkspaceTaskCenterSendRuntime<
   TMessage,
   TTurn,
@@ -231,7 +246,13 @@ export function useWorkspaceTaskCenterSendRuntime<
       setDetachedTopicId(null);
       upsertTaskCenterOpenTab(readySessionId, taskCenterWorkspaceId);
       markTaskCenterLocalSessionOverride(readySessionId);
-      if (readySessionId !== currentSessionId?.trim()) {
+      if (
+        shouldSwitchToReadyTaskCenterSession({
+          readySessionId,
+          currentSessionId,
+          activeSessionId: activeSessionIdRef?.current,
+        })
+      ) {
         void switchToReadySession?.(readySessionId, {
           allowDetachedSession: true,
           forceRefresh: true,
@@ -240,6 +261,7 @@ export function useWorkspaceTaskCenterSendRuntime<
     },
     [
       currentSessionId,
+      activeSessionIdRef,
       markNewChatRequestHandled,
       markTaskCenterLocalSessionOverride,
       newChatAt,
