@@ -10,9 +10,11 @@ import {
   continueAgentRuntimeObjective,
   setAgentRuntimeObjective,
   updateAgentRuntimeObjectiveStatus,
-  type ManagedObjective,
-  type ManagedObjectiveStatus,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/objectiveClient";
+import type {
+  ManagedObjective,
+  ManagedObjectiveStatus,
+} from "@/lib/api/agentRuntime/sessionTypes";
 import { cn } from "@/lib/utils";
 import { ManagedObjectiveCurrentView } from "./ManagedObjectiveCurrentView";
 import { ManagedObjectiveEmptyForm } from "./ManagedObjectiveEmptyForm";

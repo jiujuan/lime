@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +11,8 @@ import {
   markSkippedBatches,
   parseSmartArgs,
   selectBatchIndexesForRun,
+  shouldPersistRunState,
+  updateRunState,
 } from "../run-vitest-smart.mjs";
 
 describe("run-vitest-smart", () => {
@@ -84,6 +89,35 @@ describe("run-vitest-smart", () => {
         onlyBatch: 4,
       }),
     ).toEqual([3]);
+  });
+
+  it("targeted 与 list 模式不得持久化默认 resume state", () => {
+    expect(shouldPersistRunState({ onlyBatch: 4, listBatches: false })).toBe(
+      false,
+    );
+    expect(shouldPersistRunState({ onlyBatch: null, listBatches: true })).toBe(
+      false,
+    );
+    expect(shouldPersistRunState({ onlyBatch: null, listBatches: false })).toBe(
+      true,
+    );
+
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "lime-vitest-smart-state-"),
+    );
+    const stateFile = path.join(directory, "last-run.json");
+    const sentinel = '{"status":"failed","failed_batch":40}\n';
+    fs.writeFileSync(stateFile, sentinel);
+
+    const nextState = updateRunState(
+      { status: "running", batches: [] },
+      { persist: false, stateFile },
+    );
+
+    expect(nextState).toMatchObject({ status: "running", batches: [] });
+    expect(nextState.updated_at).toEqual(expect.any(String));
+    expect(fs.readFileSync(stateFile, "utf8")).toBe(sentinel);
+    fs.rmSync(directory, { recursive: true, force: true });
   });
 
   it("应把 from-batch 前面的批次标记为 skipped，避免 resume 回到第 1 批", () => {

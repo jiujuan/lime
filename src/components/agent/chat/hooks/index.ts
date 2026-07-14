@@ -47,7 +47,5 @@ export function useAgentChatUnified(options: UseAgentChatUnifiedOptions) {
 
 // 旧 useAgentChat 已删除，避免新代码继续沿 compat 路径扩展。
 export { useAgentChat } from "./useAgentChat";
-export { useRuntimeTeamFormation } from "./useRuntimeTeamFormation";
-export { useTeamWorkspaceRuntime } from "./useTeamWorkspaceRuntime";
 export { useThemeContextWorkspace } from "./useThemeContextWorkspace";
 export { useTopicBranchBoard } from "./useTopicBranchBoard";

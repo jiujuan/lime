@@ -1,4 +1,4 @@
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import type { Message } from "../types";
 import { mergeAdjacentAssistantMessages } from "./agentChatHistoryAdjacentMerge";
 import { contentPartContainsProcess } from "./agentChatHistoryProcess";

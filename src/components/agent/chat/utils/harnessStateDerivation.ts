@@ -309,20 +309,6 @@ export function deriveHarnessSessionStateFromItems(
       }
       case "subagent_activity":
         activity.delegation += 1;
-        delegatedTasks.push({
-          id: item.id,
-          title: item.title || "子任务",
-          status:
-            item.status === "failed"
-              ? "failed"
-              : item.status === "completed"
-                ? "completed"
-                : "running",
-          role: item.role,
-          model: item.model,
-          summary: item.summary,
-          startedAt: normalizeDate(item.started_at) ?? undefined,
-        });
         break;
       case "approval_request":
       case "request_user_input": {

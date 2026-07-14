@@ -637,7 +637,6 @@ function buildCodeRuntimeSessionFixture(
       updated_at: nowIso,
     },
     todo_items: [],
-    child_subagent_sessions: [],
   };
 }
 

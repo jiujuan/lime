@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime/evidenceTypes";
 import { HarnessTaskIndexSection } from "./HarnessTaskIndexSection";
 
 (

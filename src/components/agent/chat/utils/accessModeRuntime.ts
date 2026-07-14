@@ -3,7 +3,7 @@ import type {
   AgentSandboxPolicy,
   AgentSessionExecutionRuntime,
   AgentSessionExecutionRuntimeAccessMode,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
 import {
   normalizeAccessMode,
   type AgentAccessMode,

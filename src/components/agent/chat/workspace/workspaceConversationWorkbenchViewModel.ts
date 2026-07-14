@@ -1,4 +1,4 @@
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime/sessionTypes";
 import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
 import type {
   CanvasWorkbenchHeaderView,

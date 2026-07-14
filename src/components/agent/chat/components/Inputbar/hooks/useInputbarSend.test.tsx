@@ -15,7 +15,7 @@ const { recordAgentUiPerformanceMetricMock, setAgentRuntimeObjectiveMock } =
     setAgentRuntimeObjectiveMock: vi.fn(),
   }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
   setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
 }));
 

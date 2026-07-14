@@ -322,14 +322,14 @@ describe("useWorkspaceConversationLandingSessionRuntime", () => {
         thread_id: "thread-1",
         status: "running",
       },
-      childSubagentSessions: [
+      canonicalChildren: [
         {
-          id: "subagent-1",
           name: "执行",
-          created_at: 1783699200000,
-          updated_at: 1783699200000,
-          session_type: "subagent",
-          runtime_status: "running",
+          parentThreadId: "thread-1",
+          sessionId: "subagent-1",
+          status: "running",
+          threadId: "thread-subagent-1",
+          updatedAtMs: 1783699200000,
         },
       ],
       isSending: true,

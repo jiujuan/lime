@@ -1,3 +1,4 @@
+import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import type { ContentPart } from "../types";
 import {
   canMergeCoalescibleContentParts,
@@ -138,6 +139,28 @@ export function parseHistoryTimestamp(value?: string | null): Date {
     }
   }
   return new Date(0);
+}
+
+export function isComparableThreadItemPosition(
+  position: unknown,
+): position is number {
+  return (
+    typeof position === "number" &&
+    Number.isFinite(position) &&
+    position < Number.MAX_SAFE_INTEGER
+  );
+}
+
+export function resolveThreadItemTimelinePosition(
+  item: AgentThreadItem,
+): number {
+  if (isComparableThreadItemPosition(item.ordinal)) {
+    return item.ordinal;
+  }
+  const metadataOrdinal = asHistoryRecord(item.metadata)?.ordinal;
+  return isComparableThreadItemPosition(metadataOrdinal)
+    ? metadataOrdinal
+    : item.sequence;
 }
 
 export function parseHistoryTimestampValue(value: unknown): Date {

@@ -337,12 +337,10 @@ export async function mountHook(
 
   const defaultProps: HookProps = {
     runtime: {
-      listenToTeamEvents: vi.fn(async () => () => {}),
       listenToTurnEvents: vi.fn(async () => () => {}),
     },
     sessionIdRef: { current: "session-1" },
     sessionId: "session-1",
-    parentSessionId: null,
     currentTurnEventName: null,
     isSending: false,
     threadRead: null,

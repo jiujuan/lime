@@ -1,44 +1,41 @@
-## Lime v1.102.0
+## Lime v1.103.0
 
 ### 新功能
 
-- 打通 MCP server elicitation 的真实产品链：thread-scoped runtime 通过 App Server reverse JSON-RPC 发起表单请求，Electron 原样转发，Renderer 提供五语言交互，并支持 response、远端 resolved 与取消收口。
-- 建立 durable Agent graph、identity 与 mailbox，并通过 per-turn gateway 向 current provider 提供 `spawn_agent`、`list_agents`、`send_message`、`followup_task`、`interrupt_agent`、`wait_agent` 六个控制工具；QueueOnly / TriggerTurn、canonical Item 和 delivered audit 共享同一持久化事实源。
-- 补齐 Multi-Agent 按需恢复与终态通知：restart 后只 hydrate exact target，child 完成或失败通过 durable assistant Item / mailbox 通知 parent，`wait_agent` 以 steer-first 语义返回结构化 activity，并投影 canonical Collab / SubAgent Item。
-- MCP Tool surface 改为 sampling-step snapshot，冻结 definition、allowlist、route、connection 与 timeout；资源和提示词读写使用精确 `(server, uri/name)` identity，避免跨连接误命中。
-- 为 runtime MCP server 增加并发启动与故障隔离：optional server 失败不影响健康连接，required server 失败保持旧 generation 并拒绝不完整 replacement。
+- Agent Workspace 的 SubAgent 视图全面切到 canonical child Thread family：父子关系、七态运行状态、任务统计、导航和历史恢复统一读取 App Server `thread/list|read`、AgentGraph 与 Thread identity。
+- Codex 导入的 completed Plan 以原始 Item ID 同时作为 canonical item、revision 和 source identity，重启后仍保持 typed Plan lifecycle，不再退化为工具事件或合成身份。
+- Codex 导入的 User / Agent Message 现在保留 source identity 与 source ordinal，并写入完整 canonical `item.started` / `item.completed` lifecycle；Turn 终态不再旁路合成消息。
+- Agent Chat 的 Managed Objective、Skills、Evidence、Tool Inventory、queued turn、execution strategy、stream runtime 与 thread read 消费面迁到各自 current owner，并增加禁止旧 root barrel 与 session roster 回流的边界守卫。
 
 ### 修复
 
-- 修复 reverse JSON-RPC 的连接归属、boot-scoped request ID、abort cleanup、at-most-once response 与 resolved tombstone，重复、迟到、断连或未知响应继续 fail closed。
-- 修复 MCP elicitation 的 active-time timeout、响应 `_meta`、表单 schema/number/enum 语义与取消竞态，用户等待时间不再计入服务端执行超时。
-- 修复 Claw 首字与长工具循环稳定性：首轮响应策略统一归 App Server，移除 Renderer 快速路由双轨，并在已有联网证据后进入真实模型总结阶段。
-- 修复 Claw 中断会话从“新建任务”首页重新进入同一会话时的导航去重，显式用户意图现在可以恢复 current read model、输入框与后续发送，不再被 stale draft pause 拦截。
-- 修复媒体 provider/model 选择的原子持久化，以及侧边栏、归档会话、Automation、Skills 和 Plugin history 对旧 Agent runtime barrel 的依赖。
-- 修复 approval session-cache、canonical Thread identity、active/queued Turn、终态历史与输入恢复之间的投影偏差，避免生成重复 pending 项或回退旧 read model。
+- 修复 canonical timeline 在 live/history reasoning、Message 与 Plan 混排时的稳定顺序，统一使用 Item ordinal，并补齐 EventLog 到 canonical Thread 的历史修复路径。
+- 修复 SubAgent parent identity、child roster 与 terminal 状态在冷启动、分页读取和无 child 场景下的可见性，避免 Workspace 回退 legacy session detail。
+- 修复 Plugin runtime start/get/cancel、capability dispatcher 与 host bridge 测试夹具缺少 canonical `threadId` 的错误语义。
+- 修复定向 Vitest 与 batch 列表命令覆盖默认 resume state 的问题，局部诊断不再污染后续续跑事实源。
 
 ### 优化与重构
 
-- MCP management control plane 与 provider tool bridge 分离；canonical Tool Item 成为 history、compaction、coding、Skills、MCP、browser 与 artifact evidence 的唯一消费合同。
-- 删除旧 Agent session store、subagent sidecar、aggregate runtime、session query、execution strategy compat、backend event stream 和默认 Playwright MCP seed，并补回流守卫。
-- Agent Chat、Automation、Skills、归档会话、Sidebar 与 Plugin history 迁到各自 current owner，继续收缩旧兼容 barrel、快速响应 helper 和 pending shell 双轨。
-- Multi-Agent canonical activity 收敛为 `Started` / `Interacted` / `Interrupted` 三类；`list_agents` 保持普通 Tool，旧 V1 resume / close 与历史 activity taxonomy 不再进入 current producer。
-- 拆分 App Server event store、projection materializer、Agent runtime 与 GUI 大文件，保持领域 owner 和单一事实源边界。
+- 物理删除 Renderer Team formation、Team runtime sidecar、raw SubAgent channel/status parser、legacy roster DTO/state/normalizer、memory shadow 与 synthetic worker notification；历史兼容只保留只读解码所需边界。
+- canonical SubAgent activity 收敛到 `Started`、`Interacted`、`Interrupted`，current 六工具名称、lineage 和 GUI 状态保持端到端一致，旧 V1 alias 不再计入 current capability。
+- 拆分 App Server runtime value helpers、image command event projection 与 RuntimeBackend execution adapter，收紧文件行数和 owner guard，不引入 facade 双轨。
+- 更新 Agent Workspace、AgentUI、Project Thread 与 SubAgent roadmap，使 current 文档只引用 canonical Thread family、AgentGraph 和 AgentUI projection。
 
 ### 测试与质量
 
-- 扩展 App Server protocol/schema、Rust/TypeScript client、Electron host 与 Renderer contract，覆盖 server-originated request、resolved notification、MCP target identity 和 elicitation form。
-- 新增 Agent graph/mailbox/control、restart-on-demand、terminal Result、concurrent wait、MCP router/timeout/fault isolation、canonical projection、first-token flow control 与 atomic media preference 的定向回归。
-- 补充真实 Electron Gate B、Claw 中断后重入与继续会话、current fixture、协议守卫和 S1-S6 删除证据，验证生产 bridge 不回退 mock。
-- 用户可见的 MCP elicitation 文案与 GUI 回归覆盖 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR`。
+- 扩展 Rust/TypeScript canonical Message、Plan、SubAgent、child Thread、session read 与 export metrics 回归，并同步 App Server schema、generated client 与 Electron contract fixtures。
+- 增加 Agent runtime current owner、legacy surface、roadmap、Electron IPC ordering、App Server 文件边界和 production source 的静态守卫。
+- 补充真实 Electron GUI smoke、history fixture、Claw cancel/continue、canonical roster 与 Inputbar/Task Rail 恢复证据；五语言 Agent Workspace 文案与稳定回归保持同步。
+- history replay Electron oracle 等待 Reasoning summary、图片附件与 MCP tool row 的完整 DOM 后再断言，消除瞬态“思考中”节点导致的 E2E 竞态误报。
+- 改进 smart Vitest 的 targeted state isolation，支持在大候选集上定向修复后继续 resume，而不重置已完成批次。
 
 ### 文档
 
-- 更新架构、命令与 MCP 文档，明确 reverse JSON-RPC、MCP runtime/control-plane owner、Agent graph/mailbox、首轮响应策略和 canonical projection 边界。
-- 更新 refactor v2 执行计划与逐切片 evidence，记录 current / compat / deprecated / dead 分类、验证结果和删除退出条件。
+- 更新 Refactor V2 中央执行计划、架构确认与逐切片 evidence，记录 canonical child Thread、Agent Chat current owner、App Server 模块 owner 和删除退出条件。
+- 同步 Agent Workspace、AgentUI、Project Thread、Skills 与 SubAgent roadmap，移除把 legacy session roster 或 Team sidecar 描述为 current 的口径。
 
 ### 其他
 
-- 版本事实源更新到 `1.102.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
+- 版本事实源更新到 `1.103.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 release notes。
 
-**完整变更**: `v1.101.0` -> `v1.102.0`
+**完整变更**: `v1.102.0` -> `v1.103.0`

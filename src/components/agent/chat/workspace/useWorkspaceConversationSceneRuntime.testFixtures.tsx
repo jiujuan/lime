@@ -120,6 +120,7 @@ export function createBaseParams(overrides: Record<string, unknown> = {}) {
     sceneAppExecutionSummaryCard: undefined,
     serviceSkillExecutionCard: undefined,
     contextWorkspaceEnabled: false,
+    canonicalChildren: overrides.canonicalChildren ?? [],
     messageListRuntime: {
       emptyStateVariant: overrides.messageListEmptyStateVariant,
       quoteInput: (overrides.input as string | undefined) ?? "",
@@ -139,7 +140,6 @@ export function createBaseParams(overrides: Record<string, unknown> = {}) {
       pendingActions: overrides.pendingActions ?? [],
       submittedActionsInFlight: overrides.submittedActionsInFlight ?? [],
       queuedTurns: overrides.queuedTurns ?? [],
-      childSubagentSessions: overrides.childSubagentSessions ?? [],
       sessionHistoryWindow: overrides.sessionHistoryWindow,
       onLoadFullHistory: overrides.loadFullSessionHistory,
       isSending: Boolean(overrides.isSending),

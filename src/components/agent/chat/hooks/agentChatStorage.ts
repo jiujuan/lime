@@ -1,5 +1,5 @@
 import type { Message } from "../types";
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type {
   AgentPreferenceKeys,
   AgentPreferences,

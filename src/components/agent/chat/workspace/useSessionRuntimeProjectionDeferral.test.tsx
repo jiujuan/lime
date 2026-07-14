@@ -70,7 +70,6 @@ function createBaseProps(overrides: Partial<HookProps> = {}): HookProps {
         position: 1,
       },
     ],
-    childSubagentSessions: [],
     isRestoringSession: true,
     isSending: false,
     focusedTimelineItemId: null,
@@ -83,8 +82,9 @@ function renderHook(initialProps?: Partial<HookProps>) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  let latestValue: ReturnType<typeof useSessionRuntimeProjectionDeferral> | null =
-    null;
+  let latestValue: ReturnType<
+    typeof useSessionRuntimeProjectionDeferral
+  > | null = null;
   const defaultProps = createBaseProps(initialProps);
 
   function Probe(props: HookProps) {

@@ -39,7 +39,6 @@ function baseInput(
     showSidebar: true,
     subagentsRuntimeVisible: false,
     hasRuntimeSessions: false,
-    hasTeamDispatchPreview: false,
     themeWorkbenchRunState: "idle",
     topBarChrome: "full",
     ...overrides,

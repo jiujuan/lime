@@ -2,7 +2,9 @@ use super::*;
 use agent_protocol::ThreadTurnsView;
 use app_server_protocol::{AgentSessionReadParams, AgentSessionTurnStartParams};
 use futures::executor::block_on;
+use serde_json::json;
 use std::sync::Arc;
+use std::time::Duration;
 use thread_store::{
     AgentGraphStore, AgentIdentityStore, AgentMailboxDeliveryMode, AgentMailboxStore,
     ReadThreadParams, ThreadSpawnEdgeStatus, ThreadStore,
@@ -13,6 +15,52 @@ use tool_runtime::agent_control::{
 
 #[path = "agent_control/restart.rs"]
 mod restart;
+
+struct BlockingChildBackend {
+    child_started: tokio::sync::mpsc::UnboundedSender<ExecutionRequest>,
+    child_release: tokio::sync::Mutex<Option<tokio::sync::oneshot::Receiver<()>>>,
+}
+
+#[async_trait::async_trait]
+impl ExecutionBackend for BlockingChildBackend {
+    async fn start_turn(
+        &self,
+        request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        if request.session.session_id == "parent-session" {
+            return Ok(());
+        }
+
+        self.child_started
+            .send(request)
+            .map_err(|_| RuntimeCoreError::Backend("child start observer dropped".to_string()))?;
+        let release = self.child_release.lock().await.take().ok_or_else(|| {
+            RuntimeCoreError::Backend("child release already consumed".to_string())
+        })?;
+        release
+            .await
+            .map_err(|_| RuntimeCoreError::Backend("child release dropped".to_string()))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new("turn.canceled", json!({})))
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
 
 fn start_params(session_id: &str, thread_id: &str) -> AgentSessionStartParams {
     AgentSessionStartParams {
@@ -47,6 +95,170 @@ async fn spawned_child_identity(
         .into_iter()
         .find(|identity| identity.agent_path == format!("/root/{task_name}"))
         .expect("spawned child identity")
+}
+
+#[tokio::test]
+async fn spawn_gateway_returns_before_child_terminal_and_inherits_runtime_request() {
+    let (child_started_tx, mut child_started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (child_release_tx, child_release_rx) = tokio::sync::oneshot::channel();
+    let backend = Arc::new(BlockingChildBackend {
+        child_started: child_started_tx,
+        child_release: tokio::sync::Mutex::new(Some(child_release_rx)),
+    });
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
+    let core = RuntimeCore::with_backend(backend).with_projection_store(store.clone());
+    let session = core
+        .start_session(start_params("parent-session", "parent-thread"))
+        .expect("parent")
+        .session;
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("parent-turn".to_string()),
+                input: AgentInput {
+                    text: "delegate".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(app_server_protocol::RuntimeOptions {
+                    capability_id: None,
+                    stream: true,
+                    event_name: Some("parent-event".to_string()),
+                    queued_turn_id: Some("parent-queue".to_string()),
+                    runtime_request: Some(app_server_protocol::RuntimeRequest {
+                        provider_config: Some(app_server_protocol::RuntimeProviderConfig {
+                            base_url: Some("http://127.0.0.1:43123/v1".to_string()),
+                            ..app_server_protocol::RuntimeProviderConfig::default()
+                        }),
+                        provider_preference: Some("fixture-provider".to_string()),
+                        model_preference: Some("fixture-model".to_string()),
+                        metadata: Some(json!({ "fixture": "agent-control" })),
+                        ..app_server_protocol::RuntimeRequest::default()
+                    }),
+                    expected_output: Some(json!({ "type": "parent-only" })),
+                    structured_output: Some(
+                        app_server_protocol::StructuredOutputContract::default(),
+                    ),
+                    output_schema: Some(json!({ "type": "object" })),
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("parent turn")
+        .response
+        .turn;
+    let gateway =
+        core.agent_control_gateway_for_turn(&session, &turn, RuntimeHostContext::default());
+
+    let result = tokio::time::timeout(
+        Duration::from_millis(200),
+        gateway.gateway().execute(AgentControlGatewayRequest {
+            caller: AgentControlCaller {
+                session_id: session.session_id.clone(),
+                thread_id: session.thread_id.clone(),
+                turn_id: turn.turn_id.clone(),
+                call_id: "async-spawn-call".to_string(),
+            },
+            command: AgentControlCommand::SpawnAgent {
+                task_name: "research".to_string(),
+                message: "inspect the current owner".to_string(),
+            },
+            cancel_token: None,
+        }),
+    )
+    .await
+    .expect("spawn_agent must return before child terminal")
+    .expect("spawn result");
+
+    let child_request = tokio::time::timeout(Duration::from_secs(1), child_started_rx.recv())
+        .await
+        .expect("child turn should start")
+        .expect("child request");
+    let child_options = child_request
+        .runtime_options
+        .expect("child runtime options");
+    assert_eq!(child_options.capability_id, None);
+    assert!(child_options.stream);
+    assert_eq!(child_options.event_name, None);
+    assert_eq!(child_options.queued_turn_id, None);
+    assert_eq!(child_options.expected_output, None);
+    assert_eq!(child_options.structured_output, None);
+    assert_eq!(child_options.output_schema, None);
+    let child_runtime_request = child_options
+        .runtime_request
+        .expect("child runtime request");
+    assert_eq!(
+        child_runtime_request.provider_preference.as_deref(),
+        Some("fixture-provider")
+    );
+    assert_eq!(
+        child_runtime_request.model_preference.as_deref(),
+        Some("fixture-model")
+    );
+    assert_eq!(
+        child_runtime_request
+            .provider_config
+            .as_ref()
+            .and_then(|config| config.base_url.as_deref()),
+        Some("http://127.0.0.1:43123/v1")
+    );
+
+    let child_identity = spawned_child_identity(&store, "parent-thread", "research").await;
+    let child_thread = store
+        .read_thread(ReadThreadParams {
+            thread_id: child_identity.thread_id.clone(),
+            include_archived: true,
+            turns_view: ThreadTurnsView::Full,
+        })
+        .await
+        .expect("child thread read")
+        .expect("child thread");
+    let message_id = result.output["message_id"].as_str().expect("message id");
+    let mailbox_item_id = super::super::agent_mailbox_delivery::mailbox_item_id(message_id);
+    assert!(child_thread.turns.iter().any(|child_turn| {
+        child_turn
+            .items
+            .iter()
+            .any(|item| item.item_id.as_str() == mailbox_item_id)
+            && !matches!(
+                child_turn.status,
+                agent_protocol::TurnStatus::Completed
+                    | agent_protocol::TurnStatus::Failed
+                    | agent_protocol::TurnStatus::Interrupted
+            )
+    }));
+
+    child_release_tx.send(()).expect("release child");
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let thread = store
+                .read_thread(ReadThreadParams {
+                    thread_id: child_identity.thread_id.clone(),
+                    include_archived: true,
+                    turns_view: ThreadTurnsView::Full,
+                })
+                .await
+                .expect("child thread read")
+                .expect("child thread");
+            if thread
+                .turns
+                .iter()
+                .any(|child_turn| child_turn.status == agent_protocol::TurnStatus::Completed)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("child turn should complete after release");
 }
 
 #[test]

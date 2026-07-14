@@ -1,41 +1,69 @@
-import { useRuntimeTeamFormation } from "../hooks/useRuntimeTeamFormation";
-import { useWorkspaceTeamSessionControlRuntime } from "./useWorkspaceTeamSessionControlRuntime";
-import { useWorkspaceTeamSessionRuntime } from "./useWorkspaceTeamSessionRuntime";
+import type { CanonicalThreadListClient } from "@/lib/api/agentRuntime/canonicalThreadClient";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
+import { useCanonicalChildThreads } from "./useCanonicalChildThreads";
 
-type FormationParams = Parameters<typeof useRuntimeTeamFormation>[0];
-type SessionParams = Parameters<typeof useWorkspaceTeamSessionRuntime>[0];
-type ControlParams = Parameters<
-  typeof useWorkspaceTeamSessionControlRuntime
->[0];
-
-interface UseWorkspaceTeamRuntimeParams {
-  formation: FormationParams;
-  session: SessionParams;
-  stopSending: ControlParams["stopSending"];
+interface WorkspaceSessionTopicSummary {
+  id: string;
+  title: string;
 }
 
-/** Team 发送编队、会话投影和主输出停止控制共用同一运行时边界。 */
+interface UseWorkspaceTeamRuntimeParams {
+  canonicalClient?: CanonicalThreadListClient;
+  canonicalRefreshKey?: string | number | null;
+  referencedChildThreadIds?: readonly string[];
+  session: {
+    currentTopicId?: string | null;
+    parentThreadId?: string | null;
+    topics: WorkspaceSessionTopicSummary[];
+    subagentEnabled: boolean;
+  };
+  stopSending: () => Promise<void>;
+}
+
+export function deriveWorkspaceSubagentRuntime(input: {
+  canonicalChildren: CanonicalChildThreadSummary[];
+  currentTopicId?: string | null;
+  hasParentThread: boolean;
+  subagentEnabled: boolean;
+  topics: WorkspaceSessionTopicSummary[];
+}) {
+  const hasRuntimeSessions =
+    input.canonicalChildren.length > 0 || input.hasParentThread;
+  return {
+    currentSessionTitle:
+      input.topics.find((topic) => topic.id === input.currentTopicId)?.title ??
+      null,
+    hasRuntimeSessions,
+    subagentsRuntimeVisible: input.subagentEnabled || hasRuntimeSessions,
+  };
+}
+
 export function useWorkspaceTeamRuntime({
-  formation,
+  canonicalClient,
+  canonicalRefreshKey,
+  referencedChildThreadIds,
   session,
   stopSending,
 }: UseWorkspaceTeamRuntimeParams) {
-  const { clearRuntimeTeamState, prepareRuntimeTeamBeforeSend } =
-    useRuntimeTeamFormation(formation);
-  const teamSessionRuntime = useWorkspaceTeamSessionRuntime(session);
-  const { handleStopSending } = useWorkspaceTeamSessionControlRuntime({
-    sessionId: session.sessionId,
-    childSubagentSessions: session.childSubagentSessions,
-    liveRuntimeBySessionId: teamSessionRuntime.liveRuntimeBySessionId,
-    stopSending,
+  const canonical = useCanonicalChildThreads({
+    client: canonicalClient,
+    parentThreadId: session.parentThreadId,
+    referencedChildThreadIds,
+    refreshKey: canonicalRefreshKey,
   });
-
   return {
-    clearRuntimeTeamState,
-    currentSessionTitle: teamSessionRuntime.currentSessionTitle,
-    handleStopSending,
-    hasRuntimeSessions: teamSessionRuntime.hasRuntimeSessions,
-    prepareRuntimeTeamBeforeSend,
-    subagentsRuntimeVisible: teamSessionRuntime.subagentsRuntimeVisible,
+    ...deriveWorkspaceSubagentRuntime({
+      canonicalChildren: canonical.children,
+      currentTopicId: session.currentTopicId,
+      hasParentThread: canonical.hasParentThread,
+      subagentEnabled: session.subagentEnabled,
+      topics: session.topics,
+    }),
+    canonicalChildCounts: canonical.counts,
+    canonicalChildren: canonical.children,
+    canonicalChildrenError: canonical.error,
+    canonicalChildrenLoading: canonical.loading,
+    handleStopSending: stopSending,
+    refreshCanonicalChildren: canonical.refresh,
   };
 }

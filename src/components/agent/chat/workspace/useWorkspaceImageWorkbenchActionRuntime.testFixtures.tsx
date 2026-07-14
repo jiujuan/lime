@@ -27,9 +27,9 @@ vi.mock("sonner", () => ({
   toast: toastHoisted.toast,
 }));
 
-vi.mock("@/lib/api/agentRuntime", async (importOriginal) => {
+vi.mock("@/lib/api/agentRuntime/agentClient", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/api/agentRuntime")>();
+    await importOriginal<typeof import("@/lib/api/agentRuntime/agentClient")>();
 
   return {
     ...actual,

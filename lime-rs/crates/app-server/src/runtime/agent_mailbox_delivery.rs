@@ -5,7 +5,9 @@
 
 use super::*;
 use agent_protocol::{ItemId, ThreadId, ThreadTurnsView};
-use app_server_protocol::{AgentInput, AgentSession, AgentSessionTurnStartParams, AgentTurn};
+use app_server_protocol::{
+    AgentInput, AgentSession, AgentSessionTurnStartParams, AgentTurn, RuntimeOptions,
+};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,40 +26,90 @@ pub(in crate::runtime) struct MailboxTurnDelivery {
 }
 
 impl RuntimeCore {
+    pub(crate) async fn schedule_pending_agent_mailbox_triggers(
+        &self,
+        session_id: String,
+        host: RuntimeHostContext,
+        runtime_options: Option<RuntimeOptions>,
+    ) {
+        let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
+        let core = self.clone();
+        tokio::spawn(async move {
+            if let Err(error) = core
+                .process_pending_agent_mailbox_triggers_with_options(
+                    &session_id,
+                    host,
+                    runtime_options,
+                    Some(admitted_tx),
+                )
+                .await
+            {
+                tracing::warn!(
+                    session_id = %session_id,
+                    error = %error,
+                    "background agent mailbox TriggerTurn processing failed"
+                );
+            }
+        });
+        let _ = admitted_rx.await;
+    }
+
     /// Starts durable TriggerTurn messages for one recipient session.
     ///
     /// QueueOnly records are deliberately left pending here. They are consumed only by the next
     /// real turn through `deliver_pending_agent_mailbox_for_turn`.
+    #[cfg(test)]
     pub(crate) async fn process_pending_agent_mailbox_triggers(
         &self,
         session_id: &str,
         host: RuntimeHostContext,
+    ) -> Result<usize, RuntimeCoreError> {
+        self.process_pending_agent_mailbox_triggers_with_options(session_id, host, None, None)
+            .await
+    }
+
+    async fn process_pending_agent_mailbox_triggers_with_options(
+        &self,
+        session_id: &str,
+        host: RuntimeHostContext,
+        runtime_options: Option<RuntimeOptions>,
+        mut admitted_tx: Option<tokio::sync::oneshot::Sender<()>>,
     ) -> Result<usize, RuntimeCoreError> {
         self.ensure_current_session_hydrated(session_id).await?;
         let (session, _) = self.session_snapshot(session_id)?;
         let Some((store, identity)) = self.mailbox_context(&session).await? else {
             return Ok(0);
         };
-        let messages = store
-            .list_pending_agent_mailbox_messages(
-                identity.root_thread_id.clone(),
-                identity.thread_id.clone(),
-            )
-            .await
-            .map_err(mailbox_store_error)?;
         let mut started = 0;
-        for message in messages
-            .into_iter()
-            .filter(|message| message.delivery_mode == AgentMailboxDeliveryMode::TriggerTurn)
-        {
+        loop {
+            let message = store
+                .list_pending_agent_mailbox_messages(
+                    identity.root_thread_id.clone(),
+                    identity.thread_id.clone(),
+                )
+                .await
+                .map_err(mailbox_store_error)?
+                .into_iter()
+                .find(|message| message.delivery_mode == AgentMailboxDeliveryMode::TriggerTurn);
+            let Some(message) = message else {
+                break;
+            };
             let turn_id = mailbox_turn_id(&message.message_id);
             let item_id = mailbox_item_id(&message.message_id);
             if canonical_mailbox_item_exists(&store, &identity.thread_id, &item_id).await? {
                 acknowledge_mailbox_message(&store, &message).await?;
                 continue;
             }
+            let mut observe_admission = |event: app_server_protocol::AgentEvent| {
+                if event.event_type == "turn.accepted" {
+                    if let Some(admitted_tx) = admitted_tx.take() {
+                        let _ = admitted_tx.send(());
+                    }
+                }
+                Ok(())
+            };
             match self
-                .start_turn(
+                .start_turn_with_event_callback(
                     AgentSessionTurnStartParams {
                         session_id: session.session_id.clone(),
                         turn_id: Some(turn_id),
@@ -65,11 +117,12 @@ impl RuntimeCore {
                             text: message.content.clone(),
                             attachments: Vec::new(),
                         },
-                        runtime_options: None,
+                        runtime_options: runtime_options.clone(),
                         queue_if_busy: false,
                         skip_pre_submit_resume: false,
                     },
                     host.clone(),
+                    &mut observe_admission,
                 )
                 .await
             {

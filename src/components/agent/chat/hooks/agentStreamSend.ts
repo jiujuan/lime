@@ -1,7 +1,5 @@
-import type {
-  AutoContinueRequestPayload,
-  AgentExecutionStrategy,
-} from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import type { MessageImage } from "../types";
 import type { SendMessageOptions } from "./agentChatShared";
 import { dispatchPreparedAgentStreamSend } from "./agentStreamPreparedSendDispatch";

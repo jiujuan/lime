@@ -144,7 +144,7 @@ vi.mock("@/lib/api/channelsRuntime", () => ({
   wechatChannelSetRuntimeModel: mockWechatChannelSetRuntimeModel,
 }));
 
-import { useAgentChat } from "../hooks/useAgentChat";
+import { useAgentChat } from "../hooks";
 import type { AgentRuntimeAdapter } from "../hooks/agentRuntimeAdapter";
 import { ChatModelSelector } from "./ChatModelSelector";
 
@@ -296,8 +296,6 @@ function createRuntimeAdapterFixture(): AgentRuntimeAdapter {
     removeQueuedTurn: async () => false,
     respondToAction: unsupported,
     listenToTurnEvents: (eventName, handler) =>
-      mockSafeListen(eventName, handler),
-    listenToTeamEvents: (eventName, handler) =>
       mockSafeListen(eventName, handler),
   };
 }

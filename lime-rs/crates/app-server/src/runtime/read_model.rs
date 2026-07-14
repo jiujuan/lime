@@ -223,6 +223,7 @@ pub(super) async fn canonical_items_from_thread_store(
 
 fn canonical_item_to_agent_detail(item: &ThreadItem) -> serde_json::Value {
     let (item_type, payload) = canonical_payload_to_agent_detail(&item.payload);
+    let metadata = canonical_item_agent_metadata(item);
     let mut detail = serde_json::Map::from_iter([
         ("id".to_string(), json!(item.item_id.as_str())),
         ("item_id".to_string(), json!(item.item_id.as_str())),
@@ -241,7 +242,7 @@ fn canonical_item_to_agent_detail(item: &ThreadItem) -> serde_json::Value {
             "updated_at".to_string(),
             json!(timestamp_from_millis(item.updated_at_ms)),
         ),
-        ("metadata".to_string(), item.metadata.clone()),
+        ("metadata".to_string(), metadata),
     ]);
     if let Some(completed_at_ms) = item.completed_at_ms {
         detail.insert(
@@ -251,6 +252,37 @@ fn canonical_item_to_agent_detail(item: &ThreadItem) -> serde_json::Value {
     }
     detail.extend(payload);
     serde_json::Value::Object(detail)
+}
+
+fn canonical_item_agent_metadata(item: &ThreadItem) -> serde_json::Value {
+    let ThreadItemPayload::Plan {
+        revision_id,
+        source,
+        plan,
+        explanation,
+        tool_call_id,
+        source_item_id,
+        ..
+    } = &item.payload
+    else {
+        return item.metadata.clone();
+    };
+    let mut metadata = item.metadata.as_object().cloned().unwrap_or_default();
+    metadata.insert("revisionId".to_string(), json!(revision_id));
+    metadata.insert("plan".to_string(), json!(plan));
+    if let Some(source) = source {
+        metadata.insert("source".to_string(), json!(source));
+    }
+    if let Some(explanation) = explanation {
+        metadata.insert("explanation".to_string(), json!(explanation));
+    }
+    if let Some(tool_call_id) = tool_call_id {
+        metadata.insert("tool_call_id".to_string(), json!(tool_call_id));
+    }
+    if let Some(source_item_id) = source_item_id {
+        metadata.insert("source_item_id".to_string(), json!(source_item_id));
+    }
+    serde_json::Value::Object(metadata)
 }
 
 fn canonical_payload_to_agent_detail(
@@ -271,6 +303,10 @@ fn canonical_payload_to_agent_detail(
                 detail.insert("phase".to_string(), json!(phase));
             }
             "agent_message"
+        }
+        ThreadItemPayload::Plan { text, .. } => {
+            detail.insert("text".to_string(), json!(text));
+            "plan"
         }
         ThreadItemPayload::Reasoning { summary, content } => {
             detail.insert("text".to_string(), json!(content.join("\n")));

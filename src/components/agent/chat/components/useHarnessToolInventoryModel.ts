@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { deriveRuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import {
   buildRuntimeToolCapabilityGaps,

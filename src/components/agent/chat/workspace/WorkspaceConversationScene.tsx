@@ -269,7 +269,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     threadItems?: MessageListProps["threadItems"];
     threadRead?: MessageListProps["threadRead"];
     executionRuntime?: AgentSessionExecutionRuntime | null;
-    childSubagentSessions?: MessageListProps["childSubagentSessions"];
+    canonicalChildren?: MessageListProps["canonicalChildren"];
     context?: GeneralWorkbenchTaskRailContextInput;
     onOpenOutput?: (path: string) => void | Promise<void>;
     onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;

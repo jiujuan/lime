@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeReviewDecisionStatus,
   AgentRuntimeSaveReviewDecisionRequest,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import type {
   MemoryCategory,
   MemoryReferenceRecord,

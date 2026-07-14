@@ -1,8 +1,6 @@
 import type { MutableRefObject } from "react";
-import type {
-  AgentRuntimeThreadReadModel,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { normalizeQueuedTurnSnapshots } from "@/lib/api/queuedTurn";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import type { AgentAccessMode } from "./agentChatStorage";

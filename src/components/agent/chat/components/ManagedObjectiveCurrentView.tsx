@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { ManagedObjective } from "@/lib/api/agentRuntime";
+import type { ManagedObjective } from "@/lib/api/agentRuntime/sessionTypes";
 import { ManagedObjectiveAuditSummary } from "./ManagedObjectiveAuditSummary";
 import {
   MANAGED_OBJECTIVE_COPY as COPY,

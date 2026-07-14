@@ -1,4 +1,4 @@
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import type { ContentPart, Message } from "../types";
 
 export type HistoryToolCall = NonNullable<Message["toolCalls"]>[number];

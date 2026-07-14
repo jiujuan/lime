@@ -30,6 +30,7 @@ import {
   appendThinkingToHistoryParts,
   parseHistoryTimestamp,
   mergeByKey,
+  resolveThreadItemTimelinePosition,
 } from "./agentChatHistoryPrimitives";
 import {
   contentPartMetadataFromThreadReasoningItem,
@@ -78,7 +79,7 @@ function agentMessageContentPartMetadata(
     source: "agent_thread_item",
     threadItemId: item.id,
     turnId: item.turn_id,
-    sequence: item.sequence,
+    sequence: resolveThreadItemTimelinePosition(item),
     ...(item.phase ? { phase: item.phase } : {}),
   };
 }
@@ -176,6 +177,11 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       turnOrder.get(right.turn_id) ?? Number.MAX_SAFE_INTEGER;
     if (leftTurnOrder !== rightTurnOrder) {
       return leftTurnOrder - rightTurnOrder;
+    }
+    const leftTimelinePosition = resolveThreadItemTimelinePosition(left);
+    const rightTimelinePosition = resolveThreadItemTimelinePosition(right);
+    if (leftTimelinePosition !== rightTimelinePosition) {
+      return leftTimelinePosition - rightTimelinePosition;
     }
     if (left.sequence !== right.sequence) {
       return left.sequence - right.sequence;

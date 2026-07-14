@@ -291,63 +291,11 @@ describe("useAgentRuntimeSyncEffects", () => {
     }
   });
 
-  it("收到 subagent 状态事件后应刷新当前会话详情", async () => {
-    const refreshSessionDetail = vi.fn(async () => true);
-    const listeners = new Map<string, (event: { payload: unknown }) => void>();
-    const runtime = {
-      listenToTurnEvents: vi.fn(async () => () => {}),
-      listenToTeamEvents: vi.fn(async (eventName, handler) => {
-        listeners.set(
-          eventName,
-          handler as (event: { payload: unknown }) => void,
-        );
-        return () => {
-          listeners.delete(eventName);
-        };
-      }),
-    };
-    const harness = await mountHook({
-      runtime,
-      parentSessionId: "parent-1",
-      refreshSessionDetail,
-    });
-
-    try {
-      expect(runtime.listenToTeamEvents).toHaveBeenCalledTimes(2);
-      expect(listeners.has("agent_subagent_status:session-1")).toBe(true);
-      expect(listeners.has("agent_subagent_status:parent-1")).toBe(true);
-
-      await act(async () => {
-        listeners.get("agent_subagent_status:parent-1")?.({
-          payload: {
-            type: "subagent_status_changed",
-            session_id: "child-1",
-            root_session_id: "session-1",
-            status: "running",
-          },
-        });
-        await Promise.resolve();
-      });
-
-      expect(refreshSessionDetail).not.toHaveBeenCalled();
-      await flushCoalescedRefresh();
-
-      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith(
-        "session-1",
-        runtimeSyncRefreshRequest("runtimeSync.event"),
-      );
-    } finally {
-      harness.unmount();
-    }
-  });
-
   it("收到当前 turn 的 App Server runtime event 后应刷新 read model", async () => {
     const refreshSessionDetail = vi.fn(async () => true);
     const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
-      listenToTeamEvents: vi.fn(async () => () => {}),
       listenToTurnEvents: vi.fn(async (eventName, handler) => {
         listeners.set(
           eventName,
@@ -601,7 +549,6 @@ describe("useAgentRuntimeSyncEffects", () => {
     const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
-      listenToTeamEvents: vi.fn(async () => () => {}),
       listenToTurnEvents: vi.fn(async (eventName, handler) => {
         listeners.set(
           eventName,
@@ -643,7 +590,6 @@ describe("useAgentRuntimeSyncEffects", () => {
     const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
-      listenToTeamEvents: vi.fn(async () => () => {}),
       listenToTurnEvents: vi.fn(async (eventName, handler) => {
         listeners.set(
           eventName,
@@ -763,6 +709,18 @@ describe("useAgentRuntimeSyncEffects", () => {
               timestamp: "2026-06-06T00:00:01.000Z",
               payload: {},
             },
+            canonicalEvent: {
+              method: "turn/updated",
+              params: {
+                sessionId: "session-1",
+                threadId: "thread-1",
+                turnId: "turn-1",
+                status: "completed",
+                createdAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+                completedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+                updatedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+              },
+            },
           },
         },
       ],
@@ -773,7 +731,6 @@ describe("useAgentRuntimeSyncEffects", () => {
       isAppServerTurnLifecycleAvailable: () => true,
     });
     const runtime = {
-      listenToTeamEvents: vi.fn(async () => () => {}),
       listenToTurnEvents: vi.fn((name, handler) =>
         listenAgentRuntimeEvent(name, handler),
       ),
@@ -845,7 +802,6 @@ describe("useAgentRuntimeSyncEffects", () => {
     const refreshSessionReadModel = vi.fn(async () => true);
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     const runtime = {
-      listenToTeamEvents: vi.fn(async () => () => {}),
       listenToTurnEvents: vi.fn(async (eventName, handler) => {
         listeners.set(
           eventName,
@@ -1062,50 +1018,6 @@ describe("useAgentRuntimeSyncEffects", () => {
       expect(refreshSessionDetail).toHaveBeenLastCalledWith(
         "session-1",
         runtimeSyncRefreshRequest("runtimeSync.sendSettled"),
-      );
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  it("浏览器桥接下无活跃工作时不应订阅 team 事件，避免旧会话占满 SSE 连接", async () => {
-    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
-    mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
-    const runtime = {
-      listenToTurnEvents: vi.fn(async () => () => {}),
-      listenToTeamEvents: vi.fn(async () => () => {}),
-    };
-    const harness = await mountHook({
-      runtime,
-      isSending: false,
-      queuedTurnCount: 0,
-      threadReadStatus: null,
-      threadTurns: [],
-    });
-
-    try {
-      expect(runtime.listenToTeamEvents).not.toHaveBeenCalled();
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  it("浏览器桥接下存在活跃工作时仍应订阅 team 事件", async () => {
-    mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
-    mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
-    const runtime = {
-      listenToTurnEvents: vi.fn(async () => () => {}),
-      listenToTeamEvents: vi.fn(async () => () => {}),
-    };
-    const harness = await mountHook({
-      runtime,
-      isSending: true,
-    });
-
-    try {
-      expect(runtime.listenToTeamEvents).toHaveBeenCalledWith(
-        "agent_subagent_status:session-1",
-        expect.any(Function),
       );
     } finally {
       harness.unmount();

@@ -25,15 +25,9 @@ const { getModelRegistryMock, setAgentRuntimeObjectiveMock } = vi.hoisted(
   }),
 );
 
-vi.mock("@/lib/api/agentRuntime", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/agentRuntime")>(
-    "@/lib/api/agentRuntime",
-  );
-  return {
-    ...actual,
-    setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
-  };
-});
+vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
+  setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
+}));
 
 vi.mock("@/lib/api/modelRegistry", () => ({
   modelRegistryApi: {

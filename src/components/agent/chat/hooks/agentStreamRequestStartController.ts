@@ -1,7 +1,5 @@
-import type {
-  AgentExecutionStrategy,
-  AutoContinueRequestPayload,
-} from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   activityLogger,
   type ActivityLog,

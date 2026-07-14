@@ -647,6 +647,54 @@ describe("agentSessionState", () => {
     expect(result.snapshot.workingDir).toBe("/workspace/runtime-cwd");
   });
 
+  it("同一 canonical SubAgent item 经 live 后 cold hydrate 仍只保留一个 durable identity", () => {
+    const liveItem = createItem({
+      id: "item_subagent-call-1",
+      type: "subagent_activity",
+      status: "completed",
+      status_label: "started",
+      session_id: "thread-child",
+    } as Partial<AgentThreadItem>);
+    const coldItem = createItem({
+      id: "item_subagent-call-1",
+      type: "subagent_activity",
+      status: "completed",
+      status_label: "interacted",
+      session_id: "thread-child",
+    } as Partial<AgentThreadItem>);
+    const detail = {
+      id: "topic-subagent",
+      thread_id: "thread-1",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      messages: [],
+      turns: [createTurn()],
+      items: [coldItem],
+      thread_read: {
+        thread_id: "thread-1",
+        thread_items: [coldItem],
+      },
+    } satisfies AgentSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-subagent",
+      detail,
+      currentSessionId: "topic-subagent",
+      currentMessages: [],
+      currentThreadTurns: [createTurn()],
+      currentThreadItems: [liveItem],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+    });
+
+    expect(
+      result.snapshot.threadItems.filter(
+        (item) => item.id === "item_subagent-call-1",
+      ),
+    ).toEqual([expect.objectContaining({ status_label: "interacted" })]);
+  });
+
   it("同会话 hydrate 时远端纯正文不应刷新掉本地 assistant 执行过程", () => {
     const now = new Date("2026-04-08T10:00:00.000Z");
     const currentMessages = [

@@ -60,7 +60,6 @@ describe("runAgentStreamCompaction", () => {
         handler = nextHandler;
         return vi.fn();
       }),
-      listenToTeamEvents: vi.fn(),
     };
 
     const compactionPromise = runAgentStreamCompaction({

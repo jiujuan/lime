@@ -779,30 +779,6 @@ describe("i18n namespace loader", () => {
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.incidentPanel.priorityBadge",
       );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.liveRuntime.title.statusChanged",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.liveRuntime.detail.toolProcessing",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.detail",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.liveRuntime.status.retry",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.runtimeStatus.completed",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.control.resume.resumedOne",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.control.wait.enteredStatusOne",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.teamWorkspace.control.sendInput.emptyError",
-      );
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.browserExistingSession.presentation.status.attached.label",
       );

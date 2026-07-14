@@ -1,8 +1,6 @@
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  AgentSubagentParentContext,
-  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
   QueuedTurnSnapshot,
@@ -60,8 +58,6 @@ export interface AgentSessionSnapshot {
   threadRead: AgentRuntimeThreadReadModel | null;
   executionRuntime: AgentSessionExecutionRuntime | null;
   todoItems: AgentTodoItem[];
-  childSubagentSessions: AgentSubagentSessionInfo[];
-  subagentParentContext: AgentSubagentParentContext | null;
 }
 
 export type { AgentSessionDetailMergeMode } from "./agentSessionTimelineMergePolicy";
@@ -378,8 +374,6 @@ export function createEmptyAgentSessionSnapshot(options?: {
     threadRead: null,
     executionRuntime: options?.executionRuntime ?? null,
     todoItems: [],
-    childSubagentSessions: [],
-    subagentParentContext: null,
   };
 }
 
@@ -918,8 +912,6 @@ export function buildHydratedAgentSessionSnapshot(
           ? currentExecutionRuntime
           : nextExecutionRuntime,
       todoItems: detail.todo_items ?? [],
-      childSubagentSessions: detail.child_subagent_sessions ?? [],
-      subagentParentContext: detail.subagent_parent_context ?? null,
     },
   };
 }

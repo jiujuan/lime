@@ -11,7 +11,7 @@ import {
   resolveActionPromptKey,
 } from "./agentChatCoreUtils";
 import { buildActionResumeRuntimeStatus } from "../utils/agentRuntimeStatus";
-import type { AgentRuntimeReplayedActionRequiredView } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeReplayedActionRequiredView } from "@/lib/api/agentRuntime/requestTypes";
 
 interface UpsertAssistantActionRequestOptions {
   assistantMsgId: string;

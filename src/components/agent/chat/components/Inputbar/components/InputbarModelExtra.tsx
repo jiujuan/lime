@@ -1,5 +1,5 @@
 import React from "react";
-import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import { ChatModelSelector } from "../../ChatModelSelector";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 

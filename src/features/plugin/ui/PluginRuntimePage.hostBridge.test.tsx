@@ -568,8 +568,9 @@ describe("PluginRuntimePage Host Bridge", () => {
         }),
       }),
     );
-    expect(appServerClientMocks.readSession).toHaveBeenCalledWith({
-      sessionId: "plugin-session-1",
+    expect(appServerClientMocks.readThread).toHaveBeenCalledWith({
+      threadId: "plugin-thread-1",
+      turnsView: "full",
     });
     expect(appServerClientMocks.respondAction).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -6,6 +6,7 @@ use super::tool_process_metadata::SoulStyleMetadata;
 use crate::RuntimeCoreError;
 use crate::RuntimeEventSink;
 use lime_agent::AgentEvent as RuntimeAgentEvent;
+use serde_json::json;
 
 #[cfg(test)]
 pub(super) fn emit_runtime_agent_event_with_coding_mirror(
@@ -77,6 +78,24 @@ pub(super) fn emit_reasoning_finish(
 ) -> Result<(), RuntimeCoreError> {
     for event in reasoning_event_state.finish(status) {
         sink.emit(event)?;
+    }
+    Ok(())
+}
+
+pub(super) fn emit_agent_message_finish(
+    proposed_plan_parser: &proposed_plan_parser::ProposedPlanParser,
+    status: &str,
+    sink: &mut dyn RuntimeEventSink,
+) -> Result<(), RuntimeCoreError> {
+    if proposed_plan_parser.has_message_output() {
+        sink.emit(crate::RuntimeEvent::new(
+            "message.completed",
+            json!({
+                "role": "assistant",
+                "phase": "final_answer",
+                "status": status,
+            }),
+        ))?;
     }
     Ok(())
 }

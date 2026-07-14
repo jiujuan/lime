@@ -3,7 +3,7 @@ import type {
   AgentThreadItem,
   AgentThreadTurnSummaryItem,
 } from "@/lib/api/agentProtocol";
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import { normalizeLegacyRuntimeStatusTitle } from "@/lib/api/agentTextNormalization";
 import type { Message } from "../types";
 import {

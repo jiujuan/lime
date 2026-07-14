@@ -11,7 +11,7 @@ import type {
   AgentToolLifecycle,
   AgentToolPermissionPlane,
   AgentToolSourceKind,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import type { RuntimeToolCapabilityGap } from "./HarnessToolInventoryTypes";
 

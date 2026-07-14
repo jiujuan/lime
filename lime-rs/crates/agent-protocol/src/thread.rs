@@ -124,6 +124,7 @@ impl ItemStatus {
 pub enum ItemKind {
     UserMessage,
     AgentMessage,
+    Plan,
     Reasoning,
     Tool,
     McpToolCall,
@@ -182,6 +183,30 @@ pub enum CollabAgentOperation {
     Close,
 }
 
+/// Last known runtime status for an AgentControl child.
+///
+/// This mirrors Codex app-server's `CollabAgentStatus`; the optional message is
+/// carried separately so the wire shape stays stable across terminal states.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum CollabAgentStatus {
+    PendingInit,
+    Running,
+    Interrupted,
+    Completed,
+    Errored,
+    Shutdown,
+    NotFound,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CollabAgentState {
+    pub status: CollabAgentStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalAction {
@@ -214,13 +239,20 @@ pub enum SubAgentActivityKind {
     Started,
     Interacted,
     Interrupted,
-    Spawned,
-    MessageSent,
-    Waiting,
-    Resumed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanStepStatus {
+    Pending,
+    InProgress,
     Completed,
-    Failed,
-    Closed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PlanStep {
+    pub step: String,
+    pub status: PlanStepStatus,
 }
 
 /// Typed Item payload union. JSON `Value` is intentionally confined to the
@@ -237,6 +269,22 @@ pub enum ThreadItemPayload {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         phase: Option<String>,
+    },
+    /// Proposed plan content. The completed snapshot is authoritative and may
+    /// not equal the concatenation of preceding plan deltas.
+    Plan {
+        text: String,
+        revision_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<String>,
+        #[serde(default)]
+        plan: Vec<PlanStep>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        explanation: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tool_call_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_item_id: Option<String>,
     },
     Reasoning {
         #[serde(default)]
@@ -333,6 +381,7 @@ impl ThreadItemPayload {
         match self {
             Self::UserMessage { .. } => ItemKind::UserMessage,
             Self::AgentMessage { .. } => ItemKind::AgentMessage,
+            Self::Plan { .. } => ItemKind::Plan,
             Self::Reasoning { .. } => ItemKind::Reasoning,
             Self::Tool { .. } => ItemKind::Tool,
             Self::McpToolCall { .. } => ItemKind::McpToolCall,
@@ -361,6 +410,16 @@ pub struct Thread {
     pub recency_at_ms: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_thread_id: Option<ThreadId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_nickname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_task_message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_state: Option<CollabAgentState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forked_from_id: Option<ThreadId>,
     #[serde(default)]
@@ -710,18 +769,66 @@ mod tests {
     }
 
     #[test]
-    fn subagent_activity_keeps_current_and_historical_wire_values() {
+    fn plan_payload_keeps_revisioned_completed_snapshot_fields() {
+        let payload = ThreadItemPayload::Plan {
+            text: "- [x] inspect".to_string(),
+            revision_id: "proposed_plan:1".to_string(),
+            source: Some("proposed_plan".to_string()),
+            plan: vec![PlanStep {
+                step: "inspect".to_string(),
+                status: PlanStepStatus::Completed,
+            }],
+            explanation: None,
+            tool_call_id: None,
+            source_item_id: None,
+        };
+
+        assert_eq!(payload.kind(), ItemKind::Plan);
+        assert_eq!(
+            serde_json::to_value(payload).expect("serialize plan payload"),
+            json!({
+                "type": "plan",
+                "text": "- [x] inspect",
+                "revision_id": "proposed_plan:1",
+                "source": "proposed_plan",
+                "plan": [{"step": "inspect", "status": "completed"}]
+            })
+        );
+    }
+
+    #[test]
+    fn collab_agent_state_matches_codex_app_server_wire() {
+        let statuses = [
+            (CollabAgentStatus::PendingInit, "pendingInit"),
+            (CollabAgentStatus::Running, "running"),
+            (CollabAgentStatus::Interrupted, "interrupted"),
+            (CollabAgentStatus::Completed, "completed"),
+            (CollabAgentStatus::Errored, "errored"),
+            (CollabAgentStatus::Shutdown, "shutdown"),
+            (CollabAgentStatus::NotFound, "notFound"),
+        ];
+        for (status, wire) in statuses {
+            let state = CollabAgentState {
+                status,
+                message: (status == CollabAgentStatus::Errored)
+                    .then(|| "provider failed".to_string()),
+            };
+            let encoded = serde_json::to_value(&state).expect("serialize agent state");
+            assert_eq!(encoded["status"], wire);
+            assert_eq!(
+                serde_json::from_value::<CollabAgentState>(encoded)
+                    .expect("deserialize agent state"),
+                state
+            );
+        }
+    }
+
+    #[test]
+    fn subagent_activity_accepts_only_codex_current_wire_values() {
         let values = [
             (SubAgentActivityKind::Started, "started"),
             (SubAgentActivityKind::Interacted, "interacted"),
             (SubAgentActivityKind::Interrupted, "interrupted"),
-            (SubAgentActivityKind::Spawned, "spawned"),
-            (SubAgentActivityKind::MessageSent, "messageSent"),
-            (SubAgentActivityKind::Waiting, "waiting"),
-            (SubAgentActivityKind::Resumed, "resumed"),
-            (SubAgentActivityKind::Completed, "completed"),
-            (SubAgentActivityKind::Failed, "failed"),
-            (SubAgentActivityKind::Closed, "closed"),
         ];
 
         for (activity, wire) in values {
@@ -731,6 +838,21 @@ mod tests {
                 serde_json::from_value::<SubAgentActivityKind>(encoded)
                     .expect("deserialize subagent activity"),
                 activity
+            );
+        }
+
+        for retired in [
+            "spawned",
+            "messageSent",
+            "waiting",
+            "resumed",
+            "completed",
+            "failed",
+            "closed",
+        ] {
+            assert!(
+                serde_json::from_value::<SubAgentActivityKind>(json!(retired)).is_err(),
+                "retired SubAgent activity wire must fail closed: {retired}"
             );
         }
     }

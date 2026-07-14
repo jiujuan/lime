@@ -115,6 +115,8 @@ Plugin MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 artif
 
 2026-05-17 继续只读核对当前工作树时，发现 Lime 并不是完全没有 AgentUI 基础，而是 **Claw / Chat 主链已有较完整的 AgentUI projection 资产，Plugin Host 尚未接入这条事实源**。
 
+> 2026-07-14 supersession：本节是历史只读快照。Renderer Team runtime sidecar 已归类为 `dead / deleted / forbidden-to-restore`；Plugin 后续只能复用 canonical ThreadItem / AgentUI projection，不得依赖已删 subscription，也不得另写 roster 或 worker notification owner。
+
 | 已有资产 | 当前证据 | 对 Plugin 的含义 |
 | --- | --- | --- |
 | 标准 event / owner / scope / surface 类型 | `src/components/agent/chat/projection/agentUiEventProjection.ts` 定义 `AgentUiProjectionEvent`、`AgentUiEventClass`、`AgentUiSurface`、`AgentUiRuntimeEntity`、`AgentUiTopology` | 不应在 Plugin 里再定义一套 AgentUI 类型。 |
@@ -122,7 +124,7 @@ Plugin MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 artif
 | Projection store | `conversationProjectionStore.ts` 提供 record / select by type / surface / scope / tool / action / artifact / evidence | Host Run UI 可使用同一个 projection store 或同构 reducer，避免第二套 UI state owner。 |
 | Subagents 投影与视图模型 | `agentUiSubagentsViewModel.ts`、`AgentUiProjectionState.subagents`、`SubagentsView` 已存在 | Subagents 不是零实现；缺口是 Plugin runtime facts 尚未投影和挂到 Host Run UI。 |
 | Claw stream 运行时接入 | `agentStreamRuntimeHandler.ts` 调用 `buildAgentUiProjectionEvents` 并记录 projection events | Claw 已经证明 stream -> AgentUI projection 的路径可行；Plugin 应复用这条路径。 |
-| Team runtime 接入 | `team-workspace-runtime/runtimeEventSubscriptions.ts` 已把 subagent/team stream 记录为 AgentUI projection events | Plugin 的 team / subagent 后续应收敛到同一 projection，而不是另写 roster / worker notification。 |
+| Canonical SubAgent 接入 | canonical Thread/Turn/Item reader 与 shared AgentUI projection 已承接 activity/lineage | Plugin 的 team / subagent 后续应复用 canonical projection，不得恢复 Team sidecar 或另写 roster / worker notification。 |
 | 后端 Plugin task projection first-cut | 当前脏工作树中 `runtime_turn.rs` 已把 profile/runtime events 投影为 `task:runtimeEvent` payload，含 `taskEvents`、`runtimeEvent`、`streamKind`、artifact/evidence/action/tool 映射 | 后端已有 first-cut，但仍是 Plugin task event 形态；前端还需要桥接到 AgentUI event class。 |
 | Plugin frontend bridge first-cut | `src/features/plugin/runtime/agentUiProjectionBridge.ts` 可把 Plugin task events / `task:runtimeEvent.taskEvents` 映射为 `AgentUiProjectionEvent[]`，测试覆盖 text、tool args、HITL、artifact、evidence、queue、terminal status | P0 seam 已有纯函数入口；仍需接入 `AgentRunRenderer` view model。 |
 | Plugin Host Run view model first-cut | `src/features/plugin/runtime/agentUiProjectionViewModel.ts` 可把 `AgentUiProjectionEvent[]` 转成 Host Run 可消费的 ordered parts、actions、artifacts、evidence、task summary，并只输出语义 `label`，不夹带硬编码 UI 文案 | Renderer 接入前的数据模型已就绪；仍未改动 `AgentRunHostDrawer.tsx`。 |

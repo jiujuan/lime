@@ -17,7 +17,7 @@ import {
   buildInputbarModeRequestMetadata,
   buildInputbarToolPreferencesOverride,
 } from "../utils/inputbarModeRequestMetadata";
-import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime";
+import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import type { BaseComposerSendMetadata } from "@/components/input-kit";
 

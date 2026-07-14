@@ -4,36 +4,17 @@ import type {
   AgentUiProjectionContext,
   AgentUiProjectionEvent,
 } from "@limecloud/agent-ui-contracts";
-import {
-  buildActionProjectionEvents,
-} from "./actionProjection";
-import {
-  buildArtifactProjectionEvents,
-} from "./artifactProjection";
-import {
-  buildConversationProjectionEvents,
-} from "./conversationEventProjection";
+import { buildActionProjectionEvents } from "./actionProjection";
+import { buildArtifactProjectionEvents } from "./artifactProjection";
+import { buildConversationProjectionEvents } from "./conversationEventProjection";
 import { buildTurnContextEvents } from "./contextProjection";
-import {
-  buildDiagnosticProjectionEvents,
-} from "./diagnosticProjection";
+import { buildDiagnosticProjectionEvents } from "./diagnosticProjection";
 import { sequenceProjectionEvents as sequenceEvents } from "./projectionBase";
-import {
-  buildQueueProjectionEvents,
-} from "./queueProjection";
+import { buildQueueProjectionEvents } from "./queueProjection";
 import { buildRoutingProjectionEvents } from "./routingProjection";
-import {
-  buildRuntimeLifecycleEvents,
-} from "./runtimeLifecycleProjection";
-import {
-  buildSubagentProjectionEvents,
-} from "./subagentStatusProjection";
-import {
-  buildThreadItemProjectionEvents,
-} from "./threadItemProjection";
-import {
-  buildToolProjectionEvents,
-} from "./toolEventProjection";
+import { buildRuntimeLifecycleEvents } from "./runtimeLifecycleProjection";
+import { buildThreadItemProjectionEvents } from "./threadItemProjection";
+import { buildToolProjectionEvents } from "./toolEventProjection";
 
 export interface AgentUiProjectionOptions {
   soulCopy?: SoulInteractionCopy;
@@ -92,9 +73,7 @@ export type {
   AgentUiRemoteTeammateProjectionInput,
 } from "./remoteTeammateProjection";
 
-export {
-  buildAgentUiRemoteTeammateProjectionEvents,
-} from "./remoteTeammateProjection";
+export { buildAgentUiRemoteTeammateProjectionEvents } from "./remoteTeammateProjection";
 
 export function buildAgentUiProjectionEvents(
   event: AgentEvent,
@@ -158,8 +137,6 @@ export function buildAgentUiProjectionEvents(
       case "queue_started":
       case "queue_cleared":
         return buildQueueProjectionEvents(event, context);
-      case "subagent_status_changed":
-        return buildSubagentProjectionEvents(event, context);
       case "model_change":
         return buildRuntimeLifecycleEvents(event, context);
       case "model_effective":

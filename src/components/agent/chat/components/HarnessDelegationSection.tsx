@@ -1,23 +1,19 @@
 import { Bot, Workflow } from "lucide-react";
-import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { HarnessSessionState } from "../utils/harnessState";
-import { resolveTeamWorkspaceStableProcessingLabel } from "../utils/teamWorkspaceCopy";
+import type {
+  CanonicalAgentStatus,
+  CanonicalChildThreadSummary,
+} from "../projection/canonicalChildThreadSummary";
 import { InteractiveText } from "./HarnessStatusPanelPrimitives";
 import {
   HarnessStatusSection as Section,
   type HarnessSectionKey,
 } from "./HarnessStatusSectionFrame";
 import { agentText } from "./harnessPanelText";
-import {
-  formatUnixTimestamp,
-  resolveFriendlyToolLabel,
-  resolveSubagentRuntimeStatusLabel,
-  resolveSubagentRuntimeStatusVariant,
-  resolveSubagentSessionTypeLabel,
-  type ChildSubagentSessionSummary,
-} from "./harnessStatusPanelViewModel";
+import type { ChildSubagentSessionSummary } from "./harnessStatusPanelViewModel";
 
 interface HarnessDelegationSectionProps {
   delegatedTasks: HarnessSessionState["delegatedTasks"];
@@ -27,7 +23,7 @@ interface HarnessDelegationSectionProps {
   ) => void;
   handleOpenExternalLink: (url: string) => void | Promise<void>;
   realTeamSummary: ChildSubagentSessionSummary;
-  childSubagentSessions: AgentSubagentSessionInfo[];
+  canonicalChildren: CanonicalChildThreadSummary[];
   onOpenSubagentSession?: (sessionId: string) => void;
 }
 
@@ -36,9 +32,10 @@ export function HarnessDelegationSection({
   registerSectionRef,
   handleOpenExternalLink,
   realTeamSummary,
-  childSubagentSessions,
+  canonicalChildren,
   onOpenSubagentSession,
 }: HarnessDelegationSectionProps) {
+  const { t, i18n } = useTranslation("agent");
   if (realTeamSummary.total === 0 && delegatedTasks.length === 0) {
     return null;
   }
@@ -132,13 +129,15 @@ export function HarnessDelegationSection({
           </div>
         ))}
 
-        {childSubagentSessions.length > 0 ? (
-          <RuntimeSubagentSessionList
-            childSubagentSessions={childSubagentSessions}
-            onOpenSubagentSession={onOpenSubagentSession}
-            handleOpenExternalLink={handleOpenExternalLink}
-          />
-        ) : null}
+        <CanonicalChildThreadList
+          children={canonicalChildren}
+          locale={i18n.resolvedLanguage || i18n.language}
+          onOpenSubagentSession={onOpenSubagentSession}
+          handleOpenExternalLink={handleOpenExternalLink}
+          statusLabel={(status) =>
+            String(t(canonicalStatusKey(status) as never))
+          }
+        />
       </div>
     </Section>
   );
@@ -177,137 +176,82 @@ function RealTeamSummaryCard({
           {agentText("agentChat.harness.generated.ed5909bac1", "需处理")}
           {realTeamSummary.failed}
         </span>
+        {realTeamSummary.interrupted > 0 ? (
+          <span>
+            {agentText("agentChat.collaboration.status.interrupted", "已中断")}
+            {realTeamSummary.interrupted}
+          </span>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function RuntimeSubagentSessionList({
-  childSubagentSessions,
-  onOpenSubagentSession,
+function CanonicalChildThreadList({
+  children,
   handleOpenExternalLink,
+  locale,
+  onOpenSubagentSession,
+  statusLabel,
 }: {
-  childSubagentSessions: AgentSubagentSessionInfo[];
-  onOpenSubagentSession?: (sessionId: string) => void;
+  children: CanonicalChildThreadSummary[];
   handleOpenExternalLink: (url: string) => void | Promise<void>;
+  locale: string;
+  onOpenSubagentSession?: (threadId: string) => void;
+  statusLabel: (status: CanonicalAgentStatus) => string;
 }) {
+  if (children.length === 0) {
+    return null;
+  }
   return (
     <div className="space-y-3">
       <div className="text-xs font-medium text-muted-foreground">
         {agentText("agentChat.harness.generated.f4b507ed0d", "实时子任务")}
       </div>
-      {childSubagentSessions.map((session) => (
+      {children.map((child) => (
         <div
-          key={session.id}
-          className="rounded-xl border border-border bg-background p-3"
+          key={child.threadId}
+          className="rounded-lg border border-border bg-background p-3"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Workflow className="h-4 w-4 text-muted-foreground" />
                 <span className="truncate text-sm font-medium text-foreground">
-                  {session.name}
+                  {child.name}
                 </span>
-                <Badge
-                  variant={resolveSubagentRuntimeStatusVariant(
-                    session.runtime_status,
-                  )}
-                >
-                  {resolveSubagentRuntimeStatusLabel(session.runtime_status)}
+                <Badge variant={canonicalStatusVariant(child.status)}>
+                  {statusLabel(child.status)}
                 </Badge>
               </div>
               <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>
-                  {agentText(
-                    "agentChat.harness.generated.8f3e9e1fe7",
-                    "类型：",
-                  )}
-                  {resolveSubagentSessionTypeLabel(session.session_type)}
-                </span>
-                {session.role_hint ? (
-                  <span>
-                    {agentText(
-                      "agentChat.harness.generated.908a9f1d6a",
-                      "角色：",
-                    )}
-                    {session.role_hint}
-                  </span>
-                ) : null}
-                {session.model ? (
-                  <span>
-                    {agentText(
-                      "agentChat.harness.generated.7ac64a2b44",
-                      "模型：",
-                    )}
-                    {session.model}
-                  </span>
-                ) : null}
-                {session.provider_name ? (
-                  <span>
-                    {agentText(
-                      "agentChat.harness.generated.74dd99b7b0",
-                      "提供方：",
-                    )}
-                    {session.provider_name}
-                  </span>
-                ) : null}
-                {session.team_parallel_budget !== undefined &&
-                session.team_active_count !== undefined ? (
-                  <span>
-                    {agentText(
-                      "agentChat.harness.generated.9375445b14",
-                      "处理窗口：",
-                    )}
-                    {session.team_active_count}/{session.team_parallel_budget}
-                  </span>
-                ) : null}
-                {session.provider_parallel_budget === 1 &&
-                session.provider_concurrency_group ? (
-                  <span>
-                    {resolveTeamWorkspaceStableProcessingLabel()}
-                    {agentText(
-                      "agentChat.harness.generated.d057313512",
-                      "： 当前服务按顺序处理",
-                    )}
-                  </span>
-                ) : null}
-                {session.origin_tool ? (
-                  <span>
-                    {agentText(
-                      "agentChat.harness.generated.64b3b59a15",
-                      "来源：",
-                    )}
-                    {resolveFriendlyToolLabel(session.origin_tool) ||
-                      session.origin_tool}
-                  </span>
+                {child.role ? <span>{child.role}</span> : null}
+                {child.modelProvider ? (
+                  <span>{child.modelProvider}</span>
                 ) : null}
                 <span>
-                  {agentText(
-                    "agentChat.harness.generated.943f4e3ee6",
-                    "更新：",
-                  )}
-                  {formatUnixTimestamp(session.updated_at)}
+                  {new Date(child.updatedAtMs).toLocaleString(locale)}
                 </span>
               </div>
-              {session.task_summary ? (
+              {child.taskSummary ? (
                 <InteractiveText
-                  text={session.task_summary}
+                  text={child.taskSummary}
                   className="mt-2 text-xs text-muted-foreground"
                   onOpenUrl={handleOpenExternalLink}
                 />
               ) : null}
-              {session.queue_reason ? (
-                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-900">
-                  {session.queue_reason}
+              {child.statusMessage ? (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-900">
+                  {child.statusMessage}
                 </div>
               ) : null}
             </div>
-            {onOpenSubagentSession ? (
+            {onOpenSubagentSession && child.status !== "notFound" ? (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => onOpenSubagentSession(session.id)}
+                onClick={() => onOpenSubagentSession(child.threadId)}
               >
                 {agentText(
                   "agentChat.harness.generated.faea8c1db9",
@@ -320,4 +264,40 @@ function RuntimeSubagentSessionList({
       ))}
     </div>
   );
+}
+
+function canonicalStatusKey(status: CanonicalAgentStatus): string {
+  switch (status) {
+    case "pendingInit":
+      return "agentChat.collaboration.status.queued";
+    case "running":
+      return "agentChat.collaboration.status.running";
+    case "interrupted":
+      return "agentChat.collaboration.status.interrupted";
+    case "completed":
+      return "agentChat.collaboration.status.completed";
+    case "errored":
+      return "agentChat.collaboration.status.failed";
+    case "shutdown":
+      return "agentChat.collaboration.status.shutdown";
+    case "notFound":
+      return "agentChat.collaboration.status.notFound";
+  }
+}
+
+function canonicalStatusVariant(
+  status: CanonicalAgentStatus,
+): "default" | "destructive" | "outline" | "secondary" {
+  switch (status) {
+    case "running":
+      return "default";
+    case "errored":
+    case "notFound":
+      return "destructive";
+    case "completed":
+    case "interrupted":
+      return "secondary";
+    default:
+      return "outline";
+  }
 }

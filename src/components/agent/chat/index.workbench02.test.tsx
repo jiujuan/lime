@@ -17,27 +17,11 @@ import {
   WORKSPACE_HARNESS_TITLE_CANDIDATES,
 } from "./index.testFixtures";
 
-const {
-  mockInputbar,
-  mockSkillsGetAll,
-  mockUseAgentChatUnified,
-} = getIndexTestMocks();
+const { mockInputbar, mockSkillsGetAll, mockUseAgentChatUnified } =
+  getIndexTestMocks();
 
 describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
-  it("用户手动关闭通用画布后，同一轮后续 Subagents 更新不应再次抢焦点", async () => {
-    const runtimeState = {
-      childSubagentSessions: [] as Array<{
-        id: string;
-        name: string;
-        created_at: number;
-        updated_at: number;
-        session_type: "sub_agent";
-        runtime_status: "running";
-        task_summary: string;
-        role_hint: string;
-      }>,
-    };
-
+  it("用户手动关闭通用画布后，同一轮重渲染不应再次抢焦点", async () => {
     localStorage.setItem(
       "lime.chat.team_selection.v1.general",
       JSON.stringify({
@@ -60,8 +44,6 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
           turns: [],
           threadItems: [],
           todoItems: [],
-          childSubagentSessions: runtimeState.childSubagentSessions,
-          subagentParentContext: null,
           queuedTurns: [],
           isSending: false,
           sendMessage: sharedSendMessageMock,
@@ -136,18 +118,6 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
         ?.getAttribute("data-mode"),
     ).toBe("chat");
 
-    runtimeState.childSubagentSessions = [
-      {
-        id: "child-1",
-        name: "执行成员",
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        session_type: "sub_agent",
-        runtime_status: "running",
-        task_summary: "继续执行修复任务",
-        role_hint: "executor",
-      },
-    ];
     mounted.rerender();
     await flushEffects(8);
 
@@ -175,19 +145,6 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
         ?.getAttribute("data-mode"),
     ).toBe("chat");
 
-    runtimeState.childSubagentSessions = [
-      ...runtimeState.childSubagentSessions,
-      {
-        id: "child-2",
-        name: "分析成员",
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        session_type: "sub_agent",
-        runtime_status: "running",
-        task_summary: "补充定位根因",
-        role_hint: "explorer",
-      },
-    ];
     mounted.rerender();
     await flushEffects(8);
 
@@ -198,20 +155,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).toBe("chat");
   });
 
-  it("同一会话首次出现真实 Subagents 线程时，仍应保持聊天态", async () => {
-    const runtimeState = {
-      childSubagentSessions: [] as Array<{
-        id: string;
-        name: string;
-        created_at: number;
-        updated_at: number;
-        session_type: "sub_agent";
-        runtime_status: "running";
-        task_summary: string;
-        role_hint: string;
-      }>,
-    };
-
+  it("同一会话没有画布信号时，重渲染仍应保持聊天态", async () => {
     mockUseAgentChatUnified.mockImplementation(
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
@@ -227,8 +171,6 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
           turns: [],
           threadItems: [],
           todoItems: [],
-          childSubagentSessions: runtimeState.childSubagentSessions,
-          subagentParentContext: null,
           queuedTurns: [],
           isSending: false,
           sendMessage: sharedSendMessageMock,
@@ -274,19 +216,6 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
         .querySelector('[data-testid="layout-transition"]')
         ?.getAttribute("data-mode"),
     ).toBe("chat");
-
-    runtimeState.childSubagentSessions = [
-      {
-        id: "child-1",
-        name: "分析成员",
-        created_at: 1_710_000_000,
-        updated_at: 1_710_000_100,
-        session_type: "sub_agent",
-        runtime_status: "running",
-        task_summary: "分析问题边界",
-        role_hint: "explorer",
-      },
-    ];
 
     mounted.rerender();
     await flushEffects(10);
@@ -468,5 +397,4 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(document.body.textContent).toContain("已激活技能");
     expect(document.body.textContent).toContain("research");
   });
-
 });

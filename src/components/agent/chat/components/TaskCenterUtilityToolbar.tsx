@@ -38,8 +38,8 @@ import type {
   AgentRuntimeThreadReadModel,
   AgentSessionExecutionRuntime,
   AgentTodoItem,
-  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type {
   ActionRequired,
   AgentThreadItem,
@@ -86,7 +86,7 @@ interface TaskCenterUtilityToolbarProps {
     todoItems?: readonly AgentTodoItem[];
     threadRead?: AgentRuntimeThreadReadModel | null;
     executionRuntime?: AgentSessionExecutionRuntime | null;
-    childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+    canonicalChildren?: CanonicalChildThreadSummary[];
     context?: GeneralWorkbenchTaskRailContextInput;
     providerType?: string | null;
     model?: string | null;
@@ -398,7 +398,7 @@ export function TaskCenterUtilityToolbar({
         workspaceRootPath: taskRail.workspaceRootPath ?? null,
         threadRead: taskRail.threadRead,
         threadItems: taskRail.threadItems,
-        childSubagentSessions: taskRail.childSubagentSessions,
+        canonicalChildren: taskRail.canonicalChildren,
       });
     return buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: taskRail.workflowSteps,
@@ -419,7 +419,7 @@ export function TaskCenterUtilityToolbar({
       threadItems: taskRail.threadItems,
       todoItems: taskRail.todoItems,
       threadRead: taskRail.threadRead,
-      childSubagentSessions: taskRail.childSubagentSessions,
+      canonicalChildren: taskRail.canonicalChildren,
       context: taskRailContext,
       t: taskRailTranslate,
     });
@@ -428,7 +428,9 @@ export function TaskCenterUtilityToolbar({
     if (environmentOpen || !taskRail?.threadItems?.length) {
       return;
     }
-    if (!hydrateAgentPlanState({ threadItems: taskRail.threadItems }).revisionId) {
+    if (
+      !hydrateAgentPlanState({ threadItems: taskRail.threadItems }).revisionId
+    ) {
       return;
     }
     setEnvironmentOpen(true);

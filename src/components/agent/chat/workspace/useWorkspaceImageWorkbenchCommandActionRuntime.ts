@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { generateAgentRuntimeTitleResult } from "@/lib/api/agentRuntime";
+import { generateAgentRuntimeTitleResult } from "@/lib/api/agentRuntime/agentClient";
 import type { MessageImage } from "../types";
 import type { ParsedImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";
 import type {

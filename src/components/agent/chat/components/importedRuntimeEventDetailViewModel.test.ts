@@ -250,7 +250,7 @@ describe("importedRuntimeEventDetailViewModel", () => {
         },
         collaborationSurface: "team_roster",
         collaborationPhase: "acting",
-        sourceEventType: "subagent_status_changed",
+        sourceEventType: "item_completed",
         senderThreadId: "main-thread",
         newThreadId: "subagent-thread-2",
       },

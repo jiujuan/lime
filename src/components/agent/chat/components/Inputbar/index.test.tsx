@@ -664,7 +664,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
   setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
 }));
 
@@ -967,9 +967,10 @@ describe("Inputbar", () => {
       const [pathReferences, setPathReferences] = React.useState<
         (typeof pathReference)[]
       >([]);
-      const [restoreRequest, setRestoreRequest] = React.useState<
-        React.ComponentProps<typeof Inputbar>["inputRestoreRequest"]
-      >(null);
+      const [restoreRequest, setRestoreRequest] =
+        React.useState<
+          React.ComponentProps<typeof Inputbar>["inputRestoreRequest"]
+        >(null);
 
       triggerRestore = () =>
         setRestoreRequest({

@@ -1,4 +1,4 @@
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 
 function compareQueuedTurnSnapshotOrder(
   left: QueuedTurnSnapshot,

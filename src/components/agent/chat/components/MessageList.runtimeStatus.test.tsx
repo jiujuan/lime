@@ -50,7 +50,7 @@ describe("MessageList runtime status", () => {
       threadItems: [],
       pendingActions: [],
       queuedTurns: [],
-      childSubagentSessions: [],
+      canonicalChildren: [],
       threadRead: {
         thread_id: "thread-plain-completed",
         status: "completed",
@@ -160,14 +160,14 @@ describe("MessageList runtime status", () => {
           cwd: "/repo",
         },
       ],
-      childSubagentSessions: [
+      canonicalChildren: [
         {
-          id: "sub-task-card-1",
           name: "子任务 1",
-          created_at: now.getTime(),
-          updated_at: now.getTime(),
-          session_type: "subagent",
-          runtime_status: "completed",
+          parentThreadId: "thread-task-card",
+          sessionId: "sub-task-card-1",
+          status: "completed",
+          threadId: "thread-sub-task-card-1",
+          updatedAtMs: now.getTime(),
         },
       ],
     });

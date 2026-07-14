@@ -1,4 +1,4 @@
-import type { AgentSubagentSessionInfo } from "@/lib/api/agentRuntime";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type { HarnessSessionState } from "../utils/harnessState";
 import type {
   FileDisplayMode,
@@ -34,7 +34,7 @@ interface HarnessActivitySectionsProps {
   groupedFileEvents: FileEventGroup[];
   openPreview: (request: FilePreviewRequest) => void | Promise<void>;
   realTeamSummary: ChildSubagentSessionSummary;
-  childSubagentSessions: AgentSubagentSessionInfo[];
+  canonicalChildren: CanonicalChildThreadSummary[];
   onOpenSubagentSession?: (sessionId: string) => void;
   environment: HarnessEnvironmentSummary;
 }
@@ -54,7 +54,7 @@ export function HarnessActivitySections({
   groupedFileEvents,
   openPreview,
   realTeamSummary,
-  childSubagentSessions,
+  canonicalChildren,
   onOpenSubagentSession,
   environment,
 }: HarnessActivitySectionsProps) {
@@ -91,7 +91,7 @@ export function HarnessActivitySections({
         registerSectionRef={registerSectionRef}
         handleOpenExternalLink={handleOpenExternalLink}
         realTeamSummary={realTeamSummary}
-        childSubagentSessions={childSubagentSessions}
+        canonicalChildren={canonicalChildren}
         onOpenSubagentSession={onOpenSubagentSession}
       />
       <HarnessContextCapabilitiesSections

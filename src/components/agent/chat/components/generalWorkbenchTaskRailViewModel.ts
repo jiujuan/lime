@@ -2,8 +2,8 @@ import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type {
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
-  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type { Message, MessageTaskPreview } from "../types";
 import type {
   GeneralWorkbenchActivityLogGroup,
@@ -37,10 +37,7 @@ import {
   buildProposedPlanItemsFromMessages,
   isUpdatePlanToolName,
 } from "./planToolProjection";
-import {
-  hydrateAgentPlanState,
-  type AgentPlanState,
-} from "../utils/planState";
+import { hydrateAgentPlanState, type AgentPlanState } from "../utils/planState";
 
 export type {
   GeneralWorkbenchTaskRailContextInput,
@@ -369,7 +366,11 @@ function buildPlanStatePlanItems(
   planState: AgentPlanState | undefined,
   t: MinimalTranslate,
 ): GeneralWorkbenchTaskRailPlanItem[] {
-  if (!planState || planState.phase === "idle" || planState.steps.length === 0) {
+  if (
+    !planState ||
+    planState.phase === "idle" ||
+    planState.steps.length === 0
+  ) {
     return [];
   }
   if (planState.source === "thread_item" && !planState.revisionId) {
@@ -816,7 +817,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
   threadItems,
   todoItems,
   threadRead,
-  childSubagentSessions,
+  canonicalChildren,
   context,
   t = createFallbackWorkflowTranslate(),
 }: {
@@ -831,7 +832,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
   threadItems?: readonly AgentThreadItem[];
   todoItems?: readonly AgentTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
   context?: GeneralWorkbenchTaskRailContextInput;
   t?: MinimalTranslate;
 }): GeneralWorkbenchTaskRailProjection {
@@ -846,7 +847,7 @@ export function buildGeneralWorkbenchTaskRailProjection({
     context,
     threadRead,
     threadItems,
-    childSubagentSessions,
+    canonicalChildren,
   });
   const items = sortTaskRailItems([
     ...buildStepItems(workflowSteps, t),

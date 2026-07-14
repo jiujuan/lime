@@ -45,7 +45,7 @@ describe("defaultAgentRuntimeAdapter", () => {
     vi.clearAllMocks();
   });
 
-  it("应通过 agentRuntimeEvents 代理 turn 与 team 事件监听", async () => {
+  it("应通过 agentRuntimeEvents 代理 turn 事件监听", async () => {
     const unlisten = vi.fn();
     vi.mocked(listenAgentRuntimeEvent).mockResolvedValue(unlisten);
 
@@ -54,20 +54,7 @@ describe("defaultAgentRuntimeAdapter", () => {
     await expect(
       defaultAgentRuntimeAdapter.listenToTurnEvents("turn-event", handler),
     ).resolves.toBe(unlisten);
-    await expect(
-      defaultAgentRuntimeAdapter.listenToTeamEvents("team-event", handler),
-    ).resolves.toBe(unlisten);
-
-    expect(listenAgentRuntimeEvent).toHaveBeenNthCalledWith(
-      1,
-      "turn-event",
-      handler,
-    );
-    expect(listenAgentRuntimeEvent).toHaveBeenNthCalledWith(
-      2,
-      "team-event",
-      handler,
-    );
+    expect(listenAgentRuntimeEvent).toHaveBeenCalledWith("turn-event", handler);
   });
 
   it("应允许注入自定义 runtime 事件监听器", async () => {
@@ -78,10 +65,8 @@ describe("defaultAgentRuntimeAdapter", () => {
     const handler = vi.fn();
 
     await adapter.listenToTurnEvents("turn-event-2", handler);
-    await adapter.listenToTeamEvents("team-event-2", handler);
 
-    expect(injectedListen).toHaveBeenNthCalledWith(1, "turn-event-2", handler);
-    expect(injectedListen).toHaveBeenNthCalledWith(2, "team-event-2", handler);
+    expect(injectedListen).toHaveBeenCalledWith("turn-event-2", handler);
   });
 
   it("应允许注入自定义 runtime client", async () => {

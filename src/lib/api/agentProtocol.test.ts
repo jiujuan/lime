@@ -749,8 +749,7 @@ describe("agentProtocol", () => {
     expect(
       parseAgentEvent({
         type: "action_required",
-        request_id: "claw_request_turn_1",
-        actionId: "req-action-1",
+        request_id: "req-action-1",
         action_type: "tool_confirmation",
         scope: {
           sessionId: "session-1",
@@ -771,8 +770,7 @@ describe("agentProtocol", () => {
     expect(
       parseAgentEvent({
         type: "action_resolved",
-        request_id: "claw_request_turn_1",
-        actionId: "req-action-1",
+        request_id: "req-action-1",
         action_type: "tool_confirmation",
         approved: true,
       }),
@@ -1911,77 +1909,14 @@ describe("agentProtocol", () => {
     });
   });
 
-  it("应解析 subagent_status_changed 事件", () => {
+  it("应拒绝已退役的 subagent_status_changed 事件", () => {
     expect(
       parseAgentEvent({
         type: "subagent_status_changed",
         session_id: "child-1",
         root_session_id: "root-1",
-        parent_session_id: "parent-1",
         status: "running",
-        latest_turn_id: "turn-1",
-        latest_turn_status: "queued",
-        queued_turn_count: 2,
-        team_phase: "queued",
-        team_parallel_budget: 3,
-        team_active_count: 1,
-        team_queued_count: 2,
-        provider_concurrency_group: "openai:gpt-5.2",
-        provider_parallel_budget: 4,
-        queue_reason: "provider_busy",
-        retryable_overload: true,
-        closed: false,
-        usage: {
-          input_tokens: 120,
-          output_tokens: 32,
-          cached_input_tokens: 5,
-          cache_creation_input_tokens: 7,
-        },
-        duration_ms: 12345,
-        tool_count: 4,
-        result_ref: "artifact://worker-result-1",
-        metadata: {
-          soul_lifecycle: {
-            profileId: "cheeky_sassy_executor",
-            packId: "com.lime.soul.cheeky-sassy-executor",
-            toneVariant: "cheeky_sassy",
-          },
-        },
       }),
-    ).toEqual({
-      type: "subagent_status_changed",
-      session_id: "child-1",
-      root_session_id: "root-1",
-      parent_session_id: "parent-1",
-      status: "running",
-      latest_turn_id: "turn-1",
-      latest_turn_status: "queued",
-      queued_turn_count: 2,
-      team_phase: "queued",
-      team_parallel_budget: 3,
-      team_active_count: 1,
-      team_queued_count: 2,
-      provider_concurrency_group: "openai:gpt-5.2",
-      provider_parallel_budget: 4,
-      queue_reason: "provider_busy",
-      retryable_overload: true,
-      closed: false,
-      usage: {
-        input_tokens: 120,
-        output_tokens: 32,
-        cached_input_tokens: 5,
-        cache_creation_input_tokens: 7,
-      },
-      duration_ms: 12345,
-      tool_count: 4,
-      result_ref: "artifact://worker-result-1",
-      metadata: {
-        soul_lifecycle: {
-          profileId: "cheeky_sassy_executor",
-          packId: "com.lime.soul.cheeky-sassy-executor",
-          toneVariant: "cheeky_sassy",
-        },
-      },
-    });
+    ).toBeNull();
   });
 });

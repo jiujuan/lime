@@ -135,7 +135,9 @@ describe("app-server runtime boundary", () => {
         path: repoRelative(file),
         source: productionSource(file),
       }))
-      .filter(({ source }) => source.includes("initialize_agent_runtime("))
+      .filter(({ source }) =>
+        source.includes("lime_agent::initialize_agent_runtime("),
+      )
       .map(({ path }) => path)
       .filter(
         (path) =>
@@ -199,18 +201,28 @@ describe("app-server runtime boundary", () => {
     expect(agentBoundary).toContain("SessionProviderConfig");
     expect(agentBoundary).toContain("ModelProviderProtocol");
     expect(agentBoundary).toContain("ProtocolKind");
-    expect(agentBoundary).toContain("route_protocol_from_session_provider_config");
+    expect(agentBoundary).toContain(
+      "route_protocol_from_session_provider_config",
+    );
     expect(agentBoundary).toContain("ModelRouteProviderConfiguration");
-    expect(agentBoundary).toContain("configure_model_route_provider_for_session");
+    expect(agentBoundary).toContain(
+      "configure_model_route_provider_for_session",
+    );
     expect(agentBoundary).toContain("ProviderConfigurationRequest");
     expect(agentBoundary).toContain("RuntimeProviderProtocol::Responses");
     expect(agentBoundary).toContain("ModelProviderProtocol::Responses");
     expect(agentBoundary).toContain("ProtocolKind::OpenaiResponses");
     expect(agentBoundary).not.toContain(".configure_provider(");
     expect(agentBoundary).not.toContain("configure_provider_from_pool(");
-    expect(appServerProviderAdapter).not.toContain("configure_provider_for_session");
-    expect(appServerProviderAdapter).not.toContain("ProviderConfigurationRequest");
-    expect(appServerProviderAdapter).not.toContain("configure_provider_for_route");
+    expect(appServerProviderAdapter).not.toContain(
+      "configure_provider_for_session",
+    );
+    expect(appServerProviderAdapter).not.toContain(
+      "ProviderConfigurationRequest",
+    );
+    expect(appServerProviderAdapter).not.toContain(
+      "configure_provider_for_route",
+    );
     expect(
       offenders,
       "runtime provider 配置与 provider protocol 映射属于 lime-agent provider_configuration 边界；App Server 只能传 route ProtocolKind 并做 façade 接线",
@@ -289,10 +301,14 @@ describe("app-server runtime boundary", () => {
       "fn w3c_trace_context_metadata_from_request(",
     ].filter((snippet) => requestContext.includes(snippet));
 
-    expect(lineCount, "request_context.rs 超过 800 行前必须继续拆子模块").toBeLessThanOrEqual(
-      800,
-    );
-    expect(missingModules, "request_context.rs 的职责拆分模块不得被折回主文件").toEqual([]);
+    expect(
+      lineCount,
+      "request_context.rs 超过 800 行前必须继续拆子模块",
+    ).toBeLessThanOrEqual(800);
+    expect(
+      missingModules,
+      "request_context.rs 的职责拆分模块不得被折回主文件",
+    ).toEqual([]);
     expect(
       returnedResponsibilities,
       "SessionConfig / TurnContext / workspace scope 逻辑不得回流到 request_context.rs 主文件",
@@ -300,7 +316,10 @@ describe("app-server runtime boundary", () => {
   });
 
   it("plugin_worker_turn 主文件必须保持 worker turn 编排职责拆分", () => {
-    const mainSource = readFileSync(join(REPO_ROOT, PLUGIN_WORKER_TURN_MAIN), "utf8");
+    const mainSource = readFileSync(
+      join(REPO_ROOT, PLUGIN_WORKER_TURN_MAIN),
+      "utf8",
+    );
     const lineCount = mainSource.split(/\r?\n/u).length;
     const missingModules = PLUGIN_WORKER_TURN_SPLIT_MODULES.filter(
       (path) => !existsSync(join(REPO_ROOT, path)),
@@ -361,7 +380,10 @@ describe("app-server runtime boundary", () => {
   });
 
   it("image_command 主文件必须保持 @配图 workflow 职责拆分", () => {
-    const mainSource = readFileSync(join(REPO_ROOT, IMAGE_COMMAND_MAIN), "utf8");
+    const mainSource = readFileSync(
+      join(REPO_ROOT, IMAGE_COMMAND_MAIN),
+      "utf8",
+    );
     const lineCount = mainSource.split(/\r?\n/u).length;
     const missingModules = IMAGE_COMMAND_SPLIT_MODULES.filter(
       (path) => !existsSync(join(REPO_ROOT, path)),
@@ -446,7 +468,10 @@ describe("app-server runtime boundary", () => {
   });
 
   it("P1-4 core runtime owner 主文件不得继续承接 turn/model/tool/context domain 逻辑", () => {
-    const runtimeCore = readFileSync(join(REPO_ROOT, RUNTIME_CORE_MAIN), "utf8");
+    const runtimeCore = readFileSync(
+      join(REPO_ROOT, RUNTIME_CORE_MAIN),
+      "utf8",
+    );
     const runtimeBackend = readFileSync(
       join(REPO_ROOT, RUNTIME_BACKEND_MAIN),
       "utf8",
@@ -592,7 +617,10 @@ describe("app-server runtime boundary", () => {
     const projectionPath =
       "src/components/agent/chat/projection/sessionExecutionRuntimeProjection.ts";
     const utilsSource = readFileSync(join(REPO_ROOT, utilsPath), "utf8");
-    const projectionSource = readFileSync(join(REPO_ROOT, projectionPath), "utf8");
+    const projectionSource = readFileSync(
+      join(REPO_ROOT, projectionPath),
+      "utf8",
+    );
     const projectionHelpers = [
       "function mergeExecutionRuntime(",
       "export function applyTurnContextExecutionRuntime(",
@@ -605,7 +633,9 @@ describe("app-server runtime boundary", () => {
       projectionHelpers.filter((snippet) => utilsSource.includes(snippet)),
     ).toEqual([]);
     expect(
-      projectionHelpers.filter((snippet) => !projectionSource.includes(snippet)),
+      projectionHelpers.filter(
+        (snippet) => !projectionSource.includes(snippet),
+      ),
     ).toEqual([]);
   });
 
@@ -636,8 +666,11 @@ describe("app-server runtime boundary", () => {
     expect(runtimeBackend).not.toContain("mark_current_healthy(");
     expect(runtimeBackend).not.toContain("create_cancel_token(");
     expect(runtimeBackend).not.toContain("remove_cancel_token(");
-    expect(agentTurnExecution).toContain("stream_runtime_reply_with_policy(");
-    expect(agentTurnExecution).toContain(
+    expect(agentTurnExecution).toContain("stream_current_provider_turn(");
+    expect(agentTurnExecution).not.toContain(
+      "stream_runtime_reply_with_policy(",
+    );
+    expect(agentTurnExecution).not.toContain(
       "stream_runtime_reply_with_configured_provider(",
     );
     expect(agentTurnExecution).toContain(
@@ -646,12 +679,18 @@ describe("app-server runtime boundary", () => {
     expect(agentTurnExecution).toContain("ModelRouteProviderConfiguration");
     expect(agentTurnExecution).toContain("AgentTurnProviderConfiguration");
     expect(agentTurnExecution).toContain("let configured_provider");
-    expect(agentTurnExecution).toContain("configured_provider.map(|configured| configured.into_config())");
+    expect(agentTurnExecution).toContain(
+      "configured_provider.map(|configured| configured.into_config())",
+    );
     expect(agentTurnExecution).not.toContain("mark_healthy(");
     expect(agentTurnExecution).toContain("create_cancel_token(");
     expect(agentTurnExecution).toContain("remove_cancel_token(");
-    expect(agentProviderConfiguration).toContain("create_configured_reply_provider");
-    expect(agentProviderConfiguration).toContain("install_provider_for_session");
+    expect(agentProviderConfiguration).toContain(
+      "create_configured_reply_provider",
+    );
+    expect(agentProviderConfiguration).toContain(
+      "install_provider_for_session",
+    );
     expect(agentProviderConfiguration).not.toContain("mark_healthy(");
   });
 
@@ -670,10 +709,6 @@ describe("app-server runtime boundary", () => {
       join(REPO_ROOT, AGENT_SESSION_CONFIGURATION_BOUNDARY),
       "utf8",
     );
-    const agentSessionConfigAdapter = readFileSync(
-      join(REPO_ROOT, "lime-rs/crates/agent/src/session_config_adapter.rs"),
-      "utf8",
-    );
     const appServerAdapter = productionSource(
       join(
         REPO_ROOT,
@@ -681,11 +716,22 @@ describe("app-server runtime boundary", () => {
       ),
     );
 
-    expect(agentSessionConfiguration).toContain("AgentSessionConfigurationRequest");
+    expect(agentSessionConfiguration).toContain(
+      "agent_runtime::session_config",
+    );
+    expect(agentSessionConfiguration).toContain(
+      "AgentSessionConfigurationRequest",
+    );
     expect(agentSessionConfiguration).toContain("build_agent_session_config");
-    expect(agentSessionConfiguration).not.toContain("agent::agents::SessionConfig");
-    expect(agentSessionConfigAdapter).toContain("to_agent_session_config");
-    expect(agentSessionConfigAdapter).toContain("agent::SessionConfig");
+    expect(agentSessionConfiguration).not.toContain(
+      "agent::agents::SessionConfig",
+    );
+    expect(
+      existsSync(
+        join(REPO_ROOT, "lime-rs/crates/agent/src/session_config_adapter.rs"),
+      ),
+      "已删除的 session_config_adapter 不得恢复；current façade 直接 re-export agent-runtime session_config",
+    ).toBe(false);
     expect(appServerAdapter).toContain("build_agent_session_config");
     expect(appServerAdapter).toContain("AgentSessionConfigurationRequest");
     expect(
@@ -728,7 +774,9 @@ describe("app-server runtime boundary", () => {
     expect(appServerAdapter).toContain("build_agent_turn_context");
     expect(appServerAdapter).toContain("AgentTurnContextConfigurationRequest");
     expect(imagePresentationAdapter).toContain("insert_agent_turn_metadata");
-    expect(imagePresentationAdapter).toContain("set_agent_turn_user_visible_input_text");
+    expect(imagePresentationAdapter).toContain(
+      "set_agent_turn_user_visible_input_text",
+    );
     expect(
       offenders,
       "Agent TurnContextOverride / TurnOutputSchemaSource 属于 lime-agent turn_context_configuration 边界；App Server 只能准备投影数据并调用 façade",
@@ -749,13 +797,6 @@ describe("app-server runtime boundary", () => {
       ),
       "utf8",
     );
-    const agentRuntimeAdapter = readFileSync(
-      join(
-        REPO_ROOT,
-        "lime-rs/crates/agent/src/agent_tools/workspace_patch_runtime_adapter.rs",
-      ),
-      "utf8",
-    );
 
     expect(agentBoundary).toContain("WorkspacePatchHostToolPlan");
     expect(agentBoundary).toContain("hostToolRequests");
@@ -764,12 +805,23 @@ describe("app-server runtime boundary", () => {
       "update_workspace_patch_with_host_tool_evidence",
     );
     expect(agentBoundary).toContain("execute_workspace_patch_host_tool_plan");
-    expect(agentBoundary).toContain("execute_workspace_patch_runtime_tool_batch");
-    expect(agentRuntimeAdapter).toContain("execute_planned_tool_batch");
-    expect(agentRuntimeAdapter).toContain("ToolExecutionBatchInput");
-    expect(agentRuntimeAdapter).toContain("runtime_web_search_executor_handle");
-    expect(agentRuntimeAdapter).not.toContain("agent.tool_registry().clone()");
-    expect(appServerAdapter).toContain("WorkspacePatchHostToolPlan::from_patch");
+    expect(agentBoundary).toContain("execute_call(");
+    expect(agentBoundary).toContain("RuntimeToolExecutorHandle");
+    expect(agentBoundary).not.toContain("execute_planned_tool_batch");
+    expect(agentBoundary).not.toContain("ToolExecutionBatchInput");
+    expect(agentBoundary).not.toContain("agent.tool_registry().clone()");
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "lime-rs/crates/agent/src/agent_tools/workspace_patch_runtime_adapter.rs",
+        ),
+      ),
+      "已删除的 workspace_patch_runtime_adapter 不得恢复；RuntimeTool execute_call 留在 workspace_patch_host current owner",
+    ).toBe(false);
+    expect(appServerAdapter).toContain(
+      "WorkspacePatchHostToolPlan::from_patch",
+    );
     expect(appServerAdapter).toContain(
       "update_workspace_patch_with_host_tool_evidence",
     );
@@ -784,7 +836,9 @@ describe("app-server runtime boundary", () => {
         "lime-rs/crates/app-server/src/runtime_backend/workspace_patch_host_execution.rs",
       ),
     );
-    expect(executionAdapter).toContain("execute_workspace_patch_host_tool_plan");
+    expect(executionAdapter).toContain(
+      "execute_workspace_patch_host_tool_plan",
+    );
     expect(executionAdapter).not.toContain("host_tool_plan.planned_tools()");
     expect(executionAdapter).not.toContain("execute_planned_tool_batch");
     expect(executionAdapter).not.toContain("tool_registry()");
@@ -820,10 +874,12 @@ describe("app-server runtime boundary", () => {
       join(REPO_ROOT, "lime-rs/crates/agent/src/direct_text_generation.rs"),
       "utf8",
     );
-    const adapters = [pluginWorkerAdapter, imagePresentationAdapter].map(({ path, source }) => ({
-      path,
-      source,
-    }));
+    const adapters = [pluginWorkerAdapter, imagePresentationAdapter].map(
+      ({ path, source }) => ({
+        path,
+        source,
+      }),
+    );
     const forbiddenSnippets = [
       "stream_reply_with_policy",
       "resolve_request_tool_policy_with_mode",
@@ -851,16 +907,24 @@ describe("app-server runtime boundary", () => {
     expect(agentHostManagedGeneration).toContain("DirectTextGenerationRequest");
     expect(agentHostManagedGeneration).toContain("HostManagedGenerationPlan");
     expect(agentHostManagedGeneration).toContain("provider_configuration");
-    expect(agentDirectTextGeneration).toContain("ModelRouteProviderConfiguration");
+    expect(agentDirectTextGeneration).toContain(
+      "ModelRouteProviderConfiguration",
+    );
     expect(agentDirectTextGeneration).toContain(
       "configure_model_route_provider_for_session",
     );
     expect(pluginWorkerAdapter.source).toContain("run_host_managed_generation");
     expect(pluginWorkerAdapter.source).toContain("HostManagedGenerationPlan");
-    expect(pluginWorkerAdapter.source).toContain("provider_configuration_from_runtime");
+    expect(pluginWorkerAdapter.source).toContain(
+      "provider_configuration_from_runtime",
+    );
     expect(pluginWorkerForbiddenSnippets).toEqual([]);
-    expect(imagePresentationAdapter.source).toContain("run_direct_text_generation");
-    expect(imagePresentationAdapter.source).toContain("DirectTextGenerationRequest");
+    expect(imagePresentationAdapter.source).toContain(
+      "run_direct_text_generation",
+    );
+    expect(imagePresentationAdapter.source).toContain(
+      "DirectTextGenerationRequest",
+    );
     expect(imagePresentationAdapter.source).toContain(
       "provider_configuration_from_runtime",
     );
@@ -872,7 +936,10 @@ describe("app-server runtime boundary", () => {
 
   it("App Server native tool adapter 不应重新实现 Agent Tool surface", () => {
     const nativeToolAdapter = productionSource(
-      join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend/native_tools.rs"),
+      join(
+        REPO_ROOT,
+        "lime-rs/crates/app-server/src/runtime_backend/native_tools.rs",
+      ),
     );
     const adapters = [
       {
@@ -925,7 +992,10 @@ describe("app-server runtime boundary", () => {
 
   it("App Server tool inventory 不应直接读取 Agent tool registry", () => {
     const appServerAdapter = productionSource(
-      join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs"),
+      join(
+        REPO_ROOT,
+        "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs",
+      ),
     );
     const agentBoundary = readFileSync(
       join(
@@ -944,7 +1014,9 @@ describe("app-server runtime boundary", () => {
     ].filter((snippet) => appServerAdapter.includes(snippet));
 
     expect(agentBoundary).toContain("read_agent_tool_inventory");
-    expect(agentBoundary).not.toContain("pub struct AgentToolInventoryRuntimeSnapshot");
+    expect(agentBoundary).not.toContain(
+      "pub struct AgentToolInventoryRuntimeSnapshot",
+    );
     expect(agentBoundary).not.toContain(
       "pub async fn read_agent_tool_inventory_runtime_snapshot",
     );
@@ -965,10 +1037,6 @@ describe("app-server runtime boundary", () => {
     const appServerExecutionProcess = productionSource(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/execution_process.rs"),
     );
-    const agentToolOrchestrator = readFileSync(
-      join(REPO_ROOT, "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs"),
-      "utf8",
-    );
     const toolRuntimeShellPermission = readFileSync(
       join(REPO_ROOT, "lime-rs/crates/tool-runtime/src/shell_permission.rs"),
       "utf8",
@@ -982,18 +1050,34 @@ describe("app-server runtime boundary", () => {
       "agent::tools",
     ].filter((snippet) => appServerExecutionProcess.includes(snippet));
 
-    expect(agentToolOrchestrator).toContain("check_shell_tool_permissions");
-    expect(agentToolOrchestrator).not.toContain("BashTool");
-    expect(agentToolOrchestrator).not.toContain("PowerShellTool");
-    expect(toolRuntimeShellPermission).toContain("check_shell_command_permission");
-    expect(toolRuntimeShellPermission).toContain("check_bash_command_permission");
-    expect(toolRuntimeShellPermission).toContain("check_powershell_command_permission");
-    expect(appServerExecutionProcess).toContain("check_shell_command_permission");
+    expect(toolRuntimeShellPermission).toContain(
+      "check_shell_command_permission",
+    );
+    expect(toolRuntimeShellPermission).toContain(
+      "check_bash_command_permission",
+    );
+    expect(toolRuntimeShellPermission).toContain(
+      "check_powershell_command_permission",
+    );
+    expect(appServerExecutionProcess).toContain(
+      "check_shell_command_permission",
+    );
     expect(appServerExecutionProcess).toContain("decide_tool_execution");
-    expect(appServerExecutionProcess).not.toContain("check_shell_tool_permissions");
+    expect(appServerExecutionProcess).not.toContain(
+      "check_shell_tool_permissions",
+    );
+    expect(
+      existsSync(
+        join(
+          REPO_ROOT,
+          "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
+        ),
+      ),
+      "已删除的 Agent shell tool_orchestrator 不得恢复；权限和决策统一归 tool-runtime",
+    ).toBe(false);
     expect(
       forbiddenSnippets,
-      "Agent shell tool registry 属于 lime-agent tool_orchestrator；shell permission 属于 tool-runtime；App Server execution_process 只能做 process control / read-model 投影和委托预检",
+      "shell permission 与 execution decision 属于 tool-runtime；App Server execution_process 只能做 process control / read-model 投影和委托预检",
     ).toEqual([]);
   });
 });

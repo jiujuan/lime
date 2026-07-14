@@ -1,8 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import type {
-  AgentSubagentParentContext,
-  AgentSubagentSessionInfo,
-} from "@/lib/api/agentRuntime";
 import {
   readTeamMemorySnapshot,
   writeTeamMemorySnapshot,
@@ -17,16 +13,12 @@ import {
 } from "../utils/teamDefinitions";
 
 const TEAM_SELECTION_MEMORY_KEY = "team.selection";
-const TEAM_SUBAGENT_MEMORY_KEY = "team.subagents";
-const TEAM_PARENT_CONTEXT_MEMORY_KEY = "team.parent_context";
 
 interface TeamMemoryShadowSyncOptions {
   repoScope?: string | null;
   activeTheme?: string | null;
   sessionId?: string | null;
   selectedTeam?: TeamDefinition | null;
-  childSubagentSessions?: AgentSubagentSessionInfo[];
-  subagentParentContext?: AgentSubagentParentContext | null;
   storage?: TeamMemoryStorageLike | null;
 }
 
@@ -62,66 +54,6 @@ function buildTeamSelectionMemoryContent(params: {
   ].filter((item): item is string => Boolean(item));
 
   return lines.length > 0 ? lines.join("\n") : null;
-}
-
-function summarizeSubagentSession(session: AgentSubagentSessionInfo): string {
-  const status =
-    normalizeLine(session.runtime_status) ||
-    normalizeLine(session.latest_turn_status) ||
-    "idle";
-  const role =
-    normalizeLine(session.blueprint_role_label) ||
-    normalizeLine(session.role_hint) ||
-    normalizeLine(session.role_key);
-  const task = normalizeLine(session.task_summary);
-  const suffix = [role, task].filter(Boolean).join(" · ");
-  return `- ${session.name} [${status}]${suffix ? ` ${suffix}` : ""}`;
-}
-
-function buildSubagentMemoryContent(params: {
-  sessionId?: string | null;
-  childSubagentSessions?: AgentSubagentSessionInfo[];
-}): string | null {
-  const sessions = (params.childSubagentSessions || []).filter((session) =>
-    normalizeLine(session.name),
-  );
-  if (sessions.length === 0) {
-    return null;
-  }
-
-  return [
-    params.sessionId ? `会话：${params.sessionId}` : null,
-    "子任务：",
-    ...sessions.map(summarizeSubagentSession),
-  ]
-    .filter((item): item is string => Boolean(item))
-    .join("\n");
-}
-
-function buildParentContextMemoryContent(
-  context?: AgentSubagentParentContext | null,
-): string | null {
-  if (!context?.parent_session_id?.trim()) {
-    return null;
-  }
-
-  const siblingSessions = (context.sibling_subagent_sessions || []).filter(
-    (session) => normalizeLine(session.name),
-  );
-
-  return [
-    `父会话：${context.parent_session_name || context.parent_session_id}`,
-    normalizeLine(context.role_hint)
-      ? `当前角色：${normalizeLine(context.role_hint)}`
-      : null,
-    normalizeLine(context.task_summary)
-      ? `当前任务：${normalizeLine(context.task_summary)}`
-      : null,
-    siblingSessions.length > 0 ? "兄弟会话：" : null,
-    ...siblingSessions.map(summarizeSubagentSession),
-  ]
-    .filter((item): item is string => Boolean(item))
-    .join("\n");
 }
 
 function upsertMemoryEntry(
@@ -165,25 +97,17 @@ export function syncTeamMemoryShadowSnapshot(
     repoScope,
     entries: {},
   };
-  const nextEntries = { ...snapshot.entries };
+  const nextEntries = Object.fromEntries(
+    Object.entries(snapshot.entries).filter(
+      ([key]) => key === TEAM_SELECTION_MEMORY_KEY || !key.startsWith("team."),
+    ),
+  );
   const updatedAt = Date.now();
 
   upsertMemoryEntry(
     nextEntries,
     TEAM_SELECTION_MEMORY_KEY,
     buildTeamSelectionMemoryContent(options),
-    updatedAt,
-  );
-  upsertMemoryEntry(
-    nextEntries,
-    TEAM_SUBAGENT_MEMORY_KEY,
-    buildSubagentMemoryContent(options),
-    updatedAt,
-  );
-  upsertMemoryEntry(
-    nextEntries,
-    TEAM_PARENT_CONTEXT_MEMORY_KEY,
-    buildParentContextMemoryContent(options.subagentParentContext),
     updatedAt,
   );
 
@@ -314,48 +238,6 @@ function serializeTeamDefinition(team?: TeamDefinition | null): string {
   });
 }
 
-function serializeSubagentSessions(
-  sessions?: AgentSubagentSessionInfo[],
-): string {
-  return JSON.stringify(
-    (sessions || []).map((session) => ({
-      id: session.id,
-      name: session.name,
-      runtime_status: session.runtime_status ?? null,
-      latest_turn_status: session.latest_turn_status ?? null,
-      task_summary: session.task_summary ?? null,
-      role_hint: session.role_hint ?? null,
-      role_key: session.role_key ?? null,
-      blueprint_role_label: session.blueprint_role_label ?? null,
-    })),
-  );
-}
-
-function serializeParentContext(
-  context?: AgentSubagentParentContext | null,
-): string {
-  if (!context) {
-    return "null";
-  }
-
-  return JSON.stringify({
-    parent_session_id: context.parent_session_id,
-    parent_session_name: context.parent_session_name,
-    role_hint: context.role_hint ?? null,
-    task_summary: context.task_summary ?? null,
-    sibling_subagent_sessions: (context.sibling_subagent_sessions || []).map(
-      (session) => ({
-        id: session.id,
-        name: session.name,
-        runtime_status: session.runtime_status ?? null,
-        latest_turn_status: session.latest_turn_status ?? null,
-        task_summary: session.task_summary ?? null,
-        role_hint: session.role_hint ?? null,
-      }),
-    ),
-  });
-}
-
 function serializeSnapshot(snapshot?: TeamMemorySnapshot | null): string {
   if (!snapshot) {
     return "null";
@@ -378,14 +260,6 @@ export function useTeamMemoryShadowSync(
     () => serializeTeamDefinition(options.selectedTeam),
     [options.selectedTeam],
   );
-  const childSessionsKey = useMemo(
-    () => serializeSubagentSessions(options.childSubagentSessions),
-    [options.childSubagentSessions],
-  );
-  const parentContextKey = useMemo(
-    () => serializeParentContext(options.subagentParentContext),
-    [options.subagentParentContext],
-  );
 
   useEffect(() => {
     const nextSnapshot = syncTeamMemoryShadowSnapshot({
@@ -393,8 +267,6 @@ export function useTeamMemoryShadowSync(
       activeTheme: options.activeTheme,
       sessionId: options.sessionId,
       selectedTeam: options.selectedTeam,
-      childSubagentSessions: options.childSubagentSessions,
-      subagentParentContext: options.subagentParentContext,
       storage,
     });
     setSnapshot((current) =>
@@ -403,14 +275,10 @@ export function useTeamMemoryShadowSync(
         : nextSnapshot,
     );
   }, [
-    childSessionsKey,
     options.activeTheme,
     options.repoScope,
     options.sessionId,
     options.selectedTeam,
-    options.childSubagentSessions,
-    options.subagentParentContext,
-    parentContextKey,
     storage,
     teamKey,
   ]);

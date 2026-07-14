@@ -260,9 +260,10 @@ pub struct RuntimeSnapshot {
 }
 
 pub use thread::{
-    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChangeStatus,
-    ItemKind, ItemStatus, PageCursor, SortDirection, SubAgentActivityKind, Thread,
-    ThreadActiveFlag, ThreadHistoryChange, ThreadHistoryChangeSet, ThreadItem, ThreadItemPayload,
+    ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, CollabAgentState,
+    CollabAgentStatus, FileChangeStatus, ItemKind, ItemStatus, PageCursor, PlanStep,
+    PlanStepStatus, SortDirection, SubAgentActivityKind, Thread, ThreadActiveFlag,
+    ThreadHistoryChange, ThreadHistoryChangeSet, ThreadItem, ThreadItemPayload,
     ThreadItemsListParams, ThreadItemsListResponse, ThreadListParams, ThreadListResponse,
     ThreadStatus, ThreadTurnsListParams, ThreadTurnsListResponse, ThreadTurnsView, ToolArgument,
     ToolOutput, Turn, TurnAdmissionState, TurnApprovalState, TurnError, TurnItemsView,

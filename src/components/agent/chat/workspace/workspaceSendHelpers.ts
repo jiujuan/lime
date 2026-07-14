@@ -22,16 +22,10 @@ import {
   mergeSoulArtifactVoiceDiagnostics,
 } from "../utils/artifactGenerationBriefMetadata";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
-import type { AssistantDraftState } from "../hooks/agentChatShared";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
-import type {
-  AgentRuntimeStatus,
-  BrowserTaskRequirement,
-  Message,
-  MessageImage,
-} from "../types";
+import type { BrowserTaskRequirement, Message, MessageImage } from "../types";
 import type { Character } from "@/lib/api/projectMemory";
 import {
   buildTeamMemoryShadowRequestMetadata,
@@ -44,42 +38,12 @@ import type {
   TeamDefinitionSource,
   TeamRoleDefinition,
 } from "../utils/teamDefinitions";
-import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
-import type { TeamWorkspaceRuntimeFormationState } from "../teamWorkspaceRuntime";
-import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
-import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
-import { normalizeTeamWorkspaceDisplayValue } from "../utils/teamWorkspaceDisplay";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import type {
   OemCloudBootstrapResponse,
   OemCloudFeatureFlags,
 } from "@/lib/api/oemCloudControlPlane";
 import { getOemCloudBootstrapSnapshot } from "@/lib/oemCloudSession";
-import {
-  resolveRuntimeTeamAssignedCountCheckpoint,
-  resolveRuntimeTeamCurrentConfigCheckpoint,
-  resolveRuntimeTeamDefaultLabel,
-  resolveRuntimeTeamFailedContent,
-  resolveRuntimeTeamFailedDetailFallback,
-  resolveRuntimeTeamFailedTitle,
-  resolveRuntimeTeamFirstPlanFallback,
-  resolveRuntimeTeamFormingCheckpoints,
-  resolveRuntimeTeamFormingDetail,
-  resolveRuntimeTeamFormingTitle,
-  resolveRuntimeTeamMemberFallbackLabel,
-  resolveRuntimeTeamMemberFallbackSummary,
-  resolveRuntimeTeamMemberOverflowLine,
-  resolveRuntimeTeamMemberPlanLine,
-  resolveRuntimeTeamPlanSection,
-  resolveRuntimeTeamReadyDetailFallback,
-  resolveRuntimeTeamReadyLeadFallback,
-  resolveRuntimeTeamReadyTailFallback,
-  resolveRuntimeTeamStartingCheckpoint,
-  resolveRuntimeTeamSummaryLine,
-  resolveRuntimeTeamSyncProgressCheckpoint,
-  resolveRuntimeTeamWaitingDetailFallback,
-  resolveRuntimeTeamWaitingTitle,
-} from "./runtimeTeamCollaborationCopy";
 
 const GENERAL_BROWSER_ASSIST_PROFILE_KEY = "general_browser_assist";
 const OEM_CLOUD_FEATURE_FLAG_KEYS = [
@@ -92,22 +56,6 @@ const OEM_CLOUD_FEATURE_FLAG_KEYS = [
   "referralEnabled",
   "gatewayEnabled",
 ] as const satisfies readonly (keyof OemCloudFeatureFlags)[];
-
-type PreparedRuntimeTeamState = NonNullable<
-  Awaited<
-    ReturnType<UseRuntimeTeamFormationResult["prepareRuntimeTeamBeforeSend"]>
-  >
->;
-
-export interface RuntimeTeamDispatchPreviewSnapshot {
-  key: string;
-  prompt: string;
-  images: MessageImage[];
-  baseMessageCount: number;
-  status: "forming" | "formed" | "failed";
-  formationState?: TeamWorkspaceRuntimeFormationState | null;
-  failureMessage?: string | null;
-}
 
 export interface InitialDispatchPreviewSnapshot {
   key: string;
@@ -1084,206 +1032,6 @@ export function buildWorkspaceRequestMetadata(
   };
 }
 
-export function buildRuntimeTeamDispatchPreview(
-  preparedRuntimeTeamState: PreparedRuntimeTeamState,
-  sourceText: string,
-  images: MessageImage[],
-  messagesCount: number,
-): RuntimeTeamDispatchPreviewSnapshot {
-  return {
-    key: preparedRuntimeTeamState.requestId,
-    prompt: sourceText,
-    images,
-    baseMessageCount: messagesCount,
-    status: preparedRuntimeTeamState.status,
-    formationState: preparedRuntimeTeamState,
-    failureMessage: preparedRuntimeTeamState.errorMessage?.trim() || null,
-  };
-}
-
-export function resolveRuntimeTeamDispatchPreviewState(
-  snapshot: RuntimeTeamDispatchPreviewSnapshot | null | undefined,
-): TeamWorkspaceRuntimeFormationState | null {
-  const formationState = snapshot?.formationState ?? null;
-  if (!snapshot || !formationState) {
-    return null;
-  }
-
-  const normalizedFailureMessage = snapshot.failureMessage?.trim() || null;
-  if (
-    snapshot.status === formationState.status &&
-    !(snapshot.status === "failed" && normalizedFailureMessage)
-  ) {
-    return formationState;
-  }
-
-  return {
-    ...formationState,
-    status: snapshot.status,
-    errorMessage:
-      snapshot.status === "failed"
-        ? normalizedFailureMessage ||
-          formationState.errorMessage?.trim() ||
-          null
-        : null,
-  };
-}
-
-function buildRuntimeTeamMemberPlanLines(
-  state: TeamWorkspaceRuntimeFormationState,
-): string[] {
-  const members = state.members.slice(0, 3);
-  const lines = members.map((member, index) => {
-    const label =
-      normalizeTeamWorkspaceDisplayValue(member.label) ||
-      resolveRuntimeTeamMemberFallbackLabel(index);
-    const summary =
-      normalizeTeamWorkspaceDisplayValue(member.summary) ||
-      resolveRuntimeTeamMemberFallbackSummary();
-    return resolveRuntimeTeamMemberPlanLine({ index, label, summary });
-  });
-
-  if (state.members.length > members.length) {
-    lines.push(
-      resolveRuntimeTeamMemberOverflowLine(state.members.length - members.length),
-    );
-  }
-
-  return lines;
-}
-
-function buildRuntimeTeamAssistantDraft(
-  state: TeamWorkspaceRuntimeFormationState | null | undefined,
-  soulCopy: SoulInteractionCopy,
-): AssistantDraftState | undefined {
-  if (!state || state.status !== "formed") {
-    return undefined;
-  }
-
-  const teamLabel =
-    normalizeTeamWorkspaceDisplayValue(state.label || state.blueprint?.label) ||
-    resolveRuntimeTeamDefaultLabel();
-  const summary =
-    normalizeTeamWorkspaceDisplayValue(
-      state.summary || state.blueprint?.summary,
-    ) || "";
-  const planLines = buildRuntimeTeamMemberPlanLines(state);
-  const readyCopySections = soulCopy.subagentsReadyContent(teamLabel).split("\n\n");
-  const readyLead =
-    readyCopySections[0] || resolveRuntimeTeamReadyLeadFallback(teamLabel);
-  const readyTail =
-    readyCopySections.slice(1).join("\n\n") ||
-    resolveRuntimeTeamReadyTailFallback();
-  const contentSections = [
-    readyLead,
-    summary ? resolveRuntimeTeamSummaryLine(summary) : null,
-    planLines.length > 0 ? resolveRuntimeTeamPlanSection(planLines) : null,
-    readyTail,
-  ].filter(Boolean);
-
-  const initialRuntimeStatus: AgentRuntimeStatus = {
-    phase: "routing",
-    title: soulCopy.subagentsReadyTitle,
-    detail: summary || resolveRuntimeTeamReadyDetailFallback(),
-    checkpoints: [
-      resolveRuntimeTeamCurrentConfigCheckpoint(teamLabel),
-      resolveRuntimeTeamAssignedCountCheckpoint(
-        Math.max(state.members.length, 1),
-      ),
-      resolveRuntimeTeamSyncProgressCheckpoint(),
-    ],
-  };
-
-  const waitingRuntimeStatus: AgentRuntimeStatus = {
-    phase: "routing",
-    title: resolveRuntimeTeamWaitingTitle(),
-    detail: summary || resolveRuntimeTeamWaitingDetailFallback(),
-    checkpoints: [
-      resolveRuntimeTeamCurrentConfigCheckpoint(teamLabel),
-      planLines[0] || resolveRuntimeTeamFirstPlanFallback(),
-      resolveRuntimeTeamSyncProgressCheckpoint(),
-    ],
-  };
-
-  return {
-    content: contentSections.join("\n\n"),
-    initialRuntimeStatus,
-    waitingRuntimeStatus,
-  };
-}
-
-export function buildRuntimeTeamDispatchPreviewMessages(
-  snapshot: RuntimeTeamDispatchPreviewSnapshot,
-  soulCopy: SoulInteractionCopy = resolveSoulInteractionCopy(),
-): Message[] {
-  const normalizedPrompt = snapshot.prompt.trim();
-  const timestamp = new Date();
-  const formedAssistantDraft =
-    snapshot.status === "formed"
-      ? buildRuntimeTeamAssistantDraft(snapshot.formationState, soulCopy)
-      : undefined;
-  const formedTeamLabel =
-    normalizeTeamWorkspaceDisplayValue(
-      snapshot.formationState?.label ||
-        snapshot.formationState?.blueprint?.label,
-    ) || resolveRuntimeTeamDefaultLabel();
-  const formedSummary =
-    normalizeTeamWorkspaceDisplayValue(
-      snapshot.formationState?.summary ||
-        snapshot.formationState?.blueprint?.summary,
-    ) || "";
-  const assistantRuntimeStatus =
-    snapshot.status === "failed"
-      ? {
-          phase: "failed" as const,
-          title: resolveRuntimeTeamFailedTitle(),
-          detail:
-            normalizeTeamWorkspaceDisplayValue(snapshot.failureMessage) ||
-            resolveRuntimeTeamFailedDetailFallback(),
-        }
-      : snapshot.status === "formed"
-        ? formedAssistantDraft?.initialRuntimeStatus || {
-            phase: "routing" as const,
-            title: soulCopy.subagentsReadyTitle,
-            detail: formedSummary || resolveRuntimeTeamReadyDetailFallback(),
-            checkpoints: [
-              resolveRuntimeTeamCurrentConfigCheckpoint(formedTeamLabel),
-              resolveRuntimeTeamStartingCheckpoint(),
-              resolveRuntimeTeamSyncProgressCheckpoint(),
-            ],
-          }
-        : {
-            phase: "routing" as const,
-            title: resolveRuntimeTeamFormingTitle(),
-            detail: resolveRuntimeTeamFormingDetail(),
-            checkpoints: resolveRuntimeTeamFormingCheckpoints(),
-          };
-
-  return [
-    {
-      id: `runtime-team-dispatch:${snapshot.key}:user`,
-      role: "user",
-      content: normalizedPrompt,
-      images: snapshot.images.length > 0 ? snapshot.images : undefined,
-      timestamp,
-    },
-    {
-      id: `runtime-team-dispatch:${snapshot.key}:assistant`,
-      role: "assistant",
-      content:
-        snapshot.status === "failed"
-          ? resolveRuntimeTeamFailedContent()
-          : snapshot.status === "formed"
-            ? formedAssistantDraft?.content ||
-              soulCopy.subagentsReadyContent(formedTeamLabel)
-            : soulCopy.subagentsPreparingContent,
-      timestamp: new Date(timestamp.getTime() + 1),
-      isThinking: snapshot.status === "forming",
-      runtimeStatus: assistantRuntimeStatus,
-    },
-  ];
-}
-
 interface CreateSubmissionPreviewSnapshotOptions {
   key: string;
   prompt: string;
@@ -1295,13 +1043,7 @@ interface CreateSubmissionPreviewSnapshotOptions {
 export function createSubmissionPreviewSnapshot(
   options: CreateSubmissionPreviewSnapshotOptions,
 ): SubmissionPreviewSnapshot {
-  const {
-    key,
-    prompt,
-    images,
-    displayContent,
-    inputCapabilityRoute,
-  } = options;
+  const { key, prompt, images, displayContent, inputCapabilityRoute } = options;
 
   return {
     key,

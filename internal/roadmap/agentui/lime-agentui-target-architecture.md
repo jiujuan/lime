@@ -20,7 +20,7 @@ Lime 的下一代 AgentUI 应是一个桌面工作台，而不是单列聊天页
 | --- | --- | --- | --- |
 | 对话层 Conversation | 我和 Agent 说了什么，最终答复是什么 | `MessageList`、`StreamingRenderer`、用户消息、助手正文 | `messages`、`contentParts`、`text_delta` |
 | 过程层 Process | Agent 现在在做什么，卡在哪里 | runtime strip、thinking、tool step、timeline | `runtime_status`、`thinking_delta`、`threadItems`、`threadTurns` |
-| 任务层 Task | 还有哪些后台任务、排队输入、子代理 | capsule、task center、queue panel、team board | `queuedTurns`、`childSubagentSessions`、`thread_read` |
+| 任务层 Task | 还有哪些后台任务、排队输入、子代理 | capsule、task center、queue panel、Subagents view | `queuedTurns`、`canonicalChildren`、`thread_read` |
 | 产物层 Artifact | 最终交付物在哪里继续编辑 | canvas、artifact preview、workbench | `artifact_snapshot`、ArtifactDocument、`.lime/artifacts` |
 | 证据层 Evidence | 这次执行是否可靠，如何复盘 | harness panel、evidence pack、review decision、replay | `thread_read`、timeline、evidence/review services |
 

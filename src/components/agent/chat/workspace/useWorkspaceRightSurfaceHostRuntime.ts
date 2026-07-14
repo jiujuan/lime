@@ -1,5 +1,5 @@
 import { useCallback, type MutableRefObject, type ReactNode } from "react";
-import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime";
+import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime/sessionClient";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 import type { WorkspaceHandleSend } from "./useWorkspaceSendActions";
 import {

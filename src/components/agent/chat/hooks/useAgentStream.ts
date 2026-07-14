@@ -11,10 +11,12 @@ import { toast } from "sonner";
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
+} from "@/lib/api/agentExecutionRuntime";
+import type {
   AgentRuntimeThreadReadModel,
   AutoContinueRequestPayload,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import {
   type AgentThreadItem,
   type AgentThreadTurn,

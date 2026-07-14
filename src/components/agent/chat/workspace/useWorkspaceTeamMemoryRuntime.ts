@@ -6,27 +6,20 @@ import { useTeamMemoryShadowSync } from "../hooks/useTeamMemoryShadowSync";
 type SelectedTeamPreferenceOptions = NonNullable<
   Parameters<typeof useSelectedTeamPreference>[1]
 >;
-type TeamMemoryShadowSyncOptions = Parameters<
-  typeof useTeamMemoryShadowSync
->[0];
 
 interface UseWorkspaceTeamMemoryRuntimeParams {
   activeTheme: string;
-  childSubagentSessions: TeamMemoryShadowSyncOptions["childSubagentSessions"];
   runtimeSelection: SelectedTeamPreferenceOptions["runtimeSelection"];
   selectedTeamSessionSync: SelectedTeamPreferenceOptions["sessionSync"];
   sessionId?: string | null;
-  subagentParentContext?: TeamMemoryShadowSyncOptions["subagentParentContext"];
   workspaceRoot?: string | null;
 }
 
 export function useWorkspaceTeamMemoryRuntime({
   activeTheme,
-  childSubagentSessions,
   runtimeSelection,
   selectedTeamSessionSync,
   sessionId,
-  subagentParentContext,
   workspaceRoot,
 }: UseWorkspaceTeamMemoryRuntimeParams) {
   const persistedTeamMemoryShadowSnapshot = useMemo(() => {
@@ -56,8 +49,6 @@ export function useWorkspaceTeamMemoryRuntime({
     activeTheme,
     sessionId,
     selectedTeam,
-    childSubagentSessions,
-    subagentParentContext,
   });
   const resolvedTeamMemoryShadowSnapshot =
     teamMemoryShadowSnapshot ?? persistedTeamMemoryShadowSnapshot;

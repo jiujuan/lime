@@ -8,6 +8,26 @@ import {
 } from "./useWorkspaceConversationSceneRuntime.testFixtures";
 
 describe("useWorkspaceConversationSceneRuntime message list projection", () => {
+  it("应将 canonical child roster 透传给消息列表", () => {
+    const canonicalChildren = [
+      {
+        name: "实现",
+        parentThreadId: "thread-parent",
+        sessionId: "session-child",
+        status: "running" as const,
+        threadId: "thread-child",
+        updatedAtMs: 1,
+      },
+    ];
+    const sceneProps = getRenderedSceneProps(
+      createBaseParams({ canonicalChildren }),
+    );
+
+    expect(sceneProps.messageListProps.canonicalChildren).toBe(
+      canonicalChildren,
+    );
+  });
+
   it("messageListRuntime 应作为消息列表 current 契约来源", () => {
     const legacyFlatMessages = [
       {

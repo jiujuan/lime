@@ -282,12 +282,6 @@ describe("agentStreamFlowControl current runtime boundary", () => {
         ),
       ],
       [
-        "src/components/agent/chat/team-workspace-runtime/liveRuntimeProjector.ts",
-        readSource(
-          "src/components/agent/chat/team-workspace-runtime/liveRuntimeProjector.ts",
-        ),
-      ],
-      [
         "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts",
         readSource(
           "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts",

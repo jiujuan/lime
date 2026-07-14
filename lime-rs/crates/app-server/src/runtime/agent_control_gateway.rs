@@ -3,7 +3,9 @@
 use super::agent_control::AgentControlSpawnRequest;
 use super::*;
 use agent_protocol::ThreadId;
-use app_server_protocol::{AgentSessionStatus, AgentSessionTurnCancelParams, AgentTurnStatus};
+use app_server_protocol::{
+    AgentSessionStatus, AgentSessionTurnCancelParams, AgentTurnStatus, RuntimeOptions,
+};
 use async_trait::async_trait;
 use serde_json::json;
 use std::collections::HashSet;
@@ -34,6 +36,7 @@ struct RuntimeCoreAgentControlGateway {
     session_id: String,
     thread_id: String,
     turn_id: String,
+    child_runtime_options: Option<RuntimeOptions>,
 }
 
 #[async_trait]
@@ -52,7 +55,7 @@ impl AgentControlGateway for RuntimeCoreAgentControlGateway {
             ));
         }
         self.core
-            .execute_agent_control_gateway(request, &self.host)
+            .execute_agent_control_gateway(request, &self.host, self.child_runtime_options.clone())
             .await
             .map_err(agent_control_gateway_error)
     }
@@ -65,12 +68,22 @@ impl RuntimeCore {
         turn: &app_server_protocol::AgentTurn,
         host: RuntimeHostContext,
     ) -> AgentControlGatewayHandle {
+        let child_runtime_options = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .sessions
+            .get(&session.session_id)
+            .and_then(|stored| stored.turn_runtime_options.get(&turn.turn_id))
+            .cloned()
+            .map(agent_control_child_runtime_options);
         AgentControlGatewayHandle::new(Arc::new(RuntimeCoreAgentControlGateway {
             core: self.clone(),
             host,
             session_id: session.session_id.clone(),
             thread_id: session.thread_id.clone(),
             turn_id: turn.turn_id.clone(),
+            child_runtime_options,
         }))
     }
 
@@ -78,12 +91,19 @@ impl RuntimeCore {
         &self,
         request: AgentControlGatewayRequest,
         host: &RuntimeHostContext,
+        child_runtime_options: Option<RuntimeOptions>,
     ) -> Result<AgentControlGatewayResult, RuntimeCoreError> {
         let caller = self.resolve_agent_control_caller(&request.caller).await?;
         let (output, projection_facts) = match request.command {
             tool_runtime::agent_control::AgentControlCommand::SpawnAgent { task_name, message } => {
                 let (output, target_thread_id, agent_path) = self
-                    .execute_agent_control_spawn(&caller, task_name, message, host)
+                    .execute_agent_control_spawn(
+                        &caller,
+                        task_name,
+                        message,
+                        host,
+                        child_runtime_options.clone(),
+                    )
                     .await?;
                 (
                     output,
@@ -102,6 +122,7 @@ impl RuntimeCore {
                         message,
                         AgentMailboxDeliveryMode::QueueOnly,
                         host,
+                        child_runtime_options.clone(),
                     )
                     .await?;
                 (
@@ -121,6 +142,7 @@ impl RuntimeCore {
                         message,
                         AgentMailboxDeliveryMode::TriggerTurn,
                         host,
+                        child_runtime_options.clone(),
                     )
                     .await?;
                 (
@@ -229,6 +251,7 @@ impl RuntimeCore {
         task_name: String,
         message: String,
         host: &RuntimeHostContext,
+        child_runtime_options: Option<RuntimeOptions>,
     ) -> Result<(serde_json::Value, ThreadId, String), RuntimeCoreError> {
         let task_name = validate_agent_control_task_name(task_name)?;
         let message = required_agent_control_id(message, "agent control message is required")?;
@@ -303,19 +326,12 @@ impl RuntimeCore {
                 return Err(error);
             }
         };
-        if let Err(error) = self
-            .process_pending_agent_mailbox_triggers(&response.session.session_id, host.clone())
-            .await
-        {
-            self.cleanup_unusable_agent_control_child(caller, &response.session)
-                .await
-                .map_err(|cleanup_error| {
-                    RuntimeCoreError::Backend(format!(
-                        "failed to trigger initial child turn: {error}; failed to compensate child spawn: {cleanup_error}"
-                    ))
-                })?;
-            return Err(error);
-        }
+        self.schedule_pending_agent_mailbox_triggers(
+            response.session.session_id.clone(),
+            host.clone(),
+            child_runtime_options,
+        )
+        .await;
         let task_name = identity
             .task_name()
             .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
@@ -337,6 +353,7 @@ impl RuntimeCore {
         message: String,
         delivery_mode: AgentMailboxDeliveryMode,
         host: &RuntimeHostContext,
+        child_runtime_options: Option<RuntimeOptions>,
     ) -> Result<(serde_json::Value, ThreadId, String), RuntimeCoreError> {
         let target = self.resolve_agent_control_target(caller, &target).await?;
         if delivery_mode == AgentMailboxDeliveryMode::TriggerTurn
@@ -362,8 +379,12 @@ impl RuntimeCore {
             )
             .await?;
         if delivery_mode == AgentMailboxDeliveryMode::TriggerTurn {
-            self.process_pending_agent_mailbox_triggers(&target.session_id, host.clone())
-                .await?;
+            self.schedule_pending_agent_mailbox_triggers(
+                target.session_id.clone(),
+                host.clone(),
+                child_runtime_options,
+            )
+            .await;
         }
         Ok((
             json!({ "message_id": message_id }),
@@ -736,6 +757,15 @@ impl RuntimeCore {
             AgentSessionStatus::Canceled => "interrupted",
         })
     }
+}
+
+fn agent_control_child_runtime_options(mut options: RuntimeOptions) -> RuntimeOptions {
+    options.event_name = None;
+    options.queued_turn_id = None;
+    options.expected_output = None;
+    options.structured_output = None;
+    options.output_schema = None;
+    options
 }
 
 #[derive(Clone)]

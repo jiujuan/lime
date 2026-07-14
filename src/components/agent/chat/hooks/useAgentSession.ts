@@ -13,8 +13,6 @@ import { toast } from "sonner";
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  AgentSubagentParentContext,
-  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   AgentTodoItem,
   QueuedTurnSnapshot,
@@ -472,11 +470,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     null,
   );
   const [todoItems, setTodoItems] = useState<AgentTodoItem[]>([]);
-  const [childSubagentSessions, setChildSubagentSessions] = useState<
-    AgentSubagentSessionInfo[]
-  >([]);
-  const [subagentParentContext, setSubagentParentContext] =
-    useState<AgentSubagentParentContext | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [topicsReady, setTopicsReady] = useState(false);
   const [sessionHistoryWindow, setSessionHistoryWindow] =
@@ -710,8 +703,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       setThreadRead(stableSnapshot.threadRead);
       setExecutionRuntime(stableSnapshot.executionRuntime);
       setTodoItems(stableSnapshot.todoItems);
-      setChildSubagentSessions(stableSnapshot.childSubagentSessions);
-      setSubagentParentContext(stableSnapshot.subagentParentContext);
     },
     [sessionIdRef],
   );
@@ -1024,19 +1015,20 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
 
     sessionStateWorkspaceRef.current = resolvedWorkspaceId;
-    if (
-      !shouldRestoreSessionInForeground &&
-      hasActiveLocalSessionSnapshot()
-    ) {
+    if (!shouldRestoreSessionInForeground && hasActiveLocalSessionSnapshot()) {
       setIsAutoRestoringSession(false);
       setIsSessionHydrating(false);
-      logAgentDebug("useAgentSession", "restoreInitialization.skipActiveLocal", {
-        messagesCount: messagesRef.current.length,
-        sessionId: sessionIdRef.current,
-        threadItemsCount: threadItemsRef.current.length,
-        threadTurnsCount: threadTurnsRef.current.length,
-        workspaceId: resolvedWorkspaceId,
-      });
+      logAgentDebug(
+        "useAgentSession",
+        "restoreInitialization.skipActiveLocal",
+        {
+          messagesCount: messagesRef.current.length,
+          sessionId: sessionIdRef.current,
+          threadItemsCount: threadItemsRef.current.length,
+          threadTurnsCount: threadTurnsRef.current.length,
+          workspaceId: resolvedWorkspaceId,
+        },
+      );
       return;
     }
     appServerConfirmedSessionIdsRef.current.clear();
@@ -2546,8 +2538,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           threadRead,
           executionRuntime: executionRuntimeRef.current,
           todoItems,
-          childSubagentSessions,
-          subagentParentContext,
         });
       });
       setSessionHistoryWindow(resultPlan.nextHistoryWindow);
@@ -2611,12 +2601,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
   }, [
     applySessionSnapshot,
-    childSubagentSessions,
     currentTurnId,
     queuedTurns,
     runtime,
     sessionIdRef,
-    subagentParentContext,
     threadRead,
     todoItems,
     workspaceId,
@@ -3431,8 +3419,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     currentTurnId,
     setCurrentTurnId,
     todoItems,
-    childSubagentSessions,
-    subagentParentContext,
     queuedTurns,
     threadRead,
     executionRuntime,

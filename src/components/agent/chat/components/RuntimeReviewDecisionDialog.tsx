@@ -4,7 +4,7 @@ import type {
   AgentRuntimeReviewDecisionStatus,
   AgentRuntimeReviewDecisionTemplate,
   AgentRuntimeSaveReviewDecisionRequest,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

@@ -47,6 +47,25 @@ describe("readCanonicalThreadItem", () => {
       { type: "agent_message", text: "answer", phase: "final" },
     ],
     [
+      "plan",
+      {
+        type: "plan",
+        text: "- [ ] 验证历史恢复",
+        revision_id: "proposed_plan:1",
+        source: "proposed_plan",
+        plan: [{ step: "验证历史恢复", status: "pending" }],
+      },
+      {
+        type: "plan",
+        text: "- [ ] 验证历史恢复",
+        metadata: {
+          revisionId: "proposed_plan:1",
+          source: "proposed_plan",
+          plan: [{ step: "验证历史恢复", status: "pending" }],
+        },
+      },
+    ],
+    [
       "reasoning",
       { type: "reasoning", summary: ["summary"], content: ["a", "b"] },
       { type: "reasoning", text: "ab", summary: ["summary"] },
@@ -71,13 +90,13 @@ describe("readCanonicalThreadItem", () => {
       {
         type: "subAgent",
         child_thread_id: "thread-child",
-        activity: "waiting",
+        activity: "started",
         detail: "queued",
       },
       {
         type: "subagent_activity",
         session_id: "thread-child",
-        status_label: "waiting",
+        status_label: "started",
       },
     ],
     [
@@ -93,6 +112,10 @@ describe("readCanonicalThreadItem", () => {
   ])(
     "projects canonical %s without raw payload inference",
     (_name, payload, expected) => {
+      const expectedRecord = expected as Record<string, unknown>;
+      const expectedMetadata =
+        (expectedRecord.metadata as Record<string, unknown> | undefined) ??
+        { source: "canonical" };
       expect(readCanonicalThreadItem(item(payload), event)).toMatchObject({
         id: "item-1",
         thread_id: "thread-1",
@@ -102,11 +125,34 @@ describe("readCanonicalThreadItem", () => {
         status: "in_progress",
         started_at: "2026-07-13T00:00:00.000Z",
         updated_at: "2026-07-13T00:00:01.000Z",
-        ...expected,
+        ...expectedRecord,
         metadata: expect.objectContaining({
-          source: "canonical",
+          ...expectedMetadata,
           ordinal: 3,
         }),
+      });
+    },
+  );
+
+  it.each(["started", "interacted", "interrupted"] as const)(
+    "projects canonical SubAgent %s activity without rewriting the child thread identity",
+    (activity) => {
+      expect(
+        readCanonicalThreadItem(
+          item({
+            type: "subAgent",
+            child_thread_id: "thread-child",
+            activity,
+            detail: `activity:${activity}`,
+          }),
+          event,
+        ),
+      ).toMatchObject({
+        id: "item-1",
+        type: "subagent_activity",
+        session_id: "thread-child",
+        status_label: activity,
+        summary: `activity:${activity}`,
       });
     },
   );

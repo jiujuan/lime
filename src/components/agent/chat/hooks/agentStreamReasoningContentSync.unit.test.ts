@@ -285,4 +285,40 @@ describe("agentStreamReasoningContentSync", () => {
       messages[0]?.contentParts?.filter((part) => part.type === "thinking"),
     ).toHaveLength(1);
   });
+
+  it("临时 thinking 已落在正文后时，持久化 reasoning 应按 canonical 位置前移", () => {
+    const messages = applyReasoningSync({
+      messages: [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "最终正文。",
+          timestamp: new Date("2026-06-22T10:00:00.000Z"),
+          runtimeTurnId: "turn-1",
+          thinkingContent: "搜索结果还需要继续筛掉广告软文。",
+          contentParts: [
+            { type: "text", text: "最终正文。" },
+            {
+              type: "thinking",
+              text: "搜索结果还需要继续筛掉广告软文。",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0]?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "thinking",
+        text: "搜索结果还需要继续筛掉广告软文。",
+        metadata: expect.objectContaining({
+          source: "thread_item_reasoning",
+          threadItemId: "reasoning-1",
+          sequence: 3,
+          turnId: "turn-1",
+        }),
+      }),
+      { type: "text", text: "最终正文。" },
+    ]);
+  });
 });

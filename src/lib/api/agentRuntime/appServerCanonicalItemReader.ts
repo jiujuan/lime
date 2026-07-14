@@ -77,6 +77,25 @@ export function readCanonicalThreadItem(
         text: readString(payload, "text") ?? "",
         phase: readString(payload, "phase"),
       };
+    case "plan":
+      return {
+        ...base,
+        type: "plan",
+        text: readString(payload, "text") ?? "",
+        metadata: {
+          ...(normalizeRecord(base.metadata) ?? {}),
+          revisionId: readString(payload, "revision_id", "revisionId"),
+          source: readString(payload, "source"),
+          plan: payload.plan,
+          explanation: readString(payload, "explanation"),
+          tool_call_id: readString(payload, "tool_call_id", "toolCallId"),
+          source_item_id: readString(
+            payload,
+            "source_item_id",
+            "sourceItemId",
+          ),
+        },
+      };
     case "reasoning": {
       const summary = readStringList(payload.summary);
       const content = readStringList(payload.content);

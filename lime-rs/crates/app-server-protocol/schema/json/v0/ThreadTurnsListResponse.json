@@ -70,6 +70,7 @@
         "file",
         "mcpToolCall",
         "media",
+        "plan",
         "reasoning",
         "subAgent",
         "tool",
@@ -88,18 +89,34 @@
       ],
       "type": "string"
     },
+    "PlanStep": {
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/PlanStepStatus"
+        },
+        "step": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "step"
+      ],
+      "type": "object"
+    },
+    "PlanStepStatus": {
+      "enum": [
+        "completed",
+        "in_progress",
+        "pending"
+      ],
+      "type": "string"
+    },
     "SubAgentActivityKind": {
       "enum": [
-        "closed",
-        "completed",
-        "failed",
         "interacted",
         "interrupted",
-        "messageSent",
-        "resumed",
-        "spawned",
-        "started",
-        "waiting"
+        "started"
       ],
       "type": "string"
     },
@@ -212,6 +229,58 @@
             }
           },
           "required": [
+            "text",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Proposed plan content. The completed snapshot is authoritative and may\nnot equal the concatenation of preceding plan deltas.",
+          "properties": {
+            "explanation": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "plan": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PlanStep"
+              },
+              "type": "array"
+            },
+            "revision_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source_item_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "tool_call_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "const": "plan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "revision_id",
             "text",
             "type"
           ],

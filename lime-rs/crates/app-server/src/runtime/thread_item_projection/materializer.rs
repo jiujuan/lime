@@ -9,8 +9,8 @@ mod lifecycle;
 mod lowering;
 
 use self::fields::{
-    approval_payload_source, explicit_item_id, map_u64, non_empty, payload_source, value_string,
-    value_u64,
+    approval_payload_source, explicit_item_id, map_string, map_u64, non_empty, payload_source,
+    value_string, value_u64,
 };
 use self::lifecycle::{
     event_timestamp_ms, item_status, parse_timestamp_ms, queued_turn_id, rollback_target,
@@ -180,13 +180,24 @@ fn item_from_event(
     let source = approval_source
         .as_ref()
         .unwrap_or_else(|| payload_source(&event.payload));
-    let item_id = ItemId::new(
-        family
-            .explicit_item_id(source)
-            .unwrap_or_else(|| family.fallback_id(turn_id, &event.event_id)),
-    );
+    let raw_item_id = family.item_id(source, turn_id, &event.event_id)?;
+    let preserves_imported_codex_plan_id = matches!(family, ItemFamily::Plan)
+        && map_string(source, &["sourceClient", "source_client"]).as_deref() == Some("codex")
+        && family.explicit_item_id(source).is_some();
+    let item_id = if preserves_imported_codex_plan_id {
+        ItemId::from_legacy(raw_item_id)
+    } else {
+        ItemId::new(raw_item_id)
+    };
     let timestamp = event_timestamp_ms(event);
-    let status = item_status(event_type, &event.payload);
+    let status = if uses_legacy_import_ordinal(event)
+        && matches!(family, ItemFamily::AgentMessage)
+        && event_type == "message.delta"
+    {
+        ItemStatus::Completed
+    } else {
+        item_status(event_type, &event.payload)
+    };
     let payload = typed_payload(family, event_type, source, item_id.as_str(), timestamp);
     let completed_at_ms = status.is_terminal().then_some(timestamp);
     Some(ThreadItem {
@@ -195,8 +206,7 @@ fn item_from_event(
         turn_id: TurnId::new(turn_id),
         item_id,
         sequence: event.sequence,
-        ordinal: map_u64(source, &["ordinal", "itemOrdinal", "item_ordinal"])
-            .unwrap_or(event.sequence),
+        ordinal: canonical_item_ordinal(event, source),
         created_at_ms: timestamp,
         updated_at_ms: timestamp,
         completed_at_ms,
@@ -233,11 +243,27 @@ fn canonical_item_from_event(
     );
     item.turn_id = TurnId::new(turn_id);
     item.sequence = event.sequence;
+    if uses_legacy_import_ordinal(event) {
+        item.ordinal = event.sequence;
+    }
     item.created_at_ms = timestamp;
     item.updated_at_ms = timestamp;
     item.status = canonical_item_lifecycle_status(event.event_type.as_str(), item.status);
     item.completed_at_ms = item.status.is_terminal().then_some(timestamp);
     Some(item)
+}
+
+fn canonical_item_ordinal(event: &AgentEvent, source: &serde_json::Map<String, Value>) -> u64 {
+    if uses_legacy_import_ordinal(event) {
+        return event.sequence;
+    }
+    map_u64(source, &["ordinal", "itemOrdinal", "item_ordinal"]).unwrap_or(event.sequence)
+}
+
+fn uses_legacy_import_ordinal(event: &AgentEvent) -> bool {
+    event.payload.get("imported").and_then(Value::as_bool) == Some(true)
+        && event.payload.get("sourceClient").and_then(Value::as_str) == Some("codex")
+        && event.payload.get("importVersion").is_none()
 }
 
 fn canonical_item_lifecycle_status(event_type: &str, nested_status: ItemStatus) -> ItemStatus {

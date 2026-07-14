@@ -7,7 +7,7 @@ import type {
   AgentSessionExecutionRuntimeRecentTeamSelection,
   AgentTurnOutputSchemaRuntime,
 } from "@/lib/api/agentExecutionRuntime";
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
 import {

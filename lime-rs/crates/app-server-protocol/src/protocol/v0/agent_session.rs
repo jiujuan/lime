@@ -395,11 +395,13 @@ impl AgentSessionRuntimeEventNotification {
             }
             "item.started" => AgentSessionItemLifecycleNotification::from_agent_event(event, None)
                 .map(Self::ItemStarted),
-            "item.completed" => AgentSessionItemLifecycleNotification::from_agent_event(
-                event,
-                Some("completed".to_string()),
-            )
-            .map(Self::ItemCompleted),
+            "item.completed" | "message.completed" => {
+                AgentSessionItemLifecycleNotification::from_agent_event(
+                    event,
+                    Some("completed".to_string()),
+                )
+                .map(Self::ItemCompleted)
+            }
             _ => None,
         }
     }
@@ -755,6 +757,40 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    fn message_completed_projects_typed_item_completed_lifecycle() {
+        let params = AgentSessionEventParams::from_event(event(
+            "message.completed",
+            json!({
+                "item": {
+                    "sessionId": "sess_1",
+                    "threadId": "thread_1",
+                    "turnId": "turn_1",
+                    "itemId": "agent-turn_1",
+                    "sequence": 7,
+                    "ordinal": 3,
+                    "createdAtMs": 100,
+                    "updatedAtMs": 120,
+                    "completedAtMs": 120,
+                    "kind": "agentMessage",
+                    "status": "completed",
+                    "payload": {
+                        "type": "agentMessage",
+                        "text": "hello",
+                        "phase": "final_answer"
+                    }
+                }
+            }),
+        ));
+
+        assert!(matches!(
+            params.typed_event,
+            Some(AgentSessionRuntimeEventNotification::ItemCompleted(
+                AgentSessionItemLifecycleNotification { ref item_id, .. }
+            )) if item_id == "agent-turn_1"
+        ));
     }
 
     #[test]

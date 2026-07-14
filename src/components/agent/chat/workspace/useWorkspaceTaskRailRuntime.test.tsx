@@ -119,7 +119,7 @@ describe("resolveWorkspaceTaskRailRootPath", () => {
 });
 
 describe("buildWorkspaceTaskRailRuntimeContext", () => {
-  it("应从 read model 和子任务会话派生任务轨道运行事实", () => {
+  it("应从 read model 和 canonical 子任务派生任务轨道运行事实", () => {
     const context = buildWorkspaceTaskRailRuntimeContext({
       providerType: "cloud",
       model: "reasoner-pro",
@@ -175,30 +175,38 @@ describe("buildWorkspaceTaskRailRuntimeContext", () => {
           updated_at: "2026-06-16T10:00:01.000Z",
         },
       ],
-      childSubagentSessions: [
+      canonicalChildren: [
         {
-          id: "child-running",
           name: "实现",
-          created_at: 1,
-          updated_at: 2,
-          session_type: "subagent",
-          runtime_status: "running",
+          parentThreadId: "thread-parent",
+          sessionId: "child-running",
+          status: "running",
+          threadId: "thread-child-running",
+          updatedAtMs: 2,
         },
         {
-          id: "child-done",
           name: "验证",
-          created_at: 1,
-          updated_at: 2,
-          session_type: "subagent",
-          runtime_status: "completed",
+          parentThreadId: "thread-parent",
+          sessionId: "child-done",
+          status: "completed",
+          threadId: "thread-child-done",
+          updatedAtMs: 2,
         },
         {
-          id: "child-failed",
           name: "修复",
-          created_at: 1,
-          updated_at: 2,
-          session_type: "subagent",
-          runtime_status: "failed",
+          parentThreadId: "thread-parent",
+          sessionId: "child-failed",
+          status: "errored",
+          threadId: "thread-child-failed",
+          updatedAtMs: 2,
+        },
+        {
+          name: "中断恢复",
+          parentThreadId: "thread-parent",
+          sessionId: "child-interrupted",
+          status: "interrupted",
+          threadId: "thread-child-interrupted",
+          updatedAtMs: 2,
         },
       ],
     });
@@ -225,10 +233,10 @@ describe("buildWorkspaceTaskRailRuntimeContext", () => {
       ],
       sourceEvidenceCount: 1,
       sourceConsistencyStatus: "linked",
-      subtaskTotalCount: 3,
+      subtaskTotalCount: 4,
       subtaskActiveCount: 1,
       subtaskCompletedCount: 1,
-      subtaskFailedCount: 1,
+      subtaskFailedCount: 2,
     });
   });
 });
@@ -259,7 +267,9 @@ describe("useWorkspaceTaskRailRuntime", () => {
     expect(getValue().accessMode).toBe("current");
     expect(getValue().reasoningEffort).toBe("medium");
     expect(getValue().workspaceRootPath).toBe("/tmp/project-1");
-    expect((getValue() as unknown as { context?: unknown }).context).toBeUndefined();
+    expect(
+      (getValue() as unknown as { context?: unknown }).context,
+    ).toBeUndefined();
   });
 
   it("应透传 read model 与子任务摘要事实", async () => {
@@ -300,28 +310,30 @@ describe("useWorkspaceTaskRailRuntime", () => {
         updated_at: "2026-06-16T10:00:01.000Z",
       },
     ];
-    const childSubagentSessions = [
+    const canonicalChildren = [
       {
-        id: "child-running",
         name: "实现",
-        created_at: 1,
-        updated_at: 2,
-        session_type: "subagent",
-        latest_turn_status: "queued" as const,
+        parentThreadId: "thread-parent",
+        sessionId: "child-running",
+        status: "pendingInit" as const,
+        threadId: "thread-child-running",
+        updatedAtMs: 2,
       },
     ];
     const { render, getValue } = renderHook({
       threadRead,
       threadItems,
-      childSubagentSessions,
+      canonicalChildren,
     });
 
     await render();
 
     expect(getValue().threadRead).toBe(threadRead);
     expect(getValue().threadItems).toBe(threadItems);
-    expect(getValue().childSubagentSessions).toBe(childSubagentSessions);
-    expect((getValue() as unknown as { context?: unknown }).context).toBeUndefined();
+    expect(getValue().canonicalChildren).toBe(canonicalChildren);
+    expect(
+      (getValue() as unknown as { context?: unknown }).context,
+    ).toBeUndefined();
   });
 
   it("应透传 todo items 供运行控制区域恢复历史计划", async () => {

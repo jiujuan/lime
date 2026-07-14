@@ -21,30 +21,6 @@ export interface AgentRuntimeEventSourceDeps extends AgentRuntimeEventTransportD
 
 export interface AgentRuntimeEventSource {
   listenRuntimeEvent: AgentRuntimeEventListener;
-  listenSubagentStatus(
-    sessionId: string,
-    handler: AgentRuntimeEventHandler,
-  ): Promise<UnlistenFn>;
-  listenSubagentStream(
-    sessionId: string,
-    handler: AgentRuntimeEventHandler,
-  ): Promise<UnlistenFn>;
-}
-
-export function getAgentSubagentStatusEventName(sessionId: string): string {
-  return `agent_subagent_status:${sessionId}`;
-}
-
-export function getAgentSubagentStreamEventName(sessionId: string): string {
-  return `agent_subagent_stream:${sessionId}`;
-}
-
-export function dedupeAgentRuntimeEventNames(
-  eventNames: Array<string | null | undefined>,
-): string[] {
-  return eventNames.filter((value, index, values): value is string => {
-    return Boolean(value) && values.indexOf(value) === index;
-  });
 }
 
 const localRuntimeEventListeners = new Map<
@@ -172,10 +148,10 @@ function markProcessedAgentRuntimePayload<TPayload>(
 function isProcessedAgentRuntimePayload(payload: unknown): boolean {
   return Boolean(
     payload &&
-      typeof payload === "object" &&
-      !Array.isArray(payload) &&
-      (payload as Record<string, unknown>)[PROCESSED_RUNTIME_EVENT_MARKER] ===
-        true,
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    (payload as Record<string, unknown>)[PROCESSED_RUNTIME_EVENT_MARKER] ===
+      true,
   );
 }
 
@@ -185,10 +161,8 @@ function stripProcessedAgentRuntimePayloadMarker<TPayload>(
   if (!isProcessedAgentRuntimePayload(payload)) {
     return payload;
   }
-  const {
-    [PROCESSED_RUNTIME_EVENT_MARKER]: _marker,
-    ...rest
-  } = payload as Record<string, unknown>;
+  const { [PROCESSED_RUNTIME_EVENT_MARKER]: _marker, ...rest } =
+    payload as Record<string, unknown>;
   return rest as TPayload;
 }
 
@@ -206,30 +180,8 @@ export function createAgentRuntimeEventSource({
     return await resolvedListenEvent(eventName, handler);
   }
 
-  async function listenSubagentStatus(
-    sessionId: string,
-    handler: AgentRuntimeEventHandler,
-  ): Promise<UnlistenFn> {
-    return await listenRuntimeEvent(
-      getAgentSubagentStatusEventName(sessionId),
-      handler,
-    );
-  }
-
-  async function listenSubagentStream(
-    sessionId: string,
-    handler: AgentRuntimeEventHandler,
-  ): Promise<UnlistenFn> {
-    return await listenRuntimeEvent(
-      getAgentSubagentStreamEventName(sessionId),
-      handler,
-    );
-  }
-
   return {
     listenRuntimeEvent,
-    listenSubagentStatus,
-    listenSubagentStream,
   };
 }
 
@@ -237,23 +189,3 @@ export const defaultAgentRuntimeEventSource = createAgentRuntimeEventSource();
 
 export const listenAgentRuntimeEvent: AgentRuntimeEventListener =
   defaultAgentRuntimeEventSource.listenRuntimeEvent;
-
-export async function listenAgentSubagentStatus(
-  sessionId: string,
-  handler: AgentRuntimeEventHandler,
-): Promise<UnlistenFn> {
-  return await defaultAgentRuntimeEventSource.listenSubagentStatus(
-    sessionId,
-    handler,
-  );
-}
-
-export async function listenAgentSubagentStream(
-  sessionId: string,
-  handler: AgentRuntimeEventHandler,
-): Promise<UnlistenFn> {
-  return await defaultAgentRuntimeEventSource.listenSubagentStream(
-    sessionId,
-    handler,
-  );
-}

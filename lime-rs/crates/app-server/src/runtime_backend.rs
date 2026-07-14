@@ -3,6 +3,7 @@ mod agent_skills_context;
 mod agent_skills_telemetry;
 mod coding_events;
 mod event_mapper;
+mod execution_backend;
 mod image_command;
 mod image_tools;
 pub(crate) mod knowledge_builder_runtime;
@@ -37,17 +38,11 @@ mod workspace_patch_host_execution;
 mod workspace_patch_host_tools;
 
 use crate::execution_process::ExecutionProcessServer;
-use crate::runtime::ToolInventoryReadRequest;
-use crate::ActionRespondRequest;
 use crate::AppDataSource;
-use crate::CancelExecutionRequest;
-use crate::ExecutionBackend;
 use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
-use agent_runtime::action_required::{ActionTerminalStatus, PendingActionRestoreOutcome};
-use async_trait::async_trait;
 use lime_agent::{
     run_agent_turn_with_policy, AgentRuntimeState, AgentTurnExecutionRequest,
     AgentTurnProviderConfiguration,
@@ -55,7 +50,7 @@ use lime_agent::{
 use lime_core::database::DbConnection;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use model_provider::current_client::CurrentProviderMessage;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::sync::Arc;
 use std::sync::RwLock;
 
@@ -75,7 +70,7 @@ use app_server_protocol::AgentSessionActionType;
 #[cfg(test)]
 use event_mapper::emit_runtime_agent_event_with_coding_mirror;
 use event_mapper::{
-    emit_proposed_plan_parser_flush, emit_reasoning_finish,
+    emit_agent_message_finish, emit_proposed_plan_parser_flush, emit_reasoning_finish,
     emit_runtime_agent_event_with_coding_mirror_and_plan_parser_with_soul_style,
 };
 
@@ -350,6 +345,7 @@ impl RuntimeBackend {
 
         if execution.cancelled {
             emit_reasoning_finish(&mut reasoning_event_state, "canceled", sink)?;
+            emit_agent_message_finish(&proposed_plan_parser, "interrupted", sink)?;
             sink.emit(RuntimeEvent::new(
                 "turn.canceled",
                 json!({
@@ -367,6 +363,7 @@ impl RuntimeBackend {
         }
 
         emit_reasoning_finish(&mut reasoning_event_state, "completed", sink)?;
+        emit_agent_message_finish(&proposed_plan_parser, "completed", sink)?;
         sink.emit(RuntimeEvent::new(
             "turn.completed",
             json!({
@@ -393,174 +390,6 @@ impl RuntimeBackend {
                 )
             })
             .map(|guard| guard.clone())
-    }
-}
-
-#[async_trait]
-impl ExecutionBackend for RuntimeBackend {
-    fn set_app_data_source(
-        &self,
-        app_data_source: Arc<dyn AppDataSource>,
-    ) -> Result<(), RuntimeCoreError> {
-        let mut guard = self.app_data_source.write().map_err(|_| {
-            RuntimeCoreError::Backend("memory tool app data source lock poisoned".to_string())
-        })?;
-        *guard = Some(app_data_source);
-        Ok(())
-    }
-
-    async fn start_turn(
-        &self,
-        request: ExecutionRequest,
-        sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        self.handle_turn_start(request, sink).await
-    }
-
-    async fn start_turn_with_provider_history(
-        &self,
-        request: ExecutionRequest,
-        provider_history: Vec<CurrentProviderMessage>,
-        sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        self.handle_turn_start_with_provider_history(request, provider_history, sink)
-            .await
-    }
-
-    async fn cancel_turn(
-        &self,
-        request: CancelExecutionRequest,
-        sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        self.agent_state
-            .cancel_session(&request.session.session_id)
-            .await;
-        sink.emit(RuntimeEvent::new(
-            "turn.canceled",
-            json!({ "backend": "runtime" }),
-        ))
-    }
-
-    async fn close_session(
-        &self,
-        session_id: &str,
-        thread_id: &str,
-    ) -> Result<(), RuntimeCoreError> {
-        self.agent_state.cancel_session(session_id).await;
-        self.agent_state
-            .close_mcp_runtime(session_id, thread_id)
-            .await;
-        Ok(())
-    }
-
-    async fn respond_action(
-        &self,
-        request: ActionRespondRequest,
-        sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        let db = initialize_runtime_database(self.db.as_ref())?;
-        self.ensure_agent_initialized(&db).await?;
-        action_response::validate_action_scope(&request)?;
-        if !self
-            .agent_state
-            .contains_pending_action(&request.request_id)
-            .await
-        {
-            let descriptor = request.pending_action_descriptor.clone().ok_or_else(|| {
-                action_response_error("action_descriptor_invalid", &request.request_id)
-            })?;
-            let outcomes = self
-                .agent_state
-                .restore_pending_action_descriptors([descriptor])
-                .await;
-            match outcomes.as_slice() {
-                [PendingActionRestoreOutcome::Restored]
-                | [PendingActionRestoreOutcome::AlreadyPresent] => {}
-                [PendingActionRestoreOutcome::Expired] => {
-                    return Err(action_response_error("action_expired", &request.request_id));
-                }
-                [PendingActionRestoreOutcome::Terminal] => {
-                    let code = match self
-                        .agent_state
-                        .terminal_action_status(&request.request_id)
-                        .await
-                    {
-                        Some(ActionTerminalStatus::NotResumable) => "action_not_resumable",
-                        Some(ActionTerminalStatus::ContinuationClosed) => {
-                            "action_continuation_closed"
-                        }
-                        Some(ActionTerminalStatus::Expired) => "action_expired",
-                        Some(ActionTerminalStatus::Canceled) => "action_canceled",
-                        Some(ActionTerminalStatus::Resolved) => "action_already_resolved",
-                        None => "action_terminal",
-                    };
-                    return Err(action_response_error(code, &request.request_id));
-                }
-                [PendingActionRestoreOutcome::Invalid] | _ => {
-                    return Err(action_response_error(
-                        "action_descriptor_invalid",
-                        &request.request_id,
-                    ));
-                }
-            }
-        }
-        match action_response::handle_action_response(&self.agent_state, &request).await? {
-            action_response::ActionResponseOutcome::Resolved => {
-                sink.emit(action_response::action_resolved_event(&request))
-            }
-            action_response::ActionResponseOutcome::Canceled => {
-                sink.emit(action_response::action_canceled_event(&request))
-            }
-        }
-    }
-
-    async fn read_tool_inventory(
-        &self,
-        request: ToolInventoryReadRequest,
-    ) -> Result<Value, RuntimeCoreError> {
-        self.register_current_native_tools_if_available().await?;
-        let app_data_source = self
-            .app_data_source
-            .read()
-            .map_err(|_| {
-                RuntimeCoreError::Backend(
-                    "tool inventory app data source lock poisoned".to_string(),
-                )
-            })?
-            .clone();
-        tool_inventory::read_tool_inventory(
-            &self.agent_state,
-            request,
-            current_agent_runtime_config_metadata(),
-            app_data_source,
-        )
-        .await
-    }
-
-    async fn prepare_runtime_worker_artifact_events(
-        &self,
-        request: &ExecutionRequest,
-        events: &mut Vec<RuntimeEvent>,
-    ) -> Result<(), RuntimeCoreError> {
-        workspace_patch_host_execution::prepare_runtime_worker_artifact_events(
-            self, request, events,
-        )
-        .await
-    }
-
-    async fn prepare_plugin_worker_request(
-        &self,
-        request: &ExecutionRequest,
-        worker_request: &mut Value,
-    ) -> Result<(), RuntimeCoreError> {
-        plugin_worker_generation::prepare_plugin_worker_request(self, request, worker_request).await
-    }
-}
-
-fn action_response_error(code: &str, request_id: &str) -> RuntimeCoreError {
-    RuntimeCoreError::ActionResponse {
-        code: code.to_string(),
-        request_id: request_id.to_string(),
     }
 }
 

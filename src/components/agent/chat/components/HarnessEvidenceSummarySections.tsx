@@ -3,7 +3,7 @@ import type {
   AgentRuntimeEvidenceBrowserActionIndex,
   AgentRuntimeEvidenceLimeCorePolicyIndex,
   AgentRuntimeEvidenceLimeCorePolicyItem,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

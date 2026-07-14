@@ -1,4 +1,4 @@
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 
 const MAX_WORKSPACE_SKILL_BINDINGS = 5;
 const MAX_PERMISSION_SUMMARY_ITEMS = 4;

@@ -3,13 +3,8 @@ import { safeListen } from "@/lib/dev-bridge";
 import {
   createAgentRuntimeEventListener,
   createAgentRuntimeEventSource,
-  dedupeAgentRuntimeEventNames,
   defaultAgentRuntimeEventSource,
-  getAgentSubagentStatusEventName,
-  getAgentSubagentStreamEventName,
   listenAgentRuntimeEvent,
-  listenAgentSubagentStatus,
-  listenAgentSubagentStream,
   publishAgentRuntimeEvent,
 } from "./agentRuntimeEvents";
 import { resetAgentRuntimeEventSequenceGatesForTests } from "./agentRuntime/eventSequenceGate";
@@ -22,70 +17,6 @@ describe("agentRuntimeEvents API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetAgentRuntimeEventSequenceGatesForTests();
-  });
-
-  it("应生成并去重子代理运行时事件名", () => {
-    expect(getAgentSubagentStatusEventName("session-1")).toBe(
-      "agent_subagent_status:session-1",
-    );
-    expect(getAgentSubagentStreamEventName("session-1")).toBe(
-      "agent_subagent_stream:session-1",
-    );
-    expect(
-      dedupeAgentRuntimeEventNames([
-        "agent_subagent_status:session-1",
-        null,
-        "agent_subagent_status:session-1",
-        undefined,
-        "agent_subagent_status:session-2",
-      ]),
-    ).toEqual([
-      "agent_subagent_status:session-1",
-      "agent_subagent_status:session-2",
-    ]);
-  });
-
-  it("应代理子代理状态与流事件监听", async () => {
-    vi.mocked(safeListen)
-      .mockImplementationOnce(async (_event, handler) => {
-        handler({
-          payload: {
-            type: "subagent_status_changed",
-            session_id: "session-1",
-            status: "running",
-          },
-        });
-        return vi.fn();
-      })
-      .mockImplementationOnce(async (_event, handler) => {
-        handler({
-          payload: {
-            type: "tool_start",
-            tool_id: "tool-1",
-            tool_name: "browser_snapshot",
-          },
-        });
-        return vi.fn();
-      });
-
-    const statusListener = vi.fn();
-    const streamListener = vi.fn();
-
-    await listenAgentSubagentStatus("session-1", statusListener);
-    await listenAgentSubagentStream("session-1", streamListener);
-
-    expect(safeListen).toHaveBeenNthCalledWith(
-      1,
-      "agent_subagent_status:session-1",
-      expect.any(Function),
-    );
-    expect(safeListen).toHaveBeenNthCalledWith(
-      2,
-      "agent_subagent_stream:session-1",
-      expect.any(Function),
-    );
-    expect(statusListener).toHaveBeenCalledTimes(1);
-    expect(streamListener).toHaveBeenCalledTimes(1);
   });
 
   it("应代理通用 runtime 事件监听", async () => {
@@ -158,7 +89,7 @@ describe("agentRuntimeEvents API", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it("应允许 App Server message.delta 由 turn_completed 收口后进入现有 listener", async () => {
+  it("不应让缺少 canonical Item lifecycle 的 raw message/turn 事件进入 listener", async () => {
     vi.mocked(safeListen).mockResolvedValueOnce(vi.fn());
 
     const listener = vi.fn();
@@ -184,14 +115,10 @@ describe("agentRuntimeEvents API", () => {
       timestamp: "2026-06-12T00:00:01.000Z",
     });
 
-    expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
-      "text_delta",
-      "turn_completed",
-    ]);
+    expect(listener).not.toHaveBeenCalled();
   });
 
-  it("应在本地 runtime event 网关消费 pipeline fan-out 输出", async () => {
+  it("不应为 raw tool.completed 合成 legacy tool fan-out", async () => {
     vi.mocked(safeListen).mockResolvedValueOnce(vi.fn());
 
     const listener = vi.fn();
@@ -210,13 +137,7 @@ describe("agentRuntimeEvents API", () => {
       output: "done",
     });
 
-    expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
-      "tool_start",
-      "tool_end",
-    ]);
-    expect(
-      listener.mock.calls.map(([event]) => event.payload.toolCallId),
-    ).toEqual(["tool-fanout", "tool-fanout"]);
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it("应支持注入自定义 listen transport 与 event source", async () => {
@@ -225,17 +146,13 @@ describe("agentRuntimeEvents API", () => {
     const eventSource = createAgentRuntimeEventSource({ listenEvent });
     const handler = vi.fn();
 
-    await eventSource.listenSubagentStatus("session-9", handler);
-    await eventSource.listenSubagentStream("session-9", handler);
-
-    expect(listen).toHaveBeenNthCalledWith(
-      1,
-      "agent_subagent_status:session-9",
-      expect.any(Function),
+    await eventSource.listenRuntimeEvent(
+      "agentSession/event/session-9",
+      handler,
     );
-    expect(listen).toHaveBeenNthCalledWith(
-      2,
-      "agent_subagent_stream:session-9",
+
+    expect(listen).toHaveBeenCalledWith(
+      "agentSession/event/session-9",
       expect.any(Function),
     );
     expect(defaultAgentRuntimeEventSource.listenRuntimeEvent).toBeTypeOf(

@@ -596,7 +596,7 @@ function buildWebFixtureResponses() {
 }
 
 function buildAgentControlFixtureResponse(context) {
-  const requestText = requestTextFromFixtureContext(context);
+  const requestText = requestUserMessagesText(context?.body);
   if (
     requestText.includes("AGENT_RUNTIME_AGENT_CHILD_READY") ||
     requestText.includes("AGENT_RUNTIME_AGENT_CHILD_FOLLOWUP")
@@ -1502,16 +1502,59 @@ function providerRequestSummaries(fixtureRequests) {
       stream: request?.body?.stream === true,
       toolCount: toolNames.length,
       toolNames,
+      responseKind: request?.responseKind || null,
+      responseToolName: request?.responseToolName || null,
+      responseError: request?.responseError || null,
     };
   });
 }
 
 function getToolCalls(threadRead) {
-  return Array.isArray(threadRead?.tool_calls)
+  const toolCalls = Array.isArray(threadRead?.tool_calls)
     ? threadRead.tool_calls
     : Array.isArray(threadRead?.toolCalls)
       ? threadRead.toolCalls
       : [];
+  const threadItems = Array.isArray(threadRead?.thread_items)
+    ? threadRead.thread_items
+    : Array.isArray(threadRead?.threadItems)
+      ? threadRead.threadItems
+      : [];
+  const collabOperationToToolName = {
+    spawn: "spawn_agent",
+    sendMessage: "send_message",
+    followUp: "followup_task",
+    wait: "wait_agent",
+    interrupt: "interrupt_agent",
+  };
+  const seenCallIds = new Set(
+    toolCalls
+      .map((call) => String(call?.call_id || call?.callId || "").trim())
+      .filter(Boolean),
+  );
+  const canonicalCollabCalls = threadItems.flatMap((item) => {
+    const operation = String(
+      item?.operation ||
+        (item?.type === "subagent_activity" ? item?.status_label : "") ||
+        "",
+    ).trim();
+    const toolName = collabOperationToToolName[operation];
+    const callId = String(item?.call_id || item?.callId || "").trim();
+    if (!toolName || !callId || seenCallIds.has(callId)) {
+      return [];
+    }
+    seenCallIds.add(callId);
+    return [
+      {
+        tool_name: toolName,
+        call_id: callId,
+        status: item?.status,
+        success: item?.metadata?.success ?? null,
+        output: item?.output,
+      },
+    ];
+  });
+  return [...toolCalls, ...canonicalCollabCalls];
 }
 
 function toolName(toolCall) {
@@ -1990,6 +2033,7 @@ async function waitForRuntimeCompletion(
       },
       fixtureChatRequestCount: fixtureChatRequestCount(fixture.requests),
       expectedFixtureChatRequestCount: expectedRequestCount,
+      providerRequests: providerRequestSummaries(fixture.requests),
       turnObserved,
       pendingRequestCount: pendingRequests.length,
       completedToolCount: matrix.filter(
@@ -2327,6 +2371,17 @@ async function runSmoke(options) {
     if (options.write) {
       const writtenPath = writeEvidenceWithFallback(options.output, evidence);
       console.log(`${LOG_PREFIX} evidence=${writtenPath}`);
+    }
+
+    if (failedAssertions.length > 0) {
+      console.error(
+        `${LOG_PREFIX} failure=${JSON.stringify({
+          failedAssertions,
+          providerRequests,
+          finalSnapshot: finalState.snapshot,
+          matrix,
+        })}`,
+      );
     }
 
     for (const key of failedAssertions) {

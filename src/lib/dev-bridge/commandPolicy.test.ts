@@ -763,7 +763,8 @@ describe("commandPolicy", () => {
 
   it("集中声明运行时真相事件前缀", () => {
     expect(isBridgeTruthEvent("agent_stream_session-1")).toBe(true);
-    expect(isBridgeTruthEvent("agent_subagent_status:session-1")).toBe(true);
+    expect(isBridgeTruthEvent("agent_subagent_status:session-1")).toBe(false);
+    expect(isBridgeTruthEvent("agent_subagent_stream:session-1")).toBe(false);
     expect(isBridgeTruthEvent("embedded-browser-view-state")).toBe(true);
     expect(isBridgeTruthEvent("embedded-browser-view-load-failed")).toBe(true);
     expect(isBridgeTruthEvent("retired-runtime-event")).toBe(false);

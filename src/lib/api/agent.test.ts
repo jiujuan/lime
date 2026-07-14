@@ -805,40 +805,6 @@ describe("Agent API 治理护栏", () => {
         workspace_id: "workspace-2",
         working_dir: "/tmp/workspace-2",
         execution_strategy: "react",
-        child_subagent_sessions: [
-          {
-            id: "subagent-session-1",
-            name: "Image #1",
-            created_at: 1710001200,
-            updated_at: 1710001800,
-            session_type: "sub_agent",
-            model: "gpt-5.4-mini",
-            role_hint: "image_editor",
-            task_summary: "处理封面图优化",
-            origin_tool: "Agent",
-            runtime_status: "completed",
-          },
-        ],
-        subagent_parent_context: {
-          parent_session_id: "parent-session-1",
-          parent_session_name: "主线程会话",
-          role_hint: "image_editor",
-          task_summary: "处理封面图优化",
-          origin_tool: "Agent",
-          created_from_turn_id: "turn-2",
-          sibling_subagent_sessions: [
-            {
-              id: "subagent-session-2",
-              name: "Image #2",
-              created_at: 1710001250,
-              updated_at: 1710001850,
-              session_type: "sub_agent",
-              role_hint: "image_reviewer",
-              task_summary: "检查图片导出尺寸",
-              runtime_status: "running",
-            },
-          ],
-        },
         queued_turns: [
           {
             queued_turn_id: "queued-1",
@@ -902,41 +868,6 @@ describe("Agent API 治理护栏", () => {
       workspace_id: "workspace-2",
       working_dir: "/tmp/workspace-2",
       execution_strategy: "react",
-      child_subagent_sessions: [
-        {
-          id: "subagent-session-1",
-          name: "Image #1",
-          created_at: 1710001200,
-          updated_at: 1710001800,
-          session_type: "sub_agent",
-          model: "gpt-5.4-mini",
-          role_hint: "image_editor",
-          task_summary: "处理封面图优化",
-          origin_tool: "Agent",
-          runtime_status: "completed",
-        },
-      ],
-      subagent_parent_context: {
-        parent_session_id: "parent-session-1",
-        parent_session_name: "主线程会话",
-        role_hint: "image_editor",
-        task_summary: "处理封面图优化",
-        origin_tool: "Agent",
-        created_from_turn_id: "turn-2",
-        sibling_subagent_sessions: [
-          {
-            id: "subagent-session-2",
-            name: "Image #2",
-            created_at: 1710001250,
-            updated_at: 1710001850,
-            session_type: "sub_agent",
-            origin_tool: undefined,
-            role_hint: "image_reviewer",
-            task_summary: "检查图片导出尺寸",
-            runtime_status: "running",
-          },
-        ],
-      },
       queued_turns: [
         {
           queued_turn_id: "queued-1",

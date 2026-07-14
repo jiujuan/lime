@@ -1,4 +1,4 @@
-import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime";
+import type { ManagedObjectiveStatus } from "@/lib/api/agentRuntime/sessionTypes";
 
 export type ManagedObjectiveAction =
   | "clear"

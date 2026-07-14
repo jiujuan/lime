@@ -669,7 +669,6 @@ function appServerSessionReadToRuntimeDetail(
     queued_turns: [],
     thread_read: projectAppServerSessionReadToThreadReadModel(response),
     todo_items: [],
-    child_subagent_sessions: [],
   };
 }
 
@@ -734,7 +733,9 @@ function readSessionDetail(
   if (!isRecord(response.detail)) {
     return null;
   }
-  const detail = response.detail as Partial<AgentSessionDetail>;
+  const detail = omitLegacyRosterFields(
+    response.detail as Partial<AgentSessionDetail>,
+  );
   const fallback = appServerSessionReadToRuntimeDetail(response);
   const detailExecutionRuntime = isRecord(detail.execution_runtime)
     ? detail.execution_runtime
@@ -791,10 +792,17 @@ function readSessionDetail(
     todo_items: Array.isArray(detail.todo_items)
       ? detail.todo_items
       : fallback.todo_items,
-    child_subagent_sessions: Array.isArray(detail.child_subagent_sessions)
-      ? detail.child_subagent_sessions
-      : fallback.child_subagent_sessions,
   };
+}
+
+function omitLegacyRosterFields(
+  detail: Partial<AgentSessionDetail>,
+): Partial<AgentSessionDetail> {
+  const current = { ...detail } as Partial<AgentSessionDetail> &
+    Record<string, unknown>;
+  delete current["child_subagent_sessions"];
+  delete current["subagent_parent_context"];
+  return current;
 }
 
 function mergeThreadReadDetail(

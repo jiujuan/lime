@@ -407,12 +407,12 @@ describe("AgentThreadTimeline", () => {
         ...createBaseItem("subagent-1", 1),
         type: "subagent_activity",
         status: "completed",
-        status_label: "completed",
+        status_label: "interacted",
         title: "Image #1",
         summary: "封面图已生成",
         role: "image_editor",
         model: "gpt-image-1",
-        session_id: "child-session-1",
+        session_id: "thread-child",
       },
     ];
 
@@ -434,6 +434,6 @@ describe("AgentThreadTimeline", () => {
       button?.click();
     });
 
-    expect(onOpenSubagentSession).toHaveBeenCalledWith("child-session-1");
+    expect(onOpenSubagentSession).toHaveBeenCalledWith("thread-child");
   });
 });

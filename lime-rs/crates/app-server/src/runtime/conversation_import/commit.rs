@@ -11,8 +11,8 @@ use crate::{RuntimeCore, RuntimeCoreError, RuntimeEvent, SidecarWriteRequest};
 use app_server_protocol::{
     AgentAttachment, AgentInput, AgentSessionStartParams, AgentSessionStatus, AgentTurn,
     AgentTurnStatus, BusinessObjectRef, ConversationImportSourceClient,
-    ConversationImportThreadCommitParams, ConversationImportThreadCommitResponse,
-    ConversationImportThreadStatus,
+    ConversationImportSourceProvenance, ConversationImportThreadCommitParams,
+    ConversationImportThreadCommitResponse, ConversationImportThreadStatus,
 };
 use serde_json::json;
 
@@ -121,7 +121,7 @@ fn commit_codex_thread(
         .session;
 
     let mut projection_selector = ImportedRuntimeEventProjectionSelector::default();
-    let prepared_turns = prepare_imported_turns(turns, &mut projection_selector);
+    let prepared_turns = prepare_imported_turns(turns, &mut projection_selector)?;
     let projection_summary = summarize_prepared_turns(&prepared_turns);
     let sidecar_ref =
         persist_imported_runtime_event_sidecar(core, &session.session_id, &prepared_turns)?;
@@ -245,6 +245,7 @@ struct PreparedImportedTurn {
     user_attachments: Vec<AgentAttachment>,
     user_timestamp: Option<String>,
     user_provenance: Option<app_server_protocol::ConversationImportSourceProvenance>,
+    user_message: ImportedRuntimeEvent,
     source_events: Vec<ImportedRuntimeEvent>,
     materialized_events: Vec<ImportedRuntimeEvent>,
     projection_summary: ImportedRuntimeEventProjectionSummary,
@@ -430,8 +431,12 @@ fn append_imported_turns(
             stored.turns.push(turn);
         }
 
+        let mut materialized_source_events =
+            Vec::with_capacity(imported_turn.materialized_events.len() + 1);
+        materialized_source_events.push(imported_turn.user_message);
+        materialized_source_events.extend(imported_turn.materialized_events);
         let materialized_events = lower_imported_runtime_events_for_commit(
-            &imported_turn.materialized_events,
+            &materialized_source_events,
             session_id,
             &thread_id,
             &turn_id,
@@ -455,12 +460,18 @@ fn append_imported_turns(
 fn prepare_imported_turns(
     turns: Vec<ImportedTurn>,
     projection_selector: &mut ImportedRuntimeEventProjectionSelector,
-) -> Vec<PreparedImportedTurn> {
+) -> Result<Vec<PreparedImportedTurn>, RuntimeCoreError> {
     turns
         .into_iter()
         .map(|turn| {
+            let user_message = imported_message_draft(
+                "user",
+                &turn.user_text,
+                &turn.user_attachments,
+                turn.user_provenance.as_ref(),
+            )?;
             let (mut source_events, has_terminal_event) =
-                normalize_imported_turn_events(turn.events);
+                normalize_imported_turn_events(turn.events)?;
             if !has_terminal_event {
                 source_events.push(ImportedRuntimeEvent::new(
                     "turn.completed",
@@ -475,15 +486,16 @@ fn prepare_imported_turns(
                     &source_events,
                     projection_selector,
                 );
-            PreparedImportedTurn {
+            Ok(PreparedImportedTurn {
                 user_text: turn.user_text,
                 user_attachments: turn.user_attachments,
                 user_timestamp: turn.user_timestamp,
                 user_provenance: turn.user_provenance,
+                user_message,
                 source_events,
                 materialized_events,
                 projection_summary,
-            }
+            })
         })
         .collect()
 }
@@ -593,22 +605,19 @@ fn attach_import_projection_metadata(
 
 fn normalize_imported_turn_events(
     events: Vec<ImportedTurnEvent>,
-) -> (Vec<ImportedRuntimeEvent>, bool) {
+) -> Result<(Vec<ImportedRuntimeEvent>, bool), RuntimeCoreError> {
     let mut normalized = Vec::new();
     let mut normalizer = ImportedRuntimeEventNormalizer::new();
 
     for event in events {
         match event {
             ImportedTurnEvent::AssistantMessage(message) => {
-                normalized.push(ImportedRuntimeEvent::new(
-                    "message.delta",
-                    json!({
-                        "text": message.text,
-                        "imported": true,
-                        "sourceClient": "codex",
-                        "sourceProvenance": message.provenance,
-                    }),
-                ));
+                normalized.push(imported_message_draft(
+                    "assistant",
+                    &message.text,
+                    &[],
+                    message.provenance.as_ref(),
+                )?);
             }
             ImportedTurnEvent::Runtime(runtime_event) => {
                 normalized.extend(normalizer.push(runtime_event));
@@ -618,7 +627,66 @@ fn normalize_imported_turn_events(
 
     normalized.extend(normalizer.finish());
 
-    (normalized, normalizer.has_terminal_event())
+    Ok((normalized, normalizer.has_terminal_event()))
+}
+
+fn imported_message_draft(
+    role: &'static str,
+    text: &str,
+    attachments: &[AgentAttachment],
+    provenance: Option<&ConversationImportSourceProvenance>,
+) -> Result<ImportedRuntimeEvent, RuntimeCoreError> {
+    let provenance = provenance.ok_or_else(|| {
+        RuntimeCoreError::Backend(format!(
+            "Codex import {role} message is missing source provenance"
+        ))
+    })?;
+    let source_event_seq = provenance.source_event_seq.ok_or_else(|| {
+        RuntimeCoreError::Backend(format!(
+            "Codex import {role} message is missing source event sequence"
+        ))
+    })?;
+    let ordinal = u64::try_from(source_event_seq).map_err(|_| {
+        RuntimeCoreError::Backend(format!(
+            "Codex import {role} message source event sequence is out of range: {source_event_seq}"
+        ))
+    })?;
+    let item_role = if role == "user" { "user" } else { "agent" };
+    let item_id = provenance
+        .source_call_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("imported-{item_role}_{source_event_seq}"));
+    let source_provenance = serde_json::to_value(provenance).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "unable to serialize Codex import {role} message provenance: {error}"
+        ))
+    })?;
+    let attachments = serde_json::to_value(attachments).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "unable to serialize Codex import {role} message attachments: {error}"
+        ))
+    })?;
+
+    Ok(ImportedRuntimeEvent::new(
+        if role == "user" {
+            "import.message"
+        } else {
+            "message.delta"
+        },
+        json!({
+            "itemId": item_id,
+            "ordinal": ordinal,
+            "role": role,
+            "text": text,
+            "attachments": attachments,
+            "imported": true,
+            "sourceClient": "codex",
+            "sourceEventSeq": source_event_seq,
+            "sourceProvenance": source_provenance,
+        }),
+    ))
 }
 
 fn import_business_object_ref(

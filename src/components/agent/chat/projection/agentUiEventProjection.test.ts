@@ -890,7 +890,7 @@ describe("agentUiEventProjection", () => {
     });
   });
 
-  it("应把 action、artifact、queue 和 subagent 映射到独立 taxonomy", () => {
+  it("应把 action、artifact 和 queue 映射到独立 taxonomy", () => {
     expect(
       buildAgentUiProjectionEvents(
         {
@@ -1050,242 +1050,20 @@ describe("agentUiEventProjection", () => {
         clearedCount: 2,
       },
     });
+  });
 
-    const runningSubagentEvents = buildAgentUiProjectionEvents(
-      {
-        type: "subagent_status_changed",
-        session_id: "child-1",
-        root_session_id: "session-1",
-        parent_session_id: "session-1",
-        status: "running",
-        latest_turn_id: "turn-child-1",
-        latest_turn_status: "queued",
-        queued_turn_count: 2,
-        team_phase: "queued",
-        team_parallel_budget: 3,
-        team_active_count: 1,
-        team_queued_count: 2,
-        provider_concurrency_group: "openai:gpt-5.2",
-        provider_parallel_budget: 4,
-        queue_reason: "provider_busy",
-        retryable_overload: true,
-      },
-      { ...baseContext, threadId: "thread-1", turnId: "turn-parent-1" },
-    );
-    expect(runningSubagentEvents).toHaveLength(6);
+  it("已退役的 raw subagent status 不应进入 Agent UI 投影", () => {
     expect(
-      runningSubagentEvents.every((event) => event.threadId === "thread-1"),
-    ).toBe(true);
-    expect(runningSubagentEvents[0]).toMatchObject({
-      type: "agent.changed",
-      taskId: "child-1",
-      agentId: "child-1",
-      parentSessionId: "session-1",
-      threadId: "thread-1",
-      turnId: "turn-parent-1",
-      owner: "agent",
-      scope: "agent",
-      phase: "acting",
-      surface: "team_roster",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "running",
-      latestTurnStatus: "queued",
-      teamPhase: "queued",
-      teamParallelBudget: 3,
-      teamActiveCount: 1,
-      teamQueuedCount: 2,
-      queuedTurnCount: 2,
-      providerConcurrencyGroup: "openai:gpt-5.2",
-      providerParallelBudget: 4,
-      queueReason: "provider_busy",
-      retryableOverload: true,
-    });
-    expect(runningSubagentEvents[1]).toMatchObject({
-      type: "task.changed",
-      owner: "task",
-      scope: "task",
-      phase: "acting",
-      surface: "task_capsule",
-      control: "stop",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "running",
-      payload: {
-        taskEvent: "subagent_status_changed",
-        childSessionId: "child-1",
-        latestTurnId: "turn-child-1",
-        latestTurnStatus: "queued",
-        teamPhase: "queued",
-        queueReason: "provider_busy",
-      },
-    });
-    expect(runningSubagentEvents[2]).toMatchObject({
-      type: "team.changed",
-      owner: "team",
-      scope: "team",
-      phase: "acting",
-      surface: "team_roster",
-      topology: "parallel_workers",
-      runtimeEntity: "subagent_turn",
-      payload: {
-        teamEvent: "teammate_status_changed",
-        childSessionId: "child-1",
-        parentSessionId: "session-1",
-        status: "running",
-        queuedTurnCount: 2,
-      },
-    });
-    expect(runningSubagentEvents[3]).toMatchObject({
-      type: "agent.changed",
-      owner: "agent",
-      scope: "agent",
-      phase: "acting",
-      surface: "teammate_transcript",
-      control: "open_detail",
-      transcriptRef: "child-1:turn-child-1",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "running",
-      payload: {
-        agentEvent: "teammate_transcript_ref",
-        transcriptRef: "child-1:turn-child-1",
-        childSessionId: "child-1",
-      },
-    });
-    expect(runningSubagentEvents[4]).toMatchObject({
-      type: "agent.spawned",
-      sourceType: "subagent_status_changed",
-      taskId: "child-1",
-      agentId: "child-1",
-      parentSessionId: "session-1",
-      owner: "agent",
-      scope: "agent",
-      phase: "acting",
-      surface: "delegation_graph",
-      control: "delegate",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "running",
-      payload: {
-        agentEvent: "subagent_active",
-        spawnSource: "subagent_status_changed",
-      },
-    });
-    expect(runningSubagentEvents[5]).toMatchObject({
-      type: "agent.handoff",
-      sourceType: "subagent_status_changed",
-      handoffId: "session-1:handoff:child-1",
-      parentSessionId: "session-1",
-      taskId: "child-1",
-      agentId: "child-1",
-      phase: "accepted",
-      surface: "handoff_lane",
-      topology: "specialist_handoff",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "running",
-      payload: {
-        handoffEvent: "specialist_handoff",
-        status: "accepted",
-        sourceStatus: "running",
-        from: "session-1",
-        to: "child-1",
-        reason: "subagent_status_changed",
-        resumeTarget: "agent-runtime://session/child-1",
-        contextBoundary: "subagent_session",
-        transcriptRef: "child-1:turn-child-1",
-      },
-    });
-
-    const completedSubagentEvents = buildAgentUiProjectionEvents(
-      {
-        type: "subagent_status_changed",
-        session_id: "child-1",
-        root_session_id: "session-1",
-        parent_session_id: "session-1",
-        status: "completed",
-        latest_turn_id: "turn-child-done",
-        usage: {
-          input_tokens: 120,
-          output_tokens: 32,
-          cached_input_tokens: 5,
-          cache_creation_input_tokens: 7,
-        },
-        duration_ms: 12_345,
-        tool_count: 4,
-        result_ref: "artifact://worker-result-1",
-      },
-      baseContext,
-    );
-    expect(completedSubagentEvents).toHaveLength(7);
-    expect(completedSubagentEvents[1]).toMatchObject({
-      type: "task.changed",
-      control: "close",
-    });
-    expect(completedSubagentEvents[3]).toMatchObject({
-      type: "agent.changed",
-      surface: "teammate_transcript",
-      control: "open_detail",
-      transcriptRef: "child-1:turn-child-done",
-      runtimeStatus: "completed",
-    });
-    expect(completedSubagentEvents[4]).toMatchObject({
-      type: "agent.completed",
-      owner: "agent",
-      phase: "completed",
-      surface: "delegation_graph",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "completed",
-    });
-    expect(completedSubagentEvents[5]).toMatchObject({
-      type: "worker.notification",
-      workerNotificationId: "child-1:completed",
-      transcriptRef: "child-1:turn-child-done",
-      workerUsage: {
-        inputTokens: 120,
-        outputTokens: 32,
-        cachedInputTokens: 5,
-        cacheCreationInputTokens: 7,
-        totalTokens: 152,
-      },
-      owner: "agent",
-      phase: "completed",
-      surface: "worker_notifications",
-      runtimeEntity: "subagent_turn",
-      payload: {
-        notificationKind: "worker_completed",
-        status: "completed",
-        childSessionId: "child-1",
-        transcriptRef: "child-1:turn-child-done",
-        workerUsage: {
-          inputTokens: 120,
-          outputTokens: 32,
-          cachedInputTokens: 5,
-          cacheCreationInputTokens: 7,
-          totalTokens: 152,
-        },
-        durationMs: 12345,
-        toolCount: 4,
-        resultRef: "artifact://worker-result-1",
-      },
-    });
-    expect(completedSubagentEvents[6]).toMatchObject({
-      type: "agent.handoff",
-      sourceType: "subagent_status_changed",
-      handoffId: "session-1:handoff:child-1",
-      parentSessionId: "session-1",
-      taskId: "child-1",
-      agentId: "child-1",
-      phase: "reconciling",
-      surface: "handoff_lane",
-      persistence: "archive",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "completed",
-      payload: {
-        handoffEvent: "specialist_handoff",
-        status: "returned",
-        sourceStatus: "completed",
-        from: "session-1",
-        to: "child-1",
-        resultRef: "artifact://worker-result-1",
-      },
-    });
+      buildAgentUiProjectionEvents(
+        {
+          type: "subagent_status_changed",
+          session_id: "child-1",
+          root_session_id: "session-1",
+          status: "running",
+        } as unknown as AgentEvent,
+        baseContext,
+      ),
+    ).toEqual([]);
   });
 
   it("应从 artifact metadata 的 requested fix 执行结果即时回写 work_board", () => {

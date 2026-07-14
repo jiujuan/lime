@@ -3,7 +3,7 @@ import {
   buildTeamMemoryShadowRequestMetadata,
   type TeamMemorySnapshot,
 } from "@/lib/teamMemorySync";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import {
   buildHarnessRequestMetadata,
   type BuildHarnessRequestMetadataOptions,

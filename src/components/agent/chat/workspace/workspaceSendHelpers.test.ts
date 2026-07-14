@@ -1,20 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
-import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import {
   buildGeneralWorkbenchSendBoundaryState,
   buildGeneralWorkbenchResumePromptFromRunState,
   buildInitialDispatchKey,
-  buildRuntimeTeamDispatchPreviewMessages,
   buildSubmissionPreviewMessages,
   buildWorkspaceRequestMetadata,
   createSubmissionPreviewSnapshot,
   serviceSkillLaunchRequiresProject,
-  resolveRuntimeTeamDispatchPreviewState,
 } from "./workspaceSendHelpers";
 
-describe("workspaceSendHelpers runtime team preview", () => {
+describe("workspaceSendHelpers", () => {
   beforeEach(async () => {
     await changeLimeLocale("zh-CN");
   });
@@ -651,147 +648,6 @@ describe("workspaceSendHelpers runtime team preview", () => {
       actionLabel: "继续上次生成",
       description: expect.stringContaining("撰写主稿"),
     });
-  });
-
-  it("应在失败预览中覆盖 formationState 的错误信息", () => {
-    const state = resolveRuntimeTeamDispatchPreviewState({
-      key: "runtime-team-failed",
-      prompt: "请继续处理",
-      images: [],
-      baseMessageCount: 0,
-      status: "failed",
-      failureMessage: "Provider 认证失败",
-      formationState: {
-        requestId: "runtime-1",
-        status: "forming",
-        label: "修复 Team",
-        summary: "分析、执行、验证三段式推进。",
-        members: [],
-        blueprint: null,
-        updatedAt: Date.now(),
-      },
-    });
-
-    expect(state).toMatchObject({
-      status: "failed",
-      errorMessage: "Provider 认证失败",
-    });
-  });
-
-  it("formed 预览消息应使用任务叙事", () => {
-    const messages = buildRuntimeTeamDispatchPreviewMessages({
-      key: "runtime-team-formed",
-      prompt: "请拆成分析、执行、验证三个并行步骤继续推进",
-      images: [],
-      baseMessageCount: 0,
-      status: "formed",
-      formationState: {
-        requestId: "runtime-formed-1",
-        status: "formed",
-        label: "修复 Team",
-        summary: "分析、执行、验证三段式推进。",
-        members: [
-          {
-            id: "task-1",
-            label: "分析",
-            summary: "收敛问题边界。",
-            roleKey: "explorer",
-            profileId: "code-explorer",
-            skillIds: ["repo-exploration"],
-            status: "planned",
-          },
-          {
-            id: "task-2",
-            label: "执行",
-            summary: "完成修复并汇报结果。",
-            roleKey: "executor",
-            profileId: "code-executor",
-            skillIds: ["bounded-implementation"],
-            status: "planned",
-          },
-        ],
-        blueprint: {
-          label: "代码排障 profile",
-          summary: "分析、执行、验证三段式推进。",
-          roles: [],
-        },
-        updatedAt: Date.now(),
-      },
-    });
-
-    expect(messages).toHaveLength(2);
-    expect(messages[1]?.content).toContain("协作分工如下");
-    expect(messages[1]?.content).toContain("这些任务会分别展开处理");
-    expect(messages[1]?.runtimeStatus).toMatchObject({
-      title: "协作执行已准备好",
-      detail: "分析、执行、验证三段式推进。",
-      checkpoints: [
-        "当前协作配置：修复 Subagents profile",
-        "已分配 2 项任务",
-        "主对话会持续同步关键进展",
-      ],
-    });
-  });
-
-  it("forming 预览消息应提示等待任务接手", () => {
-    const messages = buildRuntimeTeamDispatchPreviewMessages({
-      key: "runtime-team-forming",
-      prompt: "请先拆任务再继续",
-      images: [],
-      baseMessageCount: 0,
-      status: "forming",
-      formationState: {
-        requestId: "runtime-forming-1",
-        status: "forming",
-        label: "排障 Team",
-        summary: "分析、执行两段式推进。",
-        members: [],
-        blueprint: null,
-        updatedAt: Date.now(),
-      },
-    });
-
-    expect(messages[1]?.isThinking).toBe(true);
-    expect(messages[1]?.runtimeStatus).toMatchObject({
-      title: "正在准备协作执行",
-      detail:
-        "系统正在根据当前任务准备协作执行，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
-      checkpoints: ["确认当前任务目标", "准备协作执行", "等待任务接手处理"],
-    });
-  });
-
-  it("Subagents 本地预览应保持 neutral 文案并读取 memory.soul resolver 输出", () => {
-    const soulCopy = resolveSoulInteractionCopy({
-      soul: {
-        enabled: true,
-        style_profile_id: "cheeky_sassy_executor",
-      },
-    });
-    const messages = buildRuntimeTeamDispatchPreviewMessages(
-      {
-        key: "runtime-team-soul",
-        prompt: "请先拆任务再继续",
-        images: [],
-        baseMessageCount: 0,
-        status: "forming",
-        formationState: {
-          requestId: "runtime-soul-1",
-          status: "forming",
-          label: "排障 Team",
-          summary: "分析、执行两段式推进。",
-          members: [],
-          blueprint: null,
-          updatedAt: Date.now(),
-        },
-      },
-      soulCopy,
-    );
-
-    expect(messages[1]).toMatchObject({
-      role: "assistant",
-      content: soulCopy.subagentsPreparingContent,
-    });
-    expect(messages[1]?.content).not.toMatch(/小活儿|活儿|小队|Subagents|别急|安排/u);
   });
 
   it("提交预览应回显用户消息并保留 assistant 等待态", () => {

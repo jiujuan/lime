@@ -1,4 +1,4 @@
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {

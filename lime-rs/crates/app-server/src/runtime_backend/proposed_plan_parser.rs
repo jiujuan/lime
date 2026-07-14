@@ -12,6 +12,8 @@ pub(super) struct ProposedPlanParser {
     plan_text: String,
     plan_revision_index: usize,
     current_revision_id: Option<String>,
+    message_output_emitted: bool,
+    leading_message_whitespace: String,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -36,6 +38,10 @@ enum ProposedPlanSegment {
 }
 
 impl ProposedPlanParser {
+    pub(super) fn has_message_output(&self) -> bool {
+        self.message_output_emitted
+    }
+
     fn push_text(&mut self, text: &str) -> Vec<ProposedPlanSegment> {
         self.buffer.push_str(text);
         let mut segments = Vec::new();
@@ -52,15 +58,11 @@ impl ProposedPlanParser {
     }
 
     fn finish(&mut self) -> Vec<ProposedPlanSegment> {
+        let mut segments = Vec::new();
         match self.mode {
             ParserMode::OutsidePlan => {
-                if self.buffer.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![ProposedPlanSegment::MessageDelta(std::mem::take(
-                        &mut self.buffer,
-                    ))]
-                }
+                let message = std::mem::take(&mut self.buffer);
+                self.push_message_delta(&mut segments, message);
             }
             ParserMode::InsidePlan => {
                 let pending = if CLOSE_TAG.starts_with(&self.buffer) {
@@ -70,18 +72,19 @@ impl ProposedPlanParser {
                     std::mem::take(&mut self.buffer)
                 };
                 self.mode = ParserMode::OutsidePlan;
-                self.append_plan_delta(pending).into_iter().collect()
+                if let Some(segment) = self.append_plan_delta(pending) {
+                    segments.push(segment);
+                }
             }
         }
+        segments
     }
 
     fn process_outside_plan(&mut self, segments: &mut Vec<ProposedPlanSegment>) -> bool {
         if let Some(index) = self.buffer.find(OPEN_TAG) {
             let message = self.buffer[..index].to_string();
             self.buffer.drain(..index + OPEN_TAG.len());
-            if !message.is_empty() {
-                segments.push(ProposedPlanSegment::MessageDelta(message));
-            }
+            self.push_message_delta(segments, message);
             self.start_plan();
             return true;
         }
@@ -93,10 +96,30 @@ impl ProposedPlanParser {
         }
         let message = self.buffer[..emit_len].to_string();
         self.buffer.drain(..emit_len);
-        if !message.is_empty() {
-            segments.push(ProposedPlanSegment::MessageDelta(message));
-        }
+        self.push_message_delta(segments, message);
         true
+    }
+
+    fn push_message_delta(&mut self, segments: &mut Vec<ProposedPlanSegment>, message: String) {
+        if message.is_empty() {
+            return;
+        }
+        if !self.message_output_emitted && message.chars().all(char::is_whitespace) {
+            self.leading_message_whitespace.push_str(&message);
+            return;
+        }
+        let message = if !self.message_output_emitted && !self.leading_message_whitespace.is_empty()
+        {
+            format!(
+                "{}{}",
+                std::mem::take(&mut self.leading_message_whitespace),
+                message
+            )
+        } else {
+            message
+        };
+        self.message_output_emitted = true;
+        segments.push(ProposedPlanSegment::MessageDelta(message));
     }
 
     fn process_inside_plan(&mut self, segments: &mut Vec<ProposedPlanSegment>) -> bool {
@@ -173,11 +196,13 @@ pub(super) fn split_runtime_event(
     let Some(text) = text_from_runtime_payload(&event.payload) else {
         return vec![event];
     };
-    segments_to_runtime_events(parser.push_text(text))
+    let segments = parser.push_text(text);
+    segments_to_runtime_events(segments)
 }
 
 pub(super) fn finish_runtime_events(parser: &mut ProposedPlanParser) -> Vec<RuntimeEvent> {
-    segments_to_runtime_events(parser.finish())
+    let segments = parser.finish();
+    segments_to_runtime_events(segments)
 }
 
 fn text_from_runtime_payload(payload: &Value) -> Option<&str> {
@@ -340,5 +365,66 @@ mod tests {
         assert_eq!(events[0].payload["text"], "说明");
         assert_eq!(events[1].payload["source"], "proposed_plan");
         assert_eq!(events[2].payload["plan"][0]["step"], "计划");
+        assert!(parser.has_message_output());
+    }
+
+    #[test]
+    fn plan_only_output_does_not_create_an_agent_message_lifecycle() {
+        let mut parser = ProposedPlanParser::default();
+        let events = split_runtime_event(
+            RuntimeEvent::new(
+                "message.delta",
+                json!({ "text": "<proposed_plan>\n- 计划</proposed_plan>" }),
+            ),
+            &mut parser,
+        );
+
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec!["plan.delta", "plan.final"]
+        );
+        assert!(!parser.has_message_output());
+    }
+
+    #[test]
+    fn plan_only_output_discards_surrounding_whitespace_message_deltas() {
+        let mut parser = ProposedPlanParser::default();
+        let mut events = split_runtime_event(
+            RuntimeEvent::new(
+                "message.delta",
+                json!({ "text": "\n  <proposed_plan>\n- 计划</proposed_plan>\n  " }),
+            ),
+            &mut parser,
+        );
+        events.extend(finish_runtime_events(&mut parser));
+
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec!["plan.delta", "plan.final"]
+        );
+        assert!(!parser.has_message_output());
+    }
+
+    #[test]
+    fn buffered_plan_prefix_whitespace_is_emitted_with_later_assistant_text() {
+        let mut parser = ProposedPlanParser::default();
+        let events = split_runtime_event(
+            RuntimeEvent::new(
+                "message.delta",
+                json!({ "text": "\n<proposed_plan>\n- 计划</proposed_plan>\n完成" }),
+            ),
+            &mut parser,
+        );
+
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[2].event_type, "message.delta");
+        assert_eq!(events[2].payload["text"], "\n\n完成");
+        assert!(parser.has_message_output());
     }
 }

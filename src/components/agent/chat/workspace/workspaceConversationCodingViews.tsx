@@ -3,8 +3,8 @@ import { formatNumber } from "@/i18n/format";
 import type {
   AgentRuntimeFileCheckpointThreadSummary,
   AgentRuntimeThreadReadModel,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import {
   drainExecutionProcessOutput,
   interruptExecutionProcess,

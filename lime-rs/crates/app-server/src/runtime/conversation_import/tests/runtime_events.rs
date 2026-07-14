@@ -1,5 +1,6 @@
 use super::*;
 use crate::runtime::SidecarStore;
+use crate::ProjectionStore;
 use app_server_protocol::{
     AgentSessionReadParams, ConversationImportThreadRuntimeEventsReadParams,
 };
@@ -745,8 +746,292 @@ fn commit_preserves_imported_update_plan_timeline_item() {
     assert!(reasoning_index < plan_index);
 }
 
+#[tokio::test]
+async fn commit_imports_user_and_agent_items_with_canonical_lifecycle() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-message-lifecycle.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            session_meta("thread-message-lifecycle"),
+            event_user_message("explain the result"),
+            response_reasoning("I should verify the ordering first."),
+            response_agent_message("msg_agent_4", "The verified result is ready."),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+    let projection_store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
+    let core = RuntimeCore::default().with_projection_store(projection_store);
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+    let session_id = response.session.session_id.clone();
+    let stored_events = core.events_for_session(&session_id).expect("stored events");
+    for item_id in ["imported-user_2", "msg_agent_4"] {
+        assert!(stored_events.iter().any(|event| {
+            event.event_type == "item.started" && event.payload["item"]["itemId"] == item_id
+        }));
+        assert!(stored_events.iter().any(|event| {
+            event.event_type == "item.completed" && event.payload["item"]["itemId"] == item_id
+        }));
+    }
+
+    let current = core
+        .read_session_current(AgentSessionReadParams {
+            session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read canonical imported session");
+    let detail = current.detail.expect("canonical detail");
+    let items = detail["thread_read"]["thread_items"]
+        .as_array()
+        .expect("canonical thread items");
+    let user = items
+        .iter()
+        .find(|item| item["id"] == "imported-user_2")
+        .expect("canonical user item");
+    let reasoning = items
+        .iter()
+        .find(|item| item["type"] == "reasoning")
+        .expect("canonical reasoning item");
+    let agent = items
+        .iter()
+        .find(|item| item["id"] == "msg_agent_4")
+        .expect("canonical agent item");
+
+    assert_eq!(user["type"], "user_message");
+    assert_eq!(user["status"], "completed");
+    assert_eq!(user["ordinal"], 2);
+    assert_eq!(reasoning["ordinal"], 3);
+    assert_eq!(agent["type"], "agent_message");
+    assert_eq!(agent["status"], "completed");
+    assert_eq!(agent["ordinal"], 4);
+}
+
+#[tokio::test]
+async fn commit_avoids_source_and_runtime_ordinal_collision() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let rollout_path = temp.path().join("rollout-ordinal-collision.jsonl");
+    fs::write(
+        &rollout_path,
+        [
+            session_meta("thread-ordinal-collision"),
+            event_user_message("first turn"),
+            unsupported_rollout_item("turn_context"),
+            unsupported_rollout_item("turn_context"),
+            unsupported_rollout_item("turn_context"),
+            response_function_call(
+                "call_collision",
+                "read_file",
+                serde_json::json!({"path": "/workspace/app/README.md"}),
+            ),
+            response_function_call_output("call_collision", "read"),
+            event_agent_message("first answer"),
+            event_user_message("second turn"),
+            event_agent_message("second answer"),
+        ]
+        .join("\n"),
+    )
+    .expect("write rollout");
+    let projection_store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
+    let core = RuntimeCore::default().with_projection_store(projection_store);
+
+    let response = commit::commit_conversation_import_thread(
+        &core,
+        ConversationImportThreadCommitParams {
+            source_root: Some(temp.path().to_string_lossy().into_owned()),
+            source_path: Some(rollout_path.to_string_lossy().into_owned()),
+            confirmed: true,
+            ..Default::default()
+        },
+    )
+    .expect("commit");
+    let current = core
+        .read_session_current(AgentSessionReadParams {
+            session_id: response.session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read canonical imported session after ordinal collision candidate");
+    let detail = current.detail.expect("canonical detail");
+    let items = detail["thread_read"]["thread_items"]
+        .as_array()
+        .expect("canonical thread items");
+    let ordinals = items
+        .iter()
+        .map(|item| item["ordinal"].as_u64().expect("canonical ordinal"))
+        .collect::<std::collections::BTreeSet<_>>();
+
+    assert_eq!(
+        ordinals.len(),
+        items.len(),
+        "canonical ordinals must be unique"
+    );
+    assert!(items
+        .iter()
+        .any(|item| { item["id"] == "imported-tool-call_collision" && item["ordinal"] == 6 }));
+    assert!(items.iter().any(|item| {
+        item["id"] == "imported-user_9" && item["ordinal"] == 9 && item["status"] == "completed"
+    }));
+    assert!(items.iter().any(|item| {
+        item["id"] == "imported-agent_10" && item["ordinal"] == 10 && item["status"] == "completed"
+    }));
+}
+
 #[test]
-fn commit_preserves_imported_completed_plan_item() {
+fn legacy_import_repair_uses_one_event_sequence_ordinal_domain() {
+    let events = vec![
+        app_server_protocol::AgentEvent {
+            event_id: "legacy-tool-start".to_string(),
+            sequence: 59,
+            session_id: "session-legacy".to_string(),
+            thread_id: Some("thread-legacy".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            event_type: "item.started".to_string(),
+            timestamp: "2026-07-14T00:00:01Z".to_string(),
+            payload: serde_json::json!({
+                "imported": true,
+                "sourceClient": "codex",
+                "item": {
+                    "sessionId": "session-legacy",
+                    "threadId": "thread-legacy",
+                    "turnId": "turn-1",
+                    "itemId": "imported-tool-call_collision",
+                    "sequence": 0,
+                    "ordinal": 126,
+                    "createdAtMs": 0,
+                    "updatedAtMs": 0,
+                    "completedAtMs": null,
+                    "kind": "tool",
+                    "status": "inProgress",
+                    "payload": {
+                        "type": "tool",
+                        "call_id": "call_collision",
+                        "name": "read_file",
+                        "arguments": [],
+                        "output": null
+                    },
+                    "metadata": {}
+                }
+            }),
+        },
+        app_server_protocol::AgentEvent {
+            event_id: "legacy-user".to_string(),
+            sequence: 126,
+            session_id: "session-legacy".to_string(),
+            thread_id: Some("thread-legacy".to_string()),
+            turn_id: Some("turn-2".to_string()),
+            event_type: "message.created".to_string(),
+            timestamp: "2026-07-14T00:00:02Z".to_string(),
+            payload: serde_json::json!({
+                "role": "user",
+                "input": {"text": "continue", "attachments": []}
+            }),
+        },
+        app_server_protocol::AgentEvent {
+            event_id: "legacy-reasoning".to_string(),
+            sequence: 127,
+            session_id: "session-legacy".to_string(),
+            thread_id: Some("thread-legacy".to_string()),
+            turn_id: Some("turn-2".to_string()),
+            event_type: "reasoning.completed".to_string(),
+            timestamp: "2026-07-14T00:00:03Z".to_string(),
+            payload: serde_json::json!({
+                "imported": true,
+                "sourceClient": "codex",
+                "text": "inspect ordering"
+            }),
+        },
+        app_server_protocol::AgentEvent {
+            event_id: "legacy-agent".to_string(),
+            sequence: 128,
+            session_id: "session-legacy".to_string(),
+            thread_id: Some("thread-legacy".to_string()),
+            turn_id: Some("turn-2".to_string()),
+            event_type: "message.delta".to_string(),
+            timestamp: "2026-07-14T00:00:04Z".to_string(),
+            payload: serde_json::json!({
+                "imported": true,
+                "sourceClient": "codex",
+                "role": "assistant",
+                "text": "ordered answer"
+            }),
+        },
+    ];
+
+    let changes = crate::runtime::thread_item_projection::materialize_events(
+        &events,
+        "session-legacy",
+        "thread-legacy",
+    )
+    .expect("materialize legacy import repair");
+    let tool = changes
+        .changed_items
+        .iter()
+        .find(|item| item.item_id.as_str() == "imported-tool-call_collision")
+        .expect("legacy tool item");
+    let user = changes
+        .changed_items
+        .iter()
+        .find(|item| {
+            matches!(
+                item.payload,
+                agent_protocol::ThreadItemPayload::UserMessage { .. }
+            )
+        })
+        .expect("legacy user item");
+    let reasoning = changes
+        .changed_items
+        .iter()
+        .find(|item| {
+            matches!(
+                item.payload,
+                agent_protocol::ThreadItemPayload::Reasoning { .. }
+            )
+        })
+        .expect("legacy reasoning item");
+    let agent = changes
+        .changed_items
+        .iter()
+        .find(|item| {
+            matches!(
+                item.payload,
+                agent_protocol::ThreadItemPayload::AgentMessage { .. }
+            )
+        })
+        .expect("legacy agent item");
+
+    assert_eq!(tool.ordinal, 59);
+    assert_eq!(user.ordinal, 126);
+    assert_eq!(reasoning.ordinal, 127);
+    assert_eq!(agent.ordinal, 128);
+    assert_eq!(agent.status, agent_protocol::ItemStatus::Completed);
+    assert!(agent.completed_at_ms.is_some());
+    assert_ne!(tool.ordinal, user.ordinal);
+}
+
+#[tokio::test]
+async fn commit_preserves_imported_completed_plan_item() {
     let temp = tempfile::tempdir().expect("tempdir");
     let rollout_path = temp.path().join("rollout-completed-plan-item.jsonl");
     fs::write(
@@ -764,7 +1049,11 @@ fn commit_preserves_imported_completed_plan_item() {
         .join("\n"),
     )
     .expect("write rollout");
-    let core = RuntimeCore::default();
+    let projection_store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
+    let core = RuntimeCore::default().with_projection_store(projection_store);
 
     let response = commit::commit_conversation_import_thread(
         &core,
@@ -777,20 +1066,34 @@ fn commit_preserves_imported_completed_plan_item() {
     )
     .expect("commit");
 
-    let read = core
-        .read_session(AgentSessionReadParams {
-            session_id: response.session.session_id,
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("read imported session");
-    let detail = read.detail.expect("detail");
-    let items = detail["items"].as_array().expect("timeline items");
+    let read_params = AgentSessionReadParams {
+        session_id: response.session.session_id,
+        history_limit: None,
+        history_offset: None,
+        history_before_message_id: None,
+    };
+    let presentation_read = core
+        .read_session(read_params.clone())
+        .expect("read imported presentation");
+    let canonical_read = core
+        .read_session_current(read_params)
+        .await
+        .expect("read imported canonical session");
+    let presentation_detail = presentation_read.detail.expect("presentation detail");
+    let canonical_detail = canonical_read.detail.expect("canonical detail");
+    let items = presentation_detail["items"]
+        .as_array()
+        .expect("timeline items");
     let plan = items
         .iter()
         .find(|item| item["type"] == "plan")
         .expect("plan item");
+    let canonical_plan = canonical_detail["thread_read"]["thread_items"]
+        .as_array()
+        .expect("canonical thread items")
+        .iter()
+        .find(|item| item["type"] == "plan")
+        .expect("canonical plan item");
 
     assert_eq!(plan["status"], "completed");
     assert_eq!(plan["text"], "# Final plan\n- first\n- second");
@@ -800,6 +1103,9 @@ fn commit_preserves_imported_completed_plan_item() {
         plan["metadata"]["source_provenance"]["sourcePayloadType"],
         "item_completed"
     );
+    assert_eq!(canonical_plan["id"], "item-plan-1");
+    assert_eq!(canonical_plan["status"], "completed");
+    assert_eq!(canonical_plan["metadata"]["revisionId"], "item-plan-1");
     assert!(items
         .iter()
         .any(|item| item["type"] == "agent_message" && item["text"] == "Plan ready."));
@@ -1083,6 +1389,29 @@ fn response_user_message(message: &str) -> String {
             "role": "user",
             "content": [{"type": "input_text", "text": message}]
         }
+    })
+    .to_string()
+}
+
+fn response_agent_message(item_id: &str, message: &str) -> String {
+    serde_json::json!({
+        "timestamp": "2026-06-16T00:00:02.000Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "id": item_id,
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": message}]
+        }
+    })
+    .to_string()
+}
+
+fn unsupported_rollout_item(item_type: &str) -> String {
+    serde_json::json!({
+        "timestamp": "2026-06-16T00:00:01.050Z",
+        "type": item_type,
+        "payload": {}
     })
     .to_string()
 }

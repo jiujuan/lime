@@ -176,6 +176,11 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionReadResponse>
     >;
+    listThreads(
+      params?: appServer.AppServerThreadListParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerThreadListResponse>
+    >;
     readThread(
       params: appServer.AppServerThreadReadParams,
     ): Promise<

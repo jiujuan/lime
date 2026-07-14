@@ -1,8 +1,8 @@
 import type {
   AgentRuntimeThreadReadModel,
-  AgentExecutionStrategy,
   AgentSessionDetail,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";

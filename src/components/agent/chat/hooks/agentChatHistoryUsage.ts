@@ -1,5 +1,5 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   asHistoryRecord,
   readHistoryString,

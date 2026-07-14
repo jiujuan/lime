@@ -2,10 +2,7 @@
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, vi } from "vitest";
-import {
-  agentEnUSResource,
-  agentZhCNResource,
-} from "@/i18n/agentResources";
+import { agentEnUSResource, agentZhCNResource } from "@/i18n/agentResources";
 import type { WorkspaceRightSurfaceLauncherProjection } from "./workspace/right-surface/rightSurfaceToolbarProjection";
 import { resetInitialSessionNavigationDeduplicationForTests } from "./workspace/useWorkspaceInitialSessionNavigation";
 
@@ -43,7 +40,6 @@ const {
   mockUseArtifactAutoPreviewSync,
   mockUseThemeContextWorkspace,
   mockUseTopicBranchBoard,
-  mockUseTeamWorkspaceRuntime,
   mockUseSessionFiles,
   mockUseTrayModelShortcuts,
   mockSafeListen,
@@ -82,6 +78,7 @@ const {
   mockExecutionRunGetGeneralWorkbenchState,
   mockExecutionRunListGeneralWorkbenchHistory,
   mockExecutionRunGet,
+  mockSkillExecutionListExecutableSkills,
   mockSkillExecutionGetDetail,
   mockGetAutomationJobs,
   mockCreateAutomationJob,
@@ -103,7 +100,6 @@ const {
   mockUseArtifactAutoPreviewSync: vi.fn(),
   mockUseThemeContextWorkspace: vi.fn(),
   mockUseTopicBranchBoard: vi.fn(),
-  mockUseTeamWorkspaceRuntime: vi.fn(),
   mockUseSessionFiles: vi.fn(),
   mockUseTrayModelShortcuts: vi.fn(),
   mockSafeListen: vi.fn(),
@@ -205,6 +201,7 @@ const {
   mockExecutionRunGetGeneralWorkbenchState: vi.fn(),
   mockExecutionRunListGeneralWorkbenchHistory: vi.fn(),
   mockExecutionRunGet: vi.fn(),
+  mockSkillExecutionListExecutableSkills: vi.fn(),
   mockSkillExecutionGetDetail: vi.fn(),
   mockGetAutomationJobs: vi.fn(),
   mockCreateAutomationJob: vi.fn(),
@@ -278,7 +275,6 @@ export function getIndexTestMocks() {
     mockUseArtifactAutoPreviewSync,
     mockUseThemeContextWorkspace,
     mockUseTopicBranchBoard,
-    mockUseTeamWorkspaceRuntime,
     mockUseSessionFiles,
     mockUseTrayModelShortcuts,
     mockSafeListen,
@@ -317,6 +313,7 @@ export function getIndexTestMocks() {
     mockExecutionRunGetGeneralWorkbenchState,
     mockExecutionRunListGeneralWorkbenchHistory,
     mockExecutionRunGet,
+    mockSkillExecutionListExecutableSkills,
     mockSkillExecutionGetDetail,
     mockGetAutomationJobs,
     mockCreateAutomationJob,
@@ -352,7 +349,6 @@ vi.mock("./hooks", () => ({
   useArtifactAutoPreviewSync: mockUseArtifactAutoPreviewSync,
   useThemeContextWorkspace: mockUseThemeContextWorkspace,
   useTopicBranchBoard: mockUseTopicBranchBoard,
-  useTeamWorkspaceRuntime: mockUseTeamWorkspaceRuntime,
 }));
 
 vi.mock("@/hooks/useDeveloperFeatureFlags", () => ({
@@ -705,7 +701,9 @@ vi.mock("./components/TaskCenterUtilityToolbar", () => ({
           切换 {harnessToggleLabel || "Harness"}
         </button>
       ) : null}
-      {rightSurfaceLaunchers?.some((launcher) => launcher.kind === "harness") ? (
+      {rightSurfaceLaunchers?.some(
+        (launcher) => launcher.kind === "harness",
+      ) ? (
         <button
           type="button"
           data-testid="task-center-harness-toggle"
@@ -912,11 +910,20 @@ vi.mock("@/lib/api/executionRun", () => ({
     mockExecutionRunListGeneralWorkbenchHistory,
 }));
 
-vi.mock("@/lib/api/skill-execution", () => ({
-  skillExecutionApi: {
-    getSkillDetail: mockSkillExecutionGetDetail,
-  },
-}));
+vi.mock("@/lib/api/skill-execution", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/skill-execution")
+  >("@/lib/api/skill-execution");
+
+  return {
+    ...actual,
+    skillExecutionApi: {
+      ...actual.skillExecutionApi,
+      listExecutableSkills: mockSkillExecutionListExecutableSkills,
+      getSkillDetail: mockSkillExecutionGetDetail,
+    },
+  };
+});
 
 vi.mock("@/lib/api/automation", () => ({
   getAutomationJobs: () => mockGetAutomationJobs(),
@@ -962,10 +969,20 @@ vi.mock("@/lib/api/agentRuntime", async () => {
   return {
     ...actual,
     closeAgentRuntimeSubagent: mockCloseAgentRuntimeSubagent,
-    getAgentRuntimeToolInventory: mockGetAgentRuntimeToolInventory,
     resumeAgentRuntimeSubagent: mockResumeAgentRuntimeSubagent,
     sendAgentRuntimeSubagentInput: mockSendAgentRuntimeSubagentInput,
     waitAgentRuntimeSubagents: mockWaitAgentRuntimeSubagents,
+  };
+});
+
+vi.mock("@/lib/api/agentRuntime/inventoryClient", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/agentRuntime/inventoryClient")
+  >("@/lib/api/agentRuntime/inventoryClient");
+
+  return {
+    ...actual,
+    getAgentRuntimeToolInventory: mockGetAgentRuntimeToolInventory,
   };
 });
 
@@ -1425,6 +1442,12 @@ beforeEach(async () => {
     next_offset: null,
   });
   mockExecutionRunGet.mockResolvedValue(null);
+  mockSkillExecutionListExecutableSkills.mockResolvedValue([
+    {
+      skill_id: "builtin:content_post_with_cover",
+      name: "content_post_with_cover",
+    },
+  ]);
   mockSkillExecutionGetDetail.mockResolvedValue({
     name: "content_post_with_cover",
     display_name: "社媒主稿与封面",
@@ -1665,11 +1688,6 @@ beforeEach(async () => {
       },
     ],
     setTopicStatus: vi.fn(),
-  });
-  mockUseTeamWorkspaceRuntime.mockReturnValue({
-    liveRuntimeBySessionId: {},
-    liveActivityBySessionId: {},
-    activityRefreshVersionBySessionId: {},
   });
   mockUseSessionFiles.mockReturnValue({
     saveFile: vi.fn(async () => undefined),

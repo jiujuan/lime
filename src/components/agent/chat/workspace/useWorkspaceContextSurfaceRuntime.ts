@@ -1,19 +1,14 @@
 import { useEffect, useMemo } from "react";
-import type {
-  AgentRuntimeThreadReadModel,
-  AgentSubagentSessionInfo,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import type { ProjectMemory } from "@/lib/api/projectMemory";
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
-import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
+import type { AgentThreadItem, Message } from "../types";
 import type { ActionRequired } from "../types";
 import {
   deriveHarnessSessionShellState,
   deriveHarnessSessionState,
   type HarnessSessionState,
 } from "../utils/harnessState";
-import { buildRealSubagentTimelineItems } from "../utils/subagentTimeline";
-import { mergeThreadItems } from "../utils/threadTimelineView";
 import type { AgentTodoItem } from "@/lib/api/agentRuntime";
 import {
   resolveHarnessRuntimeVisible,
@@ -25,7 +20,6 @@ import { hasRunningThreadReadActivity } from "./workspaceSceneSessionProjection"
 
 interface UseWorkspaceContextSurfaceRuntimeParams {
   activeTheme: string;
-  childSubagentSessions: AgentSubagentSessionInfo[];
   generalHarnessEntryEnabled: boolean;
   isSending: boolean;
   layoutMode: LayoutMode;
@@ -39,23 +33,19 @@ interface UseWorkspaceContextSurfaceRuntimeParams {
   projectMemory: ProjectMemory | null;
   providerType: string;
   sessionId?: string | null;
-  threadId?: string | null;
   threadItems: AgentThreadItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
   todoItems: AgentTodoItem[];
-  turns: AgentThreadTurn[];
   workspaceHarnessEnabled: boolean;
 }
 
 interface WorkspaceContextTimelineRuntime {
   effectiveThreadItems: AgentThreadItem[];
   needsFullThreadTimeline: boolean;
-  realSubagentTimelineItems: AgentThreadItem[];
 }
 
 export function useWorkspaceContextSurfaceRuntime({
   activeTheme,
-  childSubagentSessions,
   generalHarnessEntryEnabled,
   isSending,
   layoutMode,
@@ -69,11 +59,9 @@ export function useWorkspaceContextSurfaceRuntime({
   projectMemory,
   providerType,
   sessionId,
-  threadId,
   threadItems,
   threadRead,
   todoItems,
-  turns,
   workspaceHarnessEnabled,
 }: UseWorkspaceContextSurfaceRuntimeParams) {
   const harnessShellState = useMemo(
@@ -110,13 +98,9 @@ export function useWorkspaceContextSurfaceRuntime({
     rightSurfaceActive: rightSurfaceLocalState.manualRightSurface,
   });
   const timelineRuntime = useWorkspaceContextTimelineRuntime({
-    childSubagentSessions,
     harnessRuntimeVisible,
     layoutMode,
-    sessionId,
-    threadId,
     threadItems,
-    turns,
   });
   const harnessState = useWorkspaceHarnessStateRuntime({
     effectiveThreadItems: timelineRuntime.effectiveThreadItems,
@@ -196,54 +180,21 @@ function useWorkspaceHarnessStateRuntime({
 }
 
 function useWorkspaceContextTimelineRuntime({
-  childSubagentSessions,
   harnessRuntimeVisible,
   layoutMode,
-  sessionId,
-  threadId,
   threadItems,
-  turns,
 }: {
-  childSubagentSessions: AgentSubagentSessionInfo[];
   harnessRuntimeVisible: boolean;
   layoutMode: LayoutMode;
-  sessionId?: string | null;
-  threadId?: string | null;
   threadItems: AgentThreadItem[];
-  turns: AgentThreadTurn[];
 }): WorkspaceContextTimelineRuntime {
   const needsFullThreadTimeline = shouldBuildFullThreadTimeline({
     harnessPanelVisible: harnessRuntimeVisible,
     layoutMode,
   });
-  const realSubagentTimelineItems = useMemo(
-    () =>
-      needsFullThreadTimeline
-        ? buildRealSubagentTimelineItems({
-            threadId: threadId ?? sessionId,
-            turns,
-            childSessions: childSubagentSessions,
-          })
-        : [],
-    [
-      childSubagentSessions,
-      needsFullThreadTimeline,
-      sessionId,
-      threadId,
-      turns,
-    ],
-  );
-  const effectiveThreadItems = useMemo(
-    () =>
-      needsFullThreadTimeline
-        ? mergeThreadItems(threadItems, realSubagentTimelineItems)
-        : threadItems,
-    [needsFullThreadTimeline, realSubagentTimelineItems, threadItems],
-  );
 
   return {
-    effectiveThreadItems,
+    effectiveThreadItems: threadItems,
     needsFullThreadTimeline,
-    realSubagentTimelineItems,
   };
 }

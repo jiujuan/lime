@@ -7,7 +7,7 @@ describe("agentUiSubagentsViewModel", () => {
     const events: AgentUiProjectionEvent[] = [
       {
         type: "agent.changed",
-        sourceType: "team_formation_projection",
+        sourceType: "item_completed",
         sequence: 1,
         sessionId: "session-team-1",
         agentId: "member-1",
@@ -22,7 +22,7 @@ describe("agentUiSubagentsViewModel", () => {
       },
       {
         type: "task.changed",
-        sourceType: "team_formation_projection",
+        sourceType: "item_completed",
         sequence: 2,
         sessionId: "session-team-1",
         taskId: "work-1",
@@ -227,7 +227,7 @@ describe("agentUiSubagentsViewModel", () => {
     const model = buildAgentUiSubagentsViewModel([
       {
         type: "agent.changed",
-        sourceType: "subagent_status_changed",
+        sourceType: "item_completed",
         sequence: 1,
         sessionId: "session-team-1",
         taskId: "child-1",
@@ -518,7 +518,7 @@ describe("agentUiSubagentsViewModel", () => {
     const model = buildAgentUiSubagentsViewModel([
       {
         type: "worker.notification",
-        sourceType: "subagent_status_changed",
+        sourceType: "item_completed",
         sequence: 1,
         sessionId: "session-team-1",
         taskId: "child-1",
@@ -627,7 +627,7 @@ describe("agentUiSubagentsViewModel", () => {
       [
         {
           type: "task.changed",
-          sourceType: "team_formation_projection",
+          sourceType: "item_completed",
           sequence: 1,
           sessionId: "session-team-1",
           taskId: "work-1",

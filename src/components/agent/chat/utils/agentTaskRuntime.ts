@@ -1,9 +1,12 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
 import type {
-  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
+import {
+  summarizeCanonicalChildThreads,
+  type CanonicalChildThreadSummary,
+} from "../projection/canonicalChildThreadSummary";
 import type {
   ActionRequired,
   AgentThreadItem,
@@ -77,7 +80,7 @@ interface BuildAgentTaskRuntimeCardModelParams {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   queuedTurns?: readonly QueuedTurnSnapshot[];
-  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
   isSending?: boolean;
 }
 
@@ -191,7 +194,9 @@ function resolveLatestAssistantMessage(
   return null;
 }
 
-function resolveLatestUserMessage(messages: readonly Message[]): Message | null {
+function resolveLatestUserMessage(
+  messages: readonly Message[],
+): Message | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (
@@ -437,31 +442,21 @@ function resolveCompletedSummary(
   return shorten(firstMeaningfulLine(latestAssistant?.content), 96) || null;
 }
 
-function resolveSubtaskStats(
-  childSubagentSessions: readonly AgentSubagentSessionInfo[],
+export function summarizeAgentTaskChildren(
+  canonicalChildren: CanonicalChildThreadSummary[],
 ): AgentTaskRuntimeSubtaskStats | null {
-  if (childSubagentSessions.length === 0) {
+  if (canonicalChildren.length === 0) {
     return null;
   }
 
-  return childSubagentSessions.reduce<AgentTaskRuntimeSubtaskStats>(
-    (stats, session) => {
-      const status = session.runtime_status || "idle";
-      stats.total += 1;
-      if (status === "running") {
-        stats.active += 1;
-      } else if (status === "queued") {
-        stats.active += 1;
-        stats.queued += 1;
-      } else if (status === "completed" || status === "closed") {
-        stats.completed += 1;
-      } else if (status === "failed" || status === "aborted") {
-        stats.failed += 1;
-      }
-      return stats;
-    },
-    { total: 0, active: 0, queued: 0, completed: 0, failed: 0 },
-  );
+  const counts = summarizeCanonicalChildThreads(canonicalChildren);
+  return {
+    total: counts.total,
+    active: counts.active,
+    queued: counts.queued,
+    completed: counts.settled,
+    failed: counts.failed + counts.interrupted,
+  };
 }
 
 export function buildAgentTaskRuntimeCardModel({
@@ -473,7 +468,7 @@ export function buildAgentTaskRuntimeCardModel({
   pendingActions = [],
   submittedActionsInFlight = [],
   queuedTurns = [],
-  childSubagentSessions = [],
+  canonicalChildren = [],
   isSending = false,
 }: BuildAgentTaskRuntimeCardModelParams): AgentTaskRuntimeCardModel | null {
   const latestTurn = resolveLatestTurn(turns, currentTurnId);
@@ -517,7 +512,7 @@ export function buildAgentTaskRuntimeCardModel({
     !status &&
     !latestTurn &&
     !latestUser &&
-    childSubagentSessions.length === 0 &&
+    canonicalChildren.length === 0 &&
     queuedTurns.length === 0
   ) {
     return null;
@@ -531,9 +526,9 @@ export function buildAgentTaskRuntimeCardModel({
   const titleSource =
     latestTurn?.prompt_text ||
     latestUser?.content ||
-    (childSubagentSessions.length > 0 ? "正在协调子任务" : "当前任务");
+    (canonicalChildren.length > 0 ? "正在协调子任务" : "当前任务");
   const title = shorten(firstMeaningfulLine(titleSource), 120) || "当前任务";
-  const subtaskStats = resolveSubtaskStats(childSubagentSessions);
+  const subtaskStats = summarizeAgentTaskChildren(canonicalChildren);
   let latestPreview: string | null = null;
   for (let index = latestProcessItems.length - 1; index >= 0; index -= 1) {
     latestPreview = resolveAgentThreadToolProcessPreview(

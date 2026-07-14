@@ -9,7 +9,7 @@ import type {
   AgentSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
-import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/threadClient";
+import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/appServerEventPayloadProjection";
 import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
@@ -20,14 +20,42 @@ function noopDispatch<T>() {
 }
 
 function projectEvent(event: AppServerJsonRpcNotification["params"]["event"]) {
-  const payload = projectAppServerAgentEventPayload({
+  const eventPayload =
+    event.payload && typeof event.payload === "object"
+      ? (event.payload as Record<string, unknown>)
+      : {};
+  const updatedAtMs = Date.parse(event.timestamp);
+  const projected = projectAppServerAgentEventPayload({
     method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-    params: { event },
+    params: {
+      event,
+      canonicalEvent: {
+        method: "item/updated",
+        params: {
+          sessionId: event.sessionId,
+          threadId: event.threadId,
+          turnId: event.turnId,
+          itemId: `agent-message-${event.eventId}`,
+          sequence: event.sequence,
+          ordinal: event.sequence,
+          kind: "agentMessage",
+          status: "inProgress",
+          createdAtMs: updatedAtMs,
+          updatedAtMs,
+          payload: {
+            type: "agentMessage",
+            text:
+              typeof eventPayload.text === "string" ? eventPayload.text : "",
+            phase: "final_answer",
+          },
+        },
+      },
+    },
   });
-  if (!payload) {
+  if (!projected) {
     throw new Error("expected App Server notification to project");
   }
-  return payload;
+  return projected;
 }
 
 describe("agentStreamTurnEventBinding tail recovery", () => {
@@ -113,8 +141,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime:
-        noopDispatch<AgentSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: setIsSending as never,
     });
 
@@ -224,8 +251,7 @@ describe("agentStreamTurnEventBinding tail recovery", () => {
       setThreadItems: noopDispatch<AgentThreadItem[]>(),
       setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
       setCurrentTurnId: noopDispatch<string | null>(),
-      setExecutionRuntime:
-        noopDispatch<AgentSessionExecutionRuntime | null>(),
+      setExecutionRuntime: noopDispatch<AgentSessionExecutionRuntime | null>(),
       setIsSending: noopDispatch<boolean>(),
     });
 

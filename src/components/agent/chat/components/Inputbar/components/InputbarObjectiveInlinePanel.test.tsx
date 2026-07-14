@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLimeLocale } from "@/i18n/createI18n";
-import type { ManagedObjective } from "@/lib/api/agentRuntime";
+import type { ManagedObjective } from "@/lib/api/agentRuntime/sessionTypes";
 import { InputbarObjectiveInlinePanel } from "./InputbarObjectiveInlinePanel";
 
 const {
@@ -29,19 +29,13 @@ vi.mock("sonner", () => ({
   toast: toastMock,
 }));
 
-vi.mock("@/lib/api/agentRuntime", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/agentRuntime")>(
-    "@/lib/api/agentRuntime",
-  );
-  return {
-    ...actual,
-    clearAgentRuntimeObjective: clearAgentRuntimeObjectiveMock,
-    continueAgentRuntimeObjective: continueAgentRuntimeObjectiveMock,
-    getAgentRuntimeObjective: getAgentRuntimeObjectiveMock,
-    setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
-    updateAgentRuntimeObjectiveStatus: updateAgentRuntimeObjectiveStatusMock,
-  };
-});
+vi.mock("@/lib/api/agentRuntime/objectiveClient", () => ({
+  clearAgentRuntimeObjective: clearAgentRuntimeObjectiveMock,
+  continueAgentRuntimeObjective: continueAgentRuntimeObjectiveMock,
+  getAgentRuntimeObjective: getAgentRuntimeObjectiveMock,
+  setAgentRuntimeObjective: setAgentRuntimeObjectiveMock,
+  updateAgentRuntimeObjectiveStatus: updateAgentRuntimeObjectiveStatusMock,
+}));
 
 interface MountedPanel {
   container: HTMLDivElement;

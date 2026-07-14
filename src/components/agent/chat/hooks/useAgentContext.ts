@@ -7,7 +7,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { updateProject } from "@/lib/api/project";
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import { notifyProjectRuntimeAgentsGuide } from "@/components/workspace/services/runtimeAgentsGuideService";
 import type {

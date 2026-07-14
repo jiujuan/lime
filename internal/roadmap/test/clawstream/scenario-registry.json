@@ -263,7 +263,7 @@
         "npx vitest run \"internal/roadmap/test/clawstream/scenario-registry.test.mjs\"",
         "npm --prefix \"packages/agent-runtime-projection\" run build && node --test \"packages/agent-runtime-projection/tests/multiAgentItemTaxonomy.test.mjs\"",
         "npm --prefix \"packages/agent-runtime-projection\" run build && node --test \"packages/agent-runtime-projection/tests/multiAgentToolSchema.test.mjs\"",
-        "npm run test:related -- \"src/components/agent/chat/team-workspace-runtime\" \"src/components/agent/chat/projection/subagentStatusProjection.test.ts\" \"src/components/agent/chat/projection/agentUiSubagentsViewModel.test.ts\"",
+        "npm run test:related -- \"src/lib/api/agentRuntime/appServerCanonicalItemReader.ts\" \"src/components/agent/chat/projection/threadItemProjection.ts\" \"src/components/agent/chat/projection/agentUiSubagentsViewModel.ts\" \"src/components/agent/chat/workspace/useWorkspaceTeamRuntime.ts\"",
         "npm run test:rust:related -- \"lime-rs/crates/app-server/src/runtime/tests/evidence_exports/team_facts.rs\" \"lime-rs/crates/thread-store/src/subagent_tree.rs\"",
         "npm run smoke:claw-chat-current-fixture -- --scenario multi-agent-team --timeout-ms 180000"
       ],

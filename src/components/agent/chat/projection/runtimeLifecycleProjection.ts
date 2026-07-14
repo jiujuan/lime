@@ -18,11 +18,11 @@ import {
   buildAgentUiRunFinishedEvent,
   buildAgentUiRunStartedEvent,
   buildAgentUiRuntimeStatusEvent,
+  buildAgentUiRuntimeTeamChangedEvent,
   buildAgentUiTaskProfileResolvedEvent,
   buildAgentUiThreadStartedEvent,
 } from "@limecloud/agent-runtime-projection";
 import { buildPermissionChangedEvent } from "./permissionProjection";
-import { buildTeamChangedFromRuntimeStatusEvent } from "./subagentStatusProjection";
 
 type AgentEventRuntimeLifecycle = Extract<
   AgentEvent,
@@ -146,7 +146,16 @@ export function buildRuntimeStatusEvents(
       context,
     ),
     buildPermissionChangedEvent(event, context),
-    buildTeamChangedFromRuntimeStatusEvent(event, context),
+    buildAgentUiRuntimeTeamChangedEvent(
+      {
+        sourceType: event.type,
+        phase: event.status.phase,
+        title: event.status.title,
+        detail: event.status.detail,
+        metadata: event.status.metadata,
+      },
+      context,
+    ),
   ].filter((projectionEvent): projectionEvent is AgentUiProjectionEvent =>
     Boolean(projectionEvent),
   );

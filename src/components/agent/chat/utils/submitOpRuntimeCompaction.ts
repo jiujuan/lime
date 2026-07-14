@@ -2,8 +2,8 @@ import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
   AgentSessionExecutionRuntimeRecentTeamSelection,
-  RuntimeProviderConfig,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
+import type { RuntimeProviderConfig } from "@/lib/api/agentRuntime/sessionTypes";
 import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import type { ChatToolPreferences } from "./chatToolPreferences";

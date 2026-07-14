@@ -1,4 +1,4 @@
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { MessageImage, MessagePathReference } from "../types";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 

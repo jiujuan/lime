@@ -1,4 +1,4 @@
-import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 
 const WEB_SEARCH_TOOL_NAMES = ["WebSearch", "web_search"] as const;
 const SUBAGENT_CORE_TOOL_NAMES = ["Agent", "SendMessage"] as const;
@@ -9,10 +9,7 @@ const SUBAGENT_TEAM_TOOL_NAMES = [
 ] as const;
 const PLAN_TOOL_NAMES = ["update_plan"] as const;
 
-type RuntimeToolAvailabilitySource =
-  | "runtime_tools"
-  | "native_tools"
-  | "none";
+type RuntimeToolAvailabilitySource = "runtime_tools" | "native_tools" | "none";
 
 export const RUNTIME_TOOL_AVAILABILITY_OVERRIDE_STORAGE_KEY =
   "lime:debug:runtime-tool-availability:v1";

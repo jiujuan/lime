@@ -76,7 +76,6 @@ src/routing.ts     -> routing run.status / decision payload projection helpers
 src/runtimeFacts.ts -> runtime entity/status/phase/topology 标准事实解释
 src/summary.ts     -> host-neutral summary / surface / lane selectors
 src/subagents.ts   -> AgentUiSubagentsModel 标准模型 selector
-src/subagentStatusEvents.ts -> subagent_status_changed team / handoff / worker notification projection helpers
 src/threadItems.ts -> thread item -> AgentUiProjectionEvent builders / action item builders / subagent activity builders / task owner metadata parser
 src/toolEvents.ts  -> tool_start / tool_end / tool_progress / tool delta -> AgentUiProjectionEvent builders
 src/readModel.ts   -> execution events -> read model
@@ -160,7 +159,6 @@ src/index.ts            -> barrel exports only
 | `queueProjection.ts` | compat adapter | 只允许把主聊天 `queue_added` / `queue_removed` / `queue_started` / `queue_cleared` 字段映射到标准 `buildAgentUiQueueAddedEvents` / `buildAgentUiQueueLifecycleEvents`；queue.changed 与 task.changed 的 owner/scope/phase/control/runtimeStatus/payload 已由标准 helper 接管 | 周边投影模块改为直接消费标准 queue helper 后删除 |
 | `routingProjection.ts` | compat adapter | 只允许把主聊天 routing decision / limit state / limit event 字段映射到标准 `buildAgentUiRoutingStatusEvent`；run.status 的 owner/scope/phase/surface/persistence 与 routing / limit payload 已由标准 helper 接管 | 周边投影模块改为直接消费标准 routing helper 后删除 |
 | `runtimeLifecycleProjection.ts` 中 lifecycle / model / task profile 构建 | compat adapter | 只允许把主聊天 `thread_started` / `turn_started` / `turn_completed` / `turn_failed` / `runtime_status` / `model_change` / `task_profile_resolved` 字段映射到标准 `buildAgentUiThreadStartedEvent` / `buildAgentUiRunStartedEvent` / `buildAgentUiRunFinishedEvent` / `buildAgentUiRunFailedEvent` / `buildAgentUiRuntimeStatusEvent` / `buildAgentUiRuntimeTeamChangedEvent` / `buildAgentUiModelChangeEvent` / `buildAgentUiTaskProfileResolvedEvent` | 周边投影模块改为直接消费标准 lifecycle helper 后删除通用兼容构建 |
-| `subagentStatusProjection.ts` | compat adapter | 只允许把主聊天 `runtime_status` 字段映射到标准 `buildAgentUiRuntimeTeamChangedEvent`，并把 `subagent_status_changed` 字段映射到标准 `buildAgentUiSubagentStatusChangedEvents`；runtime status 来源 `team.changed` 与 subagent status 来源 team / handoff / transcript / worker notification 复合事件的 owner/scope/phase/surface/persistence/payload 已由标准 helper 接管 | 周边投影模块改为直接消费标准 subagent status helper 后删除 |
 | `threadItemProjection.ts` 中 thread item 主事件构建 | compat adapter | 只允许把主聊天 `AgentThreadItem` 映射到标准 `buildAgentUiThreadItemEvent` / `buildAgentUiThreadItemBase`，并通过 `extractAgentUiTaskOwnerChangeProjection` 读取 TaskUpdate owner metadata；审批、用户输入、subagent activity、worker notification 和计划审批 metadata 已由标准 helper 接管；旧协作视图附加事件只能作为主聊天 presentation residual 暂留 | 周边投影模块改为直接消费标准 thread item helper 后删除通用兼容构建 |
 | `toolEventProjection.ts` | compat adapter | 只允许把主聊天 `tool_start` / `tool_end` / `tool_progress` / `tool_output_delta` / `tool_input_delta` 字段映射到标准 `buildAgentUiTool*` helper；tool lifecycle、artifact refs、diagnostic keys 和 plan approval 附加 action 已由标准 helper 接管 | 周边投影模块改为直接消费标准 tool helper 后删除 |
 | `agentUiEventProjection.ts` 中从主聊天事件构建 `AgentUiProjectionEvent` 的代码 | compat adapter | 仍依赖主聊天 `agentProtocol` 和历史事件形状，是迁移输入适配层；通用 envelope / sequence 规则已迁入标准 projection 包 | host-neutral 构建规则继续分批迁入标准 projection 包或 App Server event adapter 后收缩 |
@@ -247,15 +245,14 @@ Electron 只作为 Desktop Host bridge 和 sidecar lifecycle host。新增 runti
 13. 主聊天 queue projection 必须委托标准 `buildAgentUiQueueAddedEvents` / `buildAgentUiQueueLifecycleEvents`，不得重新实现 `queue.changed` / `task.changed` 的 payload、owner、scope、phase、control、runtimeStatus 或 queued turn 计数规则。
 14. 主聊天 routing projection 必须委托标准 `buildAgentUiRoutingStatusEvent`，不得重新实现 routing / limit `run.status` 的 payload、owner、scope、phase、surface 或 persistence。
 15. 主聊天 runtime lifecycle projection 必须委托标准 `buildAgentUiThreadStartedEvent` / `buildAgentUiRunStartedEvent` / `buildAgentUiRunFinishedEvent` / `buildAgentUiRunFailedEvent` / `buildAgentUiRuntimeStatusEvent` / `buildAgentUiRuntimeTeamChangedEvent` / `buildAgentUiModelChangeEvent` / `buildAgentUiTaskProfileResolvedEvent`，不得重新实现 `session.opened` / `run.started` / `run.finished` / `run.failed` / `run.status` / runtime status 来源 `team.changed` / `task.changed` 的 payload、status、phase、model routing、Team runtime metadata / topology 或 task profile 规则。
-16. 主聊天 subagent status projection 必须委托标准 `buildAgentUiSubagentStatusChangedEvents`，不得重新实现 `subagent_status_changed` 来源 agent / task / team / transcript / spawned / completed / handoff / worker notification 事件的 payload、status、phase、topology、worker usage、transcript ref、handoff status 或 owner / scope / surface / persistence 规则。
-17. 主聊天 thread item projection 必须委托标准 `buildAgentUiThreadItemEvent` / `buildAgentUiThreadItemBase` / `buildAgentUiThreadItemActionEvent` / `buildAgentUiThreadItemSubagentActivityEvent` / `buildAgentUiThreadItemSubagentWorkerNotificationEvent` / `extractAgentUiTaskOwnerChangeProjection`，不得重新实现 approval request、request user input、subagent activity、worker notification、plan、reasoning、tool、command、web search、artifact、context compaction、turn summary、diagnostics 或 TaskUpdate owner metadata 的通用构造与解析。
-18. 主聊天 tool event projection 必须委托标准 `buildAgentUiToolStartEvents` / `buildAgentUiToolEndEvents` / `buildAgentUiToolProgressEvent` / `buildAgentUiToolOutputDeltaEvent` / `buildAgentUiToolInputDeltaEvent`，不得重新实现 `tool.started` / `tool.args` / `tool.result` / `tool.failed` / `tool.progress` / tool delta 的 payload、refs、phase、persistence 或 plan approval 附加 action。
-19. 标准包源码不得重新合并为单文件实现。
-20. `agent_runtime_*` 不得作为新增 current 能力证据。
-21. mock fallback 只能在测试夹具中显式使用。
-22. 文档与路线图不得引导新能力回到旧命令或旧 projection 事实源。
-23. Plugin Runtime 的标准 projection panel 必须渲染 `AgentUiProjectionView`，证明第二宿主消费同一个 UI 入口。
-24. `agent-runtime-ui` 的 `index.ts` 必须保持 barrel exports，React primitives 必须按 messages / processTimeline / executionGraph / runtimeFacts / projectionView 等职责拆分。
+16. 主聊天 thread item projection 必须委托标准 `buildAgentUiThreadItemEvent` / `buildAgentUiThreadItemBase` / `buildAgentUiThreadItemActionEvent` / `buildAgentUiThreadItemSubagentActivityEvent` / `buildAgentUiThreadItemSubagentWorkerNotificationEvent` / `extractAgentUiTaskOwnerChangeProjection`，不得重新实现 approval request、request user input、subagent activity、worker notification、plan、reasoning、tool、command、web search、artifact、context compaction、turn summary、diagnostics 或 TaskUpdate owner metadata 的通用构造与解析。
+17. 主聊天 tool event projection 必须委托标准 `buildAgentUiToolStartEvents` / `buildAgentUiToolEndEvents` / `buildAgentUiToolProgressEvent` / `buildAgentUiToolOutputDeltaEvent` / `buildAgentUiToolInputDeltaEvent`，不得重新实现 `tool.started` / `tool.args` / `tool.result` / `tool.failed` / `tool.progress` / tool delta 的 payload、refs、phase、persistence 或 plan approval 附加 action。
+18. 标准包源码不得重新合并为单文件实现。
+19. `agent_runtime_*` 不得作为新增 current 能力证据。
+20. mock fallback 只能在测试夹具中显式使用。
+21. 文档与路线图不得引导新能力回到旧命令或旧 projection 事实源。
+22. Plugin Runtime 的标准 projection panel 必须渲染 `AgentUiProjectionView`，证明第二宿主消费同一个 UI 入口。
+23. `agent-runtime-ui` 的 `index.ts` 必须保持 barrel exports，React primitives 必须按 messages / processTimeline / executionGraph / runtimeFacts / projectionView 等职责拆分。
 25. `agent-ui-contracts` 的 `index.ts` 只能做 barrel exports，events / runtime / projection / messages / timeline / graph 必须按职责拆分。
 26. 标准 UI 不得恢复旧私有 tree 命名或旧 Plugin `data-agent-run-projection-*` DOM；过程结构以 message parts、process timeline、execution graph 和 runtime facts 为标准 surface。
 27. `agent-runtime-ui` 用户可见文案必须可由 labels / formatter props 注入；默认 fallback 不得替代宿主五语言 i18n。

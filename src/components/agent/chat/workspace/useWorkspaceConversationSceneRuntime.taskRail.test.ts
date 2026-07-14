@@ -133,35 +133,33 @@ describe("useWorkspaceConversationSceneRuntime task rail projection", () => {
         evidence_refs: ["evidence/run-control.json"],
       },
     };
-    const childSubagentSessions = [
+    const canonicalChildren = [
       {
-        id: "child-running",
         name: "实现",
-        created_at: 1,
-        updated_at: 2,
-        session_type: "subagent",
-        runtime_status: "running",
+        parentThreadId: "thread-parent",
+        sessionId: "child-running",
+        status: "running",
+        threadId: "thread-child-running",
+        updatedAtMs: 2,
       },
       {
-        id: "child-done",
         name: "验证",
-        created_at: 1,
-        updated_at: 2,
-        session_type: "subagent",
-        runtime_status: "completed",
+        parentThreadId: "thread-parent",
+        sessionId: "child-done",
+        status: "completed",
+        threadId: "thread-child-done",
+        updatedAtMs: 2,
       },
     ];
     const params = createBaseParams({
       threadRead,
-      childSubagentSessions,
+      canonicalChildren,
     });
 
     const sceneProps = getRenderedSceneProps(params);
 
     expect(sceneProps.taskRail?.threadRead).toBe(threadRead);
-    expect(sceneProps.taskRail?.childSubagentSessions).toBe(
-      childSubagentSessions,
-    );
+    expect(sceneProps.taskRail?.canonicalChildren).toBe(canonicalChildren);
     expect(sceneProps.taskRail?.context).toBeUndefined();
   });
 

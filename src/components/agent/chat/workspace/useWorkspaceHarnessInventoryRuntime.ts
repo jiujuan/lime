@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getAgentRuntimeToolInventory } from "@/lib/api/agentRuntime/inventoryClient";
 import {
-  getAgentRuntimeToolInventory,
   type AgentRuntimeToolInventory,
   type AgentRuntimeToolInventoryPluginMcpTarget,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/toolInventoryTypes";
 import {
   mcpApi,
   type McpCallProofRequest,

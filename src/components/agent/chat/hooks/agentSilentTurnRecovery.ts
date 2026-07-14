@@ -1,4 +1,4 @@
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import { normalizeLegacyThreadItems } from "@/lib/api/agentTextNormalization";
 
 const SILENT_TURN_RECOVERY_GRACE_MS = 15_000;

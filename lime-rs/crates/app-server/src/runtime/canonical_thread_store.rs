@@ -1,20 +1,23 @@
 use std::any::Any;
+use std::collections::{HashMap, HashSet};
 
 use agent_protocol::{
-    SortDirection, Thread, ThreadActiveFlag, ThreadId, ThreadItem, ThreadStatus, ThreadTurnsView,
-    Turn, TurnId, TurnItemsView, TurnStatus,
+    CollabAgentState, CollabAgentStatus, SortDirection, Thread, ThreadActiveFlag,
+    ThreadHistoryChangeSet, ThreadId, ThreadItem, ThreadStatus, ThreadTurnsView, Turn, TurnId,
+    TurnItemsView, TurnStatus,
 };
 use app_server_protocol::{AgentEvent, AgentSessionStatus};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thread_store::{
     ApplyThreadHistoryParams, ApplyThreadHistoryResult, ArchiveThreadParams, CreateThreadParams,
     DeleteThreadParams, ItemPage, ListItemsParams, ListThreadsParams, ListTurnsParams,
-    ReadThreadParams, StoreCursor, ThreadMetadataPatch, ThreadPage, ThreadStore, ThreadStoreError,
-    ThreadStoreFuture, ThreadStoreResult, TurnPage, UpdateThreadMetadataParams,
+    ReadThreadParams, StoreCursor, ThreadMetadataPatch, ThreadPage, ThreadSpawnEdgeStatus,
+    ThreadStore, ThreadStoreError, ThreadStoreFuture, ThreadStoreResult, TurnPage,
+    UpdateThreadMetadataParams,
 };
 
 use super::{ProjectionStore, StoredSession};
@@ -99,6 +102,111 @@ impl ProjectionStore {
         .map_err(|error| error.to_string())
     }
 
+    pub(super) fn repair_canonical_history(
+        &self,
+        stored: &StoredSession,
+        events: &[AgentEvent],
+    ) -> Result<(), String> {
+        let changes = super::thread_item_projection::materialize_events(
+            events,
+            &stored.session.session_id,
+            &stored.session.thread_id,
+        )
+        .map_err(|error| error.to_string())?;
+        let thread_id = ThreadId::new(stored.session.thread_id.clone());
+        let current = self
+            .read_thread_sync(ReadThreadParams {
+                thread_id: thread_id.clone(),
+                include_archived: true,
+                turns_view: ThreadTurnsView::Full,
+            })
+            .map_err(|error| error.to_string())?;
+        if current
+            .as_ref()
+            .is_some_and(|thread| canonical_history_matches(thread, &changes))
+        {
+            return Ok(());
+        }
+
+        self.replace_canonical_history(stored, thread_id, changes)
+            .map_err(|error| error.to_string())
+    }
+
+    fn replace_canonical_history(
+        &self,
+        stored: &StoredSession,
+        thread_id: ThreadId,
+        changes: ThreadHistoryChangeSet,
+    ) -> ThreadStoreResult<()> {
+        let apply_params = ApplyThreadHistoryParams {
+            session_id: agent_protocol::SessionId::new(stored.session.session_id.clone()),
+            thread_id: thread_id.clone(),
+            changes,
+        };
+        validate_change_set(&apply_params)?;
+        let fingerprint = change_fingerprint(&apply_params)?;
+        let mut conn = self.open_thread_store()?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(store_error)?;
+        let existing = tx
+            .query_row(
+                "SELECT session_id, last_sequence FROM canonical_threads WHERE thread_id = ?1",
+                params![thread_id.as_str()],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?)),
+            )
+            .optional()
+            .map_err(store_error)?;
+
+        if let Some((session_id, last_sequence)) = existing {
+            if session_id != stored.session.session_id {
+                return Err(error("session/thread identity mismatch"));
+            }
+            if last_sequence
+                .is_some_and(|sequence| sequence.max(0) as u64 > apply_params.changes.sequence)
+            {
+                return Err(error(format!(
+                    "canonical history advanced to {} while repairing sequence {}",
+                    last_sequence.unwrap_or_default(),
+                    apply_params.changes.sequence
+                )));
+            }
+            tx.execute(
+                "DELETE FROM canonical_turns WHERE thread_id = ?1",
+                params![thread_id.as_str()],
+            )
+            .map_err(store_error)?;
+            tx.execute(
+                "DELETE FROM canonical_history_applies WHERE thread_id = ?1",
+                params![thread_id.as_str()],
+            )
+            .map_err(store_error)?;
+            tx.execute(
+                "UPDATE canonical_threads SET last_sequence = NULL WHERE thread_id = ?1",
+                params![thread_id.as_str()],
+            )
+            .map_err(store_error)?;
+        } else {
+            insert_thread_row(&tx, canonical_thread_from_stored_session(stored))?;
+        }
+
+        if apply_params.changes.sequence > 0 {
+            apply_change_set(&tx, &apply_params)?;
+            refresh_thread_snapshot(&tx, &thread_id, apply_params.changes.sequence)?;
+            tx.execute(
+                "INSERT INTO canonical_history_applies (thread_id, sequence, fingerprint)
+                 VALUES (?1, ?2, ?3)",
+                params![
+                    thread_id.as_str(),
+                    to_i64(apply_params.changes.sequence, "history sequence")?,
+                    fingerprint,
+                ],
+            )
+            .map_err(store_error)?;
+        }
+        tx.commit().map_err(store_error)
+    }
+
     fn open_thread_store(&self) -> ThreadStoreResult<Connection> {
         let conn = Connection::open(self.path()).map_err(store_error)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")
@@ -111,27 +219,8 @@ impl ProjectionStore {
         if !params.thread.turns.is_empty() {
             return Err(error("create_thread rejects embedded turns"));
         }
-        validate_thread_identity(&params.thread)?;
         let conn = self.open_thread_store()?;
-        let thread = thread_without_turns(params.thread);
-        let encoded = encode_json(&thread)?;
-        conn.execute(
-            "INSERT INTO canonical_threads (
-                thread_id, session_id, thread_json, created_at_ms, updated_at_ms,
-                recency_at_ms, archived, last_sequence
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
-            params![
-                thread.thread_id.as_str(),
-                thread.session_id.as_str(),
-                encoded,
-                thread.created_at_ms,
-                thread.updated_at_ms,
-                thread.recency_at_ms,
-                i64::from(thread.archived),
-            ],
-        )
-        .map_err(|source| error(format!("cannot create canonical thread: {source}")))?;
-        Ok(())
+        insert_thread_row(&conn, params.thread)
     }
 
     pub(crate) fn read_thread_sync(
@@ -146,6 +235,7 @@ impl ProjectionStore {
             return Ok(None);
         }
         hydrate_thread(&conn, &mut thread, params.turns_view)?;
+        self.enrich_thread_agent_context(&mut thread)?;
         Ok(Some(thread))
     }
 
@@ -175,11 +265,35 @@ impl ProjectionStore {
             .and_then(|_| rows.first())
             .map(|(_, position, id)| encode_cursor(CursorKind::Threads, *position, id))
             .transpose()?;
+        for (thread, _, _) in &mut rows {
+            self.enrich_thread_agent_context(thread)?;
+        }
         Ok(ThreadPage {
             data: rows.into_iter().map(|(thread, _, _)| thread).collect(),
             next_cursor,
             backwards_cursor,
         })
+    }
+
+    fn enrich_thread_agent_context(&self, thread: &mut Thread) -> ThreadStoreResult<()> {
+        thread.parent_thread_id = None;
+        thread.agent_path = None;
+        thread.agent_nickname = None;
+        thread.agent_role = None;
+        thread.last_task_message = None;
+        thread.agent_state = None;
+        let Some(parent) = self.read_thread_spawn_parent_sync(thread.thread_id.clone())? else {
+            return Ok(());
+        };
+        thread.parent_thread_id = Some(parent.parent_thread_id.clone());
+        if let Some(identity) = self.read_agent_identity_sync(thread.thread_id.clone())? {
+            thread.agent_path = Some(identity.agent_path);
+            thread.agent_nickname = non_empty_string(identity.nickname);
+            thread.agent_role = non_empty_string(identity.role);
+            thread.last_task_message = non_empty_string(identity.last_task_message);
+        }
+        thread.agent_state = Some(derive_agent_state(thread, parent.status));
+        Ok(())
     }
 
     fn apply_history_sync(
@@ -397,6 +511,41 @@ impl ProjectionStore {
     }
 }
 
+fn non_empty_string(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.trim().is_empty())
+}
+
+fn derive_agent_state(thread: &Thread, edge_status: ThreadSpawnEdgeStatus) -> CollabAgentState {
+    let latest_turn = thread.turns.iter().max_by(|left, right| {
+        left.updated_at_ms
+            .cmp(&right.updated_at_ms)
+            .then_with(|| left.turn_id.as_str().cmp(right.turn_id.as_str()))
+    });
+    let status = if edge_status == ThreadSpawnEdgeStatus::Closed {
+        CollabAgentStatus::Shutdown
+    } else {
+        match &thread.status {
+            ThreadStatus::Active { .. } => CollabAgentStatus::Running,
+            ThreadStatus::SystemError => CollabAgentStatus::Errored,
+            ThreadStatus::NotLoaded | ThreadStatus::Idle => {
+                match latest_turn.map(|turn| turn.status) {
+                    Some(TurnStatus::InProgress) => CollabAgentStatus::Running,
+                    Some(TurnStatus::Interrupted) => CollabAgentStatus::Interrupted,
+                    Some(TurnStatus::Failed) => CollabAgentStatus::Errored,
+                    Some(TurnStatus::Completed) => CollabAgentStatus::Completed,
+                    None => CollabAgentStatus::PendingInit,
+                }
+            }
+        }
+    };
+    let message = (status == CollabAgentStatus::Errored)
+        .then(|| latest_turn.and_then(|turn| turn.error.as_ref()))
+        .flatten()
+        .map(|error| error.message.clone())
+        .filter(|message| !message.trim().is_empty());
+    CollabAgentState { status, message }
+}
+
 fn canonical_thread_from_stored_session(stored: &StoredSession) -> Thread {
     let session = &stored.session;
     let title = session
@@ -434,6 +583,11 @@ fn canonical_thread_from_stored_session(stored: &StoredSession) -> Thread {
         archived: false,
         recency_at_ms: Some(timestamp_millis(&session.updated_at)),
         parent_thread_id: None,
+        agent_path: None,
+        agent_nickname: None,
+        agent_role: None,
+        last_task_message: None,
+        agent_state: None,
         forked_from_id: None,
         preview: title.clone().unwrap_or_default(),
         model_provider,
@@ -581,9 +735,68 @@ fn validate_thread_identity(thread: &Thread) -> ThreadStoreResult<()> {
     Ok(())
 }
 
+fn insert_thread_row(conn: &Connection, thread: Thread) -> ThreadStoreResult<()> {
+    validate_thread_identity(&thread)?;
+    let thread = thread_without_turns(thread);
+    let encoded = encode_json(&thread)?;
+    conn.execute(
+        "INSERT INTO canonical_threads (
+            thread_id, session_id, thread_json, created_at_ms, updated_at_ms,
+            recency_at_ms, archived, last_sequence
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
+        params![
+            thread.thread_id.as_str(),
+            thread.session_id.as_str(),
+            encoded,
+            thread.created_at_ms,
+            thread.updated_at_ms,
+            thread.recency_at_ms,
+            i64::from(thread.archived),
+        ],
+    )
+    .map_err(|source| error(format!("cannot create canonical thread: {source}")))?;
+    Ok(())
+}
+
+fn canonical_history_matches(thread: &Thread, changes: &ThreadHistoryChangeSet) -> bool {
+    let expected_turn_ids = changes
+        .changed_turns
+        .iter()
+        .map(|turn| turn.turn_id.as_str())
+        .collect::<HashSet<_>>();
+    let actual_turn_ids = thread
+        .turns
+        .iter()
+        .map(|turn| turn.turn_id.as_str())
+        .collect::<HashSet<_>>();
+    if expected_turn_ids != actual_turn_ids {
+        return false;
+    }
+
+    let actual_items = thread
+        .turns
+        .iter()
+        .flat_map(|turn| &turn.items)
+        .map(|item| (item.item_id.as_str(), item))
+        .collect::<HashMap<_, _>>();
+    actual_items.len() == changes.changed_items.len()
+        && changes.changed_items.iter().all(|expected| {
+            actual_items
+                .get(expected.item_id.as_str())
+                .is_some_and(|actual| *actual == expected)
+        })
+}
+
 fn thread_without_turns(mut thread: Thread) -> Thread {
     thread.turns.clear();
     thread.turns_view = ThreadTurnsView::NotLoaded;
+    // Agent identity and status are joined from the durable graph/identity stores on read.
+    thread.parent_thread_id = None;
+    thread.agent_path = None;
+    thread.agent_nickname = None;
+    thread.agent_role = None;
+    thread.last_task_message = None;
+    thread.agent_state = None;
     thread
 }
 

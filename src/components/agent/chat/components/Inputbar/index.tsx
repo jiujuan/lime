@@ -3,10 +3,8 @@ import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import type { MessagePathReference } from "../../types";
 import type { Character } from "@/lib/api/projectMemory";
-import type {
-  AgentSessionExecutionRuntime,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { InputbarComposerSection } from "./components/InputbarComposerSection";
 import type { InputbarOpenedProject } from "./components/InputbarProjectContextBar";
 import { HintRoutePopup } from "./components/HintRoutePopup";

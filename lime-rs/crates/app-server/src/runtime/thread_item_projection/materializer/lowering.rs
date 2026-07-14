@@ -5,7 +5,7 @@ use super::fields::{
 use super::lifecycle::{approval_decision, is_action_resolution_event};
 use agent_protocol::{
     ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, FileChangeStatus,
-    SubAgentActivityKind, ThreadId, ThreadItemPayload, ToolOutput,
+    PlanStep, PlanStepStatus, SubAgentActivityKind, ThreadId, ThreadItemPayload, ToolOutput,
 };
 use serde_json::{Map, Value};
 
@@ -13,6 +13,7 @@ use serde_json::{Map, Value};
 pub(super) enum ItemFamily {
     UserMessage,
     AgentMessage,
+    Plan,
     Reasoning,
     Tool,
     McpToolCall,
@@ -48,6 +49,7 @@ impl ItemFamily {
         match self {
             Self::UserMessage => "user",
             Self::AgentMessage => "agent",
+            Self::Plan => "plan",
             Self::Reasoning => "reasoning",
             Self::Tool => "tool",
             Self::McpToolCall => "mcp-tool",
@@ -61,7 +63,26 @@ impl ItemFamily {
         }
     }
 
-    pub(super) fn fallback_id(self, turn_id: &str, event_id: &str) -> String {
+    pub(super) fn item_id(
+        self,
+        payload: &Map<String, Value>,
+        turn_id: &str,
+        event_id: &str,
+    ) -> Option<String> {
+        if matches!(self, Self::Plan) {
+            if let Some(item_id) = explicit_item_id(payload) {
+                return Some(item_id);
+            }
+            let revision_id = map_string(payload, &["revisionId", "revision_id"])?;
+            return Some(format!("{}_{turn_id}_{revision_id}", self.stable_name()));
+        }
+        Some(
+            self.explicit_item_id(payload)
+                .unwrap_or_else(|| self.fallback_id(turn_id, event_id)),
+        )
+    }
+
+    fn fallback_id(self, turn_id: &str, event_id: &str) -> String {
         match self {
             Self::UserMessage | Self::AgentMessage | Self::Reasoning | Self::ContextCompaction => {
                 format!("{}-{turn_id}", self.stable_name())
@@ -82,6 +103,7 @@ pub(super) fn item_family(event_type: &str, payload: &Value) -> Option<ItemFamil
             "agent_message" | "agentmessage" | "assistant" | "message" => {
                 Some(ItemFamily::AgentMessage)
             }
+            "plan" => Some(ItemFamily::Plan),
             "reasoning" | "reasoning_message" => Some(ItemFamily::Reasoning),
             "tool" | "tool_call" | "tool_result" | "web_search" => Some(tool_family(source)),
             "mcp_tool" | "mcp_tool_call" => Some(ItemFamily::McpToolCall),
@@ -107,6 +129,9 @@ pub(super) fn item_family(event_type: &str, payload: &Value) -> Option<ItemFamil
         } else {
             ItemFamily::AgentMessage
         });
+    }
+    if normalized.starts_with("plan.") {
+        return Some(ItemFamily::Plan);
     }
     if normalized.starts_with("reasoning.") {
         return Some(ItemFamily::Reasoning);
@@ -193,6 +218,16 @@ pub(super) fn typed_payload(
         ItemFamily::AgentMessage => ThreadItemPayload::AgentMessage {
             text: message_text(payload),
             phase: map_string(payload, &["phase", "messagePhase", "message_phase"]),
+        },
+        ItemFamily::Plan => ThreadItemPayload::Plan {
+            text: message_text(payload),
+            revision_id: map_string(payload, &["revisionId", "revision_id"])
+                .unwrap_or_else(|| fallback_call_id.to_string()),
+            source: map_string(payload, &["source"]),
+            plan: plan_steps(payload),
+            explanation: map_string(payload, &["explanation"]),
+            tool_call_id: map_string(payload, &["toolCallId", "tool_call_id"]),
+            source_item_id: map_string(payload, &["sourceItemId", "source_item_id"]),
         },
         ItemFamily::Reasoning => ThreadItemPayload::Reasoning {
             summary: string_list(payload, &["summary", "summaries"]),
@@ -306,6 +341,29 @@ pub(super) fn typed_payload(
             window_id: map_string(payload, &["windowId", "window_id", "contextWindowId"]),
         },
     }
+}
+
+fn plan_steps(payload: &Map<String, Value>) -> Vec<PlanStep> {
+    payload
+        .get("plan")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| {
+            let value = value.as_object()?;
+            let step = map_string(value, &["step"])?;
+            let status = match map_string(value, &["status"])
+                .unwrap_or_else(|| "pending".to_string())
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "inprogress" | "in_progress" | "running" => PlanStepStatus::InProgress,
+                "completed" | "complete" | "done" => PlanStepStatus::Completed,
+                _ => PlanStepStatus::Pending,
+            };
+            Some(PlanStep { step, status })
+        })
+        .collect()
 }
 
 fn tool_arguments(payload: &Map<String, Value>) -> Vec<agent_protocol::ToolArgument> {

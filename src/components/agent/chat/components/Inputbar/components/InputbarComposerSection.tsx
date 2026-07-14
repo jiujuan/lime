@@ -2,10 +2,8 @@ import React from "react";
 import { FolderOpen } from "lucide-react";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
 import type { Character } from "@/lib/api/projectMemory";
-import type {
-  AgentSessionExecutionRuntime,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { MessageImage, MessagePathReference } from "../../../types";
 import { CharacterMention } from "../../../skill-selection/CharacterMention";
 import { InputbarCore } from "./InputbarCore";

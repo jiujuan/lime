@@ -12,7 +12,7 @@ import type {
   ContentReviewRunPayload,
   TextStylizeRunPayload,
 } from "@/components/workspace/canvas/canvasUtils";
-import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import { importDocument } from "@/lib/api/session-files";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import type { TopicBranchStatus } from "../hooks/useTopicBranchBoard";

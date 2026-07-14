@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type { Message, MessageImage } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";

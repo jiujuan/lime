@@ -1,8 +1,8 @@
 use super::*;
 use agent_protocol::{
-    ItemId, ItemStatus, SessionId, Thread, ThreadHistoryChangeSet, ThreadId, ThreadItem,
-    ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn, TurnAdmissionState, TurnApprovalState,
-    TurnId, TurnItemsView, TurnQueueState, TurnStatus,
+    ItemId, ItemStatus, SessionId, SubAgentActivityKind, Thread, ThreadHistoryChangeSet, ThreadId,
+    ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn, TurnAdmissionState,
+    TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
 };
 use app_server_protocol::{AgentEvent, AgentSession, AgentTurn, AgentTurnStatus};
 use futures::executor::block_on;
@@ -184,10 +184,10 @@ fn read_detail_projects_thread_items_into_thread_read() {
 }
 
 #[test]
-fn read_detail_prefers_canonical_thread_store_items() {
+fn read_detail_prefers_canonical_thread_store_items_after_restart() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let projection_store =
-        ProjectionStore::initialize(temp.path().join("projection.sqlite")).expect("store");
+    let database_path = temp.path().join("projection.sqlite");
+    let projection_store = ProjectionStore::initialize(database_path.clone()).expect("store");
     let stored = stored_running_session("2026-03-29T00:00:00.000Z", "2026-03-29T00:00:01.000Z");
     let thread = Thread {
         session_id: SessionId::new(stored.session.session_id.clone()),
@@ -198,6 +198,11 @@ fn read_detail_prefers_canonical_thread_store_items() {
         archived: false,
         recency_at_ms: Some(2),
         parent_thread_id: None,
+        agent_path: None,
+        agent_nickname: None,
+        agent_role: None,
+        last_task_message: None,
+        agent_state: None,
         forked_from_id: None,
         preview: String::new(),
         model_provider: "test".to_string(),
@@ -246,17 +251,52 @@ fn read_detail_prefers_canonical_thread_store_items() {
         },
         metadata: json!({}),
     };
+    let subagent_item =
+        |item_id: &str, sequence: u64, ordinal: u64, activity: SubAgentActivityKind| ThreadItem {
+            session_id: thread.session_id.clone(),
+            thread_id: thread.thread_id.clone(),
+            turn_id: turn.turn_id.clone(),
+            item_id: ItemId::new(item_id),
+            sequence,
+            ordinal,
+            created_at_ms: sequence as i64,
+            updated_at_ms: sequence as i64,
+            completed_at_ms: Some(sequence as i64),
+            kind: agent_protocol::ItemKind::SubAgent,
+            status: ItemStatus::Completed,
+            payload: ThreadItemPayload::SubAgent {
+                child_thread_id: ThreadId::new("thread-child"),
+                activity,
+                detail: Some(format!("activity:{item_id}")),
+            },
+            metadata: json!({}),
+        };
+    let started = subagent_item("subagent-started", 3, 2, SubAgentActivityKind::Started);
+    let interacted = subagent_item(
+        "subagent-interacted",
+        4,
+        3,
+        SubAgentActivityKind::Interacted,
+    );
+    let interrupted = subagent_item(
+        "subagent-interrupted",
+        5,
+        4,
+        SubAgentActivityKind::Interrupted,
+    );
     block_on(projection_store.apply_history(ApplyThreadHistoryParams {
         session_id: thread.session_id.clone(),
         thread_id: thread.thread_id.clone(),
         changes: ThreadHistoryChangeSet {
-            sequence: 2,
+            sequence: 5,
             changed_turns: vec![turn],
-            changed_items: vec![item],
+            changed_items: vec![item, started, interacted, interrupted],
             ..Default::default()
         },
     }))
     .expect("apply canonical history");
+    drop(projection_store);
+    let projection_store = ProjectionStore::initialize(database_path).expect("reopen store");
 
     let detail = block_on(runtime_session_read_detail_from_thread_store(
         &stored,
@@ -276,4 +316,32 @@ fn read_detail_prefers_canonical_thread_store_items() {
     assert_eq!(detail["items"][0]["text"], "canonical item");
     assert_eq!(detail["items"][0]["started_at"], "1970-01-01T00:00:00.001Z");
     assert_ne!(detail["items"][0]["id"], "event-read-model-running");
+    let activities = detail["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .filter(|item| item["type"] == "subagent_activity")
+        .map(|item| {
+            assert_eq!(item["session_id"], "thread-child");
+            assert_eq!(item["status"], "completed");
+            (
+                item["id"].as_str().expect("item id").to_string(),
+                item["status_label"].as_str().expect("activity").to_string(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        activities,
+        vec![
+            ("item_subagent-started".to_string(), "started".to_string()),
+            (
+                "item_subagent-interacted".to_string(),
+                "interacted".to_string()
+            ),
+            (
+                "item_subagent-interrupted".to_string(),
+                "interrupted".to_string()
+            ),
+        ]
+    );
 }

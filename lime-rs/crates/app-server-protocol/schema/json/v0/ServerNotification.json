@@ -570,6 +570,36 @@
       ],
       "type": "string"
     },
+    "CollabAgentState": {
+      "properties": {
+        "message": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/CollabAgentStatus"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "type": "object"
+    },
+    "CollabAgentStatus": {
+      "description": "Last known runtime status for an AgentControl child.\n\nThis mirrors Codex app-server's `CollabAgentStatus`; the optional message is\ncarried separately so the wire shape stays stable across terminal states.",
+      "enum": [
+        "completed",
+        "errored",
+        "interrupted",
+        "notFound",
+        "pendingInit",
+        "running",
+        "shutdown"
+      ],
+      "type": "string"
+    },
     "ConfigWarningNotification": {
       "properties": {
         "details": {
@@ -628,6 +658,7 @@
         "file",
         "mcpToolCall",
         "media",
+        "plan",
         "reasoning",
         "subAgent",
         "tool",
@@ -642,6 +673,29 @@
         "failed",
         "inProgress",
         "interrupted",
+        "pending"
+      ],
+      "type": "string"
+    },
+    "PlanStep": {
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/PlanStepStatus"
+        },
+        "step": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "step"
+      ],
+      "type": "object"
+    },
+    "PlanStepStatus": {
+      "enum": [
+        "completed",
+        "in_progress",
         "pending"
       ],
       "type": "string"
@@ -670,16 +724,9 @@
     },
     "SubAgentActivityKind": {
       "enum": [
-        "closed",
-        "completed",
-        "failed",
         "interacted",
         "interrupted",
-        "messageSent",
-        "resumed",
-        "spawned",
-        "started",
-        "waiting"
+        "started"
       ],
       "type": "string"
     },
@@ -719,6 +766,34 @@
     },
     "Thread": {
       "properties": {
+        "agentNickname": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "agentPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "agentRole": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "agentState": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CollabAgentState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "archived": {
           "type": "boolean"
         },
@@ -727,6 +802,12 @@
           "type": "integer"
         },
         "forkedFromId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastTaskMessage": {
           "type": [
             "null",
             "string"
@@ -919,6 +1000,58 @@
             }
           },
           "required": [
+            "text",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Proposed plan content. The completed snapshot is authoritative and may\nnot equal the concatenation of preceding plan deltas.",
+          "properties": {
+            "explanation": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "plan": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PlanStep"
+              },
+              "type": "array"
+            },
+            "revision_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source_item_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "tool_call_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "const": "plan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "revision_id",
             "text",
             "type"
           ],

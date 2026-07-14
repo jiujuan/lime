@@ -1,7 +1,5 @@
-import type {
-  AgentExecutionStrategy,
-  RuntimeSearchMode,
-} from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
+import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type {
   AssistantDraftState,
   SendMessageObserver,

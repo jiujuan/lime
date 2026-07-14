@@ -38,7 +38,7 @@
 1. `sessionId / threadId / turnId / taskId`
 2. `messages / threadTurns / threadItems`
 3. `thread_read / runtime_summary / permission_state`
-4. `queuedTurns / pendingActions / childSubagentSessions`
+4. `queuedTurns / pendingActions / canonical child Thread family / canonicalChildren`
 5. `artifact_snapshot / ArtifactDocument / task artifact index`
 6. `sessionHistoryWindow / cached snapshot / restore candidate`
 7. stream performance trace

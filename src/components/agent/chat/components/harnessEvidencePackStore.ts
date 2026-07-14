@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/evidenceTypes";
 
 interface EvidencePackLookup {
   sessionId?: string | null;
@@ -41,7 +41,7 @@ function readHarnessEvidencePackSnapshot({
 
   const normalizedThreadId = normalizeKey(threadId);
   return normalizedThreadId
-    ? packsByThreadId.get(normalizedThreadId) ?? null
+    ? (packsByThreadId.get(normalizedThreadId) ?? null)
     : null;
 }
 

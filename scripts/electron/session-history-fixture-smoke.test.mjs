@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import { isHistoryReplayVisualDomReady } from "./lib/session-history-replay-visual-oracle.mjs";
 
 function readSmokeScript() {
   return fs.readFileSync(
@@ -160,6 +161,31 @@ describe("agent session history Electron fixture smoke guard", () => {
     expect(combined).not.toContain("mockPriorityCommands");
     expect(combined).not.toContain("defaultMocks");
     expect(combined).not.toContain("invokeMockOnly");
+  });
+
+  it("waits for the complete history replay DOM instead of a transient reasoning shell", () => {
+    const completeSnapshot = {
+      messageListReady: true,
+      turnGroupPresent: true,
+      imageAttachmentCount: 2,
+      userTextVisible: true,
+      imagePlaceholderTextVisible: false,
+      assistantTextVisible: true,
+      reasoningNodePresent: true,
+      reasoningText: "先确认本地图片和远程参考图都应作为结构化输入恢复。",
+      reasoningSummaryOccurrences: 1,
+      mcpNodePresent: true,
+      toolRows: 1,
+    };
+
+    expect(
+      isHistoryReplayVisualDomReady({
+        ...completeSnapshot,
+        reasoningText: "思考中",
+        reasoningSummaryOccurrences: 0,
+      }),
+    ).toBe(false);
+    expect(isHistoryReplayVisualDomReady(completeSnapshot)).toBe(true);
   });
 
   it("keeps thread read page isomorphic coverage in the split current Electron oracle", () => {

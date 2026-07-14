@@ -543,7 +543,6 @@ function sessionReadToLegacy(
     queued_turns: [],
     thread_read: threadRead,
     todo_items: [],
-    child_subagent_sessions: [],
   };
 }
 

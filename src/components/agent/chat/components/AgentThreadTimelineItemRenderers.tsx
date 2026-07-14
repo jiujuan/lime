@@ -41,6 +41,7 @@ import {
   toToolCallState,
   resolveStatusBadgeVariant,
   resolveItemStatusLabel,
+  resolveSubagentStatusBadgeVariant,
   resolveSubagentStatusLabel,
   formatTimestamp,
   resolveUserFacingErrorMessage,
@@ -440,7 +441,7 @@ function renderGroupItemDetails(
   }
 
   if (item.type === "subagent_activity") {
-    const subagentSessionId = item.session_id?.trim();
+    const subagentThreadId = item.session_id?.trim();
     const displayTitle =
       resolveRuntimeAttachmentTaskDisplayName(item.title) ||
       resolveTimelineSubagentDefaultTitle();
@@ -450,7 +451,12 @@ function renderGroupItemDetails(
         icon={Bot}
         title={resolveTimelineSubagentTitle(displayTitle)}
         badge={
-          <Badge variant={resolveStatusBadgeVariant(item.status)}>
+          <Badge
+            variant={resolveSubagentStatusBadgeVariant(
+              item.status_label,
+              item.status,
+            )}
+          >
             {resolveSubagentStatusLabel(item.status_label, item.status)}
           </Badge>
         }
@@ -465,13 +471,13 @@ function renderGroupItemDetails(
             {item.model ? <Badge variant="outline">{item.model}</Badge> : null}
           </div>
         ) : null}
-        {subagentSessionId && onOpenSubagentSession ? (
+        {subagentThreadId && onOpenSubagentSession ? (
           <div className="mt-3">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => onOpenSubagentSession(subagentSessionId)}
+              onClick={() => onOpenSubagentSession(subagentThreadId)}
             >
               {options?.openSubagentLabel}
             </Button>

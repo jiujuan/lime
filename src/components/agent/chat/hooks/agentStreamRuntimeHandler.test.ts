@@ -307,7 +307,7 @@ describe("agentStreamRuntimeHandler storage", () => {
     ]);
   });
 
-  it("WebSearch 与 WebFetch 之间的 reasoning 在完整工具事件链完成后应保留顺序", () => {
+  it("WebSearch 与 WebFetch 之间的 reasoning 在 canonical Tool Item 完成后应保留顺序", () => {
     let messages: Message[] = [
       {
         id: "assistant-web-tools-full-chain",
@@ -399,19 +399,19 @@ describe("agentStreamRuntimeHandler storage", () => {
     handleTurnStreamEvent({
       ...baseOptions,
       data: {
-        type: "tool_start",
-        tool_id: "tool-web-search-full-chain",
-        tool_name: "WebSearch",
-        arguments: JSON.stringify({ query: "Lime WebSearch rendering" }),
-      } as AgentEvent,
-    });
-    handleTurnStreamEvent({
-      ...baseOptions,
-      data: {
-        type: "tool_end",
-        tool_id: "tool-web-search-full-chain",
-        result: {
-          success: true,
+        type: "item_completed",
+        item: {
+          id: "tool-web-search-full-chain",
+          thread_id: "session-web-tools-full-chain",
+          turn_id: "turn-web-tools-full-chain",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-06-20T10:00:00.100Z",
+          completed_at: "2026-06-20T10:00:00.200Z",
+          updated_at: "2026-06-20T10:00:00.200Z",
+          type: "tool_call",
+          tool_name: "WebSearch",
+          arguments: { query: "Lime WebSearch rendering" },
           output: JSON.stringify({
             results: [
               {
@@ -421,6 +421,7 @@ describe("agentStreamRuntimeHandler storage", () => {
               },
             ],
           }),
+          success: true,
         },
       } as AgentEvent,
     });
@@ -444,27 +445,28 @@ describe("agentStreamRuntimeHandler storage", () => {
     handleTurnStreamEvent({
       ...baseOptions,
       data: {
-        type: "tool_start",
-        tool_id: "tool-web-fetch-full-chain",
-        tool_name: "WebFetch",
-        arguments: JSON.stringify({
-          url: "https://example.com/lime-websearch-rendering",
-        }),
-      } as AgentEvent,
-    });
-    handleTurnStreamEvent({
-      ...baseOptions,
-      data: {
-        type: "tool_end",
-        tool_id: "tool-web-fetch-full-chain",
-        result: {
-          success: true,
+        type: "item_completed",
+        item: {
+          id: "tool-web-fetch-full-chain",
+          thread_id: "session-web-tools-full-chain",
+          turn_id: "turn-web-tools-full-chain",
+          sequence: 4,
+          status: "completed",
+          started_at: "2026-06-20T10:00:00.500Z",
+          completed_at: "2026-06-20T10:00:00.700Z",
+          updated_at: "2026-06-20T10:00:00.700Z",
+          type: "tool_call",
+          tool_name: "WebFetch",
+          arguments: {
+            url: "https://example.com/lime-websearch-rendering",
+          },
           output: JSON.stringify({
             bytes: 2048,
             code: 200,
             codeText: "OK",
             result: "WebFetch 正文摘要。",
           }),
+          success: true,
         },
       } as AgentEvent,
     });
@@ -1282,8 +1284,7 @@ describe("agentStreamRuntimeHandler storage", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
 
@@ -1394,5 +1395,4 @@ describe("agentStreamRuntimeHandler storage", () => {
       },
     });
   });
-
 });

@@ -1,4 +1,4 @@
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 
 export type SlashCommandSupport = "supported" | "unsupported";
 export type SlashCommandKind = "local_action" | "prompt_action" | "info";

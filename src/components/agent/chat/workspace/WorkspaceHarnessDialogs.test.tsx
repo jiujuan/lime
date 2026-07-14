@@ -48,11 +48,14 @@ function renderDialog(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  const onSubmitCodeFixPrompt = vi.fn<
-    NonNullable<
-      ComponentProps<typeof GeneralWorkbenchDialogSection>["onSubmitCodeFixPrompt"]
-    >
-  >();
+  const onSubmitCodeFixPrompt =
+    vi.fn<
+      NonNullable<
+        ComponentProps<
+          typeof GeneralWorkbenchDialogSection
+        >["onSubmitCodeFixPrompt"]
+      >
+    >();
 
   act(() => {
     root.render(
@@ -208,6 +211,42 @@ describe("WorkspaceHarnessDialogs", () => {
     expect(surface?.className).toContain("h-full");
     expect(panel).not.toBeNull();
     expect(panel?.getAttribute("data-layout")).toBe("dialog");
+  });
+
+  it("应展示 canonical child roster 并按 ThreadId 导航", () => {
+    const onOpenSubagentSession = vi.fn();
+    const container = renderSurface({
+      canonicalChildren: [
+        {
+          modelProvider: "openai",
+          name: "审阅进程",
+          parentThreadId: "thread-parent",
+          path: "/root/reviewer",
+          role: "reviewer",
+          sessionId: "session-reviewer",
+          status: "interrupted",
+          statusMessage: "等待新的审阅范围",
+          taskSummary: "检查 canonical roster 接线",
+          threadId: "thread-reviewer",
+          updatedAtMs: Date.parse("2026-07-14T10:00:00.000Z"),
+        },
+      ],
+      onOpenSubagentSession,
+    });
+
+    expect(container.textContent).toContain("审阅进程");
+    expect(container.textContent).toContain("reviewer");
+    expect(container.textContent).toContain("openai");
+    expect(container.textContent).toContain("已中断");
+    expect(container.textContent).toContain("等待新的审阅范围");
+
+    const openButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("查看详情"),
+    );
+    act(() => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onOpenSubagentSession).toHaveBeenCalledWith("thread-reviewer");
   });
 
   it("运行时工作台弹窗应基于信号展示导轨并可跳到权限区块", () => {
@@ -457,9 +496,7 @@ describe("WorkspaceHarnessDialogs", () => {
 
     expect(onSubmitCodeFixPrompt).toHaveBeenCalledTimes(1);
     expect(onSubmitCodeFixPrompt.mock.calls[0]?.[0]).toContain("回归测试失败");
-    expect(onSubmitCodeFixPrompt.mock.calls[0]?.[0]).toContain(
-      "1 test failed",
-    );
+    expect(onSubmitCodeFixPrompt.mock.calls[0]?.[0]).toContain("1 test failed");
   });
 
   it("代码审阅摘要应跟随文件审阅区的已应用状态变化", () => {

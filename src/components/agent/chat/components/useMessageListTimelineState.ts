@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import type {
-  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import { buildInputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
 import {
   filterConversationThreadItemsForRenderedTurns,
@@ -36,7 +36,7 @@ import { measureMessageListComputation } from "./messageListPerformance";
 
 interface UseMessageListTimelineStateOptions {
   activePendingA2UISource: PendingA2UISource | null;
-  childSubagentSessions: readonly AgentSubagentSessionInfo[];
+  canonicalChildren: CanonicalChildThreadSummary[];
   currentTurnId: string | null;
   expandedHistoricalTimelineKeys: Set<string>;
   focusedTimelineItemId: string | null;
@@ -58,7 +58,7 @@ interface UseMessageListTimelineStateOptions {
 
 export function useMessageListTimelineState({
   activePendingA2UISource,
-  childSubagentSessions,
+  canonicalChildren,
   currentTurnId,
   expandedHistoricalTimelineKeys,
   focusedTimelineItemId,
@@ -254,40 +254,37 @@ export function useMessageListTimelineState({
     hasActiveInteractiveRuntime ||
     turns.length > 0 ||
     threadItems.length > 0 ||
-    childSubagentSessions.length > 0;
-  const activeConversationRuntimeStatusLine = useMemo(
-    () => {
-      if (!hasRuntimeStatusLineEvidence) {
-        return null;
-      }
+    canonicalChildren.length > 0;
+  const activeConversationRuntimeStatusLine = useMemo(() => {
+    if (!hasRuntimeStatusLineEvidence) {
+      return null;
+    }
 
-      return buildInputbarRuntimeStatusLineModel({
-        messages: renderedMessages,
-        turns: renderedTurns,
-        threadItems: renderedThreadItems,
-        currentTurnId: activeCurrentTurnId,
-        threadRead,
-        pendingActions,
-        submittedActionsInFlight,
-        queuedTurns,
-        childSubagentSessions,
-        isSending,
-      });
-    },
-    [
-      activeCurrentTurnId,
-      childSubagentSessions,
-      hasRuntimeStatusLineEvidence,
-      isSending,
-      pendingActions,
-      queuedTurns,
-      renderedMessages,
-      renderedThreadItems,
-      renderedTurns,
-      submittedActionsInFlight,
+    return buildInputbarRuntimeStatusLineModel({
+      messages: renderedMessages,
+      turns: renderedTurns,
+      threadItems: renderedThreadItems,
+      currentTurnId: activeCurrentTurnId,
       threadRead,
-    ],
-  );
+      pendingActions,
+      submittedActionsInFlight,
+      queuedTurns,
+      canonicalChildren,
+      isSending,
+    });
+  }, [
+    activeCurrentTurnId,
+    canonicalChildren,
+    hasRuntimeStatusLineEvidence,
+    isSending,
+    pendingActions,
+    queuedTurns,
+    renderedMessages,
+    renderedThreadItems,
+    renderedTurns,
+    submittedActionsInFlight,
+    threadRead,
+  ]);
   const tailRuntimeStatusLine = useMemo(() => {
     if (!lastAssistantMessageId || shouldDeferTailRuntimeStatusLine) {
       return null;

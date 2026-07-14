@@ -1,7 +1,7 @@
 import type {
   AgentRuntimeEvidenceBrowserActionIndex,
   AgentRuntimeEvidencePack,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import { HarnessEvidencePackCard } from "./HarnessEvidencePackCard";
 import type { HandoffPreviewRequest } from "./HarnessHandoffExportTypes";
 import {

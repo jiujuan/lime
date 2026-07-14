@@ -5,11 +5,11 @@ import {
   type AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
 import type {
-  AgentRuntimeThreadReadModel,
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, Message } from "../types";
 import {
   buildWaitingAgentRuntimeStatus,

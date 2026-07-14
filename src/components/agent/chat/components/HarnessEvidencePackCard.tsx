@@ -3,7 +3,7 @@ import type {
   AgentRuntimeEvidenceMcpResourceContentRef,
   AgentRuntimeEvidenceMcpResourceRead,
   AgentRuntimeEvidencePack,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import { FolderOpen, Loader2, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

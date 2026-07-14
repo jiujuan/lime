@@ -1,4 +1,4 @@
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { formatAgentRuntimeStatusSummary } from "../utils/agentRuntimeStatus";
 import { isAgentMessageFinalAnswerPhase } from "../utils/agentMessagePhase";
 import type { Message, MessageImage, MessagePathReference } from "../types";

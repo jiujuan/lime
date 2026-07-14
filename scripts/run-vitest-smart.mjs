@@ -49,6 +49,7 @@ const includeLiveProviderTests = liveProviderSmokeAllowed();
 
 let activeRunState = null;
 let activeBatchIndex = null;
+let activeRunStateShouldPersist = false;
 
 function nowIso() {
   return new Date().toISOString();
@@ -428,11 +429,21 @@ function createRunState({ batches, skippedLiveTestCount }) {
   };
 }
 
-function writeRunState(state, stateFile = defaultStateFile) {
+export function shouldPersistRunState(options) {
+  return options.onlyBatch === null && !options.listBatches;
+}
+
+export function updateRunState(
+  state,
+  { persist = true, stateFile = defaultStateFile } = {},
+) {
   const nextState = {
     ...state,
     updated_at: nowIso(),
   };
+  if (!persist) {
+    return nextState;
+  }
   const directory = path.dirname(stateFile);
   fs.mkdirSync(directory, { recursive: true });
   const tempFile = `${stateFile}.tmp`;
@@ -546,6 +557,9 @@ function runFullSuite(options) {
   let state;
   let batches;
   let resumeStartIndex = 0;
+  const persistState = shouldPersistRunState(options);
+  const saveState = (nextState) =>
+    updateRunState(nextState, { persist: persistState });
 
   if (options.resume) {
     state = readRunState();
@@ -564,7 +578,7 @@ function runFullSuite(options) {
     }
     batches = buildBatches(files);
     state = createRunState({ batches, skippedLiveTestCount });
-    state = writeRunState(state);
+    state = saveState(state);
   }
 
   if (options.listBatches) {
@@ -581,10 +595,11 @@ function runFullSuite(options) {
 
   if (options.onlyBatch !== null || options.fromBatch !== null) {
     state = markSkippedBatches(state, selectedIndexes);
-    state = writeRunState(state);
+    state = saveState(state);
   }
 
   activeRunState = state;
+  activeRunStateShouldPersist = persistState;
 
   for (const batchIndex of selectedIndexes) {
     activeBatchIndex = batchIndex;
@@ -594,7 +609,7 @@ function runFullSuite(options) {
       completed_at: null,
       exit_status: null,
     });
-    state = writeRunState(state);
+    state = saveState(state);
     activeRunState = state;
 
     const status = runVitest(
@@ -621,11 +636,14 @@ function runFullSuite(options) {
         completed_at: nowIso(),
         failed_batch: batchIndex + 1,
       };
-      state = writeRunState(state);
+      state = saveState(state);
       activeRunState = null;
       activeBatchIndex = null;
+      activeRunStateShouldPersist = false;
       console.error(
-        `[vitest-smart] 批次 ${batchIndex + 1}/${batches.length} 失败。修复后可执行：npm test -- --resume`,
+        persistState
+          ? `[vitest-smart] 批次 ${batchIndex + 1}/${batches.length} 失败。修复后可执行：npm test -- --resume`
+          : `[vitest-smart] 批次 ${batchIndex + 1}/${batches.length} 失败。targeted run 未改写 resume 状态。`,
       );
       process.exit(status);
     }
@@ -635,7 +653,7 @@ function runFullSuite(options) {
       completed_at: nowIso(),
       exit_status: 0,
     });
-    state = writeRunState(state);
+    state = saveState(state);
     activeRunState = state;
   }
 
@@ -648,9 +666,10 @@ function runFullSuite(options) {
     completed_at: hasRemaining ? null : nowIso(),
     failed_batch: null,
   };
-  state = writeRunState(state);
+  state = saveState(state);
   activeRunState = null;
   activeBatchIndex = null;
+  activeRunStateShouldPersist = false;
 }
 
 function runRelatedMode(args) {
@@ -685,9 +704,13 @@ function handleInterrupted(signal) {
       completed_at: nowIso(),
       failed_batch: activeBatchIndex + 1,
     };
-    writeRunState(activeRunState);
+    if (activeRunStateShouldPersist) {
+      updateRunState(activeRunState);
+    }
     console.error(
-      `[vitest-smart] 收到 ${signal}，已记录中断批次。继续执行：npm test -- --resume`,
+      activeRunStateShouldPersist
+        ? `[vitest-smart] 收到 ${signal}，已记录中断批次。继续执行：npm test -- --resume`
+        : `[vitest-smart] 收到 ${signal}，targeted run 未改写 resume 状态。`,
     );
   }
   process.exit(signal === "SIGINT" ? 130 : 143);

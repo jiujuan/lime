@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type {
-  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
@@ -25,7 +24,6 @@ const EMPTY_PROJECTED_THREAD_ITEMS: AgentThreadItem[] = [];
 const EMPTY_PROJECTED_PENDING_ACTIONS: never[] = [];
 const EMPTY_PROJECTED_SUBMITTED_ACTIONS: never[] = [];
 const EMPTY_PROJECTED_QUEUED_TURNS: QueuedTurnSnapshot[] = [];
-const EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS: AgentSubagentSessionInfo[] = [];
 
 export interface SessionRuntimeProjectionDeferralInput<
   PendingAction,
@@ -40,7 +38,6 @@ export interface SessionRuntimeProjectionDeferralInput<
   pendingActions: readonly PendingAction[];
   submittedActionsInFlight: readonly SubmittedAction[];
   queuedTurns: readonly QueuedTurnSnapshot[];
-  childSubagentSessions: readonly AgentSubagentSessionInfo[];
   isRestoringSession: boolean;
   isSending: boolean;
   focusedTimelineItemId?: string | null;
@@ -58,7 +55,6 @@ export interface SessionRuntimeProjectionDeferralResult<
   pendingActions: readonly PendingAction[];
   submittedActionsInFlight: readonly SubmittedAction[];
   queuedTurns: readonly QueuedTurnSnapshot[];
-  childSubagentSessions: readonly AgentSubagentSessionInfo[];
 }
 
 export function useSessionRuntimeProjectionDeferral<
@@ -74,7 +70,6 @@ export function useSessionRuntimeProjectionDeferral<
   pendingActions,
   submittedActionsInFlight,
   queuedTurns,
-  childSubagentSessions,
   isRestoringSession,
   isSending,
   focusedTimelineItemId,
@@ -179,7 +174,6 @@ export function useSessionRuntimeProjectionDeferral<
       pendingActions,
       submittedActionsInFlight,
       queuedTurns,
-      childSubagentSessions,
     };
   }
 
@@ -191,6 +185,5 @@ export function useSessionRuntimeProjectionDeferral<
     pendingActions: EMPTY_PROJECTED_PENDING_ACTIONS,
     submittedActionsInFlight: EMPTY_PROJECTED_SUBMITTED_ACTIONS,
     queuedTurns: EMPTY_PROJECTED_QUEUED_TURNS,
-    childSubagentSessions: EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS,
   };
 }

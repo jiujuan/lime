@@ -3,7 +3,12 @@ use super::super::status::agent_session_status_label;
 use super::super::status::agent_turn_status_label;
 use super::super::status::resolve_agent_session_runtime_state;
 use super::super::string_field;
+use super::super::RuntimeCore;
+use super::super::RuntimeCoreError;
 use super::HANDOFF_RECENT_ARTIFACT_LIMIT;
+use agent_protocol::CollabAgentStatus;
+use agent_protocol::ThreadId;
+use agent_protocol::ThreadTurnsView;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionReadResponse;
@@ -16,6 +21,10 @@ use app_server_protocol::ManagedObjective;
 use app_server_protocol::ManagedObjectiveStatus;
 use serde_json::json;
 use std::collections::HashSet;
+use thread_store::AgentGraphStore;
+use thread_store::ReadThreadParams;
+use thread_store::ThreadSpawnEdgeStatus;
+use thread_store::ThreadStore;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct HandoffMetrics {
@@ -211,7 +220,10 @@ fn managed_objective_status_value(status: ManagedObjectiveStatus) -> &'static st
     }
 }
 
-pub(super) fn handoff_metrics(read: &AgentSessionReadResponse) -> HandoffMetrics {
+pub(super) async fn handoff_metrics(
+    runtime: &RuntimeCore,
+    read: &AgentSessionReadResponse,
+) -> Result<HandoffMetrics, RuntimeCoreError> {
     let mut metrics = HandoffMetrics {
         thread_status: agent_session_status_label(read.session.status).to_string(),
         latest_turn_status: read
@@ -223,11 +235,13 @@ pub(super) fn handoff_metrics(read: &AgentSessionReadResponse) -> HandoffMetrics
             .iter()
             .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
             .count(),
+        active_subagent_count: canonical_active_subagent_count(runtime, &read.session.thread_id)
+            .await?,
         ..HandoffMetrics::default()
     };
 
     let Some(detail) = read.detail.as_ref() else {
-        return metrics;
+        return Ok(metrics);
     };
     let thread_read = detail.get("thread_read").filter(|value| value.is_object());
     if let Some(thread_status) =
@@ -255,20 +269,6 @@ pub(super) fn handoff_metrics(read: &AgentSessionReadResponse) -> HandoffMetrics
     {
         metrics.queued_turn_count = queued_turns.len();
     }
-    if let Some(subagents) = detail
-        .get("child_subagent_sessions")
-        .or_else(|| detail.get("subagents"))
-        .and_then(serde_json::Value::as_array)
-    {
-        metrics.active_subagent_count = subagents
-            .iter()
-            .filter(|item| {
-                string_field(item, &["status", "runtime_status", "runtimeStatus"])
-                    .map(|status| handoff_status_is_active(status.as_str()))
-                    .unwrap_or(true)
-            })
-            .count();
-    }
     if let Some(todo_items) = detail
         .get("todo_items")
         .or_else(|| detail.get("todoItems"))
@@ -288,14 +288,56 @@ pub(super) fn handoff_metrics(read: &AgentSessionReadResponse) -> HandoffMetrics
             }
         }
     }
-    metrics
+    Ok(metrics)
 }
 
-fn handoff_status_is_active(status: &str) -> bool {
-    matches!(
-        status,
-        "accepted" | "queued" | "running" | "waitingAction" | "waiting_action" | "in_progress"
-    )
+async fn canonical_active_subagent_count(
+    runtime: &RuntimeCore,
+    parent_thread_id: &str,
+) -> Result<usize, RuntimeCoreError> {
+    let Some(store) = runtime.projection_store.as_deref() else {
+        return Ok(0);
+    };
+    let children = store
+        .list_thread_spawn_children(
+            ThreadId::new(parent_thread_id),
+            Some(ThreadSpawnEdgeStatus::Open),
+        )
+        .await
+        .map_err(canonical_store_error)?;
+    let mut active = 0;
+    for child_thread_id in children {
+        let child = store
+            .read_thread(ReadThreadParams {
+                thread_id: child_thread_id,
+                include_archived: false,
+                turns_view: ThreadTurnsView::Summary,
+            })
+            .await
+            .map_err(canonical_store_error)?;
+        if child
+            .and_then(|thread| thread.agent_state)
+            .is_some_and(|state| canonical_subagent_status_is_active(state.status))
+        {
+            active += 1;
+        }
+    }
+    Ok(active)
+}
+
+fn canonical_subagent_status_is_active(status: CollabAgentStatus) -> bool {
+    match status {
+        CollabAgentStatus::PendingInit | CollabAgentStatus::Running => true,
+        CollabAgentStatus::Interrupted
+        | CollabAgentStatus::Completed
+        | CollabAgentStatus::Errored
+        | CollabAgentStatus::Shutdown
+        | CollabAgentStatus::NotFound => false,
+    }
+}
+
+fn canonical_store_error(error: thread_store::ThreadStoreError) -> RuntimeCoreError {
+    RuntimeCoreError::Backend(error.to_string())
 }
 
 pub(super) fn handoff_recent_artifacts(
@@ -333,4 +375,25 @@ pub(super) fn handoff_recent_artifacts(
     }
     recent.reverse();
     recent
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_subagent_status_mapping_is_exhaustive() {
+        for status in [CollabAgentStatus::PendingInit, CollabAgentStatus::Running] {
+            assert!(canonical_subagent_status_is_active(status));
+        }
+        for status in [
+            CollabAgentStatus::Interrupted,
+            CollabAgentStatus::Completed,
+            CollabAgentStatus::Errored,
+            CollabAgentStatus::Shutdown,
+            CollabAgentStatus::NotFound,
+        ] {
+            assert!(!canonical_subagent_status_is_active(status));
+        }
+    }
 }

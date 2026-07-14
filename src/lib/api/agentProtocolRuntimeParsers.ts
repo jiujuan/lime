@@ -11,15 +11,12 @@ import { normalizeExecutionStrategyToReact } from "./agentRuntime/executionStrat
 import type {
   AgentContextTraceStep,
   AgentMessage,
-  AgentTokenUsage,
 } from "./agentProtocolCoreTypes";
 import type {
   AgentEvent,
-  AgentSubagentRuntimeStatus,
   AgentTurnContextSummary,
 } from "./agentProtocolEventTypes";
 import {
-  normalizeOptionalNumber,
   normalizeRecord,
   pickStringField,
   routingDecisionFromEvent,
@@ -386,71 +383,6 @@ export function parseAgentRuntimeEvent(
         queued_turn_ids: Array.isArray(event.queued_turn_ids)
           ? (event.queued_turn_ids as string[])
           : [],
-      };
-    case "subagent_status_changed":
-      return {
-        type: "subagent_status_changed",
-        session_id: (event.session_id as string) || "",
-        root_session_id: (event.root_session_id as string) || "",
-        parent_session_id: event.parent_session_id as string | undefined,
-        status:
-          (event.status as AgentSubagentRuntimeStatus | undefined) || "idle",
-        latest_turn_id:
-          typeof event.latest_turn_id === "string"
-            ? event.latest_turn_id
-            : undefined,
-        latest_turn_status: event.latest_turn_status as
-          | AgentSubagentRuntimeStatus
-          | undefined,
-        queued_turn_count:
-          typeof event.queued_turn_count === "number"
-            ? event.queued_turn_count
-            : undefined,
-        team_phase:
-          typeof event.team_phase === "string" ? event.team_phase : undefined,
-        team_parallel_budget:
-          typeof event.team_parallel_budget === "number"
-            ? event.team_parallel_budget
-            : undefined,
-        team_active_count:
-          typeof event.team_active_count === "number"
-            ? event.team_active_count
-            : undefined,
-        team_queued_count:
-          typeof event.team_queued_count === "number"
-            ? event.team_queued_count
-            : undefined,
-        provider_concurrency_group:
-          typeof event.provider_concurrency_group === "string"
-            ? event.provider_concurrency_group
-            : undefined,
-        provider_parallel_budget:
-          typeof event.provider_parallel_budget === "number"
-            ? event.provider_parallel_budget
-            : undefined,
-        queue_reason:
-          typeof event.queue_reason === "string"
-            ? event.queue_reason
-            : undefined,
-        retryable_overload:
-          typeof event.retryable_overload === "boolean"
-            ? event.retryable_overload
-            : undefined,
-        closed: typeof event.closed === "boolean" ? event.closed : undefined,
-        usage: event.usage as AgentTokenUsage | undefined,
-        duration_ms: normalizeOptionalNumber(
-          event.duration_ms ?? event.durationMs,
-        ),
-        tool_count: normalizeOptionalNumber(
-          event.tool_count ?? event.toolCount,
-        ),
-        result_ref:
-          typeof event.result_ref === "string"
-            ? event.result_ref
-            : typeof event.resultRef === "string"
-              ? event.resultRef
-              : undefined,
-        metadata: normalizeRecord(event.metadata),
       };
     case "message":
       return {

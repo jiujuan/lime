@@ -45,6 +45,8 @@ const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_TIMEOUT_MS = 3_000;
 const APP_SERVER_CONVERSATION_IMPORT_THREAD_COMMIT_TIMEOUT_MS = 180_000;
 const APP_SERVER_REQUEST_TIMEOUT_OVERRIDE_CEILING_MS = 600_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
+const APP_SERVER_STREAMING_TURN_IDENTITY_READ_TIMEOUT_MS = 2_000;
+const APP_SERVER_STREAMING_TURN_IDENTITY_READ_RETRY_MS = 25;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_CANCEL_REQUEST_METHOD = "$/cancelRequest";
 const APP_SERVER_DATA_DIR_NAME = "app-server";
@@ -359,12 +361,12 @@ export class ElectronAppServerHost {
         return messages;
       }
       const identity = turnEventIdentity(result.messages[0]);
+      const acceptedIdentity =
+        identity && turnIdentityMatchesStart(identity, originalMessage)
+          ? identity
+          : await this.#readCanonicalTurnIdentity(connected, originalMessage);
       return [
-        streamingTurnStartAcceptedResponse(
-          originalMessage,
-          identity ??
-            (await this.#readCanonicalTurnIdentity(connected, originalMessage)),
-        ),
+        streamingTurnStartAcceptedResponse(originalMessage, acceptedIdentity),
       ];
     } catch (error) {
       if (!isAppServerRequestTimeoutError(error)) {
@@ -390,19 +392,55 @@ export class ElectronAppServerHost {
         "app-server turn/start timed out before a canonical turn identity event",
       );
     }
-    const read = await this.#requestAppServer<AgentSessionReadResponse>(
-      connected,
-      connected.connection.client.readSession({ sessionId }),
-      "agentSession/read",
-      { timeoutMs: DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS },
-    );
-    const identity = turnIdentityFromSessionRead(read.result, sessionId, turnId);
-    if (!identity) {
-      throw new Error(
-        "app-server turn/start did not resolve a canonical turn identity",
+
+    const startedAt = Date.now();
+    for (;;) {
+      const elapsedMs = Date.now() - startedAt;
+      const remainingMs =
+        APP_SERVER_STREAMING_TURN_IDENTITY_READ_TIMEOUT_MS - elapsedMs;
+      if (remainingMs <= 0) {
+        break;
+      }
+
+      const read = await this.#requestAppServer<AgentSessionReadResponse>(
+        connected,
+        connected.connection.client.readSession({ sessionId }),
+        "agentSession/read",
+        {
+          timeoutMs: Math.min(
+            DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS,
+            remainingMs,
+          ),
+        },
       );
+      const identity = turnIdentityFromSessionRead(
+        read.result,
+        sessionId,
+        turnId,
+      );
+      if (identity) {
+        return identity;
+      }
+
+      const retryDelayMs = Math.min(
+        APP_SERVER_STREAMING_TURN_IDENTITY_READ_RETRY_MS,
+        Math.max(
+          0,
+          APP_SERVER_STREAMING_TURN_IDENTITY_READ_TIMEOUT_MS -
+            (Date.now() - startedAt),
+        ),
+      );
+      if (retryDelayMs <= 0) {
+        break;
+      }
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, retryDelayMs);
+      });
     }
-    return identity;
+
+    throw new Error(
+      "app-server turn/start did not resolve a canonical turn identity",
+    );
   }
 
   async #withActiveProxyRequest<T>(
@@ -678,6 +716,19 @@ function turnEventIdentity(
     return null;
   }
   return { sessionId, threadId, turnId, timestamp };
+}
+
+function turnIdentityMatchesStart(
+  identity: CanonicalTurnIdentity,
+  originalMessage: JsonRpcRequest,
+): boolean {
+  const params = turnStartParams(originalMessage);
+  const sessionId = nonEmptyString(params?.sessionId);
+  const turnId = nonEmptyString(params?.turnId);
+  return (
+    (!sessionId || identity.sessionId === sessionId) &&
+    (!turnId || identity.turnId === turnId)
+  );
 }
 
 function turnIdentityFromSessionRead(

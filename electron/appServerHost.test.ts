@@ -34,11 +34,14 @@ const {
   let systemProxyRules = "DIRECT";
   const resolveProxyMock = vi.fn(async () => systemProxyRules);
   let releaseDelayedStaleError: (() => void) | null = null;
+  let turnIdentityReadAttempts = 0;
   let turnStartRequestMode:
     | "resolve"
     | "hang"
     | "hang-non-admission"
     | "hang-non-admission-read-invalid"
+    | "hang-mismatched-admission"
+    | "hang-non-admission-read-eventual"
     | "hang-request"
     | "throw-stale-once"
     | "throw-exited-before-next-message"
@@ -81,16 +84,23 @@ const {
         recordedRequests.push(request);
         const hasCanonicalIdentity =
           turnStartRequestMode !== "hang-non-admission" &&
-          turnStartRequestMode !== "hang-non-admission-read-invalid";
+          turnStartRequestMode !== "hang-non-admission-read-invalid" &&
+          turnStartRequestMode !== "hang-non-admission-read-eventual";
+        const isMismatchedAdmission =
+          turnStartRequestMode === "hang-mismatched-admission";
         const notification = {
           method: "agentSession/event",
           params: {
             event: {
               eventId: `evt-${request.id}`,
               sequence: 1,
-              sessionId: "session-b",
-              ...(hasCanonicalIdentity ? { threadId: "thread-b" } : {}),
-              turnId: "turn-b",
+              sessionId: isMismatchedAdmission ? "session-old" : "session-b",
+              ...(hasCanonicalIdentity
+                ? {
+                    threadId: isMismatchedAdmission ? "thread-old" : "thread-b",
+                  }
+                : {}),
+              turnId: isMismatchedAdmission ? "turn-old" : "turn-b",
               type: "message.created",
               timestamp: "2026-06-06T00:00:00.000Z",
               payload: {},
@@ -102,7 +112,9 @@ const {
           if (
             turnStartRequestMode === "hang" ||
             turnStartRequestMode === "hang-non-admission" ||
-            turnStartRequestMode === "hang-non-admission-read-invalid"
+            turnStartRequestMode === "hang-non-admission-read-invalid" ||
+            turnStartRequestMode === "hang-mismatched-admission" ||
+            turnStartRequestMode === "hang-non-admission-read-eventual"
           ) {
             return {
               id: request.id,
@@ -189,27 +201,37 @@ const {
       if (
         request.method === "agentSession/read" &&
         (turnStartRequestMode === "hang-non-admission" ||
-          turnStartRequestMode === "hang-non-admission-read-invalid")
+          turnStartRequestMode === "hang-non-admission-read-invalid" ||
+          turnStartRequestMode === "hang-mismatched-admission" ||
+          turnStartRequestMode === "hang-non-admission-read-eventual")
       ) {
         const invalidIdentity =
           turnStartRequestMode === "hang-non-admission-read-invalid";
+        const eventualIdentity =
+          turnStartRequestMode === "hang-non-admission-read-eventual";
+        const shouldReturnEventualInvalid =
+          eventualIdentity && turnIdentityReadAttempts++ === 0;
         return {
           result: {
             session: {
               sessionId: "session-b",
-              threadId: invalidIdentity ? "" : "thread-b",
+              threadId:
+                invalidIdentity || shouldReturnEventualInvalid
+                  ? ""
+                  : "thread-b",
               updatedAt: "2026-06-06T00:00:00.000Z",
             },
-            turns: invalidIdentity
-              ? []
-              : [
-                  {
-                    turnId: "turn-b",
-                    sessionId: "session-b",
-                    threadId: "thread-b",
-                    startedAt: "2026-06-06T00:00:00.000Z",
-                  },
-                ],
+            turns:
+              invalidIdentity || shouldReturnEventualInvalid
+                ? []
+                : [
+                    {
+                      turnId: "turn-b",
+                      sessionId: "session-b",
+                      threadId: "thread-b",
+                      startedAt: "2026-06-06T00:00:00.000Z",
+                    },
+                  ],
           },
           messages: [],
         };
@@ -331,6 +353,7 @@ const {
       lifecycleOptions.length = 0;
       mirroredNotifications.length = 0;
       delayedStaleErrorReadyResolvers.length = 0;
+      turnIdentityReadAttempts = 0;
       systemProxyRules = "DIRECT";
       resolveProxyMock.mockClear();
       releaseDelayedStaleError = null;
@@ -351,6 +374,8 @@ const {
         | "hang"
         | "hang-non-admission"
         | "hang-non-admission-read-invalid"
+        | "hang-mismatched-admission"
+        | "hang-non-admission-read-eventual"
         | "hang-request"
         | "throw-stale-once"
         | "throw-exited-before-next-message"
@@ -1011,6 +1036,81 @@ describe("ElectronAppServerHost", () => {
     ]);
     expect(recordedRequests.map((request) => request.method)).toEqual([
       "agentSession/turn/start",
+      "agentSession/read",
+    ]);
+  });
+
+  it("首条 streaming 通知属于旧 turn 时应丢弃该通知身份并读取 requested canonical turn", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    setTurnStartRequestMode("hang-mismatched-admission");
+    const host = new ElectronAppServerHost();
+
+    const result = await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: 1,
+          method: "agentSession/turn/start",
+          params: {
+            sessionId: "session-b",
+            turnId: "turn-b",
+            input: { text: "忽略旧回合通知" },
+          },
+        }),
+      ],
+    });
+
+    expect(result.lines.map(decodeMessage)).toMatchObject([
+      {
+        id: 1,
+        result: {
+          turn: {
+            sessionId: "session-b",
+            threadId: "thread-b",
+            turnId: "turn-b",
+          },
+        },
+      },
+    ]);
+    expect(recordedRequests.map((request) => request.method)).toEqual([
+      "agentSession/turn/start",
+      "agentSession/read",
+    ]);
+  });
+
+  it("canonical Turn read model 稍晚落盘时应在有界窗口内重读而不是误报 identity 缺失", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    setTurnStartRequestMode("hang-non-admission-read-eventual");
+    const host = new ElectronAppServerHost();
+
+    const result = await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: 1,
+          method: "agentSession/turn/start",
+          params: {
+            sessionId: "session-b",
+            turnId: "turn-b",
+            input: { text: "等待 canonical Turn 落盘" },
+          },
+        }),
+      ],
+    });
+
+    expect(result.lines.map(decodeMessage)).toMatchObject([
+      {
+        id: 1,
+        result: {
+          turn: {
+            sessionId: "session-b",
+            threadId: "thread-b",
+            turnId: "turn-b",
+          },
+        },
+      },
+    ]);
+    expect(recordedRequests.map((request) => request.method)).toEqual([
+      "agentSession/turn/start",
+      "agentSession/read",
       "agentSession/read",
     ]);
   });

@@ -5,7 +5,7 @@ import type {
   PatchView,
   TestRunView,
 } from "@limecloud/agent-runtime-projection";
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime/sessionTypes";
 
 export type CodingWorkbenchRecoverySignalKind =
   | "command"

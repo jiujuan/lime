@@ -43,7 +43,7 @@ vi.mock("@/lib/artifact/hooks/useDebouncedValue", () => ({
   useDebouncedValue: <T,>(value: T) => value,
 }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/threadClient", () => ({
   listAgentRuntimeFileCheckpoints: (...args: unknown[]) =>
     listAgentRuntimeFileCheckpointsMock(...args),
   restoreAgentRuntimeFileCheckpoint: (...args: unknown[]) =>
@@ -179,9 +179,7 @@ vi.mock("react-i18next", () => ({
       if (key === "agentChat.processGroup.separator") {
         return "，";
       }
-      if (
-        key === "agentChat.processGroup.webSearch.section.webSearchSources"
-      ) {
+      if (key === "agentChat.processGroup.webSearch.section.webSearchSources") {
         return "搜索来源";
       }
       if (key === "agentChat.processGroup.webSearch.section.webFetchPages") {

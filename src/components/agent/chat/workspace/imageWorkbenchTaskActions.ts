@@ -1,4 +1,4 @@
-import type { AgentRuntimeGeneratedTitleResult } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeGeneratedTitleResult } from "@/lib/api/agentRuntime/sessionTypes";
 import type {
   CreateImageGenerationTaskArtifactRequest,
   MediaTaskArtifactOutput,

@@ -178,6 +178,11 @@ export const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
     params: "required",
   },
   {
+    name: "listThreads",
+    method: constants.APP_SERVER_METHOD_THREAD_LIST,
+    params: "optional-empty",
+  },
+  {
     name: "readThread",
     method: constants.APP_SERVER_METHOD_THREAD_READ,
     params: "required",

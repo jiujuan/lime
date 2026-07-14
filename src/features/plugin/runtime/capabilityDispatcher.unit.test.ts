@@ -1105,7 +1105,7 @@ describe("createPluginCapabilityDispatcher unit boundary", () => {
       expect.objectContaining({
         appId: "content-factory-app",
         taskId: "plugin-tool-task-1",
-        sessionId: "agent-runtime-session-1",
+        threadId: "agent-runtime-thread-1",
         turnId: "plugin-tool-turn-1",
       }),
     );

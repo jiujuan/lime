@@ -1,9 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  getAgentUiFixture,
-} from "../../agent-ui-contracts/dist/index.js";
+import { getAgentUiFixture } from "../../agent-ui-contracts/dist/index.js";
 import {
   buildAgentUiActionRequiredEvent,
   buildAgentUiActionResolvedEvent,
@@ -23,7 +21,6 @@ import {
   buildAgentUiThreadItemBase,
   buildAgentUiThreadItemEvent,
   buildAgentUiThreadItemSubagentActivityEvent,
-  buildAgentUiThreadItemSubagentWorkerNotificationEvent,
   buildAgentUiToolEndEvent,
   buildAgentUiToolEndEvents,
   buildAgentUiToolInputDeltaEvent,
@@ -41,13 +38,11 @@ import {
   indexAgentUiProjectionEvents,
   isAgentUiTaskUpdateToolName,
   isAgentInputSourceRecoveryEvent,
-  isSubagentTerminalStatus,
   metadataKeys,
   normalizeAgentUiProjectionToolName,
   normalizeProjectionIdList,
   normalizeRuntimePhaseFromRuntimeStatusPhase,
   normalizeRuntimeStatusFromRuntimePhase,
-  normalizeSubagentRuntimeStatus,
   projectAgentUiState,
   projectAgentUiMcpSurface,
   projectAgentUiToolSurface,
@@ -69,12 +64,8 @@ import {
   resolveAgentUiThreadItemPhase,
   resolveAgentUiThreadItemSubagentRuntimeStatus,
   resolveAgentUiThreadItemToolResultType,
-  resolveSubagentStatusControl,
-  resolveSubagentStatusPhase,
   resolveTeamTopology,
   buildTeamRuntimeFacts,
-  buildSubagentRuntimeFacts,
-  buildWorkerUsageProjection,
   buildRoutingDecisionPayload,
   extractArtifactRefs,
   projectCodingWorkbenchViewFromEvents,
@@ -779,7 +770,11 @@ test("projectAgentUiStateFromSessionSnapshot upgrades legacy transcript plus rea
   assert.equal(state.hydration.eventCount, 2);
   assert.equal(state.readModel.sourceCount, 2);
   assert.deepEqual(
-    state.messages.map((message) => [message.messageId, message.role, message.text]),
+    state.messages.map((message) => [
+      message.messageId,
+      message.role,
+      message.text,
+    ]),
     [
       ["message-user", "user", "请生成小红书标题"],
       ["message-assistant", "assistant", "已生成 5 个标题候选"],
@@ -787,11 +782,19 @@ test("projectAgentUiStateFromSessionSnapshot upgrades legacy transcript plus rea
   );
   assert.deepEqual(state.messages[1].refs, ["artifact-1", "evidence-1"]);
   assert.deepEqual(
-    state.artifacts.map((artifact) => [artifact.id, artifact.path, artifact.preview]),
+    state.artifacts.map((artifact) => [
+      artifact.id,
+      artifact.path,
+      artifact.preview,
+    ]),
     [["artifact-1", "drafts/outline.md", "文章大纲"]],
   );
   assert.deepEqual(
-    state.evidence.map((evidence) => [evidence.id, evidence.path, evidence.preview]),
+    state.evidence.map((evidence) => [
+      evidence.id,
+      evidence.path,
+      evidence.preview,
+    ]),
     [["evidence-1", "evidence/input-source", "输入源摘要"]],
   );
 });
@@ -1167,7 +1170,10 @@ test("state.delta failure marks projection stale without mutating target state",
   assert.equal(state.hydration.eventCount, 2);
   assert.equal(state.diagnostics.at(-1).id, "state-delta:evt-bad-delta");
   assert.equal(state.diagnostics.at(-1).status, "failed");
-  assert.match(state.diagnostics.at(-1).detail, /Array index out of range|Path does not exist/);
+  assert.match(
+    state.diagnostics.at(-1).detail,
+    /Array index out of range|Path does not exist/,
+  );
 });
 
 test("state.delta cannot patch runtime fact projections", () => {
@@ -1473,7 +1479,7 @@ test("Agent UI projection summaries classify host-neutral event groups", () => {
     },
     {
       type: "agent.changed",
-      sourceType: "team_formation_projection",
+      sourceType: "item_completed",
       sequence: 5,
       sessionId: "session-summary",
       agentId: "agent-1",
@@ -1513,7 +1519,7 @@ test("Agent UI subagents summaries group surfaces and lanes", () => {
     },
     {
       type: "agent.spawned",
-      sourceType: "team_formation_projection",
+      sourceType: "item_completed",
       sequence: 2,
       sessionId: "session-team",
       agentId: "agent-1",
@@ -1525,7 +1531,7 @@ test("Agent UI subagents summaries group surfaces and lanes", () => {
     },
     {
       type: "worker.notification",
-      sourceType: "team_formation_projection",
+      sourceType: "item_completed",
       sequence: 3,
       sessionId: "session-team",
       agentId: "agent-1",
@@ -1669,7 +1675,7 @@ test("projection envelope helpers normalize base fields and sequence", () => {
       timestamp: "2026-06-07T00:00:00.000Z",
       sessionId: " session-1 ",
       threadId: " thread-1 ",
-      runId: "agent_subagent_stream:run-1",
+      runId: "run-1",
       turnId: " turn-1 ",
       messageId: " ",
       taskId: "task-1",
@@ -1681,7 +1687,7 @@ test("projection envelope helpers normalize base fields and sequence", () => {
     timestamp: "2026-06-07T00:00:00.000Z",
     sessionId: "session-1",
     threadId: "thread-1",
-    runId: "agent_subagent_stream:run-1",
+    runId: "run-1",
     turnId: "turn-1",
     messageId: undefined,
     taskId: "task-1",
@@ -2277,11 +2283,7 @@ test("tool event helpers build standard tool lifecycle events", () => {
     messagePreview: "正在处理第 2 项",
     progress: 2,
     total: 4,
-    metadataKeys: [
-      "notification_kind",
-      "soul_lifecycle",
-      "tool_process_facts",
-    ],
+    metadataKeys: ["notification_kind", "soul_lifecycle", "tool_process_facts"],
     soulLifecycle: {
       surface: "tool_lifecycle",
       phase: "tool_progress",
@@ -2610,8 +2612,20 @@ test("thread item helpers build standard projection events", () => {
     "answer",
   );
   assert.equal(
-    resolveAgentUiThreadItemSubagentRuntimeStatus({ status: "in_progress" }),
+    resolveAgentUiThreadItemSubagentRuntimeStatus({ status_label: "started" }),
     "running",
+  );
+  assert.equal(
+    resolveAgentUiThreadItemSubagentRuntimeStatus({
+      status_label: "interacted",
+    }),
+    "running",
+  );
+  assert.equal(
+    resolveAgentUiThreadItemSubagentRuntimeStatus({
+      status_label: "interrupted",
+    }),
+    "cancelled",
   );
 
   const userInputAction = buildAgentUiThreadItemEvent(
@@ -2672,14 +2686,14 @@ test("thread item helpers build standard projection events", () => {
   });
 
   const subagentActivity = buildAgentUiThreadItemEvent(
-    "item_updated",
+    "item_completed",
     {
       id: "worker-1",
       thread_id: "thread-1",
       turn_id: "turn-1",
       type: "subagent_activity",
-      status: "in_progress",
-      status_label: "执行中",
+      status: "completed",
+      status_label: "started",
       title: "整理资料",
       role: "researcher",
       model: "model-a",
@@ -2701,71 +2715,28 @@ test("thread item helpers build standard projection events", () => {
   assert.equal(subagentActivity?.topology, "coordinator_team");
   assert.deepEqual(subagentActivity?.payload, {
     runtimeEntity: "subagent_turn",
-    statusLabel: "执行中",
+    statusLabel: "started",
     title: "整理资料",
     role: "researcher",
     model: "model-a",
     childSessionId: "child-session-1",
   });
-  assert.equal(
-    buildAgentUiThreadItemSubagentWorkerNotificationEvent(
-      "item_updated",
-      {
-        id: "worker-1",
-        thread_id: "thread-1",
-        turn_id: "turn-1",
-        type: "subagent_activity",
-        status: "in_progress",
-      },
-      context,
-    ),
-    null,
+  const interruptedSubagentActivity = buildAgentUiThreadItemEvent(
+    "item_completed",
+    {
+      id: "worker-2",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "subagent_activity",
+      status: "completed",
+      status_label: "interrupted",
+      session_id: "child-session-1",
+    },
+    context,
   );
-
-  const completedWorkerNotification =
-    buildAgentUiThreadItemSubagentWorkerNotificationEvent(
-      "item_completed",
-      {
-        id: "worker-1",
-        thread_id: "thread-1",
-        turn_id: "turn-1",
-        type: "subagent_activity",
-        status: "completed",
-        status_label: "已完成",
-        title: "整理资料",
-        summary: "已完成资料整理",
-        role: "researcher",
-        model: "model-a",
-        session_id: "child-session-1",
-      },
-      context,
-    );
-  assert.equal(completedWorkerNotification?.type, "worker.notification");
-  assert.equal(completedWorkerNotification?.taskId, "child-session-1");
-  assert.equal(completedWorkerNotification?.agentId, "child-session-1");
-  assert.equal(completedWorkerNotification?.workerNotificationId, "worker-1");
-  assert.equal(
-    completedWorkerNotification?.transcriptRef,
-    "thread-1:turn-1:worker-1",
-  );
-  assert.equal(completedWorkerNotification?.owner, "agent");
-  assert.equal(completedWorkerNotification?.phase, "completed");
-  assert.equal(
-    completedWorkerNotification?.surface,
-    "worker_notifications",
-  );
-  assert.equal(completedWorkerNotification?.runtimeEntity, "subagent_turn");
-  assert.equal(completedWorkerNotification?.runtimeStatus, "completed");
-  assert.deepEqual(completedWorkerNotification?.payload, {
-    runtimeEntity: "subagent_turn",
-    notificationKind: "worker_result",
-    statusLabel: "已完成",
-    title: "整理资料",
-    summaryPreview: "已完成资料整理",
-    role: "researcher",
-    model: "model-a",
-    childSessionId: "child-session-1",
-  });
+  assert.equal(interruptedSubagentActivity?.phase, "interrupted");
+  assert.equal(interruptedSubagentActivity?.runtimeStatus, "cancelled");
+  assert.equal(interruptedSubagentActivity?.latestTurnStatus, "cancelled");
   assert.equal(
     buildAgentUiThreadItemSubagentActivityEvent(
       "item_completed",
@@ -2877,7 +2848,10 @@ test("thread item helpers build standard projection events", () => {
     metadataKeys: ["artifact_id", "artifact_path"],
   });
 
-  assert.equal(normalizeAgentUiProjectionToolName("Task-Update Tool"), "taskupdatetool");
+  assert.equal(
+    normalizeAgentUiProjectionToolName("Task-Update Tool"),
+    "taskupdatetool",
+  );
   assert.equal(isAgentUiTaskUpdateToolName("TaskUpdateTool"), true);
   assert.deepEqual(
     extractAgentUiTaskOwnerChangeProjection({
@@ -3102,11 +3076,6 @@ test("runtime fact helpers normalize shared Agent UI status semantics", () => {
     normalizeRuntimePhaseFromRuntimeStatusPhase("routing"),
     "routing",
   );
-  assert.equal(normalizeSubagentRuntimeStatus("cancelled"), "cancelled");
-  assert.equal(resolveSubagentStatusPhase("running"), "acting");
-  assert.equal(resolveSubagentStatusControl("running"), "stop");
-  assert.equal(isSubagentTerminalStatus("completed"), true);
-
   const teamFacts = buildTeamRuntimeFacts({
     concurrency_phase: "running",
     concurrency_budget: 3,
@@ -3121,31 +3090,4 @@ test("runtime fact helpers normalize shared Agent UI status semantics", () => {
   assert.equal(teamFacts.queuedTurnCount, 1);
   assert.equal(teamFacts.providerConcurrencyGroup, "provider-a");
   assert.equal(resolveTeamTopology(teamFacts), "parallel_workers");
-
-  const subagentFacts = buildSubagentRuntimeFacts({
-    status: "running",
-    latest_turn_status: "completed",
-    queued_turn_count: 2,
-  });
-  assert.equal(subagentFacts.runtimeEntity, "subagent_turn");
-  assert.equal(subagentFacts.runtimeStatus, "running");
-  assert.equal(subagentFacts.latestTurnStatus, "completed");
-  assert.equal(subagentFacts.queuedTurnCount, 2);
-
-  assert.deepEqual(
-    buildWorkerUsageProjection({
-      input_tokens: 10,
-      output_tokens: 5,
-      cached_input_tokens: 3,
-      cache_creation_input_tokens: 2,
-    }),
-    {
-      inputTokens: 10,
-      outputTokens: 5,
-      cachedInputTokens: 3,
-      cacheCreationInputTokens: 2,
-      totalTokens: 15,
-    },
-  );
-  assert.equal(buildWorkerUsageProjection(undefined), undefined);
 });

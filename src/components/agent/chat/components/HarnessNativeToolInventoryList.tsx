@@ -1,4 +1,4 @@
-import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { Badge } from "@/components/ui/badge";
 import { agentText } from "./harnessPanelText";
 import {

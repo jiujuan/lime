@@ -341,7 +341,6 @@ export function registerImageContentAndTeamSmokeGuards({
       "multiAgentTeamNoAgentFirstHistory",
     ]);
     expectAllToContain(expect, scenarioContent, [
-      'type: "subagent_status_changed"',
       'type: "team.changed"',
       'type: "task.changed"',
       'type: "agent.handoff"',
@@ -360,6 +359,7 @@ export function registerImageContentAndTeamSmokeGuards({
       "workerNotificationIds",
       "reviewIds",
     ]);
+    expect(scenarioContent).not.toContain('type: "subagent_status_changed"');
     expectAllToContain(expect, regressionContent, [
       "Claw Multi-Agent Team parent Thread Evidence Pack Electron fixture",
       '"multi-agent-team"',
@@ -393,7 +393,6 @@ export function registerImageContentAndTeamSmokeGuards({
           },
         },
         events: [
-          { eventType: "subagent_status_changed" },
           { eventType: "team.changed" },
           { eventType: "worker.notification" },
         ],
@@ -418,7 +417,6 @@ export function registerImageContentAndTeamSmokeGuards({
     expect(summary.includesRunningPhase).toBe(true);
     expect(summary.includesQueuedPhase).toBe(true);
     expect(summary.includesCompletedPhase).toBe(true);
-    expect(summary.hasSubagentStatusEvent).toBe(true);
     expect(summary.hasTeamChangedEvent).toBe(true);
     expect(summary.hasWorkerNotificationEvent).toBe(true);
     expect(summary.hasWorkerResultArtifact).toBe(true);

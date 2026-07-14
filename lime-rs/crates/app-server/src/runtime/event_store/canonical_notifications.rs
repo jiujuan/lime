@@ -122,6 +122,7 @@ fn canonical_notification_target(event: &AgentEvent) -> Option<CanonicalNotifica
     let item_lifecycle = [
         "item.",
         "message.",
+        "plan.",
         "reasoning.",
         "tool.",
         "mcp.",
@@ -172,5 +173,15 @@ mod tests {
             canonical_notification_target(&event("action.resolved")),
             Some(CanonicalNotificationTarget::Item)
         ));
+    }
+
+    #[test]
+    fn plan_lifecycle_is_a_canonical_item_notification() {
+        for event_type in ["plan.delta", "plan.final"] {
+            assert!(matches!(
+                canonical_notification_target(&event(event_type)),
+                Some(CanonicalNotificationTarget::Item)
+            ));
+        }
     }
 }

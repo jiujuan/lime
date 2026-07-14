@@ -1,7 +1,4 @@
-import type {
-  AgentEvent,
-  AgentThreadItem,
-} from "@/lib/api/agentProtocol";
+import type { AgentEvent, AgentThreadItem } from "@/lib/api/agentProtocol";
 import type {
   AgentUiProjectionContext,
   AgentUiProjectionEvent,
@@ -9,7 +6,6 @@ import type {
 import {
   buildAgentUiThreadItemBase as buildStandardThreadItemBase,
   buildAgentUiThreadItemEvent,
-  buildAgentUiThreadItemSubagentWorkerNotificationEvent,
   extractAgentUiTaskOwnerChangeProjection,
 } from "@limecloud/agent-runtime-projection";
 import {
@@ -18,9 +14,7 @@ import {
   extractPlanApprovalProjection,
   extractPlanApprovalResponseProjection,
 } from "./planApprovalProjection";
-import {
-  buildAgentUiTeamControlProjectionEvents,
-} from "./teamControlProjection";
+import { buildAgentUiTeamControlProjectionEvents } from "./teamControlProjection";
 
 type ThreadItemProjectionEvent = Extract<
   AgentEvent,
@@ -105,15 +99,6 @@ export function buildThreadItemEvents(
   const events = primary ? [primary] : [];
 
   if (item.type === "subagent_activity") {
-    const workerNotification =
-      buildAgentUiThreadItemSubagentWorkerNotificationEvent(
-        sourceType,
-        item,
-        context,
-      );
-    if (workerNotification) {
-      events.push(workerNotification);
-    }
     return events;
   }
 

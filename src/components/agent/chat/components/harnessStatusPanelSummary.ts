@@ -11,10 +11,8 @@ import {
   Workflow,
   Wrench,
 } from "lucide-react";
-import type {
-  AgentRuntimeEvidencePack,
-  AgentRuntimeToolInventory,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/evidenceTypes";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import type {
   AgentUiProjectionSummary,
   AgentUiProjectionTranslation,

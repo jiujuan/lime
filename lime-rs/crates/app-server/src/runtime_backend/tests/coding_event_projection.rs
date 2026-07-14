@@ -418,6 +418,59 @@ fn runtime_thinking_delta_emits_reasoning_lifecycle_events() {
 }
 
 #[test]
+fn runtime_agent_message_emits_its_own_terminal_before_turn_terminal() {
+    let mut sink = TestRuntimeEventSink::default();
+    let mut mirror = coding_events::CodingEventMirror::default();
+    let mut proposed_plan_parser = proposed_plan_parser::ProposedPlanParser::default();
+    let mut reasoning_state = reasoning_events::ReasoningEventState::default();
+
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
+        &RuntimeAgentEvent::TextDelta {
+            text: "answer".to_string(),
+        },
+        &mut sink,
+        &mut mirror,
+        &mut proposed_plan_parser,
+        &mut reasoning_state,
+    )
+    .expect("message delta should emit");
+    emit_proposed_plan_parser_flush(&mut proposed_plan_parser, &mut sink)
+        .expect("parser flush should emit");
+    emit_agent_message_finish(&proposed_plan_parser, "completed", &mut sink)
+        .expect("message completion should emit");
+    sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+        .expect("turn completion should emit");
+
+    assert_eq!(
+        sink.events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["message.delta", "message.completed", "turn.completed"]
+    );
+    assert_eq!(sink.events[1].payload["status"], "completed");
+    assert_eq!(sink.events[1].payload["phase"], "final_answer");
+}
+
+#[test]
+fn canceled_runtime_agent_message_uses_interrupted_item_status() {
+    let mut sink = TestRuntimeEventSink::default();
+    let mut parser = proposed_plan_parser::ProposedPlanParser::default();
+    for event in proposed_plan_parser::split_runtime_event(
+        RuntimeEvent::new("message.delta", json!({"text": "partial"})),
+        &mut parser,
+    ) {
+        sink.emit(event).expect("message delta should emit");
+    }
+
+    emit_agent_message_finish(&parser, "interrupted", &mut sink)
+        .expect("message interruption should emit");
+
+    assert_eq!(sink.events[1].event_type, "message.completed");
+    assert_eq!(sink.events[1].payload["status"], "interrupted");
+}
+
+#[test]
 fn runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts() {
     let mut sink = TestRuntimeEventSink::default();
     let mut mirror = coding_events::CodingEventMirror::default();

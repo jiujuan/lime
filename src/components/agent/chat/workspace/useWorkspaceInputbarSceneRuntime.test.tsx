@@ -59,7 +59,7 @@ function createDefaultHarnessPanelBaseProps(
       contextItemNames: [],
       contextEnabled: false,
     },
-    childSubagentSessions: [],
+    canonicalChildren: [],
     selectedTeamLabel: undefined,
     selectedTeamSummary: undefined,
     selectedTeamRoles: [],

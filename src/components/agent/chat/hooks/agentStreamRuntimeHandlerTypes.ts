@@ -7,8 +7,8 @@ import type {
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { AgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";

@@ -722,13 +722,21 @@ export function buildToolExecutionHandoffDispatcher() {
       traceId: "plugin-tool-trace-1",
       taskKind: request.taskKind,
       sessionId: request.sessionId ?? "agent-runtime-session-1",
+      threadId: "agent-runtime-thread-1",
       turnId: "plugin-tool-turn-1",
       eventName: `plugin_runtime:${request.appId}:plugin-tool-task-1`,
       status: "accepted" as const,
       submittedAt: FIXED_NOW,
     })),
     getTask: vi.fn(),
-    cancelTask: vi.fn(),
+    cancelTask: vi.fn(async (request) => ({
+      appId: request.appId,
+      taskId: request.taskId,
+      sessionId: "agent-runtime-session-1",
+      threadId: request.threadId,
+      cancelled: true,
+      status: "cancelled" as const,
+    })),
     submitHostResponse: vi.fn(),
   };
   const host = new AgentRuntimeCapabilityHost({

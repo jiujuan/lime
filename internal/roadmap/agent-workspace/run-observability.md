@@ -198,4 +198,4 @@ AgentRunControlSurfaceViewModel
 
 ## 9. 下一刀
 
-下一刀转向 `run-control-split-review` 或 `run-control-permission-chip` 的真实控制闭环。`run-control-basic-local`、`run-control-plan-checklist` 与 `run-control-restore` 已经有本地 pass evidence：同一区域可见 environment / run / plan / goal / sources / participants / outputs，恢复态能从 `threadRead`、`threadItems`、`todoItems`、`child_subagent_sessions` 和 approval facts 重建。后续不要继续只补只读展示，应证明 pause / steer / approval writeback / split review 这些动作能回写 runtime 并恢复。
+下一刀转向 `run-control-split-review` 或 `run-control-permission-chip` 的真实控制闭环。`run-control-basic-local`、`run-control-plan-checklist` 与 `run-control-restore` 已经有本地 pass evidence：同一区域可见 environment / run / plan / goal / sources / participants / outputs，恢复态能从 `threadRead`、`threadItems`、`todoItems`、canonical child Thread family / `CanonicalChildThreadSummary[]` 和 approval facts 重建。后续不要继续只补只读展示，应证明 pause / steer / approval writeback / split review 这些动作能回写 runtime 并恢复。

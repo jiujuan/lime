@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldCheck } from "lucide-react";
 
-import type { ManagedObjective } from "@/lib/api/agentRuntime";
+import type { ManagedObjective } from "@/lib/api/agentRuntime/sessionTypes";
 import { cn } from "@/lib/utils";
 
 interface ManagedObjectiveAuditSummaryProps {

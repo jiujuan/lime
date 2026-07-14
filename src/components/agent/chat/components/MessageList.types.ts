@@ -2,10 +2,10 @@ import type React from "react";
 import type { Artifact } from "@/lib/artifact/types";
 import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import type {
-  AgentSubagentSessionInfo,
   AgentRuntimeThreadReadModel,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import type { buildMessageRenderGroupsProjection } from "../projection/messageTimelineRenderProjection";
 import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
@@ -38,7 +38,7 @@ export interface MessageListProps {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   queuedTurns?: readonly QueuedTurnSnapshot[];
-  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
   sessionHistoryWindow?: {
     loadedMessages: number;
     totalMessages: number;

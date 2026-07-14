@@ -3,7 +3,6 @@ import type {
   AgentRuntimeToolInventoryCatalogEntry,
   AgentRuntimeToolInventoryNativeEntry,
   AgentRuntimeToolInventoryRuntimeEntry,
-  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
 import type {
   HarnessActiveFileWrite,
@@ -79,27 +78,10 @@ import {
   resolveFriendlyToolLabel,
   resolveRuntimeStatusLabel,
   resolveRuntimeStepStatus,
-  resolveSubagentRuntimeStatusLabel,
-  resolveSubagentRuntimeStatusVariant,
-  resolveSubagentSessionTypeLabel,
   sortRuntimeToolsByVisibility,
   splitTextIntoSegments,
   summarizeFileActions,
-  summarizeChildSubagentSessions,
 } from "./harnessStatusPanelViewModel";
-
-function buildSubagentSession(
-  runtimeStatus: AgentSubagentSessionInfo["runtime_status"],
-): AgentSubagentSessionInfo {
-  return {
-    id: `session-${runtimeStatus ?? "unknown"}`,
-    name: `Session ${runtimeStatus ?? "unknown"}`,
-    created_at: 1,
-    updated_at: 1,
-    session_type: "sub_agent",
-    runtime_status: runtimeStatus,
-  };
-}
 
 function buildFileEvent(
   overrides: Partial<HarnessFileEvent> = {},
@@ -206,64 +188,11 @@ describe("harnessStatusPanelViewModel", () => {
     document.documentElement.dir = "ltr";
   });
 
-  it("应解析子任务运行状态标签和 Badge 变体", () => {
-    expect(resolveSubagentRuntimeStatusLabel("queued")).toBe("稍后开始");
-    expect(resolveSubagentRuntimeStatusVariant("queued")).toBe("outline");
-
-    expect(resolveSubagentRuntimeStatusLabel("running")).toBe("处理中");
-    expect(resolveSubagentRuntimeStatusVariant("running")).toBe("default");
-
-    expect(resolveSubagentRuntimeStatusLabel("completed")).toBe("已完成");
-    expect(resolveSubagentRuntimeStatusVariant("completed")).toBe("secondary");
-
-    expect(resolveSubagentRuntimeStatusLabel("failed")).toBe("失败");
-    expect(resolveSubagentRuntimeStatusVariant("failed")).toBe("destructive");
-
-    expect(resolveSubagentRuntimeStatusLabel("aborted")).toBe("已暂停");
-    expect(resolveSubagentRuntimeStatusVariant("aborted")).toBe("destructive");
-
-    expect(resolveSubagentRuntimeStatusLabel("idle")).toBe("待开始");
-    expect(resolveSubagentRuntimeStatusVariant("idle")).toBe("outline");
-
-    expect(resolveSubagentRuntimeStatusLabel()).toBe("待开始");
-    expect(resolveSubagentRuntimeStatusVariant()).toBe("outline");
-  });
-
-  it("应解析子任务会话类型标签", () => {
-    expect(resolveSubagentSessionTypeLabel("sub_agent")).toBe("子任务");
-    expect(resolveSubagentSessionTypeLabel("fork")).toBe("分支任务");
-    expect(resolveSubagentSessionTypeLabel("user")).toBe("user");
-    expect(resolveSubagentSessionTypeLabel(" custom ")).toBe("custom");
-    expect(resolveSubagentSessionTypeLabel("   ")).toBe("任务会话");
-    expect(resolveSubagentSessionTypeLabel()).toBe("任务会话");
-  });
-
   it("应解析工具友好标签", () => {
     expect(resolveFriendlyToolLabel()).toBeNull();
     expect(resolveFriendlyToolLabel("   ")).toBeNull();
     expect(resolveFriendlyToolLabel("TurnSummary")).toBe("当前任务摘要");
     expect(resolveFriendlyToolLabel("ReadFile")).toBe("文件读取");
-  });
-
-  it("应汇总子任务会话状态", () => {
-    expect(
-      summarizeChildSubagentSessions([
-        buildSubagentSession("running"),
-        buildSubagentSession("queued"),
-        buildSubagentSession("completed"),
-        buildSubagentSession("failed"),
-        buildSubagentSession("aborted"),
-        buildSubagentSession("closed"),
-        buildSubagentSession("idle"),
-      ]),
-    ).toEqual({
-      total: 7,
-      running: 1,
-      queued: 1,
-      active: 2,
-      settled: 4,
-      failed: 2,
-    });
   });
 
   it("应解析 Harness 文件名、动作和类型展示", () => {

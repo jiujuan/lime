@@ -104,6 +104,7 @@ import { useWorkspaceArtifactSurfaceRuntime } from "./workspace/useWorkspaceArti
 import { useWorkspaceArtifactCanvasRuntime } from "./workspace/useWorkspaceArtifactCanvasRuntime";
 import { useWorkspaceExpertSkillPanelRuntime } from "./workspace/useWorkspaceExpertSkillPanelRuntime";
 import { useWorkspaceTeamMemoryRuntime } from "./workspace/useWorkspaceTeamMemoryRuntime";
+import { useWorkspaceSubagentNavigationRuntime } from "./workspace/useWorkspaceSubagentNavigationRuntime";
 import { useWorkspaceContextDetailRuntime } from "./workspace/useWorkspaceContextDetailRuntime";
 import {
   useWorkspaceActiveContentTargetRuntime,
@@ -605,8 +606,6 @@ export function AgentChatWorkspace({
     turns = [],
     threadItems = [],
     todoItems = [],
-    childSubagentSessions = [],
-    subagentParentContext = null,
     queuedTurns = [],
     threadRead = null,
     executionRuntime = null,
@@ -758,20 +757,11 @@ export function AgentChatWorkspace({
     resolvedTeamMemoryShadowSnapshot,
   } = useWorkspaceTeamMemoryRuntime({
     activeTheme,
-    childSubagentSessions,
     runtimeSelection: executionRuntime?.recent_team_selection ?? null,
     sessionId,
     selectedTeamSessionSync,
-    subagentParentContext,
     workspaceRoot: project?.rootPath,
   });
-  const handleOpenSubagentSession = useCallback(
-    (subagentSessionId: string) => {
-      deferSessionRecentMetadataSyncForNavigation(subagentSessionId);
-      void originalSwitchTopic(subagentSessionId);
-    },
-    [deferSessionRecentMetadataSyncForNavigation, originalSwitchTopic],
-  );
   const effectiveChatToolPreferences = useWorkspaceChatToolPreferencesRuntime({
     activeTheme,
     chatToolPreferences,
@@ -784,31 +774,32 @@ export function AgentChatWorkspace({
   });
 
   const {
-    clearRuntimeTeamState,
+    canonicalChildren,
     currentSessionTitle,
     handleStopSending,
     hasRuntimeSessions,
-    prepareRuntimeTeamBeforeSend,
     subagentsRuntimeVisible,
   } = useWorkspaceTeamRuntime({
-    formation: {
-      projectId,
-      selectedTeam,
-      subagentEnabled: effectiveChatToolPreferences.subagent,
-    },
+    canonicalRefreshKey: threadItems
+      .map((item) => `${item.id}:${item.status}:${item.updated_at}`)
+      .join("|"),
+    referencedChildThreadIds: threadItems.flatMap((item) =>
+      item.type === "subagent_activity" && item.session_id?.trim()
+        ? [item.session_id.trim()]
+        : [],
+    ),
     session: {
-      sessionId,
-      threadId: threadRead?.thread_id ?? sessionId,
-      currentTurnId,
+      currentTopicId: sessionId,
+      parentThreadId: threadRead?.thread_id ?? sessionId,
       topics,
-      turns,
-      queuedTurnCount: queuedTurns.length,
-      isSending,
       subagentEnabled: effectiveChatToolPreferences.subagent,
-      childSubagentSessions,
-      subagentParentContext,
     },
     stopSending,
+  });
+  const { handleOpenSubagentSession } = useWorkspaceSubagentNavigationRuntime({
+    canonicalChildren,
+    deferSessionRecentMetadataSyncForNavigation,
+    switchTopic: originalSwitchTopic,
   });
   const {
     currentImageWorkbenchState,
@@ -930,7 +921,6 @@ export function AgentChatWorkspace({
   ]);
   const contextSurfaceRuntime = useWorkspaceContextSurfaceRuntime({
     activeTheme,
-    childSubagentSessions,
     generalHarnessEntryEnabled,
     isSending,
     layoutMode,
@@ -944,11 +934,9 @@ export function AgentChatWorkspace({
     projectMemory,
     providerType,
     sessionId,
-    threadId: threadRead?.thread_id,
     threadItems,
     threadRead,
     todoItems,
-    turns,
     workspaceHarnessEnabled,
   });
   const {
@@ -1216,7 +1204,6 @@ export function AgentChatWorkspace({
   });
   const { handleBackHome, resetTopicLocalState } = useWorkspaceResetRuntime({
     clearMessages,
-    clearRuntimeTeamState,
     clearPendingEntryA2UI: clearEntryPendingA2UI,
     clearProjectSelectionRuntime,
     resetProjectSelection,
@@ -1326,7 +1313,6 @@ export function AgentChatWorkspace({
     handleSendRef,
     isPreparingSend,
     displayMessages,
-    teamDispatchPreviewState,
     handleImageWorkbenchCommand,
     imageWorkbenchActionRuntime,
     latestAssistantMessageId,
@@ -1403,7 +1389,6 @@ export function AgentChatWorkspace({
         workspaceRequestMetadataWithExpertSkills ?? undefined,
       savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
       soulArtifactVoiceEnabledForTurn,
-      soulCopy: soulInteractionCopy,
       serviceModels,
       agentResponseLanguage,
       resolveServiceModelsBeforeSend: shouldDeferWorkspaceAuxiliaryLoads
@@ -1416,7 +1401,6 @@ export function AgentChatWorkspace({
       resolveSendBoundary,
       finalizeAfterSendSuccess,
       rollbackAfterSendFailure,
-      prepareRuntimeTeamBeforeSend,
       ensureBrowserAssistCanvas,
       handleAutoLaunchMatchedSiteSkill:
         workspaceServiceSkillEntryActions.handleAutoLaunchMatchedSiteSkill,
@@ -1907,7 +1891,6 @@ export function AgentChatWorkspace({
     showSidebar,
     subagentsRuntimeVisible,
     hasRuntimeSessions,
-    hasTeamDispatchPreview: Boolean(teamDispatchPreviewState),
     themeWorkbenchRunState,
     topBarChrome,
   });
@@ -1975,7 +1958,7 @@ export function AgentChatWorkspace({
       activeExecutionRuntime,
       activeTheme,
       canInterrupt: inputbarIsSending,
-      childSubagentSessions,
+      canonicalChildren,
       contextHarnessRuntime,
       currentTurnId,
       executionStrategy,
@@ -2558,6 +2541,7 @@ export function AgentChatWorkspace({
         activityLogs: generalWorkbenchActivityLogs,
         creationTaskEvents:
           generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
+        canonicalChildren,
         currentStepIndex: HIDDEN_WORKSPACE_WORKFLOW_STEP_INDEX,
         goToStep: ignoreHiddenWorkspaceWorkflowStepClick,
         layoutMode: sceneLayoutMode,

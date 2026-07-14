@@ -2,10 +2,6 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readTeamMemorySnapshot } from "@/lib/teamMemorySync";
-import type {
-  AgentSubagentParentContext,
-  AgentSubagentSessionInfo,
-} from "@/lib/api/agentRuntime";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import { useTeamMemoryShadowSync } from "./useTeamMemoryShadowSync";
 
@@ -24,8 +20,6 @@ interface HookOptions {
   activeTheme?: string | null;
   sessionId?: string | null;
   selectedTeam?: TeamDefinition | null;
-  childSubagentSessions?: AgentSubagentSessionInfo[];
-  subagentParentContext?: AgentSubagentParentContext | null;
   storage: MemoryStorage;
 }
 
@@ -105,7 +99,7 @@ describe("useTeamMemoryShadowSync", () => {
     localStorage.clear();
   });
 
-  it("应把 Subagents profile 选择与子代理概览写入 repo 作用域快照", () => {
+  it("只应把 Subagents profile 选择写入 repo 作用域快照", () => {
     const storage = createMemoryStorage();
     const harness = mountHook({
       storage,
@@ -113,37 +107,6 @@ describe("useTeamMemoryShadowSync", () => {
       activeTheme: "general",
       sessionId: "session-a",
       selectedTeam: createSelectedTeam(),
-      childSubagentSessions: [
-        {
-          id: "child-1",
-          name: "研究代理",
-          created_at: 1,
-          updated_at: 2,
-          session_type: "sub_agent",
-          runtime_status: "running",
-          latest_turn_status: "running",
-          role_hint: "explorer",
-          task_summary: "梳理主线风险",
-        },
-      ],
-      subagentParentContext: {
-        parent_session_id: "parent-1",
-        parent_session_name: "父会话",
-        role_hint: "reviewer",
-        task_summary: "汇总团队结论",
-        sibling_subagent_sessions: [
-          {
-            id: "sibling-1",
-            name: "实现代理",
-            created_at: 1,
-            updated_at: 3,
-            session_type: "sub_agent",
-            runtime_status: "queued",
-            latest_turn_status: "queued",
-            task_summary: "等待串行执行",
-          },
-        ],
-      },
     });
 
     try {
@@ -152,18 +115,7 @@ describe("useTeamMemoryShadowSync", () => {
         "Subagents profile：研究双人组",
       );
       expect(snapshot?.entries["team.selection"]?.content).toContain("角色：");
-      expect(snapshot?.entries["team.subagents"]?.content).toContain(
-        "子任务：",
-      );
-      expect(snapshot?.entries["team.subagents"]?.content).toContain(
-        "研究代理 [running] explorer · 梳理主线风险",
-      );
-      expect(snapshot?.entries["team.parent_context"]?.content).toContain(
-        "父会话：父会话",
-      );
-      expect(snapshot?.entries["team.parent_context"]?.content).toContain(
-        "实现代理 [queued] 等待串行执行",
-      );
+      expect(Object.keys(snapshot?.entries ?? {})).toEqual(["team.selection"]);
     } finally {
       harness.unmount();
     }
@@ -176,6 +128,16 @@ describe("useTeamMemoryShadowSync", () => {
       JSON.stringify({
         repoScope: "/tmp/repo",
         entries: {
+          "team.subagents": {
+            key: "team.subagents",
+            content: "旧子任务影子",
+            updatedAt: 1,
+          },
+          "team.parent_context": {
+            key: "team.parent_context",
+            content: "旧父会话影子",
+            updatedAt: 1,
+          },
           keep: {
             key: "keep",
             content: "保留的外部约定",
@@ -191,16 +153,6 @@ describe("useTeamMemoryShadowSync", () => {
       activeTheme: "general",
       sessionId: "session-a",
       selectedTeam: createSelectedTeam(),
-      childSubagentSessions: [
-        {
-          id: "child-1",
-          name: "研究代理",
-          created_at: 1,
-          updated_at: 2,
-          session_type: "sub_agent",
-        },
-      ],
-      subagentParentContext: null,
     });
 
     try {
@@ -210,8 +162,6 @@ describe("useTeamMemoryShadowSync", () => {
         activeTheme: "general",
         sessionId: "session-a",
         selectedTeam: null,
-        childSubagentSessions: [],
-        subagentParentContext: null,
       });
 
       const snapshot = readTeamMemorySnapshot(storage, "/tmp/repo");

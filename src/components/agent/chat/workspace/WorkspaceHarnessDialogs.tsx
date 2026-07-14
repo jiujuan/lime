@@ -19,7 +19,7 @@ type HarnessPanelBaseProps = Pick<
   ComponentProps<typeof HarnessStatusPanel>,
   | "harnessState"
   | "environment"
-  | "childSubagentSessions"
+  | "canonicalChildren"
   | "selectedTeamLabel"
   | "selectedTeamSummary"
   | "selectedTeamRoles"
@@ -252,8 +252,7 @@ function useGeneralWorkbenchHarnessSurface({
   };
 }
 
-interface GeneralWorkbenchHarnessSurfaceSectionProps
-  extends HarnessPanelBaseProps {
+interface GeneralWorkbenchHarnessSurfaceSectionProps extends HarnessPanelBaseProps {
   enabled: boolean;
   teamMemorySnapshot?: TeamMemorySnapshot | null;
   onSubmitCodeFixPrompt?: (prompt: string) => void | Promise<void>;
@@ -412,7 +411,7 @@ export function GeneralWorkbenchDialogSection({
                   toolPreferences={toolPreferences}
                   runtimeToolAvailability={runtimeToolAvailability}
                   harnessState={panelBaseProps.harnessState}
-                  childSubagentSessions={panelBaseProps.childSubagentSessions}
+                  canonicalChildren={panelBaseProps.canonicalChildren}
                   variant="embedded"
                   isSending={isSending}
                   executionRuntime={executionRuntime}

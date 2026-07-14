@@ -220,6 +220,34 @@ fn merge_payload(
             phase,
         },
         (
+            ThreadItemPayload::Plan {
+                text: previous_text,
+                revision_id: previous_revision_id,
+                source: previous_source,
+                plan: previous_plan,
+                explanation: previous_explanation,
+                tool_call_id: previous_tool_call_id,
+                source_item_id: previous_source_item_id,
+            },
+            ThreadItemPayload::Plan {
+                text,
+                revision_id,
+                source,
+                plan,
+                explanation,
+                tool_call_id,
+                source_item_id,
+            },
+        ) => ThreadItemPayload::Plan {
+            text: if text.is_empty() { previous_text } else { text },
+            revision_id: prefer_string(previous_revision_id, revision_id, ""),
+            source: source.or(previous_source),
+            plan: if plan.is_empty() { previous_plan } else { plan },
+            explanation: explanation.or(previous_explanation),
+            tool_call_id: tool_call_id.or(previous_tool_call_id),
+            source_item_id: source_item_id.or(previous_source_item_id),
+        },
+        (
             ThreadItemPayload::Reasoning {
                 mut summary,
                 mut content,

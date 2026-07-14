@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type { Message } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";

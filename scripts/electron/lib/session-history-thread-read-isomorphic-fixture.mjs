@@ -180,6 +180,23 @@ function threadReadEvents({ workspaceRoot, baseTimestampMs }) {
         },
       },
       {
+        eventId: `${turn.assistantItemId}-completed`,
+        sequence: sequence++,
+        sessionId: THREAD_READ_PAGE_ISOMORPHIC.sessionId,
+        threadId: THREAD_READ_PAGE_ISOMORPHIC.threadId,
+        turnId: turn.turnId,
+        type: "message.completed",
+        timestamp: completedAt,
+        payload: {
+          id: turn.assistantItemId,
+          phase: "final",
+          text: turn.assistantText,
+          content: {
+            text: turn.assistantText,
+          },
+        },
+      },
+      {
         eventId: `${turn.turnId}-completed`,
         sequence: sequence++,
         sessionId: THREAD_READ_PAGE_ISOMORPHIC.sessionId,
@@ -273,7 +290,10 @@ INSERT INTO agent_sessions (
 
   const turnRows = THREAD_READ_PAGE_ISOMORPHIC.turns
     .map((turn, index) => {
-      const turnStartedAt = isoTimestamp(baseTimestampMs, index * 4_000 + 1_000);
+      const turnStartedAt = isoTimestamp(
+        baseTimestampMs,
+        index * 4_000 + 1_000,
+      );
       const turnCompletedAt = isoTimestamp(
         baseTimestampMs,
         index * 4_000 + 3_000,
@@ -285,7 +305,7 @@ INSERT INTO agent_sessions (
     'completed',
         ${sqlLiteral(turnStartedAt)},
         ${sqlLiteral(turnCompletedAt)},
-    ${(index + 1) * 5}
+    ${(index + 1) * 6}
   )`;
     })
     .join(",\n  ");

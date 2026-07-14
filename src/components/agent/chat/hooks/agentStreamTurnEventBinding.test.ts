@@ -15,10 +15,44 @@ import type { ActionRequired, Message } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { StreamRequestState } from "./agentStreamSubmissionLifecycle";
 import { registerAgentStreamTurnEventBinding } from "./agentStreamTurnEventBinding";
-import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/threadClient";
+import { projectAppServerAgentEventPayload } from "@/lib/api/agentRuntime/appServerEventPayloadProjection";
 
 function noopDispatch<T>() {
   return vi.fn() as unknown as Dispatch<SetStateAction<T>>;
+}
+
+function canonicalAgentMessageEvent(params: {
+  itemId: string;
+  ordinal?: number;
+  phase: "commentary" | "final_answer";
+  sequence: number;
+  sessionId: string;
+  text: string;
+  threadId: string;
+  timestamp: string;
+  turnId: string;
+}) {
+  const updatedAtMs = Date.parse(params.timestamp);
+  return {
+    method: "item/updated",
+    params: {
+      sessionId: params.sessionId,
+      threadId: params.threadId,
+      turnId: params.turnId,
+      itemId: params.itemId,
+      sequence: params.sequence,
+      ordinal: params.ordinal ?? params.sequence,
+      kind: "agentMessage",
+      status: "inProgress",
+      createdAtMs: updatedAtMs,
+      updatedAtMs,
+      payload: {
+        type: "agentMessage",
+        text: params.text,
+        phase: params.phase,
+      },
+    },
+  };
 }
 
 describe("agentStreamTurnEventBinding", () => {
@@ -738,7 +772,7 @@ describe("agentStreamTurnEventBinding", () => {
     expect(disposeListener).toHaveBeenCalled();
   });
 
-  it("收到 App Server runtime.error 时应立即收口失败而不是等待 inactivity watchdog", async () => {
+  it("收到 App Server canonical turn.failed 时应立即收口失败而不是等待 inactivity watchdog", async () => {
     vi.useFakeTimers();
 
     let messages: Message[] = [
@@ -832,11 +866,24 @@ describe("agentStreamTurnEventBinding", () => {
           sessionId: "session-runtime-error",
           threadId: "thread-runtime-error",
           turnId: "turn-runtime-error",
-          type: "runtime.error",
+          type: "turn.failed",
           timestamp: "2026-06-28T07:45:02.000Z",
           payload: {
             message: "Plugin worker failed",
             errorCode: "PLUGIN_WORKER_PACKAGE_SIGNATURE_UNVERIFIED",
+          },
+        },
+        canonicalEvent: {
+          method: "turn/updated",
+          params: {
+            sessionId: "session-runtime-error",
+            threadId: "thread-runtime-error",
+            turnId: "turn-runtime-error",
+            status: "failed",
+            error: { message: "Plugin worker failed" },
+            createdAtMs: Date.parse("2026-06-28T07:45:02.000Z"),
+            completedAtMs: Date.parse("2026-06-28T07:45:02.000Z"),
+            updatedAtMs: Date.parse("2026-06-28T07:45:02.000Z"),
           },
         },
       },
@@ -1091,6 +1138,16 @@ describe("agentStreamTurnEventBinding", () => {
             text: "第一段",
           },
         },
+        canonicalEvent: canonicalAgentMessageEvent({
+          itemId: "agent-message-running-read-model",
+          phase: "final_answer",
+          sequence: 1,
+          sessionId: "session-running-read-model",
+          text: "第一段",
+          threadId: "thread-running-read-model",
+          timestamp: "2026-06-06T00:00:00.000Z",
+          turnId: "turn-running-read-model",
+        }),
       },
     });
     if (!payload) {
@@ -1367,6 +1424,16 @@ describe("agentStreamTurnEventBinding", () => {
             text: "第一段",
           },
         },
+        canonicalEvent: canonicalAgentMessageEvent({
+          itemId: "agent-message-app-server",
+          phase: "final_answer",
+          sequence: 1,
+          sessionId: "session-app-server",
+          text: "第一段",
+          threadId: "thread-app-server",
+          timestamp: "2026-06-06T00:00:00.000Z",
+          turnId: "turn-app-server",
+        }),
       },
     });
 
@@ -1383,6 +1450,18 @@ describe("agentStreamTurnEventBinding", () => {
           timestamp: "2026-06-06T00:00:01.000Z",
           payload: {},
         },
+        canonicalEvent: {
+          method: "turn/updated",
+          params: {
+            sessionId: "session-app-server",
+            threadId: "thread-app-server",
+            turnId: "turn-app-server",
+            status: "completed",
+            createdAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+            completedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+            updatedAtMs: Date.parse("2026-06-06T00:00:01.000Z"),
+          },
+        },
       },
     });
 
@@ -1396,6 +1475,8 @@ describe("agentStreamTurnEventBinding", () => {
         text: "第一段",
         metadata: {
           source: "agent_text_delta",
+          itemId: "agent-message-app-server",
+          phase: "final_answer",
           sequence: 1,
           turnId: "turn-app-server",
         },
@@ -1435,8 +1516,7 @@ describe("agentStreamTurnEventBinding", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const clearActiveStreamIfMatch = vi.fn(() => true);
@@ -1514,11 +1594,126 @@ describe("agentStreamTurnEventBinding", () => {
     const activeStreamHandler = streamHandler as (event: {
       payload: unknown;
     }) => void;
+    const toolOrdinalById = new Map<string, number>();
     const project = (
       type: string,
       sequence: number,
       payload: Record<string, unknown>,
     ) => {
+      const timestamp = `2026-06-20T10:00:0${sequence}.000Z`;
+      const updatedAtMs = Date.parse(timestamp);
+      const rawItem =
+        payload.item && typeof payload.item === "object"
+          ? (payload.item as Record<string, unknown>)
+          : null;
+      let canonicalEvent: Record<string, unknown>;
+      if (type === "message.delta") {
+        canonicalEvent = canonicalAgentMessageEvent({
+          itemId:
+            typeof payload.itemId === "string"
+              ? payload.itemId
+              : `agent-message-${sequence}`,
+          phase: payload.phase === "commentary" ? "commentary" : "final_answer",
+          sequence,
+          sessionId: "session-app-server-web-tools",
+          text: typeof payload.text === "string" ? payload.text : "",
+          threadId: "thread-app-server-web-tools",
+          timestamp,
+          turnId: "turn-app-server-web-tools",
+        });
+      } else if (
+        (type === "item.started" || type === "item.completed") &&
+        typeof payload.toolCallId === "string"
+      ) {
+        const toolCallId = payload.toolCallId;
+        if (type === "item.started") {
+          toolOrdinalById.set(toolCallId, sequence);
+        }
+        const status = type === "item.completed" ? "completed" : "inProgress";
+        canonicalEvent = {
+          method: "item/updated",
+          params: {
+            sessionId: "session-app-server-web-tools",
+            threadId: "thread-app-server-web-tools",
+            turnId: "turn-app-server-web-tools",
+            itemId: toolCallId,
+            sequence,
+            ordinal: toolOrdinalById.get(toolCallId) ?? sequence,
+            kind: "tool",
+            status,
+            createdAtMs: updatedAtMs,
+            updatedAtMs,
+            ...(status === "completed" ? { completedAtMs: updatedAtMs } : {}),
+            payload: {
+              type: "tool",
+              call_id: toolCallId,
+              name:
+                typeof payload.toolName === "string" ? payload.toolName : "",
+              arguments: payload.arguments,
+              ...(status === "completed"
+                ? {
+                    output: {
+                      text:
+                        typeof payload.output === "string"
+                          ? payload.output
+                          : "",
+                    },
+                  }
+                : {}),
+            },
+          },
+        };
+      } else if (
+        (type === "item.updated" || type === "item.completed") &&
+        rawItem
+      ) {
+        const text = typeof rawItem.text === "string" ? rawItem.text : "";
+        const status = type === "item.completed" ? "completed" : "inProgress";
+        const ordinal =
+          typeof rawItem.sequence === "number" ? rawItem.sequence : sequence;
+        canonicalEvent = {
+          method: "item/updated",
+          params: {
+            sessionId: "session-app-server-web-tools",
+            threadId: "thread-app-server-web-tools",
+            turnId: "turn-app-server-web-tools",
+            itemId:
+              typeof rawItem.id === "string"
+                ? rawItem.id
+                : `reasoning-${sequence}`,
+            sequence,
+            ordinal,
+            kind: "reasoning",
+            status,
+            createdAtMs:
+              typeof rawItem.started_at === "string"
+                ? Date.parse(rawItem.started_at)
+                : updatedAtMs,
+            updatedAtMs,
+            ...(status === "completed" ? { completedAtMs: updatedAtMs } : {}),
+            payload: {
+              type: "reasoning",
+              content: [text],
+              summary: [],
+            },
+          },
+        };
+      } else if (type === "turn.completed") {
+        canonicalEvent = {
+          method: "turn/updated",
+          params: {
+            sessionId: "session-app-server-web-tools",
+            threadId: "thread-app-server-web-tools",
+            turnId: "turn-app-server-web-tools",
+            status: "completed",
+            createdAtMs: updatedAtMs,
+            completedAtMs: updatedAtMs,
+            updatedAtMs,
+          },
+        };
+      } else {
+        throw new Error(`missing canonical fixture for ${type}`);
+      }
       const projected = projectAppServerAgentEventPayload({
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         params: {
@@ -1529,9 +1724,10 @@ describe("agentStreamTurnEventBinding", () => {
             threadId: "thread-app-server-web-tools",
             turnId: "turn-app-server-web-tools",
             type,
-            timestamp: `2026-06-20T10:00:0${sequence}.000Z`,
+            timestamp,
             payload,
           },
+          canonicalEvent,
         },
       });
       if (!projected) {
@@ -1545,12 +1741,12 @@ describe("agentStreamTurnEventBinding", () => {
       itemId: "agent-message-commentary-turn-app-server-web-tools",
       phase: "commentary",
     });
-    project("tool.started", 2, {
+    project("item.started", 2, {
       toolCallId: "tool-web-search",
       toolName: "WebSearch",
       arguments: { query: "Lime WebSearch rendering" },
     });
-    project("tool.result", 3, {
+    project("item.completed", 3, {
       toolCallId: "tool-web-search",
       toolName: "WebSearch",
       output: JSON.stringify({
@@ -1576,12 +1772,12 @@ describe("agentStreamTurnEventBinding", () => {
         updated_at: "2026-06-20T10:00:04.000Z",
       },
     });
-    project("tool.started", 5, {
+    project("item.started", 5, {
       toolCallId: "tool-web-fetch",
       toolName: "WebFetch",
       arguments: { url: "https://example.com/lime-websearch-rendering" },
     });
-    project("tool.result", 6, {
+    project("item.completed", 6, {
       toolCallId: "tool-web-fetch",
       toolName: "WebFetch",
       output: JSON.stringify({
@@ -1783,6 +1979,18 @@ describe("agentStreamTurnEventBinding", () => {
           timestamp: "2026-06-06T00:00:02.000Z",
           payload: {
             reason: "user_cancelled",
+          },
+        },
+        canonicalEvent: {
+          method: "turn/updated",
+          params: {
+            sessionId: "session-app-server-cancel",
+            threadId: "thread-app-server-cancel",
+            turnId: "turn-app-server-cancel",
+            status: "interrupted",
+            createdAtMs: Date.parse("2026-06-06T00:00:02.000Z"),
+            completedAtMs: Date.parse("2026-06-06T00:00:02.000Z"),
+            updatedAtMs: Date.parse("2026-06-06T00:00:02.000Z"),
           },
         },
       },

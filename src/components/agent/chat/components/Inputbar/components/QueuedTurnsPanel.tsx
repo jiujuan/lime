@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, Play, X } from "lucide-react";
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { buildInputbarQueuedTurnsCopy } from "./inputbarQueuedTurnsCopy";
 
@@ -18,10 +18,7 @@ export const QueuedTurnsPanel: React.FC<QueuedTurnsPanelProps> = ({
 }) => {
   const { t } = useTranslation("agent");
   const copy = useMemo(
-    () =>
-      buildInputbarQueuedTurnsCopy((key, values) =>
-        t(key, values ?? {}),
-      ),
+    () => buildInputbarQueuedTurnsCopy((key, values) => t(key, values ?? {})),
     [t],
   );
   const [expandedTurnId, setExpandedTurnId] = useState<string | null>(null);

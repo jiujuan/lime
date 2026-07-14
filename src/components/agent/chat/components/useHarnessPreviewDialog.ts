@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import type {
   AgentRuntimeEvidenceBrowserActionIndex,
   AgentRuntimeEvidencePack,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import type { Artifact } from "@/lib/artifact/types";
 import {
   openPathWithDefaultApp,

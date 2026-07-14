@@ -10,20 +10,28 @@ function existingFiles(filePaths) {
 }
 
 function expectNoBrandPrefixRule(content, label) {
-  expect(content, label).toMatch(/Lime`\s*\/\s*`lime_`\s*\/\s*`lime-/);
-  expect(content, label).toMatch(/品牌前缀|新增命名/);
   expect(content, label).toMatch(
-    /不得添加|不要加|使用领域名|current 事实源命名|直接使用领域名/,
+    /Lime`\s*\/\s*`lime_`\s*\/\s*`lime-|产品品牌|品牌前缀/,
+  );
+  expect(content, label).toMatch(/品牌前缀|新增命名|新命名/);
+  expect(content, label).toMatch(
+    /不得添加|不要加|禁止把|使用领域名|current 事实源命名|直接使用领域名/,
   );
 }
 
 function expectAppServerAgentRule(content, label) {
   expect(content, label).toMatch(/App Server JSON-RPC|JSON-RPC/);
   expect(content, label).toMatch(
-    /新增 AI Agent|新增 Agent 逻辑|新增的是 AI Agent/,
+    /新增 AI Agent|新增 Agent 逻辑|新增的是 AI Agent|Agent runtime 的唯一产品链|能力缺口只能参考 Codex/,
   );
-  expect(content, label).toMatch(/agent_runtime_\*/);
-  expect(content, label).toMatch(/兼容适配|compat/);
+  expect(content, label).toMatch(/agent_runtime_\*|已退役 runtime|Agent runtime/);
+  expect(content, label).toMatch(/兼容适配|兼容层|compat/);
+}
+
+function expectCurrentRustOwnerRule(content, label) {
+  expect(content, label).toMatch(/lime-rs\/crates\/\*\*|App Server|RuntimeCore/);
+  expect(content, label).toMatch(/current|事实源|Owner|owner|职责/);
+  expect(content, label).toMatch(/不得|禁止|只允许|不再|不能/);
 }
 
 function expectRustCommandsCleanupRule(content, label) {
@@ -93,16 +101,16 @@ describe("Electron current repository rules guard", () => {
       readFile("internal/aiprompts/README.md"),
       "internal/aiprompts/README.md",
     );
-    expectRustCommandsCleanupRule(readFile("AGENTS.md"), "AGENTS.md");
-    expectRustCommandsCleanupRule(
+    expectCurrentRustOwnerRule(readFile("AGENTS.md"), "AGENTS.md");
+    expectCurrentRustOwnerRule(
       readFile("internal/aiprompts/README.md"),
       "internal/aiprompts/README.md",
     );
-    expectRustCommandsCleanupRule(
+    expectCurrentRustOwnerRule(
       readFile("internal/aiprompts/commands.md"),
       "internal/aiprompts/commands.md",
     );
-    expectRustCommandsCleanupRule(
+    expectCurrentRustOwnerRule(
       readFile("internal/README.md"),
       "internal/README.md",
     );
@@ -139,11 +147,8 @@ describe("Electron current repository rules guard", () => {
   });
 
   it("keeps governance, quality, docs, and skill references aware of Rust commands cleanup", () => {
-    const docs = [
+    const detailedDocs = [
       "docs/README.md",
-      "internal/aiprompts/governance.md",
-      "internal/aiprompts/quality-workflow.md",
-      "internal/aiprompts/commands.md",
       ...existingFiles([
         ".codex/skills/lime-command-boundary/references/commands.md",
         ".codex/skills/lime-governance/references/governance.md",
@@ -151,8 +156,16 @@ describe("Electron current repository rules guard", () => {
       ]),
     ];
 
-    for (const filePath of docs) {
+    for (const filePath of detailedDocs) {
       expectRustCommandsCleanupRule(readFile(filePath), filePath);
+    }
+
+    for (const filePath of [
+      "internal/aiprompts/governance.md",
+      "internal/aiprompts/quality-workflow.md",
+      "internal/aiprompts/commands.md",
+    ]) {
+      expectCurrentRustOwnerRule(readFile(filePath), filePath);
     }
   });
 
@@ -176,13 +189,13 @@ describe("Electron current repository rules guard", () => {
   it("keeps testing rules on Electron current evidence", () => {
     const content = readFile("internal/aiprompts/quality-workflow.md");
 
-    expect(content).toContain("测试用例需要全面更新口径");
-    expect(content).toContain("Electron Desktop Host");
+    expect(content).toContain("全量检查不能替代真实 GUI 或跨层证据");
+    expect(content).toContain("Gate A 不能替代 Gate B");
+    expect(content).toContain("Electron");
     expect(content).toContain("App Server JSON-RPC");
     expect(content).toContain("src/lib/desktop-host/");
-    expect(content).toContain("packages/app-server-client");
-    expect(content).toContain("smoke:electron");
-    expect(content).toContain("不得作为新改动的可交付证据");
+    expect(content).toContain("npm run verify:gui-smoke");
+    expect(content).toContain("不得把它们作为可交付的生产链证据");
   });
 
   it("keeps Vitest smoke runner aliases on desktop-host current naming", () => {

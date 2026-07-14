@@ -3,8 +3,8 @@ import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import type {
   SessionModelPreference,
   WorkspacePathMissingState,

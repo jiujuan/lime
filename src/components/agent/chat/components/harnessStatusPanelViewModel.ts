@@ -1,7 +1,4 @@
-import type {
-  AgentRuntimeThreadReadModel,
-  AgentSubagentSessionInfo,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type { ActionRequired } from "../types";
 import type { HarnessSessionState } from "../utils/harnessState";
@@ -48,6 +45,7 @@ export interface ChildSubagentSessionSummary {
   running: number;
   queued: number;
   active: number;
+  interrupted: number;
   settled: number;
   failed: number;
 }
@@ -151,60 +149,8 @@ const APPROVAL_RISK_LABEL_KEY_BY_KIND: Record<ApprovalRiskKind, string> = {
   default: "agentChat.harness.approvals.risk.default",
 };
 
-export function resolveApprovalRiskLabelKey(
-  kind: ApprovalRiskKind,
-): string {
+export function resolveApprovalRiskLabelKey(kind: ApprovalRiskKind): string {
   return APPROVAL_RISK_LABEL_KEY_BY_KIND[kind] || kind;
-}
-
-export function resolveSubagentRuntimeStatusLabel(
-  status?: AgentSubagentSessionInfo["runtime_status"],
-): string {
-  switch (status) {
-    case "queued":
-      return "稍后开始";
-    case "running":
-      return "处理中";
-    case "completed":
-      return "已完成";
-    case "failed":
-      return "失败";
-    case "aborted":
-      return "已暂停";
-    case "idle":
-    default:
-      return "待开始";
-  }
-}
-
-export function resolveSubagentRuntimeStatusVariant(
-  status?: AgentSubagentSessionInfo["runtime_status"],
-): HarnessStatusBadgeVariant {
-  switch (status) {
-    case "running":
-      return "default";
-    case "completed":
-      return "secondary";
-    case "failed":
-    case "aborted":
-      return "destructive";
-    case "queued":
-    case "idle":
-    default:
-      return "outline";
-  }
-}
-
-export function resolveSubagentSessionTypeLabel(value?: string): string {
-  switch (value) {
-    case "sub_agent":
-      return "子任务";
-    case "fork":
-      return "分支任务";
-    case "user":
-    default:
-      return value?.trim() || "任务会话";
-  }
 }
 
 export function resolveFriendlyToolLabel(value?: string): string | null {
@@ -218,38 +164,6 @@ export function resolveFriendlyToolLabel(value?: string): string | null {
   }
 
   return resolveToolDisplayLabel(normalized);
-}
-
-export function summarizeChildSubagentSessions(
-  sessions: AgentSubagentSessionInfo[],
-): ChildSubagentSessionSummary {
-  const running = sessions.filter(
-    (session) => session.runtime_status === "running",
-  ).length;
-  const queued = sessions.filter(
-    (session) => session.runtime_status === "queued",
-  ).length;
-  const failed = sessions.filter(
-    (session) =>
-      session.runtime_status === "failed" ||
-      session.runtime_status === "aborted",
-  ).length;
-  const settled = sessions.filter(
-    (session) =>
-      session.runtime_status === "completed" ||
-      session.runtime_status === "failed" ||
-      session.runtime_status === "aborted" ||
-      session.runtime_status === "closed",
-  ).length;
-
-  return {
-    total: sessions.length,
-    running,
-    queued,
-    active: running + queued,
-    settled,
-    failed,
-  };
 }
 
 export function formatRuntimePhaseLabel(

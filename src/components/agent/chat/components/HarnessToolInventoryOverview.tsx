@@ -1,5 +1,5 @@
 import { Loader2, PlugZap, Wrench } from "lucide-react";
-import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";

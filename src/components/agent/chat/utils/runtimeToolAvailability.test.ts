@@ -1,4 +1,4 @@
-import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   deriveRuntimeToolAvailability,

@@ -8,11 +8,7 @@ import {
   type AppServerSessionClient,
   type AppServerSessionRpcClient,
 } from "./appServerSessionClient";
-import {
-  normalizeSubagentParentContext,
-  normalizeSubagentSessionInfo,
-  normalizeThreadReadModel,
-} from "./normalizers";
+import { normalizeThreadReadModel } from "./normalizers";
 import type {
   AgentExecutionStrategy,
   AgentSessionDetail,
@@ -285,8 +281,11 @@ export function createSessionClient({
         },
       );
       const normalizedDetail = detail as AgentSessionDetail | null | undefined;
+      const detailWithoutLegacyRoster = omitLegacyRosterFields(
+        detail as AgentSessionDetail,
+      );
       const normalizedSessionDetail: AgentSessionDetail = {
-        ...(detail as AgentSessionDetail),
+        ...detailWithoutLegacyRoster,
         messages: Array.isArray(normalizedDetail?.messages)
           ? normalizedDetail.messages
           : [],
@@ -298,16 +297,6 @@ export function createSessionClient({
               normalizeLegacyThreadItem(item as AgentThreadItem),
             )
           : [],
-        child_subagent_sessions: Array.isArray(
-          normalizedDetail?.child_subagent_sessions,
-        )
-          ? normalizedDetail.child_subagent_sessions.map(
-              normalizeSubagentSessionInfo,
-            )
-          : [],
-        subagent_parent_context: normalizeSubagentParentContext(
-          normalizedDetail?.subagent_parent_context,
-        ),
         queued_turns: normalizeQueuedTurnSnapshots(
           normalizedDetail?.queued_turns,
         ),
@@ -320,8 +309,6 @@ export function createSessionClient({
       settled = true;
       recordAgentUiPerformanceMetric("agentRuntime.getSession.success", {
         ...getSessionMetricContext,
-        childSubagentSessionsCount:
-          normalizedSessionDetail.child_subagent_sessions?.length ?? 0,
         durationMs: Date.now() - startedAt,
         itemsCount: normalizedSessionDetail.items?.length ?? 0,
         messagesCount: normalizedSessionDetail.messages?.length ?? 0,
@@ -329,8 +316,6 @@ export function createSessionClient({
         turnsCount: normalizedSessionDetail.turns?.length ?? 0,
       });
       logAgentDebug("AgentApi", "runtimeGetSession.success", {
-        childSubagentSessionsCount:
-          normalizedSessionDetail.child_subagent_sessions?.length ?? 0,
         durationMs: Date.now() - startedAt,
         historyLimit: historyLimit ?? null,
         historyOffset: historyOffset ?? null,
@@ -411,6 +396,15 @@ export function createSessionClient({
     listAgentRuntimeSessions,
     updateAgentRuntimeSession,
   };
+}
+
+function omitLegacyRosterFields(
+  detail: AgentSessionDetail,
+): AgentSessionDetail {
+  const current = { ...detail } as AgentSessionDetail & Record<string, unknown>;
+  delete current["child_subagent_sessions"];
+  delete current["subagent_parent_context"];
+  return current;
 }
 
 export const {

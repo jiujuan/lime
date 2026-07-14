@@ -1,7 +1,5 @@
-import type {
-  AgentRuntimeThreadReadModel,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { normalizeQueuedTurnSnapshots } from "@/lib/api/queuedTurn";
 
 export function readRecord(value: unknown): Record<string, unknown> | null {

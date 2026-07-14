@@ -570,4 +570,29 @@ describe("deriveHarnessSessionState", () => {
     ]);
     expect(state.plan.summaryText).toBeUndefined();
   });
+
+  it("canonical SubAgent activity 不应把 activity Item 的完成态伪装成 child 终态", () => {
+    const activities = ["started", "interacted", "interrupted"] as const;
+    const items = activities.map(
+      (statusLabel, index) =>
+        ({
+          id: `item_subagent-${index + 1}`,
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: index + 1,
+          status: "completed",
+          started_at: `2026-03-13T12:00:0${index}.000Z`,
+          completed_at: `2026-03-13T12:00:0${index}.100Z`,
+          updated_at: `2026-03-13T12:00:0${index}.100Z`,
+          type: "subagent_activity",
+          status_label: statusLabel,
+          session_id: "thread-child",
+        }) satisfies AgentThreadItem,
+    );
+
+    const state = deriveHarnessSessionState([createMessage()], [], items);
+
+    expect(state.activity.delegation).toBe(3);
+    expect(state.delegatedTasks).toEqual([]);
+  });
 });

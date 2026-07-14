@@ -1,8 +1,6 @@
 import type { AgentThreadItem } from "../types";
-import type {
-  AgentRuntimeThreadReadModel,
-  AgentSessionExecutionRuntime,
-} from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { isImportedSourceExecutionRuntime } from "./sessionExecutionRuntime";
 import { isImportedSourceMetadata } from "./importedSourceMetadata";
 

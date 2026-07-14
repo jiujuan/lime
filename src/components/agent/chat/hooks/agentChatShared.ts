@@ -1,9 +1,9 @@
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type {
-  AgentExecutionStrategy,
   AgentSessionInfo,
   AutoContinueRequestPayload,
-  RuntimeSearchMode,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
+import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type {
   AgentRuntimeStatus,
   Message,

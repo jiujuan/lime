@@ -571,82 +571,6 @@ export interface AgentRuntimeThreadLimeCorePolicyEvaluation {
   askRefs?: string[];
   pendingRefs?: string[];
 }
-export interface AgentSubagentSessionInfo {
-  id: string;
-  name: string;
-  created_at: number;
-  updated_at: number;
-  session_type: string;
-  model?: string;
-  provider_name?: string;
-  working_dir?: string;
-  workspace_id?: string;
-  task_summary?: string;
-  role_hint?: string;
-  origin_tool?: string;
-  created_from_turn_id?: string;
-  blueprint_role_id?: string;
-  blueprint_role_label?: string;
-  profile_id?: string;
-  profile_name?: string;
-  role_key?: string;
-  team_preset_id?: string;
-  theme?: string;
-  output_contract?: string;
-  skill_ids?: string[];
-  skills?: AgentSubagentSkillInfo[];
-  runtime_status?:
-    | "idle"
-    | "queued"
-    | "running"
-    | "completed"
-    | "failed"
-    | "aborted"
-    | "closed";
-  latest_turn_status?:
-    | "idle"
-    | "queued"
-    | "running"
-    | "completed"
-    | "failed"
-    | "aborted"
-    | "closed";
-  queued_turn_count?: number;
-  team_phase?: "queued" | "running";
-  team_parallel_budget?: number;
-  team_active_count?: number;
-  team_queued_count?: number;
-  provider_concurrency_group?: string;
-  provider_parallel_budget?: number;
-  queue_reason?: string;
-  retryable_overload?: boolean;
-}
-export interface AgentSubagentSkillInfo {
-  id: string;
-  name: string;
-  description?: string;
-  source?: string;
-  directory?: string;
-}
-export interface AgentSubagentParentContext {
-  parent_session_id: string;
-  parent_session_name: string;
-  role_hint?: string;
-  task_summary?: string;
-  origin_tool?: string;
-  created_from_turn_id?: string;
-  blueprint_role_id?: string;
-  blueprint_role_label?: string;
-  profile_id?: string;
-  profile_name?: string;
-  role_key?: string;
-  team_preset_id?: string;
-  theme?: string;
-  output_contract?: string;
-  skill_ids?: string[];
-  skills?: AgentSubagentSkillInfo[];
-  sibling_subagent_sessions?: AgentSubagentSessionInfo[];
-}
 export interface AgentSessionHistoryCursor {
   oldest_message_id?: number | null;
   start_index?: number | null;
@@ -677,8 +601,6 @@ export interface AgentSessionDetail {
   queued_turns?: QueuedTurnSnapshot[];
   thread_read?: AgentRuntimeThreadReadModel | null;
   todo_items?: AgentTodoItem[];
-  child_subagent_sessions?: AgentSubagentSessionInfo[];
-  subagent_parent_context?: AgentSubagentParentContext;
 }
 export type AgentRuntimeHandoffArtifactKind =
   | "plan"

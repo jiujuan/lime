@@ -30,9 +30,7 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   activityModel: ActivityModel;
   agentUiProjectionSummary: AgentUiProjectionSummary;
   canInterrupt: boolean;
-  childSubagentSessions: NonNullable<
-    HarnessStatusPanelProps["childSubagentSessions"]
-  >;
+  canonicalChildren: NonNullable<HarnessStatusPanelProps["canonicalChildren"]>;
   currentSessionId: string | null;
   currentTurnId: HarnessStatusPanelProps["currentTurnId"];
   diagnosticRuntimeContext: HarnessStatusPanelProps["diagnosticRuntimeContext"];
@@ -90,7 +88,7 @@ export function buildHarnessStatusPanelSectionModels({
   activityModel,
   agentUiProjectionSummary,
   canInterrupt,
-  childSubagentSessions,
+  canonicalChildren,
   currentSessionId,
   currentTurnId,
   diagnosticRuntimeContext,
@@ -398,7 +396,7 @@ export function buildHarnessStatusPanelSectionModels({
       groupedFileEvents,
       openPreview,
       realTeamSummary,
-      childSubagentSessions,
+      canonicalChildren,
       onOpenSubagentSession,
       environment,
     },

@@ -40,7 +40,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
   pendingActions = [],
   submittedActionsInFlight = [],
   queuedTurns = [],
-  childSubagentSessions = [],
+  canonicalChildren = [],
   sessionHistoryWindow = null,
   onLoadFullHistory,
   isSending = false,
@@ -98,7 +98,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
   });
   const timelineState = useMessageListTimelineState({
     activePendingA2UISource,
-    childSubagentSessions,
+    canonicalChildren,
     currentTurnId,
     expandedHistoricalTimelineKeys,
     focusedTimelineItemId,

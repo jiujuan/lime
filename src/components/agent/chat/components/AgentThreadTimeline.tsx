@@ -19,7 +19,7 @@ import {
   buildAgentThreadDisplayModel,
   type AgentThreadOrderedBlock,
 } from "../utils/agentThreadGrouping";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { cn } from "@/lib/utils";
 import {
   AgentThreadTimelineFileChangesCard,

@@ -1,4 +1,4 @@
-import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import type { HandleSendOptions } from "../../hooks/handleSendTypes";
 import type { MessageImage } from "../../types";
 

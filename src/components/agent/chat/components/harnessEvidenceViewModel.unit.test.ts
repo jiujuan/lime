@@ -5,7 +5,7 @@ import type {
   AgentRuntimeEvidencePack,
   AgentRuntimeReplayCase,
   AgentRuntimeReviewDecisionTemplate,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 
 import {
   buildBrowserReplayArtifact,

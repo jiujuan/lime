@@ -8246,6 +8246,20 @@ export type CollabAgentOperation =
   | "spawn"
   | "wait";
 
+export interface CollabAgentState {
+  message?: null | string;
+  status: CollabAgentStatus;
+}
+
+export type CollabAgentStatus =
+  | "completed"
+  | "errored"
+  | "interrupted"
+  | "notFound"
+  | "pendingInit"
+  | "running"
+  | "shutdown";
+
 export type FileChangeStatus = "applied" | "failed" | "proposed" | "rejected";
 
 export type ItemId = string;
@@ -8260,6 +8274,7 @@ export type ItemKind =
   | "file"
   | "mcpToolCall"
   | "media"
+  | "plan"
   | "reasoning"
   | "subAgent"
   | "tool"
@@ -8273,22 +8288,24 @@ export type ItemStatus =
   | "interrupted"
   | "pending";
 
-export type SubAgentActivityKind =
-  | "closed"
-  | "completed"
-  | "failed"
-  | "interacted"
-  | "interrupted"
-  | "messageSent"
-  | "resumed"
-  | "spawned"
-  | "started"
-  | "waiting";
+export interface PlanStep {
+  status: PlanStepStatus;
+  step: string;
+}
+
+export type PlanStepStatus = "completed" | "in_progress" | "pending";
+
+export type SubAgentActivityKind = "interacted" | "interrupted" | "started";
 
 export interface Thread {
+  agentNickname?: null | string;
+  agentPath?: null | string;
+  agentRole?: null | string;
+  agentState?: CollabAgentState | null;
   archived: boolean;
   createdAtMs: number;
   forkedFromId?: null | string;
+  lastTaskMessage?: null | string;
   metadata?: unknown;
   modelProvider?: string;
   name?: null | string;
@@ -8332,6 +8349,16 @@ export type ThreadItemPayload =
       phase?: null | string;
       text: string;
       type: "agentMessage";
+    }
+  | {
+      explanation?: null | string;
+      plan?: PlanStep[];
+      revision_id: string;
+      source?: null | string;
+      source_item_id?: null | string;
+      text: string;
+      tool_call_id?: null | string;
+      type: "plan";
     }
   | {
       content?: string[];

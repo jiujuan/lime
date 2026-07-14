@@ -1,7 +1,7 @@
 use super::materializer::materialize_events;
 use agent_protocol::{
     ApprovalAction, ApprovalDecision, ApprovalScope, CollabAgentOperation, ItemKind, ItemStatus,
-    ThreadItemPayload, TurnApprovalState, TurnQueueState, TurnStatus,
+    PlanStepStatus, ThreadItemPayload, TurnApprovalState, TurnQueueState, TurnStatus,
 };
 use app_server_protocol::AgentEvent;
 use serde_json::json;
@@ -89,6 +89,171 @@ fn coalesces_message_delta_into_one_stable_typed_item() {
     );
     assert_eq!(changes.changed_turns.len(), 1);
     assert_eq!(changes.changed_turns[0].status, TurnStatus::InProgress);
+}
+
+#[test]
+fn user_and_agent_messages_have_explicit_terminal_item_lifecycle() {
+    let changes = materialize_events(
+        &[
+            event(
+                "user-created",
+                1,
+                "message.created",
+                "turn-1",
+                json!({"role": "user", "input": {"text": "hello"}}),
+            ),
+            event(
+                "agent-delta",
+                2,
+                "message.delta",
+                "turn-1",
+                json!({"role": "assistant", "text": "answer"}),
+            ),
+            event(
+                "agent-completed",
+                3,
+                "message.completed",
+                "turn-1",
+                json!({
+                    "role": "assistant",
+                    "phase": "final_answer",
+                    "status": "completed"
+                }),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize message lifecycle");
+
+    assert_eq!(changes.changed_items.len(), 2);
+    let user = &changes.changed_items[0];
+    assert_eq!(user.item_id.as_str(), "item_user-turn-1");
+    assert_eq!(user.status, ItemStatus::Completed);
+    assert_eq!(user.completed_at_ms, Some(user.updated_at_ms));
+
+    let agent = &changes.changed_items[1];
+    assert_eq!(agent.item_id.as_str(), "item_agent-turn-1");
+    assert_eq!(agent.sequence, 3);
+    assert_eq!(agent.ordinal, 2);
+    assert_eq!(agent.status, ItemStatus::Completed);
+    assert_eq!(agent.completed_at_ms, Some(agent.updated_at_ms));
+    assert_eq!(
+        agent.payload,
+        ThreadItemPayload::AgentMessage {
+            text: "answer".to_string(),
+            phase: Some("final_answer".to_string()),
+        }
+    );
+}
+
+#[test]
+fn canceled_agent_message_preserves_partial_text_and_interrupts_item() {
+    let changes = materialize_events(
+        &[
+            event(
+                "agent-delta",
+                1,
+                "message.delta",
+                "turn-1",
+                json!({"role": "assistant", "text": "partial"}),
+            ),
+            event(
+                "agent-interrupted",
+                2,
+                "message.completed",
+                "turn-1",
+                json!({"role": "assistant", "status": "interrupted"}),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize interrupted message");
+
+    let item = &changes.changed_items[0];
+    assert_eq!(item.status, ItemStatus::Interrupted);
+    assert_eq!(item.completed_at_ms, Some(item.updated_at_ms));
+    assert!(matches!(
+        &item.payload,
+        ThreadItemPayload::AgentMessage { text, .. } if text == "partial"
+    ));
+}
+
+#[test]
+fn plan_delta_and_final_share_turn_scoped_revision_identity() {
+    let changes = materialize_events(
+        &[
+            event(
+                "plan-delta",
+                1,
+                "plan.delta",
+                "turn-1",
+                json!({
+                    "text": "- [ ] inspect",
+                    "revisionId": "proposed_plan:1",
+                    "source": "proposed_plan"
+                }),
+            ),
+            event(
+                "plan-final",
+                2,
+                "plan.final",
+                "turn-1",
+                json!({
+                    "text": "- [x] inspect\n- [ ] verify",
+                    "revisionId": "proposed_plan:1",
+                    "source": "proposed_plan",
+                    "plan": [
+                        {"step": "inspect", "status": "completed"},
+                        {"step": "verify", "status": "in_progress"}
+                    ]
+                }),
+            ),
+            event(
+                "next-turn-plan-final",
+                3,
+                "plan.final",
+                "turn-2",
+                json!({
+                    "text": "- [ ] another",
+                    "revisionId": "proposed_plan:1",
+                    "source": "proposed_plan",
+                    "plan": [{"step": "another", "status": "pending"}]
+                }),
+            ),
+        ],
+        "session-1",
+        "thread-1",
+    )
+    .expect("materialize plan lifecycle");
+
+    assert_eq!(changes.changed_items.len(), 2);
+    let first = &changes.changed_items[0];
+    assert_eq!(first.item_id.as_str(), "plan_turn-1_proposed_plan:1");
+    assert_eq!(first.sequence, 2);
+    assert_eq!(first.ordinal, 1);
+    assert_eq!(first.status, ItemStatus::Completed);
+    let ThreadItemPayload::Plan {
+        text,
+        revision_id,
+        source,
+        plan,
+        ..
+    } = &first.payload
+    else {
+        panic!("plan payload");
+    };
+    assert_eq!(text, "- [x] inspect\n- [ ] verify");
+    assert_eq!(revision_id, "proposed_plan:1");
+    assert_eq!(source.as_deref(), Some("proposed_plan"));
+    assert_eq!(plan.len(), 2);
+    assert_eq!(plan[1].status, PlanStepStatus::InProgress);
+
+    assert_eq!(
+        changes.changed_items[1].item_id.as_str(),
+        "plan_turn-2_proposed_plan:1"
+    );
 }
 
 #[test]

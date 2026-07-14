@@ -7,7 +7,7 @@ import type {
   AgentRuntimeHandoffBundle,
   AgentRuntimeReplayCase,
   AgentRuntimeReviewDecisionTemplate,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import type { Artifact } from "@/lib/artifact/types";
 
 export interface ReviewDecisionRegressionFacts {

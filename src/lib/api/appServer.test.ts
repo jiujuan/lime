@@ -19,6 +19,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+  APP_SERVER_METHOD_THREAD_LIST,
   APP_SERVER_METHOD_THREAD_READ,
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_CAPABILITY_LIST,
@@ -128,6 +129,51 @@ describe("App Server API", () => {
       }),
     );
     expect(result.result.thread.threadId).toBe("thread-1");
+  });
+
+  it("listThreads 应通过 canonical thread/list typed method", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 1,
+          result: {
+            data: [
+              {
+                archived: false,
+                createdAtMs: 100,
+                parentThreadId: "thread-parent",
+                sessionId: "session-child",
+                status: { type: "idle" },
+                threadId: "thread-child",
+                turns: [],
+                turnsView: "summary",
+                updatedAtMs: 200,
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient();
+    const result = await client.listThreads({
+      limit: 100,
+      turnsView: "summary",
+    });
+
+    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
+      "app_server_handle_json_lines",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          lines: [
+            expect.stringContaining(
+              `"method":"${APP_SERVER_METHOD_THREAD_LIST}"`,
+            ),
+          ],
+        }),
+      }),
+    );
+    expect(result.result.data[0]?.parentThreadId).toBe("thread-parent");
   });
 
   it("initialize 应通过 App Server JSON-RPC 命令完成握手", async () => {

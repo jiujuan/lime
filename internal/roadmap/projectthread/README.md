@@ -84,7 +84,7 @@ Lime 当前主链没有完全踩 Yi-One 的坑：`agentSession` 协议和 memory
 | 插件 `lime.agent.startTask` App Server runtime host         | `current`    | 只允许显式 `workspaceId/projectId/sessionId` 驱动；缺 Project/Thread workspace 时 fail closed，不再自动创建默认项目。                                  |
 | 插件 `agent-runtime/tasks/` 本地 task 投影缓存              | `compat`     | 只用于刷新后恢复 task projection；长期事实源仍必须回到 App Server session/thread/turn/evidence。                                                       |
 | subagent / team session                                     | `compat`     | 允许 child session 作为执行上下文，但必须挂 parent thread lineage，不得进入独立聊天列表。                                                              |
-| subagent parent context / Team projection                   | `current`    | `parent_session_id / created_from_turn_id / team_preset_id / sibling_subagent_sessions` 必须回到 parent Thread 的 timeline、team facts 和 projection。 |
+| canonical SubAgent Thread family / AgentGraph projection    | `current`    | `Thread.parentThreadId / agentState` 与 `CanonicalChildThreadSummary[]` 必须回到 parent Thread 的 timeline、team facts 和 projection。              |
 | Evidence Pack `team_facts`                                  | `current`    | App Server `evidence/export` 汇总 Team facts，证明 roster、handoff、worker notification、review lane 可从 parent session/thread/turn 导出。            |
 | Browser profile / runtime session                           | `compat`     | 只能是工具运行环境或 right surface，不得成为用户任务第一分类。                                                                                         |
 | Automation / workflow job                                   | `compat`     | 可以后台运行，但输出、证据和继续动作必须回到 Project / Thread。                                                                                        |
@@ -253,7 +253,7 @@ Agent / Expert / Skill / Plugin 的正确位置是：
 
 1. Agent Workspace P0 `multi-agent-team` evidence 证明 team facts 可见、可恢复、可导出。
 2. 没有独立的“子 Agent 会话历史列表”绕开 parent thread。
-3. 已完成恢复第一刀：parent `childSubagentSessions` / child `subagentParentContext.sibling_subagent_sessions` 会回补同构 Agent UI Team facts projection，并绑定 parent session / thread / turn。
+3. 已完成 canonical Thread family 恢复：`thread/list|read` join AgentGraph/identity 后生成 `CanonicalChildThreadSummary[]`，同构 Agent UI SubAgent projection 绑定 parent thread、child thread/session 与来源 turn item。
 
 ## 8. P0 回归场景
 

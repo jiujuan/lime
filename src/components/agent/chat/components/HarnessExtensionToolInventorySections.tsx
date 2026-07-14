@@ -1,4 +1,4 @@
-import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import { getMcpInnerToolName } from "@/lib/api/mcp";
 import { Badge } from "@/components/ui/badge";
 import { agentText } from "./harnessPanelText";
@@ -296,10 +296,7 @@ function PluginMcpTargetSection({
   return (
     <div className="space-y-3" data-testid="harness-plugin-mcp-targets">
       <div className="text-sm font-medium text-foreground">
-        {agentText(
-          "agentChat.harness.pluginMcpTargets.title",
-          "插件 MCP 目标",
-        )}
+        {agentText("agentChat.harness.pluginMcpTargets.title", "插件 MCP 目标")}
       </div>
       {entries.map((entry) => {
         const prepareCandidateCount = entry.prepareRequests.filter(
@@ -375,7 +372,11 @@ function PluginMcpTargetSection({
               <Badge variant={entry.toolAvailable ? "secondary" : "outline"}>
                 {formatPluginMcpRuntimeStatusLabel(entry.runtimeStatus)}
               </Badge>
-              <Badge variant={entry.prepareStatus === "ready" ? "secondary" : "outline"}>
+              <Badge
+                variant={
+                  entry.prepareStatus === "ready" ? "secondary" : "outline"
+                }
+              >
                 {formatPluginMcpPrepareStatusLabel(entry.prepareStatus)}
               </Badge>
               <Badge variant={entry.serverRunning ? "secondary" : "outline"}>
@@ -405,7 +406,9 @@ function PluginMcpTargetSection({
                       "工具缺失",
                     )}
               </Badge>
-              <Badge variant={prepareCandidateCount > 0 ? "secondary" : "outline"}>
+              <Badge
+                variant={prepareCandidateCount > 0 ? "secondary" : "outline"}
+              >
                 {agentText(
                   "agentChat.harness.pluginMcpTargets.prepareCount",
                   "准备 {{count}}",

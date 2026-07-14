@@ -801,8 +801,7 @@ export async function executeScenarioFlow({
       includesTeamSummary: serializedReadModel.includes(
         MULTI_AGENT_TEAM_SUMMARY_TEXT,
       ),
-      includesSubagentStatus:
-        serializedReadModel.includes("subagent_status_changed") ||
+      includesChildThreads:
         serializedReadModel.includes("fixture-team-child-researcher") ||
         serializedReadModel.includes("fixture-team-child-reviewer"),
       forbiddenAgentFirstHistory:

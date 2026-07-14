@@ -1,5 +1,5 @@
 import type { AssistantDraftState, SlashSkillRequest } from "./agentChatShared";
-import type { RuntimeSearchMode } from "@/lib/api/agentRuntime";
+import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import type { InterruptedInputDraftSnapshot } from "./agentStreamInputRestoreTypes";

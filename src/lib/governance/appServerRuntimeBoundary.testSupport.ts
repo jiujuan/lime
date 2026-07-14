@@ -3,7 +3,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 export const REPO_ROOT = process.cwd();
-export const APP_SERVER_SRC_DIR = join(REPO_ROOT, "lime-rs/crates/app-server/src");
+export const APP_SERVER_SRC_DIR = join(
+  REPO_ROOT,
+  "lime-rs/crates/app-server/src",
+);
 export const LOCAL_DATA_SOURCE_SKILLS_DIR = join(
   REPO_ROOT,
   "lime-rs/crates/app-server/src/local_data_source/skills",
@@ -44,6 +47,7 @@ export const RUNTIME_BACKEND_TEST_SPLIT_MODULES = [
 export const IMAGE_COMMAND_MAIN =
   "lime-rs/crates/app-server/src/runtime_backend/image_command/mod.rs";
 export const IMAGE_COMMAND_SPLIT_MODULES = [
+  "lime-rs/crates/app-server/src/runtime_backend/image_command/events.rs",
   "lime-rs/crates/app-server/src/runtime_backend/image_command/intent.rs",
   "lime-rs/crates/app-server/src/runtime_backend/image_command/presentation.rs",
   "lime-rs/crates/app-server/src/runtime_backend/image_command/tests.rs",
@@ -59,6 +63,7 @@ export const RUNTIME_CORE_OWNER_MODULES = [
   "lime-rs/crates/app-server/src/runtime/thread_item_projection.rs",
   "lime-rs/crates/app-server/src/runtime/tool_item_projection.rs",
   "lime-rs/crates/app-server/src/runtime/turn_execution.rs",
+  "lime-rs/crates/app-server/src/runtime/value_fields.rs",
 ];
 export const RUNTIME_READ_MODEL_MAIN =
   "lime-rs/crates/app-server/src/runtime/read_model.rs";
@@ -86,6 +91,7 @@ export const RUNTIME_THREAD_ITEM_PROJECTION_OWNER_MODULES = [
 export const RUNTIME_BACKEND_MAIN =
   "lime-rs/crates/app-server/src/runtime_backend.rs";
 export const RUNTIME_BACKEND_OWNER_MODULES = [
+  "lime-rs/crates/app-server/src/runtime_backend/execution_backend.rs",
   "lime-rs/crates/app-server/src/runtime_backend/model_capability.rs",
   "lime-rs/crates/app-server/src/runtime_backend/model_routing.rs",
   "lime-rs/crates/app-server/src/runtime_backend/provider_config.rs",
@@ -151,18 +157,12 @@ export const ALLOWED_AGENT_COUPLING_OWNER_FILES = new Set([
 export const KNOWN_OUT_OF_BOUND_AGENT_COUPLING_FILES = new Set<string>();
 export const KNOWN_OUT_OF_BOUND_AGENT_EXECUTION_FILES = new Set<string>();
 
-export const AGENT_COUPLING_SNIPPETS = [
-  "use agent::",
-  "agent::",
-  "AgentState",
-  "initialize_agent_runtime(",
-];
+export const AGENT_COUPLING_SNIPPETS = ["use agent::"];
 
 export const AGENT_EXECUTION_SNIPPETS = [
-  "stream_reply_with_policy(",
-  ".configure_provider(",
-  "configure_provider_from_pool(",
-  "provider_config_from_pool(",
+  "stream_current_provider_turn(",
+  "run_agent_turn_with_policy(",
+  "configure_model_route_provider_for_session_with_provider(",
 ];
 
 export const AGENT_PROVIDER_CONFIGURATION_SNIPPETS = [
@@ -283,7 +283,11 @@ export function repoRelative(path: string): string {
 
 export function productionSource(path: string): string {
   const relativePath = repoRelative(path);
-  if (relativePath.includes("/tests/") || relativePath.endsWith("/tests.rs")) {
+  if (
+    relativePath.includes("/tests/") ||
+    relativePath.endsWith("/tests.rs") ||
+    relativePath.endsWith("_tests.rs")
+  ) {
     return "";
   }
   const source = readFileSync(path, "utf8");

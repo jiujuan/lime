@@ -422,7 +422,7 @@ describe("Electron current package entrypoints", () => {
     expect(viteConfig).toContain("keepExistingOutDir ? false : undefined");
     expect(viteConfig).toContain('isElectronRenderer ? "./" : undefined');
     expect(viteConfig).toContain('find: "@limecloud/app-server-client"');
-    expect(viteConfig).toContain("./packages/app-server-client/src/index.ts");
+    expect(viteConfig).toContain("./packages/app-server-client/src/browser.ts");
   });
 
   it("build monitor observes Electron package output instead of retired host bundles", () => {

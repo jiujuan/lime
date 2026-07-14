@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime";
-import { exportAgentRuntimeEvidencePack } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/evidenceTypes";
+import { exportAgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/exportClient";
 import { buildAgentUiEvidenceChangedEvent } from "../projection/agentUiEventProjection";
 import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
 import { recordHarnessEvidencePack } from "./harnessEvidencePackStore";

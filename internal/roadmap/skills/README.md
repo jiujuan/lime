@@ -599,9 +599,11 @@ npm run verify:gui-smoke
 
 最终验证：
 
+> 2026-07-14：Team runtime sidecar 测试路径已被 S6j 删除；下列命令改用 canonical SubAgent reader/projection/timeline 回归，2026-06-21 的历史结果不变。
+
 ```bash
-npm test -- --run src/lib/governance/agentSkillsRuntimeBoundary.test.ts src/lib/api/skillCatalog.test.ts src/lib/base-setup/seededCommandPackage.test.ts src/lib/base-setup/compat/commandCatalogProjection.test.ts src/components/agent/chat/workspace/serviceSkillSceneLaunch.test.ts src/components/agent/chat/team-workspace-runtime/liveRuntimeProjector.test.ts src/components/agent/chat/team-workspace-runtime/runtimeEventSubscriptions.test.ts src/components/agent/chat/components/AgentThreadTimeline.test.tsx src/components/agent/chat/components/AgentThreadTimeline.reasoning.test.tsx src/components/agent/chat/components/AgentThreadTimelineViewModel.unit.test.ts
-npx eslint src/components/agent/chat/team-workspace-runtime/liveRuntimeProjector.test.ts src/components/agent/chat/components/AgentThreadTimelineViewModel.ts src/components/agent/chat/components/AgentThreadTimelineViewModel.unit.test.ts src/lib/governance/agentSkillsRuntimeBoundary.test.ts src/lib/api/skillCatalog.test.ts src/lib/base-setup/seededCommandPackage.test.ts src/lib/base-setup/compat/commandCatalogProjection.test.ts src/components/agent/chat/workspace/serviceSkillSceneLaunch.test.ts --max-warnings 0
+npm test -- --run src/lib/governance/agentSkillsRuntimeBoundary.test.ts src/lib/api/skillCatalog.test.ts src/lib/base-setup/seededCommandPackage.test.ts src/lib/base-setup/compat/commandCatalogProjection.test.ts src/components/agent/chat/workspace/serviceSkillSceneLaunch.test.ts src/lib/api/agentRuntime/appServerCanonicalItemReader.test.ts src/components/agent/chat/projection/threadItemProjection.test.ts src/components/agent/chat/components/AgentThreadTimeline.test.tsx src/components/agent/chat/components/AgentThreadTimeline.reasoning.test.tsx src/components/agent/chat/components/AgentThreadTimelineViewModel.unit.test.ts
+npx eslint src/components/agent/chat/components/AgentThreadTimelineViewModel.ts src/components/agent/chat/components/AgentThreadTimelineViewModel.unit.test.ts src/lib/governance/agentSkillsRuntimeBoundary.test.ts src/lib/api/skillCatalog.test.ts src/lib/base-setup/seededCommandPackage.test.ts src/lib/base-setup/compat/commandCatalogProjection.test.ts src/components/agent/chat/workspace/serviceSkillSceneLaunch.test.ts src/lib/api/agentRuntime/appServerCanonicalItemReader.test.ts src/components/agent/chat/projection/threadItemProjection.test.ts --max-warnings 0
 npm run test:contracts
 npm run smoke:agent-runtime-current-fixture
 npm run verify:gui-smoke

@@ -104,14 +104,16 @@ const FORBIDDEN_AUTOMATION_FIRST_RUNTIME_PATTERNS = [
 ] as const;
 
 const SUBAGENT_THREAD_FIRST_SURFACE_FILES = [
-  "lime-rs/crates/agent/src/session_store_subagent_context.rs",
   "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
   "lime-rs/crates/app-server/src/runtime/tests/evidence_exports/team_facts.rs",
+  "src/lib/api/agentRuntime/appServerCanonicalItemReader.ts",
+  "src/lib/api/agentRuntime/threadClient.ts",
   "src/components/agent/chat/AgentChatWorkspace.tsx",
-  "src/components/agent/chat/utils/subagentTimeline.ts",
-  "src/components/agent/chat/projection/subagentStatusProjection.ts",
+  "src/components/agent/chat/workspace/useWorkspaceSubagentNavigationRuntime.ts",
+  "src/components/agent/chat/projection/threadItemProjection.ts",
+  "packages/agent-runtime-projection/src/threadItems.ts",
+  "src/components/agent/chat/components/AgentThreadTimelineItemRenderers.tsx",
   "src/components/agent/chat/projection/teamControlProjection.ts",
-  "src/components/agent/chat/team-workspace-runtime/restoredTeamFactsProjection.ts",
 ] as const;
 
 const FORBIDDEN_SUBAGENT_FIRST_HISTORY_PATTERNS = [
@@ -349,10 +351,6 @@ describe("Project / Thread-first boundary", () => {
       "子代理 / Team 只能作为 parent Thread 的执行层事实；不得恢复独立子代理历史列表或子代理会话一级入口",
     ).toEqual([]);
 
-    const rustContextSource = readFileSync(
-      repoPath("lime-rs/crates/agent/src/session_store_subagent_context.rs"),
-      "utf8",
-    );
     const evidenceProviderSource = readFileSync(
       repoPath("lime-rs/crates/app-server/src/runtime/evidence_provider.rs"),
       "utf8",
@@ -367,34 +365,41 @@ describe("Project / Thread-first boundary", () => {
       repoPath("src/components/agent/chat/AgentChatWorkspace.tsx"),
       "utf8",
     );
-    const timelineSource = readFileSync(
-      repoPath("src/components/agent/chat/utils/subagentTimeline.ts"),
+    const canonicalReaderSource = readFileSync(
+      repoPath(
+        "src/lib/api/agentRuntime/appServerCanonicalItemReader.ts",
+      ),
       "utf8",
     );
-    const subagentProjectionSource = readFileSync(
+    const threadClientSource = readFileSync(
+      repoPath("src/lib/api/agentRuntime/threadClient.ts"),
+      "utf8",
+    );
+    const navigationSource = readFileSync(
       repoPath(
-        "src/components/agent/chat/projection/subagentStatusProjection.ts",
+        "src/components/agent/chat/workspace/useWorkspaceSubagentNavigationRuntime.ts",
+      ),
+      "utf8",
+    );
+    const threadItemProjectionSource = readFileSync(
+      repoPath(
+        "src/components/agent/chat/projection/threadItemProjection.ts",
+      ),
+      "utf8",
+    );
+    const sharedProjectionSource = readFileSync(
+      repoPath("packages/agent-runtime-projection/src/threadItems.ts"),
+      "utf8",
+    );
+    const timelineRendererSource = readFileSync(
+      repoPath(
+        "src/components/agent/chat/components/AgentThreadTimelineItemRenderers.tsx",
       ),
       "utf8",
     );
     const teamControlSource = readFileSync(
       repoPath("src/components/agent/chat/projection/teamControlProjection.ts"),
       "utf8",
-    );
-    const restoredTeamFactsProjectionSource = readFileSync(
-      repoPath(
-        "src/components/agent/chat/team-workspace-runtime/restoredTeamFactsProjection.ts",
-      ),
-      "utf8",
-    );
-
-    expect(rustContextSource).toContain("pub parent_session_id: String");
-    expect(rustContextSource).toContain(
-      "pub created_from_turn_id: Option<String>",
-    );
-    expect(rustContextSource).toContain("pub team_preset_id: Option<String>");
-    expect(rustContextSource).toContain(
-      "pub sibling_subagent_sessions: Vec<ChildSubagentSession>",
     );
     expect(evidenceProviderSource).toContain('"team_facts": team_facts');
     expect(evidenceProviderSource).toContain("fn team_facts_summary");
@@ -403,31 +408,37 @@ describe("Project / Thread-first boundary", () => {
     );
     expect(teamFactsEvidenceTestSource).toContain("parentSessionIds");
     expect(workspaceSource).toContain(
-      "threadId: threadRead?.thread_id ?? sessionId",
+      "useWorkspaceSubagentNavigationRuntime({",
     );
-    expect(timelineSource).toContain(
-      "if (!resolvedThreadId || childSessions.length === 0 || turns.length === 0)",
+    expect(canonicalReaderSource).toContain('case "subAgent"');
+    expect(canonicalReaderSource).toContain(
+      'readString(payload, "child_thread_id", "childThreadId")',
     );
-    expect(timelineSource).toContain("thread_id: resolvedThreadId");
-    expect(timelineSource).toContain("created_from_turn_id?.trim()");
-    expect(subagentProjectionSource).toContain(
-      "parent_session_id: event.parent_session_id",
+    expect(threadClientSource).toContain(
+      "async function readThreadSessionId(threadId: string)",
     );
+    expect(threadClientSource).toContain('turnsView: "notLoaded"');
+    expect(threadClientSource).toContain("mismatched threadId");
+    expect(navigationSource).toContain("const canonicalSessionId");
+    expect(navigationSource).toContain(
+      ".find((child) => child.threadId.trim() === normalizedTargetId)",
+    );
+    expect(navigationSource).toContain("await readSessionId(normalizedTargetId)");
+    expect(navigationSource).toContain("await switchTopic(sessionId)");
+    expect(navigationSource).not.toContain("isKnownSession");
+    expect(threadItemProjectionSource).toContain(
+      "buildAgentUiThreadItemEvent(sourceType, item, context)",
+    );
+    expect(sharedProjectionSource).toContain(
+      "buildAgentUiThreadItemSubagentActivityEvent",
+    );
+    expect(timelineRendererSource).toContain(
+      'item.type === "subagent_activity"',
+    );
+    expect(timelineRendererSource).toContain("subagentThreadId");
     expect(teamControlSource).toContain(
       "threadId: definedString(context.threadId)",
     );
     expect(teamControlSource).toContain("parentSessionId: sessionId");
-    expect(restoredTeamFactsProjectionSource).toContain(
-      "buildRestoredTeamFactsProjection",
-    );
-    expect(restoredTeamFactsProjectionSource).toContain(
-      "root_session_id: parentSessionId",
-    );
-    expect(restoredTeamFactsProjectionSource).toContain(
-      "threadId: parentThreadId",
-    );
-    expect(restoredTeamFactsProjectionSource).toContain(
-      "parent_session_id: parentSessionId",
-    );
   });
 });

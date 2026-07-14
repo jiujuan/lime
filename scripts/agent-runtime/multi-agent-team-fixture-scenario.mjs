@@ -29,27 +29,6 @@ export function renderMultiAgentTeamBackendEvents() {
   if (isMultiAgentTeamPrompt) {
     emitEvents([
       {
-        type: "subagent_status_changed",
-        payload: {
-          session_id: "${MULTI_AGENT_TEAM_CHILD_RESEARCHER_ID}",
-          root_session_id: input.request?.session?.sessionId,
-          parent_session_id: input.request?.session?.sessionId,
-          status: "running",
-          latest_turn_id: \`\${currentTurnId()}:researcher\`,
-          latest_turn_status: "running",
-          queued_turn_count: 0,
-          team_phase: "running",
-          team_parallel_budget: 2,
-          team_active_count: 1,
-          team_queued_count: 1,
-          provider_concurrency_group: "fixture-team",
-          provider_parallel_budget: 2,
-          queue_reason: "parent_thread_team_orchestration",
-          retryable_overload: false,
-          result_ref: "${MULTI_AGENT_TEAM_WORKER_RESULT_REF}"
-        }
-      },
-      {
         type: "team.changed",
         payload: {
           teamEvent: "teammate_status_changed",
@@ -92,26 +71,6 @@ export function renderMultiAgentTeamBackendEvents() {
     await sleep(80);
     emitEvents([
       {
-        type: "subagent_status_changed",
-        payload: {
-          session_id: "${MULTI_AGENT_TEAM_CHILD_REVIEWER_ID}",
-          root_session_id: input.request?.session?.sessionId,
-          parent_session_id: input.request?.session?.sessionId,
-          status: "queued",
-          latest_turn_id: \`\${currentTurnId()}:reviewer\`,
-          latest_turn_status: "queued",
-          queued_turn_count: 1,
-          team_phase: "queued",
-          team_parallel_budget: 2,
-          team_active_count: 1,
-          team_queued_count: 1,
-          provider_concurrency_group: "fixture-team",
-          provider_parallel_budget: 2,
-          queue_reason: "waiting_for_researcher_result",
-          retryable_overload: false
-        }
-      },
-      {
         type: "task.changed",
         payload: {
           taskEvent: "team_control",
@@ -129,29 +88,16 @@ export function renderMultiAgentTeamBackendEvents() {
     await sleep(80);
     emitEvents([
       {
-        type: "subagent_status_changed",
+        type: "team.changed",
         payload: {
-          session_id: "${MULTI_AGENT_TEAM_CHILD_RESEARCHER_ID}",
-          root_session_id: input.request?.session?.sessionId,
-          parent_session_id: input.request?.session?.sessionId,
+          teamEvent: "teammate_status_changed",
+          parentSessionId: input.request?.session?.sessionId,
+          childSessionId: "${MULTI_AGENT_TEAM_CHILD_RESEARCHER_ID}",
           status: "completed",
-          latest_turn_id: \`\${currentTurnId()}:researcher\`,
-          latest_turn_status: "completed",
-          queued_turn_count: 0,
-          team_phase: "completed",
-          team_parallel_budget: 2,
-          team_active_count: 0,
-          team_queued_count: 1,
-          provider_concurrency_group: "fixture-team",
-          provider_parallel_budget: 2,
-          usage: {
-            input_tokens: 128,
-            output_tokens: 64,
-            cached_input_tokens: 16
-          },
-          duration_ms: 940,
-          tool_count: 2,
-          result_ref: "${MULTI_AGENT_TEAM_WORKER_RESULT_REF}"
+          teamPhase: "completed",
+          teamParallelBudget: 2,
+          teamActiveCount: 0,
+          teamQueuedCount: 1
         }
       },
       {
@@ -261,11 +207,6 @@ export function summarizeMultiAgentTeamEvidenceExport(exportResult, context) {
     includesRunningPhase: arrayIncludes(teamFacts, "teamPhases", "running"),
     includesQueuedPhase: arrayIncludes(teamFacts, "teamPhases", "queued"),
     includesCompletedPhase: arrayIncludes(teamFacts, "teamPhases", "completed"),
-    hasSubagentStatusEvent: events.some(
-      (event) =>
-        event?.eventType === "subagent_status_changed" ||
-        event?.event_type === "subagent_status_changed",
-    ),
     hasTeamChangedEvent: events.some(
       (event) =>
         event?.eventType === "team.changed" ||

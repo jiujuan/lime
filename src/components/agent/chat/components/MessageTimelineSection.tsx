@@ -1,5 +1,5 @@
 import React from "react";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { AgentThreadTimeline } from "./AgentThreadTimeline";
 import { HistoricalTimelinePreview } from "./MessageListHistoricalPreviews";
 import type { MessageListRenderGroup } from "./MessageList.types";

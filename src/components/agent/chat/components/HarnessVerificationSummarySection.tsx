@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvidenceVerificationSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidenceVerificationSummary } from "@/lib/api/agentRuntime/evidenceTypes";
 import { buildHarnessEvidenceVerificationCardPresentations } from "@/lib/agentRuntime/harnessVerificationPresentation";
 import { Badge } from "@/components/ui/badge";
 import { ShieldAlert } from "lucide-react";

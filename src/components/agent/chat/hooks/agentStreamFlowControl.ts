@@ -1,6 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Message } from "../types";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";

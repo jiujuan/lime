@@ -12,10 +12,8 @@ import {
   getMediaTaskArtifact,
   type MediaTaskArtifactOutput,
 } from "@/lib/api/mediaTasks";
-import {
-  updateAgentRuntimeSession,
-  type AgentRuntimeThreadReadModel,
-} from "@/lib/api/agentRuntime";
+import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime/sessionClient";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Message } from "../types";
 import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";

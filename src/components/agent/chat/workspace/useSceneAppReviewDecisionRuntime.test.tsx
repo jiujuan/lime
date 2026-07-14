@@ -4,11 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentRuntimeReviewDecisionTemplate,
   AgentRuntimeSaveReviewDecisionRequest,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import type { SceneAppExecutionSummaryViewModel } from "@/lib/agent/legacySceneAppExecutionSummary";
-import {
-  recordCuratedTaskRecommendationSignalFromReviewDecision,
-} from "../utils/curatedTaskRecommendationSignals";
+import { recordCuratedTaskRecommendationSignalFromReviewDecision } from "../utils/curatedTaskRecommendationSignals";
 import {
   useSceneAppReviewDecisionRuntime,
   type SceneAppReviewDecisionRuntimeState,
@@ -27,7 +25,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/exportClient", () => ({
   exportAgentRuntimeReviewDecisionTemplate: (
     sessionId: string,
   ): Promise<AgentRuntimeReviewDecisionTemplate> =>

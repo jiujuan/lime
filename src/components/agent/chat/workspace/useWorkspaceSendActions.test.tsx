@@ -17,17 +17,11 @@ import {
 } from "../skill-selection/mentionEntryUsage";
 import { listServiceSkillUsage } from "../service-skills/storage";
 import { useWorkspaceSendActions } from "./useWorkspaceSendActions";
-import type { TeamWorkspaceRuntimeFormationState } from "../teamWorkspaceRuntime";
 import { listSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import {
   saveSkillCatalog,
   upsertLocalModelBoundImageCommandBinding,
 } from "@/lib/api/skillCatalog";
-import {
-  clearAgentUiProjectionEvents,
-  conversationProjectionStore,
-  selectAgentUiProjectionEventsBySurface,
-} from "../projection/conversationProjectionStore";
 
 const mockPreheatBrowserAssistInBackground = vi.hoisted(() => vi.fn());
 const mockGetSkillCatalog = vi.hoisted(() => vi.fn());
@@ -114,9 +108,6 @@ interface HookHarness {
 }
 
 const mockSendMessage = vi.fn<HookProps["sendMessage"]>(async () => undefined);
-const mockPrepareRuntimeTeamBeforeSend = vi.fn<
-  HookProps["prepareRuntimeTeamBeforeSend"]
->(async () => null);
 const mockFinalizeAfterSendSuccess = vi.fn();
 const mockRollbackAfterSendFailure = vi.fn();
 const mockSetInput = vi.fn();
@@ -405,39 +396,6 @@ function createGeneralServiceSkill(
   };
 }
 
-function createPreparedRuntimeTeamState(): TeamWorkspaceRuntimeFormationState {
-  return {
-    requestId: "runtime-team-preview-1",
-    status: "formed",
-    label: "研究协作组",
-    summary: "按调研、分析、汇总三段推进",
-    members: [
-      {
-        id: "researcher",
-        label: "研究员",
-        summary: "负责收集资料",
-        skillIds: [],
-        status: "planned",
-        latestSnippet: null,
-      },
-    ],
-    blueprint: {
-      label: "研究协作组",
-      summary: "按调研、分析、汇总三段推进",
-      roles: [
-        {
-          id: "researcher",
-          label: "研究员",
-          summary: "负责收集资料",
-          skillIds: [],
-        },
-      ],
-    },
-    errorMessage: null,
-    updatedAt: 1_710_000_000_000,
-  };
-}
-
 function createTeamMemoryShadowSnapshot(): TeamMemorySnapshot {
   return {
     repoScope: "/tmp/project-1",
@@ -454,15 +412,6 @@ function createTeamMemoryShadowSnapshot(): TeamMemorySnapshot {
       },
     },
   };
-}
-
-function createExistingMessages(count: number): Message[] {
-  return Array.from({ length: count }, (_, index) => ({
-    id: `message-${index + 1}`,
-    role: index % 2 === 0 ? "user" : "assistant",
-    content: `历史消息 ${index + 1}`,
-    timestamp: new Date(1_710_000_000_000 + index),
-  }));
 }
 
 function createBootstrapDispatchSnapshot(
@@ -527,8 +476,6 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
       mockFinalizeAfterSendSuccess as HookProps["finalizeAfterSendSuccess"],
     rollbackAfterSendFailure:
       mockRollbackAfterSendFailure as HookProps["rollbackAfterSendFailure"],
-    prepareRuntimeTeamBeforeSend:
-      mockPrepareRuntimeTeamBeforeSend as HookProps["prepareRuntimeTeamBeforeSend"],
     ensureBrowserAssistCanvas:
       mockEnsureBrowserAssistCanvas as HookProps["ensureBrowserAssistCanvas"],
     handleAutoLaunchMatchedSiteSkill:
@@ -580,7 +527,6 @@ describe("useWorkspaceSendActions", () => {
 
     vi.clearAllMocks();
     window.localStorage.clear();
-    clearAgentUiProjectionEvents();
     mockResolveImageWorkbenchCommandRequest.mockReturnValue(null);
     mockPrepareImageWorkbenchSkillSend.mockReturnValue(true);
     mockEnsureSessionForCommandMetadata.mockResolvedValue(null);
@@ -1163,7 +1109,6 @@ describe("useWorkspaceSendActions", () => {
       );
       expect(mockPreheatBrowserAssistInBackground).not.toHaveBeenCalled();
       expect(mockEnsureBrowserAssistCanvas).not.toHaveBeenCalled();
-      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -1191,7 +1136,6 @@ describe("useWorkspaceSendActions", () => {
         mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
       ).toBeUndefined();
       expect(mockSendMessage.mock.calls[0]?.[8]?.modelOverride).toBeUndefined();
-      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -1374,7 +1318,6 @@ describe("useWorkspaceSendActions", () => {
       expect(sendOptions?.systemPromptOverride).toBeUndefined();
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
-      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -1405,7 +1348,6 @@ describe("useWorkspaceSendActions", () => {
         expect(started).toBe(true);
       });
 
-      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
       expect(mockSetChatMessages).not.toHaveBeenCalled();
       expect(mockResolveImageWorkbenchCommandRequest).toHaveBeenCalledTimes(1);
       expect(mockResolveImageWorkbenchCommandRequest).toHaveBeenCalledWith(
@@ -2015,61 +1957,6 @@ Extract it into the Agent Skills directory.`,
 
     try {
       expect(harness.getValue().displayMessages).toEqual([]);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  it("发送前如果准备出本地 team，应写入短生命周期 dispatch preview", async () => {
-    mockPrepareRuntimeTeamBeforeSend.mockResolvedValueOnce(
-      createPreparedRuntimeTeamState(),
-    );
-    const harness = mountHook({
-      input: "请拆解这个复杂需求，并安排多人协作推进",
-      chatToolPreferences: {
-        task: false,
-        subagent: true,
-      },
-      messages: createExistingMessages(3),
-    });
-
-    try {
-      await act(async () => {
-        const started = await harness.getValue().handleSend();
-        expect(started).toBe(true);
-      });
-
-      expect(harness.getValue().teamDispatchPreviewState).toMatchObject({
-        requestId: "runtime-team-preview-1",
-        status: "formed",
-        label: "研究协作组",
-      });
-      expect(harness.getValue().displayMessages).toHaveLength(5);
-      expect(harness.getValue().displayMessages[3]).toMatchObject({
-        role: "user",
-        content: "请拆解这个复杂需求，并安排多人协作推进",
-      });
-      expect(harness.getValue().displayMessages[4]).toMatchObject({
-        role: "assistant",
-        runtimeStatus: expect.objectContaining({
-          title: "协作执行已准备好",
-        }),
-      });
-      expect(
-        selectAgentUiProjectionEventsBySurface(
-          conversationProjectionStore.getSnapshot(),
-          "work_board",
-        ),
-      ).toEqual([
-        expect.objectContaining({
-          sourceType: "team_formation_projection",
-          sessionId: "session-1",
-          taskId: "runtime-team-preview-1:researcher",
-          workItemId: "runtime-team-preview-1:researcher",
-          control: "assign",
-          runtimeEntity: "work_item",
-        }),
-      ]);
     } finally {
       harness.unmount();
     }

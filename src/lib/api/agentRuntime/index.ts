@@ -61,6 +61,7 @@ export {
   getAgentRuntimeFileCheckpoint,
   getAgentRuntimeThreadRead,
   readAgentRuntimeThread,
+  readThreadSessionId,
   interruptAgentRuntimeTurn,
   listAgentRuntimeFileCheckpoints,
   promoteAgentRuntimeQueuedTurn,

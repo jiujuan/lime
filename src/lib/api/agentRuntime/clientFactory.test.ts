@@ -922,7 +922,6 @@ describe("agentRuntime clientFactory", () => {
       items: [],
       queued_turns: [],
       todo_items: [],
-      child_subagent_sessions: [],
       thread_read: {
         status: "failed",
       },
@@ -964,7 +963,7 @@ describe("agentRuntime clientFactory", () => {
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 
-  it("turn lifecycle 可由标准 runtime client facade 注入，聚合工厂不直连旧命令", async () => {
+  it("turn lifecycle 可注入标准 client，session read 保持 App Server current owner", async () => {
     const appServerClient = appServerClientMock();
     const standardRuntimeClient = standardRuntimeClientMock();
     const bridgeInvoke = vi.fn();
@@ -1002,11 +1001,11 @@ describe("agentRuntime clientFactory", () => {
         eventName: "event-1",
       },
     });
-    expect(standardRuntimeClient.readThread).toHaveBeenCalledWith({
+    expect(standardRuntimeClient.readThread).not.toHaveBeenCalled();
+    expect(appServerClient.readSession).toHaveBeenCalledWith({
       sessionId: "session-1",
     });
     expect(appServerClient.startTurn).not.toHaveBeenCalled();
-    expect(appServerClient.readSession).not.toHaveBeenCalled();
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 

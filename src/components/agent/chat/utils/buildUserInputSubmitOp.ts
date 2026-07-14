@@ -7,10 +7,12 @@ import {
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
+} from "@/lib/api/agentExecutionRuntime";
+import type {
   AutoContinueRequestPayload,
   ImageInput,
-  RuntimeSearchMode,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/sessionTypes";
+import type { RuntimeSearchMode } from "@limecloud/app-server-client";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import type { MessageImage } from "../types";

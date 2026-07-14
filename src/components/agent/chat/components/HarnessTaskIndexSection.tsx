@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { ListChecks } from "lucide-react";
-import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidenceTaskIndex } from "@/lib/api/agentRuntime/evidenceTypes";
 import {
   buildModalityTaskIndexFacets,
   buildModalityTaskIndexRows,

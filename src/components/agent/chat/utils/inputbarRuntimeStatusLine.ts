@@ -1,9 +1,9 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
 import type {
   AgentRuntimeThreadReadModel,
-  AgentSubagentSessionInfo,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type {
   ActionRequired,
   AgentThreadItem,
@@ -13,6 +13,7 @@ import type {
 import {
   buildAgentTaskRuntimeCardModel,
   isAssistantAwaitingFinalResponse,
+  summarizeAgentTaskChildren,
   type AgentTaskRuntimeStatus,
   type AgentTaskRuntimeSubtaskStats,
 } from "./agentTaskRuntime";
@@ -54,7 +55,7 @@ interface BuildInputbarRuntimeStatusLineModelParams {
   pendingActions?: readonly ActionRequired[];
   submittedActionsInFlight?: readonly ActionRequired[];
   queuedTurns?: readonly QueuedTurnSnapshot[];
-  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
   isSending?: boolean;
 }
 
@@ -204,33 +205,6 @@ function resolveFallbackStatus(params: {
   }
 }
 
-function resolveSubtaskStats(
-  childSubagentSessions: readonly AgentSubagentSessionInfo[],
-): AgentTaskRuntimeSubtaskStats | null {
-  if (childSubagentSessions.length === 0) {
-    return null;
-  }
-
-  return childSubagentSessions.reduce<AgentTaskRuntimeSubtaskStats>(
-    (stats, session) => {
-      const status = session.runtime_status || "idle";
-      stats.total += 1;
-      if (status === "running") {
-        stats.active += 1;
-      } else if (status === "queued") {
-        stats.active += 1;
-        stats.queued += 1;
-      } else if (status === "completed" || status === "closed") {
-        stats.completed += 1;
-      } else if (status === "failed" || status === "aborted") {
-        stats.failed += 1;
-      }
-      return stats;
-    },
-    { total: 0, active: 0, queued: 0, completed: 0, failed: 0 },
-  );
-}
-
 function resolveLatestTurnTimestamp(
   latestTurn: AgentThreadTurn | null,
   threadRead: AgentRuntimeThreadReadModel | null | undefined,
@@ -295,9 +269,7 @@ function shouldShowActiveRuntimeStatusDetail(
   phase?: LatestRuntimePhase | null,
 ): boolean {
   return (
-    phase === "retrying" ||
-    phase === "continuing" ||
-    phase === "synthesizing"
+    phase === "retrying" || phase === "continuing" || phase === "synthesizing"
   );
 }
 
@@ -368,7 +340,7 @@ export function buildInputbarRuntimeStatusLineModel({
   pendingActions = [],
   submittedActionsInFlight = [],
   queuedTurns = [],
-  childSubagentSessions = [],
+  canonicalChildren = [],
   isSending = false,
 }: BuildInputbarRuntimeStatusLineModelParams): InputbarRuntimeStatusLineModel | null {
   const latestTurn = resolveLatestTurn(turns, currentTurnId);
@@ -397,7 +369,7 @@ export function buildInputbarRuntimeStatusLineModel({
     pendingActions,
     submittedActionsInFlight,
     queuedTurns,
-    childSubagentSessions,
+    canonicalChildren,
     isSending,
   });
 
@@ -444,7 +416,7 @@ export function buildInputbarRuntimeStatusLineModel({
     status === "completed" &&
     !usage &&
     !startedAt &&
-    childSubagentSessions.length === 0
+    canonicalChildren.length === 0
   ) {
     return null;
   }
@@ -465,7 +437,7 @@ export function buildInputbarRuntimeStatusLineModel({
     pendingRequestCount:
       resolveVisiblePendingActions(pendingActions).length ||
       resolveVisiblePendingRequestCount(threadRead, submittedActionsInFlight),
-    subtaskStats: resolveSubtaskStats(childSubagentSessions),
+    subtaskStats: summarizeAgentTaskChildren(canonicalChildren),
     usage,
     startedAt,
     completedAt: resolveVisibleCompletedAt(status, completedAt),

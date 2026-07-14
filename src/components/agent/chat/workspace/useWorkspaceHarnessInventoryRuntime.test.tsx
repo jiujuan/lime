@@ -12,7 +12,7 @@ const mockGetAgentRuntimeToolInventory = vi.hoisted(() => vi.fn());
 const mockExecutePrepareRequests = vi.hoisted(() => vi.fn());
 const mockExecuteCallProofRequests = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/api/agentRuntime", () => ({
+vi.mock("@/lib/api/agentRuntime/inventoryClient", () => ({
   getAgentRuntimeToolInventory: mockGetAgentRuntimeToolInventory,
 }));
 

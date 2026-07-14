@@ -1,4 +1,4 @@
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import { isGeneralResearchTheme } from "./generalAgentPrompt";
 
 export interface ChatToolPreferences {

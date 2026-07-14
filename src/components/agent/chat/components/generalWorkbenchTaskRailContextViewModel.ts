@@ -1,8 +1,9 @@
-import type {
-  AgentRuntimeThreadReadModel,
-  AgentSubagentSessionInfo,
-} from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import type { AgentThreadItem } from "../types";
+import {
+  summarizeCanonicalChildThreads,
+  type CanonicalChildThreadSummary,
+} from "../projection/canonicalChildThreadSummary";
 import { isImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import {
   type MinimalTranslate,
@@ -88,7 +89,8 @@ function stringArray(value: unknown): string[] {
     return [];
   }
   return value.filter(
-    (item): item is string => typeof item === "string" && item.trim().length > 0,
+    (item): item is string =>
+      typeof item === "string" && item.trim().length > 0,
   );
 }
 
@@ -276,10 +278,12 @@ function countEvidenceRefs(
 function countMissingContext(
   threadRead: AgentRuntimeThreadReadModel | null | undefined,
 ): number {
-  return threadRead?.context_summary?.missing_context?.filter((item) => {
-    const status = item.status?.trim().toLowerCase();
-    return status !== "resolved" && status !== "available";
-  }).length ?? 0;
+  return (
+    threadRead?.context_summary?.missing_context?.filter((item) => {
+      const status = item.status?.trim().toLowerCase();
+      return status !== "resolved" && status !== "available";
+    }).length ?? 0
+  );
 }
 
 function countSearchSourceItems(
@@ -308,24 +312,15 @@ function resolveSourceConsistencyStatus({
 }
 
 function resolveSubtaskStats(
-  childSubagentSessions: readonly AgentSubagentSessionInfo[] | undefined,
+  canonicalChildren: CanonicalChildThreadSummary[] | undefined,
 ) {
-  return (childSubagentSessions ?? []).reduce(
-    (stats, session) => {
-      const status =
-        session.runtime_status || session.latest_turn_status || "idle";
-      stats.total += 1;
-      if (status === "running" || status === "queued") {
-        stats.active += 1;
-      } else if (status === "completed" || status === "closed") {
-        stats.completed += 1;
-      } else if (status === "failed" || status === "aborted") {
-        stats.failed += 1;
-      }
-      return stats;
-    },
-    { total: 0, active: 0, completed: 0, failed: 0 },
-  );
+  const counts = summarizeCanonicalChildThreads(canonicalChildren ?? []);
+  return {
+    total: counts.total,
+    active: counts.active,
+    completed: counts.settled,
+    failed: counts.failed + counts.interrupted,
+  };
 }
 
 function formatAccessMode(
@@ -483,7 +478,8 @@ function buildSourcesContextItem(
   t: MinimalTranslate,
 ): GeneralWorkbenchTaskRailContextItem | null {
   const sourceLabels = mergeSourceLabels(stringArray(context.sourceLabels));
-  const sourceCount = positiveInteger(context.sourceCount) || sourceLabels.length;
+  const sourceCount =
+    positiveInteger(context.sourceCount) || sourceLabels.length;
   const evidenceCount = positiveInteger(context.sourceEvidenceCount);
   const missingCount = positiveInteger(context.sourceMissingCount);
   if (sourceCount === 0 && missingCount === 0) {
@@ -643,18 +639,18 @@ export function buildGeneralWorkbenchTaskRailRuntimeContext({
   context,
   threadRead,
   threadItems,
-  childSubagentSessions,
+  canonicalChildren,
 }: {
   context?: GeneralWorkbenchTaskRailContextInput;
   threadRead?: AgentRuntimeThreadReadModel | null;
   threadItems?: readonly AgentThreadItem[];
-  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
 }): GeneralWorkbenchTaskRailContextInput | undefined {
   if (
     !context &&
     !threadRead &&
-    (!threadItems?.length) &&
-    (!childSubagentSessions?.length)
+    !threadItems?.length &&
+    !canonicalChildren?.length
   ) {
     return context;
   }
@@ -667,8 +663,8 @@ export function buildGeneralWorkbenchTaskRailRuntimeContext({
     nextContext.objectiveText = objectiveText;
   }
 
-  const changeSummary = (threadRead as TaskRailThreadReadModel | null)
-    ?.change_summary ?? null;
+  const changeSummary =
+    (threadRead as TaskRailThreadReadModel | null)?.change_summary ?? null;
   if (changeSummary) {
     nextContext.changedFileCount =
       nextContext.changedFileCount ??
@@ -689,7 +685,7 @@ export function buildGeneralWorkbenchTaskRailRuntimeContext({
       positiveIntegerOrNull(changeSummary.running_patch_count);
   }
 
-  const subtaskStats = resolveSubtaskStats(childSubagentSessions);
+  const subtaskStats = resolveSubtaskStats(canonicalChildren);
   if (subtaskStats.total > 0 && !nextContext.subtaskTotalCount) {
     nextContext.subtaskTotalCount = subtaskStats.total;
     nextContext.subtaskActiveCount = subtaskStats.active;
@@ -721,12 +717,11 @@ export function buildGeneralWorkbenchTaskRailRuntimeContext({
     countMissingContext(threadRead);
   const searchSourceCount = countSearchSourceItems(threadItems);
   const hasSourceSignal =
-    inferredSourceCount > 0 || inferredMissingCount > 0 || searchSourceCount > 0;
+    inferredSourceCount > 0 ||
+    inferredMissingCount > 0 ||
+    searchSourceCount > 0;
 
-  if (
-    hasSourceSignal &&
-    typeof nextContext.sourceEvidenceCount !== "number"
-  ) {
+  if (hasSourceSignal && typeof nextContext.sourceEvidenceCount !== "number") {
     nextContext.sourceEvidenceCount = inferredEvidenceCount;
   }
   if (hasSourceSignal && typeof nextContext.sourceMissingCount !== "number") {

@@ -15,7 +15,6 @@ function renderHook(props?: Partial<HookProps>) {
 
   const defaultProps: HookProps = {
     clearMessages: vi.fn(),
-    clearRuntimeTeamState: vi.fn(),
     clearPendingEntryA2UI: vi.fn(),
     clearProjectSelectionRuntime: vi.fn(),
     resetProjectSelection: vi.fn(),

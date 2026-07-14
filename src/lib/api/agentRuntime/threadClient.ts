@@ -340,6 +340,31 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
     return response.result;
   }
 
+  async function readThreadSessionId(threadId: string): Promise<string> {
+    assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
+    const normalizedThreadId = threadId.trim();
+    if (!normalizedThreadId) {
+      throw new Error("threadId is required to resolve App Server session");
+    }
+    const response = await appServerClient.readThread({
+      threadId: normalizedThreadId,
+      turnsView: "notLoaded",
+    } satisfies AppServerThreadReadParams);
+    const resolvedThreadId = response.result.thread.threadId.trim();
+    if (resolvedThreadId !== normalizedThreadId) {
+      throw new Error(
+        `thread/read returned mismatched threadId: expected ${normalizedThreadId}, received ${resolvedThreadId || "<empty>"}`,
+      );
+    }
+    const sessionId = response.result.thread.sessionId.trim();
+    if (!sessionId) {
+      throw new Error(
+        `thread/read returned an empty sessionId for ${normalizedThreadId}`,
+      );
+    }
+    return sessionId;
+  }
+
   async function listAgentRuntimeFileCheckpoints(
     request: AgentRuntimeListFileCheckpointsRequest,
   ): Promise<AgentRuntimeFileCheckpointListResult> {
@@ -392,6 +417,7 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
     getAgentRuntimeCapabilityManifest,
     getAgentRuntimeThreadRead,
     readAgentRuntimeThread,
+    readThreadSessionId,
     interruptAgentRuntimeTurn,
     listAgentRuntimeFileCheckpoints,
     promoteAgentRuntimeQueuedTurn,
@@ -1079,6 +1105,7 @@ export const {
   getAgentRuntimeFileCheckpoint,
   getAgentRuntimeThreadRead,
   readAgentRuntimeThread,
+  readThreadSessionId,
   interruptAgentRuntimeTurn,
   listAgentRuntimeFileCheckpoints,
   promoteAgentRuntimeQueuedTurn,

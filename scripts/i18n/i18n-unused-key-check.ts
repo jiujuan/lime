@@ -70,7 +70,6 @@ const DEFAULT_PROTECTED_PREFIXES = [
   "agentChat.agentUiProjection.requestedFixStatus.",
   "agentChat.agentUiProjection.sourceType.",
   "agentChat.agentUiProjection.surface.",
-  "agentChat.teamWorkspace.control.",
   "agentChat.threadReliability.memoryBaseline.",
   "agentChat.threadReliability.memoryPrefetchPreview.",
   "agentChat.threadReliability.panel.",

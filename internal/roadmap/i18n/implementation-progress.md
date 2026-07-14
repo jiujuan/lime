@@ -2,7 +2,15 @@
 
 > 关联 PRD：`internal/roadmap/i18n/prd.md`
 > 当前阶段：P0-P4 readiness 完成审计
-> 更新日期：2026-05-27
+> 更新日期：2026-07-14
+
+## 2026-07-14：S6j/S6l Team runtime dead key 收口
+
+- 五语言 `agentTeamWorkspace` 已删除 `liveRuntime.*`、`runtimeStatus.*`、`control.*` dead key；namespace 只保留仍有 current consumer 的 AgentUI projection copy。
+- `scripts/i18n/i18n-unused-key-check.ts` 已移除 `agentChat.teamWorkspace.control.` 默认 protected prefix，避免已删 control 文案静默回流。
+- 2026-05 的“实际运行时家族”与旧保护计数保留为历史指标，不再代表 current Team runtime owner。
+
+验证：`npm run i18n:check:json`、`npm run i18n:unused` 与相关 i18n/governance 定向测试。
 
 ## 2026-05-27：P0-P4 全路线图 readiness 审计
 
@@ -86,6 +94,7 @@
 - `npm run i18n:docs-locale-manifest:json -- --output "internal/roadmap/i18n/evidence/docs-locale-build-manifest.json"` 通过。
 - `npm run i18n:release-docs-report:json -- --output "internal/roadmap/i18n/evidence/release-docs-workflow-inventory.json"` 通过。
 - `npm run i18n:p4-readiness-report:json -- --output "internal/roadmap/i18n/evidence/p4-readiness-report.json"` 通过。
+
 - `npm run i18n:roadmap-readiness-report:json -- --output "internal/roadmap/i18n/evidence/roadmap-readiness-report.json"` 通过。
 
 ## 主目标

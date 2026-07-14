@@ -33,7 +33,6 @@ export function useWorkspaceShellChromeRuntime({
   showSidebar,
   subagentsRuntimeVisible,
   hasRuntimeSessions,
-  hasTeamDispatchPreview,
   themeWorkbenchRunState,
   topBarChrome,
 }: ResolveWorkspaceShellChromeRuntimeParams) {
@@ -68,7 +67,6 @@ export function useWorkspaceShellChromeRuntime({
         showSidebar,
         subagentsRuntimeVisible,
         hasRuntimeSessions,
-        hasTeamDispatchPreview,
         themeWorkbenchRunState,
         topBarChrome,
       }),
@@ -101,7 +99,6 @@ export function useWorkspaceShellChromeRuntime({
       showSidebar,
       subagentsRuntimeVisible,
       hasRuntimeSessions,
-      hasTeamDispatchPreview,
       themeWorkbenchRunState,
       topBarChrome,
     ],

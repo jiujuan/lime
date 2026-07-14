@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import {
   removeQueuedTurnSnapshots,
   upsertQueuedTurnSnapshot,
@@ -38,9 +38,9 @@ describe("agentQueuedTurnProjection", () => {
       "queued-second",
       "queued-third",
     ]);
-    expect(next.find((item) => item.queued_turn_id === "queued-second")).toEqual(
-      queuedTurn("queued-second", 0, 15),
-    );
+    expect(
+      next.find((item) => item.queued_turn_id === "queued-second"),
+    ).toEqual(queuedTurn("queued-second", 0, 15));
   });
 
   it("remove 只按 id 过滤 queued turn，不重排 position", () => {

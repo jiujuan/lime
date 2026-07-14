@@ -25,6 +25,7 @@ describe("pluginRuntime api", () => {
       traceId: "trace-1",
       taskKind: "content_factory.copy.generate",
       sessionId: "session-1",
+      threadId: "thread-1",
       turnId: "turn-1",
       eventName: "plugin_runtime:content-factory-app:task-1",
       status: "accepted",
@@ -54,6 +55,7 @@ describe("pluginRuntime api", () => {
         appId: "content-factory-app",
         taskId: "task-1",
         sessionId: "session-1",
+        threadId: "thread-1",
         cancelled: true,
         status: "cancelled",
       })
@@ -61,6 +63,7 @@ describe("pluginRuntime api", () => {
         appId: "content-factory-app",
         taskId: "task-1",
         sessionId: "session-1",
+        threadId: "thread-1",
         status: "thread_read_available",
         taskStatus: "running",
         taskEvents: [
@@ -82,12 +85,12 @@ describe("pluginRuntime api", () => {
     await cancelPluginRuntimeTask({
       appId: "content-factory-app",
       taskId: "task-1",
-      sessionId: "session-1",
+      threadId: "thread-1",
     });
     await getPluginRuntimeTask({
       appId: "content-factory-app",
       taskId: "task-1",
-      sessionId: "session-1",
+      threadId: "thread-1",
     });
     await submitPluginRuntimeHostResponse({
       appId: "content-factory-app",
@@ -112,6 +115,7 @@ describe("pluginRuntime api", () => {
       appId: "content-factory-app",
       taskId: "task-1",
       sessionId: "session-1",
+      threadId: "thread-1",
       status: "thread_read_available",
       taskStatus: "blocked",
       taskEvents: [
@@ -129,7 +133,7 @@ describe("pluginRuntime api", () => {
     const snapshot = await getPluginRuntimeTask({
       appId: "content-factory-app",
       taskId: "task-1",
-      sessionId: "session-1",
+      threadId: "thread-1",
     });
 
     expect(snapshot.taskStatus).toBe("blocked");
@@ -163,7 +167,7 @@ describe("pluginRuntime api", () => {
       cancelPluginRuntimeTask({
         appId: "content-factory-app",
         taskId: "task-1",
-        sessionId: "session-1",
+        threadId: "thread-1",
       }),
     ).rejects.toThrow(
       "plugin_runtime_cancel_task 尚未接入真实 Plugin runtime current 通道",
@@ -173,7 +177,7 @@ describe("pluginRuntime api", () => {
       getPluginRuntimeTask({
         appId: "content-factory-app",
         taskId: "task-1",
-        sessionId: "session-1",
+        threadId: "thread-1",
       }),
     ).rejects.toThrow(
       "plugin_runtime_get_task 尚未接入真实 Plugin runtime current 通道",
@@ -247,7 +251,7 @@ describe("pluginRuntime api", () => {
       cancelPluginRuntimeTask({
         appId: "content-factory-app",
         taskId: "task-1",
-        sessionId: "session-1",
+        threadId: "thread-1",
       }),
     ).rejects.toThrow(
       "plugin_runtime_cancel_task did not return cancel task result",
@@ -257,7 +261,7 @@ describe("pluginRuntime api", () => {
       getPluginRuntimeTask({
         appId: "content-factory-app",
         taskId: "task-1",
-        sessionId: "session-1",
+        threadId: "thread-1",
       }),
     ).rejects.toThrow("plugin_runtime_get_task did not return task snapshot");
 
@@ -337,7 +341,7 @@ describe("pluginRuntime api", () => {
       cancelPluginRuntimeTask({
         appId: "content-factory-app",
         taskId: "task-1",
-        sessionId: "session-1",
+        threadId: "thread-1",
       }),
     ).rejects.toThrow(
       "plugin_runtime_cancel_task returned an error envelope",
@@ -347,7 +351,7 @@ describe("pluginRuntime api", () => {
       getPluginRuntimeTask({
         appId: "content-factory-app",
         taskId: "task-1",
-        sessionId: "session-1",
+        threadId: "thread-1",
       }),
     ).rejects.toThrow("plugin_runtime_get_task returned an error envelope");
 

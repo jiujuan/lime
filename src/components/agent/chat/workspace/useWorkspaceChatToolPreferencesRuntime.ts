@@ -8,7 +8,7 @@ import {
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
 import {
   alignChatToolPreferencesWithExecutionStrategy,
   loadChatToolPreferences,

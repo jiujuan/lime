@@ -8,9 +8,9 @@ import {
 import type {
   AgentExecutionStrategy,
   AgentSessionExecutionRuntime,
-  AutoContinueRequestPayload,
-  QueuedTurnSnapshot,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentExecutionRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { ActionRequired, Message } from "../types";
 import { handleTurnStreamEvent } from "./agentStreamRuntimeHandler";

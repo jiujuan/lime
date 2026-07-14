@@ -5,6 +5,9 @@ use chrono::{DateTime, FixedOffset};
 use serde_json::{Map, Value};
 
 pub(super) fn item_status(event_type: &str, payload: &Value) -> ItemStatus {
+    if event_type == "message.created" || event_type == "plan.final" {
+        return ItemStatus::Completed;
+    }
     if let Some(status) = value_string(payload, &["status", "state"]) {
         match status.to_ascii_lowercase().as_str() {
             "completed" | "complete" | "success" | "succeeded" | "applied" => {

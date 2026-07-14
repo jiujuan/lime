@@ -25,6 +25,7 @@ import type {
 import type { CodingWorkbenchRecoveryContext } from "./codingWorkbenchRecovery";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
 import type { GeneralWorkbenchTaskRailContextInput } from "../components/generalWorkbenchTaskRailViewModel";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import { useWorkspaceTaskRailRuntime } from "./useWorkspaceTaskRailRuntime";
 import { useSessionRuntimeProjectionDeferral } from "./useSessionRuntimeProjectionDeferral";
 import {
@@ -159,8 +160,8 @@ export interface WorkspaceConversationMessageListRuntime {
   queuedTurns: NonNullable<
     ConversationScenePresentationParams["messageList"]["queuedTurns"]
   >;
-  childSubagentSessions?: NonNullable<
-    ConversationScenePresentationParams["messageList"]["childSubagentSessions"]
+  canonicalChildren?: NonNullable<
+    ConversationScenePresentationParams["messageList"]["canonicalChildren"]
   >;
   sessionHistoryWindow?: ConversationScenePresentationParams["messageList"]["sessionHistoryWindow"];
   onLoadFullHistory?: ConversationScenePresentationParams["messageList"]["onLoadFullHistory"];
@@ -243,10 +244,6 @@ const EMPTY_PROJECTED_SUBMITTED_ACTIONS: NonNullable<
 const EMPTY_PROJECTED_QUEUED_TURNS: NonNullable<
   ConversationScenePresentationParams["messageList"]["queuedTurns"]
 > = [];
-const EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS: NonNullable<
-  ConversationScenePresentationParams["messageList"]["childSubagentSessions"]
-> = [];
-
 interface UseWorkspaceConversationSceneRuntimeParams {
   navbarContextVariant?: "default" | "task-center";
   navigationActions: NavigationActions;
@@ -290,6 +287,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   steps: ConversationScenePresentationParams["stepProgress"]["steps"];
   activityLogs?: SidebarActivityLog[];
   creationTaskEvents?: GeneralWorkbenchCreationTaskEvent[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
   currentStepIndex: ConversationScenePresentationParams["stepProgress"]["currentIndex"];
   goToStep: ConversationScenePresentationParams["stepProgress"]["onStepClick"];
   messageListRuntime: WorkspaceConversationMessageListRuntime;
@@ -348,6 +346,7 @@ export function useWorkspaceConversationSceneRuntime({
   steps,
   activityLogs = [],
   creationTaskEvents = [],
+  canonicalChildren = [],
   currentStepIndex,
   goToStep,
   messageListRuntime,
@@ -384,7 +383,6 @@ export function useWorkspaceConversationSceneRuntime({
     pendingActions = EMPTY_PROJECTED_PENDING_ACTIONS,
     submittedActionsInFlight = EMPTY_PROJECTED_SUBMITTED_ACTIONS,
     queuedTurns = EMPTY_PROJECTED_QUEUED_TURNS,
-    childSubagentSessions = EMPTY_PROJECTED_CHILD_SUBAGENT_SESSIONS,
     sessionHistoryWindow = null,
     onLoadFullHistory,
     isSending,
@@ -424,7 +422,6 @@ export function useWorkspaceConversationSceneRuntime({
     pendingActions,
     submittedActionsInFlight,
     queuedTurns,
-    childSubagentSessions,
     isRestoringSession,
     isSending: Boolean(isSending),
     focusedTimelineItemId,
@@ -438,7 +435,6 @@ export function useWorkspaceConversationSceneRuntime({
   const projectedSubmittedActionsInFlight =
     projectedRuntime.submittedActionsInFlight;
   const projectedQueuedTurns = projectedRuntime.queuedTurns;
-  const projectedChildSubagentSessions = projectedRuntime.childSubagentSessions;
   const handleQuoteMessage = (content: string) => {
     const quotedText = buildQuotedReplyText({
       content,
@@ -524,7 +520,7 @@ export function useWorkspaceConversationSceneRuntime({
       pendingActions: projectedPendingActions,
       submittedActionsInFlight: projectedSubmittedActionsInFlight,
       queuedTurns: projectedQueuedTurns,
-      childSubagentSessions: projectedChildSubagentSessions,
+      canonicalChildren,
       isSending,
       sessionId,
       projectRootPath,
@@ -552,7 +548,7 @@ export function useWorkspaceConversationSceneRuntime({
     todoItems,
     threadRead: projectedThreadRead,
     executionRuntime,
-    childSubagentSessions: projectedChildSubagentSessions,
+    canonicalChildren,
     providerType,
     model,
     accessMode,
@@ -652,7 +648,7 @@ export function useWorkspaceConversationSceneRuntime({
       pendingActions: projectedPendingActions,
       submittedActionsInFlight: projectedSubmittedActionsInFlight,
       queuedTurns: projectedQueuedTurns,
-      childSubagentSessions: projectedChildSubagentSessions,
+      canonicalChildren,
       sessionHistoryWindow,
       onLoadFullHistory,
       isRestoringSession,

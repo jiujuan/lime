@@ -177,69 +177,57 @@ describe("threadItemProjection", () => {
     });
   });
 
-  it("应由 thread item owner 分发 subagent activity 的 worker notification", () => {
-    const events = buildThreadItemProjectionEvents(
-      {
-        type: "item_completed",
-        item: {
-          ...baseItem,
-          id: "subagent-activity-1",
-          type: "subagent_activity",
-          status: "completed",
-          status_label: "completed",
+  it.each([
+    ["started", "acting", "running"],
+    ["interacted", "acting", "running"],
+    ["interrupted", "interrupted", "cancelled"],
+  ] as const)(
+    "应只按 canonical %s activity 分发 agent.changed",
+    (statusLabel, phase, runtimeStatus) => {
+      const events = buildThreadItemProjectionEvents(
+        {
+          type: "item_completed",
+          item: {
+            ...baseItem,
+            id: "subagent-activity-1",
+            type: "subagent_activity",
+            status: "completed",
+            status_label: statusLabel,
+            title: "实现子任务",
+            summary: "子任务已完成",
+            role: "implementer",
+            model: "gpt-5.2",
+            session_id: "child-session-1",
+          },
+        },
+        baseContext,
+      );
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: "agent.changed",
+        sourceType: "item_completed",
+        partId: "subagent-activity-1",
+        taskId: "child-session-1",
+        agentId: "child-session-1",
+        owner: "task",
+        scope: "agent",
+        phase,
+        surface: "task_capsule",
+        topology: "coordinator_team",
+        runtimeEntity: "subagent_turn",
+        runtimeStatus,
+        payload: {
+          statusLabel,
           title: "实现子任务",
-          summary: "子任务已完成",
           role: "implementer",
           model: "gpt-5.2",
-          session_id: "child-session-1",
+          childSessionId: "child-session-1",
         },
-      },
-      baseContext,
-    );
-
-    expect(events).toHaveLength(2);
-    expect(events[0]).toMatchObject({
-      type: "agent.changed",
-      sourceType: "item_completed",
-      partId: "subagent-activity-1",
-      taskId: "child-session-1",
-      agentId: "child-session-1",
-      owner: "task",
-      scope: "agent",
-      phase: "completed",
-      surface: "task_capsule",
-      topology: "coordinator_team",
-      runtimeEntity: "subagent_turn",
-      runtimeStatus: "completed",
-      payload: {
-        statusLabel: "completed",
-        title: "实现子任务",
-        role: "implementer",
-        model: "gpt-5.2",
-        childSessionId: "child-session-1",
-      },
-    });
-    expect(events[1]).toMatchObject({
-      type: "worker.notification",
-      sourceType: "item_completed",
-      workerNotificationId: "subagent-activity-1",
-      transcriptRef: "thread-1:turn-1:subagent-activity-1",
-      taskId: "child-session-1",
-      agentId: "child-session-1",
-      owner: "agent",
-      scope: "agent",
-      phase: "completed",
-      surface: "worker_notifications",
-      persistence: "archive",
-      runtimeStatus: "completed",
-      payload: {
-        runtimeEntity: "subagent_turn",
-        notificationKind: "worker_result",
-        statusLabel: "completed",
-        childSessionId: "child-session-1",
-        title: "实现子任务",
-        summaryPreview: "子任务已完成",
-      },
-    });
-  });
+      });
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "worker.notification" }),
+      );
+    },
+  );
 });

@@ -110,10 +110,6 @@ export interface AgentRuntimeAdapter {
     eventName: string,
     handler: (event: { payload: AgentEvent | unknown }) => void,
   ): Promise<UnlistenFn>;
-  listenToTeamEvents(
-    eventName: string,
-    handler: (event: { payload: AgentEvent | unknown }) => void,
-  ): Promise<UnlistenFn>;
 }
 
 export interface AgentRuntimeAdapterDeps {
@@ -330,9 +326,6 @@ export function createAgentRuntimeAdapter({
       });
     },
     async listenToTurnEvents(eventName, handler) {
-      return listenRuntimeEvent(eventName, handler);
-    },
-    async listenToTeamEvents(eventName, handler) {
       return listenRuntimeEvent(eventName, handler);
     },
   };

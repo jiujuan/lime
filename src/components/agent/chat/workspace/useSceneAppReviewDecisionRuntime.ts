@@ -3,9 +3,11 @@ import { toast } from "sonner";
 import {
   exportAgentRuntimeReviewDecisionTemplate,
   saveAgentRuntimeReviewDecision,
-  type AgentRuntimeReviewDecisionTemplate,
-  type AgentRuntimeSaveReviewDecisionRequest,
-} from "@/lib/api/agentRuntime";
+} from "@/lib/api/agentRuntime/exportClient";
+import type {
+  AgentRuntimeReviewDecisionTemplate,
+  AgentRuntimeSaveReviewDecisionRequest,
+} from "@/lib/api/agentRuntime/evidenceTypes";
 import {
   buildSceneAppQuickReviewDecisionRequest,
   formatSceneAppErrorMessage,
@@ -39,17 +41,15 @@ export interface SceneAppReviewDecisionRuntimeState {
   saving: boolean;
   humanReviewAvailable: boolean;
   quickReviewPending: boolean;
-  latestReviewFeedbackSignal: ReturnType<
-    typeof listCuratedTaskRecommendationSignals
-  >[number] | null;
+  latestReviewFeedbackSignal:
+    | ReturnType<typeof listCuratedTaskRecommendationSignals>[number]
+    | null;
   setDialogOpen: (open: boolean) => void;
   handleOpenHumanReview: () => void;
   handleSaveHumanReview: (
     request: AgentRuntimeSaveReviewDecisionRequest,
   ) => Promise<void>;
-  handleApplyQuickReview: (
-    actionKey: SceneAppQuickReviewActionKey,
-  ) => void;
+  handleApplyQuickReview: (actionKey: SceneAppQuickReviewActionKey) => void;
   handleSaveAsSkill: () => void;
 }
 
@@ -75,10 +75,9 @@ export function useSceneAppReviewDecisionRuntime({
   const [signalsVersion, setSignalsVersion] = useState(0);
   const summary = sceneAppExecutionSummaryState?.summary ?? null;
   const runtimeEnabled = enabled ?? Boolean(summary);
-  const targetRunSummary =
-    runtimeEnabled
-      ? (sceneAppExecutionSummaryState?.reviewTargetRunSummary ?? null)
-      : null;
+  const targetRunSummary = runtimeEnabled
+    ? (sceneAppExecutionSummaryState?.reviewTargetRunSummary ?? null)
+    : null;
   const targetSessionId = targetRunSummary?.sessionId?.trim() || "";
   const requestRefreshSceneAppExecutionSummary =
     sceneAppExecutionSummaryState?.requestRefresh;
@@ -151,7 +150,12 @@ export function useSceneAppReviewDecisionRuntime({
         setSaving(false);
       }
     },
-    [projectId, requestRefreshSceneAppExecutionSummary, sessionId, summary?.title],
+    [
+      projectId,
+      requestRefreshSceneAppExecutionSummary,
+      sessionId,
+      summary?.title,
+    ],
   );
 
   const handleOpenHumanReview = useCallback(() => {

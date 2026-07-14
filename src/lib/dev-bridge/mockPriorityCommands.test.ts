@@ -59,15 +59,11 @@ describe("mockPriorityCommands", () => {
 
   it("模型与运行时真相命令在浏览器模式下禁止静默退回 mock", () => {
     expect(shouldDisallowMockFallbackInBrowser("agent_init")).toBe(false);
-    expect(shouldDisallowMockFallbackInBrowser("agent_status")).toBe(
-      false,
-    );
+    expect(shouldDisallowMockFallbackInBrowser("agent_status")).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_configure_provider"),
     ).toBe(false);
-    expect(shouldDisallowMockFallbackInBrowser("agent_reset")).toBe(
-      false,
-    );
+    expect(shouldDisallowMockFallbackInBrowser("agent_reset")).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("agent_start_process")).toBe(
       false,
     );
@@ -344,12 +340,12 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockEventFallbackInBrowser(
         "agent_subagent_status:session-1",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockEventFallbackInBrowser(
         "agent_subagent_stream:session-1",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockEventFallbackInBrowser("embedded-browser-view-state"),
     ).toBe(true);

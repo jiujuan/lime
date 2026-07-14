@@ -22,9 +22,12 @@ const COLLABORATION_COPY_KEYS = [
   "agentChat.collaboration.preview.prefix",
   "agentChat.collaboration.status.completed",
   "agentChat.collaboration.status.failed",
+  "agentChat.collaboration.status.interacted",
+  "agentChat.collaboration.status.interrupted",
   "agentChat.collaboration.status.paused",
   "agentChat.collaboration.status.queued",
   "agentChat.collaboration.status.running",
+  "agentChat.collaboration.status.started",
   "agentChat.collaboration.title",
 ] as const;
 
@@ -58,9 +61,19 @@ describe("collaboration copy", () => {
     expect(resolveCollaborationStatusLabel("running", "in_progress")).toBe(
       "Processing",
     );
-    expect(resolveCollaborationFallback("completed")).toBe(
-      "Subtask completed",
+    expect(resolveCollaborationStatusLabel("started", "completed")).toBe(
+      "Started",
     );
+    expect(resolveCollaborationStatusLabel("interacted", "completed")).toBe(
+      "Contacted",
+    );
+    expect(resolveCollaborationStatusLabel("interrupted", "completed")).toBe(
+      "Interrupted",
+    );
+    expect(resolveCollaborationStatusLabel("future_value", "completed")).toBe(
+      "Completed",
+    );
+    expect(resolveCollaborationFallback("completed")).toBe("Subtask completed");
     expect(resolveCollaborationPreviewLine(subagentKind, "Review draft")).toBe(
       "Assigned to subtask: Review draft",
     );

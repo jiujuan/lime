@@ -3,10 +3,6 @@ import { isRuntimeSettledStatusValue } from "@limecloud/agent-ui-contracts";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
 import { hasDevBridgeEventListenerCapability } from "@/lib/api/bridgeEvents";
 import { parseAgentEvent } from "@/lib/api/agentProtocol";
-import {
-  dedupeAgentRuntimeEventNames,
-  getAgentSubagentStatusEventName,
-} from "@/lib/api/agentRuntimeEvents";
 import { hasDesktopHostEventListenerCapability } from "@/lib/desktop-runtime";
 import type { AgentThreadTurn } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
@@ -399,13 +395,9 @@ function hasTerminalTurn(
 }
 
 interface UseAgentRuntimeSyncEffectsOptions {
-  runtime: Pick<
-    AgentRuntimeAdapter,
-    "listenToTeamEvents" | "listenToTurnEvents"
-  >;
+  runtime: Pick<AgentRuntimeAdapter, "listenToTurnEvents">;
   sessionIdRef: MutableRefObject<string | null>;
   sessionId: string | null;
-  parentSessionId?: string | null;
   currentTurnEventName?: string | null;
   currentStreamTurnId?: string | null;
   isSending: boolean;
@@ -428,7 +420,6 @@ export function useAgentRuntimeSyncEffects(
     runtime,
     sessionIdRef,
     sessionId,
-    parentSessionId,
     currentTurnEventName,
     currentStreamTurnId,
     isSending,
@@ -440,7 +431,6 @@ export function useAgentRuntimeSyncEffects(
     refreshSessionReadModel,
     settleActiveRuntimeStream,
   } = options;
-  const normalizedParentSessionId = parentSessionId?.trim() || null;
   const normalizedCurrentTurnEventName = currentTurnEventName?.trim() || null;
   const normalizedCurrentStreamTurnId = currentStreamTurnId?.trim() || null;
   const lastIsSendingRef = useRef(isSending);
@@ -471,13 +461,6 @@ export function useAgentRuntimeSyncEffects(
     !normalizedCurrentTurnEventName &&
     cannotSubscribeCurrentTurnRuntimeEvent &&
     isAppServerBridgeAvailable();
-  const shouldSubscribeTeamEvents =
-    Boolean(sessionId) &&
-    (hasDesktopRuntimeEventListenerCapability ||
-      isSending ||
-      hasActiveRuntimeWork ||
-      Boolean(normalizedParentSessionId));
-
   const refreshSessionDetailOnce = useCallback(
     (targetSessionId: string, request: AgentSessionDetailRefreshRequest) => {
       if (refreshInFlightSessionRef.current === targetSessionId) {
@@ -792,74 +775,4 @@ export function useAgentRuntimeSyncEffects(
       unlisten?.();
     };
   }, [normalizedCurrentTurnEventName, runtime, sessionId, sessionIdRef]);
-
-  useEffect(() => {
-    if (!sessionId || !shouldSubscribeTeamEvents) {
-      return;
-    }
-
-    const eventNames = dedupeAgentRuntimeEventNames([
-      getAgentSubagentStatusEventName(sessionId),
-      normalizedParentSessionId
-        ? getAgentSubagentStatusEventName(normalizedParentSessionId)
-        : null,
-    ]);
-
-    let disposed = false;
-    const unlisteners: Array<() => void> = [];
-
-    const subscribe = async () => {
-      for (const eventName of eventNames) {
-        const unlisten = await runtime.listenToTeamEvents(
-          eventName,
-          (event) => {
-            const data = parseAgentEvent(event.payload);
-            if (disposed || data?.type !== "subagent_status_changed") {
-              return;
-            }
-            if (sessionIdRef.current !== sessionId) {
-              return;
-            }
-            if (isSending || normalizedCurrentTurnEventName) {
-              deferredRuntimeRefreshRequestRef.current =
-                preferRuntimeRefreshRequest(
-                  deferredRuntimeRefreshRequestRef.current,
-                  RUNTIME_SYNC_REFRESH_REQUESTS.event,
-                );
-              return;
-            }
-            scheduleRefreshSessionDetail(
-              sessionId,
-              RUNTIME_SYNC_REFRESH_REQUESTS.event,
-            );
-          },
-        );
-
-        if (disposed) {
-          unlisten();
-          return;
-        }
-
-        unlisteners.push(unlisten);
-      }
-    };
-
-    void subscribe();
-
-    return () => {
-      disposed = true;
-      for (const unlisten of unlisteners) {
-        unlisten();
-      }
-    };
-  }, [
-    normalizedParentSessionId,
-    scheduleRefreshSessionDetail,
-    runtime,
-    sessionId,
-    sessionIdRef,
-    shouldSubscribeTeamEvents,
-    isSending,
-    normalizedCurrentTurnEventName,
-  ]);
 }

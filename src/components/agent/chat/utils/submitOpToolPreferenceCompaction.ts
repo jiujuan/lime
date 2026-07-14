@@ -1,4 +1,4 @@
-import type { AgentSessionExecutionRuntime } from "@/lib/api/agentRuntime";
+import type { AgentSessionExecutionRuntime } from "@/lib/api/agentExecutionRuntime";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 
 const HARNESS_THINKING_PREFERENCE_KEYS = [

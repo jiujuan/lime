@@ -34,7 +34,7 @@ interface UseWorkspaceGeneralWorkbenchHarnessSurfaceRuntimeParams {
   } | null;
   activeTheme?: string | null;
   canInterrupt: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["canInterrupt"];
-  childSubagentSessions: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["childSubagentSessions"];
+  canonicalChildren: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["canonicalChildren"];
   contextHarnessRuntime: ContextHarnessRuntime;
   currentTurnId: WorkspaceGeneralWorkbenchHarnessPanelBaseProps["currentTurnId"];
   executionStrategy?: string | null;
@@ -77,7 +77,7 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
   activeExecutionRuntime,
   activeTheme,
   canInterrupt,
-  childSubagentSessions,
+  canonicalChildren,
   contextHarnessRuntime,
   currentTurnId,
   executionStrategy,
@@ -115,7 +115,7 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
   return useMemo(
     () => ({
       environment: contextHarnessRuntime.harnessEnvironment,
-      childSubagentSessions,
+      canonicalChildren,
       selectedTeamLabel,
       selectedTeamSummary,
       selectedTeamRoles,
@@ -173,7 +173,7 @@ export function useWorkspaceGeneralWorkbenchHarnessSurfaceRuntime({
       activeExecutionRuntime?.provider_selector,
       activeTheme,
       canInterrupt,
-      childSubagentSessions,
+      canonicalChildren,
       contextHarnessRuntime.harnessEnvironment,
       currentTurnId,
       executionStrategy,

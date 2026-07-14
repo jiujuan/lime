@@ -1,13 +1,9 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/evidenceTypes";
 import { formatIsoDateTime } from "../components/harnessStatusPanelViewModel";
 import { buildExpertSkillEvidenceSummaryViewModel } from "./expertSkillEvidenceSummaryViewModel";
-import {
-  BlockTitle,
-  BulletList,
-  Card,
-} from "./ExpertInfoPanel.styles";
+import { BlockTitle, BulletList, Card } from "./ExpertInfoPanel.styles";
 
 interface ExpertSkillEvidenceSummaryProps {
   evidencePack?: AgentRuntimeEvidencePack | null;
@@ -24,10 +20,13 @@ export function ExpertSkillEvidenceSummary({
         formatExportedAt: formatIsoDateTime,
         translateRuntimeEnable: (key, defaultValue, options) =>
           String(
-            t(key as never, {
-              defaultValue,
-              ...(options ?? {}),
-            } as never),
+            t(
+              key as never,
+              {
+                defaultValue,
+                ...(options ?? {}),
+              } as never,
+            ),
           ),
         copy: {
           title: String(
@@ -83,9 +82,7 @@ export function ExpertSkillEvidenceSummary({
         {viewModel.runtimeEnableLabel ? (
           <li>{viewModel.runtimeEnableLabel}</li>
         ) : null}
-        {viewModel.knownGapsLabel ? (
-          <li>{viewModel.knownGapsLabel}</li>
-        ) : null}
+        {viewModel.knownGapsLabel ? <li>{viewModel.knownGapsLabel}</li> : null}
         {viewModel.exportedAtLabel ? (
           <li>{viewModel.exportedAtLabel}</li>
         ) : null}

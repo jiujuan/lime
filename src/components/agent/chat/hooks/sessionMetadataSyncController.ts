@@ -1,4 +1,4 @@
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type { AgentSessionMetadataPatch } from "./agentRuntimeAdapter";
 import type { AgentAccessMode } from "./agentChatStorage";
 import type { SessionModelPreference } from "./agentChatShared";

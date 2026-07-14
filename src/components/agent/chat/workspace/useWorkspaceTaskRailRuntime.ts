@@ -3,8 +3,8 @@ import type {
   AgentRuntimeThreadReadModel,
   AgentSessionExecutionRuntime,
   AgentTodoItem,
-  AgentSubagentSessionInfo,
 } from "@/lib/api/agentRuntime";
+import type { CanonicalChildThreadSummary } from "../projection/canonicalChildThreadSummary";
 import type { SidebarActivityLog } from "../hooks/useThemeContextWorkspace";
 import type {
   ActionRequired,
@@ -32,7 +32,7 @@ export interface WorkspaceTaskRailRuntimeInput {
   todoItems?: readonly AgentTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
   executionRuntime?: AgentSessionExecutionRuntime | null;
-  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
   providerType?: string | null;
   model?: string | null;
   accessMode?: GeneralWorkbenchTaskRailContextInput["accessMode"];
@@ -55,7 +55,7 @@ export interface WorkspaceTaskRailProps {
   todoItems?: readonly AgentTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
   executionRuntime?: AgentSessionExecutionRuntime | null;
-  childSubagentSessions?: readonly AgentSubagentSessionInfo[];
+  canonicalChildren?: CanonicalChildThreadSummary[];
   providerType?: string | null;
   model?: string | null;
   accessMode?: GeneralWorkbenchTaskRailContextInput["accessMode"];
@@ -83,7 +83,7 @@ export function buildWorkspaceTaskRailRuntimeContext({
   workspaceRootPath,
   threadRead,
   threadItems,
-  childSubagentSessions = [],
+  canonicalChildren = [],
 }: Pick<
   WorkspaceTaskRailRuntimeInput,
   | "providerType"
@@ -92,7 +92,7 @@ export function buildWorkspaceTaskRailRuntimeContext({
   | "reasoningEffort"
   | "threadRead"
   | "threadItems"
-  | "childSubagentSessions"
+  | "canonicalChildren"
 > & {
   workspaceRootPath: string | null;
 }): GeneralWorkbenchTaskRailContextInput {
@@ -107,7 +107,7 @@ export function buildWorkspaceTaskRailRuntimeContext({
       },
       threadRead,
       threadItems,
-      childSubagentSessions,
+      canonicalChildren,
     }) ?? {}
   );
 }
@@ -124,7 +124,7 @@ export function useWorkspaceTaskRailRuntime({
   todoItems,
   threadRead,
   executionRuntime,
-  childSubagentSessions,
+  canonicalChildren,
   providerType,
   model,
   accessMode,
@@ -160,7 +160,7 @@ export function useWorkspaceTaskRailRuntime({
       todoItems,
       threadRead,
       executionRuntime,
-      childSubagentSessions,
+      canonicalChildren,
       providerType,
       model,
       accessMode,
@@ -188,7 +188,7 @@ export function useWorkspaceTaskRailRuntime({
       todoItems,
       workflowSteps,
       workspaceRootPath,
-      childSubagentSessions,
+      canonicalChildren,
     ],
   );
 }

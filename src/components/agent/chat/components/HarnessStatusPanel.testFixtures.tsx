@@ -1,7 +1,7 @@
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
-import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeToolInventory } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import {
   areLightweightRenderersRegistered,
   registerLightweightRenderers,
@@ -50,10 +50,10 @@ export function getHarnessPanelTestMocks() {
   };
 }
 
-vi.mock("@/lib/api/agentRuntime", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/agentRuntime")>(
-    "@/lib/api/agentRuntime",
-  );
+vi.mock("@/lib/api/agentRuntime/exportClient", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/agentRuntime/exportClient")
+  >("@/lib/api/agentRuntime/exportClient");
   return {
     ...actual,
     exportAgentRuntimeAnalysisHandoff: exportAgentRuntimeAnalysisHandoffMock,

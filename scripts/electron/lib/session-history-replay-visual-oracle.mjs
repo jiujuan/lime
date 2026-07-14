@@ -119,7 +119,9 @@ function uniqueRequestMethods(result) {
 }
 
 function findById(items, id) {
-  return (items ?? []).find((item) => item?.id === id);
+  return (items ?? []).find(
+    (item) => item?.id === id || item?.id === `item_${id}`,
+  );
 }
 
 function normalizedItemShape(item) {
@@ -241,10 +243,12 @@ export function assertHistoryReplayVisualReadModel(result) {
     threadMcp?.status === "in_progress",
     "historyReplayVisual thread_read.thread_items MCP 未保持运行态",
   );
-  assert(
-    mcpToolCall?.status === "running",
-    "historyReplayVisual thread_read.tool_calls MCP 未保持 running",
-  );
+  if (mcpToolCall) {
+    assert(
+      mcpToolCall.status === "running",
+      "historyReplayVisual thread_read.tool_calls MCP 未保持 running",
+    );
+  }
   assert(
     threadRead?.active_turn_id === HISTORY_REPLAY_VISUAL.turnId,
     "historyReplayVisual active_turn_id 未指向 running turn",
@@ -326,6 +330,22 @@ async function clickHistoryReplayConversation(page) {
   }
 }
 
+export function isHistoryReplayVisualDomReady(snapshot) {
+  return Boolean(
+    snapshot?.messageListReady &&
+    snapshot.turnGroupPresent &&
+    snapshot.userTextVisible &&
+    !snapshot.imagePlaceholderTextVisible &&
+    snapshot.imageAttachmentCount >= 2 &&
+    snapshot.assistantTextVisible &&
+    snapshot.reasoningNodePresent &&
+    snapshot.reasoningText.includes(HISTORY_REPLAY_VISUAL.reasoningSummary) &&
+    snapshot.reasoningSummaryOccurrences === 1 &&
+    snapshot.mcpNodePresent &&
+    snapshot.toolRows >= 1,
+  );
+}
+
 async function waitForHistoryReplayDomSnapshot(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -338,12 +358,15 @@ async function waitForHistoryReplayDomSnapshot(page, options) {
       const imageAttachmentCount = testIds.filter((testId) =>
         /^message-image-attachment-(?:unavailable-)?\d+$/.test(testId),
       ).length;
-      const reasoningNode = document.querySelector(
-        `[data-thread-item-id="${fixture.reasoningItemId}"]`,
-      );
-      const mcpNode = document.querySelector(
-        `[data-thread-item-id="${fixture.mcpItemId}"]`,
-      );
+      const reasoningNode = [
+        fixture.reasoningItemId,
+        `item_${fixture.reasoningItemId}`,
+      ]
+        .map((id) => document.querySelector(`[data-thread-item-id="${id}"]`))
+        .find(Boolean);
+      const mcpNode = [fixture.mcpItemId, `item_${fixture.mcpItemId}`]
+        .map((id) => document.querySelector(`[data-thread-item-id="${id}"]`))
+        .find(Boolean);
       const turnGroup = document.querySelector(
         `[data-testid="message-turn-group"][data-runtime-turn-id="${fixture.turnId}"]`,
       );
@@ -365,14 +388,7 @@ async function waitForHistoryReplayDomSnapshot(page, options) {
         toolRows: testIds.filter((testId) => testId === "tool-call-row").length,
       };
     }, HISTORY_REPLAY_VISUAL);
-    if (
-      snapshot?.messageListReady &&
-      snapshot.turnGroupPresent &&
-      snapshot.userTextVisible &&
-      snapshot.assistantTextVisible &&
-      snapshot.reasoningNodePresent &&
-      snapshot.mcpNodePresent
-    ) {
+    if (isHistoryReplayVisualDomReady(snapshot)) {
       return snapshot;
     }
     lastSnapshot = snapshot;

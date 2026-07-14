@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import type { AgentThreadTurn } from "@/lib/api/agentProtocol";
-import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime/sessionTypes";
 import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
 import type {
   CanvasWorkbenchSessionView,

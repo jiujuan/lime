@@ -4366,6 +4366,58 @@
         "src/components/agent/chat/workspace/right-surface/rightSurfaceTypes.ts",
         "src/features/plugin/history/pluginHistoryRestore.ts"
       ]
+    },
+    {
+      "id": "agent-chat-retired-local-team-formation-preview",
+      "classification": "dead",
+      "description": "Renderer 不得在 canonical child Thread 存在前本地编队或合成 Team dispatch preview；Subagent formation/activity 只允许来自 RuntimeCore AgentControl 与 canonical Thread/Turn/Item projection",
+      "patterns": [
+        "useRuntimeTeamFormation",
+        "prepareRuntimeTeamBeforeSend",
+        "runtimeTeamDispatchPreview",
+        "teamFormationAgentUiProjection",
+        "runtimeTeamCollaborationCopy",
+        "team_formation_projection",
+        "runtime-team-dispatch:"
+      ],
+      "includePathPrefixes": [
+        "packages/agent-ui-contracts/src",
+        "packages/agent-runtime-projection",
+        "src/components/agent/chat",
+        "src/i18n/resources"
+      ],
+      "allowedPaths": [
+        "src/components/agent/chat/AgentChatWorkspace.teamRuntimeBoundaryGuard.test.ts"
+      ]
+    },
+    {
+      "id": "agent-chat-retired-team-runtime-sidecar",
+      "classification": "dead",
+      "description": "Renderer 不得恢复重复订阅 raw subagent status/stream、维护本地 live/draft/tool/queue map 并写回 projection store 的第二 Team runtime；Multi-Agent GUI 只消费 canonical Thread/Turn/Item 与 canonical child roster",
+      "patterns": [
+        "team-workspace-runtime/",
+        "useTeamWorkspaceRuntime",
+        "teamWorkspaceRuntime",
+        "TeamWorkspaceRuntime",
+        "useWorkspaceTeamSessionRuntime",
+        "useWorkspaceTeamSessionControlRuntime",
+        "liveRuntimeProjector",
+        "runtimeEventSubscriptions",
+        "restoredTeamFactsProjection",
+        "liveRuntimeBySessionId",
+        "liveActivityBySessionId",
+        "activityRefreshVersionBySessionId",
+        "agentChat.teamWorkspace.liveRuntime.",
+        "agentChat.teamWorkspace.runtimeStatus.",
+        "agentChat.teamWorkspace.control."
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat",
+        "src/i18n/resources"
+      ],
+      "allowedPaths": [
+        "src/components/agent/chat/AgentChatWorkspace.teamRuntimeBoundaryGuard.test.ts"
+      ]
     }
   ],
   "rustText": [

@@ -1,4 +1,8 @@
 use super::*;
+use crate::runtime::agent_control::AgentControlSpawnRequest;
+use agent_protocol::ThreadId;
+use thread_store::AgentGraphStore;
+use thread_store::ThreadSpawnEdgeStatus;
 
 #[tokio::test]
 async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
@@ -8,7 +12,13 @@ async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
         TestSessionDataSource::new(empty_agent_session_read_response("unused"))
             .with_memory_data_root(temp.path().join("data-root")),
     );
-    let core = RuntimeCore::default().with_app_data_source(app_data_source.clone());
+    let projection_store = Arc::new(
+        ProjectionStore::initialize(temp.path().join("projection.sqlite"))
+            .expect("projection store"),
+    );
+    let core = RuntimeCore::default()
+        .with_projection_store(projection_store.clone())
+        .with_app_data_source(app_data_source.clone());
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_handoff".to_string()),
         thread_id: Some("thread_handoff".to_string()),
@@ -28,6 +38,25 @@ async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
         locale: None,
     })
     .expect("session");
+    for (session_id, thread_id) in [
+        ("sess_handoff_active_child", "thread_handoff_active_child"),
+        ("sess_handoff_closed_child", "thread_handoff_closed_child"),
+    ] {
+        core.spawn_agent_controlled(AgentControlSpawnRequest {
+            parent_session_id: "sess_handoff".to_string(),
+            child_session_id: Some(session_id.to_string()),
+            child_thread_id: Some(thread_id.to_string()),
+        })
+        .await
+        .expect("spawn canonical child");
+    }
+    projection_store
+        .set_thread_spawn_edge_status(
+            ThreadId::new("thread_handoff_closed_child"),
+            ThreadSpawnEdgeStatus::Closed,
+        )
+        .await
+        .expect("close canonical child edge");
     core.start_turn(
         AgentSessionTurnStartParams {
             session_id: "sess_handoff".to_string(),
@@ -78,6 +107,7 @@ async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
     );
     assert_eq!(response.thread_status, "completed");
     assert_eq!(response.latest_turn_status.as_deref(), Some("completed"));
+    assert_eq!(response.active_subagent_count, 1);
     assert_eq!(response.artifacts.len(), 4);
     let kinds = response
         .artifacts
@@ -101,6 +131,7 @@ async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
         .join("progress.json");
     let progress = fs::read_to_string(progress_path).expect("progress.json");
     assert!(progress.contains("\"schemaVersion\": \"agent-session-handoff-bundle.v1\""));
+    assert!(progress.contains("\"activeSubagent\": 1"));
     assert!(progress.contains(".app-server/artifacts/handoff.md"));
 
     let memory_root = temp.path().join(".lime").join("memories");

@@ -66,7 +66,9 @@ vi.mock("@/lib/api/conversationImport", () => ({
 
 vi.mock("./generalWorkbenchTaskRailViewModel", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("./generalWorkbenchTaskRailViewModel")>();
+    await importOriginal<
+      typeof import("./generalWorkbenchTaskRailViewModel")
+    >();
   return {
     ...actual,
     buildGeneralWorkbenchTaskRailProjection: (
@@ -80,7 +82,9 @@ vi.mock("./generalWorkbenchTaskRailViewModel", async (importOriginal) => {
 
 vi.mock("../workspace/useWorkspaceTaskRailRuntime", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../workspace/useWorkspaceTaskRailRuntime")>();
+    await importOriginal<
+      typeof import("../workspace/useWorkspaceTaskRailRuntime")
+    >();
   return {
     ...actual,
     buildWorkspaceTaskRailRuntimeContext: (
@@ -853,7 +857,11 @@ describe("TaskCenterUtilityToolbar", () => {
             updated_at: "2026-06-16T10:00:00.000Z",
           },
           context_summary: {
-            sources: ["AG-UI spec", "https://example.com/report", "docs/context.md"],
+            sources: [
+              "AG-UI spec",
+              "https://example.com/report",
+              "docs/context.md",
+            ],
           },
           evidence_summary: {
             evidence_refs: ["evidence/task-rail.json"],
@@ -865,30 +873,30 @@ describe("TaskCenterUtilityToolbar", () => {
             running_patch_count: 1,
           },
         } as any,
-        childSubagentSessions: [
+        canonicalChildren: [
           {
-            id: "subagent-1",
             name: "实现",
-            created_at: 1,
-            updated_at: 2,
-            session_type: "subagent",
-            runtime_status: "running",
+            parentThreadId: "thread-parent",
+            sessionId: "subagent-1",
+            status: "running",
+            threadId: "thread-subagent-1",
+            updatedAtMs: 2,
           },
           {
-            id: "subagent-2",
             name: "验证",
-            created_at: 1,
-            updated_at: 2,
-            session_type: "subagent",
-            runtime_status: "completed",
+            parentThreadId: "thread-parent",
+            sessionId: "subagent-2",
+            status: "completed",
+            threadId: "thread-subagent-2",
+            updatedAtMs: 2,
           },
           {
-            id: "subagent-3",
             name: "收尾",
-            created_at: 1,
-            updated_at: 2,
-            session_type: "subagent",
-            runtime_status: "completed",
+            parentThreadId: "thread-parent",
+            sessionId: "subagent-3",
+            status: "completed",
+            threadId: "thread-subagent-3",
+            updatedAtMs: 2,
           },
         ],
         onOpenOutput,
@@ -1079,14 +1087,14 @@ describe("TaskCenterUtilityToolbar", () => {
           active_turn_id: "turn-heavy",
           status: "completed",
         } as AgentRuntimeThreadReadModel,
-        childSubagentSessions: [
+        canonicalChildren: [
           {
-            id: "subagent-heavy",
             name: "实现",
-            created_at: 1,
-            updated_at: 2,
-            session_type: "subagent",
-            runtime_status: "completed",
+            parentThreadId: "thread-parent",
+            sessionId: "subagent-heavy",
+            status: "completed",
+            threadId: "thread-subagent-heavy",
+            updatedAtMs: 2,
           },
         ],
       },
@@ -2001,22 +2009,22 @@ describe("TaskCenterUtilityToolbar", () => {
             patch_count: 1,
           },
         } as any,
-        childSubagentSessions: [
+        canonicalChildren: [
           {
-            id: "subagent-running",
             name: "恢复检查",
-            created_at: 1,
-            updated_at: 2,
-            session_type: "subagent",
-            runtime_status: "running",
+            parentThreadId: "thread-parent",
+            sessionId: "subagent-running",
+            status: "running",
+            threadId: "thread-subagent-running",
+            updatedAtMs: 2,
           },
           {
-            id: "subagent-done",
             name: "证据整理",
-            created_at: 1,
-            updated_at: 3,
-            session_type: "subagent",
-            runtime_status: "completed",
+            parentThreadId: "thread-parent",
+            sessionId: "subagent-done",
+            status: "completed",
+            threadId: "thread-subagent-done",
+            updatedAtMs: 3,
           },
         ],
         context: {

@@ -25,7 +25,6 @@ interface ClearMessagesOptions {
 
 interface UseWorkspaceResetRuntimeParams {
   clearMessages: (options?: ClearMessagesOptions) => void;
-  clearRuntimeTeamState: () => void;
   clearPendingEntryA2UI?: () => void;
   clearProjectSelectionRuntime: () => void;
   resetProjectSelection: () => void;
@@ -57,7 +56,6 @@ interface UseWorkspaceResetRuntimeParams {
 
 export function useWorkspaceResetRuntime({
   clearMessages,
-  clearRuntimeTeamState,
   clearPendingEntryA2UI,
   clearProjectSelectionRuntime,
   resetProjectSelection,
@@ -105,12 +103,10 @@ export function useWorkspaceResetRuntime({
   const resetTopicLocalState = useCallback(() => {
     resetWorkbenchSurface();
     clearPendingEntryA2UI?.();
-    clearRuntimeTeamState();
     resetRestoredSessionState();
     resetGuideState();
   }, [
     clearPendingEntryA2UI,
-    clearRuntimeTeamState,
     resetGuideState,
     resetRestoredSessionState,
     resetWorkbenchSurface,

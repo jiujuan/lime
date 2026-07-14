@@ -53,30 +53,29 @@ describe("HarnessStatusPanel runtime", () => {
     expect(document.body.textContent).toContain("repo-exploration");
   });
 
-  it("存在真实 child session 时应优先展示子任务摘要", () => {
+  it("存在 canonical child roster 时应展示子任务摘要", () => {
     renderPanel({
-      childSubagentSessions: [
+      canonicalChildren: [
         {
-          id: "child-1",
           name: "研究代理",
-          created_at: 1_710_000_000,
-          updated_at: 1_710_000_200,
-          session_type: "sub_agent",
-          runtime_status: "running",
-          latest_turn_status: "running",
-          task_summary: "并行整理竞品与证据链",
-          role_hint: "explorer",
+          parentThreadId: "thread-parent",
+          role: "explorer",
+          sessionId: "session-research",
+          status: "running",
+          taskSummary: "并行整理竞品与证据链",
+          threadId: "thread-research",
+          updatedAtMs: 1_710_000_200_000,
         },
         {
-          id: "child-2",
+          modelProvider: "openai",
           name: "实现代理",
-          created_at: 1_710_000_010,
-          updated_at: 1_710_000_220,
-          session_type: "sub_agent",
-          runtime_status: "queued",
-          latest_turn_status: "queued",
-          task_summary: "起草第一版落地方案",
-          role_hint: "executor",
+          parentThreadId: "thread-parent",
+          role: "executor",
+          sessionId: null,
+          status: "pendingInit",
+          taskSummary: "起草第一版落地方案",
+          threadId: "thread-implementation",
+          updatedAtMs: 1_710_000_220_000,
         },
       ],
     });
@@ -85,11 +84,17 @@ describe("HarnessStatusPanel runtime", () => {
     expect(document.body.textContent).toContain("子任务");
     expect(document.body.textContent).toContain("当前子任务");
     expect(document.body.textContent).toContain("实时子任务");
-    expect(document.body.textContent).toContain("类型：子任务");
-    expect(document.body.textContent).not.toContain("协作回退");
-    expect(document.body.textContent).not.toContain("回退链路");
     expect(document.body.textContent).toContain("研究代理");
     expect(document.body.textContent).toContain("实现代理");
+    expect(document.body.textContent).toContain("explorer");
+    expect(document.body.textContent).toContain("openai");
+  });
+
+  it("空 canonical child roster 不应渲染子任务区块", () => {
+    renderPanel({ canonicalChildren: [] });
+
+    expect(document.body.textContent).not.toContain("实时子任务");
+    expect(document.body.textContent).not.toContain("当前子任务");
   });
 
   it("仅有计划摘要兜底时也应在工作台显示已就绪计划状态", () => {

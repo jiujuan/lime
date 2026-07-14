@@ -85,6 +85,7 @@ const hoisted = vi.hoisted(() => ({
     startSession: vi.fn(),
     startTurn: vi.fn(),
     readSession: vi.fn(),
+    readThread: vi.fn(),
     cancelTurn: vi.fn(),
     respondAction: vi.fn(),
     readWorkflow: vi.fn(),
@@ -384,6 +385,7 @@ export function usePluginRuntimePageTestLifecycle() {
       startSession: appServerClientMocks.startSession,
       startTurn: appServerClientMocks.startTurn,
       readSession: appServerClientMocks.readSession,
+      readThread: appServerClientMocks.readThread,
       cancelTurn: appServerClientMocks.cancelTurn,
       respondAction: appServerClientMocks.respondAction,
       readWorkflow: appServerClientMocks.readWorkflow,
@@ -455,22 +457,52 @@ export function usePluginRuntimePageTestLifecycle() {
       notifications: [],
       messages: [],
     }));
-    appServerClientMocks.cancelTurn.mockResolvedValue({
+    appServerClientMocks.readThread.mockImplementation(async (request) => ({
       id: 4,
-      result: {},
+      result: {
+        thread: {
+          archived: false,
+          createdAtMs: 1_747_267_200_000,
+          sessionId: "plugin-session-1",
+          status: { type: "active" },
+          threadId: request.threadId,
+          turns: [
+            {
+              approval: "pending",
+              createdAtMs: 1_747_267_200_000,
+              items: [],
+              itemsView: "full",
+              sessionId: "plugin-session-1",
+              status: "inProgress",
+              threadId: request.threadId,
+              turnId: "plugin-turn-1",
+              updatedAtMs: 1_747_267_201_000,
+            },
+          ],
+          turnsView: request.turnsView,
+          updatedAtMs: 1_747_267_201_000,
+        },
+      },
       response: { jsonrpc: "2.0", id: 4, result: {} },
       notifications: [],
       messages: [],
-    });
-    appServerClientMocks.respondAction.mockResolvedValue({
+    }));
+    appServerClientMocks.cancelTurn.mockResolvedValue({
       id: 5,
       result: {},
       response: { jsonrpc: "2.0", id: 5, result: {} },
       notifications: [],
       messages: [],
     });
-    appServerClientMocks.readWorkflow.mockImplementation(async (request) => ({
+    appServerClientMocks.respondAction.mockResolvedValue({
       id: 6,
+      result: {},
+      response: { jsonrpc: "2.0", id: 6, result: {} },
+      notifications: [],
+      messages: [],
+    });
+    appServerClientMocks.readWorkflow.mockImplementation(async (request) => ({
+      id: 7,
       result: {
         sessionId: request.sessionId,
         workflow: {
@@ -490,7 +522,7 @@ export function usePluginRuntimePageTestLifecycle() {
           },
         ],
       },
-      response: { jsonrpc: "2.0", id: 6, result: {} },
+      response: { jsonrpc: "2.0", id: 7, result: {} },
       notifications: [],
       messages: [],
     }));

@@ -24,8 +24,8 @@ import { useHarnessEvidencePackExport } from "./useHarnessEvidencePackExport";
 import {
   buildRuntimeFactSummary,
   buildRuntimeTaskPresentation,
-  summarizeChildSubagentSessions,
 } from "./harnessStatusPanelViewModel";
+import { summarizeCanonicalChildThreads } from "../projection/canonicalChildThreadSummary";
 import {
   buildHarnessPanelSectionNavItems,
   buildHarnessSummaryCards,
@@ -51,7 +51,7 @@ export function HarnessStatusPanel({
   onRevealPath,
   onOpenPath,
   onOpenFileCheckpoints,
-  childSubagentSessions = [],
+  canonicalChildren = [],
   onOpenSubagentSession,
   toolInventory,
   toolInventoryLoading = false,
@@ -183,8 +183,8 @@ export function HarnessStatusPanel({
     [harnessState.runtimeStatus],
   );
   const realTeamSummary = useMemo(
-    () => summarizeChildSubagentSessions(childSubagentSessions),
-    [childSubagentSessions],
+    () => summarizeCanonicalChildThreads(canonicalChildren),
+    [canonicalChildren],
   );
   const hasSelectedTeamConfig =
     Boolean(selectedTeamLabel?.trim()) ||
@@ -387,7 +387,7 @@ export function HarnessStatusPanel({
             activityModel,
             agentUiProjectionSummary,
             canInterrupt,
-            childSubagentSessions,
+            canonicalChildren,
             currentSessionId,
             currentTurnId,
             diagnosticRuntimeContext,
@@ -443,7 +443,7 @@ export function HarnessStatusPanel({
       activityModel,
       agentUiProjectionSummary,
       canInterrupt,
-      childSubagentSessions,
+      canonicalChildren,
       currentSessionId,
       currentTurnId,
       diagnosticRuntimeContext,

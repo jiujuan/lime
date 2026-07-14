@@ -511,7 +511,6 @@ describe("appServerSessionClient", () => {
         status: "idle",
       }),
       todo_items: [],
-      child_subagent_sessions: [],
     });
 
     expect(appServerClient.readSession).toHaveBeenCalledWith({
@@ -520,6 +519,45 @@ describe("appServerSessionClient", () => {
       historyOffset: 2,
       historyBeforeMessageId: 100,
     });
+  });
+
+  it("get 应剥离 retired session roster 字段", async () => {
+    const appServerClient = appServerClientMock();
+    const readSessionResult = {
+      session: {
+        sessionId: "session-retired-roster",
+        threadId: "thread-retired-roster",
+        appId: "desktop",
+        workspaceId: "workspace-1",
+        status: "idle" as const,
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:02.000Z",
+      },
+      turns: [],
+      detail: {
+        id: "session-retired-roster",
+        created_at: 1780704000000,
+        updated_at: 1780704002000,
+        messages: [],
+        child_subagent_sessions: [{ id: "legacy-child" }],
+        subagent_parent_context: { parent_session_id: "legacy-parent" },
+      },
+    };
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 3,
+      result: readSessionResult,
+      response: { id: 3, result: readSessionResult },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    const detail = await client.getAgentRuntimeSession(
+      "session-retired-roster",
+    );
+
+    expect(detail).not.toHaveProperty("child_subagent_sessions");
+    expect(detail).not.toHaveProperty("subagent_parent_context");
   });
 
   it("get 无 detail 时应从协议 session/turns 构造最小详情", async () => {
@@ -597,7 +635,6 @@ describe("appServerSessionClient", () => {
         updated_at: "2026-06-06T00:00:03.000Z",
       },
       todo_items: [],
-      child_subagent_sessions: [],
     });
   });
 
@@ -718,7 +755,6 @@ describe("appServerSessionClient", () => {
       ],
       queued_turns: [],
       todo_items: [],
-      child_subagent_sessions: [],
       thread_read: expect.objectContaining({
         thread_id: "thread-items",
         status: "completed" as const,

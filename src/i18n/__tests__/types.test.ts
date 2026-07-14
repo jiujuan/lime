@@ -789,26 +789,6 @@ function assertI18nKeyTypes() {
     ns: "agent",
     severity: "High",
   });
-  i18n.t("agentChat.teamWorkspace.liveRuntime.title.statusChanged", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.liveRuntime.detail.toolProcessing", {
-    ns: "agent",
-    target: "current step",
-  });
-  i18n.t("agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.detail", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.liveRuntime.status.retry", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.runtimeStatus.completed", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.control.resume.resumedOne", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.control.wait.enteredStatusOne", {
-    ns: "agent",
-    status: "Completed",
-  });
-  i18n.t("agentChat.teamWorkspace.control.sendInput.emptyError", {
-    ns: "agent",
-  });
   i18n.t("navigation.sidebar.items.homeGeneral", { ns: "navigation" });
   i18n.t(
     "workspace.browserExistingSession.presentation.status.attached.label",

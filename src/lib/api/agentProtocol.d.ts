@@ -766,39 +766,6 @@ export interface AgentEventQueueCleared {
   session_id: string;
   queued_turn_ids: string[];
 }
-export type AgentSubagentRuntimeStatus =
-  | "idle"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "aborted"
-  | "closed"
-  | "not_found";
-export interface AgentEventSubagentStatusChanged {
-  type: "subagent_status_changed";
-  session_id: string;
-  root_session_id: string;
-  parent_session_id?: string;
-  status: AgentSubagentRuntimeStatus;
-  latest_turn_id?: string;
-  latest_turn_status?: AgentSubagentRuntimeStatus;
-  queued_turn_count?: number;
-  team_phase?: string;
-  team_parallel_budget?: number;
-  team_active_count?: number;
-  team_queued_count?: number;
-  provider_concurrency_group?: string;
-  provider_parallel_budget?: number;
-  queue_reason?: string;
-  retryable_overload?: boolean;
-  closed?: boolean;
-  usage?: AgentTokenUsage;
-  duration_ms?: number;
-  tool_count?: number;
-  result_ref?: string;
-  metadata?: Record<string, unknown>;
-}
 export interface AgentEventMessage {
   type: "message";
   message: AgentMessage;
@@ -862,7 +829,6 @@ export type AgentEvent =
   | AgentEventQueueRemoved
   | AgentEventQueueStarted
   | AgentEventQueueCleared
-  | AgentEventSubagentStatusChanged
   | AgentEventMessage
   | AgentEventWarning
   | AgentEventError;

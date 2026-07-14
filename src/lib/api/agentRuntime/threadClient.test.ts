@@ -1278,6 +1278,85 @@ describe("agentRuntime threadClient", () => {
     );
   });
 
+  it("canonical child Thread 导航应只读取身份并严格解析 sessionId", async () => {
+    const appServerClient = appServerClientMock();
+    const readThread = vi.mocked(appServerClient.readThread);
+    readThread.mockResolvedValueOnce({
+      id: 3,
+      result: {
+        thread: {
+          archived: false,
+          createdAtMs: 100,
+          sessionId: "agent-child",
+          status: { type: "active" },
+          threadId: "thread-child",
+          turnsView: "notLoaded",
+          updatedAtMs: 200,
+        },
+      },
+      response: { id: 3, result: {} },
+      messages: [],
+      notifications: [],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(client.readThreadSessionId(" thread-child ")).resolves.toBe(
+      "agent-child",
+    );
+    expect(readThread).toHaveBeenCalledWith({
+      threadId: "thread-child",
+      turnsView: "notLoaded",
+    });
+
+    readThread.mockResolvedValueOnce({
+      id: 4,
+      result: {
+        thread: {
+          archived: false,
+          createdAtMs: 100,
+          sessionId: "agent-other",
+          status: { type: "active" },
+          threadId: "thread-other",
+          turnsView: "notLoaded",
+          updatedAtMs: 200,
+        },
+      },
+      response: { id: 4, result: {} },
+      messages: [],
+      notifications: [],
+    });
+    await expect(client.readThreadSessionId("thread-child")).rejects.toThrow(
+      "mismatched threadId",
+    );
+
+    readThread.mockResolvedValueOnce({
+      id: 5,
+      result: {
+        thread: {
+          archived: false,
+          createdAtMs: 100,
+          sessionId: " ",
+          status: { type: "active" },
+          threadId: "thread-child",
+          turnsView: "notLoaded",
+          updatedAtMs: 200,
+        },
+      },
+      response: { id: 5, result: {} },
+      messages: [],
+      notifications: [],
+    });
+    await expect(client.readThreadSessionId("thread-child")).rejects.toThrow(
+      "empty sessionId",
+    );
+    await expect(client.readThreadSessionId(" ")).rejects.toThrow(
+      "threadId is required",
+    );
+  });
+
   it("浏览器 DevBridge 可用时 submit 应允许进入 App Server JSON-RPC", async () => {
     vi.mocked(isAppServerBridgeAvailable).mockReturnValue(true);
     const appServerClient = appServerClientMock();

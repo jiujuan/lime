@@ -1,7 +1,7 @@
 use agent_protocol::{
-    ItemId, ItemStatus, SessionId, SortDirection, Thread, ThreadHistoryChangeSet, ThreadId,
-    ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn, TurnAdmissionState,
-    TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
+    ItemId, ItemStatus, PlanStepStatus, SessionId, SortDirection, Thread, ThreadHistoryChangeSet,
+    ThreadId, ThreadItem, ThreadItemPayload, ThreadStatus, ThreadTurnsView, Turn,
+    TurnAdmissionState, TurnApprovalState, TurnId, TurnItemsView, TurnQueueState, TurnStatus,
 };
 use futures::executor::block_on;
 use serde_json::json;
@@ -31,6 +31,11 @@ fn thread(id: &str, updated_at_ms: i64) -> Thread {
         archived: false,
         recency_at_ms: None,
         parent_thread_id: None,
+        agent_path: None,
+        agent_nickname: None,
+        agent_role: None,
+        last_task_message: None,
+        agent_state: None,
         forked_from_id: None,
         preview: format!("preview-{id}"),
         model_provider: "test".to_string(),
@@ -380,6 +385,105 @@ fn production_event_batches_create_and_incrementally_update_canonical_history() 
         &thread.turns[0].items[0].payload,
         ThreadItemPayload::AgentMessage { text, .. } if text == "hello world"
     ));
+}
+
+#[test]
+fn plan_revision_identity_survives_canonical_store_restart() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let database_path = temp.path().join("projection.sqlite");
+    let stored = StoredSession {
+        session: app_server_protocol::AgentSession {
+            session_id: "session-plan-restart".to_string(),
+            thread_id: "thread-plan-restart".to_string(),
+            app_id: "agent-chat".to_string(),
+            workspace_id: None,
+            business_object_ref: None,
+            status: app_server_protocol::AgentSessionStatus::Completed,
+            created_at: "2026-07-14T00:00:00Z".to_string(),
+            updated_at: "2026-07-14T00:00:03Z".to_string(),
+        },
+        turns: Vec::new(),
+        turn_inputs: HashMap::new(),
+        turn_runtime_options: HashMap::new(),
+        events: Vec::new(),
+        output_blobs: HashMap::new(),
+    };
+    let event = |sequence: u64, event_type: &str, payload| app_server_protocol::AgentEvent {
+        event_id: format!("plan-restart-event-{sequence}"),
+        sequence,
+        session_id: stored.session.session_id.clone(),
+        thread_id: Some(stored.session.thread_id.clone()),
+        turn_id: Some("turn-plan-restart".to_string()),
+        event_type: event_type.to_string(),
+        timestamp: format!("2026-07-14T00:00:{sequence:02}Z"),
+        payload,
+    };
+
+    let store = ProjectionStore::initialize(database_path.clone()).expect("projection store");
+    store
+        .apply_canonical_events(
+            &stored,
+            &[event(
+                1,
+                "plan.delta",
+                json!({
+                    "text": "- [ ] inspect",
+                    "revisionId": "proposed_plan:1",
+                    "source": "proposed_plan"
+                }),
+            )],
+        )
+        .expect("apply plan delta");
+    store
+        .apply_canonical_events(
+            &stored,
+            &[event(
+                2,
+                "plan.final",
+                json!({
+                    "text": "- [x] inspect\n- [ ] verify",
+                    "revisionId": "proposed_plan:1",
+                    "source": "proposed_plan",
+                    "plan": [
+                        {"step": "inspect", "status": "completed"},
+                        {"step": "verify", "status": "in_progress"}
+                    ]
+                }),
+            )],
+        )
+        .expect("apply plan final");
+    drop(store);
+
+    let store = ProjectionStore::initialize(database_path).expect("reopen projection store");
+    let thread = block_on(store.read_thread(ReadThreadParams {
+        thread_id: ThreadId::new("thread-plan-restart"),
+        include_archived: false,
+        turns_view: ThreadTurnsView::Full,
+    }))
+    .expect("read restarted plan thread")
+    .expect("restarted plan thread");
+    assert_eq!(thread.turns.len(), 1);
+    assert_eq!(thread.turns[0].items.len(), 1);
+    let item = &thread.turns[0].items[0];
+    assert_eq!(
+        item.item_id.as_str(),
+        "plan_turn-plan-restart_proposed_plan:1"
+    );
+    assert_eq!(item.ordinal, 1);
+    assert_eq!(item.sequence, 2);
+    assert_eq!(item.status, ItemStatus::Completed);
+    let ThreadItemPayload::Plan {
+        revision_id,
+        source,
+        plan,
+        ..
+    } = &item.payload
+    else {
+        panic!("restarted plan payload");
+    };
+    assert_eq!(revision_id, "proposed_plan:1");
+    assert_eq!(source.as_deref(), Some("proposed_plan"));
+    assert_eq!(plan[1].status, PlanStepStatus::InProgress);
 }
 
 #[test]

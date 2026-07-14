@@ -1,6 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import type { Message } from "../types";
+import {
+  isComparableThreadItemPosition,
+  resolveThreadItemTimelinePosition,
+} from "./agentChatHistoryPrimitives";
 
 type MessageContentPart = NonNullable<Message["contentParts"]>[number];
 type MessageContentParts = NonNullable<Message["contentParts"]>;
@@ -60,28 +64,9 @@ function threadItemToolSequenceById(
     if (normalizedTurnId && item.turn_id !== normalizedTurnId) {
       continue;
     }
-    sequenceById.set(item.id, threadItemTimelinePosition(item));
+    sequenceById.set(item.id, resolveThreadItemTimelinePosition(item));
   }
   return sequenceById;
-}
-
-function threadItemTimelinePosition(item: AgentThreadItem): number {
-  if (isComparableThreadItemSequence(item.ordinal)) {
-    return item.ordinal;
-  }
-  const metadata = metadataFromThreadItem(item);
-  const metadataOrdinal = metadata?.ordinal;
-  return isComparableThreadItemSequence(metadataOrdinal)
-    ? metadataOrdinal
-    : item.sequence;
-}
-
-function isComparableThreadItemSequence(sequence: unknown): sequence is number {
-  return (
-    typeof sequence === "number" &&
-    Number.isFinite(sequence) &&
-    sequence < Number.MAX_SAFE_INTEGER
-  );
 }
 
 function contentPartSequence(
@@ -89,12 +74,12 @@ function contentPartSequence(
   sequenceByToolId: Map<string, number>,
 ): number | null {
   const sequence = part.metadata?.sequence;
-  if (isComparableThreadItemSequence(sequence)) {
+  if (isComparableThreadItemPosition(sequence)) {
     return sequence;
   }
   if (part.type === "tool_use") {
     const itemSequence = sequenceByToolId.get(part.toolCall.id);
-    return isComparableThreadItemSequence(itemSequence) ? itemSequence : null;
+    return isComparableThreadItemPosition(itemSequence) ? itemSequence : null;
   }
   return null;
 }
@@ -134,11 +119,11 @@ function upsertToolSequenceIntoContentParts(
     if (part.type !== "tool_use") {
       return part;
     }
-    if (isComparableThreadItemSequence(part.metadata?.sequence)) {
+    if (isComparableThreadItemPosition(part.metadata?.sequence)) {
       return part;
     }
     const sequence = sequenceByToolId.get(part.toolCall.id);
-    if (!isComparableThreadItemSequence(sequence)) {
+    if (!isComparableThreadItemPosition(sequence)) {
       return part;
     }
     changed = true;
@@ -190,15 +175,6 @@ function insertReasoningPartByContentSequence(params: {
   return [...params.parts, params.reasoningPart];
 }
 
-function hasComparableContentPartSequence(
-  parts: MessageContentParts,
-  sequenceByToolId: Map<string, number>,
-): boolean {
-  return parts.some(
-    (part) => contentPartSequence(part, sequenceByToolId) !== null,
-  );
-}
-
 export function syncAssistantReasoningContentPartFromThreadItem(params: {
   assistantMsgId: string;
   item: AgentThreadItem;
@@ -214,7 +190,7 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
     return;
   }
 
-  const timelinePosition = threadItemTimelinePosition(params.item);
+  const timelinePosition = resolveThreadItemTimelinePosition(params.item);
 
   params.setMessages((prev) =>
     prev.map((message) => {
@@ -262,23 +238,6 @@ export function syncAssistantReasoningContentPartFromThreadItem(params: {
           ...parts.slice(0, compatibleThinkingIndex),
           ...parts.slice(compatibleThinkingIndex + 1),
         ];
-        if (
-          !hasComparableContentPartSequence(remainingParts, sequenceByToolId)
-        ) {
-          const nextParts = [...parts];
-          nextParts[compatibleThinkingIndex] = nextPart;
-          if (
-            existingPart?.type === "thinking" &&
-            existingPart.text === text &&
-            existingPart.metadata?.turnId === params.item.turn_id
-          ) {
-            return message;
-          }
-          return {
-            ...message,
-            contentParts: nextParts,
-          };
-        }
         const nextParts = insertReasoningPartByContentSequence({
           parts: remainingParts,
           reasoningPart: nextPart,

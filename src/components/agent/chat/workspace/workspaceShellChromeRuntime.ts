@@ -38,7 +38,6 @@ export interface ResolveWorkspaceShellChromeRuntimeParams {
   showSidebar: boolean;
   subagentsRuntimeVisible: boolean;
   hasRuntimeSessions: boolean;
-  hasTeamDispatchPreview: boolean;
   themeWorkbenchRunState?: "idle" | "auto_running" | "await_user_decision";
   topBarChrome: "full" | "workspace-compact";
 }
@@ -69,7 +68,6 @@ export function resolveWorkspaceShellChromeRuntime({
   showSidebar,
   subagentsRuntimeVisible,
   hasRuntimeSessions,
-  hasTeamDispatchPreview,
   themeWorkbenchRunState,
   topBarChrome,
   effectiveShowChatPanel,
@@ -150,7 +148,7 @@ export function resolveWorkspaceShellChromeRuntime({
   const shouldUseSubagentsPrimaryChatPanelWidth =
     layoutMode === "chat-canvas" &&
     subagentsRuntimeVisible &&
-    (hasRuntimeSessions || hasTeamDispatchPreview);
+    hasRuntimeSessions;
   const shouldUseCodeWorkbenchChatPanelWidth =
     layoutMode === "chat-canvas" &&
     activeTheme === "general" &&

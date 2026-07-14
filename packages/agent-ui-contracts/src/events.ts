@@ -219,7 +219,6 @@ export type AgentUiProjectionSourceType =
   | "remote_task_projection"
   | "runtime_status"
   | "team_control_projection"
-  | "team_formation_projection"
   | "text_delta"
   | "thinking_delta"
   | "tool_end"

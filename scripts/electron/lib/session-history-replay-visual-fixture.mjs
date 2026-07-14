@@ -91,7 +91,11 @@ function historyReplayAttachments(localImagePath) {
   ];
 }
 
-function historyReplayEvents({ localImagePath, workspaceRoot, baseTimestampMs }) {
+function historyReplayEvents({
+  localImagePath,
+  workspaceRoot,
+  baseTimestampMs,
+}) {
   const startedAt = isoTimestamp(baseTimestampMs, 1_000);
   const reasoningAt = isoTimestamp(baseTimestampMs, 2_000);
   const mcpStartedAt = isoTimestamp(baseTimestampMs, 3_000);
@@ -124,48 +128,60 @@ function historyReplayEvents({ localImagePath, workspaceRoot, baseTimestampMs })
   };
   const reasoningPayload = {
     item: {
-      id: HISTORY_REPLAY_VISUAL.reasoningItemId,
-      type: "reasoning",
-      status: "completed",
+      sessionId: HISTORY_REPLAY_VISUAL.sessionId,
+      threadId: HISTORY_REPLAY_VISUAL.threadId,
+      turnId: HISTORY_REPLAY_VISUAL.turnId,
+      itemId: `item_${HISTORY_REPLAY_VISUAL.reasoningItemId}`,
       sequence: 3,
-      started_at: reasoningAt,
-      updated_at: reasoningAt,
-      completed_at: reasoningAt,
+      ordinal: 3,
+      createdAtMs: baseTimestampMs + 2_000,
+      updatedAtMs: baseTimestampMs + 2_000,
+      completedAtMs: baseTimestampMs + 2_000,
+      kind: "reasoning",
+      status: "completed",
       payload: {
         type: "reasoning",
-        text: HISTORY_REPLAY_VISUAL.reasoningSummary,
         summary: [HISTORY_REPLAY_VISUAL.reasoningSummary],
-        metadata: {
-          source: "codex_history_replay_visual",
-          provider_metadata: {
-            backend: "codex",
-            signature: "history-replay-visual-reasoning",
-          },
+        content: [HISTORY_REPLAY_VISUAL.reasoningSummary],
+      },
+      metadata: {
+        source: "codex_history_replay_visual",
+        provider_metadata: {
+          backend: "codex",
+          signature: "history-replay-visual-reasoning",
         },
       },
     },
   };
   const mcpPayload = {
     item: {
-      id: HISTORY_REPLAY_VISUAL.mcpItemId,
-      type: "tool_call",
-      status: "in_progress",
+      sessionId: HISTORY_REPLAY_VISUAL.sessionId,
+      threadId: HISTORY_REPLAY_VISUAL.threadId,
+      turnId: HISTORY_REPLAY_VISUAL.turnId,
+      itemId: `item_${HISTORY_REPLAY_VISUAL.mcpItemId}`,
       sequence: 4,
-      started_at: mcpStartedAt,
-      updated_at: mcpStartedAt,
+      ordinal: 4,
+      createdAtMs: baseTimestampMs + 3_000,
+      updatedAtMs: baseTimestampMs + 3_000,
+      kind: "mcpToolCall",
+      status: "inProgress",
       payload: {
-        type: "tool_call",
+        type: "mcpToolCall",
+        call_id: HISTORY_REPLAY_VISUAL.mcpItemId,
+        server_name: "filesystem",
         tool_name: HISTORY_REPLAY_VISUAL.mcpToolName,
-        name: HISTORY_REPLAY_VISUAL.mcpToolName,
-        arguments: {
-          path: path.join(workspaceRoot, "README.md"),
-        },
-        metadata: {
-          owner: "history_replay_visual",
-          mcp: {
-            server: "filesystem",
-            tool: "read_file",
+        arguments: [
+          {
+            name: "path",
+            value: path.join(workspaceRoot, "README.md"),
           },
+        ],
+      },
+      metadata: {
+        owner: "history_replay_visual",
+        mcp: {
+          server: "filesystem",
+          tool: "read_file",
         },
       },
     },

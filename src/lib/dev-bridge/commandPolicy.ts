@@ -277,8 +277,6 @@ const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
 const bridgeTruthEventPrefixes = [
   "voice-model-download-progress",
   "agent_stream_",
-  "agent_subagent_status:",
-  "agent_subagent_stream:",
   "embedded-browser-view-",
   "mcp:",
 ];

@@ -12,6 +12,16 @@ pub(in crate::runtime::conversation_import) fn lower_imported_runtime_events_for
     let mut active_tools = BTreeMap::<String, ImportedToolDraft>::new();
 
     for (index, event) in events.iter().enumerate() {
+        if let Some(message_events) =
+            lowered_message_item_events(event, session_id, thread_id, turn_id)
+        {
+            lowered.extend(message_events);
+            continue;
+        }
+        if let Some(event) = imported_single_item_event_with_source_ordinal(event) {
+            lowered.push(event);
+            continue;
+        }
         let Some(tool) = event.tool_draft() else {
             lowered.push(event.clone());
             continue;
@@ -63,6 +73,222 @@ pub(in crate::runtime::conversation_import) fn lower_imported_runtime_events_for
     }
 
     lowered
+}
+
+fn lowered_message_item_events(
+    event: &ImportedRuntimeEvent,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+) -> Option<Vec<ImportedRuntimeEvent>> {
+    let event_type = event.event_type();
+    if event_type != "import.message" && event_type != "message.delta" {
+        return None;
+    }
+    let source = event.payload()?.as_object()?;
+    if event_type == "message.delta"
+        && source.get("sourceClient").and_then(Value::as_str) != Some("codex")
+    {
+        return None;
+    }
+    let role = source
+        .get("role")
+        .and_then(Value::as_str)
+        .unwrap_or("assistant");
+    let item_role = if role == "user" { "user" } else { "agent" };
+    let source_provenance = source.get("sourceProvenance").cloned()?;
+    let ordinal = source
+        .get("ordinal")
+        .and_then(Value::as_u64)
+        .or_else(|| source_event_ordinal_from_provenance(&source_provenance))?;
+    let item_id = source
+        .get("itemId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            source_provenance
+                .get("sourceCallId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| format!("imported-{item_role}_{ordinal}"));
+    let text = source
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let attachments = source
+        .get("attachments")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let phase = source.get("phase").cloned().unwrap_or(Value::Null);
+    let client_id = source.get("clientId").cloned().unwrap_or(Value::Null);
+    let source_event_type = source_provenance
+        .get("sourcePayloadType")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let source_call_id = source_provenance
+        .get("sourceCallId")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let metadata = json!({
+        "imported": true,
+        "source_client": "codex",
+        "source_event_seq": ordinal,
+        "source_event_type": source_event_type,
+        "source_call_id": source_call_id,
+        "source_provenance": source_provenance,
+    });
+    let item_payload = if role == "user" {
+        json!({
+            "type": "userMessage",
+            "content": text,
+            "clientId": client_id,
+        })
+    } else {
+        json!({
+            "type": "agentMessage",
+            "text": text,
+            "phase": phase,
+        })
+    };
+    let started_item = canonical_message_item(
+        session_id,
+        thread_id,
+        turn_id,
+        &item_id,
+        ordinal,
+        item_role,
+        "inProgress",
+        item_payload.clone(),
+        metadata.clone(),
+        None,
+    );
+    let completed_item = canonical_message_item(
+        session_id,
+        thread_id,
+        turn_id,
+        &item_id,
+        ordinal,
+        item_role,
+        "completed",
+        item_payload,
+        metadata,
+        Some(0),
+    );
+    let outer_metadata = json!({
+        "imported": true,
+        "sourceClient": "codex",
+        "sourceEventSeq": ordinal,
+        "sourceProvenance": source_provenance,
+    });
+    let presentation = if role == "user" {
+        ImportedRuntimeEvent::new(
+            "message.created",
+            merge_json_objects(
+                json!({
+                    "itemId": item_id,
+                    "ordinal": ordinal,
+                    "role": "user",
+                    "visibility": "user_visible",
+                    "input": {"text": text, "attachments": attachments},
+                    "content": {"kind": "inline_text", "text": text},
+                    "attachments": attachments,
+                }),
+                outer_metadata.clone(),
+            ),
+        )
+    } else {
+        ImportedRuntimeEvent::new(
+            "message.delta",
+            merge_json_objects(
+                json!({
+                    "itemId": item_id,
+                    "ordinal": ordinal,
+                    "role": "assistant",
+                    "text": text,
+                    "phase": phase,
+                }),
+                outer_metadata.clone(),
+            ),
+        )
+    };
+
+    Some(vec![
+        ImportedRuntimeEvent::new(
+            "item.started",
+            merge_json_objects(json!({"item": started_item}), outer_metadata.clone()),
+        ),
+        presentation,
+        ImportedRuntimeEvent::new(
+            "item.completed",
+            merge_json_objects(json!({"item": completed_item}), outer_metadata),
+        ),
+    ])
+}
+
+#[allow(clippy::too_many_arguments)]
+fn canonical_message_item(
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    item_id: &str,
+    ordinal: u64,
+    item_role: &str,
+    status: &str,
+    payload: Value,
+    metadata: Value,
+    completed_at_ms: Option<i64>,
+) -> Value {
+    json!({
+        "sessionId": session_id,
+        "threadId": thread_id,
+        "turnId": turn_id,
+        "itemId": item_id,
+        "sequence": 0,
+        "ordinal": ordinal,
+        "createdAtMs": 0,
+        "updatedAtMs": 0,
+        "completedAtMs": completed_at_ms,
+        "kind": if item_role == "user" { "userMessage" } else { "agentMessage" },
+        "status": status,
+        "payload": payload,
+        "metadata": metadata,
+    })
+}
+
+fn imported_single_item_event_with_source_ordinal(
+    event: &ImportedRuntimeEvent,
+) -> Option<ImportedRuntimeEvent> {
+    let payload = event.payload()?;
+    let source_provenance = payload.get("sourceProvenance")?;
+    let uses_source_ordinal = event.event_type() == "reasoning.completed"
+        || (event.event_type() == "plan.final" && payload.get("itemId").is_some());
+    if !uses_source_ordinal {
+        return None;
+    }
+    let ordinal = source_event_ordinal_from_provenance(source_provenance)?;
+    let mut payload = payload.clone();
+    payload
+        .as_object_mut()?
+        .entry("ordinal".to_string())
+        .or_insert_with(|| json!(ordinal));
+    Some(ImportedRuntimeEvent::new(event.event_type(), payload))
+}
+
+fn source_event_ordinal_from_provenance(provenance: &Value) -> Option<u64> {
+    provenance
+        .get("sourceEventSeq")
+        .and_then(|value| value.as_u64().or_else(|| value.as_str()?.parse().ok()))
+}
+
+fn merge_json_objects(mut primary: Value, extra: Value) -> Value {
+    if let (Some(primary), Some(extra)) = (primary.as_object_mut(), extra.as_object()) {
+        primary.extend(extra.clone());
+    }
+    primary
 }
 
 fn events_before_contains_tool_start(events: &[ImportedRuntimeEvent], call_id: &str) -> bool {

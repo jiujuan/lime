@@ -2,7 +2,7 @@ import type {
   AgentThreadItem,
   AgentThreadTurn,
 } from "@/lib/api/agentProtocol";
-import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
+import type { AgentSessionDetail } from "@/lib/api/agentRuntime/sessionTypes";
 import type { Message } from "../types";
 import { sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
 import {

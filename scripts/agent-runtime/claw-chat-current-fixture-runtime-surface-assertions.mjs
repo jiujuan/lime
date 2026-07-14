@@ -251,7 +251,7 @@ export function buildMultiAgentTeamScenarioAssertions({
         "completed",
     readModelMultiAgentTeamFactsObserved:
       summary.readModelMultiAgentTeamCompleted?.includesTeamSummary === true &&
-      summary.readModelMultiAgentTeamCompleted?.includesSubagentStatus === true,
+      summary.readModelMultiAgentTeamCompleted?.includesChildThreads === true,
     evidencePackMultiAgentTeamExported:
       summary.evidencePackMultiAgentTeam?.exported === true &&
       summary.evidencePackMultiAgentTeam?.teamFactsStatus === "exported",

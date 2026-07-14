@@ -25,14 +25,21 @@ describe("AgentChatWorkspace context surface runtime boundary", () => {
       "useWorkspaceRightSurfaceLocalStateRuntime(",
       "resolveHarnessRuntimeVisible(",
       "shouldBuildFullThreadTimeline(",
-      "buildRealSubagentTimelineItems(",
-      "mergeThreadItems(",
       "deriveHarnessSessionState(",
       "hasRunningThreadReadActivity(",
       "onAgentStreamingChange?.(inputbarIsSending);",
     ]) {
       expect(workspaceSource).not.toContain(retiredWorkspaceContextSurfaceGlue);
       expect(ownerSource).toContain(retiredWorkspaceContextSurfaceGlue);
+    }
+
+    for (const retiredSyntheticSubagentSurface of [
+      "buildRealSubagentTimelineItems",
+      "realSubagentTimelineItems",
+      "real:subagent:",
+    ]) {
+      expect(workspaceSource).not.toContain(retiredSyntheticSubagentSurface);
+      expect(ownerSource).not.toContain(retiredSyntheticSubagentSurface);
     }
   });
 });

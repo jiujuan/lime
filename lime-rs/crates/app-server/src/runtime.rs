@@ -104,6 +104,7 @@ mod trace_store;
 mod turn_execution;
 mod turn_input_events;
 mod usage_stats;
+mod value_fields;
 mod voice;
 pub(crate) mod workflow;
 mod workspaces;
@@ -165,6 +166,7 @@ pub(crate) use trace_store::export_trace_events_from_store_to_path;
 pub(crate) use trace_store::summarize_trace_event_store;
 pub use trace_store::TraceEventWriter;
 pub(crate) use trace_store::TRACE_EVENT_MAX_FILES_PER_SESSION;
+pub(super) use value_fields::event_request_id;
 
 use crate::CapabilityInventorySource;
 use crate::CapabilitySource;
@@ -184,8 +186,6 @@ use app_server_protocol::EvidencePackSummary;
 use app_server_protocol::JsonRpcError;
 use app_server_protocol::ManagedObjectiveStatus;
 use async_trait::async_trait;
-use chrono::SecondsFormat;
-use chrono::Utc;
 use lime_browser_runtime::{BrowserProfileScope, BrowserRuntimeManager};
 use lime_infra::telemetry::RequestLog;
 use lime_infra::telemetry::TelemetryStore;
@@ -195,7 +195,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
-use uuid::Uuid;
+use value_fields::{
+    json_string, metadata_string, new_id, optional_id_or_new, raw_string_field, string_array_field,
+    string_field, timestamp, timestamp_seconds,
+};
 
 #[derive(Debug, Error)]
 pub enum RuntimeCoreError {
@@ -647,94 +650,6 @@ impl RuntimeCore {
             projection_store: self.projection_store.clone(),
         }
     }
-}
-
-fn new_id(prefix: &str) -> String {
-    format!("{prefix}_{}", Uuid::new_v4().simple())
-}
-
-fn optional_id_or_new(value: Option<String>, prefix: &str) -> String {
-    value
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| new_id(prefix))
-}
-
-pub(super) fn event_request_id(payload: &serde_json::Value) -> Option<String> {
-    string_field(payload, &["requestId", "request_id"])
-}
-
-fn string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .filter_map(|key| value.get(*key))
-        .find_map(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-fn string_array_field(value: &serde_json::Value, keys: &[&str]) -> Vec<String> {
-    keys.iter()
-        .filter_map(|key| value.get(*key))
-        .flat_map(|value| match value {
-            serde_json::Value::Array(values) => values
-                .iter()
-                .filter_map(|item| item.as_str())
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
-            serde_json::Value::String(value) => {
-                let trimmed = value.trim();
-                if trimmed.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![trimmed.to_string()]
-                }
-            }
-            _ => Vec::new(),
-        })
-        .collect()
-}
-
-fn raw_string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .filter_map(|key| value.get(*key))
-        .find_map(|value| value.as_str())
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-fn metadata_string(metadata: Option<&serde_json::Value>, key: &str) -> Option<String> {
-    metadata?
-        .get(key)
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
-fn timestamp() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
-}
-
-fn timestamp_seconds(value: Option<&str>) -> i64 {
-    value
-        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-        .map(|value| value.timestamp())
-        .unwrap_or_else(|| Utc::now().timestamp())
-}
-
-fn json_string(value: &serde_json::Value, path: &[&str]) -> Option<String> {
-    let mut current = value;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    current
-        .as_str()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
 }
 
 #[cfg(test)]

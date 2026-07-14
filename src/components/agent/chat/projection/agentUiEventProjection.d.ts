@@ -19,7 +19,7 @@ export interface AgentUiProjectionRefs {
     diagnosticKeys?: string[];
     rawEventRef?: string;
 }
-export type AgentUiProjectionSourceType = AgentEvent["type"] | "automation_job_projection" | "evidence_projection" | "hydration_projection" | "remote_task_projection" | "team_formation_projection" | "team_control_projection" | "performance_metric";
+export type AgentUiProjectionSourceType = AgentEvent["type"] | "automation_job_projection" | "evidence_projection" | "hydration_projection" | "remote_task_projection" | "team_control_projection" | "performance_metric";
 export interface AgentUiProjectionEvent {
     type: AgentUiEventClass;
     sourceType: AgentUiProjectionSourceType;

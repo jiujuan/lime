@@ -10,7 +10,7 @@ import {
   normalizeHarnessSessionMode,
   type HarnessSessionModeInput,
 } from "./harnessSessionMode";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 import {
   buildWorkspaceSkillBindingsHarnessMetadata,
   buildWorkspaceSkillRuntimeEnableHarnessMetadata,

@@ -47,7 +47,6 @@ export * from "./statusSurfaceMatrix.js";
 export * from "./summary.js";
 export * from "./structuredOutputMessage.js";
 export * from "./subagents.js";
-export * from "./subagentStatusEvents.js";
 export * from "./threadResumeRunningStream.js";
 export * from "./threadReadPageIsomorphic.js";
 export * from "./threadInjectItems.js";

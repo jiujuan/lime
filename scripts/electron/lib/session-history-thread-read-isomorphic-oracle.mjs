@@ -72,6 +72,18 @@ function itemIds(records) {
     .filter((id) => typeof id === "string");
 }
 
+function canonicalItemId(value) {
+  return value.startsWith("item_") ? value : `item_${value}`;
+}
+
+function expectedCanonicalItemIds() {
+  return THREAD_READ_PAGE_ISOMORPHIC.turns.flatMap((turn) => [
+    canonicalItemId(`user-${turn.turnId}`),
+    canonicalItemId(turn.reasoningItemId),
+    canonicalItemId(turn.assistantItemId),
+  ]);
+}
+
 function assertEqualArray(actual, expected, label) {
   assert(
     JSON.stringify(actual) === JSON.stringify(expected),
@@ -84,10 +96,7 @@ function messageContains(message, text) {
 }
 
 function assertMessagePage(messages, expectedTexts, label) {
-  assert(
-    Array.isArray(messages),
-    `${label}.messages 必须是数组`,
-  );
+  assert(Array.isArray(messages), `${label}.messages 必须是数组`);
   assert(
     messages.length === expectedTexts.length,
     `${label}.messages 数量不正确: ${messages.length}`,
@@ -235,9 +244,7 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
   const expectedTurnIds = THREAD_READ_PAGE_ISOMORPHIC.turns.map(
     (turn) => turn.turnId,
   );
-  const expectedReasoningItemIds = THREAD_READ_PAGE_ISOMORPHIC.turns.map(
-    (turn) => turn.reasoningItemId,
-  );
+  const expectedItemIds = expectedCanonicalItemIds();
   const detail = result?.fullRead?.detail;
   const threadRead = detail?.thread_read;
   const detailTurnIds = turnIds(detail?.turns);
@@ -288,11 +295,7 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     threadRead && typeof threadRead === "object",
     "threadReadPageIsomorphic 缺少 detail.thread_read",
   );
-  assertEqualArray(
-    detailTurnIds,
-    expectedTurnIds,
-    "detail.turns turn order",
-  );
+  assertEqualArray(detailTurnIds, expectedTurnIds, "detail.turns turn order");
   assertEqualArray(
     threadReadTurnIds,
     expectedTurnIds,
@@ -303,24 +306,34 @@ export function assertThreadReadPageIsomorphicReadModel(result) {
     expectedTurnIds,
     "thread/resume turns turn order",
   );
-  assertEqualArray(
-    detailItemIds,
-    expectedReasoningItemIds,
-    "detail.items item order",
-  );
+  assertEqualArray(detailItemIds, expectedItemIds, "detail.items item order");
   assertEqualArray(
     threadReadItemIds,
-    expectedReasoningItemIds,
+    expectedItemIds,
     "thread_read.thread_items item order",
+  );
+  assert(
+    (detail?.items ?? []).every((item) => item?.status === "completed"),
+    `detail.items 必须完成 canonical lifecycle: ${JSON.stringify(
+      (detail?.items ?? []).map((item) => ({
+        id: itemId(item),
+        type: item?.type ?? null,
+        status: item?.status ?? null,
+      })),
+    )}`,
   );
   assert(
     JSON.stringify(detail?.items ?? []) ===
       JSON.stringify(threadRead?.thread_items ?? []),
     "detail.items 与 thread_read.thread_items 必须同源",
   );
-  assert(result?.resume?.resumed === false, "无 queued turn 时 resume 应 no-op");
   assert(
-    result?.resume?.session?.sessionId === THREAD_READ_PAGE_ISOMORPHIC.sessionId,
+    result?.resume?.resumed === false,
+    "无 queued turn 时 resume 应 no-op",
+  );
+  assert(
+    result?.resume?.session?.sessionId ===
+      THREAD_READ_PAGE_ISOMORPHIC.sessionId,
     "thread/resume response sessionId 不正确",
   );
 
@@ -525,7 +538,9 @@ async function readThreadReadDomDebugSnapshot(page) {
     })();
     const bodyText = document.body?.innerText || "";
     const conversationButtons = Array.from(
-      document.querySelectorAll('[data-testid="app-sidebar-conversation-open"]'),
+      document.querySelectorAll(
+        '[data-testid="app-sidebar-conversation-open"]',
+      ),
     )
       .map((button) => ({
         title: button.getAttribute("title") || "",
@@ -641,7 +656,10 @@ export async function runThreadReadPageIsomorphicDomOracle(page, options) {
 
 export function assertThreadReadPageIsomorphicDomOracle(result) {
   const snapshot = result?.snapshot ?? {};
-  assert(snapshot.messageListReady, "threadReadPageIsomorphic message list 未就绪");
+  assert(
+    snapshot.messageListReady,
+    "threadReadPageIsomorphic message list 未就绪",
+  );
   assert(
     snapshot.allTextsVisible,
     `threadReadPageIsomorphic DOM 文本缺失: ${JSON.stringify(snapshot.textPositions)}`,

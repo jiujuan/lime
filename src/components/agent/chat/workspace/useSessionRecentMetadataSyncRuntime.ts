@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime";
+import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime/sessionClient";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import {

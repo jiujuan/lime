@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
-import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   buildHistoricalHydrationProjectionEvents,
 } from "../projection/historicalMessageHydrationProjection";

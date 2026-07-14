@@ -290,7 +290,7 @@ impl RuntimeCore {
             ))
         })?;
 
-        let metrics = handoff_metrics(&read);
+        let metrics = handoff_metrics(self, &read).await?;
         let recent_artifacts = handoff_recent_artifacts(&read);
         let artifacts = vec![
             write_handoff_bundle_file(
@@ -402,7 +402,7 @@ impl RuntimeCore {
         let workspace_root = canonical_runtime_export_workspace_root(&read, METHOD)?;
         let copy = runtime_export_copy(params.locale.as_deref());
         let exported_at = timestamp();
-        let metrics = handoff_metrics(&read);
+        let metrics = handoff_metrics(self, &read).await?;
         let recent_artifacts = handoff_recent_artifacts(&read);
         let (handoff_relative_root, evidence_relative_root, _) =
             runtime_export_base_roots(&session_id);
@@ -502,7 +502,7 @@ impl RuntimeCore {
         let workspace_root = canonical_runtime_export_workspace_root(&read, METHOD)?;
         let copy = runtime_export_copy(params.locale.as_deref());
         let exported_at = timestamp();
-        let metrics = handoff_metrics(&read);
+        let metrics = handoff_metrics(self, &read).await?;
         let recent_artifacts = handoff_recent_artifacts(&read);
         let (handoff_relative_root, evidence_relative_root, replay_relative_root) =
             runtime_export_base_roots(&session_id);
@@ -632,7 +632,7 @@ impl RuntimeCore {
         let workspace_root = canonical_runtime_export_workspace_root(&read, method)?;
         let copy = runtime_export_copy(locale.as_deref());
         let exported_at = timestamp();
-        let metrics = handoff_metrics(&read);
+        let metrics = handoff_metrics(self, &read).await?;
         let recent_artifacts = handoff_recent_artifacts(&read);
         let (handoff_relative_root, evidence_relative_root, replay_relative_root) =
             runtime_export_base_roots(&session_id);

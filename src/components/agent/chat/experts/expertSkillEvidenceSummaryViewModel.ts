@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeEvidencePack } from "@/lib/api/agentRuntime/evidenceTypes";
 import {
   formatWorkspaceSkillRuntimeEnableDisplay,
   type WorkspaceSkillRuntimeEnableDisplayTranslator,
@@ -81,10 +81,7 @@ function readFirstArray(
 function readLatestSkillName(invocations: unknown[]): string | null {
   for (let index = invocations.length - 1; index >= 0; index -= 1) {
     const invocation = asRecord(invocations[index]);
-    const skillName = readFirstString(invocation, [
-      "skill_name",
-      "skillName",
-    ]);
+    const skillName = readFirstString(invocation, ["skill_name", "skillName"]);
     if (skillName) {
       return skillName;
     }
@@ -159,7 +156,9 @@ export function buildExpertSkillEvidenceSummaryViewModel({
     exportedAtLabel: exportedAt
       ? copy.exportedAt(formatExportedAt(exportedAt))
       : null,
-    latestSkillLabel: latestSkillName ? copy.latestSkill(latestSkillName) : null,
+    latestSkillLabel: latestSkillName
+      ? copy.latestSkill(latestSkillName)
+      : null,
     runtimeEnableLabel,
     knownGapsLabel:
       knownGaps.length > 0 ? copy.knownGaps(knownGaps.length) : null,

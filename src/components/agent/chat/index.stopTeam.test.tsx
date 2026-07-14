@@ -8,46 +8,17 @@ import {
   renderPage,
 } from "./index.testFixtures";
 
-const {
-  mockCloseAgentRuntimeSubagent,
-  mockInputbar,
-  mockToast,
-} = getIndexTestMocks();
+const { mockCloseAgentRuntimeSubagent, mockInputbar, mockToast } =
+  getIndexTestMocks();
 
 describe("AgentChatPage 停止 Team 协作", () => {
-  it("点击停止时只停止主输出，迁移期不再调用旧子任务控制 facade", async () => {
+  it("点击停止时只停止主输出，不调用或提示已删除的子任务控制", async () => {
     const stopSendingMock = vi.fn(async () => undefined);
 
     installMockAgentChatUnifiedState(
       createMockAgentChatUnifiedState({
         isSending: true,
         stopSending: stopSendingMock,
-        childSubagentSessions: [
-          {
-            id: "child-session-running",
-            name: "运行中成员",
-            created_at: 1700000000,
-            updated_at: 1700000001,
-            session_type: "sub_agent",
-            runtime_status: "running",
-          },
-          {
-            id: "child-session-queued",
-            name: "排队中成员",
-            created_at: 1700000002,
-            updated_at: 1700000003,
-            session_type: "sub_agent",
-            runtime_status: "queued",
-          },
-          {
-            id: "child-session-done",
-            name: "已完成成员",
-            created_at: 1700000004,
-            updated_at: 1700000005,
-            session_type: "sub_agent",
-            runtime_status: "completed",
-          },
-        ],
       }),
     );
     mockCloseAgentRuntimeSubagent
@@ -83,7 +54,6 @@ describe("AgentChatPage 停止 Team 协作", () => {
 
     expect(stopSendingMock).toHaveBeenCalledTimes(1);
     expect(mockCloseAgentRuntimeSubagent).not.toHaveBeenCalled();
-    expect(mockToast.info).toHaveBeenCalledTimes(1);
-    expect(mockToast.info.mock.calls[0]?.[0]).toBeTypeOf("string");
+    expect(mockToast.info).not.toHaveBeenCalled();
   });
 });

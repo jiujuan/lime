@@ -7,7 +7,7 @@ import type {
   QueuedTurnSnapshot,
   RuntimeSearchMode,
 } from "@/lib/api/agentRuntime";
-import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime";
+import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime/objectiveClient";
 import { modelRegistryApi } from "@/lib/api/modelRegistry";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 import {

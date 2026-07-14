@@ -51,7 +51,7 @@ import {
 } from "@/components/input-kit";
 import { isKnowledgeTextSourceCandidate } from "@/features/knowledge/import/knowledgeSourceSupport";
 import type { MessageImage, MessagePathReference } from "../../../types";
-import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import type { QueuedTurnSnapshot } from "@/lib/api/queuedTurn";
 import { QueuedTurnsPanel } from "./QueuedTurnsPanel";
 import type { InputbarCoreCopy } from "./inputbarCoreCopy";
 import {

@@ -3,7 +3,6 @@ import { listInstalledPlugins } from "@/lib/api/plugins";
 import * as harnessStateModule from "./utils/harnessState";
 import * as crashDiagnosticModule from "@/lib/crashDiagnosticAgentUiPerformance";
 import * as traceHistoryModule from "@/lib/agentUiPerformanceTraceHistory";
-import * as subagentTimelineModule from "./utils/subagentTimeline";
 import * as agentTaskRuntimeModule from "./utils/agentTaskRuntime";
 import {
   clickButton,
@@ -47,17 +46,6 @@ vi.mock("./utils/harnessState", async (importOriginal) => {
   return {
     ...actual,
     deriveHarnessSessionState: vi.fn(actual.deriveHarnessSessionState),
-  };
-});
-
-vi.mock("./utils/subagentTimeline", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("./utils/subagentTimeline")>();
-  return {
-    ...actual,
-    buildRealSubagentTimelineItems: vi.fn(
-      actual.buildRealSubagentTimelineItems,
-    ),
   };
 });
 
@@ -312,37 +300,10 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     expect(mockExpertInfoPanel).not.toHaveBeenCalled();
   });
 
-  it("默认 Claw 对话完成态不应合并完整子任务 timeline", async () => {
-    vi.mocked(subagentTimelineModule.buildRealSubagentTimelineItems).mockClear();
-    installMockAgentChatUnifiedState(
-      createMockAgentChatUnifiedState({
-        isSending: false,
-        sessionId: "topic-current",
-        topics: [
-          {
-            id: "topic-current",
-            title: "当前会话",
-            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
-            workspaceId: "workspace-test",
-          },
-        ],
-      }),
-    );
-
-    renderPage({
-      agentEntry: "claw",
-      initialSessionId: "topic-current",
-      projectId: "workspace-test",
-    });
-    await flushEffects();
-
-    expect(
-      subagentTimelineModule.buildRealSubagentTimelineItems,
-    ).not.toHaveBeenCalled();
-  });
-
   it("默认 Claw 对话有消息时不应构建空态 runtime task card", async () => {
-    vi.mocked(agentTaskRuntimeModule.buildAgentTaskRuntimeCardModel).mockClear();
+    vi.mocked(
+      agentTaskRuntimeModule.buildAgentTaskRuntimeCardModel,
+    ).mockClear();
     installMockAgentChatUnifiedState(
       createMockAgentChatUnifiedState({
         isSending: false,

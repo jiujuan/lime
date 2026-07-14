@@ -23,7 +23,7 @@ describe("agentUiProjectionSummary", () => {
       },
       {
         type: "agent.spawned",
-        sourceType: "subagent_status_changed",
+        sourceType: "item_completed",
         sequence: 2,
         sessionId: "session-team-1",
         agentId: "child-1",
@@ -36,7 +36,7 @@ describe("agentUiProjectionSummary", () => {
       },
       {
         type: "worker.notification",
-        sourceType: "subagent_status_changed",
+        sourceType: "item_completed",
         sequence: 3,
         sessionId: "session-team-1",
         agentId: "child-1",

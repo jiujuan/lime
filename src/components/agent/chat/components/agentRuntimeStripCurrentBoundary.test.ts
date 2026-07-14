@@ -19,5 +19,8 @@ describe("agent runtime strip current owner boundary", () => {
 
     expect(source).toContain('from "@/lib/api/agentExecutionRuntime"');
     expect(source).toContain('from "@/lib/api/agentRuntime/sessionTypes"');
+    expect(source).toContain(
+      'from "../projection/canonicalChildThreadSummary"',
+    );
   });
 });

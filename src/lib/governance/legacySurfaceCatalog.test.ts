@@ -3501,6 +3501,58 @@ describe("legacySurfaceCatalog", () => {
     );
   });
 
+  it("应阻止 Renderer 本地 Team formation 与 synthetic dispatch preview 回流", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-chat-retired-local-team-formation-preview",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "useRuntimeTeamFormation",
+        "prepareRuntimeTeamBeforeSend",
+        "team_formation_projection",
+        "runtime-team-dispatch:",
+      ]),
+    );
+    expect(monitor?.includePathPrefixes).toEqual(
+      expect.arrayContaining([
+        "packages/agent-ui-contracts/src",
+        "packages/agent-runtime-projection",
+        "src/components/agent/chat",
+        "src/i18n/resources",
+      ]),
+    );
+  });
+
+  it("应阻止 Renderer Team runtime sidecar 与本地 live map 回流", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-chat-retired-team-runtime-sidecar",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "team-workspace-runtime/",
+        "useTeamWorkspaceRuntime",
+        "teamWorkspaceRuntime",
+        "restoredTeamFactsProjection",
+        "liveRuntimeBySessionId",
+        "liveActivityBySessionId",
+        "agentChat.teamWorkspace.control.",
+      ]),
+    );
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat",
+      "src/i18n/resources",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([
+      "src/components/agent/chat/AgentChatWorkspace.teamRuntimeBoundaryGuard.test.ts",
+    ]);
+  });
+
   it("应阻止已删除的 lime-agent aggregate execution runtime 回流", () => {
     const monitor = legacySurfaceCatalogJson.rustText.find(
       (entry) => entry.id === "rust-retired-agent-runtime-aggregate",

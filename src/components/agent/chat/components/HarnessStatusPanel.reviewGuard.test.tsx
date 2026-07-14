@@ -1,6 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRuntimeReviewDecisionTemplate } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeReviewDecisionTemplate } from "@/lib/api/agentRuntime/evidenceTypes";
 import {
   findButtonByText,
   mountHarnessElement,

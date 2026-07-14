@@ -12,7 +12,6 @@ import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/t
 import { listInstalledPlugins } from "@/lib/api/plugins";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
-import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { readGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
@@ -74,7 +73,6 @@ import {
 } from "../utils/chatToolPreferences";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerformanceMetrics";
-import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { SendMessageFn } from "../hooks/agentChatShared";
 import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 import type {
@@ -85,13 +83,9 @@ import type {
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import {
-  buildRuntimeTeamDispatchPreview,
-  buildRuntimeTeamDispatchPreviewMessages,
   buildSubmissionPreviewMessages,
   type GeneralWorkbenchSendBoundaryState,
   type InitialDispatchPreviewSnapshot,
-  resolveRuntimeTeamDispatchPreviewState,
-  type RuntimeTeamDispatchPreviewSnapshot,
   createSubmissionPreviewSnapshot,
   type SubmissionPreviewSnapshot,
   buildWorkspaceRequestMetadata,
@@ -103,7 +97,6 @@ import {
   type ContextWorkspaceSummary,
   type EnsureBrowserAssistCanvasOptions,
 } from "./workspaceSendHelpers";
-import { recordTeamFormationAgentUiProjection } from "../projection/teamFormationAgentUiProjection";
 import type { Character } from "@/lib/api/projectMemory";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
@@ -282,7 +275,6 @@ interface UseWorkspaceSendActionsParams {
   workspaceRequestMetadataBase?: Record<string, unknown>;
   savedSoulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
   soulArtifactVoiceEnabledForTurn?: boolean;
-  soulCopy?: SoulInteractionCopy;
   serviceModels?: ServiceModelsConfig;
   agentResponseLanguage?: string | null;
   resolveServiceModelsBeforeSend?: () => Promise<{
@@ -303,7 +295,6 @@ interface UseWorkspaceSendActionsParams {
   rollbackAfterSendFailure: (
     boundary: GeneralWorkbenchSendBoundaryState,
   ) => void;
-  prepareRuntimeTeamBeforeSend: UseRuntimeTeamFormationResult["prepareRuntimeTeamBeforeSend"];
   ensureBrowserAssistCanvas: (
     target: string,
     options?: EnsureBrowserAssistCanvasOptions,
@@ -418,7 +409,7 @@ export function useWorkspaceSendActions({
   contextWorkspace,
   projectId,
   projectRootPath,
-  sessionId,
+  sessionId: _sessionId,
   executionStrategy,
   accessMode: _accessMode,
   providerType,
@@ -439,7 +430,6 @@ export function useWorkspaceSendActions({
   workspaceRequestMetadataBase,
   savedSoulArtifactVoiceGenerationBrief,
   soulArtifactVoiceEnabledForTurn,
-  soulCopy,
   serviceModels,
   agentResponseLanguage,
   resolveServiceModelsBeforeSend,
@@ -449,7 +439,6 @@ export function useWorkspaceSendActions({
   resolveSendBoundary,
   finalizeAfterSendSuccess,
   rollbackAfterSendFailure,
-  prepareRuntimeTeamBeforeSend: _prepareRuntimeTeamBeforeSend,
   ensureBrowserAssistCanvas,
   handleAutoLaunchMatchedSiteSkill,
   openRuntimeSceneGate,
@@ -460,8 +449,6 @@ export function useWorkspaceSendActions({
 }: UseWorkspaceSendActionsParams) {
   const { t } = useTranslation("agent");
   const messagesCount = messages.length;
-  const [runtimeTeamDispatchPreview, setRuntimeTeamDispatchPreview] =
-    useState<RuntimeTeamDispatchPreviewSnapshot | null>(null);
   const [submissionPreview, setSubmissionPreview] =
     useState<SubmissionPreviewSnapshot | null>(null);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
@@ -481,23 +468,6 @@ export function useWorkspaceSendActions({
     mentionCommandSkillIdMap,
     mentionCommandPrefixKeyMap,
   } = useRuntimeMentionCommandCatalog();
-  const clearRuntimeTeamDispatchPreview = useCallback(() => {
-    setRuntimeTeamDispatchPreview(null);
-  }, []);
-  const teamDispatchPreviewState = useMemo(
-    () => resolveRuntimeTeamDispatchPreviewState(runtimeTeamDispatchPreview),
-    [runtimeTeamDispatchPreview],
-  );
-  const runtimeTeamDispatchPreviewMessages = useMemo(
-    () =>
-      runtimeTeamDispatchPreview
-        ? buildRuntimeTeamDispatchPreviewMessages(
-            runtimeTeamDispatchPreview,
-            soulCopy,
-          )
-        : [],
-    [runtimeTeamDispatchPreview, soulCopy],
-  );
   const resourcePromptRewritePreference =
     serviceModels?.resource_prompt_rewrite;
   const submissionPreviewMessages = useMemo(
@@ -508,34 +478,12 @@ export function useWorkspaceSendActions({
     [messagesCount, submissionPreview],
   );
   const displayMessages = useMemo(() => {
-    if (runtimeTeamDispatchPreviewMessages.length > 0) {
-      return [...messages, ...runtimeTeamDispatchPreviewMessages];
-    }
-
     if (submissionPreviewMessages.length > 0) {
       return submissionPreviewMessages;
     }
 
     return messages;
-  }, [messages, runtimeTeamDispatchPreviewMessages, submissionPreviewMessages]);
-
-  useEffect(() => {
-    clearRuntimeTeamDispatchPreview();
-  }, [clearRuntimeTeamDispatchPreview, sessionId]);
-
-  useEffect(() => {
-    if (!runtimeTeamDispatchPreview) {
-      return;
-    }
-
-    if (messagesCount > runtimeTeamDispatchPreview.baseMessageCount) {
-      clearRuntimeTeamDispatchPreview();
-    }
-  }, [
-    clearRuntimeTeamDispatchPreview,
-    messagesCount,
-    runtimeTeamDispatchPreview,
-  ]);
+  }, [messages, submissionPreviewMessages]);
 
   const resolveSendExecutionPlan = useCallback(
     async (
@@ -2992,7 +2940,6 @@ export function useWorkspaceSendActions({
   const executeLocalConfirmationPlan = useCallback(
     async (plan: WorkspaceLocalConfirmationPlan): Promise<boolean> => {
       const { sourceText, images, sendBoundary, submissionPreviewKey } = plan;
-      setRuntimeTeamDispatchPreview(null);
       setInput("");
       setMentionedCharacters([]);
       setChatMessages((previous) => {
@@ -3026,7 +2973,6 @@ export function useWorkspaceSendActions({
       setChatMessages,
       setInput,
       setMentionedCharacters,
-      setRuntimeTeamDispatchPreview,
     ],
   );
 
@@ -3057,42 +3003,10 @@ export function useWorkspaceSendActions({
       });
       const effectiveToolPreferences = plan.effectiveToolPreferences;
       const effectivePreferredTeamPresetId = preferredTeamPresetId;
-      setRuntimeTeamDispatchPreview(null);
       setInput("");
       setMentionedCharacters([]);
 
       try {
-        const shouldPrepareRuntimeTeam = effectiveToolPreferences.subagent;
-        const teamPrepareStartedAt = shouldPrepareRuntimeTeam
-          ? Date.now()
-          : null;
-        const preparedRuntimeTeamState = shouldPrepareRuntimeTeam
-          ? await _prepareRuntimeTeamBeforeSend({
-              input: sourceText,
-              purpose: sendOptions?.purpose,
-              subagentEnabled: true,
-            })
-          : null;
-        if (teamPrepareStartedAt !== null) {
-          logAgentDebug("WorkspaceSend", "runtimeTeam.prepareDone", {
-            durationMs: Date.now() - teamPrepareStartedAt,
-            hasPreparedRuntimeTeamState: Boolean(preparedRuntimeTeamState),
-          });
-        }
-        if (preparedRuntimeTeamState) {
-          recordTeamFormationAgentUiProjection(preparedRuntimeTeamState, {
-            sessionId,
-          });
-          setRuntimeTeamDispatchPreview(
-            buildRuntimeTeamDispatchPreview(
-              preparedRuntimeTeamState,
-              sourceText,
-              images,
-              messagesCount,
-            ),
-          );
-        }
-
         let nextRequestMetadata = buildWorkspaceRequestMetadata({
           workspaceRequestMetadataBase,
           savedSoulArtifactVoiceGenerationBrief,
@@ -3241,15 +3155,6 @@ export function useWorkspaceSendActions({
         rollbackAfterSendFailure(sendBoundary);
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        setRuntimeTeamDispatchPreview((current) =>
-          current
-            ? {
-                ...current,
-                status: "failed",
-                failureMessage: errorMessage,
-              }
-            : null,
-        );
         sendOptions?.observer?.onError?.(errorMessage);
         console.error("[AgentChat] 发送消息失败:", error);
         toast.error(`发送失败: ${errorMessage}`);
@@ -3262,7 +3167,6 @@ export function useWorkspaceSendActions({
       }
     },
     [
-      _prepareRuntimeTeamBeforeSend,
       agentResponseLanguage,
       browserAssistAutoLaunch,
       browserAssistPreferredBackend,
@@ -3281,14 +3185,12 @@ export function useWorkspaceSendActions({
       selectedTeamSummary,
       serviceModels,
       resolveServiceModelsBeforeSend,
-      sessionId,
       teamMemoryShadowSnapshot,
       workspaceSkillBindings,
       workspaceSkillRuntimeEnable,
       sendMessage,
       setInput,
       setMentionedCharacters,
-      setRuntimeTeamDispatchPreview,
       themeWorkbenchActiveQueueTitle,
       workspaceRequestMetadataBase,
       savedSoulArtifactVoiceGenerationBrief,
@@ -3394,6 +3296,5 @@ export function useWorkspaceSendActions({
     handleSendRef,
     isPreparingSend,
     displayMessages,
-    teamDispatchPreviewState,
   };
 }

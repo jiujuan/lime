@@ -3,6 +3,8 @@ use app_server_protocol::{ConversationImportSourceClient, ConversationImportSour
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
+#[cfg(test)]
+mod tests;
 mod tool_draft;
 
 use tool_draft::{
@@ -227,12 +229,15 @@ fn item_completed_event(payload: &Value) -> Option<ImportedRuntimeEvent> {
     {
         return completed_turn_item_tool_event(payload);
     }
+    let item_id = string_field(item, &["id"])?;
     let text = string_field(item, &["text"])?;
     Some(ImportedRuntimeEvent::new(
         "plan.final",
         compact_json(json!({
-            "planId": string_field(item, &["id"]),
-            "sourceItemId": string_field(item, &["id"]),
+            "itemId": item_id,
+            "planId": item_id,
+            "revisionId": item_id,
+            "sourceItemId": item_id,
             "status": "completed",
             "text": text,
             "sourceClient": "codex",
@@ -571,6 +576,7 @@ fn subagent_activity_event(payload: &Value) -> ImportedRuntimeEvent {
         compact_json(json!({
             "activityId": string_field(payload, &["event_id", "eventId", "id"])
                 .or_else(|| call_id(payload)),
+            "activity": kind,
             "statusLabel": status_label,
             "status": match status_label {
                 "failed" => "failed",

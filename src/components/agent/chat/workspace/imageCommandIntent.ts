@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import type { AgentRuntimeGeneratedTitleResult } from "@/lib/api/agentRuntime";
+import type { AgentRuntimeGeneratedTitleResult } from "@/lib/api/agentRuntime/sessionTypes";
 import { resolveImageGenerationRuntimeContractBinding } from "@/lib/governance/modalityRuntimeContracts";
 import type { MessageImage } from "../types";
 import type { ParsedImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";

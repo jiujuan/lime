@@ -453,6 +453,9 @@ pub(super) fn enrich_imported_runtime_event_payload(mut payload: Value) -> Value
         object
             .entry("sourceClient".to_string())
             .or_insert_with(|| json!("codex"));
+        object
+            .entry("importVersion".to_string())
+            .or_insert_with(|| json!(2));
     }
     payload
 }

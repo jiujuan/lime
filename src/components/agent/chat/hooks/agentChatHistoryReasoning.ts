@@ -4,7 +4,10 @@ import type {
 } from "@/lib/api/agentProtocol";
 import type { ContentPart, Message } from "../types";
 import type { HistoryToolCall } from "./agentChatHistoryTypes";
-import { extractThinkingContentFromParts } from "./agentChatHistoryPrimitives";
+import {
+  extractThinkingContentFromParts,
+  resolveThreadItemTimelinePosition,
+} from "./agentChatHistoryPrimitives";
 import { collectMessageToolIds, hasSharedValue } from "./agentChatHistorySignatures";
 
 function isReasoningPartForThreadItemContent(
@@ -30,7 +33,8 @@ function isReasoningPartForThreadItemContent(
   const metadataSequence = sequenceFromContentPart(part);
   return (
     metadataTurnId === item.turn_id ||
-    (metadataSequence !== null && metadataSequence === item.sequence)
+    (metadataSequence !== null &&
+      metadataSequence === resolveThreadItemTimelinePosition(item))
   );
 }
 
@@ -73,7 +77,7 @@ export function contentPartMetadataFromThreadToolItem(
       : {};
   metadata.source = "agent_thread_item";
   metadata.threadItemId = item.id;
-  metadata.sequence = item.sequence;
+  metadata.sequence = resolveThreadItemTimelinePosition(item);
   metadata.turnId = item.turn_id;
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
@@ -87,7 +91,7 @@ export function contentPartMetadataFromThreadReasoningItem(
       : {}),
     source: "thread_item_reasoning",
     threadItemId: item.id,
-    sequence: item.sequence,
+    sequence: resolveThreadItemTimelinePosition(item),
     turnId: item.turn_id,
   };
 }
@@ -176,7 +180,11 @@ function mergeReasoningThreadItemsIntoContentParts(params: {
   );
   const relevantReasoningItems = params.reasoningItems
     .filter(isThreadReasoningItem)
-    .sort((left, right) => left.sequence - right.sequence);
+    .sort(
+      (left, right) =>
+        resolveThreadItemTimelinePosition(left) -
+        resolveThreadItemTimelinePosition(right),
+    );
 
   if (relevantReasoningItems.length === 0) {
     return params.parts;
@@ -191,7 +199,7 @@ function mergeReasoningThreadItemsIntoContentParts(params: {
         : {}),
       source: "thread_item_reasoning",
       threadItemId: item.id,
-      sequence: item.sequence,
+      sequence: resolveThreadItemTimelinePosition(item),
       turnId: item.turn_id,
     };
     const existingIndex = merged.findIndex((part) =>
@@ -213,7 +221,7 @@ function mergeReasoningThreadItemsIntoContentParts(params: {
     merged = insertReasoningPartByThreadSequence(
       merged,
       nextPart,
-      item.sequence,
+      resolveThreadItemTimelinePosition(item),
       params.sequenceByToolId,
     );
   }
@@ -259,7 +267,7 @@ function collectThreadItemSequenceByToolId(
     ) {
       continue;
     }
-    sequenceByToolId.set(item.id, item.sequence);
+    sequenceByToolId.set(item.id, resolveThreadItemTimelinePosition(item));
   }
   return sequenceByToolId;
 }

@@ -37,6 +37,12 @@ export function resolveCollaborationStatusLabel(
 ): string {
   const normalized = statusLabel?.trim().toLowerCase();
   switch (normalized) {
+    case "started":
+      return resolveCollaborationCopy("status.started");
+    case "interacted":
+      return resolveCollaborationCopy("status.interacted");
+    case "interrupted":
+      return resolveCollaborationCopy("status.interrupted");
     case "queued":
       return resolveCollaborationCopy("status.queued");
     case "running":
@@ -48,9 +54,6 @@ export function resolveCollaborationStatusLabel(
     case "aborted":
       return resolveCollaborationCopy("status.paused");
     default:
-      if (statusLabel) {
-        return statusLabel;
-      }
       return resolveThreadTimelineCopy(
         status === "in_progress"
           ? "status.running"

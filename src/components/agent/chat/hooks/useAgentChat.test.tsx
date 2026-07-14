@@ -1,6 +1,5 @@
 import "./useAgentChat.test/homeSession.case.tsx";
 import "./useAgentChat.test/taskSnapshots.case.tsx";
-import "./useAgentChat.test/teamSubscriptions.case.tsx";
 import "./useAgentChat.test/confirmAction.case.tsx";
 import "./useAgentChat.test/queueHydration.case.tsx";
 import "./useAgentChat.test/threadTimeline.case.tsx";

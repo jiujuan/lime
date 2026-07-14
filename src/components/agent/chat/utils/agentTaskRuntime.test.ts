@@ -1,9 +1,44 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "../types";
-import { buildAgentTaskRuntimeCardModel } from "./agentTaskRuntime";
+import type { CanonicalAgentStatus } from "../projection/canonicalChildThreadSummary";
+import {
+  buildAgentTaskRuntimeCardModel,
+  summarizeAgentTaskChildren,
+} from "./agentTaskRuntime";
 import { buildInputbarRuntimeStatusLineModel } from "./inputbarRuntimeStatusLine";
 
 describe("agentTaskRuntime", () => {
+  it("应按 canonical child 七态统计子任务", () => {
+    const statuses = [
+      "pendingInit",
+      "running",
+      "interrupted",
+      "completed",
+      "errored",
+      "shutdown",
+      "notFound",
+    ] satisfies CanonicalAgentStatus[];
+
+    expect(
+      summarizeAgentTaskChildren(
+        statuses.map((status, index) => ({
+          name: `child-${index}`,
+          parentThreadId: "thread-parent",
+          sessionId: `session-child-${index}`,
+          status,
+          threadId: `thread-child-${index}`,
+          updatedAtMs: index,
+        })),
+      ),
+    ).toEqual({
+      total: 7,
+      active: 2,
+      queued: 1,
+      completed: 2,
+      failed: 3,
+    });
+  });
+
   it("简单直接回答完成后不应继续显示主任务卡", () => {
     const model = buildAgentTaskRuntimeCardModel({
       messages: [
@@ -97,22 +132,22 @@ describe("agentTaskRuntime", () => {
         thread_id: "thread-1",
         status: "running",
       },
-      childSubagentSessions: [
+      canonicalChildren: [
         {
-          id: "sub-1",
           name: "代码浏览",
-          created_at: now.getTime(),
-          updated_at: now.getTime(),
-          session_type: "subagent",
-          runtime_status: "running",
+          parentThreadId: "thread-1",
+          sessionId: "sub-1",
+          status: "running",
+          threadId: "thread-sub-1",
+          updatedAtMs: now.getTime(),
         },
         {
-          id: "sub-2",
           name: "回归检查",
-          created_at: now.getTime(),
-          updated_at: now.getTime(),
-          session_type: "subagent",
-          runtime_status: "completed",
+          parentThreadId: "thread-1",
+          sessionId: "sub-2",
+          status: "completed",
+          threadId: "thread-sub-2",
+          updatedAtMs: now.getTime(),
         },
       ],
       isSending: true,

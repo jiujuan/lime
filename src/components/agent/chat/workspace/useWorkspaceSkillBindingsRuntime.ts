@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  listWorkspaceSkillBindings,
-} from "@/lib/api/agentRuntime";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import { listWorkspaceSkillBindings } from "@/lib/api/agentRuntime/inventoryClient";
+import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/toolInventoryTypes";
 
 interface UseWorkspaceSkillBindingsRuntimeParams {
   enabled: boolean;

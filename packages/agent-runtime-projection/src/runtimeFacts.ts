@@ -1,5 +1,4 @@
 import type {
-  AgentUiControl,
   AgentUiPhase,
   AgentUiProjectionEvent,
   AgentUiRuntimeEntity,
@@ -7,7 +6,7 @@ import type {
   AgentUiTopology,
 } from "@limecloud/agent-ui-contracts";
 
-import { compactProjectionFields, definedString } from "./normalization.js";
+import { definedString } from "./normalization.js";
 
 export type AgentRuntimeStatusPhase =
   | "context"
@@ -40,20 +39,6 @@ export interface AgentUiTeamRuntimeMetadata {
   retryable_overload?: boolean;
 }
 
-export interface AgentUiSubagentRuntimeFactInput
-  extends AgentUiTeamRuntimeMetadata {
-  status?: string | null;
-  latest_turn_status?: string | null;
-  queued_turn_count?: number;
-}
-
-export interface AgentUiWorkerUsageInput {
-  input_tokens: number;
-  output_tokens: number;
-  cached_input_tokens?: number;
-  cache_creation_input_tokens?: number;
-}
-
 const AGENT_UI_RUNTIME_ENTITIES = new Set<AgentUiRuntimeEntity>([
   "agent_turn",
   "subagent_turn",
@@ -81,18 +66,12 @@ export function inferAgentUiRuntimeEntity(
   if (explicit) {
     return explicit;
   }
-  if (input.sourceType === "subagent_status_changed") {
-    return "subagent_turn";
-  }
   if (
     (input.sourceType === "item_started" ||
       input.sourceType === "item_updated" ||
       input.sourceType === "item_completed") &&
     input.itemType === "subagent_activity"
   ) {
-    return "subagent_turn";
-  }
-  if (input.runId?.startsWith("agent_subagent_stream:")) {
     return "subagent_turn";
   }
   return "agent_turn";
@@ -132,87 +111,6 @@ export function normalizeRuntimePhaseFromRuntimeStatusPhase(
   }
 }
 
-export function normalizeSubagentRuntimeStatus(
-  status: string | null | undefined,
-): AgentUiRuntimeStatus {
-  switch (status) {
-    case "idle":
-    case "queued":
-    case "running":
-    case "completed":
-    case "failed":
-    case "aborted":
-    case "closed":
-    case "not_found":
-      return status;
-    case "cancelled":
-      return "cancelled";
-    default:
-      return "unknown";
-  }
-}
-
-export function resolveSubagentStatusPhase(
-  status: string | null | undefined,
-): AgentUiPhase {
-  switch (status) {
-    case "completed":
-    case "closed":
-      return "completed";
-    case "failed":
-    case "not_found":
-      return "failed";
-    case "aborted":
-    case "cancelled":
-      return "cancelled";
-    case "running":
-      return "acting";
-    case "queued":
-      return "waiting";
-    default:
-      return "waiting";
-  }
-}
-
-export function resolveSubagentStatusControl(
-  status: string | null | undefined,
-): AgentUiControl | undefined {
-  switch (status) {
-    case "idle":
-      return "continue_agent";
-    case "queued":
-      return "wait";
-    case "running":
-      return "stop";
-    case "completed":
-    case "failed":
-    case "aborted":
-    case "closed":
-    case "not_found":
-      return "close";
-    default:
-      return undefined;
-  }
-}
-
-export function isSubagentSpawnStatus(
-  status: string | null | undefined,
-): boolean {
-  return status === "idle" || status === "queued" || status === "running";
-}
-
-export function isSubagentTerminalStatus(
-  status: string | null | undefined,
-): boolean {
-  return (
-    status === "completed" ||
-    status === "failed" ||
-    status === "aborted" ||
-    status === "closed" ||
-    status === "not_found"
-  );
-}
-
 export function hasTeamRuntimeMetadata(
   metadata: AgentUiTeamRuntimeMetadata | undefined,
 ): boolean {
@@ -221,18 +119,18 @@ export function hasTeamRuntimeMetadata(
   }
   return Boolean(
     definedString(metadata.team_phase) ||
-      definedString(metadata.concurrency_phase) ||
-      definedString(metadata.concurrency_scope) ||
-      typeof metadata.team_parallel_budget === "number" ||
-      typeof metadata.team_active_count === "number" ||
-      typeof metadata.team_queued_count === "number" ||
-      typeof metadata.concurrency_active_count === "number" ||
-      typeof metadata.concurrency_queued_count === "number" ||
-      typeof metadata.concurrency_budget === "number" ||
-      definedString(metadata.provider_concurrency_group) ||
-      typeof metadata.provider_parallel_budget === "number" ||
-      definedString(metadata.queue_reason) ||
-      typeof metadata.retryable_overload === "boolean",
+    definedString(metadata.concurrency_phase) ||
+    definedString(metadata.concurrency_scope) ||
+    typeof metadata.team_parallel_budget === "number" ||
+    typeof metadata.team_active_count === "number" ||
+    typeof metadata.team_queued_count === "number" ||
+    typeof metadata.concurrency_active_count === "number" ||
+    typeof metadata.concurrency_queued_count === "number" ||
+    typeof metadata.concurrency_budget === "number" ||
+    definedString(metadata.provider_concurrency_group) ||
+    typeof metadata.provider_parallel_budget === "number" ||
+    definedString(metadata.queue_reason) ||
+    typeof metadata.retryable_overload === "boolean",
   );
 }
 
@@ -295,85 +193,6 @@ export function buildTeamRuntimeFacts(
     queueReason: definedString(metadata?.queue_reason),
     retryableOverload: metadata?.retryable_overload,
   };
-}
-
-export function buildSubagentRuntimeFacts(
-  input: AgentUiSubagentRuntimeFactInput,
-): Pick<
-  AgentUiProjectionEvent,
-  | "runtimeEntity"
-  | "runtimeStatus"
-  | "latestTurnStatus"
-  | "teamPhase"
-  | "teamParallelBudget"
-  | "teamActiveCount"
-  | "teamQueuedCount"
-  | "queuedTurnCount"
-  | "providerConcurrencyGroup"
-  | "providerParallelBudget"
-  | "queueReason"
-  | "retryableOverload"
-> {
-  return {
-    runtimeEntity: "subagent_turn",
-    runtimeStatus: normalizeSubagentRuntimeStatus(input.status),
-    latestTurnStatus: input.latest_turn_status
-      ? normalizeSubagentRuntimeStatus(input.latest_turn_status)
-      : undefined,
-    teamPhase: definedString(input.team_phase),
-    teamParallelBudget: input.team_parallel_budget,
-    teamActiveCount: input.team_active_count,
-    teamQueuedCount: input.team_queued_count,
-    queuedTurnCount: input.queued_turn_count,
-    providerConcurrencyGroup: definedString(input.provider_concurrency_group),
-    providerParallelBudget: input.provider_parallel_budget,
-    queueReason: definedString(input.queue_reason),
-    retryableOverload: input.retryable_overload,
-  };
-}
-
-export function buildSubagentProjectionPayload(
-  input: AgentUiSubagentRuntimeFactInput & {
-    session_id?: string | null;
-    parent_session_id?: string | null;
-    latest_turn_id?: string | null;
-    queued_turn_count?: number;
-    closed?: boolean;
-  },
-): Record<string, unknown> {
-  return compactProjectionFields({
-    status: input.status,
-    childSessionId: input.session_id,
-    parentSessionId: input.parent_session_id,
-    latestTurnId: input.latest_turn_id,
-    latestTurnStatus: input.latest_turn_status,
-    queuedTurnCount: input.queued_turn_count,
-    teamPhase: input.team_phase,
-    teamParallelBudget: input.team_parallel_budget,
-    teamActiveCount: input.team_active_count,
-    teamQueuedCount: input.team_queued_count,
-    providerConcurrencyGroup: input.provider_concurrency_group,
-    providerParallelBudget: input.provider_parallel_budget,
-    queueReason: input.queue_reason,
-    retryableOverload: input.retryable_overload,
-    closed: input.closed,
-  });
-}
-
-export function buildWorkerUsageProjection(
-  usage: AgentUiWorkerUsageInput | undefined,
-): Record<string, unknown> | undefined {
-  if (!usage) {
-    return undefined;
-  }
-
-  return compactProjectionFields({
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    cachedInputTokens: usage.cached_input_tokens,
-    cacheCreationInputTokens: usage.cache_creation_input_tokens,
-    totalTokens: usage.input_tokens + usage.output_tokens,
-  });
 }
 
 export function resolveTeamTopology(

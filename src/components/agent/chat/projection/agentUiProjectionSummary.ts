@@ -97,9 +97,7 @@ const AGENT_UI_SOURCE_TYPE_LABELS: Record<string, string> = {
   queue_added: "队列更新",
   remote_task_projection: "远端任务",
   runtime_status: "运行状态",
-  subagent_status_changed: "子任务状态",
   team_control_projection: "Subagents 控制",
-  team_formation_projection: "Subagents 编排",
   tool_call: "工具调用",
   tool_start: "工具开始",
 };

@@ -481,6 +481,7 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || "/", "http://127.0.0.1");
+    let requestRecord = null;
 
     if (request.method === "GET" && url.pathname === "/v1/models") {
       jsonResponse(response, 200, {
@@ -509,12 +510,13 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
 
     try {
       const body = await readJsonBody(request);
-      requests.push({
+      requestRecord = {
         method: request.method,
         path: url.pathname,
         authorization: request.headers.authorization || null,
         body,
-      });
+      };
+      requests.push(requestRecord);
       const requestIndex = requests.length - 1;
       const responseModel = String(body?.model || model);
       const scriptedCandidate = scriptedResponseAt(
@@ -544,6 +546,8 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
           body,
         })
       ) {
+        requestRecord.responseKind = scripted.type || "scripted";
+        requestRecord.responseToolName = scriptedToolName(scripted) || null;
         scriptedIndex += 1;
         return;
       }
@@ -568,6 +572,10 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
         });
       }
     } catch (error) {
+      if (requestRecord) {
+        requestRecord.responseError =
+          error instanceof Error ? error.message : String(error);
+      }
       jsonResponse(response, 400, {
         error: {
           message: error instanceof Error ? error.message : String(error),

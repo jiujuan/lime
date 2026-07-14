@@ -21,7 +21,6 @@ const ALLOWED_RELATIVE_IMPORTS = new Map<string, Set<string>>([
   ["./queueProjection", new Set(["buildQueueProjectionEvents"])],
   ["./routingProjection", new Set(["buildRoutingProjectionEvents"])],
   ["./runtimeLifecycleProjection", new Set(["buildRuntimeLifecycleEvents"])],
-  ["./subagentStatusProjection", new Set(["buildSubagentProjectionEvents"])],
   ["./threadItemProjection", new Set(["buildThreadItemProjectionEvents"])],
   ["./toolEventProjection", new Set(["buildToolProjectionEvents"])],
 ]);

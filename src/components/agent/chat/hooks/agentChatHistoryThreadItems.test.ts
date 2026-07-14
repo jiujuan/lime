@@ -5,8 +5,108 @@ import type { AgentSessionDetail } from "@/lib/api/agentRuntime";
 import { hydrateSessionDetailMessages } from "./agentChatHistory";
 import { mergeThreadItemReasoningIntoMessages } from "./agentChatHistoryReasoning";
 import { collectDetailThreadItems } from "./agentChatHistoryThreadItems";
+import { orderStreamingContentPartsForDisplay } from "../components/streamingContentPartOrder";
 
 describe("agentChatHistoryThreadItems", () => {
+  it("reasoning 的完成 sequence 晚于回答时仍按 canonical ordinal 展示在回答前", () => {
+    const detail = {
+      id: "canonical-history-order-session",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "canonical-history-order-turn",
+          thread_id: "canonical-history-order-thread",
+          prompt_text: "请先思考再回答。",
+          status: "completed",
+          started_at: "2026-07-14T10:00:00.000Z",
+          created_at: "2026-07-14T10:00:00.000Z",
+          updated_at: "2026-07-14T10:00:05.000Z",
+        },
+      ],
+      items: [],
+      thread_read: {
+        thread_id: "canonical-history-order-thread",
+        status: "completed",
+        thread_items: [
+          {
+            id: "canonical-history-order-user",
+            type: "user_message",
+            thread_id: "canonical-history-order-thread",
+            turn_id: "canonical-history-order-turn",
+            ordinal: 1,
+            sequence: 1,
+            status: "completed",
+            content: "请先思考再回答。",
+            started_at: "2026-07-14T10:00:00.000Z",
+            updated_at: "2026-07-14T10:00:00.000Z",
+            completed_at: "2026-07-14T10:00:00.000Z",
+          },
+          {
+            id: "canonical-history-order-reasoning",
+            type: "reasoning",
+            thread_id: "canonical-history-order-thread",
+            turn_id: "canonical-history-order-turn",
+            ordinal: 6,
+            sequence: 320,
+            status: "completed",
+            text: "先核对 canonical Item 的首次出现顺序。",
+            started_at: "2026-07-14T10:00:01.000Z",
+            updated_at: "2026-07-14T10:00:05.000Z",
+            completed_at: "2026-07-14T10:00:05.000Z",
+          },
+          {
+            id: "canonical-history-order-answer",
+            type: "agent_message",
+            thread_id: "canonical-history-order-thread",
+            turn_id: "canonical-history-order-turn",
+            ordinal: 314,
+            sequence: 316,
+            status: "in_progress",
+            text: "最终回答。",
+            started_at: "2026-07-14T10:00:04.000Z",
+            updated_at: "2026-07-14T10:00:04.000Z",
+          },
+        ],
+        tool_calls: [],
+      },
+    } as unknown as AgentSessionDetail;
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "canonical-history-order-session",
+    );
+    const assistantMessage = messages.find(
+      (message) => message.role === "assistant",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(assistantMessage?.contentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    expect(
+      orderStreamingContentPartsForDisplay(assistantMessage?.contentParts)?.map(
+        (part) => part.type,
+      ),
+    ).toEqual(["thinking", "text"]);
+    expect(assistantMessage?.contentParts).toEqual([
+      expect.objectContaining({
+        type: "thinking",
+        metadata: expect.objectContaining({ sequence: 6 }),
+      }),
+      expect.objectContaining({
+        type: "text",
+        metadata: expect.objectContaining({ sequence: 314 }),
+      }),
+    ]);
+    expect(assistantMessage?.content).toBe("最终回答。");
+  });
+
   it("历史 read model 的 thread_items 应作为 reasoning/tool owner hydrate，且不回退成重复 legacy process", () => {
     const detail = {
       id: "history-replay-visual-session",

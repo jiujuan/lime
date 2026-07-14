@@ -20,7 +20,6 @@ export * from "./routing.js";
 export * from "./runtimeFacts.js";
 export * from "./summary.js";
 export * from "./subagents.js";
-export * from "./subagentStatusEvents.js";
 export * from "./threadItems.js";
 export * from "./toolEvents.js";
 export * from "./readModel.js";

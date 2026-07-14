@@ -13,6 +13,7 @@ import {
 } from "./blockResolvers";
 import {
   resolveItemStatusLabel,
+  resolveSubagentStatusBadgeVariant,
   resolveSubagentStatusLabel,
 } from "./statusMapping";
 
@@ -164,6 +165,12 @@ describe("timeline copy", () => {
 
     expect(resolveItemStatusLabel("in_progress")).toBe("Running");
     expect(resolveSubagentStatusLabel("queued", "in_progress")).toBe("Queued");
+    expect(resolveSubagentStatusBadgeVariant("started", "completed")).toBe(
+      "secondary",
+    );
+    expect(resolveSubagentStatusBadgeVariant("interrupted", "completed")).toBe(
+      "destructive",
+    );
     expect(resolveCompactTechnicalSummary(processBlock)).toBe(
       "Processed 2 steps",
     );

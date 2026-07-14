@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
+import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime/sessionTypes";
 import {
   listKnowledgePacks,
   type KnowledgePackSummary,

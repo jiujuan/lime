@@ -61,7 +61,7 @@
 | `streamDiagnostics` | Conversation Projection Store | `recordAgentStreamPerformanceMetric` | E2E、debug panel、future diagnostics UI | memory ring / projection store | performance trace | true | current |
 | `queuedTurns` | stream queue controller | runtime queue event / local queue | inputbar、task capsule | runtime queue / memory | runtime event | false | current |
 | `pendingActions` | action request controller | runtime event / A2UI | inputbar、pending panel、capsule | runtime action request | runtime event | false | current |
-| `childSubagentSessions` | task / subagent projection | runtime event / session detail | task capsule、process drawer | runtime session detail | runtime event | false | current |
+| `canonicalChildren` | canonical child Thread selector | App Server `thread/list|read` + AgentGraph/identity | task capsule、process drawer、Subagents view | canonical Thread / AgentGraph | canonical Thread family | false | current |
 
 首个代码 slice 选择 `streamDiagnostics`，原因是它是纯 UI/诊断 projection，不改变 runtime 行为，适合验证 Projection Store 和 selector 边界。
 

@@ -4,7 +4,7 @@ import type {
   AgentEventArtifactSnapshot,
   AgentEventContextTrace,
 } from "@/lib/api/agentProtocol";
-import type { AgentExecutionStrategy } from "@/lib/api/agentRuntime";
+import type { AgentExecutionStrategy } from "@/lib/api/agentExecutionRuntime";
 import type {
   ActionRequired,
   ApprovalDecision,
